@@ -7,10 +7,11 @@ use std::{
 };
 
 use crate::{
-    adapters::{clipboard::PlatformClipboard, recovery::FileRecoveryExporter},
+    adapters::{clipboard::PlatformClipboard, herdr::HerdrGateway, recovery::FileRecoveryExporter},
     application::{ClipboardIntent, Effect},
     domain::RequestId,
     ports::{
+        agent::{AgentError, AgentGateway, AgentTarget, SubmissionReceipt, SubmissionRequest},
         clipboard::{Clipboard, ClipboardError, ClipboardWrite},
         recovery::{RecoveryDocument, RecoveryError, RecoveryExporter},
     },
@@ -19,6 +20,8 @@ use crate::{
 use super::TerminalError;
 
 enum ExternalRequest {
+    DiscoverAgents,
+    SubmitAgent(Box<SubmissionRequest>),
     Write {
         request_id: RequestId,
         intent: ClipboardIntent,
@@ -34,6 +37,11 @@ enum ExternalRequest {
 }
 
 pub(super) enum ExternalResult {
+    AgentsDiscovered(Result<Vec<AgentTarget>, AgentError>),
+    AgentSubmitted {
+        submission_id: crate::domain::SubmissionId,
+        result: Box<Result<SubmissionReceipt, AgentError>>,
+    },
     Written {
         request_id: RequestId,
         intent: ClipboardIntent,
@@ -71,6 +79,8 @@ impl ExternalLane {
 
     pub(super) fn send(&self, effect: &Effect) -> Result<bool, TerminalError> {
         let request = match effect {
+            Effect::DiscoverAgents => ExternalRequest::DiscoverAgents,
+            Effect::SubmitAgent(request) => ExternalRequest::SubmitAgent(Box::new(request.clone())),
             Effect::WriteClipboard {
                 request_id,
                 intent,
@@ -117,8 +127,21 @@ fn external_loop(
 ) {
     let mut clipboard = PlatformClipboard::new();
     let mut recovery = FileRecoveryExporter::new(recovery_directory);
+    let mut agents = HerdrGateway::from_environment();
     while let Ok(request) = requests.recv() {
         let outcome = match request {
+            ExternalRequest::DiscoverAgents => ExternalResult::AgentsDiscovered(
+                agents
+                    .capabilities()
+                    .and_then(|capability| agents.adjacent_targets(&capability.context)),
+            ),
+            ExternalRequest::SubmitAgent(request) => {
+                let submission_id = request.submission_id;
+                ExternalResult::AgentSubmitted {
+                    submission_id,
+                    result: Box::new(agents.submit(*request)),
+                }
+            }
             ExternalRequest::Write {
                 request_id,
                 intent,

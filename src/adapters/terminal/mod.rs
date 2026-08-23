@@ -4,6 +4,7 @@ mod browser;
 mod control;
 mod external;
 mod input;
+mod integration;
 mod persistence;
 mod runner;
 mod settings;

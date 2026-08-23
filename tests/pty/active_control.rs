@@ -1,11 +1,9 @@
 //! Cross-process active-owner acceptance through a real pseudo-terminal.
 
-use std::process::Command;
-
 use proqi::{adapters::runtime::SystemIdGenerator, ports::environment::IdGenerator};
 use serde_json::Value;
 
-use super::{json_command, json_input_command, raw_input_command, wait_for_path};
+use super::{expect_command, json_command, json_input_command, raw_input_command, wait_for_path};
 
 #[test]
 fn active_tui_accepts_durable_idempotent_cli_mutations_before_crash() {
@@ -73,7 +71,7 @@ fn spawn_owner(
         expect eof
         exit 0
     "#;
-    Command::new("/usr/bin/expect")
+    expect_command()
         .args(["-c", script])
         .env("PROQI_TEST_BINARY", binary)
         .env("PROQI_TEST_STATE", state)

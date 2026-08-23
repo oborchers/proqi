@@ -71,6 +71,24 @@ Verified owner forwarding is enabled on macOS and Linux. The private alpha
 reports `session_busy` on Windows until explicit current-user SID validation is
 implemented and exercised in Windows CI.
 
+## Herdr submission
+
+When Proqi runs in a Herdr-managed pane, it discovers eligible agent panes
+directly above, below, left, and right. A target appears only after Proqi has
+verified its workspace, tab, geometry, agent kind, stable session identity, and
+readiness through Herdr's structured protocol.
+
+In board mode, press `s` to submit the focused thought while preserving it, or
+`S` to submit and remove it after Herdr returns an accepted receipt. With
+multiple verified targets, choose a direction with an arrow key or `h`, `j`,
+`k`, or `l`. The same actions are clickable. Search for `Refresh adjacent
+agents` in the `/` command palette after a neighboring agent starts or changes
+session identity.
+
+Submission never invokes a shell or simulates terminal keystrokes. An
+unsupported protocol, ambiguous target, timeout, or rejected receipt leaves the
+thought unchanged. Copy and cut continue to work when Herdr is absent.
+
 ## Terminal configuration
 
 Proqi reads an optional `config.toml` from the platform-native Proqi

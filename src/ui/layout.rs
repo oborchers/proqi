@@ -6,8 +6,8 @@ use ratatui_core::layout::Rect;
 
 use crate::{
     application::AppState,
-    domain::ThoughtId,
-    ports::{editor::EditorSnapshot, text_layout::wrap_rows},
+    domain::{Direction, ThoughtId},
+    ports::{agent::AgentTarget, editor::EditorSnapshot, text_layout::wrap_rows},
 };
 
 /// Semantic target resolved from the latest rendered geometry.
@@ -29,6 +29,8 @@ pub enum HitTarget {
     Cut,
     /// Delete the focused thought without changing the clipboard.
     Delete,
+    /// Submit to one verified direction, optionally removing after acceptance.
+    Submit(Direction, bool),
     /// Board undo action.
     Undo,
     /// Contextual help action.
@@ -150,6 +152,29 @@ impl LayoutSnapshot {
     pub fn configure_overlay(&mut self, item_count: usize, preferred_rows: usize) {
         self.overlay =
             (preferred_rows > 0).then(|| overlay_layout(self.area, item_count, preferred_rows));
+    }
+
+    /// Add only currently verified agent controls where footer width permits.
+    pub fn configure_agent_controls(&mut self, targets: &[AgentTarget]) {
+        let mut right = self
+            .controls
+            .iter()
+            .map(|(_, area)| area.x)
+            .min()
+            .unwrap_or(self.footer.right());
+        for (direction, remove) in targets
+            .iter()
+            .flat_map(|target| [(target.direction, false), (target.direction, true)])
+        {
+            if right.saturating_sub(self.footer.x) < 3 {
+                return;
+            }
+            right = right.saturating_sub(3);
+            self.controls.push((
+                HitTarget::Submit(direction, remove),
+                Rect::new(right, self.footer.y, 3, self.footer.height),
+            ));
+        }
     }
 }
 

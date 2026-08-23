@@ -8,6 +8,7 @@ use crate::domain::{
     SessionBoard, SessionId, TextPosition, Thought, ThoughtId, ThoughtRevision, Timestamp,
     UndoScope,
 };
+use crate::ports::agent::{AgentTarget, SubmissionRequest};
 use crate::ports::{recovery::RecoveryDocument, store::OperationBatch};
 
 /// Active interaction context.
@@ -359,6 +360,19 @@ pub enum Action {
 /// Blocking work requested by the pure reducer.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Effect {
+    /// Discover verified adjacent agents without blocking the reducer lane.
+    DiscoverAgents,
+    /// Submit exact thought content through a verified semantic agent gateway.
+    SubmitAgent(SubmissionRequest),
+    /// Persist recognition-only context after an accepted submission.
+    StoreIntegrationContext {
+        /// Owning session.
+        session_id: SessionId,
+        /// Verified target used for the accepted submission.
+        target: AgentTarget,
+        /// Time at which the target was verified for submission.
+        verified_at: Timestamp,
+    },
     /// Commit one new structural operation.
     CommitBoardOperation(BoardOperation),
     /// Commit one new editor revision.

@@ -62,6 +62,9 @@ impl BoardApp {
             Some(HitTarget::Copy) => self.copy_active(ids),
             Some(HitTarget::Cut) => self.cut_active(ids, clock),
             Some(HitTarget::Delete) => self.delete(ids, clock),
+            Some(HitTarget::Submit(direction, remove)) => {
+                self.submit_to(direction, remove, ids, clock)
+            }
             Some(HitTarget::Undo) => self.history(ids, clock, true),
             Some(HitTarget::Help) => {
                 self.help = !self.help;

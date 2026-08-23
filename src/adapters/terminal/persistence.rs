@@ -15,13 +15,19 @@ use crate::{
 
 use super::TerminalError;
 
-pub(super) struct PersistenceResult {
-    pub(super) sequence: OperationSequence,
-    pub(super) result: Result<CommitReceipt, StoreError>,
+pub(super) enum PersistenceResult {
+    Sequenced {
+        sequence: OperationSequence,
+        result: Result<CommitReceipt, StoreError>,
+    },
+    Metadata {
+        result: Result<(), StoreError>,
+    },
 }
 
 enum PersistenceRequest {
     Commit(Box<OperationBatch>),
+    Metadata(Box<OperationBatch>),
     Retry(OperationSequence),
     Lookup {
         operation_id: OperationId,
@@ -54,6 +60,10 @@ impl PersistenceLane {
 
     pub(super) fn retry(&self, sequence: OperationSequence) -> Result<(), TerminalError> {
         self.send(PersistenceRequest::Retry(sequence))
+    }
+
+    pub(super) fn metadata(&self, batch: OperationBatch) -> Result<(), TerminalError> {
+        self.send(PersistenceRequest::Metadata(Box::new(batch)))
     }
 
     pub(super) fn lookup(
@@ -120,9 +130,23 @@ fn process_request(
                     "retained operation sequence {}",
                     sequence.get()
                 )));
-                return results.send(PersistenceResult { sequence, result }).is_ok();
+                return results
+                    .send(PersistenceResult::Sequenced { sequence, result })
+                    .is_ok();
             };
             (sequence, batch)
+        }
+        PersistenceRequest::Metadata(batch) => {
+            let result = store.commit(&batch).and_then(|receipt| {
+                if receipt.is_none() {
+                    Ok(())
+                } else {
+                    Err(StoreError::Integrity(
+                        "metadata operation returned a durable receipt".to_owned(),
+                    ))
+                }
+            });
+            return results.send(PersistenceResult::Metadata { result }).is_ok();
         }
         PersistenceRequest::Lookup {
             operation_id,
@@ -141,7 +165,9 @@ fn process_request(
     } else {
         retained.insert(sequence, batch);
     }
-    results.send(PersistenceResult { sequence, result }).is_ok()
+    results
+        .send(PersistenceResult::Sequenced { sequence, result })
+        .is_ok()
 }
 
 #[cfg(test)]
@@ -154,14 +180,14 @@ mod tests {
             sqlite::{RetryPolicy, StoreConfig},
         },
         application::{Action, AppState, Effect, reduce},
-        domain::{Session, SessionBoard, Timestamp},
+        domain::{OperationSequence, Session, SessionBoard, Timestamp},
         ports::{
             environment::IdGenerator,
-            store::{MigrationMode, OperationBatch, Store},
+            store::{CommitReceipt, MigrationMode, OperationBatch, Store, StoreError},
         },
     };
 
-    use super::PersistenceLane;
+    use super::{PersistenceLane, PersistenceResult};
 
     #[test]
     fn failed_batch_is_retained_and_retried_after_contention() {
@@ -215,8 +241,9 @@ mod tests {
             .receiver
             .recv_timeout(Duration::from_secs(2))
             .expect("failure result");
-        assert_eq!(failed.sequence, sequence);
-        assert!(failed.result.is_err());
+        let (failed_sequence, failed_result) = sequenced(failed);
+        assert_eq!(failed_sequence, sequence);
+        assert!(failed_result.is_err());
         lock.release().expect("release writer");
 
         lane.retry(sequence).expect("queue retry");
@@ -224,8 +251,9 @@ mod tests {
             .receiver
             .recv_timeout(Duration::from_secs(2))
             .expect("retry result");
-        assert_eq!(retried.sequence, sequence);
-        assert!(retried.result.is_ok());
+        let (retried_sequence, retried_result) = sequenced(retried);
+        assert_eq!(retried_sequence, sequence);
+        assert!(retried_result.is_ok());
         lane.stop().expect("stop lane");
         let snapshot = setup
             .load_session(state.board.session.id)
@@ -234,5 +262,70 @@ mod tests {
             snapshot.board.live_thoughts()[0].content,
             "retained through contention"
         );
+    }
+
+    #[test]
+    fn integration_metadata_commits_without_a_sequence_receipt() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let database = directory.path().join("proqi.sqlite3");
+        let config = StoreConfig::new(
+            database,
+            directory.path().join("backups"),
+            MigrationMode::Allow,
+            Timestamp::from_millis(1),
+        );
+        let mut ids = FakeIdGenerator::new(1_725_200_000_000);
+        let session = Session::new(
+            ids.session_id(),
+            PathBuf::from("/tmp/proqi-metadata-lane"),
+            Timestamp::from_millis(2),
+        )
+        .expect("session");
+        let mut setup = crate::adapters::sqlite::SqliteStore::open(&config).expect("store");
+        setup
+            .commit(&OperationBatch::CreateSession(session.clone()))
+            .expect("create session");
+        let lane_store = crate::adapters::sqlite::SqliteStore::open(&config).expect("lane store");
+        let lane = PersistenceLane::spawn(lane_store);
+        let context = crate::domain::IntegrationContext {
+            provider: "herdr".to_owned(),
+            direction: crate::domain::Direction::Right,
+            agent_kind: "codex".to_owned(),
+            agent_name: "fixture".to_owned(),
+            workspace_hint: Some("w1".to_owned()),
+            tab_hint: Some("w1:t1".to_owned()),
+            pane_hint: Some("w1:p2".to_owned()),
+            verified_at: Timestamp::from_millis(3),
+        };
+        lane.metadata(OperationBatch::IntegrationContext {
+            session_id: session.id,
+            context: Some(context.clone()),
+        })
+        .expect("queue metadata");
+        let outcome = lane
+            .receiver
+            .recv_timeout(Duration::from_secs(2))
+            .expect("metadata result");
+        assert!(matches!(
+            outcome,
+            PersistenceResult::Metadata { result: Ok(()) }
+        ));
+        lane.stop().expect("stop lane");
+        assert_eq!(
+            setup
+                .load_session(session.id)
+                .expect("snapshot")
+                .integration_context,
+            Some(context)
+        );
+    }
+
+    fn sequenced(
+        outcome: PersistenceResult,
+    ) -> (OperationSequence, Result<CommitReceipt, StoreError>) {
+        let PersistenceResult::Sequenced { sequence, result } = outcome else {
+            panic!("expected sequenced persistence result");
+        };
+        (sequence, result)
     }
 }

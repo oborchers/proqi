@@ -445,5 +445,7 @@ fn storage_failure_blocks_new_edits_and_exposes_retry() {
     );
 }
 
+#[path = "ui_board/agent.rs"]
+mod agent;
 #[path = "ui_board/clipboard.rs"]
 mod clipboard;

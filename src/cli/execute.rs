@@ -82,9 +82,10 @@ fn capabilities() -> Outcome {
             "identifier_encoding": "prefix_base32hex_uuidv7",
             "commands": ["sessions", "thoughts"],
             "active_session_control": true,
-            "herdr_submission": false,
+            "herdr_submission": true,
+            "herdr_managed_pane_required": true,
         }),
-        human: "CLI schema 1\nSessions and thoughts are available\nActive control: available\nHerdr: unavailable".to_owned(),
+        human: "CLI schema 1\nSessions and thoughts are available\nActive control: available\nHerdr submission: supported in a managed Herdr pane".to_owned(),
     }
 }
 

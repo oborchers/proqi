@@ -216,7 +216,8 @@ fn launch_modes_and_capability_discovery_have_stable_output() {
     let capabilities = success(root, &["capabilities"], None);
     assert_eq!(capabilities["cli_schema_version"], 1);
     assert_eq!(capabilities["active_session_control"], true);
-    assert_eq!(capabilities["herdr_submission"], false);
+    assert_eq!(capabilities["herdr_submission"], true);
+    assert_eq!(capabilities["herdr_managed_pane_required"], true);
 
     let non_terminal = Command::new(env!("CARGO_BIN_EXE_proqi"))
         .arg("--state-dir")

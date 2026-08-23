@@ -36,7 +36,7 @@ fn bracketed_paste_autosaves_and_resumes_in_a_real_pty() {
         catch wait result
         exit [lindex $result 3]
     "#;
-    let status = Command::new("/usr/bin/expect")
+    let status = expect_command()
         .args(["-c", create])
         .env("PROQI_TEST_BINARY", binary)
         .env("PROQI_TEST_STATE", state.path())
@@ -76,7 +76,7 @@ fn bracketed_paste_autosaves_and_resumes_in_a_real_pty() {
         catch wait result
         exit [lindex $result 3]
     "#;
-    let status = Command::new("/usr/bin/expect")
+    let status = expect_command()
         .args(["-c", resume])
         .env("PROQI_TEST_BINARY", binary)
         .env("PROQI_TEST_STATE", state.path())
@@ -121,7 +121,7 @@ fn assert_persistent_editor_undo(
         catch wait result
         exit [lindex $result 3]
     "#;
-    let status = Command::new("/usr/bin/expect")
+    let status = expect_command()
         .args(["-c", script])
         .env("PROQI_TEST_BINARY", binary)
         .env("PROQI_TEST_STATE", state)
@@ -151,7 +151,7 @@ fn termination_signal_restores_and_releases_the_session() {
         catch wait result
         exit [lindex $result 3]
     ";
-    let status = Command::new("/usr/bin/expect")
+    let status = expect_command()
         .args(["-c", terminate])
         .env("PROQI_TEST_BINARY", binary)
         .env("PROQI_TEST_STATE", state.path())
@@ -183,7 +183,7 @@ fn acknowledged_paste_survives_forced_process_termination() {
         catch wait result
         exit 0
     "#;
-    let status = Command::new("/usr/bin/expect")
+    let status = expect_command()
         .args(["-c", crash])
         .env("PROQI_TEST_BINARY", binary)
         .env("PROQI_TEST_STATE", state.path())
@@ -232,7 +232,7 @@ fn keyboard_creation_survives_rapid_pty_resize() {
         catch wait result
         exit [lindex $result 3]
     "#;
-    let status = Command::new("/usr/bin/expect")
+    let status = expect_command()
         .args(["-c", interact])
         .env("PROQI_TEST_BINARY", binary)
         .env("PROQI_TEST_STATE", state.path())
@@ -298,7 +298,7 @@ fn session_browser_searches_and_resumes_in_a_real_pty() {
         catch wait result
         exit [lindex $result 3]
     "#;
-    let status = Command::new("/usr/bin/expect")
+    let status = expect_command()
         .args(["-c", browse])
         .env("PROQI_TEST_BINARY", binary)
         .env("PROQI_TEST_STATE", state.path())
@@ -323,6 +323,13 @@ fn session_browser_searches_and_resumes_in_a_real_pty() {
 #[cfg(target_os = "macos")]
 #[path = "pty/active_control.rs"]
 mod active_control;
+
+#[cfg(target_os = "macos")]
+fn expect_command() -> Command {
+    let mut command = Command::new("/usr/bin/expect");
+    command.env("PROQI_DISABLE_HERDR", "1");
+    command
+}
 
 #[cfg(target_os = "macos")]
 fn wait_for_path(path: &std::path::Path) {

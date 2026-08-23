@@ -1,5 +1,6 @@
 //! Terminal-independent board interaction state.
 
+mod agent;
 mod clipboard;
 mod commands;
 mod control;
@@ -16,8 +17,9 @@ use crate::{
         Action, AppState, ClipboardIntent, DurabilityState, Effect, FailureCode, InteractionMode,
         reduce,
     },
-    domain::{OperationSequence, RequestId, ThoughtId},
+    domain::{OperationSequence, RequestId, SubmissionId, ThoughtId},
     ports::{
+        agent::{AgentTarget, SubmissionRequest},
         editor::{
             CursorMovement, EditCommand, Editor, EditorFactory, EditorSnapshot, TextViewport,
         },
@@ -69,6 +71,19 @@ pub struct PointerInput {
 struct PendingEditorClipboard {
     intent: ClipboardIntent,
     before: EditorSnapshot,
+}
+
+struct PendingSubmission {
+    request: SubmissionRequest,
+    thought_id: ThoughtId,
+    operation_id: crate::domain::OperationId,
+    at: crate::domain::Timestamp,
+    remove: bool,
+}
+
+#[derive(Clone, Copy)]
+struct SubmissionMode {
+    remove: bool,
 }
 
 /// Normalized keys accepted by the board UI.
@@ -153,6 +168,9 @@ pub struct BoardApp {
     pending_clipboard_reads: BTreeSet<RequestId>,
     pending_recovery_exports: BTreeSet<RequestId>,
     recovery_exported_for: Option<OperationSequence>,
+    agent_targets: Vec<AgentTarget>,
+    submission_mode: Option<SubmissionMode>,
+    pending_submissions: BTreeMap<SubmissionId, PendingSubmission>,
 }
 
 impl BoardApp {
@@ -190,6 +208,9 @@ impl BoardApp {
             pending_clipboard_reads: BTreeSet::new(),
             pending_recovery_exports: BTreeSet::new(),
             recovery_exported_for: None,
+            agent_targets: Vec::new(),
+            submission_mode: None,
+            pending_submissions: BTreeMap::new(),
         }
     }
 
@@ -209,6 +230,11 @@ impl BoardApp {
         }
         if self.palette.is_some() {
             return self.handle_palette_input(&input, ids, clock);
+        }
+        if self.submission_mode.is_some()
+            && let Some(effects) = self.handle_submission_input(&input, ids, clock)
+        {
+            return effects;
         }
         if matches!(self.state.durability, DurabilityState::Failed { .. }) {
             match input {
@@ -254,6 +280,18 @@ impl BoardApp {
     #[must_use]
     pub const fn keybindings(&self) -> &crate::ui::KeyBindings {
         &self.settings.keybindings
+    }
+
+    /// Currently verified submission targets, empty when the enhancement is unavailable.
+    #[must_use]
+    pub fn agent_targets(&self) -> &[AgentTarget] {
+        &self.agent_targets
+    }
+
+    /// Whether directional submission targeting is active and removes on acceptance.
+    #[must_use]
+    pub fn submission_mode(&self) -> Option<bool> {
+        self.submission_mode.map(|mode| mode.remove)
     }
 
     /// Prepare current frame geometry without changing the logical cursor.
@@ -306,6 +344,7 @@ impl BoardApp {
             0
         };
         layout.configure_overlay(palette_items, preferred_rows);
+        layout.configure_agent_controls(&self.agent_targets);
         let final_height = self
             .state
             .focused_thought

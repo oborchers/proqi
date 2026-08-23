@@ -57,6 +57,8 @@ impl BoardApp {
             Some(BoardCommand::Delete) => self.delete(ids, clock),
             Some(BoardCommand::Copy) => self.copy_thought(ids),
             Some(BoardCommand::Cut) => self.cut_thought(ids, clock),
+            Some(BoardCommand::Submit) => self.begin_submission(false, ids, clock),
+            Some(BoardCommand::SubmitRemove) => self.begin_submission(true, ids, clock),
             Some(BoardCommand::Undo) => self.history(ids, clock, true),
             Some(BoardCommand::FocusUp) => {
                 self.move_focus(-1);

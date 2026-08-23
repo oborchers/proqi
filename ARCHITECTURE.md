@@ -493,6 +493,14 @@ the resulting receipt without inventing its own queue semantics.
 Submit preserves the thought. Submit-and-remove commits deletion only after an
 accepted submission receipt, and that deletion remains undoable.
 
+The private alpha implements this boundary against Herdr's structured schema
+and protocol discovery commands. It fails closed when the installed client and
+server no longer match the supported contract. Initial discovery is silent so
+ordinary terminals retain an uncluttered board. An explicit refresh, or a
+submission attempt with no verified target, reports why direct submission is
+unavailable. Every submission revalidates the complete target immediately
+before invoking Herdr's semantic prompt operation.
+
 ## CLI and agent-facing contract
 
 The interactive TUI and scriptable CLI call the same `SessionService`. This

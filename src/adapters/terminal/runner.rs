@@ -33,7 +33,8 @@ use super::{
     control::{CrosstermControl, TerminalGuard, TerminationGuard},
     external::{ExternalLane, ExternalResult},
     input::{InputLane, InputMessage},
-    persistence::PersistenceLane,
+    integration::integration_context,
+    persistence::{PersistenceLane, PersistenceResult},
 };
 
 /// Concrete runtime pieces retained for one interactive session.
@@ -152,6 +153,7 @@ fn drive(
     theme: Theme,
 ) -> Result<(), TerminalError> {
     let mut pending = PendingWork::default();
+    enqueue_effects(app, lanes, BoardApp::discover_agents(), &mut pending)?;
     let mut redraw = true;
     loop {
         if lanes.termination.requested() {
@@ -217,6 +219,19 @@ fn enqueue_effects(
         } else if let Effect::RetryPersistence { sequence } = effect {
             lanes.persistence.retry(sequence)?;
             pending.persistence = pending.persistence.saturating_add(1);
+        } else if let Effect::StoreIntegrationContext {
+            session_id,
+            target,
+            verified_at,
+        } = effect
+        {
+            lanes.persistence.metadata(
+                crate::ports::store::OperationBatch::IntegrationContext {
+                    session_id,
+                    context: Some(integration_context(&target, verified_at)),
+                },
+            )?;
+            pending.persistence = pending.persistence.saturating_add(1);
         } else if lanes.external.send(&effect)? {
             pending.external = pending.external.saturating_add(1);
         } else if let Effect::Notify { code } = effect {
@@ -234,18 +249,18 @@ fn drain_persistence(
     let mut changed = false;
     loop {
         match persistence.receiver.try_recv() {
-            Ok(outcome) => {
+            Ok(PersistenceResult::Sequenced { sequence, result }) => {
                 changed = true;
                 pending.persistence = pending.persistence.saturating_sub(1);
-                let succeeded = match outcome.result {
+                let succeeded = match result {
                     Ok(receipt) => {
                         complete_control(
                             pending,
-                            outcome.sequence,
+                            sequence,
                             ControlResult::Accepted(ControlReceipt {
                                 thought_id: pending
                                     .controls
-                                    .get(&outcome.sequence)
+                                    .get(&sequence)
                                     .and_then(|control| control.thought_id),
                                 durable: receipt,
                             }),
@@ -255,7 +270,7 @@ fn drain_persistence(
                     Err(error) => {
                         complete_control(
                             pending,
-                            outcome.sequence,
+                            sequence,
                             ControlResult::Rejected {
                                 code: storage_error_code(&error).to_owned(),
                                 message: error.to_string(),
@@ -266,7 +281,16 @@ fn drain_persistence(
                         false
                     }
                 };
-                app.acknowledge_persistence(outcome.sequence, succeeded);
+                app.acknowledge_persistence(sequence, succeeded);
+            }
+            Ok(PersistenceResult::Metadata { result }) => {
+                changed = true;
+                pending.persistence = pending.persistence.saturating_sub(1);
+                if let Err(error) = result {
+                    app.status = Some(format!(
+                        "submission accepted, but integration context was not saved: {error}"
+                    ));
+                }
             }
             Err(TryRecvError::Empty) => return Ok(changed),
             Err(TryRecvError::Disconnected) if pending.persistence == 0 => return Ok(changed),
@@ -450,6 +474,14 @@ fn drain_external(
             ExternalResult::Exported { request_id, result } => {
                 app.complete_recovery_export(request_id, result.map_err(|error| error.to_string()))
             }
+            ExternalResult::AgentsDiscovered(result) => {
+                app.complete_agent_discovery(result);
+                Vec::new()
+            }
+            ExternalResult::AgentSubmitted {
+                submission_id,
+                result,
+            } => app.complete_submission(submission_id, *result),
         };
         enqueue_effects(app, lanes, effects, pending)?;
     }

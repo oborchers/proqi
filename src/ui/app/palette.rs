@@ -15,6 +15,9 @@ enum Command {
     Copy,
     Cut,
     Paste,
+    Submit,
+    SubmitRemove,
+    RefreshAgents,
     RetryStorage,
     ExportRecovery,
     Undo,
@@ -27,13 +30,16 @@ enum Command {
 }
 
 impl Command {
-    const ALL: [(Self, &'static str); 15] = [
+    const ALL: [(Self, &'static str); 18] = [
         (Self::New, "New thought"),
         (Self::Edit, "Edit focused thought"),
         (Self::Delete, "Delete focused thought"),
         (Self::Copy, "Copy focused thought"),
         (Self::Cut, "Cut focused thought"),
         (Self::Paste, "Paste native clipboard"),
+        (Self::Submit, "Submit to adjacent agent"),
+        (Self::SubmitRemove, "Submit and remove thought"),
+        (Self::RefreshAgents, "Refresh adjacent agents"),
         (Self::RetryStorage, "Retry failed save"),
         (Self::ExportRecovery, "Export recovery file"),
         (Self::Undo, "Undo board action"),
@@ -212,6 +218,9 @@ impl BoardApp {
             Command::Copy => self.copy_active(ids),
             Command::Cut => self.cut_active(ids, clock),
             Command::Paste => self.read_clipboard(ids),
+            Command::Submit => self.begin_submission(false, ids, clock),
+            Command::SubmitRemove => self.begin_submission(true, ids, clock),
+            Command::RefreshAgents => self.refresh_agents(),
             Command::RetryStorage => self.retry_persistence(),
             Command::ExportRecovery => self.export_recovery(ids, clock),
             Command::Undo => self.history(ids, clock, true),

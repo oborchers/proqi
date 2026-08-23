@@ -1,5 +1,6 @@
 //! Internal ports implemented by platform and persistence adapters.
 
+pub mod agent;
 pub mod clipboard;
 pub mod control;
 pub mod editor;

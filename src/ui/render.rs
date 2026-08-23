@@ -244,10 +244,12 @@ fn render_footer(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot,
     let keys = app.keybindings();
     let text = app.status.as_deref().map_or_else(
         || {
-            format!(
+            let base = format!(
                 " {mode}  {durability}  {} new  enter edit  {} undo  {} help  {} quit",
                 keys.new, keys.undo, keys.help, keys.quit
-            )
+            );
+            app.agent_hint()
+                .map_or(base.clone(), |hint| format!(" {hint}  {base}"))
         },
         |status| format!(" {status}"),
     );
@@ -266,6 +268,14 @@ fn render_footer(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot,
             HitTarget::Copy => format!("[{}]", keys.copy),
             HitTarget::Cut => format!("[{}]", keys.cut),
             HitTarget::Delete => format!("[{}]", keys.delete),
+            HitTarget::Submit(direction, remove) => {
+                let key = if *remove {
+                    keys.submit_remove
+                } else {
+                    keys.submit
+                };
+                format!("{key}{}", direction_symbol(*direction))
+            }
             HitTarget::Undo => format!("[{}]", keys.undo),
             HitTarget::Help => format!("[{}]", keys.help),
             HitTarget::Quit => format!("[{}]", keys.quit),
@@ -282,10 +292,19 @@ fn render_footer(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot,
     }
 }
 
+const fn direction_symbol(direction: crate::domain::Direction) -> &'static str {
+    match direction {
+        crate::domain::Direction::Up => "↑",
+        crate::domain::Direction::Right => "→",
+        crate::domain::Direction::Down => "↓",
+        crate::domain::Direction::Left => "←",
+    }
+}
+
 fn render_help(frame: &mut Frame<'_>, app: &BoardApp, overlay: &OverlayLayout, theme: &Theme) {
     let keys = app.keybindings();
     let content = format!(
-        "Board\n  {} new   {}/{} focus   Enter/{} edit   {} delete\n  {}/{} move   {} undo   {} collapse   {} quit\n\nEdit\n  Esc board   Primary+A select all   Primary+U delete line\n  Primary+Z undo   Shift+Primary+Z redo\n\nPaste is one exact operation.",
+        "Board\n  {} new   {}/{} focus   Enter/{} edit   {} delete\n  {}/{} move   {} undo   {} collapse   {}/{} submit   {} quit\n\nEdit\n  Esc board   Primary+A select all   Primary+U delete line\n  Primary+Z undo   Shift+Primary+Z redo\n\nPaste is one exact operation. Submission uses verified Herdr agents only.",
         keys.new,
         keys.focus_down,
         keys.focus_up,
@@ -295,6 +314,8 @@ fn render_help(frame: &mut Frame<'_>, app: &BoardApp, overlay: &OverlayLayout, t
         keys.move_up,
         keys.undo,
         keys.collapse,
+        keys.submit,
+        keys.submit_remove,
         keys.quit,
     );
     frame.render_widget(Clear, overlay.area);
