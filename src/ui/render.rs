@@ -233,6 +233,7 @@ fn cursor_column(snapshot: &crate::ports::editor::EditorSnapshot, cursor_row: us
 
 fn render_footer(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, theme: &Theme) {
     let durability = match app.state.durability {
+        DurabilityState::Durable { .. } if app.has_pending_edit() => "saving",
         DurabilityState::Durable { .. } => "saved",
         DurabilityState::Pending { .. } => "saving",
         DurabilityState::Failed { .. } => "save failed  r retry  w recovery",

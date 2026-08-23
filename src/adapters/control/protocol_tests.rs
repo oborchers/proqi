@@ -32,7 +32,10 @@ fn server_negotiates_protocol_and_bounds_encoded_messages() {
         storage_protocol: 1,
         control_protocol: Some(CONTROL_PROTOCOL_VERSION),
         control_endpoint: Some(endpoint.clone()),
-        launch_directory: "/tmp/proqi-control".to_owned(),
+        launch_directory: std::env::temp_dir()
+            .join("proqi-control")
+            .to_string_lossy()
+            .into_owned(),
         started_at: crate::domain::Timestamp::from_millis(1),
     };
     request.protocol = CONTROL_PROTOCOL_VERSION + 1;

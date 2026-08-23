@@ -1,5 +1,8 @@
 //! Terminal-independent searchable session browser state and geometry.
 
+mod geometry;
+mod management;
+
 use ratatui_core::layout::Rect;
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -101,36 +104,30 @@ pub struct BrowserLayout {
     pub footer: Rect,
 }
 
-impl BrowserLayout {
-    fn hit_test(&self, column: u16, row: u16) -> BrowserHit {
-        if contains(self.footer, column, row) {
-            return BrowserHit::Cancel;
-        }
-        self.entries
-            .iter()
-            .find(|entry| {
-                contains(entry.row, column, row)
-                    || entry
-                        .inline_detail
-                        .is_some_and(|area| contains(area, column, row))
-            })
-            .map_or(BrowserHit::None, |entry| BrowserHit::Item(entry.item_index))
-    }
-}
-
-enum BrowserHit {
+pub(super) enum BrowserHit {
     Item(usize),
+    Rename,
+    Trash,
     Cancel,
     None,
 }
 
 /// Result of handling one browser input.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum BrowserAction {
     /// Continue browsing.
     Continue,
     /// Open this typed session after the browser restores the terminal.
     Open(SessionId),
+    /// Persist a new optional name and reopen the refreshed browser.
+    Rename {
+        /// Session to rename.
+        session_id: SessionId,
+        /// Empty input clears the optional name.
+        name: Option<String>,
+    },
+    /// Move this session into recoverable trash.
+    Trash(SessionId),
     /// Leave without opening a session.
     Cancel,
 }
@@ -144,6 +141,7 @@ pub struct SessionBrowser {
     first_visible: usize,
     now: Timestamp,
     layout: Option<BrowserLayout>,
+    rename: Option<management::RenameState>,
     /// Visible explanation for blocked or ambiguous actions.
     pub status: Option<String>,
 }
@@ -161,6 +159,7 @@ impl SessionBrowser {
             first_visible: 0,
             now,
             layout: None,
+            rename: None,
             status: None,
         }
     }
@@ -169,6 +168,12 @@ impl SessionBrowser {
     #[must_use]
     pub fn query(&self) -> &str {
         &self.query
+    }
+
+    /// Active rename input, when the browser is editing a session name.
+    #[must_use]
+    pub fn rename_value(&self) -> Option<&str> {
+        self.rename.as_ref().map(|rename| rename.value.as_str())
     }
 
     /// Search results in their storage-defined ranking order.
@@ -245,6 +250,9 @@ impl SessionBrowser {
     /// Apply one normalized terminal event.
     pub fn handle(&mut self, input: UiInput) -> BrowserAction {
         self.status = None;
+        if self.rename.is_some() {
+            return self.handle_rename(input);
+        }
         match input {
             UiInput::Key(UiKey::Quit | UiKey::Escape) => BrowserAction::Cancel,
             UiInput::Key(UiKey::Enter) => self.activate(),
@@ -267,10 +275,14 @@ impl SessionBrowser {
                 }
                 BrowserAction::Continue
             }
-            UiInput::Key(UiKey::Character(character)) => {
-                self.handle_character(character);
-                BrowserAction::Continue
-            }
+            UiInput::Key(UiKey::Character(character)) => match character {
+                'R' if self.query.is_empty() => self.begin_rename(),
+                'D' if self.query.is_empty() => self.trash_selected(),
+                _ => {
+                    self.handle_character(character);
+                    BrowserAction::Continue
+                }
+            },
             UiInput::Paste(text) => {
                 self.query.push_str(&text.replace(['\r', '\n'], " "));
                 self.refilter();
@@ -279,94 +291,6 @@ impl SessionBrowser {
             UiInput::Pointer(pointer) => self.handle_pointer(pointer),
             UiInput::Resize { .. } | UiInput::Key(_) => BrowserAction::Continue,
         }
-    }
-
-    fn compute_layout(&self, area: Rect) -> BrowserLayout {
-        let header_height = area.height.min(2);
-        let footer_height = u16::from(area.height > header_height);
-        let header = Rect::new(area.x, area.y, area.width, header_height);
-        let body_y = area.y.saturating_add(header_height);
-        let body_height = area.height.saturating_sub(header_height + footer_height);
-        let footer = Rect::new(
-            area.x,
-            area.bottom().saturating_sub(footer_height),
-            area.width,
-            footer_height,
-        );
-        let wide = area.width >= 72;
-        let result_width = if wide {
-            area.width.saturating_mul(3) / 5
-        } else {
-            area.width
-        };
-        let results = Rect::new(area.x, body_y, result_width, body_height);
-        let detail = wide.then(|| {
-            Rect::new(
-                results.right(),
-                body_y,
-                area.width.saturating_sub(result_width),
-                body_height,
-            )
-        });
-        let entries = self.place_entries(results, !wide);
-        BrowserLayout {
-            area,
-            header,
-            results,
-            detail,
-            entries,
-            footer,
-        }
-    }
-
-    fn place_entries(&self, area: Rect, inline: bool) -> Vec<BrowserEntryLayout> {
-        let mut entries = Vec::new();
-        let mut y = area.y;
-        let mut previous_group = None;
-        for (filtered_position, item_index) in self
-            .filtered
-            .iter()
-            .copied()
-            .enumerate()
-            .skip(self.first_visible)
-        {
-            let item = &self.items[item_index];
-            let group = self.group_for(item);
-            let group_area =
-                (previous_group != Some(group)).then(|| Rect::new(area.x, y, area.width, 1));
-            if group_area.is_some() {
-                y = y.saturating_add(1);
-            }
-            if y >= area.bottom() {
-                break;
-            }
-            let row_height = area.bottom().saturating_sub(y).min(2);
-            let row = Rect::new(area.x, y, area.width, row_height);
-            y = y.saturating_add(row_height);
-            let inline_detail = (inline && filtered_position == self.selected && y < area.bottom())
-                .then(|| {
-                    let height = area.bottom().saturating_sub(y).min(8);
-                    let detail = Rect::new(
-                        area.x.saturating_add(2),
-                        y,
-                        area.width.saturating_sub(2),
-                        height,
-                    );
-                    y = y.saturating_add(height);
-                    detail
-                });
-            entries.push(BrowserEntryLayout {
-                item_index,
-                group: group_area.map(|area| (group, area)),
-                row,
-                inline_detail,
-            });
-            previous_group = Some(group);
-            if y >= area.bottom() {
-                break;
-            }
-        }
-        entries
     }
 
     fn refilter(&mut self) {
@@ -425,6 +349,8 @@ impl SessionBrowser {
         };
         match layout.hit_test(pointer.column, pointer.row) {
             BrowserHit::Cancel => BrowserAction::Cancel,
+            BrowserHit::Rename => self.begin_rename(),
+            BrowserHit::Trash => self.trash_selected(),
             BrowserHit::Item(item_index) => {
                 let Some(position) = self.filtered.iter().position(|index| *index == item_index)
                 else {
@@ -465,6 +391,7 @@ fn searchable_text(item: &SessionBrowserItem) -> String {
         item.hit.origin_cwd.to_string_lossy().into_owned(),
         item.hit.last_opened_cwd.to_string_lossy().into_owned(),
         item.hit.excerpt.clone(),
+        item.hit.search_content.clone(),
     ];
     values.extend(item.hit.previews.iter().cloned());
     if let Some(context) = &item.hit.integration_context {
@@ -478,8 +405,4 @@ fn searchable_text(item: &SessionBrowserItem) -> String {
         ]);
     }
     values.join("\n")
-}
-
-fn contains(area: Rect, column: u16, row: u16) -> bool {
-    column >= area.x && column < area.right() && row >= area.y && row < area.bottom()
 }

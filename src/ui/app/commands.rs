@@ -95,31 +95,47 @@ impl BoardApp {
     ) -> Vec<Effect> {
         match key {
             UiKey::Escape => {
+                let effects = self.flush_pending_edit(ids, clock);
                 let _effects = self.reduce(Action::ExitEdit);
                 self.editor = None;
-                return Vec::new();
+                return effects;
             }
             UiKey::Undo => return self.history(ids, clock, true),
             UiKey::Redo => return self.history(ids, clock, false),
-            UiKey::Copy => return self.copy_selection(ids),
-            UiKey::Cut => return self.cut_selection(ids),
-            UiKey::PasteClipboard => return self.read_clipboard(ids),
+            UiKey::Copy => {
+                let mut effects = self.flush_pending_edit(ids, clock);
+                effects.extend(self.copy_selection(ids));
+                return effects;
+            }
+            UiKey::Cut => {
+                let mut effects = self.flush_pending_edit(ids, clock);
+                effects.extend(self.cut_selection(ids));
+                return effects;
+            }
+            UiKey::PasteClipboard => {
+                let mut effects = self.flush_pending_edit(ids, clock);
+                effects.extend(self.read_clipboard(ids));
+                return effects;
+            }
             _ => {}
         }
-        let command = match key {
-            UiKey::Character(character) => EditCommand::InsertChar(character),
-            UiKey::Enter => EditCommand::InsertNewline,
-            UiKey::Backspace => EditCommand::DeleteBack,
-            UiKey::Delete => EditCommand::DeleteForward,
+        let (command, boundary) = match key {
+            UiKey::Character(character) => (EditCommand::InsertChar(character), false),
+            UiKey::Enter => (EditCommand::InsertNewline, false),
+            UiKey::Backspace => (EditCommand::DeleteBack, false),
+            UiKey::Delete => (EditCommand::DeleteForward, false),
             UiKey::Move {
                 movement,
                 extend_selection,
-            } => EditCommand::Move {
-                movement,
-                extend_selection,
-            },
-            UiKey::SelectAll => EditCommand::SelectAll,
-            UiKey::DeleteLine => EditCommand::DeleteLogicalLine,
+            } => (
+                EditCommand::Move {
+                    movement,
+                    extend_selection,
+                },
+                true,
+            ),
+            UiKey::SelectAll => (EditCommand::SelectAll, true),
+            UiKey::DeleteLine => (EditCommand::DeleteLogicalLine, true),
             UiKey::Escape
             | UiKey::Undo
             | UiKey::Redo
@@ -128,7 +144,16 @@ impl BoardApp {
             | UiKey::Cut
             | UiKey::PasteClipboard => return Vec::new(),
         };
-        self.apply_edit(command, ids, clock)
+        let mut effects = if boundary {
+            self.flush_pending_edit(ids, clock)
+        } else {
+            Vec::new()
+        };
+        self.apply_edit(command);
+        if matches!(key, UiKey::DeleteLine) {
+            effects.extend(self.flush_pending_edit(ids, clock));
+        }
+        effects
     }
 
     pub(super) fn paste(
@@ -140,7 +165,10 @@ impl BoardApp {
         if matches!(self.state.mode, InteractionMode::Board) {
             self.create(content, ids, clock)
         } else {
-            self.apply_edit(EditCommand::Paste(content), ids, clock)
+            let mut effects = self.flush_pending_edit(ids, clock);
+            self.apply_edit(EditCommand::Paste(content));
+            effects.extend(self.flush_pending_edit(ids, clock));
+            effects
         }
     }
 
@@ -162,6 +190,7 @@ impl BoardApp {
         clock: &impl Clock,
         undo: bool,
     ) -> Vec<Effect> {
+        let mut effects = self.flush_pending_edit(ids, clock);
         let scope = match self.state.mode {
             InteractionMode::Board => UndoScope::Board,
             InteractionMode::Edit { thought_id } => UndoScope::Editor { thought_id },
@@ -179,7 +208,7 @@ impl BoardApp {
                 at: clock.now(),
             }
         };
-        let effects = self.reduce(action);
+        effects.extend(self.reduce(action));
         self.reload_editor();
         effects
     }

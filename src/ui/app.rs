@@ -4,6 +4,7 @@ mod agent;
 mod clipboard;
 mod commands;
 mod control;
+mod editing;
 mod palette;
 mod pointer;
 mod recovery;
@@ -148,6 +149,8 @@ pub struct BoardApp {
     pub state: AppState,
     editor: Option<(ThoughtId, Box<dyn Editor>)>,
     editor_factory: Box<dyn EditorFactory>,
+    pending_edit: Option<editing::PendingEdit>,
+    edit_generation: u64,
     /// Whether the user requested a clean exit.
     pub quit: bool,
     /// Whether contextual help is visible.
@@ -191,6 +194,8 @@ impl BoardApp {
             state,
             editor: None,
             editor_factory: Box::new(editor_factory),
+            pending_edit: None,
+            edit_generation: 0,
             quit: false,
             help: false,
             status: None,
@@ -222,8 +227,13 @@ impl BoardApp {
         clock: &impl Clock,
     ) -> Vec<Effect> {
         if input == UiInput::Key(UiKey::Quit) {
+            let effects = if matches!(self.state.durability, DurabilityState::Failed { .. }) {
+                Vec::new()
+            } else {
+                self.flush_pending_edit(ids, clock)
+            };
             self.request_quit();
-            return Vec::new();
+            return effects;
         }
         if !matches!(input, UiInput::Resize { .. }) {
             self.status = None;
@@ -240,7 +250,8 @@ impl BoardApp {
             match input {
                 UiInput::Key(UiKey::Character('r')) => return self.retry_persistence(),
                 UiInput::Key(UiKey::Character('w')) => return self.export_recovery(ids, clock),
-                _ => {}
+                UiInput::Resize { .. } => {}
+                UiInput::Key(_) | UiInput::Paste(_) | UiInput::Pointer(_) => return Vec::new(),
             }
         }
         match input {
@@ -262,6 +273,18 @@ impl BoardApp {
     #[must_use]
     pub fn editor_snapshot(&self) -> Option<EditorSnapshot> {
         self.editor.as_ref().map(|(_, editor)| editor.snapshot())
+    }
+
+    /// Monotonic counter used by the runtime to detect new unflushed editor work.
+    #[must_use]
+    pub const fn edit_generation(&self) -> u64 {
+        self.edit_generation
+    }
+
+    /// Whether editor content is waiting for its semantic durability boundary.
+    #[must_use]
+    pub const fn has_pending_edit(&self) -> bool {
+        self.pending_edit.is_some()
     }
 
     /// Current hover target resolved from the latest rendered layout.
@@ -373,7 +396,7 @@ impl BoardApp {
         if let Some((current, editor)) = &mut self.editor
             && *current == thought_id
         {
-            if editor.snapshot().content != content {
+            if self.pending_edit.is_none() && editor.snapshot().content != content {
                 editor.replace_content(content, restored_cursor.unwrap_or_default());
             }
         } else {
@@ -393,6 +416,11 @@ impl BoardApp {
 
     /// Apply one ordered persistence acknowledgement to the reducer state.
     pub fn acknowledge_persistence(&mut self, sequence: OperationSequence, succeeded: bool) {
+        if !succeeded {
+            self.quit = false;
+        } else if self.pending_edit.is_some() {
+            self.edit_generation = self.edit_generation.wrapping_add(1);
+        }
         let action = if succeeded {
             Action::PersistenceCommitted(sequence)
         } else {
@@ -437,41 +465,6 @@ impl BoardApp {
         if let Some(thought_id) = self.state.focused_thought {
             let _effects = self.reduce(Action::EnterEdit(thought_id));
             self.sync_editor_from_state();
-        }
-    }
-
-    fn apply_edit(
-        &mut self,
-        command: EditCommand,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-    ) -> Vec<Effect> {
-        let edit = self.editor.as_mut().and_then(|(thought_id, editor)| {
-            let before = editor.snapshot();
-            let outcome = editor.apply(command);
-            outcome
-                .content_changed
-                .then_some((*thought_id, before, outcome.snapshot))
-        });
-        let Some((thought_id, before, after)) = edit else {
-            return Vec::new();
-        };
-        let action = Action::EditThought {
-            thought_id,
-            revision_id: ids.revision_id(),
-            before_content: before.content,
-            after_content: after.content,
-            before_cursor: before.cursor,
-            after_cursor: after.cursor,
-            at: clock.now(),
-        };
-        match reduce(&mut self.state, action) {
-            Ok(effects) => effects,
-            Err(error) => {
-                self.status = Some(error.to_string());
-                self.reload_editor();
-                Vec::new()
-            }
         }
     }
 

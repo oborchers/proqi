@@ -140,6 +140,30 @@ fn storage_failure_remains_visible_until_retry() {
 }
 
 #[test]
+fn concurrent_failures_keep_the_earliest_retry_boundary() {
+    let mut fixture = Fixture::new();
+    fixture.create("first");
+    fixture.create("second");
+    for sequence in [OperationSequence::new(2), OperationSequence::new(1)] {
+        reduce(
+            &mut fixture.state,
+            Action::PersistenceFailed {
+                sequence,
+                code: FailureCode::StorageFailed,
+            },
+        )
+        .expect("record failure");
+    }
+    assert!(matches!(
+        fixture.state.durability,
+        DurabilityState::Failed {
+            failed,
+            ..
+        } if failed == OperationSequence::new(1)
+    ));
+}
+
+#[test]
 fn acknowledgements_must_be_ordered_and_truthful() {
     let mut fixture = Fixture::new();
     fixture.create("one");

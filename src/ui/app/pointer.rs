@@ -18,7 +18,13 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        match pointer.kind {
+        let mut effects = match pointer.kind {
+            PointerKind::Down(_) | PointerKind::Drag(_) | PointerKind::Up(_) => {
+                self.flush_pending_edit(ids, clock)
+            }
+            PointerKind::Move | PointerKind::ScrollUp | PointerKind::ScrollDown => Vec::new(),
+        };
+        effects.extend(match pointer.kind {
             PointerKind::Move => {
                 self.hovered = self.hit(pointer);
                 Vec::new()
@@ -26,10 +32,11 @@ impl BoardApp {
             PointerKind::ScrollUp => self.scroll_pointer(-1),
             PointerKind::ScrollDown => self.scroll_pointer(1),
             PointerKind::Down(PointerButton::Left) => self.pointer_down(pointer, ids, clock),
-            PointerKind::Drag(PointerButton::Left) => self.pointer_drag(pointer, ids, clock),
+            PointerKind::Drag(PointerButton::Left) => self.pointer_drag(pointer),
             PointerKind::Up(PointerButton::Left) => self.pointer_up(ids, clock),
             PointerKind::Down(_) | PointerKind::Up(_) | PointerKind::Drag(_) => Vec::new(),
-        }
+        });
+        effects
     }
 
     fn pointer_down(
@@ -42,7 +49,7 @@ impl BoardApp {
         self.hovered = target;
         match target {
             Some(HitTarget::Thought(thought_id)) => {
-                self.focus_and_place_cursor(thought_id, pointer, ids, clock)
+                self.focus_and_place_cursor(thought_id, pointer)
             }
             Some(HitTarget::DragHandle(thought_id)) => {
                 self.focus(thought_id);
@@ -85,12 +92,7 @@ impl BoardApp {
         }
     }
 
-    fn pointer_drag(
-        &mut self,
-        pointer: PointerInput,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-    ) -> Vec<Effect> {
+    fn pointer_drag(&mut self, pointer: PointerInput) -> Vec<Effect> {
         if self.dragged_thought.is_some() {
             self.drag_target = self.position_at(pointer.row);
             return Vec::new();
@@ -105,7 +107,8 @@ impl BoardApp {
         let Some((row, column)) = self.editor_cell(thought_id, pointer) else {
             return Vec::new();
         };
-        self.apply_edit(EditCommand::PointerDrag { row, column }, ids, clock)
+        self.apply_edit(EditCommand::PointerDrag { row, column });
+        Vec::new()
     }
 
     fn pointer_up(&mut self, ids: &mut impl IdGenerator, clock: &impl Clock) -> Vec<Effect> {
@@ -124,8 +127,6 @@ impl BoardApp {
         &mut self,
         thought_id: crate::domain::ThoughtId,
         pointer: PointerInput,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
     ) -> Vec<Effect> {
         let cell = self.editor_cell(thought_id, pointer);
         self.focus(thought_id);
@@ -133,7 +134,8 @@ impl BoardApp {
         let Some((row, column)) = cell else {
             return Vec::new();
         };
-        self.apply_edit(EditCommand::PointerStart { row, column }, ids, clock)
+        self.apply_edit(EditCommand::PointerStart { row, column });
+        Vec::new()
     }
 
     fn scroll_pointer(&mut self, delta: isize) -> Vec<Effect> {

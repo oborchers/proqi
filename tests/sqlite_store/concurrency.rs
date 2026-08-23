@@ -5,7 +5,7 @@ fn bounded_contention_is_visible_and_failed_commit_is_not_durable() {
     let fixture = DatabaseFixture::new();
     let mut setup = fixture.open();
     let mut ids = FakeIdGenerator::new(1_725_000_000_000);
-    let mut state = session_state(&mut ids, Path::new("/tmp/proqi-busy"));
+    let mut state = session_state(&mut ids, &test_path("proqi-busy"));
     let session_id = state.board.session.id;
     setup
         .commit(&OperationBatch::CreateSession(state.board.session.clone()))
@@ -65,7 +65,7 @@ fn rejected_operation_rolls_back_current_state_and_receipt() {
     let fixture = DatabaseFixture::new();
     let mut store = fixture.open();
     let mut ids = FakeIdGenerator::new(1_725_000_000_000);
-    let mut state = session_state(&mut ids, Path::new("/tmp/proqi-rollback"));
+    let mut state = session_state(&mut ids, &test_path("proqi-rollback"));
     let session_id = state.board.session.id;
     store
         .commit(&OperationBatch::CreateSession(state.board.session.clone()))
@@ -131,7 +131,7 @@ fn process_termination_rolls_back_uncommitted_sqlite_write() {
     let fixture = DatabaseFixture::new();
     let mut store = fixture.open();
     let mut ids = FakeIdGenerator::new(1_725_000_000_000);
-    let mut state = session_state(&mut ids, Path::new("/tmp/proqi-crash"));
+    let mut state = session_state(&mut ids, &test_path("proqi-crash"));
     let session_id = state.board.session.id;
     store
         .commit(&OperationBatch::CreateSession(state.board.session.clone()))
@@ -186,7 +186,7 @@ fn load_rejects_noncontiguous_commit_history() {
     let fixture = DatabaseFixture::new();
     let mut store = fixture.open();
     let mut ids = FakeIdGenerator::new(1_725_000_000_000);
-    let mut state = session_state(&mut ids, Path::new("/tmp/proqi-corrupt-history"));
+    let mut state = session_state(&mut ids, &test_path("proqi-corrupt-history"));
     let session_id = state.board.session.id;
     store
         .commit(&OperationBatch::CreateSession(state.board.session.clone()))
@@ -209,8 +209,8 @@ fn competing_connections_commit_different_sessions() {
     let fixture = DatabaseFixture::new();
     let mut setup = fixture.open();
     let mut ids = FakeIdGenerator::new(1_725_000_000_000);
-    let mut first = session_state(&mut ids, Path::new("/tmp/proqi-writer-one"));
-    let mut second = session_state(&mut ids, Path::new("/tmp/proqi-writer-two"));
+    let mut first = session_state(&mut ids, &test_path("proqi-writer-one"));
+    let mut second = session_state(&mut ids, &test_path("proqi-writer-two"));
     for state in [&first, &second] {
         setup
             .commit(&OperationBatch::CreateSession(state.board.session.clone()))

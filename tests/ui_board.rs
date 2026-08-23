@@ -1,7 +1,5 @@
 //! Deterministic complete-board rendering and interaction contracts.
 
-use std::path::PathBuf;
-
 use proqi::{
     adapters::memory::{FakeClock, FakeIdGenerator},
     application::{AppState, ClipboardIntent, Effect, FailureCode},
@@ -34,7 +32,7 @@ impl Fixture {
         let mut ids = FakeIdGenerator::new(1_725_000_000_000);
         let session = Session::new(
             ids.session_id(),
-            PathBuf::from("/tmp/proqi-ui-contract"),
+            std::env::temp_dir().join("proqi-ui-contract"),
             Timestamp::from_millis(10),
         )
         .expect("session");
@@ -427,25 +425,9 @@ fn narrow_empty_board_has_a_complete_explicit_buffer_snapshot() {
     );
 }
 
-#[test]
-fn storage_failure_blocks_new_edits_and_exposes_retry() {
-    let mut fixture = Fixture::new();
-    let sequence = fixture.paste("durable candidate");
-    fixture.app.acknowledge_persistence(sequence, false);
-    let before = fixture.app.editor_snapshot().expect("editor");
-    assert!(
-        fixture
-            .effects(UiInput::Key(UiKey::Character('x')))
-            .is_empty()
-    );
-    assert_eq!(fixture.app.editor_snapshot().expect("editor"), before);
-    assert_eq!(
-        fixture.effects(UiInput::Key(UiKey::Character('r'))),
-        vec![Effect::RetryPersistence { sequence }]
-    );
-}
-
 #[path = "ui_board/agent.rs"]
 mod agent;
 #[path = "ui_board/clipboard.rs"]
 mod clipboard;
+#[path = "ui_board/durability.rs"]
+mod durability;

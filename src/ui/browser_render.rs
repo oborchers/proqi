@@ -80,10 +80,13 @@ fn render_header(
         title.area,
     );
     if layout.header.height > 1 {
+        let (label, value) = browser
+            .rename_value()
+            .map_or((" Search: ", browser.query()), |value| (" Rename: ", value));
         frame.render_widget(
             Paragraph::new(Line::from(vec![
-                Span::styled(" Search: ", Style::default().fg(theme.muted)),
-                Span::raw(browser.query().to_owned()),
+                Span::styled(label, Style::default().fg(theme.muted)),
+                Span::raw(value.to_owned()),
                 Span::styled("_", Style::default().fg(theme.accent)),
             ])),
             RectLine::new(layout.header, 1).area,
@@ -221,7 +224,7 @@ fn render_footer(
     let text = browser
         .status
         .as_deref()
-        .unwrap_or(" ↑↓ or j/k select  type to search  enter/click open  esc cancel");
+        .unwrap_or(" [R] rename  [D] trash  ↑↓ select  enter open  esc cancel");
     frame.render_widget(
         Paragraph::new(text).style(Style::default().fg(if browser.status.is_some() {
             theme.error

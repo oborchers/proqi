@@ -216,6 +216,7 @@ fn launch_modes_and_capability_discovery_have_stable_output() {
     let capabilities = success(root, &["capabilities"], None);
     assert_eq!(capabilities["cli_schema_version"], 1);
     assert_eq!(capabilities["active_session_control"], true);
+    assert_eq!(capabilities["max_thought_stdin_bytes"], 131_072);
     assert_eq!(capabilities["herdr_submission"], true);
     assert_eq!(capabilities["herdr_managed_pane_required"], true);
 
@@ -234,6 +235,27 @@ fn launch_modes_and_capability_discovery_have_stable_output() {
             .expect("sessions")
             .len(),
         1
+    );
+}
+
+#[test]
+fn thought_standard_input_has_one_explicit_transport_safe_bound() {
+    let temporary = tempfile::tempdir().expect("temporary directory");
+    let session = create_session(temporary.path());
+    let oversized = "x".repeat(131_073);
+    let output = run(
+        temporary.path(),
+        &["thoughts", "add", &session],
+        Some(&oversized),
+    );
+    assert!(!output.status.success());
+    let failure: Value = serde_json::from_slice(&output.stdout).expect("JSON error");
+    assert_eq!(failure["error"]["code"], "invalid_input");
+    assert!(
+        failure["error"]["message"]
+            .as_str()
+            .expect("message")
+            .contains("131072-byte")
     );
 }
 

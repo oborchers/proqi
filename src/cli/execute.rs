@@ -25,6 +25,8 @@ use super::{
 
 use sessions::{browser_items, execute_sessions, list_sessions};
 
+const MAX_THOUGHT_STDIN_BYTES: usize = 128 * 1024;
+
 struct Outcome {
     data: Value,
     human: String,
@@ -81,7 +83,8 @@ fn capabilities() -> Outcome {
             "cli_schema_version": 1,
             "identifier_encoding": "prefix_base32hex_uuidv7",
             "commands": ["sessions", "thoughts"],
-            "active_session_control": true,
+            "active_session_control": cfg!(unix),
+            "max_thought_stdin_bytes": MAX_THOUGHT_STDIN_BYTES,
             "herdr_submission": true,
             "herdr_managed_pane_required": true,
         }),
@@ -114,8 +117,6 @@ fn execute_launch(
                 return list_sessions(&mut context, None, false);
             }
             ResumeRequest::Picker => {
-                let items = browser_items(&mut context)?;
-                let now = context.clock.now();
                 let settings = settings.as_ref().ok_or_else(|| {
                     CliError::new(
                         "terminal_failed",
@@ -123,10 +124,10 @@ fn execute_launch(
                         1,
                     )
                 })?;
-                let Some(id) = terminal::pick_session(items, now, settings)? else {
+                let Some(session) = browse_for_session(&mut context, settings)? else {
                     return Ok(cancelled_browser());
                 };
-                session_service(&mut context)?.resume(id)?
+                session
             }
             ResumeRequest::Fresh => session_service(&mut context)?.create_session()?,
         }
@@ -140,6 +141,41 @@ fn execute_launch(
         let _closed = terminal::run(resources)?;
     }
     Ok(opened_session(id))
+}
+
+fn browse_for_session(
+    context: &mut RuntimeContext,
+    settings: &crate::ui::UiSettings,
+) -> Result<
+    Option<crate::application::LeasedSession<crate::adapters::runtime::FileSessionLease>>,
+    CliError,
+> {
+    loop {
+        let items = browser_items(context)?;
+        let now = context.clock.now();
+        match terminal::pick_session(items, now, settings)? {
+            crate::ui::BrowserAction::Open(id) => {
+                return session_service(context)?
+                    .resume(id)
+                    .map(Some)
+                    .map_err(Into::into);
+            }
+            crate::ui::BrowserAction::Rename { session_id, name } => {
+                session_service(context)?.rename_session(session_id, name.as_deref())?;
+            }
+            crate::ui::BrowserAction::Trash(id) => {
+                session_service(context)?.trash_session(id)?;
+            }
+            crate::ui::BrowserAction::Cancel => return Ok(None),
+            crate::ui::BrowserAction::Continue => {
+                return Err(CliError::new(
+                    "terminal_failed",
+                    "session browser returned an incomplete action".to_owned(),
+                    1,
+                ));
+            }
+        }
+    }
 }
 
 fn cancelled_browser() -> Outcome {
@@ -421,8 +457,14 @@ fn parse_operation_id(value: Option<&str>) -> Result<Option<OperationId>, CliErr
 fn read_standard_input() -> Result<String, CliError> {
     let mut content = String::new();
     std::io::stdin()
+        .take((MAX_THOUGHT_STDIN_BYTES + 1) as u64)
         .read_to_string(&mut content)
         .map_err(|error| CliError::input(format!("read standard input: {error}")))?;
+    if content.len() > MAX_THOUGHT_STDIN_BYTES {
+        return Err(CliError::input(format!(
+            "thought content exceeds the {MAX_THOUGHT_STDIN_BYTES}-byte standard-input limit"
+        )));
+    }
     Ok(content)
 }
 

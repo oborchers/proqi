@@ -6,7 +6,7 @@ use ratatui_core::terminal::Terminal;
 use ratatui_crossterm::CrosstermBackend;
 
 use crate::{
-    domain::{SessionId, Timestamp},
+    domain::Timestamp,
     ui::{BrowserAction, SessionBrowser, SessionBrowserItem, Theme, UiSettings, render_browser},
 };
 
@@ -26,7 +26,7 @@ pub(crate) fn pick_session(
     items: Vec<SessionBrowserItem>,
     now: Timestamp,
     settings: &UiSettings,
-) -> Result<Option<SessionId>, TerminalError> {
+) -> Result<BrowserAction, TerminalError> {
     let guard = TerminalGuard::enter(CrosstermControl)?;
     let termination = TerminationGuard::register()?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
@@ -51,11 +51,11 @@ fn drive(
     input: &InputLane,
     termination: &TerminationGuard,
     theme: &Theme,
-) -> Result<Option<SessionId>, TerminalError> {
+) -> Result<BrowserAction, TerminalError> {
     let mut dirty = true;
     loop {
         if termination.requested() {
-            return Ok(None);
+            return Ok(BrowserAction::Cancel);
         }
         if dirty {
             terminal.draw(|frame| {
@@ -67,8 +67,7 @@ fn drive(
         match input.receiver.recv_timeout(Duration::from_millis(40)) {
             Ok(InputMessage::Event(event)) => match browser.handle(event) {
                 BrowserAction::Continue => dirty = true,
-                BrowserAction::Open(id) => return Ok(Some(id)),
-                BrowserAction::Cancel => return Ok(None),
+                action => return Ok(action),
             },
             Ok(InputMessage::Failed(message)) => return Err(TerminalError::Io(message)),
             Err(RecvTimeoutError::Timeout) => {}

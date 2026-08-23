@@ -25,7 +25,7 @@ fn coordinator(runtime: PathBuf, instance_id: InstanceId, started: i64) -> FileR
     FileRuntimeCoordinator::new(
         runtime,
         instance_id,
-        PathBuf::from("/tmp/proqi-runtime-contract"),
+        std::env::temp_dir().join("proqi-runtime-contract"),
         Timestamp::from_millis(started),
         "test-version",
     )

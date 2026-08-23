@@ -222,9 +222,13 @@ fn reduce_persistence(state: &mut AppState, action: &Action) -> ApplicationResul
             if !state.pending_sequences.contains(sequence) {
                 return Err(ApplicationError::InvalidState);
             }
+            let failed = match state.durability {
+                DurabilityState::Failed { failed, .. } => failed.min(*sequence),
+                DurabilityState::Durable { .. } | DurabilityState::Pending { .. } => *sequence,
+            };
             state.durability = DurabilityState::Failed {
                 durable: state.board.session.last_durable_sequence,
-                failed: *sequence,
+                failed,
                 code: *code,
             };
             Ok(vec![Effect::Notify { code: *code }])

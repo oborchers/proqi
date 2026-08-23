@@ -1,7 +1,5 @@
 //! Mouse parity for focused-thought actions and narrow chrome.
 
-use std::path::PathBuf;
-
 use proqi::{
     adapters::memory::{FakeClock, FakeIdGenerator},
     application::{AppState, Effect, FailureCode},
@@ -23,7 +21,7 @@ impl Fixture {
         let now = Timestamp::from_millis(10);
         let session = Session::new(
             ids.session_id(),
-            PathBuf::from("/tmp/proqi-mouse-actions"),
+            std::env::temp_dir().join("proqi-mouse-actions"),
             now,
         )
         .expect("session");

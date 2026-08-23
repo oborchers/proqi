@@ -21,7 +21,17 @@ impl BoardApp {
             return Vec::new();
         }
         let request_id = ids.request_id();
-        let document = capture_recovery(&self.state, clock.now());
+        let exported_at = clock.now();
+        let mut document = capture_recovery(&self.state, exported_at);
+        if let Some((thought_id, snapshot)) = self.pending_edit_snapshot()
+            && let Some(thought) = document
+                .thoughts
+                .iter_mut()
+                .find(|thought| thought.id == thought_id)
+        {
+            thought.content.clone_from(&snapshot.content);
+            thought.updated_at = exported_at;
+        }
         self.pending_recovery_exports.insert(request_id);
         self.status = Some("exporting recovery file".to_owned());
         vec![Effect::ExportRecovery {

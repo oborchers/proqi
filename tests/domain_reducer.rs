@@ -1,7 +1,5 @@
 //! Model and reducer contracts for board operations, editor history, and effects.
 
-use std::path::PathBuf;
-
 use proqi::{
     adapters::memory::FakeIdGenerator,
     application::{
@@ -26,7 +24,7 @@ impl Fixture {
         let mut ids = FakeIdGenerator::new(1_725_000_000_000);
         let session = Session::new(
             ids.session_id(),
-            PathBuf::from("/tmp/proqi-contract"),
+            std::env::temp_dir().join("proqi-contract"),
             Timestamp::from_millis(1),
         )
         .expect("session");

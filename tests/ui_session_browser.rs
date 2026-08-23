@@ -16,7 +16,7 @@ use ratatui_core::{backend::TestBackend, buffer::Buffer, terminal::Terminal};
 fn item(
     ids: &mut FakeIdGenerator,
     name: Option<&str>,
-    path: &str,
+    path: PathBuf,
     preview: &str,
     active_at: i64,
     availability: fn() -> BrowserAvailability,
@@ -26,18 +26,23 @@ fn item(
         hit: SessionHit {
             id,
             name: name.map(str::to_owned),
-            origin_cwd: PathBuf::from(path),
-            last_opened_cwd: PathBuf::from(path),
+            origin_cwd: path.clone(),
+            last_opened_cwd: path,
             last_opened_at: Timestamp::from_millis(active_at),
             last_active_at: Timestamp::from_millis(active_at),
             thought_count: 2,
             excerpt: preview.to_owned(),
             previews: vec![preview.to_owned()],
+            search_content: preview.to_owned(),
             integration_context: None,
             trashed: matches!(availability(), BrowserAvailability::Trashed),
         },
         availability: availability(),
     }
+}
+
+fn test_path(name: &str) -> PathBuf {
+    std::env::temp_dir().join(name)
 }
 
 fn resumable() -> BrowserAvailability {
@@ -60,8 +65,12 @@ fn active(ids: &mut FakeIdGenerator, hit: SessionHit) -> SessionBrowserItem {
         version: "0.1.0-alpha.1".to_owned(),
         storage_protocol: 1,
         control_protocol: Some(1),
-        control_endpoint: Some("/tmp/proqi-control.sock".to_owned()),
-        launch_directory: "/tmp/agent".to_owned(),
+        control_endpoint: Some(
+            test_path("proqi-control.sock")
+                .to_string_lossy()
+                .into_owned(),
+        ),
+        launch_directory: test_path("agent").to_string_lossy().into_owned(),
         started_at: Timestamp::from_millis(1_000),
     };
     SessionBrowserItem {
@@ -100,11 +109,11 @@ fn text(buffer: &Buffer) -> String {
 #[test]
 fn search_matches_name_path_and_thought_content_without_reordering() {
     let mut ids = FakeIdGenerator::new(1_725_000_000_000);
-    let items = vec![
+    let mut items = vec![
         item(
             &mut ids,
             Some("Release notes"),
-            "/tmp/alpha",
+            test_path("alpha"),
             "ordinary prompt",
             900_000_000,
             resumable,
@@ -112,12 +121,14 @@ fn search_matches_name_path_and_thought_content_without_reordering() {
         item(
             &mut ids,
             None,
-            "/tmp/gamma-project",
+            test_path("gamma-project"),
             "Unicode resize investigation",
             800_000_000,
             recovered,
         ),
     ];
+    items[1].hit.search_content =
+        "first preview\nsecond preview\nUnicode resize investigation".to_owned();
     let second = items[1].hit.id;
     let mut browser = SessionBrowser::new(items, Timestamp::from_millis(900_000_000));
     for character in "gamma unicode".chars() {
@@ -142,20 +153,27 @@ fn active_and_trashed_results_are_visible_but_cannot_open() {
     let active_seed = item(
         &mut ids,
         Some("Live agent"),
-        "/tmp/live",
+        test_path("live"),
         "still editing",
         20,
         resumable,
     );
     let active_item = active(&mut ids, active_seed.hit);
-    let trashed_item = item(&mut ids, Some("Old"), "/tmp/old", "recover me", 10, trashed);
+    let trashed_item = item(
+        &mut ids,
+        Some("Old"),
+        test_path("old"),
+        "recover me",
+        10,
+        trashed,
+    );
     let mut browser =
         SessionBrowser::new(vec![active_item, trashed_item], Timestamp::from_millis(100));
 
     let rendered = draw(&mut browser, 100, 14);
     let rendered = text(rendered.backend().buffer());
     assert!(rendered.contains("[active]"));
-    assert!(rendered.contains("owner: pid 419 from /tmp/agent"));
+    assert!(rendered.contains("owner: pid 419 from"));
 
     assert_eq!(
         browser.handle(UiInput::Key(UiKey::Enter)),
@@ -187,7 +205,7 @@ fn wide_and_narrow_buffers_show_states_groups_and_selected_detail() {
         item(
             &mut ids,
             Some("Current"),
-            "/tmp/current",
+            test_path("current"),
             "First preview",
             900_000_000,
             resumable,
@@ -195,13 +213,14 @@ fn wide_and_narrow_buffers_show_states_groups_and_selected_detail() {
         item(
             &mut ids,
             None,
-            "/tmp/older",
+            test_path("older"),
             "Derived unnamed excerpt",
             1,
             recovered,
         ),
     ];
-    items[0].hit.origin_cwd = PathBuf::from("/tmp/original");
+    let original = test_path("original");
+    items[0].hit.origin_cwd.clone_from(&original);
     items[0].hit.integration_context = Some(IntegrationContext {
         provider: "herdr".to_owned(),
         direction: Direction::Left,
@@ -219,16 +238,16 @@ fn wide_and_narrow_buffers_show_states_groups_and_selected_detail() {
     assert!(wide_text.contains("Today"));
     assert!(wide_text.contains("Older"));
     assert!(wide_text.contains("state: resumable"));
-    assert!(wide_text.contains("origin: /tmp/original"));
-    assert!(wide_text.contains("opened from: /tmp/current"));
+    assert!(wide_text.contains("origin:"));
+    assert!(wide_text.contains("opened from:"));
     assert!(wide_text.contains("integration: herdr / left"));
     assert!(wide_text.contains("agent: Codex review (codex)"));
 
     let narrow = draw(&mut browser, 44, 14);
     let narrow_text = text(narrow.backend().buffer());
     assert!(narrow_text.contains("Current  [resumable]"));
-    assert!(narrow_text.contains("origin: /tmp/original"));
-    assert!(narrow_text.contains("opened from: /tmp/current"));
+    assert!(narrow_text.contains("origin:"));
+    assert!(narrow_text.contains("opened from:"));
     assert!(narrow_text.contains("Search:"));
 }
 
@@ -238,7 +257,7 @@ fn mouse_uses_rendered_rows_and_footer_geometry() {
     let first = item(
         &mut ids,
         Some("First"),
-        "/tmp/first",
+        test_path("first"),
         "first",
         11,
         resumable,
@@ -246,7 +265,7 @@ fn mouse_uses_rendered_rows_and_footer_geometry() {
     let second = item(
         &mut ids,
         Some("Mouse target"),
-        "/tmp/mouse",
+        test_path("mouse"),
         "clickable",
         10,
         recovered,
@@ -267,10 +286,51 @@ fn mouse_uses_rendered_rows_and_footer_geometry() {
     let footer = layout.footer;
     assert_eq!(
         browser.handle(UiInput::Pointer(PointerInput {
-            column: footer.x,
+            column: footer.x.saturating_add(12),
+            row: footer.y,
+            kind: PointerKind::Down(PointerButton::Left),
+        })),
+        BrowserAction::Trash(id)
+    );
+    assert_eq!(
+        browser.handle(UiInput::Pointer(PointerInput {
+            column: footer.x.saturating_add(30),
             row: footer.y,
             kind: PointerKind::Down(PointerButton::Left),
         })),
         BrowserAction::Cancel
+    );
+}
+
+#[test]
+fn keyboard_rename_and_trash_are_explicit_browser_actions() {
+    let mut ids = FakeIdGenerator::new(1_725_000_000_000);
+    let entry = item(
+        &mut ids,
+        None,
+        test_path("manage"),
+        "managed",
+        10,
+        resumable,
+    );
+    let id = entry.hit.id;
+    let mut browser = SessionBrowser::new(vec![entry], Timestamp::from_millis(20));
+    assert_eq!(
+        browser.handle(UiInput::Key(UiKey::Character('R'))),
+        BrowserAction::Continue
+    );
+    for character in "Release queue".chars() {
+        browser.handle(UiInput::Key(UiKey::Character(character)));
+    }
+    assert_eq!(
+        browser.handle(UiInput::Key(UiKey::Enter)),
+        BrowserAction::Rename {
+            session_id: id,
+            name: Some("Release queue".to_owned()),
+        }
+    );
+    assert_eq!(
+        browser.handle(UiInput::Key(UiKey::Character('D'))),
+        BrowserAction::Trash(id)
     );
 }

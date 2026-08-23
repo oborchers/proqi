@@ -63,6 +63,10 @@ fn session_state(ids: &mut FakeIdGenerator, path: &Path) -> AppState {
     AppState::new(SessionBoard::new(session, Vec::new()).expect("board"))
 }
 
+fn test_path(name: &str) -> PathBuf {
+    std::env::temp_dir().join(name)
+}
+
 fn one_effect(state: &mut AppState, action: Action) -> Effect {
     let effects = reduce(state, action).expect("reduce");
     assert_eq!(effects.len(), 1);

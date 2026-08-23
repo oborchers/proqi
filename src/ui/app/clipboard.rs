@@ -181,6 +181,7 @@ impl BoardApp {
             self.status = Some("selection changed before clipboard confirmation".to_owned());
             return Vec::new();
         }
-        self.apply_edit(EditCommand::DeleteForward, ids, clock)
+        self.apply_edit(EditCommand::DeleteForward);
+        self.flush_pending_edit(ids, clock)
     }
 }

@@ -20,7 +20,7 @@ impl PlatformClipboard {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            native: Box::new(ArboardNative),
+            native: Box::new(ArboardNative::default()),
             osc52: true,
         }
     }
@@ -79,24 +79,42 @@ enum NativeReadError {
     InvalidImage,
 }
 
-struct ArboardNative;
+#[derive(Default)]
+struct ArboardNative {
+    clipboard: Option<arboard::Clipboard>,
+}
+
+impl ArboardNative {
+    fn clipboard(&mut self) -> Result<&mut arboard::Clipboard, String> {
+        if self.clipboard.is_none() {
+            self.clipboard = Some(arboard::Clipboard::new().map_err(|error| error.to_string())?);
+        }
+        self.clipboard
+            .as_mut()
+            .ok_or_else(|| "native clipboard initialization failed".to_owned())
+    }
+}
 
 impl NativeClipboard for ArboardNative {
     fn write(&mut self, content: &str) -> Result<(), String> {
-        let mut clipboard = arboard::Clipboard::new().map_err(|error| error.to_string())?;
-        clipboard
+        self.clipboard()?
             .set_text(content.to_owned())
             .map_err(|error| error.to_string())
     }
 
     fn read_text(&mut self) -> Result<String, NativeReadError> {
-        let mut clipboard = arboard::Clipboard::new().map_err(native_unavailable)?;
-        clipboard.get_text().map_err(native_unavailable)
+        self.clipboard()
+            .map_err(NativeReadError::Unavailable)?
+            .get_text()
+            .map_err(native_unavailable)
     }
 
     fn read_image(&mut self) -> Result<RasterImage, NativeReadError> {
-        let mut clipboard = arboard::Clipboard::new().map_err(native_unavailable)?;
-        let image = clipboard.get_image().map_err(native_unavailable)?;
+        let image = self
+            .clipboard()
+            .map_err(NativeReadError::Unavailable)?
+            .get_image()
+            .map_err(native_unavailable)?;
         RasterImage::new(image.width, image.height, image.bytes.into_owned())
             .map_err(|_| NativeReadError::InvalidImage)
     }

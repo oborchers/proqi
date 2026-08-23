@@ -101,8 +101,6 @@ impl BoardApp {
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
-
     use crate::{
         adapters::memory::{FakeClock, FakeIdGenerator},
         application::{AppState, InteractionMode},
@@ -117,7 +115,7 @@ mod tests {
         let mut ids = FakeIdGenerator::new(1_725_200_000_000);
         let session = Session::new(
             ids.session_id(),
-            PathBuf::from("/tmp/proqi-control-focus"),
+            std::env::temp_dir().join("proqi-control-focus"),
             Timestamp::from_millis(1),
         )
         .expect("session");
@@ -175,7 +173,7 @@ mod tests {
         let mut ids = FakeIdGenerator::new(1_725_200_000_000);
         let session = Session::new(
             ids.session_id(),
-            PathBuf::from("/tmp/proqi-control-editor"),
+            std::env::temp_dir().join("proqi-control-editor"),
             Timestamp::from_millis(1),
         )
         .expect("session");
@@ -194,11 +192,8 @@ mod tests {
         );
         app.state.mode = InteractionMode::Edit { thought_id };
         app.sync_editor_from_state();
-        let _effects = app.apply_edit(
-            EditCommand::Paste(" changed".to_owned()),
-            &mut ids,
-            &FakeClock::new(Timestamp::from_millis(2)),
-        );
+        app.apply_edit(EditCommand::Paste(" changed".to_owned()));
+        let _effects = app.flush_pending_edit(&mut ids, &FakeClock::new(Timestamp::from_millis(2)));
         let mutation = ControlMutation::History {
             operation_id: ids.operation_id(),
             scope: crate::domain::UndoScope::Editor { thought_id },

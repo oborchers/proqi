@@ -27,8 +27,8 @@ interaction rules for the Ratatui interface.
 
 - Normalize Crossterm events before they reach application state or the
   reducer. Domain and application code never import terminal event types.
-- Treat only key-press events as ordinary keyboard input. Release and repeat
-  protocol events must not duplicate semantic actions.
+- Ignore key-release events. Preserve key-repeat events so held navigation and
+  deletion keys retain native auto-repeat behavior.
 - Read and poll Crossterm events from one input lane. Only resize notifications
   may be coalesced. Never drop or reorder keys, pastes, mouse actions, edits, or
   persistence operations. Keep event lanes bounded and preserve their ordering.

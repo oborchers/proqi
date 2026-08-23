@@ -163,6 +163,9 @@ pub struct SessionHit {
     pub excerpt: String,
     /// First two useful exact-content previews, each independently bounded.
     pub previews: Vec<String>,
+    /// Complete live thought corpus used only by the in-memory browser filter.
+    #[serde(skip)]
+    pub search_content: String,
     /// Last verified adjacent-agent recognition context.
     pub integration_context: Option<IntegrationContext>,
     /// Whether the session is in recoverable trash.

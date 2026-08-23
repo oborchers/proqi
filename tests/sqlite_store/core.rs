@@ -5,7 +5,7 @@ fn seeded_history(
 ) -> (SqliteStore, AppState, FakeIdGenerator, ThoughtId, ThoughtId) {
     let mut store = fixture.open();
     let mut ids = FakeIdGenerator::new(1_725_000_000_000);
-    let mut state = session_state(&mut ids, Path::new("/tmp/proqi-history"));
+    let mut state = session_state(&mut ids, &test_path("proqi-history"));
     store
         .commit(&OperationBatch::CreateSession(state.board.session.clone()))
         .expect("create session");
@@ -98,7 +98,7 @@ fn opens_with_durable_pragmas_and_round_trips_session() {
     store.quick_check().expect("integrity");
 
     let mut ids = FakeIdGenerator::new(1_725_000_000_000);
-    let state = session_state(&mut ids, Path::new("/tmp/proqi-sqlite"));
+    let state = session_state(&mut ids, &test_path("proqi-sqlite"));
     store
         .commit(&OperationBatch::CreateSession(state.board.session.clone()))
         .expect("create session");
@@ -171,7 +171,7 @@ fn commits_are_idempotent_but_identity_reuse_is_rejected() {
     let fixture = DatabaseFixture::new();
     let mut store = fixture.open();
     let mut ids = FakeIdGenerator::new(1_725_000_000_000);
-    let mut state = session_state(&mut ids, Path::new("/tmp/proqi-idempotency"));
+    let mut state = session_state(&mut ids, &test_path("proqi-idempotency"));
     store
         .commit(&OperationBatch::CreateSession(state.board.session.clone()))
         .expect("create session");
@@ -218,7 +218,9 @@ fn search_index_is_rebuildable_and_trash_is_recoverable() {
     let mut store = fixture.open();
     let mut ids = FakeIdGenerator::new(1_725_000_000_000);
 
-    let mut first = session_state(&mut ids, Path::new("/tmp/current-project"));
+    let current_project = test_path("current-project");
+    let other_project = test_path("other-project");
+    let mut first = session_state(&mut ids, &current_project);
     first
         .board
         .session
@@ -235,8 +237,15 @@ fn search_index_is_rebuildable_and_trash_is_recoverable() {
         "Summarize Cloud and Codex identity changes",
         3,
     );
+    create_thought(
+        &mut store,
+        &mut first,
+        &mut ids,
+        "Third thought with a browser-only needle",
+        4,
+    );
 
-    let mut second = session_state(&mut ids, Path::new("/tmp/other-project"));
+    let mut second = session_state(&mut ids, &other_project);
     store
         .commit(&OperationBatch::CreateSession(second.board.session.clone()))
         .expect("second session");
@@ -246,28 +255,29 @@ fn search_index_is_rebuildable_and_trash_is_recoverable() {
         .search_sessions(&SessionQuery {
             text: Some("Cloud identity".to_owned()),
             include_trashed: false,
-            current_directory: Some(PathBuf::from("/tmp/current-project")),
+            current_directory: Some(current_project.clone()),
         })
         .expect("search");
     assert_eq!(hits.len(), 1);
     assert_eq!(hits[0].id, first.board.session.id);
-    assert_eq!(hits[0].thought_count, 2);
-    assert_eq!(hits[0].origin_cwd, PathBuf::from("/tmp/current-project"));
-    assert_eq!(
-        hits[0].last_opened_cwd,
-        PathBuf::from("/tmp/current-project")
-    );
+    assert_eq!(hits[0].thought_count, 3);
+    assert_eq!(hits[0].origin_cwd, current_project);
+    assert_eq!(hits[0].last_opened_cwd, test_path("current-project"));
     assert_eq!(
         hits[0].previews,
-        ["Summarize Cloud and Codex identity changes"]
+        [
+            "Summarize Cloud and Codex identity changes",
+            "Third thought with a browser-only needle"
+        ]
     );
     assert_eq!(
         hits[0].excerpt,
         "Summarize Cloud and Codex identity changes"
     );
+    assert!(hits[0].search_content.contains("browser-only needle"));
     let ranked = store
         .search_sessions(&SessionQuery {
-            current_directory: Some(PathBuf::from("/tmp/other-project")),
+            current_directory: Some(other_project),
             ..SessionQuery::default()
         })
         .expect("ranked sessions");
@@ -292,7 +302,7 @@ fn integration_context_round_trips_without_conversation_content() {
     let fixture = DatabaseFixture::new();
     let mut store = fixture.open();
     let mut ids = FakeIdGenerator::new(1_725_000_000_000);
-    let state = session_state(&mut ids, Path::new("/tmp/proqi-context"));
+    let state = session_state(&mut ids, &test_path("proqi-context"));
     let session_id = state.board.session.id;
     store
         .commit(&OperationBatch::CreateSession(state.board.session.clone()))

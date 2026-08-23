@@ -1,7 +1,5 @@
 //! Generated model sequences preserve board normalization and reversible state.
 
-use std::path::PathBuf;
-
 use proptest::prelude::*;
 use proqi::{
     adapters::memory::FakeIdGenerator,
@@ -16,7 +14,7 @@ proptest! {
         let mut ids = FakeIdGenerator::new(1_725_000_000_000);
         let session = Session::new(
             ids.session_id(),
-            PathBuf::from("/tmp/proqi-properties"),
+            std::env::temp_dir().join("proqi-properties"),
             Timestamp::from_millis(1),
         ).expect("session");
         let mut state = AppState::new(SessionBoard::new(session, Vec::new()).expect("board"));

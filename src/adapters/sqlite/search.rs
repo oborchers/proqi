@@ -121,12 +121,16 @@ pub(super) fn load_hit(
         })
         .map_err(map_sql_error)?;
     let mut previews = Vec::new();
+    let mut search_content = String::new();
     for row in rows {
         let content = row.map_err(map_sql_error)?;
         if !content.trim().is_empty() {
-            previews.push(content.graphemes(true).take(160).collect());
-            if previews.len() == 2 {
-                break;
+            if !search_content.is_empty() {
+                search_content.push('\n');
+            }
+            search_content.push_str(&content);
+            if previews.len() < 2 {
+                previews.push(content.graphemes(true).take(160).collect());
             }
         }
     }
@@ -141,6 +145,7 @@ pub(super) fn load_hit(
         thought_count: i64_to_usize(count)?,
         excerpt,
         previews,
+        search_content,
         integration_context: load_integration_context(connection, session_id)?,
         trashed: session.deleted_at.is_some(),
     })

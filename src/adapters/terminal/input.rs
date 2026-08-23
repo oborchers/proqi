@@ -117,7 +117,9 @@ fn send_lossless(
 
 fn translate(event: Event) -> Option<UiInput> {
     match event {
-        Event::Key(key) if key.kind == KeyEventKind::Press => translate_key(key).map(UiInput::Key),
+        Event::Key(key) if matches!(key.kind, KeyEventKind::Press | KeyEventKind::Repeat) => {
+            translate_key(key).map(UiInput::Key)
+        }
         Event::Paste(content) => Some(UiInput::Paste(
             super::path_import::normalize_existing_files(&content).unwrap_or(content),
         )),
@@ -169,7 +171,7 @@ fn translate_key(key: KeyEvent) -> Option<UiKey> {
             KeyCode::Char('y') => Some(UiKey::Redo),
             _ => None,
         };
-        if command.is_some() {
+        if command.is_some() || matches!(key.code, KeyCode::Char(_)) {
             return command;
         }
     }
@@ -272,13 +274,29 @@ mod tests {
     }
 
     #[test]
-    fn release_and_repeat_events_never_duplicate_actions() {
-        for kind in [KeyEventKind::Release, KeyEventKind::Repeat] {
-            let event = Event::Key(KeyEvent::new_with_kind(
-                KeyCode::Char('n'),
-                KeyModifiers::NONE,
-                kind,
-            ));
+    fn release_is_ignored_and_repeat_preserves_auto_repeat() {
+        let release = Event::Key(KeyEvent::new_with_kind(
+            KeyCode::Char('n'),
+            KeyModifiers::NONE,
+            KeyEventKind::Release,
+        ));
+        assert_eq!(translate(release), None);
+        let repeat = Event::Key(KeyEvent::new_with_kind(
+            KeyCode::Char('n'),
+            KeyModifiers::NONE,
+            KeyEventKind::Repeat,
+        ));
+        assert_eq!(translate(repeat), Some(UiInput::Key(UiKey::Character('n'))));
+    }
+
+    #[test]
+    fn unknown_primary_character_shortcuts_never_insert_text() {
+        for modifier in [
+            KeyModifiers::CONTROL,
+            KeyModifiers::SUPER,
+            KeyModifiers::META,
+        ] {
+            let event = Event::Key(KeyEvent::new(KeyCode::Char('d'), modifier));
             assert_eq!(translate(event), None);
         }
     }

@@ -426,7 +426,10 @@ mod tests {
             storage_protocol: 1,
             control_protocol: Some(CONTROL_PROTOCOL_VERSION),
             control_endpoint: Some(endpoint),
-            launch_directory: "/tmp/proqi-control".to_owned(),
+            launch_directory: std::env::temp_dir()
+                .join("proqi-control")
+                .to_string_lossy()
+                .into_owned(),
             started_at: Timestamp::from_millis(1),
         }
     }

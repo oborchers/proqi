@@ -158,7 +158,9 @@ proqi --json thoughts undo <session-id>
 Mutations accept a typed operation ID for durable idempotency. Commands aimed at
 an active session are forwarded through its verified local owner channel. They
 never write around the owning reducer. Unsupported or unverifiable forwarding
-returns a structured `session_busy` error.
+is rejected as `session_busy`. Thought content supplied through standard input
+is bounded to 131,072 bytes so inactive and forwarded mutations share one safe
+transport contract. Discover the current bound through `proqi --json capabilities`.
 
 Verified owner forwarding is enabled on macOS and Linux. This private alpha
 returns `session_busy` on Windows until current-user named-pipe identity
