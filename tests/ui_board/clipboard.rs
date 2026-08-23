@@ -155,3 +155,50 @@ fn empty_or_failed_clipboard_read_never_creates_a_thought() {
         assert!(fixture.app.state.board.live_thoughts().is_empty());
     }
 }
+
+#[test]
+fn materialized_clipboard_image_path_is_one_undoable_paste() {
+    let mut fixture = Fixture::new();
+    let read = fixture.effects(UiInput::Key(UiKey::PasteClipboard));
+    let [Effect::ReadClipboard { request_id }] = read.as_slice() else {
+        panic!("expected clipboard read");
+    };
+    let path = "/private/proqi/attachments/clipboard-req_06g30t8fudrq55fdkjqr6mpe44.png";
+    let effects = fixture.app.complete_clipboard_read(
+        *request_id,
+        Ok(path.to_owned()),
+        &mut fixture.ids,
+        &fixture.clock,
+    );
+    assert!(matches!(
+        effects.as_slice(),
+        [Effect::CommitBoardOperation(_)]
+    ));
+    assert_eq!(fixture.app.state.board.live_thoughts()[0].content, path);
+
+    fixture.input(UiInput::Key(UiKey::Escape));
+    fixture.input(UiInput::Key(UiKey::Undo));
+    assert!(fixture.app.state.board.live_thoughts().is_empty());
+}
+
+#[test]
+fn materialized_path_in_edit_mode_inserts_at_the_cursor() {
+    let mut fixture = Fixture::new();
+    fixture.paste("attach: ");
+    let read = fixture.effects(UiInput::Key(UiKey::PasteClipboard));
+    let [Effect::ReadClipboard { request_id }] = read.as_slice() else {
+        panic!("expected clipboard read");
+    };
+    let path = "/private/proqi/Grüße 第一.png";
+    let effects = fixture.app.complete_clipboard_read(
+        *request_id,
+        Ok(path.to_owned()),
+        &mut fixture.ids,
+        &fixture.clock,
+    );
+    assert!(matches!(effects.as_slice(), [Effect::CommitRevision(_)]));
+    assert_eq!(
+        fixture.app.editor_snapshot().expect("editor").content,
+        format!("attach: {path}")
+    );
+}

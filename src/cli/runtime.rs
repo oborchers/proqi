@@ -30,6 +30,7 @@ pub(super) struct RuntimeContext {
     pub(super) cwd: PathBuf,
     config_dir: PathBuf,
     recovery_dir: PathBuf,
+    attachment_dir: PathBuf,
     schema_lease: FileSchemaLease,
 }
 
@@ -41,6 +42,7 @@ impl RuntimeContext {
         let paths = resolve_paths(state_root)?;
         let config_dir = paths.config_dir.clone();
         let recovery_dir = paths.data_dir.join("recovery");
+        let attachment_dir = paths.data_dir.join("attachments");
         let clock = SystemClock;
         let mut ids = SystemIdGenerator;
         let coordinator = FileRuntimeCoordinator::new(
@@ -59,6 +61,7 @@ impl RuntimeContext {
             cwd,
             config_dir,
             recovery_dir,
+            attachment_dir,
             schema_lease,
         })
     }
@@ -75,6 +78,7 @@ impl RuntimeContext {
         settings: crate::ui::UiSettings,
     ) -> TerminalResources {
         let (state, session_lease) = session.into_parts();
+        let attachment_directory = self.attachment_dir.join(state.board.session.id.to_string());
         TerminalResources {
             state,
             store: self.store,
@@ -84,6 +88,7 @@ impl RuntimeContext {
             schema_lease: self.schema_lease,
             settings,
             recovery_directory: self.recovery_dir,
+            attachment_directory,
         }
     }
 }

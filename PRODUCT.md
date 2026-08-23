@@ -274,11 +274,23 @@ Bracketed paste is treated as one semantic input event.
 - Whitespace, blank lines, Unicode, and line endings are preserved.
 - A large paste does not freeze rendering or briefly create one key event per
   character.
+- Dragging one or more files into Proqi inserts their absolute paths. In edit
+  mode they enter the current thought; in board mode they create and focus one
+  thought. Unicode names, spaces, quotes, local file URLs, and common terminal
+  escaping remain supported.
+- When the native clipboard contains raw image pixels, `Ctrl+V` writes a private
+  durable PNG inside the current Proqi session and inserts its absolute path.
+  Proqi never uploads or analyzes the image automatically.
 
 Creating and populating a thought through one paste is one undoable operation.
 If clipboard access fails, `Ctrl+V` reports the failure without creating an
 empty thought. Bracketed paste produces the same result without depending on a
 terminal forwarding `Ctrl+V` as a paste shortcut.
+
+Path conversion is deliberately conservative. Proqi converts a payload only
+when every referenced item is an existing local file. Otherwise it preserves
+the original text exactly. Ordinary dropped files stay in their original
+location; only raw clipboard images are materialized into Proqi-managed storage.
 
 Splitting one paste into several thoughts is an explicit later action, not an
 automatic heuristic.
@@ -801,6 +813,8 @@ Specifically:
 - The session browser remains usable in narrow and wide panes and never allows
   two processes to edit one session silently.
 - Pasting a thought takes one native paste action.
+- Pasting a clipboard image or dropping local files inserts durable, usable
+  paths in one undoable action without inspecting their contents.
 - Copying or cutting a thought takes one direct action.
 - When a verified Herdr agent is adjacent, submitting a thought takes one direct
   action for a single target or one action plus a direction for several targets.

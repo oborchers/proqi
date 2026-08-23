@@ -248,14 +248,29 @@ a resize.
 
 ```rust
 trait Clipboard {
-    fn read_text(&mut self) -> Result<String, ClipboardError>;
-    fn write_text(&mut self, text: &str) -> Result<(), ClipboardError>;
+    fn read(&mut self) -> Result<ClipboardContent, ClipboardError>;
+    fn write(&mut self, text: &str) -> Result<ClipboardWrite, ClipboardError>;
 }
 ```
 
 Native clipboard and OSC 52 are adapter choices. Cut is an application
 transaction: write the exact content first, then commit deletion. Clipboard
-failure leaves the thought unchanged.
+failure leaves the thought unchanged. `ClipboardContent` is either exact text
+or a validated, bounded RGBA image.
+
+### `AttachmentStore`
+
+Raw clipboard images cross a separate attachment port. The filesystem adapter
+encodes them as PNG into a session-scoped directory below Proqi's native data
+root. Creation is private, atomic, collision-safe, and durable before an
+absolute path is returned to the UI. A failed image read, validation, encoding,
+or installation inserts nothing.
+
+Terminal file drops still arrive as bracketed text. The terminal adapter
+normalizes only payloads that resolve completely and unambiguously to existing
+absolute files. It supports local file URLs, quoted paths, escaped whitespace,
+multiple paths, and Unicode names. Ordinary prompt text remains exact. Dropped
+files remain external references and are never read or copied automatically.
 
 ### `AgentGateway`
 
@@ -756,11 +771,12 @@ src/
   lib.rs
   domain/          entities, values, invariants, operations
   application/     AppState, reducer, effects, SessionService
-  ports/           Store, Editor, Clipboard, AgentGateway, runtime traits
+  ports/           Store, Editor, Clipboard, AttachmentStore, AgentGateway, runtime traits
   adapters/
     sqlite/
     terminal/
     clipboard/
+    attachment/
     herdr/
     runtime/
   ui/              layout, rendering, keymaps, hit testing

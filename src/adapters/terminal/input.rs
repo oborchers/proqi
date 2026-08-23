@@ -118,7 +118,9 @@ fn send_lossless(
 fn translate(event: Event) -> Option<UiInput> {
     match event {
         Event::Key(key) if key.kind == KeyEventKind::Press => translate_key(key).map(UiInput::Key),
-        Event::Paste(content) => Some(UiInput::Paste(content)),
+        Event::Paste(content) => Some(UiInput::Paste(
+            super::path_import::normalize_existing_files(&content).unwrap_or(content),
+        )),
         Event::Resize(width, height) => Some(UiInput::Resize { width, height }),
         Event::Mouse(mouse) => translate_mouse(mouse).map(UiInput::Pointer),
         Event::FocusGained | Event::FocusLost | Event::Key(_) => None,

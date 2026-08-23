@@ -7,12 +7,16 @@ use std::{
 };
 
 use crate::{
-    adapters::{clipboard::PlatformClipboard, herdr::HerdrGateway, recovery::FileRecoveryExporter},
+    adapters::{
+        attachment::FileAttachmentStore, clipboard::PlatformClipboard, herdr::HerdrGateway,
+        recovery::FileRecoveryExporter,
+    },
     application::{ClipboardIntent, Effect},
     domain::RequestId,
     ports::{
         agent::{AgentError, AgentGateway, AgentTarget, SubmissionReceipt, SubmissionRequest},
-        clipboard::{Clipboard, ClipboardError, ClipboardWrite},
+        attachment::AttachmentStore,
+        clipboard::{Clipboard, ClipboardContent, ClipboardError, ClipboardWrite},
         recovery::{RecoveryDocument, RecoveryError, RecoveryExporter},
     },
 };
@@ -49,12 +53,22 @@ pub(super) enum ExternalResult {
     },
     Read {
         request_id: RequestId,
-        result: Result<String, ClipboardError>,
+        result: Result<String, ExternalReadError>,
     },
     Exported {
         request_id: RequestId,
         result: Result<PathBuf, RecoveryError>,
     },
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub(super) enum ExternalReadError {
+    /// Native clipboard content was unavailable or invalid.
+    Clipboard,
+    /// A raw image could not be written durably.
+    Attachment,
+    /// The durable path cannot be represented in Proqi's UTF-8 text model.
+    NonUnicodePath,
 }
 
 pub(super) struct ExternalLane {
@@ -64,11 +78,16 @@ pub(super) struct ExternalLane {
 }
 
 impl ExternalLane {
-    pub(super) fn spawn(recovery_directory: PathBuf) -> Self {
+    pub(super) fn spawn(recovery_directory: PathBuf, attachment_directory: PathBuf) -> Self {
         let (request_sender, request_receiver) = sync_channel(32);
         let (result_sender, result_receiver) = sync_channel(32);
         let handle = thread::spawn(move || {
-            external_loop(&request_receiver, &result_sender, recovery_directory);
+            external_loop(
+                &request_receiver,
+                &result_sender,
+                recovery_directory,
+                attachment_directory,
+            );
         });
         Self {
             sender: Some(request_sender),
@@ -124,9 +143,11 @@ fn external_loop(
     requests: &Receiver<ExternalRequest>,
     results: &SyncSender<ExternalResult>,
     recovery_directory: PathBuf,
+    attachment_directory: PathBuf,
 ) {
     let mut clipboard = PlatformClipboard::new();
     let mut recovery = FileRecoveryExporter::new(recovery_directory);
+    let mut attachments = FileAttachmentStore::new(attachment_directory);
     let mut agents = HerdrGateway::from_environment();
     while let Ok(request) = requests.recv() {
         let outcome = match request {
@@ -153,7 +174,7 @@ fn external_loop(
             },
             ExternalRequest::Read { request_id } => ExternalResult::Read {
                 request_id,
-                result: clipboard.read(),
+                result: read_clipboard(&mut clipboard, &mut attachments, request_id),
             },
             ExternalRequest::Export {
                 request_id,
@@ -168,3 +189,24 @@ fn external_loop(
         }
     }
 }
+
+fn read_clipboard(
+    clipboard: &mut impl Clipboard,
+    attachments: &mut impl AttachmentStore,
+    request_id: RequestId,
+) -> Result<String, ExternalReadError> {
+    match clipboard.read().map_err(|_| ExternalReadError::Clipboard)? {
+        ClipboardContent::Text(content) => {
+            Ok(super::path_import::normalize_existing_files(&content).unwrap_or(content))
+        }
+        ClipboardContent::Image(image) => attachments
+            .save_clipboard_image(request_id, &image)
+            .map_err(|_| ExternalReadError::Attachment)?
+            .into_os_string()
+            .into_string()
+            .map_err(|_| ExternalReadError::NonUnicodePath),
+    }
+}
+
+#[cfg(test)]
+mod tests;

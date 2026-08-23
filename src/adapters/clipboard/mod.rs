@@ -2,7 +2,10 @@
 
 use base64::{Engine, engine::general_purpose::STANDARD};
 
-use crate::ports::clipboard::{Clipboard, ClipboardError, ClipboardWrite};
+use crate::ports::{
+    attachment::RasterImage,
+    clipboard::{Clipboard, ClipboardContent, ClipboardError, ClipboardWrite},
+};
 
 const OSC52_MAX_BYTES: usize = 100_000;
 
@@ -49,14 +52,31 @@ impl Clipboard for PlatformClipboard {
         osc52(content).map(ClipboardWrite::Osc52)
     }
 
-    fn read(&mut self) -> Result<String, ClipboardError> {
-        self.native.read().map_err(ClipboardError::Unavailable)
+    fn read(&mut self) -> Result<ClipboardContent, ClipboardError> {
+        match self.native.read_image() {
+            Ok(image) => return Ok(ClipboardContent::Image(image)),
+            Err(NativeReadError::InvalidImage) => return Err(ClipboardError::InvalidImage),
+            Err(NativeReadError::Unavailable(_)) => {}
+        }
+        self.native
+            .read_text()
+            .map(ClipboardContent::Text)
+            .map_err(|error| match error {
+                NativeReadError::Unavailable(message) => ClipboardError::Unavailable(message),
+                NativeReadError::InvalidImage => ClipboardError::InvalidImage,
+            })
     }
 }
 
 trait NativeClipboard {
     fn write(&mut self, content: &str) -> Result<(), String>;
-    fn read(&mut self) -> Result<String, String>;
+    fn read_text(&mut self) -> Result<String, NativeReadError>;
+    fn read_image(&mut self) -> Result<RasterImage, NativeReadError>;
+}
+
+enum NativeReadError {
+    Unavailable(String),
+    InvalidImage,
 }
 
 struct ArboardNative;
@@ -69,10 +89,23 @@ impl NativeClipboard for ArboardNative {
             .map_err(|error| error.to_string())
     }
 
-    fn read(&mut self) -> Result<String, String> {
-        let mut clipboard = arboard::Clipboard::new().map_err(|error| error.to_string())?;
-        clipboard.get_text().map_err(|error| error.to_string())
+    fn read_text(&mut self) -> Result<String, NativeReadError> {
+        let mut clipboard = arboard::Clipboard::new().map_err(native_unavailable)?;
+        clipboard.get_text().map_err(native_unavailable)
     }
+
+    fn read_image(&mut self) -> Result<RasterImage, NativeReadError> {
+        let mut clipboard = arboard::Clipboard::new().map_err(native_unavailable)?;
+        let image = clipboard.get_image().map_err(native_unavailable)?;
+        RasterImage::new(image.width, image.height, image.bytes.into_owned())
+            .map_err(|_| NativeReadError::InvalidImage)
+    }
+}
+
+fn native_unavailable(error: impl ToString) -> NativeReadError {
+    let message = error.to_string();
+    drop(error);
+    NativeReadError::Unavailable(message)
 }
 
 fn osc52(content: &str) -> Result<Vec<u8>, ClipboardError> {
@@ -89,13 +122,17 @@ fn osc52(content: &str) -> Result<Vec<u8>, ClipboardError> {
 
 #[cfg(test)]
 mod tests {
-    use crate::ports::clipboard::{Clipboard, ClipboardWrite};
+    use crate::ports::{
+        attachment::RasterImage,
+        clipboard::{Clipboard, ClipboardContent, ClipboardWrite},
+    };
 
-    use super::{NativeClipboard, PlatformClipboard};
+    use super::{NativeClipboard, NativeReadError, PlatformClipboard};
 
     #[derive(Default)]
     struct FakeNative {
         content: Option<String>,
+        image: Option<RasterImage>,
         unavailable: bool,
     }
 
@@ -109,8 +146,16 @@ mod tests {
             }
         }
 
-        fn read(&mut self) -> Result<String, String> {
-            self.content.clone().ok_or_else(|| "unavailable".to_owned())
+        fn read_text(&mut self) -> Result<String, NativeReadError> {
+            self.content
+                .clone()
+                .ok_or_else(|| NativeReadError::Unavailable("unavailable".to_owned()))
+        }
+
+        fn read_image(&mut self) -> Result<RasterImage, NativeReadError> {
+            self.image
+                .clone()
+                .ok_or_else(|| NativeReadError::Unavailable("unavailable".to_owned()))
         }
     }
 
@@ -139,8 +184,26 @@ mod tests {
     fn successful_native_read_preserves_exact_text() {
         let mut clipboard = clipboard(FakeNative {
             content: Some(" exact\r\n".to_owned()),
+            image: None,
             unavailable: false,
         });
-        assert_eq!(clipboard.read().expect("clipboard"), " exact\r\n");
+        assert_eq!(
+            clipboard.read().expect("clipboard"),
+            ClipboardContent::Text(" exact\r\n".to_owned())
+        );
+    }
+
+    #[test]
+    fn native_image_is_preferred_and_remains_exact_rgba() {
+        let image = RasterImage::new(1, 1, vec![1, 2, 3, 255]).expect("image");
+        let mut clipboard = clipboard(FakeNative {
+            content: Some("fallback text".to_owned()),
+            image: Some(image.clone()),
+            unavailable: false,
+        });
+        assert_eq!(
+            clipboard.read().expect("clipboard"),
+            ClipboardContent::Image(image)
+        );
     }
 }

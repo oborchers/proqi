@@ -325,6 +325,10 @@ fn session_browser_searches_and_resumes_in_a_real_pty() {
 mod active_control;
 
 #[cfg(target_os = "macos")]
+#[path = "pty/path_drop.rs"]
+mod path_drop;
+
+#[cfg(target_os = "macos")]
 fn expect_command() -> Command {
     let mut command = Command::new("/usr/bin/expect");
     command.env("PROQI_DISABLE_HERDR", "1");

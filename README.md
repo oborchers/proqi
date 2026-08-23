@@ -33,8 +33,10 @@ Use `y` or Primary+C to copy a complete thought, `x` or Primary+X to cut only
 after clipboard success, and Primary+V to read the native clipboard. OSC 52 is
 used as an unconfirmed Copy fallback when the native provider is unavailable.
 Cut never deletes after an OSC 52 write because the terminal cannot confirm
-clipboard ownership. If autosave
-fails, Proqi keeps the board in memory and blocks destructive exit. Press `r`
+clipboard ownership. Dragged local files become absolute path text. A native
+clipboard image is atomically written as a private PNG for the current session,
+then its absolute path is inserted. If autosave fails, Proqi keeps the board in
+memory and blocks destructive exit. Press `r`
 to retry the retained operation or `w` to atomically export a private recovery
 JSON file in Proqi's platform data directory.
 

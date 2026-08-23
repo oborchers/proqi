@@ -47,6 +47,7 @@ pub(crate) struct TerminalResources {
     pub(crate) schema_lease: FileSchemaLease,
     pub(crate) settings: crate::ui::UiSettings,
     pub(crate) recovery_directory: PathBuf,
+    pub(crate) attachment_directory: PathBuf,
 }
 
 /// Refuse an interactive launch before it creates or opens durable state.
@@ -102,6 +103,7 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
         schema_lease,
         settings,
         recovery_directory,
+        attachment_directory,
     } = resources;
     let session_id = state.board.session.id;
     let endpoint = session_lease
@@ -115,7 +117,7 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
     let input = InputLane::spawn();
     let persistence = PersistenceLane::spawn(store);
-    let external = ExternalLane::spawn(recovery_directory);
+    let external = ExternalLane::spawn(recovery_directory, attachment_directory);
     let theme = Theme::resolve(settings.theme, supports_true_color());
     let mut app = BoardApp::with_settings(state, settings, RopeEditorFactory);
     let lanes = WorkerLanes {

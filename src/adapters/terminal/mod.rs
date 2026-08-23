@@ -5,6 +5,7 @@ mod control;
 mod external;
 mod input;
 mod integration;
+mod path_import;
 mod persistence;
 mod runner;
 mod settings;

@@ -8,13 +8,14 @@ rust-version = "1.88"
 version = "0.1.0-alpha.1"
 
 [workspace.dependencies]
-arboard = { version = "=3.6.1", default-features = false, features = ["wayland-data-control"] }
+arboard = { version = "=3.6.1", default-features = false, features = ["image-data", "wayland-data-control"] }
 base64 = "0.22.1"
 clap = { version = "4.5.47", features = ["derive"] }
 crossterm = "0.28.1"
 directories = "6.0.0"
 fs4 = "1.1.0"
 interprocess = "=2.4.2"
+png = "=0.18.1"
 ropey = "1.6.1"
 ratatui-core = { version = "=0.1.2", default-features = false, features = ["layout-cache", "underline-color"] }
 ratatui-crossterm = { version = "=0.1.2", default-features = false, features = ["crossterm_0_28", "underline-color"] }
@@ -57,6 +58,7 @@ crossterm.workspace = true
 directories.workspace = true
 fs4.workspace = true
 interprocess.workspace = true
+png.workspace = true
 ropey.workspace = true
 ratatui-core.workspace = true
 ratatui-crossterm.workspace = true

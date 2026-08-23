@@ -2,6 +2,17 @@
 
 use thiserror::Error;
 
+use super::attachment::RasterImage;
+
+/// Native clipboard content accepted for prompt insertion.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ClipboardContent {
+    /// Exact UTF-8 text.
+    Text(String),
+    /// Validated raw image pixels requiring durable materialization.
+    Image(RasterImage),
+}
+
 /// Successful clipboard write path.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ClipboardWrite {
@@ -26,6 +37,9 @@ pub enum ClipboardError {
     /// Clipboard response was not valid text.
     #[error("clipboard content is not valid UTF-8")]
     InvalidText,
+    /// Clipboard image dimensions or pixels were invalid or exceeded the bound.
+    #[error("clipboard image is invalid or too large")]
+    InvalidImage,
 }
 
 /// Exact text clipboard operations.
@@ -42,5 +56,5 @@ pub trait Clipboard {
     /// # Errors
     ///
     /// Returns a typed non-destructive error when native clipboard reading is unavailable.
-    fn read(&mut self) -> Result<String, ClipboardError>;
+    fn read(&mut self) -> Result<ClipboardContent, ClipboardError>;
 }

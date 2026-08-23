@@ -1,5 +1,6 @@
 //! Adapters for persistence, terminals, clipboards, integrations, and runtime coordination.
 
+pub mod attachment;
 pub mod clipboard;
 pub mod control;
 pub mod editor;
