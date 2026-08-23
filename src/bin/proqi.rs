@@ -7,6 +7,7 @@
         clippy::panic,
         clippy::todo,
         clippy::unimplemented,
+        clippy::unreachable,
         clippy::unwrap_used
     )
 )]

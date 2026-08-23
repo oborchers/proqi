@@ -3,7 +3,7 @@
 use crate::{
     application::{Action, ClipboardIntent, Effect, FailureCode, InteractionMode},
     ports::{
-        editor::{EditCommand, Editor},
+        editor::EditCommand,
         environment::{Clock, IdGenerator},
     },
 };
@@ -172,9 +172,12 @@ impl BoardApp {
             self.status = Some("storage failed, selection was copied without deletion".to_owned());
             return Vec::new();
         }
-        if self.editor_snapshot().as_ref() != Some(&pending.before)
-            || !matches!(self.state.mode, InteractionMode::Edit { .. })
-        {
+        let unchanged = self.editor_snapshot().is_some_and(|current| {
+            current.content == pending.before.content
+                && current.cursor == pending.before.cursor
+                && current.selection == pending.before.selection
+        });
+        if !unchanged || !matches!(self.state.mode, InteractionMode::Edit { .. }) {
             self.status = Some("selection changed before clipboard confirmation".to_owned());
             return Vec::new();
         }

@@ -10,7 +10,7 @@ mod settings;
 
 use thiserror::Error;
 
-use crate::ports::{control::ControlError, store::StoreError};
+use crate::ports::{control::ControlError, runtime::RuntimeError, store::StoreError};
 
 pub(crate) use browser::pick_session;
 pub(crate) use runner::{TerminalResources, require_interactive, run};
@@ -34,6 +34,9 @@ pub enum TerminalError {
     /// Active-owner local control transport failed.
     #[error(transparent)]
     Control(#[from] ControlError),
+    /// Runtime ownership metadata could not be updated safely.
+    #[error(transparent)]
+    Runtime(#[from] RuntimeError),
 }
 
 impl From<std::io::Error> for TerminalError {

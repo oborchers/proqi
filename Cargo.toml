@@ -8,6 +8,7 @@ rust-version = "1.88"
 version = "0.1.0-alpha.1"
 
 [workspace.dependencies]
+arboard = { version = "=3.6.1", default-features = false, features = ["wayland-data-control"] }
 base64 = "0.22.1"
 clap = { version = "4.5.47", features = ["derive"] }
 crossterm = "0.28.1"
@@ -27,7 +28,6 @@ toml = "0.9.8"
 unicode-segmentation = "1.12.0"
 unicode-width = "=0.2.0"
 uuid = { version = "1.18.1", features = ["serde", "v7"] }
-widestring = "=1.2.1"
 
 [workspace.lints.rust]
 missing_docs = "warn"
@@ -50,6 +50,7 @@ repository = "https://github.com/oborchers/proqi"
 publish = false
 
 [dependencies]
+arboard.workspace = true
 base64.workspace = true
 clap.workspace = true
 crossterm.workspace = true
@@ -69,9 +70,6 @@ toml.workspace = true
 unicode-segmentation.workspace = true
 unicode-width.workspace = true
 uuid.workspace = true
-
-[target.'cfg(windows)'.dependencies]
-widestring.workspace = true
 
 [dev-dependencies]
 proptest = "1.7.0"

@@ -75,7 +75,6 @@ impl RuntimeContext {
         settings: crate::ui::UiSettings,
     ) -> TerminalResources {
         let (state, session_lease) = session.into_parts();
-        let control_endpoint = session_lease.info().control_endpoint.clone();
         TerminalResources {
             state,
             store: self.store,
@@ -85,7 +84,6 @@ impl RuntimeContext {
             schema_lease: self.schema_lease,
             settings,
             recovery_directory: self.recovery_dir,
-            control_endpoint,
         }
     }
 }

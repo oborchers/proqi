@@ -7,10 +7,8 @@ use std::{
 };
 
 use crate::{
-    adapters::{
-        clipboard::PlatformClipboard, process::SystemProcessRunner, recovery::FileRecoveryExporter,
-    },
-    application::Effect,
+    adapters::{clipboard::PlatformClipboard, recovery::FileRecoveryExporter},
+    application::{ClipboardIntent, Effect},
     domain::RequestId,
     ports::{
         clipboard::{Clipboard, ClipboardError, ClipboardWrite},
@@ -23,6 +21,7 @@ use super::TerminalError;
 enum ExternalRequest {
     Write {
         request_id: RequestId,
+        intent: ClipboardIntent,
         content: String,
     },
     Read {
@@ -37,6 +36,7 @@ enum ExternalRequest {
 pub(super) enum ExternalResult {
     Written {
         request_id: RequestId,
+        intent: ClipboardIntent,
         result: Result<ClipboardWrite, ClipboardError>,
     },
     Read {
@@ -73,10 +73,12 @@ impl ExternalLane {
         let request = match effect {
             Effect::WriteClipboard {
                 request_id,
+                intent,
                 content,
                 ..
             } => ExternalRequest::Write {
                 request_id: *request_id,
+                intent: *intent,
                 content: content.clone(),
             },
             Effect::ReadClipboard { request_id } => ExternalRequest::Read {
@@ -113,15 +115,17 @@ fn external_loop(
     results: &SyncSender<ExternalResult>,
     recovery_directory: PathBuf,
 ) {
-    let mut clipboard = PlatformClipboard::new(SystemProcessRunner);
+    let mut clipboard = PlatformClipboard::new();
     let mut recovery = FileRecoveryExporter::new(recovery_directory);
     while let Ok(request) = requests.recv() {
         let outcome = match request {
             ExternalRequest::Write {
                 request_id,
+                intent,
                 content,
             } => ExternalResult::Written {
                 request_id,
+                intent,
                 result: clipboard.write(&content),
             },
             ExternalRequest::Read { request_id } => ExternalResult::Read {

@@ -36,7 +36,10 @@ impl Fixture {
         );
         let board = SessionBoard::new(session, vec![thought]).expect("board");
         Self {
-            app: BoardApp::new(AppState::new(board)),
+            app: BoardApp::new(
+                AppState::new(board),
+                proqi::adapters::editor::RopeEditorFactory,
+            ),
             ids,
             clock: FakeClock::new(now),
         }

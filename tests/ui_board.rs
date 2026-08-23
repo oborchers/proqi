@@ -6,7 +6,7 @@ use proqi::{
     adapters::memory::{FakeClock, FakeIdGenerator},
     application::{AppState, ClipboardIntent, Effect, FailureCode},
     domain::{OperationSequence, Session, SessionBoard, Timestamp},
-    ports::environment::IdGenerator,
+    ports::{editor::CursorMovement, environment::IdGenerator},
     ui::{
         BoardApp, PointerButton, PointerInput, PointerKind, Theme, ThemePreference, UiInput, UiKey,
         UiSettings, render,
@@ -40,7 +40,11 @@ impl Fixture {
         .expect("session");
         let board = SessionBoard::new(session, Vec::new()).expect("board");
         Self {
-            app: BoardApp::with_settings(AppState::new(board), settings),
+            app: BoardApp::with_settings(
+                AppState::new(board),
+                settings,
+                proqi::adapters::editor::RopeEditorFactory,
+            ),
             ids,
             clock: FakeClock::new(Timestamp::from_millis(20)),
         }
@@ -139,9 +143,45 @@ fn multiline_unicode_is_rendered_as_lines_and_cursor_uses_cell_width() {
 }
 
 #[test]
+fn exact_wrap_boundary_keeps_the_terminal_cursor_visible() {
+    let mut fixture = Fixture::new();
+    fixture.paste("123456");
+    let mut terminal = draw(&mut fixture, 8, 5);
+    let cursor = terminal
+        .backend_mut()
+        .get_cursor_position()
+        .expect("cursor at wrapped document end");
+    assert_eq!((cursor.x, cursor.y), (2, 1));
+}
+
+#[test]
+fn board_rendering_uses_the_editor_wrap_model_without_clipping_words() {
+    let mut fixture = Fixture::new();
+    fixture.paste("aaaaaa bbbbbb cccccc dddddd");
+    fixture.input(UiInput::Key(UiKey::Escape));
+    let layout = fixture.app.prepare_frame(Rect::new(0, 0, 12, 8));
+    assert_eq!(layout.thoughts[0].area.height, 3);
+    let terminal = draw(&mut fixture, 12, 8);
+    let rendered = text(terminal.backend().buffer());
+    assert!(rendered.contains("aaaaaa bbb"));
+    assert!(rendered.contains("bbb cccccc"));
+    assert!(rendered.contains(" ddddd"));
+}
+
+#[test]
 fn repeated_resize_preserves_content_and_logical_cursor() {
     let mut fixture = Fixture::new();
     fixture.paste("one 👩‍💻 two combining e\u{301} three 第二行 four five six");
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::DocumentStart,
+        extend_selection: false,
+    }));
+    for _ in 0..12 {
+        fixture.input(UiInput::Key(UiKey::Move {
+            movement: CursorMovement::GraphemeForward,
+            extend_selection: true,
+        }));
+    }
     let original = fixture.app.editor_snapshot().expect("editor snapshot");
 
     for (width, height) in [(12, 4), (80, 5), (20, 12), (8, 3), (40, 8)] {
@@ -153,6 +193,7 @@ fn repeated_resize_preserves_content_and_logical_cursor() {
     let resized = fixture.app.editor_snapshot().expect("editor snapshot");
     assert_eq!(resized.content, original.content);
     assert_eq!(resized.cursor, original.cursor);
+    assert_eq!(resized.selection, original.selection);
     assert!(resized.scroll_row < resized.visual_lines.len());
 }
 
@@ -263,6 +304,51 @@ fn command_palette_is_searchable_and_mouse_operable() {
 }
 
 #[test]
+fn palette_quit_is_global_and_shallow_navigation_stays_visible() {
+    let mut fixture = Fixture::new();
+    fixture.input(UiInput::Key(UiKey::Character('/')));
+    let _terminal = draw(&mut fixture, 30, 5);
+    for _ in 0..10 {
+        fixture.input(UiInput::Key(UiKey::Move {
+            movement: CursorMovement::VisualDown,
+            extend_selection: false,
+        }));
+    }
+    let _terminal = draw(&mut fixture, 30, 5);
+    let (_, visible, selected) = fixture.app.palette_view().expect("palette");
+    assert!(selected < visible.len());
+
+    fixture.input(UiInput::Key(UiKey::Quit));
+    assert!(fixture.app.quit);
+}
+
+#[test]
+fn mouse_wheel_scrolls_editor_without_moving_cursor_or_selection() {
+    let mut fixture = Fixture::new();
+    fixture.paste(
+        &(0..20)
+            .map(|line| format!("line {line}"))
+            .collect::<Vec<_>>()
+            .join("\n"),
+    );
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::DocumentStart,
+        extend_selection: false,
+    }));
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::GraphemeForward,
+        extend_selection: true,
+    }));
+    let _terminal = draw(&mut fixture, 30, 6);
+    let before = fixture.app.editor_snapshot().expect("editor");
+    fixture.pointer(5, 2, PointerKind::ScrollDown);
+    let after = fixture.app.editor_snapshot().expect("editor");
+    assert!(after.scroll_row > before.scroll_row);
+    assert_eq!(after.cursor, before.cursor);
+    assert_eq!(after.selection, before.selection);
+}
+
+#[test]
 fn remapped_board_binding_changes_behavior_and_visible_hint() {
     let mut settings = UiSettings::default();
     settings.keybindings.new = 't';
@@ -289,8 +375,11 @@ fn long_thought_cap_expands_without_changing_content() {
     let initial = fixture.app.prepare_frame(Rect::new(0, 0, 40, 13));
     let thought = initial.thoughts.first().expect("thought");
     assert!(thought.hidden_rows > 0);
+    assert_eq!(thought.hidden_rows, 13);
     let capped_height = thought.area.height;
     let overflow = thought.overflow.expect("overflow");
+    let terminal = draw(&mut fixture, 40, 13);
+    assert!(text(terminal.backend().buffer()).contains("13 more lines"));
 
     fixture.pointer(
         overflow.x,
@@ -339,138 +428,6 @@ fn narrow_empty_board_has_a_complete_explicit_buffer_snapshot() {
 }
 
 #[test]
-fn board_cut_waits_for_clipboard_success_and_copy_preserves_exact_content() {
-    let mut fixture = Fixture::new();
-    let sequence = fixture.paste(" exact\r\n界 ");
-    fixture.app.acknowledge_persistence(sequence, true);
-    fixture.input(UiInput::Key(UiKey::Escape));
-
-    let copy = fixture.effects(UiInput::Key(UiKey::Copy));
-    let [
-        Effect::WriteClipboard {
-            request_id,
-            intent: ClipboardIntent::Copy,
-            content,
-            ..
-        },
-    ] = copy.as_slice()
-    else {
-        panic!("expected copy effect");
-    };
-    assert_eq!(content, " exact\r\n界 ");
-    assert!(
-        fixture
-            .app
-            .complete_clipboard_write(*request_id, Ok(()), &mut fixture.ids, &fixture.clock)
-            .is_empty()
-    );
-    assert_eq!(fixture.app.state.board.live_thoughts().len(), 1);
-
-    let failed_cut = fixture.effects(UiInput::Key(UiKey::Cut));
-    let [Effect::WriteClipboard { request_id, .. }] = failed_cut.as_slice() else {
-        panic!("expected cut effect");
-    };
-    let failure = fixture.app.complete_clipboard_write(
-        *request_id,
-        Err(FailureCode::ClipboardFailed),
-        &mut fixture.ids,
-        &fixture.clock,
-    );
-    assert!(matches!(failure.as_slice(), [Effect::Notify { .. }]));
-    assert_eq!(fixture.app.state.board.live_thoughts().len(), 1);
-
-    let cut = fixture.effects(UiInput::Key(UiKey::Cut));
-    let [
-        Effect::WriteClipboard {
-            request_id,
-            intent: ClipboardIntent::Cut,
-            ..
-        },
-    ] = cut.as_slice()
-    else {
-        panic!("expected cut effect");
-    };
-    let deletion =
-        fixture
-            .app
-            .complete_clipboard_write(*request_id, Ok(()), &mut fixture.ids, &fixture.clock);
-    assert!(matches!(
-        deletion.as_slice(),
-        [Effect::CommitBoardOperation(_)]
-    ));
-    assert!(fixture.app.state.board.live_thoughts().is_empty());
-}
-
-#[test]
-fn editor_cut_is_non_destructive_on_failure_or_changed_selection() {
-    let mut fixture = Fixture::new();
-    fixture.paste("A界B");
-    fixture.input(UiInput::Key(UiKey::Move {
-        movement: proqi::ports::editor::CursorMovement::GraphemeBack,
-        extend_selection: true,
-    }));
-    let cut = fixture.effects(UiInput::Key(UiKey::Cut));
-    let [
-        Effect::WriteClipboard {
-            request_id,
-            content,
-            ..
-        },
-    ] = cut.as_slice()
-    else {
-        panic!("expected selection write");
-    };
-    assert_eq!(content, "B");
-    fixture.app.complete_clipboard_write(
-        *request_id,
-        Err(FailureCode::ClipboardFailed),
-        &mut fixture.ids,
-        &fixture.clock,
-    );
-    assert_eq!(
-        fixture.app.editor_snapshot().expect("editor").content,
-        "A界B"
-    );
-
-    let cut = fixture.effects(UiInput::Key(UiKey::Cut));
-    let [Effect::WriteClipboard { request_id, .. }] = cut.as_slice() else {
-        panic!("expected selection write");
-    };
-    fixture.input(UiInput::Key(UiKey::Move {
-        movement: proqi::ports::editor::CursorMovement::GraphemeBack,
-        extend_selection: false,
-    }));
-    assert!(
-        fixture
-            .app
-            .complete_clipboard_write(*request_id, Ok(()), &mut fixture.ids, &fixture.clock)
-            .is_empty()
-    );
-    assert_eq!(
-        fixture.app.editor_snapshot().expect("editor").content,
-        "A界B"
-    );
-}
-
-#[test]
-fn empty_or_failed_clipboard_read_never_creates_a_thought() {
-    let mut fixture = Fixture::new();
-    for result in [Ok(String::new()), Err(FailureCode::ClipboardFailed)] {
-        let read = fixture.effects(UiInput::Key(UiKey::PasteClipboard));
-        let [Effect::ReadClipboard { request_id }] = read.as_slice() else {
-            panic!("expected clipboard read");
-        };
-        assert!(
-            fixture
-                .app
-                .complete_clipboard_read(*request_id, result, &mut fixture.ids, &fixture.clock)
-                .is_empty()
-        );
-        assert!(fixture.app.state.board.live_thoughts().is_empty());
-    }
-}
-
-#[test]
 fn storage_failure_blocks_new_edits_and_exposes_retry() {
     let mut fixture = Fixture::new();
     let sequence = fixture.paste("durable candidate");
@@ -487,3 +444,6 @@ fn storage_failure_blocks_new_edits_and_exposes_retry() {
         vec![Effect::RetryPersistence { sequence }]
     );
 }
+
+#[path = "ui_board/clipboard.rs"]
+mod clipboard;

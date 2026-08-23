@@ -1,23 +1,33 @@
 //! Rope-backed multiline editor implementation.
 
 mod text;
-mod wrap;
 
 use std::cmp::Ordering;
 
 use ropey::Rope;
 
+use crate::domain::TextPosition;
+use crate::ports::editor::{
+    CellRange, CursorMovement, EditCommand, EditOutcome, Editor, EditorFactory, EditorSnapshot,
+    TextSelection, TextViewport,
+};
+use crate::ports::text_layout::{
+    WrappedRow, byte_at_cell, cell_column_at_byte, wrap_rows, wrapped_row_index,
+};
 use text::{
     byte_for_position, logical_lines, next_boundary, position_for_byte, previous_boundary,
     word_back, word_forward,
 };
-use wrap::{byte_at_cell, cell_column_at_byte, wrap_content, wrapped_line_index};
 
-use crate::domain::TextPosition;
-use crate::ports::editor::{
-    CellRange, CursorMovement, EditCommand, EditOutcome, Editor, EditorSnapshot, TextSelection,
-    TextViewport, VisualLine,
-};
+/// Factory used by outer composition to keep the UI implementation-independent.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct RopeEditorFactory;
+
+impl EditorFactory for RopeEditorFactory {
+    fn create(&self, text: &str) -> Box<dyn Editor> {
+        Box::new(RopeEditor::new(text))
+    }
+}
 
 #[derive(Clone)]
 struct State {
@@ -41,13 +51,6 @@ struct LogicalLine {
     pub(super) start: usize,
     pub(super) content_end: usize,
     pub(super) end: usize,
-}
-
-#[derive(Clone, Debug)]
-struct WrappedLine {
-    pub(super) public: VisualLine,
-    pub(super) start_byte: usize,
-    pub(super) end_byte: usize,
 }
 
 /// Rope-backed editor with grapheme-safe positions and exact content storage.
@@ -121,7 +124,7 @@ impl RopeEditor {
         Some(match anchor.cmp(&self.state.cursor_byte) {
             Ordering::Less => (anchor, self.state.cursor_byte),
             Ordering::Greater => (self.state.cursor_byte, anchor),
-            Ordering::Equal => unreachable!("equal selection endpoints were handled above"),
+            Ordering::Equal => return None,
         })
     }
 
@@ -230,7 +233,7 @@ impl RopeEditor {
 
     fn vertical_target(&mut self, direction: i8) -> usize {
         let wrapped = self.wrapped_lines();
-        let current_index = wrapped_line_index(&wrapped, self.state.cursor_byte);
+        let current_index = wrapped_row_index(&wrapped, self.state.cursor_byte);
         let current = &wrapped[current_index];
         let current_column = cell_column_at_byte(&self.content(), current, self.state.cursor_byte);
         let preferred = *self.preferred_column.get_or_insert(current_column);
@@ -242,13 +245,13 @@ impl RopeEditor {
         byte_at_cell(&self.content(), &wrapped[target_index], preferred)
     }
 
-    fn wrapped_lines(&self) -> Vec<WrappedLine> {
-        wrap_content(&self.content(), usize::from(self.viewport.width))
+    fn wrapped_lines(&self) -> Vec<WrappedRow> {
+        wrap_rows(&self.content(), usize::from(self.viewport.width))
     }
 
     fn ensure_cursor_visible(&mut self) {
         let wrapped = self.wrapped_lines();
-        let cursor_row = wrapped_line_index(&wrapped, self.state.cursor_byte);
+        let cursor_row = wrapped_row_index(&wrapped, self.state.cursor_byte);
         let height = usize::from(self.viewport.height);
         if cursor_row < self.scroll_row {
             self.scroll_row = cursor_row;
@@ -357,6 +360,14 @@ impl Editor for RopeEditor {
         self.ensure_cursor_visible();
     }
 
+    fn scroll_by(&mut self, rows: isize) {
+        let maximum = self
+            .wrapped_lines()
+            .len()
+            .saturating_sub(usize::from(self.viewport.height).max(1));
+        self.scroll_row = self.scroll_row.saturating_add_signed(rows).min(maximum);
+    }
+
     fn snapshot(&self) -> EditorSnapshot {
         let content = self.content();
         let selected_bytes = self.selection_bytes();
@@ -369,7 +380,7 @@ impl Editor for RopeEditor {
                 .wrapped_lines()
                 .into_iter()
                 .map(|mut line| {
-                    line.public.selected_cells = selected_bytes.and_then(|(start, end)| {
+                    line.visual.selected_cells = selected_bytes.and_then(|(start, end)| {
                         let selected_start = start.max(line.start_byte);
                         let selected_end = end.min(line.end_byte);
                         (selected_start < selected_end).then(|| CellRange {
@@ -377,7 +388,7 @@ impl Editor for RopeEditor {
                             end: cell_column_at_byte(&content, &line, selected_end),
                         })
                     });
-                    line.public
+                    line.visual
                 })
                 .collect(),
             content,

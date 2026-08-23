@@ -12,14 +12,15 @@ use std::collections::{BTreeMap, BTreeSet};
 use ratatui_core::layout::Rect;
 
 use crate::{
-    adapters::editor::RopeEditor,
     application::{
         Action, AppState, ClipboardIntent, DurabilityState, Effect, FailureCode, InteractionMode,
         reduce,
     },
     domain::{OperationSequence, RequestId, ThoughtId},
     ports::{
-        editor::{CursorMovement, EditCommand, Editor, EditorSnapshot, TextViewport},
+        editor::{
+            CursorMovement, EditCommand, Editor, EditorFactory, EditorSnapshot, TextViewport,
+        },
         environment::{Clock, IdGenerator},
     },
 };
@@ -130,7 +131,8 @@ pub enum UiInput {
 pub struct BoardApp {
     /// Reducer-owned application state rendered by the board.
     pub state: AppState,
-    editor: Option<(ThoughtId, RopeEditor)>,
+    editor: Option<(ThoughtId, Box<dyn Editor>)>,
+    editor_factory: Box<dyn EditorFactory>,
     /// Whether the user requested a clean exit.
     pub quit: bool,
     /// Whether contextual help is visible.
@@ -139,6 +141,7 @@ pub struct BoardApp {
     pub status: Option<String>,
     viewport: TextViewport,
     first_visible: usize,
+    manual_board_scroll: bool,
     layout: Option<LayoutSnapshot>,
     dragged_thought: Option<ThoughtId>,
     drag_target: Option<usize>,
@@ -155,21 +158,27 @@ pub struct BoardApp {
 impl BoardApp {
     /// Construct a board around rehydrated application state.
     #[must_use]
-    pub fn new(state: AppState) -> Self {
-        Self::with_settings(state, UiSettings::default())
+    pub fn new(state: AppState, editor_factory: impl EditorFactory + 'static) -> Self {
+        Self::with_settings(state, UiSettings::default(), editor_factory)
     }
 
     /// Construct a board with validated user settings.
     #[must_use]
-    pub fn with_settings(state: AppState, settings: UiSettings) -> Self {
+    pub fn with_settings(
+        state: AppState,
+        settings: UiSettings,
+        editor_factory: impl EditorFactory + 'static,
+    ) -> Self {
         Self {
             state,
             editor: None,
+            editor_factory: Box::new(editor_factory),
             quit: false,
             help: false,
             status: None,
             viewport: TextViewport::default(),
             first_visible: 0,
+            manual_board_scroll: false,
             layout: None,
             dragged_thought: None,
             drag_target: None,
@@ -191,13 +200,15 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        self.status = None;
-        if self.palette.is_some() {
-            return self.handle_palette_input(&input, ids, clock);
-        }
         if input == UiInput::Key(UiKey::Quit) {
             self.request_quit();
             return Vec::new();
+        }
+        if !matches!(input, UiInput::Resize { .. }) {
+            self.status = None;
+        }
+        if self.palette.is_some() {
+            return self.handle_palette_input(&input, ids, clock);
         }
         if matches!(self.state.durability, DurabilityState::Failed { .. }) {
             match input {
@@ -255,9 +266,13 @@ impl BoardApp {
 
     /// Recompute one authoritative frame layout and reflow the active editor.
     pub fn prepare_frame(&mut self, area: Rect) -> LayoutSnapshot {
+        let mut layout_state = self.state.clone();
+        if self.manual_board_scroll {
+            layout_state.focused_thought = None;
+        }
         let editor = self.editor_snapshot();
         let first = compute_layout(
-            &self.state,
+            &layout_state,
             editor.as_ref(),
             area,
             self.first_visible,
@@ -273,7 +288,7 @@ impl BoardApp {
         self.prepare_layout(TextViewport::new(first.content_width, height));
         let editor = self.editor_snapshot();
         let mut layout = compute_layout(
-            &self.state,
+            &layout_state,
             editor.as_ref(),
             area,
             first.first_index,
@@ -291,6 +306,14 @@ impl BoardApp {
             0
         };
         layout.configure_overlay(palette_items, preferred_rows);
+        let final_height = self
+            .state
+            .focused_thought
+            .and_then(|id| layout.thought(id))
+            .map_or(layout.board.height.max(1), |thought| {
+                thought.text_area.height.max(1)
+            });
+        self.prepare_layout(TextViewport::new(layout.content_width, final_height));
         self.first_visible = layout.first_index;
         self.layout = Some(layout.clone());
         layout
@@ -306,17 +329,25 @@ impl BoardApp {
             self.editor = None;
             return;
         };
-        if self
-            .editor
-            .as_ref()
-            .is_none_or(|(current, _)| *current != thought_id)
+        let content = thought.content.clone();
+        let restored_cursor = self.state.restored_editor_cursor(thought_id);
+        if let Some((current, editor)) = &mut self.editor
+            && *current == thought_id
         {
-            let mut editor = RopeEditor::new(&thought.content);
+            if editor.snapshot().content != content {
+                editor.replace_content(content, restored_cursor.unwrap_or_default());
+            }
+        } else {
+            let mut editor = self.editor_factory.create(&content);
             editor.set_viewport(self.viewport);
-            let _outcome = editor.apply(EditCommand::Move {
-                movement: CursorMovement::DocumentEnd,
-                extend_selection: false,
-            });
+            if let Some(cursor) = restored_cursor {
+                editor.replace_content(content, cursor);
+            } else {
+                let _outcome = editor.apply(EditCommand::Move {
+                    movement: CursorMovement::DocumentEnd,
+                    extend_selection: false,
+                });
+            }
             self.editor = Some((thought_id, editor));
         }
     }
@@ -418,12 +449,5 @@ impl BoardApp {
                 Vec::new()
             }
         }
-    }
-}
-
-const fn movement(movement: CursorMovement) -> EditCommand {
-    EditCommand::Move {
-        movement,
-        extend_selection: false,
     }
 }

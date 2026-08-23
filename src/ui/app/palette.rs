@@ -49,6 +49,7 @@ impl Command {
 pub(super) struct PaletteState {
     query: String,
     selected: usize,
+    scroll: usize,
 }
 
 impl PaletteState {
@@ -56,14 +57,19 @@ impl PaletteState {
         Self {
             query: String::new(),
             selected: 0,
+            scroll: 0,
         }
     }
 
     pub(super) fn view(&self) -> (String, Vec<&'static str>, usize) {
         (
             self.query.clone(),
-            self.matches().into_iter().map(|(_, label)| label).collect(),
-            self.selected,
+            self.matches()
+                .into_iter()
+                .skip(self.scroll)
+                .map(|(_, label)| label)
+                .collect(),
+            self.selected.saturating_sub(self.scroll),
         )
     }
 
@@ -81,6 +87,7 @@ impl PaletteState {
 
     fn clamp(&mut self) {
         self.selected = self.selected.min(self.match_count().saturating_sub(1));
+        self.scroll = self.scroll.min(self.selected);
     }
 }
 
@@ -110,6 +117,19 @@ impl BoardApp {
         command.map_or_else(Vec::new, |command| {
             self.execute_command(command, ids, clock)
         })
+    }
+
+    pub(super) fn execute_palette_visible_index(
+        &mut self,
+        index: usize,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        let absolute = self
+            .palette
+            .as_ref()
+            .map_or(index, |palette| palette.scroll.saturating_add(index));
+        self.execute_palette_index(absolute, ids, clock)
     }
 
     pub(super) fn handle_palette_input(
@@ -148,6 +168,7 @@ impl BoardApp {
                 if let Some(palette) = &mut self.palette {
                     palette.query.push(character);
                     palette.selected = 0;
+                    palette.scroll = 0;
                 }
             }
             _ => {}
@@ -156,6 +177,11 @@ impl BoardApp {
     }
 
     fn move_palette(&mut self, delta: isize) {
+        let visible = self
+            .layout
+            .as_ref()
+            .and_then(|layout| layout.overlay.as_ref())
+            .map_or(1, |overlay| overlay.items.len().max(1));
         let Some(palette) = &mut self.palette else {
             return;
         };
@@ -163,6 +189,11 @@ impl BoardApp {
             .selected
             .saturating_add_signed(delta)
             .min(palette.match_count().saturating_sub(1));
+        if palette.selected < palette.scroll {
+            palette.scroll = palette.selected;
+        } else if palette.selected >= palette.scroll.saturating_add(visible) {
+            palette.scroll = palette.selected + 1 - visible;
+        }
     }
 
     fn execute_command(

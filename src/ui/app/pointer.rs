@@ -23,8 +23,8 @@ impl BoardApp {
                 self.hovered = self.hit(pointer);
                 Vec::new()
             }
-            PointerKind::ScrollUp => self.scroll_pointer(-1, ids, clock),
-            PointerKind::ScrollDown => self.scroll_pointer(1, ids, clock),
+            PointerKind::ScrollUp => self.scroll_pointer(-1),
+            PointerKind::ScrollDown => self.scroll_pointer(1),
             PointerKind::Down(PointerButton::Left) => self.pointer_down(pointer, ids, clock),
             PointerKind::Drag(PointerButton::Left) => self.pointer_drag(pointer, ids, clock),
             PointerKind::Up(PointerButton::Left) => self.pointer_up(ids, clock),
@@ -71,7 +71,9 @@ impl BoardApp {
                 self.request_quit();
                 Vec::new()
             }
-            Some(HitTarget::PaletteItem(index)) => self.execute_palette_index(index, ids, clock),
+            Some(HitTarget::PaletteItem(index)) => {
+                self.execute_palette_visible_index(index, ids, clock)
+            }
             Some(HitTarget::CloseOverlay) => {
                 self.close_overlay();
                 Vec::new()
@@ -131,25 +133,22 @@ impl BoardApp {
         self.apply_edit(EditCommand::PointerStart { row, column }, ids, clock)
     }
 
-    fn scroll_pointer(
-        &mut self,
-        delta: isize,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-    ) -> Vec<Effect> {
-        if matches!(self.state.mode, InteractionMode::Edit { .. }) {
-            let movement = if delta < 0 {
-                crate::ports::editor::CursorMovement::VisualUp
-            } else {
-                crate::ports::editor::CursorMovement::VisualDown
-            };
-            return self.apply_edit(super::movement(movement), ids, clock);
+    fn scroll_pointer(&mut self, delta: isize) -> Vec<Effect> {
+        if let Some((_, editor)) = &mut self.editor
+            && matches!(self.state.mode, InteractionMode::Edit { .. })
+        {
+            editor.scroll_by(delta);
+            return Vec::new();
         }
-        self.move_focus(delta);
+        let maximum = self.state.board.live_thoughts().len().saturating_sub(1);
+        self.first_visible = self.first_visible.saturating_add_signed(delta).min(maximum);
+        self.manual_board_scroll = true;
+        self.layout = None;
         Vec::new()
     }
 
     fn focus(&mut self, thought_id: crate::domain::ThoughtId) {
+        self.manual_board_scroll = false;
         let _effects = self.reduce(Action::FocusThought(Some(thought_id)));
     }
 

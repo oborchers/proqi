@@ -42,6 +42,9 @@ where
             return match_existing_add(&existing, session_id, thought_id, &content, position);
         }
         let _lease = self.runtime.acquire_session(session_id)?;
+        if let Some(existing) = self.store.operation_request(operation_id)? {
+            return match_existing_add(&existing, session_id, thought_id, &content, position);
+        }
         let mut state = self.load_live_state(session_id)?;
         let effects = reduce(
             &mut state,
@@ -76,6 +79,9 @@ where
             return match_existing_delete(&existing, session_id, thought_id);
         }
         let _lease = self.runtime.acquire_session(session_id)?;
+        if let Some(existing) = self.store.operation_request(operation_id)? {
+            return match_existing_delete(&existing, session_id, thought_id);
+        }
         let mut state = self.load_live_state(session_id)?;
         let effects = reduce(
             &mut state,
@@ -110,6 +116,9 @@ where
             return match_existing_move(&existing, session_id, thought_id, position);
         }
         let _lease = self.runtime.acquire_session(session_id)?;
+        if let Some(existing) = self.store.operation_request(operation_id)? {
+            return match_existing_move(&existing, session_id, thought_id, position);
+        }
         let mut state = self.load_live_state(session_id)?;
         let effects = reduce(
             &mut state,
@@ -144,6 +153,9 @@ where
             return match_existing_history(&existing, session_id, scope, undo);
         }
         let _lease = self.runtime.acquire_session(session_id)?;
+        if let Some(existing) = self.store.operation_request(operation_id)? {
+            return match_existing_history(&existing, session_id, scope, undo);
+        }
         let mut state = self.load_live_state(session_id)?;
         let action = if undo {
             Action::Undo {

@@ -1,10 +1,8 @@
 //! Focused domain mutations used by the reducer router.
 
+use super::error::{ApplicationError, ApplicationResult, FailureCode};
 use crate::{
-    application::model::{
-        AppState, ApplicationError, ApplicationResult, ClipboardIntent, Effect, FailureCode,
-        InteractionMode, PendingClipboard,
-    },
+    application::model::{AppState, ClipboardIntent, Effect, InteractionMode, PendingClipboard},
     domain::{
         BoardMutation, BoardOperation, BoardOperationKind, DomainError, OperationId, RequestId,
         RevisionId, TextPosition, Thought, ThoughtId, ThoughtPosition, ThoughtRevision, Timestamp,

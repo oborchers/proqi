@@ -3,9 +3,12 @@
 use std::collections::BTreeSet;
 
 use ratatui_core::layout::Rect;
-use unicode_width::UnicodeWidthStr;
 
-use crate::{application::AppState, domain::ThoughtId, ports::editor::EditorSnapshot};
+use crate::{
+    application::AppState,
+    domain::ThoughtId,
+    ports::{editor::EditorSnapshot, text_layout::wrap_rows},
+};
 
 /// Semantic target resolved from the latest rendered geometry.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -255,6 +258,7 @@ fn place_thoughts(
         if y >= board.bottom() {
             break;
         }
+        let editing = editor.is_some_and(|_| state.focused_thought == Some(thought.id));
         let natural = editor
             .filter(|_| state.focused_thought == Some(thought.id))
             .map_or_else(
@@ -279,7 +283,13 @@ fn place_thoughts(
             area.width.saturating_sub(2),
             area.height,
         );
-        let hidden_rows = natural.saturating_sub(usize::from(height));
+        let hidden_rows = if editing {
+            0
+        } else if natural > usize::from(height) {
+            natural.saturating_sub(usize::from(height).saturating_sub(1))
+        } else {
+            0
+        };
         let overflow = (hidden_rows > 0).then(|| {
             Rect::new(
                 text_area.x,
@@ -307,12 +317,7 @@ fn responsive_cap(board_height: u16) -> u16 {
 }
 
 fn wrapped_rows(content: &str, width: u16) -> usize {
-    let width = usize::from(width.max(1));
-    content
-        .split('\n')
-        .map(|line| UnicodeWidthStr::width(line).max(1).div_ceil(width))
-        .sum::<usize>()
-        .max(1)
+    wrap_rows(content, usize::from(width.max(1))).len().max(1)
 }
 
 fn footer_controls(area: Rect) -> Vec<(HitTarget, Rect)> {

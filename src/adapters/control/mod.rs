@@ -1,5 +1,7 @@
 //! Cross-platform local owner-control client and server.
 
+#[cfg(all(test, unix))]
+mod protocol_tests;
 mod transport;
 
 use std::{
@@ -148,6 +150,15 @@ fn handle_stream(
     let Ok(request) = read_request(stream) else {
         return;
     };
+    if request.protocol != CONTROL_PROTOCOL_VERSION {
+        let response = rejected(
+            &request,
+            "protocol_mismatch",
+            "unsupported control protocol",
+        );
+        let _written = write_response(stream, &response);
+        return;
+    }
     if let Some((original, response)) = cache.get(&request.request_id) {
         let response = if original == &request {
             response.clone()
@@ -158,15 +169,6 @@ fn handle_stream(
                 "request identity was reused",
             )
         };
-        let _written = write_response(stream, &response);
-        return;
-    }
-    if request.protocol != CONTROL_PROTOCOL_VERSION {
-        let response = rejected(
-            &request,
-            "protocol_mismatch",
-            "unsupported control protocol",
-        );
         let _written = write_response(stream, &response);
         return;
     }
@@ -183,12 +185,14 @@ fn handle_stream(
             .unwrap_or_else(|_| {
                 rejected(
                     &request,
-                    "owner_timeout",
-                    "owner did not complete the request",
+                    "outcome_unknown",
+                    "owner did not answer before the deadline; retry with the same operation id",
                 )
             })
     };
-    cache_response(cache, cache_order, request, response.clone());
+    if matches!(response.result, ControlResult::Accepted(_)) {
+        cache_response(cache, cache_order, request, response.clone());
+    }
     let _written = write_response(stream, &response);
 }
 
@@ -218,7 +222,7 @@ fn rejected(request: &ControlRequest, code: &str, message: &str) -> ControlRespo
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use std::{path::Path, time::Duration};
 
@@ -228,7 +232,7 @@ mod tests {
         ports::{
             control::{
                 CONTROL_PROTOCOL_VERSION, ControlClient, ControlError, ControlMutation,
-                ControlReceipt, ControlRequest, ControlResult, MAX_CONTROL_MESSAGE_BYTES,
+                ControlReceipt, ControlRequest, ControlResult,
             },
             environment::IdGenerator,
             runtime::InstanceInfo,
@@ -236,10 +240,7 @@ mod tests {
         },
     };
 
-    use super::{
-        ControlServer, LocalControlClient,
-        transport::{connect, read_response, write_request},
-    };
+    use super::{ControlServer, LocalControlClient};
 
     #[test]
     fn verified_request_is_durable_and_request_replay_is_cached() {
@@ -330,37 +331,7 @@ mod tests {
     }
 
     #[test]
-    fn server_negotiates_protocol_and_bounds_encoded_messages() {
-        let temporary = tempfile::tempdir().expect("temporary endpoint");
-        let mut ids = FakeIdGenerator::new(1_725_200_000_000);
-        let mut request = request(&mut ids, "body");
-        let endpoint = endpoint(temporary.path(), request.request_id.to_string().as_str());
-        let server = ControlServer::spawn(&endpoint).expect("control server");
-        let owner = owner(&mut ids, request.session_id, endpoint.clone());
-
-        request.protocol = CONTROL_PROTOCOL_VERSION + 1;
-        let stream = connect(&endpoint, owner.pid).expect("protocol stream");
-        write_request(&stream, &request).expect("protocol request");
-        let response = read_response(&stream).expect("protocol response");
-        assert!(matches!(
-            response.result,
-            ControlResult::Rejected { code, .. } if code == "protocol_mismatch"
-        ));
-
-        request.protocol = CONTROL_PROTOCOL_VERSION;
-        let ControlMutation::Add { content, .. } = &mut request.mutation else {
-            panic!("add request fixture");
-        };
-        *content = "x".repeat(MAX_CONTROL_MESSAGE_BYTES);
-        assert!(matches!(
-            LocalControlClient.send(&owner, &request),
-            Err(ControlError::MessageTooLarge)
-        ));
-        server.stop().expect("server stop");
-    }
-
-    #[test]
-    fn owner_response_timeout_is_bounded_and_typed() {
+    fn owner_response_timeout_is_bounded_indeterminate_and_not_cached() {
         let temporary = tempfile::tempdir().expect("temporary endpoint");
         let mut ids = FakeIdGenerator::new(1_725_200_000_000);
         let request = request(&mut ids, "body");
@@ -382,9 +353,19 @@ mod tests {
                 .expect_err("owner must time out");
             assert!(matches!(
                 error,
-                ControlError::Rejected { code, .. } if code == "owner_timeout"
+                ControlError::Rejected { code, .. } if code == "outcome_unknown"
             ));
             drop(envelope);
+
+            let retry_owner = owner.clone();
+            let retry_request = request.clone();
+            let retry = scope.spawn(move || LocalControlClient.send(&retry_owner, &retry_request));
+            let retry_envelope = server
+                .receiver
+                .recv_timeout(Duration::from_secs(2))
+                .expect("retry reaches owner");
+            retry_envelope.respond(ControlResult::Accepted(receipt(&request)));
+            retry.join().expect("retry thread").expect("retry receipt");
         });
         server.stop().expect("server stop");
     }
@@ -395,7 +376,9 @@ mod tests {
         use std::os::unix::fs::PermissionsExt as _;
 
         let temporary = tempfile::tempdir().expect("temporary endpoint");
-        let path = temporary.path().join("control.sock");
+        let parent = temporary.path().join("control");
+        private_directory(&parent);
+        let path = parent.join("control.sock");
         let server = ControlServer::spawn(path.to_str().expect("UTF-8 path")).expect("server");
         let endpoint_mode = std::fs::metadata(&path)
             .expect("endpoint metadata")
@@ -413,6 +396,7 @@ mod tests {
         #[cfg(target_os = "macos")]
         assert_eq!(endpoint_mode & 0o022, 0);
         server.stop().expect("server stop");
+        assert!(!path.exists());
     }
 
     fn request(ids: &mut FakeIdGenerator, content: &str) -> ControlRequest {
@@ -461,14 +445,39 @@ mod tests {
 
     #[cfg(unix)]
     fn endpoint(directory: &Path, suffix: &str) -> String {
-        directory
+        let private = directory.join("control");
+        private_directory(&private);
+        private
             .join(format!("{suffix}.sock"))
             .to_string_lossy()
             .into_owned()
     }
 
+    #[cfg(unix)]
+    fn private_directory(path: &Path) {
+        use std::os::unix::fs::DirBuilderExt as _;
+        let mut builder = std::fs::DirBuilder::new();
+        builder.mode(0o700);
+        builder.create(path).expect("private endpoint parent");
+    }
+
     #[cfg(windows)]
     fn endpoint(_directory: &Path, suffix: &str) -> String {
         format!(r"\\.\pipe\proqi-test-{suffix}")
+    }
+}
+
+#[cfg(all(test, windows))]
+mod windows_tests {
+    use crate::ports::control::ControlError;
+
+    use super::ControlServer;
+
+    #[test]
+    fn private_alpha_does_not_advertise_unverified_windows_control() {
+        assert!(matches!(
+            ControlServer::spawn(r"\\.\pipe\proqi-test"),
+            Err(ControlError::Unsupported)
+        ));
     }
 }

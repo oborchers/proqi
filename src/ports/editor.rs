@@ -175,6 +175,9 @@ pub trait Editor {
     /// Reflow into a new viewport without changing logical content or position.
     fn set_viewport(&mut self, viewport: TextViewport);
 
+    /// Scroll wrapped rows without moving the logical cursor or selection.
+    fn scroll_by(&mut self, rows: isize);
+
     /// Return the current complete state.
     fn snapshot(&self) -> EditorSnapshot;
 
@@ -186,4 +189,10 @@ pub trait Editor {
 
     /// Return selected text exactly as stored, including line delimiters.
     fn selected_text(&self) -> Option<String>;
+}
+
+/// Creates isolated editor instances without exposing an implementation to UI code.
+pub trait EditorFactory {
+    /// Construct an editor containing exact text.
+    fn create(&self, text: &str) -> Box<dyn Editor>;
 }

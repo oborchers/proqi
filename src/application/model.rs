@@ -2,13 +2,11 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
-use serde::{Deserialize, Serialize};
-use thiserror::Error;
-
+use super::error::{ApplicationError, ApplicationResult, FailureCode};
 use crate::domain::{
-    BoardOperation, BoardOperationKind, DomainError, OperationId, OperationSequence, RequestId,
-    RevisionId, SessionBoard, SessionId, TextPosition, Thought, ThoughtId, ThoughtRevision,
-    Timestamp, UndoScope,
+    BoardOperation, BoardOperationKind, OperationId, OperationSequence, RequestId, RevisionId,
+    SessionBoard, SessionId, TextPosition, Thought, ThoughtId, ThoughtRevision, Timestamp,
+    UndoScope,
 };
 use crate::ports::{recovery::RecoveryDocument, store::OperationBatch};
 
@@ -49,74 +47,6 @@ pub enum DurabilityState {
         code: FailureCode,
     },
 }
-
-/// Stable application error and notification codes.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-#[non_exhaustive]
-pub enum FailureCode {
-    /// Requested thought is absent or deleted.
-    ThoughtNotFound,
-    /// Action is not valid in the current mode or history state.
-    InvalidState,
-    /// Clipboard access failed without mutating content.
-    ClipboardFailed,
-    /// Persistence failed and state is not yet durable.
-    StorageFailed,
-    /// Domain invariants rejected the operation.
-    InvariantViolation,
-}
-
-impl FailureCode {
-    /// Stable machine-readable spelling.
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::ThoughtNotFound => "thought_not_found",
-            Self::InvalidState => "invalid_state",
-            Self::ClipboardFailed => "clipboard_failed",
-            Self::StorageFailed => "storage_failed",
-            Self::InvariantViolation => "invariant_violation",
-        }
-    }
-}
-
-/// Typed application failure.
-#[derive(Clone, Debug, Eq, Error, PartialEq)]
-pub enum ApplicationError {
-    /// Domain validation failed.
-    #[error(transparent)]
-    Domain(#[from] DomainError),
-    /// Referenced thought is unavailable.
-    #[error("live thought not found: {0}")]
-    ThoughtNotFound(ThoughtId),
-    /// Revision does not match current content or ownership.
-    #[error("revision precondition failed for thought {0}")]
-    RevisionConflict(ThoughtId),
-    /// An action requires another interaction state.
-    #[error("action is invalid in the current application state")]
-    InvalidState,
-    /// Operation sequence cannot increase.
-    #[error("operation sequence exhausted")]
-    SequenceExhausted,
-}
-
-impl ApplicationError {
-    /// Stable machine-readable classification.
-    #[must_use]
-    pub const fn code(&self) -> FailureCode {
-        match self {
-            Self::ThoughtNotFound(_) => FailureCode::ThoughtNotFound,
-            Self::RevisionConflict(_) | Self::InvalidState | Self::SequenceExhausted => {
-                FailureCode::InvalidState
-            }
-            Self::Domain(_) => FailureCode::InvariantViolation,
-        }
-    }
-}
-
-/// Application result type.
-pub type ApplicationResult<T> = Result<T, ApplicationError>;
 
 /// Clipboard purpose, kept separate from terminal keys.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -204,6 +134,23 @@ impl AppState {
             .map_or(0, |history| history.cursor)
     }
 
+    /// Restore the logical cursor represented by the currently applied revision prefix.
+    #[must_use]
+    pub fn restored_editor_cursor(&self, thought_id: ThoughtId) -> Option<TextPosition> {
+        let history = self.editor_histories.get(&thought_id)?;
+        if history.cursor == 0 {
+            history
+                .revisions
+                .first()
+                .map(|revision| revision.before_cursor)
+        } else {
+            history
+                .revisions
+                .get(history.cursor - 1)
+                .map(|revision| revision.after_cursor)
+        }
+    }
+
     pub(super) fn next_sequence(&self) -> ApplicationResult<OperationSequence> {
         self.highest_sequence
             .checked_next()
@@ -256,6 +203,7 @@ impl AppState {
     }
 
     pub(super) fn keep_focus_valid(&mut self) {
+        self.insertion_index = self.insertion_index.min(self.board.live_thoughts().len());
         if self
             .focused_thought
             .is_some_and(|id| self.live_thought(id).is_ok())
@@ -266,7 +214,6 @@ impl AppState {
         if matches!(self.mode, InteractionMode::Edit { .. }) {
             self.mode = InteractionMode::Board;
         }
-        self.insertion_index = self.insertion_index.min(self.board.live_thoughts().len());
     }
 }
 

@@ -7,7 +7,7 @@ use ratatui_core::{
 };
 use ratatui_widgets::{block::Block, borders::Borders, paragraph::Paragraph};
 
-use super::{BrowserAvailability, BrowserLayout, SessionBrowser, Theme, browser::summary};
+use super::{BrowserAvailability, BrowserLayout, SessionBrowser, Theme, browser_summary::summary};
 
 /// Render the complete session browser frame.
 pub fn render_browser(
@@ -112,6 +112,9 @@ fn render_result(
             }
         });
     let focus = if selected { "│" } else { " " };
+    let badge = format!("[{}]", item.availability.label());
+    let fixed_cells = 4_usize.saturating_add(unicode_width::UnicodeWidthStr::width(badge.as_str()));
+    let label_cells = usize::from(area.width).saturating_sub(fixed_cells);
     let style = Style::default()
         .fg(if selected {
             theme.accent
@@ -126,7 +129,7 @@ fn render_result(
     frame.render_widget(
         Paragraph::new(format!(
             "{focus} {}  [{}]",
-            summary(label, 44),
+            summary(label, label_cells),
             item.availability.label()
         ))
         .style(style),

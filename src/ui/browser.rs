@@ -483,12 +483,3 @@ fn searchable_text(item: &SessionBrowserItem) -> String {
 fn contains(area: Rect, column: u16, row: u16) -> bool {
     column >= area.x && column < area.right() && row >= area.y && row < area.bottom()
 }
-
-/// Return a grapheme-safe, single-line summary.
-#[must_use]
-pub(crate) fn summary(text: &str, limit: usize) -> String {
-    text.replace(['\r', '\n'], " ")
-        .graphemes(true)
-        .take(limit)
-        .collect()
-}

@@ -130,7 +130,10 @@ mod tests {
             Timestamp::from_millis(1),
         );
         let board = SessionBoard::new(session, vec![original]).expect("board");
-        let mut app = BoardApp::new(AppState::new(board));
+        let mut app = BoardApp::new(
+            AppState::new(board),
+            crate::adapters::editor::RopeEditorFactory,
+        );
         app.state.mode = InteractionMode::Edit {
             thought_id: original_id,
         };
@@ -163,5 +166,50 @@ mod tests {
                 .content,
             "external"
         );
+    }
+
+    #[test]
+    fn external_editor_undo_refreshes_content_and_restores_cursor() {
+        use crate::{domain::TextPosition, ports::editor::EditCommand};
+
+        let mut ids = FakeIdGenerator::new(1_725_200_000_000);
+        let session = Session::new(
+            ids.session_id(),
+            PathBuf::from("/tmp/proqi-control-editor"),
+            Timestamp::from_millis(1),
+        )
+        .expect("session");
+        let thought_id = ids.thought_id();
+        let thought = Thought::new(
+            thought_id,
+            session.id,
+            "base".to_owned(),
+            ThoughtPosition::new(0),
+            Timestamp::from_millis(1),
+        );
+        let board = SessionBoard::new(session, vec![thought]).expect("board");
+        let mut app = BoardApp::new(
+            AppState::new(board),
+            crate::adapters::editor::RopeEditorFactory,
+        );
+        app.state.mode = InteractionMode::Edit { thought_id };
+        app.sync_editor_from_state();
+        let _effects = app.apply_edit(
+            EditCommand::Paste(" changed".to_owned()),
+            &mut ids,
+            &FakeClock::new(Timestamp::from_millis(2)),
+        );
+        let mutation = ControlMutation::History {
+            operation_id: ids.operation_id(),
+            scope: crate::domain::UndoScope::Editor { thought_id },
+            undo: true,
+        };
+
+        app.handle_control(&mutation, &FakeClock::new(Timestamp::from_millis(3)))
+            .expect("external undo");
+
+        let snapshot = app.editor_snapshot().expect("editor");
+        assert_eq!(snapshot.content, "base");
+        assert_eq!(snapshot.cursor, TextPosition::new(0, 4));
     }
 }

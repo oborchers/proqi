@@ -1,51 +1,45 @@
-//! Native process clipboard with an OSC 52 write fallback.
-
-use std::{ffi::OsString, time::Duration};
+//! Native system clipboard with an OSC 52 write fallback.
 
 use base64::{Engine, engine::general_purpose::STANDARD};
 
-use crate::ports::{
-    clipboard::{Clipboard, ClipboardError, ClipboardWrite},
-    environment::{ProcessError, ProcessRequest, ProcessRunner},
-};
+use crate::ports::clipboard::{Clipboard, ClipboardError, ClipboardWrite};
 
-const TIMEOUT: Duration = Duration::from_secs(2);
 const OSC52_MAX_BYTES: usize = 100_000;
 
-/// Platform command adapter backed by a direct process runner.
-pub struct PlatformClipboard<R> {
-    runner: R,
+/// Native clipboard adapter with a bounded terminal fallback.
+pub struct PlatformClipboard {
+    native: Box<dyn NativeClipboard + Send>,
     osc52: bool,
 }
 
-impl<R> PlatformClipboard<R> {
+impl PlatformClipboard {
     /// Enable native access and the terminal write fallback.
     #[must_use]
-    pub const fn new(runner: R) -> Self {
+    pub fn new() -> Self {
         Self {
-            runner,
+            native: Box::new(ArboardNative),
             osc52: true,
         }
     }
 
     /// Disable OSC 52 for terminals whose policy forbids it.
     #[must_use]
-    pub const fn without_osc52(mut self) -> Self {
+    pub fn without_osc52(mut self) -> Self {
         self.osc52 = false;
         self
     }
 }
 
-impl<R: ProcessRunner> Clipboard for PlatformClipboard<R> {
+impl Default for PlatformClipboard {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Clipboard for PlatformClipboard {
     fn write(&mut self, content: &str) -> Result<ClipboardWrite, ClipboardError> {
-        for request in write_requests(content.as_bytes().to_vec()) {
-            if self
-                .runner
-                .run(request)
-                .is_ok_and(|output| output.exit_code == Some(0))
-            {
-                return Ok(ClipboardWrite::Native);
-            }
+        if self.native.write(content).is_ok() {
+            return Ok(ClipboardWrite::Native);
         }
         if !self.osc52 {
             return Err(ClipboardError::Unavailable(
@@ -56,24 +50,28 @@ impl<R: ProcessRunner> Clipboard for PlatformClipboard<R> {
     }
 
     fn read(&mut self) -> Result<String, ClipboardError> {
-        let mut timed_out = false;
-        for request in read_requests() {
-            match self.runner.run(request) {
-                Ok(output) if output.exit_code == Some(0) => {
-                    return String::from_utf8(output.stdout)
-                        .map_err(|_| ClipboardError::InvalidText);
-                }
-                Err(ProcessError::TimedOut) => timed_out = true,
-                Ok(_) | Err(_) => {}
-            }
-        }
-        if timed_out {
-            Err(ClipboardError::TimedOut)
-        } else {
-            Err(ClipboardError::Unavailable(
-                "no native clipboard provider succeeded".to_owned(),
-            ))
-        }
+        self.native.read().map_err(ClipboardError::Unavailable)
+    }
+}
+
+trait NativeClipboard {
+    fn write(&mut self, content: &str) -> Result<(), String>;
+    fn read(&mut self) -> Result<String, String>;
+}
+
+struct ArboardNative;
+
+impl NativeClipboard for ArboardNative {
+    fn write(&mut self, content: &str) -> Result<(), String> {
+        let mut clipboard = arboard::Clipboard::new().map_err(|error| error.to_string())?;
+        clipboard
+            .set_text(content.to_owned())
+            .map_err(|error| error.to_string())
+    }
+
+    fn read(&mut self) -> Result<String, String> {
+        let mut clipboard = arboard::Clipboard::new().map_err(|error| error.to_string())?;
+        clipboard.get_text().map_err(|error| error.to_string())
     }
 }
 
@@ -89,104 +87,46 @@ fn osc52(content: &str) -> Result<Vec<u8>, ClipboardError> {
     Ok(sequence)
 }
 
-#[cfg(target_os = "macos")]
-fn write_requests(input: Vec<u8>) -> Vec<ProcessRequest> {
-    vec![request("/usr/bin/pbcopy", &[], Some(input))]
-}
-
-#[cfg(target_os = "macos")]
-fn read_requests() -> Vec<ProcessRequest> {
-    vec![request("/usr/bin/pbpaste", &[], None)]
-}
-
-#[cfg(target_os = "linux")]
-fn write_requests(input: Vec<u8>) -> Vec<ProcessRequest> {
-    vec![
-        request(
-            "wl-copy",
-            &["--type", "text/plain;charset=utf-8"],
-            Some(input.clone()),
-        ),
-        request("xclip", &["-selection", "clipboard", "-in"], Some(input)),
-    ]
-}
-
-#[cfg(target_os = "linux")]
-fn read_requests() -> Vec<ProcessRequest> {
-    vec![
-        request("wl-paste", &["--no-newline"], None),
-        request("xclip", &["-selection", "clipboard", "-out"], None),
-    ]
-}
-
-#[cfg(target_os = "windows")]
-fn write_requests(input: Vec<u8>) -> Vec<ProcessRequest> {
-    vec![request(
-        "powershell.exe",
-        &[
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            "[Console]::InputEncoding = [Text.UTF8Encoding]::new($false); [Console]::In.ReadToEnd() | Set-Clipboard",
-        ],
-        Some(input),
-    )]
-}
-
-#[cfg(target_os = "windows")]
-fn read_requests() -> Vec<ProcessRequest> {
-    vec![request(
-        "powershell.exe",
-        &[
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            "[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false); [Console]::Out.Write((Get-Clipboard -Raw))",
-        ],
-        None,
-    )]
-}
-
-#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
-fn write_requests(_input: Vec<u8>) -> Vec<ProcessRequest> {
-    Vec::new()
-}
-
-#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
-fn read_requests() -> Vec<ProcessRequest> {
-    Vec::new()
-}
-
-fn request(program: &str, args: &[&str], stdin: Option<Vec<u8>>) -> ProcessRequest {
-    ProcessRequest {
-        program: OsString::from(program),
-        args: args.iter().map(OsString::from).collect(),
-        stdin,
-        timeout: TIMEOUT,
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use std::collections::VecDeque;
+    use crate::ports::clipboard::{Clipboard, ClipboardWrite};
 
-    use crate::{
-        adapters::memory::FakeProcessRunner,
-        ports::{
-            clipboard::{Clipboard, ClipboardWrite},
-            environment::{ProcessError, ProcessOutput},
-        },
-    };
+    use super::{NativeClipboard, PlatformClipboard};
 
-    use super::PlatformClipboard;
+    #[derive(Default)]
+    struct FakeNative {
+        content: Option<String>,
+        unavailable: bool,
+    }
+
+    impl NativeClipboard for FakeNative {
+        fn write(&mut self, content: &str) -> Result<(), String> {
+            if self.unavailable {
+                Err("unavailable".to_owned())
+            } else {
+                self.content = Some(content.to_owned());
+                Ok(())
+            }
+        }
+
+        fn read(&mut self) -> Result<String, String> {
+            self.content.clone().ok_or_else(|| "unavailable".to_owned())
+        }
+    }
+
+    fn clipboard(native: FakeNative) -> PlatformClipboard {
+        PlatformClipboard {
+            native: Box::new(native),
+            osc52: true,
+        }
+    }
 
     #[test]
     fn native_failure_returns_an_exact_bounded_osc52_sequence() {
-        let runner = FakeProcessRunner {
-            results: VecDeque::from([Err(ProcessError::Io("unavailable".to_owned()))]),
-            ..FakeProcessRunner::default()
-        };
-        let mut clipboard = PlatformClipboard::new(runner);
+        let mut clipboard = clipboard(FakeNative {
+            unavailable: true,
+            ..FakeNative::default()
+        });
         assert_eq!(
             clipboard.write("Grüße\n"),
             Ok(ClipboardWrite::Osc52(
@@ -197,15 +137,10 @@ mod tests {
 
     #[test]
     fn successful_native_read_preserves_exact_text() {
-        let runner = FakeProcessRunner {
-            results: VecDeque::from([Ok(ProcessOutput {
-                exit_code: Some(0),
-                stdout: b" exact\r\n".to_vec(),
-                stderr: Vec::new(),
-            })]),
-            ..FakeProcessRunner::default()
-        };
-        let mut clipboard = PlatformClipboard::new(runner);
+        let mut clipboard = clipboard(FakeNative {
+            content: Some(" exact\r\n".to_owned()),
+            unavailable: false,
+        });
         assert_eq!(clipboard.read().expect("clipboard"), " exact\r\n");
     }
 }

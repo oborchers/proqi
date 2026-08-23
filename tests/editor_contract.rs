@@ -130,10 +130,15 @@ fn repeated_resize_reflows_without_mutating_logical_state() {
     let text = "Grüße 日本語 👩🏽‍💻 and a deliberately long logical line";
     let mut editor = editor(text);
     editor.apply(EditCommand::SetCursor {
-        position: TextPosition::new(0, 10),
+        position: TextPosition::new(0, 3),
         extend_selection: false,
     });
+    editor.apply(EditCommand::SetCursor {
+        position: TextPosition::new(0, 20),
+        extend_selection: true,
+    });
     let cursor = editor.snapshot().cursor;
+    let selection = editor.snapshot().selection;
 
     for viewport in [
         TextViewport::new(80, 20),
@@ -147,6 +152,7 @@ fn repeated_resize_reflows_without_mutating_logical_state() {
         let snapshot = editor.snapshot();
         assert_eq!(snapshot.content, text);
         assert_eq!(snapshot.cursor, cursor);
+        assert_eq!(snapshot.selection, selection);
         assert!(
             snapshot
                 .visual_lines

@@ -1,8 +1,8 @@
 //! Pure reducer and mutation helpers.
 
+use super::error::{ApplicationError, ApplicationResult};
 use crate::application::model::{
-    Action, AppState, ApplicationError, ApplicationResult, ClipboardIntent, DurabilityState,
-    Effect, InteractionMode,
+    Action, AppState, ClipboardIntent, DurabilityState, Effect, InteractionMode,
 };
 
 use super::mutations::{
@@ -71,7 +71,7 @@ fn reduce_navigation(state: &mut AppState, action: &Action) -> ApplicationResult
             };
         }
         Action::ExitEdit => state.mode = InteractionMode::Board,
-        _ => unreachable!("navigation reducer received another action"),
+        _ => return Err(ApplicationError::InvalidState),
     }
     Ok(Vec::new())
 }
@@ -123,7 +123,7 @@ fn reduce_content(state: &mut AppState, action: Action) -> ApplicationResult<Vec
             after_cursor,
             at,
         ),
-        _ => unreachable!("content reducer received another action"),
+        _ => Err(ApplicationError::InvalidState),
     }
 }
 
@@ -162,7 +162,7 @@ fn reduce_clipboard(state: &mut AppState, action: &Action) -> ApplicationResult<
                 };
             finish_clipboard(state, *request_id, completion)
         }
-        _ => unreachable!("clipboard reducer received another action"),
+        _ => Err(ApplicationError::InvalidState),
     }
 }
 
@@ -186,7 +186,7 @@ fn reduce_board(state: &mut AppState, action: &Action) -> ApplicationResult<Vec<
             collapsed,
             at,
         } => set_collapsed(state, *operation_id, *thought_id, *collapsed, *at),
-        _ => unreachable!("board reducer received another action"),
+        _ => Err(ApplicationError::InvalidState),
     }
 }
 
@@ -202,7 +202,7 @@ fn reduce_history(state: &mut AppState, action: &Action) -> ApplicationResult<Ve
             scope,
             at,
         } => history_move(state, *operation_id, *scope, *at, false),
-        _ => unreachable!("history reducer received another action"),
+        _ => Err(ApplicationError::InvalidState),
     }
 }
 
@@ -248,6 +248,6 @@ fn reduce_persistence(state: &mut AppState, action: &Action) -> ApplicationResul
                 sequence: *sequence,
             }])
         }
-        _ => unreachable!("persistence reducer received another action"),
+        _ => Err(ApplicationError::InvalidState),
     }
 }

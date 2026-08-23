@@ -1,122 +1,26 @@
 //! Process coordination, leases, paths, and local control transport.
 
+mod control_endpoint;
+mod system;
+
+pub use system::{NativePaths, SystemClock, SystemEnvironment, SystemIdGenerator};
+
 use std::{
     collections::BTreeMap,
     fs::{self, File, OpenOptions},
     io::Write,
     path::{Path, PathBuf},
-    time::{SystemTime, UNIX_EPOCH},
 };
 
-use directories::ProjectDirs;
 use fs4::{FileExt, TryLockError};
-use uuid::Uuid;
 
 use crate::{
-    domain::{
-        InstanceId, OperationId, RequestId, RevisionId, SessionId, SubmissionId, ThoughtId,
-        Timestamp,
-    },
+    domain::{InstanceId, SessionId, Timestamp},
     ports::{
-        environment::{AppPaths, Clock, Environment, IdGenerator, PathError, Paths},
         runtime::{InstanceInfo, Lease, RuntimeCoordinator, RuntimeError, RuntimeScan},
         store::STORAGE_PROTOCOL_VERSION,
     },
 };
-
-/// Operating-system UTC clock.
-#[derive(Clone, Copy, Debug, Default)]
-pub struct SystemClock;
-
-impl Clock for SystemClock {
-    fn now(&self) -> Timestamp {
-        let millis = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_or(0, |duration| duration.as_millis());
-        Timestamp::from_millis(i64::try_from(millis).unwrap_or(i64::MAX))
-    }
-}
-
-/// System `UUIDv7` generator.
-#[derive(Clone, Copy, Debug, Default)]
-pub struct SystemIdGenerator;
-
-macro_rules! system_id {
-    ($type:ty) => {
-        loop {
-            if let Ok(id) = <$type>::from_uuid(Uuid::now_v7()) {
-                break id;
-            }
-        }
-    };
-}
-
-impl IdGenerator for SystemIdGenerator {
-    fn session_id(&mut self) -> SessionId {
-        system_id!(SessionId)
-    }
-
-    fn thought_id(&mut self) -> ThoughtId {
-        system_id!(ThoughtId)
-    }
-
-    fn revision_id(&mut self) -> RevisionId {
-        system_id!(RevisionId)
-    }
-
-    fn operation_id(&mut self) -> OperationId {
-        system_id!(OperationId)
-    }
-
-    fn instance_id(&mut self) -> InstanceId {
-        system_id!(InstanceId)
-    }
-
-    fn request_id(&mut self) -> RequestId {
-        system_id!(RequestId)
-    }
-
-    fn submission_id(&mut self) -> SubmissionId {
-        system_id!(SubmissionId)
-    }
-}
-
-/// Platform-native Proqi path resolver.
-#[derive(Clone, Copy, Debug, Default)]
-pub struct NativePaths;
-
-impl Paths for NativePaths {
-    fn resolve(&self) -> Result<AppPaths, PathError> {
-        let project = ProjectDirs::from("", "", "proqi")
-            .ok_or(PathError::Unavailable("project directories"))?;
-        let data_dir = project.data_local_dir().to_path_buf();
-        let config_dir = project.config_dir().to_path_buf();
-        let runtime_dir = project
-            .runtime_dir()
-            .map_or_else(|| data_dir.join("runtime"), Path::to_path_buf);
-        let paths = AppPaths {
-            data_dir,
-            config_dir,
-            runtime_dir,
-        };
-        for path in [&paths.data_dir, &paths.config_dir, &paths.runtime_dir] {
-            if !path.is_absolute() {
-                return Err(PathError::Relative(path.clone()));
-            }
-        }
-        Ok(paths)
-    }
-}
-
-/// Operating-system process environment adapter.
-#[derive(Clone, Copy, Debug, Default)]
-pub struct SystemEnvironment;
-
-impl Environment for SystemEnvironment {
-    fn current_directory(&self) -> Result<PathBuf, PathError> {
-        std::env::current_dir().map_err(|_| PathError::Unavailable("current working directory"))
-    }
-}
 
 /// File-lock-backed runtime coordinator.
 #[derive(Clone, Debug)]
@@ -170,18 +74,18 @@ impl FileRuntimeCoordinator {
             .join(format!("{}.json", self.instance_id))
     }
 
-    fn instance_info(&self, session_id: SessionId) -> Result<InstanceInfo, RuntimeError> {
-        Ok(InstanceInfo {
+    fn instance_info(&self, session_id: SessionId) -> InstanceInfo {
+        InstanceInfo {
             instance_id: self.instance_id,
             session_id,
             pid: std::process::id(),
             version: self.version.clone(),
             storage_protocol: STORAGE_PROTOCOL_VERSION,
-            control_protocol: Some(crate::ports::control::CONTROL_PROTOCOL_VERSION),
-            control_endpoint: Some(control_endpoint(&self.runtime_dir, self.instance_id)?),
+            control_protocol: None,
+            control_endpoint: None,
             launch_directory: self.launch_directory.to_string_lossy().into_owned(),
             started_at: self.started_at,
-        })
+        }
     }
 
     fn read_metadata(&self) -> Result<Vec<(PathBuf, InstanceInfo)>, RuntimeError> {
@@ -226,23 +130,6 @@ impl FileRuntimeCoordinator {
     }
 }
 
-#[cfg(unix)]
-fn control_endpoint(runtime_dir: &Path, instance_id: InstanceId) -> Result<String, RuntimeError> {
-    use std::os::unix::fs::MetadataExt as _;
-    let uid = fs::metadata(runtime_dir).map_err(io_error)?.uid();
-    let directory = PathBuf::from("/tmp").join(format!("proqi-{uid}"));
-    create_private_dir(&directory)?;
-    Ok(directory
-        .join(format!("{instance_id}.sock"))
-        .to_string_lossy()
-        .into_owned())
-}
-
-#[cfg(windows)]
-fn control_endpoint(_runtime_dir: &Path, instance_id: InstanceId) -> Result<String, RuntimeError> {
-    Ok(format!(r"\\.\pipe\proqi-{instance_id}"))
-}
-
 impl RuntimeCoordinator for FileRuntimeCoordinator {
     type SessionLease = FileSessionLease;
     type SharedSchemaLease = FileSchemaLease;
@@ -266,7 +153,7 @@ impl RuntimeCoordinator for FileRuntimeCoordinator {
             return Err(error);
         }
         let metadata_path = self.metadata_path();
-        let info = self.instance_info(session_id)?;
+        let info = self.instance_info(session_id);
         if let Err(error) = write_private_json(&metadata_path, &info) {
             let _ = FileExt::unlock(&file);
             return Err(error);
@@ -275,6 +162,12 @@ impl RuntimeCoordinator for FileRuntimeCoordinator {
             file,
             metadata_path,
             info,
+            prepared_control_endpoint: control_endpoint::prepare(
+                &self.runtime_dir,
+                self.instance_id,
+            )
+            .ok()
+            .flatten(),
         })
     }
 
@@ -314,7 +207,6 @@ impl RuntimeCoordinator for FileRuntimeCoordinator {
     }
 }
 
-#[cfg(unix)]
 fn remove_stale_control_endpoint(
     runtime_dir: &Path,
     info: &InstanceInfo,
@@ -322,18 +214,12 @@ fn remove_stale_control_endpoint(
     let Some(endpoint) = info.control_endpoint.as_deref() else {
         return Ok(());
     };
-    let expected = control_endpoint(runtime_dir, info.instance_id)?;
-    if endpoint == expected {
+    let Some(expected) = control_endpoint::existing(runtime_dir, info.instance_id)? else {
+        return Ok(());
+    };
+    if Path::new(endpoint) == expected {
         remove_if_exists(Path::new(endpoint))?;
     }
-    Ok(())
-}
-
-#[cfg(not(unix))]
-fn remove_stale_control_endpoint(
-    _runtime_dir: &Path,
-    _info: &InstanceInfo,
-) -> Result<(), RuntimeError> {
     Ok(())
 }
 
@@ -362,6 +248,7 @@ pub struct FileSessionLease {
     file: File,
     metadata_path: PathBuf,
     info: InstanceInfo,
+    prepared_control_endpoint: Option<String>,
 }
 
 impl FileSessionLease {
@@ -370,12 +257,36 @@ impl FileSessionLease {
     pub const fn info(&self) -> &InstanceInfo {
         &self.info
     }
+
+    /// Return the verified endpoint reserved for an interactive owner.
+    #[must_use]
+    pub fn control_endpoint(&self) -> Option<&str> {
+        self.prepared_control_endpoint.as_deref()
+    }
+
+    /// Publish control capability after the listener has bound successfully.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed metadata write failure.
+    pub fn publish_control(&mut self) -> Result<(), RuntimeError> {
+        let endpoint = self
+            .prepared_control_endpoint
+            .clone()
+            .ok_or_else(|| RuntimeError::Invalid("local control is unsupported".to_owned()))?;
+        self.info.control_protocol = Some(crate::ports::control::CONTROL_PROTOCOL_VERSION);
+        self.info.control_endpoint = Some(endpoint);
+        replace_private_json(&self.metadata_path, &self.info)
+    }
 }
 
 impl Lease for FileSessionLease {}
 
 impl Drop for FileSessionLease {
     fn drop(&mut self) {
+        if let Some(endpoint) = &self.prepared_control_endpoint {
+            let _ = remove_if_exists(Path::new(endpoint));
+        }
         let _ = remove_if_exists(&self.metadata_path);
         let _ = FileExt::unlock(&self.file);
     }
@@ -415,6 +326,17 @@ fn write_private_json(path: &Path, value: &InstanceInfo) -> Result<(), RuntimeEr
     let mut file = create_new_private_file(path)?;
     file.write_all(&bytes).map_err(io_error)?;
     file.sync_all().map_err(io_error)
+}
+
+fn replace_private_json(path: &Path, value: &InstanceInfo) -> Result<(), RuntimeError> {
+    let bytes = serde_json::to_vec(value)
+        .map_err(|error| RuntimeError::MalformedMetadata(error.to_string()))?;
+    let temporary = path.with_extension("json.tmp");
+    remove_if_exists(&temporary)?;
+    let mut file = create_new_private_file(&temporary)?;
+    file.write_all(&bytes).map_err(io_error)?;
+    file.sync_all().map_err(io_error)?;
+    fs::rename(&temporary, path).map_err(io_error)
 }
 
 fn create_private_dir(path: &Path) -> Result<(), RuntimeError> {

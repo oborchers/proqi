@@ -12,13 +12,6 @@ use interprocess::local_socket::{
     traits::{Listener as _, Stream as _, StreamCommon as _},
 };
 
-#[cfg(windows)]
-use interprocess::os::windows::{
-    local_socket::ListenerOptionsExt as _, security_descriptor::SecurityDescriptor,
-};
-#[cfg(windows)]
-use widestring::U16CString;
-
 use crate::ports::control::{
     ControlError, ControlRequest, ControlResponse, MAX_CONTROL_MESSAGE_BYTES,
 };
@@ -35,22 +28,36 @@ pub(super) struct LocalListener {
 
 impl LocalListener {
     pub(super) fn bind(endpoint: &str) -> Result<Self, ControlError> {
-        #[cfg(unix)]
-        secure_parent(endpoint)?;
-        let name = endpoint.to_fs_name::<GenericFilePath>().map_err(io_error)?;
-        let options = ListenerOptions::new()
-            .name(name)
-            .nonblocking(ListenerNonblockingMode::Accept);
         #[cfg(windows)]
-        let options = options.security_descriptor(windows_user_only_descriptor()?);
-        let inner = options.create_sync().map_err(io_error)?;
+        {
+            let _ = endpoint;
+            Err(ControlError::Unsupported)
+        }
         #[cfg(unix)]
-        secure_endpoint(endpoint)?;
-        Ok(Self {
-            inner,
-            #[cfg(unix)]
-            endpoint: endpoint.to_owned(),
-        })
+        {
+            secure_parent(endpoint)?;
+            let name = endpoint.to_fs_name::<GenericFilePath>().map_err(io_error)?;
+            let options = ListenerOptions::new()
+                .name(name)
+                .nonblocking(ListenerNonblockingMode::Accept);
+            let inner = options
+                .create_sync()
+                .map_err(|error| ControlError::Io(format!("bind failed: {error}")))?;
+            secure_endpoint(endpoint).map_err(|error| {
+                ControlError::Io(format!("endpoint validation failed: {error}"))
+            })?;
+            Ok(Self {
+                inner,
+                endpoint: endpoint.to_owned(),
+            })
+        }
+    }
+}
+
+#[cfg(unix)]
+impl Drop for LocalListener {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.endpoint);
     }
 }
 
@@ -67,11 +74,19 @@ pub(super) fn accept(listener: &LocalListener) -> Result<Option<LocalStream>, Co
 }
 
 pub(super) fn connect(endpoint: &str, owner_pid: u32) -> Result<LocalStream, ControlError> {
-    let name = endpoint.to_fs_name::<GenericFilePath>().map_err(io_error)?;
-    let stream = LocalSocketStream::connect(name).map_err(io_error)?;
-    validate_server_peer(&stream, endpoint, owner_pid)?;
-    stream.set_nonblocking(true).map_err(io_error)?;
-    Ok(stream)
+    #[cfg(windows)]
+    {
+        let _ = (endpoint, owner_pid);
+        Err(ControlError::Unsupported)
+    }
+    #[cfg(unix)]
+    {
+        let name = endpoint.to_fs_name::<GenericFilePath>().map_err(io_error)?;
+        let stream = LocalSocketStream::connect(name).map_err(io_error)?;
+        validate_server_peer(&stream, endpoint, owner_pid)?;
+        stream.set_nonblocking(true).map_err(io_error)?;
+        Ok(stream)
+    }
 }
 
 pub(super) fn read_request(stream: &LocalStream) -> Result<ControlRequest, ControlError> {
@@ -159,7 +174,7 @@ fn wait(deadline: Instant) -> Result<(), ControlError> {
     Ok(())
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 fn secure_endpoint(endpoint: &str) -> Result<(), ControlError> {
     use std::os::unix::fs::PermissionsExt;
     match std::fs::set_permissions(endpoint, std::fs::Permissions::from_mode(0o600)) {
@@ -171,27 +186,35 @@ fn secure_endpoint(endpoint: &str) -> Result<(), ControlError> {
     }
 }
 
+#[cfg(target_os = "macos")]
+fn secure_endpoint(endpoint: &str) -> Result<(), ControlError> {
+    validate_private_parent(endpoint)
+}
+
 #[cfg(unix)]
 fn secure_parent(endpoint: &str) -> Result<(), ControlError> {
-    use std::os::unix::fs::PermissionsExt;
     let parent = std::path::Path::new(endpoint)
         .parent()
         .ok_or_else(|| ControlError::Io("control endpoint has no parent".to_owned()))?;
-    std::fs::set_permissions(parent, std::fs::Permissions::from_mode(0o700)).map_err(io_error)
+    validate_private_directory(parent)
 }
 
 #[cfg(unix)]
 fn validate_private_parent(endpoint: &str) -> Result<(), ControlError> {
-    use std::os::unix::fs::PermissionsExt;
     let parent = std::path::Path::new(endpoint)
         .parent()
         .ok_or_else(|| ControlError::Io("control endpoint has no parent".to_owned()))?;
-    let mode = std::fs::metadata(parent)
-        .map_err(io_error)?
-        .permissions()
-        .mode()
-        & 0o077;
-    (mode == 0).then_some(()).ok_or(ControlError::InvalidPeer)
+    validate_private_directory(parent)
+}
+
+#[cfg(unix)]
+fn validate_private_directory(parent: &std::path::Path) -> Result<(), ControlError> {
+    use std::os::unix::fs::PermissionsExt as _;
+    let metadata = std::fs::symlink_metadata(parent).map_err(io_error)?;
+    let valid = metadata.file_type().is_dir()
+        && !metadata.file_type().is_symlink()
+        && metadata.permissions().mode().trailing_zeros() >= 6;
+    valid.then_some(()).ok_or(ControlError::InvalidPeer)
 }
 
 #[cfg(unix)]
@@ -253,10 +276,4 @@ fn validate_server_peer(
 
 fn io_error(error: impl std::fmt::Display) -> ControlError {
     ControlError::Io(error.to_string())
-}
-
-#[cfg(windows)]
-fn windows_user_only_descriptor() -> Result<SecurityDescriptor, ControlError> {
-    let sddl = U16CString::from_str("D:P(A;;GA;;;OW)").map_err(io_error)?;
-    SecurityDescriptor::deserialize(sddl.as_ucstr()).map_err(io_error)
 }

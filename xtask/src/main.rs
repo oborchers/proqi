@@ -7,6 +7,7 @@
         clippy::panic,
         clippy::todo,
         clippy::unimplemented,
+        clippy::unreachable,
         clippy::unwrap_used
     )
 )]
@@ -211,16 +212,13 @@ fn collect_source_files(directory: &Path, files: &mut Vec<PathBuf>) -> Result<()
         let file_type = entry
             .file_type()
             .map_err(|error| format!("read file type for {}: {error}", path.display()))?;
-        if file_type.is_symlink() {
-            continue;
-        }
         if file_type.is_dir() {
             let name = path.file_name().and_then(OsStr::to_str);
             if matches!(name, Some(".git" | "node_modules" | "target")) {
                 continue;
             }
             collect_source_files(&path, files)?;
-        } else if is_source_file(&path) {
+        } else if is_source_file(&path) && (file_type.is_file() || file_type.is_symlink()) {
             files.push(path);
         }
     }

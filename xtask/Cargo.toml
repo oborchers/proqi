@@ -5,5 +5,8 @@ edition.workspace = true
 rust-version.workspace = true
 publish = false
 
+[dependencies]
+syn = { version = "2.0.106", features = ["full", "visit"] }
+
 [lints]
 workspace = true

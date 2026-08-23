@@ -135,7 +135,7 @@ fn failed_ui_state_offers_retry_and_an_exact_recovery_effect() {
         },
     )
     .expect("failure");
-    let mut app = BoardApp::new(state);
+    let mut app = BoardApp::new(state, proqi::adapters::editor::RopeEditorFactory);
 
     assert!(
         app.handle(UiInput::Key(UiKey::Quit), &mut ids, &clock)

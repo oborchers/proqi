@@ -103,7 +103,8 @@ fn stale_descriptive_metadata_is_removed_when_no_lock_exists() {
     let session_id = ids.session_id();
     let instance_id = ids.instance_id();
     let owner = coordinator(runtime.clone(), instance_id, 1);
-    let lease = owner.acquire_session(session_id).expect("lease");
+    let mut lease = owner.acquire_session(session_id).expect("lease");
+    lease.publish_control().expect("publish control");
     let info = lease.info().clone();
     let metadata = runtime
         .join("instances")
@@ -158,6 +159,7 @@ fn stale_descriptive_metadata_is_removed_when_no_lock_exists() {
 }
 
 #[test]
+#[ignore = "child fixture, driven by process_termination_releases_authoritative_lock"]
 fn child_process_holds_session_lock() {
     let Ok(runtime) = std::env::var("PROQI_TEST_CHILD_RUNTIME") else {
         return;
@@ -188,6 +190,7 @@ fn process_termination_releases_authoritative_lock() {
     let mut child = Command::new(executable)
         .arg("--exact")
         .arg("child_process_holds_session_lock")
+        .arg("--ignored")
         .arg("--nocapture")
         .arg("--test-threads=1")
         .env("PROQI_TEST_CHILD_RUNTIME", &runtime)
@@ -261,7 +264,9 @@ fn runtime_files_are_user_only() {
             & 0o777,
         0o600
     );
-    let endpoint = lease.info().control_endpoint.as_deref().expect("endpoint");
+    assert_eq!(lease.info().control_protocol, None);
+    assert_eq!(lease.info().control_endpoint, None);
+    let endpoint = lease.control_endpoint().expect("prepared endpoint");
     assert!(
         endpoint.len() < 100,
         "Unix socket path is bounded: {endpoint}"

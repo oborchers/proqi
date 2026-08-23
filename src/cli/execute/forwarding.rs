@@ -146,7 +146,10 @@ fn map_error(error: ControlError, owner: &InstanceInfo) -> CliError {
             "storage_full" => CliError::new("storage_full", message, 1),
             "idempotency_conflict" => CliError::new("idempotency_conflict", message, 7),
             "no_durable_mutation" | "no_change" => CliError::new("no_change", message, 7),
-            "owner_busy" | "owner_timeout" | "protocol_mismatch" | "wrong_session" => {
+            "outcome_unknown" => {
+                CliError::new("operation_indeterminate", message, 8).with_details(details)
+            }
+            "owner_busy" | "protocol_mismatch" | "wrong_session" => {
                 CliError::new("session_busy", message, 5).with_details(details)
             }
             _ => CliError::new("mutation_rejected", message, 7),

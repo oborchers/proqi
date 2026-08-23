@@ -137,6 +137,7 @@ impl From<TerminalError> for CliError {
             }
             TerminalError::Config(message) => Self::new("config_invalid", message, 2),
             TerminalError::Control(error) => Self::new("control_failed", error.to_string(), 1),
+            TerminalError::Runtime(error) => error.into(),
         }
     }
 }

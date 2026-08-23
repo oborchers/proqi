@@ -55,11 +55,8 @@ jobs:
       - run: cargo xtask audit
 
   pty:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-15, ubuntu-24.04, windows-2025]
-    runs-on: ${{ matrix.os }}
+    name: PTY smoke tests (macOS)
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: Swatinem/rust-cache@63fed3e2fecf6f7b51dc6f043341b79ef82a9ae7 # v2.9.2

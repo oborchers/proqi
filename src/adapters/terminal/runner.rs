@@ -15,6 +15,7 @@ use ratatui_crossterm::CrosstermBackend;
 use crate::{
     adapters::{
         control::{ControlEnvelope, ControlServer},
+        editor::RopeEditorFactory,
         runtime::{FileSchemaLease, FileSessionLease, SystemClock, SystemIdGenerator},
         sqlite::SqliteStore,
     },
@@ -45,7 +46,6 @@ pub(crate) struct TerminalResources {
     pub(crate) schema_lease: FileSchemaLease,
     pub(crate) settings: crate::ui::UiSettings,
     pub(crate) recovery_directory: PathBuf,
-    pub(crate) control_endpoint: Option<String>,
 }
 
 /// Refuse an interactive launch before it creates or opens durable state.
@@ -97,15 +97,18 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
         store,
         clock,
         mut ids,
-        session_lease,
+        mut session_lease,
         schema_lease,
         settings,
         recovery_directory,
-        control_endpoint,
     } = resources;
     let session_id = state.board.session.id;
-    let endpoint = control_endpoint.ok_or(crate::ports::control::ControlError::Unsupported)?;
+    let endpoint = session_lease
+        .control_endpoint()
+        .ok_or(crate::ports::control::ControlError::Unsupported)?
+        .to_owned();
     let control = ControlServer::spawn(&endpoint)?;
+    session_lease.publish_control()?;
     let guard = TerminalGuard::enter(CrosstermControl)?;
     let termination = TerminationGuard::register()?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
@@ -113,7 +116,7 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
     let persistence = PersistenceLane::spawn(store);
     let external = ExternalLane::spawn(recovery_directory);
     let theme = Theme::resolve(settings.theme, supports_true_color());
-    let mut app = BoardApp::with_settings(state, settings);
+    let mut app = BoardApp::with_settings(state, settings, RopeEditorFactory);
     let lanes = WorkerLanes {
         input: &input,
         persistence: &persistence,
@@ -418,11 +421,16 @@ fn drain_external(
         changed = true;
         pending.external = pending.external.saturating_sub(1);
         let effects = match result {
-            ExternalResult::Written { request_id, result } => {
+            ExternalResult::Written {
+                request_id,
+                intent,
+                result,
+            } => {
                 let succeeded = match result {
                     Ok(crate::ports::clipboard::ClipboardWrite::Native) => true,
                     Ok(crate::ports::clipboard::ClipboardWrite::Osc52(sequence)) => {
-                        write_osc52(&sequence).is_ok()
+                        let emitted = write_osc52(&sequence).is_ok();
+                        emitted && intent == crate::application::ClipboardIntent::Copy
                     }
                     Err(_) => false,
                 };

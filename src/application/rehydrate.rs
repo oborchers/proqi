@@ -2,7 +2,10 @@
 
 use std::collections::{HashMap, HashSet};
 
-use super::model::{AppState, ApplicationError, ApplicationResult, EditorHistory};
+use super::{
+    error::{ApplicationError, ApplicationResult},
+    model::{AppState, EditorHistory},
+};
 use crate::{domain::ThoughtId, ports::store::SessionSnapshot};
 
 impl AppState {

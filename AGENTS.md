@@ -47,8 +47,9 @@ domain <- ports <- application <- adapters and UI composition
 
 - Unsafe Rust is forbidden unless an explicit architecture decision documents
   and reviews an unavoidable need.
-- Production code does not use `unwrap`, `expect`, `panic!`, `todo!`, or
-  `unimplemented!`. Return typed errors. A proven invariant may use a narrow
+- Production code does not use `unwrap`, `expect`, `panic!`, `unreachable!`,
+  `todo!`, or `unimplemented!`. Return typed errors. A proven invariant may use
+  a narrow
   `#[expect(..., reason = "...")]` instead of a broad allow.
 - Every first-party source file is at most 500 physical lines.
 - Rust functions are limited by the checked-in Clippy cognitive-complexity,
@@ -70,8 +71,10 @@ These rules become mandatory with the first real TUI implementation:
   controls, and wrapped selections.
 - Terminal setup uses an RAII guard. Tests prove restoration after normal exit,
   errors, panics, and supported termination signals.
-- Keyboard and mouse paths receive equivalent behavioral coverage. PTY tests
-  cover startup, input, resize, and clean shutdown in CI.
+- Keyboard and mouse paths receive equivalent behavioral coverage. macOS PTY
+  tests cover startup, input, resize, and clean shutdown in CI. Linux and
+  Windows retain build and terminal-independent integration coverage until the
+  PTY driver is portable.
 
 ## Repository hygiene
 

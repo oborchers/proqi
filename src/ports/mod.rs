@@ -7,3 +7,4 @@ pub mod environment;
 pub mod recovery;
 pub mod runtime;
 pub mod store;
+pub(crate) mod text_layout;

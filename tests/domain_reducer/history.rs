@@ -74,6 +74,20 @@ fn editor_history_is_separate_from_board_history() {
 }
 
 #[test]
+fn undoing_a_nonfocused_create_keeps_the_next_insertion_valid() {
+    let mut fixture = Fixture::new();
+    let first = fixture.create("first");
+    fixture.create("second");
+    reduce(&mut fixture.state, Action::FocusThought(Some(first))).expect("focus first");
+    reduce(&mut fixture.state, Action::ExitEdit).expect("board mode");
+    move_history(&mut fixture, UndoScope::Board, true);
+
+    let third = fixture.create("third");
+    assert_eq!(fixture.state.board.live_thoughts().len(), 2);
+    assert_eq!(fixture.state.focused_thought, Some(third));
+}
+
+#[test]
 fn storage_failure_remains_visible_until_retry() {
     let mut fixture = Fixture::new();
     fixture.create("first");

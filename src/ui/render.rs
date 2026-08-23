@@ -13,7 +13,10 @@ use ratatui_widgets::{
 };
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::application::{DurabilityState, InteractionMode};
+use crate::{
+    application::{DurabilityState, InteractionMode},
+    ports::text_layout::wrap_rows,
+};
 
 use super::{BoardApp, HitTarget, LayoutSnapshot, Theme, ThoughtLayout, layout::OverlayLayout};
 
@@ -99,8 +102,14 @@ fn render_gutter(
 }
 
 fn render_thought(frame: &mut Frame<'_>, content: &str, layout: &ThoughtLayout, theme: &Theme) {
-    let lines = thought_lines(content);
-    let mut paragraph = Paragraph::new(Text::from(lines)).wrap(Wrap { trim: false });
+    let content_rows =
+        usize::from(layout.text_area.height).saturating_sub(usize::from(layout.overflow.is_some()));
+    let lines = wrap_rows(content, usize::from(layout.text_area.width.max(1)))
+        .into_iter()
+        .take(content_rows)
+        .map(|row| Line::raw(row.visual.text))
+        .collect::<Vec<_>>();
+    let mut paragraph = Paragraph::new(Text::from(lines));
     if layout.hidden_rows > 0 {
         paragraph = paragraph.style(Style::default().fg(theme.muted));
     }
@@ -143,14 +152,7 @@ fn render_editor(
         })),
         layout.text_area,
     );
-    let cursor_row = snapshot
-        .visual_lines
-        .iter()
-        .position(|line| {
-            line.logical_line == snapshot.cursor.line
-                && snapshot.cursor.grapheme >= line.start_grapheme
-                && snapshot.cursor.grapheme <= line.end_grapheme
-        })
+    let cursor_row = cursor_visual_row(&snapshot)
         .unwrap_or(snapshot.scroll_row)
         .saturating_sub(snapshot.scroll_row);
     let cursor_column = cursor_column(&snapshot, cursor_row);
@@ -165,6 +167,27 @@ fn render_editor(
     if x < layout.text_area.right() && y < layout.text_area.bottom() {
         frame.set_cursor_position((x, y));
     }
+}
+
+fn cursor_visual_row(snapshot: &crate::ports::editor::EditorSnapshot) -> Option<usize> {
+    snapshot
+        .visual_lines
+        .iter()
+        .enumerate()
+        .find_map(|(index, line)| {
+            if line.logical_line != snapshot.cursor.line
+                || snapshot.cursor.grapheme < line.start_grapheme
+            {
+                return None;
+            }
+            let next_same_line = snapshot
+                .visual_lines
+                .get(index + 1)
+                .is_some_and(|next| next.logical_line == line.logical_line);
+            (snapshot.cursor.grapheme < line.end_grapheme
+                || (snapshot.cursor.grapheme == line.end_grapheme && !next_same_line))
+                .then_some(index)
+        })
 }
 
 fn editor_line(line: &crate::ports::editor::VisualLine, theme: &Theme) -> Line<'static> {
@@ -206,14 +229,6 @@ fn cursor_column(snapshot: &crate::ports::editor::EditorSnapshot, cursor_row: us
                 .map(unicode_width::UnicodeWidthStr::width)
                 .sum()
         })
-}
-
-fn thought_lines(content: &str) -> Vec<Line<'_>> {
-    let mut lines = content.split('\n').map(Line::raw).collect::<Vec<_>>();
-    if lines.is_empty() {
-        lines.push(Line::raw(" "));
-    }
-    lines
 }
 
 fn render_footer(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, theme: &Theme) {
@@ -336,15 +351,19 @@ fn render_palette(
 
 #[cfg(test)]
 mod tests {
-    use ratatui_core::{buffer::Buffer, layout::Rect, widgets::Widget};
+    use ratatui_core::{buffer::Buffer, layout::Rect, text::Line, widgets::Widget};
     use ratatui_widgets::paragraph::Paragraph;
 
-    use super::thought_lines;
+    use crate::ports::text_layout::wrap_rows;
     #[test]
     fn multiline_thoughts_are_distinct_buffer_rows() {
         let area = Rect::new(0, 0, 12, 2);
         let mut buffer = Buffer::empty(area);
-        Paragraph::new(thought_lines("first\n第二")).render(area, &mut buffer);
+        let lines = wrap_rows("first\n第二", 12)
+            .into_iter()
+            .map(|row| Line::raw(row.visual.text))
+            .collect::<Vec<_>>();
+        Paragraph::new(lines).render(area, &mut buffer);
         assert_eq!(buffer[(0, 0)].symbol(), "f");
         assert_eq!(buffer[(0, 1)].symbol(), "第");
     }

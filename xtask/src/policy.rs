@@ -28,7 +28,7 @@ pub(crate) fn check(root: &Path) -> Result<(), String> {
         return Err("architecture scan found no Rust source files".to_owned());
     }
 
-    let mut layer_counts = [0_usize; 3];
+    let mut layer_counts = [0_usize; 6];
     let mut violations = Vec::new();
     for path in &files {
         let relative = path.strip_prefix(root).unwrap_or(path);
@@ -39,8 +39,13 @@ pub(crate) fn check(root: &Path) -> Result<(), String> {
     }
     if layer_counts.contains(&0) {
         return Err(format!(
-            "architecture scan was incomplete: domain={}, application={}, ports={}",
-            layer_counts[0], layer_counts[1], layer_counts[2]
+            "architecture scan was incomplete: domain={}, application={}, ports={}, adapters={}, ui={}, cli={}",
+            layer_counts[0],
+            layer_counts[1],
+            layer_counts[2],
+            layer_counts[3],
+            layer_counts[4],
+            layer_counts[5]
         ));
     }
     if violations.is_empty() {
@@ -67,19 +72,18 @@ fn collect_rust_files(directory: &Path, files: &mut Vec<PathBuf>) -> Result<(), 
         let kind = entry
             .file_type()
             .map_err(|error| format!("read file type for {}: {error}", path.display()))?;
-        if kind.is_symlink() {
-            continue;
-        }
         if kind.is_dir() {
             collect_rust_files(&path, files)?;
-        } else if path.extension() == Some(OsStr::new("rs")) {
+        } else if path.extension() == Some(OsStr::new("rs"))
+            && (kind.is_file() || kind.is_symlink())
+        {
             files.push(path);
         }
     }
     Ok(())
 }
 
-fn classify(path: &Path, counts: &mut [usize; 3]) {
+fn classify(path: &Path, counts: &mut [usize; 6]) {
     let path = slash_path(path);
     if path.starts_with("src/domain/") {
         counts[0] += 1;
@@ -87,24 +91,36 @@ fn classify(path: &Path, counts: &mut [usize; 3]) {
         counts[1] += 1;
     } else if path.starts_with("src/ports/") {
         counts[2] += 1;
+    } else if path.starts_with("src/adapters/") {
+        counts[3] += 1;
+    } else if path.starts_with("src/ui/") {
+        counts[4] += 1;
+    } else if path.starts_with("src/cli/") {
+        counts[5] += 1;
     }
 }
 
 fn check_source(path: &Path, source: &str) -> Vec<String> {
     let path_text = slash_path(path);
+    let normalized = normalized_paths(source).join("\n");
     let mut violations = Vec::new();
     if path_text.starts_with("src/domain/") {
         find_markers(
             path,
-            source,
+            &normalized,
             &["crate::application", "crate::ports"],
             &mut violations,
         );
-        find_markers(path, source, INNER_FORBIDDEN, &mut violations);
-    } else if path_text.starts_with("src/application/") || path_text.starts_with("src/ports/") {
-        find_markers(path, source, INNER_FORBIDDEN, &mut violations);
+        find_markers(path, &normalized, INNER_FORBIDDEN, &mut violations);
+    } else if path_text.starts_with("src/application/") {
+        find_markers(path, &normalized, INNER_FORBIDDEN, &mut violations);
+    } else if path_text.starts_with("src/ports/") {
+        find_markers(path, &normalized, INNER_FORBIDDEN, &mut violations);
+        find_markers(path, &normalized, &["crate::application"], &mut violations);
+    } else if path_text.starts_with("src/ui/") {
+        find_markers(path, &normalized, &["crate::adapters"], &mut violations);
     }
-    enforce_adapter_ownership(path, source, &path_text, &mut violations);
+    enforce_adapter_ownership(path, &normalized, &path_text, &mut violations);
     if path_text == "src/domain/mod.rs" && source.contains("pub mod ") {
         violations.push(format!(
             "{}: domain implementation modules must remain private",
@@ -112,6 +128,77 @@ fn check_source(path: &Path, source: &str) -> Vec<String> {
         ));
     }
     violations
+}
+
+fn normalized_paths(source: &str) -> Vec<String> {
+    use syn::visit::Visit as _;
+
+    let Ok(file) = syn::parse_file(source) else {
+        return Vec::new();
+    };
+    let mut visitor = DependencyVisitor { paths: Vec::new() };
+    visitor.visit_file(&file);
+    visitor.paths
+}
+
+struct DependencyVisitor {
+    paths: Vec<String>,
+}
+
+impl<'ast> syn::visit::Visit<'ast> for DependencyVisitor {
+    fn visit_item_use(&mut self, item: &'ast syn::ItemUse) {
+        expand_use_tree(&item.tree, Vec::new(), &mut self.paths);
+    }
+
+    fn visit_item_mod(&mut self, item: &'ast syn::ItemMod) {
+        if !has_test_configuration(&item.attrs) {
+            syn::visit::visit_item_mod(self, item);
+        }
+    }
+
+    fn visit_path(&mut self, path: &'ast syn::Path) {
+        self.paths.push(
+            path.segments
+                .iter()
+                .map(|segment| segment.ident.to_string())
+                .collect::<Vec<_>>()
+                .join("::"),
+        );
+        syn::visit::visit_path(self, path);
+    }
+}
+
+fn expand_use_tree(tree: &syn::UseTree, mut prefix: Vec<String>, paths: &mut Vec<String>) {
+    match tree {
+        syn::UseTree::Path(path) => {
+            prefix.push(path.ident.to_string());
+            expand_use_tree(&path.tree, prefix, paths);
+        }
+        syn::UseTree::Name(name) => {
+            prefix.push(name.ident.to_string());
+            paths.push(prefix.join("::"));
+        }
+        syn::UseTree::Rename(rename) => {
+            prefix.push(rename.ident.to_string());
+            paths.push(prefix.join("::"));
+        }
+        syn::UseTree::Glob(_) => paths.push(format!("{}::*", prefix.join("::"))),
+        syn::UseTree::Group(group) => {
+            for nested in &group.items {
+                expand_use_tree(nested, prefix.clone(), paths);
+            }
+        }
+    }
+}
+
+fn has_test_configuration(attributes: &[syn::Attribute]) -> bool {
+    attributes.iter().any(|attribute| {
+        matches!(
+            &attribute.meta,
+            syn::Meta::List(list)
+                if list.path.is_ident("cfg") && list.tokens.to_string().contains("test")
+        )
+    })
 }
 
 fn enforce_adapter_ownership(
@@ -204,5 +291,37 @@ mod tests {
         let findings = check_source(Path::new("src/domain/mod.rs"), "pub mod model;");
         assert_eq!(findings.len(), 1);
         assert!(findings[0].contains("must remain private"));
+    }
+
+    #[test]
+    fn grouped_application_to_adapter_import_is_rejected() {
+        let findings = check_source(
+            Path::new("src/application/service.rs"),
+            "use crate::{adapters::sqlite::SqliteStore, domain::Session};",
+        );
+        assert!(
+            findings
+                .iter()
+                .any(|finding| finding.contains("crate::adapters"))
+        );
+    }
+
+    #[test]
+    fn port_to_application_dependency_is_rejected() {
+        let findings = check_source(
+            Path::new("src/ports/store.rs"),
+            "use crate::application::AppState;",
+        );
+        assert!(
+            findings
+                .iter()
+                .any(|finding| finding.contains("crate::application"))
+        );
+    }
+
+    #[test]
+    fn test_only_adapter_fixture_is_accepted() {
+        let source = "#[cfg(test)] mod tests { use crate::{adapters::memory::FakeClock}; }";
+        assert!(check_source(Path::new("src/application/model.rs"), source).is_empty());
     }
 }

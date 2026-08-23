@@ -102,6 +102,7 @@ fn rejected_operation_rolls_back_current_state_and_receipt() {
 }
 
 #[test]
+#[ignore = "child fixture, driven by process_crash_rolls_back_uncommitted_typing"]
 fn child_process_holds_uncommitted_sqlite_write() {
     let Ok(database) = std::env::var("PROQI_TEST_CHILD_DATABASE") else {
         return;
@@ -142,6 +143,7 @@ fn process_termination_rolls_back_uncommitted_sqlite_write() {
     let mut child = Command::new(executable)
         .arg("--exact")
         .arg("concurrency::child_process_holds_uncommitted_sqlite_write")
+        .arg("--ignored")
         .arg("--nocapture")
         .arg("--test-threads=1")
         .env("PROQI_TEST_CHILD_DATABASE", &fixture.config.database_path)

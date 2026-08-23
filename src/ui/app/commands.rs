@@ -183,6 +183,7 @@ impl BoardApp {
     }
 
     pub(super) fn move_focus(&mut self, delta: isize) {
+        self.manual_board_scroll = false;
         let live = self.state.board.live_thoughts();
         if live.is_empty() {
             return;
@@ -202,6 +203,7 @@ impl BoardApp {
         clock: &impl Clock,
         delta: isize,
     ) -> Vec<Effect> {
+        self.manual_board_scroll = false;
         let Some(thought_id) = self.state.focused_thought else {
             return Vec::new();
         };

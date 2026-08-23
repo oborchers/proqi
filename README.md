@@ -31,7 +31,9 @@ their canonical session identifier.
 
 Use `y` or Primary+C to copy a complete thought, `x` or Primary+X to cut only
 after clipboard success, and Primary+V to read the native clipboard. OSC 52 is
-used as a write fallback when the native provider is unavailable. If autosave
+used as an unconfirmed Copy fallback when the native provider is unavailable.
+Cut never deletes after an OSC 52 write because the terminal cannot confirm
+clipboard ownership. If autosave
 fails, Proqi keeps the board in memory and blocks destructive exit. Press `r`
 to retry the retained operation or `w` to atomically export a private recovery
 JSON file in Proqi's platform data directory.
@@ -64,6 +66,10 @@ endpoint and becomes successful only after the owning reducer has committed it.
 If the owner or protocol cannot be verified, the command returns the structured
 `session_busy` error and never writes around the owner. Run
 `proqi --json capabilities` before agent-driven use.
+
+Verified owner forwarding is enabled on macOS and Linux. The private alpha
+reports `session_busy` on Windows until explicit current-user SID validation is
+implemented and exercised in Windows CI.
 
 ## Terminal configuration
 
@@ -103,7 +109,7 @@ cargo xtask source-limits # enforce the 500-line source-file ceiling
 cargo xtask architecture # enforce module and adapter ownership boundaries
 cargo xtask check        # architecture, limits, formatting, Clippy, and tests
 cargo xtask test         # deterministic test suite
-cargo xtask test-pty     # pseudo-terminal scenarios
+cargo xtask test-pty     # real pseudo-terminal scenarios on macOS
 cargo xtask coverage     # write target/coverage/lcov.info
 cargo xtask audit        # advisories, licenses, sources, and dependency policy
 cargo xtask package      # release build plus temporary-prefix launch smoke test

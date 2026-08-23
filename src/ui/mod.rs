@@ -3,6 +3,7 @@
 mod app;
 mod browser;
 mod browser_render;
+mod browser_summary;
 mod layout;
 mod render;
 mod settings;

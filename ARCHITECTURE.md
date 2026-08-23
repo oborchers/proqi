@@ -527,8 +527,11 @@ a typed request through the owner's user-only local control endpoint. The owner
 turns that request into an ordinary action, then returns the durable operation
 receipt. It never writes around the owner.
 
-The local transport is a Unix-domain socket on macOS and Linux and a named pipe
-on Windows. Endpoint metadata lives beside runtime lock metadata. Peer-user
+The local transport is a Unix-domain socket on macOS and Linux. The private
+alpha keeps Windows owner forwarding explicitly unsupported until a named-pipe
+implementation compares the client token SID with the server SID and has
+cross-user acceptance tests. This is a public-alpha blocker, not a silent
+security fallback. Endpoint metadata lives beside runtime lock metadata. Peer-user
 validation, bounded messages, protocol negotiation, idempotency keys, and
 timeouts are mandatory. If forwarding is unsupported or the owner cannot be
 verified, the CLI returns `session_busy`.
