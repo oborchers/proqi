@@ -89,6 +89,18 @@ Submission never invokes a shell or simulates terminal keystrokes. An
 unsupported protocol, ambiguous target, timeout, or rejected receipt leaves the
 thought unchanged. Copy and cut continue to work when Herdr is absent.
 
+## Agent skill
+
+The repository contains an explicit-invocation skill at
+`skills/proqi/SKILL.md` for Codex, Claude Code, and other skills-compatible
+harnesses. It describes only the stable JSON CLI. The skill discovers
+capabilities before acting, addresses one user-specified session, passes
+arbitrary thought bodies through standard input, and surfaces structured errors
+without parsing the TUI or reading every scratchpad automatically.
+
+The private alpha keeps this package in the repository for review. It is not
+installed or published by the build.
+
 ## Terminal configuration
 
 Proqi reads an optional `config.toml` from the platform-native Proqi

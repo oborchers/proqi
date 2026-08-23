@@ -1,0 +1,6 @@
+interface:
+  display_name: "Proqi"
+  short_description: "Operate one explicit Proqi scratchpad"
+  default_prompt: "Use $proqi to work with the Proqi session I specify."
+policy:
+  allow_implicit_invocation: false
