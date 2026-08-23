@@ -10,7 +10,7 @@ mod settings;
 
 use thiserror::Error;
 
-use crate::ports::store::StoreError;
+use crate::ports::{control::ControlError, store::StoreError};
 
 pub(crate) use browser::pick_session;
 pub(crate) use runner::{TerminalResources, require_interactive, run};
@@ -31,6 +31,9 @@ pub enum TerminalError {
     /// User configuration is malformed or unsafe.
     #[error("terminal configuration failed: {0}")]
     Config(String),
+    /// Active-owner local control transport failed.
+    #[error(transparent)]
+    Control(#[from] ControlError),
 }
 
 impl From<std::io::Error> for TerminalError {

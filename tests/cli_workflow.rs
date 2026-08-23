@@ -215,7 +215,7 @@ fn launch_modes_and_capability_discovery_have_stable_output() {
     assert_eq!(resumed["session_id"], session);
     let capabilities = success(root, &["capabilities"], None);
     assert_eq!(capabilities["cli_schema_version"], 1);
-    assert_eq!(capabilities["active_session_control"], false);
+    assert_eq!(capabilities["active_session_control"], true);
     assert_eq!(capabilities["herdr_submission"], false);
 
     let non_terminal = Command::new(env!("CARGO_BIN_EXE_proqi"))
@@ -310,6 +310,11 @@ fn active_session_conflict_is_structured_and_nonzero() {
     let error: Value = serde_json::from_slice(&output.stdout).expect("error JSON");
     assert_eq!(error["error"]["code"], "session_busy");
     assert_eq!(error["error"]["details"]["session_id"], session);
+    let mutation = run(root, &["thoughts", "add", &session], Some("blocked"));
+    assert!(!mutation.status.success());
+    let mutation_error: Value =
+        serde_json::from_slice(&mutation.stdout).expect("mutation error JSON");
+    assert_eq!(mutation_error["error"]["code"], "session_busy");
     let after = success(root, &["sessions", "list"], None);
     assert_eq!(after["sessions"][0]["last_opened_at"], opened_before);
 }

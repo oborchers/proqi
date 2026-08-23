@@ -1,5 +1,6 @@
 //! CLI dispatch into the shared session service.
 
+mod forwarding;
 mod sessions;
 
 use std::{io::Read, process::ExitCode, str::FromStr};
@@ -80,10 +81,10 @@ fn capabilities() -> Outcome {
             "cli_schema_version": 1,
             "identifier_encoding": "prefix_base32hex_uuidv7",
             "commands": ["sessions", "thoughts"],
-            "active_session_control": false,
+            "active_session_control": true,
             "herdr_submission": false,
         }),
-        human: "CLI schema 1\nSessions and thoughts are available\nActive control: unavailable\nHerdr: unavailable".to_owned(),
+        human: "CLI schema 1\nSessions and thoughts are available\nActive control: available\nHerdr: unavailable".to_owned(),
     }
 }
 
@@ -270,6 +271,11 @@ fn add_thought(
     let operation = parse_operation_id(operation)?;
     let mut service = session_service(context)?;
     let session_id = service.resolve_session(session, false)?;
+    drop(service);
+    if let Some(result) = forwarding::add(context, session_id, &body, position, operation)? {
+        return Ok(mutation_outcome(result.thought_id, result.receipt));
+    }
+    let mut service = session_service(context)?;
     let result = service.add_thought(session_id, body, position, operation)?;
     Ok(mutation_outcome(result.thought_id, result.receipt))
 }
@@ -284,6 +290,11 @@ fn delete_thought(
     let operation = parse_operation_id(operation)?;
     let mut service = session_service(context)?;
     let session_id = service.resolve_session(session, false)?;
+    drop(service);
+    if let Some(result) = forwarding::delete(context, session_id, thought_id, operation)? {
+        return Ok(mutation_outcome(result.thought_id, result.receipt));
+    }
+    let mut service = session_service(context)?;
     let result = service.delete_thought(session_id, thought_id, operation)?;
     Ok(mutation_outcome(result.thought_id, result.receipt))
 }
@@ -299,6 +310,13 @@ fn move_thought(
     let operation = parse_operation_id(operation)?;
     let mut service = session_service(context)?;
     let session_id = service.resolve_session(session, false)?;
+    drop(service);
+    if let Some(result) =
+        forwarding::move_thought(context, session_id, thought_id, position, operation)?
+    {
+        return Ok(mutation_outcome(result.thought_id, result.receipt));
+    }
+    let mut service = session_service(context)?;
     let result = service.move_thought(session_id, thought_id, position, operation)?;
     Ok(mutation_outcome(result.thought_id, result.receipt))
 }
@@ -319,6 +337,11 @@ fn move_history(
     let operation = parse_operation_id(arguments.operation_id.as_deref())?;
     let mut service = session_service(context)?;
     let session_id = service.resolve_session(&arguments.session, false)?;
+    drop(service);
+    if let Some(receipt) = forwarding::history(context, session_id, scope, undo, operation)? {
+        return Ok(receipt_outcome(receipt));
+    }
+    let mut service = session_service(context)?;
     let receipt = service.move_history(session_id, scope, undo, operation)?;
     Ok(receipt_outcome(receipt))
 }

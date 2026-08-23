@@ -288,6 +288,8 @@ fn session_browser_searches_and_resumes_in_a_real_pty() {
         after 200
         send "\r"
         after 500
+        send -- "\x1b"
+        after 100
         send -- "q"
         expect {
             eof {}
@@ -316,6 +318,65 @@ fn session_browser_searches_and_resumes_in_a_real_pty() {
             .as_i64()
             .is_some_and(|opened_after| opened_after > opened_before)
     );
+}
+
+#[cfg(target_os = "macos")]
+#[path = "pty/active_control.rs"]
+mod active_control;
+
+#[cfg(target_os = "macos")]
+fn wait_for_path(path: &std::path::Path) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while !path.exists() {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "owner did not become ready"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn raw_input_command(
+    binary: &str,
+    state: &std::path::Path,
+    arguments: &[&str],
+    input: &str,
+) -> std::process::Output {
+    use std::{io::Write as _, process::Stdio};
+
+    let mut child = Command::new(binary)
+        .arg("--state-dir")
+        .arg(state)
+        .arg("--json")
+        .args(arguments)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("spawn input command");
+    child
+        .stdin
+        .take()
+        .expect("command stdin")
+        .write_all(input.as_bytes())
+        .expect("write command input");
+    child.wait_with_output().expect("wait for input command")
+}
+
+#[cfg(target_os = "macos")]
+fn json_input_command(
+    binary: &str,
+    state: &std::path::Path,
+    arguments: &[&str],
+    input: &str,
+) -> Value {
+    let output = raw_input_command(binary, state, arguments, input);
+    assert!(
+        output.status.success(),
+        "input command failed: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    serde_json::from_slice(&output.stdout).expect("input command JSON")
 }
 
 #[cfg(target_os = "macos")]

@@ -18,6 +18,12 @@ pub struct InstanceInfo {
     pub version: String,
     /// Local storage protocol used by this process.
     pub storage_protocol: u32,
+    /// Supported owner-control protocol, absent for older or unsupported processes.
+    #[serde(default)]
+    pub control_protocol: Option<u32>,
+    /// Platform local-socket or named-pipe endpoint, absent when unsupported.
+    #[serde(default)]
+    pub control_endpoint: Option<String>,
     /// Directory from which the process was launched.
     pub launch_directory: String,
     /// Process start time.
@@ -42,7 +48,7 @@ pub enum RuntimeError {
         /// Contended session.
         session_id: SessionId,
         /// Best-effort holder metadata, never authoritative.
-        holder: Option<InstanceInfo>,
+        holder: Option<Box<InstanceInfo>>,
     },
     /// Schema lease conflicts with another running version.
     #[error("schema is in use by another Proqi process")]

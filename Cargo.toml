@@ -13,6 +13,7 @@ clap = { version = "4.5.47", features = ["derive"] }
 crossterm = "0.28.1"
 directories = "6.0.0"
 fs4 = "1.1.0"
+interprocess = "=2.4.2"
 ropey = "1.6.1"
 ratatui-core = { version = "=0.1.2", default-features = false, features = ["layout-cache", "underline-color"] }
 ratatui-crossterm = { version = "=0.1.2", default-features = false, features = ["crossterm_0_28", "underline-color"] }
@@ -26,6 +27,7 @@ toml = "0.9.8"
 unicode-segmentation = "1.12.0"
 unicode-width = "=0.2.0"
 uuid = { version = "1.18.1", features = ["serde", "v7"] }
+widestring = "=1.2.1"
 
 [workspace.lints.rust]
 missing_docs = "warn"
@@ -53,6 +55,7 @@ clap.workspace = true
 crossterm.workspace = true
 directories.workspace = true
 fs4.workspace = true
+interprocess.workspace = true
 ropey.workspace = true
 ratatui-core.workspace = true
 ratatui-crossterm.workspace = true
@@ -66,6 +69,9 @@ toml.workspace = true
 unicode-segmentation.workspace = true
 unicode-width.workspace = true
 uuid.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+widestring.workspace = true
 
 [dev-dependencies]
 proptest = "1.7.0"

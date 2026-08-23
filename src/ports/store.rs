@@ -23,7 +23,7 @@ pub enum MigrationMode {
 }
 
 /// One commit accepted durably by the store.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct CommitReceipt {
     /// Owning session.
     pub session_id: SessionId,
@@ -36,7 +36,8 @@ pub struct CommitReceipt {
 }
 
 /// Typed identity of a durable commit.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "kind", content = "id")]
 pub enum DurableIdentity {
     /// Structural or history movement operation.
     Operation(OperationId),

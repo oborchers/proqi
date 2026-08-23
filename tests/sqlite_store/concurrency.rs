@@ -146,7 +146,9 @@ fn process_termination_rolls_back_uncommitted_sqlite_write() {
         .arg("--test-threads=1")
         .env("PROQI_TEST_CHILD_DATABASE", &fixture.config.database_path)
         .env("PROQI_TEST_CHILD_THOUGHT", thought_id.to_string())
+        .stdin(Stdio::null())
         .stdout(Stdio::piped())
+        .stderr(Stdio::null())
         .spawn()
         .expect("spawn child");
     let mut reader = BufReader::new(child.stdout.take().expect("child stdout"));

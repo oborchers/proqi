@@ -58,6 +58,13 @@ typed `--operation-id` and return the original durable receipt on a matching
 retry, including after another process has restarted. Permanent session pruning
 is separate from recoverable trash and requires `--yes`.
 
+Read-only commands may inspect an active session. A thought mutation addressed
+to an active session is forwarded through its verified, user-only local control
+endpoint and becomes successful only after the owning reducer has committed it.
+If the owner or protocol cannot be verified, the command returns the structured
+`session_busy` error and never writes around the owner. Run
+`proqi --json capabilities` before agent-driven use.
+
 ## Terminal configuration
 
 Proqi reads an optional `config.toml` from the platform-native Proqi

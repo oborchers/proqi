@@ -2,6 +2,7 @@
 
 mod clipboard;
 mod commands;
+mod control;
 mod palette;
 mod pointer;
 mod recovery;

@@ -4,24 +4,29 @@ use std::{
     collections::BTreeMap,
     sync::mpsc::{Receiver, SyncSender, sync_channel},
     thread::{self, JoinHandle},
+    time::Duration,
 };
 
 use crate::{
     adapters::sqlite::SqliteStore,
-    domain::OperationSequence,
-    ports::store::{OperationBatch, Store, StoreError},
+    domain::{OperationId, OperationSequence},
+    ports::store::{CommitReceipt, OperationBatch, Store, StoreError, StoredOperationRequest},
 };
 
 use super::TerminalError;
 
 pub(super) struct PersistenceResult {
     pub(super) sequence: OperationSequence,
-    pub(super) result: Result<(), StoreError>,
+    pub(super) result: Result<CommitReceipt, StoreError>,
 }
 
 enum PersistenceRequest {
     Commit(Box<OperationBatch>),
     Retry(OperationSequence),
+    Lookup {
+        operation_id: OperationId,
+        response: SyncSender<Result<Option<StoredOperationRequest>, StoreError>>,
+    },
 }
 
 pub(super) struct PersistenceLane {
@@ -49,6 +54,21 @@ impl PersistenceLane {
 
     pub(super) fn retry(&self, sequence: OperationSequence) -> Result<(), TerminalError> {
         self.send(PersistenceRequest::Retry(sequence))
+    }
+
+    pub(super) fn lookup(
+        &self,
+        operation_id: OperationId,
+    ) -> Result<Option<StoredOperationRequest>, TerminalError> {
+        let (response, result) = sync_channel(1);
+        self.send(PersistenceRequest::Lookup {
+            operation_id,
+            response,
+        })?;
+        result
+            .recv_timeout(Duration::from_secs(2))
+            .map_err(|_| TerminalError::Worker("persistence lookup timed out"))?
+            .map_err(TerminalError::from)
     }
 
     fn send(&self, request: PersistenceRequest) -> Result<(), TerminalError> {
@@ -104,8 +124,18 @@ fn process_request(
             };
             (sequence, batch)
         }
+        PersistenceRequest::Lookup {
+            operation_id,
+            response,
+        } => {
+            let _sent = response.send(store.operation_request(operation_id));
+            return true;
+        }
     };
-    let result = store.commit(&batch).map(|_receipt| ());
+    let result = store.commit(&batch).and_then(|receipt| {
+        receipt
+            .ok_or_else(|| StoreError::Integrity("mutable operation lacked a receipt".to_owned()))
+    });
     if result.is_ok() {
         retained.remove(&sequence);
     } else {

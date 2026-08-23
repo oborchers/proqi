@@ -170,16 +170,18 @@ impl FileRuntimeCoordinator {
             .join(format!("{}.json", self.instance_id))
     }
 
-    fn instance_info(&self, session_id: SessionId) -> InstanceInfo {
-        InstanceInfo {
+    fn instance_info(&self, session_id: SessionId) -> Result<InstanceInfo, RuntimeError> {
+        Ok(InstanceInfo {
             instance_id: self.instance_id,
             session_id,
             pid: std::process::id(),
             version: self.version.clone(),
             storage_protocol: STORAGE_PROTOCOL_VERSION,
+            control_protocol: Some(crate::ports::control::CONTROL_PROTOCOL_VERSION),
+            control_endpoint: Some(control_endpoint(&self.runtime_dir, self.instance_id)?),
             launch_directory: self.launch_directory.to_string_lossy().into_owned(),
             started_at: self.started_at,
-        }
+        })
     }
 
     fn read_metadata(&self) -> Result<Vec<(PathBuf, InstanceInfo)>, RuntimeError> {
@@ -216,11 +218,29 @@ impl FileRuntimeCoordinator {
     fn purge_metadata_for(&self, session_id: SessionId) -> Result<(), RuntimeError> {
         for (path, info) in self.read_metadata()? {
             if info.session_id == session_id {
+                remove_stale_control_endpoint(&self.runtime_dir, &info)?;
                 remove_if_exists(&path)?;
             }
         }
         Ok(())
     }
+}
+
+#[cfg(unix)]
+fn control_endpoint(runtime_dir: &Path, instance_id: InstanceId) -> Result<String, RuntimeError> {
+    use std::os::unix::fs::MetadataExt as _;
+    let uid = fs::metadata(runtime_dir).map_err(io_error)?.uid();
+    let directory = PathBuf::from("/tmp").join(format!("proqi-{uid}"));
+    create_private_dir(&directory)?;
+    Ok(directory
+        .join(format!("{instance_id}.sock"))
+        .to_string_lossy()
+        .into_owned())
+}
+
+#[cfg(windows)]
+fn control_endpoint(_runtime_dir: &Path, instance_id: InstanceId) -> Result<String, RuntimeError> {
+    Ok(format!(r"\\.\pipe\proqi-{instance_id}"))
 }
 
 impl RuntimeCoordinator for FileRuntimeCoordinator {
@@ -236,7 +256,7 @@ impl RuntimeCoordinator for FileRuntimeCoordinator {
             Err(TryLockError::WouldBlock) => {
                 return Err(RuntimeError::SessionBusy {
                     session_id,
-                    holder: self.holder_for(session_id),
+                    holder: self.holder_for(session_id).map(Box::new),
                 });
             }
             Err(TryLockError::Error(error)) => return Err(io_error(error)),
@@ -246,7 +266,7 @@ impl RuntimeCoordinator for FileRuntimeCoordinator {
             return Err(error);
         }
         let metadata_path = self.metadata_path();
-        let info = self.instance_info(session_id);
+        let info = self.instance_info(session_id)?;
         if let Err(error) = write_private_json(&metadata_path, &info) {
             let _ = FileExt::unlock(&file);
             return Err(error);
@@ -275,6 +295,7 @@ impl RuntimeCoordinator for FileRuntimeCoordinator {
             match FileExt::try_lock_shared(&file) {
                 Ok(()) => {
                     FileExt::unlock(&file).map_err(io_error)?;
+                    remove_stale_control_endpoint(&self.runtime_dir, &info)?;
                     remove_if_exists(&path)?;
                     recovered.insert(info.session_id);
                 }
@@ -291,6 +312,29 @@ impl RuntimeCoordinator for FileRuntimeCoordinator {
             recovered: recovered.into_iter().collect(),
         })
     }
+}
+
+#[cfg(unix)]
+fn remove_stale_control_endpoint(
+    runtime_dir: &Path,
+    info: &InstanceInfo,
+) -> Result<(), RuntimeError> {
+    let Some(endpoint) = info.control_endpoint.as_deref() else {
+        return Ok(());
+    };
+    let expected = control_endpoint(runtime_dir, info.instance_id)?;
+    if endpoint == expected {
+        remove_if_exists(Path::new(endpoint))?;
+    }
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn remove_stale_control_endpoint(
+    _runtime_dir: &Path,
+    _info: &InstanceInfo,
+) -> Result<(), RuntimeError> {
+    Ok(())
 }
 
 fn try_session_lock(file: &File) -> Result<(), TryLockError> {

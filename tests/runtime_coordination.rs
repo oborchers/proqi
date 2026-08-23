@@ -112,12 +112,43 @@ fn stale_descriptive_metadata_is_removed_when_no_lock_exists() {
     drop(lease);
     assert!(!metadata.exists());
 
+    #[cfg(unix)]
+    let stale_endpoint = {
+        let endpoint = PathBuf::from(info.control_endpoint.as_deref().expect("control endpoint"));
+        std::fs::write(&endpoint, b"stale").expect("stale endpoint fixture");
+        endpoint
+    };
     std::fs::write(&metadata, serde_json::to_vec(&info).expect("json"))
         .expect("stale metadata fixture");
     let scan = owner.scan_runtime().expect("recovery");
     assert!(scan.active.is_empty());
     assert_eq!(scan.recovered, vec![session_id]);
     assert!(!metadata.exists());
+    #[cfg(unix)]
+    assert!(!stale_endpoint.exists());
+
+    #[cfg(unix)]
+    {
+        let unrelated = temporary.path().join("unrelated.sock");
+        std::fs::write(&unrelated, b"keep").expect("unrelated endpoint fixture");
+        let mut untrusted = info.clone();
+        untrusted.control_endpoint = Some(unrelated.to_string_lossy().into_owned());
+        std::fs::write(&metadata, serde_json::to_vec(&untrusted).expect("json"))
+            .expect("untrusted metadata fixture");
+        owner.scan_runtime().expect("safe recovery");
+        assert!(unrelated.exists());
+    }
+
+    #[cfg(unix)]
+    {
+        let endpoint = PathBuf::from(info.control_endpoint.as_deref().expect("control endpoint"));
+        std::fs::write(&endpoint, b"stale").expect("resume endpoint fixture");
+        std::fs::write(&metadata, serde_json::to_vec(&info).expect("json"))
+            .expect("resume metadata fixture");
+        let resumed = owner.acquire_session(session_id).expect("direct recovery");
+        assert!(!endpoint.exists());
+        drop(resumed);
+    }
 
     let malformed = runtime.join("instances").join("malformed.json");
     std::fs::write(&malformed, b"{").expect("malformed metadata fixture");
@@ -162,7 +193,9 @@ fn process_termination_releases_authoritative_lock() {
         .env("PROQI_TEST_CHILD_RUNTIME", &runtime)
         .env("PROQI_TEST_CHILD_SESSION", session_id.to_string())
         .env("PROQI_TEST_CHILD_INSTANCE", child_instance.to_string())
+        .stdin(Stdio::null())
         .stdout(Stdio::piped())
+        .stderr(Stdio::null())
         .spawn()
         .expect("spawn child");
     let stdout = child.stdout.take().expect("child stdout");
@@ -227,5 +260,22 @@ fn runtime_files_are_user_only() {
             .mode()
             & 0o777,
         0o600
+    );
+    let endpoint = lease.info().control_endpoint.as_deref().expect("endpoint");
+    assert!(
+        endpoint.len() < 100,
+        "Unix socket path is bounded: {endpoint}"
+    );
+    assert_eq!(
+        std::fs::metadata(
+            std::path::Path::new(endpoint)
+                .parent()
+                .expect("control parent")
+        )
+        .expect("control directory")
+        .permissions()
+        .mode()
+            & 0o777,
+        0o700
     );
 }
