@@ -1,0 +1,6 @@
+/target/
+.DS_Store
+*.profraw
+.env
+.env.*
+!.env.example
