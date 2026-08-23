@@ -138,19 +138,19 @@ fn assert_persistent_editor_undo(
 fn termination_signal_restores_and_releases_the_session() {
     let state = tempfile::tempdir().expect("temporary state");
     let binary = env!("CARGO_BIN_EXE_proqi");
-    let terminate = r"
+    let terminate = r#"
         log_user 0
         set timeout 10
         set binary $env(PROQI_TEST_BINARY)
         set state $env(PROQI_TEST_STATE)
         spawn $binary --state-dir $state
         set child [exp_pid]
-        after 500
+        expect -exact "\x1b\[?1049h"
         system /bin/kill -TERM $child
         expect eof
         catch wait result
         exit [lindex $result 3]
-    ";
+    "#;
     let status = expect_command()
         .args(["-c", terminate])
         .env("PROQI_TEST_BINARY", binary)

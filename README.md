@@ -160,6 +160,10 @@ an active session are forwarded through its verified local owner channel. They
 never write around the owning reducer. Unsupported or unverifiable forwarding
 returns a structured `session_busy` error.
 
+Verified owner forwarding is enabled on macOS and Linux. This private alpha
+returns `session_busy` on Windows until current-user named-pipe identity
+validation is implemented and exercised before a public alpha.
+
 The explicit-invocation skill at [`skills/proqi/SKILL.md`](skills/proqi/SKILL.md)
 describes only this stable JSON surface. It discovers capabilities first, uses
 standard input for arbitrary content, addresses the user-specified session, and
