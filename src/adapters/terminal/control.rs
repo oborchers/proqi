@@ -10,7 +10,10 @@ use std::{
 
 use crossterm::{
     cursor::{Hide, Show},
-    event::{DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture},
+    event::{
+        DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture,
+        KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
+    },
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
@@ -32,6 +35,11 @@ impl TerminalControl for CrosstermControl {
             EnterAlternateScreen,
             EnableMouseCapture,
             EnableBracketedPaste,
+            PushKeyboardEnhancementFlags(
+                KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
+                    | KeyboardEnhancementFlags::REPORT_EVENT_TYPES
+                    | KeyboardEnhancementFlags::REPORT_ALTERNATE_KEYS
+            ),
             Hide
         )
     }
@@ -40,6 +48,7 @@ impl TerminalControl for CrosstermControl {
         let screen = execute!(
             stdout(),
             Show,
+            PopKeyboardEnhancementFlags,
             DisableBracketedPaste,
             DisableMouseCapture,
             LeaveAlternateScreen

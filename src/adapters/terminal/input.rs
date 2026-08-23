@@ -10,9 +10,13 @@ use std::{
     time::Duration,
 };
 
-use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use crossterm::event::{
+    self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent,
+    MouseEventKind,
+};
 
-use crate::ui::{UiInput, UiKey};
+use crate::ports::editor::CursorMovement;
+use crate::ui::{PointerButton, PointerInput, PointerKind, UiInput, UiKey};
 
 pub(super) enum InputMessage {
     Event(UiInput),
@@ -116,16 +120,42 @@ fn translate(event: Event) -> Option<UiInput> {
         Event::Key(key) if key.kind == KeyEventKind::Press => translate_key(key).map(UiInput::Key),
         Event::Paste(content) => Some(UiInput::Paste(content)),
         Event::Resize(width, height) => Some(UiInput::Resize { width, height }),
-        Event::FocusGained | Event::FocusLost | Event::Mouse(_) | Event::Key(_) => None,
+        Event::Mouse(mouse) => translate_mouse(mouse).map(UiInput::Pointer),
+        Event::FocusGained | Event::FocusLost | Event::Key(_) => None,
+    }
+}
+
+fn translate_mouse(mouse: MouseEvent) -> Option<PointerInput> {
+    let kind = match mouse.kind {
+        MouseEventKind::Down(button) => PointerKind::Down(pointer_button(button)),
+        MouseEventKind::Up(button) => PointerKind::Up(pointer_button(button)),
+        MouseEventKind::Drag(button) => PointerKind::Drag(pointer_button(button)),
+        MouseEventKind::Moved => PointerKind::Move,
+        MouseEventKind::ScrollUp => PointerKind::ScrollUp,
+        MouseEventKind::ScrollDown => PointerKind::ScrollDown,
+        MouseEventKind::ScrollLeft | MouseEventKind::ScrollRight => return None,
+    };
+    Some(PointerInput {
+        column: mouse.column,
+        row: mouse.row,
+        kind,
+    })
+}
+
+const fn pointer_button(button: MouseButton) -> PointerButton {
+    match button {
+        MouseButton::Left => PointerButton::Left,
+        MouseButton::Middle => PointerButton::Middle,
+        MouseButton::Right => PointerButton::Right,
     }
 }
 
 fn translate_key(key: KeyEvent) -> Option<UiKey> {
-    let command = key
+    let primary = key
         .modifiers
-        .intersects(KeyModifiers::CONTROL | KeyModifiers::SUPER);
-    if command {
-        return match key.code {
+        .intersects(KeyModifiers::CONTROL | KeyModifiers::SUPER | KeyModifiers::META);
+    if primary {
+        let command = match key.code {
             KeyCode::Char('a') => Some(UiKey::SelectAll),
             KeyCode::Char('c') => Some(UiKey::Quit),
             KeyCode::Char('u') => Some(UiKey::DeleteLine),
@@ -134,37 +164,104 @@ fn translate_key(key: KeyEvent) -> Option<UiKey> {
             KeyCode::Char('y') => Some(UiKey::Redo),
             _ => None,
         };
+        if command.is_some() {
+            return command;
+        }
     }
+    let extend_selection = key.modifiers.contains(KeyModifiers::SHIFT);
+    let word = key
+        .modifiers
+        .intersects(KeyModifiers::ALT | KeyModifiers::CONTROL);
+    let document = key
+        .modifiers
+        .intersects(KeyModifiers::SUPER | KeyModifiers::META);
     match key.code {
         KeyCode::Char(character) => Some(UiKey::Character(character)),
         KeyCode::Enter => Some(UiKey::Enter),
         KeyCode::Esc => Some(UiKey::Escape),
         KeyCode::Backspace => Some(UiKey::Backspace),
         KeyCode::Delete => Some(UiKey::Delete),
-        KeyCode::Up => Some(UiKey::Up),
-        KeyCode::Down => Some(UiKey::Down),
-        KeyCode::Left => Some(UiKey::Left),
-        KeyCode::Right => Some(UiKey::Right),
-        KeyCode::Home => Some(UiKey::Home),
-        KeyCode::End => Some(UiKey::End),
+        KeyCode::Up => Some(move_key(
+            if document {
+                CursorMovement::DocumentStart
+            } else {
+                CursorMovement::VisualUp
+            },
+            extend_selection,
+        )),
+        KeyCode::Down => Some(move_key(
+            if document {
+                CursorMovement::DocumentEnd
+            } else {
+                CursorMovement::VisualDown
+            },
+            extend_selection,
+        )),
+        KeyCode::Left => Some(move_key(
+            if word {
+                CursorMovement::WordBack
+            } else {
+                CursorMovement::GraphemeBack
+            },
+            extend_selection,
+        )),
+        KeyCode::Right => Some(move_key(
+            if word {
+                CursorMovement::WordForward
+            } else {
+                CursorMovement::GraphemeForward
+            },
+            extend_selection,
+        )),
+        KeyCode::Home => Some(move_key(CursorMovement::LineStart, extend_selection)),
+        KeyCode::End => Some(move_key(CursorMovement::LineEnd, extend_selection)),
         _ => None,
+    }
+}
+
+const fn move_key(movement: CursorMovement, extend_selection: bool) -> UiKey {
+    UiKey::Move {
+        movement,
+        extend_selection,
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+    use crossterm::event::{
+        Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
+    };
 
-    use crate::ui::{UiInput, UiKey};
+    use crate::ports::editor::CursorMovement;
+    use crate::ui::{PointerButton, PointerInput, PointerKind, UiInput, UiKey};
 
     use super::translate;
 
     #[test]
     fn command_and_meta_shortcuts_share_semantics() {
-        for modifier in [KeyModifiers::CONTROL, KeyModifiers::SUPER] {
+        for modifier in [
+            KeyModifiers::CONTROL,
+            KeyModifiers::SUPER,
+            KeyModifiers::META,
+        ] {
             let event = Event::Key(KeyEvent::new(KeyCode::Char('a'), modifier));
             assert_eq!(translate(event), Some(UiInput::Key(UiKey::SelectAll)));
         }
+    }
+
+    #[test]
+    fn shift_and_word_navigation_remain_semantic() {
+        let select = Event::Key(KeyEvent::new(
+            KeyCode::Left,
+            KeyModifiers::SHIFT | KeyModifiers::ALT,
+        ));
+        assert_eq!(
+            translate(select),
+            Some(UiInput::Key(UiKey::Move {
+                movement: CursorMovement::WordBack,
+                extend_selection: true,
+            }))
+        );
     }
 
     #[test]
@@ -173,6 +270,24 @@ mod tests {
         assert_eq!(
             translate(Event::Paste(content.clone())),
             Some(UiInput::Paste(content))
+        );
+    }
+
+    #[test]
+    fn mouse_coordinates_are_normalized_without_terminal_types() {
+        let event = Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: 7,
+            row: 3,
+            modifiers: KeyModifiers::NONE,
+        });
+        assert_eq!(
+            translate(event),
+            Some(UiInput::Pointer(PointerInput {
+                column: 7,
+                row: 3,
+                kind: PointerKind::Down(PointerButton::Left),
+            }))
         );
     }
 }

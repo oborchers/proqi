@@ -6,12 +6,16 @@ use proqi::{
     adapters::memory::{FakeClock, FakeIdGenerator},
     application::AppState,
     domain::{OperationSequence, Session, SessionBoard, Timestamp},
-    ports::{editor::TextViewport, environment::IdGenerator},
-    ui::{BoardApp, UiInput, UiKey, render},
+    ports::environment::IdGenerator,
+    ui::{
+        BoardApp, PointerButton, PointerInput, PointerKind, Theme, ThemePreference, UiInput, UiKey,
+        UiSettings, render,
+    },
 };
 use ratatui_core::{
     backend::{Backend, TestBackend},
     buffer::Buffer,
+    layout::Rect,
     terminal::Terminal,
 };
 
@@ -23,6 +27,10 @@ struct Fixture {
 
 impl Fixture {
     fn new() -> Self {
+        Self::with_settings(UiSettings::default())
+    }
+
+    fn with_settings(settings: UiSettings) -> Self {
         let mut ids = FakeIdGenerator::new(1_725_000_000_000);
         let session = Session::new(
             ids.session_id(),
@@ -32,7 +40,7 @@ impl Fixture {
         .expect("session");
         let board = SessionBoard::new(session, Vec::new()).expect("board");
         Self {
-            app: BoardApp::new(AppState::new(board)),
+            app: BoardApp::with_settings(AppState::new(board), settings),
             ids,
             clock: FakeClock::new(Timestamp::from_millis(20)),
         }
@@ -40,6 +48,10 @@ impl Fixture {
 
     fn input(&mut self, input: UiInput) {
         let _effects = self.app.handle(input, &mut self.ids, &self.clock);
+    }
+
+    fn pointer(&mut self, column: u16, row: u16, kind: PointerKind) {
+        self.input(UiInput::Pointer(PointerInput { column, row, kind }));
     }
 
     fn paste(&mut self, content: &str) -> OperationSequence {
@@ -57,14 +69,18 @@ impl Fixture {
 }
 
 fn draw(fixture: &mut Fixture, width: u16, height: u16) -> Terminal<TestBackend> {
-    fixture.app.prepare_layout(TextViewport::new(
-        width.saturating_sub(4).max(1),
-        height.saturating_sub(1).max(1),
-    ));
     let backend = TestBackend::new(width, height);
     let mut terminal = Terminal::new(backend).expect("terminal");
     terminal
-        .draw(|frame| render(frame, &fixture.app))
+        .draw(|frame| {
+            let layout = fixture.app.prepare_frame(frame.area());
+            render(
+                frame,
+                &fixture.app,
+                &layout,
+                &Theme::resolve(ThemePreference::Auto, true),
+            );
+        })
         .expect("draw");
     terminal
 }
@@ -146,4 +162,174 @@ fn pending_and_failed_durability_are_visibly_distinct() {
     fixture.app.acknowledge_persistence(sequence, false);
     let failed = draw(&mut fixture, 50, 6);
     assert!(text(failed.backend().buffer()).contains("edit  save failed"));
+}
+
+#[test]
+fn mouse_can_create_focus_place_cursor_and_open_help() {
+    let mut fixture = Fixture::new();
+    let _empty = draw(&mut fixture, 40, 8);
+    fixture.pointer(0, 0, PointerKind::Down(PointerButton::Left));
+    assert!(matches!(
+        fixture.app.state.mode,
+        proqi::application::InteractionMode::Edit { .. }
+    ));
+    fixture.input(UiInput::Paste("A界B".to_owned()));
+    fixture.input(UiInput::Key(UiKey::Escape));
+
+    let _populated = draw(&mut fixture, 40, 8);
+    fixture.pointer(3, 0, PointerKind::Down(PointerButton::Left));
+    assert_eq!(
+        fixture.app.editor_snapshot().expect("editor").cursor,
+        proqi::domain::TextPosition::new(0, 1)
+    );
+
+    fixture.input(UiInput::Key(UiKey::Escape));
+    let _board = draw(&mut fixture, 40, 8);
+    fixture.pointer(35, 7, PointerKind::Down(PointerButton::Left));
+    assert!(fixture.app.help);
+}
+
+#[test]
+fn mouse_drag_reorders_thoughts_through_the_visible_gutter() {
+    let mut fixture = Fixture::new();
+    for content in ["first", "second", "third"] {
+        fixture.paste(content);
+        fixture.input(UiInput::Key(UiKey::Escape));
+    }
+    let _board = draw(&mut fixture, 40, 10);
+    fixture.pointer(0, 0, PointerKind::Down(PointerButton::Left));
+    fixture.pointer(0, 2, PointerKind::Drag(PointerButton::Left));
+    fixture.pointer(0, 2, PointerKind::Up(PointerButton::Left));
+
+    let contents = fixture
+        .app
+        .state
+        .board
+        .live_thoughts()
+        .iter()
+        .map(|thought| thought.content.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(contents, ["second", "third", "first"]);
+}
+
+#[test]
+fn keyboard_selection_is_logical_and_visible() {
+    let mut fixture = Fixture::new();
+    fixture.paste("A界B");
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: proqi::ports::editor::CursorMovement::GraphemeBack,
+        extend_selection: true,
+    }));
+    let snapshot = fixture.app.editor_snapshot().expect("editor");
+    assert_eq!(
+        snapshot.selection,
+        Some(proqi::ports::editor::TextSelection {
+            start: proqi::domain::TextPosition::new(0, 2),
+            end: proqi::domain::TextPosition::new(0, 3),
+        })
+    );
+    assert_eq!(
+        snapshot.visual_lines[0]
+            .selected_cells
+            .expect("cells")
+            .start,
+        3
+    );
+
+    let terminal = draw(&mut fixture, 20, 5);
+    let selected = terminal.backend().buffer()[(5, 0)].modifier;
+    assert!(selected.contains(ratatui_core::style::Modifier::REVERSED));
+}
+
+#[test]
+fn command_palette_is_searchable_and_mouse_operable() {
+    let mut fixture = Fixture::new();
+    fixture.input(UiInput::Key(UiKey::Character('/')));
+    for character in "quit".chars() {
+        fixture.input(UiInput::Key(UiKey::Character(character)));
+    }
+    let terminal = draw(&mut fixture, 40, 12);
+    let rendered = text(terminal.backend().buffer());
+    assert!(rendered.contains("/quit"));
+    assert!(rendered.contains("Quit Proqi"));
+    assert!(!rendered.contains("New thought"));
+
+    fixture.pointer(2, 5, PointerKind::Down(PointerButton::Left));
+    assert!(fixture.app.quit);
+}
+
+#[test]
+fn remapped_board_binding_changes_behavior_and_visible_hint() {
+    let mut settings = UiSettings::default();
+    settings.keybindings.new = 't';
+    let mut fixture = Fixture::with_settings(settings);
+    fixture.input(UiInput::Key(UiKey::Character('n')));
+    assert!(fixture.app.state.board.live_thoughts().is_empty());
+    fixture.input(UiInput::Key(UiKey::Character('t')));
+    assert_eq!(fixture.app.state.board.live_thoughts().len(), 1);
+
+    fixture.input(UiInput::Key(UiKey::Escape));
+    let terminal = draw(&mut fixture, 50, 6);
+    assert!(text(terminal.backend().buffer()).contains("t new"));
+}
+
+#[test]
+fn long_thought_cap_expands_without_changing_content() {
+    let mut fixture = Fixture::new();
+    let content = (0..20)
+        .map(|index| format!("line {index}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    fixture.paste(&content);
+    fixture.input(UiInput::Key(UiKey::Escape));
+    let initial = fixture.app.prepare_frame(Rect::new(0, 0, 40, 13));
+    let thought = initial.thoughts.first().expect("thought");
+    assert!(thought.hidden_rows > 0);
+    let capped_height = thought.area.height;
+    let overflow = thought.overflow.expect("overflow");
+
+    fixture.pointer(
+        overflow.x,
+        overflow.y,
+        PointerKind::Down(PointerButton::Left),
+    );
+    let expanded = fixture.app.prepare_frame(Rect::new(0, 0, 40, 13));
+    assert!(expanded.thoughts[0].area.height > capped_height);
+    assert_eq!(fixture.app.state.board.live_thoughts()[0].content, content);
+}
+
+#[test]
+fn viewport_matrix_keeps_focus_visible_and_hit_geometry_current() {
+    let mut fixture = Fixture::new();
+    for index in 0..10 {
+        fixture.paste(&format!("thought {index} 界"));
+        fixture.input(UiInput::Key(UiKey::Escape));
+    }
+    let focused = fixture.app.state.focused_thought.expect("focus");
+    for (width, height) in [(6, 3), (120, 4), (18, 30), (9, 5), (80, 24)] {
+        let layout = fixture.app.prepare_frame(Rect::new(0, 0, width, height));
+        let thought = layout.thought(focused).expect("focused thought visible");
+        assert!(thought.area.right() <= width);
+        assert!(thought.area.bottom() <= height.saturating_sub(1));
+        assert_eq!(
+            layout.hit_test(thought.gutter.x, thought.gutter.y),
+            Some(proqi::ui::HitTarget::DragHandle(focused))
+        );
+        if thought.text_area.width > 0 {
+            assert_eq!(
+                layout.hit_test(thought.text_area.x, thought.text_area.y),
+                Some(proqi::ui::HitTarget::Thought(focused))
+            );
+        }
+    }
+}
+
+#[test]
+fn narrow_empty_board_has_a_complete_explicit_buffer_snapshot() {
+    let mut fixture = Fixture::new();
+    let terminal = draw(&mut fixture, 12, 3);
+    assert_eq!(
+        text(terminal.backend().buffer()),
+        "  +  create \n            \n[/][u][?][q]"
+    );
 }

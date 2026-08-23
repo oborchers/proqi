@@ -92,6 +92,9 @@ fn execute_launch(
     if interactive {
         terminal::require_interactive()?;
     }
+    let settings = interactive
+        .then(|| context.terminal_settings())
+        .transpose()?;
     let session = if continue_latest {
         session_service(&mut context)?.continue_current()?
     } else {
@@ -107,7 +110,10 @@ fn execute_launch(
     };
     let id = session.state.board.session.id;
     if interactive {
-        let resources = context.into_terminal(session);
+        let resources = context.into_terminal(
+            session,
+            settings.unwrap_or_else(crate::ui::UiSettings::default),
+        );
         let _closed = terminal::run(resources)?;
     }
     Ok(opened_session(id))

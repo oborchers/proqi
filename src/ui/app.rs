@@ -1,14 +1,63 @@
 //! Terminal-independent board interaction state.
 
+mod commands;
+mod palette;
+mod pointer;
+
+use std::collections::BTreeSet;
+
+use ratatui_core::layout::Rect;
+
 use crate::{
     adapters::editor::RopeEditor,
     application::{Action, AppState, Effect, FailureCode, InteractionMode, reduce},
-    domain::{BoardOperationKind, OperationSequence, ThoughtId, UndoScope},
+    domain::{OperationSequence, ThoughtId},
     ports::{
         editor::{CursorMovement, EditCommand, Editor, EditorSnapshot, TextViewport},
         environment::{Clock, IdGenerator},
     },
 };
+
+use super::{HitTarget, LayoutSnapshot, UiSettings, compute_layout};
+
+/// Mouse button after terminal-backend normalization.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PointerButton {
+    /// Primary button used for all required interactions.
+    Left,
+    /// Middle button, retained for portable event normalization.
+    Middle,
+    /// Secondary button, never required by Proqi.
+    Right,
+}
+
+/// Semantic pointer event kind.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PointerKind {
+    /// Button pressed.
+    Down(PointerButton),
+    /// Button released.
+    Up(PointerButton),
+    /// Pointer moved while a button is held.
+    Drag(PointerButton),
+    /// Pointer moved without a button.
+    Move,
+    /// Scroll toward earlier content.
+    ScrollUp,
+    /// Scroll toward later content.
+    ScrollDown,
+}
+
+/// Terminal-cell pointer location and semantic event kind.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PointerInput {
+    /// Zero-based terminal column.
+    pub column: u16,
+    /// Zero-based terminal row.
+    pub row: u16,
+    /// Normalized pointer event.
+    pub kind: PointerKind,
+}
 
 /// Normalized keys accepted by the board UI.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -25,18 +74,13 @@ pub enum UiKey {
     Backspace,
     /// Delete the following grapheme.
     Delete,
-    /// Move upward.
-    Up,
-    /// Move downward.
-    Down,
-    /// Move left.
-    Left,
-    /// Move right.
-    Right,
-    /// Move to the logical line start.
-    Home,
-    /// Move to the logical line end.
-    End,
+    /// Move logically or visually, optionally extending selection.
+    Move {
+        /// Backend-independent cursor intention.
+        movement: CursorMovement,
+        /// Whether to extend the active selection.
+        extend_selection: bool,
+    },
     /// Select the complete thought.
     SelectAll,
     /// Delete the current logical line.
@@ -61,6 +105,8 @@ pub enum UiInput {
         /// Latest reported terminal height.
         height: u16,
     },
+    /// One normalized mouse or trackpad event.
+    Pointer(PointerInput),
 }
 
 /// Mutable UI state around the pure application reducer.
@@ -75,12 +121,26 @@ pub struct BoardApp {
     /// Transient human-readable status.
     pub status: Option<String>,
     viewport: TextViewport,
+    first_visible: usize,
+    layout: Option<LayoutSnapshot>,
+    dragged_thought: Option<ThoughtId>,
+    drag_target: Option<usize>,
+    hovered: Option<HitTarget>,
+    palette: Option<palette::PaletteState>,
+    settings: UiSettings,
+    expanded: BTreeSet<ThoughtId>,
 }
 
 impl BoardApp {
     /// Construct a board around rehydrated application state.
     #[must_use]
     pub fn new(state: AppState) -> Self {
+        Self::with_settings(state, UiSettings::default())
+    }
+
+    /// Construct a board with validated user settings.
+    #[must_use]
+    pub fn with_settings(state: AppState, settings: UiSettings) -> Self {
         Self {
             state,
             editor: None,
@@ -88,6 +148,14 @@ impl BoardApp {
             help: false,
             status: None,
             viewport: TextViewport::default(),
+            first_visible: 0,
+            layout: None,
+            dragged_thought: None,
+            drag_target: None,
+            hovered: None,
+            palette: None,
+            settings,
+            expanded: BTreeSet::new(),
         }
     }
 
@@ -99,12 +167,16 @@ impl BoardApp {
         clock: &impl Clock,
     ) -> Vec<Effect> {
         self.status = None;
+        if self.palette.is_some() {
+            return self.handle_palette_input(&input, ids, clock);
+        }
         if input == UiInput::Key(UiKey::Quit) {
             self.quit = true;
             return Vec::new();
         }
         match input {
             UiInput::Resize { .. } => Vec::new(),
+            UiInput::Pointer(pointer) => self.handle_pointer(pointer, ids, clock),
             UiInput::Paste(content) => self.paste(content, ids, clock),
             UiInput::Key(key) => match self.state.mode {
                 InteractionMode::Board => self.handle_board_key(key, ids, clock),
@@ -119,12 +191,73 @@ impl BoardApp {
         self.editor.as_ref().map(|(_, editor)| editor.snapshot())
     }
 
+    /// Current hover target resolved from the latest rendered layout.
+    #[must_use]
+    pub const fn hovered(&self) -> Option<HitTarget> {
+        self.hovered
+    }
+
+    /// Filtered command labels and current selection for rendering.
+    #[must_use]
+    pub fn palette_view(&self) -> Option<(String, Vec<&'static str>, usize)> {
+        self.palette.as_ref().map(palette::PaletteState::view)
+    }
+
+    /// Active board bindings used by hints and command translation.
+    #[must_use]
+    pub const fn keybindings(&self) -> &crate::ui::KeyBindings {
+        &self.settings.keybindings
+    }
+
     /// Prepare current frame geometry without changing the logical cursor.
     pub fn prepare_layout(&mut self, viewport: TextViewport) {
         self.viewport = viewport;
         if let Some((_, editor)) = &mut self.editor {
             editor.set_viewport(viewport);
         }
+    }
+
+    /// Recompute one authoritative frame layout and reflow the active editor.
+    pub fn prepare_frame(&mut self, area: Rect) -> LayoutSnapshot {
+        let editor = self.editor_snapshot();
+        let first = compute_layout(
+            &self.state,
+            editor.as_ref(),
+            area,
+            self.first_visible,
+            &self.expanded,
+        );
+        let height = self
+            .state
+            .focused_thought
+            .and_then(|id| first.thought(id))
+            .map_or(first.board.height.max(1), |thought| {
+                thought.text_area.height.max(1)
+            });
+        self.prepare_layout(TextViewport::new(first.content_width, height));
+        let editor = self.editor_snapshot();
+        let mut layout = compute_layout(
+            &self.state,
+            editor.as_ref(),
+            area,
+            first.first_index,
+            &self.expanded,
+        );
+        let palette_items = self
+            .palette
+            .as_ref()
+            .map_or(0, palette::PaletteState::match_count);
+        let preferred_rows = if self.help {
+            9
+        } else if self.palette.is_some() {
+            palette_items.max(2)
+        } else {
+            0
+        };
+        layout.configure_overlay(palette_items, preferred_rows);
+        self.first_visible = layout.first_index;
+        self.layout = Some(layout.clone());
+        layout
     }
 
     /// Rebuild the editor adapter when reducer state changes externally.
@@ -163,77 +296,6 @@ impl BoardApp {
             }
         };
         let _effects = self.reduce(action);
-    }
-
-    fn handle_board_key(
-        &mut self,
-        key: UiKey,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-    ) -> Vec<Effect> {
-        match key {
-            UiKey::Character('q') => self.quit = true,
-            UiKey::Character('n') => return self.create(String::new(), ids, clock),
-            UiKey::Enter | UiKey::Character('e') => self.enter_edit(),
-            UiKey::Up | UiKey::Character('k') => self.move_focus(-1),
-            UiKey::Down | UiKey::Character('j') => self.move_focus(1),
-            UiKey::Character('d') => return self.delete(ids, clock),
-            UiKey::Character('u') | UiKey::Undo => return self.history(ids, clock, true),
-            UiKey::Redo => return self.history(ids, clock, false),
-            UiKey::Character('J') => return self.reorder(ids, clock, 1),
-            UiKey::Character('K') => return self.reorder(ids, clock, -1),
-            UiKey::Character(' ') => return self.collapse(ids, clock),
-            UiKey::Character('?') => self.help = !self.help,
-            _ => {}
-        }
-        Vec::new()
-    }
-
-    fn handle_edit_key(
-        &mut self,
-        key: UiKey,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-    ) -> Vec<Effect> {
-        match key {
-            UiKey::Escape => {
-                let _effects = self.reduce(Action::ExitEdit);
-                self.editor = None;
-                return Vec::new();
-            }
-            UiKey::Undo => return self.history(ids, clock, true),
-            UiKey::Redo => return self.history(ids, clock, false),
-            _ => {}
-        }
-        let command = match key {
-            UiKey::Character(character) => EditCommand::InsertChar(character),
-            UiKey::Enter => EditCommand::InsertNewline,
-            UiKey::Backspace => EditCommand::DeleteBack,
-            UiKey::Delete => EditCommand::DeleteForward,
-            UiKey::Left => movement(CursorMovement::GraphemeBack),
-            UiKey::Right => movement(CursorMovement::GraphemeForward),
-            UiKey::Up => movement(CursorMovement::VisualUp),
-            UiKey::Down => movement(CursorMovement::VisualDown),
-            UiKey::Home => movement(CursorMovement::LineStart),
-            UiKey::End => movement(CursorMovement::LineEnd),
-            UiKey::SelectAll => EditCommand::SelectAll,
-            UiKey::DeleteLine => EditCommand::DeleteLogicalLine,
-            UiKey::Escape | UiKey::Undo | UiKey::Redo | UiKey::Quit => return Vec::new(),
-        };
-        self.apply_edit(command, ids, clock)
-    }
-
-    fn paste(
-        &mut self,
-        content: String,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-    ) -> Vec<Effect> {
-        if matches!(self.state.mode, InteractionMode::Board) {
-            self.create(content, ids, clock)
-        } else {
-            self.apply_edit(EditCommand::Paste(content), ids, clock)
-        }
     }
 
     fn create(
@@ -283,99 +345,6 @@ impl BoardApp {
             after_content: after.content,
             before_cursor: before.cursor,
             after_cursor: after.cursor,
-            at: clock.now(),
-        })
-    }
-
-    fn delete(&mut self, ids: &mut impl IdGenerator, clock: &impl Clock) -> Vec<Effect> {
-        let Some(thought_id) = self.state.focused_thought else {
-            return Vec::new();
-        };
-        self.reduce(Action::DeleteThought {
-            operation_id: ids.operation_id(),
-            thought_id,
-            kind: BoardOperationKind::Delete,
-            at: clock.now(),
-        })
-    }
-
-    fn history(
-        &mut self,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-        undo: bool,
-    ) -> Vec<Effect> {
-        let scope = match self.state.mode {
-            InteractionMode::Board => UndoScope::Board,
-            InteractionMode::Edit { thought_id } => UndoScope::Editor { thought_id },
-        };
-        let action = if undo {
-            Action::Undo {
-                operation_id: ids.operation_id(),
-                scope,
-                at: clock.now(),
-            }
-        } else {
-            Action::Redo {
-                operation_id: ids.operation_id(),
-                scope,
-                at: clock.now(),
-            }
-        };
-        let effects = self.reduce(action);
-        self.reload_editor();
-        effects
-    }
-
-    fn move_focus(&mut self, delta: isize) {
-        let live = self.state.board.live_thoughts();
-        if live.is_empty() {
-            return;
-        }
-        let current = self
-            .state
-            .focused_thought
-            .and_then(|id| live.iter().position(|thought| thought.id == id))
-            .unwrap_or(0);
-        let target = current.saturating_add_signed(delta).min(live.len() - 1);
-        let _effects = self.reduce(Action::FocusThought(Some(live[target].id)));
-    }
-
-    fn reorder(
-        &mut self,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-        delta: isize,
-    ) -> Vec<Effect> {
-        let Some(thought_id) = self.state.focused_thought else {
-            return Vec::new();
-        };
-        let live = self.state.board.live_thoughts();
-        let Some(current) = live.iter().position(|thought| thought.id == thought_id) else {
-            return Vec::new();
-        };
-        let target = current
-            .saturating_add_signed(delta)
-            .min(live.len().saturating_sub(1));
-        self.reduce(Action::MoveThought {
-            operation_id: ids.operation_id(),
-            thought_id,
-            to: target,
-            at: clock.now(),
-        })
-    }
-
-    fn collapse(&mut self, ids: &mut impl IdGenerator, clock: &impl Clock) -> Vec<Effect> {
-        let Some(thought_id) = self.state.focused_thought else {
-            return Vec::new();
-        };
-        let Some(thought) = self.state.board.thought(thought_id) else {
-            return Vec::new();
-        };
-        self.reduce(Action::SetCollapsed {
-            operation_id: ids.operation_id(),
-            thought_id,
-            collapsed: !thought.collapsed,
             at: clock.now(),
         })
     }

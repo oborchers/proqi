@@ -28,6 +28,7 @@ pub(super) struct RuntimeContext {
     pub(super) clock: SystemClock,
     pub(super) ids: SystemIdGenerator,
     pub(super) cwd: PathBuf,
+    config_dir: PathBuf,
     schema_lease: FileSchemaLease,
 }
 
@@ -37,6 +38,7 @@ impl RuntimeContext {
             .current_directory()
             .map_err(|error| CliError::new("environment_failed", error.to_string(), 1))?;
         let paths = resolve_paths(state_root)?;
+        let config_dir = paths.config_dir.clone();
         let clock = SystemClock;
         let mut ids = SystemIdGenerator;
         let coordinator = FileRuntimeCoordinator::new(
@@ -53,13 +55,21 @@ impl RuntimeContext {
             clock,
             ids,
             cwd,
+            config_dir,
             schema_lease,
         })
+    }
+
+    pub(super) fn terminal_settings(
+        &self,
+    ) -> Result<crate::ui::UiSettings, crate::adapters::terminal::TerminalError> {
+        crate::adapters::terminal::load_settings(&self.config_dir)
     }
 
     pub(super) fn into_terminal(
         self,
         session: LeasedSession<crate::adapters::runtime::FileSessionLease>,
+        settings: crate::ui::UiSettings,
     ) -> TerminalResources {
         let (state, session_lease) = session.into_parts();
         TerminalResources {
@@ -69,6 +79,7 @@ impl RuntimeContext {
             ids: self.ids,
             session_lease,
             schema_lease: self.schema_lease,
+            settings,
         }
     }
 }

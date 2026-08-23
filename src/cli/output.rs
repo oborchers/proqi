@@ -135,6 +135,7 @@ impl From<TerminalError> for CliError {
             TerminalError::Worker(message) => {
                 Self::new("terminal_worker_failed", message.to_owned(), 1)
             }
+            TerminalError::Config(message) => Self::new("config_invalid", message, 2),
         }
     }
 }

@@ -51,6 +51,34 @@ typed `--operation-id` and return the original durable receipt on a matching
 retry, including after another process has restarted. Permanent session pruning
 is separate from recoverable trash and requires `--yes`.
 
+## Terminal configuration
+
+Proqi reads an optional `config.toml` from the platform-native Proqi
+configuration directory. The file is bounded, parsed strictly, and changed to
+user-only permissions when loaded. Themes are `auto`, `light`, `dark`, or
+`limited`. Direct board bindings accept one distinct printable character:
+
+```toml
+theme = "auto"
+
+[keybindings]
+new = "n"
+edit = "e"
+delete = "d"
+undo = "u"
+focus_up = "k"
+focus_down = "j"
+move_up = "K"
+move_down = "J"
+collapse = " "
+commands = "/"
+help = "?"
+quit = "q"
+```
+
+Arrow keys, `Enter`, `Esc`, and primary-modifier editing shortcuts remain
+portable fallbacks. Press `/` to search and run available commands.
+
 ## Development
 
 ```shell

@@ -15,8 +15,8 @@ use wrap::{byte_at_cell, cell_column_at_byte, wrap_content, wrapped_line_index};
 
 use crate::domain::TextPosition;
 use crate::ports::editor::{
-    CursorMovement, EditCommand, EditOutcome, Editor, EditorSnapshot, TextSelection, TextViewport,
-    VisualLine,
+    CellRange, CursorMovement, EditCommand, EditOutcome, Editor, EditorSnapshot, TextSelection,
+    TextViewport, VisualLine,
 };
 
 #[derive(Clone)]
@@ -359,6 +359,7 @@ impl Editor for RopeEditor {
 
     fn snapshot(&self) -> EditorSnapshot {
         let content = self.content();
+        let selected_bytes = self.selection_bytes();
         EditorSnapshot {
             cursor: position_for_byte(&content, self.state.cursor_byte),
             selection: self.selection(&content),
@@ -367,7 +368,17 @@ impl Editor for RopeEditor {
             visual_lines: self
                 .wrapped_lines()
                 .into_iter()
-                .map(|line| line.public)
+                .map(|mut line| {
+                    line.public.selected_cells = selected_bytes.and_then(|(start, end)| {
+                        let selected_start = start.max(line.start_byte);
+                        let selected_end = end.min(line.end_byte);
+                        (selected_start < selected_end).then(|| CellRange {
+                            start: cell_column_at_byte(&content, &line, selected_start),
+                            end: cell_column_at_byte(&content, &line, selected_end),
+                        })
+                    });
+                    line.public
+                })
                 .collect(),
             content,
         }

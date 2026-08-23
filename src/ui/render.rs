@@ -1,115 +1,130 @@
 //! Deterministic one-column board renderer.
 
 use ratatui_core::{
-    layout::Rect,
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     terminal::Frame,
     text::{Line, Span, Text},
 };
 use ratatui_widgets::{
-    block::{Block, Padding},
+    block::Block,
     borders::Borders,
     clear::Clear,
     paragraph::{Paragraph, Wrap},
 };
 use unicode_segmentation::UnicodeSegmentation;
-use unicode_width::UnicodeWidthStr;
 
 use crate::application::{DurabilityState, InteractionMode};
 
-use super::BoardApp;
-
-const GREEN: Color = Color::Rgb(38, 112, 75);
+use super::{BoardApp, HitTarget, LayoutSnapshot, Theme, ThoughtLayout, layout::OverlayLayout};
 
 /// Render the complete board into one terminal frame.
-pub fn render(frame: &mut Frame<'_>, app: &BoardApp) {
-    let area = frame.area();
-    let footer_height = 1_u16;
-    let board = Rect::new(
-        area.x,
-        area.y,
-        area.width,
-        area.height.saturating_sub(footer_height),
-    );
-    let footer = Rect::new(
-        area.x,
-        area.bottom().saturating_sub(footer_height),
-        area.width,
-        footer_height.min(area.height),
-    );
-    render_board(frame, app, board);
-    render_footer(frame, app, footer);
-    if app.help {
-        render_help(frame, area);
+pub fn render(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, theme: &Theme) {
+    frame.render_widget(Block::default().style(theme.base_style()), layout.area);
+    render_board(frame, app, layout, theme);
+    render_footer(frame, app, layout, theme);
+    if let Some((query, entries, selected)) = app.palette_view() {
+        if let Some(overlay) = &layout.overlay {
+            render_palette(frame, overlay, &query, &entries, selected, theme);
+        }
+    } else if app.help
+        && let Some(overlay) = &layout.overlay
+    {
+        render_help(frame, app, overlay, theme);
     }
 }
 
-fn render_board(frame: &mut Frame<'_>, app: &BoardApp, area: Rect) {
-    if area.width == 0 || area.height == 0 {
+fn render_board(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, theme: &Theme) {
+    if layout.board.width == 0 || layout.board.height == 0 {
         return;
     }
-    let thoughts = app
-        .state
-        .board
-        .live_thoughts()
-        .into_iter()
-        .cloned()
-        .collect::<Vec<_>>();
-    if thoughts.is_empty() {
+    if layout.thoughts.is_empty() {
         frame.render_widget(
             Paragraph::new("  +  create a thought with n or paste text")
-                .style(Style::default().fg(Color::DarkGray)),
-            area,
+                .style(Style::default().fg(theme.muted)),
+            layout.board,
         );
-        return;
     }
-    let mut y = area.y;
-    for thought in thoughts {
-        if y >= area.bottom() {
-            break;
-        }
+    for thought_layout in &layout.thoughts {
+        let Some(thought) = app.state.board.thought(thought_layout.thought_id) else {
+            continue;
+        };
         let focused = app.state.focused_thought == Some(thought.id);
-        let available = area.bottom().saturating_sub(y);
-        let natural = natural_height(&thought.content, area.width.saturating_sub(4));
-        let cap = area.height.saturating_sub(2).max(3);
-        let height = natural.min(cap).min(available).max(1);
-        let rect = Rect::new(area.x, y, area.width, height);
+        let hovered = matches!(
+            app.hovered(),
+            Some(HitTarget::Thought(id) | HitTarget::DragHandle(id) | HitTarget::Overflow(id))
+                if id == thought.id
+        );
+        render_gutter(frame, thought_layout, focused, hovered, theme);
         if matches!(app.state.mode, InteractionMode::Edit { thought_id } if thought_id == thought.id)
         {
-            render_editor(frame, app, rect, focused);
+            render_editor(frame, app, thought_layout, focused, theme);
         } else {
-            render_thought(frame, &thought.content, thought.collapsed, rect, focused);
+            render_thought(frame, &thought.content, thought_layout, theme);
         }
-        y = y.saturating_add(height);
     }
-    if y < area.bottom() {
+    if let Some(insert) = layout.insert {
+        let style = if app.hovered() == Some(HitTarget::Insert) {
+            Style::default()
+                .fg(theme.accent)
+                .add_modifier(Modifier::REVERSED)
+        } else {
+            Style::default().fg(theme.accent)
+        };
+        frame.render_widget(Paragraph::new("  +").style(style), insert);
+    }
+}
+
+fn render_gutter(
+    frame: &mut Frame<'_>,
+    layout: &ThoughtLayout,
+    focused: bool,
+    hovered: bool,
+    theme: &Theme,
+) {
+    let symbol = if focused {
+        "│"
+    } else if hovered {
+        "┆"
+    } else {
+        " "
+    };
+    frame.render_widget(
+        Paragraph::new(symbol).style(Style::default().fg(if focused || hovered {
+            theme.accent
+        } else {
+            theme.muted
+        })),
+        layout.gutter,
+    );
+}
+
+fn render_thought(frame: &mut Frame<'_>, content: &str, layout: &ThoughtLayout, theme: &Theme) {
+    let lines = thought_lines(content);
+    let mut paragraph = Paragraph::new(Text::from(lines)).wrap(Wrap { trim: false });
+    if layout.hidden_rows > 0 {
+        paragraph = paragraph.style(Style::default().fg(theme.muted));
+    }
+    frame.render_widget(paragraph, layout.text_area);
+    if let Some(overflow) = layout.overflow {
+        frame.render_widget(Clear, overflow);
         frame.render_widget(
-            Paragraph::new("  +").style(Style::default().fg(GREEN)),
-            Rect::new(area.x, y, area.width, 1),
+            Paragraph::new(format!("{} more lines  expand", layout.hidden_rows)).style(
+                Style::default()
+                    .fg(theme.accent)
+                    .add_modifier(Modifier::DIM),
+            ),
+            overflow,
         );
     }
 }
 
-fn render_thought(
+fn render_editor(
     frame: &mut Frame<'_>,
-    content: &str,
-    collapsed: bool,
-    area: Rect,
+    app: &BoardApp,
+    layout: &ThoughtLayout,
     focused: bool,
+    theme: &Theme,
 ) {
-    let gutter = if focused { "│ " } else { "  " };
-    let lines = thought_lines(content, gutter, focused);
-    let block = Block::default().padding(Padding::new(1, 1, 0, 0));
-    let mut paragraph = Paragraph::new(Text::from(lines))
-        .block(block)
-        .wrap(Wrap { trim: false });
-    if collapsed {
-        paragraph = paragraph.style(Style::default().fg(Color::DarkGray));
-    }
-    frame.render_widget(paragraph, area);
-}
-
-fn render_editor(frame: &mut Frame<'_>, app: &BoardApp, area: Rect, focused: bool) {
     let Some(snapshot) = app.editor_snapshot() else {
         return;
     };
@@ -117,16 +132,16 @@ fn render_editor(frame: &mut Frame<'_>, app: &BoardApp, area: Rect, focused: boo
         .visual_lines
         .iter()
         .skip(snapshot.scroll_row)
-        .take(usize::from(area.height))
-        .map(|line| Line::raw(format!("│ {}", line.text)))
+        .take(usize::from(layout.text_area.height))
+        .map(|line| editor_line(line, theme))
         .collect::<Vec<_>>();
     frame.render_widget(
         Paragraph::new(visible).style(Style::default().fg(if focused {
-            GREEN
+            theme.accent
         } else {
-            Color::Reset
+            theme.foreground
         })),
-        area,
+        layout.text_area,
     );
     let cursor_row = snapshot
         .visual_lines
@@ -138,42 +153,70 @@ fn render_editor(frame: &mut Frame<'_>, app: &BoardApp, area: Rect, focused: boo
         })
         .unwrap_or(snapshot.scroll_row)
         .saturating_sub(snapshot.scroll_row);
-    let cursor_column = snapshot
-        .visual_lines
-        .get(snapshot.scroll_row + cursor_row)
-        .map_or(0, |line| {
-            let offset = snapshot.cursor.grapheme.saturating_sub(line.start_grapheme);
-            let prefix = line.text.graphemes(true).take(offset).collect::<String>();
-            UnicodeWidthStr::width(prefix.as_str())
-        });
-    let x = area
+    let cursor_column = cursor_column(&snapshot, cursor_row);
+    let x = layout
+        .text_area
         .x
-        .saturating_add(2)
         .saturating_add(u16::try_from(cursor_column).unwrap_or(u16::MAX));
-    let y = area
+    let y = layout
+        .text_area
         .y
         .saturating_add(u16::try_from(cursor_row).unwrap_or(u16::MAX));
-    if x < area.right() && y < area.bottom() {
+    if x < layout.text_area.right() && y < layout.text_area.bottom() {
         frame.set_cursor_position((x, y));
     }
 }
 
-fn thought_lines<'a>(content: &'a str, gutter: &'a str, focused: bool) -> Vec<Line<'a>> {
-    let style = Style::default().fg(if focused { GREEN } else { Color::DarkGray });
-    let mut lines = content
-        .split('\n')
-        .map(|line| Line::from(vec![Span::styled(gutter, style), Span::raw(line)]))
+fn editor_line(line: &crate::ports::editor::VisualLine, theme: &Theme) -> Line<'static> {
+    let Some(selection) = line.selected_cells else {
+        return Line::raw(line.text.clone());
+    };
+    let mut column = 0;
+    let spans = line
+        .text
+        .graphemes(true)
+        .map(|grapheme| {
+            let width = unicode_width::UnicodeWidthStr::width(grapheme);
+            let selected = column < selection.end && column.saturating_add(width) > selection.start;
+            column = column.saturating_add(width);
+            if selected {
+                Span::styled(
+                    grapheme.to_owned(),
+                    Style::default()
+                        .fg(theme.accent)
+                        .add_modifier(Modifier::REVERSED),
+                )
+            } else {
+                Span::raw(grapheme.to_owned())
+            }
+        })
         .collect::<Vec<_>>();
+    Line::from(spans)
+}
+
+fn cursor_column(snapshot: &crate::ports::editor::EditorSnapshot, cursor_row: usize) -> usize {
+    snapshot
+        .visual_lines
+        .get(snapshot.scroll_row + cursor_row)
+        .map_or(0, |line| {
+            let offset = snapshot.cursor.grapheme.saturating_sub(line.start_grapheme);
+            line.text
+                .graphemes(true)
+                .take(offset)
+                .map(unicode_width::UnicodeWidthStr::width)
+                .sum()
+        })
+}
+
+fn thought_lines(content: &str) -> Vec<Line<'_>> {
+    let mut lines = content.split('\n').map(Line::raw).collect::<Vec<_>>();
     if lines.is_empty() {
-        lines.push(Line::from(vec![
-            Span::styled(gutter, style),
-            Span::raw(" "),
-        ]));
+        lines.push(Line::raw(" "));
     }
     lines
 }
 
-fn render_footer(frame: &mut Frame<'_>, app: &BoardApp, area: Rect) {
+fn render_footer(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, theme: &Theme) {
     let durability = match app.state.durability {
         DurabilityState::Durable { .. } => "saved",
         DurabilityState::Pending { .. } => "saving",
@@ -183,47 +226,109 @@ fn render_footer(frame: &mut Frame<'_>, app: &BoardApp, area: Rect) {
         InteractionMode::Board => "board",
         InteractionMode::Edit { .. } => "edit",
     };
+    let keys = app.keybindings();
     let text = app.status.as_deref().map_or_else(
-        || format!(" {mode}  {durability}  n new  enter edit  u undo  ? help  q quit"),
+        || {
+            format!(
+                " {mode}  {durability}  {} new  enter edit  {} undo  {} help  {} quit",
+                keys.new, keys.undo, keys.help, keys.quit
+            )
+        },
         |status| format!(" {status}"),
     );
+    let footer_color = if matches!(app.state.durability, DurabilityState::Failed { .. }) {
+        theme.error
+    } else {
+        theme.muted
+    };
     frame.render_widget(
-        Paragraph::new(text).style(Style::default().fg(Color::DarkGray)),
-        area,
+        Paragraph::new(text).style(Style::default().fg(footer_color)),
+        layout.footer,
+    );
+    for (target, area) in &layout.controls {
+        let label = match target {
+            HitTarget::Commands => format!("[{}]", keys.commands),
+            HitTarget::Undo => format!("[{}]", keys.undo),
+            HitTarget::Help => format!("[{}]", keys.help),
+            HitTarget::Quit => format!("[{}]", keys.quit),
+            _ => continue,
+        };
+        let style = if app.hovered() == Some(*target) {
+            Style::default()
+                .fg(theme.accent)
+                .add_modifier(Modifier::REVERSED)
+        } else {
+            Style::default().fg(theme.accent)
+        };
+        frame.render_widget(Paragraph::new(label).style(style), *area);
+    }
+}
+
+fn render_help(frame: &mut Frame<'_>, app: &BoardApp, overlay: &OverlayLayout, theme: &Theme) {
+    let keys = app.keybindings();
+    let content = format!(
+        "Board\n  {} new   {}/{} focus   Enter/{} edit   {} delete\n  {}/{} move   {} undo   {} collapse   {} quit\n\nEdit\n  Esc board   Primary+A select all   Primary+U delete line\n  Primary+Z undo   Shift+Primary+Z redo\n\nPaste is one exact operation.",
+        keys.new,
+        keys.focus_down,
+        keys.focus_up,
+        keys.edit,
+        keys.delete,
+        keys.move_down,
+        keys.move_up,
+        keys.undo,
+        keys.collapse,
+        keys.quit,
+    );
+    frame.render_widget(Clear, overlay.area);
+    frame.render_widget(
+        Paragraph::new(content)
+            .block(
+                Block::default()
+                    .title(Span::styled(
+                        " proqi help ",
+                        Style::default()
+                            .fg(theme.accent)
+                            .add_modifier(Modifier::BOLD),
+                    ))
+                    .borders(Borders::ALL),
+            )
+            .wrap(Wrap { trim: false }),
+        overlay.area,
+    );
+    frame.render_widget(
+        Paragraph::new("[x]").style(Style::default().fg(theme.accent)),
+        overlay.close,
     );
 }
 
-fn render_help(frame: &mut Frame<'_>, area: Rect) {
-    let width = area.width.clamp(1, 58);
-    let height = area.height.clamp(1, 12);
-    let popup = Rect::new(
-        area.x + area.width.saturating_sub(width) / 2,
-        area.y + area.height.saturating_sub(height) / 2,
-        width,
-        height,
-    );
-    frame.render_widget(Clear, popup);
+fn render_palette(
+    frame: &mut Frame<'_>,
+    overlay: &OverlayLayout,
+    query: &str,
+    entries: &[&str],
+    selected: usize,
+    theme: &Theme,
+) {
+    frame.render_widget(Clear, overlay.area);
     frame.render_widget(
-        Paragraph::new(
-            "Board\n  n new   j/k focus   Enter edit   d delete\n  J/K move   u undo   Space collapse   q quit\n\nEdit\n  Esc board   Ctrl+A select all   Ctrl+U delete line\n  Ctrl+Z undo   Ctrl+Y redo\n\nPaste is one exact operation.",
-        )
-        .block(
-            Block::default()
-                .title(Span::styled(" proqi help ", Style::default().fg(GREEN).add_modifier(Modifier::BOLD)))
-                .borders(Borders::ALL),
-        )
-        .wrap(Wrap { trim: false }),
-        popup,
+        Paragraph::new(format!("/{query}"))
+            .block(Block::default().title(" commands ").borders(Borders::ALL)),
+        overlay.area,
     );
-}
-
-fn natural_height(content: &str, width: u16) -> u16 {
-    let width = usize::from(width.max(1));
-    let rows = content
-        .split('\n')
-        .map(|line| UnicodeWidthStr::width(line).max(1).div_ceil(width))
-        .sum::<usize>();
-    u16::try_from(rows.max(1)).unwrap_or(u16::MAX)
+    for (index, (entry, area)) in entries.iter().zip(&overlay.items).enumerate() {
+        let style = if index == selected {
+            Style::default()
+                .fg(theme.accent)
+                .add_modifier(Modifier::REVERSED)
+        } else {
+            Style::default()
+        };
+        frame.render_widget(Paragraph::new(*entry).style(style), *area);
+    }
+    frame.render_widget(
+        Paragraph::new("[x]").style(Style::default().fg(theme.accent)),
+        overlay.close,
+    );
 }
 
 #[cfg(test)]
@@ -231,20 +336,13 @@ mod tests {
     use ratatui_core::{buffer::Buffer, layout::Rect, widgets::Widget};
     use ratatui_widgets::paragraph::Paragraph;
 
-    use super::{natural_height, thought_lines};
-
+    use super::thought_lines;
     #[test]
     fn multiline_thoughts_are_distinct_buffer_rows() {
         let area = Rect::new(0, 0, 12, 2);
         let mut buffer = Buffer::empty(area);
-        Paragraph::new(thought_lines("first\n第二", "│ ", true)).render(area, &mut buffer);
-        assert_eq!(buffer[(2, 0)].symbol(), "f");
-        assert_eq!(buffer[(2, 1)].symbol(), "第");
-    }
-
-    #[test]
-    fn natural_height_uses_terminal_cells_and_preserves_blank_lines() {
-        assert_eq!(natural_height("界界", 2), 2);
-        assert_eq!(natural_height("a\n\nb", 20), 3);
+        Paragraph::new(thought_lines("first\n第二")).render(area, &mut buffer);
+        assert_eq!(buffer[(0, 0)].symbol(), "f");
+        assert_eq!(buffer[(0, 1)].symbol(), "第");
     }
 }

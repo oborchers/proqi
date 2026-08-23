@@ -3,12 +3,14 @@
 mod control;
 mod input;
 mod runner;
+mod settings;
 
 use thiserror::Error;
 
 use crate::ports::store::StoreError;
 
 pub(crate) use runner::{TerminalResources, require_interactive, run};
+pub(crate) use settings::load_settings;
 
 /// Failure while owning or driving the interactive terminal.
 #[derive(Debug, Error)]
@@ -22,6 +24,9 @@ pub enum TerminalError {
     /// A bounded worker lane ended unexpectedly.
     #[error("terminal worker failed: {0}")]
     Worker(&'static str),
+    /// User configuration is malformed or unsafe.
+    #[error("terminal configuration failed: {0}")]
+    Config(String),
 }
 
 impl From<std::io::Error> for TerminalError {

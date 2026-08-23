@@ -128,6 +128,17 @@ pub struct VisualLine {
     pub cell_width: usize,
     /// Exact visible text for this row, without the line delimiter.
     pub text: String,
+    /// Selected half-open terminal-cell range on this row.
+    pub selected_cells: Option<CellRange>,
+}
+
+/// Half-open terminal-cell range within one rendered row.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CellRange {
+    /// First selected cell.
+    pub start: usize,
+    /// Cell immediately after the selection.
+    pub end: usize,
 }
 
 /// Serializable application-facing view of transient editor state.

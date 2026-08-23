@@ -124,6 +124,51 @@ fn termination_signal_restores_and_releases_the_session() {
 }
 
 #[cfg(target_os = "macos")]
+#[test]
+fn keyboard_creation_survives_rapid_pty_resize() {
+    let state = tempfile::tempdir().expect("temporary state");
+    let binary = env!("CARGO_BIN_EXE_proqi");
+    let interact = r#"
+        log_user 0
+        set timeout 10
+        set binary $env(PROQI_TEST_BINARY)
+        set state $env(PROQI_TEST_STATE)
+        spawn $binary --state-dir $state
+        expect -exact "\x1b\[?1049h"
+        after 300
+        send -- "n"
+        after 100
+        send -- "mouse-created"
+        stty rows 4 columns 12
+        after 100
+        stty rows 30 columns 100
+        after 100
+        stty rows 6 columns 20
+        after 500
+        send "\x1b"
+        after 100
+        send "q"
+        expect eof
+        catch wait result
+        exit [lindex $result 3]
+    "#;
+    let status = Command::new("/usr/bin/expect")
+        .args(["-c", interact])
+        .env("PROQI_TEST_BINARY", binary)
+        .env("PROQI_TEST_STATE", state.path())
+        .status()
+        .expect("run PTY keyboard and resize workflow");
+    assert!(status.success());
+
+    let sessions = json_command(binary, state.path(), &["sessions", "list"]);
+    let session = sessions["data"]["sessions"][0]["id"]
+        .as_str()
+        .expect("session ID");
+    let thoughts = json_command(binary, state.path(), &["thoughts", "list", session]);
+    assert_eq!(thoughts["data"]["thoughts"][0]["content"], "mouse-created");
+}
+
+#[cfg(target_os = "macos")]
 fn json_command(binary: &str, state: &std::path::Path, arguments: &[&str]) -> Value {
     let output = Command::new(binary)
         .arg("--state-dir")

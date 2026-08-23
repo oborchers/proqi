@@ -17,9 +17,8 @@ use crate::{
     },
     application::{AppState, Effect},
     domain::{OperationSequence, SessionId},
-    ports::editor::TextViewport,
     ports::store::{OperationBatch, Store, StoreError},
-    ui::{BoardApp, render},
+    ui::{BoardApp, Theme, render},
 };
 
 use super::{
@@ -36,6 +35,7 @@ pub(crate) struct TerminalResources {
     pub(crate) ids: SystemIdGenerator,
     pub(crate) session_lease: FileSessionLease,
     pub(crate) schema_lease: FileSchemaLease,
+    pub(crate) settings: crate::ui::UiSettings,
 }
 
 /// Refuse an interactive launch before it creates or opens durable state.
@@ -58,6 +58,12 @@ struct PersistenceLane {
     sender: Option<SyncSender<OperationBatch>>,
     receiver: Receiver<PersistenceResult>,
     handle: Option<JoinHandle<()>>,
+}
+
+struct WorkerLanes<'a> {
+    input: &'a InputLane,
+    persistence: &'a PersistenceLane,
+    termination: &'a TerminationGuard,
 }
 
 impl PersistenceLane {
@@ -104,6 +110,7 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
         mut ids,
         session_lease,
         schema_lease,
+        settings,
     } = resources;
     let session_id = state.board.session.id;
     let guard = TerminalGuard::enter(CrosstermControl)?;
@@ -111,16 +118,14 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
     let input = InputLane::spawn();
     let persistence = PersistenceLane::spawn(store);
-    let mut app = BoardApp::new(state);
-    let run_result = drive(
-        &mut terminal,
-        &mut app,
-        &input,
-        &persistence,
-        &termination,
-        &mut ids,
-        clock,
-    );
+    let theme = Theme::resolve(settings.theme, supports_true_color());
+    let mut app = BoardApp::with_settings(state, settings);
+    let lanes = WorkerLanes {
+        input: &input,
+        persistence: &persistence,
+        termination: &termination,
+    };
+    let run_result = drive(&mut terminal, &mut app, &lanes, &mut ids, clock, theme);
     let input_result = input
         .stop()
         .map_err(|_| TerminalError::Worker("input lane panicked"));
@@ -138,24 +143,21 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
 fn drive(
     terminal: &mut Terminal<CrosstermBackend<Stdout>>,
     app: &mut BoardApp,
-    input: &InputLane,
-    persistence: &PersistenceLane,
-    termination: &TerminationGuard,
+    lanes: &WorkerLanes<'_>,
     ids: &mut SystemIdGenerator,
     clock: SystemClock,
+    theme: Theme,
 ) -> Result<(), TerminalError> {
     let mut awaiting = 0_usize;
     loop {
-        if termination.requested() {
+        if lanes.termination.requested() {
             app.quit = true;
         }
-        drain_persistence(app, persistence, &mut awaiting)?;
-        let size = terminal.size()?;
-        app.prepare_layout(TextViewport::new(
-            size.width.saturating_sub(4).max(1),
-            size.height.saturating_sub(1).max(1),
-        ));
-        terminal.draw(|frame| render(frame, app))?;
+        drain_persistence(app, lanes.persistence, &mut awaiting)?;
+        terminal.draw(|frame| {
+            let layout = app.prepare_frame(frame.area());
+            render(frame, app, &layout, &theme);
+        })?;
         if app.quit && awaiting == 0 {
             return Ok(());
         }
@@ -163,10 +165,10 @@ fn drive(
             thread::sleep(Duration::from_millis(5));
             continue;
         }
-        match input.receiver.recv_timeout(Duration::from_millis(30)) {
+        match lanes.input.receiver.recv_timeout(Duration::from_millis(30)) {
             Ok(InputMessage::Event(event)) => {
                 let effects = app.handle(event, ids, &clock);
-                enqueue_effects(app, persistence, effects, &mut awaiting)?;
+                enqueue_effects(app, lanes.persistence, effects, &mut awaiting)?;
             }
             Ok(InputMessage::Failed(message)) => return Err(TerminalError::Io(message)),
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
@@ -175,6 +177,15 @@ fn drive(
             }
         }
     }
+}
+
+fn supports_true_color() -> bool {
+    if std::env::var_os("NO_COLOR").is_some() {
+        return false;
+    }
+    std::env::var("COLORTERM")
+        .is_ok_and(|value| matches!(value.to_ascii_lowercase().as_str(), "truecolor" | "24bit"))
+        || std::env::var("TERM").is_ok_and(|value| value.to_ascii_lowercase().contains("direct"))
 }
 
 fn enqueue_effects(
