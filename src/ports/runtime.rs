@@ -24,6 +24,15 @@ pub struct InstanceInfo {
     pub started_at: Timestamp,
 }
 
+/// Verified runtime ownership and stale-crash recovery observed in one scan.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct RuntimeScan {
+    /// Sessions whose authoritative lock is currently held.
+    pub active: Vec<InstanceInfo>,
+    /// Sessions whose stale metadata was removed after finding no live lock.
+    pub recovered: Vec<SessionId>,
+}
+
 /// Runtime coordination failure.
 #[derive(Clone, Debug, Eq, Error, PartialEq)]
 pub enum RuntimeError {
@@ -87,5 +96,14 @@ pub trait RuntimeCoordinator {
     /// # Errors
     ///
     /// Returns a typed filesystem or metadata failure.
-    fn active_instances(&self) -> Result<Vec<InstanceInfo>, RuntimeError>;
+    fn scan_runtime(&self) -> Result<RuntimeScan, RuntimeError>;
+
+    /// Return only verified active instances from one complete scan.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed filesystem or metadata failure.
+    fn active_instances(&self) -> Result<Vec<InstanceInfo>, RuntimeError> {
+        Ok(self.scan_runtime()?.active)
+    }
 }

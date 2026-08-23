@@ -9,7 +9,7 @@ use crate::{
 };
 
 use super::{
-    load::load_session_record,
+    load::{load_integration_context, load_session_record},
     support::{i64_to_usize, map_sql_error, session_id_from_blob},
 };
 
@@ -120,21 +120,28 @@ pub(super) fn load_hit(
             row.get::<_, String>(0)
         })
         .map_err(map_sql_error)?;
-    let mut excerpt = String::new();
+    let mut previews = Vec::new();
     for row in rows {
         let content = row.map_err(map_sql_error)?;
         if !content.trim().is_empty() {
-            excerpt = content.graphemes(true).take(160).collect();
-            break;
+            previews.push(content.graphemes(true).take(160).collect());
+            if previews.len() == 2 {
+                break;
+            }
         }
     }
+    let excerpt = previews.first().cloned().unwrap_or_default();
     Ok(SessionHit {
         id: session.id,
         name: session.name,
+        origin_cwd: session.origin_cwd,
         last_opened_cwd: session.last_opened_cwd,
+        last_opened_at: session.last_opened_at,
         last_active_at: session.last_active_at,
         thought_count: i64_to_usize(count)?,
         excerpt,
+        previews,
+        integration_context: load_integration_context(connection, session_id)?,
         trashed: session.deleted_at.is_some(),
     })
 }

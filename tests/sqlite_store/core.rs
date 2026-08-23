@@ -252,6 +252,15 @@ fn search_index_is_rebuildable_and_trash_is_recoverable() {
     assert_eq!(hits.len(), 1);
     assert_eq!(hits[0].id, first.board.session.id);
     assert_eq!(hits[0].thought_count, 2);
+    assert_eq!(hits[0].origin_cwd, PathBuf::from("/tmp/current-project"));
+    assert_eq!(
+        hits[0].last_opened_cwd,
+        PathBuf::from("/tmp/current-project")
+    );
+    assert_eq!(
+        hits[0].previews,
+        ["Summarize Cloud and Codex identity changes"]
+    );
     assert_eq!(
         hits[0].excerpt,
         "Summarize Cloud and Codex identity changes"

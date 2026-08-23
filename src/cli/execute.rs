@@ -1,6 +1,8 @@
 //! CLI dispatch into the shared session service.
 
-use std::{collections::HashSet, io::Read, process::ExitCode, str::FromStr};
+mod sessions;
+
+use std::{io::Read, process::ExitCode, str::FromStr};
 
 use serde_json::{Value, json};
 
@@ -9,16 +11,18 @@ use crate::{
     application::SessionService,
     domain::{OperationId, SessionId, ThoughtId, UndoScope},
     ports::{
-        runtime::RuntimeCoordinator,
+        environment::Clock,
         store::{CommitReceipt, DurableIdentity},
     },
 };
 
 use super::{
-    args::{Cli, Command, HistoryArgs, SessionCommand, ThoughtCommand},
+    args::{Cli, Command, HistoryArgs, ThoughtCommand},
     output::{CliError, render_error, render_success},
     runtime::RuntimeContext,
 };
+
+use sessions::{browser_items, execute_sessions, list_sessions};
 
 struct Outcome {
     data: Value,
@@ -104,7 +108,24 @@ fn execute_launch(
                 let id = service.resolve_session(&reference, false)?;
                 service.resume(id)?
             }
-            ResumeRequest::Picker => return list_sessions(&mut context, None, false),
+            ResumeRequest::Picker if !interactive => {
+                return list_sessions(&mut context, None, false);
+            }
+            ResumeRequest::Picker => {
+                let items = browser_items(&mut context)?;
+                let now = context.clock.now();
+                let settings = settings.as_ref().ok_or_else(|| {
+                    CliError::new(
+                        "terminal_failed",
+                        "terminal settings unavailable".to_owned(),
+                        1,
+                    )
+                })?;
+                let Some(id) = terminal::pick_session(items, now, settings)? else {
+                    return Ok(cancelled_browser());
+                };
+                session_service(&mut context)?.resume(id)?
+            }
             ResumeRequest::Fresh => session_service(&mut context)?.create_session()?,
         }
     };
@@ -119,122 +140,19 @@ fn execute_launch(
     Ok(opened_session(id))
 }
 
+fn cancelled_browser() -> Outcome {
+    Outcome {
+        data: json!({ "cancelled": true }),
+        human: "No session opened".to_owned(),
+    }
+}
+
 fn opened_session(id: SessionId) -> Outcome {
     let resume = format!("proqi -r {id}");
     Outcome {
         data: json!({ "session_id": id, "resume_command": resume }),
         human: format!("Session {id}\nResume later: {resume}"),
     }
-}
-
-fn execute_sessions(
-    context: &mut RuntimeContext,
-    command: Option<SessionCommand>,
-) -> Result<Outcome, CliError> {
-    match command.unwrap_or(SessionCommand::List {
-        query: None,
-        all: false,
-    }) {
-        SessionCommand::List { query, all } => list_sessions(context, query, all),
-        SessionCommand::Rename {
-            session,
-            name,
-            clear,
-        } => {
-            let mut service = session_service(context)?;
-            let id = service.resolve_session(&session, true)?;
-            let name = if clear { None } else { name.as_deref() };
-            service.rename_session(id, name)?;
-            Ok(simple_session_outcome(id, "renamed"))
-        }
-        SessionCommand::Trash { session } => manage_session(context, &session, "trashed"),
-        SessionCommand::Restore { session } => manage_session(context, &session, "restored"),
-        SessionCommand::Prune { session, yes } => {
-            if !yes {
-                return Err(CliError::arguments(
-                    "permanent pruning requires --yes".to_owned(),
-                ));
-            }
-            manage_session(context, &session, "pruned")
-        }
-    }
-}
-
-fn manage_session(
-    context: &mut RuntimeContext,
-    reference: &str,
-    action: &str,
-) -> Result<Outcome, CliError> {
-    let mut service = session_service(context)?;
-    let id = service.resolve_session(reference, true)?;
-    match action {
-        "trashed" => service.trash_session(id)?,
-        "restored" => service.restore_session(id)?,
-        "pruned" => service.prune_session(id)?,
-        _ => return Err(CliError::unsupported(action.to_owned())),
-    }
-    Ok(simple_session_outcome(id, action))
-}
-
-fn simple_session_outcome(id: SessionId, action: &str) -> Outcome {
-    Outcome {
-        data: json!({ "session_id": id, "status": action }),
-        human: format!("Session {id} {action}"),
-    }
-}
-
-fn list_sessions(
-    context: &mut RuntimeContext,
-    query: Option<String>,
-    all: bool,
-) -> Result<Outcome, CliError> {
-    let active: HashSet<_> = context
-        .coordinator
-        .active_instances()?
-        .into_iter()
-        .map(|instance| instance.session_id)
-        .collect();
-    let hits = session_service(context)?.list_sessions(query, all)?;
-    let data: Vec<_> = hits
-        .iter()
-        .map(|hit| {
-            json!({
-                "id": hit.id,
-                "name": hit.name,
-                "last_opened_cwd": hit.last_opened_cwd,
-                "last_active_at": hit.last_active_at,
-                "thought_count": hit.thought_count,
-                "excerpt": hit.excerpt,
-                "state": if hit.trashed { "trashed" } else if active.contains(&hit.id) { "active" } else { "resumable" },
-            })
-        })
-        .collect();
-    let human = if hits.is_empty() {
-        "No sessions".to_owned()
-    } else {
-        hits.iter()
-            .map(|hit| {
-                let state = if hit.trashed {
-                    "trashed"
-                } else if active.contains(&hit.id) {
-                    "active"
-                } else {
-                    "resumable"
-                };
-                let label = hit.name.as_deref().unwrap_or(&hit.excerpt);
-                format!(
-                    "{}  {state}  {}  {label}",
-                    hit.id,
-                    hit.last_opened_cwd.display()
-                )
-            })
-            .collect::<Vec<_>>()
-            .join("\n")
-    };
-    Ok(Outcome {
-        data: json!({ "sessions": data }),
-        human,
-    })
 }
 
 fn execute_thoughts(

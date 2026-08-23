@@ -286,7 +286,7 @@ fn load_editor_cursors(
     Ok(cursors)
 }
 
-fn load_integration_context(
+pub(super) fn load_integration_context(
     connection: &Connection,
     session_id: SessionId,
 ) -> Result<Option<IntegrationContext>, StoreError> {

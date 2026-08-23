@@ -287,6 +287,10 @@ fn active_session_conflict_is_structured_and_nonzero() {
     let temporary = tempfile::tempdir().expect("temporary directory");
     let root = temporary.path();
     let session = create_session(root);
+    let before = success(root, &["sessions", "list"], None);
+    let opened_before = before["sessions"][0]["last_opened_at"]
+        .as_i64()
+        .expect("opening timestamp");
     let session_id: SessionId = session.parse().expect("session ID");
     let mut ids = SystemIdGenerator;
     let coordinator = FileRuntimeCoordinator::new(
@@ -306,4 +310,6 @@ fn active_session_conflict_is_structured_and_nonzero() {
     let error: Value = serde_json::from_slice(&output.stdout).expect("error JSON");
     assert_eq!(error["error"]["code"], "session_busy");
     assert_eq!(error["error"]["details"]["session_id"], session);
+    let after = success(root, &["sessions", "list"], None);
+    assert_eq!(after["sessions"][0]["last_opened_at"], opened_before);
 }

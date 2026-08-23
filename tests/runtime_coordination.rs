@@ -114,7 +114,9 @@ fn stale_descriptive_metadata_is_removed_when_no_lock_exists() {
 
     std::fs::write(&metadata, serde_json::to_vec(&info).expect("json"))
         .expect("stale metadata fixture");
-    assert!(owner.active_instances().expect("recovery").is_empty());
+    let scan = owner.scan_runtime().expect("recovery");
+    assert!(scan.active.is_empty());
+    assert_eq!(scan.recovered, vec![session_id]);
     assert!(!metadata.exists());
 
     let malformed = runtime.join("instances").join("malformed.json");

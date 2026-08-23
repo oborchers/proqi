@@ -148,14 +148,22 @@ pub struct SessionHit {
     pub id: SessionId,
     /// Optional session name.
     pub name: Option<String>,
+    /// Directory in which the session was first created.
+    pub origin_cwd: std::path::PathBuf,
     /// Directory from which it was last opened.
     pub last_opened_cwd: std::path::PathBuf,
+    /// Latest successful opening time.
+    pub last_opened_at: Timestamp,
     /// Latest activity time.
     pub last_active_at: Timestamp,
     /// Number of live thoughts.
     pub thought_count: usize,
     /// Derived first useful content excerpt.
     pub excerpt: String,
+    /// First two useful exact-content previews, each independently bounded.
+    pub previews: Vec<String>,
+    /// Last verified adjacent-agent recognition context.
+    pub integration_context: Option<IntegrationContext>,
     /// Whether the session is in recoverable trash.
     pub trashed: bool,
 }

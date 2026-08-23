@@ -160,7 +160,7 @@ fn drive(
     }
 }
 
-fn supports_true_color() -> bool {
+pub(super) fn supports_true_color() -> bool {
     if std::env::var_os("NO_COLOR").is_some() {
         return false;
     }

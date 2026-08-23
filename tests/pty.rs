@@ -192,7 +192,7 @@ fn acknowledged_paste_survives_forced_process_termination() {
     assert!(status.success());
 
     let sessions = json_command(binary, state.path(), &["sessions", "list"]);
-    assert_eq!(sessions["data"]["sessions"][0]["state"], "resumable");
+    assert_eq!(sessions["data"]["sessions"][0]["state"], "recovered");
     let session = sessions["data"]["sessions"][0]["id"]
         .as_str()
         .expect("session ID");
@@ -246,6 +246,76 @@ fn keyboard_creation_survives_rapid_pty_resize() {
         .expect("session ID");
     let thoughts = json_command(binary, state.path(), &["thoughts", "list", session]);
     assert_eq!(thoughts["data"]["thoughts"][0]["content"], "mouse-created");
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn session_browser_searches_and_resumes_in_a_real_pty() {
+    let state = tempfile::tempdir().expect("temporary state");
+    let binary = env!("CARGO_BIN_EXE_proqi");
+    let first = json_command(binary, state.path(), &[]);
+    let first_id = first["data"]["session_id"].as_str().expect("first ID");
+    let _renamed = json_command(
+        binary,
+        state.path(),
+        &["sessions", "rename", first_id, "Other session"],
+    );
+    let target = json_command(binary, state.path(), &[]);
+    let target_id = target["data"]["session_id"].as_str().expect("target ID");
+    let _renamed = json_command(
+        binary,
+        state.path(),
+        &["sessions", "rename", target_id, "Needle target"],
+    );
+    let before = json_command(binary, state.path(), &["sessions", "list"]);
+    let opened_before = before["data"]["sessions"]
+        .as_array()
+        .expect("sessions")
+        .iter()
+        .find(|session| session["id"] == target_id)
+        .and_then(|session| session["last_opened_at"].as_i64())
+        .expect("opening timestamp");
+
+    let browse = r#"
+        log_user 0
+        set timeout 10
+        set binary $env(PROQI_TEST_BINARY)
+        set state $env(PROQI_TEST_STATE)
+        spawn $binary --state-dir $state -r
+        stty rows 24 columns 100
+        after 500
+        send -- "Needle"
+        after 200
+        send "\r"
+        after 500
+        send -- "q"
+        expect {
+            eof {}
+            timeout { exit 93 }
+        }
+        catch wait result
+        exit [lindex $result 3]
+    "#;
+    let status = Command::new("/usr/bin/expect")
+        .args(["-c", browse])
+        .env("PROQI_TEST_BINARY", binary)
+        .env("PROQI_TEST_STATE", state.path())
+        .status()
+        .expect("run PTY browser workflow");
+    assert!(status.success(), "browser PTY exited with {status}");
+
+    let sessions = json_command(binary, state.path(), &["sessions", "list"]);
+    let selected = sessions["data"]["sessions"]
+        .as_array()
+        .expect("sessions")
+        .iter()
+        .find(|session| session["id"] == target_id)
+        .expect("resumed target");
+    assert!(
+        selected["last_opened_at"]
+            .as_i64()
+            .is_some_and(|opened_after| opened_after > opened_before)
+    );
 }
 
 #[cfg(target_os = "macos")]

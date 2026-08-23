@@ -1,5 +1,6 @@
 //! Crossterm terminal session and event adapter.
 
+mod browser;
 mod control;
 mod external;
 mod input;
@@ -11,6 +12,7 @@ use thiserror::Error;
 
 use crate::ports::store::StoreError;
 
+pub(crate) use browser::pick_session;
 pub(crate) use runner::{TerminalResources, require_interactive, run};
 pub(crate) use settings::load_settings;
 

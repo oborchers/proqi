@@ -19,7 +19,7 @@ use crate::{
     },
     ports::{
         environment::{AppPaths, Clock, Environment, IdGenerator, PathError, Paths},
-        runtime::{InstanceInfo, Lease, RuntimeCoordinator, RuntimeError},
+        runtime::{InstanceInfo, Lease, RuntimeCoordinator, RuntimeError, RuntimeScan},
         store::STORAGE_PROTOCOL_VERSION,
     },
 };
@@ -266,15 +266,17 @@ impl RuntimeCoordinator for FileRuntimeCoordinator {
         schema_lease(&self.runtime_dir.join("schema.lock"), true)
     }
 
-    fn active_instances(&self) -> Result<Vec<InstanceInfo>, RuntimeError> {
+    fn scan_runtime(&self) -> Result<RuntimeScan, RuntimeError> {
         let entries = self.read_metadata()?;
         let mut active = BTreeMap::new();
+        let mut recovered = std::collections::BTreeSet::new();
         for (path, info) in entries {
             let file = open_private_file(&self.session_lock_path(info.session_id))?;
             match FileExt::try_lock_shared(&file) {
                 Ok(()) => {
                     FileExt::unlock(&file).map_err(io_error)?;
                     remove_if_exists(&path)?;
+                    recovered.insert(info.session_id);
                 }
                 Err(TryLockError::WouldBlock) => {
                     retain_latest_instance(&mut active, info);
@@ -284,7 +286,10 @@ impl RuntimeCoordinator for FileRuntimeCoordinator {
         }
         let mut active: Vec<_> = active.into_values().collect();
         active.sort_by_key(|info| (info.started_at, info.instance_id));
-        Ok(active)
+        Ok(RuntimeScan {
+            active,
+            recovered: recovered.into_iter().collect(),
+        })
     }
 }
 
