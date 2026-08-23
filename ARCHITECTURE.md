@@ -604,6 +604,7 @@ equivalent of a project Makefile and exposes these stable entry points:
 ```text
 cargo xtask setup
 cargo xtask format
+cargo xtask source-limits
 cargo xtask check
 cargo xtask test
 cargo xtask test-pty
@@ -615,9 +616,12 @@ cargo xtask package
 - `setup` verifies the pinned toolchain, Rust components, and developer tools.
   It reports missing prerequisites and does not silently modify global state.
 - `format` applies `rustfmt` and any repository-owned text formatting.
+- `source-limits` rejects every first-party Rust or common frontend source file
+  above 500 physical lines, including JavaScript, TypeScript, stylesheet, HTML,
+  Vue, Svelte, and Astro sources.
 - `check` runs the normal pre-push gate: formatting in check mode, Clippy for
-  all targets and features, documentation warnings, and the deterministic test
-  suite through `cargo-nextest`.
+  all targets and features, source limits, documentation warnings, and the
+  deterministic test suite through `cargo-nextest`.
 - `test` runs the deterministic unit, contract, and integration suites.
 - `test-pty` builds the real binary and runs pseudo-terminal scenarios.
 - `coverage` uses `cargo-llvm-cov` and produces machine-readable and human
@@ -631,6 +635,14 @@ The commands remain thin orchestrators around standard Cargo tools. They print
 the commands they run, propagate exit codes, avoid network access unless the
 operation inherently requires it, and work on macOS, Linux, and Windows. A
 failing subcommand fails the overall command immediately.
+
+Rust uses Clippy's `cognitive_complexity` lint with a threshold of 25 as a
+secondary heuristic, not as a claim to measure true cognitive complexity. The
+same gate limits functions to 80 lines and nesting to four levels. These signals
+work together with review and tests. A future frontend stack must establish a
+well-maintained language-native complexity lint before its first source file is
+merged. Every frontend source file is also subject to the repository-wide
+500-line ceiling.
 
 Local commit hooks may run formatting and file-hygiene checks, but they are a
 convenience rather than an enforcement boundary. The complete gate remains

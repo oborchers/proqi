@@ -1,0 +1,290 @@
+//! New structural and editor commits.
+
+use rusqlite::{OptionalExtension, Transaction, params};
+
+use crate::{
+    domain::{BoardOperation, OperationSequence, Session, ThoughtRevision, Timestamp},
+    ports::store::{CommitReceipt, DurableIdentity, OperationBatch, StoreError},
+};
+
+use super::{
+    history_commit::{
+        HistoryMove, commit_history_move, existing_receipt, insert_receipt, persist_board,
+        require_next_sequence, set_integration_context, update_session_sequence,
+    },
+    load::{load_session_record, load_snapshot},
+    search::rebuild_session_search,
+    support::{map_sql_error, path_to_bytes, sequence_to_i64, session_id_from_blob, usize_to_i64},
+};
+
+pub(super) fn commit_batch(
+    transaction: &Transaction<'_>,
+    batch: &OperationBatch,
+) -> Result<Option<CommitReceipt>, StoreError> {
+    match batch {
+        OperationBatch::CreateSession(session) => {
+            create_session(transaction, session)?;
+            Ok(None)
+        }
+        OperationBatch::Board(operation) => commit_board(transaction, operation).map(Some),
+        OperationBatch::Revision(revision) => commit_revision(transaction, revision).map(Some),
+        OperationBatch::HistoryMove {
+            operation_id,
+            session_id,
+            scope,
+            undo,
+            sequence,
+            at,
+        } => commit_history_move(
+            transaction,
+            HistoryMove {
+                operation_id: *operation_id,
+                session_id: *session_id,
+                scope: *scope,
+                undo: *undo,
+                sequence: *sequence,
+                at: *at,
+            },
+        )
+        .map(Some),
+        OperationBatch::IntegrationContext {
+            session_id,
+            context,
+        } => {
+            set_integration_context(transaction, *session_id, context.as_ref())?;
+            Ok(None)
+        }
+    }
+}
+
+fn create_session(transaction: &Transaction<'_>, session: &Session) -> Result<(), StoreError> {
+    if session.last_durable_sequence != OperationSequence::ZERO {
+        return Err(StoreError::Conflict(
+            "new sessions must start at operation sequence zero".to_owned(),
+        ));
+    }
+    let existing: Option<Vec<u8>> = transaction
+        .query_row(
+            "SELECT id FROM sessions WHERE id = ?1",
+            [session.id.database_bytes().as_slice()],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(map_sql_error)?;
+    if existing.is_some() {
+        let loaded = load_session_record(transaction, session.id)?;
+        if &loaded == session {
+            return Ok(());
+        }
+        return Err(StoreError::Conflict(format!(
+            "session identifier already exists: {}",
+            session.id
+        )));
+    }
+    transaction
+        .execute(
+            "INSERT INTO sessions (
+                id, name, origin_cwd, last_opened_cwd, created_at, last_opened_at,
+                last_active_at, last_durable_sequence, board_history_cursor, deleted_at
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 0, ?9)",
+            params![
+                session.id.database_bytes().as_slice(),
+                session.name,
+                path_to_bytes(&session.origin_cwd),
+                path_to_bytes(&session.last_opened_cwd),
+                session.created_at.as_millis(),
+                session.last_opened_at.as_millis(),
+                session.last_active_at.as_millis(),
+                sequence_to_i64(session.last_durable_sequence)?,
+                session.deleted_at.map(Timestamp::as_millis),
+            ],
+        )
+        .map_err(map_sql_error)?;
+    rebuild_session_search(transaction, session.id)
+}
+
+fn commit_board(
+    transaction: &Transaction<'_>,
+    operation: &BoardOperation,
+) -> Result<CommitReceipt, StoreError> {
+    let request_json = serde_json::to_string(operation)
+        .map_err(|error| StoreError::Serialization(error.to_string()))?;
+    if let Some(receipt) = existing_receipt(
+        transaction,
+        "operation",
+        operation.id.database_bytes(),
+        &request_json,
+        DurableIdentity::Operation(operation.id),
+    )? {
+        return Ok(receipt);
+    }
+    require_next_sequence(transaction, operation.session_id, operation.sequence)?;
+    let snapshot = load_snapshot(transaction, operation.session_id)?;
+    let mut board = snapshot.board;
+    board
+        .apply_mutation(&operation.forward, operation.created_at)
+        .map_err(|error| StoreError::Invariant(error.to_string()))?;
+    let cursor = snapshot.board_history_cursor;
+    transaction
+        .execute(
+            "DELETE FROM board_operations WHERE session_id = ?1 AND history_index >= ?2",
+            params![
+                operation.session_id.database_bytes().as_slice(),
+                usize_to_i64(cursor)?
+            ],
+        )
+        .map_err(map_sql_error)?;
+    persist_board(transaction, &board)?;
+    transaction
+        .execute(
+            "INSERT INTO board_operations(id, session_id, history_index, sequence, payload_json, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![
+                operation.id.database_bytes().as_slice(),
+                operation.session_id.database_bytes().as_slice(),
+                usize_to_i64(cursor)?,
+                sequence_to_i64(operation.sequence)?,
+                request_json,
+                operation.created_at.as_millis(),
+            ],
+        )
+        .map_err(map_sql_error)?;
+    insert_receipt(
+        transaction,
+        operation.session_id,
+        operation.sequence,
+        "operation",
+        operation.id.database_bytes(),
+        &request_json,
+        operation.created_at,
+    )?;
+    transaction
+        .execute(
+            "UPDATE sessions SET board_history_cursor = ?2, last_durable_sequence = ?3,
+             last_active_at = max(last_active_at, ?4) WHERE id = ?1",
+            params![
+                operation.session_id.database_bytes().as_slice(),
+                usize_to_i64(cursor + 1)?,
+                sequence_to_i64(operation.sequence)?,
+                operation.created_at.as_millis(),
+            ],
+        )
+        .map_err(map_sql_error)?;
+    rebuild_session_search(transaction, operation.session_id)?;
+    Ok(CommitReceipt {
+        session_id: operation.session_id,
+        sequence: operation.sequence,
+        identity: DurableIdentity::Operation(operation.id),
+        idempotent_replay: false,
+    })
+}
+
+fn commit_revision(
+    transaction: &Transaction<'_>,
+    revision: &ThoughtRevision,
+) -> Result<CommitReceipt, StoreError> {
+    let request_json = serde_json::to_string(revision)
+        .map_err(|error| StoreError::Serialization(error.to_string()))?;
+    if let Some(receipt) = existing_receipt(
+        transaction,
+        "revision",
+        revision.id.database_bytes(),
+        &request_json,
+        DurableIdentity::Revision(revision.id),
+    )? {
+        return Ok(receipt);
+    }
+    require_next_sequence(transaction, revision.session_id, revision.sequence)?;
+    let cursor = revision_cursor(transaction, revision)?;
+    persist_revision(transaction, revision, cursor, &request_json)?;
+    insert_receipt(
+        transaction,
+        revision.session_id,
+        revision.sequence,
+        "revision",
+        revision.id.database_bytes(),
+        &request_json,
+        revision.created_at,
+    )?;
+    update_session_sequence(
+        transaction,
+        revision.session_id,
+        revision.sequence,
+        revision.created_at,
+    )?;
+    rebuild_session_search(transaction, revision.session_id)?;
+    Ok(CommitReceipt {
+        session_id: revision.session_id,
+        sequence: revision.sequence,
+        identity: DurableIdentity::Revision(revision.id),
+        idempotent_replay: false,
+    })
+}
+
+fn revision_cursor(
+    transaction: &Transaction<'_>,
+    revision: &ThoughtRevision,
+) -> Result<i64, StoreError> {
+    let current: Option<(Vec<u8>, String, i64, Option<i64>)> = transaction
+        .query_row(
+            "SELECT session_id, content, editor_history_cursor, deleted_at FROM thoughts WHERE id = ?1",
+            [revision.thought_id.database_bytes().as_slice()],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )
+        .optional()
+        .map_err(map_sql_error)?;
+    let (stored_session, content, cursor, deleted_at) =
+        current.ok_or_else(|| StoreError::NotFound(revision.thought_id.to_string()))?;
+    if session_id_from_blob(stored_session)? != revision.session_id
+        || deleted_at.is_some()
+        || content != revision.before_content
+    {
+        return Err(StoreError::Conflict(format!(
+            "revision precondition failed: {}",
+            revision.id
+        )));
+    }
+    Ok(cursor)
+}
+
+fn persist_revision(
+    transaction: &Transaction<'_>,
+    revision: &ThoughtRevision,
+    cursor: i64,
+    request_json: &str,
+) -> Result<(), StoreError> {
+    transaction
+        .execute(
+            "DELETE FROM thought_revisions WHERE thought_id = ?1 AND history_index >= ?2",
+            params![revision.thought_id.database_bytes().as_slice(), cursor],
+        )
+        .map_err(map_sql_error)?;
+    transaction
+        .execute(
+            "INSERT INTO thought_revisions(
+                id, session_id, thought_id, history_index, sequence, payload_json, created_at
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                revision.id.database_bytes().as_slice(),
+                revision.session_id.database_bytes().as_slice(),
+                revision.thought_id.database_bytes().as_slice(),
+                cursor,
+                sequence_to_i64(revision.sequence)?,
+                request_json,
+                revision.created_at.as_millis(),
+            ],
+        )
+        .map_err(map_sql_error)?;
+    transaction
+        .execute(
+            "UPDATE thoughts SET content = ?2, updated_at = ?3, editor_history_cursor = ?4 WHERE id = ?1",
+            params![
+                revision.thought_id.database_bytes().as_slice(),
+                revision.after_content,
+                revision.created_at.as_millis(),
+                cursor.checked_add(1).ok_or_else(|| StoreError::Corrupt("editor cursor overflow".to_owned()))?,
+            ],
+        )
+        .map_err(map_sql_error)?;
+    Ok(())
+}

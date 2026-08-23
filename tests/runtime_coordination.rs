@@ -1,0 +1,229 @@
+//! File-lock ownership, schema exclusion, stale metadata, and crash release contracts.
+
+use std::{
+    io::{BufRead, BufReader},
+    path::PathBuf,
+    process::{Command, Stdio},
+    str::FromStr,
+    thread,
+    time::{Duration, Instant},
+};
+
+use proqi::{
+    adapters::{
+        memory::FakeIdGenerator,
+        runtime::{FileRuntimeCoordinator, NativePaths},
+    },
+    domain::{InstanceId, SessionId, Timestamp},
+    ports::{
+        environment::{IdGenerator, Paths},
+        runtime::{RuntimeCoordinator, RuntimeError},
+    },
+};
+
+fn coordinator(runtime: PathBuf, instance_id: InstanceId, started: i64) -> FileRuntimeCoordinator {
+    FileRuntimeCoordinator::new(
+        runtime,
+        instance_id,
+        PathBuf::from("/tmp/proqi-runtime-contract"),
+        Timestamp::from_millis(started),
+        "test-version",
+    )
+    .expect("coordinator")
+}
+
+#[test]
+fn native_paths_are_absolute() {
+    let paths = NativePaths.resolve().expect("native paths");
+    assert!(paths.data_dir.is_absolute());
+    assert!(paths.config_dir.is_absolute());
+    assert!(paths.runtime_dir.is_absolute());
+}
+
+#[test]
+fn one_session_has_one_authoritative_owner() {
+    let temporary = tempfile::tempdir().expect("temporary directory");
+    let runtime = temporary.path().join("runtime");
+    let mut ids = FakeIdGenerator::new(1_725_000_000_000);
+    let session_id = ids.session_id();
+    let first = coordinator(runtime.clone(), ids.instance_id(), 1);
+    let second = coordinator(runtime, ids.instance_id(), 2);
+
+    let lease = first.acquire_session(session_id).expect("first lease");
+    let error = second
+        .acquire_session(session_id)
+        .expect_err("must conflict");
+    assert!(matches!(
+        error,
+        RuntimeError::SessionBusy {
+            session_id: busy,
+            holder: Some(holder),
+        } if busy == session_id && holder.instance_id == lease.info().instance_id
+    ));
+    assert_eq!(first.active_instances().expect("active").len(), 1);
+
+    drop(lease);
+    assert!(first.active_instances().expect("inactive").is_empty());
+    second.acquire_session(session_id).expect("released lease");
+}
+
+#[test]
+fn different_sessions_and_shared_schema_leases_can_coexist() {
+    let temporary = tempfile::tempdir().expect("temporary directory");
+    let runtime = temporary.path().join("runtime");
+    let mut ids = FakeIdGenerator::new(1_725_000_000_000);
+    let first = coordinator(runtime.clone(), ids.instance_id(), 1);
+    let second = coordinator(runtime, ids.instance_id(), 2);
+    let _first_session = first
+        .acquire_session(ids.session_id())
+        .expect("first session");
+    let _second_session = second
+        .acquire_session(ids.session_id())
+        .expect("second session");
+    let first_schema = first.acquire_schema_shared().expect("first shared");
+    let second_schema = second.acquire_schema_shared().expect("second shared");
+    assert!(matches!(
+        first.acquire_schema_exclusive(),
+        Err(RuntimeError::SchemaBusy)
+    ));
+    drop(first_schema);
+    drop(second_schema);
+    let _exclusive = first.acquire_schema_exclusive().expect("exclusive");
+    assert!(matches!(
+        second.acquire_schema_shared(),
+        Err(RuntimeError::SchemaBusy)
+    ));
+}
+
+#[test]
+fn stale_descriptive_metadata_is_removed_when_no_lock_exists() {
+    let temporary = tempfile::tempdir().expect("temporary directory");
+    let runtime = temporary.path().join("runtime");
+    let mut ids = FakeIdGenerator::new(1_725_000_000_000);
+    let session_id = ids.session_id();
+    let instance_id = ids.instance_id();
+    let owner = coordinator(runtime.clone(), instance_id, 1);
+    let lease = owner.acquire_session(session_id).expect("lease");
+    let info = lease.info().clone();
+    let metadata = runtime
+        .join("instances")
+        .join(format!("{instance_id}.json"));
+    assert!(metadata.exists());
+    drop(lease);
+    assert!(!metadata.exists());
+
+    std::fs::write(&metadata, serde_json::to_vec(&info).expect("json"))
+        .expect("stale metadata fixture");
+    assert!(owner.active_instances().expect("recovery").is_empty());
+    assert!(!metadata.exists());
+
+    let malformed = runtime.join("instances").join("malformed.json");
+    std::fs::write(&malformed, b"{").expect("malformed metadata fixture");
+    let _lease = owner
+        .acquire_session(session_id)
+        .expect("metadata is not authority");
+}
+
+#[test]
+fn child_process_holds_session_lock() {
+    let Ok(runtime) = std::env::var("PROQI_TEST_CHILD_RUNTIME") else {
+        return;
+    };
+    let session =
+        SessionId::from_str(&std::env::var("PROQI_TEST_CHILD_SESSION").expect("child session"))
+            .expect("session ID");
+    let instance =
+        InstanceId::from_str(&std::env::var("PROQI_TEST_CHILD_INSTANCE").expect("child instance"))
+            .expect("instance ID");
+    let owner = coordinator(PathBuf::from(runtime), instance, 1);
+    let _lease = owner.acquire_session(session).expect("child lease");
+    println!("PROQI_LOCK_READY");
+    loop {
+        thread::sleep(Duration::from_secs(1));
+    }
+}
+
+#[test]
+fn process_termination_releases_authoritative_lock() {
+    let temporary = tempfile::tempdir().expect("temporary directory");
+    let runtime = temporary.path().join("runtime");
+    let mut ids = FakeIdGenerator::new(1_725_000_000_000);
+    let session_id = ids.session_id();
+    let child_instance = ids.instance_id();
+    let parent = coordinator(runtime.clone(), ids.instance_id(), 2);
+    let executable = std::env::current_exe().expect("test executable");
+    let mut child = Command::new(executable)
+        .arg("--exact")
+        .arg("child_process_holds_session_lock")
+        .arg("--nocapture")
+        .arg("--test-threads=1")
+        .env("PROQI_TEST_CHILD_RUNTIME", &runtime)
+        .env("PROQI_TEST_CHILD_SESSION", session_id.to_string())
+        .env("PROQI_TEST_CHILD_INSTANCE", child_instance.to_string())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("spawn child");
+    let stdout = child.stdout.take().expect("child stdout");
+    let mut reader = BufReader::new(stdout);
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let mut line = String::new();
+        let read = reader.read_line(&mut line).expect("child output");
+        assert!(read > 0, "child exited before acquiring the lock");
+        if line.contains("PROQI_LOCK_READY") {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "child did not acquire lock in time"
+        );
+    }
+    assert!(matches!(
+        parent.acquire_session(session_id),
+        Err(RuntimeError::SessionBusy { .. })
+    ));
+    child.kill().expect("terminate child");
+    child.wait().expect("reap child");
+
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        match parent.acquire_session(session_id) {
+            Ok(_lease) => break,
+            Err(RuntimeError::SessionBusy { .. }) if Instant::now() < deadline => {
+                thread::sleep(Duration::from_millis(20));
+            }
+            result => panic!("lock was not released after process termination: {result:?}"),
+        }
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn runtime_files_are_user_only() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temporary = tempfile::tempdir().expect("temporary directory");
+    let runtime = temporary.path().join("runtime");
+    let mut ids = FakeIdGenerator::new(1_725_000_000_000);
+    let owner = coordinator(runtime.clone(), ids.instance_id(), 1);
+    let lease = owner.acquire_session(ids.session_id()).expect("lease");
+    assert_eq!(
+        std::fs::metadata(&runtime)
+            .expect("runtime metadata")
+            .permissions()
+            .mode()
+            & 0o777,
+        0o700
+    );
+    let metadata = runtime
+        .join("instances")
+        .join(format!("{}.json", lease.info().instance_id));
+    assert_eq!(
+        std::fs::metadata(metadata)
+            .expect("instance metadata")
+            .permissions()
+            .mode()
+            & 0o777,
+        0o600
+    );
+}

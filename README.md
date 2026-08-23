@@ -30,7 +30,8 @@ board is implemented incrementally against `PRODUCT.md` and `ARCHITECTURE.md`.
 
 ```shell
 cargo xtask format       # apply formatting
-cargo xtask check        # formatting, Clippy, tests, and documentation tests
+cargo xtask source-limits # enforce the 500-line source-file ceiling
+cargo xtask check        # source limits, formatting, Clippy, and all tests
 cargo xtask test         # deterministic test suite
 cargo xtask test-pty     # pseudo-terminal scenarios
 cargo xtask coverage     # write target/coverage/lcov.info
@@ -39,6 +40,10 @@ cargo xtask package      # release build plus temporary-prefix launch smoke test
 ```
 
 CI invokes the same `xtask` commands. Run `cargo xtask check` before committing.
+First-party source files may contain at most 500 physical lines. Rust functions
+are also gated by Clippy's 80-line, nesting-depth, and cognitive-complexity
+checks. Any future frontend language must add its native complexity lint before
+frontend source is accepted, and it remains subject to the same file ceiling.
 
 ## Product and architecture
 

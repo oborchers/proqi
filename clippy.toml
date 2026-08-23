@@ -1,0 +1,5 @@
+# Clippy's cognitive-complexity lint is an approximation. Keep it as one
+# maintainability signal alongside function length and nesting limits.
+cognitive-complexity-threshold = 25
+too-many-lines-threshold = 80
+excessive-nesting-threshold = 4

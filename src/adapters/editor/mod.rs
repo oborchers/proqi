@@ -1,10 +1,17 @@
 //! Rope-backed multiline editor implementation.
 
+mod text;
+mod wrap;
+
 use std::cmp::Ordering;
 
 use ropey::Rope;
-use unicode_segmentation::UnicodeSegmentation;
-use unicode_width::UnicodeWidthStr;
+
+use text::{
+    byte_for_position, logical_lines, next_boundary, position_for_byte, previous_boundary,
+    word_back, word_forward,
+};
+use wrap::{byte_at_cell, cell_column_at_byte, wrap_content, wrapped_line_index};
 
 use crate::ports::editor::{
     CursorMovement, EditCommand, EditOutcome, Editor, EditorSnapshot, TextPosition, TextSelection,
@@ -30,16 +37,16 @@ impl State {
 
 #[derive(Clone, Copy, Debug)]
 struct LogicalLine {
-    start: usize,
-    content_end: usize,
-    end: usize,
+    pub(super) start: usize,
+    pub(super) content_end: usize,
+    pub(super) end: usize,
 }
 
 #[derive(Clone, Debug)]
 struct WrappedLine {
-    public: VisualLine,
-    start_byte: usize,
-    end_byte: usize,
+    pub(super) public: VisualLine,
+    pub(super) start_byte: usize,
+    pub(super) end_byte: usize,
 }
 
 /// Rope-backed editor with grapheme-safe positions and exact content storage.
@@ -391,202 +398,4 @@ impl Editor for RopeEditor {
         let content = self.content();
         Some(content[start..end].to_owned())
     }
-}
-
-fn logical_lines(content: &str) -> Vec<LogicalLine> {
-    let mut lines = Vec::new();
-    let mut start = 0;
-    for (newline, _) in content.match_indices('\n') {
-        let content_end = if newline > start && content.as_bytes()[newline - 1] == b'\r' {
-            newline - 1
-        } else {
-            newline
-        };
-        lines.push(LogicalLine {
-            start,
-            content_end,
-            end: newline + 1,
-        });
-        start = newline + 1;
-    }
-    lines.push(LogicalLine {
-        start,
-        content_end: content.len(),
-        end: content.len(),
-    });
-    lines
-}
-
-fn byte_for_position(content: &str, position: TextPosition) -> usize {
-    let lines = logical_lines(content);
-    let line = lines[position.line.min(lines.len().saturating_sub(1))];
-    let text = &content[line.start..line.content_end];
-    text.grapheme_indices(true)
-        .nth(position.grapheme)
-        .map_or(line.content_end, |(offset, _)| line.start + offset)
-}
-
-fn position_for_byte(content: &str, byte: usize) -> TextPosition {
-    let byte = byte.min(content.len());
-    let lines = logical_lines(content);
-    let line_index = lines
-        .iter()
-        .enumerate()
-        .position(|(index, line)| byte < line.end || index + 1 == lines.len())
-        .unwrap_or_else(|| lines.len().saturating_sub(1));
-    let line = lines[line_index];
-    let local_end = byte.min(line.content_end).saturating_sub(line.start);
-    let grapheme = content[line.start..line.start + local_end]
-        .graphemes(true)
-        .count();
-    TextPosition::new(line_index, grapheme)
-}
-
-fn previous_boundary(content: &str, cursor: usize) -> Option<usize> {
-    if cursor == 0 {
-        return None;
-    }
-    let position = position_for_byte(content, cursor);
-    let lines = logical_lines(content);
-    let line = lines[position.line];
-    if cursor > line.start {
-        return content[line.start..cursor]
-            .grapheme_indices(true)
-            .next_back()
-            .map(|(offset, _)| line.start + offset);
-    }
-    (position.line > 0).then_some(lines[position.line - 1].content_end)
-}
-
-fn next_boundary(content: &str, cursor: usize) -> Option<usize> {
-    if cursor >= content.len() {
-        return None;
-    }
-    let position = position_for_byte(content, cursor);
-    let lines = logical_lines(content);
-    let line = lines[position.line];
-    if cursor < line.content_end {
-        let grapheme = content[cursor..line.content_end].graphemes(true).next()?;
-        return Some(cursor + grapheme.len());
-    }
-    (position.line + 1 < lines.len()).then_some(lines[position.line + 1].start)
-}
-
-fn word_segments(content: &str) -> Vec<(usize, usize)> {
-    content
-        .split_word_bound_indices()
-        .filter_map(|(start, segment)| {
-            segment
-                .unicode_words()
-                .next()
-                .map(|_| (start, start + segment.len()))
-        })
-        .collect()
-}
-
-fn word_back(content: &str, cursor: usize) -> usize {
-    word_segments(content)
-        .into_iter()
-        .rev()
-        .find_map(|(start, _)| (start < cursor).then_some(start))
-        .unwrap_or(0)
-}
-
-fn word_forward(content: &str, cursor: usize) -> usize {
-    word_segments(content)
-        .into_iter()
-        .find_map(|(start, end)| {
-            if cursor < end {
-                Some(if cursor >= start { end } else { start })
-            } else {
-                None
-            }
-        })
-        .unwrap_or(content.len())
-}
-
-fn wrap_content(content: &str, width: usize) -> Vec<WrappedLine> {
-    let width = width.max(1);
-    let mut output = Vec::new();
-    for (logical_line, line) in logical_lines(content).into_iter().enumerate() {
-        let text = &content[line.start..line.content_end];
-        let graphemes: Vec<_> = text.grapheme_indices(true).collect();
-        if graphemes.is_empty() {
-            output.push(WrappedLine {
-                public: VisualLine {
-                    logical_line,
-                    start_grapheme: 0,
-                    end_grapheme: 0,
-                    cell_width: 0,
-                    text: String::new(),
-                },
-                start_byte: line.start,
-                end_byte: line.content_end,
-            });
-            continue;
-        }
-
-        let mut start_index = 0;
-        while start_index < graphemes.len() {
-            let mut end_index = start_index;
-            let mut cells = 0;
-            while end_index < graphemes.len() {
-                let grapheme_width = UnicodeWidthStr::width(graphemes[end_index].1);
-                if end_index > start_index && cells + grapheme_width > width {
-                    break;
-                }
-                cells += grapheme_width;
-                end_index += 1;
-                if cells >= width {
-                    break;
-                }
-            }
-            let start_offset = graphemes[start_index].0;
-            let end_offset = graphemes
-                .get(end_index)
-                .map_or(text.len(), |(offset, _)| *offset);
-            output.push(WrappedLine {
-                public: VisualLine {
-                    logical_line,
-                    start_grapheme: start_index,
-                    end_grapheme: end_index,
-                    cell_width: cells,
-                    text: text[start_offset..end_offset].to_owned(),
-                },
-                start_byte: line.start + start_offset,
-                end_byte: line.start + end_offset,
-            });
-            start_index = end_index;
-        }
-    }
-    output
-}
-
-fn byte_at_cell(content: &str, line: &WrappedLine, target_cell: usize) -> usize {
-    let text = &content[line.start_byte..line.end_byte];
-    let mut cells = 0;
-    for (offset, grapheme) in text.grapheme_indices(true) {
-        let width = UnicodeWidthStr::width(grapheme);
-        if target_cell < cells + width {
-            return line.start_byte + offset;
-        }
-        cells += width;
-    }
-    line.end_byte
-}
-
-fn cell_column_at_byte(content: &str, line: &WrappedLine, byte: usize) -> usize {
-    let end = byte.min(line.end_byte);
-    UnicodeWidthStr::width(&content[line.start_byte..end])
-}
-
-fn wrapped_line_index(lines: &[WrappedLine], byte: usize) -> usize {
-    lines
-        .iter()
-        .position(|line| {
-            (line.start_byte == line.end_byte && byte == line.start_byte)
-                || (byte >= line.start_byte && byte < line.end_byte)
-        })
-        .or_else(|| lines.iter().rposition(|line| line.start_byte <= byte))
-        .unwrap_or(0)
 }

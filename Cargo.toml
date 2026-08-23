@@ -9,8 +9,10 @@ version = "0.1.0-alpha.1"
 
 [workspace.dependencies]
 clap = { version = "4.5.47", features = ["derive"] }
+directories = "6.0.0"
+fs4 = "1.1.0"
 ropey = "1.6.1"
-rusqlite = { version = "0.37.0", features = ["bundled"] }
+rusqlite = { version = "0.37.0", features = ["backup", "bundled"] }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.143"
 thiserror = "2.0.16"
@@ -25,6 +27,8 @@ unsafe_code = "forbid"
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
+cognitive_complexity = "warn"
+excessive_nesting = "warn"
 module_name_repetitions = "allow"
 
 [package]
@@ -38,8 +42,12 @@ publish = false
 
 [dependencies]
 clap.workspace = true
+directories.workspace = true
+fs4.workspace = true
 ropey.workspace = true
+rusqlite.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 thiserror.workspace = true
 unicode-segmentation.workspace = true
 unicode-width.workspace = true
@@ -47,8 +55,7 @@ uuid.workspace = true
 
 [dev-dependencies]
 proptest = "1.7.0"
-rusqlite.workspace = true
-serde_json.workspace = true
+tempfile = "3.27.0"
 
 [lints]
 workspace = true

@@ -324,19 +324,9 @@ impl SessionBoard {
             });
         }
         if from < to {
-            for thought in self.thoughts.iter_mut().filter(|thought| thought.is_live()) {
-                let position = usize::try_from(thought.position.get()).unwrap_or(usize::MAX);
-                if position > from && position <= to {
-                    thought.position = ThoughtPosition::new(to_u32(position - 1)?);
-                }
-            }
+            shift_range(&mut self.thoughts, from, to, ShiftDirection::TowardStart)?;
         } else if to < from {
-            for thought in self.thoughts.iter_mut().filter(|thought| thought.is_live()) {
-                let position = usize::try_from(thought.position.get()).unwrap_or(usize::MAX);
-                if position >= to && position < from {
-                    thought.position = ThoughtPosition::new(to_u32(position + 1)?);
-                }
-            }
+            shift_range(&mut self.thoughts, to, from, ShiftDirection::TowardEnd)?;
         }
         let thought = self
             .thought_mut(thought_id)
@@ -361,6 +351,30 @@ impl SessionBoard {
             }
         }
     }
+}
+
+#[derive(Clone, Copy)]
+enum ShiftDirection {
+    TowardStart,
+    TowardEnd,
+}
+
+fn shift_range(
+    thoughts: &mut [Thought],
+    start: usize,
+    end: usize,
+    direction: ShiftDirection,
+) -> Result<(), DomainError> {
+    for thought in thoughts.iter_mut().filter(|thought| thought.is_live()) {
+        let position = usize::try_from(thought.position.get()).unwrap_or(usize::MAX);
+        let shifted = match direction {
+            ShiftDirection::TowardStart if position > start && position <= end => position - 1,
+            ShiftDirection::TowardEnd if position >= start && position < end => position + 1,
+            _ => continue,
+        };
+        thought.position = ThoughtPosition::new(to_u32(shifted)?);
+    }
+    Ok(())
 }
 
 fn to_u32(value: usize) -> Result<u32, DomainError> {
