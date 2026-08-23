@@ -100,6 +100,19 @@ pub enum OperationBatch {
     },
 }
 
+impl OperationBatch {
+    /// Return the ordered session sequence carried by a mutable operation.
+    #[must_use]
+    pub const fn sequence(&self) -> Option<OperationSequence> {
+        match self {
+            Self::Board(operation) => Some(operation.sequence),
+            Self::Revision(revision) => Some(revision.sequence),
+            Self::HistoryMove { sequence, .. } => Some(*sequence),
+            Self::CreateSession(_) | Self::IntegrationContext { .. } => None,
+        }
+    }
+}
+
 /// Complete persisted session state and reversible history.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SessionSnapshot {

@@ -218,14 +218,22 @@ fn launch_modes_and_capability_discovery_have_stable_output() {
     assert_eq!(capabilities["active_session_control"], false);
     assert_eq!(capabilities["herdr_submission"], false);
 
-    let human = Command::new(env!("CARGO_BIN_EXE_proqi"))
+    let non_terminal = Command::new(env!("CARGO_BIN_EXE_proqi"))
         .arg("--state-dir")
         .arg(root)
         .output()
-        .expect("human launch");
-    assert!(human.status.success());
-    let text = String::from_utf8(human.stdout).expect("UTF-8 output");
-    assert!(text.contains("Resume later: proqi -r ses_"));
+        .expect("non-terminal launch");
+    assert!(!non_terminal.status.success());
+    let text = String::from_utf8(non_terminal.stderr).expect("UTF-8 output");
+    assert!(text.contains("interactive launch requires a terminal"));
+    let after_failure = success(root, &["sessions", "list"], None);
+    assert_eq!(
+        after_failure["sessions"]
+            .as_array()
+            .expect("sessions")
+            .len(),
+        1
+    );
 }
 
 #[test]

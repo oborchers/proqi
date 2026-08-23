@@ -6,7 +6,7 @@ use crate::{
     ports::{
         environment::{Clock, IdGenerator},
         runtime::RuntimeCoordinator,
-        store::{CommitReceipt, OperationBatch, Store, StoredOperationRequest},
+        store::{CommitReceipt, Store, StoredOperationRequest},
     },
 };
 
@@ -177,25 +177,9 @@ where
         let [effect] = effects else {
             return Err(SessionServiceError::NoDurableMutation);
         };
-        let batch = match effect {
-            Effect::CommitBoardOperation(operation) => OperationBatch::Board(operation.clone()),
-            Effect::CommitHistoryMove {
-                operation_id,
-                session_id,
-                scope,
-                undo,
-                sequence,
-                at,
-            } => OperationBatch::HistoryMove {
-                operation_id: *operation_id,
-                session_id: *session_id,
-                scope: *scope,
-                undo: *undo,
-                sequence: *sequence,
-                at: *at,
-            },
-            _ => return Err(SessionServiceError::NoDurableMutation),
-        };
+        let batch = effect
+            .persistence_batch()
+            .ok_or(SessionServiceError::NoDurableMutation)?;
         self.store
             .commit(&batch)?
             .ok_or(SessionServiceError::NoDurableMutation)

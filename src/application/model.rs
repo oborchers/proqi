@@ -10,6 +10,7 @@ use crate::domain::{
     RevisionId, SessionBoard, SessionId, TextPosition, Thought, ThoughtId, ThoughtRevision,
     Timestamp, UndoScope,
 };
+use crate::ports::store::OperationBatch;
 
 /// Active interaction context.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -451,4 +452,31 @@ pub enum Effect {
         /// Failed sequence to retry.
         sequence: OperationSequence,
     },
+}
+
+impl Effect {
+    /// Convert a persistence effect into its durable store request.
+    #[must_use]
+    pub fn persistence_batch(&self) -> Option<OperationBatch> {
+        match self {
+            Self::CommitBoardOperation(operation) => Some(OperationBatch::Board(operation.clone())),
+            Self::CommitRevision(revision) => Some(OperationBatch::Revision(revision.clone())),
+            Self::CommitHistoryMove {
+                operation_id,
+                session_id,
+                scope,
+                undo,
+                sequence,
+                at,
+            } => Some(OperationBatch::HistoryMove {
+                operation_id: *operation_id,
+                session_id: *session_id,
+                scope: *scope,
+                undo: *undo,
+                sequence: *sequence,
+                at: *at,
+            }),
+            _ => None,
+        }
+    }
 }

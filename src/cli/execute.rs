@@ -5,6 +5,7 @@ use std::{collections::HashSet, io::Read, process::ExitCode, str::FromStr};
 use serde_json::{Value, json};
 
 use crate::{
+    adapters::terminal,
     application::SessionService,
     domain::{OperationId, SessionId, ThoughtId, UndoScope},
     ports::{
@@ -47,10 +48,16 @@ fn execute_inner(cli: Cli) -> Result<Outcome, CliError> {
     if matches!(cli.command, Some(Command::Capabilities)) {
         return Ok(capabilities());
     }
-    let mut context = RuntimeContext::open(cli.state_dir.as_deref())?;
+    let context = RuntimeContext::open(cli.state_dir.as_deref())?;
     match cli.command {
-        Some(Command::Sessions(arguments)) => execute_sessions(&mut context, arguments.command),
-        Some(Command::Thoughts(arguments)) => execute_thoughts(&mut context, arguments.command),
+        Some(Command::Sessions(arguments)) => {
+            let mut context = context;
+            execute_sessions(&mut context, arguments.command)
+        }
+        Some(Command::Thoughts(arguments)) => {
+            let mut context = context;
+            execute_thoughts(&mut context, arguments.command)
+        }
         Some(Command::Capabilities) => Ok(capabilities()),
         None => {
             let resume = match cli.resume {
@@ -58,7 +65,7 @@ fn execute_inner(cli: Cli) -> Result<Outcome, CliError> {
                 Some(None) => ResumeRequest::Picker,
                 Some(Some(reference)) => ResumeRequest::Target(reference),
             };
-            execute_launch(&mut context, cli.continue_latest, resume)
+            execute_launch(context, cli.continue_latest, resume, !cli.json)
         }
     }
 }
@@ -77,27 +84,33 @@ fn capabilities() -> Outcome {
 }
 
 fn execute_launch(
-    context: &mut RuntimeContext,
+    mut context: RuntimeContext,
     continue_latest: bool,
     resume: ResumeRequest,
+    interactive: bool,
 ) -> Result<Outcome, CliError> {
-    let mut service = session_service(context)?;
-    if continue_latest {
-        let session = service.continue_current()?;
-        return Ok(opened_session(session.state.board.session.id));
+    if interactive {
+        terminal::require_interactive()?;
     }
-    match resume {
-        ResumeRequest::Target(reference) => {
-            let id = service.resolve_session(&reference, false)?;
-            let session = service.resume(id)?;
-            Ok(opened_session(session.state.board.session.id))
+    let session = if continue_latest {
+        session_service(&mut context)?.continue_current()?
+    } else {
+        match resume {
+            ResumeRequest::Target(reference) => {
+                let mut service = session_service(&mut context)?;
+                let id = service.resolve_session(&reference, false)?;
+                service.resume(id)?
+            }
+            ResumeRequest::Picker => return list_sessions(&mut context, None, false),
+            ResumeRequest::Fresh => session_service(&mut context)?.create_session()?,
         }
-        ResumeRequest::Picker => list_sessions(context, None, false),
-        ResumeRequest::Fresh => {
-            let session = service.create_session()?;
-            Ok(opened_session(session.state.board.session.id))
-        }
+    };
+    let id = session.state.board.session.id;
+    if interactive {
+        let resources = context.into_terminal(session);
+        let _closed = terminal::run(resources)?;
     }
+    Ok(opened_session(id))
 }
 
 fn opened_session(id: SessionId) -> Outcome {

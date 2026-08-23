@@ -23,8 +23,11 @@ cargo build --locked
 cargo run --bin proqi
 ```
 
-The session and scriptable thought workflow is available now. The interactive
-board is implemented incrementally against `PRODUCT.md` and `ARCHITECTURE.md`.
+Running without a subcommand opens the interactive board in the current
+terminal. Paste in board mode to create and focus one thought, press `Enter` to
+edit the focused thought, press `Esc` to return to the board, and press `?` for
+the complete contextual key guide. Changes are autosaved and can be resumed by
+their canonical session identifier.
 
 ## CLI workflow
 

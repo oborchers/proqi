@@ -72,6 +72,12 @@ impl<L> LeasedSession<L> {
     pub const fn lease(&self) -> &L {
         &self.lease
     }
+
+    /// Consume the editing handle while preserving both state and lease.
+    #[must_use]
+    pub fn into_parts(self) -> (AppState, L) {
+        (self.state, self.lease)
+    }
 }
 
 /// Durable result of one thought mutation.

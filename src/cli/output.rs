@@ -6,6 +6,7 @@ use serde::Serialize;
 use serde_json::{Value, json};
 
 use crate::{
+    adapters::terminal::TerminalError,
     application::{ApplicationError, SessionServiceError},
     ports::{runtime::RuntimeError, store::StoreError},
 };
@@ -123,6 +124,18 @@ impl From<ApplicationError> for CliError {
             7
         };
         Self::new(code, error.to_string(), exit)
+    }
+}
+
+impl From<TerminalError> for CliError {
+    fn from(error: TerminalError) -> Self {
+        match error {
+            TerminalError::Store(store) => store.into(),
+            TerminalError::Io(message) => Self::new("terminal_failed", message, 1),
+            TerminalError::Worker(message) => {
+                Self::new("terminal_worker_failed", message.to_owned(), 1)
+            }
+        }
     }
 }
 

@@ -9,7 +9,9 @@ use crate::{
             SystemIdGenerator,
         },
         sqlite::{SqliteStore, StoreConfig},
+        terminal::TerminalResources,
     },
+    application::LeasedSession,
     domain::Timestamp,
     ports::{
         environment::{AppPaths, Clock, Environment, IdGenerator, Paths},
@@ -26,7 +28,7 @@ pub(super) struct RuntimeContext {
     pub(super) clock: SystemClock,
     pub(super) ids: SystemIdGenerator,
     pub(super) cwd: PathBuf,
-    _schema_lease: FileSchemaLease,
+    schema_lease: FileSchemaLease,
 }
 
 impl RuntimeContext {
@@ -51,8 +53,23 @@ impl RuntimeContext {
             clock,
             ids,
             cwd,
-            _schema_lease: schema_lease,
+            schema_lease,
         })
+    }
+
+    pub(super) fn into_terminal(
+        self,
+        session: LeasedSession<crate::adapters::runtime::FileSessionLease>,
+    ) -> TerminalResources {
+        let (state, session_lease) = session.into_parts();
+        TerminalResources {
+            state,
+            store: self.store,
+            clock: self.clock,
+            ids: self.ids,
+            session_lease,
+            schema_lease: self.schema_lease,
+        }
     }
 }
 
