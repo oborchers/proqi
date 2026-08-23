@@ -1,0 +1,1 @@
+//! Optional Herdr integration adapter.
