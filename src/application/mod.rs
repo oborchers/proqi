@@ -3,6 +3,7 @@
 mod model;
 mod mutations;
 mod reducer;
+mod rehydrate;
 
 pub use model::{
     Action, AppState, ApplicationError, ApplicationResult, ClipboardIntent, DurabilityState,

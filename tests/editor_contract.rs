@@ -177,3 +177,16 @@ fn crlf_and_whitespace_are_preserved_exactly() {
         text
     );
 }
+
+#[test]
+fn tabs_and_controls_have_safe_consistent_visual_geometry() {
+    let mut editor = editor("a\tb\rc");
+    editor.set_viewport(TextViewport::new(20, 2));
+    let snapshot = editor.snapshot();
+    assert_eq!(snapshot.content, "a\tb\rc");
+    assert_eq!(snapshot.visual_lines[0].text, "a   b�c");
+    assert_eq!(snapshot.visual_lines[0].cell_width, 7);
+    assert_eq!(editor.position_at_cell(0, 2), TextPosition::new(0, 1));
+    assert_eq!(editor.position_at_cell(0, 4), TextPosition::new(0, 2));
+    assert_eq!(editor.position_at_cell(0, 5), TextPosition::new(0, 3));
+}

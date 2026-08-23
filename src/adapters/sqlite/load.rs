@@ -63,6 +63,17 @@ pub(super) fn load_snapshot(
     })
 }
 
+pub(super) fn load_board(
+    connection: &Connection,
+    session_id: SessionId,
+) -> Result<SessionBoard, StoreError> {
+    SessionBoard::new(
+        load_session_record(connection, session_id)?,
+        load_thoughts(connection, session_id)?,
+    )
+    .map_err(|error| StoreError::Invariant(error.to_string()))
+}
+
 pub(super) fn load_session_record(
     connection: &Connection,
     session_id: SessionId,

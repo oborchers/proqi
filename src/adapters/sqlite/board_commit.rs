@@ -3,7 +3,9 @@
 use rusqlite::{OptionalExtension, Transaction, params};
 
 use crate::{
-    domain::{BoardOperation, OperationSequence, Session, ThoughtRevision, Timestamp},
+    domain::{
+        BoardMutation, BoardOperation, OperationSequence, Session, ThoughtRevision, Timestamp,
+    },
     ports::store::{CommitReceipt, DurableIdentity, OperationBatch, StoreError},
 };
 
@@ -12,7 +14,7 @@ use super::{
         HistoryMove, commit_history_move, existing_receipt, insert_receipt, persist_board,
         require_next_sequence, set_integration_context, update_session_sequence,
     },
-    load::{load_session_record, load_snapshot},
+    load::{load_board, load_session_record},
     search::rebuild_session_search,
     support::{map_sql_error, path_to_bytes, sequence_to_i64, session_id_from_blob, usize_to_i64},
 };
@@ -119,12 +121,18 @@ fn commit_board(
         return Ok(receipt);
     }
     require_next_sequence(transaction, operation.session_id, operation.sequence)?;
-    let snapshot = load_snapshot(transaction, operation.session_id)?;
-    let mut board = snapshot.board;
+    let mut board = load_board(transaction, operation.session_id)?;
     board
         .apply_mutation(&operation.forward, operation.created_at)
         .map_err(|error| StoreError::Invariant(error.to_string()))?;
-    let cursor = snapshot.board_history_cursor;
+    let cursor: i64 = transaction
+        .query_row(
+            "SELECT board_history_cursor FROM sessions WHERE id = ?1",
+            [operation.session_id.database_bytes().as_slice()],
+            |row| row.get(0),
+        )
+        .map_err(map_sql_error)?;
+    let cursor = super::support::i64_to_usize(cursor)?;
     transaction
         .execute(
             "DELETE FROM board_operations WHERE session_id = ?1 AND history_index >= ?2",
@@ -170,13 +178,22 @@ fn commit_board(
             ],
         )
         .map_err(map_sql_error)?;
-    rebuild_session_search(transaction, operation.session_id)?;
+    if mutation_changes_search(&operation.forward) {
+        rebuild_session_search(transaction, operation.session_id)?;
+    }
     Ok(CommitReceipt {
         session_id: operation.session_id,
         sequence: operation.sequence,
         identity: DurableIdentity::Operation(operation.id),
         idempotent_replay: false,
     })
+}
+
+pub(super) const fn mutation_changes_search(mutation: &BoardMutation) -> bool {
+    matches!(
+        mutation,
+        BoardMutation::AddThought { .. } | BoardMutation::SetDeletion { .. }
+    )
 }
 
 fn commit_revision(

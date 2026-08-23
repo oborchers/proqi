@@ -1,6 +1,7 @@
 //! Derived full-text search and session result projection.
 
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
+use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
     domain::SessionId,
@@ -101,21 +102,39 @@ pub(super) fn load_hit(
     session_id: SessionId,
 ) -> Result<SessionHit, StoreError> {
     let session = load_session_record(connection, session_id)?;
-    let (count, excerpt): (i64, Option<String>) = connection
+    let count: i64 = connection
         .query_row(
-            "SELECT count(*), min(CASE WHEN position = 0 THEN content END)
-             FROM thoughts WHERE session_id = ?1 AND deleted_at IS NULL",
+            "SELECT count(*) FROM thoughts WHERE session_id = ?1 AND deleted_at IS NULL",
             [session_id.database_bytes().as_slice()],
-            |row| Ok((row.get(0)?, row.get(1)?)),
+            |row| row.get(0),
         )
         .map_err(map_sql_error)?;
+    let mut statement = connection
+        .prepare(
+            "SELECT content FROM thoughts
+             WHERE session_id = ?1 AND deleted_at IS NULL ORDER BY position",
+        )
+        .map_err(map_sql_error)?;
+    let rows = statement
+        .query_map([session_id.database_bytes().as_slice()], |row| {
+            row.get::<_, String>(0)
+        })
+        .map_err(map_sql_error)?;
+    let mut excerpt = String::new();
+    for row in rows {
+        let content = row.map_err(map_sql_error)?;
+        if !content.trim().is_empty() {
+            excerpt = content.graphemes(true).take(160).collect();
+            break;
+        }
+    }
     Ok(SessionHit {
         id: session.id,
         name: session.name,
         last_opened_cwd: session.last_opened_cwd,
         last_active_at: session.last_active_at,
         thought_count: i64_to_usize(count)?,
-        excerpt: excerpt.unwrap_or_default().chars().take(160).collect(),
+        excerpt,
         trashed: session.deleted_at.is_some(),
     })
 }

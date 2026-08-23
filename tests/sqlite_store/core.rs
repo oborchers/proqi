@@ -138,6 +138,7 @@ fn board_editor_and_persistent_history_survive_reopen() {
             .map(|(_, cursor)| *cursor),
         Some(0)
     );
+    state = AppState::from_snapshot(snapshot).expect("rehydrate application state");
 
     let redo_board = one_effect(
         &mut state,
@@ -226,12 +227,13 @@ fn search_index_is_rebuildable_and_trash_is_recoverable() {
     store
         .commit(&OperationBatch::CreateSession(first.board.session.clone()))
         .expect("first session");
+    create_thought(&mut store, &mut first, &mut ids, "  \n", 2);
     create_thought(
         &mut store,
         &mut first,
         &mut ids,
         "Summarize Cloud and Codex identity changes",
-        2,
+        3,
     );
 
     let mut second = session_state(&mut ids, Path::new("/tmp/other-project"));
@@ -249,7 +251,11 @@ fn search_index_is_rebuildable_and_trash_is_recoverable() {
         .expect("search");
     assert_eq!(hits.len(), 1);
     assert_eq!(hits[0].id, first.board.session.id);
-    assert_eq!(hits[0].thought_count, 1);
+    assert_eq!(hits[0].thought_count, 2);
+    assert_eq!(
+        hits[0].excerpt,
+        "Summarize Cloud and Codex identity changes"
+    );
     let ranked = store
         .search_sessions(&SessionQuery {
             current_directory: Some(PathBuf::from("/tmp/other-project")),

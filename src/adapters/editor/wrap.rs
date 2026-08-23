@@ -40,7 +40,7 @@ pub(super) fn wrap_content(content: &str, width: usize) -> Vec<WrappedLine> {
                     start_grapheme: start_index,
                     end_grapheme: end_index,
                     cell_width: cells,
-                    text: text[start_offset..end_offset].to_owned(),
+                    text: display_text(&graphemes[start_index..end_index]),
                 },
                 start_byte: line.start + start_offset,
                 end_byte: line.start + end_offset,
@@ -55,7 +55,7 @@ fn segment_end(graphemes: &[(usize, &str)], start: usize, width: usize) -> (usiz
     let mut end = start;
     let mut cells = 0;
     while end < graphemes.len() {
-        let grapheme_width = UnicodeWidthStr::width(graphemes[end].1);
+        let grapheme_width = grapheme_width(graphemes[end].1, cells);
         if end > start && cells + grapheme_width > width {
             break;
         }
@@ -68,11 +68,38 @@ fn segment_end(graphemes: &[(usize, &str)], start: usize, width: usize) -> (usiz
     (end, cells)
 }
 
+fn grapheme_width(grapheme: &str, column: usize) -> usize {
+    if grapheme == "\t" {
+        4 - column % 4
+    } else if grapheme.chars().any(char::is_control) {
+        1
+    } else {
+        UnicodeWidthStr::width(grapheme)
+    }
+}
+
+fn display_text(graphemes: &[(usize, &str)]) -> String {
+    let mut display = String::new();
+    let mut cells = 0;
+    for (_, grapheme) in graphemes {
+        let width = grapheme_width(grapheme, cells);
+        if *grapheme == "\t" {
+            display.push_str(&" ".repeat(width));
+        } else if grapheme.chars().any(char::is_control) {
+            display.push('�');
+        } else {
+            display.push_str(grapheme);
+        }
+        cells += width;
+    }
+    display
+}
+
 pub(super) fn byte_at_cell(content: &str, line: &WrappedLine, target_cell: usize) -> usize {
     let text = &content[line.start_byte..line.end_byte];
     let mut cells = 0;
     for (offset, grapheme) in text.grapheme_indices(true) {
-        let width = UnicodeWidthStr::width(grapheme);
+        let width = grapheme_width(grapheme, cells);
         if target_cell < cells + width {
             return line.start_byte + offset;
         }
@@ -83,7 +110,9 @@ pub(super) fn byte_at_cell(content: &str, line: &WrappedLine, target_cell: usize
 
 pub(super) fn cell_column_at_byte(content: &str, line: &WrappedLine, byte: usize) -> usize {
     let end = byte.min(line.end_byte);
-    UnicodeWidthStr::width(&content[line.start_byte..end])
+    content[line.start_byte..end]
+        .graphemes(true)
+        .fold(0, |cells, grapheme| cells + grapheme_width(grapheme, cells))
 }
 
 pub(super) fn wrapped_line_index(lines: &[WrappedLine], byte: usize) -> usize {

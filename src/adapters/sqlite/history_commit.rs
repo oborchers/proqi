@@ -11,7 +11,8 @@ use crate::{
 };
 
 use super::{
-    load::load_snapshot,
+    board_commit::mutation_changes_search,
+    load::load_board,
     search::rebuild_session_search,
     support::{
         map_sql_error, sequence_from_i64, sequence_to_i64, session_id_from_blob, usize_to_i64,
@@ -52,12 +53,13 @@ pub(super) fn commit_history_move(
         return Ok(receipt);
     }
     require_next_sequence(transaction, session_id, sequence)?;
-    match scope {
+    let search_changed = match scope {
         UndoScope::Board => move_board_history(transaction, session_id, undo, at)?,
         UndoScope::Editor { thought_id } => {
             move_editor_history(transaction, session_id, thought_id, undo, at)?;
+            true
         }
-    }
+    };
     insert_receipt(
         transaction,
         session_id,
@@ -68,7 +70,9 @@ pub(super) fn commit_history_move(
         at,
     )?;
     update_session_sequence(transaction, session_id, sequence, at)?;
-    rebuild_session_search(transaction, session_id)?;
+    if search_changed {
+        rebuild_session_search(transaction, session_id)?;
+    }
     Ok(CommitReceipt {
         session_id,
         sequence,
@@ -82,7 +86,7 @@ fn move_board_history(
     session_id: SessionId,
     undo: bool,
     at: Timestamp,
-) -> Result<(), StoreError> {
+) -> Result<bool, StoreError> {
     let cursor: i64 = transaction
         .query_row(
             "SELECT board_history_cursor FROM sessions WHERE id = ?1",
@@ -111,17 +115,14 @@ fn move_board_history(
         &payload.ok_or_else(|| StoreError::Conflict("board redo history is empty".to_owned()))?,
     )
     .map_err(|error| StoreError::Corrupt(error.to_string()))?;
-    let snapshot = load_snapshot(transaction, session_id)?;
-    let mut board = snapshot.board;
+    let mutation = if undo {
+        &operation.inverse
+    } else {
+        &operation.forward
+    };
+    let mut board = load_board(transaction, session_id)?;
     board
-        .apply_mutation(
-            if undo {
-                &operation.inverse
-            } else {
-                &operation.forward
-            },
-            at,
-        )
+        .apply_mutation(mutation, at)
         .map_err(|error| StoreError::Invariant(error.to_string()))?;
     persist_board(transaction, &board)?;
     let new_cursor = if undo {
@@ -137,7 +138,7 @@ fn move_board_history(
             params![session_id.database_bytes().as_slice(), new_cursor],
         )
         .map_err(map_sql_error)?;
-    Ok(())
+    Ok(mutation_changes_search(mutation))
 }
 
 fn move_editor_history(

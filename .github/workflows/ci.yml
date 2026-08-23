@@ -54,6 +54,27 @@ jobs:
           tool: cargo-deny@0.20.2,cargo-audit@0.22.2
       - run: cargo xtask audit
 
+  pty:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, ubuntu-24.04, windows-2025]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: Swatinem/rust-cache@63fed3e2fecf6f7b51dc6f043341b79ef82a9ae7 # v2.9.2
+      - run: cargo xtask test-pty
+
+  coverage:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: Swatinem/rust-cache@63fed3e2fecf6f7b51dc6f043341b79ef82a9ae7 # v2.9.2
+      - uses: taiki-e/install-action@6cd13508893c0e7eab5f273c2575d3859bd7229a # v2.86.6
+        with:
+          tool: cargo-nextest@0.9.143,cargo-llvm-cov@0.8.4
+      - run: cargo xtask coverage
+
   package:
     strategy:
       fail-fast: false
@@ -67,7 +88,7 @@ jobs:
 
   check:
     if: always()
-    needs: [quality, test, msrv, security, package]
+    needs: [quality, test, msrv, security, pty, coverage, package]
     runs-on: ubuntu-24.04
     steps:
       - name: Require every quality job

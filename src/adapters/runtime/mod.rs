@@ -217,7 +217,7 @@ impl RuntimeCoordinator for FileRuntimeCoordinator {
     fn acquire_session(&self, session_id: SessionId) -> Result<Self::SessionLease, RuntimeError> {
         let lock_path = self.session_lock_path(session_id);
         let file = open_private_file(&lock_path)?;
-        match FileExt::try_lock(&file) {
+        match try_session_lock(&file) {
             Ok(()) => {}
             Err(TryLockError::WouldBlock) => {
                 return Err(RuntimeError::SessionBusy {
@@ -257,7 +257,7 @@ impl RuntimeCoordinator for FileRuntimeCoordinator {
         let mut active = BTreeMap::new();
         for (path, info) in entries {
             let file = open_private_file(&self.session_lock_path(info.session_id))?;
-            match FileExt::try_lock(&file) {
+            match FileExt::try_lock_shared(&file) {
                 Ok(()) => {
                     FileExt::unlock(&file).map_err(io_error)?;
                     remove_if_exists(&path)?;
@@ -271,6 +271,16 @@ impl RuntimeCoordinator for FileRuntimeCoordinator {
         let mut active: Vec<_> = active.into_values().collect();
         active.sort_by_key(|info| (info.started_at, info.instance_id));
         Ok(active)
+    }
+}
+
+fn try_session_lock(file: &File) -> Result<(), TryLockError> {
+    match FileExt::try_lock(file) {
+        Err(TryLockError::WouldBlock) => {
+            std::thread::sleep(std::time::Duration::from_millis(2));
+            FileExt::try_lock(file)
+        }
+        result => result,
     }
 }
 

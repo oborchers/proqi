@@ -142,9 +142,7 @@ impl Session {
     ///
     /// Returns [`DomainError::BlankSessionName`] for whitespace-only names.
     pub fn rename(&mut self, name: Option<String>) -> Result<(), DomainError> {
-        if let Some(value) = &name
-            && value.trim().is_empty()
-        {
+        if name.as_deref().is_some_and(|value| value.trim().is_empty()) {
             return Err(DomainError::BlankSessionName);
         }
         self.name = name;

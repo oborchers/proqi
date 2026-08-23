@@ -131,7 +131,7 @@ pub(super) fn path_to_bytes(path: &Path) -> Vec<u8> {
 #[cfg(windows)]
 pub(super) fn path_from_bytes(bytes: Vec<u8>) -> Result<PathBuf, StoreError> {
     use std::{ffi::OsString, os::windows::ffi::OsStringExt};
-    if !bytes.len().is_multiple_of(2) {
+    if bytes.len() % 2 != 0 {
         return Err(StoreError::Corrupt(
             "Windows path BLOB has odd length".to_owned(),
         ));
@@ -164,10 +164,11 @@ pub(super) fn create_private_file(path: &Path) -> Result<(), StoreError> {
     let mut options = OpenOptions::new();
     options.read(true).write(true).create_new(true);
     set_private_open_mode(&mut options);
-    options
-        .open(path)
-        .map(|_| ())
-        .map_err(|error| StoreError::Io(error.to_string()))
+    match options.open(path) {
+        Ok(_) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => Ok(()),
+        Err(error) => Err(StoreError::Io(error.to_string())),
+    }
 }
 
 pub(super) fn set_sqlite_permissions(database_path: &Path) -> Result<(), StoreError> {
@@ -218,4 +219,32 @@ fn set_private_dir_permissions(path: &Path) -> Result<(), StoreError> {
 #[cfg(not(unix))]
 fn set_private_dir_permissions(_path: &Path) -> Result<(), StoreError> {
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, Barrier};
+
+    use super::*;
+
+    #[test]
+    fn racing_creators_accept_the_same_database_file() {
+        let temporary = tempfile::tempdir().expect("temporary directory");
+        let path = temporary.path().join("proqi.sqlite3");
+        let barrier = Arc::new(Barrier::new(3));
+        let mut workers = Vec::new();
+        for _ in 0..2 {
+            let path = path.clone();
+            let barrier = Arc::clone(&barrier);
+            workers.push(std::thread::spawn(move || {
+                barrier.wait();
+                create_private_file(&path)
+            }));
+        }
+        barrier.wait();
+        for worker in workers {
+            worker.join().expect("creator thread").expect("create file");
+        }
+        assert!(path.is_file());
+    }
 }

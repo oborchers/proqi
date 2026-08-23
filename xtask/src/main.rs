@@ -41,17 +41,7 @@ fn execute() -> Result<(), String> {
         "coverage" => coverage(&root),
         "audit" => audit(&root),
         "package" => package(&root),
-        "msrv" => run(
-            &root,
-            "cargo",
-            [
-                "check",
-                "--locked",
-                "--workspace",
-                "--all-targets",
-                "--all-features",
-            ],
-        ),
+        "msrv" => msrv(&root),
         "help" | "--help" | "-h" => {
             print_help();
             Ok(())
@@ -113,7 +103,48 @@ fn check(root: &Path) -> Result<(), String> {
             "warnings",
         ],
     )?;
+    check_docs(root)?;
     test(root)
+}
+
+fn check_docs(root: &Path) -> Result<(), String> {
+    let arguments = [
+        "doc",
+        "--locked",
+        "--workspace",
+        "--all-features",
+        "--no-deps",
+    ];
+    println!("+ RUSTDOCFLAGS=-D warnings cargo {}", arguments.join(" "));
+    let status = Command::new("cargo")
+        .args(arguments)
+        .env("RUSTDOCFLAGS", "-D warnings")
+        .current_dir(root)
+        .status()
+        .map_err(|error| format!("start cargo doc: {error}"))?;
+    status
+        .success()
+        .then_some(())
+        .ok_or_else(|| format!("cargo doc exited with {status}"))
+}
+
+fn msrv(root: &Path) -> Result<(), String> {
+    run(
+        root,
+        "cargo",
+        [
+            "check",
+            "--locked",
+            "--workspace",
+            "--all-targets",
+            "--all-features",
+        ],
+    )?;
+    run(
+        root,
+        "cargo",
+        ["test", "--locked", "--workspace", "--all-features"],
+    )
 }
 
 fn check_source_limits(root: &Path) -> Result<(), String> {
@@ -210,6 +241,8 @@ fn coverage(root: &Path) -> Result<(), String> {
             "--lcov",
             "--output-path",
             "target/coverage/lcov.info",
+            "--fail-under-lines",
+            "70",
         ],
     )
 }

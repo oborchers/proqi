@@ -658,10 +658,9 @@ Pull requests and pushes to the protected default branch run these jobs:
   does not use fail-fast because all platform results are diagnostically useful.
 - `msrv` compiles and tests with the declared minimum supported Rust version.
 - `pty` runs terminal scenarios on each platform where the harness is supported.
-- `coverage` publishes a report from Linux and enforces an explicitly documented
+- `coverage` publishes a report from Linux and enforces a 70 percent line
   threshold. Exclusions must be narrow and justified in configuration.
 - `security` runs dependency advisory, license, source, and policy checks.
-- `docs` validates Markdown, links, and generated command documentation.
 - `check` is an aggregate job that succeeds only when every required job has
   succeeded or has been explicitly marked inapplicable.
 

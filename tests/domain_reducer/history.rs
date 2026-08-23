@@ -55,6 +55,60 @@ fn editor_history_is_separate_from_board_history() {
             .is_live()
     );
     assert_eq!(fixture.state.editor_history_cursor(thought_id), 0);
+
+    let before = fixture.state.clone();
+    let operation_id = fixture.operation_id();
+    let at = fixture.time();
+    assert!(
+        reduce(
+            &mut fixture.state,
+            Action::Redo {
+                operation_id,
+                scope: UndoScope::Editor { thought_id },
+                at,
+            },
+        )
+        .is_err()
+    );
+    assert_eq!(fixture.state, before);
+}
+
+#[test]
+fn storage_failure_remains_visible_until_retry() {
+    let mut fixture = Fixture::new();
+    fixture.create("first");
+    reduce(
+        &mut fixture.state,
+        Action::PersistenceFailed {
+            sequence: OperationSequence::new(1),
+            code: FailureCode::StorageFailed,
+        },
+    )
+    .expect("record failure");
+    fixture.create("second");
+    assert_eq!(
+        fixture.state.durability,
+        DurabilityState::Failed {
+            durable: OperationSequence::ZERO,
+            failed: OperationSequence::new(1),
+            code: FailureCode::StorageFailed,
+        }
+    );
+    let retry = reduce(
+        &mut fixture.state,
+        Action::RetryPersistence(OperationSequence::new(1)),
+    )
+    .expect("retry");
+    assert_eq!(
+        retry,
+        vec![Effect::RetryPersistence {
+            sequence: OperationSequence::new(1)
+        }]
+    );
+    assert!(matches!(
+        fixture.state.durability,
+        DurabilityState::Pending { .. }
+    ));
 }
 
 #[test]

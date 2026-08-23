@@ -220,6 +220,12 @@ impl AppState {
 
     pub(super) fn refresh_durability(&mut self) {
         let durable = self.board.session.last_durable_sequence;
+        if matches!(
+            self.durability,
+            DurabilityState::Failed { failed, .. } if self.pending_sequences.contains(&failed)
+        ) {
+            return;
+        }
         self.durability = self.pending_sequences.last().map_or(
             DurabilityState::Durable { sequence: durable },
             |latest| DurabilityState::Pending {
@@ -401,6 +407,8 @@ pub enum Action {
         /// Stable failure class.
         code: FailureCode,
     },
+    /// Ask the storage lane to retry one retained failed operation.
+    RetryPersistence(OperationSequence),
 }
 
 /// Blocking work requested by the pure reducer.
@@ -440,5 +448,10 @@ pub enum Effect {
     Notify {
         /// Stable classification.
         code: FailureCode,
+    },
+    /// Retry the retained durable batch for one sequence.
+    RetryPersistence {
+        /// Failed sequence to retry.
+        sequence: OperationSequence,
     },
 }

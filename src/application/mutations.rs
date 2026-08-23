@@ -284,7 +284,7 @@ pub(super) fn history_move(
         UndoScope::Editor { thought_id } => {
             let history = state
                 .editor_histories
-                .get_mut(&thought_id)
+                .get(&thought_id)
                 .ok_or(ApplicationError::InvalidState)?;
             let revision = if undo {
                 history
@@ -296,17 +296,24 @@ pub(super) fn history_move(
             }
             .cloned()
             .ok_or(ApplicationError::InvalidState)?;
-            let content = if undo {
-                revision.before_content
+            let (expected, content) = if undo {
+                (&revision.after_content, revision.before_content)
             } else {
-                revision.after_content
+                (&revision.before_content, revision.after_content)
             };
+            if &state.live_thought(thought_id)?.content != expected {
+                return Err(ApplicationError::RevisionConflict(thought_id));
+            }
             let thought = state
                 .board
                 .thought_mut(thought_id)
                 .ok_or(ApplicationError::ThoughtNotFound(thought_id))?;
             thought.content = content;
             thought.updated_at = at;
+            let history = state
+                .editor_histories
+                .get_mut(&thought_id)
+                .ok_or(ApplicationError::InvalidState)?;
             if undo {
                 history.cursor -= 1;
             } else {

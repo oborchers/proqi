@@ -30,9 +30,9 @@ pub fn reduce(state: &mut AppState, action: Action) -> ApplicationResult<Vec<Eff
             reduce_board(state, &action)
         }
         Action::Undo { .. } | Action::Redo { .. } => reduce_history(state, &action),
-        Action::PersistenceCommitted(_) | Action::PersistenceFailed { .. } => {
-            reduce_persistence(state, &action)
-        }
+        Action::PersistenceCommitted(_)
+        | Action::PersistenceFailed { .. }
+        | Action::RetryPersistence(_) => reduce_persistence(state, &action),
     }
 }
 
@@ -203,6 +203,25 @@ fn reduce_persistence(state: &mut AppState, action: &Action) -> ApplicationResul
                 code: *code,
             };
             Ok(vec![Effect::Notify { code: *code }])
+        }
+        Action::RetryPersistence(sequence) => {
+            if !matches!(
+                state.durability,
+                DurabilityState::Failed { failed, .. } if failed == *sequence
+            ) || !state.pending_sequences.contains(sequence)
+            {
+                return Err(ApplicationError::InvalidState);
+            }
+            state.durability = DurabilityState::Pending {
+                durable: state.board.session.last_durable_sequence,
+                latest: *state
+                    .pending_sequences
+                    .last()
+                    .ok_or(ApplicationError::InvalidState)?,
+            };
+            Ok(vec![Effect::RetryPersistence {
+                sequence: *sequence,
+            }])
         }
         _ => unreachable!("persistence reducer received another action"),
     }
