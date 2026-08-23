@@ -1,7 +1,7 @@
 //! Editor contract expressed without terminal-library input types.
 
 /// A logical position measured in Unicode grapheme clusters.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct TextPosition {
     /// Zero-based logical line.
     pub line: usize,
@@ -18,7 +18,7 @@ impl TextPosition {
 }
 
 /// A normalized text selection.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct TextSelection {
     /// Earlier end of the selection.
     pub start: TextPosition,

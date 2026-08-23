@@ -116,7 +116,13 @@ without adding product value.
 - `serde` with TOML for configuration and JSON for stable machine output.
 - `arboard` for the native clipboard, with OSC 52 behind the same facade.
 - `tracing` for diagnostics with content redaction by default.
-- UUID version 7 identifiers for opaque, sortable entity IDs.
+- UUID version 7 identifiers for opaque, sortable entity IDs. Public IDs use a
+  typed resource prefix plus 26 characters of canonical lowercase, unpadded
+  base32hex. The encoding preserves all 128 UUID bits, is URL safe, and retains
+  byte ordering in lexical form. SQLite stores the same UUID as a 16-byte BLOB.
+  Prefixes are `ses` for sessions, `tht` for thoughts, `rev` for revisions,
+  `op` for durable operations, `ins` for running instances, `req` for
+  idempotent control requests, and `sub` for Proqi submission receipts.
 - A cross-platform advisory file-lock library for session and schema locks.
 - Bounded channels for event and effect communication. An async runtime is not
   introduced until a real concurrent I/O requirement justifies it.
