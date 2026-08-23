@@ -1,6 +1,6 @@
 //! Deterministic in-memory adapters used by fast contract tests.
 
-use std::collections::VecDeque;
+use std::{collections::VecDeque, path::PathBuf};
 
 use uuid::Uuid;
 
@@ -10,7 +10,7 @@ use crate::{
         Timestamp,
     },
     ports::environment::{
-        AppPaths, Clock, IdGenerator, PathError, Paths, ProcessError, ProcessOutput,
+        AppPaths, Clock, Environment, IdGenerator, PathError, Paths, ProcessError, ProcessOutput,
         ProcessRequest, ProcessRunner,
     },
 };
@@ -124,6 +124,19 @@ pub struct FakePaths {
 impl Paths for FakePaths {
     fn resolve(&self) -> Result<AppPaths, PathError> {
         self.result.clone()
+    }
+}
+
+/// Fixed process environment.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FakeEnvironment {
+    /// Current-directory result returned by every call.
+    pub current_directory: Result<PathBuf, PathError>,
+}
+
+impl Environment for FakeEnvironment {
+    fn current_directory(&self) -> Result<PathBuf, PathError> {
+        self.current_directory.clone()
     }
 }
 

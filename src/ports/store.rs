@@ -44,6 +44,29 @@ pub enum DurableIdentity {
     Revision(RevisionId),
 }
 
+/// Previously committed request associated with a durable operation identity.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum StoredOperationRequest {
+    /// Reversible board mutation.
+    Board {
+        /// Original operation payload.
+        operation: Box<BoardOperation>,
+        /// Original durable receipt.
+        receipt: CommitReceipt,
+    },
+    /// Persistent undo or redo request.
+    HistoryMove {
+        /// Owning session.
+        session_id: SessionId,
+        /// Addressed history scope.
+        scope: UndoScope,
+        /// Undo when true, redo when false.
+        undo: bool,
+        /// Original durable receipt.
+        receipt: CommitReceipt,
+    },
+}
+
 /// One atomic persistence request.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum OperationBatch {
@@ -198,6 +221,35 @@ pub trait Store {
     ///
     /// Returns a typed storage failure.
     fn search_sessions(&mut self, query: &SessionQuery) -> Result<Vec<SessionHit>, StoreError>;
+
+    /// Record opening metadata after the caller acquired the session lease.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed absence, validation, or persistence failure.
+    fn record_session_open(
+        &mut self,
+        id: SessionId,
+        cwd: &std::path::Path,
+        at: Timestamp,
+    ) -> Result<(), StoreError>;
+
+    /// Replace or clear an optional session name.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed absence, validation, or persistence failure.
+    fn rename_session(&mut self, id: SessionId, name: Option<&str>) -> Result<(), StoreError>;
+
+    /// Look up a prior operation request for cross-process idempotency.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed corruption or persistence failure.
+    fn operation_request(
+        &mut self,
+        id: OperationId,
+    ) -> Result<Option<StoredOperationRequest>, StoreError>;
 
     /// Atomically apply one operation batch.
     ///

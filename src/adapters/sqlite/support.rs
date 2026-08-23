@@ -113,7 +113,10 @@ pub(super) fn path_to_bytes(path: &Path) -> Vec<u8> {
 }
 
 #[cfg(unix)]
-#[allow(clippy::unnecessary_wraps)]
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "the cross-platform decoder has one fallible port signature"
+)]
 pub(super) fn path_from_bytes(bytes: Vec<u8>) -> Result<PathBuf, StoreError> {
     use std::{ffi::OsString, os::unix::ffi::OsStringExt};
     Ok(PathBuf::from(OsString::from_vec(bytes)))

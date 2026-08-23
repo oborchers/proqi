@@ -50,7 +50,10 @@ pub(super) fn create_thought(
     Ok(vec![Effect::CommitBoardOperation(operation)])
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "an exact revision keeps before and after content and cursor state together"
+)]
 pub(super) fn edit_thought(
     state: &mut AppState,
     thought_id: ThoughtId,

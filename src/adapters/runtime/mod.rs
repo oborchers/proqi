@@ -18,7 +18,7 @@ use crate::{
         Timestamp,
     },
     ports::{
-        environment::{AppPaths, Clock, IdGenerator, PathError, Paths},
+        environment::{AppPaths, Clock, Environment, IdGenerator, PathError, Paths},
         runtime::{InstanceInfo, Lease, RuntimeCoordinator, RuntimeError},
         store::STORAGE_PROTOCOL_VERSION,
     },
@@ -105,6 +105,16 @@ impl Paths for NativePaths {
             }
         }
         Ok(paths)
+    }
+}
+
+/// Operating-system process environment adapter.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SystemEnvironment;
+
+impl Environment for SystemEnvironment {
+    fn current_directory(&self) -> Result<PathBuf, PathError> {
+        std::env::current_dir().map_err(|_| PathError::Unavailable("current working directory"))
     }
 }
 
@@ -387,7 +397,10 @@ fn remove_if_exists(path: &Path) -> Result<(), RuntimeError> {
     }
 }
 
-#[allow(clippy::needless_pass_by_value)]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "I/O errors are consumed and converted at adapter boundaries"
+)]
 fn io_error(error: std::io::Error) -> RuntimeError {
     RuntimeError::Io(error.to_string())
 }

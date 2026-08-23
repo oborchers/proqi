@@ -513,6 +513,13 @@ Agent-friendly commands follow these rules:
 - Return nonzero on busy, ambiguous, unsupported, or failed operations.
 - Never require parsing the TUI or terminal escape sequences.
 
+The version 1 machine envelope is `{ schema_version, ok, data }` on success and
+`{ schema_version, ok, error: { code, message, details } }` on failure. JSON is
+written to standard output for both outcomes, while human diagnostics use
+standard error. Thought bodies enter through standard input. A caller-supplied
+`op_` identity is resolved against its typed durable request before mutation,
+so matching retries return the original receipt and mismatched reuse fails.
+
 Read-only commands may inspect the shared database through the storage facade.
 A mutating CLI command first resolves the session owner. For an inactive
 session it acquires the ordinary session lease. For an active session it sends

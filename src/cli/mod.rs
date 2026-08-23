@@ -1,38 +1,54 @@
 //! Human and machine-readable command-line interface.
 
-use std::process::ExitCode;
+mod args;
+mod execute;
+mod output;
+mod runtime;
 
-use clap::{CommandFactory, Parser};
+use std::{ffi::OsString, process::ExitCode};
 
-/// Proqi command-line arguments.
-#[derive(Debug, Parser)]
-#[command(
-    name = "proqi",
-    version,
-    about = "A terminal-native scratchpad for agent work",
-    long_about = None
-)]
-struct Cli {}
+use clap::Parser;
 
-/// Parse arguments and execute the selected command.
+use args::Cli;
+use output::{CliError, render_error};
+
+/// Parse supplied process arguments and execute the selected command.
+///
+/// The thin binary supplies operating-system arguments so environment access
+/// remains in the composition layer.
 #[must_use]
-pub fn run() -> ExitCode {
-    let _arguments = Cli::parse();
-    let mut command = Cli::command();
-    if command.print_help().is_err() {
-        return ExitCode::FAILURE;
-    }
-    println!();
-    ExitCode::SUCCESS
+pub fn run(arguments: impl IntoIterator<Item = OsString>) -> ExitCode {
+    let arguments: Vec<_> = arguments.into_iter().collect();
+    let wants_json = arguments.iter().any(|value| value == "--json");
+    let cli = match Cli::try_parse_from(arguments) {
+        Ok(cli) => cli,
+        Err(error) => {
+            if wants_json {
+                return render_error(&CliError::arguments(error.to_string()), true);
+            }
+            let code = error.exit_code();
+            let _printed = error.print();
+            return ExitCode::from(u8::try_from(code).unwrap_or(2));
+        }
+    };
+    execute::execute(cli)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::Cli;
-    use clap::CommandFactory;
+    use super::args::Cli;
+    use clap::{CommandFactory, Parser};
 
     #[test]
     fn command_definition_is_valid() {
         Cli::command().debug_assert();
+    }
+
+    #[test]
+    fn resume_accepts_an_optional_reference() {
+        let picker = Cli::try_parse_from(["proqi", "-r"]).expect("picker arguments");
+        assert_eq!(picker.resume, Some(None));
+        let target = Cli::try_parse_from(["proqi", "-r", "work"]).expect("resume arguments");
+        assert_eq!(target.resume, Some(Some("work".to_owned())));
     }
 }

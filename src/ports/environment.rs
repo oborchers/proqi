@@ -53,6 +53,16 @@ pub trait Paths {
     fn resolve(&self) -> Result<AppPaths, PathError>;
 }
 
+/// Process environment values required by application composition.
+pub trait Environment {
+    /// Resolve the absolute current working directory.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed error when the directory cannot be resolved.
+    fn current_directory(&self) -> Result<PathBuf, PathError>;
+}
+
 /// Path resolution failure.
 #[derive(Clone, Debug, Eq, Error, PartialEq)]
 pub enum PathError {

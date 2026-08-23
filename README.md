@@ -23,8 +23,30 @@ cargo build --locked
 cargo run --bin proqi
 ```
 
-The current scaffold exposes help and version information. The interactive
+The session and scriptable thought workflow is available now. The interactive
 board is implemented incrementally against `PRODUCT.md` and `ARCHITECTURE.md`.
+
+## CLI workflow
+
+```shell
+proqi                         # start a fresh resumable session
+proqi -c                      # continue the latest inactive session here
+proqi -r <id-or-name>         # resume a specific session
+proqi sessions                # list sessions
+proqi sessions rename <id> "name"
+proqi sessions trash <id>
+proqi sessions restore <id>
+printf '%s' 'prompt text' | proqi thoughts add <session-id>
+proqi thoughts list <session-id>
+proqi thoughts inspect <session-id> <thought-id>
+proqi thoughts delete <session-id> <thought-id>
+proqi thoughts undo <session-id>
+```
+
+Add `--json` for the versioned machine contract. Mutations accept an optional
+typed `--operation-id` and return the original durable receipt on a matching
+retry, including after another process has restarted. Permanent session pruning
+is separate from recoverable trash and requires `--yes`.
 
 ## Development
 

@@ -14,5 +14,5 @@
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
-    proqi::cli::run()
+    proqi::cli::run(std::env::args_os())
 }

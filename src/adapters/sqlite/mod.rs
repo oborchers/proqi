@@ -4,8 +4,10 @@ mod board_commit;
 mod history_commit;
 mod load;
 mod migration;
+mod operation_lookup;
 mod schema;
 mod search;
+mod session_admin;
 mod support;
 
 use std::{path::PathBuf, thread, time::Duration};
@@ -19,6 +21,7 @@ use crate::{
     ports::store::{
         CommitReceipt, MigrationMode, OperationBatch, STORAGE_PROTOCOL_VERSION,
         SUPPORTED_SCHEMA_VERSION, SessionHit, SessionQuery, SessionSnapshot, Store, StoreError,
+        StoredOperationRequest,
     },
 };
 
@@ -301,9 +304,29 @@ impl Store for SqliteStore {
             right_current
                 .cmp(&left_current)
                 .then_with(|| right.last_active_at.cmp(&left.last_active_at))
-                .then_with(|| left.id.cmp(&right.id))
+                .then_with(|| right.id.cmp(&left.id))
         });
         Ok(hits)
+    }
+
+    fn record_session_open(
+        &mut self,
+        id: SessionId,
+        cwd: &std::path::Path,
+        at: Timestamp,
+    ) -> Result<(), StoreError> {
+        self.with_write_retry(|transaction| session_admin::record_open(transaction, id, cwd, at))
+    }
+
+    fn rename_session(&mut self, id: SessionId, name: Option<&str>) -> Result<(), StoreError> {
+        self.with_write_retry(|transaction| session_admin::rename(transaction, id, name))
+    }
+
+    fn operation_request(
+        &mut self,
+        id: crate::domain::OperationId,
+    ) -> Result<Option<StoredOperationRequest>, StoreError> {
+        operation_lookup::operation_request(&self.connection, id)
     }
 
     fn commit(&mut self, batch: &OperationBatch) -> Result<Option<CommitReceipt>, StoreError> {
