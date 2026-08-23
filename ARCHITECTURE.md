@@ -581,6 +581,126 @@ package installation, launch, session resumption, and uninstall boundaries.
 Manual release checks cover real terminal emulators and multiplexers where
 automation cannot faithfully reproduce host behavior.
 
+## Engineering operations
+
+Proqi adopts one operational contract for contributors, coding agents, CI, and
+release automation. A check that matters must be executable locally through the
+same command that CI runs. Workflow YAML does not become a second source of
+truth for build or test behavior.
+
+### Canonical command surface
+
+The workspace contains a small Rust `xtask` crate. It is the cross-platform
+equivalent of a project Makefile and exposes these stable entry points:
+
+```text
+cargo xtask setup
+cargo xtask format
+cargo xtask check
+cargo xtask test
+cargo xtask test-pty
+cargo xtask coverage
+cargo xtask audit
+cargo xtask package
+```
+
+- `setup` verifies the pinned toolchain, Rust components, and developer tools.
+  It reports missing prerequisites and does not silently modify global state.
+- `format` applies `rustfmt` and any repository-owned text formatting.
+- `check` runs the normal pre-push gate: formatting in check mode, Clippy for
+  all targets and features, documentation warnings, and the deterministic test
+  suite through `cargo-nextest`.
+- `test` runs the deterministic unit, contract, and integration suites.
+- `test-pty` builds the real binary and runs pseudo-terminal scenarios.
+- `coverage` uses `cargo-llvm-cov` and produces machine-readable and human
+  reports from the same tests used in CI.
+- `audit` runs dependency advisory, license, source, and duplicate-dependency
+  policy through `cargo-audit` and `cargo-deny`.
+- `package` builds release-mode artifacts and performs installation smoke tests
+  without publishing them.
+
+The commands remain thin orchestrators around standard Cargo tools. They print
+the commands they run, propagate exit codes, avoid network access unless the
+operation inherently requires it, and work on macOS, Linux, and Windows. A
+failing subcommand fails the overall command immediately.
+
+Local commit hooks may run formatting and file-hygiene checks, but they are a
+convenience rather than an enforcement boundary. The complete gate remains
+`cargo xtask check`, with CI as the authority.
+
+### Continuous integration
+
+Pull requests and pushes to the protected default branch run these jobs:
+
+- `quality` runs formatting, Clippy with warnings denied, and documentation
+  checks on the pinned stable toolchain.
+- `test` runs the deterministic suite on macOS, Linux, and Windows. The matrix
+  does not use fail-fast because all platform results are diagnostically useful.
+- `msrv` compiles and tests with the declared minimum supported Rust version.
+- `pty` runs terminal scenarios on each platform where the harness is supported.
+- `coverage` publishes a report from Linux and enforces an explicitly documented
+  threshold. Exclusions must be narrow and justified in configuration.
+- `security` runs dependency advisory, license, source, and policy checks.
+- `docs` validates Markdown, links, and generated command documentation.
+- `check` is an aggregate job that succeeds only when every required job has
+  succeeded or has been explicitly marked inapplicable.
+
+The aggregate `check` job is the stable branch-protection contract. Individual
+jobs may evolve without repeatedly changing repository settings. Superseded
+pull-request runs are cancelled, release runs are never cancelled, workflow
+permissions use least privilege, and every third-party GitHub Action is pinned
+to a full commit SHA with its human-readable version recorded in a comment.
+
+Tests that require a real desktop clipboard, a specific terminal emulator, or a
+live Herdr session are gated smoke tests. Their deterministic equivalents remain
+required on every pull request. Live smoke tests run before releases and may also
+run on a schedule without weakening the required gate.
+
+### Dependencies and repository policy
+
+Cargo.lock is committed because Proqi ships an application. Dependabot checks
+Cargo dependencies and GitHub Actions weekly. Dependency pull requests pass the
+same required gate as contributor pull requests. Automatic merging is limited
+to explicitly allowed low-risk patch updates after all required checks pass.
+Minor updates, all pre-1.0 compatibility changes, and security-sensitive crates
+receive human review.
+
+The default branch requires the aggregate `check` status and rejects force
+pushes. Releases use a protected GitHub environment with narrowly scoped
+credentials. CODEOWNERS, structured issue forms, a pull-request template,
+`CONTRIBUTING.md`, `SECURITY.md`, and the chosen license are present before the
+repository becomes public.
+
+Repository instructions contain durable Proqi-specific rules and commands.
+External agent skills may supplement those instructions but never replace them.
+A third-party skill is treated as executable supply-chain input: its complete
+instructions and scripts require review, its license must be clear, and any
+vendored copy is pinned to a reviewed revision. Broad global Rust skill packs
+are not a project prerequisite.
+
+A project-local maintainer skill is introduced only after a working workflow
+demonstrates repeated value, such as running PTY fixtures or performing a
+release rehearsal. It remains separate from the public `proqi` skill that
+teaches coding agents to use the installed application.
+
+### Release pipeline
+
+Every release starts from an immutable semantic-version tag after the aggregate
+gate has passed. Release automation then:
+
+- Rebuilds and tests the tagged source on every supported target.
+- Uses `cargo-dist` or an equivalent reviewed tool to create native archives.
+- Publishes the executable, shell completions, license and notices, checksums,
+  an SBOM, and build-provenance attestations in one GitHub Release.
+- Runs archive installation, launch, session-resume, and terminal-restoration
+  smoke tests before marking the release complete.
+- Updates the personal Homebrew tap from the published immutable artifacts.
+- Refuses artifact replacement for an existing version.
+
+Package publication has no hidden local step. A release rehearsal exercises the
+complete workflow without publishing, and the release checklist records any
+manual terminal-emulator or notarization verification that cannot be automated.
+
 ## Source organization
 
 Start with one library crate plus thin binaries:
@@ -607,7 +727,7 @@ tests/
   pty/
 skills/
   proqi/SKILL.md
-xtask/
+xtask/             canonical development, CI, and packaging commands
 ```
 
 Split a module into another crate only when compilation boundaries, public API,

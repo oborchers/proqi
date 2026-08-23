@@ -680,8 +680,19 @@ Before the first public release it requires:
   Apache-2.0, subject to an explicit project decision.
 - Public architecture and contribution documentation.
 - A code of conduct and security reporting policy.
-- Reproducible release automation and checksums.
+- One cross-platform development command surface shared by contributors,
+  coding agents, and CI.
+- Required pull-request checks for formatting, linting, documentation, tests,
+  supported platforms, the minimum Rust version, and dependency policy.
+- A protected default branch whose stable aggregate check must pass before
+  merge.
+- Reproducible release automation, checksums, an SBOM, and build-provenance
+  attestations.
 - Dependency license review and generated notices where required.
+- Weekly Cargo and GitHub Actions updates. Automatic merging is limited to
+  reviewed low-risk patch policy after all required checks pass.
+- Third-party workflow actions pinned to immutable revisions with least-privilege
+  permissions.
 - A public roadmap that distinguishes product commitments from ideas.
 - Tests on macOS, Linux, and Windows.
 - No embedded personal paths, private data, or assumptions about one agent
@@ -702,6 +713,11 @@ and optional `cargo install` distribution, complement Homebrew.
 
 Package managers own updates in the first public version. The application does
 not silently replace its own executable.
+
+Release archives are tested as installed products rather than only as compiled
+binaries. The release gate covers installation, launch, terminal restoration,
+session resumption, and compatibility with an existing database. Published
+artifacts are immutable and the Homebrew package refers to their checksums.
 
 ## Research and clean-room boundary
 
