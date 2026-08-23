@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use proqi::{
     adapters::memory::{FakeClock, FakeIdGenerator},
-    application::AppState,
+    application::{AppState, ClipboardIntent, Effect, FailureCode},
     domain::{OperationSequence, Session, SessionBoard, Timestamp},
     ports::environment::IdGenerator,
     ui::{
@@ -48,6 +48,10 @@ impl Fixture {
 
     fn input(&mut self, input: UiInput) {
         let _effects = self.app.handle(input, &mut self.ids, &self.clock);
+    }
+
+    fn effects(&mut self, input: UiInput) -> Vec<Effect> {
+        self.app.handle(input, &mut self.ids, &self.clock)
     }
 
     fn pointer(&mut self, column: u16, row: u16, kind: PointerKind) {
@@ -330,6 +334,156 @@ fn narrow_empty_board_has_a_complete_explicit_buffer_snapshot() {
     let terminal = draw(&mut fixture, 12, 3);
     assert_eq!(
         text(terminal.backend().buffer()),
-        "  +  create \n            \n[/][u][?][q]"
+        "  +  create \n            \n[u][/][?][q]"
+    );
+}
+
+#[test]
+fn board_cut_waits_for_clipboard_success_and_copy_preserves_exact_content() {
+    let mut fixture = Fixture::new();
+    let sequence = fixture.paste(" exact\r\n界 ");
+    fixture.app.acknowledge_persistence(sequence, true);
+    fixture.input(UiInput::Key(UiKey::Escape));
+
+    let copy = fixture.effects(UiInput::Key(UiKey::Copy));
+    let [
+        Effect::WriteClipboard {
+            request_id,
+            intent: ClipboardIntent::Copy,
+            content,
+            ..
+        },
+    ] = copy.as_slice()
+    else {
+        panic!("expected copy effect");
+    };
+    assert_eq!(content, " exact\r\n界 ");
+    assert!(
+        fixture
+            .app
+            .complete_clipboard_write(*request_id, Ok(()), &mut fixture.ids, &fixture.clock)
+            .is_empty()
+    );
+    assert_eq!(fixture.app.state.board.live_thoughts().len(), 1);
+
+    let failed_cut = fixture.effects(UiInput::Key(UiKey::Cut));
+    let [Effect::WriteClipboard { request_id, .. }] = failed_cut.as_slice() else {
+        panic!("expected cut effect");
+    };
+    let failure = fixture.app.complete_clipboard_write(
+        *request_id,
+        Err(FailureCode::ClipboardFailed),
+        &mut fixture.ids,
+        &fixture.clock,
+    );
+    assert!(matches!(failure.as_slice(), [Effect::Notify { .. }]));
+    assert_eq!(fixture.app.state.board.live_thoughts().len(), 1);
+
+    let cut = fixture.effects(UiInput::Key(UiKey::Cut));
+    let [
+        Effect::WriteClipboard {
+            request_id,
+            intent: ClipboardIntent::Cut,
+            ..
+        },
+    ] = cut.as_slice()
+    else {
+        panic!("expected cut effect");
+    };
+    let deletion =
+        fixture
+            .app
+            .complete_clipboard_write(*request_id, Ok(()), &mut fixture.ids, &fixture.clock);
+    assert!(matches!(
+        deletion.as_slice(),
+        [Effect::CommitBoardOperation(_)]
+    ));
+    assert!(fixture.app.state.board.live_thoughts().is_empty());
+}
+
+#[test]
+fn editor_cut_is_non_destructive_on_failure_or_changed_selection() {
+    let mut fixture = Fixture::new();
+    fixture.paste("A界B");
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: proqi::ports::editor::CursorMovement::GraphemeBack,
+        extend_selection: true,
+    }));
+    let cut = fixture.effects(UiInput::Key(UiKey::Cut));
+    let [
+        Effect::WriteClipboard {
+            request_id,
+            content,
+            ..
+        },
+    ] = cut.as_slice()
+    else {
+        panic!("expected selection write");
+    };
+    assert_eq!(content, "B");
+    fixture.app.complete_clipboard_write(
+        *request_id,
+        Err(FailureCode::ClipboardFailed),
+        &mut fixture.ids,
+        &fixture.clock,
+    );
+    assert_eq!(
+        fixture.app.editor_snapshot().expect("editor").content,
+        "A界B"
+    );
+
+    let cut = fixture.effects(UiInput::Key(UiKey::Cut));
+    let [Effect::WriteClipboard { request_id, .. }] = cut.as_slice() else {
+        panic!("expected selection write");
+    };
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: proqi::ports::editor::CursorMovement::GraphemeBack,
+        extend_selection: false,
+    }));
+    assert!(
+        fixture
+            .app
+            .complete_clipboard_write(*request_id, Ok(()), &mut fixture.ids, &fixture.clock)
+            .is_empty()
+    );
+    assert_eq!(
+        fixture.app.editor_snapshot().expect("editor").content,
+        "A界B"
+    );
+}
+
+#[test]
+fn empty_or_failed_clipboard_read_never_creates_a_thought() {
+    let mut fixture = Fixture::new();
+    for result in [Ok(String::new()), Err(FailureCode::ClipboardFailed)] {
+        let read = fixture.effects(UiInput::Key(UiKey::PasteClipboard));
+        let [Effect::ReadClipboard { request_id }] = read.as_slice() else {
+            panic!("expected clipboard read");
+        };
+        assert!(
+            fixture
+                .app
+                .complete_clipboard_read(*request_id, result, &mut fixture.ids, &fixture.clock)
+                .is_empty()
+        );
+        assert!(fixture.app.state.board.live_thoughts().is_empty());
+    }
+}
+
+#[test]
+fn storage_failure_blocks_new_edits_and_exposes_retry() {
+    let mut fixture = Fixture::new();
+    let sequence = fixture.paste("durable candidate");
+    fixture.app.acknowledge_persistence(sequence, false);
+    let before = fixture.app.editor_snapshot().expect("editor");
+    assert!(
+        fixture
+            .effects(UiInput::Key(UiKey::Character('x')))
+            .is_empty()
+    );
+    assert_eq!(fixture.app.editor_snapshot().expect("editor"), before);
+    assert_eq!(
+        fixture.effects(UiInput::Key(UiKey::Character('r'))),
+        vec![Effect::RetryPersistence { sequence }]
     );
 }

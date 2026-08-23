@@ -8,6 +8,7 @@ rust-version = "1.88"
 version = "0.1.0-alpha.1"
 
 [workspace.dependencies]
+base64 = "0.22.1"
 clap = { version = "4.5.47", features = ["derive"] }
 crossterm = "0.28.1"
 directories = "6.0.0"
@@ -47,6 +48,7 @@ repository = "https://github.com/oborchers/proqi"
 publish = false
 
 [dependencies]
+base64.workspace = true
 clap.workspace = true
 crossterm.workspace = true
 directories.workspace = true

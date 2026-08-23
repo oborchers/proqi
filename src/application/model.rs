@@ -10,7 +10,7 @@ use crate::domain::{
     RevisionId, SessionBoard, SessionId, TextPosition, Thought, ThoughtId, ThoughtRevision,
     Timestamp, UndoScope,
 };
-use crate::ports::store::OperationBatch;
+use crate::ports::{recovery::RecoveryDocument, store::OperationBatch};
 
 /// Active interaction context.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -441,6 +441,18 @@ pub enum Effect {
         intent: ClipboardIntent,
         /// Exact content, including line endings.
         content: String,
+    },
+    /// Read exact content from the native clipboard.
+    ReadClipboard {
+        /// Matching request identity.
+        request_id: RequestId,
+    },
+    /// Atomically export the current in-memory board for recovery.
+    ExportRecovery {
+        /// Matching request identity.
+        request_id: RequestId,
+        /// Exact versioned snapshot.
+        document: Box<RecoveryDocument>,
     },
     /// Present a non-destructive user-visible status.
     Notify {

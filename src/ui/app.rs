@@ -1,17 +1,22 @@
 //! Terminal-independent board interaction state.
 
+mod clipboard;
 mod commands;
 mod palette;
 mod pointer;
+mod recovery;
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use ratatui_core::layout::Rect;
 
 use crate::{
     adapters::editor::RopeEditor,
-    application::{Action, AppState, Effect, FailureCode, InteractionMode, reduce},
-    domain::{OperationSequence, ThoughtId},
+    application::{
+        Action, AppState, ClipboardIntent, DurabilityState, Effect, FailureCode, InteractionMode,
+        reduce,
+    },
+    domain::{OperationSequence, RequestId, ThoughtId},
     ports::{
         editor::{CursorMovement, EditCommand, Editor, EditorSnapshot, TextViewport},
         environment::{Clock, IdGenerator},
@@ -59,6 +64,11 @@ pub struct PointerInput {
     pub kind: PointerKind,
 }
 
+struct PendingEditorClipboard {
+    intent: ClipboardIntent,
+    before: EditorSnapshot,
+}
+
 /// Normalized keys accepted by the board UI.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum UiKey {
@@ -89,6 +99,12 @@ pub enum UiKey {
     Undo,
     /// Redo in the active history scope.
     Redo,
+    /// Copy the active thought or editor selection.
+    Copy,
+    /// Cut the active thought or editor selection after clipboard success.
+    Cut,
+    /// Read and paste the native clipboard.
+    PasteClipboard,
 }
 
 /// Input translated from a concrete terminal backend.
@@ -129,6 +145,10 @@ pub struct BoardApp {
     palette: Option<palette::PaletteState>,
     settings: UiSettings,
     expanded: BTreeSet<ThoughtId>,
+    pending_editor_clipboard: BTreeMap<RequestId, PendingEditorClipboard>,
+    pending_clipboard_reads: BTreeSet<RequestId>,
+    pending_recovery_exports: BTreeSet<RequestId>,
+    recovery_exported_for: Option<OperationSequence>,
 }
 
 impl BoardApp {
@@ -156,6 +176,10 @@ impl BoardApp {
             palette: None,
             settings,
             expanded: BTreeSet::new(),
+            pending_editor_clipboard: BTreeMap::new(),
+            pending_clipboard_reads: BTreeSet::new(),
+            pending_recovery_exports: BTreeSet::new(),
+            recovery_exported_for: None,
         }
     }
 
@@ -171,11 +195,22 @@ impl BoardApp {
             return self.handle_palette_input(&input, ids, clock);
         }
         if input == UiInput::Key(UiKey::Quit) {
-            self.quit = true;
+            self.request_quit();
             return Vec::new();
         }
+        if matches!(self.state.durability, DurabilityState::Failed { .. }) {
+            match input {
+                UiInput::Key(UiKey::Character('r')) => return self.retry_persistence(),
+                UiInput::Key(UiKey::Character('w')) => return self.export_recovery(ids, clock),
+                _ => {}
+            }
+        }
         match input {
-            UiInput::Resize { .. } => Vec::new(),
+            UiInput::Resize { .. } => {
+                self.layout = None;
+                self.hovered = None;
+                Vec::new()
+            }
             UiInput::Pointer(pointer) => self.handle_pointer(pointer, ids, clock),
             UiInput::Paste(content) => self.paste(content, ids, clock),
             UiInput::Key(key) => match self.state.mode {
@@ -298,6 +333,18 @@ impl BoardApp {
         let _effects = self.reduce(action);
     }
 
+    pub(super) fn request_quit(&mut self) {
+        if matches!(
+            self.state.durability,
+            DurabilityState::Failed { failed, .. }
+                if self.recovery_exported_for != Some(failed)
+        ) {
+            self.status = Some("retry the save or export recovery before quitting".to_owned());
+        } else {
+            self.quit = true;
+        }
+    }
+
     fn create(
         &mut self,
         content: String,
@@ -338,7 +385,7 @@ impl BoardApp {
         let Some((thought_id, before, after)) = edit else {
             return Vec::new();
         };
-        self.reduce(Action::EditThought {
+        let action = Action::EditThought {
             thought_id,
             revision_id: ids.revision_id(),
             before_content: before.content,
@@ -346,7 +393,15 @@ impl BoardApp {
             before_cursor: before.cursor,
             after_cursor: after.cursor,
             at: clock.now(),
-        })
+        };
+        match reduce(&mut self.state, action) {
+            Ok(effects) => effects,
+            Err(error) => {
+                self.status = Some(error.to_string());
+                self.reload_editor();
+                Vec::new()
+            }
+        }
     }
 
     fn reload_editor(&mut self) {

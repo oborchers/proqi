@@ -12,6 +12,11 @@ enum Command {
     New,
     Edit,
     Delete,
+    Copy,
+    Cut,
+    Paste,
+    RetryStorage,
+    ExportRecovery,
     Undo,
     Redo,
     MoveUp,
@@ -22,10 +27,15 @@ enum Command {
 }
 
 impl Command {
-    const ALL: [(Self, &'static str); 10] = [
+    const ALL: [(Self, &'static str); 15] = [
         (Self::New, "New thought"),
         (Self::Edit, "Edit focused thought"),
         (Self::Delete, "Delete focused thought"),
+        (Self::Copy, "Copy focused thought"),
+        (Self::Cut, "Cut focused thought"),
+        (Self::Paste, "Paste native clipboard"),
+        (Self::RetryStorage, "Retry failed save"),
+        (Self::ExportRecovery, "Export recovery file"),
         (Self::Undo, "Undo board action"),
         (Self::Redo, "Redo board action"),
         (Self::MoveUp, "Move thought up"),
@@ -168,6 +178,11 @@ impl BoardApp {
                 Vec::new()
             }
             Command::Delete => self.delete(ids, clock),
+            Command::Copy => self.copy_active(ids),
+            Command::Cut => self.cut_active(ids, clock),
+            Command::Paste => self.read_clipboard(ids),
+            Command::RetryStorage => self.retry_persistence(),
+            Command::ExportRecovery => self.export_recovery(ids, clock),
             Command::Undo => self.history(ids, clock, true),
             Command::Redo => self.history(ids, clock, false),
             Command::MoveUp => self.reorder(ids, clock, -1),
@@ -178,7 +193,7 @@ impl BoardApp {
                 Vec::new()
             }
             Command::Quit => {
-                self.quit = true;
+                self.request_quit();
                 Vec::new()
             }
         }

@@ -1,0 +1,61 @@
+//! Visible retry and safe export controls for failed persistence.
+
+use std::path::PathBuf;
+
+use crate::{
+    application::{Action, DurabilityState, Effect, capture_recovery},
+    domain::RequestId,
+    ports::environment::{Clock, IdGenerator},
+};
+
+use super::BoardApp;
+
+impl BoardApp {
+    pub(super) fn export_recovery(
+        &mut self,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        if !matches!(self.state.durability, DurabilityState::Failed { .. }) {
+            self.status = Some("recovery export is available after a save failure".to_owned());
+            return Vec::new();
+        }
+        let request_id = ids.request_id();
+        let document = capture_recovery(&self.state, clock.now());
+        self.pending_recovery_exports.insert(request_id);
+        self.status = Some("exporting recovery file".to_owned());
+        vec![Effect::ExportRecovery {
+            request_id,
+            document: Box::new(document),
+        }]
+    }
+
+    /// Complete one recovery write on the UI lane.
+    pub fn complete_recovery_export(
+        &mut self,
+        request_id: RequestId,
+        result: Result<PathBuf, String>,
+    ) -> Vec<Effect> {
+        if !self.pending_recovery_exports.remove(&request_id) {
+            return Vec::new();
+        }
+        self.status = Some(match result {
+            Ok(path) => {
+                self.recovery_exported_for = match self.state.durability {
+                    DurabilityState::Failed { failed, .. } => Some(failed),
+                    DurabilityState::Durable { .. } | DurabilityState::Pending { .. } => None,
+                };
+                format!("recovery exported to {}", path.display())
+            }
+            Err(error) => format!("recovery export failed: {error}"),
+        });
+        Vec::new()
+    }
+
+    pub(super) fn retry_persistence(&mut self) -> Vec<Effect> {
+        let DurabilityState::Failed { failed, .. } = self.state.durability else {
+            return Vec::new();
+        };
+        self.reduce(Action::RetryPersistence(failed))
+    }
+}

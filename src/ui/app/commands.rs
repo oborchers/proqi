@@ -34,6 +34,9 @@ impl BoardApp {
             } => self.move_focus(1),
             UiKey::Undo => return self.history(ids, clock, true),
             UiKey::Redo => return self.history(ids, clock, false),
+            UiKey::Copy => return self.copy_thought(ids),
+            UiKey::Cut => return self.cut_thought(ids, clock),
+            UiKey::PasteClipboard => return self.read_clipboard(ids),
             _ => {}
         }
         Vec::new()
@@ -52,6 +55,8 @@ impl BoardApp {
                 Vec::new()
             }
             Some(BoardCommand::Delete) => self.delete(ids, clock),
+            Some(BoardCommand::Copy) => self.copy_thought(ids),
+            Some(BoardCommand::Cut) => self.cut_thought(ids, clock),
             Some(BoardCommand::Undo) => self.history(ids, clock, true),
             Some(BoardCommand::FocusUp) => {
                 self.move_focus(-1);
@@ -73,7 +78,7 @@ impl BoardApp {
                 Vec::new()
             }
             Some(BoardCommand::Quit) => {
-                self.quit = true;
+                self.request_quit();
                 Vec::new()
             }
             None => Vec::new(),
@@ -94,6 +99,9 @@ impl BoardApp {
             }
             UiKey::Undo => return self.history(ids, clock, true),
             UiKey::Redo => return self.history(ids, clock, false),
+            UiKey::Copy => return self.copy_selection(ids),
+            UiKey::Cut => return self.cut_selection(ids),
+            UiKey::PasteClipboard => return self.read_clipboard(ids),
             _ => {}
         }
         let command = match key {
@@ -110,7 +118,13 @@ impl BoardApp {
             },
             UiKey::SelectAll => EditCommand::SelectAll,
             UiKey::DeleteLine => EditCommand::DeleteLogicalLine,
-            UiKey::Escape | UiKey::Undo | UiKey::Redo | UiKey::Quit => return Vec::new(),
+            UiKey::Escape
+            | UiKey::Undo
+            | UiKey::Redo
+            | UiKey::Quit
+            | UiKey::Copy
+            | UiKey::Cut
+            | UiKey::PasteClipboard => return Vec::new(),
         };
         self.apply_edit(command, ids, clock)
     }

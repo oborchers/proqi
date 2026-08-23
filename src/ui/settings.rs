@@ -37,6 +37,10 @@ pub struct KeyBindings {
     pub edit: char,
     /// Delete focused thought.
     pub delete: char,
+    /// Copy focused thought.
+    pub copy: char,
+    /// Cut focused thought.
+    pub cut: char,
     /// Undo board action.
     pub undo: char,
     /// Move focus upward.
@@ -63,6 +67,8 @@ impl Default for KeyBindings {
             new: 'n',
             edit: 'e',
             delete: 'd',
+            copy: 'y',
+            cut: 'x',
             undo: 'u',
             focus_up: 'k',
             focus_down: 'j',
@@ -81,6 +87,8 @@ pub(super) enum BoardCommand {
     New,
     Edit,
     Delete,
+    Copy,
+    Cut,
     Undo,
     FocusUp,
     FocusDown,
@@ -98,6 +106,8 @@ impl KeyBindings {
             (self.new, BoardCommand::New),
             (self.edit, BoardCommand::Edit),
             (self.delete, BoardCommand::Delete),
+            (self.copy, BoardCommand::Copy),
+            (self.cut, BoardCommand::Cut),
             (self.undo, BoardCommand::Undo),
             (self.focus_up, BoardCommand::FocusUp),
             (self.focus_down, BoardCommand::FocusDown),
@@ -123,6 +133,8 @@ impl KeyBindings {
             self.new,
             self.edit,
             self.delete,
+            self.copy,
+            self.cut,
             self.undo,
             self.focus_up,
             self.focus_down,

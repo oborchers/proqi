@@ -29,6 +29,13 @@ edit the focused thought, press `Esc` to return to the board, and press `?` for
 the complete contextual key guide. Changes are autosaved and can be resumed by
 their canonical session identifier.
 
+Use `y` or Primary+C to copy a complete thought, `x` or Primary+X to cut only
+after clipboard success, and Primary+V to read the native clipboard. OSC 52 is
+used as a write fallback when the native provider is unavailable. If autosave
+fails, Proqi keeps the board in memory and blocks destructive exit. Press `r`
+to retry the retained operation or `w` to atomically export a private recovery
+JSON file in Proqi's platform data directory.
+
 ## CLI workflow
 
 ```shell
@@ -65,6 +72,8 @@ theme = "auto"
 new = "n"
 edit = "e"
 delete = "d"
+copy = "y"
+cut = "x"
 undo = "u"
 focus_up = "k"
 focus_down = "j"

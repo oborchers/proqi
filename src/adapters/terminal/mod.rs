@@ -1,7 +1,9 @@
 //! Crossterm terminal session and event adapter.
 
 mod control;
+mod external;
 mod input;
+mod persistence;
 mod runner;
 mod settings;
 

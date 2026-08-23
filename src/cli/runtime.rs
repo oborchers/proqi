@@ -29,6 +29,7 @@ pub(super) struct RuntimeContext {
     pub(super) ids: SystemIdGenerator,
     pub(super) cwd: PathBuf,
     config_dir: PathBuf,
+    recovery_dir: PathBuf,
     schema_lease: FileSchemaLease,
 }
 
@@ -39,6 +40,7 @@ impl RuntimeContext {
             .map_err(|error| CliError::new("environment_failed", error.to_string(), 1))?;
         let paths = resolve_paths(state_root)?;
         let config_dir = paths.config_dir.clone();
+        let recovery_dir = paths.data_dir.join("recovery");
         let clock = SystemClock;
         let mut ids = SystemIdGenerator;
         let coordinator = FileRuntimeCoordinator::new(
@@ -56,6 +58,7 @@ impl RuntimeContext {
             ids,
             cwd,
             config_dir,
+            recovery_dir,
             schema_lease,
         })
     }
@@ -80,6 +83,7 @@ impl RuntimeContext {
             session_lease,
             schema_lease: self.schema_lease,
             settings,
+            recovery_directory: self.recovery_dir,
         }
     }
 }

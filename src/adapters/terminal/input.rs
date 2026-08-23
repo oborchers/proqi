@@ -157,7 +157,10 @@ fn translate_key(key: KeyEvent) -> Option<UiKey> {
     if primary {
         let command = match key.code {
             KeyCode::Char('a') => Some(UiKey::SelectAll),
-            KeyCode::Char('c') => Some(UiKey::Quit),
+            KeyCode::Char('c') => Some(UiKey::Copy),
+            KeyCode::Char('x') => Some(UiKey::Cut),
+            KeyCode::Char('v') => Some(UiKey::PasteClipboard),
+            KeyCode::Char('q') => Some(UiKey::Quit),
             KeyCode::Char('u') => Some(UiKey::DeleteLine),
             KeyCode::Char('z') if key.modifiers.contains(KeyModifiers::SHIFT) => Some(UiKey::Redo),
             KeyCode::Char('z') => Some(UiKey::Undo),
@@ -229,7 +232,8 @@ const fn move_key(movement: CursorMovement, extend_selection: bool) -> UiKey {
 #[cfg(test)]
 mod tests {
     use crossterm::event::{
-        Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
+        Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent,
+        MouseEventKind,
     };
 
     use crate::ports::editor::CursorMovement;
@@ -246,6 +250,34 @@ mod tests {
         ] {
             let event = Event::Key(KeyEvent::new(KeyCode::Char('a'), modifier));
             assert_eq!(translate(event), Some(UiInput::Key(UiKey::SelectAll)));
+        }
+    }
+
+    #[test]
+    fn primary_clipboard_shortcuts_do_not_reuse_quit() {
+        for (character, expected) in [
+            ('c', UiKey::Copy),
+            ('x', UiKey::Cut),
+            ('v', UiKey::PasteClipboard),
+            ('q', UiKey::Quit),
+        ] {
+            let event = Event::Key(KeyEvent::new(
+                KeyCode::Char(character),
+                KeyModifiers::CONTROL,
+            ));
+            assert_eq!(translate(event), Some(UiInput::Key(expected)));
+        }
+    }
+
+    #[test]
+    fn release_and_repeat_events_never_duplicate_actions() {
+        for kind in [KeyEventKind::Release, KeyEventKind::Repeat] {
+            let event = Event::Key(KeyEvent::new_with_kind(
+                KeyCode::Char('n'),
+                KeyModifiers::NONE,
+                kind,
+            ));
+            assert_eq!(translate(event), None);
         }
     }
 

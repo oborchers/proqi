@@ -16,6 +16,10 @@ use super::mutations::{
 ///
 /// Returns a typed error when an action violates current state or domain invariants.
 pub fn reduce(state: &mut AppState, action: Action) -> ApplicationResult<Vec<Effect>> {
+    if matches!(state.durability, DurabilityState::Failed { .. }) && mutates_durable_state(&action)
+    {
+        return Err(ApplicationError::InvalidState);
+    }
     match action {
         Action::FocusThought(_) | Action::EnterEdit(_) | Action::ExitEdit => {
             reduce_navigation(state, &action)
@@ -34,6 +38,21 @@ pub fn reduce(state: &mut AppState, action: Action) -> ApplicationResult<Vec<Eff
         | Action::PersistenceFailed { .. }
         | Action::RetryPersistence(_) => reduce_persistence(state, &action),
     }
+}
+
+const fn mutates_durable_state(action: &Action) -> bool {
+    matches!(
+        action,
+        Action::CreateThought { .. }
+            | Action::PasteAsThought { .. }
+            | Action::EditThought { .. }
+            | Action::CutThought { .. }
+            | Action::DeleteThought { .. }
+            | Action::MoveThought { .. }
+            | Action::SetCollapsed { .. }
+            | Action::Undo { .. }
+            | Action::Redo { .. }
+    )
 }
 
 fn reduce_navigation(state: &mut AppState, action: &Action) -> ApplicationResult<Vec<Effect>> {
@@ -135,7 +154,13 @@ fn reduce_clipboard(state: &mut AppState, action: &Action) -> ApplicationResult<
             Some(*at),
         ),
         Action::ClipboardResult { request_id, result } => {
-            finish_clipboard(state, *request_id, *result)
+            let completion =
+                if result.is_ok() && matches!(state.durability, DurabilityState::Failed { .. }) {
+                    Err(crate::application::FailureCode::StorageFailed)
+                } else {
+                    *result
+                };
+            finish_clipboard(state, *request_id, completion)
         }
         _ => unreachable!("clipboard reducer received another action"),
     }

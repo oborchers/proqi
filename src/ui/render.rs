@@ -220,7 +220,7 @@ fn render_footer(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot,
     let durability = match app.state.durability {
         DurabilityState::Durable { .. } => "saved",
         DurabilityState::Pending { .. } => "saving",
-        DurabilityState::Failed { .. } => "save failed",
+        DurabilityState::Failed { .. } => "save failed  r retry  w recovery",
     };
     let mode = match app.state.mode {
         InteractionMode::Board => "board",
@@ -248,6 +248,9 @@ fn render_footer(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot,
     for (target, area) in &layout.controls {
         let label = match target {
             HitTarget::Commands => format!("[{}]", keys.commands),
+            HitTarget::Copy => format!("[{}]", keys.copy),
+            HitTarget::Cut => format!("[{}]", keys.cut),
+            HitTarget::Delete => format!("[{}]", keys.delete),
             HitTarget::Undo => format!("[{}]", keys.undo),
             HitTarget::Help => format!("[{}]", keys.help),
             HitTarget::Quit => format!("[{}]", keys.quit),

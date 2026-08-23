@@ -2,6 +2,7 @@
 
 mod model;
 mod mutations;
+mod recovery;
 mod reducer;
 mod rehydrate;
 mod service;
@@ -10,5 +11,6 @@ pub use model::{
     Action, AppState, ApplicationError, ApplicationResult, ClipboardIntent, DurabilityState,
     Effect, FailureCode, InteractionMode,
 };
+pub use recovery::capture_recovery;
 pub use reducer::reduce;
 pub use service::{LeasedSession, SessionService, SessionServiceError, ThoughtMutation};

@@ -85,7 +85,21 @@ fn storage_failure_remains_visible_until_retry() {
         },
     )
     .expect("record failure");
-    fixture.create("second");
+    let thought_id = fixture.ids.thought_id();
+    let operation_id = fixture.operation_id();
+    let at = fixture.time();
+    let blocked = reduce(
+        &mut fixture.state,
+        Action::CreateThought {
+            thought_id,
+            operation_id,
+            content: "second".to_owned(),
+            insertion_index: None,
+            at,
+        },
+    );
+    assert!(blocked.is_err());
+    assert_eq!(fixture.state.board.live_thoughts().len(), 1);
     assert_eq!(
         fixture.state.durability,
         DurabilityState::Failed {

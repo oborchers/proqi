@@ -91,6 +91,46 @@ fn bracketed_paste_autosaves_and_resumes_in_a_real_pty() {
         &["thoughts", "inspect", session, thought],
     );
     assert_eq!(inspected["data"]["thought"]["content"], "Grüße 界\nsecond!");
+
+    assert_persistent_editor_undo(binary, state.path(), session, thought);
+}
+
+#[cfg(target_os = "macos")]
+fn assert_persistent_editor_undo(
+    binary: &str,
+    state: &std::path::Path,
+    session: &str,
+    thought: &str,
+) {
+    let script = r#"
+        log_user 0
+        set timeout 10
+        set binary $env(PROQI_TEST_BINARY)
+        set state $env(PROQI_TEST_STATE)
+        set session $env(PROQI_TEST_SESSION)
+        spawn $binary --state-dir $state -r $session
+        after 500
+        send "\r"
+        after 100
+        send "\x1a"
+        after 500
+        send "\x1b"
+        after 100
+        send "q"
+        expect eof
+        catch wait result
+        exit [lindex $result 3]
+    "#;
+    let status = Command::new("/usr/bin/expect")
+        .args(["-c", script])
+        .env("PROQI_TEST_BINARY", binary)
+        .env("PROQI_TEST_STATE", state)
+        .env("PROQI_TEST_SESSION", session)
+        .status()
+        .expect("run PTY persistent undo workflow");
+    assert!(status.success());
+    let undone = json_command(binary, state, &["thoughts", "inspect", session, thought]);
+    assert_eq!(undone["data"]["thought"]["content"], "Grüße 界\nsecond");
 }
 
 #[cfg(target_os = "macos")]
@@ -121,6 +161,46 @@ fn termination_signal_restores_and_releases_the_session() {
 
     let sessions = json_command(binary, state.path(), &["sessions", "list"]);
     assert_eq!(sessions["data"]["sessions"][0]["state"], "resumable");
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn acknowledged_paste_survives_forced_process_termination() {
+    let state = tempfile::tempdir().expect("temporary state");
+    let binary = env!("CARGO_BIN_EXE_proqi");
+    let crash = r#"
+        log_user 0
+        set timeout 10
+        set binary $env(PROQI_TEST_BINARY)
+        set state $env(PROQI_TEST_STATE)
+        spawn $binary --state-dir $state
+        set child [exp_pid]
+        after 500
+        send -- "\x1b\[200~committed before crash 界\x1b\[201~"
+        after 800
+        system /bin/kill -KILL $child
+        expect eof
+        catch wait result
+        exit 0
+    "#;
+    let status = Command::new("/usr/bin/expect")
+        .args(["-c", crash])
+        .env("PROQI_TEST_BINARY", binary)
+        .env("PROQI_TEST_STATE", state.path())
+        .status()
+        .expect("run PTY crash workflow");
+    assert!(status.success());
+
+    let sessions = json_command(binary, state.path(), &["sessions", "list"]);
+    assert_eq!(sessions["data"]["sessions"][0]["state"], "resumable");
+    let session = sessions["data"]["sessions"][0]["id"]
+        .as_str()
+        .expect("session ID");
+    let thoughts = json_command(binary, state.path(), &["thoughts", "list", session]);
+    assert_eq!(
+        thoughts["data"]["thoughts"][0]["content"],
+        "committed before crash 界"
+    );
 }
 
 #[cfg(target_os = "macos")]

@@ -20,6 +20,12 @@ pub enum HitTarget {
     Insert,
     /// Searchable command discovery.
     Commands,
+    /// Copy the focused thought.
+    Copy,
+    /// Cut the focused thought after clipboard success.
+    Cut,
+    /// Delete the focused thought without changing the clipboard.
+    Delete,
     /// Board undo action.
     Undo,
     /// Contextual help action.
@@ -311,8 +317,11 @@ fn wrapped_rows(content: &str, width: u16) -> usize {
 
 fn footer_controls(area: Rect) -> Vec<(HitTarget, Rect)> {
     let labels = [
-        (HitTarget::Commands, 3_u16),
+        (HitTarget::Delete, 3_u16),
+        (HitTarget::Cut, 3),
+        (HitTarget::Copy, 3),
         (HitTarget::Undo, 3),
+        (HitTarget::Commands, 3),
         (HitTarget::Help, 3),
         (HitTarget::Quit, 3),
     ];

@@ -110,7 +110,26 @@ pub struct SqliteStore {
     retry: RetryPolicy,
 }
 
+#[cfg(test)]
+pub(crate) struct TestWriteLock(Connection);
+
+#[cfg(test)]
+impl TestWriteLock {
+    pub(crate) fn release(self) -> Result<(), StoreError> {
+        self.0.execute_batch("ROLLBACK").map_err(map_sql_error)
+    }
+}
+
 impl SqliteStore {
+    #[cfg(test)]
+    pub(crate) fn acquire_test_write_lock(&self) -> Result<TestWriteLock, StoreError> {
+        let connection = Connection::open(&self.database_path).map_err(map_sql_error)?;
+        connection
+            .execute_batch("BEGIN IMMEDIATE")
+            .map_err(map_sql_error)?;
+        Ok(TestWriteLock(connection))
+    }
+
     /// Open, validate, and when authorized migrate one local database.
     ///
     /// # Errors

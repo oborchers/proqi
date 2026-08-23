@@ -10,14 +10,16 @@ interaction rules for the Ratatui interface.
 - `Frame::area()` is the source of truth for current geometry. Resize events
   wake rendering but do not define layout dimensions.
 - Calculate layout and mouse hit targets together from the same rectangles.
-  Never maintain an independent hit-test geometry model.
+  Never maintain an independent hit-test geometry model. Ignore mouse input
+  when no hit map from the current rendered frame is available.
 - Store logical editor positions. Recompute wrapped visual rows, terminal cell
   columns, cursor placement, selection geometry, and scroll bounds after each
   layout change.
 - Measure terminal cells, not bytes, Unicode scalar values, or grapheme counts,
   for visual width.
 - Preserve whitespace and indentation. Thought text wraps without horizontal
-  scrolling.
+  scrolling. Render multiline content as structured text, never as a single
+  span containing newline characters, and configure wrapping not to trim.
 - Responsive degradation is explicit and tested at minimum, narrow, standard,
   wide, tall, and shallow viewport sizes.
 
@@ -25,9 +27,11 @@ interaction rules for the Ratatui interface.
 
 - Normalize Crossterm events before they reach application state or the
   reducer. Domain and application code never import terminal event types.
+- Treat only key-press events as ordinary keyboard input. Release and repeat
+  protocol events must not duplicate semantic actions.
 - Read and poll Crossterm events from one input lane. Only resize notifications
   may be coalesced. Never drop or reorder keys, pastes, mouse actions, edits, or
-  persistence operations.
+  persistence operations. Keep event lanes bounded and preserve their ordering.
 - Treat one bracketed paste as one semantic edit operation.
 - Derive keyboard and mouse behavior from the same domain intentions. Keep both
   paths complete for every core action.
@@ -37,6 +41,8 @@ interaction rules for the Ratatui interface.
   termination signal.
 - Use frame cursor APIs during rendering. Do not issue backend commands from
   ordinary widgets or render functions.
+- Treat a rendering failure as a typed terminal-session failure. Restore owned
+  terminal modes before returning the error.
 
 ## Verification
 

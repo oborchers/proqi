@@ -56,16 +56,19 @@ impl BoardApp {
             }
             Some(HitTarget::Insert) => self.create(String::new(), ids, clock),
             Some(HitTarget::Commands) => {
-                self.status = Some("commands: n new, enter edit, d delete, u undo".to_owned());
+                self.open_palette();
                 Vec::new()
             }
+            Some(HitTarget::Copy) => self.copy_active(ids),
+            Some(HitTarget::Cut) => self.cut_active(ids, clock),
+            Some(HitTarget::Delete) => self.delete(ids, clock),
             Some(HitTarget::Undo) => self.history(ids, clock, true),
             Some(HitTarget::Help) => {
                 self.help = !self.help;
                 Vec::new()
             }
             Some(HitTarget::Quit) => {
-                self.quit = true;
+                self.request_quit();
                 Vec::new()
             }
             Some(HitTarget::PaletteItem(index)) => self.execute_palette_index(index, ids, clock),
