@@ -3,7 +3,7 @@
 use unicode_segmentation::UnicodeSegmentation;
 
 use super::LogicalLine;
-use crate::ports::editor::TextPosition;
+use crate::domain::TextPosition;
 
 pub(super) fn logical_lines(content: &str) -> Vec<LogicalLine> {
     let mut lines = Vec::new();

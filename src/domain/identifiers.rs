@@ -30,7 +30,7 @@ pub enum IdError {
 }
 
 /// Behavior shared by every typed Proqi identifier.
-pub trait TypedId:
+trait TypedId:
     Copy + Eq + Ord + std::hash::Hash + fmt::Debug + fmt::Display + FromStr<Err = IdError>
 {
     /// Stable public resource prefix.
@@ -42,23 +42,6 @@ pub trait TypedId:
     ///
     /// Returns [`IdError::NotUuidV7`] for any other UUID version or variant.
     fn from_uuid(uuid: Uuid) -> Result<Self, IdError>;
-
-    /// Return the complete UUID.
-    fn into_uuid(self) -> Uuid;
-
-    /// Return the compact 16-byte database representation.
-    fn database_bytes(self) -> [u8; 16] {
-        *self.into_uuid().as_bytes()
-    }
-
-    /// Validate a compact database representation.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`IdError::NotUuidV7`] when the bytes are not an RFC 4122 `UUIDv7`.
-    fn from_database_bytes(bytes: [u8; 16]) -> Result<Self, IdError> {
-        Self::from_uuid(Uuid::from_bytes(bytes))
-    }
 }
 
 macro_rules! define_id {
@@ -73,10 +56,6 @@ macro_rules! define_id {
             fn from_uuid(uuid: Uuid) -> Result<Self, IdError> {
                 validate_v7(uuid)?;
                 Ok(Self(uuid))
-            }
-
-            fn into_uuid(self) -> Uuid {
-                self.0
             }
         }
 
@@ -108,7 +87,7 @@ macro_rules! define_id {
             ///
             /// Returns an error when the bytes are not an RFC 4122 `UUIDv7`.
             pub fn from_database_bytes(bytes: [u8; 16]) -> Result<Self, IdError> {
-                <Self as TypedId>::from_database_bytes(bytes)
+                Self::from_uuid(Uuid::from_bytes(bytes))
             }
         }
 

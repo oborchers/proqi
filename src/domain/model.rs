@@ -5,9 +5,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::ports::editor::TextPosition;
-
-use super::{OperationId, RevisionId, SessionId, ThoughtId};
+use super::{OperationId, RevisionId, SessionId, TextPosition, ThoughtId};
 
 /// UTC milliseconds since the Unix epoch.
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]

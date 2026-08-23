@@ -65,17 +65,22 @@ impl FakeIdGenerator {
         let counter = self.counter.to_be_bytes();
         bytes[8..].copy_from_slice(&counter);
         bytes[8] = (bytes[8] & 0x3f) | 0x80;
-        self.counter = self
-            .counter
-            .checked_add(1)
-            .expect("fake ID space exhausted");
+        let (next_counter, wrapped) = self.counter.overflowing_add(1);
+        self.counter = next_counter;
+        if wrapped {
+            self.timestamp_ms = self.timestamp_ms.wrapping_add(1);
+        }
         Uuid::from_bytes(bytes)
     }
 }
 
 macro_rules! generate {
     ($self:ident, $type:ty) => {
-        <$type>::from_uuid($self.uuid()).expect("fake generator constructs UUIDv7")
+        loop {
+            if let Ok(id) = <$type>::from_uuid($self.uuid()) {
+                break id;
+            }
+        }
     };
 }
 

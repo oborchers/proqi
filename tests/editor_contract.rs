@@ -1,7 +1,10 @@
 //! Reusable behavioral contract for multiline editor backends.
 
 use proqi::adapters::editor::RopeEditor;
-use proqi::ports::editor::{CursorMovement, EditCommand, Editor, TextPosition, TextViewport};
+use proqi::{
+    domain::TextPosition,
+    ports::editor::{CursorMovement, EditCommand, Editor, TextViewport},
+};
 
 fn editor(text: &str) -> impl Editor {
     RopeEditor::new(text)

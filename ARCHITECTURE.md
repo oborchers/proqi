@@ -603,8 +603,10 @@ equivalent of a project Makefile and exposes these stable entry points:
 
 ```text
 cargo xtask setup
+cargo xtask install-hooks
 cargo xtask format
 cargo xtask source-limits
+cargo xtask architecture
 cargo xtask check
 cargo xtask test
 cargo xtask test-pty
@@ -615,10 +617,16 @@ cargo xtask package
 
 - `setup` verifies the pinned toolchain, Rust components, and developer tools.
   It reports missing prerequisites and does not silently modify global state.
+- `install-hooks` explicitly opts the current clone into the checked-in Git
+  hooks. Builds and setup never change Git configuration automatically.
 - `format` applies `rustfmt` and any repository-owned text formatting.
 - `source-limits` rejects every first-party Rust or common frontend source file
   above 500 physical lines, including JavaScript, TypeScript, stylesheet, HTML,
   Vue, Svelte, and Astro sources.
+- `architecture` verifies the inward dependency graph, canonical domain API,
+  and ownership of SQLite, terminal, process, environment, and filesystem
+  implementation dependencies. Its detector tests include accepted and
+  rejected examples, and the scan fails if expected source layers are absent.
 - `check` runs the normal pre-push gate: formatting in check mode, Clippy for
   all targets and features, source limits, documentation warnings, and the
   deterministic test suite through `cargo-nextest`.
@@ -644,9 +652,9 @@ well-maintained language-native complexity lint before its first source file is
 merged. Every frontend source file is also subject to the repository-wide
 500-line ceiling.
 
-Local commit hooks may run formatting and file-hygiene checks, but they are a
-convenience rather than an enforcement boundary. The complete gate remains
-`cargo xtask check`, with CI as the authority.
+The checked-in pre-commit hook runs `cargo xtask check` after explicit local
+installation through `cargo xtask install-hooks`. It is a convenience rather
+than an enforcement boundary, with CI remaining authoritative.
 
 ### Continuous integration
 

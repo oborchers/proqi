@@ -18,10 +18,10 @@ use proqi::{
     application::{Action, AppState, Effect, reduce},
     domain::{
         BoardMutation, BoardOperation, BoardOperationKind, Direction, IntegrationContext,
-        OperationSequence, Session, SessionBoard, ThoughtId, ThoughtPosition, Timestamp, UndoScope,
+        OperationSequence, Session, SessionBoard, TextPosition, ThoughtId, ThoughtPosition,
+        Timestamp, UndoScope,
     },
     ports::{
-        editor::TextPosition,
         environment::IdGenerator,
         store::{DurableIdentity, MigrationMode, OperationBatch, SessionQuery, Store, StoreError},
     },

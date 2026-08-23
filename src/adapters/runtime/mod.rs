@@ -43,7 +43,11 @@ pub struct SystemIdGenerator;
 
 macro_rules! system_id {
     ($type:ty) => {
-        <$type>::from_uuid(Uuid::now_v7()).expect("uuid crate generated UUIDv7")
+        loop {
+            if let Ok(id) = <$type>::from_uuid(Uuid::now_v7()) {
+                break id;
+            }
+        }
     };
 }
 

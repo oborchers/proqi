@@ -5,13 +5,10 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::{
-    domain::{
-        BoardOperation, BoardOperationKind, DomainError, OperationId, OperationSequence, RequestId,
-        RevisionId, SessionBoard, SessionId, Thought, ThoughtId, ThoughtRevision, Timestamp,
-        UndoScope,
-    },
-    ports::editor::TextPosition,
+use crate::domain::{
+    BoardOperation, BoardOperationKind, DomainError, OperationId, OperationSequence, RequestId,
+    RevisionId, SessionBoard, SessionId, TextPosition, Thought, ThoughtId, ThoughtRevision,
+    Timestamp, UndoScope,
 };
 
 /// Active interaction context.

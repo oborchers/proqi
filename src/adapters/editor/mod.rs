@@ -13,9 +13,10 @@ use text::{
 };
 use wrap::{byte_at_cell, cell_column_at_byte, wrap_content, wrapped_line_index};
 
+use crate::domain::TextPosition;
 use crate::ports::editor::{
-    CursorMovement, EditCommand, EditOutcome, Editor, EditorSnapshot, TextPosition, TextSelection,
-    TextViewport, VisualLine,
+    CursorMovement, EditCommand, EditOutcome, Editor, EditorSnapshot, TextSelection, TextViewport,
+    VisualLine,
 };
 
 #[derive(Clone)]

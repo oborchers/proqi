@@ -1,5 +1,18 @@
 //! Repository-owned development, quality, and packaging commands.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::expect_used,
+        clippy::panic,
+        clippy::todo,
+        clippy::unimplemented,
+        clippy::unwrap_used
+    )
+)]
+
+mod policy;
+
 use std::env;
 use std::ffi::OsStr;
 use std::fs;
@@ -29,8 +42,10 @@ fn execute() -> Result<(), String> {
 
     match command.as_str() {
         "setup" => setup(&root),
+        "install-hooks" => install_hooks(&root),
         "format" => run(&root, "cargo", ["fmt", "--all"]),
         "source-limits" => check_source_limits(&root),
+        "architecture" => policy::check(&root),
         "check" => check(&root),
         "test" => test(&root),
         "test-pty" => run(
@@ -61,8 +76,10 @@ fn print_help() {
     println!(
         "Proqi development tasks:\n\
          \n  cargo xtask setup\
+         \n  cargo xtask install-hooks\
          \n  cargo xtask format\
          \n  cargo xtask source-limits\
+         \n  cargo xtask architecture\
          \n  cargo xtask check\
          \n  cargo xtask test\
          \n  cargo xtask test-pty\
@@ -70,6 +87,14 @@ fn print_help() {
          \n  cargo xtask audit\
          \n  cargo xtask package"
     );
+}
+
+fn install_hooks(root: &Path) -> Result<(), String> {
+    run(
+        root,
+        "git",
+        ["config", "--local", "core.hooksPath", ".githooks"],
+    )
 }
 
 fn setup(root: &Path) -> Result<(), String> {
@@ -89,6 +114,7 @@ fn setup(root: &Path) -> Result<(), String> {
 fn check(root: &Path) -> Result<(), String> {
     run(root, "cargo", ["fmt", "--all", "--", "--check"])?;
     check_source_limits(root)?;
+    policy::check(root)?;
     run(
         root,
         "cargo",

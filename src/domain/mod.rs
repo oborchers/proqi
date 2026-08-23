@@ -1,8 +1,9 @@
 //! Entities, value objects, identifiers, and invariants.
 
-pub mod identifiers;
-pub mod model;
-pub mod operations;
+mod identifiers;
+mod model;
+mod operations;
+mod text;
 
 pub use identifiers::{
     InstanceId, OperationId, RequestId, RevisionId, SessionId, SubmissionId, ThoughtId,
@@ -12,3 +13,4 @@ pub use model::{
     Thought, ThoughtPosition, ThoughtRevision, Timestamp,
 };
 pub use operations::{BoardMutation, BoardOperation, BoardOperationKind, SessionBoard, UndoScope};
+pub use text::TextPosition;

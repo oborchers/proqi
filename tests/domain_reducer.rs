@@ -9,10 +9,10 @@ use proqi::{
         reduce,
     },
     domain::{
-        BoardMutation, BoardOperationKind, OperationSequence, Session, SessionBoard, ThoughtId,
-        ThoughtPosition, Timestamp, UndoScope,
+        BoardMutation, BoardOperationKind, OperationSequence, Session, SessionBoard, TextPosition,
+        ThoughtId, ThoughtPosition, Timestamp, UndoScope,
     },
-    ports::{editor::TextPosition, environment::IdGenerator},
+    ports::environment::IdGenerator,
 };
 
 struct Fixture {

@@ -7,9 +7,9 @@ use crate::{
     },
     domain::{
         BoardMutation, BoardOperation, BoardOperationKind, DomainError, OperationId, RequestId,
-        RevisionId, Thought, ThoughtId, ThoughtPosition, ThoughtRevision, Timestamp, UndoScope,
+        RevisionId, TextPosition, Thought, ThoughtId, ThoughtPosition, ThoughtRevision, Timestamp,
+        UndoScope,
     },
-    ports::editor::TextPosition,
 };
 
 pub(super) fn create_thought(
