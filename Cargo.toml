@@ -9,6 +9,9 @@ version = "0.1.0-alpha.1"
 
 [workspace.dependencies]
 clap = { version = "4.5.47", features = ["derive"] }
+ropey = "1.6.1"
+unicode-segmentation = "1.12.0"
+unicode-width = "0.2.1"
 
 [workspace.lints.rust]
 missing_docs = "warn"
@@ -30,6 +33,9 @@ publish = false
 
 [dependencies]
 clap.workspace = true
+ropey.workspace = true
+unicode-segmentation.workspace = true
+unicode-width.workspace = true
 
 [lints]
 workspace = true

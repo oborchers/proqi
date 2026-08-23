@@ -82,10 +82,12 @@ possible to ship without a Node, Python, or JVM runtime.
   capability handling.
 - `unicode-segmentation` and `unicode-width` define grapheme and terminal-cell
   behavior. Byte indices are never treated as visual columns.
-- The first editor backend is selected through a benchmarked implementation
-  spike. `ratatui-textarea` is the initial candidate. A Ropey-backed editor may
-  replace it without changing application code if long paste, wrapping, mouse
-  selection, or undo requirements are not met.
+- The editor port is backed by Ropey. A dependency spike against
+  `ratatui-textarea` 0.9.2 confirmed useful Unicode wrapping and selection
+  behavior, but the crate normalizes CRLF input and keeps wrapped mouse mapping
+  behind private state. Those constraints conflict with exact paste preservation
+  and layout-derived mouse hit testing. Ratatui therefore renders Proqi's own
+  editor snapshot rather than owning the text model.
 
 There is no web view and no browser runtime. Playwright is therefore not the
 primary end-to-end tool. Terminal behavior is tested through pseudo-terminal
@@ -754,7 +756,6 @@ The architecture leaves these choices open until evidence or a product decision
 resolves them:
 
 - MIT, Apache-2.0, or dual licensing.
-- `ratatui-textarea` versus a custom Ropey-backed editor after the editor spike.
 - Homebrew formula versus binary cask before the first public release. Only one
   becomes the canonical package identity.
 - Exact signing and notarization scope for each platform.

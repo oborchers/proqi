@@ -604,7 +604,7 @@ Initial components:
 
 - Ratatui for layout and rendering.
 - Crossterm for terminal events, resize, mouse input, and bracketed paste.
-- A multiline editor abstraction initially backed by `tui-textarea`.
+- A Ropey-backed multiline editor behind a terminal-independent abstraction.
 - SQLite through `rusqlite` with bundled SQLite.
 - `clap` for commands and session flags.
 - `arboard` for local clipboard access.
