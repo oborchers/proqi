@@ -4,10 +4,24 @@ fn snapshot(fixture: &mut Fixture, width: u16, height: u16, theme: ThemePreferen
     let terminal = draw_theme(fixture, width, height, theme);
     let buffer = terminal.backend().buffer();
     format!(
-        "TEXT\n{}\n\nSTYLE RUNS\n{}",
-        text(buffer),
+        "SIZE {}x{}\n\nTEXT\n{}\n\nSTYLE RUNS\n{}",
+        buffer.area.width,
+        buffer.area.height,
+        snapshot_text(buffer),
         style_runs(buffer)
     )
+}
+
+fn snapshot_text(buffer: &Buffer) -> String {
+    (0..buffer.area.height)
+        .map(|y| {
+            let row = (0..buffer.area.width)
+                .map(|x| buffer[(x, y)].symbol())
+                .collect::<String>();
+            format!("{y:02}│{}│", row.trim_end_matches(' '))
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn style_runs(buffer: &Buffer) -> String {

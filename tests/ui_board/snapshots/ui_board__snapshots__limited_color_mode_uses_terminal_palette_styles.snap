@@ -1,17 +1,19 @@
 ---
 source: tests/ui_board/snapshots.rs
-assertion_line: 93
+assertion_line: 107
 expression: "snapshot(&mut fixture, 48, 8, ThemePreference::Limited)"
 ---
+SIZE 48x8
+
 TEXT
- proqi · proqi-ui-contract · 1 thought    saving
-│ selected prompt                               
-                                                
-                                                
-                                                
-                                                
- ready                             edit · saving
-Esc Board  y Copy  u Undo  : Commands           
+00│ proqi · proqi-ui-contract · 1 thought    saving│
+01││ selected prompt│
+02││
+03││
+04││
+05││
+06│ ready                             edit · saving│
+07│Esc Board  y Copy  u Undo  : Commands│
 
 STYLE RUNS
 0: 0-47 fg=DarkGray bg=Reset mod=NONE

@@ -1,15 +1,17 @@
 ---
 source: tests/ui_board/snapshots.rs
-assertion_line: 44
+assertion_line: 58
 expression: "snapshot(&mut fixture, 24, 6, ThemePreference::Dark)"
 ---
+SIZE 24x6
+
 TEXT
- proqi             saved
-  + New thought         
-                        
-                        
- ready     board · saved
-n New   : Commands      
+00│ proqi             saved│
+01│  + New thought│
+02││
+03││
+04│ ready     board · saved│
+05│n New   : Commands│
 
 STYLE RUNS
 0: 0-23 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE

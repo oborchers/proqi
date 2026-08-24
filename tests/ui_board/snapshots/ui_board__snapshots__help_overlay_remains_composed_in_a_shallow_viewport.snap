@@ -1,17 +1,19 @@
 ---
 source: tests/ui_board/snapshots.rs
-assertion_line: 86
+assertion_line: 100
 expression: "snapshot(&mut fixture, 42, 8, ThemePreference::Auto)"
 ---
+SIZE 42x8
+
 TEXT
-┌ proqi help ──────────────────────────[x]
-│Board                                   │
-│n New   j/k Focus   Enter/e Edit        │
-│d Delete   J/K Reorder   u Undo         │
-│Space Collapse   / Search   : Commands  │
-│s/S Send   q Quit                       │
-│                                        │
-└────────────────────────────────────────┘
+00│┌ proqi help ──────────────────────────[x]│
+01││Board                                   ││
+02││n New   j/k Focus   Enter/e Edit        ││
+03││d Delete   J/K Reorder   u Undo         ││
+04││Space Collapse   / Search   : Commands  ││
+05││s/S Send   q Quit                       ││
+06││                                        ││
+07│└────────────────────────────────────────┘│
 
 STYLE RUNS
 0: 0-0 fg=Reset bg=Reset mod=NONE | 1-12 fg=Rgb(45, 106, 79) bg=Reset mod=BOLD | 13-38 fg=Reset bg=Reset mod=NONE | 39-41 fg=Rgb(45, 106, 79) bg=Reset mod=NONE

@@ -1,21 +1,23 @@
 ---
 source: tests/ui_board/snapshots.rs
-assertion_line: 64
+assertion_line: 78
 expression: "snapshot(&mut fixture, 60, 12, ThemePreference::Dark)"
 ---
+SIZE 60x12
+
 TEXT
- proqi · proqi-ui-contract · 2 thoughts               saving
-  first prompt                                              
-                                                            
-  ──────────────────────────────────────────────────────────
-                                                            
-│ [Image 1]  screenshot.png                                 
-  + New thought                                             
-                                                            
-                                                            
-                                                            
- ready                                        board · saving
-n New   y Copy  x Cut  d Delete  u Undo  / Search           
+00│ proqi · proqi-ui-contract · 2 thoughts               saving│
+01│  first prompt│
+02││
+03│  ──────────────────────────────────────────────────────────│
+04││
+05││ [Image 1]  screenshot.png│
+06│  + New thought│
+07││
+08││
+09││
+10│ ready                                        board · saving│
+11│n New   y Copy  x Cut  d Delete  u Undo  / Search│
 
 STYLE RUNS
 0: 0-59 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE
