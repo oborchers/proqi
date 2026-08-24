@@ -4,7 +4,8 @@ use crate::{
     domain::Direction,
     ports::{
         agent::{
-            AgentCapabilities, AgentError, AgentReadiness, AgentTarget, PaneContext, PaneRect,
+            AgentCapabilities, AgentDeliveryCapabilities, AgentError, AgentReadiness, AgentTarget,
+            PaneContext, PaneRect,
         },
         environment::ProcessRunner,
     },
@@ -40,6 +41,7 @@ pub(super) fn capabilities<R: ProcessRunner>(
         provider: "herdr".to_owned(),
         version: live.result.snapshot.version,
         protocol: schema.protocol,
+        delivery: AgentDeliveryCapabilities::SUBMIT_ONLY,
         context,
     })
 }
@@ -198,6 +200,7 @@ fn eligible_target(
         agent_name: name,
         agent_session_id: session.value.clone(),
         readiness,
+        delivery: AgentDeliveryCapabilities::SUBMIT_ONLY,
         rect,
         source: source.clone(),
     })

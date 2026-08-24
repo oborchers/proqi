@@ -34,6 +34,8 @@ impl BoardApp {
             created_at: clock.now(),
             annotations: Vec::new(),
         });
+        self.insertion_focus = super::InsertionFocus::Inactive;
+        self.edit_boundary = None;
         self.manual_board_scroll = false;
         self.layout = None;
         Vec::new()
@@ -75,12 +77,17 @@ impl BoardApp {
             self.editor = None;
             self.layout = None;
         }
+        self.edit_boundary = None;
     }
 
     pub(super) fn is_draft(&self, thought_id: ThoughtId) -> bool {
         self.draft
             .as_ref()
             .is_some_and(|draft| draft.thought_id == thought_id)
+    }
+
+    pub(super) fn draft_insertion_index(&self) -> Option<usize> {
+        self.draft.as_ref().map(|draft| draft.insertion_index)
     }
 
     pub(super) fn set_draft_annotations(&mut self, annotations: Vec<ContentAnnotation>) {

@@ -1,7 +1,10 @@
 //! Target revalidation and atomic semantic prompt submission.
 
 use crate::ports::{
-    agent::{AgentError, AgentGateway as _, AgentReadiness, SubmissionReceipt, SubmissionRequest},
+    agent::{
+        AgentDeliveryMode, AgentError, AgentGateway as _, AgentReadiness, SubmissionReceipt,
+        SubmissionRequest,
+    },
     environment::ProcessRunner,
 };
 
@@ -14,6 +17,11 @@ pub(super) fn submit<R: ProcessRunner>(
     gateway: &mut HerdrGateway<R>,
     request: &SubmissionRequest,
 ) -> Result<SubmissionReceipt, AgentError> {
+    if request.delivery != AgentDeliveryMode::Submit {
+        return Err(AgentError::Unsupported(
+            "installed Herdr contract cannot fill an agent composer without submitting".to_owned(),
+        ));
+    }
     let verified = gateway
         .adjacent_targets(&request.target.source)?
         .into_iter()

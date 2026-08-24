@@ -38,6 +38,7 @@ fn recorded_fake_executable_proves_direct_semantic_cli_contract() {
         .submit(SubmissionRequest {
             submission_id: ids.submission_id(),
             target: target.clone(),
+            delivery: proqi::ports::agent::AgentDeliveryMode::Submit,
             content: exact.to_owned(),
         })
         .expect("accepted prompt");

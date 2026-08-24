@@ -19,6 +19,9 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
+        if self.insertion_focus == super::InsertionFocus::Active {
+            return self.handle_insertion_key(key, ids, clock);
+        }
         match key {
             UiKey::Character(character) => {
                 return self.handle_board_command(character, ids, clock);
@@ -26,11 +29,19 @@ impl BoardApp {
             UiKey::Enter => self.enter_edit(),
             UiKey::Move {
                 movement: CursorMovement::VisualUp,
-                ..
+                extend_selection: true,
+            } => return self.reorder(ids, clock, -1),
+            UiKey::Move {
+                movement: CursorMovement::VisualDown,
+                extend_selection: true,
+            } => return self.reorder(ids, clock, 1),
+            UiKey::Move {
+                movement: CursorMovement::VisualUp,
+                extend_selection: false,
             } => self.move_focus(-1),
             UiKey::Move {
                 movement: CursorMovement::VisualDown,
-                ..
+                extend_selection: false,
             } => self.move_focus(1),
             UiKey::Undo => return self.history(ids, clock, true),
             UiKey::Redo => return self.history(ids, clock, false),
@@ -40,6 +51,46 @@ impl BoardApp {
             _ => {}
         }
         Vec::new()
+    }
+
+    fn handle_insertion_key(
+        &mut self,
+        key: UiKey,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        match key {
+            UiKey::Character(character) => {
+                let mut effects = self.start_draft(ids, clock);
+                self.apply_edit(EditCommand::InsertChar(character));
+                effects.extend(self.persist_draft(ids, clock));
+                effects
+            }
+            UiKey::Enter => self.start_draft(ids, clock),
+            UiKey::Escape
+            | UiKey::Move {
+                movement: CursorMovement::VisualUp,
+                ..
+            } => {
+                self.move_focus(-1);
+                Vec::new()
+            }
+            UiKey::PasteClipboard => self.read_clipboard(ids),
+            UiKey::Move {
+                movement: CursorMovement::VisualDown,
+                ..
+            }
+            | UiKey::Backspace
+            | UiKey::Delete
+            | UiKey::SelectAll
+            | UiKey::DeleteLine
+            | UiKey::Undo
+            | UiKey::Redo
+            | UiKey::Copy
+            | UiKey::Cut
+            | UiKey::Quit
+            | UiKey::Move { .. } => Vec::new(),
+        }
     }
 
     fn handle_board_command(
@@ -57,8 +108,18 @@ impl BoardApp {
             Some(BoardCommand::Delete) => self.delete(ids, clock),
             Some(BoardCommand::Copy) => self.copy_thought(ids),
             Some(BoardCommand::Cut) => self.cut_thought(ids, clock),
-            Some(BoardCommand::Submit) => self.begin_submission(false, ids, clock),
-            Some(BoardCommand::SubmitRemove) => self.begin_submission(true, ids, clock),
+            Some(BoardCommand::Send) => self.begin_delivery(
+                crate::ports::agent::AgentDeliveryMode::Compose,
+                false,
+                ids,
+                clock,
+            ),
+            Some(BoardCommand::Submit) => self.begin_delivery(
+                crate::ports::agent::AgentDeliveryMode::Submit,
+                false,
+                ids,
+                clock,
+            ),
             Some(BoardCommand::Undo) => self.history(ids, clock, true),
             Some(BoardCommand::FocusUp) => {
                 self.move_focus(-1);
@@ -97,35 +158,22 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        if matches!(key, UiKey::Enter) && self.expand_fold_at_cursor() {
-            return Vec::new();
+        if let Some(effects) = self.handle_edit_effect(key, ids, clock) {
+            return effects;
+        }
+        if let UiKey::Move {
+            movement,
+            extend_selection,
+        } = key
+            && self.leave_selected_fold(movement, extend_selection)
+        {
+            return self.flush_pending_edit(ids, clock);
         }
         let adjacent_fold = match key {
             UiKey::Backspace => self.delete_adjacent_fold(true),
             UiKey::Delete => self.delete_adjacent_fold(false),
             _ => false,
         };
-        match key {
-            UiKey::Escape => return self.finish_edit(ids, clock),
-            UiKey::Undo => return self.history(ids, clock, true),
-            UiKey::Redo => return self.history(ids, clock, false),
-            UiKey::Copy => {
-                let mut effects = self.flush_pending_edit(ids, clock);
-                effects.extend(self.copy_selection(ids));
-                return effects;
-            }
-            UiKey::Cut => {
-                let mut effects = self.flush_pending_edit(ids, clock);
-                effects.extend(self.cut_selection(ids));
-                return effects;
-            }
-            UiKey::PasteClipboard => {
-                let mut effects = self.flush_pending_edit(ids, clock);
-                effects.extend(self.read_clipboard(ids));
-                return effects;
-            }
-            _ => {}
-        }
         let (command, boundary) = match key {
             UiKey::Character(character) => (EditCommand::InsertChar(character), false),
             UiKey::Enter => (EditCommand::InsertNewline, false),
@@ -158,6 +206,7 @@ impl BoardApp {
             } => Some((*movement, *extend_selection)),
             _ => None,
         };
+        let before_movement = movement.and_then(|_| self.editor_snapshot());
         let mut effects = if boundary {
             self.flush_pending_edit(ids, clock)
         } else {
@@ -166,6 +215,13 @@ impl BoardApp {
         self.apply_edit(command);
         if let Some((movement, extend_selection)) = movement {
             self.normalize_fold_cursor(movement, extend_selection);
+            effects.extend(self.finish_boundary_navigation(
+                movement,
+                extend_selection,
+                before_movement.as_ref(),
+                ids,
+                clock,
+            ));
         }
         if self.has_draft() {
             effects.extend(self.persist_draft(ids, clock));
@@ -176,11 +232,44 @@ impl BoardApp {
         effects
     }
 
+    fn handle_edit_effect(
+        &mut self,
+        key: UiKey,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Option<Vec<Effect>> {
+        if matches!(key, UiKey::Enter) && self.expand_fold_at_cursor() {
+            return Some(Vec::new());
+        }
+        match key {
+            UiKey::Escape => Some(self.finish_edit(ids, clock)),
+            UiKey::Undo => Some(self.history(ids, clock, true)),
+            UiKey::Redo => Some(self.history(ids, clock, false)),
+            UiKey::Copy => {
+                let mut effects = self.flush_pending_edit(ids, clock);
+                effects.extend(self.copy_selection(ids));
+                Some(effects)
+            }
+            UiKey::Cut => {
+                let mut effects = self.flush_pending_edit(ids, clock);
+                effects.extend(self.cut_selection(ids));
+                Some(effects)
+            }
+            UiKey::PasteClipboard => {
+                let mut effects = self.flush_pending_edit(ids, clock);
+                effects.extend(self.read_clipboard(ids));
+                Some(effects)
+            }
+            _ => None,
+        }
+    }
+
     pub(super) fn finish_edit(
         &mut self,
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
+        self.edit_boundary = None;
         if self.has_draft() {
             self.discard_draft();
             return Vec::new();
@@ -265,13 +354,80 @@ impl BoardApp {
         if live.is_empty() {
             return;
         }
+        if self.insertion_focus == super::InsertionFocus::Active {
+            if delta < 0 {
+                self.insertion_focus = super::InsertionFocus::Inactive;
+                let _effects = self.reduce(Action::FocusThought(Some(live[live.len() - 1].id)));
+            }
+            return;
+        }
         let current = self
             .state
             .focused_thought
             .and_then(|id| live.iter().position(|thought| thought.id == id))
             .unwrap_or(0);
+        if delta > 0 && current == live.len() - 1 {
+            self.insertion_focus = super::InsertionFocus::Active;
+            self.layout = None;
+            return;
+        }
         let target = current.saturating_add_signed(delta).min(live.len() - 1);
         let _effects = self.reduce(Action::FocusThought(Some(live[target].id)));
+    }
+
+    fn finish_boundary_navigation(
+        &mut self,
+        movement: CursorMovement,
+        extend_selection: bool,
+        before: Option<&crate::ports::editor::EditorSnapshot>,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        if extend_selection
+            || !matches!(
+                movement,
+                CursorMovement::VisualUp | CursorMovement::VisualDown
+            )
+        {
+            self.edit_boundary = None;
+            return Vec::new();
+        }
+        let Some(before) = before else {
+            return Vec::new();
+        };
+        let Some(after) = self.editor_snapshot() else {
+            return Vec::new();
+        };
+        if before.cursor != after.cursor || before.selection != after.selection {
+            self.edit_boundary = None;
+            return Vec::new();
+        }
+        let armed = self.edit_boundary == Some(movement);
+        self.edit_boundary = Some(movement);
+        if !armed {
+            return Vec::new();
+        }
+        let Some(target) = self.edit_neighbor(movement) else {
+            return Vec::new();
+        };
+        let mut effects = self.finish_edit(ids, clock);
+        self.insertion_focus = super::InsertionFocus::Inactive;
+        effects.extend(self.reduce(Action::FocusThought(Some(target))));
+        effects
+    }
+
+    fn edit_neighbor(&self, movement: CursorMovement) -> Option<crate::domain::ThoughtId> {
+        let live = self.state.board.live_thoughts();
+        let current = self.draft_insertion_index().or_else(|| {
+            let active = self.active_thought_id()?;
+            live.iter().position(|thought| thought.id == active)
+        })?;
+        let target = match movement {
+            CursorMovement::VisualUp => current.checked_sub(1)?,
+            CursorMovement::VisualDown => current.saturating_add(1),
+            _ => return None,
+        };
+        live.get(target).map(|thought| thought.id)
     }
 
     pub(super) fn reorder(

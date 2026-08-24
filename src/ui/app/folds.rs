@@ -16,19 +16,35 @@ impl BoardApp {
             return false;
         };
         let cursor = crate::ui::projection::byte_for_position(&snapshot.content, snapshot.cursor);
+        let selection = snapshot.selection.map(|selection| {
+            (
+                crate::ui::projection::byte_for_position(&snapshot.content, selection.start),
+                crate::ui::projection::byte_for_position(&snapshot.content, selection.end),
+            )
+        });
         let annotations = self.current_annotations(thought_id);
         let candidate = annotations
             .iter()
             .enumerate()
             .find_map(|(index, annotation)| {
                 (!self.expanded_folds.contains(&(thought_id, index))
-                    && (cursor == annotation.start || cursor == annotation.end))
+                    && (selection == Some((annotation.start, annotation.end))
+                        || cursor == annotation.start
+                        || cursor == annotation.end))
                     .then_some(index)
             });
-        candidate.is_some_and(|index| self.expanded_folds.insert((thought_id, index)))
+        let Some(index) = candidate else {
+            return false;
+        };
+        if !self.expanded_folds.insert((thought_id, index)) {
+            return false;
+        }
+        let end = annotations[index].end;
+        self.set_editor_range(end, end);
+        true
     }
 
-    pub(super) fn expand_fold_at_cell(
+    pub(super) fn select_fold_at_cell(
         &mut self,
         thought_id: ThoughtId,
         row: u16,
@@ -43,19 +59,7 @@ impl BoardApp {
         let Some(fold) = presentation.fold_at_cell(row, column) else {
             return false;
         };
-        let index = fold.annotation_index;
-        let end = fold.canonical_end;
-        if !self.expanded_folds.insert((thought_id, index)) {
-            return false;
-        }
-        if let Some((_, editor)) = &mut self.editor {
-            let content = editor.snapshot().content;
-            let position = crate::ui::projection::position_for_byte(&content, end);
-            let _outcome = editor.apply(EditCommand::SetCursor {
-                position,
-                extend_selection: false,
-            });
-        }
+        self.set_editor_range(fold.canonical_start, fold.canonical_end);
         true
     }
 
@@ -72,8 +76,8 @@ impl BoardApp {
 
     pub(super) fn normalize_fold_cursor(
         &mut self,
-        movement: CursorMovement,
-        extend_selection: bool,
+        _movement: CursorMovement,
+        _extend_selection: bool,
     ) {
         let Some(thought_id) = self.active_thought_id() else {
             return;
@@ -90,18 +94,55 @@ impl BoardApp {
                 (!self.expanded_folds.contains(&(thought_id, index))
                     && cursor > annotation.start
                     && cursor < annotation.end)
-                    .then(|| movement_target(annotation, movement))
+                    .then_some((annotation.start, annotation.end))
             });
-        let Some(target) = target else {
+        let Some((start, end)) = target else {
             return;
         };
-        if let Some((_, editor)) = &mut self.editor {
-            let position = crate::ui::projection::position_for_byte(&snapshot.content, target);
-            let _outcome = editor.apply(EditCommand::SetCursor {
-                position,
-                extend_selection,
-            });
+        self.set_editor_range(start, end);
+    }
+
+    pub(super) fn leave_selected_fold(
+        &mut self,
+        movement: CursorMovement,
+        extend_selection: bool,
+    ) -> bool {
+        if extend_selection {
+            return false;
         }
+        let Some(thought_id) = self.active_thought_id() else {
+            return false;
+        };
+        let Some(snapshot) = self.editor_snapshot() else {
+            return false;
+        };
+        let Some(selection) = snapshot.selection else {
+            return false;
+        };
+        let range = (
+            crate::ui::projection::byte_for_position(&snapshot.content, selection.start),
+            crate::ui::projection::byte_for_position(&snapshot.content, selection.end),
+        );
+        let annotations = self.current_annotations(thought_id);
+        let target = annotations
+            .iter()
+            .enumerate()
+            .find(|(index, annotation)| {
+                !self.expanded_folds.contains(&(thought_id, *index))
+                    && range == (annotation.start, annotation.end)
+            })
+            .map(|(_, annotation)| {
+                if moves_before(movement) {
+                    annotation.start
+                } else {
+                    annotation.end
+                }
+            });
+        let Some(target) = target else {
+            return false;
+        };
+        self.set_editor_range(target, target);
+        true
     }
 
     pub(super) fn delete_adjacent_fold(&mut self, backwards: bool) -> bool {
@@ -142,24 +183,37 @@ impl BoardApp {
         true
     }
 
+    fn set_editor_range(&mut self, start: usize, end: usize) {
+        let Some((_, editor)) = &mut self.editor else {
+            return;
+        };
+        let content = editor.snapshot().content;
+        let start = crate::ui::projection::position_for_byte(&content, start);
+        let end = crate::ui::projection::position_for_byte(&content, end);
+        let _outcome = editor.apply(EditCommand::SetCursor {
+            position: start,
+            extend_selection: false,
+        });
+        let _outcome = editor.apply(EditCommand::SetCursor {
+            position: end,
+            extend_selection: true,
+        });
+    }
+
     pub(super) fn clear_expanded_folds(&mut self, thought_id: ThoughtId) {
         self.expanded_folds.retain(|(id, _)| *id != thought_id);
     }
 }
 
-fn movement_target(annotation: &ContentAnnotation, movement: CursorMovement) -> usize {
-    match movement {
+fn moves_before(movement: CursorMovement) -> bool {
+    matches!(
+        movement,
         CursorMovement::GraphemeBack
-        | CursorMovement::WordBack
-        | CursorMovement::VisualUp
-        | CursorMovement::LineStart
-        | CursorMovement::DocumentStart => annotation.start,
-        CursorMovement::GraphemeForward
-        | CursorMovement::WordForward
-        | CursorMovement::VisualDown
-        | CursorMovement::LineEnd
-        | CursorMovement::DocumentEnd => annotation.end,
-    }
+            | CursorMovement::WordBack
+            | CursorMovement::VisualUp
+            | CursorMovement::LineStart
+            | CursorMovement::DocumentStart
+    )
 }
 
 fn adjacent_range(

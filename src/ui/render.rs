@@ -106,7 +106,7 @@ fn render_board(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, 
             Span::styled("+", Style::default().fg(theme.accent)),
             Span::styled(" New thought", Style::default().fg(theme.foreground)),
         ]);
-        let style = if hovered {
+        let style = if hovered || app.insertion_focused() {
             theme.focused_style()
         } else {
             theme.base_style()
@@ -150,11 +150,11 @@ fn render_gutter(
     theme: &Theme,
 ) {
     let symbol = if focused || hovered { "⋮" } else { " " };
-    let padding = usize::from(layout.gutter.height.saturating_sub(1) / 2);
+    let padding = usize::from(layout.gutter.height / 2);
     let content = format!("{}{symbol}", "\n".repeat(padding));
     let style = if focused {
         Style::default()
-            .fg(theme.background)
+            .fg(theme.focused_foreground)
             .bg(theme.accent)
             .remove_modifier(Modifier::REVERSED)
             .add_modifier(if dragging {
@@ -194,7 +194,7 @@ fn render_thought(
     .collect::<Vec<_>>();
     let mut paragraph = Paragraph::new(Text::from(lines));
     if focused {
-        paragraph = paragraph.style(Style::default().fg(theme.foreground));
+        paragraph = paragraph.style(Style::default().fg(theme.focused_foreground));
     } else if layout.hidden_rows > 0 {
         paragraph = paragraph.style(Style::default().fg(theme.muted));
     }
@@ -241,6 +241,14 @@ fn render_editor(frame: &mut Frame<'_>, app: &BoardApp, layout: &ThoughtLayout, 
         .y
         .saturating_add(u16::try_from(cursor_row).unwrap_or(u16::MAX));
     if x < layout.text_area.right() && y < layout.text_area.bottom() {
+        if snapshot.selection.is_none() {
+            frame.buffer_mut()[(x, y)].set_style(
+                Style::default()
+                    .fg(theme.focused_foreground)
+                    .bg(theme.accent)
+                    .remove_modifier(Modifier::REVERSED),
+            );
+        }
         frame.set_cursor_position((x, y));
     }
 }

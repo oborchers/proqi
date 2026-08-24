@@ -100,7 +100,7 @@ fn large_paste_is_folded_while_editing_and_editor_undo_restores_its_fold() {
 }
 
 #[test]
-fn collapsed_folds_are_atomic_for_cursor_deletion_and_mouse_expansion() {
+fn collapsed_folds_are_atomic_for_selection_replacement_and_expansion() {
     let mut fixture = Fixture::new();
     let path = "/tmp/screenshot.png";
     fixture.input(UiInput::PasteAnnotated(image_payload(path)));
@@ -108,19 +108,48 @@ fn collapsed_folds_are_atomic_for_cursor_deletion_and_mouse_expansion() {
         movement: CursorMovement::GraphemeBack,
         extend_selection: false,
     }));
+    let snapshot = fixture.app.editor_snapshot().expect("editor");
     assert_eq!(
-        fixture.app.editor_snapshot().expect("editor").cursor,
-        proqi::domain::TextPosition::new(0, 0)
+        snapshot.selection,
+        Some(proqi::ports::editor::TextSelection {
+            start: proqi::domain::TextPosition::new(0, 0),
+            end: proqi::domain::TextPosition::new(0, path.len()),
+        })
     );
+    let terminal = draw(&mut fixture, 40, 8);
+    let area = fixture.app.prepare_frame(Rect::new(0, 0, 40, 8)).thoughts[0].text_area;
+    for column in 0.."[Image 1]".len() {
+        let column = u16::try_from(column).expect("short placeholder");
+        assert!(
+            terminal.backend().buffer()[(area.x + column, area.y)]
+                .modifier
+                .contains(ratatui_core::style::Modifier::REVERSED)
+        );
+    }
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::GraphemeBack,
+        extend_selection: false,
+    }));
+    let before = fixture.app.editor_snapshot().expect("editor");
+    assert_eq!(before.cursor, proqi::domain::TextPosition::new(0, 0));
+    assert!(before.selection.is_none());
     fixture.input(UiInput::Key(UiKey::Move {
         movement: CursorMovement::GraphemeForward,
         extend_selection: false,
     }));
-    assert_eq!(
-        fixture.app.editor_snapshot().expect("editor").cursor,
-        proqi::domain::TextPosition::new(0, path.len())
+    assert!(
+        fixture
+            .app
+            .editor_snapshot()
+            .expect("editor")
+            .selection
+            .is_some()
     );
+    fixture.input(UiInput::Key(UiKey::Character('x')));
+    assert_eq!(fixture.app.editor_snapshot().expect("editor").content, "x");
 
+    let mut fixture = Fixture::new();
+    fixture.input(UiInput::PasteAnnotated(image_payload(path)));
     let _rendered = draw(&mut fixture, 40, 8);
     let area = fixture.app.prepare_frame(Rect::new(0, 0, 40, 8)).thoughts[0].text_area;
     fixture.pointer(
@@ -128,6 +157,15 @@ fn collapsed_folds_are_atomic_for_cursor_deletion_and_mouse_expansion() {
         area.y,
         PointerKind::Down(PointerButton::Left),
     );
+    assert_eq!(
+        fixture.app.editor_snapshot().expect("editor").selection,
+        Some(proqi::ports::editor::TextSelection {
+            start: proqi::domain::TextPosition::new(0, 0),
+            end: proqi::domain::TextPosition::new(0, path.len()),
+        })
+    );
+    assert!(text(draw(&mut fixture, 40, 8).backend().buffer()).contains("[Image 1]"));
+    fixture.input(UiInput::Key(UiKey::Enter));
     assert!(text(draw(&mut fixture, 40, 8).backend().buffer()).contains(path));
 
     fixture.input(UiInput::Key(UiKey::Escape));

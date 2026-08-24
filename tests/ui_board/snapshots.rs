@@ -78,6 +78,7 @@ fn adjacent_target(direction: Direction, pane_id: &str, readiness: AgentReadines
         agent_name: format!("Codex {pane_id}"),
         agent_session_id: format!("session-{pane_id}"),
         readiness,
+        delivery: proqi::ports::agent::AgentDeliveryCapabilities::SUBMIT_ONLY,
         rect: source.rect,
         source,
     }

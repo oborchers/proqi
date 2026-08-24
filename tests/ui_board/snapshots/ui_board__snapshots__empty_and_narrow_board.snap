@@ -5,11 +5,11 @@ expression: "snapshot(&mut fixture, 24, 6, ThemePreference::Dark)"
 SIZE 24x6
 
 TEXT
-00│  proqi            saved│
+00│  proqi│
 01││
 02│      + New thought│
 03││
-04│  ready  board · saved│
+04│         board · saved│
 05│  n New   : Commands│
 
 STYLE RUNS

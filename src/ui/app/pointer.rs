@@ -38,6 +38,7 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
+        self.edit_boundary = None;
         let mut effects = match pointer.kind {
             PointerKind::Down(_) | PointerKind::Drag(_) | PointerKind::Up(_) => {
                 self.flush_pending_edit(ids, clock)
@@ -95,10 +96,12 @@ impl BoardApp {
             Some(HitTarget::Copy) => self.copy_active(ids),
             Some(HitTarget::Cut) => self.cut_active(ids, clock),
             Some(HitTarget::Delete) => self.delete(ids, clock),
-            Some(HitTarget::Submit(direction, remove)) => {
-                self.submit_to(direction, remove, ids, clock)
+            Some(HitTarget::Deliver(direction, delivery, remove)) => {
+                self.deliver_to(direction, delivery, remove, ids, clock)
             }
-            Some(HitTarget::BeginSubmit(remove)) => self.begin_submission(remove, ids, clock),
+            Some(HitTarget::BeginDelivery(delivery, remove)) => {
+                self.begin_delivery(delivery, remove, ids, clock)
+            }
             Some(HitTarget::Undo) => self.history(ids, clock, true),
             Some(HitTarget::Help) => {
                 self.help = !self.help;
@@ -122,7 +125,7 @@ impl BoardApp {
                 self.close_overlay();
                 Vec::new()
             }
-            None => Vec::new(),
+            Some(HitTarget::Agent(_)) | None => Vec::new(),
         }
     }
 
@@ -172,7 +175,7 @@ impl BoardApp {
         let Some((row, column)) = cell else {
             return Vec::new();
         };
-        if self.expand_fold_at_cell(thought_id, row, column) {
+        if self.select_fold_at_cell(thought_id, row, column) {
             return Vec::new();
         }
         let position = self.projected_position_at_cell(row, column);
@@ -202,6 +205,7 @@ impl BoardApp {
             return;
         }
         self.discard_draft();
+        self.insertion_focus = super::InsertionFocus::Inactive;
         self.manual_board_scroll = false;
         let _effects = self.reduce(Action::FocusThought(Some(thought_id)));
     }

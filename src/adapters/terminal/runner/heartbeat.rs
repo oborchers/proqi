@@ -14,13 +14,10 @@ pub(super) struct PaneHeartbeat {
 }
 
 impl PaneHeartbeat {
-    pub(super) fn from_environment() -> Option<Self> {
-        let managed = std::env::var_os("HERDR_ENV").is_some_and(|value| value == "1")
-            && std::env::var_os("PROQI_DISABLE_HERDR").is_none();
-        let pane_id = managed
-            .then(|| std::env::var("HERDR_PANE_ID").ok())
-            .flatten()
-            .filter(|value| !value.is_empty())?;
+    pub(super) fn from_pane_id(pane_id: String) -> Option<Self> {
+        if pane_id.is_empty() {
+            return None;
+        }
         Some(Self {
             pane_id,
             sequence: 1,
@@ -45,5 +42,25 @@ impl PaneHeartbeat {
     pub(super) fn clear(&mut self, external: &ExternalLane) -> Result<(), TerminalError> {
         self.sequence = self.sequence.saturating_add(1);
         external.clear_pane(&self.pane_id, self.sequence)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PaneHeartbeat;
+
+    #[test]
+    fn verified_pane_identity_creates_a_heartbeat_without_environment_state() {
+        let heartbeat = PaneHeartbeat::from_pane_id("wA:pC".to_owned());
+
+        assert_eq!(
+            heartbeat.map(|value| value.pane_id),
+            Some("wA:pC".to_owned())
+        );
+    }
+
+    #[test]
+    fn empty_pane_identity_is_rejected() {
+        assert!(PaneHeartbeat::from_pane_id(String::new()).is_none());
     }
 }

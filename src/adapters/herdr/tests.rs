@@ -175,6 +175,10 @@ fn capability_negotiation_verifies_live_protocol_and_current_geometry() {
     let (mut gateway, runner) = gateway(capability_responses(&context));
     let capability = gateway.capabilities().expect("capability");
     assert_eq!(capability.protocol, 19);
+    assert_eq!(
+        capability.delivery,
+        crate::ports::agent::AgentDeliveryCapabilities::SUBMIT_ONLY
+    );
     assert_eq!(capability.version, "0.8.0");
     assert_eq!(capability.context, context);
     let requests = runner.requests.borrow();
@@ -284,6 +288,7 @@ fn target(context: &PaneContext) -> AgentTarget {
         agent_name: "reviewer".to_owned(),
         agent_session_id: "agent-session-1".to_owned(),
         readiness: AgentReadiness::Idle,
+        delivery: crate::ports::agent::AgentDeliveryCapabilities::SUBMIT_ONLY,
         rect: right_rect(),
         source: context.clone(),
     }
@@ -306,6 +311,7 @@ fn submission_revalidates_and_passes_exact_text_as_one_distinct_argument() {
         .submit(SubmissionRequest {
             submission_id,
             target: target(&context),
+            delivery: crate::ports::agent::AgentDeliveryMode::Submit,
             content: prompt_text.clone(),
         })
         .expect("accepted submission");
@@ -320,6 +326,22 @@ fn submission_revalidates_and_passes_exact_text_as_one_distinct_argument() {
     );
     assert_eq!(prompt.stdin, None);
     assert_eq!(prompt.timeout, Duration::from_secs(5));
+}
+
+#[test]
+fn composer_only_delivery_fails_before_executing_herdr() {
+    let context = source();
+    let (mut gateway, runner) = gateway(Vec::new());
+    let mut ids = FakeIdGenerator::new(1_725_200_000_000);
+    let result = gateway.submit(SubmissionRequest {
+        submission_id: ids.submission_id(),
+        target: target(&context),
+        delivery: crate::ports::agent::AgentDeliveryMode::Compose,
+        content: "keep in composer".to_owned(),
+    });
+
+    assert!(matches!(result, Err(AgentError::Unsupported(_))));
+    assert!(runner.requests.borrow().is_empty());
 }
 
 #[test]
@@ -376,4 +398,19 @@ fn pane_identity_uses_display_only_metadata_with_ttl_and_clean_clear() {
             "8",
         ]
     );
+}
+
+#[test]
+fn pane_identity_can_use_a_process_unique_monotonic_source() {
+    let responses = vec![success(json!({}))];
+    let runner = FakeRunner::with(responses);
+    let mut gateway = HerdrGateway::new(OsString::from("herdr"), runner.clone(), true)
+        .with_presentation_source("proqi-ins_example".to_owned());
+
+    gateway
+        .publish("w1:p1", 1, Duration::from_secs(15))
+        .expect("publish display metadata");
+
+    let requests = runner.requests.borrow();
+    assert_eq!(requests[0].args[3..5], ["--source", "proqi-ins_example"]);
 }

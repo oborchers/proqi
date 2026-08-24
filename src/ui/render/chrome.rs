@@ -12,6 +12,7 @@ use unicode_width::UnicodeWidthStr as _;
 use crate::{
     application::{DurabilityState, InteractionMode},
     domain::Direction,
+    ports::agent::AgentDeliveryMode,
 };
 
 use super::super::{BoardApp, HitTarget, LayoutSnapshot, Theme};
@@ -46,13 +47,8 @@ pub(super) fn render_header(
     } else {
         "  proqi".to_owned()
     };
-    let text = compose(
-        &left,
-        summary_durability(app),
-        usize::from(layout.header.width),
-    );
     frame.render_widget(
-        Paragraph::new(text).style(Style::default().fg(theme.muted)),
+        Paragraph::new(left).style(Style::default().fg(theme.muted)),
         layout.header,
     );
 }
@@ -86,9 +82,13 @@ fn render_control(
         Span::styled(label.key, Style::default().fg(theme.accent)),
         Span::styled(text, Style::default().fg(theme.foreground)),
     ]);
-    let active_submission =
-        matches!(target, HitTarget::BeginSubmit(remove) if app.submission_mode() == Some(remove));
-    let style = if app.hovered() == Some(target) || active_submission {
+    let active_submission = matches!(
+        target,
+        HitTarget::BeginDelivery(delivery, remove)
+            if app.submission_mode() == Some((delivery, remove))
+    );
+    let interactive = !matches!(target, HitTarget::Agent(_));
+    let style = if (interactive && app.hovered() == Some(target)) || active_submission {
         theme.focused_style()
     } else {
         theme.base_style()
@@ -122,13 +122,12 @@ fn render_context(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot
     if layout.footer_context.height == 0 {
         return;
     }
-    let fallback = app.agent_hint().unwrap_or_else(|| "ready".to_owned());
     let left = layout
         .footer_status
         .is_none()
         .then(|| app.status.clone())
         .flatten()
-        .unwrap_or(fallback);
+        .unwrap_or_default();
     let mode = match app.interaction_mode() {
         InteractionMode::Board => "board",
         InteractionMode::Edit { .. } => "edit",
@@ -192,49 +191,22 @@ fn label(
         HitTarget::ExitEdit => ("Esc".to_owned(), " Board"),
         HitTarget::Retry => ("r".to_owned(), " Retry"),
         HitTarget::ExportRecovery => ("w".to_owned(), " Export"),
-        HitTarget::BeginSubmit(remove) => submit_mode_label(remove, keys),
-        HitTarget::Submit(direction, remove) => {
+        HitTarget::Agent(direction) => {
             let target = app
                 .agent_targets()
                 .iter()
                 .find(|target| target.direction == direction);
-            if app.agent_targets().len() == 1 {
-                let key = if remove {
-                    keys.submit_remove
-                } else {
-                    keys.submit
-                };
-                let verb = if remove { "Send+" } else { "Send" };
-                let detail = target.map_or_else(
-                    || format!(" {verb} {}", direction_word(direction)),
-                    |target| {
-                        format!(
-                            " {verb} {} · {} · {}",
-                            direction_word(direction),
-                            compact_agent_name(&target.agent_kind),
-                            readiness(target.readiness)
-                        )
-                    },
-                );
-                return ControlLabel {
-                    key: crate::ui::settings::key_label(key),
-                    text: detail,
-                };
-            }
             let detail = target.map_or_else(
                 || " Agent".to_owned(),
-                |target| {
-                    format!(
-                        " {} · {}",
-                        compact_agent_name(&target.agent_kind),
-                        readiness(target.readiness)
-                    )
-                },
+                |target| format!(" {}", compact_agent_name(&target.agent_kind)),
             );
             return ControlLabel {
                 key: direction_symbol(direction).to_owned(),
                 text: detail,
             };
+        }
+        HitTarget::BeginDelivery(delivery, _) | HitTarget::Deliver(_, delivery, _) => {
+            delivery_label(delivery, keys)
         }
         _ => (String::new(), ""),
     };
@@ -244,11 +216,13 @@ fn label(
     }
 }
 
-fn submit_mode_label(remove: bool, keys: &crate::ui::KeyBindings) -> (String, &'static str) {
-    if remove {
-        (crate::ui::settings::key_label(keys.submit_remove), " Send+")
-    } else {
-        (crate::ui::settings::key_label(keys.submit), " Send")
+fn delivery_label(
+    delivery: AgentDeliveryMode,
+    keys: &crate::ui::KeyBindings,
+) -> (String, &'static str) {
+    match delivery {
+        AgentDeliveryMode::Compose => (crate::ui::settings::key_label(keys.send), " Send"),
+        AgentDeliveryMode::Submit => (crate::ui::settings::key_label(keys.submit), " Submit"),
     }
 }
 
@@ -257,23 +231,6 @@ fn compact_agent_name(kind: &str) -> String {
     characters.next().map_or_else(String::new, |first| {
         first.to_uppercase().collect::<String>() + characters.as_str()
     })
-}
-
-const fn readiness(value: crate::ports::agent::AgentReadiness) -> &'static str {
-    match value {
-        crate::ports::agent::AgentReadiness::Idle => "idle",
-        crate::ports::agent::AgentReadiness::Working => "working",
-        crate::ports::agent::AgentReadiness::Done => "done",
-    }
-}
-
-const fn direction_word(direction: Direction) -> &'static str {
-    match direction {
-        Direction::Up => "up",
-        Direction::Right => "right",
-        Direction::Down => "down",
-        Direction::Left => "left",
-    }
 }
 
 fn inset(area: ratatui_core::layout::Rect) -> ratatui_core::layout::Rect {

@@ -446,5 +446,7 @@ mod composition;
 mod draft;
 #[path = "ui_board/durability.rs"]
 mod durability;
+#[path = "ui_board/navigation.rs"]
+mod navigation;
 #[path = "ui_board/snapshots.rs"]
 mod snapshots;

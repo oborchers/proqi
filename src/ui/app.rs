@@ -22,7 +22,7 @@ use crate::{
     },
     domain::{OperationSequence, RequestId, SubmissionId, ThoughtId},
     ports::{
-        agent::{AgentTarget, SubmissionRequest},
+        agent::{AgentDeliveryMode, AgentTarget, SubmissionRequest},
         editor::{
             CursorMovement, EditCommand, Editor, EditorFactory, EditorSnapshot, TextViewport,
         },
@@ -86,7 +86,15 @@ struct PendingSubmission {
 
 #[derive(Clone, Copy)]
 struct SubmissionMode {
+    delivery: AgentDeliveryMode,
     remove: bool,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+enum InsertionFocus {
+    #[default]
+    Inactive,
+    Active,
 }
 
 /// Normalized keys accepted by the board UI.
@@ -171,6 +179,8 @@ pub struct BoardApp {
     dragged_thought: Option<ThoughtId>,
     drag_target: Option<usize>,
     hovered: Option<HitTarget>,
+    insertion_focus: InsertionFocus,
+    edit_boundary: Option<CursorMovement>,
     palette: Option<palette::PaletteState>,
     search: Option<search::SearchState>,
     settings: UiSettings,
@@ -216,6 +226,8 @@ impl BoardApp {
             dragged_thought: None,
             drag_target: None,
             hovered: None,
+            insertion_focus: InsertionFocus::Inactive,
+            edit_boundary: None,
             palette: None,
             search: None,
             settings,
@@ -251,6 +263,15 @@ impl BoardApp {
         if !matches!(input, UiInput::Resize { .. } | UiInput::HostFocusGained) {
             self.status = None;
         }
+        if !matches!(
+            input,
+            UiInput::Key(UiKey::Move {
+                movement: CursorMovement::VisualUp | CursorMovement::VisualDown,
+                extend_selection: false,
+            })
+        ) {
+            self.edit_boundary = None;
+        }
         if self.palette.is_some() {
             return self.handle_palette_input(&input, ids, clock);
         }
@@ -280,6 +301,7 @@ impl BoardApp {
             UiInput::Resize { .. } => {
                 self.layout = None;
                 self.hovered = None;
+                self.edit_boundary = None;
                 Vec::new()
             }
             UiInput::Pointer(pointer) => self.handle_pointer(pointer, ids, clock),
@@ -362,6 +384,7 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
+        self.insertion_focus = InsertionFocus::Inactive;
         if payload.content.is_empty() {
             return self.start_draft(ids, clock);
         }
@@ -379,6 +402,8 @@ impl BoardApp {
     }
 
     fn enter_edit(&mut self) {
+        self.insertion_focus = InsertionFocus::Inactive;
+        self.edit_boundary = None;
         if self.draft.is_some() {
             return;
         }

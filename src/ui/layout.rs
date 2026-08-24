@@ -9,7 +9,11 @@ use ratatui_core::layout::Rect;
 use crate::{
     application::AppState,
     domain::{Direction, ThoughtId},
-    ports::{agent::AgentTarget, editor::EditorSnapshot, text_layout::wrap_rows},
+    ports::{
+        agent::{AgentDeliveryMode, AgentTarget},
+        editor::EditorSnapshot,
+        text_layout::wrap_rows,
+    },
 };
 
 /// Semantic target resolved from the latest rendered geometry.
@@ -33,10 +37,12 @@ pub enum HitTarget {
     Cut,
     /// Delete the focused thought without changing the clipboard.
     Delete,
-    /// Submit to one verified direction, optionally removing after acceptance.
-    Submit(Direction, bool),
-    /// Choose normal or remove-after-acceptance submission for several agents.
-    BeginSubmit(bool),
+    /// Display one independently verified adjacent target.
+    Agent(Direction),
+    /// Deliver to one verified direction, optionally removing after acceptance.
+    Deliver(Direction, AgentDeliveryMode, bool),
+    /// Choose a verified direction for one delivery intention.
+    BeginDelivery(AgentDeliveryMode, bool),
     /// Board undo action.
     Undo,
     /// Contextual help action.
@@ -179,44 +185,59 @@ impl LayoutSnapshot {
     }
 
     /// Add only currently verified agent controls where footer width permits.
-    pub fn configure_agent_controls(&mut self, targets: &[AgentTarget], remove_mode: Option<bool>) {
+    pub fn configure_agent_controls(
+        &mut self,
+        targets: &[AgentTarget],
+        selection: Option<(AgentDeliveryMode, bool)>,
+    ) {
         if self.footer_agents.height == 0 {
             return;
         }
         let mut left = self.footer_agents.x.saturating_add(2);
         let right = self.footer_agents.right().saturating_sub(2);
-        if let [target] = targets {
-            let width = right.saturating_sub(left) / 2;
-            for remove in [false, true] {
+        if let Some((delivery, remove)) = selection {
+            let eligible = targets
+                .iter()
+                .filter(|target| target.delivery.supports(delivery))
+                .collect::<Vec<_>>();
+            let count = u16::try_from(eligible.len()).unwrap_or(u16::MAX).max(1);
+            let width = right.saturating_sub(left).checked_div(count).unwrap_or(0);
+            for target in eligible {
                 self.controls.push((
-                    HitTarget::Submit(target.direction, remove),
+                    HitTarget::Deliver(target.direction, delivery, remove),
                     Rect::new(left, self.footer_agents.y, width, 1),
                 ));
                 left = left.saturating_add(width);
             }
             return;
         }
-        for remove in [false, true] {
-            if left.saturating_add(9) > right {
-                break;
-            }
-            self.controls.push((
-                HitTarget::BeginSubmit(remove),
-                Rect::new(left, self.footer_agents.y, 9, 1),
-            ));
-            left = left.saturating_add(10);
-        }
+
         let count = u16::try_from(targets.len()).unwrap_or(u16::MAX).max(1);
-        let width = right.saturating_sub(left).checked_div(count).unwrap_or(0);
+        let target_band_width = right.saturating_sub(left).saturating_mul(2) / 3;
+        let label_width = target_band_width.checked_div(count).unwrap_or(0);
         for target in targets {
-            if width == 0 || left >= right {
-                break;
-            }
-            let remove = remove_mode.unwrap_or(false);
             self.controls.push((
-                HitTarget::Submit(target.direction, remove),
-                Rect::new(left, self.footer_agents.y, width, 1),
+                HitTarget::Agent(target.direction),
+                Rect::new(left, self.footer_agents.y, label_width, 1),
             ));
+            left = left.saturating_add(label_width);
+        }
+        for delivery in [AgentDeliveryMode::Compose, AgentDeliveryMode::Submit] {
+            let eligible = targets
+                .iter()
+                .filter(|target| target.delivery.supports(delivery))
+                .collect::<Vec<_>>();
+            if eligible.is_empty() || left >= right {
+                continue;
+            }
+            let width = right.saturating_sub(left).min(11);
+            let target = if let [target] = eligible.as_slice() {
+                HitTarget::Deliver(target.direction, delivery, false)
+            } else {
+                HitTarget::BeginDelivery(delivery, false)
+            };
+            self.controls
+                .push((target, Rect::new(left, self.footer_agents.y, width, 1)));
             left = left.saturating_add(width);
         }
     }

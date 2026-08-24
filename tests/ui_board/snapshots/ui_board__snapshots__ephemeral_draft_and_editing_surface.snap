@@ -5,19 +5,19 @@ expression: "snapshot(&mut fixture, 50, 9, ThemePreference::Light)"
 SIZE 50x9
 
 TEXT
-00│  proqi · proqi-ui-contract · 1 thought      draft│
+00│  proqi · proqi-ui-contract · 1 thought│
 01│⋮│
 02││
 03││
 04││
 05││
 06││
-07│  ready                             edit · draft│
+07│                                    edit · draft│
 08│  Esc Board  : Commands  ? Shortcuts│
 
 STYLE RUNS
 0: 0-49 fg=Rgb(79, 70, 62) bg=Rgb(250, 250, 248) mod=NONE
-1: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-49 fg=Rgb(30, 27, 24) bg=Rgb(238, 235, 230) mod=NONE
+1: 0-0 fg=Rgb(30, 27, 24) bg=Rgb(45, 106, 79) mod=BOLD | 1-1 fg=Rgb(30, 27, 24) bg=Rgb(236, 236, 240) mod=NONE | 2-2 fg=Rgb(30, 27, 24) bg=Rgb(45, 106, 79) mod=NONE | 3-49 fg=Rgb(30, 27, 24) bg=Rgb(236, 236, 240) mod=NONE
 2: 0-49 fg=Rgb(30, 27, 24) bg=Rgb(250, 250, 248) mod=NONE
 3: 0-49 fg=Rgb(30, 27, 24) bg=Rgb(250, 250, 248) mod=NONE
 4: 0-49 fg=Rgb(30, 27, 24) bg=Rgb(250, 250, 248) mod=NONE

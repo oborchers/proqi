@@ -4,7 +4,7 @@ use crate::{
     application::{Action, Effect},
     domain::{BoardOperationKind, Direction, SubmissionId},
     ports::{
-        agent::{AgentError, AgentTarget, SubmissionReceipt, SubmissionRequest},
+        agent::{AgentDeliveryMode, AgentError, AgentTarget, SubmissionReceipt, SubmissionRequest},
         editor::CursorMovement,
         environment::{Clock, IdGenerator},
     },
@@ -87,47 +87,48 @@ impl BoardApp {
                 at: pending.at,
             }));
         }
-        self.status = Some(format!(
-            "sent {} to {}",
-            direction_name(receipt.target.direction),
-            receipt.target.agent_name
-        ));
+        self.status = Some(match pending.request.delivery {
+            AgentDeliveryMode::Compose => format!(
+                "sent {} to {} composer",
+                direction_name(receipt.target.direction),
+                receipt.target.agent_name
+            ),
+            AgentDeliveryMode::Submit => format!(
+                "submitted {} to {}",
+                direction_name(receipt.target.direction),
+                receipt.target.agent_name
+            ),
+        });
         effects
     }
 
-    /// Compact verified target description shown before a submission is committed.
-    #[must_use]
-    pub fn agent_hint(&self) -> Option<String> {
-        if let Some(mode) = self.submission_mode {
-            return Some(if mode.remove {
-                "submit and remove: choose direction".to_owned()
-            } else {
-                "submit: choose direction".to_owned()
-            });
-        }
-        match self.agent_targets.as_slice() {
-            [target] => Some(format!(
-                "send {} {} ({})",
-                direction_name(target.direction),
-                target.agent_name,
-                readiness_name(target.readiness)
-            )),
-            targets if !targets.is_empty() => Some(format!("{} verified agents", targets.len())),
-            _ => None,
-        }
-    }
-
-    pub(super) fn begin_submission(
+    pub(super) fn begin_delivery(
         &mut self,
+        delivery: AgentDeliveryMode,
         remove: bool,
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        match self.agent_targets.as_slice() {
-            [] => self.refresh_agents(),
-            [target] => self.submit_to(target.direction, remove, ids, clock),
+        if self.agent_targets.is_empty() {
+            return self.refresh_agents();
+        }
+        let eligible = self
+            .agent_targets
+            .iter()
+            .filter(|target| target.delivery.supports(delivery))
+            .map(|target| target.direction)
+            .collect::<Vec<_>>();
+        match eligible.as_slice() {
+            [] => {
+                self.status = Some(format!(
+                    "{} is unavailable for verified adjacent agents",
+                    delivery_name(delivery)
+                ));
+                Vec::new()
+            }
+            [direction] => self.deliver_to(*direction, delivery, remove, ids, clock),
             _ => {
-                self.submission_mode = Some(SubmissionMode { remove });
+                self.submission_mode = Some(SubmissionMode { delivery, remove });
                 self.status = Some("choose agent direction with arrows or h/j/k/l".to_owned());
                 Vec::new()
             }
@@ -140,7 +141,7 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Option<Vec<Effect>> {
-        let remove = self.submission_mode?.remove;
+        let mode = self.submission_mode?;
         let direction = match input {
             UiInput::Key(UiKey::Escape) => {
                 self.submission_mode = None;
@@ -179,12 +180,13 @@ impl BoardApp {
             _ => return Some(Vec::new()),
         };
         self.submission_mode = None;
-        Some(self.submit_to(direction, remove, ids, clock))
+        Some(self.deliver_to(direction, mode.delivery, mode.remove, ids, clock))
     }
 
-    pub(super) fn submit_to(
+    pub(super) fn deliver_to(
         &mut self,
         direction: Direction,
+        delivery: AgentDeliveryMode,
         remove: bool,
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
@@ -198,6 +200,14 @@ impl BoardApp {
             self.status = Some(format!("no verified agent {}", direction_name(direction)));
             return Vec::new();
         };
+        if !target.delivery.supports(delivery) {
+            self.status = Some(format!(
+                "{} is unavailable {}",
+                delivery_name(delivery),
+                direction_name(direction)
+            ));
+            return Vec::new();
+        }
         let Some(thought) = self
             .state
             .focused_thought
@@ -211,6 +221,7 @@ impl BoardApp {
         let request = SubmissionRequest {
             submission_id,
             target,
+            delivery,
             content: thought.content.clone(),
         };
         self.pending_submissions.insert(
@@ -223,8 +234,15 @@ impl BoardApp {
                 remove,
             },
         );
-        self.status = Some("submitting thought".to_owned());
+        self.status = Some(format!("{} thought", delivery_name(delivery)));
         vec![Effect::SubmitAgent(request)]
+    }
+}
+
+fn delivery_name(delivery: AgentDeliveryMode) -> &'static str {
+    match delivery {
+        AgentDeliveryMode::Compose => "send",
+        AgentDeliveryMode::Submit => "submit",
     }
 }
 
@@ -234,14 +252,6 @@ fn direction_name(direction: Direction) -> &'static str {
         Direction::Right => "right",
         Direction::Down => "down",
         Direction::Left => "left",
-    }
-}
-
-fn readiness_name(readiness: crate::ports::agent::AgentReadiness) -> &'static str {
-    match readiness {
-        crate::ports::agent::AgentReadiness::Idle => "idle",
-        crate::ports::agent::AgentReadiness::Working => "working",
-        crate::ports::agent::AgentReadiness::Done => "done",
     }
 }
 

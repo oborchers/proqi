@@ -5,18 +5,18 @@ expression: "snapshot(&mut fixture, 48, 8, ThemePreference::Limited)"
 SIZE 48x8
 
 TEXT
-00│  proqi · proqi-ui-contract · 1 thought   saving│
+00│  proqi · proqi-ui-contract · 1 thought│
 01│⋮ selected prompt│
 02││
 03││
 04││
 05││
-06│  ready                          edit · saving│
+06│                                 edit · saving│
 07│  Esc Board  : Commands  ? Shortcuts│
 
 STYLE RUNS
 0: 0-47 fg=DarkGray bg=Reset mod=NONE
-1: 0-0 fg=Reset bg=Green mod=BOLD | 1-47 fg=Reset bg=Reset mod=REVERSED
+1: 0-0 fg=White bg=Green mod=BOLD | 1-1 fg=White bg=DarkGray mod=NONE | 2-16 fg=Reset bg=DarkGray mod=NONE | 17-17 fg=White bg=Green mod=NONE | 18-47 fg=Reset bg=DarkGray mod=NONE
 2: 0-47 fg=Reset bg=Reset mod=NONE
 3: 0-47 fg=Reset bg=Reset mod=NONE
 4: 0-47 fg=Reset bg=Reset mod=NONE

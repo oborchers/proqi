@@ -57,6 +57,11 @@ impl BoardApp {
     /// Focused durable thought or ephemeral draft identity.
     #[must_use]
     pub fn active_thought_id(&self) -> Option<ThoughtId> {
+        if self.insertion_focus == super::InsertionFocus::Active
+            && matches!(self.state.mode, InteractionMode::Board)
+        {
+            return None;
+        }
         self.draft
             .as_ref()
             .map(|draft| draft.thought_id)
@@ -73,6 +78,12 @@ impl BoardApp {
     #[must_use]
     pub const fn has_draft(&self) -> bool {
         self.draft.is_some()
+    }
+
+    /// Whether the board insertion row owns keyboard focus.
+    #[must_use]
+    pub const fn insertion_focused(&self) -> bool {
+        matches!(self.insertion_focus, super::InsertionFocus::Active)
     }
 
     /// Monotonic counter used by the runtime to detect new unflushed editor work.
@@ -123,10 +134,19 @@ impl BoardApp {
         &self.agent_targets
     }
 
-    /// Whether directional submission targeting is active and removes on acceptance.
+    /// Whether at least one verified target supports a delivery behavior.
     #[must_use]
-    pub fn submission_mode(&self) -> Option<bool> {
-        self.submission_mode.map(|mode| mode.remove)
+    pub fn supports_delivery(&self, mode: crate::ports::agent::AgentDeliveryMode) -> bool {
+        self.agent_targets
+            .iter()
+            .any(|target| target.delivery.supports(mode))
+    }
+
+    /// Active delivery intention while a direction is being selected.
+    #[must_use]
+    pub fn submission_mode(&self) -> Option<(crate::ports::agent::AgentDeliveryMode, bool)> {
+        self.submission_mode
+            .map(|mode| (mode.delivery, mode.remove))
     }
 
     /// Prepare current frame geometry without changing the logical cursor.
@@ -204,6 +224,11 @@ impl BoardApp {
 
     fn presentation_state(&self) -> crate::application::AppState {
         let mut state = self.layout_state_with_draft();
+        if self.insertion_focus == super::InsertionFocus::Active
+            && matches!(state.mode, InteractionMode::Board)
+        {
+            state.focused_thought = None;
+        }
         let ids = state
             .board
             .thoughts()

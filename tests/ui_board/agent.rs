@@ -3,7 +3,8 @@ use super::*;
 use proqi::{
     domain::Direction,
     ports::agent::{
-        AgentError, AgentReadiness, AgentTarget, PaneContext, PaneRect, SubmissionReceipt,
+        AgentDeliveryCapabilities, AgentDeliveryMode, AgentError, AgentReadiness, AgentTarget,
+        PaneContext, PaneRect, SubmissionReceipt,
     },
 };
 
@@ -28,6 +29,7 @@ fn target(direction: Direction, pane_id: &str) -> AgentTarget {
         agent_name: format!("Codex {pane_id}"),
         agent_session_id: format!("session-{pane_id}"),
         readiness: AgentReadiness::Idle,
+        delivery: AgentDeliveryCapabilities::SUBMIT_ONLY,
         rect: PaneRect {
             x: 40,
             y: 0,
@@ -53,7 +55,7 @@ fn failed_submission_preserves_thought_and_accepted_remove_is_undoable() {
         .app
         .complete_agent_discovery(Ok(vec![target.clone()]));
 
-    let failed = fixture.effects(UiInput::Key(UiKey::Character('s')));
+    let failed = fixture.effects(UiInput::Key(UiKey::Character('S')));
     let [Effect::SubmitAgent(failed_request)] = failed.as_slice() else {
         panic!("expected semantic submission");
     };
@@ -63,7 +65,11 @@ fn failed_submission_preserves_thought_and_accepted_remove_is_undoable() {
     assert!(no_mutation.is_empty());
     assert_eq!(fixture.app.state.board.live_thoughts().len(), 1);
 
-    let removing = fixture.effects(UiInput::Key(UiKey::Character('S')));
+    fixture.input(UiInput::Key(UiKey::Character(':')));
+    for character in "remove".chars() {
+        fixture.input(UiInput::Key(UiKey::Character(character)));
+    }
+    let removing = fixture.effects(UiInput::Key(UiKey::Enter));
     let [Effect::SubmitAgent(request)] = removing.as_slice() else {
         panic!("expected submit-and-remove request");
     };
@@ -102,10 +108,13 @@ fn multiple_targets_require_direction_and_mouse_controls_use_verified_targets() 
 
     assert!(
         fixture
-            .effects(UiInput::Key(UiKey::Character('s')))
+            .effects(UiInput::Key(UiKey::Character('S')))
             .is_empty()
     );
-    assert_eq!(fixture.app.submission_mode(), Some(false));
+    assert_eq!(
+        fixture.app.submission_mode(),
+        Some((AgentDeliveryMode::Submit, false))
+    );
     let directed = fixture.effects(UiInput::Key(UiKey::Move {
         movement: CursorMovement::GraphemeForward,
         extend_selection: false,
@@ -115,26 +124,19 @@ fn multiple_targets_require_direction_and_mouse_controls_use_verified_targets() 
         [Effect::SubmitAgent(request)] if request.target == right
     ));
 
-    let layout = fixture.app.prepare_frame(Rect::new(0, 0, 100, 10));
-    let (_, begin_remove) = layout
-        .controls
-        .iter()
-        .find(|(target, _)| *target == proqi::ui::HitTarget::BeginSubmit(true))
-        .expect("submit-and-remove mode control");
-    assert!(
-        fixture
-            .effects(UiInput::Pointer(PointerInput {
-                column: begin_remove.x,
-                row: begin_remove.y,
-                kind: PointerKind::Down(PointerButton::Left),
-            }))
-            .is_empty()
-    );
+    let _layout = fixture.app.prepare_frame(Rect::new(0, 0, 100, 10));
+    fixture.input(UiInput::Key(UiKey::Character(':')));
+    for character in "remove".chars() {
+        fixture.input(UiInput::Key(UiKey::Character(character)));
+    }
+    assert!(fixture.effects(UiInput::Key(UiKey::Enter)).is_empty());
     let layout = fixture.app.prepare_frame(Rect::new(0, 0, 100, 10));
     let (_, control) = layout
         .controls
         .iter()
-        .find(|(target, _)| *target == proqi::ui::HitTarget::Submit(Direction::Up, true))
+        .find(|(target, _)| {
+            *target == proqi::ui::HitTarget::Deliver(Direction::Up, AgentDeliveryMode::Submit, true)
+        })
         .expect("mouse submit-and-remove control");
     let clicked = fixture.effects(UiInput::Pointer(PointerInput {
         column: control.x,
@@ -174,7 +176,7 @@ fn all_four_verified_directions_receive_distinct_footer_targets() {
             layout
                 .controls
                 .iter()
-                .any(|(target, _)| { *target == proqi::ui::HitTarget::Submit(direction, false) })
+                .any(|(target, _)| *target == proqi::ui::HitTarget::Agent(direction))
         );
     }
 }
@@ -196,7 +198,11 @@ fn controls_and_hint_disappear_when_discovery_is_unsupported() {
         .app
         .complete_agent_discovery(Ok(vec![target(Direction::Left, "w1:p2")]));
     let shown = draw(&mut fixture, 80, 6);
-    assert!(text(shown.backend().buffer()).contains("send left Codex"));
+    let rendered = text(shown.backend().buffer());
+    assert!(rendered.contains("← Codex"));
+    assert!(rendered.contains("S Submit"));
+    assert!(!rendered.contains("working"));
+    assert!(!rendered.contains("s Send"));
 
     fixture
         .app
@@ -206,7 +212,7 @@ fn controls_and_hint_disappear_when_discovery_is_unsupported() {
         !hidden
             .controls
             .iter()
-            .any(|(target, _)| matches!(target, proqi::ui::HitTarget::Submit(_, _)))
+            .any(|(target, _)| matches!(target, proqi::ui::HitTarget::Deliver(_, _, _)))
     );
 }
 
@@ -215,7 +221,7 @@ fn submission_without_a_target_refreshes_and_reports_the_verified_result() {
     let mut fixture = Fixture::new();
     prepare_thought(&mut fixture);
 
-    let effects = fixture.effects(UiInput::Key(UiKey::Character('s')));
+    let effects = fixture.effects(UiInput::Key(UiKey::Character('S')));
     assert!(matches!(effects.as_slice(), [Effect::DiscoverAgents]));
     assert_eq!(
         fixture.app.status.as_deref(),
@@ -234,6 +240,27 @@ fn submission_without_a_target_refreshes_and_reports_the_verified_result() {
         shown
             .controls
             .iter()
-            .any(|(target, _)| matches!(target, proqi::ui::HitTarget::Submit(_, _)))
+            .any(|(target, _)| matches!(target, proqi::ui::HitTarget::Deliver(_, _, _)))
     );
+}
+
+#[test]
+fn composer_send_is_shown_and_requested_only_when_the_target_supports_it() {
+    let mut fixture = Fixture::new();
+    prepare_thought(&mut fixture);
+    let mut target = target(Direction::Left, "w1:p2");
+    target.delivery = AgentDeliveryCapabilities {
+        compose: true,
+        submit: true,
+    };
+    fixture.app.complete_agent_discovery(Ok(vec![target]));
+
+    let rendered = text(draw(&mut fixture, 80, 7).backend().buffer());
+    assert!(rendered.contains("s Send"));
+    assert!(rendered.contains("S Submit"));
+    let effects = fixture.effects(UiInput::Key(UiKey::Character('s')));
+    assert!(matches!(
+        effects.as_slice(),
+        [Effect::SubmitAgent(request)] if request.delivery == AgentDeliveryMode::Compose
+    ));
 }

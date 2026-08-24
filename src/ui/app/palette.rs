@@ -2,7 +2,10 @@
 
 use crate::{
     application::Effect,
-    ports::environment::{Clock, IdGenerator},
+    ports::{
+        agent::AgentDeliveryMode,
+        environment::{Clock, IdGenerator},
+    },
 };
 
 use super::{BoardApp, UiInput, UiKey};
@@ -15,6 +18,8 @@ enum Command {
     Copy,
     Cut,
     Paste,
+    Send,
+    SendRemove,
     Submit,
     SubmitRemove,
     RefreshAgents,
@@ -30,13 +35,15 @@ enum Command {
 }
 
 impl Command {
-    const ALL: [(Self, &'static str); 18] = [
+    const ALL: [(Self, &'static str); 20] = [
         (Self::New, "New thought"),
         (Self::Edit, "Edit thought"),
         (Self::Delete, "Delete thought"),
         (Self::Copy, "Copy thought"),
         (Self::Cut, "Cut thought"),
         (Self::Paste, "Paste native clipboard"),
+        (Self::Send, "Send to adjacent agent composer"),
+        (Self::SendRemove, "Send to composer and remove thought"),
         (Self::Submit, "Submit to adjacent agent"),
         (Self::SubmitRemove, "Submit and remove thought"),
         (Self::RefreshAgents, "Refresh adjacent agents"),
@@ -56,14 +63,18 @@ pub(super) struct PaletteState {
     query: String,
     selected: usize,
     scroll: usize,
+    compose_supported: bool,
+    submit_supported: bool,
 }
 
 impl PaletteState {
-    fn new() -> Self {
+    fn new(compose_supported: bool, submit_supported: bool) -> Self {
         Self {
             query: String::new(),
             selected: 0,
             scroll: 0,
+            compose_supported,
+            submit_supported,
         }
     }
 
@@ -87,8 +98,17 @@ impl PaletteState {
         let query = self.query.to_lowercase();
         Command::ALL
             .into_iter()
+            .filter(|(command, _)| self.available(*command))
             .filter(|(_, label)| label.to_lowercase().contains(&query))
             .collect()
+    }
+
+    fn available(&self, command: Command) -> bool {
+        match command {
+            Command::Send | Command::SendRemove => self.compose_supported,
+            Command::Submit | Command::SubmitRemove => self.submit_supported,
+            _ => true,
+        }
     }
 
     fn clamp(&mut self) {
@@ -101,7 +121,10 @@ impl BoardApp {
     pub(super) fn open_palette(&mut self) {
         self.help = false;
         self.search = None;
-        self.palette = Some(PaletteState::new());
+        self.palette = Some(PaletteState::new(
+            self.supports_delivery(AgentDeliveryMode::Compose),
+            self.supports_delivery(AgentDeliveryMode::Submit),
+        ));
     }
 
     pub(super) fn close_overlay(&mut self) {
@@ -224,8 +247,14 @@ impl BoardApp {
             Command::Copy => self.copy_active(ids),
             Command::Cut => self.cut_active(ids, clock),
             Command::Paste => self.read_clipboard(ids),
-            Command::Submit => self.begin_submission(false, ids, clock),
-            Command::SubmitRemove => self.begin_submission(true, ids, clock),
+            Command::Send => self.begin_delivery(AgentDeliveryMode::Compose, false, ids, clock),
+            Command::SendRemove => {
+                self.begin_delivery(AgentDeliveryMode::Compose, true, ids, clock)
+            }
+            Command::Submit => self.begin_delivery(AgentDeliveryMode::Submit, false, ids, clock),
+            Command::SubmitRemove => {
+                self.begin_delivery(AgentDeliveryMode::Submit, true, ids, clock)
+            }
             Command::RefreshAgents => self.refresh_agents(),
             Command::RetryStorage => self.retry_persistence(),
             Command::ExportRecovery => self.export_recovery(ids, clock),

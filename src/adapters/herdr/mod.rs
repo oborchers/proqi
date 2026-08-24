@@ -30,6 +30,7 @@ pub struct HerdrGateway<R> {
     runner: R,
     program: OsString,
     managed: bool,
+    presentation_source: String,
 }
 
 impl<R> HerdrGateway<R> {
@@ -40,14 +41,22 @@ impl<R> HerdrGateway<R> {
             runner,
             program,
             managed,
+            presentation_source: "proqi".to_owned(),
         }
+    }
+
+    /// Use one process-unique source for monotonic display metadata sequences.
+    #[must_use]
+    pub fn with_presentation_source(mut self, source: String) -> Self {
+        self.presentation_source = source;
+        self
     }
 }
 
 impl HerdrGateway<crate::adapters::process::SystemProcessRunner> {
     /// Compose the installed Herdr binary and inherited managed-pane context.
     #[must_use]
-    pub fn from_environment() -> Self {
+    pub fn from_environment(presentation_source: String) -> Self {
         let managed = std::env::var_os("HERDR_ENV").is_some_and(|value| value == "1")
             && std::env::var_os("PROQI_DISABLE_HERDR").is_none();
         Self::new(
@@ -55,6 +64,7 @@ impl HerdrGateway<crate::adapters::process::SystemProcessRunner> {
             crate::adapters::process::SystemProcessRunner,
             managed,
         )
+        .with_presentation_source(presentation_source)
     }
 }
 
@@ -99,10 +109,11 @@ impl<R: ProcessRunner> PanePresentation for HerdrGateway<R> {
     fn publish(&mut self, pane_id: &str, sequence: u64, ttl: Duration) -> Result<(), AgentError> {
         let sequence = sequence.to_string();
         let ttl = ttl.as_millis().to_string();
+        let source = self.presentation_source.clone();
         self.metadata(&[
             pane_id,
             "--source",
-            "proqi",
+            &source,
             "--title",
             "proqi",
             "--display-agent",
@@ -116,10 +127,11 @@ impl<R: ProcessRunner> PanePresentation for HerdrGateway<R> {
 
     fn clear(&mut self, pane_id: &str, sequence: u64) -> Result<(), AgentError> {
         let sequence = sequence.to_string();
+        let source = self.presentation_source.clone();
         self.metadata(&[
             pane_id,
             "--source",
-            "proqi",
+            &source,
             "--clear-title",
             "--clear-display-agent",
             "--seq",

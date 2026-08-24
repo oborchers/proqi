@@ -114,11 +114,13 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
     let input = InputLane::spawn();
     let persistence = PersistenceLane::spawn(store);
-    let external = ExternalLane::spawn(recovery_directory, attachment_directory);
-    let mut pane_heartbeat = PaneHeartbeat::from_environment();
-    if let Some(heartbeat) = pane_heartbeat.as_mut() {
-        let _published = heartbeat.publish(&external);
-    }
+    let presentation_source = format!("proqi-{}", session_lease.info().instance_id);
+    let external = ExternalLane::spawn(
+        recovery_directory,
+        attachment_directory,
+        presentation_source,
+    );
+    let mut pane_heartbeat = None;
     let theme = Theme::resolve(settings.theme, supports_true_color());
     let mut app = BoardApp::with_settings(state, settings, RopeEditorFactory);
     app.status = control_warning;
@@ -214,7 +216,7 @@ fn drive(
             enqueue_effects(app, lanes, effects, &mut pending)?;
         }
         redraw |= drain_persistence(app, lanes.persistence, &mut pending)?;
-        redraw |= drain_external(app, lanes, &mut pending, ids, clock)?;
+        redraw |= drain_external(app, lanes, &mut pending, ids, clock, pane_heartbeat)?;
         redraw |= drain_control(app, lanes, &mut pending, ids, clock)?;
         if app.edit_generation() != edit_generation {
             edit_generation = app.edit_generation();
@@ -404,6 +406,7 @@ fn drain_external(
     pending: &mut PendingWork,
     ids: &mut SystemIdGenerator,
     clock: SystemClock,
+    pane_heartbeat: &mut Option<PaneHeartbeat>,
 ) -> Result<bool, TerminalError> {
     let mut changed = false;
     loop {
@@ -447,7 +450,8 @@ fn drain_external(
             ExternalResult::Exported { request_id, result } => {
                 app.complete_recovery_export(request_id, result.map_err(|error| error.to_string()))
             }
-            ExternalResult::AgentsDiscovered(result) => {
+            ExternalResult::AgentsDiscovered { pane_id, result } => {
+                publish_discovered_identity(pane_heartbeat, pane_id, lanes.external);
                 app.complete_agent_discovery(result);
                 Vec::new()
             }
@@ -458,6 +462,21 @@ fn drain_external(
         };
         enqueue_effects(app, lanes, effects, pending)?;
     }
+}
+
+fn publish_discovered_identity(
+    heartbeat: &mut Option<PaneHeartbeat>,
+    pane_id: Option<String>,
+    external: &ExternalLane,
+) {
+    if heartbeat.is_some() {
+        return;
+    }
+    let Some(mut discovered) = pane_id.and_then(PaneHeartbeat::from_pane_id) else {
+        return;
+    };
+    let _published = discovered.publish(external);
+    *heartbeat = Some(discovered);
 }
 
 fn write_osc52(sequence: &[u8]) -> std::io::Result<()> {

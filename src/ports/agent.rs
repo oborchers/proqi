@@ -54,8 +54,45 @@ pub struct AgentCapabilities {
     pub version: String,
     /// Negotiated protocol number.
     pub protocol: u32,
+    /// Prompt delivery behaviors verified for this provider version.
+    pub delivery: AgentDeliveryCapabilities,
     /// Current Proqi pane.
     pub context: PaneContext,
+}
+
+/// User-visible way a prompt can be delivered to an adjacent agent.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AgentDeliveryMode {
+    /// Place text in the agent composer without starting a turn.
+    Compose,
+    /// Place text and start the agent turn immediately.
+    Submit,
+}
+
+/// Negotiated delivery behaviors. Unsupported actions stay absent from the UI.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AgentDeliveryCapabilities {
+    /// Composer-only delivery is available.
+    pub compose: bool,
+    /// Immediate turn submission is available.
+    pub submit: bool,
+}
+
+impl AgentDeliveryCapabilities {
+    /// Current Herdr semantic contract: immediate submission only.
+    pub const SUBMIT_ONLY: Self = Self {
+        compose: false,
+        submit: true,
+    };
+
+    /// Whether one delivery mode is explicitly supported.
+    #[must_use]
+    pub const fn supports(self, mode: AgentDeliveryMode) -> bool {
+        match mode {
+            AgentDeliveryMode::Compose => self.compose,
+            AgentDeliveryMode::Submit => self.submit,
+        }
+    }
 }
 
 /// Agent state known before submission.
@@ -88,6 +125,8 @@ pub struct AgentTarget {
     pub agent_session_id: String,
     /// Verified readiness.
     pub readiness: AgentReadiness,
+    /// Delivery behaviors verified for this target.
+    pub delivery: AgentDeliveryCapabilities,
     /// Target pane geometry.
     pub rect: PaneRect,
     /// Source context against which adjacency was verified.
@@ -101,6 +140,8 @@ pub struct SubmissionRequest {
     pub submission_id: SubmissionId,
     /// Previously verified target, revalidated immediately before submission.
     pub target: AgentTarget,
+    /// Whether to fill the composer or start the turn.
+    pub delivery: AgentDeliveryMode,
     /// Exact thought content.
     pub content: String,
 }

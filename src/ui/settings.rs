@@ -41,10 +41,10 @@ pub struct KeyBindings {
     pub copy: char,
     /// Cut focused thought.
     pub cut: char,
-    /// Submit focused thought to a verified adjacent agent.
+    /// Place the focused thought in a verified adjacent agent composer.
+    pub send: char,
+    /// Submit the focused thought to a verified adjacent agent.
     pub submit: char,
-    /// Submit focused thought and remove it after acceptance.
-    pub submit_remove: char,
     /// Undo board action.
     pub undo: char,
     /// Move focus upward.
@@ -75,8 +75,8 @@ impl Default for KeyBindings {
             delete: 'd',
             copy: 'y',
             cut: 'x',
-            submit: 's',
-            submit_remove: 'S',
+            send: 's',
+            submit: 'S',
             undo: 'u',
             focus_up: 'k',
             focus_down: 'j',
@@ -98,8 +98,8 @@ pub(super) enum BoardCommand {
     Delete,
     Copy,
     Cut,
+    Send,
     Submit,
-    SubmitRemove,
     Undo,
     FocusUp,
     FocusDown,
@@ -120,8 +120,8 @@ impl KeyBindings {
             (self.delete, BoardCommand::Delete),
             (self.copy, BoardCommand::Copy),
             (self.cut, BoardCommand::Cut),
+            (self.send, BoardCommand::Send),
             (self.submit, BoardCommand::Submit),
-            (self.submit_remove, BoardCommand::SubmitRemove),
             (self.undo, BoardCommand::Undo),
             (self.focus_up, BoardCommand::FocusUp),
             (self.focus_down, BoardCommand::FocusDown),
@@ -150,8 +150,8 @@ impl KeyBindings {
             self.delete,
             self.copy,
             self.cut,
+            self.send,
             self.submit,
-            self.submit_remove,
             self.undo,
             self.focus_up,
             self.focus_down,

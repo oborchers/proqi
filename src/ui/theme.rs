@@ -19,6 +19,8 @@ pub struct Theme {
     pub divider: Color,
     /// Neutral selected-thought surface in explicit themes.
     pub focused_surface: Option<Color>,
+    /// Text color used on the selected-thought surface.
+    pub focused_foreground: Color,
     /// Semantic failure color.
     pub error: Color,
 }
@@ -37,7 +39,8 @@ impl Theme {
                 accent: Color::Rgb(45, 106, 79),
                 muted: Color::Rgb(79, 70, 62),
                 divider: Color::Rgb(224, 217, 207),
-                focused_surface: Some(Color::Rgb(238, 235, 230)),
+                focused_surface: Some(Color::Rgb(236, 236, 240)),
+                focused_foreground: Color::Rgb(30, 27, 24),
                 error: Color::Red,
             },
             ThemePreference::Dark => Self {
@@ -46,7 +49,8 @@ impl Theme {
                 accent: Color::Rgb(91, 158, 125),
                 muted: Color::Rgb(176, 169, 160),
                 divider: Color::Rgb(42, 37, 32),
-                focused_surface: Some(Color::Rgb(35, 31, 27)),
+                focused_surface: Some(Color::Rgb(52, 52, 63)),
+                focused_foreground: Color::Rgb(232, 228, 223),
                 error: Color::LightRed,
             },
             ThemePreference::Auto => Self {
@@ -55,7 +59,8 @@ impl Theme {
                 accent: Color::Rgb(45, 106, 79),
                 muted: Color::DarkGray,
                 divider: Color::DarkGray,
-                focused_surface: None,
+                focused_surface: Some(Color::DarkGray),
+                focused_foreground: Color::White,
                 error: Color::Red,
             },
             ThemePreference::Limited => Self::limited(),
@@ -71,13 +76,9 @@ impl Theme {
     /// High-contrast selected-thought style without turning body text green.
     #[must_use]
     pub fn focused_style(self) -> Style {
-        self.focused_surface.map_or_else(
-            || {
-                self.base_style()
-                    .add_modifier(ratatui_core::style::Modifier::REVERSED)
-            },
-            |background| self.base_style().bg(background),
-        )
+        self.base_style()
+            .fg(self.focused_foreground)
+            .bg(self.focused_surface.unwrap_or(Color::DarkGray))
     }
 
     const fn limited() -> Self {
@@ -88,6 +89,7 @@ impl Theme {
             muted: Color::DarkGray,
             divider: Color::DarkGray,
             focused_surface: None,
+            focused_foreground: Color::White,
             error: Color::Red,
         }
     }
@@ -111,5 +113,20 @@ mod tests {
             assert_eq!(theme.foreground, Color::Reset);
             assert_eq!(theme.accent, Color::Green);
         }
+    }
+
+    #[test]
+    fn selected_surfaces_are_quiet_and_keep_explicit_contrast() {
+        let dark = Theme::resolve(ThemePreference::Dark, true);
+        assert_eq!(dark.focused_surface, Some(Color::Rgb(52, 52, 63)));
+        assert_eq!(dark.focused_foreground, Color::Rgb(232, 228, 223));
+
+        let light = Theme::resolve(ThemePreference::Light, true);
+        assert_eq!(light.focused_surface, Some(Color::Rgb(236, 236, 240)));
+        assert_eq!(light.focused_foreground, Color::Rgb(30, 27, 24));
+
+        let automatic = Theme::resolve(ThemePreference::Auto, true);
+        assert_eq!(automatic.focused_surface, Some(Color::DarkGray));
+        assert_eq!(automatic.focused_foreground, Color::White);
     }
 }

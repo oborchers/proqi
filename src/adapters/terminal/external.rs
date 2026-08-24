@@ -55,7 +55,10 @@ enum ExternalRequest {
 }
 
 pub(super) enum ExternalResult {
-    AgentsDiscovered(Result<Vec<AgentTarget>, AgentError>),
+    AgentsDiscovered {
+        pane_id: Option<String>,
+        result: Result<Vec<AgentTarget>, AgentError>,
+    },
     AgentSubmitted {
         submission_id: crate::domain::SubmissionId,
         result: Box<Result<SubmissionReceipt, AgentError>>,
@@ -92,7 +95,11 @@ pub(super) struct ExternalLane {
 }
 
 impl ExternalLane {
-    pub(super) fn spawn(recovery_directory: PathBuf, attachment_directory: PathBuf) -> Self {
+    pub(super) fn spawn(
+        recovery_directory: PathBuf,
+        attachment_directory: PathBuf,
+        presentation_source: String,
+    ) -> Self {
         let (request_sender, request_receiver) = sync_channel(32);
         let (result_sender, result_receiver) = sync_channel(32);
         let handle = thread::spawn(move || {
@@ -101,6 +108,7 @@ impl ExternalLane {
                 &result_sender,
                 recovery_directory,
                 attachment_directory,
+                presentation_source,
             );
         });
         Self {
@@ -186,18 +194,15 @@ fn external_loop(
     results: &SyncSender<ExternalResult>,
     recovery_directory: PathBuf,
     attachment_directory: PathBuf,
+    presentation_source: String,
 ) {
     let mut clipboard = PlatformClipboard::new();
     let mut recovery = FileRecoveryExporter::new(recovery_directory);
     let mut attachments = FileAttachmentStore::new(attachment_directory);
-    let mut agents = HerdrGateway::from_environment();
+    let mut agents = HerdrGateway::from_environment(presentation_source);
     while let Ok(request) = requests.recv() {
         let outcome = match request {
-            ExternalRequest::DiscoverAgents => ExternalResult::AgentsDiscovered(
-                agents
-                    .capabilities()
-                    .and_then(|capability| agents.adjacent_targets(&capability.context)),
-            ),
+            ExternalRequest::DiscoverAgents => discover_agents(&mut agents),
             ExternalRequest::SubmitAgent(request) => {
                 let submission_id = request.submission_id;
                 ExternalResult::AgentSubmitted {
@@ -241,6 +246,20 @@ fn external_loop(
         if results.send(outcome).is_err() {
             return;
         }
+    }
+}
+
+fn discover_agents(agents: &mut impl AgentGateway) -> ExternalResult {
+    match agents.capabilities() {
+        Ok(capability) => {
+            let pane_id = Some(capability.context.pane_id.clone());
+            let result = agents.adjacent_targets(&capability.context);
+            ExternalResult::AgentsDiscovered { pane_id, result }
+        }
+        Err(error) => ExternalResult::AgentsDiscovered {
+            pane_id: None,
+            result: Err(error),
+        },
     }
 }
 

@@ -12,7 +12,7 @@ use ratatui_widgets::{
     paragraph::{Paragraph, Wrap},
 };
 
-use crate::application::InteractionMode;
+use crate::{application::InteractionMode, ports::agent::AgentDeliveryMode};
 
 use super::super::{BoardApp, Theme, layout::OverlayLayout};
 
@@ -97,6 +97,14 @@ fn help_lines(app: &BoardApp, theme: &Theme) -> Vec<Line<'static>> {
             shortcut_line(&[(keys.help.to_string(), "Close")], theme),
         ];
     }
+    let mut delivery = Vec::new();
+    if app.supports_delivery(AgentDeliveryMode::Compose) {
+        delivery.push((keys.send.to_string(), "Send"));
+    }
+    if app.supports_delivery(AgentDeliveryMode::Submit) {
+        delivery.push((keys.submit.to_string(), "Submit"));
+    }
+    delivery.push((keys.quit.to_string(), "Quit"));
     vec![
         shortcut_line(
             &[
@@ -135,14 +143,7 @@ fn help_lines(app: &BoardApp, theme: &Theme) -> Vec<Line<'static>> {
             ],
             theme,
         ),
-        shortcut_line(
-            &[
-                (keys.submit.to_string(), "Send"),
-                (keys.submit_remove.to_string(), "Send+"),
-                (keys.quit.to_string(), "Quit"),
-            ],
-            theme,
-        ),
+        shortcut_line(&delivery, theme),
     ]
 }
 

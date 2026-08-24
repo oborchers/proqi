@@ -5,7 +5,7 @@ expression: "snapshot(&mut fixture, 60, 14, ThemePreference::Dark)"
 SIZE 60x14
 
 TEXT
-00│  proqi · proqi-ui-contract · 3 thoughts              saving│
+00│  proqi · proqi-ui-contract · 3 thoughts│
 01││
 02│⋮ first thought│
 03││
@@ -17,13 +17,13 @@ TEXT
 09││
 10│  third thought│
 11││
-12│  ready                                     board · saving│
+12│                                            board · saving│
 13│  n New   y Copy  x Cut  d Delete  u Undo  / Search│
 
 STYLE RUNS
 0: 0-59 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE
 1: 0-59 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE
-2: 0-0 fg=Rgb(15, 13, 10) bg=Rgb(91, 158, 125) mod=DIM | 1-59 fg=Rgb(232, 228, 223) bg=Rgb(35, 31, 27) mod=NONE
+2: 0-0 fg=Rgb(232, 228, 223) bg=Rgb(91, 158, 125) mod=DIM | 1-59 fg=Rgb(232, 228, 223) bg=Rgb(52, 52, 63) mod=NONE
 3: 0-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 4: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-59 fg=Rgb(42, 37, 32) bg=Rgb(15, 13, 10) mod=NONE
 5: 0-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE

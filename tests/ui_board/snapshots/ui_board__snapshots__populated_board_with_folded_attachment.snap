@@ -5,7 +5,7 @@ expression: "snapshot(&mut fixture, 60, 12, ThemePreference::Dark)"
 SIZE 60x12
 
 TEXT
-00│  proqi · proqi-ui-contract · 2 thoughts              saving│
+00│  proqi · proqi-ui-contract · 2 thoughts│
 01││
 02│  first prompt│
 03││
@@ -15,7 +15,7 @@ TEXT
 07││
 08│                        + New thought│
 09││
-10│  ready                                     board · saving│
+10│                                            board · saving│
 11│  n New   y Copy  x Cut  d Delete  u Undo  / Search│
 
 STYLE RUNS
@@ -25,7 +25,7 @@ STYLE RUNS
 3: 0-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 4: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-59 fg=Rgb(42, 37, 32) bg=Rgb(15, 13, 10) mod=NONE
 5: 0-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-6: 0-0 fg=Rgb(15, 13, 10) bg=Rgb(91, 158, 125) mod=BOLD | 1-1 fg=Rgb(232, 228, 223) bg=Rgb(35, 31, 27) mod=NONE | 2-10 fg=Rgb(91, 158, 125) bg=Rgb(35, 31, 27) mod=BOLD | 11-59 fg=Rgb(232, 228, 223) bg=Rgb(35, 31, 27) mod=NONE
+6: 0-0 fg=Rgb(232, 228, 223) bg=Rgb(91, 158, 125) mod=BOLD | 1-1 fg=Rgb(232, 228, 223) bg=Rgb(52, 52, 63) mod=NONE | 2-10 fg=Rgb(91, 158, 125) bg=Rgb(52, 52, 63) mod=BOLD | 11-59 fg=Rgb(232, 228, 223) bg=Rgb(52, 52, 63) mod=NONE
 7: 0-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 8: 0-23 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 24-24 fg=Rgb(91, 158, 125) bg=Rgb(15, 13, 10) mod=NONE | 25-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 9: 0-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
