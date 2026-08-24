@@ -11,7 +11,10 @@ fn help_and_version_are_available() {
         .output()
         .expect("run proqi --help");
     assert!(help.status.success());
-    assert!(String::from_utf8_lossy(&help.stdout).contains("terminal-native scratchpad"));
+    assert!(
+        String::from_utf8_lossy(&help.stdout)
+            .contains("agent-optimized scratchpad for follow-up prompts")
+    );
 
     let version = Command::new(binary)
         .arg("--version")

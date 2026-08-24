@@ -1,11 +1,11 @@
 # Architecture
 
-Status: Initial architecture decision record
+Status: v0.1.0 architecture contract
 
 Project: Proqi
 
 Command: `proqi`
-Last updated: 2026-08-24
+Last updated: 2026-08-25
 
 ## Purpose
 
@@ -68,8 +68,15 @@ large multi-crate abstraction hierarchy before one is needed.
 - A checked-in `rust-toolchain.toml` defines the supported compiler version.
 - The minimum supported Rust version follows the highest minimum required by a
   direct dependency. It is tested in CI rather than merely documented.
-- Cargo owns dependency resolution. `cargo-dist` or an equivalent release tool
-  produces platform archives, checksums, and package-manager metadata.
+- Cargo owns dependency resolution. A reviewed pinned `cargo-dist` release tool
+  produces platform archives and metadata without becoming a second local
+  development command surface.
+
+The `v0.1.0` release targets are Apple silicon macOS, Intel macOS, and x86-64
+Linux using GNU libc. Windows remains a compile and terminal-independent test
+signal only. Named-pipe control, Windows packaging, terminal automation,
+signing, and updating are deferred to a separate future goal and are not public
+support claims.
 
 Rust provides a single native executable, predictable resource use, strong
 cross-platform support, and a mature terminal ecosystem. It also makes it
@@ -118,7 +125,7 @@ without adding product value.
 ### Supporting libraries
 
 - `clap` for interactive launch flags and scriptable subcommands.
-- `serde` with TOML for configuration and JSON for stable machine output.
+- `serde` with TOML for configuration and versioned machine output.
 - `arboard` for the native clipboard, with OSC 52 behind the same facade.
 - `tracing` for diagnostics with content redaction by default.
 - UUID version 7 identifiers for opaque, sortable entity IDs. Public IDs use a
@@ -385,81 +392,129 @@ remain available without modifying the source database.
 
 ## Multiple running versions during an update
 
-### What a Homebrew update changes
+### Installation-wide update boundary
 
-The package manager replaces the installed artifact and updates the command
-link used by future launches. It does not transform a process that is already
-running into the new version. A running process continues with the executable
-image it loaded at startup. A newly started pane resolves the new installed
-binary.
+Update awareness is a typed application capability. HTTP, GitHub response
+parsing, filesystem state, process execution, install detection, terminal
+cleanup, and Unix process replacement remain adapters. Domain values identify
+stable versions, installation identities, update choices, participants, and
+operation state without containing URLs, shell strings, environment snapshots,
+or terminal content.
 
-The release binary must therefore be self-contained after startup. It may read
-configuration and user data from stable platform directories, but it must not
-load versioned runtime assets from its Homebrew installation directory after
-launch. Removing an old package directory then cannot break an existing pane.
+Only interactive release builds schedule an implicit check. Debug and source
+builds, tests, JSON commands, skill invocations, and other noninteractive paths
+do not. `proqi update check --json` is the explicit machine-readable exception.
+The application reads cached state synchronously and schedules at most one
+background refresh when the last successful check is at least 24 hours old.
 
-### Mixed-version compatibility rule
+The HTTPS adapter uses bounded connection, response, redirect, body, and retry
+limits. It requests the latest stable GitHub Release without authentication,
+ignores drafts and prereleases, and sends no user content or Proqi state. The
+only optional request metadata is a bounded application name and version
+User-Agent required by GitHub.
 
-Every process holds a shared schema lock for its lifetime and records:
+### Shared cache and election
 
-- Application version.
-- Supported storage protocol and schema range.
-- Session ID and launch directory.
-- Process ID plus a platform-specific process start token.
-- Start time and most recent heartbeat for diagnostics.
+Update state is separate from SQLite thought data and private to the current
+user. It stores only:
 
-Schema-neutral releases may run together. The release process must prove that
-both binaries interpret the existing schema and operation payloads compatibly.
+- Latest stable version and last successful check time.
+- Exact dismissed and skipped versions.
+- Last observed installed version.
+- Whether an older running process may still need restart.
+- Optional bounded safe HTTP cache metadata.
 
-If a new binary requires any migration, the initial implementation uses a
-conservative rule: migration is refused while another process holds the shared
-schema lock. Existing processes continue normally. The new process exits cleanly
-with a message listing the active sessions and versions that must be restarted.
-It never kills them and never migrates the database behind them.
+The cache is atomic, bounded, corruption-tolerant, and protected by an explicit
+installation-wide lock. Corruption is treated as a miss. One compare-and-swap
+or lock transaction elects a network refresher, prompt owner, and installer
+coordinator, so 10 to 15 concurrent processes still produce at most one request,
+one actionable prompt, and one installer. `Not now`, `Skip this version`, and
+configuration opt-out update the shared state atomically and are observed by
+every process.
 
-After the older processes close, the next new process obtains the exclusive
-schema lock, backs up and migrates the database, then reopens it under a shared
-lock. All subsequent launches use the new schema.
+Install detection is deterministic and testable. It distinguishes
+`HomebrewFormula`, `StandaloneArchive`, and `SourceOrUnknown` using the canonical
+executable path plus package-owned metadata or another strong marker. A
+forgeable environment variable is never sufficient by itself.
 
-This is intentionally stricter than trying to infer whether an arbitrary SQL
-change is safe for older writers. Later releases may allow explicitly declared
-additive migrations through an expand-and-contract protocol, but destructive
-or semantic changes always require exclusive migration.
+### Coordination protocol
 
-### Update experience
+The existing current-user runtime registry and owner-control transport gain a
+small ephemeral update protocol. A coordination message includes a typed
+operation ID, target version, installation identity, participant identity,
+deadline, and one of prepare, ready, blocked, installation-result, or restart
+requests. Messages are bounded and contain no prompt text, arbitrary command,
+terminal content, secret, or raw environment data.
 
-The application may check the version of the installed command locally and
-show `A newer version is installed. Restart this pane when convenient.` It does
-not download an update, replace its executable, restart itself, or interrupt
-other sessions.
+The coordinator verifies current-user ownership, process start identity, live
+session lease, endpoint, compatibility domain, and installation identity. It
+rejects stale records, PID reuse, forged endpoints, and other users. It snapshots
+live participants for preflight and rescans after installation so a process
+created during the update can converge without a durable distributed phase log.
 
-Package managers own installation and update. The application may offer the
-correct command as copyable guidance after detecting its installation source.
-It must not assume Homebrew when installed through a release archive or Cargo.
+Every preflight participant flushes durable thoughts, drafts, and the ordinary
+resume identity and UI state. A save failure, negative acknowledgement, live
+timeout, or lost coordinator aborts before installation. Ready participants
+return to their prior session after a bounded timeout. The shared cache records
+only the minimal state a later process needs to compare installed and running
+versions.
 
-The initial Homebrew tap should expose one canonical package identity. A
-formula is the conventional choice for this open-source CLI and matches the
-existing product installation goal. A binary-only cask is also technically
-valid and follows the approach used by Codex. We should not publish both under
-the same token because migration between package identities produces confusing
-upgrade behavior.
+### Homebrew installation and Unix process replacement
 
-Whichever packaging form is selected before release, the runtime and schema
-lock protocol is identical. For a cask, the explicit update command is
-`brew upgrade --cask <name>`. For a formula, it is
-`brew upgrade --formula <name>`.
+Homebrew is the sole owner of installed-file replacement. On macOS and Linux,
+one coordinator directly executes exactly:
 
-### Failure cases
+```text
+program: brew
+arguments: upgrade, --formula, oborchers/tap/proqi
+```
 
-- If Homebrew updates while four panes are open, all four keep running the old
-  binary. The next launch uses the new binary.
-- If the update has no storage change, the new launch may coexist with them.
-- If it needs a migration, the new launch explains the conflict and stops. The
-  four existing panes remain usable and continue saving.
-- If an existing pane crashes, its operating-system locks are released. Stale
-  descriptive metadata is removed when the next process verifies the lock.
-- If migration fails after all panes close, the backup remains available and no
-  old binary is automatically relaunched against a partially migrated store.
+No shell is involved and Proqi never overwrites a Homebrew-managed executable.
+If installation fails or the result is ambiguous, no participant calls `exec`.
+Every old process returns to normal use after a bounded wait.
+
+After success, the coordinator rescans active instances and publishes the
+installed version. Each participant independently flushes required work,
+restores terminal modes, stops worker threads, closes control transport, releases
+session and schema leases, applies an explicit descriptor policy, resolves and
+verifies the active Homebrew Proqi path, and then calls Unix `exec` with its
+ordinary resume arguments. Cleanup is explicit because successful
+`CommandExt::exec` does not run Rust destructors. Standard input, output, error,
+and the inherited PTY remain attached, so no shell, terminal multiplexer, Herdr,
+or parent agent must recreate the pane.
+
+A failed `exec` does not undo successful peers. Where safe, the old process
+re-enters its session; otherwise its durable state remains normally resumable.
+Runtime metadata marks it as an old-version participant and the UI offers a
+direct retry. The system never reports complete restart while such an instance
+remains.
+
+### Schema compatibility during convergence
+
+Every running process holds the existing shared schema lease and records its
+application and storage protocol versions. Schema-neutral versions may coexist
+only when release tests prove compatible payload interpretation. A process that
+requires migration must obtain the exclusive schema lease, create a verified
+backup, migrate transactionally, and pass integrity checking.
+
+An old process holding a shared lease prevents an incompatible migration. A new
+process waits within the update convergence window or reports a bounded
+restart-pending state and retries after the old process leaves. It never migrates
+behind an older writer. This conservative barrier remains mandatory even though
+the public CLI has no compatibility guarantee before `1.0`.
+
+### Standalone and unknown installations
+
+Standalone archives share version checking, prompt election, global dismissal,
+checkpointing, and ordinary resumable sessions. `v0.1.0` does not replace an
+archive executable or guarantee same-pane restart. It provides a verified stable
+release URL and external replacement instructions, then resumes on the next
+normal start. `SourceOrUnknown` installations receive accurate non-destructive
+guidance or no action.
+
+Automatic standalone replacement remains behind a future updater port. It must
+not be approximated by writing over the running executable, invoking `curl`, or
+assuming a package manager.
 
 ## Terminal rendering and input
 
@@ -576,7 +631,7 @@ Both visible actions invoke the same immediate semantic prompt command.
 accepted receipt whose submission identifier matches the pending request. That
 deletion remains undoable. Every failure preserves the thought.
 
-The private alpha implements this boundary against Herdr's structured schema
+`v0.1.0` implements this boundary against Herdr's structured schema
 and protocol discovery commands. Capability discovery verifies both the
 `agent.prompt` request and `agent_prompted` receipt shapes. Explicit
 `interactive_ready=false` or `launch_pending=true` metadata makes a target
@@ -601,15 +656,15 @@ weakens the standalone board or changes submission verification.
 
 The interactive TUI and scriptable CLI call the same `SessionService`. This
 avoids a second set of business rules. The repository ships a dedicated
-`skills/proqi/SKILL.md` package as a thin description of this stable command
-surface. Harnesses may expose it as `/proqi`, `$proqi`, or natural-language
-skill invocation.
+`skills/proqi/SKILL.md` package as a thin description of the installed version's
+current JSON command surface. Harnesses may expose it as `/proqi`, `$proqi`, or
+natural-language skill invocation.
 
 Agent-friendly commands follow these rules:
 
 - Accept opaque IDs and text through standard input for large or arbitrary
   content.
-- Provide `--json` with a versioned schema and stable machine-readable error
+- Provide `--json` with a versioned schema and documented current-version error
   codes.
 - Keep human output concise and send diagnostics to standard error.
 - Support discovery commands before mutation.
@@ -631,14 +686,14 @@ a typed request through the owner's user-only local control endpoint. The owner
 turns that request into an ordinary action, then returns the durable operation
 receipt. It never writes around the owner.
 
-The local transport is a Unix-domain socket on macOS and Linux. The private
-alpha keeps Windows owner forwarding explicitly unsupported until a named-pipe
-implementation compares the client token SID with the server SID and has
-cross-user acceptance tests. This is a public-alpha blocker, not a silent
-security fallback. Endpoint metadata lives beside runtime lock metadata. Peer-user
-validation, bounded messages, protocol negotiation, idempotency keys, and
-timeouts are mandatory. If forwarding is unsupported or the owner cannot be
-verified, the CLI returns `session_busy`.
+The local transport is a Unix-domain socket on macOS and Linux. Windows owner
+forwarding remains explicitly unsupported until a separate implementation uses
+a named pipe, verifies current-user token identity, and passes cross-user tests.
+There is no insecure fallback and `v0.1.0` makes no Windows support claim.
+Endpoint metadata lives beside runtime lock metadata. Peer-user validation,
+bounded messages, protocol negotiation, idempotency keys, and timeouts are
+mandatory. If forwarding is unsupported or the owner cannot be verified, the
+CLI returns `session_busy`.
 
 Control protocol version 2 adds durable presentation annotations to thought
 creation. Plain additions remain compatible with version 1 owners. An
@@ -656,7 +711,11 @@ or automatic scratchpad reads.
 
 ## Privacy and security
 
-- The application has no network requirement and no telemetry by default.
+- Ordinary product use has no network requirement. Interactive release builds
+  may perform the bounded, disableable GitHub stable-version check described
+  above. Proqi has no telemetry.
+- Update requests contain no thought, clipboard, path, session, identifier,
+  runtime, terminal, or usage data.
 - Diagnostic logs exclude thought and clipboard content by default.
 - Paths and agent metadata are logged only at an explicit diagnostic level and
   are redactable in support bundles.
@@ -821,10 +880,14 @@ Minor updates, all pre-1.0 compatibility changes, and security-sensitive crates
 receive human review.
 
 The default branch requires the aggregate `check` status and rejects force
-pushes. Releases use a protected GitHub environment with narrowly scoped
-credentials. CODEOWNERS, structured issue forms, a pull-request template,
-`CONTRIBUTING.md`, `SECURITY.md`, and the chosen license are present before the
-repository becomes public.
+pushes while allowing direct owner pushes. Releases use a protected GitHub
+environment with narrowly scoped credentials. CODEOWNERS, structured issue
+forms, a pull-request template, `CONTRIBUTING.md`, `SECURITY.md`, Contributor
+Covenant 2.1, and the MIT license are present before the repository becomes
+public. Issues and pull requests are the public collaboration surfaces;
+Discussions and a support mailbox remain disabled. Security reports use GitHub
+private vulnerability reporting and support only the latest stable release.
+Inbound contributions use the repository's MIT terms with no CLA or DCO.
 
 Repository instructions contain durable Proqi-specific rules and commands.
 External agent skills may supplement those instructions but never replace them.
@@ -840,21 +903,34 @@ teaches coding agents to use the installed application.
 
 ### Release pipeline
 
-Every release starts from an immutable semantic-version tag after the aggregate
-gate has passed. Release automation then:
+Every release starts from an immutable protected `vX.Y.Z` tag after the
+aggregate gate has passed. The workflow rejects a tag that differs from the
+single Cargo workspace version. The `v0.1.0` matrix builds only Apple silicon
+macOS, Intel macOS, and x86-64 GNU Linux artifacts, preferably on native runners.
 
-- Rebuilds and tests the tagged source on every supported target.
-- Uses `cargo-dist` or an equivalent reviewed tool to create native archives.
-- Publishes the executable, shell completions, license and notices, checksums,
-  an SBOM, and build-provenance attestations in one GitHub Release.
-- Runs archive installation, launch, session-resume, and terminal-restoration
-  smoke tests before marking the release complete.
-- Updates the personal Homebrew tap from the published immutable artifacts.
-- Refuses artifact replacement for an existing version.
+A reviewed pinned `cargo-dist` configuration or equivalent narrow Rust tool
+stages archives containing one executable, MIT license, required notices, and
+shell completions. Jobs create and verify SHA-256 manifests, SPDX JSON SBOMs,
+and GitHub OIDC Sigstore provenance attestations. Every third-party Action is
+pinned by full commit SHA and ordinary CI remains read-only.
 
-Package publication has no hidden local step. A release rehearsal exercises the
-complete workflow without publishing, and the release checklist records any
-manual terminal-emulator or notarization verification that cannot be automated.
+The workflow creates a draft GitHub Release only after every target, installed
+smoke, checksum, SBOM, attestation, and formula preparation step succeeds.
+GitHub Release notes are the only changelog. Oliver reviews notes and artifacts,
+then explicitly approves a protected environment before publication. Release
+runs are never cancelled through pull-request concurrency and existing assets
+for a version are immutable.
+
+Homebrew tap updates occur only after the referenced Release assets, checksums,
+and attestations are verified. The external `oborchers/homebrew-tap` repository
+contains `Formula/proqi.rb` and receives narrowly scoped credentials only after
+Oliver approves tap creation. Homebrew Core is outside `v0.1.0`.
+
+Package publication has no hidden local step. A credential-free rehearsal plans
+all three targets, builds and smokes the host artifact, and generates host
+checksums, completions, notices, SPDX output, and formula metadata under
+`target`. It reports platform work that only CI can verify. No paid platform
+signing or notarization is performed.
 
 ## Source organization
 
@@ -892,40 +968,42 @@ as architecture.
 
 ## Release compatibility contract
 
-- Semantic versioning describes the public CLI, config, export format, and
-  agent-facing JSON contract.
+- Before `1.0`, Proqi does not guarantee compatibility for the human CLI,
+  configuration, export format, or agent-facing JSON contract between minor
+  releases. Machine JSON remains explicitly versioned and the skill discovers
+  the installed version before acting.
 - Database schemas are internal but migrations are forward-only, backed up, and
   protected from mixed-version writers.
-- Config fields are additive by default. Unknown fields produce an actionable
-  warning or error rather than silent reinterpretation.
+- Unknown config fields produce an actionable error rather than silent
+  reinterpretation.
 - Machine-readable JSON has an explicit schema version.
-- Deprecations remain supported for at least one minor release before removal.
-- Release archives contain one executable, license and notices, completions,
-  checksums, and provenance attestations.
+- Breaking pre-`1.0` behavior is called out in GitHub Release notes.
+- Release archives contain one executable, MIT license, notices, and
+  completions. Checksums, SPDX SBOMs, and provenance attestations accompany the
+  archives as release assets.
 - Package-manager updates never delete user sessions, configuration, or backups.
 
 ## Decisions deliberately deferred
 
-The architecture leaves these choices open until evidence or a product decision
-resolves them:
+The architecture leaves only later product expansion open:
 
-- MIT, Apache-2.0, or dual licensing.
-- Homebrew formula versus binary cask before the first public release. Only one
-  becomes the canonical package identity.
-- Exact signing and notarization scope for each platform.
-- Additional multiplexer adapters.
-- Cloud sync, shared editing, and a public plugin API, all of which remain out of
-  scope for the initial architecture.
+- Additional multiplexer and coding-agent adapters.
+- A separately reviewed standalone self-replacement mechanism after `v0.1.0`.
+- Windows owner control, packaging, signing, terminal automation, and updating.
+- Cloud sync, shared editing, and a public plugin API.
+- Homebrew Core submission after the project independently meets its policy.
 
 ## External behavior references
 
-- [Codex CLI documentation](https://learn.chatgpt.com/docs/codex/cli) documents
-  standalone updates, Homebrew availability, and resumable CLI sessions.
-- [Codex open-source repository](https://github.com/openai/codex) documents its
-  standalone Rust executable and current `brew install --cask codex` channel.
-- [Homebrew manual](https://docs.brew.sh/Manpage) defines formula and cask
-  upgrades, including cask handling for running applications.
-- [Homebrew Cask Cookbook](https://docs.brew.sh/Cask-Cookbook) defines binary
-  artifacts as links into Homebrew's binary directory.
+- [GitHub Releases REST API](https://docs.github.com/en/rest/releases/releases)
+  defines stable release discovery.
+- [Homebrew Formula Cookbook](https://docs.brew.sh/Formula-Cookbook) defines
+  formula installation and upgrade behavior.
+- [Homebrew Acceptable Formulae](https://docs.brew.sh/Acceptable-Formulae)
+  records the policy boundary for a possible later Core submission.
+- [POSIX exec](https://pubs.opengroup.org/onlinepubs/9799919799/functions/exec.html)
+  defines same-process image replacement.
+- [Rust Unix CommandExt](https://doc.rust-lang.org/std/os/unix/process/trait.CommandExt.html)
+  documents that successful `exec` does not run Rust destructors.
 - [SQLite WAL documentation](https://www.sqlite.org/wal.html) defines the
   concurrency and durability behavior underlying the storage adapter.

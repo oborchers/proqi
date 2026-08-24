@@ -1,6 +1,6 @@
 ---
 name: proqi
-description: Inspect or update one user-specified Proqi scratchpad session through its stable JSON CLI. Use only when the user explicitly invokes Proqi or names this skill.
+description: Inspect or update one user-specified Proqi scratchpad session through the installed version's JSON CLI. Use only when the user explicitly invokes Proqi or names this skill.
 ---
 
 # Proqi
@@ -26,6 +26,12 @@ Act only after explicit invocation. Use the scriptable CLI, never TUI output.
    merely because the skill is active. Never parse terminal escape sequences.
 7. Perform only the requested mutation. Preserve operation receipts so the
    user can identify and reverse the change.
+8. Do not trigger update checks. JSON commands never check implicitly. Run an
+   explicit update command only when the user specifically requests one and the
+   installed capabilities advertise it.
+
+Proqi is pre-`1.0`. Discover and follow the installed JSON schema rather than
+assuming that a command from another minor release remains compatible.
 
 ## Typed identifiers
 

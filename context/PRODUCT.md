@@ -1,11 +1,11 @@
 # Product Vision
 
-Status: Working product vision
+Status: v0.1.0 product contract
 
 Product name: Proqi
 
 Command: `proqi`
-Last updated: 2026-08-24
+Last updated: 2026-08-25
 
 ## Vision
 
@@ -13,9 +13,9 @@ Proqi is a terminal-native scratchpad for people who work with several
 coding agents at once.
 
 It replaces the plain text editor that sits beside an agent session. It gives
-each agent session its own resumable board of thoughts, prompts, fragments,
-questions, and pasted context. These thoughts may be used immediately or may
-remain for days. They are not a FIFO queue and do not have to be sent anywhere.
+each agent session its own resumable board of follow-up prompts, fragments,
+questions, and pasted context. These thoughts remain editable until the user
+copies one or submits it to the working coding agent.
 
 The product must feel as immediate as typing into an already open text file,
 while adding only the structure that materially improves agent work:
@@ -53,11 +53,10 @@ interaction without helping the primary workflow. A collapsed thought uses its
 first visible lines as its preview. The data model may support optional titles
 later, but the default interface does not show or request them.
 
-### The board is not a queue
+### Order is spatial organization
 
-Visual order is spatial organization, not execution order. A thought can be
-used out of sequence, revised repeatedly, or left untouched for days. The
-product does not label thoughts as pending or done.
+A thought can be used out of sequence, revised repeatedly, or left untouched
+for days. The product does not label thoughts as pending or done.
 
 ### Ephemeral means disposable, not volatile
 
@@ -92,9 +91,16 @@ through a resize. No restart, redraw command, or manual correction is required.
 
 ### Local first and quiet by default
 
-The product works without an account or network connection. It has no telemetry
-by default. It does not inspect agent conversations or project contents merely
-because it was launched from a project directory.
+The product works without an account. Ordinary capture, editing, persistence,
+search, copy, submission, and JSON automation require no network service. Proqi
+has no telemetry and never sends thought content, paths, identifiers, clipboard
+data, or session state for analytics.
+
+Interactive release builds perform a bounded, disableable stable-release check
+against GitHub at most once every 24 hours per installation. The check sends
+only a bounded Proqi name and version User-Agent when required by GitHub. It is
+never implicit in debug or source builds, tests, JSON commands, the Proqi skill,
+or other noninteractive paths.
 
 ## Core concepts
 
@@ -566,6 +572,76 @@ Confirmation is reserved for irreversible pruning, destructive recovery
 choices, and operations that affect more content than their immediate target
 implies.
 
+## Updates
+
+Proqi supports only the latest stable release during the `0.x` series. Update
+checks consider stable GitHub Releases only. Drafts, prereleases, malformed
+tags, and older or equal versions never produce a prompt.
+
+Interactive release builds enable `check_for_updates = true` by default. The
+setting can be disabled globally. Check results, `Not now`, and
+`Skip this version` are installation-wide so 10 to 15 adjacent Proqi processes
+do not each contact GitHub or compete for attention. A shared private cache
+stores only the latest stable version, check time, exact dismissed or skipped
+version, observed installed version, restart-needed state, and bounded HTTP
+cache metadata. Cache corruption is a miss and never blocks startup.
+
+At most one process refreshes a stale cache and at most one process owns the
+actionable prompt. Other sessions continue normally. JSON commands, the Proqi
+skill, and noninteractive commands never check unless the user explicitly runs
+`proqi update check --json`.
+
+### Homebrew update and restart
+
+The supported automatic action is available only for a verified installation
+from the `oborchers/tap/proqi` Homebrew formula on macOS or Linux. The prompt
+offers:
+
+- `Update and restart all sessions`.
+- `Not now`.
+- `Skip this version`.
+
+The prompt shows the verified count of affected active sessions and has full
+keyboard and mouse operation. Before installation, one elected coordinator
+asks every live Proqi process from the same installation and compatibility
+domain to flush durable work and acknowledge readiness. A save failure,
+negative acknowledgement, verified live timeout, or lost coordinator cancels
+the operation before Homebrew runs and returns every participant to ordinary
+use.
+
+After all participants are ready, Proqi runs exactly one direct process with no
+shell interpolation:
+
+```text
+brew upgrade --formula oborchers/tap/proqi
+```
+
+If Homebrew fails, every old process remains usable and no restart is attempted.
+After success, the coordinator rescans active instances. Each macOS or Linux
+participant completes durable flushing, terminal restoration, lease release,
+and resource cleanup, then uses Unix process replacement to resume the same
+session in the existing pane. A failed replacement never rolls back successful
+peers. It is reported truthfully, leaves that session resumable, and offers a
+direct retry. Proqi never claims that all sessions restarted while an old
+process remains.
+
+Existing shared schema leases remain the compatibility barrier. A new process
+does not migrate while an old process still holds a conflicting lease. It waits
+for bounded restart convergence or reports that restart remains pending.
+
+### Archive and unknown installations
+
+Standalone archive users receive the verified release URL and external
+replacement instructions. Proqi `v0.1.0` does not overwrite a standalone
+executable and does not promise same-pane restart for archive installations.
+Durable sessions resume on the next normal start after the user replaces the
+binary. Source and unknown installations receive accurate non-destructive
+guidance or no action.
+
+No installer action is automatic. Update installation always requires an
+explicit user choice. A future standalone updater may implement a separately
+reviewed replacement boundary, but it is outside `v0.1.0`.
+
 ## Responsive terminal layout
 
 The application listens to terminal resize events and reflows on every size
@@ -771,8 +847,9 @@ The public project ships a dedicated `proqi` skill for supported coding-agent
 harnesses. Depending on the harness, users invoke it as `/proqi`, `$proqi`, or
 by naming the skill in natural language.
 
-The skill teaches an agent to discover Proqi's installed capabilities and use
-its stable CLI. It does not duplicate application logic. It supports explicit
+The skill teaches an agent to discover the installed Proqi version's
+capabilities and use its current versioned JSON CLI. It does not duplicate
+application logic. It supports explicit
 user requests to list or find sessions, inspect a specified thought, add a
 thought from standard input, and perform reversible thought operations.
 
@@ -800,53 +877,54 @@ session. Different sessions can remain active concurrently.
 
 ## Open source direction
 
-The project is intended to become a public open source project, not merely a
-personal tool that happens to be published.
+Proqi is an Oliver Borchers personal open source project licensed under MIT.
+Contributions use the same MIT terms as the repository. No contributor license
+agreement or Developer Certificate of Origin sign-off is required.
 
-Before the first public release it requires:
+Public collaboration uses GitHub Issues and pull requests. GitHub Discussions,
+a support mailbox, and an in-repository changelog are not part of the project.
+GitHub Releases are the only release changelog. Security reports use GitHub's
+private vulnerability reporting and the security policy supports only the
+latest stable release. Contributor behavior follows Contributor Covenant 2.1.
 
-- A clear OSI-approved license. The recommended choice is dual MIT or
-  Apache-2.0, subject to an explicit project decision.
-- Public architecture and contribution documentation.
-- A code of conduct and security reporting policy.
-- One cross-platform development command surface shared by contributors,
-  coding agents, and CI.
-- Required pull-request checks for formatting, linting, documentation, tests,
-  supported platforms, the minimum Rust version, and dependency policy.
-- A protected default branch whose stable aggregate check must pass before
-  merge.
-- Reproducible release automation, checksums, an SBOM, and build-provenance
-  attestations.
-- Dependency license review and generated notices where required.
-- Weekly Cargo and GitHub Actions updates. Automatic merging is limited to
-  reviewed low-risk patch policy after all required checks pass.
-- Third-party workflow actions pinned to immutable revisions with least-privilege
-  permissions.
-- A public roadmap that distinguishes product commitments from ideas.
-- Tests on macOS, Linux, and Windows.
-- No embedded personal paths, private data, or assumptions about one agent
-  harness.
-- Optional integrations that fail closed for submission and leave the standalone
-  scratchpad fully usable.
+The minimum supported Rust version for `0.x` is 1.88. The public CLI, config,
+and JSON surface may change before `1.0`; machine JSON remains explicitly
+versioned. Database integrity, forward migration, backup, newer-schema refusal,
+typed identifiers, and mixed-version safety are mandatory regardless of the
+pre-`1.0` compatibility policy.
 
-Distribution begins with platform-specific GitHub Releases and a personal
-Homebrew tap. The intended installation experience is:
+The first public version is `v0.1.0`. Release targets are:
+
+- Apple silicon macOS.
+- Intel macOS.
+- x86-64 Linux using GNU libc.
+
+Windows compilation and terminal-independent tests remain useful engineering
+signals, but Windows is not a `v0.1.0` support or publication target. Named-pipe
+owner control, Windows terminal automation, signing, packaging, and update
+behavior require a separate future implementation goal.
+
+Distribution is limited to immutable GitHub Release archives and the
+`oborchers/homebrew-tap` personal tap. The tap provides one prebuilt Homebrew
+formula, installed with:
 
 ```text
-brew install <tap>/<formula>
+brew install oborchers/tap/proqi
 ```
 
-Once the project meets Homebrew's maturity and maintenance expectations, a
-submission to Homebrew Core can be considered. Shell and PowerShell installers,
-and optional `cargo install` distribution, complement Homebrew.
+There is no crates.io, npm, PyPI, WinGet, Docker, Homebrew Core, shell installer,
+PowerShell installer, or binary cask in `v0.1.0`. Release archives contain the
+native executable, MIT license, required notices, and shell completions.
+Published artifacts also receive SHA-256 checksums, SPDX JSON SBOMs, and GitHub
+OIDC Sigstore build-provenance attestations. Paid Apple signing and notarization
+are not used.
 
-Package managers own updates in the first public version. The application does
-not silently replace its own executable.
-
-Release archives are tested as installed products rather than only as compiled
-binaries. The release gate covers installation, launch, terminal restoration,
-session resumption, and compatibility with an existing database. Published
-artifacts are immutable and the Homebrew package refers to their checksums.
+Pull requests and `main` use one aggregate CI contract. Direct owner pushes
+remain allowed, force pushes do not. Immutable `vX.Y.Z` tags start a protected
+release workflow that builds a draft GitHub Release. Publication requires
+Oliver to review the notes and artifacts and approve the protected release
+environment. No package, tag, tap, repository visibility, or GitHub setting is
+changed without that explicit approval.
 
 ## Research and clean-room boundary
 
@@ -901,12 +979,22 @@ The current direction is grounded in these public primary sources:
 - Plugin systems.
 - Automatic splitting of pasted text into several thoughts.
 - Silent retention expiry.
+- A background app server or public local service.
+- A native IDE or editor extension.
+- Native terminal scrollback as the primary board renderer.
+- JSONL conversation history or agent-runtime storage.
+- Bazel, JavaScript package wrappers, or multi-language launchers.
+- Telemetry, update-check analytics, installation identifiers, or usage events.
+- Automatic update installation without explicit confirmation.
+- Standalone executable self-replacement in `v0.1.0`.
+- Windows release artifacts or public Windows support claims.
+- Public repository changes, tap creation, credentials, tags, or release
+  publication without Oliver's explicit approval.
 
 ## Later opportunities
 
 These remain compatible with the vision but are not initial requirements:
 
-- Optional session naming and deterministic aliases.
 - Duplicate, merge, and split thought operations.
 - External editor handoff through `$VISUAL` or `$EDITOR`.
 - Import and export as plain text, Markdown, or JSON.
@@ -916,9 +1004,9 @@ These remain compatible with the vision but are not initial requirements:
   clipboard-first core.
 - A library API for third-party frontends.
 
-## Success criteria for the first usable release
+## Success criteria for `v0.1.0`
 
-The first release succeeds when a user can keep several instances beside
+`v0.1.0` succeeds when a user can keep several instances beside
 several agent sessions for a full working day and stop using a separate text
 editor for prompt scratchpads.
 
@@ -948,4 +1036,13 @@ Specifically:
 - Deleted thoughts and text edits can be undone after restarting.
 - Simultaneous instances do not mix sessions or silently lose writes.
 - Installation through Homebrew requires no language runtime setup.
+- One installation-wide update check and one prompt serve 10 to 15 simultaneous
+  sessions without transmitting user content.
+- A confirmed Homebrew update either checkpoints every verified participant
+  before one installer runs or aborts before installation.
+- Successful Homebrew updates resume macOS and Linux sessions through ordinary
+  durable state and same-pane Unix process replacement, with partial failures
+  reported accurately.
+- Standalone archives provide external replacement guidance and next-start
+  resume without claiming automatic self-replacement.
 - The interface remains visually quiet after hours of continuous use.

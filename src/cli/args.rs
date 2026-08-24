@@ -8,7 +8,7 @@ use clap::{Args, Parser, Subcommand};
 #[command(
     name = "proqi",
     version,
-    about = "A terminal-native scratchpad for agent work",
+    about = "An agent-optimized scratchpad for follow-up prompts",
     long_about = None
 )]
 pub(super) struct Cli {

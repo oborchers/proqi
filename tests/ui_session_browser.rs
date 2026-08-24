@@ -62,7 +62,7 @@ fn active(ids: &mut FakeIdGenerator, hit: SessionHit) -> SessionBrowserItem {
         instance_id: ids.instance_id(),
         session_id: hit.id,
         pid: 419,
-        version: "0.1.0-alpha.1".to_owned(),
+        version: "0.0.1".to_owned(),
         storage_protocol: 1,
         control_protocol: Some(1),
         control_endpoint: Some(

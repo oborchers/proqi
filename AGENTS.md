@@ -131,5 +131,6 @@ comes from interaction quality and small precise details, not visual decoration.
 - Do not commit secrets, local databases, runtime state, build artifacts,
   temporary review output, or machine-specific paths.
 - Do not add another command layer when `xtask` can own the operation.
-- Do not select or publish a license, package, release, tap, or public artifact
-  until the corresponding product decision is made explicitly.
+- The project license is MIT. Do not publish a package, release, tap, public
+  artifact, repository setting, tag, or visibility change without Oliver's
+  explicit approval of that exact outward action.
