@@ -1,13 +1,15 @@
 //! Bounded UI and persistence lane composition.
 
 mod durability;
+mod external_results;
+mod fairness;
 mod heartbeat;
+mod owner_control;
 
 use std::{
     collections::BTreeMap,
-    io::{IsTerminal, Stdout, Write, stdout},
+    io::{IsTerminal, Stdout, stdout},
     path::PathBuf,
-    sync::mpsc::TryRecvError,
     thread,
     time::{Duration, Instant},
 };
@@ -25,16 +27,16 @@ use crate::{
         },
         sqlite::SqliteStore,
     },
-    application::{AppState, ControlReplay, Effect, FailureCode, match_control_replay},
-    domain::{OperationSequence, SessionId, ThoughtId},
-    ports::{control::ControlResult, store::StoreError},
+    application::AppState,
+    domain::{OperationSequence, RequestId, SessionId, ThoughtId},
+    ports::store::StoreError,
     ui::{BoardApp, Theme, UiInput, UiKey, render},
 };
 
 use super::{
     TerminalError,
     control::{CrosstermControl, TerminalGuard, TerminationGuard},
-    external::{ExternalLane, ExternalResult},
+    external::ExternalLane,
     input::{InputLane, InputMessage},
     persistence::PersistenceLane,
 };
@@ -68,30 +70,34 @@ pub(crate) fn require_interactive() -> Result<(), TerminalError> {
     }
 }
 
-struct WorkerLanes<'a> {
-    input: &'a InputLane,
-    persistence: &'a PersistenceLane,
-    external: &'a ExternalLane,
-    control: Option<&'a ControlServer>,
-    termination: &'a TerminationGuard,
+pub(super) struct WorkerLanes<'a> {
+    pub(super) input: &'a InputLane,
+    pub(super) persistence: &'a PersistenceLane,
+    pub(super) external: &'a ExternalLane,
+    pub(super) control: Option<&'a ControlServer>,
+    pub(super) termination: &'a TerminationGuard,
 }
 
 #[derive(Default)]
-struct PendingWork {
-    persistence: usize,
-    external: usize,
-    controls: BTreeMap<OperationSequence, PendingControl>,
+pub(super) struct PendingWork {
+    pub(super) persistence: usize,
+    pub(super) external: usize,
+    pub(super) controls: BTreeMap<OperationSequence, PendingControl>,
+    pub(super) control_lookups: BTreeMap<RequestId, ControlEnvelope>,
 }
 
 impl PendingWork {
     fn is_empty(&self) -> bool {
-        self.persistence == 0 && self.external == 0 && self.controls.is_empty()
+        self.persistence == 0
+            && self.external == 0
+            && self.controls.is_empty()
+            && self.control_lookups.is_empty()
     }
 }
 
-struct PendingControl {
-    envelope: ControlEnvelope,
-    thought_id: Option<ThoughtId>,
+pub(super) struct PendingControl {
+    pub(super) envelope: ControlEnvelope,
+    pub(super) thought_id: Option<ThoughtId>,
 }
 
 /// Run a leased session until a clean user exit.
@@ -224,9 +230,13 @@ fn drive(
             let effects = app.handle(UiInput::Key(UiKey::Quit), ids, &clock);
             enqueue_effects(app, lanes, effects, &mut pending)?;
         }
-        redraw |= drain_persistence(app, lanes, &mut pending, ids, &clock)?;
-        redraw |= drain_external(app, lanes, &mut pending, ids, clock, pane_heartbeat)?;
-        redraw |= drain_control(app, lanes, &mut pending, ids, clock)?;
+        let persistence = drain_persistence(app, lanes, &mut pending, ids, &clock)?;
+        let external =
+            external_results::drain(app, lanes, &mut pending, ids, clock, pane_heartbeat)?;
+        let control = owner_control::drain(app, lanes, &mut pending, ids, clock)?;
+        redraw |= persistence.changed || external.changed || control.changed;
+        let worker_backlog =
+            persistence.budget_exhausted || external.budget_exhausted || control.budget_exhausted;
         if app.edit_generation() != edit_generation {
             edit_generation = app.edit_generation();
             edit_deadline = app
@@ -260,7 +270,12 @@ fn drive(
             thread::sleep(Duration::from_millis(5));
             continue;
         }
-        match lanes.input.receiver.recv_timeout(Duration::from_millis(30)) {
+        let input_wait = if worker_backlog {
+            Duration::ZERO
+        } else {
+            Duration::from_millis(30)
+        };
+        match lanes.input.receiver.recv_timeout(input_wait) {
             Ok(InputMessage::Event(event)) => {
                 if matches!(event, UiInput::Resize { .. }) {
                     agent_deadline = Some(Instant::now() + Duration::from_millis(250));
@@ -287,210 +302,10 @@ pub(super) fn supports_true_color() -> bool {
         || std::env::var("TERM").is_ok_and(|value| value.to_ascii_lowercase().contains("direct"))
 }
 
-fn drain_control(
-    app: &mut BoardApp,
-    lanes: &WorkerLanes<'_>,
-    pending: &mut PendingWork,
-    ids: &mut SystemIdGenerator,
-    clock: SystemClock,
-) -> Result<bool, TerminalError> {
-    let Some(control) = lanes.control else {
-        return Ok(false);
-    };
-    let mut changed = false;
-    loop {
-        let envelope = match control.receiver.try_recv() {
-            Ok(envelope) => envelope,
-            Err(TryRecvError::Empty) => return Ok(changed),
-            Err(TryRecvError::Disconnected) => {
-                return Err(TerminalError::Worker("control request lane disconnected"));
-            }
-        };
-        if envelope.request.session_id != app.state.board.session.id {
-            envelope.respond(ControlResult::Rejected {
-                code: "wrong_session".to_owned(),
-                message: "request does not address the active owner session".to_owned(),
-            });
-            continue;
-        }
-        let edit_effects = app.flush_pending_edit(ids, &clock);
-        enqueue_effects(app, lanes, edit_effects, pending)?;
-        match lanes
-            .persistence
-            .lookup(envelope.request.mutation.operation_id())
-        {
-            Ok(Some(existing)) => {
-                let result = match match_control_replay(
-                    &existing,
-                    envelope.request.session_id,
-                    &envelope.request.mutation,
-                ) {
-                    ControlReplay::Accepted(receipt) => ControlResult::Accepted(receipt),
-                    ControlReplay::Conflict => ControlResult::Rejected {
-                        code: "idempotency_conflict".to_owned(),
-                        message: "operation identity belongs to another request".to_owned(),
-                    },
-                };
-                envelope.respond(result);
-                continue;
-            }
-            Ok(None) => {}
-            Err(error) => {
-                let code = match &error {
-                    TerminalError::Store(source) => storage_error_code(source),
-                    _ => "storage_failed",
-                };
-                envelope.respond(ControlResult::Rejected {
-                    code: code.to_owned(),
-                    message: error.to_string(),
-                });
-                continue;
-            }
-        }
-        let thought_id = envelope.request.mutation.thought_id();
-        match app.handle_control(&envelope.request.mutation, &clock) {
-            Ok(effects) => {
-                queue_control_effect(app, lanes, pending, envelope, thought_id, &effects)?;
-                changed = true;
-            }
-            Err(error) => envelope.respond(ControlResult::Rejected {
-                code: error.code().as_str().to_owned(),
-                message: error.to_string(),
-            }),
-        }
-    }
-}
-
-const fn storage_error_code(error: &StoreError) -> &'static str {
+pub(super) const fn storage_error_code(error: &StoreError) -> &'static str {
     match error {
         StoreError::Busy => "storage_busy",
         StoreError::DiskFull => "storage_full",
         _ => "storage_failed",
     }
-}
-
-fn queue_control_effect(
-    app: &mut BoardApp,
-    lanes: &WorkerLanes<'_>,
-    pending: &mut PendingWork,
-    envelope: ControlEnvelope,
-    thought_id: Option<ThoughtId>,
-    effects: &[Effect],
-) -> Result<(), TerminalError> {
-    let [effect] = effects else {
-        envelope.respond(ControlResult::Rejected {
-            code: "no_durable_mutation".to_owned(),
-            message: "request produced no durable mutation".to_owned(),
-        });
-        return Ok(());
-    };
-    let batch = effect
-        .persistence_batch()
-        .ok_or(TerminalError::Worker("control mutation lacked persistence"))?;
-    let sequence = batch
-        .sequence()
-        .ok_or(TerminalError::Worker("control mutation lacked sequence"))?;
-    if let Err(error) = lanes.persistence.commit(batch) {
-        app.acknowledge_persistence(sequence, false);
-        envelope.respond(ControlResult::Rejected {
-            code: "storage_failed".to_owned(),
-            message: error.to_string(),
-        });
-        return Err(error);
-    }
-    pending.persistence = pending.persistence.saturating_add(1);
-    pending.controls.insert(
-        sequence,
-        PendingControl {
-            envelope,
-            thought_id,
-        },
-    );
-    Ok(())
-}
-
-fn drain_external(
-    app: &mut BoardApp,
-    lanes: &WorkerLanes<'_>,
-    pending: &mut PendingWork,
-    ids: &mut SystemIdGenerator,
-    clock: SystemClock,
-    pane_heartbeat: &mut Option<PaneHeartbeat>,
-) -> Result<bool, TerminalError> {
-    let mut changed = false;
-    loop {
-        let result = match lanes.external.receiver.try_recv() {
-            Ok(result) => result,
-            Err(TryRecvError::Empty) => return Ok(changed),
-            Err(TryRecvError::Disconnected) if pending.external == 0 => return Ok(changed),
-            Err(TryRecvError::Disconnected) => {
-                return Err(TerminalError::Worker("external result lane disconnected"));
-            }
-        };
-        changed = true;
-        pending.external = pending.external.saturating_sub(1);
-        let effects = match result {
-            ExternalResult::Written {
-                request_id,
-                intent,
-                result,
-            } => {
-                let succeeded = match result {
-                    Ok(crate::ports::clipboard::ClipboardWrite::Native) => true,
-                    Ok(crate::ports::clipboard::ClipboardWrite::Osc52(sequence)) => {
-                        let emitted = write_osc52(&sequence).is_ok();
-                        emitted && intent == crate::application::ClipboardIntent::Copy
-                    }
-                    Err(_) => false,
-                };
-                app.complete_clipboard_write(
-                    request_id,
-                    succeeded.then_some(()).ok_or(FailureCode::ClipboardFailed),
-                    ids,
-                    &clock,
-                )
-            }
-            ExternalResult::Read { request_id, result } => app.complete_clipboard_read_payload(
-                request_id,
-                result.map_err(|_| FailureCode::ClipboardFailed),
-                ids,
-                &clock,
-            ),
-            ExternalResult::Exported { request_id, result } => {
-                app.complete_recovery_export(request_id, result.map_err(|error| error.to_string()))
-            }
-            ExternalResult::AgentsDiscovered { pane_id, result } => {
-                publish_discovered_identity(pane_heartbeat, pane_id, lanes.external);
-                app.complete_agent_discovery(result);
-                Vec::new()
-            }
-            ExternalResult::AgentSubmitted {
-                submission_id,
-                result,
-            } => app.complete_submission(submission_id, *result),
-        };
-        enqueue_effects(app, lanes, effects, pending)?;
-    }
-}
-
-fn publish_discovered_identity(
-    heartbeat: &mut Option<PaneHeartbeat>,
-    pane_id: Option<String>,
-    external: &ExternalLane,
-) {
-    if heartbeat.is_some() {
-        return;
-    }
-    let Some(mut discovered) = pane_id.and_then(PaneHeartbeat::from_pane_id) else {
-        return;
-    };
-    let _published = discovered.publish(external);
-    *heartbeat = Some(discovered);
-}
-
-fn write_osc52(sequence: &[u8]) -> std::io::Result<()> {
-    let output = stdout();
-    let mut writer = output.lock();
-    writer.write_all(sequence)?;
-    writer.flush()
 }

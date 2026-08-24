@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::mpsc::sync_channel};
 
 use crate::{
     adapters::memory::FakeIdGenerator,
@@ -10,7 +10,7 @@ use crate::{
     },
 };
 
-use super::{ExternalReadError, read_clipboard};
+use super::{ExternalLane, ExternalReadError, ExternalRequest, read_clipboard};
 
 struct FakeClipboard(Result<ClipboardContent, ClipboardError>);
 
@@ -79,4 +79,28 @@ fn attachment_failure_returns_no_insertable_path() {
         read_clipboard(&mut clipboard, &mut attachments, ids.request_id()),
         Err(ExternalReadError::Attachment)
     ));
+}
+
+#[test]
+fn full_and_disconnected_request_lanes_fail_without_blocking() {
+    let (request_sender, request_receiver) = sync_channel(1);
+    let (_result_sender, result_receiver) = sync_channel(1);
+    request_sender
+        .try_send(ExternalRequest::DiscoverAgents)
+        .expect("fill request lane");
+    let lane = ExternalLane {
+        sender: Some(request_sender),
+        receiver: result_receiver,
+        handle: None,
+    };
+    assert!(matches!(
+        lane.send(&crate::application::Effect::DiscoverAgents),
+        Err(super::TerminalError::Worker("external lane is full"))
+    ));
+    drop(request_receiver);
+    assert!(matches!(
+        lane.send(&crate::application::Effect::DiscoverAgents),
+        Err(super::TerminalError::Worker("external lane disconnected"))
+    ));
+    lane.stop().expect("stop detached lane");
 }

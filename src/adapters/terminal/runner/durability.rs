@@ -9,7 +9,11 @@ use crate::{
     ui::BoardApp,
 };
 
-use super::{PendingWork, WorkerLanes, storage_error_code};
+use super::{
+    PendingWork, WorkerLanes,
+    fairness::{DrainOutcome, drain_bounded},
+    owner_control, storage_error_code,
+};
 use crate::adapters::terminal::{
     TerminalError, integration::integration_context, persistence::PersistenceResult,
 };
@@ -79,63 +83,74 @@ pub(super) fn drain_persistence(
     pending: &mut PendingWork,
     ids: &mut impl crate::ports::environment::IdGenerator,
     clock: &impl crate::ports::environment::Clock,
+) -> Result<DrainOutcome, TerminalError> {
+    let disconnected_is_clean = pending.persistence == 0;
+    drain_bounded(
+        || match lanes.persistence.receiver.try_recv() {
+            Ok(result) => Ok(Some(result)),
+            Err(TryRecvError::Empty) => Ok(None),
+            Err(TryRecvError::Disconnected) if disconnected_is_clean => Ok(None),
+            Err(TryRecvError::Disconnected) => Err(TerminalError::Worker(
+                "persistence result lane disconnected",
+            )),
+        },
+        |result| complete_result(app, lanes, pending, ids, clock, result),
+    )
+}
+
+fn complete_result(
+    app: &mut BoardApp,
+    lanes: &WorkerLanes<'_>,
+    pending: &mut PendingWork,
+    ids: &mut impl crate::ports::environment::IdGenerator,
+    clock: &impl crate::ports::environment::Clock,
+    result: PersistenceResult,
 ) -> Result<bool, TerminalError> {
-    let mut changed = false;
-    loop {
-        match lanes.persistence.receiver.try_recv() {
-            Ok(PersistenceResult::Sequenced {
-                sequence,
-                result,
-                retried,
-            }) => {
-                changed = true;
-                if !retried {
-                    pending.persistence = pending.persistence.saturating_sub(1);
-                }
-                let succeeded = complete_sequence(app, pending, sequence, result);
-                app.acknowledge_persistence(sequence, succeeded);
-            }
-            Ok(PersistenceResult::RetryFinished) => {
-                changed = true;
+    match result {
+        PersistenceResult::Sequenced {
+            sequence,
+            result,
+            retried,
+        } => {
+            if !retried {
                 pending.persistence = pending.persistence.saturating_sub(1);
             }
-            Ok(PersistenceResult::Metadata { result }) => {
-                changed = true;
-                pending.persistence = pending.persistence.saturating_sub(1);
-                if let Err(error) = result {
-                    app.set_warning(format!(
-                        "submission accepted, but integration context was not saved: {error}"
-                    ));
-                }
-            }
-            Ok(PersistenceResult::SessionRenamed {
-                previous_name,
-                result,
-            }) => {
-                changed = true;
-                pending.persistence = pending.persistence.saturating_sub(1);
-                app.complete_session_rename(previous_name, result);
-            }
-            Ok(PersistenceResult::TransferSessions(result)) => {
-                changed = true;
-                pending.persistence = pending.persistence.saturating_sub(1);
-                app.complete_transfer_discovery(result);
-            }
-            Ok(PersistenceResult::ThoughtTransferred { request, result }) => {
-                changed = true;
-                pending.persistence = pending.persistence.saturating_sub(1);
-                let effects = app.complete_session_transfer(&request, result, ids, clock);
-                enqueue_effects(app, lanes, effects, pending)?;
-            }
-            Err(TryRecvError::Empty) => return Ok(changed),
-            Err(TryRecvError::Disconnected) if pending.persistence == 0 => return Ok(changed),
-            Err(TryRecvError::Disconnected) => {
-                return Err(TerminalError::Worker(
-                    "persistence result lane disconnected",
+            let succeeded = complete_sequence(app, pending, sequence, result);
+            app.acknowledge_persistence(sequence, succeeded);
+        }
+        PersistenceResult::RetryFinished => {
+            pending.persistence = pending.persistence.saturating_sub(1);
+        }
+        PersistenceResult::Metadata { result } => {
+            pending.persistence = pending.persistence.saturating_sub(1);
+            if let Err(error) = result {
+                app.set_warning(format!(
+                    "submission accepted, but integration context was not saved: {error}"
                 ));
             }
         }
+        PersistenceResult::SessionRenamed {
+            previous_name,
+            result,
+        } => {
+            pending.persistence = pending.persistence.saturating_sub(1);
+            app.complete_session_rename(previous_name, result);
+        }
+        PersistenceResult::TransferSessions(result) => {
+            pending.persistence = pending.persistence.saturating_sub(1);
+            app.complete_transfer_discovery(result);
+        }
+        PersistenceResult::ThoughtTransferred { request, result } => {
+            pending.persistence = pending.persistence.saturating_sub(1);
+            let effects = app.complete_session_transfer(&request, result, ids, clock);
+            enqueue_effects(app, lanes, effects, pending)?;
+        }
+        PersistenceResult::Lookup { request_id, result } => {
+            pending.persistence = pending.persistence.saturating_sub(1);
+            return owner_control::complete_lookup(app, lanes, pending, clock, request_id, result);
+        }
     }
+    Ok(true)
 }
 
 fn complete_sequence(

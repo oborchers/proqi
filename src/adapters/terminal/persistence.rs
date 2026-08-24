@@ -7,13 +7,12 @@ use std::{
     collections::BTreeMap,
     sync::mpsc::{Receiver, SyncSender, sync_channel},
     thread::{self, JoinHandle},
-    time::Duration,
 };
 
 use crate::{
     adapters::{runtime::FileRuntimeCoordinator, sqlite::SqliteStore},
     application::ThoughtMutation,
-    domain::{OperationId, OperationSequence, SessionId},
+    domain::{OperationId, OperationSequence, RequestId, SessionId},
     ports::{
         store::{
             CommitReceipt, OperationBatch, SessionHit, Store, StoreError, StoredOperationRequest,
@@ -43,6 +42,10 @@ pub(super) enum PersistenceResult {
         request: SessionTransferRequest,
         result: Result<ThoughtMutation, String>,
     },
+    Lookup {
+        request_id: RequestId,
+        result: Result<Option<StoredOperationRequest>, StoreError>,
+    },
 }
 enum PersistenceRequest {
     Commit(Box<OperationBatch>),
@@ -58,8 +61,8 @@ enum PersistenceRequest {
     TransferThought(SessionTransferRequest),
     Retry(OperationSequence),
     Lookup {
+        request_id: RequestId,
         operation_id: OperationId,
-        response: SyncSender<Result<Option<StoredOperationRequest>, StoreError>>,
     },
 }
 pub(super) struct PersistenceLane {
@@ -143,11 +146,13 @@ fn process_request(
                 .is_ok();
         }
         PersistenceRequest::Lookup {
+            request_id,
             operation_id,
-            response,
         } => {
-            let _sent = response.send(store.operation_request(operation_id));
-            return true;
+            let result = store.operation_request(operation_id);
+            return results
+                .send(PersistenceResult::Lookup { request_id, result })
+                .is_ok();
         }
     };
     commit_batch(store, sequence, batch, retained, results, false)

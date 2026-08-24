@@ -2,7 +2,7 @@
 
 use std::{
     path::PathBuf,
-    sync::mpsc::{Receiver, SyncSender, sync_channel},
+    sync::mpsc::{Receiver, SyncSender, TrySendError, sync_channel},
     thread::{self, JoinHandle},
     time::Duration,
 };
@@ -147,8 +147,8 @@ impl ExternalLane {
         self.sender
             .as_ref()
             .ok_or(TerminalError::Worker("external lane is closed"))?
-            .send(request)
-            .map_err(|_| TerminalError::Worker("external lane disconnected"))?;
+            .try_send(request)
+            .map_err(|error| map_send_error(&error))?;
         Ok(true)
     }
 
@@ -176,16 +176,31 @@ impl ExternalLane {
         self.sender
             .as_ref()
             .ok_or(TerminalError::Worker("external lane is closed"))?
-            .send(request)
-            .map_err(|_| TerminalError::Worker("external lane disconnected"))
+            .try_send(request)
+            .map_err(|error| map_send_error(&error))
     }
 
-    pub(super) fn stop(mut self) -> Result<(), TerminalError> {
-        drop(self.sender.take());
-        match self.handle.take().map(JoinHandle::join) {
+    pub(super) fn stop(self) -> Result<(), TerminalError> {
+        let Self {
+            sender,
+            receiver,
+            mut handle,
+        } = self;
+        drop(sender);
+        if handle.is_some() {
+            while receiver.recv().is_ok() {}
+        }
+        match handle.take().map(JoinHandle::join) {
             None | Some(Ok(())) => Ok(()),
             Some(Err(_)) => Err(TerminalError::Worker("external lane panicked")),
         }
+    }
+}
+
+fn map_send_error(error: &TrySendError<ExternalRequest>) -> TerminalError {
+    match error {
+        TrySendError::Full(_) => TerminalError::Worker("external lane is full"),
+        TrySendError::Disconnected(_) => TerminalError::Worker("external lane disconnected"),
     }
 }
 
