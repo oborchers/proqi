@@ -1,4 +1,5 @@
 use super::*;
+use proptest::prelude::*;
 
 fn image_payload(path: &str) -> PastePayload {
     attachment_payload(path, true)
@@ -34,6 +35,10 @@ fn image_path_folds_immediately_but_every_exact_content_path_is_preserved() {
     assert!(!rendered.contains("screenshot.png"));
     assert!(!rendered.contains("/private/temporary"));
 
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::GraphemeBack,
+        extend_selection: false,
+    }));
     fixture.input(UiInput::Key(UiKey::Enter));
     assert!(
         text(draw(&mut fixture, 60, 8).backend().buffer())
@@ -77,6 +82,10 @@ fn large_paste_is_folded_while_editing_and_editor_undo_restores_its_fold() {
     assert!(rendered.contains("[Pasted text · 14 lines · 213 characters]"));
     assert!(!rendered.contains("context line 13"));
 
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::GraphemeBack,
+        extend_selection: false,
+    }));
     fixture.input(UiInput::Key(UiKey::Enter));
     let expanded = text(draw(&mut fixture, 60, 8).backend().buffer());
     assert!(expanded.contains("context line 13"));
@@ -194,6 +203,166 @@ fn folded_editor_keeps_a_visible_terminal_cursor_at_the_token_boundary() {
         .expect("visible cursor");
     let area = fixture.app.prepare_frame(Rect::new(0, 0, 40, 8)).thoughts[0].text_area;
     assert_eq!((cursor.x, cursor.y), (area.x + 9, area.y));
+}
+
+#[test]
+fn folded_cursor_projects_before_selected_and_after_without_extra_steps() {
+    let mut fixture = Fixture::new();
+    fixture.input(UiInput::PasteAnnotated(image_payload(
+        "/tmp/screenshot.png",
+    )));
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::GraphemeBack,
+        extend_selection: false,
+    }));
+    assert!(
+        fixture
+            .app
+            .editor_snapshot()
+            .expect("selected fold")
+            .selection
+            .is_some()
+    );
+
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::GraphemeBack,
+        extend_selection: false,
+    }));
+    let area = fixture.app.prepare_frame(Rect::new(0, 0, 40, 8)).thoughts[0].text_area;
+    let mut before = draw(&mut fixture, 40, 8);
+    let cursor = before
+        .backend_mut()
+        .get_cursor_position()
+        .expect("cursor before fold");
+    assert_eq!((cursor.x, cursor.y), (area.x, area.y));
+
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::GraphemeForward,
+        extend_selection: false,
+    }));
+    assert!(
+        fixture
+            .app
+            .editor_snapshot()
+            .expect("selected fold")
+            .selection
+            .is_some()
+    );
+
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::GraphemeForward,
+        extend_selection: false,
+    }));
+    let mut after = draw(&mut fixture, 40, 8);
+    let cursor = after
+        .backend_mut()
+        .get_cursor_position()
+        .expect("cursor after fold");
+    assert_eq!((cursor.x, cursor.y), (area.x + 9, area.y));
+}
+
+#[test]
+fn adjacent_folds_remain_independently_atomic() {
+    let first = "/tmp/first.png";
+    let second = "/tmp/second.png";
+    let content = format!("{first}{second}");
+    let split = first.len();
+    let payload = PastePayload::annotated(
+        content,
+        vec![
+            ContentAnnotation {
+                start: 0,
+                end: split,
+                kind: ContentAnnotationKind::Attachment {
+                    image: true,
+                    display_name: "first.png".to_owned(),
+                },
+            },
+            ContentAnnotation {
+                start: split,
+                end: split + second.len(),
+                kind: ContentAnnotationKind::Attachment {
+                    image: true,
+                    display_name: "second.png".to_owned(),
+                },
+            },
+        ],
+    );
+    let mut fixture = Fixture::new();
+    fixture.input(UiInput::PasteAnnotated(payload));
+
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::GraphemeBack,
+        extend_selection: false,
+    }));
+    assert_eq!(
+        fixture
+            .app
+            .editor_snapshot()
+            .expect("second fold")
+            .selection,
+        Some(proqi::ports::editor::TextSelection {
+            start: proqi::domain::TextPosition::new(0, split),
+            end: proqi::domain::TextPosition::new(0, split + second.len()),
+        })
+    );
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::GraphemeBack,
+        extend_selection: false,
+    }));
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::GraphemeBack,
+        extend_selection: false,
+    }));
+    assert_eq!(
+        fixture.app.editor_snapshot().expect("first fold").selection,
+        Some(proqi::ports::editor::TextSelection {
+            start: proqi::domain::TextPosition::new(0, 0),
+            end: proqi::domain::TextPosition::new(0, split),
+        })
+    );
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig {
+        failure_persistence: None,
+        .. ProptestConfig::default()
+    })]
+
+    #[test]
+    fn collapsed_fold_navigation_never_leaves_a_cursor_inside_hidden_content(
+        forwards in proptest::collection::vec(any::<bool>(), 0..80),
+    ) {
+        let path = "/tmp/atomic-hidden-image.png";
+        let mut fixture = Fixture::new();
+        fixture.input(UiInput::PasteAnnotated(image_payload(path)));
+        for forward in forwards {
+            fixture.input(UiInput::Key(UiKey::Move {
+                movement: if forward {
+                    CursorMovement::GraphemeForward
+                } else {
+                    CursorMovement::GraphemeBack
+                },
+                extend_selection: false,
+            }));
+            let snapshot = fixture.app.editor_snapshot().expect("editor");
+            if let Some(selection) = snapshot.selection {
+                prop_assert_eq!(
+                    selection,
+                    proqi::ports::editor::TextSelection {
+                        start: proqi::domain::TextPosition::new(0, 0),
+                        end: proqi::domain::TextPosition::new(0, path.len()),
+                    }
+                );
+            } else {
+                prop_assert!(
+                    snapshot.cursor == proqi::domain::TextPosition::new(0, 0)
+                        || snapshot.cursor
+                            == proqi::domain::TextPosition::new(0, path.len())
+                );
+            }
+        }
+    }
 }
 
 #[test]

@@ -3,7 +3,16 @@
 use unicode_segmentation::UnicodeSegmentation as _;
 use unicode_width::UnicodeWidthStr;
 
+use crate::domain::TextPosition;
+
 use super::editor::VisualLine;
+
+#[derive(Clone, Copy)]
+pub(crate) struct LogicalLine {
+    pub(crate) start: usize,
+    pub(crate) content_end: usize,
+    pub(crate) end: usize,
+}
 
 #[derive(Clone, Debug)]
 pub(crate) struct WrappedRow {
@@ -15,8 +24,8 @@ pub(crate) struct WrappedRow {
 pub(crate) fn wrap_rows(content: &str, width: usize) -> Vec<WrappedRow> {
     let width = width.max(1);
     let mut output = Vec::new();
-    for (logical_line, line) in line_ranges(content).into_iter().enumerate() {
-        let text = &content[line.start..line.end];
+    for (logical_line, line) in logical_lines(content).into_iter().enumerate() {
+        let text = &content[line.start..line.content_end];
         let graphemes: Vec<_> = text.grapheme_indices(true).collect();
         if graphemes.is_empty() {
             output.push(empty_row(logical_line, line.start, 0));
@@ -46,7 +55,7 @@ pub(crate) fn wrap_rows(content: &str, width: usize) -> Vec<WrappedRow> {
         if output.last().is_some_and(|row| {
             row.visual.logical_line == logical_line && row.visual.cell_width == width
         }) {
-            output.push(empty_row(logical_line, line.end, graphemes.len()));
+            output.push(empty_row(logical_line, line.content_end, graphemes.len()));
         }
     }
     output
@@ -82,6 +91,31 @@ pub(crate) fn wrapped_row_index(rows: &[WrappedRow], byte: usize) -> usize {
         .unwrap_or(0)
 }
 
+pub(crate) fn byte_for_position(content: &str, position: TextPosition) -> usize {
+    let lines = logical_lines(content);
+    let line = lines[position.line.min(lines.len().saturating_sub(1))];
+    let text = &content[line.start..line.content_end];
+    text.grapheme_indices(true)
+        .nth(position.grapheme)
+        .map_or(line.content_end, |(offset, _)| line.start + offset)
+}
+
+pub(crate) fn position_for_byte(content: &str, byte: usize) -> TextPosition {
+    let byte = byte.min(content.len());
+    let lines = logical_lines(content);
+    let line_index = lines
+        .iter()
+        .enumerate()
+        .position(|(index, line)| byte < line.end || index + 1 == lines.len())
+        .unwrap_or_else(|| lines.len().saturating_sub(1));
+    let line = lines[line_index];
+    let local_end = byte.min(line.content_end).saturating_sub(line.start);
+    let grapheme = content[line.start..line.start + local_end]
+        .graphemes(true)
+        .count();
+    TextPosition::new(line_index, grapheme)
+}
+
 fn segment_end(graphemes: &[(usize, &str)], start: usize, width: usize) -> (usize, usize) {
     let mut end = start;
     let mut cells = 0;
@@ -108,12 +142,6 @@ fn grapheme_width(grapheme: &str, column: usize) -> usize {
     } else {
         UnicodeWidthStr::width(grapheme)
     }
-}
-
-pub(crate) fn display_width(text: &str) -> usize {
-    text.graphemes(true).fold(0, |column, grapheme| {
-        column + grapheme_width(grapheme, column)
-    })
 }
 
 fn display_text(graphemes: &[(usize, &str)]) -> String {
@@ -150,26 +178,25 @@ fn empty_row(logical_line: usize, byte: usize, grapheme: usize) -> WrappedRow {
     }
 }
 
-#[derive(Clone, Copy)]
-struct LineRange {
-    start: usize,
-    end: usize,
-}
-
-fn line_ranges(content: &str) -> Vec<LineRange> {
+pub(crate) fn logical_lines(content: &str) -> Vec<LogicalLine> {
     let mut lines = Vec::new();
     let mut start = 0;
     for (newline, _) in content.match_indices('\n') {
-        let end = if newline > start && content.as_bytes()[newline - 1] == b'\r' {
+        let content_end = if newline > start && content.as_bytes()[newline - 1] == b'\r' {
             newline - 1
         } else {
             newline
         };
-        lines.push(LineRange { start, end });
+        lines.push(LogicalLine {
+            start,
+            content_end,
+            end: newline + 1,
+        });
         start = newline + 1;
     }
-    lines.push(LineRange {
+    lines.push(LogicalLine {
         start,
+        content_end: content.len(),
         end: content.len(),
     });
     lines
@@ -177,7 +204,11 @@ fn line_ranges(content: &str) -> Vec<LineRange> {
 
 #[cfg(test)]
 mod tests {
-    use super::wrap_rows;
+    use unicode_segmentation::UnicodeSegmentation as _;
+
+    use crate::domain::TextPosition;
+
+    use super::{LogicalLine, byte_for_position, logical_lines, position_for_byte, wrap_rows};
 
     #[test]
     fn ordinary_words_wrap_at_the_latest_whitespace_boundary() {
@@ -197,5 +228,38 @@ mod tests {
         assert_eq!(rows[1].visual.text, "界e\u{301}");
         assert_eq!(rows[2].visual.text, "界");
         assert_eq!(rows[1].visual.start_grapheme, 2);
+    }
+
+    #[test]
+    fn trailing_newlines_round_trip_as_distinct_logical_insertion_points() {
+        let content = "line\n\n";
+        for position in [
+            TextPosition::new(0, 4),
+            TextPosition::new(1, 0),
+            TextPosition::new(2, 0),
+        ] {
+            let byte = byte_for_position(content, position);
+            assert_eq!(position_for_byte(content, byte), position);
+        }
+    }
+
+    #[test]
+    fn every_logical_grapheme_position_round_trips_through_its_canonical_byte() {
+        for content in ["", "line\n", "line\n\n", "e\u{301}\n界🙂\n", "one\r\ntwo"] {
+            for (line_index, line) in logical_lines(content).into_iter().enumerate() {
+                assert_line_positions_round_trip(content, line_index, line);
+            }
+        }
+    }
+
+    fn assert_line_positions_round_trip(content: &str, line_index: usize, line: LogicalLine) {
+        let graphemes = content[line.start..line.content_end]
+            .graphemes(true)
+            .count();
+        for grapheme in 0..=graphemes {
+            let position = TextPosition::new(line_index, grapheme);
+            let byte = byte_for_position(content, position);
+            assert_eq!(position_for_byte(content, byte), position, "{content:?}");
+        }
     }
 }

@@ -212,7 +212,7 @@ fn render_thought(
     .collect::<Vec<_>>();
     let mut paragraph = Paragraph::new(Text::from(lines));
     if focused {
-        paragraph = paragraph.style(Style::default().fg(theme.focused_foreground));
+        paragraph = paragraph.style(Style::default().fg(theme.foreground));
     } else if layout.hidden_rows > 0 {
         paragraph = paragraph.style(Style::default().fg(theme.muted));
     }
@@ -246,10 +246,9 @@ fn render_editor(frame: &mut Frame<'_>, app: &BoardApp, layout: &ThoughtLayout, 
         Paragraph::new(visible).style(Style::default().fg(theme.foreground)),
         layout.text_area,
     );
-    let cursor_row = cursor_visual_row(snapshot)
-        .unwrap_or(snapshot.scroll_row)
-        .saturating_sub(snapshot.scroll_row);
-    let cursor_column = cursor_column(snapshot, cursor_row);
+    let Some((cursor_column, cursor_row)) = presentation.cursor_viewport_cell() else {
+        return;
+    };
     let x = layout
         .text_area
         .x
@@ -259,37 +258,8 @@ fn render_editor(frame: &mut Frame<'_>, app: &BoardApp, layout: &ThoughtLayout, 
         .y
         .saturating_add(u16::try_from(cursor_row).unwrap_or(u16::MAX));
     if x < layout.text_area.right() && y < layout.text_area.bottom() {
-        if snapshot.selection.is_none() {
-            frame.buffer_mut()[(x, y)].set_style(
-                Style::default()
-                    .fg(theme.on_accent)
-                    .bg(theme.accent_surface)
-                    .remove_modifier(Modifier::REVERSED),
-            );
-        }
         frame.set_cursor_position((x, y));
     }
-}
-
-fn cursor_visual_row(snapshot: &crate::ports::editor::EditorSnapshot) -> Option<usize> {
-    snapshot
-        .visual_lines
-        .iter()
-        .enumerate()
-        .find_map(|(index, line)| {
-            if line.logical_line != snapshot.cursor.line
-                || snapshot.cursor.grapheme < line.start_grapheme
-            {
-                return None;
-            }
-            let next_same_line = snapshot
-                .visual_lines
-                .get(index + 1)
-                .is_some_and(|next| next.logical_line == line.logical_line);
-            (snapshot.cursor.grapheme < line.end_grapheme
-                || (snapshot.cursor.grapheme == line.end_grapheme && !next_same_line))
-                .then_some(index)
-        })
 }
 
 fn styled_line(
@@ -343,25 +313,6 @@ fn visible_grapheme(grapheme: &str, column: usize) -> (String, usize) {
             unicode_width::UnicodeWidthStr::width(grapheme),
         )
     }
-}
-
-fn cursor_column(snapshot: &crate::ports::editor::EditorSnapshot, cursor_row: usize) -> usize {
-    snapshot
-        .visual_lines
-        .get(snapshot.scroll_row + cursor_row)
-        .map_or(0, |line| {
-            let offset = snapshot.cursor.grapheme.saturating_sub(line.start_grapheme);
-            let logical = snapshot
-                .content
-                .split('\n')
-                .nth(line.logical_line)
-                .unwrap_or_default()
-                .graphemes(true)
-                .skip(line.start_grapheme)
-                .take(offset)
-                .collect::<String>();
-            crate::ports::text_layout::display_width(&logical)
-        })
 }
 
 #[cfg(test)]

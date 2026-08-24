@@ -48,8 +48,9 @@ interaction rules for the Ratatui interface.
   termination signal.
 - Use frame cursor APIs during rendering. Do not issue backend commands from
   ordinary widgets or render functions.
-- Establish a visible steady cursor shape when entering the terminal session
-  and restore the user's default cursor shape on every teardown path.
+- Establish a visible blinking block cursor when entering the terminal session.
+  Let the terminal own blink timing, and restore the user's default cursor shape
+  on every teardown path.
 - Treat a rendering failure as a typed terminal-session failure. Restore owned
   terminal modes before returning the error.
 

@@ -13,7 +13,7 @@ pub struct Theme {
     pub background: Color,
     /// Forest-green routine accent.
     pub accent: Color,
-    /// Deeper forest-green surface used by the gutter and text cursor.
+    /// Deeper forest-green surface used by the focus gutter.
     pub accent_surface: Color,
     /// High-contrast text rendered on an accent surface.
     pub on_accent: Color,
@@ -23,8 +23,6 @@ pub struct Theme {
     pub divider: Color,
     /// Neutral selected-thought surface in explicit themes.
     pub focused_surface: Option<Color>,
-    /// Text color used on the selected-thought surface.
-    pub focused_foreground: Color,
     /// Semantic failure color.
     pub error: Color,
 }
@@ -46,7 +44,6 @@ impl Theme {
                 muted: Color::Rgb(79, 70, 62),
                 divider: Color::Rgb(224, 217, 207),
                 focused_surface: Some(Color::Rgb(236, 236, 240)),
-                focused_foreground: Color::Rgb(30, 27, 24),
                 error: Color::Red,
             },
             ThemePreference::Dark => Self {
@@ -57,23 +54,10 @@ impl Theme {
                 on_accent: Color::Rgb(250, 250, 248),
                 muted: Color::Rgb(176, 169, 160),
                 divider: Color::Rgb(42, 37, 32),
-                focused_surface: Some(Color::Rgb(52, 52, 63)),
-                focused_foreground: Color::Rgb(232, 228, 223),
+                focused_surface: Some(Color::Rgb(39, 40, 48)),
                 error: Color::LightRed,
             },
-            ThemePreference::Auto => Self {
-                foreground: Color::Reset,
-                background: Color::Reset,
-                accent: Color::Green,
-                accent_surface: Color::Green,
-                on_accent: Color::Black,
-                muted: Color::DarkGray,
-                divider: Color::DarkGray,
-                focused_surface: Some(Color::DarkGray),
-                focused_foreground: Color::White,
-                error: Color::Red,
-            },
-            ThemePreference::Limited => Self::limited(),
+            ThemePreference::Auto | ThemePreference::Limited => Self::limited(),
         }
     }
 
@@ -86,9 +70,10 @@ impl Theme {
     /// High-contrast selected-thought style without turning body text green.
     #[must_use]
     pub fn focused_style(self) -> Style {
-        self.base_style()
-            .fg(self.focused_foreground)
-            .bg(self.focused_surface.unwrap_or(Color::DarkGray))
+        self.focused_surface.map_or_else(
+            || self.base_style(),
+            |surface| self.base_style().bg(surface),
+        )
     }
 
     const fn limited() -> Self {
@@ -101,17 +86,40 @@ impl Theme {
             muted: Color::DarkGray,
             divider: Color::DarkGray,
             focused_surface: None,
-            focused_foreground: Color::White,
             error: Color::Red,
         }
     }
 }
 
 #[cfg(test)]
+fn contrast(first: (u8, u8, u8), second: (u8, u8, u8)) -> f64 {
+    let first = luminance(first);
+    let second = luminance(second);
+    (first.max(second) + 0.05) / (first.min(second) + 0.05)
+}
+
+#[cfg(test)]
+fn luminance(color: (u8, u8, u8)) -> f64 {
+    [color.0, color.1, color.2]
+        .map(|channel| {
+            let value = f64::from(channel) / 255.0;
+            if value <= 0.040_45 {
+                value / 12.92
+            } else {
+                ((value + 0.055) / 1.055).powf(2.4)
+            }
+        })
+        .into_iter()
+        .zip([0.2126, 0.7152, 0.0722])
+        .map(|(channel, weight)| channel * weight)
+        .sum()
+}
+
+#[cfg(test)]
 mod tests {
     use ratatui_core::style::Color;
 
-    use super::{Theme, ThemePreference};
+    use super::{Theme, ThemePreference, contrast};
 
     #[test]
     fn limited_terminals_never_receive_rgb_colors() {
@@ -130,51 +138,31 @@ mod tests {
     #[test]
     fn selected_surfaces_are_quiet_and_keep_explicit_contrast() {
         let dark = Theme::resolve(ThemePreference::Dark, true);
-        assert_eq!(dark.focused_surface, Some(Color::Rgb(52, 52, 63)));
-        assert_eq!(dark.focused_foreground, Color::Rgb(232, 228, 223));
+        assert_eq!(dark.focused_surface, Some(Color::Rgb(39, 40, 48)));
 
         let light = Theme::resolve(ThemePreference::Light, true);
         assert_eq!(light.focused_surface, Some(Color::Rgb(236, 236, 240)));
-        assert_eq!(light.focused_foreground, Color::Rgb(30, 27, 24));
 
         let automatic = Theme::resolve(ThemePreference::Auto, true);
-        assert_eq!(automatic.focused_surface, Some(Color::DarkGray));
-        assert_eq!(automatic.focused_foreground, Color::White);
+        assert_eq!(automatic.focused_surface, None);
+        assert_eq!(automatic.foreground, Color::Reset);
     }
 
     #[test]
-    fn explicit_accent_text_meets_aa_contrast() {
+    fn explicit_theme_text_pairs_meet_aa_contrast() {
         let dark = Theme::resolve(ThemePreference::Dark, true);
-        assert!(contrast(dark.accent, Color::Rgb(52, 52, 63)) >= 4.5);
-        assert!(contrast(dark.accent, dark.background) >= 4.5);
+        assert!(contrast((232, 228, 223), (15, 13, 10)) >= 4.5);
+        assert!(contrast((232, 228, 223), (39, 40, 48)) >= 4.5);
+        assert!(contrast((112, 214, 155), (39, 40, 48)) >= 4.5);
+        assert!(contrast((112, 214, 155), (15, 13, 10)) >= 4.5);
+        assert!(contrast((250, 250, 248), (45, 106, 79)) >= 4.5);
 
         let light = Theme::resolve(ThemePreference::Light, true);
-        assert!(contrast(light.accent, light.focused_surface.expect("surface")) >= 4.5);
-        assert!(contrast(light.accent, light.background) >= 4.5);
-    }
-
-    fn contrast(first: Color, second: Color) -> f64 {
-        let first = luminance(first);
-        let second = luminance(second);
-        (first.max(second) + 0.05) / (first.min(second) + 0.05)
-    }
-
-    fn luminance(color: Color) -> f64 {
-        let Color::Rgb(red, green, blue) = color else {
-            return 0.0;
-        };
-        [red, green, blue]
-            .map(|channel| {
-                let value = f64::from(channel) / 255.0;
-                if value <= 0.040_45 {
-                    value / 12.92
-                } else {
-                    ((value + 0.055) / 1.055).powf(2.4)
-                }
-            })
-            .into_iter()
-            .zip([0.2126, 0.7152, 0.0722])
-            .map(|(channel, weight)| channel * weight)
-            .sum()
+        assert!(contrast((30, 27, 24), (250, 250, 248)) >= 4.5);
+        assert!(contrast((30, 27, 24), (236, 236, 240)) >= 4.5);
+        assert!(contrast((45, 106, 79), (236, 236, 240)) >= 4.5);
+        assert!(contrast((45, 106, 79), (250, 250, 248)) >= 4.5);
+        assert!(contrast((250, 250, 248), (45, 106, 79)) >= 4.5);
+        assert_ne!(dark.accent, light.accent);
     }
 }

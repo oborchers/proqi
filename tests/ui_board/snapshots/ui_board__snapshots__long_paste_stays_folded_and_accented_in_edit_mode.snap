@@ -16,7 +16,7 @@ TEXT
 08│  Esc Board  y Copy  x Cut  u Undo  : Commands  ? Shortcuts│
 
 STYLE RUNS
-0: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-1 fg=Rgb(232, 228, 223) bg=Rgb(52, 52, 63) mod=NONE | 2-44 fg=Rgb(112, 214, 155) bg=Rgb(52, 52, 63) mod=BOLD | 45-45 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=NONE | 46-71 fg=Rgb(232, 228, 223) bg=Rgb(52, 52, 63) mod=NONE
+0: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-1 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 2-44 fg=Rgb(112, 214, 155) bg=Rgb(39, 40, 48) mod=BOLD | 45-71 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
 1: 0-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 2: 0-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 3: 0-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE

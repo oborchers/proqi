@@ -21,7 +21,7 @@ TEXT
 13│  n New   y Copy  x Cut  d Delete  u Undo  / Search│
 
 STYLE RUNS
-0: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=DIM | 1-59 fg=Rgb(232, 228, 223) bg=Rgb(52, 52, 63) mod=NONE
+0: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=DIM | 1-59 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
 1: 0-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 2: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-59 fg=Rgb(42, 37, 32) bg=Rgb(15, 13, 10) mod=NONE
 3: 0-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE

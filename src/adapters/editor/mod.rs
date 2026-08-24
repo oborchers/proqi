@@ -12,12 +12,10 @@ use crate::ports::editor::{
     TextSelection, TextViewport,
 };
 use crate::ports::text_layout::{
-    WrappedRow, byte_at_cell, cell_column_at_byte, wrap_rows, wrapped_row_index,
+    WrappedRow, byte_at_cell, byte_for_position, cell_column_at_byte, logical_lines,
+    position_for_byte, wrap_rows, wrapped_row_index,
 };
-use text::{
-    byte_for_position, logical_lines, next_boundary, position_for_byte, previous_boundary,
-    word_back, word_forward,
-};
+use text::{next_boundary, previous_boundary, word_back, word_forward};
 
 /// Factory used by outer composition to keep the UI implementation-independent.
 #[derive(Clone, Copy, Debug, Default)]
@@ -44,13 +42,6 @@ impl State {
             selection_anchor_byte: None,
         }
     }
-}
-
-#[derive(Clone, Copy, Debug)]
-struct LogicalLine {
-    pub(super) start: usize,
-    pub(super) content_end: usize,
-    pub(super) end: usize,
 }
 
 /// Rope-backed editor with grapheme-safe positions and exact content storage.

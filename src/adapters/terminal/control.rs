@@ -40,7 +40,7 @@ impl TerminalControl for CrosstermControl {
                     | KeyboardEnhancementFlags::REPORT_EVENT_TYPES
                     | KeyboardEnhancementFlags::REPORT_ALTERNATE_KEYS
             ),
-            SetCursorStyle::BlinkingBar,
+            SetCursorStyle::BlinkingBlock,
             Hide
         )
     }

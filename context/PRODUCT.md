@@ -634,7 +634,7 @@ remain brand-derived.
 
 Forest green remains the only routine hue. A bright mint expression of that hue
 marks folded tokens and actionable text on dark backgrounds. The deeper forest
-surface marks the focus gutter and cursor cell with a contrasting foreground.
+surface marks the focus gutter with a contrasting foreground.
 Focused thought text remains in the primary foreground on a quiet neutral
 surface. Muted text and borders establish hierarchy without introducing more
 hues.
@@ -649,10 +649,10 @@ focused surface from the core palette. This is the terminal translation of the
 canonical brand edge without turning the complete selection into an accent
 block. Unselected thoughts use the quiet border or whitespace alone.
 
-Edit mode requests a blinking bar cursor where the terminal supports cursor
-styling safely. The current cell also receives a contrasting accent treatment
-so cursor position remains visible when a host ignores the requested shape.
-There is no glow or motion beyond the functional terminal cursor.
+Edit mode requests a blinking block cursor where the terminal supports cursor
+styling safely. The terminal owns its blink timing; Proqi does not paint a
+permanent cursor cell that could mask the blink. There is no glow or motion
+beyond the functional terminal cursor.
 
 The interface relies on spacing, wrapping, and contrast before borders. A
 thought should look like readable text with focus, not like a dashboard card.

@@ -80,6 +80,10 @@ possible to ship without a Node, Python, or JVM runtime.
 - Ratatui owns terminal-independent drawing primitives and widget composition.
 - Crossterm owns terminal setup, input, resize, mouse, bracketed-paste, and
   capability handling.
+- Automatic mode inherits the terminal foreground and background and uses a
+  gutter-only focus treatment. OSC palette probing remains disabled because a
+  startup PTY regression proved that the available query implementation can
+  consume typeahead before the input lane owns the terminal.
 - `unicode-segmentation` and `unicode-width` define grapheme and terminal-cell
   behavior. Byte indices are never treated as visual columns.
 - The editor port is backed by Ropey. A dependency spike against
@@ -458,6 +462,11 @@ lock protocol is identical. For a cask, the explicit update command is
 
 Rendering is immediate-mode and derived from current state. Widgets hold no
 canonical product state. The board uses one vertical flow at every width.
+
+Automatic mode keeps the terminal foreground and background unchanged and uses
+the non-color gutter cue for selection. Explicit dark and light themes use
+fixed neutral selected surfaces whose primary and accent text pairs are checked
+against WCAG AA contrast thresholds.
 
 The board reserves independent responsive regions for product and session
 identity, content, integration or durability context, transient status,

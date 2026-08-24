@@ -23,7 +23,7 @@ STYLE RUNS
 1: 0-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 2: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-59 fg=Rgb(42, 37, 32) bg=Rgb(15, 13, 10) mod=NONE
 3: 0-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-4: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-1 fg=Rgb(232, 228, 223) bg=Rgb(52, 52, 63) mod=NONE | 2-10 fg=Rgb(112, 214, 155) bg=Rgb(52, 52, 63) mod=BOLD | 11-59 fg=Rgb(232, 228, 223) bg=Rgb(52, 52, 63) mod=NONE
+4: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-1 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 2-10 fg=Rgb(112, 214, 155) bg=Rgb(39, 40, 48) mod=BOLD | 11-59 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
 5: 0-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 6: 0-23 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 24-24 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 25-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 7: 0-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE

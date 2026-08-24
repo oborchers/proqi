@@ -1,13 +1,12 @@
 //! Canonical-to-visible mapping for folded editor ranges.
 
-use unicode_segmentation::UnicodeSegmentation as _;
-
 use crate::{
     domain::{ContentAnnotation, TextPosition},
     ports::{
         editor::{CellRange, EditorSnapshot, TextSelection},
         text_layout::{
-            WrappedRow, byte_at_cell, cell_column_at_byte, wrap_rows, wrapped_row_index,
+            WrappedRow, byte_at_cell, byte_for_position, cell_column_at_byte, position_for_byte,
+            wrap_rows, wrapped_row_index,
         },
     },
 };
@@ -20,6 +19,7 @@ pub(super) struct EditorPresentation {
     pub(super) folds: Vec<PresentedFold>,
     canonical_content: String,
     rows: Vec<WrappedRow>,
+    cursor_display_byte: usize,
 }
 
 impl EditorPresentation {
@@ -48,6 +48,16 @@ impl EditorPresentation {
             unproject_byte(display, &self.folds),
         )
     }
+
+    pub(super) fn cursor_viewport_cell(&self) -> Option<(usize, usize)> {
+        let row = wrapped_row_index(&self.rows, self.cursor_display_byte);
+        let viewport_row = row.checked_sub(self.snapshot.scroll_row)?;
+        let wrapped = self.rows.get(row)?;
+        Some((
+            cell_column_at_byte(&self.snapshot.content, wrapped, self.cursor_display_byte),
+            viewport_row,
+        ))
+    }
 }
 
 pub(super) fn editor_presentation(
@@ -56,17 +66,21 @@ pub(super) fn editor_presentation(
     expanded: &[usize],
 ) -> EditorPresentation {
     let presentation = project(&canonical.content, annotations, expanded);
-    let cursor = project_position(&canonical.content, canonical.cursor, &presentation, true);
+    let cursor_display_byte = project_byte(
+        byte_for_position(&canonical.content, canonical.cursor),
+        &presentation.folds,
+    );
+    let cursor = position_for_byte(&presentation.content, cursor_display_byte);
     let selection = canonical.selection.map(|selection| TextSelection {
-        start: project_position(&canonical.content, selection.start, &presentation, false),
-        end: project_position(&canonical.content, selection.end, &presentation, true),
+        start: project_position(&canonical.content, selection.start, &presentation),
+        end: project_position(&canonical.content, selection.end, &presentation),
     });
     let mut rows = wrap_rows(
         &presentation.content,
         usize::from(canonical.viewport.width.max(1)),
     );
     apply_selection(&presentation.content, &mut rows, selection);
-    let scroll_row = visible_scroll(canonical, &presentation, &rows);
+    let scroll_row = visible_scroll(canonical, &rows, cursor_display_byte);
     let snapshot = EditorSnapshot {
         content: presentation.content,
         cursor,
@@ -80,54 +94,21 @@ pub(super) fn editor_presentation(
         folds: presentation.folds,
         canonical_content: canonical.content.clone(),
         rows,
+        cursor_display_byte,
     }
-}
-
-pub(super) fn byte_for_position(content: &str, position: TextPosition) -> usize {
-    let mut start = 0;
-    for (line_index, line) in content.split_inclusive('\n').enumerate() {
-        if line_index == position.line {
-            let body = line.strip_suffix('\n').unwrap_or(line);
-            return body
-                .grapheme_indices(true)
-                .nth(position.grapheme)
-                .map_or(start + body.len(), |(offset, _)| start + offset);
-        }
-        start += line.len();
-    }
-    content.len()
-}
-
-pub(super) fn position_for_byte(content: &str, byte: usize) -> TextPosition {
-    let byte = byte.min(content.len());
-    let mut start = 0;
-    for (line_index, line) in content.split_inclusive('\n').enumerate() {
-        let end = start + line.len();
-        if byte < end || end == content.len() {
-            let body_end = end.saturating_sub(usize::from(line.ends_with('\n')));
-            let local_end = byte.min(body_end).saturating_sub(start);
-            return TextPosition::new(
-                line_index,
-                content[start..start + local_end].graphemes(true).count(),
-            );
-        }
-        start = end;
-    }
-    TextPosition::default()
 }
 
 fn project_position(
     canonical: &str,
     position: TextPosition,
     presentation: &Presentation,
-    toward_end: bool,
 ) -> TextPosition {
     let byte = byte_for_position(canonical, position);
-    let projected = project_byte(byte, &presentation.folds, toward_end);
+    let projected = project_byte(byte, &presentation.folds);
     position_for_byte(&presentation.content, projected)
 }
 
-fn project_byte(byte: usize, folds: &[PresentedFold], toward_end: bool) -> usize {
+fn project_byte(byte: usize, folds: &[PresentedFold]) -> usize {
     let mut canonical_cursor = 0;
     let mut display_cursor = 0;
     for fold in folds {
@@ -138,7 +119,7 @@ fn project_byte(byte: usize, folds: &[PresentedFold], toward_end: bool) -> usize
             if !fold.collapsed {
                 return fold.start + byte.saturating_sub(fold.canonical_start);
             }
-            return if byte == fold.canonical_start && !toward_end {
+            return if byte == fold.canonical_start {
                 fold.start
             } else {
                 fold.end
@@ -186,16 +167,7 @@ fn apply_selection(content: &str, rows: &mut [WrappedRow], selection: Option<Tex
     }
 }
 
-fn visible_scroll(
-    canonical: &EditorSnapshot,
-    presentation: &Presentation,
-    rows: &[WrappedRow],
-) -> usize {
-    let cursor = project_byte(
-        byte_for_position(&canonical.content, canonical.cursor),
-        &presentation.folds,
-        true,
-    );
+fn visible_scroll(canonical: &EditorSnapshot, rows: &[WrappedRow], cursor: usize) -> usize {
     let cursor_row = wrapped_row_index(rows, cursor);
     let height = usize::from(canonical.viewport.height).max(1);
     let mut scroll = canonical.scroll_row.min(rows.len().saturating_sub(height));

@@ -116,7 +116,7 @@ fn other_input_resets_the_blocked_navigation_confirmation() {
 }
 
 #[test]
-fn focused_editor_cursor_cell_uses_the_accent_surface() {
+fn focused_editor_uses_the_terminal_cursor_without_painting_its_cell() {
     let mut fixture = Fixture::new();
     fixture.paste("cursor");
     let terminal = draw_theme(&mut fixture, 30, 7, ThemePreference::Dark);
@@ -127,8 +127,8 @@ fn focused_editor_cursor_cell_uses_the_accent_surface() {
         .expect("visible cursor");
     let cell = &terminal.backend().buffer()[cursor];
     let theme = Theme::resolve(ThemePreference::Dark, true);
-    assert_eq!(cell.bg, theme.accent_surface);
-    assert_eq!(cell.fg, theme.on_accent);
+    assert_eq!(cell.bg, theme.focused_surface.expect("focused surface"));
+    assert_eq!(cell.fg, theme.foreground);
 }
 
 #[test]

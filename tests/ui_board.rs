@@ -183,6 +183,29 @@ fn exact_wrap_boundary_keeps_the_terminal_cursor_visible() {
 }
 
 #[test]
+fn trailing_newlines_each_receive_their_own_terminal_cursor_row() {
+    let mut fixture = Fixture::new();
+    fixture.paste("line");
+    fixture.input(UiInput::Key(UiKey::Enter));
+
+    let area = fixture.app.prepare_frame(Rect::new(0, 0, 20, 8)).thoughts[0].text_area;
+    let mut terminal = draw(&mut fixture, 20, 8);
+    let cursor = terminal
+        .backend_mut()
+        .get_cursor_position()
+        .expect("cursor after first newline");
+    assert_eq!((cursor.x, cursor.y), (area.x, area.y + 1));
+
+    fixture.input(UiInput::Key(UiKey::Enter));
+    let mut terminal = draw(&mut fixture, 20, 8);
+    let cursor = terminal
+        .backend_mut()
+        .get_cursor_position()
+        .expect("cursor after second newline");
+    assert_eq!((cursor.x, cursor.y), (area.x, area.y + 2));
+}
+
+#[test]
 fn board_rendering_uses_the_editor_wrap_model_without_clipping_words() {
     let mut fixture = Fixture::new();
     fixture.paste("aaaaaa bbbbbb cccccc dddddd");
@@ -416,6 +439,10 @@ fn mouse_wheel_scrolls_editor_without_moving_cursor_or_selection() {
             .collect::<Vec<_>>()
             .join("\n"),
     );
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::GraphemeBack,
+        extend_selection: false,
+    }));
     fixture.input(UiInput::Key(UiKey::Enter));
     fixture.input(UiInput::Key(UiKey::Move {
         movement: CursorMovement::DocumentStart,
@@ -427,9 +454,14 @@ fn mouse_wheel_scrolls_editor_without_moving_cursor_or_selection() {
     }));
     let _terminal = draw(&mut fixture, 30, 6);
     let before = fixture.app.editor_snapshot().expect("editor");
-    fixture.pointer(5, 2, PointerKind::ScrollDown);
+    let text_area = fixture.app.prepare_frame(Rect::new(0, 0, 30, 6)).thoughts[0].text_area;
+    fixture.pointer(text_area.x, text_area.y, PointerKind::ScrollDown);
     let after = fixture.app.editor_snapshot().expect("editor");
-    assert!(after.scroll_row > before.scroll_row);
+    assert!(
+        after.scroll_row > before.scroll_row,
+        "scroll must advance: before={before:?}, after={after:?}, mode={:?}",
+        fixture.app.interaction_mode()
+    );
     assert_eq!(after.cursor, before.cursor);
     assert_eq!(after.selection, before.selection);
 }

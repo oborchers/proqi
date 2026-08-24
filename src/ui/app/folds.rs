@@ -15,11 +15,10 @@ impl BoardApp {
         let Some(snapshot) = self.editor_snapshot() else {
             return false;
         };
-        let cursor = crate::ui::projection::byte_for_position(&snapshot.content, snapshot.cursor);
         let selection = snapshot.selection.map(|selection| {
             (
-                crate::ui::projection::byte_for_position(&snapshot.content, selection.start),
-                crate::ui::projection::byte_for_position(&snapshot.content, selection.end),
+                crate::ports::text_layout::byte_for_position(&snapshot.content, selection.start),
+                crate::ports::text_layout::byte_for_position(&snapshot.content, selection.end),
             )
         });
         let annotations = self.current_annotations(thought_id);
@@ -28,10 +27,8 @@ impl BoardApp {
             .enumerate()
             .find_map(|(index, annotation)| {
                 (!self.expanded_folds.contains(&(thought_id, index))
-                    && (selection == Some((annotation.start, annotation.end))
-                        || cursor == annotation.start
-                        || cursor == annotation.end))
-                    .then_some(index)
+                    && selection == Some((annotation.start, annotation.end)))
+                .then_some(index)
             });
         let Some(index) = candidate else {
             return false;
@@ -85,7 +82,8 @@ impl BoardApp {
         let Some(snapshot) = self.editor_snapshot() else {
             return;
         };
-        let cursor = crate::ui::projection::byte_for_position(&snapshot.content, snapshot.cursor);
+        let cursor =
+            crate::ports::text_layout::byte_for_position(&snapshot.content, snapshot.cursor);
         let annotations = self.current_annotations(thought_id);
         let target = annotations
             .iter()
@@ -120,8 +118,8 @@ impl BoardApp {
             return false;
         };
         let range = (
-            crate::ui::projection::byte_for_position(&snapshot.content, selection.start),
-            crate::ui::projection::byte_for_position(&snapshot.content, selection.end),
+            crate::ports::text_layout::byte_for_position(&snapshot.content, selection.start),
+            crate::ports::text_layout::byte_for_position(&snapshot.content, selection.end),
         );
         let annotations = self.current_annotations(thought_id);
         let target = annotations
@@ -155,7 +153,8 @@ impl BoardApp {
         if snapshot.selection.is_some() {
             return false;
         }
-        let cursor = crate::ui::projection::byte_for_position(&snapshot.content, snapshot.cursor);
+        let cursor =
+            crate::ports::text_layout::byte_for_position(&snapshot.content, snapshot.cursor);
         let annotations = self.current_annotations(thought_id);
         let range = adjacent_range(
             thought_id,
@@ -170,8 +169,8 @@ impl BoardApp {
         let Some((_, editor)) = &mut self.editor else {
             return false;
         };
-        let end = crate::ui::projection::position_for_byte(&snapshot.content, end);
-        let start = crate::ui::projection::position_for_byte(&snapshot.content, start);
+        let end = crate::ports::text_layout::position_for_byte(&snapshot.content, end);
+        let start = crate::ports::text_layout::position_for_byte(&snapshot.content, start);
         let _outcome = editor.apply(EditCommand::SetCursor {
             position: end,
             extend_selection: false,
@@ -188,8 +187,8 @@ impl BoardApp {
             return;
         };
         let content = editor.snapshot().content;
-        let start = crate::ui::projection::position_for_byte(&content, start);
-        let end = crate::ui::projection::position_for_byte(&content, end);
+        let start = crate::ports::text_layout::position_for_byte(&content, start);
+        let end = crate::ports::text_layout::position_for_byte(&content, end);
         let _outcome = editor.apply(EditCommand::SetCursor {
             position: start,
             extend_selection: false,
