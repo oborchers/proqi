@@ -7,3 +7,4 @@
 .github/agents/impeccable-*.agent.md
 .github/hooks/impeccable.json
 .github/skills/impeccable/
+.impeccable/

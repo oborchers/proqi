@@ -158,9 +158,10 @@ heading row or decorative card chrome. Whole-thought controls can appear for
 the focused or hovered thought without permanently consuming a row.
 
 A quiet header identifies Proqi, the current session, thought count, and
-durability. A separate footer uses one context row and one labeled-action row,
-with a third transient-status row only when useful space permits. Narrow panes
-shorten or remove secondary labels before any two regions can collide.
+durability. A separate footer uses one context row, one labeled-action row, and
+an integration row when verified adjacent agents exist. A transient-status row
+appears only when useful space permits. Narrow panes shorten or remove
+secondary labels before any two regions can collide.
 
 ### Revision and operation history
 
@@ -293,13 +294,21 @@ Bracketed paste is treated as one semantic input event.
   durable PNG inside the current Proqi session and inserts its absolute path.
   Proqi never uploads or analyzes the image automatically.
 
-File paths and large pasted context use folded presentation on the board while
-their canonical text remains exact. Images appear as `[Image 1] filename.png`,
-other files as `[File 1] filename.ext`, and context at or above 12 logical lines
+File paths and large pasted context use folded presentation immediately in both
+board and edit mode while their canonical text remains exact. Images appear as
+`[Image 1]`, other files as `[File 1]`, and context at or above 12 logical lines
 or 1,200 perceived Unicode characters as
-`[Pasted text]  N lines · N characters`. Numbering restarts for each thought.
-Entering edit mode reveals the exact path or text. Copy, cut, export, search,
-recovery, and agent submission always use that exact canonical content.
+`[Pasted text · N lines · N characters]`. Thousands use comma grouping.
+Numbering restarts for each thought. The complete bracketed token uses the
+forest-green accent plus bold as a non-color cue, without exposing temporary
+paths or filenames.
+
+`Enter` or a mouse click on a folded token expands its exact path or text for
+editing. A collapsed token is one logical unit for cursor movement, selection,
+backspace, and delete, so the cursor can never disappear inside hidden content.
+Leaving edit mode returns expanded ranges to their compact presentation. Copy,
+cut, export, search, recovery, and agent submission always use exact canonical
+content regardless of the visible fold.
 
 Fold metadata is durable and participates in editor undo and redo. Editing
 inside a folded range dissolves that range safely, while edits outside it
@@ -378,7 +387,14 @@ direct action such as `Send ← Codex`. If several exist, submission enters a
 directional targeting state. Arrow keys and `h`, `j`, `k`, and `l` choose among
 the enabled directions. Mouse users select the corresponding adjacent-agent
 indicator. The target agent, direction, and current state remain visible before
-the submission is committed.
+the submission is committed. A dedicated integration row keeps `Send`, `Send+`,
+direction, agent kind, and readiness separate from board shortcuts and
+durability context.
+
+In a Herdr-managed pane, Proqi publishes the display-only pane label `proqi`
+with a short lease and clears it on normal exit. This helps users distinguish
+the scratchpad beside several named agent panes. It never claims an agent
+identity, and stale display metadata expires after a crash.
 
 Submit preserves the thought. Submit and remove deletes it only after Herdr
 confirms successful prompt submission, and that deletion remains undoable. A
@@ -473,6 +489,11 @@ Mouse support includes:
 - Clickable overflow, search, help, undo, and session controls.
 - Clickable verified adjacent-agent targets when an integration is available.
 - Hover treatment when the terminal reports mouse motion.
+
+The active gutter shows a vertical-ellipsis drag affordance. During a drag,
+the existing separator at the proposed destination changes to the accent color
+without reflowing the board. Proqi does not use timer-driven decorative
+animation. Terminal motion is reserved for immediate interaction feedback.
 
 Right click is never required because terminals reserve or forward it
 inconsistently. All mouse actions have keyboard equivalents.

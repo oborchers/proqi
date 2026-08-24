@@ -458,10 +458,11 @@ Rendering is immediate-mode and derived from current state. Widgets hold no
 canonical product state. The board uses one vertical flow at every width.
 
 The board reserves independent responsive regions for product and session
-identity, content, integration or durability context, transient status, and
-contextual actions. Renderers never paint independently aligned strings into
-the same cells. Compact panes shorten labels and remove secondary context
-before they reduce the usable content area below one row.
+identity, content, integration or durability context, transient status,
+contextual actions, and verified adjacent-agent targets. Renderers never paint
+independently aligned strings into the same cells. Compact panes shorten labels
+and remove secondary context before they reduce the usable content area below
+one row.
 
 Natural thought height is calculated from wrapped visual lines. A viewport-aware
 cap is applied only to long thoughts. The focused thought receives enough space
@@ -501,11 +502,14 @@ to split a paste heuristically.
 The normalized paste payload carries exact text plus optional typed provenance.
 Attachment annotations retain only presentation-safe metadata and byte ranges;
 the absolute path remains the canonical text. Large-paste annotations retain
-derived line and grapheme counts. Board rendering substitutes folded labels in
-a transient projection, while the editor, clipboard, recovery, CLI, search,
-and integration boundaries continue to consume canonical content. Edits rebase
-unaffected ranges and dissolve overlapping ranges. Revisions persist both sides
-of the annotation change so undo and redo remain restart-safe.
+derived line and grapheme counts. A UI-owned projection substitutes folded
+labels for both board rendering and editor snapshots, while the editor model,
+clipboard, recovery, CLI, search, and integration boundaries continue to
+consume canonical content. The projection owns lossless canonical-to-visible
+cursor and selection mapping. Collapsed ranges are atomic for pointer, cursor,
+selection, and deletion commands. Edits rebase unaffected ranges and dissolve
+overlapping ranges. Revisions persist both sides of the annotation change so
+undo and redo remain restart-safe.
 
 ## Herdr integration
 
@@ -537,6 +541,15 @@ ordinary terminals retain an uncluttered board. An explicit refresh, or a
 submission attempt with no verified target, reports why direct submission is
 unavailable. Every submission revalidates the complete target immediately
 before invoking Herdr's semantic prompt operation.
+
+Herdr also implements a separate display-only `PanePresentation` port. In a
+managed pane, the terminal runtime publishes `title=proqi` and
+`display-agent=proqi` through `pane report-metadata` without the agent identity
+field. A monotonically increasing sequence refreshes a 15-second TTL every 10
+seconds. Clean shutdown clears both fields; crash recovery relies on expiry.
+Focus-gained events refresh target discovery immediately, while resize bursts
+trigger one debounced refresh after geometry settles. Metadata failure never
+weakens the standalone board or changes submission verification.
 
 ## CLI and agent-facing contract
 

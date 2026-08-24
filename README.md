@@ -55,6 +55,11 @@ viewport-derived cap is reached. Narrow panes remove chrome before hiding
 content, and rapid pane resizing preserves focus, cursor position, and scroll.
 Every core action has keyboard and mouse access.
 
+Images, files, and large context stay compact while editing. Proqi renders
+`[Image 1]`, `[File 1]`, or
+`[Pasted text · 84 lines · 5,812 characters]` in the green accent while keeping
+the exact path or text available to copy, export, undo, resume, and submit.
+
 ## Private alpha quick start
 
 Proqi is not published yet. Build the private alpha from this checkout with the
@@ -107,6 +112,9 @@ fallbacks remain available when a terminal cannot report a particular modifier.
 Mouse users can focus and edit thoughts, place the cursor, drag a selection,
 scroll, reorder thoughts, search, click controls, use help, and choose Herdr
 targets.
+
+Folded context expands with `Enter` or a click. Collapsed ranges behave as one
+cursor and deletion unit, so hidden content never traps the editing cursor.
 
 ## Sessions that can be resumed
 
@@ -185,7 +193,11 @@ after an accepted receipt. Ambiguity, timeout, rejection, or protocol mismatch
 leaves the thought unchanged. Proqi never invokes a shell, injects raw keys,
 reads the conversation, or waits for the agent response.
 
-Herdr is optional. The complete standalone workflow works without it.
+Herdr is optional. The complete standalone workflow works without it. When
+available, Proqi also publishes a short-lived display-only `proqi` pane label
+so the scratchpad is distinguishable from adjacent named agent panes. It does
+not claim an agent identity, and the label expires automatically after an
+unclean process exit.
 
 ## Failure behavior
 
