@@ -1072,7 +1072,7 @@ dependencies = [
 
 [[package]]
 name = "proqi"
-version = "0.1.0-alpha.1"
+version = "0.0.1"
 dependencies = [
  "arboard",
  "base64",
@@ -2072,7 +2072,7 @@ checksum = "ea6fc2961e4ef194dcbfe56bb845534d0dc8098940c7e5c012a258bfec6701bd"
 
 [[package]]
 name = "xtask"
-version = "0.1.0-alpha.1"
+version = "0.0.1"
 dependencies = [
  "syn 2.0.119",
 ]

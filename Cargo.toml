@@ -5,7 +5,7 @@ resolver = "2"
 [workspace.package]
 edition = "2024"
 rust-version = "1.88"
-version = "0.1.0-alpha.1"
+version = "0.0.1"
 
 [workspace.dependencies]
 arboard = { version = "=3.6.1", default-features = false, features = ["image-data", "wayland-data-control"] }
