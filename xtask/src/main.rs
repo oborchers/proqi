@@ -14,6 +14,7 @@
 
 mod policy;
 mod snapshots;
+mod source_limits;
 
 use std::env;
 use std::ffi::OsStr;
@@ -21,12 +22,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 use std::time::{SystemTime, UNIX_EPOCH};
-
-const MAX_SOURCE_LINES: usize = 500;
-const SOURCE_EXTENSIONS: &[&str] = &[
-    "astro", "cjs", "css", "cts", "html", "js", "jsx", "less", "mjs", "mts", "rs", "scss",
-    "svelte", "ts", "tsx", "vue",
-];
 
 fn main() -> ExitCode {
     match execute() {
@@ -46,7 +41,7 @@ fn execute() -> Result<(), String> {
         "setup" => setup(&root),
         "install-hooks" => install_hooks(&root),
         "format" => run(&root, "cargo", ["fmt", "--all"]),
-        "source-limits" => check_source_limits(&root),
+        "source-limits" => source_limits::check(&root),
         "architecture" => policy::check(&root),
         "check" => check(&root),
         "test" => test(&root),
@@ -116,7 +111,7 @@ fn setup(root: &Path) -> Result<(), String> {
 fn check(root: &Path) -> Result<(), String> {
     run(root, "cargo", ["fmt", "--all", "--", "--check"])?;
     check_whitespace(root)?;
-    check_source_limits(root)?;
+    source_limits::check(root)?;
     snapshots::check(root)?;
     policy::check(root)?;
     run(
@@ -181,75 +176,6 @@ fn msrv(root: &Path) -> Result<(), String> {
         "cargo",
         ["test", "--locked", "--workspace", "--all-features"],
     )
-}
-
-fn check_source_limits(root: &Path) -> Result<(), String> {
-    let mut files = Vec::new();
-    collect_source_files(root, &mut files)?;
-    files.sort();
-
-    let mut violations = Vec::new();
-    for path in files {
-        let source = fs::read_to_string(&path)
-            .map_err(|error| format!("read {}: {error}", path.display()))?;
-        let line_count = source.lines().count();
-        if line_count > MAX_SOURCE_LINES {
-            let relative = path.strip_prefix(root).unwrap_or(&path);
-            violations.push(format!("{}: {line_count} lines", relative.display()));
-        }
-    }
-
-    if violations.is_empty() {
-        println!(
-            "source limits: every first-party source file is at most {MAX_SOURCE_LINES} lines"
-        );
-        Ok(())
-    } else {
-        Err(format!(
-            "first-party source files exceed the {MAX_SOURCE_LINES}-line limit:\n{}",
-            violations.join("\n")
-        ))
-    }
-}
-
-fn collect_source_files(directory: &Path, files: &mut Vec<PathBuf>) -> Result<(), String> {
-    for entry in fs::read_dir(directory)
-        .map_err(|error| format!("read directory {}: {error}", directory.display()))?
-    {
-        let entry = entry.map_err(|error| format!("read directory entry: {error}"))?;
-        let path = entry.path();
-        if is_impeccable_artifact(&path) {
-            continue;
-        }
-        let file_type = entry
-            .file_type()
-            .map_err(|error| format!("read file type for {}: {error}", path.display()))?;
-        if file_type.is_dir() {
-            let name = path.file_name().and_then(OsStr::to_str);
-            if matches!(name, Some(".git" | "node_modules" | "target")) {
-                continue;
-            }
-            collect_source_files(&path, files)?;
-        } else if is_source_file(&path) && (file_type.is_file() || file_type.is_symlink()) {
-            files.push(path);
-        }
-    }
-    Ok(())
-}
-
-fn is_impeccable_artifact(path: &Path) -> bool {
-    path.components().any(|component| {
-        component
-            .as_os_str()
-            .to_str()
-            .is_some_and(|name| name.to_ascii_lowercase().contains("impeccable"))
-    })
-}
-
-fn is_source_file(path: &Path) -> bool {
-    path.extension()
-        .and_then(OsStr::to_str)
-        .is_some_and(|extension| SOURCE_EXTENSIONS.contains(&extension))
 }
 
 fn test(root: &Path) -> Result<(), String> {
@@ -359,42 +285,5 @@ where
             "{} exited with {status}",
             program.as_ref().to_string_lossy()
         ))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn source_policy_covers_rust_and_common_frontend_languages() {
-        for path in [
-            "src/lib.rs",
-            "ui/view.tsx",
-            "ui/theme.css",
-            "ui/page.svelte",
-            "ui/component.vue",
-            "ui/page.astro",
-        ] {
-            assert!(is_source_file(Path::new(path)), "uncovered source: {path}");
-        }
-        assert!(!is_source_file(Path::new("PRODUCT.md")));
-    }
-
-    #[test]
-    fn configured_ceiling_is_inclusive() {
-        assert_eq!("line\n".repeat(MAX_SOURCE_LINES).lines().count(), 500);
-        assert_eq!("line\n".repeat(MAX_SOURCE_LINES + 1).lines().count(), 501);
-    }
-
-    #[test]
-    fn local_impeccable_artifacts_are_not_first_party_source() {
-        assert!(is_impeccable_artifact(Path::new(
-            ".github/skills/impeccable/scripts/context.mjs"
-        )));
-        assert!(is_impeccable_artifact(Path::new(
-            ".github/agents/impeccable-documenter.agent.md"
-        )));
-        assert!(!is_impeccable_artifact(Path::new("src/ui/render.rs")));
     }
 }
