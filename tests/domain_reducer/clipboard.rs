@@ -12,6 +12,7 @@ fn paste_creates_one_focused_thought_and_one_commit_effect() {
             thought_id,
             operation_id,
             content: "Grüße\r\n日本語".to_owned(),
+            annotations: Vec::new(),
             at,
         },
     )

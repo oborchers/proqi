@@ -118,6 +118,7 @@ fn failed_ui_state_offers_retry_and_an_exact_recovery_effect() {
             thought_id,
             operation_id,
             content: "unsaved".to_owned(),
+            annotations: Vec::new(),
             insertion_index: None,
             at: clock.now(),
         },

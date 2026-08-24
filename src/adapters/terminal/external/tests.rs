@@ -57,7 +57,10 @@ fn image_read_materializes_exact_pixels_before_returning_a_path() {
 
     assert_eq!(
         read_clipboard(&mut clipboard, &mut attachments, request),
-        Ok(path.to_string_lossy().into_owned())
+        Ok(super::super::path_import::attachment_payload(
+            path.to_string_lossy().into_owned(),
+            true,
+        ))
     );
     assert_eq!(attachments.saved, Some((request, image)));
 }

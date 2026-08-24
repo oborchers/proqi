@@ -9,7 +9,7 @@ fn unsupported_and_migration_required_schemas_are_refused_without_changes() {
         SqliteStore::open(&refuse),
         Err(StoreError::MigrationRequired {
             found: 0,
-            supported: 1
+            supported: 2
         })
     ));
 
@@ -33,7 +33,7 @@ fn unsupported_and_migration_required_schemas_are_refused_without_changes() {
         SqliteStore::open(&config),
         Err(StoreError::UnsupportedSchema {
             found: 99,
-            supported: 1
+            supported: 2
         })
     ));
 
@@ -47,7 +47,7 @@ fn unsupported_and_migration_required_schemas_are_refused_without_changes() {
         SqliteStore::open(&protocol.config),
         Err(StoreError::UnsupportedStorageProtocol {
             found: 99,
-            supported: 1
+            supported: 2
         })
     ));
 }
@@ -121,6 +121,37 @@ fn migration_backup_succeeds_and_failure_preserves_source() {
             .count(),
         2
     );
+}
+
+#[test]
+fn version_one_database_migrates_annotations_forward_without_reinterpretation() {
+    let fixture = DatabaseFixture::new();
+    drop(fixture.open());
+    let connection = Connection::open(&fixture.config.database_path).expect("version one DB");
+    connection
+        .execute_batch(
+            "ALTER TABLE thoughts DROP COLUMN annotations_json;
+             DELETE FROM migration_history WHERE version = 2;
+             UPDATE schema_meta SET schema_version = 1, storage_protocol = 1;",
+        )
+        .expect("downgrade fixture");
+    drop(connection);
+
+    drop(SqliteStore::open(&fixture.config).expect("migrate version one"));
+    let connection = Connection::open(&fixture.config.database_path).expect("migrated DB");
+    let version: i64 = connection
+        .query_row("SELECT schema_version FROM schema_meta", [], |row| {
+            row.get(0)
+        })
+        .expect("version");
+    let annotations_column: i64 = connection
+        .query_row(
+            "SELECT count(*) FROM pragma_table_info('thoughts') WHERE name = 'annotations_json'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("annotation column");
+    assert_eq!((version, annotations_column), (2, 1));
 }
 
 #[test]

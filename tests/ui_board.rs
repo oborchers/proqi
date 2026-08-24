@@ -3,11 +3,14 @@
 use proqi::{
     adapters::memory::{FakeClock, FakeIdGenerator},
     application::{AppState, ClipboardIntent, Effect, FailureCode},
-    domain::{OperationSequence, Session, SessionBoard, Timestamp},
+    domain::{
+        ContentAnnotation, ContentAnnotationKind, OperationSequence, Session, SessionBoard,
+        Timestamp,
+    },
     ports::{editor::CursorMovement, environment::IdGenerator},
     ui::{
-        BoardApp, PointerButton, PointerInput, PointerKind, Theme, ThemePreference, UiInput, UiKey,
-        UiSettings, render,
+        BoardApp, PastePayload, PointerButton, PointerInput, PointerKind, Theme, ThemePreference,
+        UiInput, UiKey, UiSettings, render,
     },
 };
 use ratatui_core::{
@@ -432,6 +435,8 @@ fn mouse_wheel_scrolls_editor_without_moving_cursor_or_selection() {
 
 #[path = "ui_board/agent.rs"]
 mod agent;
+#[path = "ui_board/annotations.rs"]
+mod annotations;
 #[path = "ui_board/clipboard.rs"]
 mod clipboard;
 #[path = "ui_board/composition.rs"]

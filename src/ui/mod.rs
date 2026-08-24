@@ -1,5 +1,6 @@
 //! Responsive layout, rendering, keymaps, and hit testing.
 
+mod annotations;
 mod app;
 mod browser;
 mod browser_render;
@@ -9,6 +10,7 @@ mod render;
 mod settings;
 mod theme;
 
+pub use annotations::PastePayload;
 pub use app::{BoardApp, PointerButton, PointerInput, PointerKind, UiInput, UiKey};
 pub use browser::{
     BrowserAction, BrowserAvailability, BrowserEntryLayout, BrowserLayout, RecencyGroup,

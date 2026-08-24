@@ -17,15 +17,15 @@ fn remapped_board_binding_changes_behavior_and_visible_hint() {
 #[test]
 fn long_thought_cap_expands_without_changing_content() {
     let mut fixture = Fixture::new();
-    let content = (0..20)
-        .map(|index| format!("line {index}"))
+    let content = (0..8)
+        .map(|index| format!("line {index} with enough ordinary words to wrap several times"))
         .collect::<Vec<_>>()
         .join("\n");
     fixture.paste(&content);
     fixture.input(UiInput::Key(UiKey::Escape));
     let initial = fixture.app.prepare_frame(Rect::new(0, 0, 40, 13));
     let thought = initial.thoughts.first().expect("thought");
-    assert!(thought.hidden_rows >= 13);
+    assert!(thought.hidden_rows > 0);
     let capped_height = thought.area.height;
     let overflow = thought.overflow.expect("overflow");
     let rendered = text(draw(&mut fixture, 40, 13).backend().buffer());

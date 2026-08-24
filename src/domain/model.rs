@@ -170,6 +170,9 @@ pub struct Thought {
     pub session_id: SessionId,
     /// Exact current content.
     pub content: String,
+    /// Durable presentation metadata over exact UTF-8 byte ranges.
+    #[serde(default)]
+    pub annotations: Vec<ContentAnnotation>,
     /// Current order among live thoughts.
     pub position: ThoughtPosition,
     /// Creation time.
@@ -196,6 +199,7 @@ impl Thought {
             id,
             session_id,
             content,
+            annotations: Vec::new(),
             position,
             created_at: now,
             updated_at: now,
@@ -209,6 +213,52 @@ impl Thought {
     pub const fn is_live(&self) -> bool {
         self.deleted_at.is_none()
     }
+
+    /// Replace presentation annotations after validating their content ranges.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DomainError::InvalidContentAnnotation`] for invalid, overlapping,
+    /// or non-character-boundary ranges.
+    pub fn set_annotations(
+        &mut self,
+        annotations: Vec<ContentAnnotation>,
+    ) -> Result<(), DomainError> {
+        validate_annotations(&self.content, &annotations)?;
+        self.annotations = annotations;
+        Ok(())
+    }
+}
+
+/// Durable presentation metadata for one exact content range.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ContentAnnotation {
+    /// Inclusive UTF-8 byte offset in the canonical thought content.
+    pub start: usize,
+    /// Exclusive UTF-8 byte offset in the canonical thought content.
+    pub end: usize,
+    /// Presentation origin retained independently from the text.
+    pub kind: ContentAnnotationKind,
+}
+
+/// Provenance used to fold context without rewriting canonical content.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "kind")]
+pub enum ContentAnnotationKind {
+    /// One absolute local file path.
+    Attachment {
+        /// Whether the file should receive image-specific presentation.
+        image: bool,
+        /// Safe basename shown instead of the complete path.
+        display_name: String,
+    },
+    /// One large terminal or clipboard paste.
+    LargePaste {
+        /// Logical line count at capture time.
+        lines: usize,
+        /// Perceived Unicode character count at capture time.
+        graphemes: usize,
+    },
 }
 
 /// One coalesced editor revision with reversible cursor state.
@@ -226,6 +276,12 @@ pub struct ThoughtRevision {
     pub before_content: String,
     /// Content after the edit.
     pub after_content: String,
+    /// Presentation metadata before the edit.
+    #[serde(default)]
+    pub before_annotations: Vec<ContentAnnotation>,
+    /// Presentation metadata after the edit.
+    #[serde(default)]
+    pub after_annotations: Vec<ContentAnnotation>,
     /// Cursor before the edit.
     pub before_cursor: TextPosition,
     /// Cursor after the edit.
@@ -308,6 +364,34 @@ pub enum DomainError {
     /// The operation sequence cannot increase further.
     #[error("operation sequence exhausted")]
     SequenceExhausted,
+    /// Content presentation metadata does not address valid canonical text.
+    #[error("content annotation range is invalid")]
+    InvalidContentAnnotation,
+}
+
+/// Validate sorted non-overlapping annotation ranges against canonical content.
+///
+/// # Errors
+///
+/// Returns [`DomainError::InvalidContentAnnotation`] when any range is empty,
+/// overlaps its predecessor, exceeds content, or splits a UTF-8 scalar value.
+pub fn validate_annotations(
+    content: &str,
+    annotations: &[ContentAnnotation],
+) -> Result<(), DomainError> {
+    let mut previous_end = 0;
+    for annotation in annotations {
+        if annotation.start >= annotation.end
+            || annotation.end > content.len()
+            || !content.is_char_boundary(annotation.start)
+            || !content.is_char_boundary(annotation.end)
+            || annotation.start < previous_end
+        {
+            return Err(DomainError::InvalidContentAnnotation);
+        }
+        previous_end = annotation.end;
+    }
+    Ok(())
 }
 
 fn validate_absolute_path(path: &Path) -> Result<(), DomainError> {

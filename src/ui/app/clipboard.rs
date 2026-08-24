@@ -85,7 +85,7 @@ impl BoardApp {
         self.reduce(Action::ClipboardResult { request_id, result })
     }
 
-    /// Complete one native clipboard read without creating an empty thought on failure.
+    /// Complete one plain native clipboard read.
     pub fn complete_clipboard_read(
         &mut self,
         request_id: crate::domain::RequestId,
@@ -93,15 +93,31 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
+        self.complete_clipboard_read_payload(
+            request_id,
+            result.map(crate::ui::PastePayload::text),
+            ids,
+            clock,
+        )
+    }
+
+    /// Complete one native clipboard read without creating an empty thought on failure.
+    pub fn complete_clipboard_read_payload(
+        &mut self,
+        request_id: crate::domain::RequestId,
+        result: Result<crate::ui::PastePayload, FailureCode>,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
         if !self.pending_clipboard_reads.remove(&request_id) {
             return Vec::new();
         }
         match result {
-            Ok(content) if content.is_empty() => {
+            Ok(payload) if payload.content.is_empty() => {
                 self.status = Some("clipboard is empty".to_owned());
                 Vec::new()
             }
-            Ok(content) => self.paste(content, ids, clock),
+            Ok(payload) => self.paste_payload(payload, ids, clock),
             Err(code) => {
                 self.notify(code);
                 Vec::new()

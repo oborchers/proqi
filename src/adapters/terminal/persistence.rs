@@ -235,6 +235,18 @@ mod tests {
 
     use super::{PersistenceLane, PersistenceResult};
 
+    fn assert_ordered_results(lane: &PersistenceLane, succeed: bool) {
+        for expected in [OperationSequence::new(1), OperationSequence::new(2)] {
+            let result = lane
+                .receiver
+                .recv_timeout(Duration::from_secs(2))
+                .expect("persistence result");
+            let (sequence, result) = sequenced(result);
+            assert_eq!(sequence, expected);
+            assert_eq!(result.is_ok(), succeed);
+        }
+    }
+
     #[test]
     fn failed_batch_is_retained_and_retried_after_contention() {
         let directory = tempfile::tempdir().expect("temporary directory");
@@ -271,6 +283,7 @@ mod tests {
                 thought_id: ids.thought_id(),
                 operation_id: ids.operation_id(),
                 content: "retained through contention".to_owned(),
+                annotations: Vec::new(),
                 insertion_index: None,
                 at: Timestamp::from_millis(3),
             },
@@ -353,6 +366,7 @@ mod tests {
                     thought_id: ids.thought_id(),
                     operation_id: ids.operation_id(),
                     content: content.to_owned(),
+                    annotations: Vec::new(),
                     insertion_index: None,
                     at: Timestamp::from_millis(3),
                 },
@@ -367,26 +381,10 @@ mod tests {
         for batch in batches {
             lane.commit(batch).expect("queue commit");
         }
-        for expected in [OperationSequence::new(1), OperationSequence::new(2)] {
-            let (sequence, result) = sequenced(
-                lane.receiver
-                    .recv_timeout(Duration::from_secs(2))
-                    .expect("failure result"),
-            );
-            assert_eq!(sequence, expected);
-            assert!(result.is_err());
-        }
+        assert_ordered_results(&lane, false);
         lock.release().expect("release writer");
         lane.retry(OperationSequence::new(1)).expect("queue retry");
-        for expected in [OperationSequence::new(1), OperationSequence::new(2)] {
-            let (sequence, result) = sequenced(
-                lane.receiver
-                    .recv_timeout(Duration::from_secs(2))
-                    .expect("retry result"),
-            );
-            assert_eq!(sequence, expected);
-            assert!(result.is_ok());
-        }
+        assert_ordered_results(&lane, true);
         assert!(matches!(
             lane.receiver
                 .recv_timeout(Duration::from_secs(2))

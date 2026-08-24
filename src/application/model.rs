@@ -4,9 +4,9 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use super::error::{ApplicationError, ApplicationResult, FailureCode};
 use crate::domain::{
-    BoardOperation, BoardOperationKind, OperationId, OperationSequence, RequestId, RevisionId,
-    SessionBoard, SessionId, TextPosition, Thought, ThoughtId, ThoughtRevision, Timestamp,
-    UndoScope,
+    BoardOperation, BoardOperationKind, ContentAnnotation, OperationId, OperationSequence,
+    RequestId, RevisionId, SessionBoard, SessionId, TextPosition, Thought, ThoughtId,
+    ThoughtRevision, Timestamp, UndoScope,
 };
 use crate::ports::agent::{AgentTarget, SubmissionRequest};
 use crate::ports::{recovery::RecoveryDocument, store::OperationBatch};
@@ -235,6 +235,8 @@ pub enum Action {
         operation_id: OperationId,
         /// Exact initial content.
         content: String,
+        /// Durable presentation metadata over the exact initial content.
+        annotations: Vec<ContentAnnotation>,
         /// Explicit insertion point, or the current insertion point.
         insertion_index: Option<usize>,
         /// Event time.
@@ -248,6 +250,8 @@ pub enum Action {
         operation_id: OperationId,
         /// Exact bracketed-paste payload.
         content: String,
+        /// Durable presentation metadata over the exact paste payload.
+        annotations: Vec<ContentAnnotation>,
         /// Event time.
         at: Timestamp,
     },
@@ -261,6 +265,10 @@ pub enum Action {
         before_content: String,
         /// Replacement content.
         after_content: String,
+        /// Presentation metadata required before the edit.
+        before_annotations: Vec<ContentAnnotation>,
+        /// Replacement presentation metadata.
+        after_annotations: Vec<ContentAnnotation>,
         /// Cursor before the edit.
         before_cursor: TextPosition,
         /// Cursor after the edit.

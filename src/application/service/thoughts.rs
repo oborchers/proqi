@@ -52,6 +52,7 @@ where
                 thought_id,
                 operation_id,
                 content,
+                annotations: Vec::new(),
                 insertion_index: position,
                 at: self.clock.now(),
             },

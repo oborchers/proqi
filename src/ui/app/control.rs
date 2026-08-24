@@ -28,6 +28,7 @@ impl BoardApp {
                 thought_id: *thought_id,
                 operation_id: *operation_id,
                 content: content.clone(),
+                annotations: Vec::new(),
                 insertion_index: *position,
                 at,
             },

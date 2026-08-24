@@ -4,9 +4,9 @@ use super::error::{ApplicationError, ApplicationResult, FailureCode};
 use crate::{
     application::model::{AppState, ClipboardIntent, Effect, InteractionMode, PendingClipboard},
     domain::{
-        BoardMutation, BoardOperation, BoardOperationKind, DomainError, OperationId, RequestId,
-        RevisionId, TextPosition, Thought, ThoughtId, ThoughtPosition, ThoughtRevision, Timestamp,
-        UndoScope,
+        BoardMutation, BoardOperation, BoardOperationKind, ContentAnnotation, DomainError,
+        OperationId, RequestId, RevisionId, TextPosition, Thought, ThoughtId, ThoughtPosition,
+        ThoughtRevision, Timestamp, UndoScope, validate_annotations,
     },
 };
 
@@ -15,17 +15,20 @@ pub(super) fn create_thought(
     thought_id: ThoughtId,
     operation_id: OperationId,
     content: String,
+    annotations: Vec<ContentAnnotation>,
     insertion_index: usize,
     at: Timestamp,
 ) -> ApplicationResult<Vec<Effect>> {
     let sequence = state.next_sequence()?;
-    let thought = Thought::new(
+    validate_annotations(&content, &annotations)?;
+    let mut thought = Thought::new(
         thought_id,
         state.board.session.id,
         content,
         ThoughtPosition::new(position_u32(insertion_index)?),
         at,
     );
+    thought.set_annotations(annotations)?;
     let operation = BoardOperation {
         id: operation_id,
         session_id: state.board.session.id,
@@ -58,15 +61,18 @@ pub(super) fn edit_thought(
     revision_id: RevisionId,
     before_content: String,
     after_content: String,
+    before_annotations: Vec<ContentAnnotation>,
+    after_annotations: Vec<ContentAnnotation>,
     before_cursor: TextPosition,
     after_cursor: TextPosition,
     at: Timestamp,
 ) -> ApplicationResult<Vec<Effect>> {
     let current = state.live_thought(thought_id)?;
-    if current.content != before_content {
+    if current.content != before_content || current.annotations != before_annotations {
         return Err(ApplicationError::RevisionConflict(thought_id));
     }
-    if before_content == after_content {
+    validate_annotations(&after_content, &after_annotations)?;
+    if before_content == after_content && before_annotations == after_annotations {
         return Ok(Vec::new());
     }
     let sequence = state.next_sequence()?;
@@ -77,6 +83,8 @@ pub(super) fn edit_thought(
         sequence,
         before_content,
         after_content: after_content.clone(),
+        before_annotations,
+        after_annotations: after_annotations.clone(),
         before_cursor,
         after_cursor,
         created_at: at,
@@ -86,6 +94,7 @@ pub(super) fn edit_thought(
         .thought_mut(thought_id)
         .ok_or(ApplicationError::ThoughtNotFound(thought_id))?;
     thought.content = after_content;
+    thought.annotations = after_annotations;
     thought.updated_at = at;
     state.board = board;
     let history = state.editor_histories.entry(thought_id).or_default();
@@ -256,71 +265,8 @@ pub(super) fn history_move(
 ) -> ApplicationResult<Vec<Effect>> {
     let sequence = state.next_sequence()?;
     match scope {
-        UndoScope::Board => {
-            let operation = if undo {
-                state
-                    .board_history_cursor
-                    .checked_sub(1)
-                    .and_then(|index| state.board_history.get(index))
-            } else {
-                state.board_history.get(state.board_history_cursor)
-            }
-            .cloned()
-            .ok_or(ApplicationError::InvalidState)?;
-            let mutation = if undo {
-                &operation.inverse
-            } else {
-                &operation.forward
-            };
-            let mut board = state.board.clone();
-            board.apply_mutation(mutation, at)?;
-            state.board = board;
-            if undo {
-                state.board_history_cursor -= 1;
-            } else {
-                state.board_history_cursor += 1;
-            }
-            state.keep_focus_valid();
-        }
-        UndoScope::Editor { thought_id } => {
-            let history = state
-                .editor_histories
-                .get(&thought_id)
-                .ok_or(ApplicationError::InvalidState)?;
-            let revision = if undo {
-                history
-                    .cursor
-                    .checked_sub(1)
-                    .and_then(|index| history.revisions.get(index))
-            } else {
-                history.revisions.get(history.cursor)
-            }
-            .cloned()
-            .ok_or(ApplicationError::InvalidState)?;
-            let (expected, content) = if undo {
-                (&revision.after_content, revision.before_content)
-            } else {
-                (&revision.before_content, revision.after_content)
-            };
-            if &state.live_thought(thought_id)?.content != expected {
-                return Err(ApplicationError::RevisionConflict(thought_id));
-            }
-            let thought = state
-                .board
-                .thought_mut(thought_id)
-                .ok_or(ApplicationError::ThoughtNotFound(thought_id))?;
-            thought.content = content;
-            thought.updated_at = at;
-            let history = state
-                .editor_histories
-                .get_mut(&thought_id)
-                .ok_or(ApplicationError::InvalidState)?;
-            if undo {
-                history.cursor -= 1;
-            } else {
-                history.cursor += 1;
-            }
-        }
+        UndoScope::Board => move_board_history(state, at, undo)?,
+        UndoScope::Editor { thought_id } => move_editor_history(state, thought_id, at, undo)?,
     }
     state.track_pending(sequence);
     Ok(vec![Effect::CommitHistoryMove {
@@ -331,6 +277,89 @@ pub(super) fn history_move(
         sequence,
         at,
     }])
+}
+
+fn move_board_history(state: &mut AppState, at: Timestamp, undo: bool) -> ApplicationResult<()> {
+    let operation = if undo {
+        state
+            .board_history_cursor
+            .checked_sub(1)
+            .and_then(|index| state.board_history.get(index))
+    } else {
+        state.board_history.get(state.board_history_cursor)
+    }
+    .cloned()
+    .ok_or(ApplicationError::InvalidState)?;
+    let mutation = if undo {
+        &operation.inverse
+    } else {
+        &operation.forward
+    };
+    let mut board = state.board.clone();
+    board.apply_mutation(mutation, at)?;
+    state.board = board;
+    state.board_history_cursor =
+        state
+            .board_history_cursor
+            .saturating_add_signed(if undo { -1 } else { 1 });
+    state.keep_focus_valid();
+    Ok(())
+}
+
+fn move_editor_history(
+    state: &mut AppState,
+    thought_id: ThoughtId,
+    at: Timestamp,
+    undo: bool,
+) -> ApplicationResult<()> {
+    let history = state
+        .editor_histories
+        .get(&thought_id)
+        .ok_or(ApplicationError::InvalidState)?;
+    let revision = if undo {
+        history
+            .cursor
+            .checked_sub(1)
+            .and_then(|index| history.revisions.get(index))
+    } else {
+        history.revisions.get(history.cursor)
+    }
+    .cloned()
+    .ok_or(ApplicationError::InvalidState)?;
+    let (expected, expected_annotations, content, annotations) = if undo {
+        (
+            &revision.after_content,
+            &revision.after_annotations,
+            revision.before_content,
+            revision.before_annotations,
+        )
+    } else {
+        (
+            &revision.before_content,
+            &revision.before_annotations,
+            revision.after_content,
+            revision.after_annotations,
+        )
+    };
+    let current = state.live_thought(thought_id)?;
+    if &current.content != expected || &current.annotations != expected_annotations {
+        return Err(ApplicationError::RevisionConflict(thought_id));
+    }
+    let thought = state
+        .board
+        .thought_mut(thought_id)
+        .ok_or(ApplicationError::ThoughtNotFound(thought_id))?;
+    thought.content = content;
+    thought.annotations = annotations;
+    thought.updated_at = at;
+    let history = state
+        .editor_histories
+        .get_mut(&thought_id)
+        .ok_or(ApplicationError::InvalidState)?;
+    history.cursor = history
+        .cursor
+        .saturating_add_signed(if undo { -1 } else { 1 });
+    Ok(())
 }
 
 fn position_u32(value: usize) -> Result<u32, ApplicationError> {

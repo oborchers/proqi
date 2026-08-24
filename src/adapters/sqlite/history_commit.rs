@@ -4,8 +4,8 @@ use rusqlite::{OptionalExtension, Transaction, params};
 
 use crate::{
     domain::{
-        BoardOperation, IntegrationContext, OperationId, OperationSequence, SessionBoard,
-        SessionId, ThoughtId, ThoughtRevision, Timestamp, UndoScope,
+        BoardOperation, ContentAnnotation, IntegrationContext, OperationId, OperationSequence,
+        SessionBoard, SessionId, ThoughtId, ThoughtRevision, Timestamp, UndoScope,
     },
     ports::store::{CommitReceipt, DurableIdentity, StoreError},
 };
@@ -148,47 +148,32 @@ fn move_editor_history(
     undo: bool,
     at: Timestamp,
 ) -> Result<(), StoreError> {
-    let current: Option<(Vec<u8>, String, i64)> = transaction
-        .query_row(
-            "SELECT session_id, content, editor_history_cursor FROM thoughts
-             WHERE id = ?1 AND deleted_at IS NULL",
-            [thought_id.database_bytes().as_slice()],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-        )
-        .optional()
-        .map_err(map_sql_error)?;
-    let (stored_session, current_content, cursor) =
-        current.ok_or_else(|| StoreError::NotFound(thought_id.to_string()))?;
-    if session_id_from_blob(stored_session)? != session_id {
+    let current = load_editor_current(transaction, thought_id)?;
+    if session_id_from_blob(current.session_id)? != session_id {
         return Err(StoreError::Conflict(
             "editor history belongs to another session".to_owned(),
         ));
     }
     let index = if undo {
-        cursor
+        current
+            .cursor
             .checked_sub(1)
             .ok_or_else(|| StoreError::Conflict("editor undo history is empty".to_owned()))?
     } else {
-        cursor
+        current.cursor
     };
-    let payload: Option<String> = transaction
-        .query_row(
-            "SELECT payload_json FROM thought_revisions WHERE thought_id = ?1 AND history_index = ?2",
-            params![thought_id.database_bytes().as_slice(), index],
-            |row| row.get(0),
-        )
-        .optional()
-        .map_err(map_sql_error)?;
-    let revision: ThoughtRevision = serde_json::from_str(
-        &payload.ok_or_else(|| StoreError::Conflict("editor redo history is empty".to_owned()))?,
-    )
-    .map_err(|error| StoreError::Corrupt(error.to_string()))?;
+    let revision = load_revision_at(transaction, thought_id, index)?;
     let expected_content = if undo {
         &revision.after_content
     } else {
         &revision.before_content
     };
-    if &current_content != expected_content {
+    let expected_annotations = if undo {
+        &revision.after_annotations
+    } else {
+        &revision.before_annotations
+    };
+    if &current.content != expected_content || &current.annotations != expected_annotations {
         return Err(StoreError::Conflict(
             "editor history does not match current thought content".to_owned(),
         ));
@@ -198,20 +183,87 @@ fn move_editor_history(
     } else {
         revision.after_content
     };
+    let annotations = if undo {
+        revision.before_annotations
+    } else {
+        revision.after_annotations
+    };
+    let annotations_json = serde_json::to_string(&annotations)
+        .map_err(|error| StoreError::Serialization(error.to_string()))?;
     let new_cursor = if undo {
         index
     } else {
-        cursor
+        current
+            .cursor
             .checked_add(1)
             .ok_or_else(|| StoreError::Corrupt("editor cursor overflow".to_owned()))?
     };
     transaction
         .execute(
-            "UPDATE thoughts SET content = ?2, updated_at = ?3, editor_history_cursor = ?4 WHERE id = ?1",
-            params![thought_id.database_bytes().as_slice(), content, at.as_millis(), new_cursor],
+            "UPDATE thoughts SET content = ?2, annotations_json = ?3, updated_at = ?4,
+                    editor_history_cursor = ?5 WHERE id = ?1",
+            params![
+                thought_id.database_bytes().as_slice(),
+                content,
+                annotations_json,
+                at.as_millis(),
+                new_cursor
+            ],
         )
         .map_err(map_sql_error)?;
     Ok(())
+}
+
+struct EditorCurrent {
+    session_id: Vec<u8>,
+    content: String,
+    annotations: Vec<ContentAnnotation>,
+    cursor: i64,
+}
+
+fn load_editor_current(
+    transaction: &Transaction<'_>,
+    thought_id: ThoughtId,
+) -> Result<EditorCurrent, StoreError> {
+    type Row = (Vec<u8>, String, String, i64);
+    let row: Option<Row> = transaction
+        .query_row(
+            "SELECT session_id, content, annotations_json, editor_history_cursor FROM thoughts
+             WHERE id = ?1 AND deleted_at IS NULL",
+            [thought_id.database_bytes().as_slice()],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )
+        .optional()
+        .map_err(map_sql_error)?;
+    let (session_id, content, annotations_json, cursor) =
+        row.ok_or_else(|| StoreError::NotFound(thought_id.to_string()))?;
+    let annotations = serde_json::from_str(&annotations_json)
+        .map_err(|error| StoreError::Corrupt(error.to_string()))?;
+    Ok(EditorCurrent {
+        session_id,
+        content,
+        annotations,
+        cursor,
+    })
+}
+
+fn load_revision_at(
+    transaction: &Transaction<'_>,
+    thought_id: ThoughtId,
+    index: i64,
+) -> Result<ThoughtRevision, StoreError> {
+    let payload: Option<String> = transaction
+        .query_row(
+            "SELECT payload_json FROM thought_revisions WHERE thought_id = ?1 AND history_index = ?2",
+            params![thought_id.database_bytes().as_slice(), index],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(map_sql_error)?;
+    serde_json::from_str(
+        &payload.ok_or_else(|| StoreError::Conflict("editor redo history is empty".to_owned()))?,
+    )
+    .map_err(|error| StoreError::Corrupt(error.to_string()))
 }
 
 pub(super) fn existing_receipt(
@@ -343,6 +395,8 @@ pub(super) fn persist_board(
         )
         .map_err(map_sql_error)?;
     for thought in board.thoughts() {
+        let annotations_json = serde_json::to_string(&thought.annotations)
+            .map_err(|error| StoreError::Serialization(error.to_string()))?;
         let cursor: i64 = transaction
             .query_row(
                 "SELECT editor_history_cursor FROM thoughts WHERE id = ?1",
@@ -355,12 +409,13 @@ pub(super) fn persist_board(
         transaction
             .execute(
                 "INSERT INTO thoughts(
-                    id, session_id, content, position, created_at, updated_at, collapsed,
-                    deleted_at, editor_history_cursor
-                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+                    id, session_id, content, annotations_json, position, created_at, updated_at,
+                    collapsed, deleted_at, editor_history_cursor
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
                  ON CONFLICT(id) DO UPDATE SET
                     session_id = excluded.session_id,
                     content = excluded.content,
+                    annotations_json = excluded.annotations_json,
                     position = excluded.position,
                     created_at = excluded.created_at,
                     updated_at = excluded.updated_at,
@@ -370,6 +425,7 @@ pub(super) fn persist_board(
                     thought.id.database_bytes().as_slice(),
                     thought.session_id.database_bytes().as_slice(),
                     thought.content,
+                    annotations_json,
                     i64::from(thought.position.get()),
                     thought.created_at.as_millis(),
                     thought.updated_at.as_millis(),

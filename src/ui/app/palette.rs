@@ -149,7 +149,10 @@ impl BoardApp {
         let UiInput::Key(key) = input else {
             return match input {
                 UiInput::Pointer(pointer) => self.handle_pointer(*pointer, ids, clock),
-                UiInput::Resize { .. } | UiInput::Paste(_) | UiInput::Key(_) => Vec::new(),
+                UiInput::Resize { .. }
+                | UiInput::Paste(_)
+                | UiInput::PasteAnnotated(_)
+                | UiInput::Key(_) => Vec::new(),
             };
         };
         match *key {
@@ -211,7 +214,7 @@ impl BoardApp {
         clock: &impl Clock,
     ) -> Vec<Effect> {
         match command {
-            Command::New => self.create(String::new(), ids, clock),
+            Command::New => self.create(crate::ui::PastePayload::text(String::new()), ids, clock),
             Command::Edit => {
                 self.enter_edit();
                 Vec::new()

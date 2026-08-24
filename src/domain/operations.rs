@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     DomainError, OperationId, OperationSequence, Session, SessionId, Thought, ThoughtId,
-    ThoughtPosition, Timestamp,
+    ThoughtPosition, Timestamp, validate_annotations,
 };
 
 /// Explicit persistent undo scope.
@@ -210,6 +210,7 @@ impl SessionBoard {
                     session_id: self.session.id,
                 });
             }
+            validate_annotations(&thought.content, &thought.annotations)?;
         }
         for (expected, thought) in self.live_thoughts().into_iter().enumerate() {
             if usize::try_from(thought.position.get()).ok() != Some(expected) {

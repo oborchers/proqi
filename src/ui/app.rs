@@ -29,7 +29,7 @@ use crate::{
     },
 };
 
-use super::{HitTarget, LayoutSnapshot, UiSettings};
+use super::{HitTarget, LayoutSnapshot, PastePayload, UiSettings};
 
 /// Mouse button after terminal-backend normalization.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -133,6 +133,8 @@ pub enum UiInput {
     Key(UiKey),
     /// One complete bracketed or clipboard paste.
     Paste(String),
+    /// One complete paste with adapter-derived presentation provenance.
+    PasteAnnotated(PastePayload),
     /// Latest terminal cell dimensions.
     Resize {
         /// Latest reported terminal width.
@@ -260,7 +262,10 @@ impl BoardApp {
                 UiInput::Key(UiKey::Character('r')) => return self.retry_persistence(),
                 UiInput::Key(UiKey::Character('w')) => return self.export_recovery(ids, clock),
                 UiInput::Resize { .. } => {}
-                UiInput::Key(_) | UiInput::Paste(_) | UiInput::Pointer(_) => return Vec::new(),
+                UiInput::Key(_)
+                | UiInput::Paste(_)
+                | UiInput::PasteAnnotated(_)
+                | UiInput::Pointer(_) => return Vec::new(),
             }
         }
         match input {
@@ -270,7 +275,8 @@ impl BoardApp {
                 Vec::new()
             }
             UiInput::Pointer(pointer) => self.handle_pointer(pointer, ids, clock),
-            UiInput::Paste(content) => self.paste(content, ids, clock),
+            UiInput::Paste(content) => self.paste_payload(PastePayload::text(content), ids, clock),
+            UiInput::PasteAnnotated(payload) => self.paste_payload(payload, ids, clock),
             UiInput::Key(key) => match self.interaction_mode() {
                 InteractionMode::Board => self.handle_board_key(key, ids, clock),
                 InteractionMode::Edit { .. } => self.handle_edit_key(key, ids, clock),
@@ -344,18 +350,19 @@ impl BoardApp {
 
     fn create(
         &mut self,
-        content: String,
+        payload: PastePayload,
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        if content.is_empty() {
+        if payload.content.is_empty() {
             return self.start_draft(ids, clock);
         }
         self.discard_draft();
         let effects = self.reduce(Action::CreateThought {
             thought_id: ids.thought_id(),
             operation_id: ids.operation_id(),
-            content,
+            content: payload.content,
+            annotations: payload.annotations,
             insertion_index: None,
             at: clock.now(),
         });

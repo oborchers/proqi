@@ -9,7 +9,7 @@ use crate::{
     },
 };
 
-use super::{BoardApp, UiKey};
+use super::{BoardApp, PastePayload, UiKey};
 use crate::ui::settings::BoardCommand;
 
 impl BoardApp {
@@ -49,7 +49,7 @@ impl BoardApp {
         clock: &impl Clock,
     ) -> Vec<Effect> {
         match self.settings.keybindings.command(character) {
-            Some(BoardCommand::New) => self.create(String::new(), ids, clock),
+            Some(BoardCommand::New) => self.create(PastePayload::text(String::new()), ids, clock),
             Some(BoardCommand::Edit) => {
                 self.enter_edit();
                 Vec::new()
@@ -167,23 +167,24 @@ impl BoardApp {
         effects
     }
 
-    pub(super) fn paste(
+    pub(super) fn paste_payload(
         &mut self,
-        content: String,
+        payload: PastePayload,
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
         if self.has_draft() {
-            self.apply_edit(EditCommand::Paste(content));
+            self.set_draft_annotations(payload.annotations.clone());
+            self.apply_annotated_edit(EditCommand::Paste(payload.content), &payload.annotations);
             self.persist_draft(ids, clock)
         } else if matches!(self.state.mode, InteractionMode::Board) {
-            if content.is_empty() {
+            if payload.content.is_empty() {
                 return Vec::new();
             }
-            self.create(content, ids, clock)
+            self.create(payload, ids, clock)
         } else {
             let mut effects = self.flush_pending_edit(ids, clock);
-            self.apply_edit(EditCommand::Paste(content));
+            self.apply_annotated_edit(EditCommand::Paste(payload.content), &payload.annotations);
             effects.extend(self.flush_pending_edit(ids, clock));
             effects
         }

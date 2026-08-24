@@ -409,7 +409,7 @@ fn drain_external(
                     &clock,
                 )
             }
-            ExternalResult::Read { request_id, result } => app.complete_clipboard_read(
+            ExternalResult::Read { request_id, result } => app.complete_clipboard_read_payload(
                 request_id,
                 result.map_err(|_| FailureCode::ClipboardFailed),
                 ids,

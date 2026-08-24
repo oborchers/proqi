@@ -2,6 +2,11 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::{
+    domain::{ContentAnnotation, ContentAnnotationKind},
+    ui::PastePayload,
+};
+
 pub(super) fn normalize_existing_files(content: &str) -> Option<String> {
     let trimmed = content.trim();
     if trimmed.is_empty() {
@@ -32,6 +37,63 @@ pub(super) fn normalize_existing_files(content: &str) -> Option<String> {
         .map(|token| existing_file(token))
         .collect::<Option<Vec<_>>>()?;
     Some(display_paths(&paths))
+}
+
+pub(super) fn annotate_existing_files(content: &str) -> Option<PastePayload> {
+    let content = normalize_existing_files(content)?;
+    let mut start = 0;
+    let annotations = content
+        .split('\n')
+        .map(|path| {
+            let end = start + path.len();
+            let annotation = ContentAnnotation {
+                start,
+                end,
+                kind: ContentAnnotationKind::Attachment {
+                    image: is_image_path(Path::new(path)),
+                    display_name: Path::new(path)
+                        .file_name()
+                        .and_then(|name| name.to_str())
+                        .unwrap_or(path)
+                        .to_owned(),
+                },
+            };
+            start = end.saturating_add(1);
+            annotation
+        })
+        .collect();
+    Some(PastePayload::annotated(content, annotations))
+}
+
+pub(super) fn attachment_payload(path: String, image: bool) -> PastePayload {
+    let display_name = Path::new(&path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or(&path)
+        .to_owned();
+    let end = path.len();
+    PastePayload::annotated(
+        path,
+        vec![ContentAnnotation {
+            start: 0,
+            end,
+            kind: ContentAnnotationKind::Attachment {
+                image,
+                display_name,
+            },
+        }],
+    )
+}
+
+fn is_image_path(path: &Path) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| {
+            matches!(
+                extension.to_ascii_lowercase().as_str(),
+                "avif" | "bmp" | "gif" | "heic" | "jpeg" | "jpg" | "png" | "tiff" | "webp"
+            )
+        })
 }
 
 fn existing_file(value: &str) -> Option<PathBuf> {
@@ -137,7 +199,9 @@ fn display_paths(paths: &[PathBuf]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::normalize_existing_files;
+    use crate::domain::ContentAnnotationKind;
+
+    use super::{annotate_existing_files, normalize_existing_files};
 
     #[test]
     fn file_urls_quotes_escapes_and_unicode_are_normalized_only_when_real() {
@@ -176,6 +240,17 @@ mod tests {
             normalize_existing_files(&format!("{}\n{}", first.display(), second.display())),
             Some(format!("{}\n{}", first.display(), second.display()))
         );
+        let payload =
+            annotate_existing_files(&format!("{}\n{}", first.display(), second.display()))
+                .expect("annotated files");
+        assert!(matches!(
+            payload.annotations[0].kind,
+            ContentAnnotationKind::Attachment { image: true, .. }
+        ));
+        assert!(matches!(
+            payload.annotations[1].kind,
+            ContentAnnotationKind::Attachment { image: false, .. }
+        ));
     }
 
     #[test]

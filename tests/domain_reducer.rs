@@ -50,6 +50,7 @@ impl Fixture {
                 thought_id,
                 operation_id,
                 content: content.to_owned(),
+                annotations: Vec::new(),
                 insertion_index: None,
                 at,
             },

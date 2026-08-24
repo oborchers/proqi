@@ -17,9 +17,9 @@ use proqi::{
     },
     application::{Action, AppState, Effect, reduce},
     domain::{
-        BoardMutation, BoardOperation, BoardOperationKind, Direction, IntegrationContext,
-        OperationSequence, Session, SessionBoard, TextPosition, ThoughtId, ThoughtPosition,
-        Timestamp, UndoScope,
+        BoardMutation, BoardOperation, BoardOperationKind, ContentAnnotation,
+        ContentAnnotationKind, Direction, IntegrationContext, OperationSequence, Session,
+        SessionBoard, TextPosition, ThoughtId, ThoughtPosition, Timestamp, UndoScope,
     },
     ports::{
         environment::IdGenerator,
@@ -111,6 +111,7 @@ fn create_thought(
             thought_id,
             operation_id: ids.operation_id(),
             content: content.to_owned(),
+            annotations: Vec::new(),
             insertion_index: None,
             at: Timestamp::from_millis(at),
         },

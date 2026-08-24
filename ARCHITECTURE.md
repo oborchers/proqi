@@ -332,10 +332,10 @@ event-sourced system.
 
 - `sessions`: identity, optional name, original and last-opened directories,
   timestamps, last durable operation sequence, and deletion state.
-- `thoughts`: session, current content, integer position, timestamps, collapse
-  preference, and deletion state.
+- `thoughts`: session, exact current content, validated presentation annotations,
+  integer position, timestamps, collapse preference, and deletion state.
 - `thought_revisions`: coalesced text revisions with enough data to restore the
-  previous and next content and cursor state.
+  previous and next content, annotations, and cursor state.
 - `operations`: ordered structural operations and their inverse payloads for
   persistent undo and redo.
 - `integration_context`: optional last-known terminal and verified agent
@@ -358,6 +358,8 @@ ordinary tables.
 - Soft deletion remains recoverable until explicit pruning.
 - Only the holder of the session lease may mutate that session.
 - All timestamps are stored as UTC integers and rendered in local time.
+- Presentation annotations are sorted, non-overlapping UTF-8 byte ranges within
+  canonical thought content. They never replace or truncate that content.
 
 ### Migrations and recovery
 
@@ -495,6 +497,15 @@ line commands operate on the text model and are independent of visual wrapping.
 Bracketed paste is one payload and one undoable edit. When no thought is
 selected, paste creates and focuses a new thought. The application never tries
 to split a paste heuristically.
+
+The normalized paste payload carries exact text plus optional typed provenance.
+Attachment annotations retain only presentation-safe metadata and byte ranges;
+the absolute path remains the canonical text. Large-paste annotations retain
+derived line and grapheme counts. Board rendering substitutes folded labels in
+a transient projection, while the editor, clipboard, recovery, CLI, search,
+and integration boundaries continue to consume canonical content. Edits rebase
+unaffected ranges and dissolve overlapping ranges. Revisions persist both sides
+of the annotation change so undo and redo remain restart-safe.
 
 ## Herdr integration
 

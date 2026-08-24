@@ -2,7 +2,7 @@
 
 use crate::{
     application::{Action, AppState, Effect, InteractionMode},
-    domain::{SessionBoard, Thought, ThoughtId, ThoughtPosition, Timestamp},
+    domain::{ContentAnnotation, SessionBoard, Thought, ThoughtId, ThoughtPosition, Timestamp},
     ports::environment::{Clock, IdGenerator},
 };
 
@@ -12,6 +12,7 @@ pub(super) struct DraftState {
     pub(super) thought_id: ThoughtId,
     insertion_index: usize,
     created_at: Timestamp,
+    annotations: Vec<ContentAnnotation>,
 }
 
 impl BoardApp {
@@ -31,6 +32,7 @@ impl BoardApp {
             thought_id,
             insertion_index: self.state.insertion_index,
             created_at: clock.now(),
+            annotations: Vec::new(),
         });
         self.manual_board_scroll = false;
         self.layout = None;
@@ -57,6 +59,7 @@ impl BoardApp {
             thought_id,
             operation_id: ids.operation_id(),
             content,
+            annotations: draft.annotations.clone(),
             insertion_index: Some(insertion_index),
             at: clock.now(),
         });
@@ -80,6 +83,12 @@ impl BoardApp {
             .is_some_and(|draft| draft.thought_id == thought_id)
     }
 
+    pub(super) fn set_draft_annotations(&mut self, annotations: Vec<ContentAnnotation>) {
+        if let Some(draft) = &mut self.draft {
+            draft.annotations = annotations;
+        }
+    }
+
     pub(in crate::ui) fn content_for_render(&self, thought_id: ThoughtId) -> Option<String> {
         if self.is_draft(thought_id) {
             return self.editor_snapshot().map(|snapshot| snapshot.content);
@@ -87,7 +96,14 @@ impl BoardApp {
         self.state
             .board
             .thought(thought_id)
-            .map(|thought| thought.content.clone())
+            .map(|thought| {
+                if matches!(self.interaction_mode(), InteractionMode::Edit { thought_id: active } if active == thought_id)
+                {
+                    thought.content.clone()
+                } else {
+                    crate::ui::annotations::presentation(&thought.content, &thought.annotations)
+                }
+            })
     }
 
     pub(super) fn layout_state_with_draft(&self) -> AppState {
@@ -103,14 +119,18 @@ impl BoardApp {
                 thought.position = ThoughtPosition::new(thought.position.get().saturating_add(1));
             }
         }
-        thoughts.push(Thought::new(
+        let mut thought = Thought::new(
             draft.thought_id,
             self.state.board.session.id,
             self.editor_snapshot()
                 .map_or_else(String::new, |snapshot| snapshot.content),
             ThoughtPosition::new(u32::try_from(draft.insertion_index).unwrap_or(u32::MAX)),
             draft.created_at,
-        ));
+        );
+        if thought.set_annotations(draft.annotations.clone()).is_err() {
+            return self.state.clone();
+        }
+        thoughts.push(thought);
         let Ok(board) = SessionBoard::new(self.state.board.session.clone(), thoughts) else {
             return self.state.clone();
         };

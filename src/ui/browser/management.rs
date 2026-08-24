@@ -72,6 +72,14 @@ impl SessionBrowser {
                 }
                 BrowserAction::Continue
             }
+            UiInput::PasteAnnotated(payload) => {
+                if let Some(rename) = &mut self.rename {
+                    rename
+                        .value
+                        .push_str(&payload.content.replace(['\r', '\n'], " "));
+                }
+                BrowserAction::Continue
+            }
             UiInput::Key(_) | UiInput::Resize { .. } | UiInput::Pointer(_) => {
                 BrowserAction::Continue
             }

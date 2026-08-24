@@ -120,9 +120,10 @@ fn translate(event: Event) -> Option<UiInput> {
         Event::Key(key) if matches!(key.kind, KeyEventKind::Press | KeyEventKind::Repeat) => {
             translate_key(key).map(UiInput::Key)
         }
-        Event::Paste(content) => Some(UiInput::Paste(
-            super::path_import::normalize_existing_files(&content).unwrap_or(content),
-        )),
+        Event::Paste(content) => Some(
+            super::path_import::annotate_existing_files(&content)
+                .map_or_else(|| UiInput::Paste(content), UiInput::PasteAnnotated),
+        ),
         Event::Resize(width, height) => Some(UiInput::Resize { width, height }),
         Event::Mouse(mouse) => translate_mouse(mouse).map(UiInput::Pointer),
         Event::FocusGained | Event::FocusLost | Event::Key(_) => None,

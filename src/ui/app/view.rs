@@ -101,7 +101,7 @@ impl BoardApp {
 
     /// Recompute one authoritative frame layout and reflow the active editor.
     pub fn prepare_frame(&mut self, area: Rect) -> LayoutSnapshot {
-        let mut layout_state = self.layout_state_with_draft();
+        let mut layout_state = self.presentation_state();
         if self.manual_board_scroll {
             layout_state.focused_thought = None;
         }
@@ -158,5 +158,29 @@ impl BoardApp {
             0
         };
         layout.configure_overlay(palette_items.max(search_items), preferred_rows);
+    }
+
+    fn presentation_state(&self) -> crate::application::AppState {
+        let mut state = self.layout_state_with_draft();
+        let active = self.active_thought_id();
+        let editing = self.interaction_mode();
+        let ids = state
+            .board
+            .thoughts()
+            .iter()
+            .map(|thought| thought.id)
+            .collect::<Vec<_>>();
+        for id in ids {
+            if matches!(editing, InteractionMode::Edit { thought_id } if Some(thought_id) == active && thought_id == id)
+            {
+                continue;
+            }
+            if let Some(thought) = state.board.thought_mut(id) {
+                thought.content =
+                    crate::ui::annotations::presentation(&thought.content, &thought.annotations);
+                thought.annotations.clear();
+            }
+        }
+        state
     }
 }

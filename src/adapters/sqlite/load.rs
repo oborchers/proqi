@@ -4,8 +4,8 @@ use rusqlite::{Connection, OptionalExtension};
 
 use crate::{
     domain::{
-        BoardOperation, IntegrationContext, Session, SessionBoard, SessionId, Thought, ThoughtId,
-        ThoughtPosition, ThoughtRevision, Timestamp,
+        BoardOperation, ContentAnnotation, IntegrationContext, Session, SessionBoard, SessionId,
+        Thought, ThoughtId, ThoughtPosition, ThoughtRevision, Timestamp,
     },
     ports::store::{SessionSnapshot, StoreError},
 };
@@ -138,7 +138,7 @@ fn load_thoughts(
 ) -> Result<Vec<Thought>, StoreError> {
     let mut statement = connection
         .prepare(
-            "SELECT id, session_id, content, position, created_at, updated_at, collapsed, deleted_at
+            "SELECT id, session_id, content, annotations_json, position, created_at, updated_at, collapsed, deleted_at
              FROM thoughts WHERE session_id = ?1 ORDER BY deleted_at IS NOT NULL, position, id",
         )
         .map_err(map_sql_error)?;
@@ -148,22 +148,28 @@ fn load_thoughts(
                 row.get::<_, Vec<u8>>(0)?,
                 row.get::<_, Vec<u8>>(1)?,
                 row.get::<_, String>(2)?,
-                row.get::<_, i64>(3)?,
+                row.get::<_, String>(3)?,
                 row.get::<_, i64>(4)?,
                 row.get::<_, i64>(5)?,
                 row.get::<_, i64>(6)?,
-                row.get::<_, Option<i64>>(7)?,
+                row.get::<_, i64>(7)?,
+                row.get::<_, Option<i64>>(8)?,
             ))
         })
         .map_err(map_sql_error)?;
     let mut thoughts = Vec::new();
     for row in rows {
-        let (id, owner, content, position, created, updated, collapsed, deleted) =
+        let (id, owner, content, annotations, position, created, updated, collapsed, deleted) =
             row.map_err(map_sql_error)?;
+        let annotations: Vec<ContentAnnotation> = serde_json::from_str(&annotations)
+            .map_err(|error| StoreError::Corrupt(error.to_string()))?;
+        crate::domain::validate_annotations(&content, &annotations)
+            .map_err(|error| StoreError::Corrupt(error.to_string()))?;
         thoughts.push(Thought {
             id: thought_id_from_blob(id)?,
             session_id: session_id_from_blob(owner)?,
             content,
+            annotations,
             position: ThoughtPosition::new(i64_to_u32(position)?),
             created_at: Timestamp::from_millis(created),
             updated_at: Timestamp::from_millis(updated),

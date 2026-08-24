@@ -23,6 +23,8 @@ fn seeded_history(
             revision_id: ids.revision_id(),
             before_content: "first".to_owned(),
             after_content: "first edited\r\n日本語".to_owned(),
+            before_annotations: Vec::new(),
+            after_annotations: Vec::new(),
             before_cursor: TextPosition::new(0, 5),
             after_cursor: TextPosition::new(1, 3),
             at: Timestamp::from_millis(5),
@@ -183,6 +185,7 @@ fn commits_are_idempotent_but_identity_reuse_is_rejected() {
             thought_id,
             operation_id,
             content: "same request".to_owned(),
+            annotations: Vec::new(),
             insertion_index: None,
             at: Timestamp::from_millis(2),
         },
@@ -330,4 +333,69 @@ fn integration_context_round_trips_without_conversation_content() {
             .integration_context,
         Some(context)
     );
+}
+
+#[test]
+fn folded_provenance_and_editor_undo_survive_reopen() {
+    let fixture = DatabaseFixture::new();
+    let mut store = fixture.open();
+    let mut ids = FakeIdGenerator::new(1_725_000_000_000);
+    let mut state = session_state(&mut ids, &test_path("proqi-annotations"));
+    let session_id = state.board.session.id;
+    store
+        .commit(&OperationBatch::CreateSession(state.board.session.clone()))
+        .expect("session");
+    let thought_id = ids.thought_id();
+    let content = "/private/tmp/screenshot.png".to_owned();
+    let annotation = ContentAnnotation {
+        start: 0,
+        end: content.len(),
+        kind: ContentAnnotationKind::Attachment {
+            image: true,
+            display_name: "screenshot.png".to_owned(),
+        },
+    };
+    let create = one_effect(
+        &mut state,
+        Action::CreateThought {
+            thought_id,
+            operation_id: ids.operation_id(),
+            content: content.clone(),
+            annotations: vec![annotation.clone()],
+            insertion_index: None,
+            at: Timestamp::from_millis(2),
+        },
+    );
+    persist_effect(&mut store, &create);
+    let edit = one_effect(
+        &mut state,
+        Action::EditThought {
+            thought_id,
+            revision_id: ids.revision_id(),
+            before_content: content.clone(),
+            after_content: format!("{content}!"),
+            before_annotations: vec![annotation.clone()],
+            after_annotations: Vec::new(),
+            before_cursor: TextPosition::new(0, 0),
+            after_cursor: TextPosition::new(0, 1),
+            at: Timestamp::from_millis(3),
+        },
+    );
+    persist_effect(&mut store, &edit);
+    let undo = one_effect(
+        &mut state,
+        Action::Undo {
+            operation_id: ids.operation_id(),
+            scope: UndoScope::Editor { thought_id },
+            at: Timestamp::from_millis(4),
+        },
+    );
+    persist_effect(&mut store, &undo);
+    drop(store);
+
+    let snapshot = fixture.open().load_session(session_id).expect("reopen");
+    let restored = snapshot.board.thought(thought_id).expect("thought");
+    assert_eq!(restored.content, content);
+    assert_eq!(restored.annotations, [annotation]);
+    assert_eq!(snapshot.editor_history_cursors, [(thought_id, 0)]);
 }

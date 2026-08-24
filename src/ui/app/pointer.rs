@@ -61,7 +61,9 @@ impl BoardApp {
                 self.focus(thought_id);
                 self.collapse(ids, clock)
             }
-            Some(HitTarget::Insert) => self.create(String::new(), ids, clock),
+            Some(HitTarget::Insert) => {
+                self.create(crate::ui::PastePayload::text(String::new()), ids, clock)
+            }
             Some(HitTarget::Search) => {
                 self.open_search();
                 Vec::new()

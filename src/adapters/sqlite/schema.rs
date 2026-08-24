@@ -30,6 +30,7 @@ CREATE TABLE thoughts (
     id BLOB PRIMARY KEY CHECK (length(id) = 16),
     session_id BLOB NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
     content TEXT NOT NULL,
+    annotations_json TEXT NOT NULL DEFAULT '[]',
     position INTEGER NOT NULL CHECK (position >= 0),
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
@@ -90,6 +91,13 @@ CREATE VIRTUAL TABLE session_search USING fts5(
 );
 
 INSERT INTO schema_meta(singleton, schema_version, storage_protocol, migrated_at)
-VALUES (1, 1, 1, 0);
+VALUES (1, 2, 2, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (1, 0);
+INSERT INTO migration_history(version, applied_at) VALUES (2, 0);
+";
+
+pub(super) const MIGRATION_2: &str = r"
+ALTER TABLE thoughts ADD COLUMN annotations_json TEXT NOT NULL DEFAULT '[]';
+UPDATE schema_meta SET schema_version = 2, storage_protocol = 2;
+INSERT INTO migration_history(version, applied_at) VALUES (2, 0);
 ";

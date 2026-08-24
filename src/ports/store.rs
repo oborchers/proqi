@@ -9,9 +9,9 @@ use crate::domain::{
 };
 
 /// Current storage schema understood by this binary.
-pub const SUPPORTED_SCHEMA_VERSION: u32 = 1;
+pub const SUPPORTED_SCHEMA_VERSION: u32 = 2;
 /// Current local storage protocol understood by this binary.
-pub const STORAGE_PROTOCOL_VERSION: u32 = 1;
+pub const STORAGE_PROTOCOL_VERSION: u32 = 2;
 
 /// Whether this process proved it holds the exclusive schema lease.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

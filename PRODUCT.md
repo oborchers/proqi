@@ -293,6 +293,19 @@ Bracketed paste is treated as one semantic input event.
   durable PNG inside the current Proqi session and inserts its absolute path.
   Proqi never uploads or analyzes the image automatically.
 
+File paths and large pasted context use folded presentation on the board while
+their canonical text remains exact. Images appear as `[Image 1] filename.png`,
+other files as `[File 1] filename.ext`, and context at or above 12 logical lines
+or 1,200 perceived Unicode characters as
+`[Pasted text]  N lines · N characters`. Numbering restarts for each thought.
+Entering edit mode reveals the exact path or text. Copy, cut, export, search,
+recovery, and agent submission always use that exact canonical content.
+
+Fold metadata is durable and participates in editor undo and redo. Editing
+inside a folded range dissolves that range safely, while edits outside it
+preserve and rebase its offsets. Restarting the application restores the same
+folded presentation and undo state.
+
 Creating and populating a thought through one paste is one undoable operation.
 If clipboard access fails, `Ctrl+V` reports the failure without creating an
 empty thought. Bracketed paste produces the same result without depending on a

@@ -19,6 +19,7 @@ use crate::{
         clipboard::{Clipboard, ClipboardContent, ClipboardError, ClipboardWrite},
         recovery::{RecoveryDocument, RecoveryError, RecoveryExporter},
     },
+    ui::PastePayload,
 };
 
 use super::TerminalError;
@@ -53,7 +54,7 @@ pub(super) enum ExternalResult {
     },
     Read {
         request_id: RequestId,
-        result: Result<String, ExternalReadError>,
+        result: Result<PastePayload, ExternalReadError>,
     },
     Exported {
         request_id: RequestId,
@@ -194,16 +195,18 @@ fn read_clipboard(
     clipboard: &mut impl Clipboard,
     attachments: &mut impl AttachmentStore,
     request_id: RequestId,
-) -> Result<String, ExternalReadError> {
+) -> Result<PastePayload, ExternalReadError> {
     match clipboard.read().map_err(|_| ExternalReadError::Clipboard)? {
         ClipboardContent::Text(content) => {
-            Ok(super::path_import::normalize_existing_files(&content).unwrap_or(content))
+            Ok(super::path_import::annotate_existing_files(&content)
+                .unwrap_or_else(|| PastePayload::text(content)))
         }
         ClipboardContent::Image(image) => attachments
             .save_clipboard_image(request_id, &image)
             .map_err(|_| ExternalReadError::Attachment)?
             .into_os_string()
             .into_string()
+            .map(|path| super::path_import::attachment_payload(path, true))
             .map_err(|_| ExternalReadError::NonUnicodePath),
     }
 }

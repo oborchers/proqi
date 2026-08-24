@@ -2,7 +2,7 @@
 
 use crate::{
     application::{Action, Effect, reduce},
-    domain::ThoughtId,
+    domain::{ContentAnnotation, ThoughtId},
     ports::{
         editor::{EditCommand, EditorSnapshot},
         environment::{Clock, IdGenerator},
@@ -10,15 +10,26 @@ use crate::{
 };
 
 use super::BoardApp;
+use crate::ui::annotations;
 
 pub(super) struct PendingEdit {
     thought_id: ThoughtId,
     before: EditorSnapshot,
     after: EditorSnapshot,
+    before_annotations: Vec<ContentAnnotation>,
+    after_annotations: Vec<ContentAnnotation>,
 }
 
 impl BoardApp {
     pub(super) fn apply_edit(&mut self, command: EditCommand) {
+        self.apply_annotated_edit(command, &[]);
+    }
+
+    pub(super) fn apply_annotated_edit(
+        &mut self,
+        command: EditCommand,
+        inserted_annotations: &[ContentAnnotation],
+    ) {
         let edit = self.editor.as_mut().and_then(|(thought_id, editor)| {
             let before = editor.snapshot();
             let outcome = editor.apply(command);
@@ -33,13 +44,37 @@ impl BoardApp {
             self.edit_generation = self.edit_generation.wrapping_add(1);
             return;
         }
+        let current_annotations = self
+            .pending_edit
+            .as_ref()
+            .filter(|pending| pending.thought_id == thought_id)
+            .map_or_else(
+                || {
+                    self.state
+                        .board
+                        .thought(thought_id)
+                        .map_or_else(Vec::new, |thought| thought.annotations.clone())
+                },
+                |pending| pending.after_annotations.clone(),
+            );
+        let after_annotations = annotations::rebase(
+            &before.content,
+            &after.content,
+            &current_annotations,
+            inserted_annotations,
+        );
         match &mut self.pending_edit {
-            Some(pending) if pending.thought_id == thought_id => pending.after = after,
+            Some(pending) if pending.thought_id == thought_id => {
+                pending.after = after;
+                pending.after_annotations = after_annotations;
+            }
             _ => {
                 self.pending_edit = Some(PendingEdit {
                     thought_id,
                     before,
                     after,
+                    before_annotations: current_annotations,
+                    after_annotations,
                 });
             }
         }
@@ -60,6 +95,8 @@ impl BoardApp {
             revision_id: ids.revision_id(),
             before_content: pending.before.content.clone(),
             after_content: pending.after.content.clone(),
+            before_annotations: pending.before_annotations.clone(),
+            after_annotations: pending.after_annotations.clone(),
             before_cursor: pending.before.cursor,
             after_cursor: pending.after.cursor,
             at: clock.now(),

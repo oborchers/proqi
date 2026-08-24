@@ -26,6 +26,7 @@ proptest! {
                 thought_id,
                 operation_id: ids.operation_id(),
                 content: index.to_string(),
+                annotations: Vec::new(),
                 insertion_index: None,
                 at: Timestamp::from_millis(i64::from(index) + 2),
             }).expect("create");

@@ -4,7 +4,8 @@ use rusqlite::{OptionalExtension, Transaction, params};
 
 use crate::{
     domain::{
-        BoardMutation, BoardOperation, OperationSequence, Session, ThoughtRevision, Timestamp,
+        BoardMutation, BoardOperation, ContentAnnotation, OperationSequence, Session,
+        ThoughtRevision, Timestamp,
     },
     ports::store::{CommitReceipt, DurableIdentity, OperationBatch, StoreError},
 };
@@ -242,19 +243,32 @@ fn revision_cursor(
     transaction: &Transaction<'_>,
     revision: &ThoughtRevision,
 ) -> Result<i64, StoreError> {
-    let current: Option<(Vec<u8>, String, i64, Option<i64>)> = transaction
+    type CurrentRevisionRow = (Vec<u8>, String, String, i64, Option<i64>);
+    let current: Option<CurrentRevisionRow> = transaction
         .query_row(
-            "SELECT session_id, content, editor_history_cursor, deleted_at FROM thoughts WHERE id = ?1",
+            "SELECT session_id, content, annotations_json, editor_history_cursor, deleted_at
+             FROM thoughts WHERE id = ?1",
             [revision.thought_id.database_bytes().as_slice()],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                ))
+            },
         )
         .optional()
         .map_err(map_sql_error)?;
-    let (stored_session, content, cursor, deleted_at) =
+    let (stored_session, content, annotations_json, cursor, deleted_at) =
         current.ok_or_else(|| StoreError::NotFound(revision.thought_id.to_string()))?;
+    let annotations: Vec<ContentAnnotation> = serde_json::from_str(&annotations_json)
+        .map_err(|error| StoreError::Corrupt(error.to_string()))?;
     if session_id_from_blob(stored_session)? != revision.session_id
         || deleted_at.is_some()
         || content != revision.before_content
+        || annotations != revision.before_annotations
     {
         return Err(StoreError::Conflict(format!(
             "revision precondition failed: {}",
@@ -270,6 +284,8 @@ fn persist_revision(
     cursor: i64,
     request_json: &str,
 ) -> Result<(), StoreError> {
+    let annotations_json = serde_json::to_string(&revision.after_annotations)
+        .map_err(|error| StoreError::Serialization(error.to_string()))?;
     transaction
         .execute(
             "DELETE FROM thought_revisions WHERE thought_id = ?1 AND history_index >= ?2",
@@ -294,12 +310,16 @@ fn persist_revision(
         .map_err(map_sql_error)?;
     transaction
         .execute(
-            "UPDATE thoughts SET content = ?2, updated_at = ?3, editor_history_cursor = ?4 WHERE id = ?1",
+            "UPDATE thoughts SET content = ?2, annotations_json = ?3, updated_at = ?4,
+                    editor_history_cursor = ?5 WHERE id = ?1",
             params![
                 revision.thought_id.database_bytes().as_slice(),
                 revision.after_content,
+                annotations_json,
                 revision.created_at.as_millis(),
-                cursor.checked_add(1).ok_or_else(|| StoreError::Corrupt("editor cursor overflow".to_owned()))?,
+                cursor
+                    .checked_add(1)
+                    .ok_or_else(|| StoreError::Corrupt("editor cursor overflow".to_owned()))?,
             ],
         )
         .map_err(map_sql_error)?;

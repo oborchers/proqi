@@ -288,6 +288,12 @@ impl SessionBrowser {
                 self.refilter();
                 BrowserAction::Continue
             }
+            UiInput::PasteAnnotated(payload) => {
+                self.query
+                    .push_str(&payload.content.replace(['\r', '\n'], " "));
+                self.refilter();
+                BrowserAction::Continue
+            }
             UiInput::Pointer(pointer) => self.handle_pointer(pointer),
             UiInput::Resize { .. } | UiInput::Key(_) => BrowserAction::Continue,
         }
