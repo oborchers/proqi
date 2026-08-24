@@ -54,7 +54,7 @@ impl Fixture {
             .expect("visible mouse control");
         self.app.handle(
             UiInput::Pointer(PointerInput {
-                column: area.x,
+                column: area.right().saturating_sub(1),
                 row: area.y,
                 kind: PointerKind::Down(PointerButton::Left),
             }),
@@ -109,12 +109,12 @@ fn search_control_and_result_are_mouse_operable() {
     let mut fixture = Fixture::new();
     assert!(
         fixture
-            .click(HitTarget::Search, Size::new(40, 8))
+            .click(HitTarget::Search, Size::new(80, 8))
             .is_empty()
     );
     assert!(fixture.app.search_view().is_some());
 
-    let layout = fixture.app.prepare_frame(Rect::new(0, 0, 40, 8));
+    let layout = fixture.app.prepare_frame(Rect::new(0, 0, 80, 8));
     let result = layout
         .overlay
         .expect("search overlay")

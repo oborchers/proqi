@@ -1,5 +1,7 @@
 //! Deterministic one-column board renderer.
 
+mod chrome;
+
 use ratatui_core::{
     style::{Modifier, Style},
     terminal::Frame,
@@ -13,18 +15,16 @@ use ratatui_widgets::{
 };
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::{
-    application::{DurabilityState, InteractionMode},
-    ports::text_layout::wrap_rows,
-};
+use crate::{application::InteractionMode, ports::text_layout::wrap_rows};
 
 use super::{BoardApp, HitTarget, LayoutSnapshot, Theme, ThoughtLayout, layout::OverlayLayout};
 
 /// Render the complete board into one terminal frame.
 pub fn render(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, theme: &Theme) {
     frame.render_widget(Block::default().style(theme.base_style()), layout.area);
+    chrome::render_header(frame, app, layout, theme);
     render_board(frame, app, layout, theme);
-    render_footer(frame, app, layout, theme);
+    chrome::render_footer(frame, app, layout, theme);
     if let Some((query, entries, selected)) = app.search_view() {
         if let Some(overlay) = &layout.overlay {
             render_picker(
@@ -66,13 +66,6 @@ fn render_board(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, 
     if layout.board.width == 0 || layout.board.height == 0 {
         return;
     }
-    if layout.thoughts.is_empty() {
-        frame.render_widget(
-            Paragraph::new("  +  create a thought with n or paste text")
-                .style(Style::default().fg(theme.muted)),
-            layout.board,
-        );
-    }
     for thought_layout in &layout.thoughts {
         let Some(thought) = app.state.board.thought(thought_layout.thought_id) else {
             continue;
@@ -83,12 +76,19 @@ fn render_board(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, 
             Some(HitTarget::Thought(id) | HitTarget::DragHandle(id) | HitTarget::Overflow(id))
                 if id == thought.id
         );
+        render_separator(frame, thought_layout, theme);
+        if focused {
+            frame.render_widget(
+                Block::default().style(theme.focused_style()),
+                thought_layout.area,
+            );
+        }
         render_gutter(frame, thought_layout, focused, hovered, theme);
         if matches!(app.state.mode, InteractionMode::Edit { thought_id } if thought_id == thought.id)
         {
-            render_editor(frame, app, thought_layout, focused, theme);
+            render_editor(frame, app, thought_layout, theme);
         } else {
-            render_thought(frame, &thought.content, thought_layout, theme);
+            render_thought(frame, &thought.content, thought_layout, focused, theme);
         }
     }
     if let Some(insert) = layout.insert {
@@ -99,8 +99,25 @@ fn render_board(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, 
         } else {
             Style::default().fg(theme.accent)
         };
-        frame.render_widget(Paragraph::new("  +").style(style), insert);
+        let label =
+            if app.hovered() == Some(HitTarget::Insert) || app.state.focused_thought.is_none() {
+                "  + New thought"
+            } else {
+                "  +"
+            };
+        frame.render_widget(Paragraph::new(label).style(style), insert);
     }
+}
+
+fn render_separator(frame: &mut Frame<'_>, layout: &ThoughtLayout, theme: &Theme) {
+    let Some(area) = layout.separator_before else {
+        return;
+    };
+    frame.render_widget(
+        Paragraph::new("─".repeat(usize::from(area.width)))
+            .style(Style::default().fg(theme.divider)),
+        area,
+    );
 }
 
 fn render_gutter(
@@ -127,7 +144,13 @@ fn render_gutter(
     );
 }
 
-fn render_thought(frame: &mut Frame<'_>, content: &str, layout: &ThoughtLayout, theme: &Theme) {
+fn render_thought(
+    frame: &mut Frame<'_>,
+    content: &str,
+    layout: &ThoughtLayout,
+    focused: bool,
+    theme: &Theme,
+) {
     let content_rows =
         usize::from(layout.text_area.height).saturating_sub(usize::from(layout.overflow.is_some()));
     let lines = wrap_rows(content, usize::from(layout.text_area.width.max(1)))
@@ -136,7 +159,9 @@ fn render_thought(frame: &mut Frame<'_>, content: &str, layout: &ThoughtLayout, 
         .map(|row| Line::raw(row.visual.text))
         .collect::<Vec<_>>();
     let mut paragraph = Paragraph::new(Text::from(lines));
-    if layout.hidden_rows > 0 {
+    if focused {
+        paragraph = paragraph.style(Style::default().fg(theme.foreground));
+    } else if layout.hidden_rows > 0 {
         paragraph = paragraph.style(Style::default().fg(theme.muted));
     }
     frame.render_widget(paragraph, layout.text_area);
@@ -153,13 +178,7 @@ fn render_thought(frame: &mut Frame<'_>, content: &str, layout: &ThoughtLayout, 
     }
 }
 
-fn render_editor(
-    frame: &mut Frame<'_>,
-    app: &BoardApp,
-    layout: &ThoughtLayout,
-    focused: bool,
-    theme: &Theme,
-) {
+fn render_editor(frame: &mut Frame<'_>, app: &BoardApp, layout: &ThoughtLayout, theme: &Theme) {
     let Some(snapshot) = app.editor_snapshot() else {
         return;
     };
@@ -171,11 +190,7 @@ fn render_editor(
         .map(|line| editor_line(line, theme))
         .collect::<Vec<_>>();
     frame.render_widget(
-        Paragraph::new(visible).style(Style::default().fg(if focused {
-            theme.accent
-        } else {
-            theme.foreground
-        })),
+        Paragraph::new(visible).style(Style::default().fg(theme.foreground)),
         layout.text_area,
     );
     let cursor_row = cursor_visual_row(&snapshot)
@@ -260,78 +275,6 @@ fn cursor_column(snapshot: &crate::ports::editor::EditorSnapshot, cursor_row: us
                 .collect::<String>();
             crate::ports::text_layout::display_width(&logical)
         })
-}
-
-fn render_footer(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, theme: &Theme) {
-    let durability = match app.state.durability {
-        DurabilityState::Durable { .. } if app.has_pending_edit() => "saving",
-        DurabilityState::Durable { .. } => "saved",
-        DurabilityState::Pending { .. } => "saving",
-        DurabilityState::Failed { .. } => "save failed  r retry  w recovery",
-    };
-    let mode = match app.state.mode {
-        InteractionMode::Board => "board",
-        InteractionMode::Edit { .. } => "edit",
-    };
-    let keys = app.keybindings();
-    let text = app.status.as_deref().map_or_else(
-        || {
-            let base = format!(
-                " {mode}  {durability}  {} new  enter edit  {} undo  {} help  {} quit",
-                keys.new, keys.undo, keys.help, keys.quit
-            );
-            app.agent_hint()
-                .map_or(base.clone(), |hint| format!(" {hint}  {base}"))
-        },
-        |status| format!(" {status}"),
-    );
-    let footer_color = if matches!(app.state.durability, DurabilityState::Failed { .. }) {
-        theme.error
-    } else {
-        theme.muted
-    };
-    frame.render_widget(
-        Paragraph::new(text).style(Style::default().fg(footer_color)),
-        layout.footer,
-    );
-    for (target, area) in &layout.controls {
-        let label = match target {
-            HitTarget::Search => format!("[{}]", keys.search),
-            HitTarget::Commands => format!("[{}]", keys.commands),
-            HitTarget::Copy => format!("[{}]", keys.copy),
-            HitTarget::Cut => format!("[{}]", keys.cut),
-            HitTarget::Delete => format!("[{}]", keys.delete),
-            HitTarget::Submit(direction, remove) => {
-                let key = if *remove {
-                    keys.submit_remove
-                } else {
-                    keys.submit
-                };
-                format!("{key}{}", direction_symbol(*direction))
-            }
-            HitTarget::Undo => format!("[{}]", keys.undo),
-            HitTarget::Help => format!("[{}]", keys.help),
-            HitTarget::Quit => format!("[{}]", keys.quit),
-            _ => continue,
-        };
-        let style = if app.hovered() == Some(*target) {
-            Style::default()
-                .fg(theme.accent)
-                .add_modifier(Modifier::REVERSED)
-        } else {
-            Style::default().fg(theme.accent)
-        };
-        frame.render_widget(Paragraph::new(label).style(style), *area);
-    }
-}
-
-const fn direction_symbol(direction: crate::domain::Direction) -> &'static str {
-    match direction {
-        crate::domain::Direction::Up => "↑",
-        crate::domain::Direction::Right => "→",
-        crate::domain::Direction::Down => "↓",
-        crate::domain::Direction::Left => "←",
-    }
 }
 
 fn render_help(frame: &mut Frame<'_>, app: &BoardApp, overlay: &OverlayLayout, theme: &Theme) {

@@ -31,7 +31,7 @@ fn typing_coalesces_until_a_semantic_boundary() {
     }
     assert!(fixture.app.has_pending_edit());
     let terminal = draw(&mut fixture, 40, 8);
-    assert!(text(terminal.backend().buffer()).contains("edit  saving"));
+    assert!(text(terminal.backend().buffer()).contains("edit · saving"));
     let effects = fixture
         .app
         .flush_pending_edit(&mut fixture.ids, &fixture.clock);

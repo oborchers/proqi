@@ -157,6 +157,11 @@ The green focus gutter is the strongest routine visual element. Notes have no
 heading row or decorative card chrome. Whole-thought controls can appear for
 the focused or hovered thought without permanently consuming a row.
 
+A quiet header identifies Proqi, the current session, thought count, and
+durability. A separate footer uses one context row and one labeled-action row,
+with a third transient-status row only when useful space permits. Narrow panes
+shorten or remove secondary labels before any two regions can collide.
+
 ### Revision and operation history
 
 Text revisions preserve editing history within a thought. Structural operations
@@ -243,6 +248,12 @@ Short and medium thoughts therefore remain fully readable in the board. This
 preserves the useful quality of the current Sublime Text scratchpad, where the
 next prompts can be read without opening them one by one.
 
+Adjacent visible thoughts use a deliberate three-row cadence when the viewport
+has room: one blank row, one quiet horizontal rule, and one blank row. Shallow
+panes compress that cadence to the rule alone. The rule belongs to the board
+presentation, is never a card border or mouse target, and is allocated only
+when the following thought can still receive a content row.
+
 ### Long thoughts
 
 A thought collapses only when its natural height would dominate the useful
@@ -303,7 +314,9 @@ equivalent and a stable mouse hit target.
 
 Clicking `+`, clicking the insertion area, or pressing the create-thought key
 creates one blank thought, enters edit mode immediately, and places the cursor
-in the new thought. The user never needs a second action before typing.
+in the new thought. The complete insertion row is clickable and reads
+`+ New thought` while focused or hovered instead of relying on an unexplained
+symbol. The user never needs a second action before typing.
 
 ### Copy, cut, and delete
 

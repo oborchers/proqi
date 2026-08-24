@@ -75,6 +75,15 @@ impl Fixture {
 }
 
 fn draw(fixture: &mut Fixture, width: u16, height: u16) -> Terminal<TestBackend> {
+    draw_theme(fixture, width, height, ThemePreference::Auto)
+}
+
+fn draw_theme(
+    fixture: &mut Fixture,
+    width: u16,
+    height: u16,
+    preference: ThemePreference,
+) -> Terminal<TestBackend> {
     let backend = TestBackend::new(width, height);
     let mut terminal = Terminal::new(backend).expect("terminal");
     terminal
@@ -84,7 +93,7 @@ fn draw(fixture: &mut Fixture, width: u16, height: u16) -> Terminal<TestBackend>
                 frame,
                 &fixture.app,
                 &layout,
-                &Theme::resolve(ThemePreference::Auto, true),
+                &Theme::resolve(preference, true),
             );
         })
         .expect("draw");
@@ -107,8 +116,9 @@ fn empty_board_and_help_have_reviewable_complete_buffers() {
     let mut fixture = Fixture::new();
     let terminal = draw(&mut fixture, 40, 8);
     let rendered = text(terminal.backend().buffer());
-    assert!(rendered.contains("+  create a thought with n or paste"));
-    assert!(rendered.contains("board  saved"));
+    assert!(rendered.contains("+ New thought"));
+    assert!(rendered.contains("proqi"));
+    assert!(rendered.contains("board · saved"));
 
     fixture.input(UiInput::Key(UiKey::Character('?')));
     let terminal = draw(&mut fixture, 40, 8);
@@ -132,12 +142,12 @@ fn multiline_unicode_is_rendered_as_lines_and_cursor_uses_cell_width() {
         .backend_mut()
         .get_cursor_position()
         .expect("cursor position");
-    assert_eq!(cursor.y, 2);
+    assert_eq!(cursor.y, 3);
     assert_eq!(cursor.x, 8);
 
     fixture.app.acknowledge_persistence(sequence, true);
     let terminal = draw(&mut fixture, 40, 10);
-    assert!(text(terminal.backend().buffer()).contains("edit  saved"));
+    assert!(text(terminal.backend().buffer()).contains("edit · saved"));
 }
 
 #[test]
@@ -154,7 +164,7 @@ fn cursor_uses_expanded_tab_cells() {
         .get_cursor_position()
         .expect("cursor position");
     assert_eq!(cursor.x, 6);
-    assert_eq!(cursor.y, 0);
+    assert_eq!(cursor.y, 1);
 }
 
 #[test]
@@ -166,7 +176,7 @@ fn exact_wrap_boundary_keeps_the_terminal_cursor_visible() {
         .backend_mut()
         .get_cursor_position()
         .expect("cursor at wrapped document end");
-    assert_eq!((cursor.x, cursor.y), (2, 1));
+    assert_eq!((cursor.x, cursor.y), (2, 2));
 }
 
 #[test]
@@ -217,18 +227,23 @@ fn pending_and_failed_durability_are_visibly_distinct() {
     let mut fixture = Fixture::new();
     let sequence = fixture.paste("important unsaved text");
     let pending = draw(&mut fixture, 50, 6);
-    assert!(text(pending.backend().buffer()).contains("edit  saving"));
+    assert!(text(pending.backend().buffer()).contains("edit · saving"));
 
     fixture.app.acknowledge_persistence(sequence, false);
     let failed = draw(&mut fixture, 50, 6);
-    assert!(text(failed.backend().buffer()).contains("edit  save failed"));
+    assert!(text(failed.backend().buffer()).contains("save failed"));
 }
 
 #[test]
 fn mouse_can_create_focus_place_cursor_and_open_help() {
     let mut fixture = Fixture::new();
     let _empty = draw(&mut fixture, 40, 8);
-    fixture.pointer(0, 0, PointerKind::Down(PointerButton::Left));
+    let insert = fixture
+        .app
+        .prepare_frame(Rect::new(0, 0, 40, 8))
+        .insert
+        .expect("insert row");
+    fixture.pointer(insert.x, insert.y, PointerKind::Down(PointerButton::Left));
     assert!(matches!(
         fixture.app.state.mode,
         proqi::application::InteractionMode::Edit { .. }
@@ -237,7 +252,12 @@ fn mouse_can_create_focus_place_cursor_and_open_help() {
     fixture.input(UiInput::Key(UiKey::Escape));
 
     let _populated = draw(&mut fixture, 40, 8);
-    fixture.pointer(3, 0, PointerKind::Down(PointerButton::Left));
+    let text_area = fixture.app.prepare_frame(Rect::new(0, 0, 40, 8)).thoughts[0].text_area;
+    fixture.pointer(
+        text_area.x.saturating_add(1),
+        text_area.y,
+        PointerKind::Down(PointerButton::Left),
+    );
     assert_eq!(
         fixture.app.editor_snapshot().expect("editor").cursor,
         proqi::domain::TextPosition::new(0, 1)
@@ -245,7 +265,14 @@ fn mouse_can_create_focus_place_cursor_and_open_help() {
 
     fixture.input(UiInput::Key(UiKey::Escape));
     let _board = draw(&mut fixture, 40, 8);
-    fixture.pointer(35, 7, PointerKind::Down(PointerButton::Left));
+    let help = fixture
+        .app
+        .prepare_frame(Rect::new(0, 0, 40, 8))
+        .controls
+        .into_iter()
+        .find_map(|(target, area)| (target == proqi::ui::HitTarget::Help).then_some(area))
+        .expect("help control");
+    fixture.pointer(help.x, help.y, PointerKind::Down(PointerButton::Left));
     assert!(fixture.app.help);
 }
 
@@ -256,10 +283,25 @@ fn mouse_drag_reorders_thoughts_through_the_visible_gutter() {
         fixture.paste(content);
         fixture.input(UiInput::Key(UiKey::Escape));
     }
-    let _board = draw(&mut fixture, 40, 10);
-    fixture.pointer(0, 0, PointerKind::Down(PointerButton::Left));
-    fixture.pointer(0, 2, PointerKind::Drag(PointerButton::Left));
-    fixture.pointer(0, 2, PointerKind::Up(PointerButton::Left));
+    let board = draw(&mut fixture, 40, 10);
+    let rendered = text(board.backend().buffer());
+    let layout = fixture.app.prepare_frame(Rect::new(0, 0, 40, 10));
+    let separator = layout.thoughts[1]
+        .separator_before
+        .expect("separator geometry");
+    assert!(
+        rendered
+            .lines()
+            .nth(usize::from(separator.y))
+            .expect("separator row")
+            .starts_with("  ─")
+    );
+    assert_eq!(layout.hit_test(separator.x, separator.y), None);
+    let target_row = layout.thoughts[2].gutter.y;
+    let source_row = layout.thoughts[0].gutter.y;
+    fixture.pointer(0, source_row, PointerKind::Down(PointerButton::Left));
+    fixture.pointer(0, target_row, PointerKind::Drag(PointerButton::Left));
+    fixture.pointer(0, target_row, PointerKind::Up(PointerButton::Left));
 
     let contents = fixture
         .app
@@ -297,7 +339,7 @@ fn keyboard_selection_is_logical_and_visible() {
     );
 
     let terminal = draw(&mut fixture, 20, 5);
-    let selected = terminal.backend().buffer()[(5, 0)].modifier;
+    let selected = terminal.backend().buffer()[(5, 1)].modifier;
     assert!(selected.contains(ratatui_core::style::Modifier::REVERSED));
 }
 
@@ -312,7 +354,6 @@ fn command_palette_is_searchable_and_mouse_operable() {
     let rendered = text(terminal.backend().buffer());
     assert!(rendered.contains(":quit"));
     assert!(rendered.contains("Quit Proqi"));
-    assert!(!rendered.contains("New thought"));
 
     fixture.pointer(2, 5, PointerKind::Down(PointerButton::Left));
     assert!(fixture.app.quit);
@@ -388,88 +429,11 @@ fn mouse_wheel_scrolls_editor_without_moving_cursor_or_selection() {
     assert_eq!(after.selection, before.selection);
 }
 
-#[test]
-fn remapped_board_binding_changes_behavior_and_visible_hint() {
-    let mut settings = UiSettings::default();
-    settings.keybindings.new = 't';
-    let mut fixture = Fixture::with_settings(settings);
-    fixture.input(UiInput::Key(UiKey::Character('n')));
-    assert!(fixture.app.state.board.live_thoughts().is_empty());
-    fixture.input(UiInput::Key(UiKey::Character('t')));
-    assert_eq!(fixture.app.state.board.live_thoughts().len(), 1);
-
-    fixture.input(UiInput::Key(UiKey::Escape));
-    let terminal = draw(&mut fixture, 50, 6);
-    assert!(text(terminal.backend().buffer()).contains("t new"));
-}
-
-#[test]
-fn long_thought_cap_expands_without_changing_content() {
-    let mut fixture = Fixture::new();
-    let content = (0..20)
-        .map(|index| format!("line {index}"))
-        .collect::<Vec<_>>()
-        .join("\n");
-    fixture.paste(&content);
-    fixture.input(UiInput::Key(UiKey::Escape));
-    let initial = fixture.app.prepare_frame(Rect::new(0, 0, 40, 13));
-    let thought = initial.thoughts.first().expect("thought");
-    assert!(thought.hidden_rows > 0);
-    assert_eq!(thought.hidden_rows, 13);
-    let capped_height = thought.area.height;
-    let overflow = thought.overflow.expect("overflow");
-    let terminal = draw(&mut fixture, 40, 13);
-    assert!(text(terminal.backend().buffer()).contains("13 more lines"));
-
-    fixture.pointer(
-        overflow.x,
-        overflow.y,
-        PointerKind::Down(PointerButton::Left),
-    );
-    let expanded = fixture.app.prepare_frame(Rect::new(0, 0, 40, 13));
-    assert!(expanded.thoughts[0].area.height > capped_height);
-    assert_eq!(fixture.app.state.board.live_thoughts()[0].content, content);
-}
-
-#[test]
-fn viewport_matrix_keeps_focus_visible_and_hit_geometry_current() {
-    let mut fixture = Fixture::new();
-    for index in 0..10 {
-        fixture.paste(&format!("thought {index} 界"));
-        fixture.input(UiInput::Key(UiKey::Escape));
-    }
-    let focused = fixture.app.state.focused_thought.expect("focus");
-    for (width, height) in [(6, 3), (120, 4), (18, 30), (9, 5), (80, 24)] {
-        let layout = fixture.app.prepare_frame(Rect::new(0, 0, width, height));
-        let thought = layout.thought(focused).expect("focused thought visible");
-        assert!(thought.area.right() <= width);
-        assert!(thought.area.bottom() <= height.saturating_sub(1));
-        assert_eq!(
-            layout.hit_test(thought.gutter.x, thought.gutter.y),
-            Some(proqi::ui::HitTarget::DragHandle(focused))
-        );
-        if thought.text_area.width > 0 {
-            assert_eq!(
-                layout.hit_test(thought.text_area.x, thought.text_area.y),
-                Some(proqi::ui::HitTarget::Thought(focused))
-            );
-        }
-    }
-}
-
-#[test]
-fn narrow_empty_board_has_a_complete_explicit_buffer_snapshot() {
-    let mut fixture = Fixture::new();
-    let terminal = draw(&mut fixture, 12, 3);
-    assert_eq!(
-        text(terminal.backend().buffer()),
-        "  +  create \n            \n[:][/][?][q]"
-    );
-}
-
 #[path = "ui_board/agent.rs"]
 mod agent;
 #[path = "ui_board/clipboard.rs"]
 mod clipboard;
+#[path = "ui_board/composition.rs"]
+mod composition;
 #[path = "ui_board/durability.rs"]
 mod durability;

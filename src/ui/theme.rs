@@ -15,6 +15,10 @@ pub struct Theme {
     pub accent: Color,
     /// Secondary text and quiet controls.
     pub muted: Color,
+    /// Quiet horizontal separation between adjacent thoughts.
+    pub divider: Color,
+    /// Neutral selected-thought surface in explicit themes.
+    pub focused_surface: Option<Color>,
     /// Semantic failure color.
     pub error: Color,
 }
@@ -32,6 +36,8 @@ impl Theme {
                 background: Color::Rgb(250, 250, 248),
                 accent: Color::Rgb(45, 106, 79),
                 muted: Color::Rgb(79, 70, 62),
+                divider: Color::Rgb(224, 217, 207),
+                focused_surface: Some(Color::Rgb(238, 235, 230)),
                 error: Color::Red,
             },
             ThemePreference::Dark => Self {
@@ -39,6 +45,8 @@ impl Theme {
                 background: Color::Rgb(15, 13, 10),
                 accent: Color::Rgb(91, 158, 125),
                 muted: Color::Rgb(176, 169, 160),
+                divider: Color::Rgb(42, 37, 32),
+                focused_surface: Some(Color::Rgb(35, 31, 27)),
                 error: Color::LightRed,
             },
             ThemePreference::Auto => Self {
@@ -46,6 +54,8 @@ impl Theme {
                 background: Color::Reset,
                 accent: Color::Rgb(45, 106, 79),
                 muted: Color::DarkGray,
+                divider: Color::DarkGray,
+                focused_surface: None,
                 error: Color::Red,
             },
             ThemePreference::Limited => Self::limited(),
@@ -58,12 +68,26 @@ impl Theme {
         Style::new().fg(self.foreground).bg(self.background)
     }
 
+    /// High-contrast selected-thought style without turning body text green.
+    #[must_use]
+    pub fn focused_style(self) -> Style {
+        self.focused_surface.map_or_else(
+            || {
+                self.base_style()
+                    .add_modifier(ratatui_core::style::Modifier::REVERSED)
+            },
+            |background| self.base_style().bg(background),
+        )
+    }
+
     const fn limited() -> Self {
         Self {
             foreground: Color::Reset,
             background: Color::Reset,
             accent: Color::Green,
             muted: Color::DarkGray,
+            divider: Color::DarkGray,
+            focused_surface: None,
             error: Color::Red,
         }
     }

@@ -1,5 +1,7 @@
 //! Responsive board geometry and layout-derived hit targets.
 
+mod chrome;
+
 use std::collections::BTreeSet;
 
 use ratatui_core::layout::Rect;
@@ -52,6 +54,8 @@ pub struct ThoughtLayout {
     pub thought_id: ThoughtId,
     /// Live board position.
     pub index: usize,
+    /// Quiet non-interactive rule before this thought, when another thought precedes it.
+    pub separator_before: Option<Rect>,
     /// Complete visible allocation.
     pub area: Rect,
     /// Text cells excluding the focus or drag gutter.
@@ -71,8 +75,16 @@ pub struct LayoutSnapshot {
     pub area: Rect,
     /// Scrollable board area above the footer.
     pub board: Rect,
-    /// Minimum global footer.
+    /// Quiet product and session identity row.
+    pub header: Rect,
+    /// Complete footer allocation.
     pub footer: Rect,
+    /// Integration, mode, and durability context row.
+    pub footer_context: Rect,
+    /// Contextual labeled actions.
+    pub footer_actions: Rect,
+    /// Optional dedicated transient-status row.
+    pub footer_status: Option<Rect>,
     /// Visible thought allocations.
     pub thoughts: Vec<ThoughtLayout>,
     /// Clickable insertion control when visible.
@@ -158,26 +170,33 @@ impl LayoutSnapshot {
 
     /// Add only currently verified agent controls where footer width permits.
     pub fn configure_agent_controls(&mut self, targets: &[AgentTarget]) {
-        let mut right = self
-            .controls
-            .iter()
-            .map(|(_, area)| area.x)
-            .min()
-            .unwrap_or(self.footer.right());
-        for (direction, remove) in targets
+        let entries = targets
             .iter()
             .flat_map(|target| [(target.direction, false), (target.direction, true)])
+            .collect::<Vec<_>>();
+        let required = u16::try_from(entries.len())
+            .unwrap_or(u16::MAX)
+            .saturating_mul(8);
+        while controls_end(&self.controls, self.footer_actions.x).saturating_add(required)
+            > self.footer_actions.right()
         {
-            if right.saturating_sub(self.footer.x) < 3 {
+            if self.controls.pop().is_none() {
                 return;
             }
-            right = right.saturating_sub(3);
+        }
+        let mut left = controls_end(&self.controls, self.footer_actions.x);
+        for (direction, remove) in entries {
             self.controls.push((
                 HitTarget::Submit(direction, remove),
-                Rect::new(right, self.footer.y, 3, self.footer.height),
+                Rect::new(left, self.footer_actions.y, 8, 1),
             ));
+            left = left.saturating_add(8);
         }
     }
+}
+
+fn controls_end(controls: &[(HitTarget, Rect)], fallback: u16) -> u16 {
+    controls.last().map_or(fallback, |(_, area)| area.right())
 }
 
 /// Compute responsive geometry from current state and terminal dimensions.
@@ -188,20 +207,10 @@ pub fn compute(
     area: Rect,
     requested_first: usize,
     expanded: &BTreeSet<ThoughtId>,
+    has_status: bool,
 ) -> LayoutSnapshot {
-    let footer_height = u16::from(area.height > 0);
-    let board = Rect::new(
-        area.x,
-        area.y,
-        area.width,
-        area.height.saturating_sub(footer_height),
-    );
-    let footer = Rect::new(
-        area.x,
-        area.bottom().saturating_sub(footer_height),
-        area.width,
-        footer_height,
-    );
+    let chrome = chrome::compute(area, state.mode, has_status);
+    let board = chrome.board;
     let content_width = board.width.saturating_sub(2).max(1);
     let live = state.board.live_thoughts();
     let focus_index = state
@@ -224,11 +233,15 @@ pub fn compute(
     LayoutSnapshot {
         area,
         board,
-        footer,
+        header: chrome.header,
+        footer: chrome.footer,
+        footer_context: chrome.context,
+        footer_actions: chrome.actions,
+        footer_status: chrome.status,
         thoughts,
         insert,
         first_index: first,
-        controls: footer_controls(footer),
+        controls: chrome::controls(chrome.actions, state.mode),
         content_width,
         overlay: None,
     }
@@ -275,16 +288,19 @@ fn place_thoughts(
     let mut layouts = Vec::new();
     let mut y = board.y;
     let cap = responsive_cap(board.height);
-    for (index, thought) in state
-        .board
-        .live_thoughts()
-        .into_iter()
-        .enumerate()
-        .skip(first)
-    {
+    let live = state.board.live_thoughts();
+    let remaining = live.len().saturating_sub(first);
+    let roomy = usize::from(board.height)
+        >= remaining.saturating_add(remaining.saturating_sub(1).saturating_mul(3));
+    for (index, thought) in live.into_iter().enumerate().skip(first) {
         if y >= board.bottom() {
             break;
         }
+        let separation = if roomy { 3 } else { 1 };
+        if !layouts.is_empty() && y.saturating_add(separation) >= board.bottom() {
+            break;
+        }
+        let separator_before = separator_before(board, &mut y, !layouts.is_empty(), roomy);
         let editing = editor.is_some_and(|_| state.focused_thought == Some(thought.id));
         let natural = editor
             .filter(|_| state.focused_thought == Some(thought.id))
@@ -328,6 +344,7 @@ fn place_thoughts(
         layouts.push(ThoughtLayout {
             thought_id: thought.id,
             index,
+            separator_before,
             area,
             text_area,
             gutter,
@@ -339,37 +356,26 @@ fn place_thoughts(
     layouts
 }
 
+fn separator_before(board: Rect, y: &mut u16, preceded: bool, roomy: bool) -> Option<Rect> {
+    preceded.then(|| {
+        let rule_y = if roomy { y.saturating_add(1) } else { *y };
+        let separator = Rect::new(
+            board.x.saturating_add(2).min(board.right()),
+            rule_y,
+            board.width.saturating_sub(2),
+            1,
+        );
+        *y = y.saturating_add(if roomy { 3 } else { 1 });
+        separator
+    })
+}
+
 fn responsive_cap(board_height: u16) -> u16 {
     board_height.saturating_mul(2).div_ceil(3).max(3)
 }
 
 fn wrapped_rows(content: &str, width: u16) -> usize {
     wrap_rows(content, usize::from(width.max(1))).len().max(1)
-}
-
-fn footer_controls(area: Rect) -> Vec<(HitTarget, Rect)> {
-    let labels = [
-        (HitTarget::Delete, 3_u16),
-        (HitTarget::Cut, 3),
-        (HitTarget::Copy, 3),
-        (HitTarget::Undo, 3),
-        (HitTarget::Commands, 3),
-        (HitTarget::Search, 3),
-        (HitTarget::Help, 3),
-        (HitTarget::Quit, 3),
-    ];
-    let mut right = area.right();
-    labels
-        .into_iter()
-        .rev()
-        .filter_map(|(target, width)| {
-            if right.saturating_sub(area.x) < width {
-                return None;
-            }
-            right = right.saturating_sub(width);
-            Some((target, Rect::new(right, area.y, width, area.height)))
-        })
-        .collect()
 }
 
 const fn contains(area: Rect, column: u16, row: u16) -> bool {
@@ -406,8 +412,15 @@ mod tests {
             Rect::new(0, 0, 20, 5),
             0,
             &BTreeSet::new(),
+            false,
         );
-        assert_eq!(layout.hit_test(0, 0), Some(HitTarget::Insert));
-        assert_eq!(layout.hit_test(18, 4), Some(HitTarget::Quit));
+        assert_eq!(layout.header, Rect::new(0, 0, 20, 1));
+        assert_eq!(layout.hit_test(0, 1), Some(HitTarget::Insert));
+        assert!(
+            layout
+                .controls
+                .iter()
+                .any(|(target, _)| { matches!(target, HitTarget::Commands | HitTarget::Help) })
+        );
     }
 }

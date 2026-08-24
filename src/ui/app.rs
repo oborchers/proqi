@@ -338,12 +338,15 @@ impl BoardApp {
             layout_state.focused_thought = None;
         }
         let editor = self.editor_snapshot();
+        let has_status = self.status.is_some()
+            || matches!(self.state.durability, DurabilityState::Failed { .. });
         let first = compute_layout(
             &layout_state,
             editor.as_ref(),
             area,
             self.first_visible,
             &self.expanded,
+            has_status,
         );
         let height = self
             .state
@@ -360,6 +363,7 @@ impl BoardApp {
             area,
             first.first_index,
             &self.expanded,
+            has_status,
         );
         let palette_items = self
             .palette

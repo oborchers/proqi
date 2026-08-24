@@ -76,6 +76,54 @@ These rules become mandatory with the first real TUI implementation:
   Windows retain build and terminal-independent integration coverage until the
   PTY driver is portable.
 
+## Design Context
+
+### Users
+
+Proqi serves developers who coordinate several coding agents at once and keep
+the board open in a frequently resized terminal pane beside an active agent.
+Their job is to capture, edit, organize, recover, and transfer prompts or local
+context without interrupting the work already in progress. The interface must
+remain comfortable through long working sessions and require almost no setup or
+mode-management overhead.
+
+### Brand Personality
+
+Proqi is calm, immediate, and trustworthy. It should create confidence through
+precise behavior, truthful persistence state, and predictable interactions. It
+stays quiet while the user is thinking and becomes visually assertive only for
+focus, an available action, or a state that genuinely requires attention.
+
+### Aesthetic Direction
+
+The interface is minimal, terminal-native, and closer to an unobtrusive Sublime
+Text scratchpad than a dashboard or task manager. Use one responsive column,
+natural-height titleless thoughts, generous readable whitespace, and a compact
+forest-green focus gutter. Separate adjacent thoughts with one quiet horizontal
+rule instead of enclosing them in cards. Prefer spacing and contrast over other
+borders or permanent chrome. Inherit terminal foreground and background in
+automatic mode, support explicit light and dark palettes, and retain a
+limited-color fallback.
+
+Forest green is the only routine accent. Other colors communicate real semantic
+states only. Do not introduce decorative cards, gradients, glow, texture,
+animation, or ornamental brand motifs into the terminal interface. Personality
+comes from interaction quality and small precise details, not visual decoration.
+
+### Design Principles
+
+- Disappear until useful. Keep content dominant and reveal controls or emphasis
+  only when context makes them relevant.
+- Make every interaction direct. Common capture, editing, organization, and
+  transfer actions should take one unambiguous step whenever possible.
+- Make state unmistakable. Focus, durability, errors, selection, and available
+  actions must remain legible without relying on color alone.
+- Treat the pane as the design surface. Reflow continuously and preserve content,
+  focus, cursor position, scroll, and hit geometry across every supported size.
+- Provide equivalent keyboard and mouse workflows. Where Proqi controls the RGB
+  palette, target WCAG 2.2 AA contrast. Respect reduced motion, remappable input,
+  limited-color terminals, and Unicode text.
+
 ## Repository hygiene
 
 - Do not commit secrets, local databases, runtime state, build artifacts,

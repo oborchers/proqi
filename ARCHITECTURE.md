@@ -450,6 +450,12 @@ lock protocol is identical. For a cask, the explicit update command is
 Rendering is immediate-mode and derived from current state. Widgets hold no
 canonical product state. The board uses one vertical flow at every width.
 
+The board reserves independent responsive regions for product and session
+identity, content, integration or durability context, transient status, and
+contextual actions. Renderers never paint independently aligned strings into
+the same cells. Compact panes shorten labels and remove secondary context
+before they reduce the usable content area below one row.
+
 Natural thought height is calculated from wrapped visual lines. A viewport-aware
 cap is applied only to long thoughts. The focused thought receives enough space
 to keep its cursor or active content visible, subject to a minimal navigable
