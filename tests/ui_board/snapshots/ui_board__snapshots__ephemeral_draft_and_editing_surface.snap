@@ -1,0 +1,26 @@
+---
+source: tests/ui_board/snapshots.rs
+assertion_line: 71
+expression: "snapshot(&mut fixture, 50, 9, ThemePreference::Light)"
+---
+TEXT
+ proqi · proqi-ui-contract · 1 thought       draft
+│                                                 
+                                                  
+                                                  
+                                                  
+                                                  
+                                                  
+ ready                                edit · draft
+Esc Board  y Copy  u Undo  : Commands             
+
+STYLE RUNS
+0: 0-49 fg=Rgb(79, 70, 62) bg=Rgb(250, 250, 248) mod=NONE
+1: 0-0 fg=Rgb(45, 106, 79) bg=Rgb(238, 235, 230) mod=NONE | 1-49 fg=Rgb(30, 27, 24) bg=Rgb(238, 235, 230) mod=NONE
+2: 0-49 fg=Rgb(30, 27, 24) bg=Rgb(250, 250, 248) mod=NONE
+3: 0-49 fg=Rgb(30, 27, 24) bg=Rgb(250, 250, 248) mod=NONE
+4: 0-49 fg=Rgb(30, 27, 24) bg=Rgb(250, 250, 248) mod=NONE
+5: 0-49 fg=Rgb(30, 27, 24) bg=Rgb(250, 250, 248) mod=NONE
+6: 0-49 fg=Rgb(30, 27, 24) bg=Rgb(250, 250, 248) mod=NONE
+7: 0-49 fg=Rgb(79, 70, 62) bg=Rgb(250, 250, 248) mod=NONE
+8: 0-9 fg=Rgb(45, 106, 79) bg=Rgb(250, 250, 248) mod=NONE | 10-10 fg=Rgb(30, 27, 24) bg=Rgb(250, 250, 248) mod=NONE | 11-17 fg=Rgb(45, 106, 79) bg=Rgb(250, 250, 248) mod=NONE | 18-18 fg=Rgb(30, 27, 24) bg=Rgb(250, 250, 248) mod=NONE | 19-25 fg=Rgb(45, 106, 79) bg=Rgb(250, 250, 248) mod=NONE | 26-26 fg=Rgb(30, 27, 24) bg=Rgb(250, 250, 248) mod=NONE | 27-37 fg=Rgb(45, 106, 79) bg=Rgb(250, 250, 248) mod=NONE | 38-49 fg=Rgb(30, 27, 24) bg=Rgb(250, 250, 248) mod=NONE

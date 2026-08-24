@@ -32,12 +32,17 @@ pub(super) fn render_header(
         )
     });
     let count = app.visible_thought_count();
+    let noun = if count == 1 { "thought" } else { "thoughts" };
     let left = if layout.header.width >= 40 {
-        format!(" proqi · {label} · {count} thoughts")
+        format!(" proqi · {label} · {count} {noun}")
     } else {
         " proqi".to_owned()
     };
-    let text = compose(&left, durability(app), usize::from(layout.header.width));
+    let text = compose(
+        &left,
+        summary_durability(app),
+        usize::from(layout.header.width),
+    );
     frame.render_widget(
         Paragraph::new(text).style(Style::default().fg(theme.muted)),
         layout.header,
@@ -70,7 +75,13 @@ fn render_status(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot,
     let Some(area) = layout.footer_status else {
         return;
     };
-    let text = app.status.as_deref().unwrap_or_else(|| durability(app));
+    let text = app.status.as_deref().unwrap_or_else(|| {
+        if matches!(app.state.durability, DurabilityState::Failed { .. }) {
+            "save failed · r Retry · w Export recovery"
+        } else {
+            durability(app)
+        }
+    });
     let color = if matches!(app.state.durability, DurabilityState::Failed { .. }) {
         theme.error
     } else {
@@ -93,11 +104,11 @@ fn render_context(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot
         .then(|| app.status.clone())
         .flatten()
         .unwrap_or(fallback);
-    let mode = match app.state.mode {
+    let mode = match app.interaction_mode() {
         InteractionMode::Board => "board",
         InteractionMode::Edit { .. } => "edit",
     };
-    let right = format!("{mode} · {}", durability(app));
+    let right = format!("{mode} · {}", summary_durability(app));
     let text = compose(
         &format!(" {left}"),
         &right,
@@ -121,17 +132,30 @@ fn durability(app: &BoardApp) -> &'static str {
     }
 }
 
+fn summary_durability(app: &BoardApp) -> &'static str {
+    if matches!(app.state.durability, DurabilityState::Failed { .. }) {
+        "unsaved"
+    } else {
+        durability(app)
+    }
+}
+
 fn label(target: HitTarget, width: u16, keys: &crate::ui::KeyBindings) -> String {
     let full = match target {
-        HitTarget::Insert => format!("{} New", keys.new),
-        HitTarget::Copy => format!("{} Copy", keys.copy),
-        HitTarget::Cut => format!("{} Cut", keys.cut),
-        HitTarget::Delete => format!("{} Delete", keys.delete),
-        HitTarget::Undo => format!("{} Undo", keys.undo),
-        HitTarget::Search => format!("{} Search", keys.search),
-        HitTarget::Commands => format!("{} Commands", keys.commands),
-        HitTarget::Help => format!("{} Shortcuts", keys.help),
-        HitTarget::Quit => format!("{} Quit", keys.quit),
+        HitTarget::Insert => format!("{} New", crate::ui::settings::key_label(keys.new)),
+        HitTarget::Copy => format!("{} Copy", crate::ui::settings::key_label(keys.copy)),
+        HitTarget::Cut => format!("{} Cut", crate::ui::settings::key_label(keys.cut)),
+        HitTarget::Delete => format!("{} Delete", crate::ui::settings::key_label(keys.delete)),
+        HitTarget::Undo => format!("{} Undo", crate::ui::settings::key_label(keys.undo)),
+        HitTarget::Search => format!("{} Search", crate::ui::settings::key_label(keys.search)),
+        HitTarget::Commands => {
+            format!("{} Commands", crate::ui::settings::key_label(keys.commands))
+        }
+        HitTarget::Help => format!("{} Shortcuts", crate::ui::settings::key_label(keys.help)),
+        HitTarget::Quit => format!("{} Quit", crate::ui::settings::key_label(keys.quit)),
+        HitTarget::ExitEdit => "Esc Board".to_owned(),
+        HitTarget::Retry => "r Retry".to_owned(),
+        HitTarget::ExportRecovery => "w Export".to_owned(),
         HitTarget::Submit(direction, remove) => {
             let key = if remove {
                 keys.submit_remove
@@ -139,7 +163,11 @@ fn label(target: HitTarget, width: u16, keys: &crate::ui::KeyBindings) -> String
                 keys.submit
             };
             let verb = if remove { "Send+" } else { "Send" };
-            format!("{key}{} {verb}", direction_symbol(direction))
+            format!(
+                "{}{} {verb}",
+                crate::ui::settings::key_label(key),
+                direction_symbol(direction)
+            )
         }
         _ => String::new(),
     };

@@ -127,7 +127,7 @@ fn empty_board_and_help_have_reviewable_complete_buffers() {
     let terminal = draw(&mut fixture, 40, 8);
     let rendered = text(terminal.backend().buffer());
     assert!(rendered.contains("proqi help"));
-    assert!(rendered.contains("J/K move"));
+    assert!(rendered.contains("J/K Reorder"));
 }
 
 #[test]
@@ -235,7 +235,7 @@ fn pending_and_failed_durability_are_visibly_distinct() {
 
     fixture.app.acknowledge_persistence(sequence, false);
     let failed = draw(&mut fixture, 50, 6);
-    assert!(text(failed.backend().buffer()).contains("save failed"));
+    assert!(text(failed.backend().buffer()).contains("edit · unsaved"));
 }
 
 #[test]
@@ -445,3 +445,5 @@ mod composition;
 mod draft;
 #[path = "ui_board/durability.rs"]
 mod durability;
+#[path = "ui_board/snapshots.rs"]
+mod snapshots;

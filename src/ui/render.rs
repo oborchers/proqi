@@ -99,13 +99,7 @@ fn render_board(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, 
         } else {
             Style::default().fg(theme.accent)
         };
-        let label =
-            if app.hovered() == Some(HitTarget::Insert) || app.state.focused_thought.is_none() {
-                "  + New thought"
-            } else {
-                "  +"
-            };
-        frame.render_widget(Paragraph::new(label).style(style), insert);
+        frame.render_widget(Paragraph::new("  + New thought").style(style), insert);
     }
 }
 
@@ -280,7 +274,7 @@ fn cursor_column(snapshot: &crate::ports::editor::EditorSnapshot, cursor_row: us
 fn render_help(frame: &mut Frame<'_>, app: &BoardApp, overlay: &OverlayLayout, theme: &Theme) {
     let keys = app.keybindings();
     let content = format!(
-        "Board\n  {} new   {}/{} focus   Enter/{} edit   {} delete\n  {}/{} move   {} undo   {} collapse   {} search   {} commands\n  {}/{} submit   {} quit\n\nEdit\n  Esc board   Primary+A select all   Primary+U delete line\n  Primary+Z undo   Shift+Primary+Z redo\n\nPaste and file drop are one operation. Clipboard images become private PNG paths. Submission uses verified Herdr agents only.",
+        "Board\n{} New   {}/{} Focus   Enter/{} Edit\n{} Delete   {}/{} Reorder   {} Undo\n{} Collapse   {} Search   {} Commands\n{}/{} Send   {} Quit\n\nEdit\nEsc Board   Primary+A Select all\nPrimary+U Delete line   Primary+Z Undo\nShift+Primary+Z Redo\n\nPaste and file drop are one operation. Clipboard images become private PNG paths. Submission uses verified Herdr agents only.",
         keys.new,
         keys.focus_down,
         keys.focus_up,
@@ -289,7 +283,7 @@ fn render_help(frame: &mut Frame<'_>, app: &BoardApp, overlay: &OverlayLayout, t
         keys.move_down,
         keys.move_up,
         keys.undo,
-        keys.collapse,
+        crate::ui::settings::key_label(keys.collapse),
         keys.search,
         keys.commands,
         keys.submit,

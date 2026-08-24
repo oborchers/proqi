@@ -49,14 +49,32 @@ pub(super) fn compute(area: Rect, _mode: InteractionMode, has_status: bool) -> C
     }
 }
 
-pub(super) fn controls(area: Rect, mode: InteractionMode) -> Vec<(HitTarget, Rect)> {
+pub(super) fn controls(
+    area: Rect,
+    mode: InteractionMode,
+    persistence_failed: bool,
+    has_focus: bool,
+) -> Vec<(HitTarget, Rect)> {
     if area.height == 0 || area.width == 0 {
         return Vec::new();
     }
-    let candidates = if area.width < 24 {
+    let candidates = if persistence_failed {
+        vec![
+            (HitTarget::Retry, 8),
+            (HitTarget::ExportRecovery, 10),
+            (HitTarget::Help, 12),
+        ]
+    } else if !has_focus && matches!(mode, InteractionMode::Board) {
+        vec![
+            (HitTarget::Insert, 7),
+            (HitTarget::Commands, 11),
+            (HitTarget::Help, 12),
+        ]
+    } else if area.width < 24 {
         vec![(HitTarget::Commands, 6), (HitTarget::Help, 6)]
     } else if area.width < 60 && matches!(mode, InteractionMode::Edit { .. }) {
         vec![
+            (HitTarget::ExitEdit, 10),
             (HitTarget::Copy, 7),
             (HitTarget::Undo, 7),
             (HitTarget::Commands, 11),
@@ -71,6 +89,7 @@ pub(super) fn controls(area: Rect, mode: InteractionMode) -> Vec<(HitTarget, Rec
         ]
     } else if matches!(mode, InteractionMode::Edit { .. }) {
         vec![
+            (HitTarget::ExitEdit, 10),
             (HitTarget::Copy, 7),
             (HitTarget::Cut, 6),
             (HitTarget::Undo, 7),

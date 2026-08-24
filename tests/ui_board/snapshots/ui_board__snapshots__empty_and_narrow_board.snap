@@ -1,0 +1,20 @@
+---
+source: tests/ui_board/snapshots.rs
+assertion_line: 44
+expression: "snapshot(&mut fixture, 24, 6, ThemePreference::Dark)"
+---
+TEXT
+ proqi             saved
+  + New thought         
+                        
+                        
+ ready     board · saved
+n New   : Commands      
+
+STYLE RUNS
+0: 0-23 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE
+1: 0-23 fg=Rgb(91, 158, 125) bg=Rgb(15, 13, 10) mod=NONE
+2: 0-23 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+3: 0-23 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+4: 0-23 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE
+5: 0-6 fg=Rgb(91, 158, 125) bg=Rgb(15, 13, 10) mod=NONE | 7-7 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 8-18 fg=Rgb(91, 158, 125) bg=Rgb(15, 13, 10) mod=NONE | 19-23 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE

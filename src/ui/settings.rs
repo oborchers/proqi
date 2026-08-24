@@ -172,6 +172,15 @@ impl KeyBindings {
     }
 }
 
+pub(crate) fn key_label(key: char) -> String {
+    match key {
+        ' ' => "Space".to_owned(),
+        '\t' => "Tab".to_owned(),
+        '\n' | '\r' => "Enter".to_owned(),
+        _ => key.to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{BoardCommand, KeyBindings, UiSettings};

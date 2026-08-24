@@ -78,6 +78,7 @@ unicode-width.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
+insta = "1.43.2"
 proptest = "1.7.0"
 tempfile = "3.27.0"
 

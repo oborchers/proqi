@@ -13,6 +13,7 @@
 )]
 
 mod policy;
+mod snapshots;
 
 use std::env;
 use std::ffi::OsStr;
@@ -115,6 +116,7 @@ fn setup(root: &Path) -> Result<(), String> {
 fn check(root: &Path) -> Result<(), String> {
     run(root, "cargo", ["fmt", "--all", "--", "--check"])?;
     check_source_limits(root)?;
+    snapshots::check(root)?;
     policy::check(root)?;
     run(
         root,

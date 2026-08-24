@@ -41,6 +41,12 @@ pub enum HitTarget {
     Help,
     /// Clean exit action.
     Quit,
+    /// Leave the editor or discard an unchanged draft.
+    ExitEdit,
+    /// Retry the failed durable operation.
+    Retry,
+    /// Export the exact unsaved recovery buffer.
+    ExportRecovery,
     /// Search result within the active modal picker.
     PaletteItem(usize),
     /// Close the active help or command overlay.
@@ -228,8 +234,9 @@ pub fn compute(
     let used_bottom = thoughts
         .last()
         .map_or(board.y, |layout| layout.area.bottom());
-    let insert =
-        (used_bottom < board.bottom()).then(|| Rect::new(board.x, used_bottom, board.width, 1));
+    let insert = (matches!(state.mode, crate::application::InteractionMode::Board)
+        && used_bottom < board.bottom())
+    .then(|| Rect::new(board.x, used_bottom, board.width, 1));
     LayoutSnapshot {
         area,
         board,
@@ -241,7 +248,15 @@ pub fn compute(
         thoughts,
         insert,
         first_index: first,
-        controls: chrome::controls(chrome.actions, state.mode),
+        controls: chrome::controls(
+            chrome.actions,
+            state.mode,
+            matches!(
+                state.durability,
+                crate::application::DurabilityState::Failed { .. }
+            ),
+            state.focused_thought.is_some(),
+        ),
         content_width,
         overlay: None,
     }

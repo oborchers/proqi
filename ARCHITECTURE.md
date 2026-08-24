@@ -638,6 +638,10 @@ known initial state.
 A pseudo-terminal harness launches the real binary and drives keys, mouse
 events, bracketed paste, signals, and resize sequences. It asserts semantic
 screen snapshots after normalizing escape sequences and nondeterministic data.
+Representative in-memory terminal states also use checked-in Insta snapshots
+that preserve text, spacing, foreground, background, and modifiers. Visible UI
+changes require explicit snapshot review, and the canonical gate rejects every
+pending `.snap.new` file.
 
 Platform smoke tests verify terminal restoration, native clipboard behavior,
 package installation, launch, session resumption, and uninstall boundaries.

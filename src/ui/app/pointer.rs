@@ -12,6 +12,26 @@ use super::{BoardApp, PointerButton, PointerInput, PointerKind};
 use crate::ui::HitTarget;
 
 impl BoardApp {
+    pub(super) fn handle_recovery_pointer(
+        &mut self,
+        pointer: PointerInput,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        if !matches!(pointer.kind, PointerKind::Down(PointerButton::Left)) {
+            return Vec::new();
+        }
+        match self.hit(pointer) {
+            Some(HitTarget::Retry) => self.retry_persistence(),
+            Some(HitTarget::ExportRecovery) => self.export_recovery(ids, clock),
+            Some(HitTarget::Help) => {
+                self.help = !self.help;
+                Vec::new()
+            }
+            _ => Vec::new(),
+        }
+    }
+
     pub(super) fn handle_pointer(
         &mut self,
         pointer: PointerInput,
@@ -87,6 +107,9 @@ impl BoardApp {
                 self.request_quit();
                 Vec::new()
             }
+            Some(HitTarget::ExitEdit) => self.finish_edit(ids, clock),
+            Some(HitTarget::Retry) => self.retry_persistence(),
+            Some(HitTarget::ExportRecovery) => self.export_recovery(ids, clock),
             Some(HitTarget::PaletteItem(index)) => {
                 if self.search.is_some() {
                     self.execute_search_visible_index(index)

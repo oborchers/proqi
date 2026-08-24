@@ -261,11 +261,13 @@ impl BoardApp {
             match input {
                 UiInput::Key(UiKey::Character('r')) => return self.retry_persistence(),
                 UiInput::Key(UiKey::Character('w')) => return self.export_recovery(ids, clock),
+                UiInput::Pointer(pointer) => {
+                    return self.handle_recovery_pointer(pointer, ids, clock);
+                }
                 UiInput::Resize { .. } => {}
-                UiInput::Key(_)
-                | UiInput::Paste(_)
-                | UiInput::PasteAnnotated(_)
-                | UiInput::Pointer(_) => return Vec::new(),
+                UiInput::Key(_) | UiInput::Paste(_) | UiInput::PasteAnnotated(_) => {
+                    return Vec::new();
+                }
             }
         }
         match input {

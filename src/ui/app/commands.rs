@@ -98,16 +98,7 @@ impl BoardApp {
         clock: &impl Clock,
     ) -> Vec<Effect> {
         match key {
-            UiKey::Escape => {
-                if self.has_draft() {
-                    self.discard_draft();
-                    return Vec::new();
-                }
-                let effects = self.flush_pending_edit(ids, clock);
-                let _effects = self.reduce(Action::ExitEdit);
-                self.editor = None;
-                return effects;
-            }
+            UiKey::Escape => return self.finish_edit(ids, clock),
             UiKey::Undo => return self.history(ids, clock, true),
             UiKey::Redo => return self.history(ids, clock, false),
             UiKey::Copy => {
@@ -164,6 +155,21 @@ impl BoardApp {
         if matches!(key, UiKey::DeleteLine) {
             effects.extend(self.flush_pending_edit(ids, clock));
         }
+        effects
+    }
+
+    pub(super) fn finish_edit(
+        &mut self,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        if self.has_draft() {
+            self.discard_draft();
+            return Vec::new();
+        }
+        let effects = self.flush_pending_edit(ids, clock);
+        let _effects = self.reduce(Action::ExitEdit);
+        self.editor = None;
         effects
     }
 

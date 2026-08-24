@@ -1,0 +1,26 @@
+---
+source: tests/ui_board/snapshots.rs
+assertion_line: 79
+expression: "snapshot(&mut fixture, 55, 9, ThemePreference::Dark)"
+---
+TEXT
+ proqi · proqi-ui-contract · 1 thought          unsaved
+│ important prompt                                     
+                                                       
+                                                       
+                                                       
+                                                       
+ save failed · r Retry · w Export recovery             
+ ready                                   edit · unsaved
+r Retry  w Export   ? Shortcuts                        
+
+STYLE RUNS
+0: 0-54 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE
+1: 0-0 fg=Rgb(91, 158, 125) bg=Rgb(35, 31, 27) mod=NONE | 1-54 fg=Rgb(232, 228, 223) bg=Rgb(35, 31, 27) mod=NONE
+2: 0-54 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+3: 0-54 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+4: 0-54 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+5: 0-54 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+6: 0-54 fg=LightRed bg=Rgb(15, 13, 10) mod=NONE
+7: 0-54 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE
+8: 0-7 fg=Rgb(91, 158, 125) bg=Rgb(15, 13, 10) mod=NONE | 8-8 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 9-18 fg=Rgb(91, 158, 125) bg=Rgb(15, 13, 10) mod=NONE | 19-19 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 20-31 fg=Rgb(91, 158, 125) bg=Rgb(15, 13, 10) mod=NONE | 32-54 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE

@@ -2,7 +2,7 @@
 
 use proqi::{
     adapters::memory::{FakeClock, FakeIdGenerator},
-    application::{AppState, Effect, FailureCode},
+    application::{AppState, Effect, FailureCode, InteractionMode},
     domain::{Session, SessionBoard, Thought, ThoughtPosition, Timestamp},
     ports::environment::IdGenerator,
     ui::{BoardApp, HitTarget, PointerButton, PointerInput, PointerKind, UiInput},
@@ -51,7 +51,7 @@ impl Fixture {
             .controls
             .iter()
             .find_map(|(candidate, area)| (*candidate == target).then_some(*area))
-            .expect("visible mouse control");
+            .unwrap_or_else(|| panic!("visible mouse control {target:?}: {:?}", layout.controls));
         self.app.handle(
             UiInput::Pointer(PointerInput {
                 column: area.right().saturating_sub(1),
@@ -132,4 +132,53 @@ fn search_control_and_result_are_mouse_operable() {
         &fixture.clock,
     );
     assert!(fixture.app.search_view().is_none());
+}
+
+#[test]
+fn editor_and_recovery_controls_are_mouse_operable() {
+    let mut fixture = Fixture::new();
+    assert!(
+        fixture
+            .app
+            .handle(
+                UiInput::Key(proqi::ui::UiKey::Enter),
+                &mut fixture.ids,
+                &fixture.clock,
+            )
+            .is_empty()
+    );
+    assert!(matches!(
+        fixture.app.state.mode,
+        InteractionMode::Edit { .. }
+    ));
+    assert!(
+        fixture
+            .click(HitTarget::ExitEdit, Size::new(80, 9))
+            .is_empty()
+    );
+    assert_eq!(fixture.app.state.mode, InteractionMode::Board);
+
+    let effects = fixture.app.handle(
+        UiInput::Paste("unsaved mouse content".to_owned()),
+        &mut fixture.ids,
+        &fixture.clock,
+    );
+    let sequence = effects
+        .first()
+        .and_then(Effect::persistence_batch)
+        .and_then(|batch| batch.sequence())
+        .expect("pending persistence sequence");
+    fixture.app.acknowledge_persistence(sequence, false);
+    assert_eq!(
+        fixture.click(HitTarget::Retry, Size::new(80, 9)),
+        vec![Effect::RetryPersistence { sequence }]
+    );
+
+    fixture.app.acknowledge_persistence(sequence, false);
+    assert!(matches!(
+        fixture
+            .click(HitTarget::ExportRecovery, Size::new(80, 9))
+            .as_slice(),
+        [Effect::ExportRecovery { .. }]
+    ));
 }

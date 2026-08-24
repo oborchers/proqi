@@ -1,0 +1,24 @@
+---
+source: tests/ui_board/snapshots.rs
+assertion_line: 86
+expression: "snapshot(&mut fixture, 42, 8, ThemePreference::Auto)"
+---
+TEXT
+┌ proqi help ──────────────────────────[x]
+│Board                                   │
+│n New   j/k Focus   Enter/e Edit        │
+│d Delete   J/K Reorder   u Undo         │
+│Space Collapse   / Search   : Commands  │
+│s/S Send   q Quit                       │
+│                                        │
+└────────────────────────────────────────┘
+
+STYLE RUNS
+0: 0-0 fg=Reset bg=Reset mod=NONE | 1-12 fg=Rgb(45, 106, 79) bg=Reset mod=BOLD | 13-38 fg=Reset bg=Reset mod=NONE | 39-41 fg=Rgb(45, 106, 79) bg=Reset mod=NONE
+1: 0-41 fg=Reset bg=Reset mod=NONE
+2: 0-41 fg=Reset bg=Reset mod=NONE
+3: 0-41 fg=Reset bg=Reset mod=NONE
+4: 0-41 fg=Reset bg=Reset mod=NONE
+5: 0-41 fg=Reset bg=Reset mod=NONE
+6: 0-41 fg=Reset bg=Reset mod=NONE
+7: 0-41 fg=Reset bg=Reset mod=NONE
