@@ -322,6 +322,47 @@ fn wait_for_path(path: &std::path::Path) {
 }
 
 #[cfg(target_os = "macos")]
+fn wait_for_control_owner(state: &std::path::Path, session: &str) {
+    let instances = state.join("runtime/instances");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    loop {
+        if control_owner_is_ready(&instances, session) {
+            return;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "owner did not advertise a ready control endpoint"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn control_owner_is_ready(instances: &std::path::Path, session: &str) -> bool {
+    let Ok(entries) = std::fs::read_dir(instances) else {
+        return false;
+    };
+    entries
+        .filter_map(Result::ok)
+        .any(|entry| control_metadata_is_ready(&entry.path(), session))
+}
+
+#[cfg(target_os = "macos")]
+fn control_metadata_is_ready(path: &std::path::Path, session: &str) -> bool {
+    let Ok(bytes) = std::fs::read(path) else {
+        return false;
+    };
+    let Ok(value) = serde_json::from_slice::<Value>(&bytes) else {
+        return false;
+    };
+    value["session_id"] == session
+        && value["control_protocol"].as_u64() == Some(2)
+        && value["control_endpoint"]
+            .as_str()
+            .is_some_and(|endpoint| std::path::Path::new(endpoint).exists())
+}
+
+#[cfg(target_os = "macos")]
 fn raw_input_command(
     binary: &str,
     state: &std::path::Path,

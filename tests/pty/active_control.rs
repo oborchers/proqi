@@ -3,7 +3,10 @@
 use proqi::{adapters::runtime::SystemIdGenerator, ports::environment::IdGenerator};
 use serde_json::Value;
 
-use super::{expect_command, json_command, json_input_command, raw_input_command, wait_for_path};
+use super::{
+    expect_command, json_command, json_input_command, raw_input_command, wait_for_control_owner,
+    wait_for_path,
+};
 
 #[test]
 fn active_tui_accepts_durable_idempotent_cli_mutations_before_crash() {
@@ -13,10 +16,17 @@ fn active_tui_accepts_durable_idempotent_cli_mutations_before_crash() {
     let session = created["data"]["session_id"].as_str().expect("session ID");
     let source = json_command(binary, state.path(), &[]);
     let source_id = source["data"]["session_id"].as_str().expect("source ID");
+    let source_operation = operation_id();
     let source_thought = json_input_command(
         binary,
         state.path(),
-        &["thoughts", "add", source_id],
+        &[
+            "thoughts",
+            "add",
+            source_id,
+            "--operation-id",
+            &source_operation,
+        ],
         "Transferred while destination is active",
     );
     let source_thought_id = source_thought["data"]["thought_id"]
@@ -26,6 +36,7 @@ fn active_tui_accepts_durable_idempotent_cli_mutations_before_crash() {
     let done = state.path().join("owner-done");
     let mut owner = spawn_owner(binary, state.path(), session, &ready, &done);
     wait_for_path(&ready);
+    wait_for_control_owner(state.path(), session);
 
     let first_operation = operation_id();
     let first_args = [
@@ -38,9 +49,11 @@ fn active_tui_accepts_durable_idempotent_cli_mutations_before_crash() {
     let first_body = "Forwarded Grüße 界\nsecond line";
     let first = json_input_command(binary, state.path(), &first_args, first_body);
     let first_id = first["data"]["thought_id"].as_str().expect("first ID");
+    assert_equivalent_commit_shape(&source_thought, &first);
     let replay = json_input_command(binary, state.path(), &first_args, first_body);
     let conflict = raw_input_command(binary, state.path(), &first_args, "changed");
     assert_idempotency(&first, &replay, &conflict);
+    assert_cross_kind_reuse_is_rejected(binary, state.path(), session, first_id, &first_operation);
 
     let second_operation = operation_id();
     let second_args = [
@@ -114,6 +127,43 @@ fn assert_idempotency(first: &Value, replay: &Value, conflict: &std::process::Ou
     assert_eq!(replay["data"]["receipt"]["idempotent_replay"], true);
     assert!(!conflict.status.success());
     let error: Value = serde_json::from_slice(&conflict.stdout).expect("conflict JSON");
+    assert_eq!(error["error"]["code"], "idempotency_conflict");
+}
+
+fn assert_equivalent_commit_shape(inactive: &Value, forwarded: &Value) {
+    for value in [inactive, forwarded] {
+        assert_eq!(value["data"]["receipt"]["sequence"], 1);
+        assert!(
+            value["data"]["receipt"]["operation_id"]
+                .as_str()
+                .is_some_and(|identity| identity.starts_with("op_"))
+        );
+        assert_eq!(value["data"]["receipt"]["idempotent_replay"], false);
+    }
+}
+
+fn assert_cross_kind_reuse_is_rejected(
+    binary: &str,
+    state: &std::path::Path,
+    session: &str,
+    thought: &str,
+    operation: &str,
+) {
+    let output = raw_input_command(
+        binary,
+        state,
+        &[
+            "thoughts",
+            "delete",
+            session,
+            thought,
+            "--operation-id",
+            operation,
+        ],
+        "",
+    );
+    assert!(!output.status.success());
+    let error: Value = serde_json::from_slice(&output.stdout).expect("reuse error JSON");
     assert_eq!(error["error"]["code"], "idempotency_conflict");
 }
 

@@ -107,7 +107,8 @@ mod tests {
         adapters::memory::{FakeClock, FakeIdGenerator},
         application::{AppState, InteractionMode},
         domain::{Session, SessionBoard, Thought, ThoughtPosition, Timestamp},
-        ports::{control::ControlMutation, environment::IdGenerator},
+        ports::{control::ControlMutation, editor::EditCommand, environment::IdGenerator},
+        ui::UiInput,
     };
 
     use super::BoardApp;
@@ -138,6 +139,9 @@ mod tests {
             thought_id: original_id,
         };
         app.sync_editor_from_state();
+        app.apply_edit(EditCommand::InsertChar('!'));
+        let editor_before = app.editor_snapshot().expect("live editor draft");
+        assert!(app.has_pending_edit());
         let added_id = ids.thought_id();
         let mutation = ControlMutation::Add {
             operation_id: ids.operation_id(),
@@ -152,6 +156,8 @@ mod tests {
             .expect("control add");
 
         assert_eq!(effects.len(), 1);
+        assert_eq!(app.editor_snapshot(), Some(editor_before));
+        assert!(app.has_pending_edit());
         assert_eq!(app.state.focused_thought, Some(original_id));
         assert_eq!(
             app.state.mode,
@@ -167,6 +173,49 @@ mod tests {
                 .content,
             "external"
         );
+    }
+
+    #[test]
+    fn ui_paste_and_forwarded_add_produce_the_same_state_and_durable_effect() {
+        let mut session_ids = FakeIdGenerator::new(1_725_200_000_000);
+        let session = Session::new(
+            session_ids.session_id(),
+            std::env::temp_dir().join("proqi-entry-point-conformance"),
+            Timestamp::from_millis(1),
+        )
+        .expect("session");
+        let board = SessionBoard::new(session, Vec::new()).expect("board");
+        let state = AppState::new(board);
+        let mut ui = BoardApp::new(state.clone(), crate::adapters::editor::RopeEditorFactory);
+        let mut forwarded = BoardApp::new(state, crate::adapters::editor::RopeEditorFactory);
+        let clock = FakeClock::new(Timestamp::from_millis(2));
+        let mut ui_ids = FakeIdGenerator::new(1_725_300_000_000);
+        let mut forwarded_ids = FakeIdGenerator::new(1_725_300_000_000);
+        let thought_id = forwarded_ids.thought_id();
+        let operation_id = forwarded_ids.operation_id();
+
+        let ui_effects = ui.handle(
+            UiInput::Paste("same content".to_owned()),
+            &mut ui_ids,
+            &clock,
+        );
+        let forwarded_effects = forwarded
+            .handle_control(
+                &ControlMutation::Add {
+                    operation_id,
+                    thought_id,
+                    content: "same content".to_owned(),
+                    annotations: Vec::new(),
+                    position: None,
+                },
+                &clock,
+            )
+            .expect("forwarded add");
+
+        assert_eq!(forwarded.state, ui.state);
+        assert_eq!(forwarded_effects, ui_effects);
+        assert_eq!(forwarded_effects.len(), 1);
+        assert!(forwarded_effects[0].persistence_batch().is_some());
     }
 
     #[test]

@@ -1,0 +1,4 @@
+{
+  "arguments": ["--json", "sessions", "list"],
+  "stdin": null
+}

@@ -18,6 +18,8 @@ independently edit instruction content in `CLAUDE.md`.
   gates. Coverage is a floor, not evidence that critical invariants are correct.
 - Never weaken a gate, threshold, or test merely to make a change pass.
 - Never auto-accept snapshots or golden files. Review their diffs explicitly.
+- Before `1.0`, an intentional breaking CLI or JSON change must update the
+  current-contract fixtures and the prepared GitHub Release notes.
 - Every visible TUI change updates the representative Insta snapshots in the
   same commit. Pending `.snap.new` files fail the canonical quality gate.
 

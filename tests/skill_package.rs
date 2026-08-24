@@ -10,6 +10,7 @@ const OPENAI: &str = include_str!("../skills/proqi/agents/openai.yaml");
 #[test]
 fn skill_is_explicit_json_only_and_example_identifiers_are_canonical() {
     assert!(SKILL.contains("Act only after explicit invocation."));
+    assert!(SKILL.contains("installed JSON CLI is the only application boundary"));
     assert!(OPENAI.contains("allow_implicit_invocation: false"));
     assert!(
         SKILL

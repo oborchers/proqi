@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "ok": false,
+  "error": {
+    "code": "invalid_identifier",
+    "message": "invalid identifier tht_06g30t8fudrq55fdkk348i7388: expected identifier prefix ses_",
+    "details": {}
+  }
+}

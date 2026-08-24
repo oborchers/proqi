@@ -23,7 +23,9 @@ Act only after explicit invocation. Use the scriptable CLI, never TUI output.
    in shell syntax, command arguments, environment variables, or temporary
    command files.
 6. Read only what the user requested. Do not list or inspect every scratchpad
-   merely because the skill is active. Never parse terminal escape sequences.
+   merely because the skill is active. Never parse terminal escape sequences,
+   read SQLite, inspect leases, connect to owner endpoints, or access runtime
+   metadata files. The installed JSON CLI is the only application boundary.
 7. Perform only the requested mutation. Preserve operation receipts so the
    user can identify and reverse the change.
 8. Do not trigger update checks. JSON commands never check implicitly. Run an
