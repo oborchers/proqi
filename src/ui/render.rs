@@ -67,14 +67,14 @@ fn render_board(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, 
         return;
     }
     for thought_layout in &layout.thoughts {
-        let Some(thought) = app.state.board.thought(thought_layout.thought_id) else {
+        let Some(content) = app.content_for_render(thought_layout.thought_id) else {
             continue;
         };
-        let focused = app.state.focused_thought == Some(thought.id);
+        let focused = app.active_thought_id() == Some(thought_layout.thought_id);
         let hovered = matches!(
             app.hovered(),
             Some(HitTarget::Thought(id) | HitTarget::DragHandle(id) | HitTarget::Overflow(id))
-                if id == thought.id
+                if id == thought_layout.thought_id
         );
         render_separator(frame, thought_layout, theme);
         if focused {
@@ -84,11 +84,11 @@ fn render_board(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, 
             );
         }
         render_gutter(frame, thought_layout, focused, hovered, theme);
-        if matches!(app.state.mode, InteractionMode::Edit { thought_id } if thought_id == thought.id)
+        if matches!(app.interaction_mode(), InteractionMode::Edit { thought_id } if thought_id == thought_layout.thought_id)
         {
             render_editor(frame, app, thought_layout, theme);
         } else {
-            render_thought(frame, &thought.content, thought_layout, focused, theme);
+            render_thought(frame, &content, thought_layout, focused, theme);
         }
     }
     if let Some(insert) = layout.insert {

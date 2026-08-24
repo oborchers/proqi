@@ -4,15 +4,15 @@ mod agent;
 mod clipboard;
 mod commands;
 mod control;
+mod draft;
 mod editing;
 mod palette;
 mod pointer;
 mod recovery;
 mod search;
+mod view;
 
 use std::collections::{BTreeMap, BTreeSet};
-
-use ratatui_core::layout::Rect;
 
 use crate::{
     application::{
@@ -29,7 +29,7 @@ use crate::{
     },
 };
 
-use super::{HitTarget, LayoutSnapshot, UiSettings, compute_layout};
+use super::{HitTarget, LayoutSnapshot, UiSettings};
 
 /// Mouse button after terminal-backend normalization.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -149,6 +149,7 @@ pub struct BoardApp {
     /// Reducer-owned application state rendered by the board.
     pub state: AppState,
     editor: Option<(ThoughtId, Box<dyn Editor>)>,
+    draft: Option<draft::DraftState>,
     editor_factory: Box<dyn EditorFactory>,
     pending_edit: Option<editing::PendingEdit>,
     edit_generation: u64,
@@ -195,6 +196,7 @@ impl BoardApp {
         Self {
             state,
             editor: None,
+            draft: None,
             editor_factory: Box::new(editor_factory),
             pending_edit: None,
             edit_generation: 0,
@@ -235,6 +237,7 @@ impl BoardApp {
             } else {
                 self.flush_pending_edit(ids, clock)
             };
+            self.discard_draft();
             self.request_quit();
             return effects;
         }
@@ -268,130 +271,11 @@ impl BoardApp {
             }
             UiInput::Pointer(pointer) => self.handle_pointer(pointer, ids, clock),
             UiInput::Paste(content) => self.paste(content, ids, clock),
-            UiInput::Key(key) => match self.state.mode {
+            UiInput::Key(key) => match self.interaction_mode() {
                 InteractionMode::Board => self.handle_board_key(key, ids, clock),
                 InteractionMode::Edit { .. } => self.handle_edit_key(key, ids, clock),
             },
         }
-    }
-
-    /// Return the active editor snapshot, if edit mode is active.
-    #[must_use]
-    pub fn editor_snapshot(&self) -> Option<EditorSnapshot> {
-        self.editor.as_ref().map(|(_, editor)| editor.snapshot())
-    }
-
-    /// Monotonic counter used by the runtime to detect new unflushed editor work.
-    #[must_use]
-    pub const fn edit_generation(&self) -> u64 {
-        self.edit_generation
-    }
-
-    /// Whether editor content is waiting for its semantic durability boundary.
-    #[must_use]
-    pub const fn has_pending_edit(&self) -> bool {
-        self.pending_edit.is_some()
-    }
-
-    /// Current hover target resolved from the latest rendered layout.
-    #[must_use]
-    pub const fn hovered(&self) -> Option<HitTarget> {
-        self.hovered
-    }
-
-    /// Filtered command labels and current selection for rendering.
-    #[must_use]
-    pub fn palette_view(&self) -> Option<(String, Vec<String>, usize)> {
-        self.palette.as_ref().map(palette::PaletteState::view)
-    }
-
-    /// Active board bindings used by hints and command translation.
-    #[must_use]
-    pub const fn keybindings(&self) -> &crate::ui::KeyBindings {
-        &self.settings.keybindings
-    }
-
-    /// Currently verified submission targets, empty when the enhancement is unavailable.
-    #[must_use]
-    pub fn agent_targets(&self) -> &[AgentTarget] {
-        &self.agent_targets
-    }
-
-    /// Whether directional submission targeting is active and removes on acceptance.
-    #[must_use]
-    pub fn submission_mode(&self) -> Option<bool> {
-        self.submission_mode.map(|mode| mode.remove)
-    }
-
-    /// Prepare current frame geometry without changing the logical cursor.
-    pub fn prepare_layout(&mut self, viewport: TextViewport) {
-        self.viewport = viewport;
-        if let Some((_, editor)) = &mut self.editor {
-            editor.set_viewport(viewport);
-        }
-    }
-
-    /// Recompute one authoritative frame layout and reflow the active editor.
-    pub fn prepare_frame(&mut self, area: Rect) -> LayoutSnapshot {
-        let mut layout_state = self.state.clone();
-        if self.manual_board_scroll {
-            layout_state.focused_thought = None;
-        }
-        let editor = self.editor_snapshot();
-        let has_status = self.status.is_some()
-            || matches!(self.state.durability, DurabilityState::Failed { .. });
-        let first = compute_layout(
-            &layout_state,
-            editor.as_ref(),
-            area,
-            self.first_visible,
-            &self.expanded,
-            has_status,
-        );
-        let height = self
-            .state
-            .focused_thought
-            .and_then(|id| first.thought(id))
-            .map_or(first.board.height.max(1), |thought| {
-                thought.text_area.height.max(1)
-            });
-        self.prepare_layout(TextViewport::new(first.content_width, height));
-        let editor = self.editor_snapshot();
-        let mut layout = compute_layout(
-            &layout_state,
-            editor.as_ref(),
-            area,
-            first.first_index,
-            &self.expanded,
-            has_status,
-        );
-        let palette_items = self
-            .palette
-            .as_ref()
-            .map_or(0, palette::PaletteState::match_count);
-        let search_items = self.search_match_count();
-        let preferred_rows = if self.help {
-            9
-        } else if self.palette.is_some() {
-            palette_items.max(2)
-        } else if self.search.is_some() {
-            search_items.max(2)
-        } else {
-            0
-        };
-        layout.configure_overlay(palette_items.max(search_items), preferred_rows);
-        layout.configure_agent_controls(&self.agent_targets);
-        let final_height = self
-            .state
-            .focused_thought
-            .and_then(|id| layout.thought(id))
-            .map_or(layout.board.height.max(1), |thought| {
-                thought.text_area.height.max(1)
-            });
-        self.prepare_layout(TextViewport::new(layout.content_width, final_height));
-        self.first_visible = layout.first_index;
-        self.layout = Some(layout.clone());
-        layout
     }
 
     /// Rebuild the editor adapter when reducer state changes externally.
@@ -446,6 +330,7 @@ impl BoardApp {
     }
 
     pub(super) fn request_quit(&mut self) {
+        self.discard_draft();
         if matches!(
             self.state.durability,
             DurabilityState::Failed { failed, .. }
@@ -463,6 +348,10 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
+        if content.is_empty() {
+            return self.start_draft(ids, clock);
+        }
+        self.discard_draft();
         let effects = self.reduce(Action::CreateThought {
             thought_id: ids.thought_id(),
             operation_id: ids.operation_id(),
@@ -475,6 +364,9 @@ impl BoardApp {
     }
 
     fn enter_edit(&mut self) {
+        if self.draft.is_some() {
+            return;
+        }
         if let Some(thought_id) = self.state.focused_thought {
             let _effects = self.reduce(Action::EnterEdit(thought_id));
             self.sync_editor_from_state();

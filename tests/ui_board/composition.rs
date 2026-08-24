@@ -8,7 +8,8 @@ fn remapped_board_binding_changes_behavior_and_visible_hint() {
     fixture.input(UiInput::Key(UiKey::Character('n')));
     assert!(fixture.app.state.board.live_thoughts().is_empty());
     fixture.input(UiInput::Key(UiKey::Character('t')));
-    assert_eq!(fixture.app.state.board.live_thoughts().len(), 1);
+    assert!(fixture.app.has_draft());
+    assert!(fixture.app.state.board.live_thoughts().is_empty());
     fixture.input(UiInput::Key(UiKey::Escape));
     assert!(text(draw(&mut fixture, 50, 6).backend().buffer()).contains("t New"));
 }

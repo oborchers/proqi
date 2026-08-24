@@ -318,6 +318,11 @@ error return, panic, and termination signals supported by the platform.
 wall-clock time, identifiers, platform directories, or subprocess execution
 would otherwise make tests nondeterministic.
 
+An empty new-thought draft is UI-owned transient state. It stays outside the
+reducer and persistence store until its first non-empty edit, which becomes an
+ordinary create operation using the already reserved thought identifier. An
+abandoned draft therefore produces no durable thought, revision, or operation.
+
 ## Domain model and database
 
 The database stores current state and operation history. It is not a pure

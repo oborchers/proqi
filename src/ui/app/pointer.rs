@@ -161,6 +161,10 @@ impl BoardApp {
     }
 
     fn focus(&mut self, thought_id: crate::domain::ThoughtId) {
+        if self.is_draft(thought_id) {
+            return;
+        }
+        self.discard_draft();
         self.manual_board_scroll = false;
         let _effects = self.reduce(Action::FocusThought(Some(thought_id)));
     }

@@ -313,8 +313,10 @@ subtle until the area is focused or hovered, but it must always have a keyboard
 equivalent and a stable mouse hit target.
 
 Clicking `+`, clicking the insertion area, or pressing the create-thought key
-creates one blank thought, enters edit mode immediately, and places the cursor
-in the new thought. The complete insertion row is clickable and reads
+opens one ephemeral blank draft, enters edit mode immediately, and places the
+cursor in it. The first non-empty edit persists the thought. `Esc`, focus loss,
+and exit discard an unchanged draft, and only one empty draft may exist at a
+time. The complete insertion row is clickable and reads
 `+ New thought` while focused or hovered instead of relying on an unexplained
 symbol. The user never needs a second action before typing.
 

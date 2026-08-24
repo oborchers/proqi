@@ -29,6 +29,10 @@ impl BoardApp {
         let Some((thought_id, before, after)) = edit else {
             return;
         };
+        if self.is_draft(thought_id) {
+            self.edit_generation = self.edit_generation.wrapping_add(1);
+            return;
+        }
         match &mut self.pending_edit {
             Some(pending) if pending.thought_id == thought_id => pending.after = after,
             _ => {

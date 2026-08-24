@@ -31,7 +31,7 @@ pub(super) fn render_header(
             |name| name.to_string_lossy().into_owned(),
         )
     });
-    let count = app.state.board.live_thoughts().len();
+    let count = app.visible_thought_count();
     let left = if layout.header.width >= 40 {
         format!(" proqi · {label} · {count} thoughts")
     } else {
@@ -110,6 +110,9 @@ fn render_context(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot
 }
 
 fn durability(app: &BoardApp) -> &'static str {
+    if app.has_draft() {
+        return "draft";
+    }
     match app.state.durability {
         DurabilityState::Durable { .. } if app.has_pending_edit() => "saving",
         DurabilityState::Durable { .. } => "saved",

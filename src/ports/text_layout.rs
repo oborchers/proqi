@@ -83,15 +83,16 @@ pub(crate) fn wrapped_row_index(rows: &[WrappedRow], byte: usize) -> usize {
 fn segment_end(graphemes: &[(usize, &str)], start: usize, width: usize) -> (usize, usize) {
     let mut end = start;
     let mut cells = 0;
+    let mut whitespace_break = None;
     while end < graphemes.len() {
         let grapheme_cells = grapheme_width(graphemes[end].1, cells);
         if end > start && cells + grapheme_cells > width {
-            break;
+            return whitespace_break.unwrap_or((end, cells));
         }
         cells += grapheme_cells;
         end += 1;
-        if cells >= width {
-            break;
+        if graphemes[end - 1].1.chars().all(char::is_whitespace) {
+            whitespace_break = Some((end, cells));
         }
     }
     (end, cells)
@@ -168,4 +169,29 @@ fn line_ranges(content: &str) -> Vec<LineRange> {
         end: content.len(),
     });
     lines
+}
+
+#[cfg(test)]
+mod tests {
+    use super::wrap_rows;
+
+    #[test]
+    fn ordinary_words_wrap_at_the_latest_whitespace_boundary() {
+        let rows = wrap_rows("Explain the smallest next step", 12);
+        let visible = rows
+            .iter()
+            .map(|row| row.visual.text.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(visible, ["Explain the ", "smallest ", "next step"]);
+        assert_eq!(rows[1].start_byte, "Explain the ".len());
+    }
+
+    #[test]
+    fn oversized_unicode_tokens_still_hard_wrap_without_splitting_graphemes() {
+        let rows = wrap_rows("界界界e\u{301}界", 4);
+        assert_eq!(rows[0].visual.text, "界界");
+        assert_eq!(rows[1].visual.text, "界e\u{301}");
+        assert_eq!(rows[2].visual.text, "界");
+        assert_eq!(rows[1].visual.start_grapheme, 2);
+    }
 }

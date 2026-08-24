@@ -99,6 +99,10 @@ impl BoardApp {
     ) -> Vec<Effect> {
         match key {
             UiKey::Escape => {
+                if self.has_draft() {
+                    self.discard_draft();
+                    return Vec::new();
+                }
                 let effects = self.flush_pending_edit(ids, clock);
                 let _effects = self.reduce(Action::ExitEdit);
                 self.editor = None;
@@ -154,6 +158,9 @@ impl BoardApp {
             Vec::new()
         };
         self.apply_edit(command);
+        if self.has_draft() {
+            effects.extend(self.persist_draft(ids, clock));
+        }
         if matches!(key, UiKey::DeleteLine) {
             effects.extend(self.flush_pending_edit(ids, clock));
         }
@@ -166,7 +173,13 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        if matches!(self.state.mode, InteractionMode::Board) {
+        if self.has_draft() {
+            self.apply_edit(EditCommand::Paste(content));
+            self.persist_draft(ids, clock)
+        } else if matches!(self.state.mode, InteractionMode::Board) {
+            if content.is_empty() {
+                return Vec::new();
+            }
             self.create(content, ids, clock)
         } else {
             let mut effects = self.flush_pending_edit(ids, clock);

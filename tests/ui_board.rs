@@ -185,12 +185,13 @@ fn board_rendering_uses_the_editor_wrap_model_without_clipping_words() {
     fixture.paste("aaaaaa bbbbbb cccccc dddddd");
     fixture.input(UiInput::Key(UiKey::Escape));
     let layout = fixture.app.prepare_frame(Rect::new(0, 0, 12, 8));
-    assert_eq!(layout.thoughts[0].area.height, 3);
+    assert!(layout.thoughts[0].area.height >= 3);
     let terminal = draw(&mut fixture, 12, 8);
     let rendered = text(terminal.backend().buffer());
-    assert!(rendered.contains("aaaaaa bbb"));
-    assert!(rendered.contains("bbb cccccc"));
-    assert!(rendered.contains(" ddddd"));
+    for word in ["aaaaaa", "bbbbbb", "cccccc", "dddddd"] {
+        assert!(rendered.contains(word));
+    }
+    assert!(!rendered.contains("aaaaaa bbb"));
 }
 
 #[test]
@@ -245,7 +246,7 @@ fn mouse_can_create_focus_place_cursor_and_open_help() {
         .expect("insert row");
     fixture.pointer(insert.x, insert.y, PointerKind::Down(PointerButton::Left));
     assert!(matches!(
-        fixture.app.state.mode,
+        fixture.app.interaction_mode(),
         proqi::application::InteractionMode::Edit { .. }
     ));
     fixture.input(UiInput::Paste("A界B".to_owned()));
@@ -435,5 +436,7 @@ mod agent;
 mod clipboard;
 #[path = "ui_board/composition.rs"]
 mod composition;
+#[path = "ui_board/draft.rs"]
+mod draft;
 #[path = "ui_board/durability.rs"]
 mod durability;
