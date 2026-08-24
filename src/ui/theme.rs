@@ -13,6 +13,10 @@ pub struct Theme {
     pub background: Color,
     /// Forest-green routine accent.
     pub accent: Color,
+    /// Deeper forest-green surface used by the gutter and text cursor.
+    pub accent_surface: Color,
+    /// High-contrast text rendered on an accent surface.
+    pub on_accent: Color,
     /// Secondary text and quiet controls.
     pub muted: Color,
     /// Quiet horizontal separation between adjacent thoughts.
@@ -37,6 +41,8 @@ impl Theme {
                 foreground: Color::Rgb(30, 27, 24),
                 background: Color::Rgb(250, 250, 248),
                 accent: Color::Rgb(45, 106, 79),
+                accent_surface: Color::Rgb(45, 106, 79),
+                on_accent: Color::Rgb(250, 250, 248),
                 muted: Color::Rgb(79, 70, 62),
                 divider: Color::Rgb(224, 217, 207),
                 focused_surface: Some(Color::Rgb(236, 236, 240)),
@@ -46,7 +52,9 @@ impl Theme {
             ThemePreference::Dark => Self {
                 foreground: Color::Rgb(232, 228, 223),
                 background: Color::Rgb(15, 13, 10),
-                accent: Color::Rgb(91, 158, 125),
+                accent: Color::Rgb(112, 214, 155),
+                accent_surface: Color::Rgb(45, 106, 79),
+                on_accent: Color::Rgb(250, 250, 248),
                 muted: Color::Rgb(176, 169, 160),
                 divider: Color::Rgb(42, 37, 32),
                 focused_surface: Some(Color::Rgb(52, 52, 63)),
@@ -56,7 +64,9 @@ impl Theme {
             ThemePreference::Auto => Self {
                 foreground: Color::Reset,
                 background: Color::Reset,
-                accent: Color::Rgb(45, 106, 79),
+                accent: Color::Green,
+                accent_surface: Color::Green,
+                on_accent: Color::Black,
                 muted: Color::DarkGray,
                 divider: Color::DarkGray,
                 focused_surface: Some(Color::DarkGray),
@@ -86,6 +96,8 @@ impl Theme {
             foreground: Color::Reset,
             background: Color::Reset,
             accent: Color::Green,
+            accent_surface: Color::Green,
+            on_accent: Color::Black,
             muted: Color::DarkGray,
             divider: Color::DarkGray,
             focused_surface: None,
@@ -128,5 +140,41 @@ mod tests {
         let automatic = Theme::resolve(ThemePreference::Auto, true);
         assert_eq!(automatic.focused_surface, Some(Color::DarkGray));
         assert_eq!(automatic.focused_foreground, Color::White);
+    }
+
+    #[test]
+    fn explicit_accent_text_meets_aa_contrast() {
+        let dark = Theme::resolve(ThemePreference::Dark, true);
+        assert!(contrast(dark.accent, Color::Rgb(52, 52, 63)) >= 4.5);
+        assert!(contrast(dark.accent, dark.background) >= 4.5);
+
+        let light = Theme::resolve(ThemePreference::Light, true);
+        assert!(contrast(light.accent, light.focused_surface.expect("surface")) >= 4.5);
+        assert!(contrast(light.accent, light.background) >= 4.5);
+    }
+
+    fn contrast(first: Color, second: Color) -> f64 {
+        let first = luminance(first);
+        let second = luminance(second);
+        (first.max(second) + 0.05) / (first.min(second) + 0.05)
+    }
+
+    fn luminance(color: Color) -> f64 {
+        let Color::Rgb(red, green, blue) = color else {
+            return 0.0;
+        };
+        [red, green, blue]
+            .map(|channel| {
+                let value = f64::from(channel) / 255.0;
+                if value <= 0.040_45 {
+                    value / 12.92
+                } else {
+                    ((value + 0.055) / 1.055).powf(2.4)
+                }
+            })
+            .into_iter()
+            .zip([0.2126, 0.7152, 0.0722])
+            .map(|(channel, weight)| channel * weight)
+            .sum()
     }
 }

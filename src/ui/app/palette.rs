@@ -13,6 +13,9 @@ use super::{BoardApp, UiInput, UiKey};
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Command {
     New,
+    RenameSession,
+    SendSession,
+    SendSessionRemove,
     Edit,
     Delete,
     Copy,
@@ -35,8 +38,9 @@ enum Command {
 }
 
 impl Command {
-    const ALL: [(Self, &'static str); 20] = [
+    const ALL: [(Self, &'static str); 23] = [
         (Self::New, "New thought"),
+        (Self::RenameSession, "Rename session"),
         (Self::Edit, "Edit thought"),
         (Self::Delete, "Delete thought"),
         (Self::Copy, "Copy thought"),
@@ -46,6 +50,11 @@ impl Command {
         (Self::SendRemove, "Send to composer and remove thought"),
         (Self::Submit, "Submit to adjacent agent"),
         (Self::SubmitRemove, "Submit and remove thought"),
+        (Self::SendSession, "Send to another Proqi session"),
+        (
+            Self::SendSessionRemove,
+            "Send to another Proqi session and remove thought",
+        ),
         (Self::RefreshAgents, "Refresh adjacent agents"),
         (Self::RetryStorage, "Retry failed save"),
         (Self::ExportRecovery, "Export recovery file"),
@@ -130,6 +139,7 @@ impl BoardApp {
     pub(super) fn close_overlay(&mut self) {
         self.palette = None;
         self.search = None;
+        self.transfer = None;
         self.help = false;
     }
 
@@ -239,6 +249,12 @@ impl BoardApp {
     ) -> Vec<Effect> {
         match command {
             Command::New => self.create(crate::ui::PastePayload::text(String::new()), ids, clock),
+            Command::RenameSession => {
+                self.begin_session_rename();
+                Vec::new()
+            }
+            Command::SendSession => self.begin_session_transfer(false, ids, clock),
+            Command::SendSessionRemove => self.begin_session_transfer(true, ids, clock),
             Command::Edit => {
                 self.enter_edit();
                 Vec::new()

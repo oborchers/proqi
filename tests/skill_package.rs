@@ -32,6 +32,7 @@ fn every_documented_command_family_remains_available() {
         &["thoughts", "inspect", "--help"],
         &["thoughts", "add", "--help"],
         &["thoughts", "move", "--help"],
+        &["thoughts", "send", "--help"],
         &["thoughts", "delete", "--help"],
         &["thoughts", "undo", "--help"],
         &["thoughts", "redo", "--help"],

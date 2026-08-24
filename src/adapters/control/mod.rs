@@ -18,7 +18,7 @@ use std::{
 use crate::ports::{
     control::{
         CONTROL_PROTOCOL_VERSION, ControlClient, ControlError, ControlRequest, ControlResponse,
-        ControlResult,
+        ControlResult, MIN_CONTROL_PROTOCOL_VERSION,
     },
     runtime::InstanceInfo,
 };
@@ -40,8 +40,10 @@ impl ControlClient for LocalControlClient {
         owner: &InstanceInfo,
         request: &ControlRequest,
     ) -> Result<crate::ports::control::ControlReceipt, ControlError> {
-        if owner.control_protocol != Some(CONTROL_PROTOCOL_VERSION)
-            || request.protocol != CONTROL_PROTOCOL_VERSION
+        if owner.control_protocol != Some(request.protocol)
+            || !(MIN_CONTROL_PROTOCOL_VERSION..=CONTROL_PROTOCOL_VERSION)
+                .contains(&request.protocol)
+            || request.mutation.requires_protocol_two() && request.protocol < 2
             || owner.session_id != request.session_id
         {
             return Err(ControlError::Unsupported);
@@ -53,9 +55,7 @@ impl ControlClient for LocalControlClient {
         let stream = connect(endpoint, owner.pid)?;
         write_request(&stream, request)?;
         let response = read_response(&stream)?;
-        if response.protocol != CONTROL_PROTOCOL_VERSION
-            || response.request_id != request.request_id
-        {
+        if response.protocol != request.protocol || response.request_id != request.request_id {
             return Err(ControlError::Protocol(
                 "response version or request identity differs".to_owned(),
             ));
@@ -79,7 +79,7 @@ impl ControlEnvelope {
     /// Respond exactly once to the waiting transport request.
     pub(crate) fn respond(self, result: ControlResult) {
         let response = ControlResponse {
-            protocol: CONTROL_PROTOCOL_VERSION,
+            protocol: self.request.protocol,
             request_id: self.request.request_id,
             result,
         };
@@ -150,11 +150,20 @@ fn handle_stream(
     let Ok(request) = read_request(stream) else {
         return;
     };
-    if request.protocol != CONTROL_PROTOCOL_VERSION {
+    if !(MIN_CONTROL_PROTOCOL_VERSION..=CONTROL_PROTOCOL_VERSION).contains(&request.protocol) {
         let response = rejected(
             &request,
             "protocol_mismatch",
             "unsupported control protocol",
+        );
+        let _written = write_response(stream, &response);
+        return;
+    }
+    if request.mutation.requires_protocol_two() && request.protocol < 2 {
+        let response = rejected(
+            &request,
+            "protocol_mismatch",
+            "presentation annotations require control protocol 2",
         );
         let _written = write_response(stream, &response);
         return;
@@ -213,7 +222,7 @@ fn cache_response(
 
 fn rejected(request: &ControlRequest, code: &str, message: &str) -> ControlResponse {
     ControlResponse {
-        protocol: CONTROL_PROTOCOL_VERSION,
+        protocol: request.protocol,
         request_id: request.request_id,
         result: ControlResult::Rejected {
             code: code.to_owned(),
@@ -408,6 +417,7 @@ mod tests {
                 operation_id: ids.operation_id(),
                 thought_id: ids.thought_id(),
                 content: content.to_owned(),
+                annotations: Vec::new(),
                 position: None,
             },
         }

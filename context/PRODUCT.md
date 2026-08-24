@@ -157,11 +157,12 @@ The green focus gutter is the strongest routine visual element. Notes have no
 heading row or decorative card chrome. Whole-thought controls can appear for
 the focused or hovered thought without permanently consuming a row.
 
-A quiet header identifies Proqi, the current session, thought count, and
-durability. A separate footer uses one context row, one labeled-action row, and
-an integration row when verified adjacent agents exist. A transient-status row
-appears only when useful space permits. Narrow panes shorten or remove
-secondary labels before any two regions can collide.
+The board spends no permanent row on a repeated product header. The footer
+combines the optional session name, thought count, mode, and durability into one
+responsive summary. Separate rows contain labeled actions and only the verified
+agent targets that currently exist. A transient-status row appears only when
+useful space permits. Narrow panes shorten or remove secondary labels before
+any two regions can collide.
 
 ### Revision and operation history
 
@@ -517,6 +518,21 @@ animation. Terminal motion is reserved for immediate interaction feedback.
 Right click is never required because terminals reserve or forward it
 inconsistently. All mouse actions have keyboard equivalents.
 
+### Cross-session thought delivery
+
+The command palette can copy the selected thought into another resumable Proqi
+session. A searchable destination picker matches exact names, paths, and
+derived excerpts. Duplicate names remain valid, but a typed session identifier
+is required when a name is ambiguous.
+
+Send preserves the source. Send and remove commits the exact content and its
+presentation annotations in the destination first, then performs an ordinary
+undoable source deletion only after the destination returns a durable receipt.
+Failure, ambiguity, or an unsupported active owner leaves the source unchanged.
+Undo restores only the source deletion and never retracts the destination copy.
+The scriptable CLI exposes the same behavior with `thoughts send` and separate
+idempotency identifiers for destination creation and optional source removal.
+
 ### Interaction economy
 
 The following actions must not open a confirmation dialog:
@@ -550,6 +566,7 @@ After any resize:
 - The editing cursor remains visible and refers to the same text position.
 - A mouse hit target always matches its newly rendered geometry.
 - Scroll bounds and scrollbars reflect the new layout immediately.
+- Underfilled content cannot be scrolled away from the viewport.
 - No content is clipped behind the footer or terminal edge.
 - Undo history and presentation state remain unchanged.
 
@@ -605,7 +622,8 @@ texture would add noise and render inconsistently across terminals.
 |---|---|---|
 | Background | `#FAFAF8` | `#0F0D0A` |
 | Primary text | `#1E1B18` | `#E8E4DF` |
-| Accent | `#2D6A4F` | `#5B9E7D` |
+| Accent text | `#2D6A4F` | `#70D69B` |
+| Accent surface | `#2D6A4F` | `#2D6A4F` |
 | Focused surface | `#ECECF0` | `#34343F` |
 | Quiet border | `#E0D9CF` | `#2A2520` |
 | Muted text | `#4F463E` | `#B0A9A0` |
@@ -614,10 +632,12 @@ The terminal may inherit its existing background where exact background color
 control would make integration feel less native. Accent and focus treatment
 remain brand-derived.
 
-Forest green is the only routine accent. It marks the focus gutter, folded
-tokens, the text cursor, and actionable state. Focused thought text remains in
-the primary foreground on a quiet neutral surface. Muted text and borders establish hierarchy
-without introducing more hues.
+Forest green remains the only routine hue. A bright mint expression of that hue
+marks folded tokens and actionable text on dark backgrounds. The deeper forest
+surface marks the focus gutter and cursor cell with a contrasting foreground.
+Focused thought text remains in the primary foreground on a quiet neutral
+surface. Muted text and borders establish hierarchy without introducing more
+hues.
 
 Semantic error, warning, and information colors appear only when those states
 actually exist. They are not decorative note colors.

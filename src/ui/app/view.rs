@@ -1,6 +1,7 @@
 //! Read-only UI projections and frame preparation.
 
 use ratatui_core::layout::Rect;
+use unicode_width::UnicodeWidthStr as _;
 
 use crate::{
     application::{DurabilityState, InteractionMode},
@@ -122,6 +123,18 @@ impl BoardApp {
         self.palette.as_ref().map(palette::PaletteState::view)
     }
 
+    /// Current session-name input when the rename prompt is active.
+    #[must_use]
+    pub fn session_rename_view(&self) -> Option<&str> {
+        self.rename.as_deref()
+    }
+
+    /// Searchable destination sessions for explicit cross-session delivery.
+    #[must_use]
+    pub fn session_transfer_view(&self) -> Option<(String, Vec<String>, usize)> {
+        self.transfer_view()
+    }
+
     /// Active board bindings used by hints and command translation.
     #[must_use]
     pub const fn keybindings(&self) -> &KeyBindings {
@@ -189,6 +202,9 @@ impl BoardApp {
         );
         self.configure_overlay(&mut layout);
         layout.configure_agent_controls(&self.agent_targets, self.submission_mode());
+        let (summary, name_width) =
+            self.footer_summary(layout.footer_context.width.saturating_sub(4));
+        layout.configure_footer_summary(summary, name_width);
         let final_height = self.focused_height(&layout);
         self.prepare_layout(TextViewport::new(layout.content_width, final_height));
         self.first_visible = layout.first_index;
@@ -210,16 +226,70 @@ impl BoardApp {
             .as_ref()
             .map_or(0, palette::PaletteState::match_count);
         let search_items = self.search_match_count();
+        let transfer_items = self.transfer_match_count();
         let preferred_rows = if self.help {
             6
+        } else if self.rename.is_some() {
+            2
         } else if self.palette.is_some() {
             palette_items.max(2)
+        } else if self.transfer.is_some() {
+            transfer_items.max(2)
         } else if self.search.is_some() {
             search_items.max(2)
         } else {
             0
         };
-        layout.configure_overlay(palette_items.max(search_items), preferred_rows);
+        layout.configure_overlay(
+            palette_items.max(search_items).max(transfer_items),
+            preferred_rows,
+        );
+    }
+
+    fn footer_summary(&self, width: u16) -> (String, u16) {
+        let session = &self.state.board.session;
+        let derived_name = session
+            .last_opened_cwd
+            .file_name()
+            .or_else(|| session.origin_cwd.file_name())
+            .and_then(|name| name.to_str())
+            .unwrap_or("untitled");
+        let name = session.name.as_deref().unwrap_or(derived_name);
+        let count = self.visible_thought_count();
+        let noun = if count == 1 { "thought" } else { "thoughts" };
+        let mode = match self.interaction_mode() {
+            InteractionMode::Board => "board",
+            InteractionMode::Edit { .. } => "edit",
+        };
+        let durability = self.durability_summary();
+        let full = format!("{name} · {count} {noun} · {mode} · {durability}");
+        if full.width() <= usize::from(width) {
+            return (full, u16::try_from(name.width()).unwrap_or(u16::MAX));
+        }
+        for fallback in [
+            format!("{count} {noun} · {mode} · {durability}"),
+            format!("{mode} · {durability}"),
+            durability.to_owned(),
+        ] {
+            if fallback.width() <= usize::from(width) {
+                return (fallback, 0);
+            }
+        }
+        (String::new(), 0)
+    }
+
+    fn durability_summary(&self) -> &'static str {
+        if matches!(self.state.durability, DurabilityState::Failed { .. }) {
+            "unsaved"
+        } else if self.has_draft() {
+            "draft"
+        } else if self.has_pending_edit()
+            || matches!(self.state.durability, DurabilityState::Pending { .. })
+        {
+            "saving"
+        } else {
+            "saved"
+        }
     }
 
     fn presentation_state(&self) -> crate::application::AppState {

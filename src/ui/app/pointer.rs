@@ -93,6 +93,10 @@ impl BoardApp {
                 self.open_palette();
                 Vec::new()
             }
+            Some(HitTarget::RenameSession) => {
+                self.begin_session_rename();
+                Vec::new()
+            }
             Some(HitTarget::Copy) => self.copy_active(ids),
             Some(HitTarget::Cut) => self.cut_active(ids, clock),
             Some(HitTarget::Delete) => self.delete(ids, clock),
@@ -117,6 +121,8 @@ impl BoardApp {
             Some(HitTarget::PaletteItem(index)) => {
                 if self.search.is_some() {
                     self.execute_search_visible_index(index)
+                } else if self.transfer.is_some() {
+                    self.choose_transfer_visible(index, ids)
                 } else {
                     self.execute_palette_visible_index(index, ids, clock)
                 }
@@ -193,8 +199,15 @@ impl BoardApp {
             editor.scroll_by(delta);
             return Vec::new();
         }
-        let maximum = self.state.board.live_thoughts().len().saturating_sub(1);
-        self.first_visible = self.first_visible.saturating_add_signed(delta).min(maximum);
+        let maximum = self
+            .layout
+            .as_ref()
+            .map_or(0, |layout| layout.max_first_index);
+        let next = self.first_visible.saturating_add_signed(delta).min(maximum);
+        if next == self.first_visible {
+            return Vec::new();
+        }
+        self.first_visible = next;
         self.manual_board_scroll = true;
         self.layout = None;
         Vec::new()

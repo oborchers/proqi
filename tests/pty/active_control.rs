@@ -11,6 +11,17 @@ fn active_tui_accepts_durable_idempotent_cli_mutations_before_crash() {
     let binary = env!("CARGO_BIN_EXE_proqi");
     let created = json_command(binary, state.path(), &[]);
     let session = created["data"]["session_id"].as_str().expect("session ID");
+    let source = json_command(binary, state.path(), &[]);
+    let source_id = source["data"]["session_id"].as_str().expect("source ID");
+    let source_thought = json_input_command(
+        binary,
+        state.path(),
+        &["thoughts", "add", source_id],
+        "Transferred while destination is active",
+    );
+    let source_thought_id = source_thought["data"]["thought_id"]
+        .as_str()
+        .expect("source thought ID");
     let ready = state.path().join("owner-ready");
     let done = state.path().join("owner-done");
     let mut owner = spawn_owner(binary, state.path(), session, &ready, &done);
@@ -42,11 +53,27 @@ fn active_tui_accepts_durable_idempotent_cli_mutations_before_crash() {
     let second = json_input_command(binary, state.path(), &second_args, "Keep me");
     let second_id = second["data"]["thought_id"].as_str().expect("second ID");
     mutate_active(binary, state.path(), session, first_id, second_id);
+    let transferred = json_command(
+        binary,
+        state.path(),
+        &[
+            "thoughts",
+            "send",
+            source_id,
+            source_thought_id,
+            session,
+            "--operation-id",
+            &operation_id(),
+        ],
+    );
+    let transferred_id = transferred["data"]["destination_thought_id"]
+        .as_str()
+        .expect("transferred thought ID");
 
     std::fs::write(&done, b"done").expect("release owner workflow");
     let status = owner.wait().expect("wait for active owner workflow");
     assert!(status.success(), "active owner PTY exited with {status}");
-    assert_recovered_state(binary, state.path(), session, second_id);
+    assert_recovered_state(binary, state.path(), session, second_id, transferred_id);
 }
 
 fn spawn_owner(
@@ -155,14 +182,20 @@ fn assert_recovered_state(
     state: &std::path::Path,
     session: &str,
     surviving_id: &str,
+    transferred_id: &str,
 ) {
     let sessions = json_command(binary, state, &["sessions", "list"]);
     assert_eq!(sessions["data"]["sessions"][0]["state"], "recovered");
     let thoughts = json_command(binary, state, &["thoughts", "list", session]);
     let live = thoughts["data"]["thoughts"].as_array().expect("thoughts");
-    assert_eq!(live.len(), 1);
+    assert_eq!(live.len(), 2);
     assert_eq!(live[0]["id"], surviving_id);
     assert_eq!(live[0]["content"], "Keep me");
+    assert_eq!(live[1]["id"], transferred_id);
+    assert_eq!(
+        live[1]["content"],
+        "Transferred while destination is active"
+    );
 }
 
 fn operation_id() -> String {

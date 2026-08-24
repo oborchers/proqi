@@ -23,12 +23,13 @@ impl BoardApp {
                 operation_id,
                 thought_id,
                 content,
+                annotations,
                 position,
             } => Action::CreateThought {
                 thought_id: *thought_id,
                 operation_id: *operation_id,
                 content: content.clone(),
-                annotations: Vec::new(),
+                annotations: annotations.clone(),
                 insertion_index: *position,
                 at,
             },
@@ -142,6 +143,7 @@ mod tests {
             operation_id: ids.operation_id(),
             thought_id: added_id,
             content: "external".to_owned(),
+            annotations: Vec::new(),
             position: None,
         };
 

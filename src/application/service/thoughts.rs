@@ -2,7 +2,10 @@
 
 use crate::{
     application::{Action, AppState, Effect, reduce},
-    domain::{BoardMutation, BoardOperationKind, OperationId, SessionId, ThoughtId, UndoScope},
+    domain::{
+        BoardMutation, BoardOperationKind, ContentAnnotation, OperationId, SessionId, ThoughtId,
+        UndoScope,
+    },
     ports::{
         environment::{Clock, IdGenerator},
         runtime::RuntimeCoordinator,
@@ -31,6 +34,28 @@ where
         position: Option<usize>,
         supplied_operation: Option<OperationId>,
     ) -> Result<ThoughtMutation, SessionServiceError> {
+        self.add_thought_annotated(
+            session_id,
+            content,
+            Vec::new(),
+            position,
+            supplied_operation,
+        )
+    }
+
+    /// Add exact content and durable presentation annotations.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed lease, reducer, idempotency, annotation, or persistence failure.
+    pub fn add_thought_annotated(
+        &mut self,
+        session_id: SessionId,
+        content: String,
+        annotations: Vec<ContentAnnotation>,
+        position: Option<usize>,
+        supplied_operation: Option<OperationId>,
+    ) -> Result<ThoughtMutation, SessionServiceError> {
         let operation_id = supplied_operation.unwrap_or_else(|| self.ids.operation_id());
         let thought_id = if supplied_operation.is_some() {
             ThoughtId::from_database_bytes(operation_id.database_bytes())
@@ -39,11 +64,25 @@ where
             self.ids.thought_id()
         };
         if let Some(existing) = self.store.operation_request(operation_id)? {
-            return match_existing_add(&existing, session_id, thought_id, &content, position);
+            return match_existing_add(
+                &existing,
+                session_id,
+                thought_id,
+                &content,
+                &annotations,
+                position,
+            );
         }
         let _lease = self.runtime.acquire_session(session_id)?;
         if let Some(existing) = self.store.operation_request(operation_id)? {
-            return match_existing_add(&existing, session_id, thought_id, &content, position);
+            return match_existing_add(
+                &existing,
+                session_id,
+                thought_id,
+                &content,
+                &annotations,
+                position,
+            );
         }
         let mut state = self.load_live_state(session_id)?;
         let effects = reduce(
@@ -52,7 +91,7 @@ where
                 thought_id,
                 operation_id,
                 content,
-                annotations: Vec::new(),
+                annotations,
                 insertion_index: position,
                 at: self.clock.now(),
             },
@@ -204,6 +243,7 @@ fn match_existing_add(
     session_id: SessionId,
     thought_id: ThoughtId,
     content: &str,
+    annotations: &[ContentAnnotation],
     position: Option<usize>,
 ) -> Result<ThoughtMutation, SessionServiceError> {
     let StoredOperationRequest::Board { operation, receipt } = existing else {
@@ -217,6 +257,7 @@ fn match_existing_add(
         || operation.kind != BoardOperationKind::Create
         || thought.id != thought_id
         || thought.content != content
+        || thought.annotations != annotations
         || expected_position.is_some_and(|value| thought.position.get() != value)
     {
         return Err(SessionServiceError::IdempotencyConflict);

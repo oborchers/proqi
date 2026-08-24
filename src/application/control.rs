@@ -76,6 +76,7 @@ fn matches_add(
         ControlMutation::Add {
             thought_id,
             content,
+            annotations,
             position,
             ..
         },
@@ -90,6 +91,7 @@ fn matches_add(
             BoardMutation::AddThought { thought }
                 if thought.id == *thought_id
                     && thought.content == *content
+                    && thought.annotations == *annotations
                     && position.is_none_or(|value| {
                         u32::try_from(value).ok() == Some(thought.position.get())
                     })
@@ -202,6 +204,7 @@ mod tests {
             operation_id,
             thought_id,
             content: "exact".to_owned(),
+            annotations: Vec::new(),
             position: Some(0),
         };
         assert!(matches!(
@@ -212,6 +215,7 @@ mod tests {
             operation_id,
             thought_id,
             content: "changed".to_owned(),
+            annotations: Vec::new(),
             position: Some(0),
         };
         assert!(matches!(

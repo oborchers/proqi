@@ -121,6 +121,24 @@ pub(super) enum ThoughtCommand {
         #[arg(long, value_name = "OP_ID")]
         operation_id: Option<String>,
     },
+    /// Copy one thought into another Proqi session.
+    Send {
+        /// Session that currently contains the thought.
+        source: String,
+        /// Canonical thought identifier.
+        thought: String,
+        /// Destination session identifier or unique name.
+        destination: String,
+        /// Remove the source thought only after destination durability.
+        #[arg(long)]
+        remove: bool,
+        /// Durable idempotency identity for destination creation.
+        #[arg(long, value_name = "OP_ID")]
+        operation_id: Option<String>,
+        /// Durable idempotency identity for optional source removal.
+        #[arg(long, value_name = "OP_ID", requires = "remove")]
+        remove_operation_id: Option<String>,
+    },
     /// Undo one persistent board or editor operation.
     Undo(HistoryArgs),
     /// Redo one persistent board or editor operation.

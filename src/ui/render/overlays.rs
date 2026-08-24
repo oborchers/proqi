@@ -11,6 +11,7 @@ use ratatui_widgets::{
     clear::Clear,
     paragraph::{Paragraph, Wrap},
 };
+use unicode_width::UnicodeWidthStr as _;
 
 use crate::{application::InteractionMode, ports::agent::AgentDeliveryMode};
 
@@ -24,7 +25,7 @@ pub(super) fn render_help(
 ) {
     frame.render_widget(Clear, overlay.area);
     frame.render_widget(
-        Paragraph::new(help_lines(app, theme))
+        Paragraph::new(help_lines(app, theme, overlay.area.width.saturating_sub(2)))
             .block(
                 Block::default()
                     .title(Span::styled(
@@ -66,6 +67,29 @@ pub(super) fn render_picker(
     render_close(frame, overlay, theme);
 }
 
+pub(super) fn render_text_prompt(
+    frame: &mut Frame<'_>,
+    overlay: &OverlayLayout,
+    title: &str,
+    value: &str,
+    theme: &Theme,
+) {
+    frame.render_widget(Clear, overlay.area);
+    frame.render_widget(
+        Paragraph::new(format!("> {value}"))
+            .block(Block::default().title(title).borders(Borders::ALL)),
+        overlay.area,
+    );
+    render_close(frame, overlay, theme);
+    let x = overlay
+        .area
+        .x
+        .saturating_add(2)
+        .saturating_add(u16::try_from(value.width()).unwrap_or(u16::MAX))
+        .min(overlay.area.right().saturating_sub(2));
+    frame.set_cursor_position((x, overlay.area.y.saturating_add(1)));
+}
+
 #[derive(Clone, Copy)]
 pub(super) struct PickerView<'a> {
     pub(super) title: &'a str,
@@ -82,21 +106,30 @@ fn render_close(frame: &mut Frame<'_>, overlay: &OverlayLayout, theme: &Theme) {
     );
 }
 
-fn help_lines(app: &BoardApp, theme: &Theme) -> Vec<Line<'static>> {
+fn help_lines(app: &BoardApp, theme: &Theme, width: u16) -> Vec<Line<'static>> {
     let keys = app.keybindings();
-    if matches!(app.interaction_mode(), InteractionMode::Edit { .. }) {
-        return vec![
-            shortcut_line(&[("Esc".to_owned(), "Board")], theme),
-            shortcut_line(&[(primary("A"), "Select all")], theme),
-            shortcut_line(&[(primary("U"), "Delete line")], theme),
-            shortcut_line(
-                &[(primary("Z"), "Undo"), (primary("Shift+Z"), "Redo")],
-                theme,
-            ),
-            shortcut_line(&[(keys.commands.to_string(), "Commands")], theme),
-            shortcut_line(&[(keys.help.to_string(), "Close")], theme),
-        ];
-    }
+    let items = if matches!(app.interaction_mode(), InteractionMode::Edit { .. }) {
+        edit_shortcuts(keys)
+    } else {
+        board_shortcuts(app)
+    };
+    shortcut_grid(&items, width, theme)
+}
+
+fn edit_shortcuts(keys: &crate::ui::KeyBindings) -> Vec<(String, &'static str)> {
+    vec![
+        ("Esc".to_owned(), "Board"),
+        (primary("A"), "Select all"),
+        (primary("U"), "Delete line"),
+        (primary("Z"), "Undo"),
+        (primary("Shift+Z"), "Redo"),
+        (keys.commands.to_string(), "Commands"),
+        (keys.help.to_string(), "Close"),
+    ]
+}
+
+fn board_shortcuts(app: &BoardApp) -> Vec<(String, &'static str)> {
+    let keys = app.keybindings();
     let mut delivery = Vec::new();
     if app.supports_delivery(AgentDeliveryMode::Compose) {
         delivery.push((keys.send.to_string(), "Send"));
@@ -104,60 +137,63 @@ fn help_lines(app: &BoardApp, theme: &Theme) -> Vec<Line<'static>> {
     if app.supports_delivery(AgentDeliveryMode::Submit) {
         delivery.push((keys.submit.to_string(), "Submit"));
     }
-    delivery.push((keys.quit.to_string(), "Quit"));
-    vec![
-        shortcut_line(
-            &[
-                (keys.new.to_string(), "New"),
-                (format!("Enter/{}", keys.edit), "Edit"),
-            ],
-            theme,
-        ),
-        shortcut_line(
-            &[
-                (format!("{}/{}", keys.focus_down, keys.focus_up), "Move"),
-                (format!("{}/{}", keys.move_down, keys.move_up), "Reorder"),
-            ],
-            theme,
-        ),
-        shortcut_line(
-            &[
-                (keys.copy.to_string(), "Copy"),
-                (keys.cut.to_string(), "Cut"),
-                (keys.delete.to_string(), "Delete"),
-            ],
-            theme,
-        ),
-        shortcut_line(
-            &[
-                (keys.undo.to_string(), "Undo"),
-                (crate::ui::settings::key_label(keys.collapse), "Fold"),
-            ],
-            theme,
-        ),
-        shortcut_line(
-            &[
-                (keys.search.to_string(), "Search"),
-                (keys.commands.to_string(), "Commands"),
-                (keys.help.to_string(), "Close"),
-            ],
-            theme,
-        ),
-        shortcut_line(&delivery, theme),
-    ]
+    let mut items = vec![
+        (keys.new.to_string(), "New"),
+        (format!("Enter/{}", keys.edit), "Edit"),
+        (format!("{}/{}", keys.focus_down, keys.focus_up), "Move"),
+        (format!("{}/{}", keys.move_down, keys.move_up), "Reorder"),
+        (keys.copy.to_string(), "Copy"),
+        (keys.cut.to_string(), "Cut"),
+        (keys.delete.to_string(), "Delete"),
+        (keys.undo.to_string(), "Undo"),
+        (crate::ui::settings::key_label(keys.collapse), "Fold"),
+        (keys.search.to_string(), "Search"),
+        (keys.commands.to_string(), "Commands"),
+        (keys.help.to_string(), "Close"),
+    ];
+    items.extend(delivery);
+    items.push((keys.quit.to_string(), "Quit"));
+    items
 }
 
-fn shortcut_line(items: &[(String, &str)], theme: &Theme) -> Line<'static> {
+fn shortcut_grid(
+    items: &[(String, &'static str)],
+    width: u16,
+    theme: &Theme,
+) -> Vec<Line<'static>> {
+    let columns = if width >= 48 {
+        3
+    } else if width >= 30 {
+        2
+    } else {
+        1
+    };
+    let cell_width = usize::from(width) / columns;
+    let key_width = items.iter().map(|(key, _)| key.width()).max().unwrap_or(1);
+    items
+        .chunks(columns)
+        .map(|row| shortcut_row(row, columns, cell_width, key_width, theme))
+        .collect()
+}
+
+fn shortcut_row(
+    items: &[(String, &'static str)],
+    columns: usize,
+    cell_width: usize,
+    key_width: usize,
+    theme: &Theme,
+) -> Line<'static> {
     let mut spans = Vec::new();
     for (index, (key, label)) in items.iter().enumerate() {
-        if index > 0 {
-            spans.push(Span::raw("   "));
-        }
         spans.push(Span::styled(key.clone(), Style::default().fg(theme.accent)));
-        spans.push(Span::styled(
-            format!(" {label}"),
-            Style::default().fg(theme.foreground),
+        spans.push(Span::raw(
+            " ".repeat(key_width.saturating_sub(key.width()) + 1),
         ));
+        spans.push(Span::styled(*label, Style::default().fg(theme.foreground)));
+        if index + 1 < columns {
+            let used = key_width + 1 + label.width();
+            spans.push(Span::raw(" ".repeat(cell_width.saturating_sub(used))));
+        }
     }
     Line::from(spans)
 }

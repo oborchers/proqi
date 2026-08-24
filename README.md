@@ -48,6 +48,7 @@ immediately or remain on the board for days.
 | Work beside any agent | Copy and cut work without an integration or account |
 | Pass local context | Drop files as paths or paste a clipboard image as a private, durable PNG path |
 | Automate safely | Versioned JSON CLI, typed identifiers, idempotent operations, and a repository skill |
+| Correct the wrong board | Send a thought to another named Proqi session, with optional removal after delivery |
 | Submit when verified | Optional Herdr submission to eligible panes above, below, left, or right |
 
 The interface is one responsive column. Notes take their natural height until a
@@ -163,6 +164,8 @@ printf '%s' 'Review this exact prompt.' | proqi --json thoughts add <session-id>
 proqi --json thoughts list <session-id>
 proqi --json thoughts inspect <session-id> <thought-id>
 proqi --json thoughts move <session-id> <thought-id> <zero-based-position>
+proqi --json thoughts send <source-session> <thought-id> <destination-session>
+proqi --json thoughts send <source-session> <thought-id> <destination-session> --remove
 proqi --json thoughts delete <session-id> <thought-id>
 proqi --json thoughts undo <session-id>
 ```
@@ -173,6 +176,13 @@ never write around the owning reducer. Unsupported or unverifiable forwarding
 is rejected as `session_busy`. Thought content supplied through standard input
 is bounded to 131,072 bytes so inactive and forwarded mutations share one safe
 transport contract. Discover the current bound through `proqi --json capabilities`.
+
+Cross-session send accepts canonical session identifiers or unique exact names.
+It copies the complete canonical content and folded-context annotations. With
+`--remove`, Proqi commits the destination first and deletes the source only
+after receiving its durable receipt. If destination delivery fails, the source
+is unchanged. The same workflow is available from the TUI command palette as
+`Send to another Proqi session` and its remove-after-delivery variant.
 
 Verified owner forwarding is enabled on macOS and Linux. This private alpha
 returns `session_busy` on Windows until current-user named-pipe identity

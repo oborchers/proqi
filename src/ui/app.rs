@@ -11,6 +11,8 @@ mod palette;
 mod pointer;
 mod recovery;
 mod search;
+mod session;
+mod transfer;
 mod view;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -183,6 +185,8 @@ pub struct BoardApp {
     edit_boundary: Option<CursorMovement>,
     palette: Option<palette::PaletteState>,
     search: Option<search::SearchState>,
+    rename: Option<String>,
+    transfer: Option<transfer::TransferState>,
     settings: UiSettings,
     expanded: BTreeSet<ThoughtId>,
     expanded_folds: BTreeSet<(ThoughtId, usize)>,
@@ -230,6 +234,8 @@ impl BoardApp {
             edit_boundary: None,
             palette: None,
             search: None,
+            rename: None,
+            transfer: None,
             settings,
             expanded: BTreeSet::new(),
             expanded_folds: BTreeSet::new(),
@@ -274,6 +280,12 @@ impl BoardApp {
         }
         if self.palette.is_some() {
             return self.handle_palette_input(&input, ids, clock);
+        }
+        if self.transfer.is_some() {
+            return self.handle_transfer_input(&input, ids, clock);
+        }
+        if self.rename.is_some() {
+            return self.handle_session_rename(&input);
         }
         if self.search.is_some() {
             return self.handle_search_input(&input, ids, clock);

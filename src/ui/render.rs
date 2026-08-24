@@ -19,7 +19,6 @@ use super::{BoardApp, HitTarget, LayoutSnapshot, Theme, ThoughtLayout};
 /// Render the complete board into one terminal frame.
 pub fn render(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, theme: &Theme) {
     frame.render_widget(Block::default().style(theme.base_style()), layout.area);
-    chrome::render_header(frame, app, layout, theme);
     render_board(frame, app, layout, theme);
     chrome::render_footer(frame, app, layout, theme);
     if let Some((query, entries, selected)) = app.search_view() {
@@ -29,6 +28,21 @@ pub fn render(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, th
                 overlay,
                 overlays::PickerView {
                     title: " thoughts ",
+                    prompt: '/',
+                    query: &query,
+                    entries: &entries,
+                    selected,
+                },
+                theme,
+            );
+        }
+    } else if let Some((query, entries, selected)) = app.session_transfer_view() {
+        if let Some(overlay) = &layout.overlay {
+            overlays::render_picker(
+                frame,
+                overlay,
+                overlays::PickerView {
+                    title: " send to Proqi session ",
                     prompt: '/',
                     query: &query,
                     entries: &entries,
@@ -51,6 +65,10 @@ pub fn render(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, th
                 },
                 theme,
             );
+        }
+    } else if let Some(value) = app.session_rename_view() {
+        if let Some(overlay) = &layout.overlay {
+            overlays::render_text_prompt(frame, overlay, " rename session ", value, theme);
         }
     } else if app.help
         && let Some(overlay) = &layout.overlay
@@ -150,12 +168,12 @@ fn render_gutter(
     theme: &Theme,
 ) {
     let symbol = if focused || hovered { "⋮" } else { " " };
-    let padding = usize::from(layout.gutter.height / 2);
+    let padding = usize::from(layout.gutter.height.saturating_sub(1) / 2);
     let content = format!("{}{symbol}", "\n".repeat(padding));
     let style = if focused {
         Style::default()
-            .fg(theme.focused_foreground)
-            .bg(theme.accent)
+            .fg(theme.on_accent)
+            .bg(theme.accent_surface)
             .remove_modifier(Modifier::REVERSED)
             .add_modifier(if dragging {
                 Modifier::DIM
@@ -244,8 +262,8 @@ fn render_editor(frame: &mut Frame<'_>, app: &BoardApp, layout: &ThoughtLayout, 
         if snapshot.selection.is_none() {
             frame.buffer_mut()[(x, y)].set_style(
                 Style::default()
-                    .fg(theme.focused_foreground)
-                    .bg(theme.accent)
+                    .fg(theme.on_accent)
+                    .bg(theme.accent_surface)
                     .remove_modifier(Modifier::REVERSED),
             );
         }

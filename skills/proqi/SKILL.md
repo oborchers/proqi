@@ -81,6 +81,20 @@ proqi --json thoughts undo ses_06g30t7dv5qv55n1ppn3clis3k
 proqi --json thoughts redo ses_06g30t7dv5qv55n1ppn3clis3k
 ```
 
+Copy a specified thought into another user-specified session. Add `--remove`
+only when the user explicitly asks to remove the source after destination
+durability. Supply separate operation identifiers when retry safety matters:
+
+```console
+proqi --json thoughts send ses_06g30t7dv5qv55n1ppn3clis3k tht_06g30t8fudrq55fdkk348i7388 destination-name --operation-id op_06g30t8fudrq55fdkjqr6mpe44
+```
+
+For remove-after-delivery, obtain a second canonical `op_` identifier for
+`--remove-operation-id`. Never reuse one operation identifier for both steps.
+If the command reports that destination delivery succeeded but source removal
+failed, surface the structured receipt and do not retry with new identifiers
+without the user's direction.
+
 Use `--thought tht_06g30t8fudrq55fdkk348i7388` with undo or redo only when
 the user explicitly requests that thought's editor history instead of board
 history.

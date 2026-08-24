@@ -85,8 +85,10 @@ impl RuntimeContext {
         TerminalResources {
             state,
             store: self.store,
+            coordinator: self.coordinator,
             clock: self.clock,
             ids: self.ids,
+            cwd: self.cwd,
             session_lease,
             schema_lease: self.schema_lease,
             settings,

@@ -1,5 +1,8 @@
 //! Ordered persistence lane with explicit retention for failed batches.
 
+mod lane;
+mod transfer;
+
 use std::{
     collections::BTreeMap,
     sync::mpsc::{Receiver, SyncSender, sync_channel},
@@ -8,9 +11,15 @@ use std::{
 };
 
 use crate::{
-    adapters::sqlite::SqliteStore,
-    domain::{OperationId, OperationSequence},
-    ports::store::{CommitReceipt, OperationBatch, Store, StoreError, StoredOperationRequest},
+    adapters::{runtime::FileRuntimeCoordinator, sqlite::SqliteStore},
+    application::ThoughtMutation,
+    domain::{OperationId, OperationSequence, SessionId},
+    ports::{
+        store::{
+            CommitReceipt, OperationBatch, SessionHit, Store, StoreError, StoredOperationRequest,
+        },
+        transfer::SessionTransferRequest,
+    },
 };
 
 use super::TerminalError;
@@ -25,96 +34,61 @@ pub(super) enum PersistenceResult {
     Metadata {
         result: Result<(), StoreError>,
     },
+    SessionRenamed {
+        previous_name: Option<String>,
+        result: Result<(), StoreError>,
+    },
+    TransferSessions(Result<Vec<SessionHit>, StoreError>),
+    ThoughtTransferred {
+        request: SessionTransferRequest,
+        result: Result<ThoughtMutation, String>,
+    },
 }
-
 enum PersistenceRequest {
     Commit(Box<OperationBatch>),
     Metadata(Box<OperationBatch>),
+    RenameSession {
+        session_id: SessionId,
+        previous_name: Option<String>,
+        name: Option<String>,
+    },
+    DiscoverTransferSessions {
+        current_session_id: SessionId,
+    },
+    TransferThought(SessionTransferRequest),
     Retry(OperationSequence),
     Lookup {
         operation_id: OperationId,
         response: SyncSender<Result<Option<StoredOperationRequest>, StoreError>>,
     },
 }
-
 pub(super) struct PersistenceLane {
     sender: Option<SyncSender<PersistenceRequest>>,
     pub(super) receiver: Receiver<PersistenceResult>,
     handle: Option<JoinHandle<()>>,
 }
-
-impl PersistenceLane {
-    pub(super) fn spawn(store: SqliteStore) -> Self {
-        let (request_sender, request_receiver) = sync_channel(64);
-        let (result_sender, result_receiver) = sync_channel(64);
-        let handle =
-            thread::spawn(move || persistence_loop(store, &request_receiver, &result_sender));
-        Self {
-            sender: Some(request_sender),
-            receiver: result_receiver,
-            handle: Some(handle),
-        }
-    }
-
-    pub(super) fn commit(&self, batch: OperationBatch) -> Result<(), TerminalError> {
-        self.send(PersistenceRequest::Commit(Box::new(batch)))
-    }
-
-    pub(super) fn retry(&self, sequence: OperationSequence) -> Result<(), TerminalError> {
-        self.send(PersistenceRequest::Retry(sequence))
-    }
-
-    pub(super) fn metadata(&self, batch: OperationBatch) -> Result<(), TerminalError> {
-        self.send(PersistenceRequest::Metadata(Box::new(batch)))
-    }
-
-    pub(super) fn lookup(
-        &self,
-        operation_id: OperationId,
-    ) -> Result<Option<StoredOperationRequest>, TerminalError> {
-        let (response, result) = sync_channel(1);
-        self.send(PersistenceRequest::Lookup {
-            operation_id,
-            response,
-        })?;
-        result
-            .recv_timeout(Duration::from_secs(2))
-            .map_err(|_| TerminalError::Worker("persistence lookup timed out"))?
-            .map_err(TerminalError::from)
-    }
-
-    fn send(&self, request: PersistenceRequest) -> Result<(), TerminalError> {
-        self.sender
-            .as_ref()
-            .ok_or(TerminalError::Worker("persistence lane is closed"))?
-            .send(request)
-            .map_err(|_| TerminalError::Worker("persistence lane disconnected"))
-    }
-
-    pub(super) fn stop(mut self) -> Result<(), TerminalError> {
-        drop(self.sender.take());
-        match self.handle.take().map(JoinHandle::join) {
-            None | Some(Ok(())) => Ok(()),
-            Some(Err(_)) => Err(TerminalError::Worker("persistence lane panicked")),
-        }
-    }
-}
-
 fn persistence_loop(
     mut store: SqliteStore,
+    mut runtime: Option<transfer::TransferRuntime>,
     requests: &Receiver<PersistenceRequest>,
     results: &SyncSender<PersistenceResult>,
 ) {
     let mut retained = BTreeMap::new();
     while let Ok(request) = requests.recv() {
-        if !process_request(&mut store, request, &mut retained, results) {
+        if !process_request(
+            &mut store,
+            runtime.as_mut(),
+            request,
+            &mut retained,
+            results,
+        ) {
             return;
         }
     }
 }
-
 fn process_request(
     store: &mut SqliteStore,
+    runtime: Option<&mut transfer::TransferRuntime>,
     request: PersistenceRequest,
     retained: &mut BTreeMap<OperationSequence, Box<OperationBatch>>,
     results: &SyncSender<PersistenceResult>,
@@ -141,6 +115,33 @@ fn process_request(
             });
             return results.send(PersistenceResult::Metadata { result }).is_ok();
         }
+        PersistenceRequest::RenameSession {
+            session_id,
+            previous_name,
+            name,
+        } => {
+            let result = store.rename_session(session_id, name.as_deref());
+            return results
+                .send(PersistenceResult::SessionRenamed {
+                    previous_name,
+                    result,
+                })
+                .is_ok();
+        }
+        PersistenceRequest::DiscoverTransferSessions { current_session_id } => {
+            let result = transfer::discover(store, current_session_id);
+            return results
+                .send(PersistenceResult::TransferSessions(result))
+                .is_ok();
+        }
+        PersistenceRequest::TransferThought(request) => {
+            let result = runtime
+                .ok_or_else(|| "session transfer runtime is unavailable".to_owned())
+                .and_then(|runtime| transfer::deliver(store, runtime, &request));
+            return results
+                .send(PersistenceResult::ThoughtTransferred { request, result })
+                .is_ok();
+        }
         PersistenceRequest::Lookup {
             operation_id,
             response,
@@ -151,7 +152,6 @@ fn process_request(
     };
     commit_batch(store, sequence, batch, retained, results, false)
 }
-
 fn retry_from(
     store: &mut SqliteStore,
     first: OperationSequence,
@@ -189,7 +189,6 @@ fn retry_from(
     }
     results.send(PersistenceResult::RetryFinished).is_ok()
 }
-
 fn commit_batch(
     store: &mut SqliteStore,
     sequence: OperationSequence,

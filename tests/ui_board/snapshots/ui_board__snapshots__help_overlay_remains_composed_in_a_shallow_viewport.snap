@@ -6,20 +6,20 @@ SIZE 42x8
 
 TEXT
 00│┌ proqi shortcuts ─────────────────────[x]│
-01││n New   Enter/e Edit                    ││
-02││j/k Move   J/K Reorder                  ││
-03││y Copy   x Cut   d Delete               ││
-04││u Undo   Space Fold                     ││
-05││/ Search   : Commands   ? Close         ││
-06││q Quit                                  ││
+01││n       New         Enter/e Edit        ││
+02││j/k     Move        J/K     Reorder     ││
+03││y       Copy        x       Cut         ││
+04││d       Delete      u       Undo        ││
+05││Space   Fold        /       Search      ││
+06││:       Commands    ?       Close       ││
 07│└────────────────────────────────────────┘│
 
 STYLE RUNS
-0: 0-0 fg=Reset bg=Reset mod=NONE | 1-17 fg=Rgb(45, 106, 79) bg=Reset mod=BOLD | 18-38 fg=Reset bg=Reset mod=NONE | 39-41 fg=Rgb(45, 106, 79) bg=Reset mod=NONE
-1: 0-0 fg=Reset bg=Reset mod=NONE | 1-1 fg=Rgb(45, 106, 79) bg=Reset mod=NONE | 2-8 fg=Reset bg=Reset mod=NONE | 9-15 fg=Rgb(45, 106, 79) bg=Reset mod=NONE | 16-41 fg=Reset bg=Reset mod=NONE
-2: 0-0 fg=Reset bg=Reset mod=NONE | 1-3 fg=Rgb(45, 106, 79) bg=Reset mod=NONE | 4-11 fg=Reset bg=Reset mod=NONE | 12-14 fg=Rgb(45, 106, 79) bg=Reset mod=NONE | 15-41 fg=Reset bg=Reset mod=NONE
-3: 0-0 fg=Reset bg=Reset mod=NONE | 1-1 fg=Rgb(45, 106, 79) bg=Reset mod=NONE | 2-9 fg=Reset bg=Reset mod=NONE | 10-10 fg=Rgb(45, 106, 79) bg=Reset mod=NONE | 11-17 fg=Reset bg=Reset mod=NONE | 18-18 fg=Rgb(45, 106, 79) bg=Reset mod=NONE | 19-41 fg=Reset bg=Reset mod=NONE
-4: 0-0 fg=Reset bg=Reset mod=NONE | 1-1 fg=Rgb(45, 106, 79) bg=Reset mod=NONE | 2-9 fg=Reset bg=Reset mod=NONE | 10-14 fg=Rgb(45, 106, 79) bg=Reset mod=NONE | 15-41 fg=Reset bg=Reset mod=NONE
-5: 0-0 fg=Reset bg=Reset mod=NONE | 1-1 fg=Rgb(45, 106, 79) bg=Reset mod=NONE | 2-11 fg=Reset bg=Reset mod=NONE | 12-12 fg=Rgb(45, 106, 79) bg=Reset mod=NONE | 13-24 fg=Reset bg=Reset mod=NONE | 25-25 fg=Rgb(45, 106, 79) bg=Reset mod=NONE | 26-41 fg=Reset bg=Reset mod=NONE
-6: 0-0 fg=Reset bg=Reset mod=NONE | 1-1 fg=Rgb(45, 106, 79) bg=Reset mod=NONE | 2-41 fg=Reset bg=Reset mod=NONE
+0: 0-0 fg=Reset bg=Reset mod=NONE | 1-17 fg=Green bg=Reset mod=BOLD | 18-38 fg=Reset bg=Reset mod=NONE | 39-41 fg=Green bg=Reset mod=NONE
+1: 0-0 fg=Reset bg=Reset mod=NONE | 1-1 fg=Green bg=Reset mod=NONE | 2-20 fg=Reset bg=Reset mod=NONE | 21-27 fg=Green bg=Reset mod=NONE | 28-41 fg=Reset bg=Reset mod=NONE
+2: 0-0 fg=Reset bg=Reset mod=NONE | 1-3 fg=Green bg=Reset mod=NONE | 4-20 fg=Reset bg=Reset mod=NONE | 21-23 fg=Green bg=Reset mod=NONE | 24-41 fg=Reset bg=Reset mod=NONE
+3: 0-0 fg=Reset bg=Reset mod=NONE | 1-1 fg=Green bg=Reset mod=NONE | 2-20 fg=Reset bg=Reset mod=NONE | 21-21 fg=Green bg=Reset mod=NONE | 22-41 fg=Reset bg=Reset mod=NONE
+4: 0-0 fg=Reset bg=Reset mod=NONE | 1-1 fg=Green bg=Reset mod=NONE | 2-20 fg=Reset bg=Reset mod=NONE | 21-21 fg=Green bg=Reset mod=NONE | 22-41 fg=Reset bg=Reset mod=NONE
+5: 0-0 fg=Reset bg=Reset mod=NONE | 1-5 fg=Green bg=Reset mod=NONE | 6-20 fg=Reset bg=Reset mod=NONE | 21-21 fg=Green bg=Reset mod=NONE | 22-41 fg=Reset bg=Reset mod=NONE
+6: 0-0 fg=Reset bg=Reset mod=NONE | 1-1 fg=Green bg=Reset mod=NONE | 2-20 fg=Reset bg=Reset mod=NONE | 21-21 fg=Green bg=Reset mod=NONE | 22-41 fg=Reset bg=Reset mod=NONE
 7: 0-41 fg=Reset bg=Reset mod=NONE

@@ -9,8 +9,8 @@ use proqi::{
     },
     ports::{editor::CursorMovement, environment::IdGenerator},
     ui::{
-        BoardApp, PastePayload, PointerButton, PointerInput, PointerKind, Theme, ThemePreference,
-        UiInput, UiKey, UiSettings, render,
+        BoardApp, HitTarget, PastePayload, PointerButton, PointerInput, PointerKind, Theme,
+        ThemePreference, UiInput, UiKey, UiSettings, render,
     },
 };
 use ratatui_core::{
@@ -120,14 +120,14 @@ fn empty_board_and_help_have_reviewable_complete_buffers() {
     let terminal = draw(&mut fixture, 40, 8);
     let rendered = text(terminal.backend().buffer());
     assert!(rendered.contains("+ New thought"));
-    assert!(rendered.contains("proqi"));
     assert!(rendered.contains("board · saved"));
 
     fixture.input(UiInput::Key(UiKey::Character('?')));
     let terminal = draw(&mut fixture, 40, 8);
     let rendered = text(terminal.backend().buffer());
     assert!(rendered.contains("proqi shortcuts"));
-    assert!(rendered.contains("J/K Reorder"));
+    assert!(rendered.contains("J/K"));
+    assert!(rendered.contains("Reorder"));
 }
 
 #[test]
@@ -145,7 +145,7 @@ fn multiline_unicode_is_rendered_as_lines_and_cursor_uses_cell_width() {
         .backend_mut()
         .get_cursor_position()
         .expect("cursor position");
-    assert_eq!(cursor.y, 4);
+    assert_eq!(cursor.y, 2);
     assert_eq!(cursor.x, 8);
 
     fixture.app.acknowledge_persistence(sequence, true);
@@ -167,7 +167,7 @@ fn cursor_uses_expanded_tab_cells() {
         .get_cursor_position()
         .expect("cursor position");
     assert_eq!(cursor.x, 6);
-    assert_eq!(cursor.y, 1);
+    assert_eq!(cursor.y, 0);
 }
 
 #[test]
@@ -179,7 +179,7 @@ fn exact_wrap_boundary_keeps_the_terminal_cursor_visible() {
         .backend_mut()
         .get_cursor_position()
         .expect("cursor at wrapped document end");
-    assert_eq!((cursor.x, cursor.y), (2, 2));
+    assert_eq!((cursor.x, cursor.y), (2, 1));
 }
 
 #[test]
@@ -343,7 +343,7 @@ fn keyboard_selection_is_logical_and_visible() {
     );
 
     let terminal = draw(&mut fixture, 20, 5);
-    let selected = terminal.backend().buffer()[(5, 1)].modifier;
+    let selected = terminal.backend().buffer()[(5, 0)].modifier;
     assert!(selected.contains(ratatui_core::style::Modifier::REVERSED));
 }
 

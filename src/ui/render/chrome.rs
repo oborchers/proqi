@@ -9,49 +9,9 @@ use ratatui_widgets::paragraph::Paragraph;
 use unicode_segmentation::UnicodeSegmentation as _;
 use unicode_width::UnicodeWidthStr as _;
 
-use crate::{
-    application::{DurabilityState, InteractionMode},
-    domain::Direction,
-    ports::agent::AgentDeliveryMode,
-};
+use crate::{application::DurabilityState, domain::Direction, ports::agent::AgentDeliveryMode};
 
 use super::super::{BoardApp, HitTarget, LayoutSnapshot, Theme};
-
-pub(super) fn render_header(
-    frame: &mut Frame<'_>,
-    app: &BoardApp,
-    layout: &LayoutSnapshot,
-    theme: &Theme,
-) {
-    if layout.header.height == 0 {
-        return;
-    }
-    let session = &app.state.board.session;
-    let label = session.name.clone().unwrap_or_else(|| {
-        session.last_opened_cwd.file_name().map_or_else(
-            || "untitled".to_owned(),
-            |name| name.to_string_lossy().into_owned(),
-        )
-    });
-    let count = app.visible_thought_count();
-    let noun = if count == 1 { "thought" } else { "thoughts" };
-    let identity = if label.eq_ignore_ascii_case("proqi") {
-        "proqi".to_owned()
-    } else {
-        format!("proqi · {label}")
-    };
-    let left = if layout.header.width >= 40 {
-        format!("  {identity} · {count} {noun}")
-    } else if layout.header.width < 20 {
-        " proqi".to_owned()
-    } else {
-        "  proqi".to_owned()
-    };
-    frame.render_widget(
-        Paragraph::new(left).style(Style::default().fg(theme.muted)),
-        layout.header,
-    );
-}
 
 pub(super) fn render_footer(
     frame: &mut Frame<'_>,
@@ -128,13 +88,9 @@ fn render_context(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot
         .then(|| app.status.clone())
         .flatten()
         .unwrap_or_default();
-    let mode = match app.interaction_mode() {
-        InteractionMode::Board => "board",
-        InteractionMode::Edit { .. } => "edit",
-    };
-    let right = format!("{mode} · {}", summary_durability(app));
+    let right = &layout.footer_summary;
     let area = inset(layout.footer_context);
-    let text = compose(&left, &right, usize::from(area.width));
+    let text = compose(&left, right, usize::from(area.width));
     frame.render_widget(
         Paragraph::new(text).style(Style::default().fg(theme.muted)),
         area,
@@ -150,14 +106,6 @@ fn durability(app: &BoardApp) -> &'static str {
         DurabilityState::Durable { .. } => "saved",
         DurabilityState::Pending { .. } => "saving",
         DurabilityState::Failed { .. } => "save failed",
-    }
-}
-
-fn summary_durability(app: &BoardApp) -> &'static str {
-    if matches!(app.state.durability, DurabilityState::Failed { .. }) {
-        "unsaved"
-    } else {
-        durability(app)
     }
 }
 

@@ -68,6 +68,7 @@ fn request(ids: &mut FakeIdGenerator, content: &str) -> ControlRequest {
             operation_id: ids.operation_id(),
             thought_id: ids.thought_id(),
             content: content.to_owned(),
+            annotations: Vec::new(),
             position: None,
         },
     }

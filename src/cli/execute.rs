@@ -2,6 +2,7 @@
 
 mod forwarding;
 mod sessions;
+mod transfer;
 
 use std::{io::Read, process::ExitCode, str::FromStr};
 
@@ -84,6 +85,8 @@ fn capabilities() -> Outcome {
             "identifier_encoding": "prefix_base32hex_uuidv7",
             "commands": ["sessions", "thoughts"],
             "active_session_control": cfg!(unix),
+            "control_protocol": crate::ports::control::CONTROL_PROTOCOL_VERSION,
+            "cross_session_transfer": true,
             "max_thought_stdin_bytes": MAX_THOUGHT_STDIN_BYTES,
             "herdr_submission": true,
             "herdr_managed_pane_required": true,
@@ -223,6 +226,22 @@ fn execute_thoughts(
             &thought,
             position,
             operation_id.as_deref(),
+        ),
+        ThoughtCommand::Send {
+            source,
+            thought,
+            destination,
+            remove,
+            operation_id,
+            remove_operation_id,
+        } => transfer::send_thought(
+            context,
+            &source,
+            &thought,
+            &destination,
+            remove,
+            operation_id.as_deref(),
+            remove_operation_id.as_deref(),
         ),
         ThoughtCommand::Undo(arguments) => move_history(context, &arguments, true),
         ThoughtCommand::Redo(arguments) => move_history(context, &arguments, false),

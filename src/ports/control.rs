@@ -3,12 +3,14 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::domain::{OperationId, RequestId, SessionId, ThoughtId, UndoScope};
+use crate::domain::{ContentAnnotation, OperationId, RequestId, SessionId, ThoughtId, UndoScope};
 
 use super::{runtime::InstanceInfo, store::CommitReceipt};
 
 /// Current local owner-control protocol.
-pub const CONTROL_PROTOCOL_VERSION: u32 = 1;
+pub const CONTROL_PROTOCOL_VERSION: u32 = 2;
+/// Oldest owner-control protocol accepted for plain-text mutations.
+pub const MIN_CONTROL_PROTOCOL_VERSION: u32 = 1;
 /// Maximum encoded request or response, including framing newline.
 pub const MAX_CONTROL_MESSAGE_BYTES: usize = 1_048_576;
 
@@ -24,6 +26,9 @@ pub enum ControlMutation {
         thought_id: ThoughtId,
         /// Exact content, including line endings.
         content: String,
+        /// Durable presentation metadata, available from protocol version 2.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        annotations: Vec<ContentAnnotation>,
         /// Optional zero-based insertion position.
         position: Option<usize>,
     },
@@ -75,6 +80,12 @@ impl ControlMutation {
             | Self::Move { thought_id, .. } => Some(*thought_id),
             Self::History { .. } => None,
         }
+    }
+
+    /// Whether this mutation requires the annotation-aware protocol.
+    #[must_use]
+    pub fn requires_protocol_two(&self) -> bool {
+        matches!(self, Self::Add { annotations, .. } if !annotations.is_empty())
     }
 }
 
@@ -169,4 +180,53 @@ pub trait ControlClient {
         owner: &InstanceInfo,
         request: &ControlRequest,
     ) -> Result<ControlReceipt, ControlError>;
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        adapters::memory::FakeIdGenerator,
+        domain::{ContentAnnotation, ContentAnnotationKind},
+        ports::environment::IdGenerator,
+    };
+
+    use super::{ControlMutation, ControlRequest};
+
+    #[test]
+    fn plain_v1_add_stays_wire_compatible_and_annotations_require_v2() {
+        let mut ids = FakeIdGenerator::new(1_725_200_000_000);
+        let plain = ControlRequest {
+            protocol: 1,
+            request_id: ids.request_id(),
+            session_id: ids.session_id(),
+            mutation: ControlMutation::Add {
+                operation_id: ids.operation_id(),
+                thought_id: ids.thought_id(),
+                content: "plain".to_owned(),
+                annotations: Vec::new(),
+                position: None,
+            },
+        };
+        let encoded = serde_json::to_string(&plain).expect("serialize v1 request");
+        assert!(!encoded.contains("annotations"));
+        let decoded: ControlRequest = serde_json::from_str(&encoded).expect("deserialize v1");
+        assert_eq!(decoded, plain);
+        assert!(!decoded.mutation.requires_protocol_two());
+
+        let annotated = ControlMutation::Add {
+            operation_id: ids.operation_id(),
+            thought_id: ids.thought_id(),
+            content: "/tmp/a.png".to_owned(),
+            annotations: vec![ContentAnnotation {
+                start: 0,
+                end: 10,
+                kind: ContentAnnotationKind::Attachment {
+                    image: true,
+                    display_name: "a.png".to_owned(),
+                },
+            }],
+            position: None,
+        };
+        assert!(annotated.requires_protocol_two());
+    }
 }

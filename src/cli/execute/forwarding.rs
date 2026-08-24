@@ -5,7 +5,7 @@ use serde_json::json;
 use crate::{
     adapters::control::LocalControlClient,
     application::ThoughtMutation,
-    domain::{OperationId, SessionId, ThoughtId, UndoScope},
+    domain::{ContentAnnotation, OperationId, SessionId, ThoughtId, UndoScope},
     ports::{
         control::{ControlClient, ControlError, ControlMutation, ControlRequest},
         environment::IdGenerator,
@@ -23,6 +23,17 @@ pub(super) fn add(
     position: Option<usize>,
     supplied: Option<OperationId>,
 ) -> Result<Option<ThoughtMutation>, CliError> {
+    add_annotated(context, session_id, body, Vec::new(), position, supplied)
+}
+
+pub(super) fn add_annotated(
+    context: &mut RuntimeContext,
+    session_id: SessionId,
+    body: &str,
+    annotations: Vec<ContentAnnotation>,
+    position: Option<usize>,
+    supplied: Option<OperationId>,
+) -> Result<Option<ThoughtMutation>, CliError> {
     let Some(owner) = owner(context, session_id)? else {
         return Ok(None);
     };
@@ -33,6 +44,7 @@ pub(super) fn add(
         operation_id,
         thought_id,
         content: body.to_owned(),
+        annotations,
         position,
     };
     let receipt = send(context, &owner, session_id, mutation)?;
@@ -121,8 +133,26 @@ fn send(
     session_id: SessionId,
     mutation: ControlMutation,
 ) -> Result<CommitReceipt, CliError> {
+    let protocol = owner.control_protocol.ok_or_else(|| {
+        CliError::new(
+            "session_busy",
+            "active owner does not advertise a control protocol".to_owned(),
+            5,
+        )
+    })?;
+    if !(crate::ports::control::MIN_CONTROL_PROTOCOL_VERSION
+        ..=crate::ports::control::CONTROL_PROTOCOL_VERSION)
+        .contains(&protocol)
+        || mutation.requires_protocol_two() && protocol < 2
+    {
+        return Err(CliError::new(
+            "session_busy",
+            "active owner does not support the required control protocol".to_owned(),
+            5,
+        ));
+    }
     let request = ControlRequest {
-        protocol: crate::ports::control::CONTROL_PROTOCOL_VERSION,
+        protocol,
         request_id: context.ids.request_id(),
         session_id,
         mutation,

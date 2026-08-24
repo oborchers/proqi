@@ -46,6 +46,24 @@ pub(super) fn enqueue_effects(
                 },
             )?;
             pending.persistence = pending.persistence.saturating_add(1);
+        } else if let Effect::RenameSession {
+            session_id,
+            previous_name,
+            name,
+        } = effect
+        {
+            lanes
+                .persistence
+                .rename_session(session_id, previous_name, name)?;
+            pending.persistence = pending.persistence.saturating_add(1);
+        } else if let Effect::DiscoverTransferSessions = effect {
+            lanes
+                .persistence
+                .discover_transfer_sessions(app.state.board.session.id)?;
+            pending.persistence = pending.persistence.saturating_add(1);
+        } else if let Effect::TransferThought(request) = effect {
+            lanes.persistence.transfer_thought(request)?;
+            pending.persistence = pending.persistence.saturating_add(1);
         } else if lanes.external.send(&effect)? {
             pending.external = pending.external.saturating_add(1);
         } else if let Effect::Notify { code } = effect {
@@ -57,12 +75,14 @@ pub(super) fn enqueue_effects(
 
 pub(super) fn drain_persistence(
     app: &mut BoardApp,
-    persistence: &crate::adapters::terminal::persistence::PersistenceLane,
+    lanes: &WorkerLanes<'_>,
     pending: &mut PendingWork,
+    ids: &mut impl crate::ports::environment::IdGenerator,
+    clock: &impl crate::ports::environment::Clock,
 ) -> Result<bool, TerminalError> {
     let mut changed = false;
     loop {
-        match persistence.receiver.try_recv() {
+        match lanes.persistence.receiver.try_recv() {
             Ok(PersistenceResult::Sequenced {
                 sequence,
                 result,
@@ -87,6 +107,25 @@ pub(super) fn drain_persistence(
                         "submission accepted, but integration context was not saved: {error}"
                     ));
                 }
+            }
+            Ok(PersistenceResult::SessionRenamed {
+                previous_name,
+                result,
+            }) => {
+                changed = true;
+                pending.persistence = pending.persistence.saturating_sub(1);
+                app.complete_session_rename(previous_name, result);
+            }
+            Ok(PersistenceResult::TransferSessions(result)) => {
+                changed = true;
+                pending.persistence = pending.persistence.saturating_sub(1);
+                app.complete_transfer_discovery(result);
+            }
+            Ok(PersistenceResult::ThoughtTransferred { request, result }) => {
+                changed = true;
+                pending.persistence = pending.persistence.saturating_sub(1);
+                let effects = app.complete_session_transfer(&request, result, ids, clock);
+                enqueue_effects(app, lanes, effects, pending)?;
             }
             Err(TryRecvError::Empty) => return Ok(changed),
             Err(TryRecvError::Disconnected) if pending.persistence == 0 => return Ok(changed),

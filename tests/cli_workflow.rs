@@ -63,6 +63,10 @@ fn operation_id() -> String {
     SystemIdGenerator.operation_id().to_string()
 }
 
+fn rename(root: &Path, session: &str, name: &str) {
+    let _renamed = success(root, &["sessions", "rename", session, name], None);
+}
+
 fn add_with_idempotency(root: &Path, session: &str, body: &str) -> String {
     let operation = operation_id();
     let arguments = ["thoughts", "add", session, "--operation-id", &operation];
@@ -230,6 +234,110 @@ fn thought_mutations_round_trip_unicode_and_idempotency_across_processes() {
 }
 
 #[test]
+fn thoughts_copy_between_named_sessions_and_remove_only_after_delivery() {
+    let temporary = tempfile::tempdir().expect("temporary directory");
+    let root = temporary.path();
+    let source = create_session(root);
+    let destination = create_session(root);
+    rename(root, &source, "source");
+    rename(root, &destination, "destination");
+    let added = success(root, &["thoughts", "add", "source"], Some("exact\n内容"));
+    let thought = added["thought_id"].as_str().expect("thought ID");
+    let operation = operation_id();
+    let copied = success(
+        root,
+        &[
+            "thoughts",
+            "send",
+            "source",
+            thought,
+            "destination",
+            "--operation-id",
+            &operation,
+        ],
+        None,
+    );
+    assert_eq!(copied["source_removed"], false);
+    assert_eq!(copied["destination_session_id"], destination);
+    let destination_thought = copied["destination_thought_id"]
+        .as_str()
+        .expect("destination thought");
+    let inspected = success(
+        root,
+        &["thoughts", "inspect", "destination", destination_thought],
+        None,
+    );
+    assert_eq!(inspected["thought"]["content"], "exact\n内容");
+    let replay = success(
+        root,
+        &[
+            "thoughts",
+            "send",
+            "source",
+            thought,
+            "destination",
+            "--operation-id",
+            &operation,
+        ],
+        None,
+    );
+    assert_eq!(replay["destination_receipt"]["idempotent_replay"], true);
+
+    let move_operation = operation_id();
+    let remove_operation = operation_id();
+    let removed = send_and_remove(root, thought, &move_operation, &remove_operation);
+    assert_eq!(removed["source_removed"], true);
+    let source_after = success(root, &["thoughts", "list", "source"], None);
+    assert!(
+        source_after["thoughts"]
+            .as_array()
+            .expect("thoughts")
+            .is_empty()
+    );
+    let destination_after = success(root, &["thoughts", "list", "destination"], None);
+    assert_eq!(
+        destination_after["thoughts"]
+            .as_array()
+            .expect("thoughts")
+            .len(),
+        2
+    );
+    let removal_replay = send_and_remove(root, thought, &move_operation, &remove_operation);
+    assert_eq!(
+        removal_replay["destination_receipt"]["idempotent_replay"],
+        true
+    );
+    assert_eq!(
+        removal_replay["source_removal_receipt"]["idempotent_replay"],
+        true
+    );
+}
+
+fn send_and_remove(
+    root: &Path,
+    thought: &str,
+    move_operation: &str,
+    remove_operation: &str,
+) -> Value {
+    success(
+        root,
+        &[
+            "thoughts",
+            "send",
+            "source",
+            thought,
+            "destination",
+            "--remove",
+            "--operation-id",
+            move_operation,
+            "--remove-operation-id",
+            remove_operation,
+        ],
+        None,
+    )
+}
+
+#[test]
 fn launch_modes_and_capability_discovery_have_stable_output() {
     let temporary = tempfile::tempdir().expect("temporary directory");
     let root = temporary.path();
@@ -244,6 +352,8 @@ fn launch_modes_and_capability_discovery_have_stable_output() {
     let capabilities = success(root, &["capabilities"], None);
     assert_eq!(capabilities["cli_schema_version"], 1);
     assert_eq!(capabilities["active_session_control"], true);
+    assert_eq!(capabilities["control_protocol"], 2);
+    assert_eq!(capabilities["cross_session_transfer"], true);
     assert_eq!(capabilities["max_thought_stdin_bytes"], 131_072);
     assert_eq!(capabilities["herdr_submission"], true);
     assert_eq!(capabilities["herdr_managed_pane_required"], true);

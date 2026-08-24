@@ -19,7 +19,10 @@ use crate::{
     adapters::{
         control::{ControlEnvelope, ControlServer},
         editor::RopeEditorFactory,
-        runtime::{FileSchemaLease, FileSessionLease, SystemClock, SystemIdGenerator},
+        runtime::{
+            FileRuntimeCoordinator, FileSchemaLease, FileSessionLease, SystemClock,
+            SystemIdGenerator,
+        },
         sqlite::SqliteStore,
     },
     application::{AppState, ControlReplay, Effect, FailureCode, match_control_replay},
@@ -43,8 +46,10 @@ use heartbeat::PaneHeartbeat;
 pub(crate) struct TerminalResources {
     pub(crate) state: AppState,
     pub(crate) store: SqliteStore,
+    pub(crate) coordinator: FileRuntimeCoordinator,
     pub(crate) clock: SystemClock,
     pub(crate) ids: SystemIdGenerator,
+    pub(crate) cwd: PathBuf,
     pub(crate) session_lease: FileSessionLease,
     pub(crate) schema_lease: FileSchemaLease,
     pub(crate) settings: crate::ui::UiSettings,
@@ -99,8 +104,10 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
     let TerminalResources {
         state,
         store,
+        coordinator,
         clock,
         mut ids,
+        cwd,
         mut session_lease,
         schema_lease,
         settings,
@@ -113,7 +120,7 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
     let termination = TerminationGuard::register()?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
     let input = InputLane::spawn();
-    let persistence = PersistenceLane::spawn(store);
+    let persistence = PersistenceLane::spawn_with_runtime(store, coordinator, cwd);
     let presentation_source = format!("proqi-{}", session_lease.info().instance_id);
     let external = ExternalLane::spawn(
         recovery_directory,
@@ -215,7 +222,7 @@ fn drive(
             let effects = app.handle(UiInput::Key(UiKey::Quit), ids, &clock);
             enqueue_effects(app, lanes, effects, &mut pending)?;
         }
-        redraw |= drain_persistence(app, lanes.persistence, &mut pending)?;
+        redraw |= drain_persistence(app, lanes, &mut pending, ids, &clock)?;
         redraw |= drain_external(app, lanes, &mut pending, ids, clock, pane_heartbeat)?;
         redraw |= drain_control(app, lanes, &mut pending, ids, clock)?;
         if app.edit_generation() != edit_generation {

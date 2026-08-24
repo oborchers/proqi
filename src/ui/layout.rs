@@ -1,6 +1,8 @@
 //! Responsive board geometry and layout-derived hit targets.
 
 mod chrome;
+mod controls;
+mod scroll;
 
 use std::collections::BTreeSet;
 
@@ -39,6 +41,8 @@ pub enum HitTarget {
     Delete,
     /// Display one independently verified adjacent target.
     Agent(Direction),
+    /// Rename the current session.
+    RenameSession,
     /// Deliver to one verified direction, optionally removing after acceptance.
     Deliver(Direction, AgentDeliveryMode, bool),
     /// Choose a verified direction for one delivery intention.
@@ -107,6 +111,10 @@ pub struct LayoutSnapshot {
     pub insert: Option<Rect>,
     /// First visible live thought.
     pub first_index: usize,
+    /// Greatest useful first-visible thought for the current content and viewport.
+    pub max_first_index: usize,
+    /// Responsive right-aligned session and board summary.
+    pub footer_summary: String,
     /// Footer command targets.
     pub controls: Vec<(HitTarget, Rect)>,
     /// Content width supplied to the editor.
@@ -127,6 +135,11 @@ pub struct OverlayLayout {
 }
 
 impl LayoutSnapshot {
+    /// Store the rendered footer summary and register its visible session-name target.
+    pub fn configure_footer_summary(&mut self, summary: String, session_name_width: u16) {
+        controls::configure_footer_summary(self, summary, session_name_width);
+    }
+
     /// Resolve one terminal cell through the same rectangles used to render.
     #[must_use]
     pub fn hit_test(&self, column: u16, row: u16) -> Option<HitTarget> {
@@ -190,56 +203,7 @@ impl LayoutSnapshot {
         targets: &[AgentTarget],
         selection: Option<(AgentDeliveryMode, bool)>,
     ) {
-        if self.footer_agents.height == 0 {
-            return;
-        }
-        let mut left = self.footer_agents.x.saturating_add(2);
-        let right = self.footer_agents.right().saturating_sub(2);
-        if let Some((delivery, remove)) = selection {
-            let eligible = targets
-                .iter()
-                .filter(|target| target.delivery.supports(delivery))
-                .collect::<Vec<_>>();
-            let count = u16::try_from(eligible.len()).unwrap_or(u16::MAX).max(1);
-            let width = right.saturating_sub(left).checked_div(count).unwrap_or(0);
-            for target in eligible {
-                self.controls.push((
-                    HitTarget::Deliver(target.direction, delivery, remove),
-                    Rect::new(left, self.footer_agents.y, width, 1),
-                ));
-                left = left.saturating_add(width);
-            }
-            return;
-        }
-
-        let count = u16::try_from(targets.len()).unwrap_or(u16::MAX).max(1);
-        let target_band_width = right.saturating_sub(left).saturating_mul(2) / 3;
-        let label_width = target_band_width.checked_div(count).unwrap_or(0);
-        for target in targets {
-            self.controls.push((
-                HitTarget::Agent(target.direction),
-                Rect::new(left, self.footer_agents.y, label_width, 1),
-            ));
-            left = left.saturating_add(label_width);
-        }
-        for delivery in [AgentDeliveryMode::Compose, AgentDeliveryMode::Submit] {
-            let eligible = targets
-                .iter()
-                .filter(|target| target.delivery.supports(delivery))
-                .collect::<Vec<_>>();
-            if eligible.is_empty() || left >= right {
-                continue;
-            }
-            let width = right.saturating_sub(left).min(11);
-            let target = if let [target] = eligible.as_slice() {
-                HitTarget::Deliver(target.direction, delivery, false)
-            } else {
-                HitTarget::BeginDelivery(delivery, false)
-            };
-            self.controls
-                .push((target, Rect::new(left, self.footer_agents.y, width, 1)));
-            left = left.saturating_add(width);
-        }
+        controls::configure_agent_controls(self, targets, selection);
     }
 }
 
@@ -261,13 +225,14 @@ pub fn compute(
     let focus_index = state
         .focused_thought
         .and_then(|id| live.iter().position(|thought| thought.id == id));
-    let mut first = requested_first.min(live.len().saturating_sub(1));
+    let max_first = scroll::maximum_first(state, editor, board, content_width, expanded);
+    let mut first = requested_first.min(max_first);
     if focus_index.is_some_and(|index| index < first) {
-        first = focus_index.unwrap_or(first);
+        first = focus_index.unwrap_or(first).min(max_first);
     }
     let mut thoughts = place_thoughts(state, editor, board, content_width, first, expanded);
     if focus_index.is_some_and(|index| !thoughts.iter().any(|layout| layout.index == index)) {
-        first = focus_index.unwrap_or(first);
+        first = focus_index.unwrap_or(first).min(max_first);
         thoughts = place_thoughts(state, editor, board, content_width, first, expanded);
     }
     let used_bottom = thoughts
@@ -292,6 +257,8 @@ pub fn compute(
         thoughts,
         insert,
         first_index: first,
+        max_first_index: max_first,
+        footer_summary: String::new(),
         controls: chrome::controls(
             chrome.actions,
             state.mode,
@@ -474,7 +441,7 @@ mod tests {
             false,
             false,
         );
-        assert_eq!(layout.header, Rect::new(0, 0, 20, 1));
+        assert_eq!(layout.header, Rect::new(0, 0, 20, 0));
         let insert = layout.insert.expect("visible insertion row");
         assert_eq!(layout.hit_test(insert.x, insert.y), Some(HitTarget::Insert));
         assert!(

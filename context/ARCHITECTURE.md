@@ -466,6 +466,11 @@ independently aligned strings into the same cells. Compact panes shorten labels
 and remove secondary context before they reduce the usable content area below
 one row.
 
+The ordinary board has no permanent top header. Its responsive footer is the
+single session-summary surface and contains name, thought count, mode, and
+durability when width permits. Agent controls are content-sized and only exist
+for independently verified targets.
+
 Natural thought height is calculated from wrapped visual lines. A viewport-aware
 cap is applied only to long thoughts. The focused thought receives enough space
 to keep its cursor or active content visible, subject to a minimal navigable
@@ -595,6 +600,14 @@ security fallback. Endpoint metadata lives beside runtime lock metadata. Peer-us
 validation, bounded messages, protocol negotiation, idempotency keys, and
 timeouts are mandatory. If forwarding is unsupported or the owner cannot be
 verified, the CLI returns `session_busy`.
+
+Control protocol version 2 adds durable presentation annotations to thought
+creation. Plain additions remain compatible with version 1 owners. An
+annotation-bearing transfer requires version 2 and fails closed rather than
+discarding metadata. Cross-session delivery inspects the source, commits an
+idempotent destination creation through the verified owner or an acquired
+inactive-session lease, and only then requests an ordinary source deletion.
+No direct database write bypasses an active destination owner.
 
 The Proqi skill contains instructions and examples, not privileged executable
 logic. It begins with capability discovery, passes arbitrary thought content by

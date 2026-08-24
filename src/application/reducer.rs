@@ -21,6 +21,7 @@ pub fn reduce(state: &mut AppState, action: Action) -> ApplicationResult<Vec<Eff
         return Err(ApplicationError::InvalidState);
     }
     match action {
+        Action::RenameSession { name } => reduce_session_name(state, name),
         Action::FocusThought(_) | Action::EnterEdit(_) | Action::ExitEdit => {
             reduce_navigation(state, &action)
         }
@@ -44,6 +45,7 @@ const fn mutates_durable_state(action: &Action) -> bool {
     matches!(
         action,
         Action::CreateThought { .. }
+            | Action::RenameSession { .. }
             | Action::PasteAsThought { .. }
             | Action::EditThought { .. }
             | Action::CutThought { .. }
@@ -53,6 +55,19 @@ const fn mutates_durable_state(action: &Action) -> bool {
             | Action::Undo { .. }
             | Action::Redo { .. }
     )
+}
+
+fn reduce_session_name(
+    state: &mut AppState,
+    name: Option<String>,
+) -> ApplicationResult<Vec<Effect>> {
+    let previous_name = state.board.session.name.clone();
+    state.board.session.rename(name.clone())?;
+    Ok(vec![Effect::RenameSession {
+        session_id: state.board.session.id,
+        previous_name,
+        name,
+    }])
 }
 
 fn reduce_navigation(state: &mut AppState, action: &Action) -> ApplicationResult<Vec<Effect>> {

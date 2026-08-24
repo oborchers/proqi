@@ -22,7 +22,7 @@ pub(super) fn compute(
     has_status: bool,
     has_agents: bool,
 ) -> ChromeLayout {
-    let header_height = u16::from(area.height > 0) + u16::from(area.height >= 10);
+    let header_height = 0;
     let available = area.height.saturating_sub(header_height);
     let actions_height = u16::from(available >= 2);
     let context_height = u16::from(available >= 4);

@@ -9,7 +9,9 @@ use crate::domain::{
     ThoughtRevision, Timestamp, UndoScope,
 };
 use crate::ports::agent::{AgentTarget, SubmissionRequest};
-use crate::ports::{recovery::RecoveryDocument, store::OperationBatch};
+use crate::ports::{
+    recovery::RecoveryDocument, store::OperationBatch, transfer::SessionTransferRequest,
+};
 
 /// Active interaction context.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -221,6 +223,11 @@ impl AppState {
 /// Normalized input or external result accepted by the reducer.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Action {
+    /// Replace or clear the current session's optional name.
+    RenameSession {
+        /// New validated name, or `None` to clear it.
+        name: Option<String>,
+    },
     /// Focus one live thought, or clear focus.
     FocusThought(Option<ThoughtId>),
     /// Enter the multiline editor for one live thought.
@@ -368,6 +375,19 @@ pub enum Action {
 /// Blocking work requested by the pure reducer.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Effect {
+    /// Discover live destination sessions for an explicit transfer picker.
+    DiscoverTransferSessions,
+    /// Copy one exact thought to another session before optional source removal.
+    TransferThought(SessionTransferRequest),
+    /// Persist an optimistic current-session rename.
+    RenameSession {
+        /// Owning session.
+        session_id: SessionId,
+        /// Previous name restored when persistence fails.
+        previous_name: Option<String>,
+        /// New name, or `None` to clear it.
+        name: Option<String>,
+    },
     /// Discover verified adjacent agents without blocking the reducer lane.
     DiscoverAgents,
     /// Submit exact thought content through a verified semantic agent gateway.
