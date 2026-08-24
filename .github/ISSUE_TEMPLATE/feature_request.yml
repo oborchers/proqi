@@ -3,6 +3,9 @@ description: Propose a focused product improvement
 title: "feature: "
 labels: [enhancement]
 body:
+  - type: markdown
+    attributes:
+      value: Read CONTRIBUTING.md before proposing a change. Report vulnerabilities privately through SECURITY.md.
   - type: textarea
     id: problem
     attributes:

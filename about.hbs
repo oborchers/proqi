@@ -1,0 +1,23 @@
+# Third-party notices
+
+Proqi includes the following third-party Rust components. This generated file
+is informational and does not replace the license terms below.
+
+## Components
+
+| Component | Version | License |
+| --- | --- | --- |
+{{#each crates}}
+| [{{package.name}}]({{#if package.repository}}{{package.repository}}{{else}}https://crates.io/crates/{{package.name}}{{/if}}) | {{package.version}} | {{license}} |
+{{/each}}
+
+## License texts
+
+{{#each overview}}
+### {{name}}
+
+```text
+{{text}}
+```
+
+{{/each}}

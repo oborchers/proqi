@@ -6,6 +6,7 @@ resolver = "2"
 edition = "2024"
 rust-version = "1.88"
 version = "0.0.1"
+license = "MIT"
 
 [workspace.dependencies]
 arboard = { version = "=3.6.1", default-features = false, features = ["image-data", "wayland-data-control"] }
@@ -51,8 +52,10 @@ name = "proqi"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-description = "A terminal-native scratchpad for agent work"
+description = "An agent-optimized terminal scratchpad for follow-up prompts"
 repository = "https://github.com/oborchers/proqi"
+readme = "README.md"
+license.workspace = true
 publish = false
 
 [dependencies]

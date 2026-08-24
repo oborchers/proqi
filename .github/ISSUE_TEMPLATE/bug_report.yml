@@ -5,7 +5,7 @@ labels: [bug]
 body:
   - type: markdown
     attributes:
-      value: Do not include private prompt content, credentials, or unredacted diagnostics.
+      value: Read CONTRIBUTING.md first. Do not include private prompt content, credentials, or unredacted diagnostics. Report vulnerabilities privately through SECURITY.md.
   - type: textarea
     id: behavior
     attributes:
