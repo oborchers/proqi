@@ -227,3 +227,54 @@ fn board_reorder_delete_and_collapse_have_independent_undo_redo() {
     );
     assert_eq!(fixture.state.board.live_thoughts()[0].id, second);
 }
+
+#[test]
+fn deleting_the_focused_thought_preserves_its_board_position() {
+    let mut fixture = Fixture::new();
+    let first = fixture.create("first");
+    let second = fixture.create("second");
+    let third = fixture.create("third");
+    reduce(&mut fixture.state, Action::FocusThought(Some(second))).expect("focus second");
+
+    let operation_id = fixture.operation_id();
+    let at = fixture.time();
+    reduce(
+        &mut fixture.state,
+        Action::DeleteThought {
+            operation_id,
+            thought_id: second,
+            kind: BoardOperationKind::Delete,
+            at,
+        },
+    )
+    .expect("delete middle");
+    assert_eq!(fixture.state.focused_thought, Some(third));
+
+    let operation_id = fixture.operation_id();
+    let at = fixture.time();
+    reduce(
+        &mut fixture.state,
+        Action::DeleteThought {
+            operation_id,
+            thought_id: third,
+            kind: BoardOperationKind::Delete,
+            at,
+        },
+    )
+    .expect("delete last");
+    assert_eq!(fixture.state.focused_thought, Some(first));
+
+    let operation_id = fixture.operation_id();
+    let at = fixture.time();
+    reduce(
+        &mut fixture.state,
+        Action::DeleteThought {
+            operation_id,
+            thought_id: first,
+            kind: BoardOperationKind::Delete,
+            at,
+        },
+    )
+    .expect("delete only remaining thought");
+    assert_eq!(fixture.state.focused_thought, None);
+}

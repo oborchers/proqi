@@ -168,6 +168,13 @@ pub(super) fn delete_thought(
         return Err(ApplicationError::InvalidState);
     }
     let thought = state.live_thought(thought_id)?.clone();
+    let deleted_index = state
+        .board
+        .live_thoughts()
+        .iter()
+        .position(|candidate| candidate.id == thought_id)
+        .ok_or(ApplicationError::InvalidState)?;
+    let was_focused = state.focused_thought == Some(thought_id);
     let sequence = state.next_sequence()?;
     let operation = BoardOperation {
         id: operation_id,
@@ -187,6 +194,17 @@ pub(super) fn delete_thought(
         created_at: at,
     };
     state.record_board_operation(&operation)?;
+    if was_focused {
+        let live = state.board.live_thoughts();
+        state.focused_thought = live
+            .get(deleted_index)
+            .or_else(|| {
+                deleted_index
+                    .checked_sub(1)
+                    .and_then(|previous| live.get(previous))
+            })
+            .map(|thought| thought.id);
+    }
     Ok(vec![Effect::CommitBoardOperation(operation)])
 }
 

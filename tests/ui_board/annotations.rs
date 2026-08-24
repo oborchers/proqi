@@ -306,6 +306,17 @@ fn reverse_fold_navigation_uses_the_visible_space_before_an_inline_placeholder()
         .get_cursor_position()
         .expect("cursor before fold");
     assert_eq!((cursor.x, cursor.y), (area.x + 6, area.y));
+
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::GraphemeBack,
+        extend_selection: false,
+    }));
+    let mut terminal = draw(&mut fixture, 50, 8);
+    let cursor = terminal
+        .backend_mut()
+        .get_cursor_position()
+        .expect("cursor on preceding grapheme");
+    assert_eq!((cursor.x, cursor.y), (area.x + 5, area.y));
 }
 
 #[test]

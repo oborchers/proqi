@@ -4,6 +4,7 @@ use crate::{
     domain::{ContentAnnotation, ThoughtId},
     ports::editor::{CursorMovement, EditCommand},
 };
+use unicode_segmentation::UnicodeSegmentation as _;
 
 use super::BoardApp;
 
@@ -133,7 +134,7 @@ impl BoardApp {
             })
             .map(|(_, annotation)| {
                 if moves_before(movement) {
-                    annotation.start
+                    boundary_before_fold(&snapshot.content, annotation.start)
                 } else {
                     annotation.end
                 }
@@ -204,6 +205,14 @@ impl BoardApp {
     pub(super) fn clear_expanded_folds(&mut self, thought_id: ThoughtId) {
         self.expanded_folds.retain(|(id, _)| *id != thought_id);
     }
+}
+
+fn boundary_before_fold(content: &str, fold_start: usize) -> usize {
+    content
+        .get(..fold_start)
+        .and_then(|prefix| prefix.grapheme_indices(true).next_back())
+        .filter(|(_, grapheme)| *grapheme != "\n" && grapheme.chars().all(char::is_whitespace))
+        .map_or(fold_start, |(byte, _)| byte)
 }
 
 fn moves_before(movement: CursorMovement) -> bool {
