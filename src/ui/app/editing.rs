@@ -53,12 +53,18 @@ impl BoardApp {
         if !armed {
             return Vec::new();
         }
-        let Some(target) = self.edit_neighbor(movement) else {
+        let target = self.edit_neighbor(movement);
+        if target.is_none() && movement != CursorMovement::VisualDown {
             return Vec::new();
-        };
+        }
         let mut effects = self.finish_edit(ids, clock);
-        self.insertion_focus = super::InsertionFocus::Inactive;
-        effects.extend(self.reduce(Action::FocusThought(Some(target))));
+        if let Some(target) = target {
+            self.insertion_focus = super::InsertionFocus::Inactive;
+            effects.extend(self.reduce(Action::FocusThought(Some(target))));
+        } else {
+            self.insertion_focus = super::InsertionFocus::Active;
+            self.layout = None;
+        }
         effects
     }
 
@@ -171,7 +177,7 @@ impl BoardApp {
                 effects
             }
             Err(error) => {
-                self.status = Some(error.to_string());
+                self.set_error(error.to_string());
                 Vec::new()
             }
         }

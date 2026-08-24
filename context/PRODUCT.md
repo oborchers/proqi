@@ -160,9 +160,11 @@ the focused or hovered thought without permanently consuming a row.
 The board spends no permanent row on a repeated product header. The footer
 combines the optional session name, thought count, mode, and durability into one
 responsive summary. Separate rows contain labeled actions and only the verified
-agent targets that currently exist. A transient-status row appears only when
-useful space permits. Narrow panes shorten or remove secondary labels before
-any two regions can collide.
+agent targets that currently exist. Transient information and success messages
+share the left side of the summary row. Warnings and errors temporarily replace
+the summary so they can use the complete row. Status never changes footer
+height. Narrow panes shorten or remove secondary labels before any two regions
+can collide.
 
 ### Revision and operation history
 
@@ -313,6 +315,10 @@ Leaving edit mode returns expanded ranges to their compact presentation. Copy,
 cut, export, search, recovery, and agent submission always use exact canonical
 content regardless of the visible fold.
 
+Explicit `http://` and `https://` URLs use the accent color and underline as a
+visual link cue. Styling never changes the canonical content or terminal link
+target.
+
 Fold metadata is durable and participates in editor undo and redo. Editing
 inside a folded range dissolves that range safely, while edits outside it
 preserve and rebase its offsets. Restarting the application restores the same
@@ -346,15 +352,15 @@ insertion row is clickable and reads
 symbol. The user never needs a second action before typing.
 
 The insertion row is part of keyboard focus order. Moving down from the last
-thought focuses `+ New thought`. `Enter` creates a durable blank, and any
-printable key creates a thought with that key as its first content. Moving up
-or pressing `Esc` leaves the insertion row without creating anything.
+thought focuses `+ New thought`. `Enter` or `n` creates a durable blank. Moving
+up or pressing `Esc` leaves the insertion row without creating anything.
 
 When the board contains no thoughts, the insertion row owns keyboard focus by
-default. A durable empty thought reuses the insertion row's capture behavior:
-every printable character enters edit mode and inserts that character, even
-when the character is normally a plain-key board shortcut. Modifier shortcuts,
-navigation keys, paste, and mouse actions retain their ordinary semantics.
+default. Printable keys remain board commands on the insertion row and on a
+focused durable blank. Typing content always requires the explicit create or
+edit transition first. This keeps delete, command discovery, navigation, help,
+submission, and every configurable board shortcut reachable in those states.
+Bracketed board paste remains the deliberate one-action create-and-paste path.
 
 ### Copy, cut, and delete
 
@@ -396,29 +402,29 @@ A submission target is eligible only when all of the following are true:
 Directional lookup is never trusted without these independent checks. The
 product never guesses a target and never falls back to raw input injection.
 
-Prompt delivery has two distinct intentions. `Send` fills the target agent's
-composer without starting a turn. `Submit` starts the turn immediately. An
-integration must advertise each behavior independently. Unsupported behaviors
-remain hidden, and Proqi never substitutes raw key injection. Herdr's current
-semantic contract advertises immediate submission only.
+Prompt delivery has two dispositions over the same immediate semantic submit
+operation. `Submit & remove` is the default and deletes the thought only after
+an accepted matching receipt. `Submit & keep` sends the same prompt and retains
+the thought. Proqi verifies at submission time that the target exposes Herdr's
+semantic request and receipt contract. It never substitutes raw key injection.
 
 Each verified adjacent target appears once in the integration row, without its
-readiness label. If exactly one eligible target supports an action, that action
-is direct. If several support it, delivery enters a directional targeting state.
+readiness label. `s Submit & remove` and `S Submit & keep` are shown only when
+semantic submission is available. If exactly one eligible target supports an
+action, that action is direct. If several support it, delivery enters a
+directional targeting state.
 Arrow keys and `h`, `j`, `k`, and `l` choose among the enabled directions. Mouse
-users select the corresponding adjacent-agent indicator. Remove-after-acceptance
-variants remain available through the command palette instead of duplicating
-every footer control.
+users select the corresponding adjacent-agent indicator.
 
 In a Herdr-managed pane, Proqi publishes the display-only pane label `proqi`
 with a short lease and clears it on normal exit. This helps users distinguish
 the scratchpad beside several named agent panes. It never claims an agent
 identity, and stale display metadata expires after a crash.
 
-Send and Submit preserve the thought. Their remove variants delete it only after
-the integration confirms successful delivery, and that deletion remains undoable. A
-failed, timed-out, ambiguous, or unsupported submission leaves the thought
-unchanged and reports what prevented it.
+Submit and keep always preserves the thought. Submit and remove deletes it only
+after the integration returns an accepted receipt for the exact request, and
+that deletion remains undoable. A failed, timed-out, ambiguous, unsupported, or
+mismatched submission leaves the thought unchanged and reports that it was kept.
 
 Submission does not wait for the agent's response and does not import or inspect
 the agent conversation. The receiving harness decides whether a prompt sent
@@ -449,9 +455,8 @@ bindings are:
 | Copy thought | `y` | Click copy control |
 | Cut thought | `x` | Click cut control |
 | Delete thought | `d` | Click delete control |
-| Send to composer | `s`, when supported, then direction when needed | Click verified Send control |
-| Submit and start | `S`, when supported, then direction when needed | Click verified Submit control |
-| Deliver and remove | Use the command palette | Choose a verified target in the palette flow |
+| Submit and remove after acceptance | `s`, when supported, then direction when needed | Click verified Submit & remove control |
+| Submit and keep thought | `S`, when supported, then direction when needed | Click verified Submit & keep control |
 | Undo board action | `u` | Click undo control when visible |
 | Move thought | `J` and `K`, or `Shift+↑` and `Shift+↓` | Drag thought handle |
 | Expand or collapse | `Space` | Click overflow indicator |
@@ -577,6 +582,8 @@ After any resize:
 - A mouse hit target always matches its newly rendered geometry.
 - Scroll bounds and scrollbars reflect the new layout immediately.
 - Underfilled content cannot be scrolled away from the viewport.
+- The final scroll page reserves enough space for `+ New thought` above the
+  footer, including when every thought overflows the initial viewport.
 - No content is clipped behind the footer or terminal edge.
 - Undo history and presentation state remain unchanged.
 

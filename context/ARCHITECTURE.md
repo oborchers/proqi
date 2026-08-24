@@ -287,12 +287,13 @@ trait AgentGateway {
 }
 ```
 
-Capabilities and targets expose typed delivery support for composer-only Send
-and immediate Submit separately. The gateway returns verified targets and typed
-readiness states. It never returns a convenient but unverified pane. Delivery
-success means the harness accepted the requested operation. It does not mean the
-agent finished processing the prompt. Unsupported modes fail before any process
-is executed.
+Capabilities and targets expose typed support for immediate semantic submission.
+The application separately models whether the accepted submission keeps the
+source thought or removes it afterward. The gateway returns verified targets
+and typed readiness states. It never returns a convenient but unverified pane.
+Delivery success means the harness accepted the matching request. It does not
+mean the agent finished processing the prompt. Unsupported contracts fail
+before any prompt process is executed.
 
 ### `RuntimeCoordinator`
 
@@ -328,8 +329,10 @@ would otherwise make tests nondeterministic.
 An explicitly created empty thought is an ordinary durable domain entity. Its
 creation is committed through the same board operation as populated thoughts,
 so it participates in session ordering, resume, undo, redo, and crash recovery.
-The UI shares one capture intention between the insertion row and a focused
-empty thought instead of maintaining a second transient draft model.
+The insertion row and focused empty thoughts retain board-mode command
+semantics. Content entry starts only through explicit create, edit, paste, or
+pointer intentions. This prevents an empty entity from intercepting delete,
+navigation, help, or configurable plain-key commands.
 
 ## Domain model and database
 
@@ -474,8 +477,10 @@ and limited-color terminals retain the non-color gutter cue without inventing
 an unsafe contrast pair.
 
 The board reserves independent responsive regions for product and session
-identity, content, integration or durability context, transient status,
-contextual actions, and verified adjacent-agent targets. Renderers never paint
+identity, content, integration or durability context, contextual actions, and
+verified adjacent-agent targets. Transient status shares the context row:
+information and success compose beside the summary, while warnings and errors
+replace it temporarily. Renderers never paint
 independently aligned strings into the same cells. Compact panes shorten labels
 and remove secondary context before they reduce the usable content area below
 one row.
@@ -488,7 +493,9 @@ for independently verified targets.
 Natural thought height is calculated from wrapped visual lines. A viewport-aware
 cap is applied only to long thoughts. The focused thought receives enough space
 to keep its cursor or active content visible, subject to a minimal navigable
-context around it.
+context around it. The maximum board scroll position includes the insertion row
+as a terminal virtual item, so the final page always exposes `+ New thought`
+above the footer without permitting blank overscroll.
 
 ### Resize
 
@@ -520,6 +527,12 @@ Bracketed paste is one payload and one undoable edit. When no thought is
 selected, paste creates and focuses a new thought. The application never tries
 to split a paste heuristically.
 
+Board-mode printable keys always pass through the configured command map, even
+when the insertion row or a durable blank has focus. The second blocked
+downward movement at the end of the final edited thought exits edit mode and
+focuses the insertion row. Other edit boundaries use the same navigation state
+machine.
+
 The normalized paste payload carries exact text plus optional typed provenance.
 Attachment annotations retain only presentation-safe metadata and byte ranges;
 the absolute path remains the canonical text. Large-paste annotations retain
@@ -531,6 +544,11 @@ cursor and selection mapping. Collapsed ranges are atomic for pointer, cursor,
 selection, and deletion commands. Edits rebase unaffected ranges and dissolve
 overlapping ranges. Revisions persist both sides of the annotation change so
 undo and redo remain restart-safe.
+
+URL recognition is a render-only pass over canonical content. Only explicit
+HTTP and HTTPS ranges receive accent and underline styling. URL recognition does
+not create durable annotations, rewrite content, or participate in editor
+position conversion.
 
 ## Herdr integration
 
@@ -552,12 +570,19 @@ The receiving harness decides whether a prompt sent to a working agent is
 queued, treated as steering, or rejected. The gateway reports that state and
 the resulting receipt without inventing its own queue semantics.
 
-Submit preserves the thought. Submit-and-remove commits deletion only after an
-accepted submission receipt, and that deletion remains undoable.
+Both visible actions invoke the same immediate semantic prompt command.
+`SubmissionDisposition::Keep` preserves the thought.
+`SubmissionDisposition::RemoveAfterSuccess` commits deletion only after an
+accepted receipt whose submission identifier matches the pending request. That
+deletion remains undoable. Every failure preserves the thought.
 
 The private alpha implements this boundary against Herdr's structured schema
-and protocol discovery commands. It fails closed when the installed client and
-server no longer match the supported contract. Initial discovery is silent so
+and protocol discovery commands. Capability discovery verifies both the
+`agent.prompt` request and `agent_prompted` receipt shapes. Explicit
+`interactive_ready=false` or `launch_pending=true` metadata makes a target
+ineligible, while absent optional readiness metadata remains compatible. It
+fails closed when the installed client and server no longer match the supported
+contract. Initial discovery is silent so
 ordinary terminals retain an uncluttered board. An explicit refresh, or a
 submission attempt with no verified target, reports why direct submission is
 unavailable. Every submission revalidates the complete target immediately

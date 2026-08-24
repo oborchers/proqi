@@ -75,10 +75,10 @@ impl BoardApp {
         result: Result<(), StoreError>,
     ) {
         match result {
-            Ok(()) => self.status = Some("session renamed".to_owned()),
+            Ok(()) => self.set_success("session renamed"),
             Err(error) => {
                 let _restored = self.state.board.session.rename(previous_name);
-                self.status = Some(format!("session rename failed: {error}"));
+                self.set_error(format!("session rename failed: {error}"));
             }
         }
     }

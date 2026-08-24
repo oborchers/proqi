@@ -118,7 +118,7 @@ fn durable_blank_and_editing_surface() {
 }
 
 #[test]
-fn failed_save_uses_a_dedicated_status_row() {
+fn failed_save_replaces_the_summary_without_changing_footer_height() {
     let mut fixture = Fixture::new();
     let sequence = fixture.paste("important prompt");
     fixture.app.acknowledge_persistence(sequence, false);

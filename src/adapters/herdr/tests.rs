@@ -76,7 +76,14 @@ fn source() -> PaneContext {
 }
 
 fn schema(protocol: u32) -> Value {
-    json!({"protocol": protocol, "schema_version": 1, "schemas": {}})
+    json!({
+        "protocol": protocol,
+        "schema_version": 1,
+        "schemas": {
+            "request": {"const": "agent.prompt"},
+            "response": {"const": "agent_prompted"}
+        }
+    })
 }
 
 fn snapshot(protocol: u32) -> Value {
@@ -278,6 +285,26 @@ fn ambiguity_wrong_context_invalid_geometry_and_unsupported_state_are_rejected()
     );
 }
 
+#[test]
+fn explicit_interactive_readiness_metadata_fails_closed() {
+    let context = source();
+    for (field, value) in [("interactive_ready", false), ("launch_pending", true)] {
+        let mut unavailable = agent("w1:p2", "w1", "w1:t1", "idle");
+        unavailable[field] = json!(value);
+        let (mut gateway, _) = gateway(discovery_responses(
+            &context,
+            json!([unavailable]),
+            Some(("w1:p2", right_rect())),
+        ));
+        assert!(
+            gateway
+                .adjacent_targets(&context)
+                .expect("unready neighbor is hidden")
+                .is_empty()
+        );
+    }
+}
+
 fn target(context: &PaneContext) -> AgentTarget {
     AgentTarget {
         direction: Direction::Right,
@@ -311,7 +338,6 @@ fn submission_revalidates_and_passes_exact_text_as_one_distinct_argument() {
         .submit(SubmissionRequest {
             submission_id,
             target: target(&context),
-            delivery: crate::ports::agent::AgentDeliveryMode::Submit,
             content: prompt_text.clone(),
         })
         .expect("accepted submission");
@@ -329,19 +355,19 @@ fn submission_revalidates_and_passes_exact_text_as_one_distinct_argument() {
 }
 
 #[test]
-fn composer_only_delivery_fails_before_executing_herdr() {
+fn capability_negotiation_rejects_a_schema_without_semantic_prompt_contracts() {
     let context = source();
-    let (mut gateway, runner) = gateway(Vec::new());
-    let mut ids = FakeIdGenerator::new(1_725_200_000_000);
-    let result = gateway.submit(SubmissionRequest {
-        submission_id: ids.submission_id(),
-        target: target(&context),
-        delivery: crate::ports::agent::AgentDeliveryMode::Compose,
-        content: "keep in composer".to_owned(),
-    });
-
-    assert!(matches!(result, Err(AgentError::Unsupported(_))));
-    assert!(runner.requests.borrow().is_empty());
+    let incomplete = json!({"protocol":19,"schema_version":1,"schemas":{}});
+    let (mut gateway, _) = gateway(vec![
+        success(incomplete),
+        success(snapshot(19)),
+        success(current(&context)),
+        success(layout(&context)),
+    ]);
+    assert!(matches!(
+        gateway.capabilities(),
+        Err(AgentError::Unsupported(_))
+    ));
 }
 
 #[test]

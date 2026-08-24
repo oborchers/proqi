@@ -23,7 +23,7 @@ use crate::{
     },
     domain::{OperationSequence, RequestId, SubmissionId, ThoughtId},
     ports::{
-        agent::{AgentDeliveryMode, AgentTarget, SubmissionRequest},
+        agent::{AgentTarget, SubmissionDisposition, SubmissionRequest},
         editor::{
             CursorMovement, EditCommand, Editor, EditorFactory, EditorSnapshot, TextViewport,
         },
@@ -82,13 +82,12 @@ struct PendingSubmission {
     thought_id: ThoughtId,
     operation_id: crate::domain::OperationId,
     at: crate::domain::Timestamp,
-    remove: bool,
+    disposition: SubmissionDisposition,
 }
 
 #[derive(Clone, Copy)]
 struct SubmissionMode {
-    delivery: AgentDeliveryMode,
-    remove: bool,
+    disposition: SubmissionDisposition,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -171,7 +170,7 @@ pub struct BoardApp {
     /// Whether contextual help is visible.
     pub help: bool,
     /// Transient human-readable status.
-    pub status: Option<String>,
+    pub(in crate::ui) status: Option<crate::ui::status::UiStatus>,
     viewport: TextViewport,
     first_visible: usize,
     manual_board_scroll: bool,
@@ -418,7 +417,7 @@ impl BoardApp {
             DurabilityState::Failed { failed, .. }
                 if self.recovery_exported_for != Some(failed)
         ) {
-            self.status = Some("retry the save or export recovery before quitting".to_owned());
+            self.set_error("retry the save or export recovery before quitting");
         } else {
             self.quit = true;
         }
@@ -461,7 +460,7 @@ impl BoardApp {
         match reduce(&mut self.state, action) {
             Ok(effects) => effects,
             Err(error) => {
-                self.status = Some(error.to_string());
+                self.set_error(error.to_string());
                 Vec::new()
             }
         }

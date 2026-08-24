@@ -138,19 +138,18 @@ impl BoardApp {
         &self.agent_targets
     }
 
-    /// Whether at least one verified target supports a delivery behavior.
+    /// Whether at least one verified target supports immediate submission.
     #[must_use]
-    pub fn supports_delivery(&self, mode: crate::ports::agent::AgentDeliveryMode) -> bool {
+    pub fn supports_submission(&self) -> bool {
         self.agent_targets
             .iter()
-            .any(|target| target.delivery.supports(mode))
+            .any(|target| target.delivery.supports())
     }
 
     /// Active delivery intention while a direction is being selected.
     #[must_use]
-    pub fn submission_mode(&self) -> Option<(crate::ports::agent::AgentDeliveryMode, bool)> {
-        self.submission_mode
-            .map(|mode| (mode.delivery, mode.remove))
+    pub fn submission_mode(&self) -> Option<crate::ports::agent::SubmissionDisposition> {
+        self.submission_mode.map(|mode| mode.disposition)
     }
 
     /// Prepare current frame geometry without changing the logical cursor.
@@ -167,8 +166,6 @@ impl BoardApp {
         if self.manual_board_scroll {
             layout_state.focused_thought = None;
         }
-        let has_status = self.status.is_some()
-            || matches!(self.state.durability, DurabilityState::Failed { .. });
         let first_editor = self.editor_presentation();
         let first = compute_layout(
             &layout_state,
@@ -176,7 +173,7 @@ impl BoardApp {
             area,
             self.first_visible,
             &self.expanded,
-            has_status,
+            self.insertion_focused(),
             !self.agent_targets.is_empty(),
         );
         let height = self.focused_height(&first);
@@ -188,13 +185,18 @@ impl BoardApp {
             area,
             first.first_index,
             &self.expanded,
-            has_status,
+            self.insertion_focused(),
             !self.agent_targets.is_empty(),
         );
         self.configure_overlay(&mut layout);
         layout.configure_agent_controls(&self.agent_targets, self.submission_mode());
-        let (summary, name_width) =
-            self.footer_summary(layout.footer_context.width.saturating_sub(4));
+        let prominent = self.status_is_prominent()
+            || matches!(self.state.durability, DurabilityState::Failed { .. });
+        let (summary, name_width) = if prominent {
+            (String::new(), 0)
+        } else {
+            self.footer_summary(layout.footer_context.width.saturating_sub(4))
+        };
         layout.configure_footer_summary(summary, name_width);
         let final_height = self.focused_height(&layout);
         self.prepare_layout(TextViewport::new(layout.content_width, final_height));

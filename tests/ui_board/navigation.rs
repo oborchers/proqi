@@ -99,7 +99,7 @@ fn help_is_modal_and_escape_closes_it_without_mutating_the_board() {
 }
 
 #[test]
-fn insertion_row_is_keyboard_focusable_and_printable_keys_start_content() {
+fn insertion_row_keeps_board_commands_available_until_creation_is_explicit() {
     let mut fixture = Fixture::new();
     durable_thought(&mut fixture, "existing");
     fixture.input(visual(CursorMovement::VisualDown, false));
@@ -107,11 +107,52 @@ fn insertion_row_is_keyboard_focusable_and_printable_keys_start_content() {
     assert!(fixture.app.active_thought_id().is_none());
 
     fixture.input(UiInput::Key(UiKey::Character('j')));
+    assert!(fixture.app.insertion_focused());
+    assert!(fixture.app.editor_snapshot().is_none());
+    assert_eq!(fixture.app.state.board.live_thoughts().len(), 1);
+
+    fixture.input(UiInput::Key(UiKey::Character(':')));
+    assert!(fixture.app.palette_view().is_some());
+    fixture.input(UiInput::Key(UiKey::Escape));
+    fixture.input(UiInput::Key(UiKey::Character('n')));
     assert_eq!(
         fixture.app.editor_snapshot().expect("new editor").content,
-        "j"
+        ""
     );
     assert_eq!(fixture.app.state.board.live_thoughts().len(), 2);
+}
+
+#[test]
+fn durable_blank_thought_uses_board_commands_instead_of_implicit_typing() {
+    let mut fixture = Fixture::new();
+    fixture.input(UiInput::Key(UiKey::Character('n')));
+    fixture.input(UiInput::Key(UiKey::Escape));
+    assert_eq!(fixture.app.state.board.live_thoughts().len(), 1);
+
+    fixture.input(UiInput::Key(UiKey::Character('d')));
+    assert!(fixture.app.state.board.live_thoughts().is_empty());
+}
+
+#[test]
+fn blocked_down_navigation_from_the_last_editor_focuses_the_insertion_row() {
+    let mut fixture = Fixture::new();
+    durable_thought(&mut fixture, "last thought");
+    fixture.input(UiInput::Key(UiKey::Enter));
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::DocumentEnd,
+        extend_selection: false,
+    }));
+
+    fixture.input(visual(CursorMovement::VisualDown, false));
+    fixture.input(visual(CursorMovement::VisualDown, false));
+
+    assert_eq!(
+        fixture.app.interaction_mode(),
+        proqi::application::InteractionMode::Board
+    );
+    assert!(fixture.app.insertion_focused());
+    let layout = fixture.app.prepare_frame(Rect::new(0, 0, 40, 7));
+    assert!(layout.insert.is_some());
 }
 
 #[test]
@@ -243,6 +284,31 @@ fn overflowing_board_clamps_to_a_useful_last_page_and_resets_after_resize() {
 }
 
 #[test]
+fn overflowing_board_scrolls_to_the_insertion_row_without_blank_overscroll() {
+    let mut fixture = Fixture::new();
+    for index in 0..10 {
+        durable_thought(&mut fixture, &format!("thought {index}"));
+    }
+    let area = Rect::new(0, 0, 52, 10);
+    let _initial = fixture.app.prepare_frame(area);
+    for _ in 0..20 {
+        fixture.pointer(5, 3, PointerKind::ScrollDown);
+        let _rendered = draw(&mut fixture, area.width, area.height);
+    }
+
+    let final_page = fixture.app.prepare_frame(area);
+    let insert = final_page.insert.expect("reachable insertion row");
+    assert!(insert.bottom() <= final_page.board.bottom());
+    assert!(final_page.thoughts.iter().any(|thought| thought.index == 9));
+    assert_eq!(final_page.first_index, final_page.max_first_index);
+
+    fixture.pointer(5, 3, PointerKind::ScrollDown);
+    let clamped = fixture.app.prepare_frame(area);
+    assert_eq!(clamped.first_index, final_page.first_index);
+    assert!(clamped.insert.is_some());
+}
+
+#[test]
 fn current_session_can_be_renamed_from_the_palette_and_footer() {
     let mut fixture = Fixture::new();
     durable_thought(&mut fixture, "existing");
@@ -274,6 +340,11 @@ fn current_session_can_be_renamed_from_the_palette_and_footer() {
         Some("Agent research")
     );
     fixture.app.complete_session_rename(None, Ok(()));
+    let confirmation = draw_theme(&mut fixture, 70, 10, ThemePreference::Dark);
+    assert!(text(confirmation.backend().buffer()).lines().any(|line| {
+        line.contains("session renamed")
+            && line.contains("Agent research · 1 thought · board · saving")
+    }));
 
     let layout = fixture.app.prepare_frame(Rect::new(0, 0, 70, 10));
     let (_, area) = layout
@@ -320,8 +391,15 @@ fn failed_session_rename_restores_the_previous_durable_name() {
     assert!(
         fixture
             .app
-            .status
-            .as_deref()
+            .status_text()
             .is_some_and(|status| status.contains("failed"))
     );
+    let failed = draw_theme(&mut fixture, 70, 10, ThemePreference::Dark);
+    let failed_text = text(failed.backend().buffer());
+    assert!(failed_text.contains("session rename failed"));
+    assert!(!failed_text.contains("Durable · 1 thought · board · saving"));
+
+    fixture.input(UiInput::Key(UiKey::Escape));
+    let restored = draw_theme(&mut fixture, 70, 10, ThemePreference::Dark);
+    assert!(text(restored.backend().buffer()).contains("Durable · 1 thought · board · saving"));
 }

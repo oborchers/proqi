@@ -41,10 +41,12 @@ pub struct KeyBindings {
     pub copy: char,
     /// Cut focused thought.
     pub cut: char,
-    /// Place the focused thought in a verified adjacent agent composer.
-    pub send: char,
-    /// Submit the focused thought to a verified adjacent agent.
-    pub submit: char,
+    /// Submit and remove the focused thought after acceptance.
+    #[serde(alias = "send")]
+    pub submit_remove: char,
+    /// Submit and preserve the focused thought.
+    #[serde(alias = "submit")]
+    pub submit_keep: char,
     /// Undo board action.
     pub undo: char,
     /// Move focus upward.
@@ -75,8 +77,8 @@ impl Default for KeyBindings {
             delete: 'd',
             copy: 'y',
             cut: 'x',
-            send: 's',
-            submit: 'S',
+            submit_remove: 's',
+            submit_keep: 'S',
             undo: 'u',
             focus_up: 'k',
             focus_down: 'j',
@@ -98,8 +100,8 @@ pub(super) enum BoardCommand {
     Delete,
     Copy,
     Cut,
-    Send,
-    Submit,
+    SubmitRemove,
+    SubmitKeep,
     Undo,
     FocusUp,
     FocusDown,
@@ -120,8 +122,8 @@ impl KeyBindings {
             (self.delete, BoardCommand::Delete),
             (self.copy, BoardCommand::Copy),
             (self.cut, BoardCommand::Cut),
-            (self.send, BoardCommand::Send),
-            (self.submit, BoardCommand::Submit),
+            (self.submit_remove, BoardCommand::SubmitRemove),
+            (self.submit_keep, BoardCommand::SubmitKeep),
             (self.undo, BoardCommand::Undo),
             (self.focus_up, BoardCommand::FocusUp),
             (self.focus_down, BoardCommand::FocusDown),
@@ -150,8 +152,8 @@ impl KeyBindings {
             self.delete,
             self.copy,
             self.cut,
-            self.send,
-            self.submit,
+            self.submit_remove,
+            self.submit_keep,
             self.undo,
             self.focus_up,
             self.focus_down,
@@ -198,5 +200,19 @@ mod tests {
         let mut bindings = KeyBindings::default();
         bindings.edit = bindings.new;
         assert!(bindings.validate().is_err());
+    }
+
+    #[test]
+    fn legacy_delivery_names_map_to_the_new_submission_dispositions() {
+        let settings: UiSettings =
+            toml::from_str("[keybindings]\nsend = 'a'\nsubmit = 'A'").expect("settings");
+        assert_eq!(
+            settings.keybindings.command('a'),
+            Some(BoardCommand::SubmitRemove)
+        );
+        assert_eq!(
+            settings.keybindings.command('A'),
+            Some(BoardCommand::SubmitKeep)
+        );
     }
 }

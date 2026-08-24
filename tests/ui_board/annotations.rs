@@ -262,6 +262,53 @@ fn folded_cursor_projects_before_selected_and_after_without_extra_steps() {
 }
 
 #[test]
+fn reverse_fold_navigation_uses_the_visible_space_before_an_inline_placeholder() {
+    let path = "/tmp/screenshot.png";
+    let prefix = "before ";
+    let suffix = " after";
+    let content = format!("{prefix}{path}{suffix}");
+    let start = prefix.len();
+    let mut fixture = Fixture::new();
+    fixture.input(UiInput::PasteAnnotated(PastePayload::annotated(
+        content,
+        vec![ContentAnnotation {
+            start,
+            end: start + path.len(),
+            kind: ContentAnnotationKind::Attachment {
+                image: true,
+                display_name: "screenshot.png".to_owned(),
+            },
+        }],
+    )));
+    for _ in 0..suffix.chars().count() {
+        fixture.input(UiInput::Key(UiKey::Move {
+            movement: CursorMovement::GraphemeBack,
+            extend_selection: false,
+        }));
+    }
+    assert!(
+        fixture
+            .app
+            .editor_snapshot()
+            .expect("fold")
+            .selection
+            .is_some()
+    );
+
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::GraphemeBack,
+        extend_selection: false,
+    }));
+    let area = fixture.app.prepare_frame(Rect::new(0, 0, 50, 8)).thoughts[0].text_area;
+    let mut terminal = draw(&mut fixture, 50, 8);
+    let cursor = terminal
+        .backend_mut()
+        .get_cursor_position()
+        .expect("cursor before fold");
+    assert_eq!((cursor.x, cursor.y), (area.x + 6, area.y));
+}
+
+#[test]
 fn adjacent_folds_remain_independently_atomic() {
     let first = "/tmp/first.png";
     let second = "/tmp/second.png";

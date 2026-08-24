@@ -17,7 +17,7 @@ impl BoardApp {
         clock: &impl Clock,
     ) -> Vec<Effect> {
         if !matches!(self.state.durability, DurabilityState::Failed { .. }) {
-            self.status = Some("recovery export is available after a save failure".to_owned());
+            self.set_warning("recovery export is available after a save failure");
             return Vec::new();
         }
         let request_id = ids.request_id();
@@ -33,7 +33,7 @@ impl BoardApp {
             thought.updated_at = exported_at;
         }
         self.pending_recovery_exports.insert(request_id);
-        self.status = Some("exporting recovery file".to_owned());
+        self.set_info("exporting recovery file");
         vec![Effect::ExportRecovery {
             request_id,
             document: Box::new(document),
@@ -49,16 +49,16 @@ impl BoardApp {
         if !self.pending_recovery_exports.remove(&request_id) {
             return Vec::new();
         }
-        self.status = Some(match result {
+        match result {
             Ok(path) => {
                 self.recovery_exported_for = match self.state.durability {
                     DurabilityState::Failed { failed, .. } => Some(failed),
                     DurabilityState::Durable { .. } | DurabilityState::Pending { .. } => None,
                 };
-                format!("recovery exported to {}", path.display())
+                self.set_success(format!("recovery exported to {}", path.display()));
             }
-            Err(error) => format!("recovery export failed: {error}"),
-        });
+            Err(error) => self.set_error(format!("recovery export failed: {error}")),
+        }
         Vec::new()
     }
 

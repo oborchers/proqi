@@ -6,17 +6,34 @@ fn remapped_board_binding_changes_behavior_and_visible_hint() {
     settings.keybindings.new = 't';
     let mut fixture = Fixture::with_settings(settings);
     fixture.input(UiInput::Key(UiKey::Character('n')));
-    assert_eq!(fixture.app.state.board.live_thoughts()[0].content, "n");
-    fixture.input(UiInput::Key(UiKey::Escape));
+    assert!(fixture.app.state.board.live_thoughts().is_empty());
     fixture.input(UiInput::Key(UiKey::Character('t')));
-    assert_eq!(fixture.app.state.board.live_thoughts().len(), 2);
+    assert_eq!(fixture.app.state.board.live_thoughts().len(), 1);
     assert!(
-        fixture.app.state.board.live_thoughts()[1]
+        fixture.app.state.board.live_thoughts()[0]
             .content
             .is_empty()
     );
     fixture.input(UiInput::Key(UiKey::Escape));
     assert!(text(draw(&mut fixture, 50, 6).backend().buffer()).contains("t New"));
+}
+
+#[test]
+fn explicit_web_urls_use_accent_and_underline_without_changing_content() {
+    let mut fixture = Fixture::new();
+    let content = "See https://google.com? now";
+    fixture.paste(content);
+    fixture.input(UiInput::Key(UiKey::Escape));
+    let terminal = draw_theme(&mut fixture, 60, 8, ThemePreference::Dark);
+    let area = fixture.app.prepare_frame(Rect::new(0, 0, 60, 8)).thoughts[0].text_area;
+    let theme = Theme::resolve(ThemePreference::Dark, true);
+    let url = &terminal.backend().buffer()[(area.x + 4, area.y)];
+    assert_eq!(url.fg, theme.accent);
+    assert!(
+        url.modifier
+            .contains(ratatui_core::style::Modifier::UNDERLINED)
+    );
+    assert_eq!(fixture.app.state.board.live_thoughts()[0].content, content);
 }
 
 #[test]

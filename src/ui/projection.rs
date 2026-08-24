@@ -10,6 +10,7 @@ use crate::{
         },
     },
 };
+use unicode_segmentation::UnicodeSegmentation as _;
 
 use super::annotations::{Presentation, PresentedFold, project};
 
@@ -50,13 +51,30 @@ impl EditorPresentation {
     }
 
     pub(super) fn cursor_viewport_cell(&self) -> Option<(usize, usize)> {
-        let row = wrapped_row_index(&self.rows, self.cursor_display_byte);
+        let cursor = self.visual_cursor_byte();
+        let row = wrapped_row_index(&self.rows, cursor);
         let viewport_row = row.checked_sub(self.snapshot.scroll_row)?;
         let wrapped = self.rows.get(row)?;
         Some((
-            cell_column_at_byte(&self.snapshot.content, wrapped, self.cursor_display_byte),
+            cell_column_at_byte(&self.snapshot.content, wrapped, cursor),
             viewport_row,
         ))
+    }
+
+    fn visual_cursor_byte(&self) -> usize {
+        if self.snapshot.selection.is_some()
+            || !self
+                .folds
+                .iter()
+                .any(|fold| fold.collapsed && fold.start == self.cursor_display_byte)
+        {
+            return self.cursor_display_byte;
+        }
+        self.snapshot.content[..self.cursor_display_byte]
+            .grapheme_indices(true)
+            .next_back()
+            .filter(|(_, grapheme)| *grapheme != "\n" && grapheme.chars().all(char::is_whitespace))
+            .map_or(self.cursor_display_byte, |(byte, _)| byte)
     }
 }
 

@@ -258,7 +258,7 @@ fn keyboard_creation_survives_rapid_pty_resize() {
         spawn $binary --state-dir $state
         expect -exact "\x1b\[?1049h"
         after 300
-        send -- "mouse-created"
+        send -- "nmouse-created"
         stty rows 4 columns 12
         after 100
         stty rows 30 columns 100

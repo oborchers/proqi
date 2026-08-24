@@ -267,7 +267,9 @@ fn pending_and_failed_durability_are_visibly_distinct() {
 
     fixture.app.acknowledge_persistence(sequence, false);
     let failed = draw(&mut fixture, 50, 6);
-    assert!(text(failed.backend().buffer()).contains("edit · unsaved"));
+    let failed_text = text(failed.backend().buffer());
+    assert!(failed_text.contains("save failed · r Retry · w Export recovery"));
+    assert!(!failed_text.contains("edit · unsaved"));
 }
 
 #[test]

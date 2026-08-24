@@ -103,7 +103,7 @@ pub(super) fn drain_persistence(
                 changed = true;
                 pending.persistence = pending.persistence.saturating_sub(1);
                 if let Err(error) = result {
-                    app.status = Some(format!(
+                    app.set_warning(format!(
                         "submission accepted, but integration context was not saved: {error}"
                     ));
                 }
@@ -168,7 +168,7 @@ fn complete_sequence(
                     message: error.to_string(),
                 },
             );
-            app.status = Some(format!("{error}; press r to retry or w to export recovery"));
+            app.set_error(format!("{error}; press r to retry or w to export recovery"));
             false
         }
     }

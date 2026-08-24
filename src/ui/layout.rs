@@ -12,7 +12,7 @@ use crate::{
     application::AppState,
     domain::{Direction, ThoughtId},
     ports::{
-        agent::{AgentDeliveryMode, AgentTarget},
+        agent::{AgentTarget, SubmissionDisposition},
         editor::EditorSnapshot,
         text_layout::wrap_rows,
     },
@@ -43,10 +43,10 @@ pub enum HitTarget {
     Agent(Direction),
     /// Rename the current session.
     RenameSession,
-    /// Deliver to one verified direction, optionally removing after acceptance.
-    Deliver(Direction, AgentDeliveryMode, bool),
-    /// Choose a verified direction for one delivery intention.
-    BeginDelivery(AgentDeliveryMode, bool),
+    /// Submit to one verified direction with explicit post-acceptance behavior.
+    Deliver(Direction, SubmissionDisposition),
+    /// Choose a verified direction for one submission intention.
+    BeginDelivery(SubmissionDisposition),
     /// Board undo action.
     Undo,
     /// Contextual help action.
@@ -103,8 +103,6 @@ pub struct LayoutSnapshot {
     pub footer_actions: Rect,
     /// Verified adjacent-agent targets.
     pub footer_agents: Rect,
-    /// Optional dedicated transient-status row.
-    pub footer_status: Option<Rect>,
     /// Visible thought allocations.
     pub thoughts: Vec<ThoughtLayout>,
     /// Clickable insertion control when visible.
@@ -201,7 +199,7 @@ impl LayoutSnapshot {
     pub fn configure_agent_controls(
         &mut self,
         targets: &[AgentTarget],
-        selection: Option<(AgentDeliveryMode, bool)>,
+        selection: Option<SubmissionDisposition>,
     ) {
         controls::configure_agent_controls(self, targets, selection);
     }
@@ -215,36 +213,41 @@ pub fn compute(
     area: Rect,
     requested_first: usize,
     expanded: &BTreeSet<ThoughtId>,
-    has_status: bool,
+    insertion_focused: bool,
     has_agents: bool,
 ) -> LayoutSnapshot {
-    let chrome = chrome::compute(area, state.mode, has_status, has_agents);
+    let chrome = chrome::compute(area, state.mode, has_agents);
     let board = chrome.board;
     let content_width = board.width.saturating_sub(2).max(1);
     let live = state.board.live_thoughts();
     let focus_index = state
         .focused_thought
         .and_then(|id| live.iter().position(|thought| thought.id == id));
-    let max_first = scroll::maximum_first(state, editor, board, content_width, expanded);
+    let board_mode = matches!(state.mode, crate::application::InteractionMode::Board);
+    let max_first =
+        scroll::maximum_first(state, editor, board, content_width, expanded, board_mode);
     let mut first = requested_first.min(max_first);
+    if insertion_focused {
+        first = max_first;
+    }
     if focus_index.is_some_and(|index| index < first) {
         first = focus_index.unwrap_or(first).min(max_first);
     }
-    let mut thoughts = place_thoughts(state, editor, board, content_width, first, expanded);
+    let mut thought_board = board_for_page(board, board_mode && first == max_first);
+    let mut thoughts = place_thoughts(state, editor, thought_board, content_width, first, expanded);
     if focus_index.is_some_and(|index| !thoughts.iter().any(|layout| layout.index == index)) {
         first = focus_index.unwrap_or(first).min(max_first);
-        thoughts = place_thoughts(state, editor, board, content_width, first, expanded);
+        thought_board = board_for_page(board, board_mode && first == max_first);
+        thoughts = place_thoughts(state, editor, thought_board, content_width, first, expanded);
     }
     let used_bottom = thoughts
         .last()
         .map_or(board.y, |layout| layout.area.bottom());
     let insert_space = board.bottom().saturating_sub(used_bottom);
-    let insert = (matches!(state.mode, crate::application::InteractionMode::Board)
-        && insert_space > 0)
-        .then(|| {
-            let y = used_bottom.saturating_add(u16::from(insert_space >= 2));
-            Rect::new(board.x, y, board.width, 1)
-        });
+    let insert = (board_mode && first == max_first && insert_space > 0).then(|| {
+        let y = used_bottom.saturating_add(u16::from(insert_space >= 2));
+        Rect::new(board.x, y, board.width, 1)
+    });
     LayoutSnapshot {
         area,
         board,
@@ -253,7 +256,6 @@ pub fn compute(
         footer_context: chrome.context,
         footer_actions: chrome.actions,
         footer_agents: chrome.agents,
-        footer_status: chrome.status,
         thoughts,
         insert,
         first_index: first,
@@ -270,6 +272,19 @@ pub fn compute(
         ),
         content_width,
         overlay: None,
+    }
+}
+
+fn board_for_page(board: Rect, reserve_insert: bool) -> Rect {
+    if reserve_insert {
+        Rect::new(
+            board.x,
+            board.y,
+            board.width,
+            board.height.saturating_sub(1),
+        )
+    } else {
+        board
     }
 }
 
@@ -439,7 +454,7 @@ mod tests {
             Rect::new(0, 0, 20, 5),
             0,
             &BTreeSet::new(),
-            false,
+            true,
             false,
         );
         assert_eq!(layout.header, Rect::new(0, 0, 20, 0));

@@ -38,7 +38,6 @@ fn recorded_fake_executable_proves_direct_semantic_cli_contract() {
         .submit(SubmissionRequest {
             submission_id: ids.submission_id(),
             target: target.clone(),
-            delivery: proqi::ports::agent::AgentDeliveryMode::Submit,
             content: exact.to_owned(),
         })
         .expect("accepted prompt");
@@ -54,7 +53,7 @@ fn fixture_script(prompt_log: &std::path::Path) -> String {
     format!(
         r#"#!/bin/sh
 if [ "$1 $2 $3" = "api schema --json" ]; then
-  printf '%s\n' '{{"protocol":19,"schema_version":1,"schemas":{{}}}}'
+  printf '%s\n' '{{"protocol":19,"schema_version":1,"schemas":{{"request":{{"const":"agent.prompt"}},"response":{{"const":"agent_prompted"}}}}}}'
 elif [ "$1 $2" = "api snapshot" ]; then
   printf '%s\n' '{{"result":{{"snapshot":{{"protocol":19,"version":"0.8.0"}}}}}}'
 elif [ "$1 $2 $3" = "pane current --current" ]; then

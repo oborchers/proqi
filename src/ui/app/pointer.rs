@@ -100,11 +100,11 @@ impl BoardApp {
             Some(HitTarget::Copy) => self.copy_active(ids),
             Some(HitTarget::Cut) => self.cut_active(ids, clock),
             Some(HitTarget::Delete) => self.delete(ids, clock),
-            Some(HitTarget::Deliver(direction, delivery, remove)) => {
-                self.deliver_to(direction, delivery, remove, ids, clock)
+            Some(HitTarget::Deliver(direction, disposition)) => {
+                self.deliver_to(direction, disposition, ids, clock)
             }
-            Some(HitTarget::BeginDelivery(delivery, remove)) => {
-                self.begin_delivery(delivery, remove, ids, clock)
+            Some(HitTarget::BeginDelivery(disposition)) => {
+                self.begin_delivery(disposition, ids, clock)
             }
             Some(HitTarget::Undo) => self.history(ids, clock, true),
             Some(HitTarget::Help) => {

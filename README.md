@@ -95,6 +95,8 @@ fallbacks remain available when a terminal cannot report a particular modifier.
 | `J` / `K`, `Shift+↑` / `Shift+↓`, or drag | Reorder the focused thought |
 | `y` or `Primary+C` | Copy the complete thought |
 | `x` or `Primary+X` | Cut only after confirmed clipboard success |
+| `s`, then direction when needed | Submit and remove only after acceptance |
+| `S`, then direction when needed | Submit and keep the thought |
 | `u` | Undo the latest board operation |
 | `Space` | Collapse or expand a long thought |
 | `/` | Search thought content |
@@ -200,14 +202,12 @@ below, left, and right. A delivery control appears only after the workspace, tab
 geometry, edge overlap, agent kind, session identity, and readiness have all
 been verified through Herdr's structured protocol.
 
-`Send` places a thought in an agent composer without starting a turn. `Submit`
-starts the turn immediately. Each action is displayed only when the installed
-integration explicitly supports it. Herdr's current semantic contract supports
-`S Submit`, but not composer-only `s Send`, so Proqi does not display or simulate
-that unavailable action. Remove-after-acceptance variants live in the command
-palette. Ambiguity, timeout, rejection, or protocol mismatch
-leaves the thought unchanged. Proqi never invokes a shell, injects raw keys,
-reads the conversation, or waits for the agent response.
+Both actions use Herdr's immediate semantic prompt operation. `s Submit & remove`
+deletes the thought only after Herdr returns an accepted matching receipt.
+`S Submit & keep` sends the same prompt and retains the thought. Ambiguity,
+timeout, rejection, receipt mismatch, or protocol mismatch always leaves the
+thought unchanged. Proqi never invokes a shell, injects raw keys, reads the
+conversation, or waits for the agent response.
 
 Herdr is optional. The complete standalone workflow works without it. When
 available, Proqi also publishes a short-lived display-only `proqi` pane label
@@ -242,6 +242,8 @@ edit = "e"
 delete = "d"
 copy = "y"
 cut = "x"
+submit_remove = "s"
+submit_keep = "S"
 undo = "u"
 focus_up = "k"
 focus_down = "j"

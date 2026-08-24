@@ -48,23 +48,30 @@ fn an_empty_clipboard_paste_is_a_no_op_but_an_explicit_blank_survives_exit() {
 }
 
 #[test]
-fn focused_blank_treats_printable_shortcut_letters_as_content() {
+fn focused_blank_keeps_board_shortcuts_available_until_edit_is_explicit() {
     let mut fixture = Fixture::new();
     fixture.input(UiInput::Key(UiKey::Enter));
     fixture.input(UiInput::Key(UiKey::Escape));
-    for character in ['n', 'd', 'j', 'x'] {
-        fixture.input(UiInput::Key(UiKey::Character(character)));
-    }
-    fixture.input(UiInput::Key(UiKey::Escape));
-    assert_eq!(fixture.app.state.board.live_thoughts()[0].content, "ndjx");
+    fixture.input(UiInput::Key(UiKey::Character('n')));
+    assert_eq!(fixture.app.state.board.live_thoughts().len(), 2);
+    assert!(
+        fixture.app.state.board.live_thoughts()[0]
+            .content
+            .is_empty()
+    );
 }
 
 #[test]
-fn paste_populates_a_focused_blank_instead_of_creating_another_thought() {
+fn board_paste_creates_a_new_thought_even_when_a_blank_is_focused() {
     let mut fixture = Fixture::new();
     fixture.input(UiInput::Key(UiKey::Enter));
     fixture.input(UiInput::Key(UiKey::Escape));
     fixture.input(UiInput::Paste("pasted".to_owned()));
-    assert_eq!(fixture.app.state.board.live_thoughts().len(), 1);
-    assert_eq!(fixture.app.state.board.live_thoughts()[0].content, "pasted");
+    assert_eq!(fixture.app.state.board.live_thoughts().len(), 2);
+    assert!(
+        fixture.app.state.board.live_thoughts()[0]
+            .content
+            .is_empty()
+    );
+    assert_eq!(fixture.app.state.board.live_thoughts()[1].content, "pasted");
 }

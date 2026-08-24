@@ -114,7 +114,7 @@ impl BoardApp {
         }
         match result {
             Ok(payload) if payload.content.is_empty() => {
-                self.status = Some("clipboard is empty".to_owned());
+                self.set_warning("clipboard is empty");
                 Vec::new()
             }
             Ok(payload) => self.paste_payload(payload, ids, clock),
@@ -127,7 +127,7 @@ impl BoardApp {
 
     /// Present an application notification returned by a background effect.
     pub fn notify(&mut self, code: FailureCode) {
-        self.status = Some(match code {
+        let message = match code {
             FailureCode::ClipboardFailed => {
                 "clipboard unavailable; use bracketed terminal paste or retry".to_owned()
             }
@@ -135,7 +135,8 @@ impl BoardApp {
                 "save failed; press r to retry or w to export recovery".to_owned()
             }
             _ => code.as_str().to_owned(),
-        });
+        };
+        self.set_error(message);
     }
 
     fn write_selection(
@@ -147,7 +148,7 @@ impl BoardApp {
             return Vec::new();
         };
         let Some(content) = editor.selected_text() else {
-            self.status = Some("select text before copying or cutting".to_owned());
+            self.set_warning("select text before copying or cutting");
             return Vec::new();
         };
         let request_id = ids.request_id();
@@ -178,14 +179,14 @@ impl BoardApp {
             return Vec::new();
         }
         if pending.intent == ClipboardIntent::Copy {
-            self.status = Some("copied selection".to_owned());
+            self.set_success("copied selection");
             return Vec::new();
         }
         if matches!(
             self.state.durability,
             crate::application::DurabilityState::Failed { .. }
         ) {
-            self.status = Some("storage failed, selection was copied without deletion".to_owned());
+            self.set_error("storage failed, selection was copied without deletion");
             return Vec::new();
         }
         let unchanged = self.editor_snapshot().is_some_and(|current| {
@@ -194,7 +195,7 @@ impl BoardApp {
                 && current.selection == pending.before.selection
         });
         if !unchanged || !matches!(self.state.mode, InteractionMode::Edit { .. }) {
-            self.status = Some("selection changed before clipboard confirmation".to_owned());
+            self.set_warning("selection changed before clipboard confirmation");
             return Vec::new();
         }
         self.apply_edit(EditCommand::DeleteForward);

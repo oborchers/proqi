@@ -31,7 +31,7 @@ impl BoardApp {
         clock: &impl Clock,
     ) -> Vec<Effect> {
         let Some(source_thought_id) = self.active_thought_id() else {
-            self.status = Some("select a thought before sending it to another session".to_owned());
+            self.set_warning("select a thought before sending it to another session");
             return Vec::new();
         };
         let mut effects = self.flush_pending_edit(ids, clock);
@@ -59,12 +59,12 @@ impl BoardApp {
         match result {
             Ok(sessions) if sessions.is_empty() => {
                 self.transfer = None;
-                self.status = Some("no other resumable Proqi session is available".to_owned());
+                self.set_warning("no other resumable Proqi session is available");
             }
             Ok(sessions) => state.sessions = sessions,
             Err(error) => {
                 self.transfer = None;
-                self.status = Some(format!("could not list destination sessions: {error}"));
+                self.set_error(format!("could not list destination sessions: {error}"));
             }
         }
     }
@@ -78,15 +78,15 @@ impl BoardApp {
     ) -> Vec<Effect> {
         match result {
             Err(error) => {
-                self.status = Some(format!("thought was not sent: {error}"));
+                self.set_error(format!("thought was not sent: {error}"));
                 Vec::new()
             }
             Ok(_) if !request.remove_source => {
-                self.status = Some("thought sent to the destination session".to_owned());
+                self.set_success("thought sent to the destination session");
                 Vec::new()
             }
             Ok(_) => {
-                self.status = Some("thought sent; removing the source".to_owned());
+                self.set_info("thought sent; removing the source");
                 self.reduce(Action::DeleteThought {
                     operation_id: ids.operation_id(),
                     thought_id: request.source_thought_id,

@@ -9,7 +9,10 @@ use ratatui_widgets::paragraph::Paragraph;
 use unicode_segmentation::UnicodeSegmentation as _;
 use unicode_width::UnicodeWidthStr as _;
 
-use crate::{application::DurabilityState, domain::Direction, ports::agent::AgentDeliveryMode};
+use crate::{
+    application::DurabilityState, domain::Direction, ports::agent::SubmissionDisposition,
+    ui::status::StatusSeverity,
+};
 
 use super::super::{BoardApp, HitTarget, LayoutSnapshot, Theme};
 
@@ -19,7 +22,6 @@ pub(super) fn render_footer(
     layout: &LayoutSnapshot,
     theme: &Theme,
 ) {
-    render_status(frame, app, layout, theme);
     render_context(frame, app, layout, theme);
     let keys = app.keybindings();
     for (target, area) in &layout.controls {
@@ -51,8 +53,8 @@ fn render_control(
     ]);
     let active_submission = matches!(
         target,
-        HitTarget::BeginDelivery(delivery, remove)
-            if app.submission_mode() == Some((delivery, remove))
+        HitTarget::BeginDelivery(disposition)
+            if app.submission_mode() == Some(disposition)
     );
     let interactive = !matches!(target, HitTarget::Agent(_));
     let style = if (interactive && app.hovered() == Some(target)) || active_submission {
@@ -63,54 +65,34 @@ fn render_control(
     frame.render_widget(Paragraph::new(line).style(style), area);
 }
 
-fn render_status(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, theme: &Theme) {
-    let Some(area) = layout.footer_status else {
-        return;
-    };
-    let text = app.status.as_deref().unwrap_or_else(|| {
-        if matches!(app.state.durability, DurabilityState::Failed { .. }) {
-            "save failed · r Retry · w Export recovery"
-        } else {
-            durability(app)
-        }
-    });
-    let color = if matches!(app.state.durability, DurabilityState::Failed { .. }) {
-        theme.error
-    } else {
-        theme.muted
-    };
-    frame.render_widget(
-        Paragraph::new(text).style(Style::default().fg(color)),
-        inset(area),
-    );
-}
-
 fn render_context(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, theme: &Theme) {
     if layout.footer_context.height == 0 {
         return;
     }
-    let left = layout
-        .footer_status
-        .is_none()
-        .then(|| app.status.clone())
-        .flatten()
-        .unwrap_or_default();
+    let failed = matches!(app.state.durability, DurabilityState::Failed { .. });
+    let status = app.status_view();
+    let left = status.map_or_else(
+        || {
+            if failed {
+                "save failed · r Retry · w Export recovery"
+            } else {
+                ""
+            }
+        },
+        |(message, _)| message,
+    );
     let right = &layout.footer_summary;
     let area = inset(layout.footer_context);
-    let text = compose(&left, right, usize::from(area.width));
-    frame.render_widget(
-        Paragraph::new(text).style(Style::default().fg(theme.muted)),
-        area,
+    let text = compose(left, right, usize::from(area.width));
+    let color = status.map_or_else(
+        || if failed { theme.error } else { theme.muted },
+        |(_, severity)| match severity {
+            StatusSeverity::Info => theme.muted,
+            StatusSeverity::Success | StatusSeverity::Warning => theme.accent,
+            StatusSeverity::Error => theme.error,
+        },
     );
-}
-
-fn durability(app: &BoardApp) -> &'static str {
-    match app.state.durability {
-        DurabilityState::Durable { .. } if app.has_pending_edit() => "saving",
-        DurabilityState::Durable { .. } => "saved",
-        DurabilityState::Pending { .. } => "saving",
-        DurabilityState::Failed { .. } => "save failed",
-    }
+    frame.render_widget(Paragraph::new(text).style(Style::default().fg(color)), area);
 }
 
 struct ControlLabel {
@@ -157,8 +139,8 @@ fn label(
                 text: detail,
             };
         }
-        HitTarget::BeginDelivery(delivery, _) | HitTarget::Deliver(_, delivery, _) => {
-            delivery_label(delivery, keys)
+        HitTarget::BeginDelivery(disposition) | HitTarget::Deliver(_, disposition) => {
+            submission_label(disposition, keys)
         }
         _ => (String::new(), ""),
     };
@@ -168,13 +150,19 @@ fn label(
     }
 }
 
-fn delivery_label(
-    delivery: AgentDeliveryMode,
+fn submission_label(
+    disposition: SubmissionDisposition,
     keys: &crate::ui::KeyBindings,
 ) -> (String, &'static str) {
-    match delivery {
-        AgentDeliveryMode::Compose => (crate::ui::settings::key_label(keys.send), " Send"),
-        AgentDeliveryMode::Submit => (crate::ui::settings::key_label(keys.submit), " Submit"),
+    match disposition {
+        SubmissionDisposition::RemoveAfterSuccess => (
+            crate::ui::settings::key_label(keys.submit_remove),
+            " Submit & remove",
+        ),
+        SubmissionDisposition::Keep => (
+            crate::ui::settings::key_label(keys.submit_keep),
+            " Submit & keep",
+        ),
     }
 }
 

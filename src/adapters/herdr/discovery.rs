@@ -87,6 +87,8 @@ fn verify_protocol(
         || schema.protocol != SUPPORTED_PROTOCOL
         || live.protocol != schema.protocol
         || live.version.trim().is_empty()
+        || !contains_const(&schema.schemas, "agent.prompt")
+        || !contains_const(&schema.schemas, "agent_prompted")
     {
         return Err(AgentError::Unsupported(format!(
             "requires schema {SUPPORTED_SCHEMA} and protocol {SUPPORTED_PROTOCOL}, received schema {} and protocols {}/{}",
@@ -94,6 +96,19 @@ fn verify_protocol(
         )));
     }
     Ok(())
+}
+
+fn contains_const(value: &serde_json::Value, expected: &str) -> bool {
+    match value {
+        serde_json::Value::Object(fields) => {
+            fields.get("const").and_then(serde_json::Value::as_str) == Some(expected)
+                || fields.values().any(|value| contains_const(value, expected))
+        }
+        serde_json::Value::Array(values) => {
+            values.iter().any(|value| contains_const(value, expected))
+        }
+        _ => false,
+    }
 }
 
 fn context_from(
@@ -167,6 +182,11 @@ fn eligible_target(
     if agent.workspace_id != source.workspace_id || agent.tab_id != source.tab_id {
         return Err(AgentError::Malformed(
             "agent identity belongs to another workspace or tab".to_owned(),
+        ));
+    }
+    if agent.interactive_ready == Some(false) || agent.launch_pending == Some(true) {
+        return Err(AgentError::Unsupported(
+            "neighbor is not ready for safe prompt submission".to_owned(),
         ));
     }
     let kind = agent

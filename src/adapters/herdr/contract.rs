@@ -24,6 +24,7 @@ pub(super) struct ErrorBody {
 pub(super) struct SchemaDocument {
     pub(super) protocol: u32,
     pub(super) schema_version: u32,
+    pub(super) schemas: serde_json::Value,
 }
 
 #[derive(Deserialize)]
@@ -50,6 +51,8 @@ pub(super) struct PaneInfo {
     pub(super) agent: Option<String>,
     pub(super) name: Option<String>,
     pub(super) agent_status: Option<RawReadiness>,
+    pub(super) interactive_ready: Option<bool>,
+    pub(super) launch_pending: Option<bool>,
     pub(super) agent_session: Option<AgentSession>,
 }
 

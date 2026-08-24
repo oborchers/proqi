@@ -13,7 +13,7 @@ use ratatui_widgets::{
 };
 use unicode_width::UnicodeWidthStr as _;
 
-use crate::{application::InteractionMode, ports::agent::AgentDeliveryMode};
+use crate::application::InteractionMode;
 
 use super::super::{BoardApp, Theme, layout::OverlayLayout};
 
@@ -149,11 +149,9 @@ fn edit_shortcuts(keys: &crate::ui::KeyBindings) -> Vec<(String, &'static str)> 
 fn board_shortcuts(app: &BoardApp) -> Vec<(String, &'static str)> {
     let keys = app.keybindings();
     let mut delivery = Vec::new();
-    if app.supports_delivery(AgentDeliveryMode::Compose) {
-        delivery.push((keys.send.to_string(), "Send"));
-    }
-    if app.supports_delivery(AgentDeliveryMode::Submit) {
-        delivery.push((keys.submit.to_string(), "Submit"));
+    if app.supports_submission() {
+        delivery.push((keys.submit_remove.to_string(), "Submit & remove"));
+        delivery.push((keys.submit_keep.to_string(), "Submit & keep"));
     }
     let mut items = vec![
         (keys.new.to_string(), "New"),

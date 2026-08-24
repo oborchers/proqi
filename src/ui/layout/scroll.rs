@@ -12,23 +12,41 @@ pub(super) fn maximum_first(
     board: Rect,
     content_width: u16,
     expanded: &BTreeSet<ThoughtId>,
+    include_insert: bool,
 ) -> usize {
     let live_count = state.board.live_thoughts().len();
-    if live_count < 2 || board.height == 0 {
+    if live_count == 0 || board.height == 0 {
         return 0;
     }
+    let thought_board = if include_insert {
+        Rect::new(
+            board.x,
+            board.y,
+            board.width,
+            board.height.saturating_sub(1),
+        )
+    } else {
+        board
+    };
     for candidate in 0..live_count {
-        let layouts =
-            super::place_thoughts(state, editor, board, content_width, candidate, expanded);
+        let layouts = super::place_thoughts(
+            state,
+            editor,
+            thought_board,
+            content_width,
+            candidate,
+            expanded,
+        );
         let reaches_end = layouts
             .last()
             .is_some_and(|layout| layout.index + 1 == live_count);
-        let leaves_insert_row = layouts
-            .last()
-            .is_none_or(|layout| layout.area.bottom() < board.bottom());
-        if reaches_end && (candidate > 0 || leaves_insert_row) {
+        if reaches_end {
             return candidate;
         }
     }
-    live_count.saturating_sub(1)
+    if include_insert {
+        live_count
+    } else {
+        live_count.saturating_sub(1)
+    }
 }

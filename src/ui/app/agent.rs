@@ -4,7 +4,9 @@ use crate::{
     application::{Action, Effect},
     domain::{BoardOperationKind, Direction, SubmissionId},
     ports::{
-        agent::{AgentDeliveryMode, AgentError, AgentTarget, SubmissionReceipt, SubmissionRequest},
+        agent::{
+            AgentError, AgentTarget, SubmissionDisposition, SubmissionReceipt, SubmissionRequest,
+        },
         editor::CursorMovement,
         environment::{Clock, IdGenerator},
     },
@@ -21,30 +23,30 @@ impl BoardApp {
 
     /// Request explicit rediscovery and make its result visible to the user.
     pub(super) fn refresh_agents(&mut self) -> Vec<Effect> {
-        self.status = Some("checking adjacent agents".to_owned());
+        self.set_info("checking adjacent agents");
         Self::discover_agents()
     }
 
     /// Replace targets only after complete verified discovery.
     pub fn complete_agent_discovery(&mut self, result: Result<Vec<AgentTarget>, AgentError>) {
         self.submission_mode = None;
-        let was_refreshing = self.status.as_deref() == Some("checking adjacent agents");
+        let was_refreshing = self.status_text() == Some("checking adjacent agents");
         match result {
             Ok(targets) => {
                 if was_refreshing {
-                    self.status = Some(discovery_status(targets.len()));
+                    self.set_success(discovery_status(targets.len()));
                 }
                 self.agent_targets = targets;
             }
             Err(error @ (AgentError::Unavailable(_) | AgentError::Unsupported(_))) => {
                 self.agent_targets.clear();
                 if was_refreshing {
-                    self.status = Some(format!("direct submission unavailable: {error}"));
+                    self.set_warning(format!("direct submission unavailable: {error}"));
                 }
             }
             Err(error) => {
                 self.agent_targets.clear();
-                self.status = Some(format!("direct submission unavailable: {error}"));
+                self.set_error(format!("direct submission unavailable: {error}"));
             }
         }
     }
@@ -66,11 +68,11 @@ impl BoardApp {
                 receipt
             }
             Ok(_) => {
-                self.status = Some("submission receipt did not match the request".to_owned());
+                self.set_error("Submission failed. Thought kept. Receipt did not match request.");
                 return Vec::new();
             }
             Err(error) => {
-                self.status = Some(format!("thought was not submitted: {error}"));
+                self.set_error(format!("Submission failed. Thought kept. {error}"));
                 return Vec::new();
             }
         };
@@ -79,7 +81,7 @@ impl BoardApp {
             target: receipt.target.clone(),
             verified_at: pending.at,
         }];
-        if pending.remove {
+        if pending.disposition == SubmissionDisposition::RemoveAfterSuccess {
             effects.extend(self.reduce(Action::DeleteThought {
                 operation_id: pending.operation_id,
                 thought_id: pending.thought_id,
@@ -87,25 +89,21 @@ impl BoardApp {
                 at: pending.at,
             }));
         }
-        self.status = Some(match pending.request.delivery {
-            AgentDeliveryMode::Compose => format!(
-                "sent {} to {} composer",
-                direction_name(receipt.target.direction),
-                receipt.target.agent_name
-            ),
-            AgentDeliveryMode::Submit => format!(
-                "submitted {} to {}",
-                direction_name(receipt.target.direction),
-                receipt.target.agent_name
-            ),
-        });
+        let outcome = match pending.disposition {
+            SubmissionDisposition::Keep => "thought kept",
+            SubmissionDisposition::RemoveAfterSuccess => "thought removed",
+        };
+        self.set_success(format!(
+            "submitted {} to {}, {outcome}",
+            direction_name(receipt.target.direction),
+            receipt.target.agent_name
+        ));
         effects
     }
 
     pub(super) fn begin_delivery(
         &mut self,
-        delivery: AgentDeliveryMode,
-        remove: bool,
+        disposition: SubmissionDisposition,
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
@@ -115,21 +113,18 @@ impl BoardApp {
         let eligible = self
             .agent_targets
             .iter()
-            .filter(|target| target.delivery.supports(delivery))
+            .filter(|target| target.delivery.supports())
             .map(|target| target.direction)
             .collect::<Vec<_>>();
         match eligible.as_slice() {
             [] => {
-                self.status = Some(format!(
-                    "{} is unavailable for verified adjacent agents",
-                    delivery_name(delivery)
-                ));
+                self.set_warning("submission is unavailable for verified adjacent agents");
                 Vec::new()
             }
-            [direction] => self.deliver_to(*direction, delivery, remove, ids, clock),
+            [direction] => self.deliver_to(*direction, disposition, ids, clock),
             _ => {
-                self.submission_mode = Some(SubmissionMode { delivery, remove });
-                self.status = Some("choose agent direction with arrows or h/j/k/l".to_owned());
+                self.submission_mode = Some(SubmissionMode { disposition });
+                self.set_info("choose agent direction with arrows or h/j/k/l");
                 Vec::new()
             }
         }
@@ -145,7 +140,7 @@ impl BoardApp {
         let direction = match input {
             UiInput::Key(UiKey::Escape) => {
                 self.submission_mode = None;
-                self.status = Some("submission cancelled".to_owned());
+                self.set_info("submission cancelled");
                 return Some(Vec::new());
             }
             UiInput::Key(
@@ -180,14 +175,13 @@ impl BoardApp {
             _ => return Some(Vec::new()),
         };
         self.submission_mode = None;
-        Some(self.deliver_to(direction, mode.delivery, mode.remove, ids, clock))
+        Some(self.deliver_to(direction, mode.disposition, ids, clock))
     }
 
     pub(super) fn deliver_to(
         &mut self,
         direction: Direction,
-        delivery: AgentDeliveryMode,
-        remove: bool,
+        disposition: SubmissionDisposition,
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
@@ -197,13 +191,12 @@ impl BoardApp {
             .find(|target| target.direction == direction)
             .cloned()
         else {
-            self.status = Some(format!("no verified agent {}", direction_name(direction)));
+            self.set_warning(format!("no verified agent {}", direction_name(direction)));
             return Vec::new();
         };
-        if !target.delivery.supports(delivery) {
-            self.status = Some(format!(
-                "{} is unavailable {}",
-                delivery_name(delivery),
+        if !target.delivery.supports() {
+            self.set_warning(format!(
+                "submission is unavailable {}",
                 direction_name(direction)
             ));
             return Vec::new();
@@ -214,14 +207,13 @@ impl BoardApp {
             .and_then(|id| self.state.board.thought(id))
             .filter(|thought| thought.is_live())
         else {
-            self.status = Some("select a thought before submitting".to_owned());
+            self.set_warning("select a thought before submitting");
             return Vec::new();
         };
         let submission_id = ids.submission_id();
         let request = SubmissionRequest {
             submission_id,
             target,
-            delivery,
             content: thought.content.clone(),
         };
         self.pending_submissions.insert(
@@ -231,18 +223,16 @@ impl BoardApp {
                 thought_id: thought.id,
                 operation_id: ids.operation_id(),
                 at: clock.now(),
-                remove,
+                disposition,
             },
         );
-        self.status = Some(format!("{} thought", delivery_name(delivery)));
+        self.set_info(match disposition {
+            SubmissionDisposition::Keep => "submitting, thought will be kept",
+            SubmissionDisposition::RemoveAfterSuccess => {
+                "submitting, thought will be removed after acceptance"
+            }
+        });
         vec![Effect::SubmitAgent(request)]
-    }
-}
-
-fn delivery_name(delivery: AgentDeliveryMode) -> &'static str {
-    match delivery {
-        AgentDeliveryMode::Compose => "send",
-        AgentDeliveryMode::Submit => "submit",
     }
 }
 

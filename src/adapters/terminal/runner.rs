@@ -130,7 +130,9 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
     );
     let mut pane_heartbeat = None;
     let mut app = BoardApp::with_settings(state, settings, RopeEditorFactory);
-    app.status = control_warning;
+    if let Some(warning) = control_warning {
+        app.set_warning(warning);
+    }
     let lanes = WorkerLanes {
         input: &input,
         persistence: &persistence,

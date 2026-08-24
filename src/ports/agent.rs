@@ -60,38 +60,30 @@ pub struct AgentCapabilities {
     pub context: PaneContext,
 }
 
-/// User-visible way a prompt can be delivered to an adjacent agent.
+/// Durable board behavior after one accepted prompt submission.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum AgentDeliveryMode {
-    /// Place text in the agent composer without starting a turn.
-    Compose,
-    /// Place text and start the agent turn immediately.
-    Submit,
+pub enum SubmissionDisposition {
+    /// Preserve the submitted thought.
+    Keep,
+    /// Delete the thought only after an accepted matching receipt.
+    RemoveAfterSuccess,
 }
 
 /// Negotiated delivery behaviors. Unsupported actions stay absent from the UI.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct AgentDeliveryCapabilities {
-    /// Composer-only delivery is available.
-    pub compose: bool,
     /// Immediate turn submission is available.
     pub submit: bool,
 }
 
 impl AgentDeliveryCapabilities {
     /// Current Herdr semantic contract: immediate submission only.
-    pub const SUBMIT_ONLY: Self = Self {
-        compose: false,
-        submit: true,
-    };
+    pub const SUBMIT_ONLY: Self = Self { submit: true };
 
-    /// Whether one delivery mode is explicitly supported.
+    /// Whether semantic immediate submission is explicitly supported.
     #[must_use]
-    pub const fn supports(self, mode: AgentDeliveryMode) -> bool {
-        match mode {
-            AgentDeliveryMode::Compose => self.compose,
-            AgentDeliveryMode::Submit => self.submit,
-        }
+    pub const fn supports(self) -> bool {
+        self.submit
     }
 }
 
@@ -140,8 +132,6 @@ pub struct SubmissionRequest {
     pub submission_id: SubmissionId,
     /// Previously verified target, revalidated immediately before submission.
     pub target: AgentTarget,
-    /// Whether to fill the composer or start the turn.
-    pub delivery: AgentDeliveryMode,
     /// Exact thought content.
     pub content: String,
 }

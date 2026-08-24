@@ -5,7 +5,7 @@ use unicode_width::UnicodeWidthStr as _;
 
 use crate::{
     domain::Direction,
-    ports::agent::{AgentDeliveryMode, AgentTarget},
+    ports::agent::{AgentTarget, SubmissionDisposition},
 };
 
 use super::{HitTarget, LayoutSnapshot};
@@ -34,24 +34,21 @@ pub(super) fn configure_footer_summary(
 pub(super) fn configure_agent_controls(
     layout: &mut LayoutSnapshot,
     targets: &[AgentTarget],
-    selection: Option<(AgentDeliveryMode, bool)>,
+    selection: Option<SubmissionDisposition>,
 ) {
     let area = inset(layout.footer_agents);
     if area.height == 0 {
         return;
     }
     let mut x = area.x;
-    if let Some((delivery, remove)) = selection {
-        for target in targets
-            .iter()
-            .filter(|target| target.delivery.supports(delivery))
-        {
+    if let Some(disposition) = selection {
+        for target in targets.iter().filter(|target| target.delivery.supports()) {
             let label_width = agent_width(target);
             push(
                 layout,
                 &mut x,
                 area,
-                HitTarget::Deliver(target.direction, delivery, remove),
+                HitTarget::Deliver(target.direction, disposition),
                 label_width,
             );
         }
@@ -67,19 +64,22 @@ pub(super) fn configure_agent_controls(
             label_width,
         );
     }
-    for delivery in [AgentDeliveryMode::Compose, AgentDeliveryMode::Submit] {
+    for disposition in [
+        SubmissionDisposition::RemoveAfterSuccess,
+        SubmissionDisposition::Keep,
+    ] {
         let eligible = targets
             .iter()
-            .filter(|target| target.delivery.supports(delivery))
+            .filter(|target| target.delivery.supports())
             .collect::<Vec<_>>();
         let target = match eligible.as_slice() {
             [] => continue,
-            [only] => HitTarget::Deliver(only.direction, delivery, false),
-            _ => HitTarget::BeginDelivery(delivery, false),
+            [only] => HitTarget::Deliver(only.direction, disposition),
+            _ => HitTarget::BeginDelivery(disposition),
         };
-        let label_width = match delivery {
-            AgentDeliveryMode::Compose => 7,
-            AgentDeliveryMode::Submit => 9,
+        let label_width = match disposition {
+            SubmissionDisposition::RemoveAfterSuccess => 17,
+            SubmissionDisposition::Keep => 15,
         };
         push(layout, &mut x, area, target, label_width);
     }

@@ -63,11 +63,13 @@ fn board_cut_waits_for_clipboard_success_and_copy_preserves_exact_content() {
     assert!(fixture.app.state.board.live_thoughts().is_empty());
     assert!(fixture.app.insertion_focused());
 
-    let replacement = fixture.effects(UiInput::Key(UiKey::Character('n')));
+    let replacement = fixture.effects(UiInput::Key(UiKey::Enter));
     assert!(matches!(
         replacement.as_slice(),
         [Effect::CommitBoardOperation(_)]
     ));
+    fixture.input(UiInput::Key(UiKey::Character('n')));
+    fixture.input(UiInput::Key(UiKey::Escape));
     assert_eq!(fixture.app.state.board.live_thoughts()[0].content, "n");
 }
 

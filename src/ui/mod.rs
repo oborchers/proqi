@@ -9,6 +9,7 @@ mod layout;
 mod projection;
 mod render;
 mod settings;
+mod status;
 mod theme;
 
 pub use annotations::PastePayload;

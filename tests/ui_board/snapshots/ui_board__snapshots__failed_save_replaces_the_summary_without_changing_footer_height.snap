@@ -12,8 +12,8 @@ TEXT
 03││
 04││
 05││
-06│  save failed · r Retry · w Export recovery│
-07│       proqi-ui-contract · 1 thought · edit · unsaved│
+06││
+07│  save failed · r Retry · w Export recovery│
 08│  r Retry  w Export   ? Shortcuts│
 
 STYLE RUNS
@@ -23,6 +23,6 @@ STYLE RUNS
 3: 0-54 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 4: 0-54 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 5: 0-54 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-6: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-52 fg=LightRed bg=Rgb(15, 13, 10) mod=NONE | 53-54 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-7: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-6 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE | 7-23 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 24-52 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE | 53-54 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+6: 0-54 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+7: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-52 fg=LightRed bg=Rgb(15, 13, 10) mod=NONE | 53-54 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 8: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-2 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 3-10 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 11-11 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 12-21 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 22-22 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 23-54 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE

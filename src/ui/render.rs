@@ -3,6 +3,7 @@
 mod chrome;
 mod overlays;
 
+use linkify::{LinkFinder, LinkKind};
 use ratatui_core::{
     layout::Alignment,
     style::{Modifier, Style},
@@ -193,9 +194,10 @@ fn render_thought(
     focused: bool,
     theme: &Theme,
 ) {
+    let links = url_ranges(&presentation.content);
     let content_rows =
         usize::from(layout.text_area.height).saturating_sub(usize::from(layout.overflow.is_some()));
-    let lines = wrap_rows(
+    let rendered_lines = wrap_rows(
         &presentation.content,
         usize::from(layout.text_area.width.max(1)),
     )
@@ -206,11 +208,12 @@ fn render_thought(
             &presentation.content,
             &row.visual,
             &presentation.folds,
+            &links,
             theme,
         )
     })
     .collect::<Vec<_>>();
-    let mut paragraph = Paragraph::new(Text::from(lines));
+    let mut paragraph = Paragraph::new(Text::from(rendered_lines));
     if focused {
         paragraph = paragraph.style(Style::default().fg(theme.foreground));
     } else if layout.hidden_rows > 0 {
@@ -235,12 +238,13 @@ fn render_editor(frame: &mut Frame<'_>, app: &BoardApp, layout: &ThoughtLayout, 
         return;
     };
     let snapshot = &presentation.snapshot;
+    let links = url_ranges(&snapshot.content);
     let visible = snapshot
         .visual_lines
         .iter()
         .skip(snapshot.scroll_row)
         .take(usize::from(layout.text_area.height))
-        .map(|line| styled_line(&snapshot.content, line, &presentation.folds, theme))
+        .map(|line| styled_line(&snapshot.content, line, &presentation.folds, &links, theme))
         .collect::<Vec<_>>();
     frame.render_widget(
         Paragraph::new(visible).style(Style::default().fg(theme.foreground)),
@@ -266,6 +270,7 @@ fn styled_line(
     content: &str,
     line: &crate::ports::editor::VisualLine,
     folds: &[crate::ui::annotations::PresentedFold],
+    links: &[std::ops::Range<usize>],
     theme: &Theme,
 ) -> Line<'static> {
     let source = content
@@ -283,14 +288,18 @@ fn styled_line(
             let folded = folds
                 .iter()
                 .any(|fold| fold.collapsed && byte >= fold.start && byte < fold.end);
+            let linked = links.iter().any(|range| range.contains(&byte));
             column = column.saturating_add(width);
-            let mut style = Style::default().fg(if folded {
+            let mut style = Style::default().fg(if folded || linked {
                 theme.accent
             } else {
                 theme.foreground
             });
             if folded {
                 style = style.add_modifier(Modifier::BOLD);
+            }
+            if linked {
+                style = style.add_modifier(Modifier::UNDERLINED);
             }
             if selected {
                 style = style.add_modifier(Modifier::REVERSED);
@@ -299,6 +308,24 @@ fn styled_line(
         })
         .collect::<Vec<_>>();
     Line::from(spans)
+}
+
+fn url_ranges(content: &str) -> Vec<std::ops::Range<usize>> {
+    let mut finder = LinkFinder::new();
+    finder.kinds(&[LinkKind::Url]);
+    finder
+        .links(content)
+        .filter(|link| {
+            let value = link.as_str();
+            value
+                .get(..7)
+                .is_some_and(|prefix| prefix.eq_ignore_ascii_case("http://"))
+                || value
+                    .get(..8)
+                    .is_some_and(|prefix| prefix.eq_ignore_ascii_case("https://"))
+        })
+        .map(|link| link.start()..link.end())
+        .collect()
 }
 
 fn visible_grapheme(grapheme: &str, column: usize) -> (String, usize) {

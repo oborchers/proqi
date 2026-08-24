@@ -22,13 +22,6 @@ impl BoardApp {
         if self.insertion_focused() {
             return self.handle_insertion_key(key, ids, clock);
         }
-        if let UiKey::Character(character) = key
-            && self.focused_thought_is_empty()
-        {
-            self.enter_edit();
-            self.apply_edit(EditCommand::InsertChar(character));
-            return Vec::new();
-        }
         match key {
             UiKey::Character(character) => {
                 return self.handle_board_command(character, ids, clock);
@@ -67,9 +60,7 @@ impl BoardApp {
         clock: &impl Clock,
     ) -> Vec<Effect> {
         match key {
-            UiKey::Character(character) => {
-                self.create(PastePayload::text(character.to_string()), ids, clock)
-            }
+            UiKey::Character(character) => self.handle_board_command(character, ids, clock),
             UiKey::Enter => self.create(PastePayload::text(String::new()), ids, clock),
             UiKey::Escape
             | UiKey::Move {
@@ -112,18 +103,14 @@ impl BoardApp {
             Some(BoardCommand::Delete) => self.delete(ids, clock),
             Some(BoardCommand::Copy) => self.copy_thought(ids),
             Some(BoardCommand::Cut) => self.cut_thought(ids, clock),
-            Some(BoardCommand::Send) => self.begin_delivery(
-                crate::ports::agent::AgentDeliveryMode::Compose,
-                false,
+            Some(BoardCommand::SubmitRemove) => self.begin_delivery(
+                crate::ports::agent::SubmissionDisposition::RemoveAfterSuccess,
                 ids,
                 clock,
             ),
-            Some(BoardCommand::Submit) => self.begin_delivery(
-                crate::ports::agent::AgentDeliveryMode::Submit,
-                false,
-                ids,
-                clock,
-            ),
+            Some(BoardCommand::SubmitKeep) => {
+                self.begin_delivery(crate::ports::agent::SubmissionDisposition::Keep, ids, clock)
+            }
             Some(BoardCommand::Undo) => self.history(ids, clock, true),
             Some(BoardCommand::FocusUp) => {
                 self.move_focus(-1);
@@ -291,18 +278,7 @@ impl BoardApp {
             if payload.content.is_empty() {
                 return Vec::new();
             }
-            if self.insertion_focus == super::InsertionFocus::Inactive
-                && self.focused_thought_is_empty()
-            {
-                self.enter_edit();
-                self.apply_annotated_edit(
-                    EditCommand::Paste(payload.content),
-                    &payload.annotations,
-                );
-                self.flush_pending_edit(ids, clock)
-            } else {
-                self.create(payload, ids, clock)
-            }
+            self.create(payload, ids, clock)
         } else {
             let mut effects = self.flush_pending_edit(ids, clock);
             self.apply_annotated_edit(EditCommand::Paste(payload.content), &payload.annotations);
@@ -382,13 +358,6 @@ impl BoardApp {
         }
         let target = current.saturating_add_signed(delta).min(live.len() - 1);
         let _effects = self.reduce(Action::FocusThought(Some(live[target].id)));
-    }
-
-    fn focused_thought_is_empty(&self) -> bool {
-        self.state
-            .focused_thought
-            .and_then(|thought_id| self.state.board.thought(thought_id))
-            .is_some_and(|thought| thought.content.is_empty())
     }
 
     fn sync_empty_insertion_focus(&mut self) {
