@@ -258,8 +258,6 @@ fn keyboard_creation_survives_rapid_pty_resize() {
         spawn $binary --state-dir $state
         expect -exact "\x1b\[?1049h"
         after 300
-        send -- "n"
-        after 100
         send -- "mouse-created"
         stty rows 4 columns 12
         after 100
@@ -330,9 +328,7 @@ fn session_browser_searches_and_resumes_in_a_real_pty() {
         after 200
         send "\r"
         after 500
-        send -- "\x1b"
-        after 100
-        send -- "q"
+        send -- "\x11"
         expect {
             eof {}
             timeout { exit 93 }

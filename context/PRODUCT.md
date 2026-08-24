@@ -338,17 +338,23 @@ subtle until the area is focused or hovered, but it must always have a keyboard
 equivalent and a stable mouse hit target.
 
 Clicking `+`, clicking the insertion area, or pressing the create-thought key
-opens one ephemeral blank draft, enters edit mode immediately, and places the
-cursor in it. The first non-empty edit persists the thought. `Esc`, focus loss,
-and exit discard an unchanged draft, and only one empty draft may exist at a
-time. The complete insertion row is clickable and reads
+creates one durable blank thought, enters edit mode immediately, and places the
+cursor in it. The blank remains part of the session after `Esc`, exit, crash,
+and resume. Creating it is an ordinary undoable board operation. The complete
+insertion row is clickable and reads
 `+ New thought` while focused or hovered instead of relying on an unexplained
 symbol. The user never needs a second action before typing.
 
 The insertion row is part of keyboard focus order. Moving down from the last
-thought focuses `+ New thought`. `Enter` opens the draft, and any printable key
-opens the draft and inserts that key as its first content. Moving up or pressing
-`Esc` leaves the insertion row without creating anything.
+thought focuses `+ New thought`. `Enter` creates a durable blank, and any
+printable key creates a thought with that key as its first content. Moving up
+or pressing `Esc` leaves the insertion row without creating anything.
+
+When the board contains no thoughts, the insertion row owns keyboard focus by
+default. A durable empty thought reuses the insertion row's capture behavior:
+every printable character enters edit mode and inserts that character, even
+when the character is normally a plain-key board shortcut. Modifier shortcuts,
+navigation keys, paste, and mouse actions retain their ordinary semantics.
 
 ### Copy, cut, and delete
 
@@ -423,6 +429,10 @@ the agent state but does not reinterpret the harness's behavior.
 
 Thoughts can be moved up and down with direct keys and mouse drag. Reordering is
 immediate, autosaved, and undoable.
+
+Keyboard reordering wraps across the board boundaries. Moving the last thought
+down places it first, and moving the first thought up places it last. Mouse drag
+remains positional and does not wrap.
 
 ## Interaction model
 
@@ -663,6 +673,14 @@ The default theme is `auto`, with explicit `light` and `dark` overrides.
 Automatic detection uses terminal capabilities where available and falls back
 to terminal-native foreground and background colors rather than guessing an
 unsafe contrast pair.
+
+In automatic mode Proqi queries the terminal's default foreground and
+background before terminal input begins. The focused surface is a quiet neutral
+blend derived from that background while primary text keeps the terminal's
+exact foreground. The same semantic focus surface is used for thoughts,
+insertion rows, session-name affordances, footer controls, modal selections,
+and hover states. A failed query retains terminal-native colors plus the
+non-color focus gutter.
 
 The product remains usable in terminals without true color. The fallback uses
 default foreground and background, one supported green accent, bold, dim, and

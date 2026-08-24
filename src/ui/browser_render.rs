@@ -80,15 +80,21 @@ fn render_header(
         title.area,
     );
     if layout.header.height > 1 {
-        let (label, value) = browser
-            .rename_value()
-            .map_or((" Search: ", browser.query()), |value| (" Rename: ", value));
+        let rename = browser.rename_value();
+        let (label, value) =
+            rename.map_or((" Search: ", browser.query()), |value| (" Rename: ", value));
+        let style = if rename.is_some() {
+            theme.focused_style()
+        } else {
+            theme.base_style()
+        };
         frame.render_widget(
             Paragraph::new(Line::from(vec![
                 Span::styled(label, Style::default().fg(theme.muted)),
                 Span::raw(value.to_owned()),
                 Span::styled("_", Style::default().fg(theme.accent)),
-            ])),
+            ]))
+            .style(style),
             RectLine::new(layout.header, 1).area,
         );
     }
@@ -118,17 +124,16 @@ fn render_result(
     let badge = format!("[{}]", item.availability.label());
     let fixed_cells = 4_usize.saturating_add(unicode_width::UnicodeWidthStr::width(badge.as_str()));
     let label_cells = usize::from(area.width).saturating_sub(fixed_cells);
-    let style = Style::default()
-        .fg(if selected {
-            theme.accent
-        } else {
-            theme.foreground
-        })
-        .add_modifier(if selected {
-            Modifier::BOLD
-        } else {
-            Modifier::empty()
-        });
+    let style = if selected {
+        theme.focused_style().fg(theme.accent)
+    } else {
+        theme.base_style()
+    }
+    .add_modifier(if selected {
+        Modifier::BOLD
+    } else {
+        Modifier::empty()
+    });
     frame.render_widget(
         Paragraph::new(format!(
             "{focus} {}  [{}]",

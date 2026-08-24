@@ -21,4 +21,4 @@ pub use browser_render::render_browser;
 pub use layout::{HitTarget, LayoutSnapshot, ThoughtLayout, compute as compute_layout};
 pub use render::render;
 pub use settings::{KeyBindings, ThemePreference, UiSettings};
-pub use theme::Theme;
+pub use theme::{TerminalPalette, Theme};

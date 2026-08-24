@@ -116,6 +116,7 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
     } = resources;
     let session_id = state.board.session.id;
     let (control, control_warning) = start_optional_control(&mut session_lease);
+    let theme = super::palette::resolve(settings.theme, supports_true_color());
     let guard = TerminalGuard::enter(CrosstermControl)?;
     let termination = TerminationGuard::register()?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
@@ -128,7 +129,6 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
         presentation_source,
     );
     let mut pane_heartbeat = None;
-    let theme = Theme::resolve(settings.theme, supports_true_color());
     let mut app = BoardApp::with_settings(state, settings, RopeEditorFactory);
     app.status = control_warning;
     let lanes = WorkerLanes {

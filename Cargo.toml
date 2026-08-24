@@ -25,6 +25,7 @@ serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.143"
 signal-hook = "0.3.18"
 thiserror = "2.0.16"
+terminal-colorsaurus = "=1.0.3"
 toml = "0.9.8"
 tracing = { version = "0.1.44", default-features = false, features = ["std"] }
 tracing-subscriber = { version = "0.3.23", default-features = false, features = ["fmt"] }
@@ -70,6 +71,7 @@ serde.workspace = true
 serde_json.workspace = true
 signal-hook.workspace = true
 thiserror.workspace = true
+terminal-colorsaurus.workspace = true
 toml.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true

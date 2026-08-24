@@ -27,11 +27,11 @@ pub(crate) fn pick_session(
     now: Timestamp,
     settings: &UiSettings,
 ) -> Result<BrowserAction, TerminalError> {
+    let theme = super::palette::resolve(settings.theme, supports_true_color());
     let guard = TerminalGuard::enter(CrosstermControl)?;
     let termination = TerminationGuard::register()?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
     let input = InputLane::spawn();
-    let theme = Theme::resolve(settings.theme, supports_true_color());
     let mut browser = SessionBrowser::new(items, now);
     let run_result = drive(&mut terminal, &mut browser, &input, &termination, &theme);
     let input_result = input

@@ -80,10 +80,11 @@ possible to ship without a Node, Python, or JVM runtime.
 - Ratatui owns terminal-independent drawing primitives and widget composition.
 - Crossterm owns terminal setup, input, resize, mouse, bracketed-paste, and
   capability handling.
-- Automatic mode inherits the terminal foreground and background and uses a
-  gutter-only focus treatment. OSC palette probing remains disabled because a
-  startup PTY regression proved that the available query implementation can
-  consume typeahead before the input lane owns the terminal.
+- Automatic mode queries the terminal foreground and background through a
+  bounded terminal-adapter palette probe before alternate-screen setup and
+  before the input lane starts. This ordering prevents the probe from consuming
+  user typeahead. Failed probes retain terminal-native colors and a gutter-only
+  focus treatment.
 - `unicode-segmentation` and `unicode-width` define grapheme and terminal-cell
   behavior. Byte indices are never treated as visual columns.
 - The editor port is backed by Ropey. A dependency spike against
@@ -324,10 +325,11 @@ error return, panic, and termination signals supported by the platform.
 wall-clock time, identifiers, platform directories, or subprocess execution
 would otherwise make tests nondeterministic.
 
-An empty new-thought draft is UI-owned transient state. It stays outside the
-reducer and persistence store until its first non-empty edit, which becomes an
-ordinary create operation using the already reserved thought identifier. An
-abandoned draft therefore produces no durable thought, revision, or operation.
+An explicitly created empty thought is an ordinary durable domain entity. Its
+creation is committed through the same board operation as populated thoughts,
+so it participates in session ordering, resume, undo, redo, and crash recovery.
+The UI shares one capture intention between the insertion row and a focused
+empty thought instead of maintaining a second transient draft model.
 
 ## Domain model and database
 
@@ -463,10 +465,13 @@ lock protocol is identical. For a cask, the explicit update command is
 Rendering is immediate-mode and derived from current state. Widgets hold no
 canonical product state. The board uses one vertical flow at every width.
 
-Automatic mode keeps the terminal foreground and background unchanged and uses
-the non-color gutter cue for selection. Explicit dark and light themes use
-fixed neutral selected surfaces whose primary and accent text pairs are checked
-against WCAG AA contrast thresholds.
+Automatic mode preserves the detected terminal foreground and background. Its
+neutral selected surface is derived by blending the background eight percent
+toward white on dark terminals or black on light terminals. Explicit dark and
+light themes use fixed neutral selected surfaces. Primary and accent text pairs
+are checked against WCAG AA contrast thresholds. Failed automatic detection
+and limited-color terminals retain the non-color gutter cue without inventing
+an unsafe contrast pair.
 
 The board reserves independent responsive regions for product and session
 identity, content, integration or durability context, transient status,

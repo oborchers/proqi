@@ -19,8 +19,15 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        if self.insertion_focus == super::InsertionFocus::Active {
+        if self.insertion_focused() {
             return self.handle_insertion_key(key, ids, clock);
+        }
+        if let UiKey::Character(character) = key
+            && self.focused_thought_is_empty()
+        {
+            self.enter_edit();
+            self.apply_edit(EditCommand::InsertChar(character));
+            return Vec::new();
         }
         match key {
             UiKey::Character(character) => {
@@ -61,12 +68,9 @@ impl BoardApp {
     ) -> Vec<Effect> {
         match key {
             UiKey::Character(character) => {
-                let mut effects = self.start_draft(ids, clock);
-                self.apply_edit(EditCommand::InsertChar(character));
-                effects.extend(self.persist_draft(ids, clock));
-                effects
+                self.create(PastePayload::text(character.to_string()), ids, clock)
             }
-            UiKey::Enter => self.start_draft(ids, clock),
+            UiKey::Enter => self.create(PastePayload::text(String::new()), ids, clock),
             UiKey::Escape
             | UiKey::Move {
                 movement: CursorMovement::VisualUp,
@@ -76,6 +80,8 @@ impl BoardApp {
                 Vec::new()
             }
             UiKey::PasteClipboard => self.read_clipboard(ids),
+            UiKey::Undo => self.history(ids, clock, true),
+            UiKey::Redo => self.history(ids, clock, false),
             UiKey::Move {
                 movement: CursorMovement::VisualDown,
                 ..
@@ -84,8 +90,6 @@ impl BoardApp {
             | UiKey::Delete
             | UiKey::SelectAll
             | UiKey::DeleteLine
-            | UiKey::Undo
-            | UiKey::Redo
             | UiKey::Copy
             | UiKey::Cut
             | UiKey::Quit
@@ -223,9 +227,6 @@ impl BoardApp {
                 clock,
             ));
         }
-        if self.has_draft() {
-            effects.extend(self.persist_draft(ids, clock));
-        }
         if matches!(key, UiKey::DeleteLine) {
             effects.extend(self.flush_pending_edit(ids, clock));
         }
@@ -270,10 +271,6 @@ impl BoardApp {
         clock: &impl Clock,
     ) -> Vec<Effect> {
         self.edit_boundary = None;
-        if self.has_draft() {
-            self.discard_draft();
-            return Vec::new();
-        }
         let thought_id = self.active_thought_id();
         let effects = self.flush_pending_edit(ids, clock);
         if let Some(thought_id) = thought_id {
@@ -290,15 +287,22 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        if self.has_draft() {
-            self.set_draft_annotations(payload.annotations.clone());
-            self.apply_annotated_edit(EditCommand::Paste(payload.content), &payload.annotations);
-            self.persist_draft(ids, clock)
-        } else if matches!(self.state.mode, InteractionMode::Board) {
+        if matches!(self.state.mode, InteractionMode::Board) {
             if payload.content.is_empty() {
                 return Vec::new();
             }
-            self.create(payload, ids, clock)
+            if self.insertion_focus == super::InsertionFocus::Inactive
+                && self.focused_thought_is_empty()
+            {
+                self.enter_edit();
+                self.apply_annotated_edit(
+                    EditCommand::Paste(payload.content),
+                    &payload.annotations,
+                );
+                self.flush_pending_edit(ids, clock)
+            } else {
+                self.create(payload, ids, clock)
+            }
         } else {
             let mut effects = self.flush_pending_edit(ids, clock);
             self.apply_annotated_edit(EditCommand::Paste(payload.content), &payload.annotations);
@@ -311,12 +315,14 @@ impl BoardApp {
         let Some(thought_id) = self.state.focused_thought else {
             return Vec::new();
         };
-        self.reduce(Action::DeleteThought {
+        let effects = self.reduce(Action::DeleteThought {
             operation_id: ids.operation_id(),
             thought_id,
             kind: BoardOperationKind::Delete,
             at: clock.now(),
-        })
+        });
+        self.sync_empty_insertion_focus();
+        effects
     }
 
     pub(super) fn history(
@@ -345,6 +351,7 @@ impl BoardApp {
         };
         effects.extend(self.reduce(action));
         self.reload_editor();
+        self.sync_empty_insertion_focus();
         effects
     }
 
@@ -352,6 +359,8 @@ impl BoardApp {
         self.manual_board_scroll = false;
         let live = self.state.board.live_thoughts();
         if live.is_empty() {
+            self.insertion_focus = super::InsertionFocus::Active;
+            self.layout = None;
             return;
         }
         if self.insertion_focus == super::InsertionFocus::Active {
@@ -375,59 +384,20 @@ impl BoardApp {
         let _effects = self.reduce(Action::FocusThought(Some(live[target].id)));
     }
 
-    fn finish_boundary_navigation(
-        &mut self,
-        movement: CursorMovement,
-        extend_selection: bool,
-        before: Option<&crate::ports::editor::EditorSnapshot>,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-    ) -> Vec<Effect> {
-        if extend_selection
-            || !matches!(
-                movement,
-                CursorMovement::VisualUp | CursorMovement::VisualDown
-            )
-        {
-            self.edit_boundary = None;
-            return Vec::new();
-        }
-        let Some(before) = before else {
-            return Vec::new();
-        };
-        let Some(after) = self.editor_snapshot() else {
-            return Vec::new();
-        };
-        if before.cursor != after.cursor || before.selection != after.selection {
-            self.edit_boundary = None;
-            return Vec::new();
-        }
-        let armed = self.edit_boundary == Some(movement);
-        self.edit_boundary = Some(movement);
-        if !armed {
-            return Vec::new();
-        }
-        let Some(target) = self.edit_neighbor(movement) else {
-            return Vec::new();
-        };
-        let mut effects = self.finish_edit(ids, clock);
-        self.insertion_focus = super::InsertionFocus::Inactive;
-        effects.extend(self.reduce(Action::FocusThought(Some(target))));
-        effects
+    fn focused_thought_is_empty(&self) -> bool {
+        self.state
+            .focused_thought
+            .and_then(|thought_id| self.state.board.thought(thought_id))
+            .is_some_and(|thought| thought.content.is_empty())
     }
 
-    fn edit_neighbor(&self, movement: CursorMovement) -> Option<crate::domain::ThoughtId> {
-        let live = self.state.board.live_thoughts();
-        let current = self.draft_insertion_index().or_else(|| {
-            let active = self.active_thought_id()?;
-            live.iter().position(|thought| thought.id == active)
-        })?;
-        let target = match movement {
-            CursorMovement::VisualUp => current.checked_sub(1)?,
-            CursorMovement::VisualDown => current.saturating_add(1),
-            _ => return None,
-        };
-        live.get(target).map(|thought| thought.id)
+    fn sync_empty_insertion_focus(&mut self) {
+        if self.state.board.live_thoughts().is_empty() {
+            self.insertion_focus = super::InsertionFocus::Active;
+            self.layout = None;
+        } else if self.state.focused_thought.is_some() {
+            self.insertion_focus = super::InsertionFocus::Inactive;
+        }
     }
 
     pub(super) fn reorder(
@@ -444,9 +414,16 @@ impl BoardApp {
         let Some(current) = live.iter().position(|thought| thought.id == thought_id) else {
             return Vec::new();
         };
-        let target = current
-            .saturating_add_signed(delta)
-            .min(live.len().saturating_sub(1));
+        if live.len() <= 1 {
+            return Vec::new();
+        }
+        let target = if delta < 0 {
+            current.checked_sub(1).unwrap_or(live.len() - 1)
+        } else if current + 1 == live.len() {
+            0
+        } else {
+            current + 1
+        };
         self.reduce(Action::MoveThought {
             operation_id: ids.operation_id(),
             thought_id,

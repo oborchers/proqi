@@ -50,17 +50,23 @@ pub(super) fn render_picker(
 ) {
     frame.render_widget(Clear, overlay.area);
     frame.render_widget(
-        Paragraph::new(format!("{}{query}", picker.prompt, query = picker.query))
-            .block(Block::default().title(picker.title).borders(Borders::ALL)),
+        Block::default().title(picker.title).borders(Borders::ALL),
         overlay.area,
+    );
+    let input = input_area(overlay);
+    frame.render_widget(
+        Paragraph::new(format!("{}{query}", picker.prompt, query = picker.query))
+            .style(theme.focused_style()),
+        input,
     );
     for (index, (entry, area)) in picker.entries.iter().zip(&overlay.items).enumerate() {
         let style = if index == picker.selected {
-            Style::default()
+            theme
+                .focused_style()
                 .fg(theme.accent)
-                .add_modifier(Modifier::REVERSED)
+                .add_modifier(Modifier::BOLD)
         } else {
-            Style::default()
+            theme.base_style()
         };
         frame.render_widget(Paragraph::new(entry.as_str()).style(style), *area);
     }
@@ -76,18 +82,30 @@ pub(super) fn render_text_prompt(
 ) {
     frame.render_widget(Clear, overlay.area);
     frame.render_widget(
-        Paragraph::new(format!("> {value}"))
-            .block(Block::default().title(title).borders(Borders::ALL)),
+        Block::default().title(title).borders(Borders::ALL),
         overlay.area,
+    );
+    frame.render_widget(
+        Paragraph::new(format!("> {value}")).style(theme.focused_style()),
+        input_area(overlay),
     );
     render_close(frame, overlay, theme);
     let x = overlay
         .area
         .x
-        .saturating_add(2)
+        .saturating_add(3)
         .saturating_add(u16::try_from(value.width()).unwrap_or(u16::MAX))
         .min(overlay.area.right().saturating_sub(2));
     frame.set_cursor_position((x, overlay.area.y.saturating_add(1)));
+}
+
+fn input_area(overlay: &OverlayLayout) -> ratatui_core::layout::Rect {
+    ratatui_core::layout::Rect::new(
+        overlay.area.x.saturating_add(1),
+        overlay.area.y.saturating_add(1),
+        overlay.area.width.saturating_sub(2),
+        u16::from(overlay.area.height > 2),
+    )
 }
 
 #[derive(Clone, Copy)]

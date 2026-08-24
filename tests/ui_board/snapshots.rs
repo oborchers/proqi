@@ -111,9 +111,9 @@ fn populated_board_with_folded_attachment() {
 }
 
 #[test]
-fn ephemeral_draft_and_editing_surface() {
+fn durable_blank_and_editing_surface() {
     let mut fixture = Fixture::new();
-    fixture.input(UiInput::Key(UiKey::Character('n')));
+    fixture.input(UiInput::Key(UiKey::Enter));
     insta::assert_snapshot!(snapshot(&mut fixture, 50, 9, ThemePreference::Light));
 }
 
@@ -128,7 +128,14 @@ fn failed_save_uses_a_dedicated_status_row() {
 #[test]
 fn help_overlay_remains_composed_in_a_shallow_viewport() {
     let mut fixture = Fixture::new();
-    fixture.input(UiInput::Key(UiKey::Character('?')));
+    let _initial = draw(&mut fixture, 42, 8);
+    let layout = fixture.app.prepare_frame(Rect::new(0, 0, 42, 8));
+    let help = layout
+        .controls
+        .iter()
+        .find_map(|(target, area)| (*target == HitTarget::Help).then_some(*area))
+        .expect("help control");
+    fixture.pointer(help.x, help.y, PointerKind::Down(PointerButton::Left));
     insta::assert_snapshot!(snapshot(&mut fixture, 42, 8, ThemePreference::Auto));
 }
 

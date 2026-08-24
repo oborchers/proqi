@@ -53,7 +53,7 @@ pub enum HitTarget {
     Help,
     /// Clean exit action.
     Quit,
-    /// Leave the editor or discard an unchanged draft.
+    /// Leave the editor.
     ExitEdit,
     /// Retry the failed durable operation.
     Retry,
@@ -312,12 +312,13 @@ fn place_thoughts(
     expanded: &BTreeSet<ThoughtId>,
 ) -> Vec<ThoughtLayout> {
     let mut layouts = Vec::new();
-    let mut y = board.y;
     let cap = responsive_cap(board.height);
     let live = state.board.live_thoughts();
     let remaining = live.len().saturating_sub(first);
     let roomy = usize::from(board.height)
         >= remaining.saturating_add(remaining.saturating_sub(1).saturating_mul(3));
+    let top_padding = u16::from(roomy && board.height >= 3 && remaining > 0);
+    let mut y = board.y.saturating_add(top_padding);
     for (index, thought) in live.into_iter().enumerate().skip(first) {
         if y >= board.bottom() {
             break;

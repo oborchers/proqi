@@ -36,7 +36,11 @@ impl BoardApp {
         &self,
         thought_id: ThoughtId,
     ) -> Option<crate::ui::annotations::Presentation> {
-        let content = self.content_for_render(thought_id)?;
+        let content = self
+            .state
+            .board
+            .thought(thought_id)
+            .map(|thought| thought.content.clone())?;
         let annotations = self.current_annotations(thought_id);
         Some(crate::ui::annotations::project(
             &content,
@@ -45,46 +49,33 @@ impl BoardApp {
         ))
     }
 
-    /// Effective interaction mode, including an ephemeral draft editor.
+    /// Effective interaction mode.
     #[must_use]
     pub fn interaction_mode(&self) -> InteractionMode {
-        self.draft
-            .as_ref()
-            .map_or(self.state.mode, |draft| InteractionMode::Edit {
-                thought_id: draft.thought_id,
-            })
+        self.state.mode
     }
 
-    /// Focused durable thought or ephemeral draft identity.
+    /// Focused durable thought identity.
     #[must_use]
     pub fn active_thought_id(&self) -> Option<ThoughtId> {
-        if self.insertion_focus == super::InsertionFocus::Active
-            && matches!(self.state.mode, InteractionMode::Board)
-        {
+        if self.insertion_focused() {
             return None;
         }
-        self.draft
-            .as_ref()
-            .map(|draft| draft.thought_id)
-            .or(self.state.focused_thought)
+        self.state.focused_thought
     }
 
-    /// Number of currently visible durable thoughts and drafts.
+    /// Number of currently visible durable thoughts.
     #[must_use]
     pub fn visible_thought_count(&self) -> usize {
-        self.state.board.live_thoughts().len() + usize::from(self.draft.is_some())
-    }
-
-    /// Whether an empty, non-durable thought is currently being edited.
-    #[must_use]
-    pub const fn has_draft(&self) -> bool {
-        self.draft.is_some()
+        self.state.board.live_thoughts().len()
     }
 
     /// Whether the board insertion row owns keyboard focus.
     #[must_use]
-    pub const fn insertion_focused(&self) -> bool {
-        matches!(self.insertion_focus, super::InsertionFocus::Active)
+    pub fn insertion_focused(&self) -> bool {
+        matches!(self.state.mode, InteractionMode::Board)
+            && (matches!(self.insertion_focus, super::InsertionFocus::Active)
+                || self.state.board.live_thoughts().is_empty())
     }
 
     /// Monotonic counter used by the runtime to detect new unflushed editor work.
@@ -247,14 +238,7 @@ impl BoardApp {
     }
 
     fn footer_summary(&self, width: u16) -> (String, u16) {
-        let session = &self.state.board.session;
-        let derived_name = session
-            .last_opened_cwd
-            .file_name()
-            .or_else(|| session.origin_cwd.file_name())
-            .and_then(|name| name.to_str())
-            .unwrap_or("untitled");
-        let name = session.name.as_deref().unwrap_or(derived_name);
+        let name = self.session_display_name();
         let count = self.visible_thought_count();
         let noun = if count == 1 { "thought" } else { "thoughts" };
         let mode = match self.interaction_mode() {
@@ -278,11 +262,21 @@ impl BoardApp {
         (String::new(), 0)
     }
 
+    pub(crate) fn session_display_name(&self) -> &str {
+        let session = &self.state.board.session;
+        session.name.as_deref().unwrap_or_else(|| {
+            session
+                .last_opened_cwd
+                .file_name()
+                .or_else(|| session.origin_cwd.file_name())
+                .and_then(|name| name.to_str())
+                .unwrap_or("untitled")
+        })
+    }
+
     fn durability_summary(&self) -> &'static str {
         if matches!(self.state.durability, DurabilityState::Failed { .. }) {
             "unsaved"
-        } else if self.has_draft() {
-            "draft"
         } else if self.has_pending_edit()
             || matches!(self.state.durability, DurabilityState::Pending { .. })
         {
@@ -293,10 +287,8 @@ impl BoardApp {
     }
 
     fn presentation_state(&self) -> crate::application::AppState {
-        let mut state = self.layout_state_with_draft();
-        if self.insertion_focus == super::InsertionFocus::Active
-            && matches!(state.mode, InteractionMode::Board)
-        {
+        let mut state = self.state.clone();
+        if self.insertion_focused() {
             state.focused_thought = None;
         }
         let ids = state

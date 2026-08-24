@@ -97,7 +97,7 @@ fn render_board(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, 
             app.drag_target() == Some(thought_layout.index),
             theme,
         );
-        if focused {
+        if focused || hovered {
             frame.render_widget(
                 Block::default().style(theme.focused_style()),
                 thought_layout.area,

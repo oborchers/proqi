@@ -6,10 +6,15 @@ fn remapped_board_binding_changes_behavior_and_visible_hint() {
     settings.keybindings.new = 't';
     let mut fixture = Fixture::with_settings(settings);
     fixture.input(UiInput::Key(UiKey::Character('n')));
-    assert!(fixture.app.state.board.live_thoughts().is_empty());
+    assert_eq!(fixture.app.state.board.live_thoughts()[0].content, "n");
+    fixture.input(UiInput::Key(UiKey::Escape));
     fixture.input(UiInput::Key(UiKey::Character('t')));
-    assert!(fixture.app.has_draft());
-    assert!(fixture.app.state.board.live_thoughts().is_empty());
+    assert_eq!(fixture.app.state.board.live_thoughts().len(), 2);
+    assert!(
+        fixture.app.state.board.live_thoughts()[1]
+            .content
+            .is_empty()
+    );
     fixture.input(UiInput::Key(UiKey::Escape));
     assert!(text(draw(&mut fixture, 50, 6).backend().buffer()).contains("t New"));
 }
@@ -88,6 +93,7 @@ fn chrome_and_thought_rhythm_are_responsive_and_non_overlapping() {
         fixture.input(UiInput::Key(UiKey::Escape));
     }
     let roomy = fixture.app.prepare_frame(Rect::new(0, 0, 60, 14));
+    assert_eq!(roomy.thoughts[0].area.y, roomy.board.y + 1);
     let rule = roomy.thoughts[1].separator_before.expect("roomy rule");
     assert_eq!(rule.y, roomy.thoughts[0].area.bottom() + 1);
     assert_eq!(roomy.thoughts[1].area.y, rule.bottom() + 1);
@@ -96,6 +102,7 @@ fn chrome_and_thought_rhythm_are_responsive_and_non_overlapping() {
     assert!(roomy.footer_context.bottom() <= roomy.footer_actions.y);
 
     let shallow = fixture.app.prepare_frame(Rect::new(0, 0, 60, 6));
+    assert_eq!(shallow.thoughts[0].area.y, shallow.board.y);
     let rule = shallow.thoughts[1].separator_before.expect("compact rule");
     assert_eq!(rule.y, shallow.thoughts[0].area.bottom());
     assert_eq!(shallow.thoughts[1].area.y, rule.bottom());

@@ -73,9 +73,12 @@ impl BoardApp {
 
     pub(super) fn normalize_fold_cursor(
         &mut self,
-        _movement: CursorMovement,
-        _extend_selection: bool,
+        movement: CursorMovement,
+        extend_selection: bool,
     ) {
+        if extend_selection {
+            return;
+        }
         let Some(thought_id) = self.active_thought_id() else {
             return;
         };
@@ -90,9 +93,8 @@ impl BoardApp {
             .enumerate()
             .find_map(|(index, annotation)| {
                 (!self.expanded_folds.contains(&(thought_id, index))
-                    && cursor > annotation.start
-                    && cursor < annotation.end)
-                    .then_some((annotation.start, annotation.end))
+                    && cursor_in_fold(cursor, annotation, movement))
+                .then_some((annotation.start, annotation.end))
             });
         let Some((start, end)) = target else {
             return;
@@ -212,6 +214,27 @@ fn moves_before(movement: CursorMovement) -> bool {
             | CursorMovement::VisualUp
             | CursorMovement::LineStart
             | CursorMovement::DocumentStart
+    )
+}
+
+fn cursor_in_fold(cursor: usize, annotation: &ContentAnnotation, movement: CursorMovement) -> bool {
+    if moves_before(movement) {
+        cursor > annotation.start && cursor <= annotation.end
+    } else if moves_after(movement) {
+        cursor >= annotation.start && cursor < annotation.end
+    } else {
+        cursor > annotation.start && cursor < annotation.end
+    }
+}
+
+fn moves_after(movement: CursorMovement) -> bool {
+    matches!(
+        movement,
+        CursorMovement::GraphemeForward
+            | CursorMovement::WordForward
+            | CursorMovement::VisualDown
+            | CursorMovement::LineEnd
+            | CursorMovement::DocumentEnd
     )
 }
 

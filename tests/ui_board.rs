@@ -122,7 +122,13 @@ fn empty_board_and_help_have_reviewable_complete_buffers() {
     assert!(rendered.contains("+ New thought"));
     assert!(rendered.contains("board · saved"));
 
-    fixture.input(UiInput::Key(UiKey::Character('?')));
+    let layout = fixture.app.prepare_frame(Rect::new(0, 0, 40, 8));
+    let help = layout
+        .controls
+        .iter()
+        .find_map(|(target, area)| (*target == HitTarget::Help).then_some(*area))
+        .expect("help control");
+    fixture.pointer(help.x, help.y, PointerKind::Down(PointerButton::Left));
     let terminal = draw(&mut fixture, 40, 8);
     let rendered = text(terminal.backend().buffer());
     assert!(rendered.contains("proqi shortcuts"));
@@ -145,7 +151,8 @@ fn multiline_unicode_is_rendered_as_lines_and_cursor_uses_cell_width() {
         .backend_mut()
         .get_cursor_position()
         .expect("cursor position");
-    assert_eq!(cursor.y, 2);
+    let area = fixture.app.prepare_frame(Rect::new(0, 0, 40, 10)).thoughts[0].text_area;
+    assert_eq!(cursor.y, area.y + 2);
     assert_eq!(cursor.x, 8);
 
     fixture.app.acknowledge_persistence(sequence, true);
@@ -167,7 +174,8 @@ fn cursor_uses_expanded_tab_cells() {
         .get_cursor_position()
         .expect("cursor position");
     assert_eq!(cursor.x, 6);
-    assert_eq!(cursor.y, 0);
+    let area = fixture.app.prepare_frame(Rect::new(0, 0, 20, 5)).thoughts[0].text_area;
+    assert_eq!(cursor.y, area.y);
 }
 
 #[test]
@@ -179,7 +187,8 @@ fn exact_wrap_boundary_keeps_the_terminal_cursor_visible() {
         .backend_mut()
         .get_cursor_position()
         .expect("cursor at wrapped document end");
-    assert_eq!((cursor.x, cursor.y), (2, 1));
+    let area = fixture.app.prepare_frame(Rect::new(0, 0, 8, 5)).thoughts[0].text_area;
+    assert_eq!((cursor.x, cursor.y), (area.x, area.y + 1));
 }
 
 #[test]
@@ -366,13 +375,16 @@ fn keyboard_selection_is_logical_and_visible() {
     );
 
     let terminal = draw(&mut fixture, 20, 5);
-    let selected = terminal.backend().buffer()[(5, 0)].modifier;
+    let area = fixture.app.prepare_frame(Rect::new(0, 0, 20, 5)).thoughts[0].text_area;
+    let selected = terminal.backend().buffer()[(area.x + 3, area.y)].modifier;
     assert!(selected.contains(ratatui_core::style::Modifier::REVERSED));
 }
 
 #[test]
 fn command_palette_is_searchable_and_mouse_operable() {
     let mut fixture = Fixture::new();
+    fixture.paste("existing");
+    fixture.input(UiInput::Key(UiKey::Escape));
     fixture.input(UiInput::Key(UiKey::Character(':')));
     for character in "quit".chars() {
         fixture.input(UiInput::Key(UiKey::Character(character)));
@@ -389,6 +401,8 @@ fn command_palette_is_searchable_and_mouse_operable() {
 #[test]
 fn palette_quit_is_global_and_shallow_navigation_stays_visible() {
     let mut fixture = Fixture::new();
+    fixture.paste("existing");
+    fixture.input(UiInput::Key(UiKey::Escape));
     fixture.input(UiInput::Key(UiKey::Character(':')));
     let _terminal = draw(&mut fixture, 30, 5);
     for _ in 0..10 {
@@ -470,12 +484,12 @@ fn mouse_wheel_scrolls_editor_without_moving_cursor_or_selection() {
 mod agent;
 #[path = "ui_board/annotations.rs"]
 mod annotations;
+#[path = "ui_board/blank.rs"]
+mod blank;
 #[path = "ui_board/clipboard.rs"]
 mod clipboard;
 #[path = "ui_board/composition.rs"]
 mod composition;
-#[path = "ui_board/draft.rs"]
-mod draft;
 #[path = "ui_board/durability.rs"]
 mod durability;
 #[path = "ui_board/navigation.rs"]

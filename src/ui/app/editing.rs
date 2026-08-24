@@ -4,7 +4,7 @@ use crate::{
     application::{Action, Effect, reduce},
     domain::{ContentAnnotation, ThoughtId},
     ports::{
-        editor::{EditCommand, EditorSnapshot},
+        editor::{CursorMovement, EditCommand, EditorSnapshot},
         environment::{Clock, IdGenerator},
     },
 };
@@ -21,20 +21,71 @@ pub(super) struct PendingEdit {
 }
 
 impl BoardApp {
+    pub(super) fn finish_boundary_navigation(
+        &mut self,
+        movement: CursorMovement,
+        extend_selection: bool,
+        before: Option<&EditorSnapshot>,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        if extend_selection
+            || !matches!(
+                movement,
+                CursorMovement::VisualUp | CursorMovement::VisualDown
+            )
+        {
+            self.edit_boundary = None;
+            return Vec::new();
+        }
+        let Some(before) = before else {
+            return Vec::new();
+        };
+        let Some(after) = self.editor_snapshot() else {
+            return Vec::new();
+        };
+        if before.cursor != after.cursor || before.selection != after.selection {
+            self.edit_boundary = None;
+            return Vec::new();
+        }
+        let armed = self.edit_boundary == Some(movement);
+        self.edit_boundary = Some(movement);
+        if !armed {
+            return Vec::new();
+        }
+        let Some(target) = self.edit_neighbor(movement) else {
+            return Vec::new();
+        };
+        let mut effects = self.finish_edit(ids, clock);
+        self.insertion_focus = super::InsertionFocus::Inactive;
+        effects.extend(self.reduce(Action::FocusThought(Some(target))));
+        effects
+    }
+
+    fn edit_neighbor(&self, movement: CursorMovement) -> Option<ThoughtId> {
+        let live = self.state.board.live_thoughts();
+        let active = self.active_thought_id()?;
+        let current = live.iter().position(|thought| thought.id == active)?;
+        let target = match movement {
+            CursorMovement::VisualUp => current.checked_sub(1)?,
+            CursorMovement::VisualDown => current.saturating_add(1),
+            _ => return None,
+        };
+        live.get(target).map(|thought| thought.id)
+    }
+
     pub(super) fn current_annotations(&self, thought_id: ThoughtId) -> Vec<ContentAnnotation> {
-        self.draft_annotations(thought_id).unwrap_or_else(|| {
-            self.pending_edit
-                .as_ref()
-                .filter(|pending| pending.thought_id == thought_id)
-                .map(|pending| pending.after_annotations.clone())
-                .or_else(|| {
-                    self.state
-                        .board
-                        .thought(thought_id)
-                        .map(|thought| thought.annotations.clone())
-                })
-                .unwrap_or_default()
-        })
+        self.pending_edit
+            .as_ref()
+            .filter(|pending| pending.thought_id == thought_id)
+            .map(|pending| pending.after_annotations.clone())
+            .or_else(|| {
+                self.state
+                    .board
+                    .thought(thought_id)
+                    .map(|thought| thought.annotations.clone())
+            })
+            .unwrap_or_default()
     }
 
     pub(super) fn apply_edit(&mut self, command: EditCommand) {
@@ -57,10 +108,6 @@ impl BoardApp {
             return;
         };
         self.clear_expanded_folds(thought_id);
-        if self.is_draft(thought_id) {
-            self.edit_generation = self.edit_generation.wrapping_add(1);
-            return;
-        }
         let current_annotations = self
             .pending_edit
             .as_ref()

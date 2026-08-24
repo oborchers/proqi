@@ -1,8 +1,19 @@
 //! Small capability-aware terminal palette.
 
-use ratatui_core::style::{Color, Style};
+use ratatui_core::style::{Color, Modifier, Style};
 
 use super::ThemePreference;
+
+/// Terminal colors discovered before the full-screen interface starts.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TerminalPalette {
+    /// Default terminal foreground.
+    pub foreground: (u8, u8, u8),
+    /// Default terminal background.
+    pub background: (u8, u8, u8),
+    /// Whether the terminal background is perceptually dark.
+    pub dark: bool,
+}
 
 /// Resolved colors used by every board widget.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -30,7 +41,17 @@ pub struct Theme {
 impl Theme {
     /// Resolve a theme without assuming unsupported terminal colors.
     #[must_use]
-    pub const fn resolve(preference: ThemePreference, true_color: bool) -> Self {
+    pub fn resolve(preference: ThemePreference, true_color: bool) -> Self {
+        Self::resolve_with_palette(preference, true_color, None)
+    }
+
+    /// Resolve a theme using the terminal's detected foreground and background.
+    #[must_use]
+    pub fn resolve_with_palette(
+        preference: ThemePreference,
+        true_color: bool,
+        palette: Option<TerminalPalette>,
+    ) -> Self {
         if !true_color || matches!(preference, ThemePreference::Limited) {
             return Self::limited();
         }
@@ -57,7 +78,11 @@ impl Theme {
                 focused_surface: Some(Color::Rgb(39, 40, 48)),
                 error: Color::LightRed,
             },
-            ThemePreference::Auto | ThemePreference::Limited => Self::limited(),
+            ThemePreference::Auto => match palette {
+                Some(palette) => Self::automatic(palette),
+                None => Self::limited(),
+            },
+            ThemePreference::Limited => Self::limited(),
         }
     }
 
@@ -71,7 +96,7 @@ impl Theme {
     #[must_use]
     pub fn focused_style(self) -> Style {
         self.focused_surface.map_or_else(
-            || self.base_style(),
+            || self.base_style().add_modifier(Modifier::REVERSED),
             |surface| self.base_style().bg(surface),
         )
     }
@@ -89,6 +114,44 @@ impl Theme {
             error: Color::Red,
         }
     }
+
+    fn automatic(palette: TerminalPalette) -> Self {
+        let foreground = Color::Rgb(
+            palette.foreground.0,
+            palette.foreground.1,
+            palette.foreground.2,
+        );
+        let background = Color::Rgb(
+            palette.background.0,
+            palette.background.1,
+            palette.background.2,
+        );
+        let target = if palette.dark { 255 } else { 0 };
+        let surface = blend(palette.background, target, 8);
+        let mut theme = if palette.dark {
+            Self::resolve(ThemePreference::Dark, true)
+        } else {
+            Self::resolve(ThemePreference::Light, true)
+        };
+        theme.foreground = foreground;
+        theme.background = background;
+        theme.focused_surface = Some(Color::Rgb(surface.0, surface.1, surface.2));
+        theme
+    }
+}
+
+fn blend(color: (u8, u8, u8), target: u8, percentage: u16) -> (u8, u8, u8) {
+    (
+        blend_channel(color.0, target, percentage),
+        blend_channel(color.1, target, percentage),
+        blend_channel(color.2, target, percentage),
+    )
+}
+
+fn blend_channel(channel: u8, target: u8, percentage: u16) -> u8 {
+    let retained = 100_u16.saturating_sub(percentage);
+    let value = u16::from(channel) * retained + u16::from(target) * percentage + 50;
+    u8::try_from(value / 100).unwrap_or(u8::MAX)
 }
 
 #[cfg(test)]
@@ -117,9 +180,9 @@ fn luminance(color: (u8, u8, u8)) -> f64 {
 
 #[cfg(test)]
 mod tests {
-    use ratatui_core::style::Color;
+    use ratatui_core::style::{Color, Modifier};
 
-    use super::{Theme, ThemePreference, contrast};
+    use super::{TerminalPalette, Theme, ThemePreference, contrast};
 
     #[test]
     fn limited_terminals_never_receive_rgb_colors() {
@@ -146,6 +209,53 @@ mod tests {
         let automatic = Theme::resolve(ThemePreference::Auto, true);
         assert_eq!(automatic.focused_surface, None);
         assert_eq!(automatic.foreground, Color::Reset);
+    }
+
+    #[test]
+    fn automatic_theme_preserves_terminal_text_and_derives_a_quiet_surface() {
+        let theme = Theme::resolve_with_palette(
+            ThemePreference::Auto,
+            true,
+            Some(TerminalPalette {
+                foreground: (201, 205, 224),
+                background: (24, 25, 34),
+                dark: true,
+            }),
+        );
+        assert_eq!(theme.foreground, Color::Rgb(201, 205, 224));
+        assert_eq!(theme.background, Color::Rgb(24, 25, 34));
+        assert_eq!(theme.focused_surface, Some(Color::Rgb(42, 43, 52)));
+        assert_eq!(theme.focused_style().fg, Some(theme.foreground));
+        assert!(contrast((201, 205, 224), (42, 43, 52)) >= 4.5);
+        assert!(contrast((112, 214, 155), (42, 43, 52)) >= 4.5);
+    }
+
+    #[test]
+    fn automatic_light_surface_moves_toward_black() {
+        let theme = Theme::resolve_with_palette(
+            ThemePreference::Auto,
+            true,
+            Some(TerminalPalette {
+                foreground: (30, 31, 34),
+                background: (245, 244, 240),
+                dark: false,
+            }),
+        );
+        assert_eq!(theme.focused_surface, Some(Color::Rgb(225, 224, 221)));
+        assert!(contrast((30, 31, 34), (225, 224, 221)) >= 4.5);
+        assert!(contrast((45, 106, 79), (225, 224, 221)) >= 4.5);
+    }
+
+    #[test]
+    fn limited_and_failed_auto_detection_keep_a_non_color_focus_cue() {
+        for preference in [ThemePreference::Auto, ThemePreference::Limited] {
+            assert!(
+                Theme::resolve(preference, true)
+                    .focused_style()
+                    .add_modifier
+                    .contains(Modifier::REVERSED)
+            );
+        }
     }
 
     #[test]

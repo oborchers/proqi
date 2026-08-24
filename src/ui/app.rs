@@ -4,7 +4,6 @@ mod agent;
 mod clipboard;
 mod commands;
 mod control;
-mod draft;
 mod editing;
 mod folds;
 mod palette;
@@ -164,7 +163,6 @@ pub struct BoardApp {
     /// Reducer-owned application state rendered by the board.
     pub state: AppState,
     editor: Option<(ThoughtId, Box<dyn Editor>)>,
-    draft: Option<draft::DraftState>,
     editor_factory: Box<dyn EditorFactory>,
     pending_edit: Option<editing::PendingEdit>,
     edit_generation: u64,
@@ -213,10 +211,14 @@ impl BoardApp {
         settings: UiSettings,
         editor_factory: impl EditorFactory + 'static,
     ) -> Self {
+        let insertion_focus = if state.board.live_thoughts().is_empty() {
+            InsertionFocus::Active
+        } else {
+            InsertionFocus::Inactive
+        };
         Self {
             state,
             editor: None,
-            draft: None,
             editor_factory: Box::new(editor_factory),
             pending_edit: None,
             edit_generation: 0,
@@ -230,7 +232,7 @@ impl BoardApp {
             dragged_thought: None,
             drag_target: None,
             hovered: None,
-            insertion_focus: InsertionFocus::Inactive,
+            insertion_focus,
             edit_boundary: None,
             palette: None,
             search: None,
@@ -256,13 +258,15 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
+        if self.help {
+            return self.handle_help_input(&input);
+        }
         if input == UiInput::Key(UiKey::Quit) {
             let effects = if matches!(self.state.durability, DurabilityState::Failed { .. }) {
                 Vec::new()
             } else {
                 self.flush_pending_edit(ids, clock)
             };
-            self.discard_draft();
             self.request_quit();
             return effects;
         }
@@ -326,6 +330,37 @@ impl BoardApp {
         }
     }
 
+    fn handle_help_input(&mut self, input: &UiInput) -> Vec<Effect> {
+        match input {
+            UiInput::Key(UiKey::Escape) => self.help = false,
+            UiInput::Key(UiKey::Character(character))
+                if *character == self.settings.keybindings.help =>
+            {
+                self.help = false;
+            }
+            UiInput::Resize { .. } => {
+                self.layout = None;
+                self.hovered = None;
+            }
+            UiInput::Pointer(pointer) => {
+                if self
+                    .layout
+                    .as_ref()
+                    .and_then(|layout| layout.hit_test(pointer.column, pointer.row))
+                    == Some(HitTarget::CloseOverlay)
+                    && matches!(pointer.kind, PointerKind::Down(PointerButton::Left))
+                {
+                    self.help = false;
+                }
+            }
+            UiInput::HostFocusGained
+            | UiInput::Key(_)
+            | UiInput::Paste(_)
+            | UiInput::PasteAnnotated(_) => {}
+        }
+        Vec::new()
+    }
+
     /// Rebuild the editor adapter when reducer state changes externally.
     pub fn sync_editor_from_state(&mut self) {
         let InteractionMode::Edit { thought_id } = self.state.mode else {
@@ -378,7 +413,6 @@ impl BoardApp {
     }
 
     pub(super) fn request_quit(&mut self) {
-        self.discard_draft();
         if matches!(
             self.state.durability,
             DurabilityState::Failed { failed, .. }
@@ -397,10 +431,6 @@ impl BoardApp {
         clock: &impl Clock,
     ) -> Vec<Effect> {
         self.insertion_focus = InsertionFocus::Inactive;
-        if payload.content.is_empty() {
-            return self.start_draft(ids, clock);
-        }
-        self.discard_draft();
         let effects = self.reduce(Action::CreateThought {
             thought_id: ids.thought_id(),
             operation_id: ids.operation_id(),
@@ -416,9 +446,6 @@ impl BoardApp {
     fn enter_edit(&mut self) {
         self.insertion_focus = InsertionFocus::Inactive;
         self.edit_boundary = None;
-        if self.draft.is_some() {
-            return;
-        }
         if let Some(thought_id) = self.state.focused_thought {
             let _effects = self.reduce(Action::EnterEdit(thought_id));
             self.sync_editor_from_state();

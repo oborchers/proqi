@@ -35,7 +35,14 @@ fn render_control(
     keys: &crate::ui::KeyBindings,
     theme: &Theme,
 ) {
-    let label = label(app, target, area.width, keys);
+    let label = if target == HitTarget::RenameSession {
+        ControlLabel {
+            key: String::new(),
+            text: app.session_display_name().to_owned(),
+        }
+    } else {
+        label(app, target, area.width, keys)
+    };
     let available = usize::from(area.width).saturating_sub(label.key.width());
     let text = truncate(&label.text, available);
     let line = Line::from(vec![
@@ -98,9 +105,6 @@ fn render_context(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot
 }
 
 fn durability(app: &BoardApp) -> &'static str {
-    if app.has_draft() {
-        return "draft";
-    }
     match app.state.durability {
         DurabilityState::Durable { .. } if app.has_pending_edit() => "saving",
         DurabilityState::Durable { .. } => "saved",

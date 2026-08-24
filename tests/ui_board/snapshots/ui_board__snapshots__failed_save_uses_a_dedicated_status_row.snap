@@ -1,12 +1,13 @@
 ---
 source: tests/ui_board/snapshots.rs
+assertion_line: 125
 expression: "snapshot(&mut fixture, 55, 9, ThemePreference::Dark)"
 ---
 SIZE 55x9
 
 TEXT
-00│⋮ important prompt│
-01││
+00││
+01│⋮ important prompt│
 02││
 03││
 04││
@@ -16,8 +17,8 @@ TEXT
 08│  r Retry  w Export   ? Shortcuts│
 
 STYLE RUNS
-0: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-54 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
-1: 0-54 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+0: 0-54 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+1: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-54 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
 2: 0-54 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 3: 0-54 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 4: 0-54 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE

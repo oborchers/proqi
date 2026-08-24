@@ -51,6 +51,54 @@ fn arrows_and_jk_share_focus_and_reorder_intentions_on_the_board() {
 }
 
 #[test]
+fn keyboard_reordering_wraps_at_both_board_edges() {
+    let mut fixture = Fixture::new();
+    for content in ["first", "second", "third"] {
+        durable_thought(&mut fixture, content);
+    }
+    fixture.input(UiInput::Key(UiKey::Character('J')));
+    assert_eq!(
+        fixture
+            .app
+            .state
+            .board
+            .live_thoughts()
+            .iter()
+            .map(|thought| thought.content.as_str())
+            .collect::<Vec<_>>(),
+        ["third", "first", "second"]
+    );
+    fixture.input(UiInput::Key(UiKey::Character('K')));
+    assert_eq!(
+        fixture
+            .app
+            .state
+            .board
+            .live_thoughts()
+            .iter()
+            .map(|thought| thought.content.as_str())
+            .collect::<Vec<_>>(),
+        ["first", "second", "third"]
+    );
+}
+
+#[test]
+fn help_is_modal_and_escape_closes_it_without_mutating_the_board() {
+    let mut fixture = Fixture::new();
+    durable_thought(&mut fixture, "unchanged");
+    fixture.input(UiInput::Key(UiKey::Character('?')));
+    assert!(fixture.app.help);
+    fixture.input(UiInput::Key(UiKey::Character('d')));
+    assert_eq!(fixture.app.state.board.live_thoughts().len(), 1);
+    fixture.input(UiInput::Key(UiKey::Escape));
+    assert!(!fixture.app.help);
+    assert_eq!(
+        fixture.app.state.board.live_thoughts()[0].content,
+        "unchanged"
+    );
+}
+
+#[test]
 fn insertion_row_is_keyboard_focusable_and_printable_keys_start_content() {
     let mut fixture = Fixture::new();
     durable_thought(&mut fixture, "existing");
@@ -60,7 +108,7 @@ fn insertion_row_is_keyboard_focusable_and_printable_keys_start_content() {
 
     fixture.input(UiInput::Key(UiKey::Character('j')));
     assert_eq!(
-        fixture.app.editor_snapshot().expect("draft editor").content,
+        fixture.app.editor_snapshot().expect("new editor").content,
         "j"
     );
     assert_eq!(fixture.app.state.board.live_thoughts().len(), 2);
@@ -197,12 +245,22 @@ fn overflowing_board_clamps_to_a_useful_last_page_and_resets_after_resize() {
 #[test]
 fn current_session_can_be_renamed_from_the_palette_and_footer() {
     let mut fixture = Fixture::new();
+    durable_thought(&mut fixture, "existing");
     fixture.input(UiInput::Key(UiKey::Character(':')));
     for character in "rename session".chars() {
         fixture.input(UiInput::Key(UiKey::Character(character)));
     }
     fixture.input(UiInput::Key(UiKey::Enter));
     assert_eq!(fixture.app.session_rename_view(), Some(""));
+    let rename_layout = fixture.app.prepare_frame(Rect::new(0, 0, 70, 10));
+    let rename_input = rename_layout.overlay.expect("rename overlay").area;
+    let terminal = draw_theme(&mut fixture, 70, 10, ThemePreference::Dark);
+    assert_eq!(
+        terminal.backend().buffer()[(rename_input.x + 1, rename_input.y + 1)].bg,
+        Theme::resolve(ThemePreference::Dark, true)
+            .focused_surface
+            .expect("surface")
+    );
     for character in "Agent research".chars() {
         fixture.input(UiInput::Key(UiKey::Character(character)));
     }
@@ -223,6 +281,15 @@ fn current_session_can_be_renamed_from_the_palette_and_footer() {
         .iter()
         .find(|(target, _)| *target == HitTarget::RenameSession)
         .expect("rename target");
+    fixture.pointer(area.x, area.y, PointerKind::Move);
+    let terminal = draw_theme(&mut fixture, 70, 10, ThemePreference::Dark);
+    assert_eq!(
+        terminal.backend().buffer()[(area.x, area.y)].bg,
+        Theme::resolve(ThemePreference::Dark, true)
+            .focused_surface
+            .expect("focused surface")
+    );
+    assert_eq!(terminal.backend().buffer()[(area.x, area.y)].symbol(), "A");
     fixture.pointer(area.x, area.y, PointerKind::Down(PointerButton::Left));
     assert_eq!(fixture.app.session_rename_view(), Some("Agent research"));
 }
@@ -230,6 +297,7 @@ fn current_session_can_be_renamed_from_the_palette_and_footer() {
 #[test]
 fn failed_session_rename_restores_the_previous_durable_name() {
     let mut fixture = Fixture::new();
+    durable_thought(&mut fixture, "existing");
     fixture.app.state.board.session.name = Some("Durable".to_owned());
     fixture.input(UiInput::Key(UiKey::Character(':')));
     for character in "rename session".chars() {

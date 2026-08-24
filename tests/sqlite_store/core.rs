@@ -112,6 +112,42 @@ fn opens_with_durable_pragmas_and_round_trips_session() {
 }
 
 #[test]
+fn explicitly_created_blank_thought_survives_reopen_and_remains_undoable() {
+    let fixture = DatabaseFixture::new();
+    let mut store = fixture.open();
+    let mut ids = FakeIdGenerator::new(1_725_000_000_000);
+    let mut state = session_state(&mut ids, &test_path("proqi-blank"));
+    let session_id = state.board.session.id;
+    store
+        .commit(&OperationBatch::CreateSession(state.board.session.clone()))
+        .expect("create session");
+    let blank = create_thought(&mut store, &mut state, &mut ids, "", 2);
+    drop(store);
+
+    let mut reopened = fixture.open();
+    let snapshot = reopened.load_session(session_id).expect("reopen blank");
+    assert_eq!(snapshot.board.thought(blank).expect("blank").content, "");
+    let mut restored = AppState::from_snapshot(snapshot).expect("rehydrate blank");
+    let undo = one_effect(
+        &mut restored,
+        Action::Undo {
+            operation_id: ids.operation_id(),
+            scope: UndoScope::Board,
+            at: Timestamp::from_millis(3),
+        },
+    );
+    persist_effect(&mut reopened, &undo);
+    assert!(
+        reopened
+            .load_session(session_id)
+            .expect("undone blank")
+            .board
+            .live_thoughts()
+            .is_empty()
+    );
+}
+
+#[test]
 fn board_editor_and_persistent_history_survive_reopen() {
     let fixture = DatabaseFixture::new();
     let (store, mut state, mut ids, first, second) = seeded_history(&fixture);
