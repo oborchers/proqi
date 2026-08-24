@@ -62,6 +62,10 @@ impl BoardApp {
                 self.collapse(ids, clock)
             }
             Some(HitTarget::Insert) => self.create(String::new(), ids, clock),
+            Some(HitTarget::Search) => {
+                self.open_search();
+                Vec::new()
+            }
             Some(HitTarget::Commands) => {
                 self.open_palette();
                 Vec::new()
@@ -82,7 +86,11 @@ impl BoardApp {
                 Vec::new()
             }
             Some(HitTarget::PaletteItem(index)) => {
-                self.execute_palette_visible_index(index, ids, clock)
+                if self.search.is_some() {
+                    self.execute_search_visible_index(index)
+                } else {
+                    self.execute_palette_visible_index(index, ids, clock)
+                }
             }
             Some(HitTarget::CloseOverlay) => {
                 self.close_overlay();

@@ -8,6 +8,7 @@ mod editing;
 mod palette;
 mod pointer;
 mod recovery;
+mod search;
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -165,6 +166,7 @@ pub struct BoardApp {
     drag_target: Option<usize>,
     hovered: Option<HitTarget>,
     palette: Option<palette::PaletteState>,
+    search: Option<search::SearchState>,
     settings: UiSettings,
     expanded: BTreeSet<ThoughtId>,
     pending_editor_clipboard: BTreeMap<RequestId, PendingEditorClipboard>,
@@ -207,6 +209,7 @@ impl BoardApp {
             drag_target: None,
             hovered: None,
             palette: None,
+            search: None,
             settings,
             expanded: BTreeSet::new(),
             pending_editor_clipboard: BTreeMap::new(),
@@ -240,6 +243,9 @@ impl BoardApp {
         }
         if self.palette.is_some() {
             return self.handle_palette_input(&input, ids, clock);
+        }
+        if self.search.is_some() {
+            return self.handle_search_input(&input, ids, clock);
         }
         if self.submission_mode.is_some()
             && let Some(effects) = self.handle_submission_input(&input, ids, clock)
@@ -295,7 +301,7 @@ impl BoardApp {
 
     /// Filtered command labels and current selection for rendering.
     #[must_use]
-    pub fn palette_view(&self) -> Option<(String, Vec<&'static str>, usize)> {
+    pub fn palette_view(&self) -> Option<(String, Vec<String>, usize)> {
         self.palette.as_ref().map(palette::PaletteState::view)
     }
 
@@ -359,14 +365,17 @@ impl BoardApp {
             .palette
             .as_ref()
             .map_or(0, palette::PaletteState::match_count);
+        let search_items = self.search_match_count();
         let preferred_rows = if self.help {
             9
         } else if self.palette.is_some() {
             palette_items.max(2)
+        } else if self.search.is_some() {
+            search_items.max(2)
         } else {
             0
         };
-        layout.configure_overlay(palette_items, preferred_rows);
+        layout.configure_overlay(palette_items.max(search_items), preferred_rows);
         layout.configure_agent_controls(&self.agent_targets);
         let final_height = self
             .state

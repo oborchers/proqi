@@ -107,6 +107,12 @@ fn grapheme_width(grapheme: &str, column: usize) -> usize {
     }
 }
 
+pub(crate) fn display_width(text: &str) -> usize {
+    text.graphemes(true).fold(0, |column, grapheme| {
+        column + grapheme_width(grapheme, column)
+    })
+}
+
 fn display_text(graphemes: &[(usize, &str)]) -> String {
     let mut display = String::new();
     let mut cells = 0;

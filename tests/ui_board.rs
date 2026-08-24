@@ -141,6 +141,23 @@ fn multiline_unicode_is_rendered_as_lines_and_cursor_uses_cell_width() {
 }
 
 #[test]
+fn cursor_uses_expanded_tab_cells() {
+    let mut fixture = Fixture::new();
+    fixture.paste("a\tb");
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::GraphemeBack,
+        extend_selection: false,
+    }));
+    let mut terminal = draw(&mut fixture, 20, 5);
+    let cursor = terminal
+        .backend_mut()
+        .get_cursor_position()
+        .expect("cursor position");
+    assert_eq!(cursor.x, 6);
+    assert_eq!(cursor.y, 0);
+}
+
+#[test]
 fn exact_wrap_boundary_keeps_the_terminal_cursor_visible() {
     let mut fixture = Fixture::new();
     fixture.paste("123456");
@@ -287,13 +304,13 @@ fn keyboard_selection_is_logical_and_visible() {
 #[test]
 fn command_palette_is_searchable_and_mouse_operable() {
     let mut fixture = Fixture::new();
-    fixture.input(UiInput::Key(UiKey::Character('/')));
+    fixture.input(UiInput::Key(UiKey::Character(':')));
     for character in "quit".chars() {
         fixture.input(UiInput::Key(UiKey::Character(character)));
     }
     let terminal = draw(&mut fixture, 40, 12);
     let rendered = text(terminal.backend().buffer());
-    assert!(rendered.contains("/quit"));
+    assert!(rendered.contains(":quit"));
     assert!(rendered.contains("Quit Proqi"));
     assert!(!rendered.contains("New thought"));
 
@@ -304,7 +321,7 @@ fn command_palette_is_searchable_and_mouse_operable() {
 #[test]
 fn palette_quit_is_global_and_shallow_navigation_stays_visible() {
     let mut fixture = Fixture::new();
-    fixture.input(UiInput::Key(UiKey::Character('/')));
+    fixture.input(UiInput::Key(UiKey::Character(':')));
     let _terminal = draw(&mut fixture, 30, 5);
     for _ in 0..10 {
         fixture.input(UiInput::Key(UiKey::Move {
@@ -318,6 +335,31 @@ fn palette_quit_is_global_and_shallow_navigation_stays_visible() {
 
     fixture.input(UiInput::Key(UiKey::Quit));
     assert!(fixture.app.quit);
+}
+
+#[test]
+fn thought_search_filters_content_and_focuses_the_selected_match() {
+    let mut fixture = Fixture::new();
+    fixture.paste("first searchable prompt");
+    let first = fixture.app.state.focused_thought.expect("first thought");
+    fixture.input(UiInput::Key(UiKey::Escape));
+    fixture.paste("unrelated second prompt");
+    fixture.input(UiInput::Key(UiKey::Escape));
+
+    fixture.input(UiInput::Key(UiKey::Character('/')));
+    for character in "searchable".chars() {
+        fixture.input(UiInput::Key(UiKey::Character(character)));
+    }
+    let terminal = draw(&mut fixture, 40, 10);
+    let rendered = text(terminal.backend().buffer());
+    assert!(rendered.contains("/searchable"));
+    assert!(rendered.contains("first searchable prompt"));
+    let (_, results, _) = fixture.app.search_view().expect("search view");
+    assert_eq!(results, ["first searchable prompt"]);
+
+    fixture.input(UiInput::Key(UiKey::Enter));
+    assert_eq!(fixture.app.state.focused_thought, Some(first));
+    assert!(fixture.app.search_view().is_none());
 }
 
 #[test]
@@ -421,7 +463,7 @@ fn narrow_empty_board_has_a_complete_explicit_buffer_snapshot() {
     let terminal = draw(&mut fixture, 12, 3);
     assert_eq!(
         text(terminal.backend().buffer()),
-        "  +  create \n            \n[u][/][?][q]"
+        "  +  create \n            \n[:][/][?][q]"
     );
 }
 

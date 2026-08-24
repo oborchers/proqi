@@ -67,13 +67,13 @@ impl PaletteState {
         }
     }
 
-    pub(super) fn view(&self) -> (String, Vec<&'static str>, usize) {
+    pub(super) fn view(&self) -> (String, Vec<String>, usize) {
         (
             self.query.clone(),
             self.matches()
                 .into_iter()
                 .skip(self.scroll)
-                .map(|(_, label)| label)
+                .map(|(_, label)| label.to_owned())
                 .collect(),
             self.selected.saturating_sub(self.scroll),
         )
@@ -100,11 +100,13 @@ impl PaletteState {
 impl BoardApp {
     pub(super) fn open_palette(&mut self) {
         self.help = false;
+        self.search = None;
         self.palette = Some(PaletteState::new());
     }
 
     pub(super) fn close_overlay(&mut self) {
         self.palette = None;
+        self.search = None;
         self.help = false;
     }
 

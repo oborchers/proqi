@@ -91,7 +91,8 @@ fallbacks remain available when a terminal cannot report a particular modifier.
 | `x` or `Primary+X` | Cut only after confirmed clipboard success |
 | `u` | Undo the latest board operation |
 | `Space` | Collapse or expand a long thought |
-| `/` | Search commands |
+| `/` | Search thought content |
+| `:` | Search commands |
 | `?` | Open contextual help |
 
 | Editor | Action |
@@ -104,7 +105,8 @@ fallbacks remain available when a terminal cannot report a particular modifier.
 | `Primary+V` | Read the native clipboard |
 
 Mouse users can focus and edit thoughts, place the cursor, drag a selection,
-scroll, reorder thoughts, click controls, use help, and choose Herdr targets.
+scroll, reorder thoughts, search, click controls, use help, and choose Herdr
+targets.
 
 ## Sessions that can be resumed
 
@@ -218,7 +220,8 @@ focus_down = "j"
 move_up = "K"
 move_down = "J"
 collapse = " "
-commands = "/"
+search = "/"
+commands = ":"
 help = "?"
 quit = "q"
 ```
@@ -247,6 +250,11 @@ linting and remains subject to the same file ceiling.
 CI runs the same gates on Linux, macOS, and Windows where applicable. Enable the
 optional local hook explicitly with `cargo xtask install-hooks`. Builds never
 change Git configuration automatically.
+
+Content-redacted diagnostics are written to the platform-native Proqi data
+directory under `diagnostics/proqi.log`. The private file is truncated at one
+MiB on process startup. Thought text, clipboard content, and command arguments
+are never logged.
 
 The demo is generated from the real release binary with
 [VHS](https://github.com/charmbracelet/vhs):

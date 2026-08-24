@@ -21,6 +21,8 @@ pub enum HitTarget {
     Overflow(ThoughtId),
     /// Active insertion area.
     Insert,
+    /// Search current thought content.
+    Search,
     /// Searchable command discovery.
     Commands,
     /// Copy the focused thought.
@@ -37,7 +39,7 @@ pub enum HitTarget {
     Help,
     /// Clean exit action.
     Quit,
-    /// Search result within the command palette.
+    /// Search result within the active modal picker.
     PaletteItem(usize),
     /// Close the active help or command overlay.
     CloseOverlay,
@@ -352,6 +354,7 @@ fn footer_controls(area: Rect) -> Vec<(HitTarget, Rect)> {
         (HitTarget::Copy, 3),
         (HitTarget::Undo, 3),
         (HitTarget::Commands, 3),
+        (HitTarget::Search, 3),
         (HitTarget::Help, 3),
         (HitTarget::Quit, 3),
     ];

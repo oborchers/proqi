@@ -25,9 +25,35 @@ pub fn render(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, th
     frame.render_widget(Block::default().style(theme.base_style()), layout.area);
     render_board(frame, app, layout, theme);
     render_footer(frame, app, layout, theme);
-    if let Some((query, entries, selected)) = app.palette_view() {
+    if let Some((query, entries, selected)) = app.search_view() {
         if let Some(overlay) = &layout.overlay {
-            render_palette(frame, overlay, &query, &entries, selected, theme);
+            render_picker(
+                frame,
+                overlay,
+                &PickerView {
+                    title: " thoughts ",
+                    prompt: '/',
+                    query: &query,
+                    entries: &entries,
+                    selected,
+                },
+                theme,
+            );
+        }
+    } else if let Some((query, entries, selected)) = app.palette_view() {
+        if let Some(overlay) = &layout.overlay {
+            render_picker(
+                frame,
+                overlay,
+                &PickerView {
+                    title: " commands ",
+                    prompt: ':',
+                    query: &query,
+                    entries: &entries,
+                    selected,
+                },
+                theme,
+            );
         }
     } else if app.help
         && let Some(overlay) = &layout.overlay
@@ -223,11 +249,16 @@ fn cursor_column(snapshot: &crate::ports::editor::EditorSnapshot, cursor_row: us
         .get(snapshot.scroll_row + cursor_row)
         .map_or(0, |line| {
             let offset = snapshot.cursor.grapheme.saturating_sub(line.start_grapheme);
-            line.text
+            let logical = snapshot
+                .content
+                .split('\n')
+                .nth(line.logical_line)
+                .unwrap_or_default()
                 .graphemes(true)
+                .skip(line.start_grapheme)
                 .take(offset)
-                .map(unicode_width::UnicodeWidthStr::width)
-                .sum()
+                .collect::<String>();
+            crate::ports::text_layout::display_width(&logical)
         })
 }
 
@@ -265,6 +296,7 @@ fn render_footer(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot,
     );
     for (target, area) in &layout.controls {
         let label = match target {
+            HitTarget::Search => format!("[{}]", keys.search),
             HitTarget::Commands => format!("[{}]", keys.commands),
             HitTarget::Copy => format!("[{}]", keys.copy),
             HitTarget::Cut => format!("[{}]", keys.cut),
@@ -305,7 +337,7 @@ const fn direction_symbol(direction: crate::domain::Direction) -> &'static str {
 fn render_help(frame: &mut Frame<'_>, app: &BoardApp, overlay: &OverlayLayout, theme: &Theme) {
     let keys = app.keybindings();
     let content = format!(
-        "Board\n  {} new   {}/{} focus   Enter/{} edit   {} delete\n  {}/{} move   {} undo   {} collapse   {}/{} submit   {} quit\n\nEdit\n  Esc board   Primary+A select all   Primary+U delete line\n  Primary+Z undo   Shift+Primary+Z redo\n\nPaste and file drop are one operation. Clipboard images become private PNG paths. Submission uses verified Herdr agents only.",
+        "Board\n  {} new   {}/{} focus   Enter/{} edit   {} delete\n  {}/{} move   {} undo   {} collapse   {} search   {} commands\n  {}/{} submit   {} quit\n\nEdit\n  Esc board   Primary+A select all   Primary+U delete line\n  Primary+Z undo   Shift+Primary+Z redo\n\nPaste and file drop are one operation. Clipboard images become private PNG paths. Submission uses verified Herdr agents only.",
         keys.new,
         keys.focus_down,
         keys.focus_up,
@@ -315,6 +347,8 @@ fn render_help(frame: &mut Frame<'_>, app: &BoardApp, overlay: &OverlayLayout, t
         keys.move_up,
         keys.undo,
         keys.collapse,
+        keys.search,
+        keys.commands,
         keys.submit,
         keys.submit_remove,
         keys.quit,
@@ -341,29 +375,35 @@ fn render_help(frame: &mut Frame<'_>, app: &BoardApp, overlay: &OverlayLayout, t
     );
 }
 
-fn render_palette(
+struct PickerView<'a> {
+    title: &'a str,
+    prompt: char,
+    query: &'a str,
+    entries: &'a [String],
+    selected: usize,
+}
+
+fn render_picker(
     frame: &mut Frame<'_>,
     overlay: &OverlayLayout,
-    query: &str,
-    entries: &[&str],
-    selected: usize,
+    picker: &PickerView<'_>,
     theme: &Theme,
 ) {
     frame.render_widget(Clear, overlay.area);
     frame.render_widget(
-        Paragraph::new(format!("/{query}"))
-            .block(Block::default().title(" commands ").borders(Borders::ALL)),
+        Paragraph::new(format!("{}{query}", picker.prompt, query = picker.query))
+            .block(Block::default().title(picker.title).borders(Borders::ALL)),
         overlay.area,
     );
-    for (index, (entry, area)) in entries.iter().zip(&overlay.items).enumerate() {
-        let style = if index == selected {
+    for (index, (entry, area)) in picker.entries.iter().zip(&overlay.items).enumerate() {
+        let style = if index == picker.selected {
             Style::default()
                 .fg(theme.accent)
                 .add_modifier(Modifier::REVERSED)
         } else {
             Style::default()
         };
-        frame.render_widget(Paragraph::new(*entry).style(style), *area);
+        frame.render_widget(Paragraph::new(entry.as_str()).style(style), *area);
     }
     frame.render_widget(
         Paragraph::new("[x]").style(Style::default().fg(theme.accent)),

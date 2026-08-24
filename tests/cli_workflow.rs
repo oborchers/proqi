@@ -81,6 +81,34 @@ fn add_with_idempotency(root: &Path, session: &str, body: &str) -> String {
 }
 
 #[test]
+fn file_diagnostics_are_private_bounded_and_content_redacted() {
+    let temporary = tempfile::tempdir().expect("temporary directory");
+    let session = create_session(temporary.path());
+    let secret = "never-log-this-thought-body";
+    let _thought = add_with_idempotency(temporary.path(), &session, secret);
+    let log_path = temporary.path().join("data/diagnostics/proqi.log");
+    let log = std::fs::read_to_string(&log_path).expect("diagnostic log");
+    assert!(log.contains("diagnostics_initialized"));
+    assert!(log.contains("command_succeeded"));
+    assert!(!log.contains(secret));
+    assert!(std::fs::metadata(&log_path).expect("log metadata").len() < 1024 * 1024);
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        assert_eq!(
+            std::fs::metadata(&log_path)
+                .expect("log metadata")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o600
+        );
+    }
+}
+
+#[test]
 fn session_management_is_searchable_recoverable_and_explicitly_prunable() {
     let temporary = tempfile::tempdir().expect("temporary directory");
     let root = temporary.path();

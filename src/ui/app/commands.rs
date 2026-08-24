@@ -71,6 +71,10 @@ impl BoardApp {
             Some(BoardCommand::MoveUp) => self.reorder(ids, clock, -1),
             Some(BoardCommand::MoveDown) => self.reorder(ids, clock, 1),
             Some(BoardCommand::Collapse) => self.collapse(ids, clock),
+            Some(BoardCommand::Search) => {
+                self.open_search();
+                Vec::new()
+            }
             Some(BoardCommand::Commands) => {
                 self.open_palette();
                 Vec::new()

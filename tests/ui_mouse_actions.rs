@@ -103,3 +103,33 @@ fn narrow_footer_keeps_the_mouse_operable_command_palette() {
     );
     assert!(fixture.app.palette_view().is_some());
 }
+
+#[test]
+fn search_control_and_result_are_mouse_operable() {
+    let mut fixture = Fixture::new();
+    assert!(
+        fixture
+            .click(HitTarget::Search, Size::new(40, 8))
+            .is_empty()
+    );
+    assert!(fixture.app.search_view().is_some());
+
+    let layout = fixture.app.prepare_frame(Rect::new(0, 0, 40, 8));
+    let result = layout
+        .overlay
+        .expect("search overlay")
+        .items
+        .first()
+        .copied()
+        .expect("thought result");
+    fixture.app.handle(
+        UiInput::Pointer(PointerInput {
+            column: result.x,
+            row: result.y,
+            kind: PointerKind::Down(PointerButton::Left),
+        }),
+        &mut fixture.ids,
+        &fixture.clock,
+    );
+    assert!(fixture.app.search_view().is_none());
+}

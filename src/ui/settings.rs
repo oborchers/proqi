@@ -57,7 +57,9 @@ pub struct KeyBindings {
     pub move_down: char,
     /// Toggle expanded presentation.
     pub collapse: char,
-    /// Search commands.
+    /// Search thought content.
+    pub search: char,
+    /// Discover commands.
     pub commands: char,
     /// Show help.
     pub help: char,
@@ -81,7 +83,8 @@ impl Default for KeyBindings {
             move_up: 'K',
             move_down: 'J',
             collapse: ' ',
-            commands: '/',
+            search: '/',
+            commands: ':',
             help: '?',
             quit: 'q',
         }
@@ -103,6 +106,7 @@ pub(super) enum BoardCommand {
     MoveUp,
     MoveDown,
     Collapse,
+    Search,
     Commands,
     Help,
     Quit,
@@ -124,6 +128,7 @@ impl KeyBindings {
             (self.move_up, BoardCommand::MoveUp),
             (self.move_down, BoardCommand::MoveDown),
             (self.collapse, BoardCommand::Collapse),
+            (self.search, BoardCommand::Search),
             (self.commands, BoardCommand::Commands),
             (self.help, BoardCommand::Help),
             (self.quit, BoardCommand::Quit),
@@ -153,6 +158,7 @@ impl KeyBindings {
             self.move_up,
             self.move_down,
             self.collapse,
+            self.search,
             self.commands,
             self.help,
             self.quit,

@@ -3,6 +3,7 @@
 use std::{
     io::{Read, Write},
     process::{Command, Stdio},
+    sync::mpsc::{self, Receiver, RecvTimeoutError},
     thread,
     time::{Duration, Instant},
 };
@@ -38,13 +39,14 @@ impl ProcessRunner for SystemProcessRunner {
             .stderr
             .take()
             .ok_or_else(|| ProcessError::Io("child standard error is unavailable".to_owned()))?;
-        let stdout_reader = thread::spawn(move || read_bounded(stdout));
-        let stderr_reader = thread::spawn(move || read_bounded(stderr));
-        let stdin_writer = thread::spawn(move || write_input(stdin, request.stdin));
-        let exit_code = wait_for_exit(&mut child, request.timeout)?;
-        join_writer(stdin_writer)?;
-        let stdout = join_reader(stdout_reader)?;
-        let stderr = join_reader(stderr_reader)?;
+        let stdout_reader = read_in_background(stdout);
+        let stderr_reader = read_in_background(stderr);
+        let stdin_writer = write_in_background(stdin, request.stdin);
+        let deadline = Deadline::new(request.timeout);
+        let exit_code = wait_for_exit(&mut child, deadline)?;
+        receive_writer(&stdin_writer, deadline)?;
+        let stdout = receive_reader(&stdout_reader, deadline)?;
+        let stderr = receive_reader(&stderr_reader, deadline)?;
         if stdout.exceeded || stderr.exceeded {
             return Err(ProcessError::OutputLimit);
         }
@@ -54,6 +56,46 @@ impl ProcessRunner for SystemProcessRunner {
             stderr: stderr.bytes,
         })
     }
+}
+
+#[derive(Clone, Copy)]
+struct Deadline {
+    started: Instant,
+    timeout: Duration,
+}
+
+impl Deadline {
+    fn new(timeout: Duration) -> Self {
+        Self {
+            started: Instant::now(),
+            timeout,
+        }
+    }
+
+    fn remaining(self) -> Option<Duration> {
+        self.timeout.checked_sub(self.started.elapsed())
+    }
+}
+
+fn read_in_background(
+    reader: impl Read + Send + 'static,
+) -> Receiver<std::io::Result<BoundedRead>> {
+    let (sender, receiver) = mpsc::channel();
+    thread::spawn(move || {
+        let _sent = sender.send(read_bounded(reader));
+    });
+    receiver
+}
+
+fn write_in_background(
+    writer: impl Write + Send + 'static,
+    input: Option<Vec<u8>>,
+) -> Receiver<std::io::Result<()>> {
+    let (sender, receiver) = mpsc::channel();
+    thread::spawn(move || {
+        let _sent = sender.send(write_input(writer, input));
+    });
+    receiver
 }
 
 fn write_input(mut writer: impl Write, input: Option<Vec<u8>>) -> std::io::Result<()> {
@@ -82,9 +124,8 @@ fn read_bounded(reader: impl Read) -> std::io::Result<BoundedRead> {
 
 fn wait_for_exit(
     child: &mut std::process::Child,
-    timeout: Duration,
+    deadline: Deadline,
 ) -> Result<Option<i32>, ProcessError> {
-    let deadline = Instant::now() + timeout;
     loop {
         if let Some(status) = child
             .try_wait()
@@ -92,7 +133,7 @@ fn wait_for_exit(
         {
             return Ok(status.code());
         }
-        if Instant::now() >= deadline {
+        if deadline.remaining().is_none() {
             let _killed = child.kill();
             let _waited = child.wait();
             return Err(ProcessError::TimedOut);
@@ -101,20 +142,35 @@ fn wait_for_exit(
     }
 }
 
-fn join_reader(
-    handle: thread::JoinHandle<std::io::Result<BoundedRead>>,
+fn receive_reader(
+    receiver: &Receiver<std::io::Result<BoundedRead>>,
+    deadline: Deadline,
 ) -> Result<BoundedRead, ProcessError> {
-    handle
-        .join()
-        .map_err(|_| ProcessError::Io("child output reader panicked".to_owned()))?
-        .map_err(|error| ProcessError::Io(error.to_string()))
+    receive_until(receiver, deadline, "child output reader")
 }
 
-fn join_writer(handle: thread::JoinHandle<std::io::Result<()>>) -> Result<(), ProcessError> {
-    handle
-        .join()
-        .map_err(|_| ProcessError::Io("child input writer panicked".to_owned()))?
-        .map_err(|error| ProcessError::Io(error.to_string()))
+fn receive_writer(
+    receiver: &Receiver<std::io::Result<()>>,
+    deadline: Deadline,
+) -> Result<(), ProcessError> {
+    receive_until(receiver, deadline, "child input writer")
+}
+
+fn receive_until<T>(
+    receiver: &Receiver<std::io::Result<T>>,
+    deadline: Deadline,
+    worker: &str,
+) -> Result<T, ProcessError> {
+    let Some(remaining) = deadline.remaining() else {
+        return Err(ProcessError::TimedOut);
+    };
+    match receiver.recv_timeout(remaining) {
+        Ok(result) => result.map_err(|error| ProcessError::Io(error.to_string())),
+        Err(RecvTimeoutError::Timeout) => Err(ProcessError::TimedOut),
+        Err(RecvTimeoutError::Disconnected) => {
+            Err(ProcessError::Io(format!("{worker} stopped unexpectedly")))
+        }
+    }
 }
 
 #[cfg(test)]
@@ -152,5 +208,20 @@ mod tests {
             timeout: Duration::from_millis(10),
         });
         assert_eq!(result, Err(ProcessError::TimedOut));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn inherited_output_pipe_cannot_extend_the_deadline() {
+        let started = std::time::Instant::now();
+        let mut runner = SystemProcessRunner;
+        let result = runner.run(ProcessRequest {
+            program: OsString::from("/bin/sh"),
+            args: vec![OsString::from("-c"), OsString::from("sleep 2 &")],
+            stdin: None,
+            timeout: Duration::from_millis(30),
+        });
+        assert_eq!(result, Err(ProcessError::TimedOut));
+        assert!(started.elapsed() < Duration::from_millis(500));
     }
 }

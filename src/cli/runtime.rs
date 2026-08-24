@@ -40,6 +40,9 @@ impl RuntimeContext {
             .current_directory()
             .map_err(|error| CliError::new("environment_failed", error.to_string(), 1))?;
         let paths = resolve_paths(state_root)?;
+        crate::adapters::diagnostics::initialize(&paths.data_dir)
+            .map_err(|error| CliError::new("diagnostics_failed", error.to_string(), 1))?;
+        tracing::info!(event = "runtime_opening");
         let config_dir = paths.config_dir.clone();
         let recovery_dir = paths.data_dir.join("recovery");
         let attachment_dir = paths.data_dir.join("attachments");
