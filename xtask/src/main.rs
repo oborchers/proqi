@@ -115,6 +115,7 @@ fn setup(root: &Path) -> Result<(), String> {
 
 fn check(root: &Path) -> Result<(), String> {
     run(root, "cargo", ["fmt", "--all", "--", "--check"])?;
+    check_whitespace(root)?;
     check_source_limits(root)?;
     snapshots::check(root)?;
     policy::check(root)?;
@@ -134,6 +135,12 @@ fn check(root: &Path) -> Result<(), String> {
     )?;
     check_docs(root)?;
     test(root)
+}
+
+fn check_whitespace(root: &Path) -> Result<(), String> {
+    run(root, "git", ["diff", "--check"])?;
+    run(root, "git", ["diff", "--cached", "--check"])?;
+    run(root, "git", ["show", "--check", "--format=", "HEAD"])
 }
 
 fn check_docs(root: &Path) -> Result<(), String> {

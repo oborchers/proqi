@@ -686,9 +686,11 @@ cargo xtask package
   and ownership of SQLite, terminal, process, environment, and filesystem
   implementation dependencies. Its detector tests include accepted and
   rejected examples, and the scan fails if expected source layers are absent.
-- `check` runs the normal pre-push gate: formatting in check mode, Clippy for
-  all targets and features, source limits, documentation warnings, and the
-  deterministic test suite through `cargo-nextest`.
+- `check` runs the normal pre-push gate: formatting in check mode, Git
+  whitespace validation for unstaged, staged, and committed HEAD content,
+  Clippy for all targets and features, source limits, reviewed-snapshot policy,
+  documentation warnings, and the deterministic test suite through
+  `cargo-nextest`.
 - `test` runs the deterministic unit, contract, and integration suites.
 - `test-pty` builds the real binary and runs pseudo-terminal scenarios.
 - `coverage` uses `cargo-llvm-cov` and produces machine-readable and human
