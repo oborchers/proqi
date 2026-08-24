@@ -5,7 +5,7 @@ Status: Initial architecture decision record
 Project: Proqi
 
 Command: `proqi`
-Last updated: 2026-08-23
+Last updated: 2026-08-24
 
 ## Purpose
 
@@ -282,10 +282,12 @@ trait AgentGateway {
 }
 ```
 
-The gateway returns verified targets and typed readiness states. It never
-returns a convenient but unverified pane. Submission success means the harness
-accepted the prompt operation. It does not mean the agent finished processing
-the prompt.
+Capabilities and targets expose typed delivery support for composer-only Send
+and immediate Submit separately. The gateway returns verified targets and typed
+readiness states. It never returns a convenient but unverified pane. Delivery
+success means the harness accepted the requested operation. It does not mean the
+agent finished processing the prompt. Unsupported modes fail before any process
+is executed.
 
 ### `RuntimeCoordinator`
 

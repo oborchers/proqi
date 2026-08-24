@@ -1,8 +1,8 @@
 # Proqi engineering contract
 
-These rules apply to all work in this repository. Read `PRODUCT.md` completely
-before changing visible behavior. Read `ARCHITECTURE.md` completely before
-changing implementation boundaries or durable contracts.
+These rules apply to all work in this repository. Read `context/PRODUCT.md`
+completely before changing visible behavior. Read `context/ARCHITECTURE.md`
+completely before changing implementation boundaries or durable contracts.
 
 `AGENTS.md` is the canonical instruction file at every scope. Each one must have
 a sibling relative `CLAUDE.md` symlink that points to it. Never duplicate or

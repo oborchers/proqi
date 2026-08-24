@@ -5,8 +5,8 @@
 <h1 align="center">Proqi</h1>
 
 <p align="center">
-  <strong>A session-aware prompt scratchpad for terminal-native agent work.</strong><br>
-  Capture the next thought while your coding agents are still busy.
+  <strong>The thoughtpad for humans working with agents.</strong><br>
+  Capture prompts, ideas, questions, and follow-ups while your agents are still busy.
 </p>
 
 <p align="center">
@@ -89,9 +89,9 @@ fallbacks remain available when a terminal cannot report a particular modifier.
 | Board | Action |
 | --- | --- |
 | Paste or click `+` | Create and focus a thought |
-| `j` / `k` or arrows | Focus the next or previous thought |
+| `j` / `k` or arrows | Focus the next or previous thought, including `+ New thought` |
 | `Enter` or `e` | Edit the focused thought |
-| `J` / `K` or drag | Reorder the focused thought |
+| `J` / `K`, `Shift+↑` / `Shift+↓`, or drag | Reorder the focused thought |
 | `y` or `Primary+C` | Copy the complete thought |
 | `x` or `Primary+X` | Cut only after confirmed clipboard success |
 | `u` | Undo the latest board operation |
@@ -108,13 +108,15 @@ fallbacks remain available when a terminal cannot report a particular modifier.
 | `Primary+Z` | Undo an edit |
 | `Shift+Primary+Z` | Redo an edit |
 | `Primary+V` | Read the native clipboard |
+| `↑` / `↓` twice at a text boundary | Return to the board and focus the adjacent thought |
 
 Mouse users can focus and edit thoughts, place the cursor, drag a selection,
 scroll, reorder thoughts, search, click controls, use help, and choose Herdr
 targets.
 
-Folded context expands with `Enter` or a click. Collapsed ranges behave as one
-cursor and deletion unit, so hidden content never traps the editing cursor.
+Clicking or moving onto folded context selects the complete placeholder.
+`Enter` expands it, while typing or deletion replaces the complete canonical
+range. Hidden content never traps the editing cursor.
 
 ## Sessions that can be resumed
 
@@ -184,12 +186,16 @@ does not scrape the TUI or read every scratchpad automatically.
 ## Optional Herdr submission
 
 Inside a Herdr-managed pane, Proqi can discover coding agents directly above,
-below, left, and right. A submit control appears only after the workspace, tab,
+below, left, and right. A delivery control appears only after the workspace, tab,
 geometry, edge overlap, agent kind, session identity, and readiness have all
 been verified through Herdr's structured protocol.
 
-Press `s` to submit while preserving the thought. Press `S` to remove it only
-after an accepted receipt. Ambiguity, timeout, rejection, or protocol mismatch
+`Send` places a thought in an agent composer without starting a turn. `Submit`
+starts the turn immediately. Each action is displayed only when the installed
+integration explicitly supports it. Herdr's current semantic contract supports
+`S Submit`, but not composer-only `s Send`, so Proqi does not display or simulate
+that unavailable action. Remove-after-acceptance variants live in the command
+palette. Ambiguity, timeout, rejection, or protocol mismatch
 leaves the thought unchanged. Proqi never invokes a shell, injects raw keys,
 reads the conversation, or waits for the agent response.
 
@@ -283,5 +289,5 @@ final open-source license, Homebrew formula versus cask, signing, notarization,
 and publication setup remain deliberately undecided. Nothing in the current
 workflow publishes artifacts or changes repository visibility.
 
-[`PRODUCT.md`](PRODUCT.md) defines user-visible behavior.
-[`ARCHITECTURE.md`](ARCHITECTURE.md) defines technical boundaries and invariants.
+[`context/PRODUCT.md`](context/PRODUCT.md) defines user-visible behavior.
+[`context/ARCHITECTURE.md`](context/ARCHITECTURE.md) defines technical boundaries and invariants.

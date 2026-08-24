@@ -5,7 +5,7 @@ Status: Working product vision
 Product name: Proqi
 
 Command: `proqi`
-Last updated: 2026-08-23
+Last updated: 2026-08-24
 
 ## Vision
 
@@ -303,9 +303,11 @@ Numbering restarts for each thought. The complete bracketed token uses the
 forest-green accent plus bold as a non-color cue, without exposing temporary
 paths or filenames.
 
-`Enter` or a mouse click on a folded token expands its exact path or text for
-editing. A collapsed token is one logical unit for cursor movement, selection,
-backspace, and delete, so the cursor can never disappear inside hidden content.
+Moving onto or clicking a folded token selects its complete visible placeholder.
+`Enter` expands the selected token's exact path or text for editing. Typing,
+backspace, and delete replace or remove the complete canonical range. A
+collapsed token is one logical editor unit, so the cursor can never disappear
+inside hidden content.
 Leaving edit mode returns expanded ranges to their compact presentation. Copy,
 cut, export, search, recovery, and agent submission always use exact canonical
 content regardless of the visible fold.
@@ -341,6 +343,11 @@ and exit discard an unchanged draft, and only one empty draft may exist at a
 time. The complete insertion row is clickable and reads
 `+ New thought` while focused or hovered instead of relying on an unexplained
 symbol. The user never needs a second action before typing.
+
+The insertion row is part of keyboard focus order. Moving down from the last
+thought focuses `+ New thought`. `Enter` opens the draft, and any printable key
+opens the draft and inserts that key as its first content. Moving up or pressing
+`Esc` leaves the insertion row without creating anything.
 
 ### Copy, cut, and delete
 
@@ -382,22 +389,27 @@ A submission target is eligible only when all of the following are true:
 Directional lookup is never trusted without these independent checks. The
 product never guesses a target and never falls back to raw input injection.
 
-If exactly one eligible adjacent agent exists, the interface presents one
-direct action such as `Send ← Codex`. If several exist, submission enters a
-directional targeting state. Arrow keys and `h`, `j`, `k`, and `l` choose among
-the enabled directions. Mouse users select the corresponding adjacent-agent
-indicator. The target agent, direction, and current state remain visible before
-the submission is committed. A dedicated integration row keeps `Send`, `Send+`,
-direction, agent kind, and readiness separate from board shortcuts and
-durability context.
+Prompt delivery has two distinct intentions. `Send` fills the target agent's
+composer without starting a turn. `Submit` starts the turn immediately. An
+integration must advertise each behavior independently. Unsupported behaviors
+remain hidden, and Proqi never substitutes raw key injection. Herdr's current
+semantic contract advertises immediate submission only.
+
+Each verified adjacent target appears once in the integration row, without its
+readiness label. If exactly one eligible target supports an action, that action
+is direct. If several support it, delivery enters a directional targeting state.
+Arrow keys and `h`, `j`, `k`, and `l` choose among the enabled directions. Mouse
+users select the corresponding adjacent-agent indicator. Remove-after-acceptance
+variants remain available through the command palette instead of duplicating
+every footer control.
 
 In a Herdr-managed pane, Proqi publishes the display-only pane label `proqi`
 with a short lease and clears it on normal exit. This helps users distinguish
 the scratchpad beside several named agent panes. It never claims an agent
 identity, and stale display metadata expires after a crash.
 
-Submit preserves the thought. Submit and remove deletes it only after Herdr
-confirms successful prompt submission, and that deletion remains undoable. A
+Send and Submit preserve the thought. Their remove variants delete it only after
+the integration confirms successful delivery, and that deletion remains undoable. A
 failed, timed-out, ambiguous, or unsupported submission leaves the thought
 unchanged and reports what prevented it.
 
@@ -426,10 +438,11 @@ bindings are:
 | Copy thought | `y` | Click copy control |
 | Cut thought | `x` | Click cut control |
 | Delete thought | `d` | Click delete control |
-| Submit thought | `s`, then direction when needed | Click verified agent target |
-| Submit and remove | `S`, then direction when needed | Click submit-and-remove control |
+| Send to composer | `s`, when supported, then direction when needed | Click verified Send control |
+| Submit and start | `S`, when supported, then direction when needed | Click verified Submit control |
+| Deliver and remove | Use the command palette | Choose a verified target in the palette flow |
 | Undo board action | `u` | Click undo control when visible |
-| Move thought | `J` and `K` | Drag thought handle |
+| Move thought | `J` and `K`, or `Shift+↑` and `Shift+↓` | Drag thought handle |
 | Expand or collapse | `Space` | Click overflow indicator |
 | Search | `/` | Click search control |
 | Help | `?` | Click help control |
@@ -476,6 +489,11 @@ Edit mode behaves like a focused multiline text editor. It supports:
 Leaving edit mode returns to the same board position and keeps the edited
 thought selected.
 
+At the first or last visual line, the first blocked vertical arrow confirms the
+boundary. Repeating the same blocked movement leaves edit mode and focuses the
+adjacent thought. Any other input resets the confirmation. This behavior has no
+timer, and plain `j` and `k` remain editable characters in text contexts.
+
 ### Mouse interaction
 
 Mouse support includes:
@@ -490,7 +508,8 @@ Mouse support includes:
 - Clickable verified adjacent-agent targets when an integration is available.
 - Hover treatment when the terminal reports mouse motion.
 
-The active gutter shows a vertical-ellipsis drag affordance. During a drag,
+The active gutter centers a vertical-ellipsis drag affordance at every thought
+height. During a drag,
 the existing separator at the proposed destination changes to the accent color
 without reflowing the board. Proqi does not use timer-driven decorative
 animation. Terminal motion is reserved for immediate interaction feedback.
@@ -587,6 +606,7 @@ texture would add noise and render inconsistently across terminals.
 | Background | `#FAFAF8` | `#0F0D0A` |
 | Primary text | `#1E1B18` | `#E8E4DF` |
 | Accent | `#2D6A4F` | `#5B9E7D` |
+| Focused surface | `#ECECF0` | `#34343F` |
 | Quiet border | `#E0D9CF` | `#2A2520` |
 | Muted text | `#4F463E` | `#B0A9A0` |
 
@@ -594,8 +614,9 @@ The terminal may inherit its existing background where exact background color
 control would make integration feel less native. Accent and focus treatment
 remain brand-derived.
 
-Forest green is the only routine accent. It marks focus, active selection, the
-text cursor, and actionable state. Muted text and borders establish hierarchy
+Forest green is the only routine accent. It marks the focus gutter, folded
+tokens, the text cursor, and actionable state. Focused thought text remains in
+the primary foreground on a quiet neutral surface. Muted text and borders establish hierarchy
 without introducing more hues.
 
 Semantic error, warning, and information colors appear only when those states
@@ -603,13 +624,15 @@ actually exist. They are not decorative note colors.
 
 ### Brand expression in the terminal
 
-The selected thought uses a one-cell forest green edge or gutter. This is the
-terminal translation of the canonical brand edge. Unselected thoughts use the
-quiet border or whitespace alone.
+The selected thought uses a one-cell forest green edge or gutter and the quiet
+focused surface from the core palette. This is the terminal translation of the
+canonical brand edge without turning the complete selection into an accent
+block. Unselected thoughts use the quiet border or whitespace alone.
 
-The text cursor may use the brand green where the terminal supports cursor
-styling safely. There is no glow or blinking decoration beyond the functional
-terminal cursor.
+Edit mode requests a blinking bar cursor where the terminal supports cursor
+styling safely. The current cell also receives a contrasting accent treatment
+so cursor position remains visible when a host ignores the requested shape.
+There is no glow or motion beyond the functional terminal cursor.
 
 The interface relies on spacing, wrapping, and contrast before borders. A
 thought should look like readable text with focus, not like a dashboard card.
