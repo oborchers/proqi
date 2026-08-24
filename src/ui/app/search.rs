@@ -67,6 +67,7 @@ impl BoardApp {
             return match input {
                 UiInput::Pointer(pointer) => self.handle_pointer(*pointer, ids, clock),
                 UiInput::Resize { .. }
+                | UiInput::HostFocusGained
                 | UiInput::Paste(_)
                 | UiInput::PasteAnnotated(_)
                 | UiInput::Key(_) => Vec::new(),

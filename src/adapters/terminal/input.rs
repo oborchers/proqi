@@ -126,7 +126,8 @@ fn translate(event: Event) -> Option<UiInput> {
         ),
         Event::Resize(width, height) => Some(UiInput::Resize { width, height }),
         Event::Mouse(mouse) => translate_mouse(mouse).map(UiInput::Pointer),
-        Event::FocusGained | Event::FocusLost | Event::Key(_) => None,
+        Event::FocusGained => Some(UiInput::HostFocusGained),
+        Event::FocusLost | Event::Key(_) => None,
     }
 }
 
@@ -324,6 +325,15 @@ mod tests {
             translate(Event::Paste(content.clone())),
             Some(UiInput::Paste(content))
         );
+    }
+
+    #[test]
+    fn host_focus_is_a_semantic_refresh_signal() {
+        assert_eq!(
+            translate(Event::FocusGained),
+            Some(UiInput::HostFocusGained)
+        );
+        assert_eq!(translate(Event::FocusLost), None);
     }
 
     #[test]

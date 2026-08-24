@@ -21,6 +21,22 @@ pub(super) struct PendingEdit {
 }
 
 impl BoardApp {
+    pub(super) fn current_annotations(&self, thought_id: ThoughtId) -> Vec<ContentAnnotation> {
+        self.draft_annotations(thought_id).unwrap_or_else(|| {
+            self.pending_edit
+                .as_ref()
+                .filter(|pending| pending.thought_id == thought_id)
+                .map(|pending| pending.after_annotations.clone())
+                .or_else(|| {
+                    self.state
+                        .board
+                        .thought(thought_id)
+                        .map(|thought| thought.annotations.clone())
+                })
+                .unwrap_or_default()
+        })
+    }
+
     pub(super) fn apply_edit(&mut self, command: EditCommand) {
         self.apply_annotated_edit(command, &[]);
     }
@@ -40,6 +56,7 @@ impl BoardApp {
         let Some((thought_id, before, after)) = edit else {
             return;
         };
+        self.clear_expanded_folds(thought_id);
         if self.is_draft(thought_id) {
             self.edit_generation = self.edit_generation.wrapping_add(1);
             return;

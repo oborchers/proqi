@@ -29,6 +29,8 @@ pub(crate) fn wrap_rows(content: &str, width: usize) -> Vec<WrappedRow> {
             let end_offset = graphemes.get(end).map_or(text.len(), |(offset, _)| *offset);
             output.push(WrappedRow {
                 visual: VisualLine {
+                    start_byte: line.start + start_offset,
+                    end_byte: line.start + end_offset,
                     logical_line,
                     start_grapheme: start,
                     end_grapheme: end,
@@ -134,6 +136,8 @@ fn display_text(graphemes: &[(usize, &str)]) -> String {
 fn empty_row(logical_line: usize, byte: usize, grapheme: usize) -> WrappedRow {
     WrappedRow {
         visual: VisualLine {
+            start_byte: byte,
+            end_byte: byte,
             logical_line,
             start_grapheme: grapheme,
             end_grapheme: grapheme,

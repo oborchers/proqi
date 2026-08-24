@@ -89,6 +89,16 @@ impl BoardApp {
         }
     }
 
+    pub(super) fn draft_annotations(
+        &self,
+        thought_id: ThoughtId,
+    ) -> Option<Vec<ContentAnnotation>> {
+        self.draft
+            .as_ref()
+            .filter(|draft| draft.thought_id == thought_id)
+            .map(|draft| draft.annotations.clone())
+    }
+
     pub(in crate::ui) fn content_for_render(&self, thought_id: ThoughtId) -> Option<String> {
         if self.is_draft(thought_id) {
             return self.editor_snapshot().map(|snapshot| snapshot.content);
@@ -96,14 +106,7 @@ impl BoardApp {
         self.state
             .board
             .thought(thought_id)
-            .map(|thought| {
-                if matches!(self.interaction_mode(), InteractionMode::Edit { thought_id: active } if active == thought_id)
-                {
-                    thought.content.clone()
-                } else {
-                    crate::ui::annotations::presentation(&thought.content, &thought.annotations)
-                }
-            })
+            .map(|thought| thought.content.clone())
     }
 
     pub(super) fn layout_state_with_draft(&self) -> AppState {

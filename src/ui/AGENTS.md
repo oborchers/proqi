@@ -20,8 +20,15 @@ interaction rules for the Ratatui interface.
 - Preserve whitespace and indentation. Thought text wraps without horizontal
   scrolling. Render multiline content as structured text, never as a single
   span containing newline characters, and configure wrapping not to trim.
+- Folded attachment and large-paste labels are display projections only. Keep
+  exact canonical content at every application, persistence, clipboard,
+  recovery, search, CLI, and integration boundary. Cursor, selection, pointer,
+  and deletion mapping across a collapsed range must remain lossless and
+  atomic.
 - Responsive degradation is explicit and tested at minimum, narrow, standard,
   wide, tall, and shallow viewport sizes.
+- Use state-driven drag, hover, focus, and save feedback only. Do not add
+  timer-driven decorative animation or layout motion that delays input.
 
 ## Input and terminal ownership
 
@@ -41,6 +48,8 @@ interaction rules for the Ratatui interface.
   termination signal.
 - Use frame cursor APIs during rendering. Do not issue backend commands from
   ordinary widgets or render functions.
+- Establish a visible steady cursor shape when entering the terminal session
+  and restore the user's default cursor shape on every teardown path.
 - Treat a rendering failure as a typed terminal-session failure. Restore owned
   terminal modes before returning the error.
 

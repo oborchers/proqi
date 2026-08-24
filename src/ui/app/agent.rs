@@ -175,7 +175,7 @@ impl BoardApp {
                     ..
                 },
             ) => Direction::Down,
-            UiInput::Resize { .. } => return None,
+            UiInput::Resize { .. } | UiInput::HostFocusGained | UiInput::Pointer(_) => return None,
             _ => return Some(Vec::new()),
         };
         self.submission_mode = None;

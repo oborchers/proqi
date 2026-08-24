@@ -18,6 +18,32 @@ impl BoardApp {
         self.editor.as_ref().map(|(_, editor)| editor.snapshot())
     }
 
+    pub(in crate::ui) fn editor_presentation(
+        &self,
+    ) -> Option<crate::ui::projection::EditorPresentation> {
+        let thought_id = self.active_thought_id()?;
+        let snapshot = self.editor_snapshot()?;
+        let annotations = self.current_annotations(thought_id);
+        Some(crate::ui::projection::editor_presentation(
+            &snapshot,
+            &annotations,
+            &self.expanded_fold_indices(thought_id),
+        ))
+    }
+
+    pub(in crate::ui) fn presentation_for_render(
+        &self,
+        thought_id: ThoughtId,
+    ) -> Option<crate::ui::annotations::Presentation> {
+        let content = self.content_for_render(thought_id)?;
+        let annotations = self.current_annotations(thought_id);
+        Some(crate::ui::annotations::project(
+            &content,
+            &annotations,
+            &self.expanded_fold_indices(thought_id),
+        ))
+    }
+
     /// Effective interaction mode, including an ephemeral draft editor.
     #[must_use]
     pub fn interaction_mode(&self) -> InteractionMode {
@@ -67,6 +93,18 @@ impl BoardApp {
         self.hovered
     }
 
+    /// Thought currently being dragged, when pointer reordering is active.
+    #[must_use]
+    pub const fn dragged_thought(&self) -> Option<ThoughtId> {
+        self.dragged_thought
+    }
+
+    /// Board position currently previewed as the drag destination.
+    #[must_use]
+    pub const fn drag_target(&self) -> Option<usize> {
+        self.drag_target
+    }
+
     /// Filtered command labels and current selection for rendering.
     #[must_use]
     pub fn palette_view(&self) -> Option<(String, Vec<String>, usize)> {
@@ -107,26 +145,30 @@ impl BoardApp {
         }
         let has_status = self.status.is_some()
             || matches!(self.state.durability, DurabilityState::Failed { .. });
+        let first_editor = self.editor_presentation();
         let first = compute_layout(
             &layout_state,
-            self.editor_snapshot().as_ref(),
+            first_editor.as_ref().map(|view| &view.snapshot),
             area,
             self.first_visible,
             &self.expanded,
             has_status,
+            !self.agent_targets.is_empty(),
         );
         let height = self.focused_height(&first);
         self.prepare_layout(TextViewport::new(first.content_width, height));
+        let editor = self.editor_presentation();
         let mut layout = compute_layout(
             &layout_state,
-            self.editor_snapshot().as_ref(),
+            editor.as_ref().map(|view| &view.snapshot),
             area,
             first.first_index,
             &self.expanded,
             has_status,
+            !self.agent_targets.is_empty(),
         );
         self.configure_overlay(&mut layout);
-        layout.configure_agent_controls(&self.agent_targets);
+        layout.configure_agent_controls(&self.agent_targets, self.submission_mode());
         let final_height = self.focused_height(&layout);
         self.prepare_layout(TextViewport::new(layout.content_width, final_height));
         self.first_visible = layout.first_index;
@@ -149,7 +191,7 @@ impl BoardApp {
             .map_or(0, palette::PaletteState::match_count);
         let search_items = self.search_match_count();
         let preferred_rows = if self.help {
-            9
+            6
         } else if self.palette.is_some() {
             palette_items.max(2)
         } else if self.search.is_some() {
@@ -162,8 +204,6 @@ impl BoardApp {
 
     fn presentation_state(&self) -> crate::application::AppState {
         let mut state = self.layout_state_with_draft();
-        let active = self.active_thought_id();
-        let editing = self.interaction_mode();
         let ids = state
             .board
             .thoughts()
@@ -171,16 +211,23 @@ impl BoardApp {
             .map(|thought| thought.id)
             .collect::<Vec<_>>();
         for id in ids {
-            if matches!(editing, InteractionMode::Edit { thought_id } if Some(thought_id) == active && thought_id == id)
-            {
-                continue;
-            }
             if let Some(thought) = state.board.thought_mut(id) {
-                thought.content =
-                    crate::ui::annotations::presentation(&thought.content, &thought.annotations);
+                thought.content = crate::ui::annotations::project(
+                    &thought.content,
+                    &thought.annotations,
+                    &self.expanded_fold_indices(id),
+                )
+                .content;
                 thought.annotations.clear();
             }
         }
         state
+    }
+
+    fn expanded_fold_indices(&self, thought_id: ThoughtId) -> Vec<usize> {
+        self.expanded_folds
+            .iter()
+            .filter_map(|(id, index)| (*id == thought_id).then_some(*index))
+            .collect()
     }
 }

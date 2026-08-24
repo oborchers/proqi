@@ -49,20 +49,66 @@ impl PastePayload {
     }
 }
 
-pub(super) fn presentation(content: &str, annotations: &[ContentAnnotation]) -> String {
+/// One folded range in projected presentation text.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct PresentedFold {
+    pub(super) annotation_index: usize,
+    pub(super) start: usize,
+    pub(super) end: usize,
+    pub(super) canonical_start: usize,
+    pub(super) canonical_end: usize,
+    pub(super) collapsed: bool,
+}
+
+/// Display-only projection that never replaces canonical content.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct Presentation {
+    pub(super) content: String,
+    pub(super) folds: Vec<PresentedFold>,
+}
+
+pub(super) fn project(
+    content: &str,
+    annotations: &[ContentAnnotation],
+    expanded: &[usize],
+) -> Presentation {
     let mut output = String::new();
+    let mut folds = Vec::new();
     let mut cursor = 0;
     let mut image = 0;
     let mut file = 0;
-    for annotation in annotations {
+    for (annotation_index, annotation) in annotations.iter().enumerate() {
         let Some(prefix) = content.get(cursor..annotation.start) else {
-            return content.to_owned();
+            return plain(content);
         };
         output.push_str(prefix);
+        let start = output.len();
+        if expanded.contains(&annotation_index) {
+            if let ContentAnnotationKind::Attachment { image: true, .. } = &annotation.kind {
+                image += 1;
+            } else if matches!(
+                &annotation.kind,
+                ContentAnnotationKind::Attachment { image: false, .. }
+            ) {
+                file += 1;
+            }
+            let Some(exact) = content.get(annotation.start..annotation.end) else {
+                return plain(content);
+            };
+            output.push_str(exact);
+            folds.push(fold(
+                annotation_index,
+                start,
+                output.len(),
+                annotation,
+                false,
+            ));
+            cursor = annotation.end;
+            continue;
+        }
         match &annotation.kind {
             ContentAnnotationKind::Attachment {
-                image: is_image,
-                display_name,
+                image: is_image, ..
             } => {
                 let (kind, number) = if *is_image {
                     image += 1;
@@ -75,24 +121,57 @@ pub(super) fn presentation(content: &str, annotations: &[ContentAnnotation]) -> 
                 output.push_str(kind);
                 output.push(' ');
                 output.push_str(&number.to_string());
-                output.push_str("]  ");
-                output.push_str(display_name);
+                output.push(']');
             }
             ContentAnnotationKind::LargePaste { lines, graphemes } => {
-                output.push_str("[Pasted text]  ");
+                output.push_str("[Pasted text · ");
                 output.push_str(&lines.to_string());
                 output.push_str(" lines · ");
                 output.push_str(&grouped(*graphemes));
-                output.push_str(" characters");
+                output.push_str(" characters]");
             }
         }
+        folds.push(fold(
+            annotation_index,
+            start,
+            output.len(),
+            annotation,
+            true,
+        ));
         cursor = annotation.end;
     }
     match content.get(cursor..) {
         Some(suffix) => output.push_str(suffix),
-        None => return content.to_owned(),
+        None => return plain(content),
     }
-    output
+    Presentation {
+        content: output,
+        folds,
+    }
+}
+
+fn fold(
+    annotation_index: usize,
+    start: usize,
+    end: usize,
+    annotation: &ContentAnnotation,
+    collapsed: bool,
+) -> PresentedFold {
+    PresentedFold {
+        annotation_index,
+        start,
+        end,
+        canonical_start: annotation.start,
+        canonical_end: annotation.end,
+        collapsed,
+    }
+}
+
+fn plain(content: &str) -> Presentation {
+    Presentation {
+        content: content.to_owned(),
+        folds: Vec::new(),
+    }
 }
 
 pub(super) fn rebase(

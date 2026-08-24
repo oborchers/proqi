@@ -32,10 +32,10 @@ enum Command {
 impl Command {
     const ALL: [(Self, &'static str); 18] = [
         (Self::New, "New thought"),
-        (Self::Edit, "Edit focused thought"),
-        (Self::Delete, "Delete focused thought"),
-        (Self::Copy, "Copy focused thought"),
-        (Self::Cut, "Cut focused thought"),
+        (Self::Edit, "Edit thought"),
+        (Self::Delete, "Delete thought"),
+        (Self::Copy, "Copy thought"),
+        (Self::Cut, "Cut thought"),
         (Self::Paste, "Paste native clipboard"),
         (Self::Submit, "Submit to adjacent agent"),
         (Self::SubmitRemove, "Submit and remove thought"),
@@ -150,6 +150,7 @@ impl BoardApp {
             return match input {
                 UiInput::Pointer(pointer) => self.handle_pointer(*pointer, ids, clock),
                 UiInput::Resize { .. }
+                | UiInput::HostFocusGained
                 | UiInput::Paste(_)
                 | UiInput::PasteAnnotated(_)
                 | UiInput::Key(_) => Vec::new(),

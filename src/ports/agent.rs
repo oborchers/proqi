@@ -1,5 +1,6 @@
 //! Verified adjacent-agent discovery and semantic prompt submission.
 
+use std::time::Duration;
 use thiserror::Error;
 
 use crate::domain::{Direction, SubmissionId};
@@ -168,4 +169,21 @@ pub trait AgentGateway {
     ///
     /// Fails without modifying the thought when validation or submission is not accepted.
     fn submit(&mut self, request: SubmissionRequest) -> Result<SubmissionReceipt, AgentError>;
+}
+
+/// Optional display-only identity published to a terminal host.
+pub trait PanePresentation {
+    /// Publish or refresh Proqi's pane label without claiming an agent identity.
+    ///
+    /// # Errors
+    ///
+    /// Fails when display metadata is unsupported, rejected, or unavailable.
+    fn publish(&mut self, pane_id: &str, sequence: u64, ttl: Duration) -> Result<(), AgentError>;
+
+    /// Clear display metadata on a clean exit.
+    ///
+    /// # Errors
+    ///
+    /// Fails when the host cannot clear the owned display metadata.
+    fn clear(&mut self, pane_id: &str, sequence: u64) -> Result<(), AgentError>;
 }

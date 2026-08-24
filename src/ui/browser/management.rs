@@ -80,9 +80,10 @@ impl SessionBrowser {
                 }
                 BrowserAction::Continue
             }
-            UiInput::Key(_) | UiInput::Resize { .. } | UiInput::Pointer(_) => {
-                BrowserAction::Continue
-            }
+            UiInput::Key(_)
+            | UiInput::Resize { .. }
+            | UiInput::HostFocusGained
+            | UiInput::Pointer(_) => BrowserAction::Continue,
         }
     }
 }

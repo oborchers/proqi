@@ -126,7 +126,7 @@ fn empty_board_and_help_have_reviewable_complete_buffers() {
     fixture.input(UiInput::Key(UiKey::Character('?')));
     let terminal = draw(&mut fixture, 40, 8);
     let rendered = text(terminal.backend().buffer());
-    assert!(rendered.contains("proqi help"));
+    assert!(rendered.contains("proqi shortcuts"));
     assert!(rendered.contains("J/K Reorder"));
 }
 
@@ -145,7 +145,7 @@ fn multiline_unicode_is_rendered_as_lines_and_cursor_uses_cell_width() {
         .backend_mut()
         .get_cursor_position()
         .expect("cursor position");
-    assert_eq!(cursor.y, 3);
+    assert_eq!(cursor.y, 4);
     assert_eq!(cursor.x, 8);
 
     fixture.app.acknowledge_persistence(sequence, true);
@@ -187,12 +187,12 @@ fn board_rendering_uses_the_editor_wrap_model_without_clipping_words() {
     let mut fixture = Fixture::new();
     fixture.paste("aaaaaa bbbbbb cccccc dddddd");
     fixture.input(UiInput::Key(UiKey::Escape));
-    let layout = fixture.app.prepare_frame(Rect::new(0, 0, 12, 8));
+    let layout = fixture.app.prepare_frame(Rect::new(0, 0, 12, 10));
     assert!(layout.thoughts[0].area.height >= 3);
-    let terminal = draw(&mut fixture, 12, 8);
+    let terminal = draw(&mut fixture, 12, 10);
     let rendered = text(terminal.backend().buffer());
     for word in ["aaaaaa", "bbbbbb", "cccccc", "dddddd"] {
-        assert!(rendered.contains(word));
+        assert!(rendered.contains(word), "missing {word} in:\n{rendered}");
     }
     assert!(!rendered.contains("aaaaaa bbb"));
 }
@@ -416,6 +416,7 @@ fn mouse_wheel_scrolls_editor_without_moving_cursor_or_selection() {
             .collect::<Vec<_>>()
             .join("\n"),
     );
+    fixture.input(UiInput::Key(UiKey::Enter));
     fixture.input(UiInput::Key(UiKey::Move {
         movement: CursorMovement::DocumentStart,
         extend_selection: false,

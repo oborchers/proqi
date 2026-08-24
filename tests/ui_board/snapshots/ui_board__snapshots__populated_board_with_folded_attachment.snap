@@ -1,34 +1,33 @@
 ---
 source: tests/ui_board/snapshots.rs
-assertion_line: 78
 expression: "snapshot(&mut fixture, 60, 12, ThemePreference::Dark)"
 ---
 SIZE 60x12
 
 TEXT
-00│ proqi · proqi-ui-contract · 2 thoughts               saving│
-01│  first prompt│
-02││
-03│  ──────────────────────────────────────────────────────────│
-04││
-05││ [Image 1]  screenshot.png│
-06│  + New thought│
+00│  proqi · proqi-ui-contract · 2 thoughts              saving│
+01││
+02│  first prompt│
+03││
+04│  ──────────────────────────────────────────────────────────│
+05││
+06│⋮ [Image 1]│
 07││
-08││
+08│                        + New thought│
 09││
-10│ ready                                        board · saving│
-11│n New   y Copy  x Cut  d Delete  u Undo  / Search│
+10│  ready                                     board · saving│
+11│  n New   y Copy  x Cut  d Delete  u Undo  / Search│
 
 STYLE RUNS
 0: 0-59 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE
-1: 0-0 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE | 1-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-2: 0-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-3: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-59 fg=Rgb(42, 37, 32) bg=Rgb(15, 13, 10) mod=NONE
-4: 0-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-5: 0-0 fg=Rgb(91, 158, 125) bg=Rgb(35, 31, 27) mod=NONE | 1-59 fg=Rgb(232, 228, 223) bg=Rgb(35, 31, 27) mod=NONE
-6: 0-59 fg=Rgb(91, 158, 125) bg=Rgb(15, 13, 10) mod=NONE
+1: 0-59 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE
+2: 0-0 fg=Rgb(91, 158, 125) bg=Rgb(15, 13, 10) mod=NONE | 1-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+3: 0-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+4: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-59 fg=Rgb(42, 37, 32) bg=Rgb(15, 13, 10) mod=NONE
+5: 0-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+6: 0-0 fg=Rgb(15, 13, 10) bg=Rgb(91, 158, 125) mod=BOLD | 1-1 fg=Rgb(232, 228, 223) bg=Rgb(35, 31, 27) mod=NONE | 2-10 fg=Rgb(91, 158, 125) bg=Rgb(35, 31, 27) mod=BOLD | 11-59 fg=Rgb(232, 228, 223) bg=Rgb(35, 31, 27) mod=NONE
 7: 0-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-8: 0-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+8: 0-23 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 24-24 fg=Rgb(91, 158, 125) bg=Rgb(15, 13, 10) mod=NONE | 25-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 9: 0-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-10: 0-59 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE
-11: 0-6 fg=Rgb(91, 158, 125) bg=Rgb(15, 13, 10) mod=NONE | 7-7 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 8-14 fg=Rgb(91, 158, 125) bg=Rgb(15, 13, 10) mod=NONE | 15-15 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 16-21 fg=Rgb(91, 158, 125) bg=Rgb(15, 13, 10) mod=NONE | 22-22 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 23-31 fg=Rgb(91, 158, 125) bg=Rgb(15, 13, 10) mod=NONE | 32-32 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 33-39 fg=Rgb(91, 158, 125) bg=Rgb(15, 13, 10) mod=NONE | 40-40 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 41-49 fg=Rgb(91, 158, 125) bg=Rgb(15, 13, 10) mod=NONE | 50-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+10: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-57 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE | 58-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+11: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-2 fg=Rgb(91, 158, 125) bg=Rgb(15, 13, 10) mod=NONE | 3-9 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 10-10 fg=Rgb(91, 158, 125) bg=Rgb(15, 13, 10) mod=NONE | 11-17 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 18-18 fg=Rgb(91, 158, 125) bg=Rgb(15, 13, 10) mod=NONE | 19-24 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 25-25 fg=Rgb(91, 158, 125) bg=Rgb(15, 13, 10) mod=NONE | 26-34 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 35-35 fg=Rgb(91, 158, 125) bg=Rgb(15, 13, 10) mod=NONE | 36-42 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 43-43 fg=Rgb(91, 158, 125) bg=Rgb(15, 13, 10) mod=NONE | 44-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE

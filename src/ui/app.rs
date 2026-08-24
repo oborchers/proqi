@@ -6,6 +6,7 @@ mod commands;
 mod control;
 mod draft;
 mod editing;
+mod folds;
 mod palette;
 mod pointer;
 mod recovery;
@@ -142,6 +143,8 @@ pub enum UiInput {
         /// Latest reported terminal height.
         height: u16,
     },
+    /// Terminal host focus returned to this pane.
+    HostFocusGained,
     /// One normalized mouse or trackpad event.
     Pointer(PointerInput),
 }
@@ -172,6 +175,7 @@ pub struct BoardApp {
     search: Option<search::SearchState>,
     settings: UiSettings,
     expanded: BTreeSet<ThoughtId>,
+    expanded_folds: BTreeSet<(ThoughtId, usize)>,
     pending_editor_clipboard: BTreeMap<RequestId, PendingEditorClipboard>,
     pending_clipboard_reads: BTreeSet<RequestId>,
     pending_recovery_exports: BTreeSet<RequestId>,
@@ -216,6 +220,7 @@ impl BoardApp {
             search: None,
             settings,
             expanded: BTreeSet::new(),
+            expanded_folds: BTreeSet::new(),
             pending_editor_clipboard: BTreeMap::new(),
             pending_clipboard_reads: BTreeSet::new(),
             pending_recovery_exports: BTreeSet::new(),
@@ -243,7 +248,7 @@ impl BoardApp {
             self.request_quit();
             return effects;
         }
-        if !matches!(input, UiInput::Resize { .. }) {
+        if !matches!(input, UiInput::Resize { .. } | UiInput::HostFocusGained) {
             self.status = None;
         }
         if self.palette.is_some() {
@@ -264,13 +269,14 @@ impl BoardApp {
                 UiInput::Pointer(pointer) => {
                     return self.handle_recovery_pointer(pointer, ids, clock);
                 }
-                UiInput::Resize { .. } => {}
+                UiInput::Resize { .. } | UiInput::HostFocusGained => {}
                 UiInput::Key(_) | UiInput::Paste(_) | UiInput::PasteAnnotated(_) => {
                     return Vec::new();
                 }
             }
         }
         match input {
+            UiInput::HostFocusGained => Self::discover_agents(),
             UiInput::Resize { .. } => {
                 self.layout = None;
                 self.hovered = None;

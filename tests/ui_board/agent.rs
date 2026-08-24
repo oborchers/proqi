@@ -115,7 +115,22 @@ fn multiple_targets_require_direction_and_mouse_controls_use_verified_targets() 
         [Effect::SubmitAgent(request)] if request.target == right
     ));
 
-    let layout = fixture.app.prepare_frame(Rect::new(0, 0, 100, 8));
+    let layout = fixture.app.prepare_frame(Rect::new(0, 0, 100, 10));
+    let (_, begin_remove) = layout
+        .controls
+        .iter()
+        .find(|(target, _)| *target == proqi::ui::HitTarget::BeginSubmit(true))
+        .expect("submit-and-remove mode control");
+    assert!(
+        fixture
+            .effects(UiInput::Pointer(PointerInput {
+                column: begin_remove.x,
+                row: begin_remove.y,
+                kind: PointerKind::Down(PointerButton::Left),
+            }))
+            .is_empty()
+    );
+    let layout = fixture.app.prepare_frame(Rect::new(0, 0, 100, 10));
     let (_, control) = layout
         .controls
         .iter()
@@ -129,6 +144,47 @@ fn multiple_targets_require_direction_and_mouse_controls_use_verified_targets() 
     assert!(matches!(
         clicked.as_slice(),
         [Effect::SubmitAgent(request)] if request.target == up
+    ));
+}
+
+#[test]
+fn all_four_verified_directions_receive_distinct_footer_targets() {
+    let mut fixture = Fixture::new();
+    prepare_thought(&mut fixture);
+    fixture.app.complete_agent_discovery(Ok(vec![
+        target(Direction::Up, "w1:p2"),
+        target(Direction::Right, "w1:p3"),
+        target(Direction::Down, "w1:p4"),
+        target(Direction::Left, "w1:p5"),
+    ]));
+
+    let terminal = draw(&mut fixture, 120, 12);
+    let rendered = text(terminal.backend().buffer());
+    for direction in ["↑", "→", "↓", "←"] {
+        assert!(rendered.contains(direction));
+    }
+    let layout = fixture.app.prepare_frame(Rect::new(0, 0, 120, 12));
+    for direction in [
+        Direction::Up,
+        Direction::Right,
+        Direction::Down,
+        Direction::Left,
+    ] {
+        assert!(
+            layout
+                .controls
+                .iter()
+                .any(|(target, _)| { *target == proqi::ui::HitTarget::Submit(direction, false) })
+        );
+    }
+}
+
+#[test]
+fn host_focus_refreshes_adjacent_agents() {
+    let mut fixture = Fixture::new();
+    assert!(matches!(
+        fixture.effects(UiInput::HostFocusGained).as_slice(),
+        [Effect::DiscoverAgents]
     ));
 }
 

@@ -98,6 +98,7 @@ impl BoardApp {
             Some(HitTarget::Submit(direction, remove)) => {
                 self.submit_to(direction, remove, ids, clock)
             }
+            Some(HitTarget::BeginSubmit(remove)) => self.begin_submission(remove, ids, clock),
             Some(HitTarget::Undo) => self.history(ids, clock, true),
             Some(HitTarget::Help) => {
                 self.help = !self.help;
@@ -140,7 +141,11 @@ impl BoardApp {
         let Some((row, column)) = self.editor_cell(thought_id, pointer) else {
             return Vec::new();
         };
-        self.apply_edit(EditCommand::PointerDrag { row, column });
+        let position = self.projected_position_at_cell(row, column);
+        self.apply_edit(EditCommand::SetCursor {
+            position,
+            extend_selection: true,
+        });
         Vec::new()
     }
 
@@ -167,7 +172,14 @@ impl BoardApp {
         let Some((row, column)) = cell else {
             return Vec::new();
         };
-        self.apply_edit(EditCommand::PointerStart { row, column });
+        if self.expand_fold_at_cell(thought_id, row, column) {
+            return Vec::new();
+        }
+        let position = self.projected_position_at_cell(row, column);
+        self.apply_edit(EditCommand::SetCursor {
+            position,
+            extend_selection: false,
+        });
         Vec::new()
     }
 

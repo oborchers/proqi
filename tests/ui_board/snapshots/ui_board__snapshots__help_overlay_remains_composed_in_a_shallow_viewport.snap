@@ -1,26 +1,25 @@
 ---
 source: tests/ui_board/snapshots.rs
-assertion_line: 100
 expression: "snapshot(&mut fixture, 42, 8, ThemePreference::Auto)"
 ---
 SIZE 42x8
 
 TEXT
-00│┌ proqi help ──────────────────────────[x]│
-01││Board                                   ││
-02││n New   j/k Focus   Enter/e Edit        ││
-03││d Delete   J/K Reorder   u Undo         ││
-04││Space Collapse   / Search   : Commands  ││
-05││s/S Send   q Quit                       ││
-06││                                        ││
+00│┌ proqi shortcuts ─────────────────────[x]│
+01││n New   Enter/e Edit                    ││
+02││j/k Move   J/K Reorder                  ││
+03││y Copy   x Cut   d Delete               ││
+04││u Undo   Space Fold                     ││
+05││/ Search   : Commands   ? Close         ││
+06││s Send   S Send+   q Quit               ││
 07│└────────────────────────────────────────┘│
 
 STYLE RUNS
-0: 0-0 fg=Reset bg=Reset mod=NONE | 1-12 fg=Rgb(45, 106, 79) bg=Reset mod=BOLD | 13-38 fg=Reset bg=Reset mod=NONE | 39-41 fg=Rgb(45, 106, 79) bg=Reset mod=NONE
-1: 0-41 fg=Reset bg=Reset mod=NONE
-2: 0-41 fg=Reset bg=Reset mod=NONE
-3: 0-41 fg=Reset bg=Reset mod=NONE
-4: 0-41 fg=Reset bg=Reset mod=NONE
-5: 0-41 fg=Reset bg=Reset mod=NONE
-6: 0-41 fg=Reset bg=Reset mod=NONE
+0: 0-0 fg=Reset bg=Reset mod=NONE | 1-17 fg=Rgb(45, 106, 79) bg=Reset mod=BOLD | 18-38 fg=Reset bg=Reset mod=NONE | 39-41 fg=Rgb(45, 106, 79) bg=Reset mod=NONE
+1: 0-0 fg=Reset bg=Reset mod=NONE | 1-1 fg=Rgb(45, 106, 79) bg=Reset mod=NONE | 2-8 fg=Reset bg=Reset mod=NONE | 9-15 fg=Rgb(45, 106, 79) bg=Reset mod=NONE | 16-41 fg=Reset bg=Reset mod=NONE
+2: 0-0 fg=Reset bg=Reset mod=NONE | 1-3 fg=Rgb(45, 106, 79) bg=Reset mod=NONE | 4-11 fg=Reset bg=Reset mod=NONE | 12-14 fg=Rgb(45, 106, 79) bg=Reset mod=NONE | 15-41 fg=Reset bg=Reset mod=NONE
+3: 0-0 fg=Reset bg=Reset mod=NONE | 1-1 fg=Rgb(45, 106, 79) bg=Reset mod=NONE | 2-9 fg=Reset bg=Reset mod=NONE | 10-10 fg=Rgb(45, 106, 79) bg=Reset mod=NONE | 11-17 fg=Reset bg=Reset mod=NONE | 18-18 fg=Rgb(45, 106, 79) bg=Reset mod=NONE | 19-41 fg=Reset bg=Reset mod=NONE
+4: 0-0 fg=Reset bg=Reset mod=NONE | 1-1 fg=Rgb(45, 106, 79) bg=Reset mod=NONE | 2-9 fg=Reset bg=Reset mod=NONE | 10-14 fg=Rgb(45, 106, 79) bg=Reset mod=NONE | 15-41 fg=Reset bg=Reset mod=NONE
+5: 0-0 fg=Reset bg=Reset mod=NONE | 1-1 fg=Rgb(45, 106, 79) bg=Reset mod=NONE | 2-11 fg=Reset bg=Reset mod=NONE | 12-12 fg=Rgb(45, 106, 79) bg=Reset mod=NONE | 13-24 fg=Reset bg=Reset mod=NONE | 25-25 fg=Rgb(45, 106, 79) bg=Reset mod=NONE | 26-41 fg=Reset bg=Reset mod=NONE
+6: 0-0 fg=Reset bg=Reset mod=NONE | 1-1 fg=Rgb(45, 106, 79) bg=Reset mod=NONE | 2-9 fg=Reset bg=Reset mod=NONE | 10-10 fg=Rgb(45, 106, 79) bg=Reset mod=NONE | 11-19 fg=Reset bg=Reset mod=NONE | 20-20 fg=Rgb(45, 106, 79) bg=Reset mod=NONE | 21-41 fg=Reset bg=Reset mod=NONE
 7: 0-41 fg=Reset bg=Reset mod=NONE

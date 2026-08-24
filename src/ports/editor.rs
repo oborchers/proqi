@@ -118,6 +118,10 @@ pub enum EditCommand {
 /// One wrapped row produced by the editor's canonical text mapping.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct VisualLine {
+    /// First UTF-8 byte represented by this row in the snapshot content.
+    pub start_byte: usize,
+    /// UTF-8 byte boundary immediately after this row.
+    pub end_byte: usize,
     /// Source logical line.
     pub logical_line: usize,
     /// First grapheme included in this row.

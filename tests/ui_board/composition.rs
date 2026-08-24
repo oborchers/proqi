@@ -106,6 +106,6 @@ fn narrow_empty_board_has_a_complete_explicit_buffer_snapshot() {
     let mut fixture = Fixture::new();
     assert_eq!(
         text(draw(&mut fixture, 12, 3).backend().buffer()),
-        " proqi saved\n  + New thou\nn New       "
+        " proqi saved\n+ New though\n  n New     "
     );
 }

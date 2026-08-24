@@ -97,6 +97,14 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
+        if matches!(key, UiKey::Enter) && self.expand_fold_at_cursor() {
+            return Vec::new();
+        }
+        let adjacent_fold = match key {
+            UiKey::Backspace => self.delete_adjacent_fold(true),
+            UiKey::Delete => self.delete_adjacent_fold(false),
+            _ => false,
+        };
         match key {
             UiKey::Escape => return self.finish_edit(ids, clock),
             UiKey::Undo => return self.history(ids, clock, true),
@@ -121,8 +129,8 @@ impl BoardApp {
         let (command, boundary) = match key {
             UiKey::Character(character) => (EditCommand::InsertChar(character), false),
             UiKey::Enter => (EditCommand::InsertNewline, false),
-            UiKey::Backspace => (EditCommand::DeleteBack, false),
-            UiKey::Delete => (EditCommand::DeleteForward, false),
+            UiKey::Backspace => (EditCommand::DeleteBack, adjacent_fold),
+            UiKey::Delete => (EditCommand::DeleteForward, adjacent_fold),
             UiKey::Move {
                 movement,
                 extend_selection,
@@ -143,12 +151,22 @@ impl BoardApp {
             | UiKey::Cut
             | UiKey::PasteClipboard => return Vec::new(),
         };
+        let movement = match &command {
+            EditCommand::Move {
+                movement,
+                extend_selection,
+            } => Some((*movement, *extend_selection)),
+            _ => None,
+        };
         let mut effects = if boundary {
             self.flush_pending_edit(ids, clock)
         } else {
             Vec::new()
         };
         self.apply_edit(command);
+        if let Some((movement, extend_selection)) = movement {
+            self.normalize_fold_cursor(movement, extend_selection);
+        }
         if self.has_draft() {
             effects.extend(self.persist_draft(ids, clock));
         }
@@ -167,7 +185,11 @@ impl BoardApp {
             self.discard_draft();
             return Vec::new();
         }
+        let thought_id = self.active_thought_id();
         let effects = self.flush_pending_edit(ids, clock);
+        if let Some(thought_id) = thought_id {
+            self.clear_expanded_folds(thought_id);
+        }
         let _effects = self.reduce(Action::ExitEdit);
         self.editor = None;
         effects

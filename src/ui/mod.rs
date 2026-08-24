@@ -6,6 +6,7 @@ mod browser;
 mod browser_render;
 mod browser_summary;
 mod layout;
+mod projection;
 mod render;
 mod settings;
 mod theme;

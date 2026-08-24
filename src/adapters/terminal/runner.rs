@@ -1,6 +1,7 @@
 //! Bounded UI and persistence lane composition.
 
 mod durability;
+mod heartbeat;
 
 use std::{
     collections::BTreeMap,
@@ -36,6 +37,7 @@ use super::{
 };
 
 use durability::{drain_persistence, enqueue_effects};
+use heartbeat::PaneHeartbeat;
 
 /// Concrete runtime pieces retained for one interactive session.
 pub(crate) struct TerminalResources {
@@ -113,6 +115,10 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
     let input = InputLane::spawn();
     let persistence = PersistenceLane::spawn(store);
     let external = ExternalLane::spawn(recovery_directory, attachment_directory);
+    let mut pane_heartbeat = PaneHeartbeat::from_environment();
+    if let Some(heartbeat) = pane_heartbeat.as_mut() {
+        let _published = heartbeat.publish(&external);
+    }
     let theme = Theme::resolve(settings.theme, supports_true_color());
     let mut app = BoardApp::with_settings(state, settings, RopeEditorFactory);
     app.status = control_warning;
@@ -123,7 +129,18 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
         control: control.as_ref(),
         termination: &termination,
     };
-    let run_result = drive(&mut terminal, &mut app, &lanes, &mut ids, clock, theme);
+    let run_result = drive(
+        &mut terminal,
+        &mut app,
+        &lanes,
+        &mut ids,
+        clock,
+        theme,
+        &mut pane_heartbeat,
+    );
+    if let Some(heartbeat) = pane_heartbeat.as_mut() {
+        let _cleared = heartbeat.clear(&external);
+    }
     let control_result = control.map_or(Ok(()), ControlServer::stop);
     let input_result = input
         .stop()
@@ -181,10 +198,12 @@ fn drive(
     ids: &mut SystemIdGenerator,
     clock: SystemClock,
     theme: Theme,
+    pane_heartbeat: &mut Option<PaneHeartbeat>,
 ) -> Result<(), TerminalError> {
     let mut pending = PendingWork::default();
     let mut edit_generation = app.edit_generation();
     let mut edit_deadline = None;
+    let mut agent_deadline = None;
     let mut termination_seen = false;
     enqueue_effects(app, lanes, BoardApp::discover_agents(), &mut pending)?;
     let mut redraw = true;
@@ -209,6 +228,13 @@ fn drive(
             edit_deadline = None;
             redraw = true;
         }
+        if agent_deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+            enqueue_effects(app, lanes, BoardApp::discover_agents(), &mut pending)?;
+            agent_deadline = None;
+        }
+        if let Some(heartbeat) = pane_heartbeat.as_mut() {
+            let _refreshed = heartbeat.refresh_if_due(lanes.external);
+        }
         if redraw {
             terminal.draw(|frame| {
                 let layout = app.prepare_frame(frame.area());
@@ -225,6 +251,9 @@ fn drive(
         }
         match lanes.input.receiver.recv_timeout(Duration::from_millis(30)) {
             Ok(InputMessage::Event(event)) => {
+                if matches!(event, UiInput::Resize { .. }) {
+                    agent_deadline = Some(Instant::now() + Duration::from_millis(250));
+                }
                 let effects = app.handle(event, ids, &clock);
                 enqueue_effects(app, lanes, effects, &mut pending)?;
                 redraw = true;

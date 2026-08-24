@@ -1,23 +1,20 @@
 //! Deterministic one-column board renderer.
 
 mod chrome;
+mod overlays;
 
 use ratatui_core::{
+    layout::Alignment,
     style::{Modifier, Style},
     terminal::Frame,
     text::{Line, Span, Text},
 };
-use ratatui_widgets::{
-    block::Block,
-    borders::Borders,
-    clear::Clear,
-    paragraph::{Paragraph, Wrap},
-};
+use ratatui_widgets::{block::Block, clear::Clear, paragraph::Paragraph};
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{application::InteractionMode, ports::text_layout::wrap_rows};
 
-use super::{BoardApp, HitTarget, LayoutSnapshot, Theme, ThoughtLayout, layout::OverlayLayout};
+use super::{BoardApp, HitTarget, LayoutSnapshot, Theme, ThoughtLayout};
 
 /// Render the complete board into one terminal frame.
 pub fn render(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, theme: &Theme) {
@@ -27,10 +24,10 @@ pub fn render(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, th
     chrome::render_footer(frame, app, layout, theme);
     if let Some((query, entries, selected)) = app.search_view() {
         if let Some(overlay) = &layout.overlay {
-            render_picker(
+            overlays::render_picker(
                 frame,
                 overlay,
-                &PickerView {
+                overlays::PickerView {
                     title: " thoughts ",
                     prompt: '/',
                     query: &query,
@@ -42,10 +39,10 @@ pub fn render(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, th
         }
     } else if let Some((query, entries, selected)) = app.palette_view() {
         if let Some(overlay) = &layout.overlay {
-            render_picker(
+            overlays::render_picker(
                 frame,
                 overlay,
-                &PickerView {
+                overlays::PickerView {
                     title: " commands ",
                     prompt: ':',
                     query: &query,
@@ -58,7 +55,7 @@ pub fn render(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, th
     } else if app.help
         && let Some(overlay) = &layout.overlay
     {
-        render_help(frame, app, overlay, theme);
+        overlays::render_help(frame, app, overlay, theme);
     }
 }
 
@@ -67,7 +64,7 @@ fn render_board(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, 
         return;
     }
     for thought_layout in &layout.thoughts {
-        let Some(content) = app.content_for_render(thought_layout.thought_id) else {
+        let Some(presentation) = app.presentation_for_render(thought_layout.thought_id) else {
             continue;
         };
         let focused = app.active_thought_id() == Some(thought_layout.thought_id);
@@ -76,40 +73,70 @@ fn render_board(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, 
             Some(HitTarget::Thought(id) | HitTarget::DragHandle(id) | HitTarget::Overflow(id))
                 if id == thought_layout.thought_id
         );
-        render_separator(frame, thought_layout, theme);
+        render_separator(
+            frame,
+            thought_layout,
+            app.drag_target() == Some(thought_layout.index),
+            theme,
+        );
         if focused {
             frame.render_widget(
                 Block::default().style(theme.focused_style()),
                 thought_layout.area,
             );
         }
-        render_gutter(frame, thought_layout, focused, hovered, theme);
+        render_gutter(
+            frame,
+            thought_layout,
+            focused,
+            hovered,
+            app.dragged_thought() == Some(thought_layout.thought_id),
+            theme,
+        );
         if matches!(app.interaction_mode(), InteractionMode::Edit { thought_id } if thought_id == thought_layout.thought_id)
         {
             render_editor(frame, app, thought_layout, theme);
         } else {
-            render_thought(frame, &content, thought_layout, focused, theme);
+            render_thought(frame, &presentation, thought_layout, focused, theme);
         }
     }
     if let Some(insert) = layout.insert {
-        let style = if app.hovered() == Some(HitTarget::Insert) {
-            Style::default()
-                .fg(theme.accent)
-                .add_modifier(Modifier::REVERSED)
+        let hovered = app.hovered() == Some(HitTarget::Insert);
+        let label = Line::from(vec![
+            Span::styled("+", Style::default().fg(theme.accent)),
+            Span::styled(" New thought", Style::default().fg(theme.foreground)),
+        ]);
+        let style = if hovered {
+            theme.focused_style()
         } else {
-            Style::default().fg(theme.accent)
+            theme.base_style()
         };
-        frame.render_widget(Paragraph::new("  + New thought").style(style), insert);
+        frame.render_widget(
+            Paragraph::new(label)
+                .alignment(Alignment::Center)
+                .style(style),
+            insert,
+        );
     }
 }
 
-fn render_separator(frame: &mut Frame<'_>, layout: &ThoughtLayout, theme: &Theme) {
+fn render_separator(
+    frame: &mut Frame<'_>,
+    layout: &ThoughtLayout,
+    drag_target: bool,
+    theme: &Theme,
+) {
     let Some(area) = layout.separator_before else {
         return;
     };
     frame.render_widget(
-        Paragraph::new("─".repeat(usize::from(area.width)))
-            .style(Style::default().fg(theme.divider)),
+        Paragraph::new("─".repeat(usize::from(area.width))).style(Style::default().fg(
+            if drag_target {
+                theme.accent
+            } else {
+                theme.divider
+            },
+        )),
         area,
     );
 }
@@ -119,39 +146,52 @@ fn render_gutter(
     layout: &ThoughtLayout,
     focused: bool,
     hovered: bool,
+    dragging: bool,
     theme: &Theme,
 ) {
-    let symbol = if focused {
-        "│"
-    } else if hovered {
-        "┆"
+    let symbol = if focused || hovered { "⋮" } else { " " };
+    let padding = usize::from(layout.gutter.height.saturating_sub(1) / 2);
+    let content = format!("{}{symbol}", "\n".repeat(padding));
+    let style = if focused {
+        Style::default()
+            .fg(theme.background)
+            .bg(theme.accent)
+            .remove_modifier(Modifier::REVERSED)
+            .add_modifier(if dragging {
+                Modifier::DIM
+            } else {
+                Modifier::BOLD
+            })
     } else {
-        " "
+        Style::default().fg(theme.accent)
     };
-    frame.render_widget(
-        Paragraph::new(symbol).style(Style::default().fg(if focused || hovered {
-            theme.accent
-        } else {
-            theme.muted
-        })),
-        layout.gutter,
-    );
+    frame.render_widget(Paragraph::new(content).style(style), layout.gutter);
 }
 
 fn render_thought(
     frame: &mut Frame<'_>,
-    content: &str,
+    presentation: &crate::ui::annotations::Presentation,
     layout: &ThoughtLayout,
     focused: bool,
     theme: &Theme,
 ) {
     let content_rows =
         usize::from(layout.text_area.height).saturating_sub(usize::from(layout.overflow.is_some()));
-    let lines = wrap_rows(content, usize::from(layout.text_area.width.max(1)))
-        .into_iter()
-        .take(content_rows)
-        .map(|row| Line::raw(row.visual.text))
-        .collect::<Vec<_>>();
+    let lines = wrap_rows(
+        &presentation.content,
+        usize::from(layout.text_area.width.max(1)),
+    )
+    .into_iter()
+    .take(content_rows)
+    .map(|row| {
+        styled_line(
+            &presentation.content,
+            &row.visual,
+            &presentation.folds,
+            theme,
+        )
+    })
+    .collect::<Vec<_>>();
     let mut paragraph = Paragraph::new(Text::from(lines));
     if focused {
         paragraph = paragraph.style(Style::default().fg(theme.foreground));
@@ -173,24 +213,25 @@ fn render_thought(
 }
 
 fn render_editor(frame: &mut Frame<'_>, app: &BoardApp, layout: &ThoughtLayout, theme: &Theme) {
-    let Some(snapshot) = app.editor_snapshot() else {
+    let Some(presentation) = app.editor_presentation() else {
         return;
     };
+    let snapshot = &presentation.snapshot;
     let visible = snapshot
         .visual_lines
         .iter()
         .skip(snapshot.scroll_row)
         .take(usize::from(layout.text_area.height))
-        .map(|line| editor_line(line, theme))
+        .map(|line| styled_line(&snapshot.content, line, &presentation.folds, theme))
         .collect::<Vec<_>>();
     frame.render_widget(
         Paragraph::new(visible).style(Style::default().fg(theme.foreground)),
         layout.text_area,
     );
-    let cursor_row = cursor_visual_row(&snapshot)
+    let cursor_row = cursor_visual_row(snapshot)
         .unwrap_or(snapshot.scroll_row)
         .saturating_sub(snapshot.scroll_row);
-    let cursor_column = cursor_column(&snapshot, cursor_row);
+    let cursor_column = cursor_column(snapshot, cursor_row);
     let x = layout
         .text_area
         .x
@@ -225,31 +266,57 @@ fn cursor_visual_row(snapshot: &crate::ports::editor::EditorSnapshot) -> Option<
         })
 }
 
-fn editor_line(line: &crate::ports::editor::VisualLine, theme: &Theme) -> Line<'static> {
-    let Some(selection) = line.selected_cells else {
-        return Line::raw(line.text.clone());
-    };
+fn styled_line(
+    content: &str,
+    line: &crate::ports::editor::VisualLine,
+    folds: &[crate::ui::annotations::PresentedFold],
+    theme: &Theme,
+) -> Line<'static> {
+    let source = content
+        .get(line.start_byte..line.end_byte)
+        .unwrap_or_default();
     let mut column = 0;
-    let spans = line
-        .text
-        .graphemes(true)
-        .map(|grapheme| {
-            let width = unicode_width::UnicodeWidthStr::width(grapheme);
-            let selected = column < selection.end && column.saturating_add(width) > selection.start;
+    let spans = source
+        .grapheme_indices(true)
+        .map(|(offset, grapheme)| {
+            let byte = line.start_byte.saturating_add(offset);
+            let (visible, width) = visible_grapheme(grapheme, column);
+            let selected = line.selected_cells.is_some_and(|selection| {
+                column < selection.end && column.saturating_add(width) > selection.start
+            });
+            let folded = folds
+                .iter()
+                .any(|fold| fold.collapsed && byte >= fold.start && byte < fold.end);
             column = column.saturating_add(width);
-            if selected {
-                Span::styled(
-                    grapheme.to_owned(),
-                    Style::default()
-                        .fg(theme.accent)
-                        .add_modifier(Modifier::REVERSED),
-                )
+            let mut style = Style::default().fg(if folded {
+                theme.accent
             } else {
-                Span::raw(grapheme.to_owned())
+                theme.foreground
+            });
+            if folded {
+                style = style.add_modifier(Modifier::BOLD);
             }
+            if selected {
+                style = style.add_modifier(Modifier::REVERSED);
+            }
+            Span::styled(visible, style)
         })
         .collect::<Vec<_>>();
     Line::from(spans)
+}
+
+fn visible_grapheme(grapheme: &str, column: usize) -> (String, usize) {
+    if grapheme == "\t" {
+        let width = 4 - column % 4;
+        (" ".repeat(width), width)
+    } else if grapheme.chars().any(char::is_control) {
+        ("�".to_owned(), 1)
+    } else {
+        (
+            grapheme.to_owned(),
+            unicode_width::UnicodeWidthStr::width(grapheme),
+        )
+    }
 }
 
 fn cursor_column(snapshot: &crate::ports::editor::EditorSnapshot, cursor_row: usize) -> usize {
@@ -269,83 +336,6 @@ fn cursor_column(snapshot: &crate::ports::editor::EditorSnapshot, cursor_row: us
                 .collect::<String>();
             crate::ports::text_layout::display_width(&logical)
         })
-}
-
-fn render_help(frame: &mut Frame<'_>, app: &BoardApp, overlay: &OverlayLayout, theme: &Theme) {
-    let keys = app.keybindings();
-    let content = format!(
-        "Board\n{} New   {}/{} Focus   Enter/{} Edit\n{} Delete   {}/{} Reorder   {} Undo\n{} Collapse   {} Search   {} Commands\n{}/{} Send   {} Quit\n\nEdit\nEsc Board   Primary+A Select all\nPrimary+U Delete line   Primary+Z Undo\nShift+Primary+Z Redo\n\nPaste and file drop are one operation. Clipboard images become private PNG paths. Submission uses verified Herdr agents only.",
-        keys.new,
-        keys.focus_down,
-        keys.focus_up,
-        keys.edit,
-        keys.delete,
-        keys.move_down,
-        keys.move_up,
-        keys.undo,
-        crate::ui::settings::key_label(keys.collapse),
-        keys.search,
-        keys.commands,
-        keys.submit,
-        keys.submit_remove,
-        keys.quit,
-    );
-    frame.render_widget(Clear, overlay.area);
-    frame.render_widget(
-        Paragraph::new(content)
-            .block(
-                Block::default()
-                    .title(Span::styled(
-                        " proqi help ",
-                        Style::default()
-                            .fg(theme.accent)
-                            .add_modifier(Modifier::BOLD),
-                    ))
-                    .borders(Borders::ALL),
-            )
-            .wrap(Wrap { trim: false }),
-        overlay.area,
-    );
-    frame.render_widget(
-        Paragraph::new("[x]").style(Style::default().fg(theme.accent)),
-        overlay.close,
-    );
-}
-
-struct PickerView<'a> {
-    title: &'a str,
-    prompt: char,
-    query: &'a str,
-    entries: &'a [String],
-    selected: usize,
-}
-
-fn render_picker(
-    frame: &mut Frame<'_>,
-    overlay: &OverlayLayout,
-    picker: &PickerView<'_>,
-    theme: &Theme,
-) {
-    frame.render_widget(Clear, overlay.area);
-    frame.render_widget(
-        Paragraph::new(format!("{}{query}", picker.prompt, query = picker.query))
-            .block(Block::default().title(picker.title).borders(Borders::ALL)),
-        overlay.area,
-    );
-    for (index, (entry, area)) in picker.entries.iter().zip(&overlay.items).enumerate() {
-        let style = if index == picker.selected {
-            Style::default()
-                .fg(theme.accent)
-                .add_modifier(Modifier::REVERSED)
-        } else {
-            Style::default()
-        };
-        frame.render_widget(Paragraph::new(entry.as_str()).style(style), *area);
-    }
-    frame.render_widget(
-        Paragraph::new("[x]").style(Style::default().fg(theme.accent)),
-        overlay.close,
-    );
 }
 
 #[cfg(test)]

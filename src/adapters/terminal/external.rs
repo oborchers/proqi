@@ -4,6 +4,7 @@ use std::{
     path::PathBuf,
     sync::mpsc::{Receiver, SyncSender, sync_channel},
     thread::{self, JoinHandle},
+    time::Duration,
 };
 
 use crate::{
@@ -14,7 +15,10 @@ use crate::{
     application::{ClipboardIntent, Effect},
     domain::RequestId,
     ports::{
-        agent::{AgentError, AgentGateway, AgentTarget, SubmissionReceipt, SubmissionRequest},
+        agent::{
+            AgentError, AgentGateway, AgentTarget, PanePresentation, SubmissionReceipt,
+            SubmissionRequest,
+        },
         attachment::AttachmentStore,
         clipboard::{Clipboard, ClipboardContent, ClipboardError, ClipboardWrite},
         recovery::{RecoveryDocument, RecoveryError, RecoveryExporter},
@@ -27,6 +31,15 @@ use super::TerminalError;
 enum ExternalRequest {
     DiscoverAgents,
     SubmitAgent(Box<SubmissionRequest>),
+    PublishPane {
+        pane_id: String,
+        sequence: u64,
+        ttl: Duration,
+    },
+    ClearPane {
+        pane_id: String,
+        sequence: u64,
+    },
     Write {
         request_id: RequestId,
         intent: ClipboardIntent,
@@ -131,6 +144,34 @@ impl ExternalLane {
         Ok(true)
     }
 
+    pub(super) fn publish_pane(
+        &self,
+        pane_id: &str,
+        sequence: u64,
+        ttl: Duration,
+    ) -> Result<(), TerminalError> {
+        self.send_request(ExternalRequest::PublishPane {
+            pane_id: pane_id.to_owned(),
+            sequence,
+            ttl,
+        })
+    }
+
+    pub(super) fn clear_pane(&self, pane_id: &str, sequence: u64) -> Result<(), TerminalError> {
+        self.send_request(ExternalRequest::ClearPane {
+            pane_id: pane_id.to_owned(),
+            sequence,
+        })
+    }
+
+    fn send_request(&self, request: ExternalRequest) -> Result<(), TerminalError> {
+        self.sender
+            .as_ref()
+            .ok_or(TerminalError::Worker("external lane is closed"))?
+            .send(request)
+            .map_err(|_| TerminalError::Worker("external lane disconnected"))
+    }
+
     pub(super) fn stop(mut self) -> Result<(), TerminalError> {
         drop(self.sender.take());
         match self.handle.take().map(JoinHandle::join) {
@@ -163,6 +204,18 @@ fn external_loop(
                     submission_id,
                     result: Box::new(agents.submit(*request)),
                 }
+            }
+            ExternalRequest::PublishPane {
+                pane_id,
+                sequence,
+                ttl,
+            } => {
+                let _published = agents.publish(&pane_id, sequence, ttl);
+                continue;
+            }
+            ExternalRequest::ClearPane { pane_id, sequence } => {
+                let _cleared = agents.clear(&pane_id, sequence);
+                continue;
             }
             ExternalRequest::Write {
                 request_id,

@@ -7,8 +7,8 @@ use crate::{
     domain::Direction,
     ports::{
         agent::{
-            AgentError, AgentGateway, AgentReadiness, AgentTarget, PaneContext, PaneRect,
-            SubmissionRequest,
+            AgentError, AgentGateway, AgentReadiness, AgentTarget, PaneContext, PanePresentation,
+            PaneRect, SubmissionRequest,
         },
         environment::{IdGenerator, ProcessError, ProcessOutput, ProcessRequest, ProcessRunner},
     },
@@ -331,4 +331,49 @@ fn unmanaged_environment_never_executes_herdr() {
         Err(AgentError::Unavailable(_))
     ));
     assert!(runner.requests.borrow().is_empty());
+}
+
+#[test]
+fn pane_identity_uses_display_only_metadata_with_ttl_and_clean_clear() {
+    let responses = vec![success(json!({})), success(json!({}))];
+    let (mut gateway, runner) = gateway(responses);
+    gateway
+        .publish("w1:p1", 7, Duration::from_secs(15))
+        .expect("publish display metadata");
+    gateway.clear("w1:p1", 8).expect("clear display metadata");
+
+    let requests = runner.requests.borrow();
+    assert_eq!(
+        requests[0].args,
+        [
+            "pane",
+            "report-metadata",
+            "w1:p1",
+            "--source",
+            "proqi",
+            "--title",
+            "proqi",
+            "--display-agent",
+            "proqi",
+            "--seq",
+            "7",
+            "--ttl-ms",
+            "15000",
+        ]
+    );
+    assert!(!requests[0].args.contains(&OsString::from("--agent")));
+    assert_eq!(
+        requests[1].args,
+        [
+            "pane",
+            "report-metadata",
+            "w1:p1",
+            "--source",
+            "proqi",
+            "--clear-title",
+            "--clear-display-agent",
+            "--seq",
+            "8",
+        ]
+    );
 }

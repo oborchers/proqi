@@ -12,16 +12,25 @@ pub(super) struct ChromeLayout {
     pub(super) footer: Rect,
     pub(super) context: Rect,
     pub(super) actions: Rect,
+    pub(super) agents: Rect,
     pub(super) status: Option<Rect>,
 }
 
-pub(super) fn compute(area: Rect, _mode: InteractionMode, has_status: bool) -> ChromeLayout {
-    let header_height = u16::from(area.height > 0);
+pub(super) fn compute(
+    area: Rect,
+    _mode: InteractionMode,
+    has_status: bool,
+    has_agents: bool,
+) -> ChromeLayout {
+    let header_height = u16::from(area.height > 0) + u16::from(area.height >= 10);
     let available = area.height.saturating_sub(header_height);
     let actions_height = u16::from(available >= 2);
     let context_height = u16::from(available >= 4);
-    let status_height = u16::from(has_status && available >= 7);
-    let footer_height = actions_height + context_height + status_height;
+    let agents_height = u16::from(has_agents && available >= 5);
+    let status_height = u16::from(has_status && available >= 7 + agents_height);
+    let chrome_height = actions_height + context_height + agents_height + status_height;
+    let gap_height = u16::from(available.saturating_sub(chrome_height) >= 4);
+    let footer_height = chrome_height + gap_height;
     let header = Rect::new(area.x, area.y, area.width, header_height);
     let board = Rect::new(
         area.x,
@@ -30,7 +39,7 @@ pub(super) fn compute(area: Rect, _mode: InteractionMode, has_status: bool) -> C
         available.saturating_sub(footer_height),
     );
     let footer = Rect::new(area.x, board.bottom(), area.width, footer_height);
-    let mut row = footer.y;
+    let mut row = footer.y.saturating_add(gap_height);
     let status = (status_height > 0).then(|| {
         let result = Rect::new(area.x, row, area.width, 1);
         row = row.saturating_add(1);
@@ -39,12 +48,15 @@ pub(super) fn compute(area: Rect, _mode: InteractionMode, has_status: bool) -> C
     let context = Rect::new(area.x, row, area.width, context_height);
     row = row.saturating_add(context_height);
     let actions = Rect::new(area.x, row, area.width, actions_height);
+    row = row.saturating_add(actions_height);
+    let agents = Rect::new(area.x, row, area.width, agents_height);
     ChromeLayout {
         header,
         board,
         footer,
         context,
         actions,
+        agents,
         status,
     }
 }
@@ -64,6 +76,8 @@ pub(super) fn controls(
             (HitTarget::ExportRecovery, 10),
             (HitTarget::Help, 12),
         ]
+    } else if !has_focus && matches!(mode, InteractionMode::Board) && area.width < 24 {
+        vec![(HitTarget::Insert, 7), (HitTarget::Help, 6)]
     } else if !has_focus && matches!(mode, InteractionMode::Board) {
         vec![
             (HitTarget::Insert, 7),
@@ -75,15 +89,12 @@ pub(super) fn controls(
     } else if area.width < 60 && matches!(mode, InteractionMode::Edit { .. }) {
         vec![
             (HitTarget::ExitEdit, 10),
-            (HitTarget::Copy, 7),
-            (HitTarget::Undo, 7),
             (HitTarget::Commands, 11),
             (HitTarget::Help, 12),
         ]
     } else if area.width < 60 {
         vec![
             (HitTarget::Insert, 7),
-            (HitTarget::Copy, 7),
             (HitTarget::Commands, 11),
             (HitTarget::Help, 12),
         ]
@@ -108,7 +119,11 @@ pub(super) fn controls(
             (HitTarget::Help, 12),
         ]
     };
-    place(area, &candidates)
+    let inset_width = area.width.saturating_sub(4);
+    place(
+        Rect::new(area.x.saturating_add(2), area.y, inset_width, area.height),
+        &candidates,
+    )
 }
 
 fn place(area: Rect, candidates: &[(HitTarget, u16)]) -> Vec<(HitTarget, Rect)> {

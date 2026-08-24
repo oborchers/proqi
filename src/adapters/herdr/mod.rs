@@ -12,8 +12,8 @@ use serde::de::DeserializeOwned;
 
 use crate::ports::{
     agent::{
-        AgentCapabilities, AgentError, AgentGateway, AgentTarget, PaneContext, SubmissionReceipt,
-        SubmissionRequest,
+        AgentCapabilities, AgentError, AgentGateway, AgentTarget, PaneContext, PanePresentation,
+        SubmissionReceipt, SubmissionRequest,
     },
     environment::{ProcessError, ProcessRequest, ProcessRunner},
 };
@@ -92,6 +92,65 @@ impl<R: ProcessRunner> AgentGateway for HerdrGateway<R> {
 
     fn submit(&mut self, request: SubmissionRequest) -> Result<SubmissionReceipt, AgentError> {
         submission::submit(self, &request)
+    }
+}
+
+impl<R: ProcessRunner> PanePresentation for HerdrGateway<R> {
+    fn publish(&mut self, pane_id: &str, sequence: u64, ttl: Duration) -> Result<(), AgentError> {
+        let sequence = sequence.to_string();
+        let ttl = ttl.as_millis().to_string();
+        self.metadata(&[
+            pane_id,
+            "--source",
+            "proqi",
+            "--title",
+            "proqi",
+            "--display-agent",
+            "proqi",
+            "--seq",
+            &sequence,
+            "--ttl-ms",
+            &ttl,
+        ])
+    }
+
+    fn clear(&mut self, pane_id: &str, sequence: u64) -> Result<(), AgentError> {
+        let sequence = sequence.to_string();
+        self.metadata(&[
+            pane_id,
+            "--source",
+            "proqi",
+            "--clear-title",
+            "--clear-display-agent",
+            "--seq",
+            &sequence,
+        ])
+    }
+}
+
+impl<R: ProcessRunner> HerdrGateway<R> {
+    fn metadata(&mut self, args: &[&str]) -> Result<(), AgentError> {
+        if !self.managed {
+            return Err(AgentError::Unavailable(
+                "HERDR_ENV is not set for this pane".to_owned(),
+            ));
+        }
+        let mut command = vec![OsString::from("pane"), OsString::from("report-metadata")];
+        command.extend(args.iter().map(OsString::from));
+        let output = self
+            .runner
+            .run(ProcessRequest {
+                program: self.program.clone(),
+                args: command,
+                stdin: None,
+                timeout: DISCOVERY_TIMEOUT,
+            })
+            .map_err(process_error)?;
+        if output.exit_code == Some(0) {
+            Ok(())
+        } else {
+            Err(command_error(&output.stderr))
+        }
     }
 }
 

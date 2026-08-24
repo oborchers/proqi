@@ -9,7 +9,7 @@ use std::{
 };
 
 use crossterm::{
-    cursor::{Hide, Show},
+    cursor::{Hide, SetCursorStyle, Show},
     event::{
         DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture,
         KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
@@ -40,6 +40,7 @@ impl TerminalControl for CrosstermControl {
                     | KeyboardEnhancementFlags::REPORT_EVENT_TYPES
                     | KeyboardEnhancementFlags::REPORT_ALTERNATE_KEYS
             ),
+            SetCursorStyle::SteadyBlock,
             Hide
         )
     }
@@ -48,6 +49,7 @@ impl TerminalControl for CrosstermControl {
         let screen = execute!(
             stdout(),
             Show,
+            SetCursorStyle::DefaultUserShape,
             PopKeyboardEnhancementFlags,
             DisableBracketedPaste,
             DisableMouseCapture,

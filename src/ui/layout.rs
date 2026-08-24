@@ -35,6 +35,8 @@ pub enum HitTarget {
     Delete,
     /// Submit to one verified direction, optionally removing after acceptance.
     Submit(Direction, bool),
+    /// Choose normal or remove-after-acceptance submission for several agents.
+    BeginSubmit(bool),
     /// Board undo action.
     Undo,
     /// Contextual help action.
@@ -89,6 +91,8 @@ pub struct LayoutSnapshot {
     pub footer_context: Rect,
     /// Contextual labeled actions.
     pub footer_actions: Rect,
+    /// Verified adjacent-agent targets.
+    pub footer_agents: Rect,
     /// Optional dedicated transient-status row.
     pub footer_status: Option<Rect>,
     /// Visible thought allocations.
@@ -175,34 +179,47 @@ impl LayoutSnapshot {
     }
 
     /// Add only currently verified agent controls where footer width permits.
-    pub fn configure_agent_controls(&mut self, targets: &[AgentTarget]) {
-        let entries = targets
-            .iter()
-            .flat_map(|target| [(target.direction, false), (target.direction, true)])
-            .collect::<Vec<_>>();
-        let required = u16::try_from(entries.len())
-            .unwrap_or(u16::MAX)
-            .saturating_mul(8);
-        while controls_end(&self.controls, self.footer_actions.x).saturating_add(required)
-            > self.footer_actions.right()
-        {
-            if self.controls.pop().is_none() {
-                return;
-            }
+    pub fn configure_agent_controls(&mut self, targets: &[AgentTarget], remove_mode: Option<bool>) {
+        if self.footer_agents.height == 0 {
+            return;
         }
-        let mut left = controls_end(&self.controls, self.footer_actions.x);
-        for (direction, remove) in entries {
+        let mut left = self.footer_agents.x.saturating_add(2);
+        let right = self.footer_agents.right().saturating_sub(2);
+        if let [target] = targets {
+            let width = right.saturating_sub(left) / 2;
+            for remove in [false, true] {
+                self.controls.push((
+                    HitTarget::Submit(target.direction, remove),
+                    Rect::new(left, self.footer_agents.y, width, 1),
+                ));
+                left = left.saturating_add(width);
+            }
+            return;
+        }
+        for remove in [false, true] {
+            if left.saturating_add(9) > right {
+                break;
+            }
             self.controls.push((
-                HitTarget::Submit(direction, remove),
-                Rect::new(left, self.footer_actions.y, 8, 1),
+                HitTarget::BeginSubmit(remove),
+                Rect::new(left, self.footer_agents.y, 9, 1),
             ));
-            left = left.saturating_add(8);
+            left = left.saturating_add(10);
+        }
+        let count = u16::try_from(targets.len()).unwrap_or(u16::MAX).max(1);
+        let width = right.saturating_sub(left).checked_div(count).unwrap_or(0);
+        for target in targets {
+            if width == 0 || left >= right {
+                break;
+            }
+            let remove = remove_mode.unwrap_or(false);
+            self.controls.push((
+                HitTarget::Submit(target.direction, remove),
+                Rect::new(left, self.footer_agents.y, width, 1),
+            ));
+            left = left.saturating_add(width);
         }
     }
-}
-
-fn controls_end(controls: &[(HitTarget, Rect)], fallback: u16) -> u16 {
-    controls.last().map_or(fallback, |(_, area)| area.right())
 }
 
 /// Compute responsive geometry from current state and terminal dimensions.
@@ -214,8 +231,9 @@ pub fn compute(
     requested_first: usize,
     expanded: &BTreeSet<ThoughtId>,
     has_status: bool,
+    has_agents: bool,
 ) -> LayoutSnapshot {
-    let chrome = chrome::compute(area, state.mode, has_status);
+    let chrome = chrome::compute(area, state.mode, has_status, has_agents);
     let board = chrome.board;
     let content_width = board.width.saturating_sub(2).max(1);
     let live = state.board.live_thoughts();
@@ -234,9 +252,13 @@ pub fn compute(
     let used_bottom = thoughts
         .last()
         .map_or(board.y, |layout| layout.area.bottom());
+    let insert_space = board.bottom().saturating_sub(used_bottom);
     let insert = (matches!(state.mode, crate::application::InteractionMode::Board)
-        && used_bottom < board.bottom())
-    .then(|| Rect::new(board.x, used_bottom, board.width, 1));
+        && insert_space > 0)
+        .then(|| {
+            let y = used_bottom.saturating_add(u16::from(insert_space >= 2));
+            Rect::new(board.x, y, board.width, 1)
+        });
     LayoutSnapshot {
         area,
         board,
@@ -244,6 +266,7 @@ pub fn compute(
         footer: chrome.footer,
         footer_context: chrome.context,
         footer_actions: chrome.actions,
+        footer_agents: chrome.agents,
         footer_status: chrome.status,
         thoughts,
         insert,
@@ -428,9 +451,11 @@ mod tests {
             0,
             &BTreeSet::new(),
             false,
+            false,
         );
         assert_eq!(layout.header, Rect::new(0, 0, 20, 1));
-        assert_eq!(layout.hit_test(0, 1), Some(HitTarget::Insert));
+        let insert = layout.insert.expect("visible insertion row");
+        assert_eq!(layout.hit_test(insert.x, insert.y), Some(HitTarget::Insert));
         assert!(
             layout
                 .controls

@@ -1,26 +1,25 @@
 ---
 source: tests/ui_board/snapshots.rs
-assertion_line: 107
 expression: "snapshot(&mut fixture, 48, 8, ThemePreference::Limited)"
 ---
 SIZE 48x8
 
 TEXT
-00│ proqi · proqi-ui-contract · 1 thought    saving│
-01││ selected prompt│
+00│  proqi · proqi-ui-contract · 1 thought   saving│
+01│⋮ selected prompt│
 02││
 03││
 04││
 05││
-06│ ready                             edit · saving│
-07│Esc Board  y Copy  u Undo  : Commands│
+06│  ready                          edit · saving│
+07│  Esc Board  : Commands  ? Shortcuts│
 
 STYLE RUNS
 0: 0-47 fg=DarkGray bg=Reset mod=NONE
-1: 0-0 fg=Green bg=Reset mod=REVERSED | 1-47 fg=Reset bg=Reset mod=REVERSED
+1: 0-0 fg=Reset bg=Green mod=BOLD | 1-47 fg=Reset bg=Reset mod=REVERSED
 2: 0-47 fg=Reset bg=Reset mod=NONE
 3: 0-47 fg=Reset bg=Reset mod=NONE
 4: 0-47 fg=Reset bg=Reset mod=NONE
 5: 0-47 fg=Reset bg=Reset mod=NONE
-6: 0-47 fg=DarkGray bg=Reset mod=NONE
-7: 0-9 fg=Green bg=Reset mod=NONE | 10-10 fg=Reset bg=Reset mod=NONE | 11-17 fg=Green bg=Reset mod=NONE | 18-18 fg=Reset bg=Reset mod=NONE | 19-25 fg=Green bg=Reset mod=NONE | 26-26 fg=Reset bg=Reset mod=NONE | 27-37 fg=Green bg=Reset mod=NONE | 38-47 fg=Reset bg=Reset mod=NONE
+6: 0-1 fg=Reset bg=Reset mod=NONE | 2-45 fg=DarkGray bg=Reset mod=NONE | 46-47 fg=Reset bg=Reset mod=NONE
+7: 0-1 fg=Reset bg=Reset mod=NONE | 2-4 fg=Green bg=Reset mod=NONE | 5-12 fg=Reset bg=Reset mod=NONE | 13-13 fg=Green bg=Reset mod=NONE | 14-24 fg=Reset bg=Reset mod=NONE | 25-25 fg=Green bg=Reset mod=NONE | 26-47 fg=Reset bg=Reset mod=NONE

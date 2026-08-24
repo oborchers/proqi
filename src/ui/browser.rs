@@ -295,7 +295,9 @@ impl SessionBrowser {
                 BrowserAction::Continue
             }
             UiInput::Pointer(pointer) => self.handle_pointer(pointer),
-            UiInput::Resize { .. } | UiInput::Key(_) => BrowserAction::Continue,
+            UiInput::Resize { .. } | UiInput::HostFocusGained | UiInput::Key(_) => {
+                BrowserAction::Continue
+            }
         }
     }
 
