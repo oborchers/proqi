@@ -209,6 +209,9 @@ fn collect_source_files(directory: &Path, files: &mut Vec<PathBuf>) -> Result<()
     {
         let entry = entry.map_err(|error| format!("read directory entry: {error}"))?;
         let path = entry.path();
+        if is_impeccable_artifact(&path) {
+            continue;
+        }
         let file_type = entry
             .file_type()
             .map_err(|error| format!("read file type for {}: {error}", path.display()))?;
@@ -223,6 +226,15 @@ fn collect_source_files(directory: &Path, files: &mut Vec<PathBuf>) -> Result<()
         }
     }
     Ok(())
+}
+
+fn is_impeccable_artifact(path: &Path) -> bool {
+    path.components().any(|component| {
+        component
+            .as_os_str()
+            .to_str()
+            .is_some_and(|name| name.to_ascii_lowercase().contains("impeccable"))
+    })
 }
 
 fn is_source_file(path: &Path) -> bool {
@@ -364,5 +376,16 @@ mod tests {
     fn configured_ceiling_is_inclusive() {
         assert_eq!("line\n".repeat(MAX_SOURCE_LINES).lines().count(), 500);
         assert_eq!("line\n".repeat(MAX_SOURCE_LINES + 1).lines().count(), 501);
+    }
+
+    #[test]
+    fn local_impeccable_artifacts_are_not_first_party_source() {
+        assert!(is_impeccable_artifact(Path::new(
+            ".github/skills/impeccable/scripts/context.mjs"
+        )));
+        assert!(is_impeccable_artifact(Path::new(
+            ".github/agents/impeccable-documenter.agent.md"
+        )));
+        assert!(!is_impeccable_artifact(Path::new("src/ui/render.rs")));
     }
 }
