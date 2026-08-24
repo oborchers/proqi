@@ -1,5 +1,6 @@
 //! CLI dispatch into the shared session service.
 
+mod capabilities;
 mod forwarding;
 mod sessions;
 mod transfer;
@@ -54,7 +55,7 @@ fn execute_inner(cli: Cli) -> Result<Outcome, CliError> {
         ));
     }
     if matches!(cli.command, Some(Command::Capabilities)) {
-        return Ok(capabilities());
+        return Ok(capabilities::outcome());
     }
     let context = RuntimeContext::open(cli.state_dir.as_deref())?;
     match cli.command {
@@ -66,7 +67,7 @@ fn execute_inner(cli: Cli) -> Result<Outcome, CliError> {
             let mut context = context;
             execute_thoughts(&mut context, arguments.command)
         }
-        Some(Command::Capabilities) => Ok(capabilities()),
+        Some(Command::Capabilities) => Ok(capabilities::outcome()),
         None => {
             let resume = match cli.resume {
                 None => ResumeRequest::Fresh,
@@ -75,23 +76,6 @@ fn execute_inner(cli: Cli) -> Result<Outcome, CliError> {
             };
             execute_launch(context, cli.continue_latest, resume, !cli.json)
         }
-    }
-}
-
-fn capabilities() -> Outcome {
-    Outcome {
-        data: json!({
-            "cli_schema_version": 1,
-            "identifier_encoding": "prefix_base32hex_uuidv7",
-            "commands": ["sessions", "thoughts"],
-            "active_session_control": cfg!(unix),
-            "control_protocol": crate::ports::control::CONTROL_PROTOCOL_VERSION,
-            "cross_session_transfer": true,
-            "max_thought_stdin_bytes": MAX_THOUGHT_STDIN_BYTES,
-            "herdr_submission": true,
-            "herdr_managed_pane_required": true,
-        }),
-        human: "CLI schema 1\nSessions and thoughts are available\nActive control: available\nHerdr submission: supported in a managed Herdr pane".to_owned(),
     }
 }
 

@@ -481,16 +481,4 @@ mod tests {
 }
 
 #[cfg(all(test, windows))]
-mod windows_tests {
-    use crate::ports::control::ControlError;
-
-    use super::ControlServer;
-
-    #[test]
-    fn private_alpha_does_not_advertise_unverified_windows_control() {
-        assert!(matches!(
-            ControlServer::spawn(r"\\.\pipe\proqi-test"),
-            Err(ControlError::Unsupported)
-        ));
-    }
-}
+mod windows_tests;

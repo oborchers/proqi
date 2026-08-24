@@ -1,4 +1,4 @@
-//! Bounded framed transport over Unix sockets or Windows named pipes.
+//! Bounded framed transport over Unix sockets with fail-closed Windows stubs.
 
 use std::{
     io::{Read, Write},
@@ -234,15 +234,10 @@ fn validate_client_peer(
 
 #[cfg(windows)]
 fn validate_client_peer(
-    stream: &LocalStream,
+    _stream: &LocalStream,
     _listener: &LocalListener,
 ) -> Result<(), ControlError> {
-    stream
-        .peer_creds()
-        .map_err(io_error)?
-        .pid()
-        .map(|_| ())
-        .ok_or(ControlError::InvalidPeer)
+    Err(ControlError::Unsupported)
 }
 
 #[cfg(unix)]
@@ -264,14 +259,11 @@ fn validate_server_peer(
 
 #[cfg(windows)]
 fn validate_server_peer(
-    stream: &LocalStream,
+    _stream: &LocalStream,
     _endpoint: &str,
-    owner_pid: u32,
+    _owner_pid: u32,
 ) -> Result<(), ControlError> {
-    let peer = stream.peer_creds().map_err(io_error)?;
-    (peer.pid().and_then(|pid| u32::try_from(pid).ok()) == Some(owner_pid))
-        .then_some(())
-        .ok_or(ControlError::InvalidPeer)
+    Err(ControlError::Unsupported)
 }
 
 fn io_error(error: impl std::fmt::Display) -> ControlError {

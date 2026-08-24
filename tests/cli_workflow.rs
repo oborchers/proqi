@@ -351,12 +351,25 @@ fn launch_modes_and_capability_discovery_have_stable_output() {
     assert_eq!(resumed["session_id"], session);
     let capabilities = success(root, &["capabilities"], None);
     assert_eq!(capabilities["cli_schema_version"], 1);
-    assert_eq!(capabilities["active_session_control"], true);
+    assert_eq!(capabilities["active_session_control"], cfg!(unix));
     assert_eq!(capabilities["control_protocol"], 2);
     assert_eq!(capabilities["cross_session_transfer"], true);
     assert_eq!(capabilities["max_thought_stdin_bytes"], 131_072);
     assert_eq!(capabilities["herdr_submission"], true);
     assert_eq!(capabilities["herdr_managed_pane_required"], true);
+
+    let human_capabilities = Command::new(env!("CARGO_BIN_EXE_proqi"))
+        .arg("capabilities")
+        .output()
+        .expect("human capability discovery");
+    assert!(human_capabilities.status.success());
+    let human = String::from_utf8(human_capabilities.stdout).expect("UTF-8 capabilities");
+    let expected = if cfg!(unix) {
+        "Active control: available"
+    } else {
+        "Active control: unavailable on this platform"
+    };
+    assert!(human.contains(expected));
 
     let non_terminal = Command::new(env!("CARGO_BIN_EXE_proqi"))
         .arg("--state-dir")
