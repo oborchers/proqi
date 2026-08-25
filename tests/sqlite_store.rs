@@ -25,8 +25,9 @@ use proqi::{
         agent::{AgentState, SubmissionDisposition},
         environment::IdGenerator,
         store::{
-            DurableIdentity, MigrationMode, OperationBatch, SessionQuery, Store, StoreError,
-            SubmissionAttempt, SubmissionAttemptState, SubmissionOutcome,
+            DurableIdentity, MigrationMode, OperationBatch, STORAGE_PROTOCOL_VERSION,
+            SUPPORTED_SCHEMA_VERSION, SessionQuery, Store, StoreError, SubmissionAttempt,
+            SubmissionAttemptState, SubmissionOutcome,
         },
     },
 };
@@ -124,6 +125,8 @@ fn create_thought(
     thought_id
 }
 
+#[path = "sqlite_store/compaction.rs"]
+mod compaction;
 #[path = "sqlite_store/concurrency.rs"]
 mod concurrency;
 #[path = "sqlite_store/core.rs"]

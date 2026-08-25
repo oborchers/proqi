@@ -15,7 +15,7 @@ use crate::{
 
 use super::{
     StoreConfig,
-    schema::{MIGRATION_1, MIGRATION_2, MIGRATION_3},
+    schema::{MIGRATION_1, MIGRATION_2, MIGRATION_3, MIGRATION_4},
     support::{
         create_private_dir, map_sql_error, set_private_file_permissions, set_private_open_mode,
     },
@@ -60,7 +60,7 @@ pub(super) fn migrate(
     found: u32,
     at: Timestamp,
 ) -> Result<(), StoreError> {
-    if found > 2 {
+    if found > 3 {
         return Err(StoreError::MigrationRequired {
             found,
             supported: SUPPORTED_SCHEMA_VERSION,
@@ -73,15 +73,25 @@ pub(super) fn migrate(
         0 => transaction.execute_batch(MIGRATION_1),
         1 => transaction
             .execute_batch(MIGRATION_2)
-            .and_then(|()| transaction.execute_batch(MIGRATION_3)),
-        2 => transaction.execute_batch(MIGRATION_3),
+            .and_then(|()| transaction.execute_batch(MIGRATION_3))
+            .and_then(|()| transaction.execute_batch(MIGRATION_4)),
+        2 => transaction
+            .execute_batch(MIGRATION_3)
+            .and_then(|()| transaction.execute_batch(MIGRATION_4)),
+        3 => transaction.execute_batch(MIGRATION_4),
         _ => Ok(()),
     }
     .map_err(map_sql_error)?;
     transaction
         .execute(
-            "UPDATE schema_meta SET migrated_at = ?1, storage_protocol = ?2 WHERE singleton = 1",
-            params![at.as_millis(), i64::from(STORAGE_PROTOCOL_VERSION)],
+            "UPDATE schema_meta
+             SET schema_version = ?1, storage_protocol = ?2, migrated_at = ?3
+             WHERE singleton = 1",
+            params![
+                i64::from(SUPPORTED_SCHEMA_VERSION),
+                i64::from(STORAGE_PROTOCOL_VERSION),
+                at.as_millis()
+            ],
         )
         .map_err(map_sql_error)?;
     transaction

@@ -63,9 +63,13 @@ impl BoardApp {
     }
 
     pub(super) fn retry_persistence(&mut self) -> Vec<Effect> {
-        let DurabilityState::Failed { failed, .. } = self.state.durability else {
+        let DurabilityState::Failed { failed, code, .. } = self.state.durability else {
             return Vec::new();
         };
+        if code == crate::application::FailureCode::RecoveryCapacity {
+            self.set_error("retry is unavailable; export recovery before quitting");
+            return Vec::new();
+        }
         self.reduce(Action::RetryPersistence(failed))
     }
 }

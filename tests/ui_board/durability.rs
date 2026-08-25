@@ -19,6 +19,25 @@ fn storage_failure_blocks_new_edits_and_exposes_retry() {
 }
 
 #[test]
+fn exhausted_recovery_capacity_exposes_export_without_retry() {
+    let mut fixture = Fixture::new();
+    let sequence = fixture.paste("must export");
+    fixture.app.acknowledge_persistence_result(
+        sequence,
+        Err(proqi::application::FailureCode::RecoveryCapacity),
+    );
+    let terminal = draw(&mut fixture, 70, 10);
+    let rendered = text(terminal.backend().buffer());
+    assert!(rendered.contains("w Export recovery"));
+    assert!(!rendered.contains("r Retry"));
+    assert!(
+        fixture
+            .effects(UiInput::Key(UiKey::Character('r')))
+            .is_empty()
+    );
+}
+
+#[test]
 fn typing_coalesces_until_a_semantic_boundary() {
     let mut fixture = Fixture::new();
     let effects = fixture.effects(UiInput::Key(UiKey::Enter));

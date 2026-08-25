@@ -2,6 +2,7 @@
 
 mod lane;
 mod message;
+mod retention;
 mod transfer;
 
 use std::{
@@ -24,6 +25,7 @@ pub(super) struct PersistenceLane {
     pub(super) receiver: Receiver<PersistenceResult>,
     handle: Option<JoinHandle<()>>,
 }
+
 fn persistence_loop(
     mut store: SqliteStore,
     mut runtime: Option<transfer::TransferRuntime>,
@@ -196,9 +198,14 @@ fn commit_batch(
         receipt
             .ok_or_else(|| StoreError::Integrity("mutable operation lacked a receipt".to_owned()))
     });
+    let result = if result.is_err() && !retention::can_retain(retained, sequence, &batch) {
+        Err(StoreError::RecoveryCapacity)
+    } else {
+        result
+    };
     if result.is_ok() {
         retained.remove(&sequence);
-    } else {
+    } else if !matches!(result, Err(StoreError::RecoveryCapacity)) {
         retained.insert(sequence, batch);
     }
     results

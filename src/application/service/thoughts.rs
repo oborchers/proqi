@@ -215,6 +215,7 @@ where
     }
 
     fn load_live_state(&mut self, id: SessionId) -> Result<AppState, SessionServiceError> {
+        self.store.compact_session(id)?;
         let snapshot = self.store.load_session(id)?;
         if snapshot.board.session.deleted_at.is_some() {
             return Err(SessionServiceError::SessionTrashed(id));
@@ -246,6 +247,29 @@ fn match_existing_add(
     annotations: &[ContentAnnotation],
     position: Option<usize>,
 ) -> Result<ThoughtMutation, SessionServiceError> {
+    if let StoredOperationRequest::Compacted { replay, receipt } = existing {
+        let crate::ports::store::CompactedOperationRequest::Add {
+            session_id: stored_session,
+            thought_id: stored_thought,
+            payload_digest,
+            position: stored_position,
+        } = replay
+        else {
+            return Err(SessionServiceError::IdempotencyConflict);
+        };
+        let digest = crate::ports::store::thought_payload_digest(content, annotations)?;
+        if *stored_session == session_id
+            && *stored_thought == thought_id
+            && *payload_digest == digest
+            && position.is_none_or(|value| value == *stored_position)
+        {
+            return Ok(ThoughtMutation {
+                thought_id,
+                receipt: *receipt,
+            });
+        }
+        return Err(SessionServiceError::IdempotencyConflict);
+    }
     let StoredOperationRequest::Board { operation, receipt } = existing else {
         return Err(SessionServiceError::IdempotencyConflict);
     };
@@ -273,6 +297,21 @@ fn match_existing_delete(
     session_id: SessionId,
     thought_id: ThoughtId,
 ) -> Result<ThoughtMutation, SessionServiceError> {
+    if let StoredOperationRequest::Compacted { replay, receipt } = existing {
+        if matches!(
+            replay,
+            crate::ports::store::CompactedOperationRequest::Delete {
+                session_id: stored_session,
+                thought_id: stored_thought,
+            } if *stored_session == session_id && *stored_thought == thought_id
+        ) {
+            return Ok(ThoughtMutation {
+                thought_id,
+                receipt: *receipt,
+            });
+        }
+        return Err(SessionServiceError::IdempotencyConflict);
+    }
     let StoredOperationRequest::Board { operation, receipt } = existing else {
         return Err(SessionServiceError::IdempotencyConflict);
     };
@@ -302,6 +341,24 @@ fn match_existing_move(
     thought_id: ThoughtId,
     position: usize,
 ) -> Result<ThoughtMutation, SessionServiceError> {
+    if let StoredOperationRequest::Compacted { replay, receipt } = existing {
+        if matches!(
+            replay,
+            crate::ports::store::CompactedOperationRequest::Move {
+                session_id: stored_session,
+                thought_id: stored_thought,
+                position: stored_position,
+            } if *stored_session == session_id
+                && *stored_thought == thought_id
+                && *stored_position == position
+        ) {
+            return Ok(ThoughtMutation {
+                thought_id,
+                receipt: *receipt,
+            });
+        }
+        return Err(SessionServiceError::IdempotencyConflict);
+    }
     let StoredOperationRequest::Board { operation, receipt } = existing else {
         return Err(SessionServiceError::IdempotencyConflict);
     };
@@ -332,6 +389,19 @@ fn match_existing_history(
     scope: UndoScope,
     undo: bool,
 ) -> Result<CommitReceipt, SessionServiceError> {
+    if let StoredOperationRequest::Compacted { replay, receipt } = existing {
+        if matches!(
+            replay,
+            crate::ports::store::CompactedOperationRequest::History {
+                session_id: stored_session,
+                scope: stored_scope,
+                undo: stored_undo,
+            } if *stored_session == session_id && *stored_scope == scope && *stored_undo == undo
+        ) {
+            return Ok(*receipt);
+        }
+        return Err(SessionServiceError::IdempotencyConflict);
+    }
     let StoredOperationRequest::HistoryMove {
         session_id: stored_session,
         scope: stored_scope,

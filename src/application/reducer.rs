@@ -257,6 +257,15 @@ fn reduce_persistence(state: &mut AppState, action: &Action) -> ApplicationResul
             Ok(vec![Effect::Notify { code: *code }])
         }
         Action::RetryPersistence(sequence) => {
+            if matches!(
+                state.durability,
+                DurabilityState::Failed {
+                    code: crate::application::FailureCode::RecoveryCapacity,
+                    ..
+                }
+            ) {
+                return Err(ApplicationError::InvalidState);
+            }
             if !matches!(
                 state.durability,
                 DurabilityState::Failed { failed, .. } if failed == *sequence

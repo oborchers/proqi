@@ -1,10 +1,12 @@
 //! SQLite persistence adapter.
 
 mod board_commit;
+mod compaction;
 mod history_commit;
 mod load;
 mod migration;
 mod operation_lookup;
+mod receipt_compaction;
 mod schema;
 mod search;
 mod session_admin;
@@ -304,6 +306,10 @@ impl SqliteStore {
 impl Store for SqliteStore {
     fn load_session(&mut self, id: SessionId) -> Result<SessionSnapshot, StoreError> {
         load_snapshot(&self.connection, id)
+    }
+
+    fn compact_session(&mut self, id: SessionId) -> Result<(), StoreError> {
+        self.with_write_retry(|transaction| compaction::compact_session(transaction, id))
     }
 
     fn search_sessions(&mut self, query: &SessionQuery) -> Result<Vec<SessionHit>, StoreError> {

@@ -1,5 +1,7 @@
 //! Persistence facade expressed in domain terms.
 
+mod compaction;
+
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -10,10 +12,12 @@ use crate::domain::{
 };
 use crate::ports::agent::{AgentState, SubmissionDisposition};
 
+pub use compaction::{CompactedOperationRequest, thought_payload_digest};
+
 /// Current storage schema understood by this binary.
-pub const SUPPORTED_SCHEMA_VERSION: u32 = 3;
+pub const SUPPORTED_SCHEMA_VERSION: u32 = 4;
 /// Current local storage protocol understood by this binary.
-pub const STORAGE_PROTOCOL_VERSION: u32 = 3;
+pub const STORAGE_PROTOCOL_VERSION: u32 = 4;
 
 /// Durable lifecycle state for one content-redacted agent submission.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -127,6 +131,13 @@ pub enum StoredOperationRequest {
         scope: UndoScope,
         /// Undo when true, redo when false.
         undo: bool,
+        /// Original durable receipt.
+        receipt: CommitReceipt,
+    },
+    /// Content-redacted semantic replay data retained after history compaction.
+    Compacted {
+        /// Minimal fields required to compare a replay safely.
+        replay: CompactedOperationRequest,
         /// Original durable receipt.
         receipt: CommitReceipt,
     },
@@ -293,6 +304,9 @@ pub enum StoreError {
     /// Available storage could not accept a write.
     #[error("storage device is full")]
     DiskFull,
+    /// The in-memory recovery queue cannot safely retain another failed write.
+    #[error("failed write exceeds bounded recovery capacity")]
+    RecoveryCapacity,
 }
 
 /// Local durable store used by the TUI and CLI.
@@ -303,6 +317,15 @@ pub trait Store {
     ///
     /// Returns a typed error for absence, incompatibility, corruption, or I/O failure.
     fn load_session(&mut self, id: SessionId) -> Result<SessionSnapshot, StoreError>;
+
+    /// Compact retained history while the caller owns the session lease.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed corruption, serialization, contention, or I/O failure.
+    fn compact_session(&mut self, _id: SessionId) -> Result<(), StoreError> {
+        Ok(())
+    }
 
     /// Search current state without consulting canonical data outside SQLite.
     ///

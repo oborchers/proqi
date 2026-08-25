@@ -115,10 +115,11 @@ CREATE VIRTUAL TABLE session_search USING fts5(
 );
 
 INSERT INTO schema_meta(singleton, schema_version, storage_protocol, migrated_at)
-VALUES (1, 3, 3, 0);
+VALUES (1, 4, 4, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (1, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (2, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (3, 0);
+INSERT INTO migration_history(version, applied_at) VALUES (4, 0);
 ";
 
 pub(super) const MIGRATION_2: &str = r"
@@ -152,4 +153,9 @@ ON submission_attempts(thought_id)
 WHERE state IN ('prepared', 'sending');
 UPDATE schema_meta SET schema_version = 3, storage_protocol = 3;
 INSERT INTO migration_history(version, applied_at) VALUES (3, 0);
+";
+
+pub(super) const MIGRATION_4: &str = r"
+UPDATE schema_meta SET schema_version = 4, storage_protocol = 4;
+INSERT INTO migration_history(version, applied_at) VALUES (4, 0);
 ";

@@ -18,6 +18,8 @@ pub enum FailureCode {
     ClipboardFailed,
     /// Persistence failed and state is not yet durable.
     StorageFailed,
+    /// Persistence failed and the exact failed batch could not be retained for retry.
+    RecoveryCapacity,
     /// Domain invariants rejected the operation.
     InvariantViolation,
 }
@@ -31,6 +33,7 @@ impl FailureCode {
             Self::InvalidState => "invalid_state",
             Self::ClipboardFailed => "clipboard_failed",
             Self::StorageFailed => "storage_failed",
+            Self::RecoveryCapacity => "recovery_capacity",
             Self::InvariantViolation => "invariant_violation",
         }
     }

@@ -33,6 +33,9 @@ pub(super) fn operation_request(
         identity: DurableIdentity::Operation(id),
         idempotent_replay: true,
     };
+    if let Some((replay, _)) = super::receipt_compaction::decode(&request)? {
+        return Ok(Some(StoredOperationRequest::Compacted { replay, receipt }));
+    }
     if let Ok(operation) = serde_json::from_str::<BoardOperation>(&request) {
         validate_board_record(&operation, id, session_id, sequence)?;
         return Ok(Some(StoredOperationRequest::Board {

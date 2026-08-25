@@ -134,6 +134,7 @@ impl BoardApp {
             FailureCode::StorageFailed => {
                 "save failed; press r to retry or w to export recovery".to_owned()
             }
+            FailureCode::RecoveryCapacity => "save failed; press w to export recovery".to_owned(),
             _ => code.as_str().to_owned(),
         };
         self.set_error(message);

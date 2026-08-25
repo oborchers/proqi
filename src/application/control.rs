@@ -24,7 +24,8 @@ pub(crate) fn match_control_replay(
 ) -> ControlReplay {
     let receipt = match existing {
         StoredOperationRequest::Board { receipt, .. }
-        | StoredOperationRequest::HistoryMove { receipt, .. } => *receipt,
+        | StoredOperationRequest::HistoryMove { receipt, .. }
+        | StoredOperationRequest::Compacted { receipt, .. } => *receipt,
     };
     let Some(operation_id) = mutation.durable_operation_id() else {
         return ControlReplay::Conflict;
@@ -47,15 +48,7 @@ pub(crate) fn match_control_replay(
             Some(*thought_id)
         }
         ControlMutation::History { scope, undo, .. }
-            if matches!(
-                existing,
-                StoredOperationRequest::HistoryMove {
-                    session_id: stored_session,
-                    scope: stored_scope,
-                    undo: stored_undo,
-                    ..
-                } if *stored_session == session_id && stored_scope == scope && stored_undo == undo
-            ) =>
+            if matches_history(existing, session_id, *scope, *undo) =>
         {
             None
         }
@@ -74,6 +67,35 @@ fn matches_add(
     session_id: SessionId,
     mutation: &ControlMutation,
 ) -> bool {
+    if let StoredOperationRequest::Compacted { replay, .. } = existing {
+        let crate::ports::store::CompactedOperationRequest::Add {
+            session_id: stored_session,
+            thought_id: stored_thought,
+            payload_digest,
+            position: stored_position,
+        } = replay
+        else {
+            return false;
+        };
+        let ControlMutation::Add {
+            thought_id,
+            content,
+            annotations,
+            position,
+            ..
+        } = mutation
+        else {
+            return false;
+        };
+        return crate::ports::store::thought_payload_digest(content, annotations).is_ok_and(
+            |digest| {
+                *stored_session == session_id
+                    && stored_thought == thought_id
+                    && *payload_digest == digest
+                    && position.is_none_or(|value| value == *stored_position)
+            },
+        );
+    }
     let (
         StoredOperationRequest::Board { operation, .. },
         ControlMutation::Add {
@@ -106,6 +128,15 @@ fn matches_delete(
     session_id: SessionId,
     thought_id: crate::domain::ThoughtId,
 ) -> bool {
+    if let StoredOperationRequest::Compacted { replay, .. } = existing {
+        return matches!(
+            replay,
+            crate::ports::store::CompactedOperationRequest::Delete {
+                session_id: stored_session,
+                thought_id: stored_thought,
+            } if *stored_session == session_id && *stored_thought == thought_id
+        );
+    }
     let StoredOperationRequest::Board { operation, .. } = existing else {
         return false;
     };
@@ -126,6 +157,26 @@ fn matches_move(
     session_id: SessionId,
     mutation: &ControlMutation,
 ) -> bool {
+    if let StoredOperationRequest::Compacted { replay, .. } = existing {
+        let ControlMutation::Move {
+            thought_id,
+            position,
+            ..
+        } = mutation
+        else {
+            return false;
+        };
+        return matches!(
+            replay,
+            crate::ports::store::CompactedOperationRequest::Move {
+                session_id: stored_session,
+                thought_id: stored_thought,
+                position: stored_position,
+            } if *stored_session == session_id
+                && stored_thought == thought_id
+                && stored_position == position
+        );
+    }
     let (
         StoredOperationRequest::Board { operation, .. },
         ControlMutation::Move {
@@ -147,6 +198,32 @@ fn matches_move(
                 ..
             } if stored == thought_id && usize::try_from(to.get()).ok() == Some(*position)
         )
+}
+
+fn matches_history(
+    existing: &StoredOperationRequest,
+    session_id: SessionId,
+    scope: crate::domain::UndoScope,
+    undo: bool,
+) -> bool {
+    match existing {
+        StoredOperationRequest::HistoryMove {
+            session_id: stored_session,
+            scope: stored_scope,
+            undo: stored_undo,
+            ..
+        }
+        | StoredOperationRequest::Compacted {
+            replay:
+                crate::ports::store::CompactedOperationRequest::History {
+                    session_id: stored_session,
+                    scope: stored_scope,
+                    undo: stored_undo,
+                },
+            ..
+        } => *stored_session == session_id && *stored_scope == scope && *stored_undo == undo,
+        StoredOperationRequest::Board { .. } | StoredOperationRequest::Compacted { .. } => false,
+    }
 }
 
 #[cfg(test)]

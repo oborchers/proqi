@@ -143,8 +143,8 @@ fn complete_result(
             if !retried {
                 pending.persistence = pending.persistence.saturating_sub(1);
             }
-            let succeeded = complete_sequence(app, pending, sequence, result);
-            app.acknowledge_persistence(sequence, succeeded);
+            let application_result = complete_sequence(app, pending, sequence, result);
+            app.acknowledge_persistence_result(sequence, application_result);
         }
         PersistenceResult::RetryFinished => {
             pending.persistence = pending.persistence.saturating_sub(1);
@@ -227,7 +227,7 @@ fn complete_sequence(
     pending: &mut PendingWork,
     sequence: OperationSequence,
     result: Result<crate::ports::store::CommitReceipt, crate::ports::store::StoreError>,
-) -> bool {
+) -> Result<(), crate::application::FailureCode> {
     match result {
         Ok(receipt) => {
             complete_control(
@@ -241,7 +241,7 @@ fn complete_sequence(
                     durable: receipt,
                 }),
             );
-            true
+            Ok(())
         }
         Err(error) => {
             complete_control(
@@ -252,8 +252,13 @@ fn complete_sequence(
                     message: error.to_string(),
                 },
             );
-            app.set_error(format!("{error}; press r to retry or w to export recovery"));
-            false
+            if error == crate::ports::store::StoreError::RecoveryCapacity {
+                app.set_error(format!("{error}; press w to export recovery"));
+                Err(crate::application::FailureCode::RecoveryCapacity)
+            } else {
+                app.set_error(format!("{error}; press r to retry or w to export recovery"));
+                Err(crate::application::FailureCode::StorageFailed)
+            }
         }
     }
 }

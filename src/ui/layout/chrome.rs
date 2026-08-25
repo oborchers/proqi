@@ -52,17 +52,20 @@ pub(super) fn controls(
     area: Rect,
     mode: InteractionMode,
     persistence_failed: bool,
+    retry_available: bool,
     has_focus: bool,
 ) -> Vec<(HitTarget, Rect)> {
     if area.height == 0 || area.width == 0 {
         return Vec::new();
     }
-    let candidates = if persistence_failed {
+    let candidates = if persistence_failed && retry_available {
         vec![
             (HitTarget::Retry, 8),
             (HitTarget::ExportRecovery, 10),
             (HitTarget::Help, 12),
         ]
+    } else if persistence_failed {
+        vec![(HitTarget::ExportRecovery, 10), (HitTarget::Help, 12)]
     } else if !has_focus && matches!(mode, InteractionMode::Board) && area.width < 24 {
         vec![(HitTarget::Insert, 7), (HitTarget::Help, 6)]
     } else if !has_focus && matches!(mode, InteractionMode::Board) {

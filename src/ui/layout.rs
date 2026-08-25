@@ -272,6 +272,13 @@ pub fn compute(
                 state.durability,
                 crate::application::DurabilityState::Failed { .. }
             ),
+            !matches!(
+                state.durability,
+                crate::application::DurabilityState::Failed {
+                    code: crate::application::FailureCode::RecoveryCapacity,
+                    ..
+                }
+            ),
             state.focused_thought.is_some(),
         ),
         content_width,

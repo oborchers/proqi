@@ -413,6 +413,19 @@ impl BoardApp {
 
     /// Apply one ordered persistence acknowledgement to the reducer state.
     pub fn acknowledge_persistence(&mut self, sequence: OperationSequence, succeeded: bool) {
+        self.acknowledge_persistence_result(
+            sequence,
+            succeeded.then_some(()).ok_or(FailureCode::StorageFailed),
+        );
+    }
+
+    /// Apply a typed ordered persistence result to the reducer state.
+    pub fn acknowledge_persistence_result(
+        &mut self,
+        sequence: OperationSequence,
+        result: Result<(), FailureCode>,
+    ) {
+        let succeeded = result.is_ok();
         if !succeeded {
             self.quit = false;
         } else if self.pending_edit.is_some() {
@@ -423,7 +436,7 @@ impl BoardApp {
         } else {
             Action::PersistenceFailed {
                 sequence,
-                code: FailureCode::StorageFailed,
+                code: result.err().unwrap_or(FailureCode::StorageFailed),
             }
         };
         let _effects = self.reduce(action);

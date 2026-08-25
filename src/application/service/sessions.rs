@@ -188,6 +188,7 @@ where
         lease: R::SessionLease,
         record_open: bool,
     ) -> Result<LeasedSession<R::SessionLease>, SessionServiceError> {
+        self.store.compact_session(id)?;
         let snapshot = self.store.load_session(id)?;
         if snapshot.board.session.deleted_at.is_some() {
             return Err(SessionServiceError::SessionTrashed(id));

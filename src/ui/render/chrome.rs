@@ -70,11 +70,22 @@ fn render_context(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot
         return;
     }
     let failed = matches!(app.state.durability, DurabilityState::Failed { .. });
+    let recovery_only = matches!(
+        app.state.durability,
+        DurabilityState::Failed {
+            code: crate::application::FailureCode::RecoveryCapacity,
+            ..
+        }
+    );
     let status = app.status_view();
     let left = status.map_or_else(
         || {
             if failed {
-                "save failed · r Retry · w Export recovery"
+                if recovery_only {
+                    "save failed · w Export recovery"
+                } else {
+                    "save failed · r Retry · w Export recovery"
+                }
             } else {
                 ""
             }

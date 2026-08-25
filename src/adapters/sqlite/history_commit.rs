@@ -285,7 +285,9 @@ pub(super) fn existing_receipt(
     let Some((session, sequence, request)) = existing else {
         return Ok(None);
     };
-    if request != expected_request {
+    if request != expected_request
+        && !super::receipt_compaction::matches_original(&request, expected_request)?
+    {
         return Err(StoreError::Conflict(
             "idempotency identity was reused for another request".to_owned(),
         ));
