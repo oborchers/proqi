@@ -3,8 +3,11 @@
 mod client;
 #[cfg(all(test, unix))]
 mod protocol_tests;
+#[cfg(all(test, unix))]
+mod shutdown_tests;
 mod transport;
 
+pub(crate) use client::CancellableLocalControlClient;
 pub use client::{LocalControlClient, LocalUpdateControlClient};
 
 use std::{
@@ -50,6 +53,8 @@ impl ControlEnvelope {
 pub(crate) struct ControlServer {
     pub(crate) receiver: Receiver<ControlEnvelope>,
     stop: Arc<AtomicBool>,
+    active_stream: Arc<AtomicBool>,
+    exited: Arc<AtomicBool>,
     handle: Option<JoinHandle<()>>,
 }
 
@@ -59,11 +64,20 @@ impl ControlServer {
         let listener = LocalListener::bind(endpoint)?;
         let (sender, receiver) = sync_channel(64);
         let stop = Arc::new(AtomicBool::new(false));
+        let active_stream = Arc::new(AtomicBool::new(false));
+        let exited = Arc::new(AtomicBool::new(false));
         let worker_stop = Arc::clone(&stop);
-        let handle = thread::spawn(move || server_loop(&listener, &sender, &worker_stop));
+        let worker_active = Arc::clone(&active_stream);
+        let worker_exited = Arc::clone(&exited);
+        let handle = thread::spawn(move || {
+            server_loop(&listener, &sender, &worker_stop, &worker_active);
+            worker_exited.store(true, Ordering::Release);
+        });
         Ok(Self {
             receiver,
             stop,
+            active_stream,
+            exited,
             handle: Some(handle),
         })
     }
@@ -77,7 +91,17 @@ impl ControlServer {
         self.stop.load(Ordering::Acquire)
     }
 
-    /// Stop accepting clients and join before the shared shutdown deadline.
+    pub(crate) fn is_quiescent(&self) -> bool {
+        !self.active_stream.load(Ordering::Acquire)
+            && (self.exited.load(Ordering::Acquire)
+                || self.handle.as_ref().is_none_or(JoinHandle::is_finished))
+    }
+
+    #[cfg(test)]
+    fn has_active_stream(&self) -> bool {
+        self.active_stream.load(Ordering::Acquire)
+    }
+
     pub(crate) fn stop_before(mut self, deadline: Instant) -> Result<(), ControlError> {
         self.request_stop();
         while self
@@ -101,7 +125,6 @@ impl ControlServer {
             .map_err(|_| ControlError::Io("control server panicked".to_owned()))
     }
 
-    /// Stop accepting clients with the ordinary interactive deadline.
     pub(crate) fn stop(self) -> Result<(), ControlError> {
         self.stop_before(Instant::now() + Duration::from_secs(2))
     }
@@ -113,12 +136,21 @@ impl Drop for ControlServer {
     }
 }
 
-fn server_loop(listener: &LocalListener, sender: &SyncSender<ControlEnvelope>, stop: &AtomicBool) {
+fn server_loop(
+    listener: &LocalListener,
+    sender: &SyncSender<ControlEnvelope>,
+    stop: &AtomicBool,
+    active_stream: &AtomicBool,
+) {
     let mut cache = BTreeMap::new();
     let mut cache_order = VecDeque::new();
     while !stop.load(Ordering::Acquire) {
         match accept(listener) {
-            Ok(Some(stream)) => handle_stream(&stream, sender, &mut cache, &mut cache_order),
+            Ok(Some(stream)) => {
+                active_stream.store(true, Ordering::Release);
+                handle_stream(&stream, sender, stop, &mut cache, &mut cache_order);
+                active_stream.store(false, Ordering::Release);
+            }
             Ok(None) => thread::sleep(Duration::from_millis(5)),
             Err(_) => thread::sleep(Duration::from_millis(10)),
         }
@@ -128,10 +160,11 @@ fn server_loop(listener: &LocalListener, sender: &SyncSender<ControlEnvelope>, s
 fn handle_stream(
     stream: &transport::LocalStream,
     sender: &SyncSender<ControlEnvelope>,
+    stop: &AtomicBool,
     cache: &mut BTreeMap<crate::domain::RequestId, (ControlRequest, ControlResponse)>,
     cache_order: &mut VecDeque<crate::domain::RequestId>,
 ) {
-    let Ok(request) = read_request(stream) else {
+    let Ok(request) = read_request(stream, stop) else {
         return;
     };
     if !(MIN_CONTROL_PROTOCOL_VERSION..=CONTROL_PROTOCOL_VERSION).contains(&request.protocol) {
@@ -140,7 +173,7 @@ fn handle_stream(
             "protocol_mismatch",
             "unsupported control protocol",
         );
-        let _written = write_response(stream, &response);
+        let _written = write_response(stream, &response, stop);
         return;
     }
     if request.protocol < request.mutation.minimum_protocol() {
@@ -149,7 +182,7 @@ fn handle_stream(
             "protocol_mismatch",
             "request requires a newer control protocol",
         );
-        let _written = write_response(stream, &response);
+        let _written = write_response(stream, &response, stop);
         return;
     }
     if let Some((original, response)) = cache.get(&request.request_id) {
@@ -162,7 +195,7 @@ fn handle_stream(
                 "request identity was reused",
             )
         };
-        let _written = write_response(stream, &response);
+        let _written = write_response(stream, &response, stop);
         return;
     }
     let (response_sender, response_receiver) = sync_channel(1);
@@ -189,7 +222,7 @@ fn handle_stream(
     ) {
         cache_response(cache, cache_order, request, response.clone());
     }
-    let _written = write_response(stream, &response);
+    let _written = write_response(stream, &response, stop);
 }
 
 fn cache_response(

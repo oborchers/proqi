@@ -53,7 +53,6 @@ use durability::{drain_persistence, enqueue_effects};
 use heartbeat::PaneHeartbeat;
 use owned_lanes::OwnedLanes;
 
-/// Concrete runtime pieces retained for one interactive session.
 pub(crate) struct TerminalResources {
     pub(crate) state: AppState,
     pub(crate) store: SqliteStore,
@@ -71,7 +70,6 @@ pub(crate) struct TerminalResources {
     pub(crate) state_root: Option<PathBuf>,
 }
 
-/// Refuse an interactive launch before it creates or opens durable state.
 pub(crate) fn require_interactive() -> Result<(), TerminalError> {
     if stdin().is_terminal() && stdout().is_terminal() {
         Ok(())
@@ -119,10 +117,6 @@ pub(super) struct PendingControl {
     pub(super) thought_id: Option<ThoughtId>,
 }
 
-/// Run a leased session until a clean user exit.
-///
-/// # Errors
-///
 /// Returns a typed setup, render, input, persistence, worker, or restoration failure.
 #[expect(
     clippy::too_many_lines,
@@ -208,9 +202,11 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
     let lane_results = owned.stop_workers(shutdown_deadline);
     finish::runtime(
         run_result,
-        lane_results
-            .into_iter()
-            .chain([control_result, restoration_result]),
+        lane_results.into_iter().chain([
+            ("control", control_result),
+            ("terminal_restoration", restoration_result),
+        ]),
+        shutdown_deadline.elapsed(),
     )?;
     resume_after_update(
         installation.as_ref(),
@@ -239,7 +235,12 @@ fn spawn_lanes(
     OwnedLanes {
         control,
         input: InputLane::spawn(),
-        persistence: PersistenceLane::spawn_with_runtime(store, coordinator.clone(), cwd),
+        persistence: PersistenceLane::spawn_with_runtime(
+            store,
+            coordinator.clone(),
+            cwd,
+            cancellation.clone(),
+        ),
         external: ExternalLane::spawn(
             recovery_directory,
             attachment_directory,
@@ -416,7 +417,8 @@ fn drive(
             if let Some(control) = lanes.control {
                 control.request_stop();
             }
-            if pending.is_empty() {
+            let control_quiescent = lanes.control.is_none_or(ControlServer::is_quiescent);
+            if pending.is_empty() && control_quiescent {
                 return Ok(());
             }
             if deadline.expired() {

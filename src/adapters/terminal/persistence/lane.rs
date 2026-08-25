@@ -36,10 +36,11 @@ impl PersistenceLane {
         store: SqliteStore,
         coordinator: FileRuntimeCoordinator,
         cwd: std::path::PathBuf,
+        cancellation: crate::adapters::process::CancellationFlag,
     ) -> Self {
         let (request_sender, request_receiver) = sync_channel(64);
         let (result_sender, result_receiver) = sync_channel(64);
-        let runtime = transfer::TransferRuntime::new(coordinator, cwd);
+        let runtime = transfer::TransferRuntime::new(coordinator, cwd, cancellation);
         let lifecycle = WorkerLifecycle::default();
         let worker_lifecycle = lifecycle.clone();
         let handle = thread::spawn(move || {

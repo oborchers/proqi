@@ -83,15 +83,22 @@ impl ShutdownCoordinator {
 }
 
 #[derive(Clone, Copy)]
-pub(super) struct ShutdownDeadline(Instant);
+pub(super) struct ShutdownDeadline {
+    started: Instant,
+    deadline: Instant,
+}
 
 impl ShutdownDeadline {
     pub(super) fn after(timeout: Duration) -> Self {
-        Self(Instant::now() + timeout)
+        let started = Instant::now();
+        Self {
+            started,
+            deadline: started + timeout,
+        }
     }
 
     pub(super) fn remaining(self) -> Duration {
-        self.0.saturating_duration_since(Instant::now())
+        self.deadline.saturating_duration_since(Instant::now())
     }
 
     pub(super) fn expired(self) -> bool {
@@ -99,7 +106,11 @@ impl ShutdownDeadline {
     }
 
     pub(super) const fn instant(self) -> Instant {
-        self.0
+        self.deadline
+    }
+
+    pub(super) fn elapsed(self) -> Duration {
+        self.started.elapsed()
     }
 }
 

@@ -4,8 +4,43 @@ use proqi::{adapters::runtime::SystemIdGenerator, ports::environment::IdGenerato
 
 use super::{expect_command, json_command, raw_input_command, wait_for_path};
 
+#[derive(Clone, Copy)]
+enum ExitScenario {
+    Quit,
+    Terminate,
+}
+
+#[derive(Clone, Copy)]
+struct OwnerFixture<'a> {
+    binary: &'a str,
+    state: &'a std::path::Path,
+    session: &'a str,
+    ready: &'a std::path::Path,
+    start: &'a std::path::Path,
+    done: &'a std::path::Path,
+    transcript: &'a std::path::Path,
+}
+
+impl ExitScenario {
+    const fn environment_value(self) -> &'static str {
+        match self {
+            Self::Quit => "quit",
+            Self::Terminate => "terminate",
+        }
+    }
+}
+
 #[test]
 fn flooded_owner_control_cannot_starve_local_typing_resize_or_quit() {
+    run_fairness(ExitScenario::Quit);
+}
+
+#[test]
+fn termination_during_control_flood_is_bounded_and_durable() {
+    run_fairness(ExitScenario::Terminate);
+}
+
+fn run_fairness(exit: ExitScenario) {
     let state = tempfile::tempdir().expect("temporary state");
     let binary = env!("CARGO_BIN_EXE_proqi");
     let created = json_command(binary, state.path(), &[]);
@@ -15,13 +50,16 @@ fn flooded_owner_control_cannot_starve_local_typing_resize_or_quit() {
     let done = state.path().join("fairness-done");
     let transcript = state.path().join("fairness-transcript.log");
     let owner = spawn_owner(
-        binary,
-        state.path(),
-        session,
-        &ready,
-        &start,
-        &done,
-        &transcript,
+        OwnerFixture {
+            binary,
+            state: state.path(),
+            session,
+            ready: &ready,
+            start: &start,
+            done: &done,
+            transcript: &transcript,
+        },
+        exit,
     );
     wait_for_path(&ready);
     std::fs::write(&start, b"start").expect("start owner input");
@@ -119,15 +157,7 @@ fn assert_owner_success(
     );
 }
 
-fn spawn_owner(
-    binary: &str,
-    state: &std::path::Path,
-    session: &str,
-    ready: &std::path::Path,
-    start: &std::path::Path,
-    done: &std::path::Path,
-    transcript: &std::path::Path,
-) -> std::process::Child {
+fn spawn_owner(fixture: OwnerFixture<'_>, exit: ExitScenario) -> std::process::Child {
     let script = r#"
         log_user 0
         log_file -noappend $env(PROQI_TEST_TRANSCRIPT)
@@ -141,7 +171,11 @@ fn spawn_owner(
         stty rows 28 columns 100
         send -- "\x1b"
         while {![file exists $env(PROQI_TEST_DONE)]} { after 10 }
-        send -- "\x11"
+        if {$env(PROQI_TEST_EXIT) eq "terminate"} {
+            system /bin/kill -TERM [exp_pid]
+        } else {
+            send -- "\x11"
+        }
         expect -exact "\x1b\[0 q"
         expect eof
         catch wait result
@@ -149,13 +183,14 @@ fn spawn_owner(
     "#;
     expect_command()
         .args(["-c", script])
-        .env("PROQI_TEST_BINARY", binary)
-        .env("PROQI_TEST_STATE", state)
-        .env("PROQI_TEST_SESSION", session)
-        .env("PROQI_TEST_READY", ready)
-        .env("PROQI_TEST_START", start)
-        .env("PROQI_TEST_DONE", done)
-        .env("PROQI_TEST_TRANSCRIPT", transcript)
+        .env("PROQI_TEST_BINARY", fixture.binary)
+        .env("PROQI_TEST_STATE", fixture.state)
+        .env("PROQI_TEST_SESSION", fixture.session)
+        .env("PROQI_TEST_READY", fixture.ready)
+        .env("PROQI_TEST_START", fixture.start)
+        .env("PROQI_TEST_DONE", fixture.done)
+        .env("PROQI_TEST_TRANSCRIPT", fixture.transcript)
+        .env("PROQI_TEST_EXIT", exit.environment_value())
         .stderr(std::process::Stdio::piped())
         .spawn()
         .expect("spawn fairness owner")

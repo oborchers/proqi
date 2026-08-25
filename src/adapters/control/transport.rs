@@ -2,6 +2,7 @@
 
 use std::{
     io::{Read, Write},
+    sync::atomic::{AtomicBool, Ordering},
     thread,
     time::{Duration, Instant},
 };
@@ -70,14 +71,26 @@ pub(super) fn connect(endpoint: &str, owner_pid: u32) -> Result<LocalStream, Con
     Ok(stream)
 }
 
-pub(super) fn read_request(stream: &LocalStream) -> Result<ControlRequest, ControlError> {
-    serde_json::from_slice(&read_frame(stream)?).map_err(|error| {
+pub(super) fn read_request(
+    stream: &LocalStream,
+    stopping: &AtomicBool,
+) -> Result<ControlRequest, ControlError> {
+    serde_json::from_slice(&read_frame(stream, Some(stopping))?).map_err(|error| {
         ControlError::Protocol(format!("request is not valid protocol JSON: {error}"))
     })
 }
 
 pub(super) fn read_response(stream: &LocalStream) -> Result<ControlResponse, ControlError> {
-    serde_json::from_slice(&read_frame(stream)?).map_err(|error| {
+    serde_json::from_slice(&read_frame(stream, None)?).map_err(|error| {
+        ControlError::Protocol(format!("response is not valid protocol JSON: {error}"))
+    })
+}
+
+pub(super) fn read_response_until(
+    stream: &LocalStream,
+    stopping: &AtomicBool,
+) -> Result<ControlResponse, ControlError> {
+    serde_json::from_slice(&read_frame(stream, Some(stopping))?).map_err(|error| {
         ControlError::Protocol(format!("response is not valid protocol JSON: {error}"))
     })
 }
@@ -86,31 +99,48 @@ pub(super) fn write_request(
     stream: &LocalStream,
     request: &ControlRequest,
 ) -> Result<(), ControlError> {
-    write_json(stream, request)
+    write_json(stream, request, None)
+}
+
+pub(super) fn write_request_until(
+    stream: &LocalStream,
+    request: &ControlRequest,
+    stopping: &AtomicBool,
+) -> Result<(), ControlError> {
+    write_json(stream, request, Some(stopping))
 }
 
 pub(super) fn write_response(
     stream: &LocalStream,
     response: &ControlResponse,
+    stopping: &AtomicBool,
 ) -> Result<(), ControlError> {
-    write_json(stream, response)
+    write_json(stream, response, Some(stopping))
 }
 
-fn write_json(stream: &LocalStream, value: &impl serde::Serialize) -> Result<(), ControlError> {
+fn write_json(
+    stream: &LocalStream,
+    value: &impl serde::Serialize,
+    stopping: Option<&AtomicBool>,
+) -> Result<(), ControlError> {
     let mut bytes =
         serde_json::to_vec(value).map_err(|error| ControlError::Protocol(error.to_string()))?;
     bytes.push(b'\n');
     if bytes.len() > MAX_CONTROL_MESSAGE_BYTES {
         return Err(ControlError::MessageTooLarge);
     }
-    write_all(stream, &bytes)
+    write_all(stream, &bytes, stopping)
 }
 
-fn read_frame(stream: &LocalStream) -> Result<Vec<u8>, ControlError> {
+fn read_frame(
+    stream: &LocalStream,
+    stopping: Option<&AtomicBool>,
+) -> Result<Vec<u8>, ControlError> {
     let deadline = Instant::now() + IO_TIMEOUT;
     let mut output = Vec::new();
     let mut chunk = [0_u8; 4096];
     loop {
+        ensure_running(stopping)?;
         match (&*stream).read(&mut chunk) {
             Ok(0) => {
                 return Err(ControlError::Protocol(
@@ -127,32 +157,51 @@ fn read_frame(stream: &LocalStream) -> Result<Vec<u8>, ControlError> {
                     return Ok(output);
                 }
             }
-            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => wait(deadline)?,
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                wait(deadline, stopping)?;
+            }
             Err(error) => return Err(io_error(error)),
         }
     }
 }
 
-fn write_all(stream: &LocalStream, bytes: &[u8]) -> Result<(), ControlError> {
+fn write_all(
+    stream: &LocalStream,
+    bytes: &[u8],
+    stopping: Option<&AtomicBool>,
+) -> Result<(), ControlError> {
     let deadline = Instant::now() + IO_TIMEOUT;
     let mut written = 0;
     while written < bytes.len() {
         match (&*stream).write(&bytes[written..]) {
             Ok(0) => return Err(ControlError::Io("control connection closed".to_owned())),
             Ok(count) => written = written.saturating_add(count),
-            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => wait(deadline)?,
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                wait(deadline, stopping)?;
+            }
             Err(error) => return Err(io_error(error)),
         }
     }
     Ok(())
 }
 
-fn wait(deadline: Instant) -> Result<(), ControlError> {
+fn wait(deadline: Instant, stopping: Option<&AtomicBool>) -> Result<(), ControlError> {
+    ensure_running(stopping)?;
     if Instant::now() >= deadline {
         return Err(ControlError::Timeout);
     }
     thread::sleep(Duration::from_millis(2));
     Ok(())
+}
+
+fn ensure_running(stopping: Option<&AtomicBool>) -> Result<(), ControlError> {
+    if stopping.is_some_and(|flag| flag.load(Ordering::Acquire)) {
+        Err(ControlError::Io(
+            "control server is shutting down".to_owned(),
+        ))
+    } else {
+        Ok(())
+    }
 }
 
 #[cfg(all(unix, not(target_os = "macos")))]

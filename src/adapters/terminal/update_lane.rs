@@ -277,8 +277,9 @@ fn install(
         .restart_executable
         .clone()
         .ok_or_else(|| UpdateError::Installation("active Homebrew path is absent".to_owned()))?;
+    let cancellation = process.cancellation();
     let mut installer = HomebrewFormulaInstaller::new(process, active);
-    let mut gateway = LocalUpdateControlClient::new(SystemIdGenerator);
+    let mut gateway = LocalUpdateControlClient::cancellable(SystemIdGenerator, cancellation);
     let now = SystemClock.now();
     let deadline = Timestamp::from_millis(now.as_millis().saturating_add(UPDATE_DEADLINE_MILLIS));
     let mut ids = SystemIdGenerator;

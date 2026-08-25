@@ -36,14 +36,22 @@ impl CancellationFlag {
         self.0.store(true, Ordering::Release);
     }
 
-    fn is_cancelled(&self) -> bool {
+    pub(crate) fn is_cancelled(&self) -> bool {
         self.0.load(Ordering::Acquire)
+    }
+
+    pub(crate) fn signal(&self) -> &AtomicBool {
+        &self.0
     }
 }
 
 impl SystemProcessRunner {
     pub(crate) fn cancellable(cancellation: CancellationFlag) -> Self {
         Self { cancellation }
+    }
+
+    pub(crate) fn cancellation(&self) -> CancellationFlag {
+        self.cancellation.clone()
     }
 }
 

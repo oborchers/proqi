@@ -1,6 +1,7 @@
 //! Verified mutation and update clients over one owner-control endpoint.
 
 use crate::{
+    adapters::process::CancellationFlag,
     domain::RequestId,
     ports::{
         control::{
@@ -16,7 +17,9 @@ use crate::{
     },
 };
 
-use super::transport::{connect, read_response, write_request};
+use super::transport::{
+    connect, read_response, read_response_until, write_request, write_request_until,
+};
 
 /// Verified local durable-mutation client.
 #[derive(Clone, Copy, Debug, Default)]
@@ -40,16 +43,56 @@ impl ControlClient for LocalControlClient {
     }
 }
 
+/// Runtime-owned mutation client that stops waiting when Proqi shuts down.
+pub(crate) struct CancellableLocalControlClient {
+    cancellation: CancellationFlag,
+}
+
+impl CancellableLocalControlClient {
+    pub(crate) const fn new(cancellation: CancellationFlag) -> Self {
+        Self { cancellation }
+    }
+}
+
+impl ControlClient for CancellableLocalControlClient {
+    fn send(
+        &self,
+        owner: &InstanceInfo,
+        request: &ControlRequest,
+    ) -> Result<crate::ports::control::ControlReceipt, ControlError> {
+        match exchange_until(owner, request, &self.cancellation)? {
+            ControlResult::Accepted(receipt) => Ok(receipt),
+            ControlResult::Rejected { code, message } => {
+                Err(ControlError::Rejected { code, message })
+            }
+            ControlResult::Update(_) => Err(ControlError::Protocol(
+                "owner returned an update receipt for a durable mutation".to_owned(),
+            )),
+        }
+    }
+}
+
 /// Verified update client with an injected transport-request identity source.
 pub struct LocalUpdateControlClient<I> {
     ids: I,
+    cancellation: Option<CancellationFlag>,
 }
 
 impl<I> LocalUpdateControlClient<I> {
     /// Bind deterministic request identities to the update transport.
     #[must_use]
     pub const fn new(ids: I) -> Self {
-        Self { ids }
+        Self {
+            ids,
+            cancellation: None,
+        }
+    }
+
+    pub(crate) const fn cancellable(ids: I, cancellation: CancellationFlag) -> Self {
+        Self {
+            ids,
+            cancellation: Some(cancellation),
+        }
     }
 }
 
@@ -124,7 +167,11 @@ impl<I: IdGenerator> LocalUpdateControlClient<I> {
             session_id: owner.session_id,
             mutation,
         };
-        match exchange(owner, &request).map_err(|error| map_control_error(&error))? {
+        let exchange = self.cancellation.as_ref().map_or_else(
+            || exchange(owner, &request),
+            |cancellation| exchange_until(owner, &request, cancellation),
+        );
+        match exchange.map_err(|error| map_control_error(&error))? {
             ControlResult::Update(receipt) => Ok(receipt),
             ControlResult::Rejected { code, .. } => Err(UpdateError::Coordination(code)),
             ControlResult::Accepted(_) => Err(coordination_error(
@@ -134,14 +181,27 @@ impl<I: IdGenerator> LocalUpdateControlClient<I> {
     }
 }
 
-fn exchange(owner: &InstanceInfo, request: &ControlRequest) -> Result<ControlResult, ControlError> {
-    if owner.control_protocol != Some(request.protocol)
-        || !(MIN_CONTROL_PROTOCOL_VERSION..=CONTROL_PROTOCOL_VERSION).contains(&request.protocol)
-        || request.protocol < request.mutation.minimum_protocol()
-        || owner.session_id != request.session_id
-    {
-        return Err(ControlError::Unsupported);
+fn exchange_until(
+    owner: &InstanceInfo,
+    request: &ControlRequest,
+    cancellation: &CancellationFlag,
+) -> Result<ControlResult, ControlError> {
+    validate_exchange(owner, request)?;
+    if cancellation.is_cancelled() {
+        return Err(ControlError::Io("control request was cancelled".to_owned()));
     }
+    let endpoint = owner
+        .control_endpoint
+        .as_deref()
+        .ok_or(ControlError::Unsupported)?;
+    let stream = connect(endpoint, owner.pid)?;
+    write_request_until(&stream, request, cancellation.signal())?;
+    let response = read_response_until(&stream, cancellation.signal())?;
+    validate_response(request, response)
+}
+
+fn exchange(owner: &InstanceInfo, request: &ControlRequest) -> Result<ControlResult, ControlError> {
+    validate_exchange(owner, request)?;
     let endpoint = owner
         .control_endpoint
         .as_deref()
@@ -149,6 +209,24 @@ fn exchange(owner: &InstanceInfo, request: &ControlRequest) -> Result<ControlRes
     let stream = connect(endpoint, owner.pid)?;
     write_request(&stream, request)?;
     let response = read_response(&stream)?;
+    validate_response(request, response)
+}
+
+fn validate_exchange(owner: &InstanceInfo, request: &ControlRequest) -> Result<(), ControlError> {
+    if owner.control_protocol != Some(request.protocol)
+        || !(MIN_CONTROL_PROTOCOL_VERSION..=CONTROL_PROTOCOL_VERSION).contains(&request.protocol)
+        || request.protocol < request.mutation.minimum_protocol()
+        || owner.session_id != request.session_id
+    {
+        return Err(ControlError::Unsupported);
+    }
+    Ok(())
+}
+
+fn validate_response(
+    request: &ControlRequest,
+    response: crate::ports::control::ControlResponse,
+) -> Result<ControlResult, ControlError> {
     if response.protocol != request.protocol || response.request_id != request.request_id {
         return Err(ControlError::Protocol(
             "response version or request identity differs".to_owned(),

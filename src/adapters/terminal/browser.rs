@@ -39,11 +39,17 @@ pub(crate) fn pick_session(
     drop(terminal);
     let restoration_result = guard.finish();
     drop(panic_hook);
-    let input_result = input.stop(super::supervisor::ShutdownDeadline::after(
-        super::supervisor::SHUTDOWN_TIMEOUT,
-    ));
+    let shutdown = super::supervisor::ShutdownDeadline::after(super::supervisor::SHUTDOWN_TIMEOUT);
+    let input_result = input.stop(shutdown);
     let selected = run_result;
-    let cleanup = super::runner::finish::runtime(Ok(()), [input_result, restoration_result]);
+    let cleanup = super::runner::finish::runtime(
+        Ok(()),
+        [
+            ("input", input_result),
+            ("terminal_restoration", restoration_result),
+        ],
+        shutdown.elapsed(),
+    );
     let selected = selected?;
     cleanup?;
     Ok(selected)

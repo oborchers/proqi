@@ -17,6 +17,7 @@ const RELEASE_PATH_MARKER: &str = "/releases/download/v";
 const MAX_RESPONSE_BYTES: u64 = 64 * 1024;
 const MAX_RESPONSE_HEADER_BYTES: usize = 16 * 1024;
 const MAX_ETAG_BYTES: usize = 256;
+const UPDATE_REQUEST_TIMEOUT: Duration = Duration::from_millis(1_500);
 
 /// Fetches the latest supported stable release from the canonical repository.
 #[derive(Clone)]
@@ -33,10 +34,10 @@ impl GitHubReleaseSource {
             .http_status_as_error(false)
             .max_redirects(2)
             .max_response_header_size(MAX_RESPONSE_HEADER_BYTES)
-            .timeout_global(Some(Duration::from_secs(10)))
-            .timeout_connect(Some(Duration::from_secs(3)))
-            .timeout_recv_response(Some(Duration::from_secs(5)))
-            .timeout_recv_body(Some(Duration::from_secs(5)))
+            .timeout_global(Some(UPDATE_REQUEST_TIMEOUT))
+            .timeout_connect(Some(Duration::from_secs(1)))
+            .timeout_recv_response(Some(UPDATE_REQUEST_TIMEOUT))
+            .timeout_recv_body(Some(UPDATE_REQUEST_TIMEOUT))
             .user_agent(format!("proqi/{}", env!("CARGO_PKG_VERSION")))
             .build();
         Self {
@@ -172,12 +173,21 @@ fn map_transport_error(error: &ureq::Error) -> UpdateError {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use crate::{
         domain::{InstallationKind, StableVersion},
         ports::update::{ReleaseObservation, UpdateError},
     };
 
-    use super::{MAX_RESPONSE_BYTES, parse_formula, parse_observation, valid_etag};
+    use super::{
+        MAX_RESPONSE_BYTES, UPDATE_REQUEST_TIMEOUT, parse_formula, parse_observation, valid_etag,
+    };
+
+    #[test]
+    fn update_discovery_is_shorter_than_runtime_shutdown_budget() {
+        assert!(UPDATE_REQUEST_TIMEOUT < Duration::from_secs(2));
+    }
 
     #[test]
     fn stable_payload_is_strict_and_preserves_bounded_etag() {

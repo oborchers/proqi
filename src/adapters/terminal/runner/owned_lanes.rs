@@ -37,13 +37,13 @@ impl OwnedLanes {
     pub(super) fn stop_workers(
         mut self,
         deadline: crate::adapters::terminal::supervisor::ShutdownDeadline,
-    ) -> [Result<(), TerminalError>; 4] {
+    ) -> [(&'static str, Result<(), TerminalError>); 4] {
         self.request_stop();
         [
-            self.input.stop(deadline),
-            self.persistence.stop(deadline),
-            self.external.stop(deadline),
-            self.update.stop(deadline),
+            ("input", self.input.stop(deadline)),
+            ("persistence", self.persistence.stop(deadline)),
+            ("external", self.external.stop(deadline)),
+            ("update", self.update.stop(deadline)),
         ]
     }
 }

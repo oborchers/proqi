@@ -49,6 +49,13 @@ pub enum SafeEvent<'a> {
     ShutdownFinished {
         /// Number of cleanup stages that returned an error.
         cleanup_failures: usize,
+        /// Total bounded shutdown time in milliseconds.
+        elapsed_ms: u64,
+    },
+    /// One named runtime cleanup stage failed.
+    CleanupFailed {
+        /// Stable, content-free cleanup stage name.
+        stage: &'a str,
     },
     /// A runtime thread panicked without recording its payload.
     RuntimePanicked {
@@ -130,8 +137,14 @@ pub fn record(event: SafeEvent<'_>) {
             tracing::info!(event = "runtime_opening", instance_id = %instance_id);
         }
         SafeEvent::ShutdownStarted => tracing::info!(event = "shutdown_started"),
-        SafeEvent::ShutdownFinished { cleanup_failures } => {
-            tracing::info!(event = "shutdown_finished", cleanup_failures);
+        SafeEvent::ShutdownFinished {
+            cleanup_failures,
+            elapsed_ms,
+        } => {
+            tracing::info!(event = "shutdown_finished", cleanup_failures, elapsed_ms);
+        }
+        SafeEvent::CleanupFailed { stage } => {
+            tracing::error!(event = "cleanup_failed", stage);
         }
         SafeEvent::RuntimePanicked { role } => {
             tracing::error!(event = "runtime_panicked", role);

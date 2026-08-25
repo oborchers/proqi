@@ -4,7 +4,8 @@ use std::path::PathBuf;
 
 use crate::{
     adapters::{
-        control::LocalControlClient,
+        control::CancellableLocalControlClient,
+        process::CancellationFlag,
         runtime::{FileRuntimeCoordinator, SystemClock, SystemIdGenerator},
         sqlite::SqliteStore,
     },
@@ -24,15 +25,21 @@ pub(super) struct TransferRuntime {
     cwd: PathBuf,
     clock: SystemClock,
     ids: SystemIdGenerator,
+    client: CancellableLocalControlClient,
 }
 
 impl TransferRuntime {
-    pub(super) const fn new(coordinator: FileRuntimeCoordinator, cwd: PathBuf) -> Self {
+    pub(super) const fn new(
+        coordinator: FileRuntimeCoordinator,
+        cwd: PathBuf,
+        cancellation: CancellationFlag,
+    ) -> Self {
         Self {
             coordinator,
             cwd,
             clock: SystemClock,
             ids: SystemIdGenerator,
+            client: CancellableLocalControlClient::new(cancellation),
         }
     }
 }
@@ -104,7 +111,8 @@ fn forward(
     }
     let thought_id = ThoughtId::from_database_bytes(request.operation_id.database_bytes())
         .map_err(|error| error.to_string())?;
-    let receipt = LocalControlClient
+    let receipt = runtime
+        .client
         .send(
             owner,
             &ControlRequest {
