@@ -832,8 +832,16 @@ cargo xtask package
   reports from the same tests used in CI.
 - `audit` runs dependency advisory, license, source, and duplicate-dependency
   policy through `cargo-audit` and `cargo-deny`.
-- `package` builds release-mode artifacts and performs installation smoke tests
-  without publishing them.
+- `package` builds the host release executable, stages the exact standalone
+  archive layout, generates Bash, Zsh, and Fish completions from the installed
+  executable, and runs the copied binary from isolated config, data, cache,
+  runtime, and working directories. Its installed-product contract covers exact
+  version and JSON behavior, Unicode and whitespace fidelity, process-to-process
+  reopen, active-owner forwarding, migration backup, newer-schema refusal,
+  terminal restoration, fake update installation, same-PTY Unix replacement,
+  and failure recovery. The deterministic 15-participant update test remains in
+  the normal suite. Package output stays below ignored `target/package` and is
+  never published by this command.
 
 The commands remain thin orchestrators around standard Cargo tools. They print
 the commands they run, propagate exit codes, avoid network access unless the

@@ -8,6 +8,8 @@ mod update;
 
 use std::{io::Read, process::ExitCode, str::FromStr};
 
+use clap::CommandFactory;
+use clap_complete::generate;
 use serde_json::{Value, json};
 
 use crate::{
@@ -42,6 +44,11 @@ enum ResumeRequest {
 }
 
 pub(super) fn execute(cli: Cli) -> ExitCode {
+    if let Some(Command::Completions { shell }) = cli.command.as_ref() {
+        let mut command = Cli::command();
+        generate(*shell, &mut command, "proqi", &mut std::io::stdout());
+        return ExitCode::SUCCESS;
+    }
     let json_output = cli.json;
     match execute_inner(cli) {
         Ok(outcome) => render_success(&outcome.data, &outcome.human, json_output),
@@ -73,6 +80,9 @@ fn execute_inner(cli: Cli) -> Result<Outcome, CliError> {
             execute_thoughts(&mut context, arguments.command)
         }
         Some(Command::Capabilities) => Ok(capabilities::outcome()),
+        Some(Command::Completions { .. }) => Err(CliError::arguments(
+            "completion generation was not dispatched".to_owned(),
+        )),
         Some(Command::Update(_)) => Err(CliError::arguments("invalid update command".to_owned())),
         None => {
             let resume = match cli.resume {

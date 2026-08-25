@@ -290,7 +290,7 @@ cargo xtask check          # format, architecture, Clippy, docs, and tests
 cargo xtask test-pty       # real terminal scenarios on macOS
 cargo xtask coverage       # enforce the line-coverage floor
 cargo xtask audit          # advisories, licenses, sources, and dependencies
-cargo xtask package        # release build and temporary-prefix smoke test
+cargo xtask package        # host archive and isolated installed-product contract
 ```
 
 Clippy warnings are denied. Rust functions are capped at 80 lines, cognitive

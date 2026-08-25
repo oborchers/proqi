@@ -62,4 +62,15 @@ mod tests {
             Some(super::args::Command::Update(_))
         ));
     }
+
+    #[test]
+    fn completions_require_one_supported_shell() {
+        let parsed =
+            Cli::try_parse_from(["proqi", "completions", "zsh"]).expect("completion arguments");
+        assert!(matches!(
+            parsed.command,
+            Some(super::args::Command::Completions { .. })
+        ));
+        assert!(Cli::try_parse_from(["proqi", "completions"]).is_err());
+    }
 }

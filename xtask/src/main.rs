@@ -12,6 +12,7 @@
     )
 )]
 
+mod package;
 mod policy;
 mod snapshots;
 mod source_limits;
@@ -21,7 +22,6 @@ use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 fn main() -> ExitCode {
     match execute() {
@@ -52,7 +52,7 @@ fn execute() -> Result<(), String> {
         ),
         "coverage" => coverage(&root),
         "audit" => audit(&root),
-        "package" => package(&root),
+        "package" => package::run(&root),
         "msrv" => msrv(&root),
         "help" | "--help" | "-h" => {
             print_help();
@@ -221,39 +221,6 @@ fn coverage(root: &Path) -> Result<(), String> {
 fn audit(root: &Path) -> Result<(), String> {
     run(root, "cargo", ["deny", "check"])?;
     run(root, "cargo", ["audit", "--deny", "warnings"])
-}
-
-fn package(root: &Path) -> Result<(), String> {
-    run(
-        root,
-        "cargo",
-        [
-            "build",
-            "--locked",
-            "--workspace",
-            "--all-features",
-            "--release",
-        ],
-    )?;
-
-    let suffix = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|error| format!("read system clock: {error}"))?
-        .as_nanos();
-    let prefix = env::temp_dir().join(format!("proqi-install-{suffix}"));
-    let bin_dir = prefix.join("bin");
-    fs::create_dir_all(&bin_dir).map_err(|error| format!("create install prefix: {error}"))?;
-
-    let executable_name = if cfg!(windows) { "proqi.exe" } else { "proqi" };
-    let source = root.join("target/release").join(executable_name);
-    let installed = bin_dir.join(executable_name);
-    fs::copy(&source, &installed)
-        .map_err(|error| format!("install {}: {error}", source.display()))?;
-
-    let result = run(&prefix, installed.as_os_str(), ["--version"]);
-    let cleanup = fs::remove_dir_all(&prefix)
-        .map_err(|error| format!("remove temporary install prefix: {error}"));
-    result.and(cleanup)
 }
 
 fn run<I, S>(cwd: &Path, program: impl AsRef<OsStr>, arguments: I) -> Result<(), String>

@@ -3,6 +3,7 @@
 use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand};
+use clap_complete::Shell;
 
 #[derive(Debug, Parser)]
 #[command(
@@ -36,6 +37,11 @@ pub(super) struct Cli {
 pub(super) enum Command {
     /// Describe the stable CLI and optional integrations.
     Capabilities,
+    /// Generate a shell completion script on standard output.
+    Completions {
+        /// Shell whose completion syntax should be generated.
+        shell: Shell,
+    },
     /// Check the canonical GitHub stable release on demand.
     Update(UpdateArgs),
     /// List and manage resumable sessions.
