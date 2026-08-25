@@ -70,9 +70,14 @@ jobs:
         with:
           persist-credentials: false
       - uses: taiki-e/install-action@6cd13508893c0e7eab5f273c2575d3859bd7229a # v2.86.6
+        if: matrix.target != 'x86_64-apple-darwin'
         with:
           tool: cargo-about@0.9.2
-          fallback: cargo-install
+      - name: Install cargo-about from source on Intel macOS
+        if: matrix.target == 'x86_64-apple-darwin'
+        run: cargo install cargo-about --version 0.9.2 --locked --features cli
+      - name: Verify packaging tool
+        run: cargo about --version
       - name: Verify native release runner
         env:
           EXPECTED_TARGET: ${{ matrix.target }}
