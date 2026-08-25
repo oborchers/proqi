@@ -70,6 +70,7 @@ mod tests {
         .expect("write config");
         let settings = load_settings(directory.path()).expect("settings");
         assert_eq!(settings.keybindings.new, 't');
+        assert!(settings.check_for_updates);
     }
 
     #[test]

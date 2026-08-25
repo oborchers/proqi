@@ -12,7 +12,8 @@ pub(super) fn outcome() -> Outcome {
         data: json!({
             "cli_schema_version": 1,
             "identifier_encoding": "prefix_base32hex_uuidv7",
-            "commands": ["sessions", "thoughts"],
+            "commands": ["sessions", "thoughts", "update"],
+            "explicit_update_check": true,
             "active_session_control": cfg!(unix),
             "control_protocol": crate::ports::control::CONTROL_PROTOCOL_VERSION,
             "cross_session_transfer": true,

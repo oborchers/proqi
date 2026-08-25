@@ -70,6 +70,7 @@ fn active(ids: &mut FakeIdGenerator, hit: SessionHit) -> SessionBrowserItem {
                 .to_string_lossy()
                 .into_owned(),
         ),
+        update: None,
         launch_directory: test_path("agent").to_string_lossy().into_owned(),
         started_at: Timestamp::from_millis(1_000),
     };

@@ -12,6 +12,7 @@ mod recovery;
 mod search;
 mod session;
 mod transfer;
+mod update;
 mod view;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -194,6 +195,8 @@ pub struct BoardApp {
     agent_targets: Vec<AgentTarget>,
     submission_mode: Option<SubmissionMode>,
     pending_submissions: BTreeMap<SubmissionId, PendingSubmission>,
+    update_barrier: Option<update::UpdateBarrier>,
+    update_restart: Option<crate::domain::StableVersion>,
 }
 
 impl BoardApp {
@@ -247,6 +250,8 @@ impl BoardApp {
             agent_targets: Vec::new(),
             submission_mode: None,
             pending_submissions: BTreeMap::new(),
+            update_barrier: None,
+            update_restart: None,
         }
     }
 
@@ -268,6 +273,11 @@ impl BoardApp {
             };
             self.request_quit();
             return effects;
+        }
+        if self.update_barrier.is_some()
+            && !matches!(input, UiInput::Resize { .. } | UiInput::HostFocusGained)
+        {
+            return Vec::new();
         }
         if !matches!(input, UiInput::Resize { .. } | UiInput::HostFocusGained) {
             self.status = None;

@@ -71,6 +71,11 @@ impl BoardApp {
                     }
                 }
             }
+            ControlMutation::UpdatePrepare { .. }
+            | ControlMutation::UpdateRelease { .. }
+            | ControlMutation::UpdateRestart { .. } => {
+                return Err(ApplicationError::InvalidState);
+            }
         };
         let effects = reduce(&mut self.state, action)?;
         self.restore_live_interaction(previous_mode, previous_focus);

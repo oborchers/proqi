@@ -20,6 +20,8 @@ ignore = "0.4.33"
 linkify = "0.11.0"
 png = "=0.18.1"
 ropey = "1.6.1"
+semver = { version = "=1.0.28", features = ["serde"] }
+sha2 = "=0.10.9"
 ratatui-core = { version = "=0.1.2", default-features = false, features = ["layout-cache", "underline-color"] }
 ratatui-crossterm = { version = "=0.1.2", default-features = false, features = ["crossterm_0_28", "underline-color"] }
 ratatui-widgets = { version = "=0.3.2", default-features = false }
@@ -34,6 +36,7 @@ tracing = { version = "0.1.44", default-features = false, features = ["std"] }
 tracing-subscriber = { version = "0.3.23", default-features = false, features = ["fmt"] }
 unicode-segmentation = "1.12.0"
 unicode-width = "=0.2.0"
+ureq = { version = "=3.4.0", default-features = false, features = ["rustls"] }
 uuid = { version = "1.18.1", features = ["serde", "v7"] }
 
 [workspace.lints.rust]
@@ -69,6 +72,8 @@ interprocess.workspace = true
 linkify.workspace = true
 png.workspace = true
 ropey.workspace = true
+semver.workspace = true
+sha2.workspace = true
 ratatui-core.workspace = true
 ratatui-crossterm.workspace = true
 ratatui-widgets.workspace = true
@@ -83,6 +88,7 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 unicode-segmentation.workspace = true
 unicode-width.workspace = true
+ureq.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]

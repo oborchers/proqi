@@ -32,6 +32,7 @@ fn server_negotiates_protocol_and_bounds_encoded_messages() {
         storage_protocol: 1,
         control_protocol: Some(CONTROL_PROTOCOL_VERSION),
         control_endpoint: Some(endpoint.clone()),
+        update: None,
         launch_directory: std::env::temp_dir()
             .join("proqi-control")
             .to_string_lossy()

@@ -26,7 +26,10 @@ pub(crate) fn match_control_replay(
         StoredOperationRequest::Board { receipt, .. }
         | StoredOperationRequest::HistoryMove { receipt, .. } => *receipt,
     };
-    if receipt.identity != DurableIdentity::Operation(mutation.operation_id()) {
+    let Some(operation_id) = mutation.durable_operation_id() else {
+        return ControlReplay::Conflict;
+    };
+    if receipt.identity != DurableIdentity::Operation(operation_id) {
         return ControlReplay::Conflict;
     }
     let thought_id = match mutation {

@@ -5,10 +5,13 @@ use thiserror::Error;
 
 use crate::domain::{ContentAnnotation, OperationId, RequestId, SessionId, ThoughtId, UndoScope};
 
+use super::update::{
+    UpdatePrepareReply, UpdatePrepareRequest, UpdateRestartReply, UpdateRestartRequest,
+};
 use super::{runtime::InstanceInfo, store::CommitReceipt};
 
 /// Current local owner-control protocol.
-pub const CONTROL_PROTOCOL_VERSION: u32 = 2;
+pub const CONTROL_PROTOCOL_VERSION: u32 = 3;
 /// Oldest owner-control protocol accepted for plain-text mutations.
 pub const MIN_CONTROL_PROTOCOL_VERSION: u32 = 1;
 /// Maximum encoded request or response, including framing newline.
@@ -57,17 +60,35 @@ pub enum ControlMutation {
         /// Undo when true, redo otherwise.
         undo: bool,
     },
+    /// Ask one live owner to flush and enter a bounded update barrier.
+    UpdatePrepare {
+        /// Shared all-session readiness request.
+        request: UpdatePrepareRequest,
+    },
+    /// Release a previously prepared owner after cancellation or failure.
+    UpdateRelease {
+        /// Shared attempt identity.
+        operation_id: RequestId,
+    },
+    /// Ask one prepared owner to clean up and replace itself.
+    UpdateRestart {
+        /// Verified installed version and shared attempt identity.
+        request: UpdateRestartRequest,
+    },
 }
 
 impl ControlMutation {
     /// Durable idempotency identity carried by every mutation.
     #[must_use]
-    pub const fn operation_id(&self) -> OperationId {
+    pub const fn durable_operation_id(&self) -> Option<OperationId> {
         match self {
             Self::Add { operation_id, .. }
             | Self::Delete { operation_id, .. }
             | Self::Move { operation_id, .. }
-            | Self::History { operation_id, .. } => *operation_id,
+            | Self::History { operation_id, .. } => Some(*operation_id),
+            Self::UpdatePrepare { .. }
+            | Self::UpdateRelease { .. }
+            | Self::UpdateRestart { .. } => None,
         }
     }
 
@@ -78,7 +99,10 @@ impl ControlMutation {
             Self::Add { thought_id, .. }
             | Self::Delete { thought_id, .. }
             | Self::Move { thought_id, .. } => Some(*thought_id),
-            Self::History { .. } => None,
+            Self::History { .. }
+            | Self::UpdatePrepare { .. }
+            | Self::UpdateRelease { .. }
+            | Self::UpdateRestart { .. } => None,
         }
     }
 
@@ -86,6 +110,21 @@ impl ControlMutation {
     #[must_use]
     pub fn requires_protocol_two(&self) -> bool {
         matches!(self, Self::Add { annotations, .. } if !annotations.is_empty())
+    }
+
+    /// Oldest control protocol capable of representing this request.
+    #[must_use]
+    pub fn minimum_protocol(&self) -> u32 {
+        if matches!(
+            self,
+            Self::UpdatePrepare { .. } | Self::UpdateRelease { .. } | Self::UpdateRestart { .. }
+        ) {
+            3
+        } else if self.requires_protocol_two() {
+            2
+        } else {
+            1
+        }
     }
 }
 
@@ -128,6 +167,8 @@ pub struct ControlResponse {
 pub enum ControlResult {
     /// Mutation became durable through the owner reducer and store lane.
     Accepted(ControlReceipt),
+    /// Ephemeral update readiness or restart receipt.
+    Update(ControlUpdateReceipt),
     /// Owner rejected the mutation without reporting it as durable.
     Rejected {
         /// Stable error code.
@@ -135,6 +176,21 @@ pub enum ControlResult {
         /// Human-readable explanation without thought content.
         message: String,
     },
+}
+
+/// Successful typed result from update coordination over the owner endpoint.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "update")]
+pub enum ControlUpdateReceipt {
+    /// Readiness result after durable flushing.
+    Prepared(UpdatePrepareReply),
+    /// Prepared participant returned to normal use.
+    Released {
+        /// Participant acknowledging release.
+        instance_id: crate::domain::InstanceId,
+    },
+    /// Participant accepted or rejected replacement responsibility.
+    Restart(UpdateRestartReply),
 }
 
 /// Local transport or verification failure.

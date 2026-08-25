@@ -39,6 +39,8 @@ pub struct AppPaths {
     pub data_dir: PathBuf,
     /// User-editable configuration.
     pub config_dir: PathBuf,
+    /// Rebuildable private caches shared by one installation.
+    pub cache_dir: PathBuf,
     /// Short-lived locks, sockets, and instance metadata.
     pub runtime_dir: PathBuf,
 }

@@ -3,7 +3,16 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::domain::{InstanceId, SessionId, Timestamp};
+use crate::domain::{InstallationIdentity, InstanceId, SessionId, Timestamp};
+
+/// Update-coordination capability advertised by a live process.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct UpdateInstanceContext {
+    /// Stable installation identity shared across executable versions.
+    pub installation_identity: InstallationIdentity,
+    /// Ephemeral update-control protocol supported by this process.
+    pub protocol: u32,
+}
 
 /// Descriptive metadata for one process holding a session lease.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -24,6 +33,9 @@ pub struct InstanceInfo {
     /// Platform local-socket or named-pipe endpoint, absent when unsupported.
     #[serde(default)]
     pub control_endpoint: Option<String>,
+    /// Optional all-session update coordination capability.
+    #[serde(default)]
+    pub update: Option<UpdateInstanceContext>,
     /// Directory from which the process was launched.
     pub launch_directory: String,
     /// Process start time.

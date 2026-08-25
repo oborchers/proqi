@@ -1,0 +1,317 @@
+//! Convergent all-session Homebrew readiness and restart coordination.
+
+use serde::Serialize;
+
+use crate::{
+    domain::{InstallationIdentity, InstanceId, RequestId, StableVersion, Timestamp},
+    ports::{
+        runtime::InstanceInfo,
+        store::STORAGE_PROTOCOL_VERSION,
+        update::{
+            HomebrewInstaller, UPDATE_CONTROL_PROTOCOL_VERSION, UpdateError,
+            UpdateInstanceRegistry, UpdateLockKind, UpdateParticipantGateway, UpdatePrepareReply,
+            UpdatePrepareRequest, UpdateRestartRequest, UpdateStateStore,
+        },
+    },
+};
+
+/// Final result of one elected update attempt.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct UpdateExecution {
+    /// Shared attempt identity.
+    pub operation_id: RequestId,
+    /// Preflight participant count.
+    pub prepared_participants: usize,
+    /// Post-install processes asked to replace themselves.
+    pub restart_requests: usize,
+    /// Processes that could not accept a restart request.
+    pub restart_failed: Vec<InstanceId>,
+    /// Whether convergent state was persisted after installation.
+    pub convergence_state_recorded: bool,
+    /// Terminal attempt outcome.
+    pub status: UpdateExecutionStatus,
+}
+
+/// Bounded coordination state without a durable phase transaction.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case", tag = "status")]
+pub enum UpdateExecutionStatus {
+    /// Another process owns the one installer attempt.
+    AlreadyInProgress,
+    /// Preflight aborted before Homebrew ran.
+    Aborted {
+        /// Participant that blocked, when one was identifiable.
+        blocker: Option<InstanceId>,
+        /// Stable content-free reason.
+        code: String,
+    },
+    /// Homebrew succeeded and restart requests were broadcast.
+    Installed {
+        /// Version independently reported by the installed binary.
+        version: StableVersion,
+    },
+}
+
+/// Coordinates one exact update through injected registry, control, and installer ports.
+pub struct UpdateRestartCoordinator<'a, S, R, G, I> {
+    state: &'a S,
+    registry: &'a R,
+    gateway: &'a mut G,
+    installer: &'a mut I,
+}
+
+impl<'a, S, R, G, I> UpdateRestartCoordinator<'a, S, R, G, I>
+where
+    S: UpdateStateStore,
+    R: UpdateInstanceRegistry,
+    G: UpdateParticipantGateway,
+    I: HomebrewInstaller,
+{
+    /// Bind one coordinator to the installation-wide boundaries.
+    #[must_use]
+    pub const fn new(
+        state: &'a S,
+        registry: &'a R,
+        gateway: &'a mut G,
+        installer: &'a mut I,
+    ) -> Self {
+        Self {
+            state,
+            registry,
+            gateway,
+            installer,
+        }
+    }
+
+    /// Preflight all current participants, install once, rescan, and request replacement.
+    ///
+    /// # Errors
+    ///
+    /// Returns only registry, lock, installer, or convergence-state failures. Participant
+    /// refusal is an ordinary aborted result and never invokes Homebrew.
+    pub fn execute(
+        &mut self,
+        operation_id: RequestId,
+        installation: InstallationIdentity,
+        target: &StableVersion,
+        deadline: Timestamp,
+    ) -> Result<UpdateExecution, UpdateError> {
+        let Some(installer_lease) = self
+            .state
+            .try_lock(installation, UpdateLockKind::Installer)?
+        else {
+            return Ok(execution(
+                operation_id,
+                UpdateExecutionStatus::AlreadyInProgress,
+            ));
+        };
+        let participants = matching(self.registry.active_instances()?, installation);
+        if participants.is_empty() {
+            drop(installer_lease);
+            return Ok(aborted_execution(
+                operation_id,
+                0,
+                None,
+                "no_compatible_participants",
+            ));
+        }
+        let request = UpdatePrepareRequest {
+            operation_id,
+            target_version: target.clone(),
+            installation_identity: installation,
+            deadline,
+        };
+        let ready = match preflight(self.gateway, &participants, &request) {
+            Ok(ready) => ready,
+            Err(failure) => {
+                release_all(self.gateway, &failure.ready, operation_id);
+                drop(installer_lease);
+                return Ok(aborted_execution(
+                    operation_id,
+                    failure.ready.len(),
+                    failure.blocker,
+                    &failure.code,
+                ));
+            }
+        };
+        let installed = match self.installer.upgrade(target) {
+            Ok(installed) => installed,
+            Err(error) => {
+                release_all(self.gateway, &ready, operation_id);
+                drop(installer_lease);
+                return Err(error);
+            }
+        };
+        let state_recorded = self
+            .state
+            .record_restart_state(installation, installed.clone(), true)
+            .is_ok();
+        let current = matching(self.registry.active_instances()?, installation);
+        let (requested, failed) = restart_all(self.gateway, current, operation_id, &installed);
+        let final_state = self
+            .state
+            .record_restart_state(installation, installed.clone(), !failed.is_empty())
+            .is_ok();
+        drop(installer_lease);
+        Ok(UpdateExecution {
+            operation_id,
+            prepared_participants: ready.len(),
+            restart_requests: requested,
+            restart_failed: failed,
+            convergence_state_recorded: state_recorded && final_state,
+            status: UpdateExecutionStatus::Installed { version: installed },
+        })
+    }
+}
+
+struct PreflightFailure {
+    ready: Vec<InstanceInfo>,
+    blocker: Option<InstanceId>,
+    code: String,
+}
+
+fn preflight<G: UpdateParticipantGateway>(
+    gateway: &mut G,
+    participants: &[InstanceInfo],
+    request: &UpdatePrepareRequest,
+) -> Result<Vec<InstanceInfo>, PreflightFailure> {
+    let mut ready = Vec::new();
+    for participant in participants {
+        let reply = gateway.prepare(participant, request);
+        if let Some(status) = validate_reply(participant, reply) {
+            let UpdateExecutionStatus::Aborted { blocker, code } = status else {
+                return Err(PreflightFailure {
+                    ready,
+                    blocker: Some(participant.instance_id),
+                    code: "invalid_preflight_status".to_owned(),
+                });
+            };
+            return Err(PreflightFailure {
+                ready,
+                blocker,
+                code,
+            });
+        }
+        ready.push(participant.clone());
+    }
+    Ok(ready)
+}
+
+fn restart_all<G: UpdateParticipantGateway>(
+    gateway: &mut G,
+    participants: Vec<InstanceInfo>,
+    operation_id: RequestId,
+    installed: &StableVersion,
+) -> (usize, Vec<InstanceId>) {
+    let restart = UpdateRestartRequest {
+        operation_id,
+        installed_version: installed.clone(),
+    };
+    let mut requested = 0_usize;
+    let mut failed = Vec::new();
+    for participant in participants {
+        if participant.version == installed.to_string() {
+            continue;
+        }
+        requested = requested.saturating_add(1);
+        if !restart_accepted(gateway, &participant, &restart) {
+            failed.push(participant.instance_id);
+        }
+    }
+    (requested, failed)
+}
+
+fn aborted_execution(
+    operation_id: RequestId,
+    prepared_participants: usize,
+    blocker: Option<InstanceId>,
+    code: &str,
+) -> UpdateExecution {
+    UpdateExecution {
+        operation_id,
+        prepared_participants,
+        restart_requests: 0,
+        restart_failed: Vec::new(),
+        convergence_state_recorded: true,
+        status: UpdateExecutionStatus::Aborted {
+            blocker,
+            code: code.to_owned(),
+        },
+    }
+}
+
+fn matching(instances: Vec<InstanceInfo>, installation: InstallationIdentity) -> Vec<InstanceInfo> {
+    instances
+        .into_iter()
+        .filter(|info| {
+            info.storage_protocol == STORAGE_PROTOCOL_VERSION
+                && info.control_endpoint.is_some()
+                && info.update.as_ref().is_some_and(|context| {
+                    context.installation_identity == installation
+                        && context.protocol == UPDATE_CONTROL_PROTOCOL_VERSION
+                })
+        })
+        .collect()
+}
+
+fn validate_reply(
+    participant: &InstanceInfo,
+    reply: Result<UpdatePrepareReply, UpdateError>,
+) -> Option<UpdateExecutionStatus> {
+    match reply {
+        Ok(UpdatePrepareReply::Ready {
+            instance_id,
+            session_id,
+        }) if instance_id == participant.instance_id && session_id == participant.session_id => {
+            None
+        }
+        Ok(UpdatePrepareReply::Blocked { instance_id, code }) => {
+            Some(UpdateExecutionStatus::Aborted {
+                blocker: Some(instance_id),
+                code,
+            })
+        }
+        Ok(UpdatePrepareReply::Ready { .. }) => Some(UpdateExecutionStatus::Aborted {
+            blocker: Some(participant.instance_id),
+            code: "invalid_readiness_receipt".to_owned(),
+        }),
+        Err(_) => Some(UpdateExecutionStatus::Aborted {
+            blocker: Some(participant.instance_id),
+            code: "participant_unavailable".to_owned(),
+        }),
+    }
+}
+
+fn release_all<G: UpdateParticipantGateway>(
+    gateway: &mut G,
+    participants: &[InstanceInfo],
+    operation_id: RequestId,
+) {
+    for participant in participants {
+        let _released = gateway.release(participant, operation_id);
+    }
+}
+
+fn restart_accepted<G: UpdateParticipantGateway>(
+    gateway: &mut G,
+    participant: &InstanceInfo,
+    request: &UpdateRestartRequest,
+) -> bool {
+    gateway
+        .restart(participant, request)
+        .is_ok_and(|reply| reply.instance_id == participant.instance_id && reply.accepted)
+}
+
+fn execution(operation_id: RequestId, status: UpdateExecutionStatus) -> UpdateExecution {
+    UpdateExecution {
+        operation_id,
+        prepared_participants: 0,
+        restart_requests: 0,
+        restart_failed: Vec::new(),
+        convergence_state_recorded: true,
+        status,
+    }
+}
+
+#[cfg(test)]
+mod tests;

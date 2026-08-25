@@ -17,7 +17,10 @@ use fs4::{FileExt, TryLockError};
 use crate::{
     domain::{InstanceId, SessionId, Timestamp},
     ports::{
-        runtime::{InstanceInfo, Lease, RuntimeCoordinator, RuntimeError, RuntimeScan},
+        runtime::{
+            InstanceInfo, Lease, RuntimeCoordinator, RuntimeError, RuntimeScan,
+            UpdateInstanceContext,
+        },
         store::STORAGE_PROTOCOL_VERSION,
     },
 };
@@ -30,6 +33,7 @@ pub struct FileRuntimeCoordinator {
     launch_directory: PathBuf,
     started_at: Timestamp,
     version: String,
+    update: Option<UpdateInstanceContext>,
 }
 
 impl FileRuntimeCoordinator {
@@ -59,7 +63,22 @@ impl FileRuntimeCoordinator {
             launch_directory,
             started_at,
             version: version.into(),
+            update: None,
         })
+    }
+
+    /// Advertise a verified installation and update-control protocol.
+    #[must_use]
+    pub fn with_update_context(
+        mut self,
+        installation_identity: crate::domain::InstallationIdentity,
+        protocol: u32,
+    ) -> Self {
+        self.update = Some(UpdateInstanceContext {
+            installation_identity,
+            protocol,
+        });
+        self
     }
 
     fn session_lock_path(&self, session_id: SessionId) -> PathBuf {
@@ -83,6 +102,7 @@ impl FileRuntimeCoordinator {
             storage_protocol: STORAGE_PROTOCOL_VERSION,
             control_protocol: None,
             control_endpoint: None,
+            update: self.update.clone(),
             launch_directory: self.launch_directory.to_string_lossy().into_owned(),
             started_at: self.started_at,
         }
@@ -204,6 +224,13 @@ impl RuntimeCoordinator for FileRuntimeCoordinator {
             active,
             recovered: recovered.into_iter().collect(),
         })
+    }
+}
+
+impl crate::ports::update::UpdateInstanceRegistry for FileRuntimeCoordinator {
+    fn active_instances(&self) -> Result<Vec<InstanceInfo>, crate::ports::update::UpdateError> {
+        RuntimeCoordinator::active_instances(self)
+            .map_err(|error| crate::ports::update::UpdateError::Coordination(error.to_string()))
     }
 }
 

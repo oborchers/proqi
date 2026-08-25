@@ -10,6 +10,7 @@ use crate::{
         },
         sqlite::{SqliteStore, StoreConfig},
         terminal::TerminalResources,
+        update::SystemInstallDetector,
     },
     application::LeasedSession,
     domain::Timestamp,
@@ -17,6 +18,7 @@ use crate::{
         environment::{AppPaths, Clock, Environment, IdGenerator, Paths},
         runtime::RuntimeCoordinator,
         store::{MigrationMode, StoreError},
+        update::{InstallDetector as _, UPDATE_CONTROL_PROTOCOL_VERSION},
     },
 };
 
@@ -31,6 +33,7 @@ pub(super) struct RuntimeContext {
     config_dir: PathBuf,
     recovery_dir: PathBuf,
     attachment_dir: PathBuf,
+    installation: Option<crate::domain::Installation>,
     schema_lease: FileSchemaLease,
 }
 
@@ -48,6 +51,7 @@ impl RuntimeContext {
         let attachment_dir = paths.data_dir.join("attachments");
         let clock = SystemClock;
         let mut ids = SystemIdGenerator;
+        let installation = SystemInstallDetector::current().detect().ok();
         let coordinator = FileRuntimeCoordinator::new(
             paths.runtime_dir,
             ids.instance_id(),
@@ -55,6 +59,13 @@ impl RuntimeContext {
             clock.now(),
             env!("CARGO_PKG_VERSION"),
         )?;
+        let coordinator = installation
+            .as_ref()
+            .map_or(coordinator.clone(), |installation| {
+                coordinator
+                    .clone()
+                    .with_update_context(installation.identity, UPDATE_CONTROL_PROTOCOL_VERSION)
+            });
         let (store, schema_lease) = open_store(&coordinator, &paths.data_dir, clock.now())?;
         Ok(Self {
             store,
@@ -65,6 +76,7 @@ impl RuntimeContext {
             config_dir,
             recovery_dir,
             attachment_dir,
+            installation,
             schema_lease,
         })
     }
@@ -94,11 +106,12 @@ impl RuntimeContext {
             settings,
             recovery_directory: self.recovery_dir,
             attachment_directory,
+            installation: self.installation,
         }
     }
 }
 
-fn resolve_paths(state_root: Option<&Path>) -> Result<AppPaths, CliError> {
+pub(super) fn resolve_paths(state_root: Option<&Path>) -> Result<AppPaths, CliError> {
     if let Some(root) = state_root {
         if !root.is_absolute() {
             return Err(CliError::input(format!(
@@ -109,6 +122,7 @@ fn resolve_paths(state_root: Option<&Path>) -> Result<AppPaths, CliError> {
         return Ok(AppPaths {
             data_dir: root.join("data"),
             config_dir: root.join("config"),
+            cache_dir: root.join("cache"),
             runtime_dir: root.join("runtime"),
         });
     }

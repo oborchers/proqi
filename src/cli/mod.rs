@@ -51,4 +51,15 @@ mod tests {
         let target = Cli::try_parse_from(["proqi", "-r", "work"]).expect("resume arguments");
         assert_eq!(target.resume, Some(Some("work".to_owned())));
     }
+
+    #[test]
+    fn explicit_update_check_has_a_stable_command_shape() {
+        let parsed =
+            Cli::try_parse_from(["proqi", "--json", "update", "check"]).expect("update arguments");
+        assert!(parsed.json);
+        assert!(matches!(
+            parsed.command,
+            Some(super::args::Command::Update(_))
+        ));
+    }
 }

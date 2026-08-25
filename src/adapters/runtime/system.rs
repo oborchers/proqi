@@ -77,15 +77,22 @@ impl Paths for NativePaths {
             .ok_or(PathError::Unavailable("project directories"))?;
         let data_dir = project.data_local_dir().to_path_buf();
         let config_dir = project.config_dir().to_path_buf();
+        let cache_dir = project.cache_dir().to_path_buf();
         let runtime_dir = project
             .runtime_dir()
             .map_or_else(|| data_dir.join("runtime"), Path::to_path_buf);
         let paths = AppPaths {
             data_dir,
             config_dir,
+            cache_dir,
             runtime_dir,
         };
-        for path in [&paths.data_dir, &paths.config_dir, &paths.runtime_dir] {
+        for path in [
+            &paths.data_dir,
+            &paths.config_dir,
+            &paths.cache_dir,
+            &paths.runtime_dir,
+        ] {
             if !path.is_absolute() {
                 return Err(PathError::Relative(path.clone()));
             }

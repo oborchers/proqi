@@ -36,10 +36,24 @@ pub(super) struct Cli {
 pub(super) enum Command {
     /// Describe the stable CLI and optional integrations.
     Capabilities,
+    /// Check the canonical GitHub stable release on demand.
+    Update(UpdateArgs),
     /// List and manage resumable sessions.
     Sessions(SessionArgs),
     /// Inspect and mutate thoughts in one explicit session.
     Thoughts(ThoughtArgs),
+}
+
+#[derive(Debug, Args)]
+pub(super) struct UpdateArgs {
+    #[command(subcommand)]
+    pub(super) command: UpdateCommand,
+}
+
+#[derive(Clone, Copy, Debug, Subcommand)]
+pub(super) enum UpdateCommand {
+    /// Contact GitHub and report the latest stable release.
+    Check,
 }
 
 #[derive(Debug, Args)]

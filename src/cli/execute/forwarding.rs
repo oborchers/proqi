@@ -143,7 +143,7 @@ fn send(
     if !(crate::ports::control::MIN_CONTROL_PROTOCOL_VERSION
         ..=crate::ports::control::CONTROL_PROTOCOL_VERSION)
         .contains(&protocol)
-        || mutation.requires_protocol_two() && protocol < 2
+        || protocol < mutation.minimum_protocol()
     {
         return Err(CliError::new(
             "session_busy",

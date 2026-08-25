@@ -16,6 +16,42 @@ const MAX_CAPTURE_BYTES: u64 = 1024 * 1024;
 #[derive(Clone, Copy, Debug, Default)]
 pub struct SystemProcessRunner;
 
+/// Unix process-image replacement after explicit caller-owned cleanup.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SystemProcessReplacer;
+
+#[cfg(unix)]
+impl crate::ports::update::ProcessReplacer for SystemProcessReplacer {
+    fn replace(
+        &self,
+        executable: &std::path::Path,
+        session_id: crate::domain::SessionId,
+    ) -> Result<(), crate::ports::update::UpdateError> {
+        use std::os::unix::process::CommandExt as _;
+
+        let error = Command::new(executable)
+            .arg("-r")
+            .arg(session_id.to_string())
+            .exec();
+        Err(crate::ports::update::UpdateError::Coordination(format!(
+            "process replacement failed: {error}"
+        )))
+    }
+}
+
+#[cfg(not(unix))]
+impl crate::ports::update::ProcessReplacer for SystemProcessReplacer {
+    fn replace(
+        &self,
+        _executable: &std::path::Path,
+        _session_id: crate::domain::SessionId,
+    ) -> Result<(), crate::ports::update::UpdateError> {
+        Err(crate::ports::update::UpdateError::Coordination(
+            "process replacement is unsupported on this platform".to_owned(),
+        ))
+    }
+}
+
 impl ProcessRunner for SystemProcessRunner {
     fn run(&mut self, request: ProcessRequest) -> Result<ProcessOutput, ProcessError> {
         let mut command = Command::new(request.program);

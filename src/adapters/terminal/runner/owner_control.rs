@@ -6,7 +6,12 @@ use crate::{
     adapters::{control::ControlEnvelope, runtime::SystemClock, terminal::TerminalError},
     application::{ControlReplay, Effect, match_control_replay},
     domain::{RequestId, ThoughtId},
-    ports::{control::ControlResult, store::StoredOperationRequest},
+    ports::{
+        control::{ControlMutation, ControlResult, ControlUpdateReceipt},
+        environment::Clock as _,
+        store::StoredOperationRequest,
+        update::{UpdatePrepareReply, UpdateRestartReply},
+    },
     ui::BoardApp,
 };
 
@@ -26,7 +31,7 @@ pub(super) fn drain(
     let Some(control) = lanes.control else {
         return Ok(DrainOutcome::default());
     };
-    drain_bounded(
+    let mut outcome = drain_bounded(
         || match control.receiver.try_recv() {
             Ok(envelope) => Ok(Some(envelope)),
             Err(TryRecvError::Empty) => Ok(None),
@@ -35,7 +40,9 @@ pub(super) fn drain(
             }
         },
         |envelope| queue_lookup(app, lanes, pending, ids, clock, envelope),
-    )
+    )?;
+    outcome.changed |= complete_update_prepares(app, pending, lanes.instance, clock);
+    Ok(outcome)
 }
 
 fn queue_lookup(
@@ -61,10 +68,24 @@ fn queue_lookup(
         });
         return Ok(false);
     }
+    if matches!(
+        envelope.request.mutation,
+        ControlMutation::UpdatePrepare { .. }
+            | ControlMutation::UpdateRelease { .. }
+            | ControlMutation::UpdateRestart { .. }
+    ) {
+        return handle_update(app, lanes, pending, ids, clock, envelope);
+    }
     let effects = app.flush_pending_edit(ids, &clock);
     super::durability::enqueue_effects(app, lanes, effects, pending)?;
     let request_id = envelope.request.request_id;
-    let operation_id = envelope.request.mutation.operation_id();
+    let Some(operation_id) = envelope.request.mutation.durable_operation_id() else {
+        envelope.respond(ControlResult::Rejected {
+            code: "invalid_control_request".to_owned(),
+            message: "update request reached the durable mutation lane".to_owned(),
+        });
+        return Ok(false);
+    };
     match lanes.persistence.lookup(request_id, operation_id) {
         Ok(()) => {
             pending.persistence = pending.persistence.saturating_add(1);
@@ -76,6 +97,149 @@ fn queue_lookup(
         }),
     }
     Ok(false)
+}
+
+fn handle_update(
+    app: &mut BoardApp,
+    lanes: &WorkerLanes<'_>,
+    pending: &mut PendingWork,
+    ids: &mut crate::adapters::runtime::SystemIdGenerator,
+    clock: SystemClock,
+    envelope: ControlEnvelope,
+) -> Result<bool, TerminalError> {
+    match envelope.request.mutation.clone() {
+        ControlMutation::UpdatePrepare { request } => {
+            queue_update_prepare(app, lanes, pending, ids, clock, envelope, &request)
+        }
+        ControlMutation::UpdateRelease { operation_id } => {
+            let released = app.release_update_barrier(operation_id);
+            respond_update_release(envelope, lanes.instance.instance_id, released);
+            Ok(released)
+        }
+        ControlMutation::UpdateRestart { request } => {
+            let accepted =
+                app.request_update_restart(request.operation_id, request.installed_version);
+            envelope.respond(ControlResult::Update(ControlUpdateReceipt::Restart(
+                UpdateRestartReply {
+                    instance_id: lanes.instance.instance_id,
+                    accepted,
+                },
+            )));
+            Ok(accepted)
+        }
+        ControlMutation::Add { .. }
+        | ControlMutation::Delete { .. }
+        | ControlMutation::Move { .. }
+        | ControlMutation::History { .. } => Ok(false),
+    }
+}
+
+fn queue_update_prepare(
+    app: &mut BoardApp,
+    lanes: &WorkerLanes<'_>,
+    pending: &mut PendingWork,
+    ids: &mut crate::adapters::runtime::SystemIdGenerator,
+    clock: SystemClock,
+    envelope: ControlEnvelope,
+    request: &crate::ports::update::UpdatePrepareRequest,
+) -> Result<bool, TerminalError> {
+    let verified = lanes.instance.update.as_ref().is_some_and(|context| {
+        context.installation_identity == request.installation_identity
+            && context.protocol == crate::ports::update::UPDATE_CONTROL_PROTOCOL_VERSION
+    });
+    if !verified || clock.now() >= request.deadline {
+        envelope.respond(ControlResult::Update(ControlUpdateReceipt::Prepared(
+            UpdatePrepareReply::Blocked {
+                instance_id: lanes.instance.instance_id,
+                code: if verified {
+                    "deadline_expired"
+                } else {
+                    "installation_mismatch"
+                }
+                .to_owned(),
+            },
+        )));
+        return Ok(false);
+    }
+    if !app.begin_update_barrier(request.operation_id, request.deadline) {
+        envelope.respond(ControlResult::Update(ControlUpdateReceipt::Prepared(
+            UpdatePrepareReply::Blocked {
+                instance_id: lanes.instance.instance_id,
+                code: "another_update_is_preparing".to_owned(),
+            },
+        )));
+        return Ok(false);
+    }
+    let effects = app.flush_pending_edit(ids, &clock);
+    super::durability::enqueue_effects(app, lanes, effects, pending)?;
+    pending
+        .update_prepares
+        .insert(envelope.request.request_id, envelope);
+    Ok(true)
+}
+
+fn complete_update_prepares(
+    app: &mut BoardApp,
+    pending: &mut PendingWork,
+    instance: &crate::ports::runtime::InstanceInfo,
+    clock: SystemClock,
+) -> bool {
+    if pending.persistence > 0 || pending.update_prepares.is_empty() {
+        return false;
+    }
+    let request_ids: Vec<_> = pending.update_prepares.keys().copied().collect();
+    let mut changed = false;
+    for request_id in request_ids {
+        let Some(envelope) = pending.update_prepares.remove(&request_id) else {
+            continue;
+        };
+        let ControlMutation::UpdatePrepare { request } = &envelope.request.mutation else {
+            continue;
+        };
+        let blocked = if clock.now() >= request.deadline {
+            Some("deadline_expired")
+        } else if app.update_preflight_failed() {
+            Some("save_failed")
+        } else if !app.update_preflight_ready() {
+            pending.update_prepares.insert(request_id, envelope);
+            continue;
+        } else {
+            None
+        };
+        let reply = blocked.map_or_else(
+            || UpdatePrepareReply::Ready {
+                instance_id: instance.instance_id,
+                session_id: instance.session_id,
+            },
+            |code| UpdatePrepareReply::Blocked {
+                instance_id: instance.instance_id,
+                code: code.to_owned(),
+            },
+        );
+        if blocked.is_some() {
+            app.release_update_barrier(request.operation_id);
+        }
+        envelope.respond(ControlResult::Update(ControlUpdateReceipt::Prepared(reply)));
+        changed = true;
+    }
+    changed
+}
+
+fn respond_update_release(
+    envelope: ControlEnvelope,
+    instance_id: crate::domain::InstanceId,
+    released: bool,
+) {
+    if released {
+        envelope.respond(ControlResult::Update(ControlUpdateReceipt::Released {
+            instance_id,
+        }));
+    } else {
+        envelope.respond(ControlResult::Rejected {
+            code: "update_operation_mismatch".to_owned(),
+            message: "participant is not waiting for that update".to_owned(),
+        });
+    }
 }
 
 pub(super) fn complete_lookup(

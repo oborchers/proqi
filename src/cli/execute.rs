@@ -4,6 +4,7 @@ mod capabilities;
 mod forwarding;
 mod sessions;
 mod transfer;
+mod update;
 
 use std::{io::Read, process::ExitCode, str::FromStr};
 
@@ -57,6 +58,10 @@ fn execute_inner(cli: Cli) -> Result<Outcome, CliError> {
     if matches!(cli.command, Some(Command::Capabilities)) {
         return Ok(capabilities::outcome());
     }
+    if let Some(Command::Update(arguments)) = &cli.command {
+        let paths = super::runtime::resolve_paths(cli.state_dir.as_deref())?;
+        return update::execute(arguments, &paths.cache_dir);
+    }
     let context = RuntimeContext::open(cli.state_dir.as_deref())?;
     match cli.command {
         Some(Command::Sessions(arguments)) => {
@@ -68,6 +73,7 @@ fn execute_inner(cli: Cli) -> Result<Outcome, CliError> {
             execute_thoughts(&mut context, arguments.command)
         }
         Some(Command::Capabilities) => Ok(capabilities::outcome()),
+        Some(Command::Update(_)) => Err(CliError::arguments("invalid update command".to_owned())),
         None => {
             let resume = match cli.resume {
                 None => ResumeRequest::Fresh,

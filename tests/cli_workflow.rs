@@ -352,11 +352,12 @@ fn launch_modes_and_capability_discovery_have_stable_output() {
     let capabilities = success(root, &["capabilities"], None);
     assert_eq!(capabilities["cli_schema_version"], 1);
     assert_eq!(capabilities["active_session_control"], cfg!(unix));
-    assert_eq!(capabilities["control_protocol"], 2);
+    assert_eq!(capabilities["control_protocol"], 3);
     assert_eq!(capabilities["cross_session_transfer"], true);
     assert_eq!(capabilities["max_thought_stdin_bytes"], 131_072);
     assert_eq!(capabilities["herdr_submission"], true);
     assert_eq!(capabilities["herdr_managed_pane_required"], true);
+    assert_eq!(capabilities["explicit_update_check"], true);
 
     let human_capabilities = Command::new(env!("CARGO_BIN_EXE_proqi"))
         .arg("capabilities")

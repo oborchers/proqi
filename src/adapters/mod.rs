@@ -12,3 +12,4 @@ pub mod recovery;
 pub mod runtime;
 pub mod sqlite;
 pub mod terminal;
+pub mod update;

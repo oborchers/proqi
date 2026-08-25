@@ -29,7 +29,7 @@ use crate::{
     },
     application::AppState,
     domain::{OperationSequence, RequestId, SessionId, ThoughtId},
-    ports::store::StoreError,
+    ports::{environment::Clock as _, runtime::InstanceInfo, store::StoreError},
     ui::{BoardApp, Theme, UiInput, UiKey, render},
 };
 
@@ -57,6 +57,7 @@ pub(crate) struct TerminalResources {
     pub(crate) settings: crate::ui::UiSettings,
     pub(crate) recovery_directory: PathBuf,
     pub(crate) attachment_directory: PathBuf,
+    pub(crate) installation: Option<crate::domain::Installation>,
 }
 
 /// Refuse an interactive launch before it creates or opens durable state.
@@ -76,6 +77,7 @@ pub(super) struct WorkerLanes<'a> {
     pub(super) external: &'a ExternalLane,
     pub(super) control: Option<&'a ControlServer>,
     pub(super) termination: &'a TerminationGuard,
+    pub(super) instance: &'a InstanceInfo,
 }
 
 #[derive(Default)]
@@ -84,6 +86,7 @@ pub(super) struct PendingWork {
     pub(super) external: usize,
     pub(super) controls: BTreeMap<OperationSequence, PendingControl>,
     pub(super) control_lookups: BTreeMap<RequestId, ControlEnvelope>,
+    pub(super) update_prepares: BTreeMap<RequestId, ControlEnvelope>,
 }
 
 impl PendingWork {
@@ -119,6 +122,7 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
         settings,
         recovery_directory,
         attachment_directory,
+        installation,
     } = resources;
     let session_id = state.board.session.id;
     let (control, control_warning) = start_optional_control(&mut session_lease);
@@ -145,6 +149,7 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
         external: &external,
         control: control.as_ref(),
         termination: &termination,
+        instance: session_lease.info(),
     };
     let run_result = drive(
         &mut terminal,
@@ -155,6 +160,7 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
         theme,
         &mut pane_heartbeat,
     );
+    let requested_restart = app.update_restart().cloned();
     if let Some(heartbeat) = pane_heartbeat.as_mut() {
         let _cleared = heartbeat.clear(&external);
     }
@@ -173,7 +179,60 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
     external_result?;
     control_result?;
     restoration_result?;
+    if let Some(version) = requested_restart {
+        return replace_after_cleanup(installation.as_ref(), &version, session_id);
+    }
     Ok(session_id)
+}
+
+#[cfg(unix)]
+fn replace_after_cleanup(
+    installation: Option<&crate::domain::Installation>,
+    expected: &crate::domain::StableVersion,
+    session_id: SessionId,
+) -> Result<SessionId, TerminalError> {
+    use crate::ports::update::{InstallDetector as _, ProcessReplacer as _};
+
+    let installation = installation.ok_or_else(|| {
+        TerminalError::Io("update restart lacks a verified installation context".to_owned())
+    })?;
+    if installation.kind != crate::domain::InstallationKind::HomebrewFormula {
+        return Err(TerminalError::Io(
+            "automatic restart is available only for verified Homebrew installations".to_owned(),
+        ));
+    }
+    let active = installation
+        .restart_executable
+        .as_ref()
+        .ok_or_else(|| TerminalError::Io("Homebrew active executable is unavailable".to_owned()))?;
+    let detected = crate::adapters::update::SystemInstallDetector::for_executable(active.clone())
+        .detect()
+        .map_err(|error| TerminalError::Io(error.to_string()))?;
+    if detected.kind != crate::domain::InstallationKind::HomebrewFormula
+        || detected.identity != installation.identity
+    {
+        return Err(TerminalError::Io(
+            "updated executable does not belong to this Homebrew installation".to_owned(),
+        ));
+    }
+    let mut runner = crate::adapters::process::SystemProcessRunner;
+    crate::adapters::update::verify_installed_version(&mut runner, &detected.executable, expected)
+        .map_err(|error| TerminalError::Io(error.to_string()))?;
+    crate::adapters::process::SystemProcessReplacer
+        .replace(&detected.executable, session_id)
+        .map_err(|error| TerminalError::Io(error.to_string()))?;
+    Ok(session_id)
+}
+
+#[cfg(not(unix))]
+fn replace_after_cleanup(
+    _installation: Option<&crate::domain::Installation>,
+    _expected: &crate::domain::StableVersion,
+    _session_id: SessionId,
+) -> Result<SessionId, TerminalError> {
+    Err(TerminalError::Io(
+        "automatic update restart is unsupported on this platform".to_owned(),
+    ))
 }
 
 fn start_optional_control(
@@ -234,7 +293,8 @@ fn drive(
         let external =
             external_results::drain(app, lanes, &mut pending, ids, clock, pane_heartbeat)?;
         let control = owner_control::drain(app, lanes, &mut pending, ids, clock)?;
-        redraw |= persistence.changed || external.changed || control.changed;
+        let barrier_expired = app.expire_update_barrier(clock.now());
+        redraw |= persistence.changed || external.changed || control.changed || barrier_expired;
         let worker_backlog =
             persistence.budget_exhausted || external.budget_exhausted || control.budget_exhausted;
         if app.edit_generation() != edit_generation {

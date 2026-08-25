@@ -1,8 +1,11 @@
 //! Cross-platform local owner-control client and server.
 
+mod client;
 #[cfg(all(test, unix))]
 mod protocol_tests;
 mod transport;
+
+pub use client::{LocalControlClient, LocalUpdateControlClient};
 
 use std::{
     collections::{BTreeMap, VecDeque},
@@ -15,59 +18,15 @@ use std::{
     time::Duration,
 };
 
-use crate::ports::{
-    control::{
-        CONTROL_PROTOCOL_VERSION, ControlClient, ControlError, ControlRequest, ControlResponse,
-        ControlResult, MIN_CONTROL_PROTOCOL_VERSION,
-    },
-    runtime::InstanceInfo,
+use crate::ports::control::{
+    CONTROL_PROTOCOL_VERSION, ControlError, ControlRequest, ControlResponse, ControlResult,
+    MIN_CONTROL_PROTOCOL_VERSION,
 };
 
-use transport::{
-    LocalListener, accept, connect, read_request, read_response, write_request, write_response,
-};
+use transport::{LocalListener, accept, read_request, write_response};
 
 const RESPONSE_TIMEOUT: Duration = Duration::from_secs(2);
 const MAX_CACHED_REQUESTS: usize = 64;
-
-/// Verified local control client.
-#[derive(Clone, Copy, Debug, Default)]
-pub struct LocalControlClient;
-
-impl ControlClient for LocalControlClient {
-    fn send(
-        &self,
-        owner: &InstanceInfo,
-        request: &ControlRequest,
-    ) -> Result<crate::ports::control::ControlReceipt, ControlError> {
-        if owner.control_protocol != Some(request.protocol)
-            || !(MIN_CONTROL_PROTOCOL_VERSION..=CONTROL_PROTOCOL_VERSION)
-                .contains(&request.protocol)
-            || request.mutation.requires_protocol_two() && request.protocol < 2
-            || owner.session_id != request.session_id
-        {
-            return Err(ControlError::Unsupported);
-        }
-        let endpoint = owner
-            .control_endpoint
-            .as_deref()
-            .ok_or(ControlError::Unsupported)?;
-        let stream = connect(endpoint, owner.pid)?;
-        write_request(&stream, request)?;
-        let response = read_response(&stream)?;
-        if response.protocol != request.protocol || response.request_id != request.request_id {
-            return Err(ControlError::Protocol(
-                "response version or request identity differs".to_owned(),
-            ));
-        }
-        match response.result {
-            ControlResult::Accepted(receipt) => Ok(receipt),
-            ControlResult::Rejected { code, message } => {
-                Err(ControlError::Rejected { code, message })
-            }
-        }
-    }
-}
 
 /// One verified request waiting for the owner reducer.
 pub(crate) struct ControlEnvelope {
@@ -159,7 +118,7 @@ fn handle_stream(
         let _written = write_response(stream, &response);
         return;
     }
-    if request.mutation.requires_protocol_two() && request.protocol < 2 {
+    if request.protocol < request.mutation.minimum_protocol() {
         let response = rejected(
             &request,
             "protocol_mismatch",
@@ -199,7 +158,10 @@ fn handle_stream(
                 )
             })
     };
-    if matches!(response.result, ControlResult::Accepted(_)) {
+    if matches!(
+        response.result,
+        ControlResult::Accepted(_) | ControlResult::Update(_)
+    ) {
         cache_response(cache, cache_order, request, response.clone());
     }
     let _written = write_response(stream, &response);
@@ -436,6 +398,7 @@ mod tests {
             storage_protocol: 1,
             control_protocol: Some(CONTROL_PROTOCOL_VERSION),
             control_endpoint: Some(endpoint),
+            update: None,
             launch_directory: std::env::temp_dir()
                 .join("proqi-control")
                 .to_string_lossy()
@@ -450,7 +413,12 @@ mod tests {
             durable: CommitReceipt {
                 session_id: request.session_id,
                 sequence: OperationSequence::new(1),
-                identity: DurableIdentity::Operation(request.mutation.operation_id()),
+                identity: DurableIdentity::Operation(
+                    request
+                        .mutation
+                        .durable_operation_id()
+                        .expect("durable test request"),
+                ),
                 idempotent_replay: false,
             },
         }

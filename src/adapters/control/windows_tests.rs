@@ -25,6 +25,7 @@ fn windows_control_is_unadvertised_and_has_no_pid_only_fallback() {
         storage_protocol: 1,
         control_protocol: Some(CONTROL_PROTOCOL_VERSION),
         control_endpoint: Some(endpoint.to_owned()),
+        update: None,
         launch_directory: r"C:\proqi-test".to_owned(),
         started_at: Timestamp::from_millis(1),
     };
