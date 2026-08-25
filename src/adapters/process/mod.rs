@@ -26,13 +26,13 @@ impl crate::ports::update::ProcessReplacer for SystemProcessReplacer {
         &self,
         executable: &std::path::Path,
         session_id: crate::domain::SessionId,
+        state_root: Option<&std::path::Path>,
     ) -> Result<(), crate::ports::update::UpdateError> {
         use std::os::unix::process::CommandExt as _;
 
-        let error = Command::new(executable)
-            .arg("-r")
-            .arg(session_id.to_string())
-            .exec();
+        let mut command = Command::new(executable);
+        command.args(resume_args(session_id, state_root));
+        let error = command.exec();
         Err(crate::ports::update::UpdateError::Coordination(format!(
             "process replacement failed: {error}"
         )))
@@ -45,11 +45,26 @@ impl crate::ports::update::ProcessReplacer for SystemProcessReplacer {
         &self,
         _executable: &std::path::Path,
         _session_id: crate::domain::SessionId,
+        _state_root: Option<&std::path::Path>,
     ) -> Result<(), crate::ports::update::UpdateError> {
         Err(crate::ports::update::UpdateError::Coordination(
             "process replacement is unsupported on this platform".to_owned(),
         ))
     }
+}
+
+fn resume_args(
+    session_id: crate::domain::SessionId,
+    state_root: Option<&std::path::Path>,
+) -> Vec<std::ffi::OsString> {
+    let mut arguments = Vec::new();
+    if let Some(root) = state_root {
+        arguments.push("--state-dir".into());
+        arguments.push(root.as_os_str().to_owned());
+    }
+    arguments.push("-r".into());
+    arguments.push(session_id.to_string().into());
+    arguments
 }
 
 impl ProcessRunner for SystemProcessRunner {
@@ -213,9 +228,22 @@ fn receive_until<T>(
 mod tests {
     use std::{ffi::OsString, time::Duration};
 
-    use crate::ports::environment::{ProcessError, ProcessRequest, ProcessRunner};
+    use crate::{
+        adapters::memory::FakeIdGenerator,
+        ports::environment::{IdGenerator as _, ProcessError, ProcessRequest, ProcessRunner},
+    };
 
-    use super::SystemProcessRunner;
+    use super::{SystemProcessRunner, resume_args};
+
+    #[test]
+    fn replacement_resume_arguments_preserve_an_explicit_state_root() {
+        let mut ids = FakeIdGenerator::new(1_800_000_000_000);
+        let session = ids.session_id();
+        assert_eq!(
+            resume_args(session, Some(std::path::Path::new("/private/state"))),
+            ["--state-dir", "/private/state", "-r", &session.to_string(),].map(OsString::from)
+        );
+    }
 
     #[cfg(unix)]
     #[test]

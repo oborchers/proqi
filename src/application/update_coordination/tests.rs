@@ -1,6 +1,10 @@
 use std::{
-    cell::{Cell, RefCell},
+    cell::RefCell,
     collections::VecDeque,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
 };
 
 use crate::{
@@ -24,12 +28,20 @@ use crate::{
 
 use super::{UpdateExecutionStatus, UpdateRestartCoordinator};
 
-struct Lease;
+struct Lease(Option<Arc<AtomicBool>>);
 impl UpdateLease for Lease {}
+
+impl Drop for Lease {
+    fn drop(&mut self) {
+        if let Some(owned) = &self.0 {
+            owned.store(false, Ordering::Release);
+        }
+    }
+}
 
 #[derive(Default)]
 struct State {
-    installer_owned: Cell<bool>,
+    installer_owned: Arc<AtomicBool>,
     cache: RefCell<UpdateCacheState>,
 }
 
@@ -43,11 +55,16 @@ impl UpdateStateStore for State {
         _: InstallationIdentity,
         kind: UpdateLockKind,
     ) -> Result<Option<Box<dyn UpdateLease>>, UpdateError> {
-        if kind == UpdateLockKind::Installer && self.installer_owned.replace(true) {
-            Ok(None)
-        } else {
-            Ok(Some(Box::new(Lease)))
+        if kind != UpdateLockKind::Installer {
+            return Ok(Some(Box::new(Lease(None))));
         }
+        self.installer_owned
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .map(|_| {
+                Some(Box::new(Lease(Some(Arc::clone(&self.installer_owned))))
+                    as Box<dyn UpdateLease>)
+            })
+            .or(Ok(None))
     }
 
     fn record_success(
@@ -110,6 +127,7 @@ struct Gateway {
     released: Vec<InstanceId>,
     restarted: Vec<InstanceId>,
     block_at: Option<usize>,
+    fail_prepare_at: Option<usize>,
     fail_restart: Option<InstanceId>,
 }
 
@@ -121,6 +139,11 @@ impl UpdateParticipantGateway for Gateway {
     ) -> Result<UpdatePrepareReply, UpdateError> {
         let index = self.prepared.len();
         self.prepared.push(participant.instance_id);
+        if self.fail_prepare_at == Some(index) {
+            return Err(UpdateError::Coordination(
+                "participant unavailable".to_owned(),
+            ));
+        }
         if self.block_at == Some(index) {
             Ok(UpdatePrepareReply::Blocked {
                 instance_id: participant.instance_id,
@@ -250,6 +273,91 @@ fn post_install_rescan_includes_new_sessions_and_records_partial_restart() {
     assert_eq!(result.restart_requests, 3);
     assert_eq!(result.restart_failed, vec![failed]);
     assert!(state.cache.borrow().restart_needed);
+}
+
+#[test]
+fn already_current_preflight_participants_are_released_after_installation() {
+    let mut ids = TestIds::new(1_800_000_000_000);
+    let identity = InstallationIdentity::from_digest([34; 32]);
+    let mut current = participants(&mut ids, identity, 1);
+    current[0].version = "0.2.0".to_owned();
+    let registry = registry(current.clone(), current);
+    let state = State::default();
+    let mut gateway = Gateway::default();
+    let mut installer = successful_installer();
+
+    let result = UpdateRestartCoordinator::new(&state, &registry, &mut gateway, &mut installer)
+        .execute(
+            ids.request_id(),
+            identity,
+            &version("0.2.0"),
+            Timestamp::from_millis(1_800_000_030_000),
+        )
+        .expect("coordinate current participant");
+
+    assert_eq!(result.prepared_participants, 1);
+    assert_eq!(result.restart_requests, 0);
+    assert_eq!(gateway.released.len(), 1);
+}
+
+#[test]
+fn unavailable_participant_aborts_and_releases_ready_peers() {
+    let mut ids = TestIds::new(1_800_000_000_000);
+    let identity = InstallationIdentity::from_digest([35; 32]);
+    let participants = participants(&mut ids, identity, 3);
+    let registry = Registry {
+        scans: RefCell::new(VecDeque::from([participants])),
+    };
+    let state = State::default();
+    let mut gateway = Gateway {
+        fail_prepare_at: Some(1),
+        ..Gateway::default()
+    };
+    let mut installer = successful_installer();
+
+    let result = UpdateRestartCoordinator::new(&state, &registry, &mut gateway, &mut installer)
+        .execute(
+            ids.request_id(),
+            identity,
+            &version("0.2.0"),
+            Timestamp::from_millis(1_800_000_030_000),
+        )
+        .expect("abort unavailable participant");
+
+    assert!(matches!(
+        result.status,
+        UpdateExecutionStatus::Aborted { ref code, .. } if code == "participant_unavailable"
+    ));
+    assert_eq!(gateway.released.len(), 1);
+    assert_eq!(installer.calls, 0);
+}
+
+#[test]
+fn installer_failure_releases_every_ready_participant() {
+    let mut ids = TestIds::new(1_800_000_000_000);
+    let identity = InstallationIdentity::from_digest([36; 32]);
+    let participants = participants(&mut ids, identity, 3);
+    let registry = Registry {
+        scans: RefCell::new(VecDeque::from([participants])),
+    };
+    let state = State::default();
+    let mut gateway = Gateway::default();
+    let mut installer = Installer {
+        calls: 0,
+        result: Err(UpdateError::InstallerFailed),
+    };
+
+    let result = UpdateRestartCoordinator::new(&state, &registry, &mut gateway, &mut installer)
+        .execute(
+            ids.request_id(),
+            identity,
+            &version("0.2.0"),
+            Timestamp::from_millis(1_800_000_030_000),
+        );
+
+    assert_eq!(result, Err(UpdateError::InstallerFailed));
+    assert_eq!(gateway.released.len(), 3);
+    assert!(gateway.restarted.is_empty());
 }
 
 fn registry(before: Vec<InstanceInfo>, after: Vec<InstanceInfo>) -> Registry {

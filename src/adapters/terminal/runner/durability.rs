@@ -68,6 +68,8 @@ pub(super) fn enqueue_effects(
         } else if let Effect::TransferThought(request) = effect {
             lanes.persistence.transfer_thought(request)?;
             pending.persistence = pending.persistence.saturating_add(1);
+        } else if lanes.update.send(&effect)? {
+            pending.update = pending.update.saturating_add(1);
         } else if lanes.external.send(&effect)? {
             pending.external = pending.external.saturating_add(1);
         } else if let Effect::Notify { code } = effect {

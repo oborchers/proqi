@@ -303,6 +303,10 @@ mod fairness;
 mod shutdown;
 
 #[cfg(target_os = "macos")]
+#[path = "pty/update_control.rs"]
+mod update_control;
+
+#[cfg(target_os = "macos")]
 fn expect_command() -> Command {
     let mut command = Command::new("/usr/bin/expect");
     command.env("PROQI_DISABLE_HERDR", "1");

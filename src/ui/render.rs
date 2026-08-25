@@ -22,7 +22,11 @@ pub fn render(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, th
     frame.render_widget(Block::default().style(theme.base_style()), layout.area);
     render_board(frame, app, layout, theme);
     chrome::render_footer(frame, app, layout, theme);
-    if let Some((query, entries, selected)) = app.search_view() {
+    if let Some((title, entries, selected)) = app.update_prompt_view() {
+        if let Some(overlay) = &layout.overlay {
+            overlays::render_update(frame, overlay, &title, &entries, selected, theme);
+        }
+    } else if let Some((query, entries, selected)) = app.search_view() {
         if let Some(overlay) = &layout.overlay {
             overlays::render_picker(
                 frame,

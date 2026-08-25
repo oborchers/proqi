@@ -5,6 +5,7 @@ mod external_results;
 mod fairness;
 mod heartbeat;
 mod owner_control;
+mod update_results;
 
 use std::{
     collections::BTreeMap,
@@ -58,6 +59,8 @@ pub(crate) struct TerminalResources {
     pub(crate) recovery_directory: PathBuf,
     pub(crate) attachment_directory: PathBuf,
     pub(crate) installation: Option<crate::domain::Installation>,
+    pub(crate) cache_directory: PathBuf,
+    pub(crate) state_root: Option<PathBuf>,
 }
 
 /// Refuse an interactive launch before it creates or opens durable state.
@@ -76,6 +79,7 @@ pub(super) struct WorkerLanes<'a> {
     pub(super) persistence: &'a PersistenceLane,
     pub(super) external: &'a ExternalLane,
     pub(super) control: Option<&'a ControlServer>,
+    pub(super) update: &'a super::update_lane::UpdateLane,
     pub(super) termination: &'a TerminationGuard,
     pub(super) instance: &'a InstanceInfo,
 }
@@ -87,6 +91,7 @@ pub(super) struct PendingWork {
     pub(super) controls: BTreeMap<OperationSequence, PendingControl>,
     pub(super) control_lookups: BTreeMap<RequestId, ControlEnvelope>,
     pub(super) update_prepares: BTreeMap<RequestId, ControlEnvelope>,
+    pub(super) update: usize,
 }
 
 impl PendingWork {
@@ -95,6 +100,8 @@ impl PendingWork {
             && self.external == 0
             && self.controls.is_empty()
             && self.control_lookups.is_empty()
+            && self.update_prepares.is_empty()
+            && self.update == 0
     }
 }
 
@@ -123,21 +130,25 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
         recovery_directory,
         attachment_directory,
         installation,
+        cache_directory,
+        state_root,
     } = resources;
     let session_id = state.board.session.id;
     let (control, control_warning) = start_optional_control(&mut session_lease);
-    let theme = super::palette::resolve(settings.theme, supports_true_color());
-    let guard = TerminalGuard::enter(CrosstermControl)?;
+    let (theme, guard) = enter_terminal(settings.theme)?;
     let termination = TerminationGuard::register()?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
     let input = InputLane::spawn();
-    let persistence = PersistenceLane::spawn_with_runtime(store, coordinator, cwd);
+    let persistence = PersistenceLane::spawn_with_runtime(store, coordinator.clone(), cwd);
     let presentation_source = format!("proqi-{}", session_lease.info().instance_id);
     let external = ExternalLane::spawn(
         recovery_directory,
         attachment_directory,
         presentation_source,
     );
+    let update =
+        super::update_lane::UpdateLane::spawn(cache_directory, installation.clone(), coordinator);
+    update.check(settings.check_for_updates)?;
     let mut pane_heartbeat = None;
     let mut app = BoardApp::with_settings(state, settings, RopeEditorFactory);
     if let Some(warning) = control_warning {
@@ -148,6 +159,7 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
         persistence: &persistence,
         external: &external,
         control: control.as_ref(),
+        update: &update,
         termination: &termination,
         instance: session_lease.info(),
     };
@@ -164,12 +176,10 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
     if let Some(heartbeat) = pane_heartbeat.as_mut() {
         let _cleared = heartbeat.clear(&external);
     }
-    let control_result = control.map_or(Ok(()), ControlServer::stop);
-    let input_result = input
-        .stop()
-        .map_err(|_| TerminalError::Worker("input lane panicked"));
+    let (control_result, input_result) = stop_frontend_lanes(control, input);
     let persistence_result = persistence.stop();
     let external_result = external.stop();
+    let update_result = update.stop();
     drop(terminal);
     let restoration_result = guard.finish();
     drop((session_lease, schema_lease));
@@ -177,12 +187,40 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
     input_result?;
     persistence_result?;
     external_result?;
+    update_result?;
     control_result?;
     restoration_result?;
-    if let Some(version) = requested_restart {
-        return replace_after_cleanup(installation.as_ref(), &version, session_id);
-    }
-    Ok(session_id)
+    resume_after_update(
+        installation.as_ref(),
+        requested_restart.as_ref(),
+        session_id,
+        state_root.as_deref(),
+    )
+}
+
+fn resume_after_update(
+    installation: Option<&crate::domain::Installation>,
+    requested: Option<&crate::domain::StableVersion>,
+    session_id: SessionId,
+    state_root: Option<&std::path::Path>,
+) -> Result<SessionId, TerminalError> {
+    requested.map_or(Ok(session_id), |version| {
+        replace_after_cleanup(installation, version, session_id, state_root)
+    })
+}
+
+fn stop_frontend_lanes(
+    control: Option<ControlServer>,
+    input: InputLane,
+) -> (
+    Result<(), crate::ports::control::ControlError>,
+    Result<(), TerminalError>,
+) {
+    let control = control.map_or(Ok(()), ControlServer::stop);
+    let input = input
+        .stop()
+        .map_err(|_| TerminalError::Worker("input lane panicked"));
+    (control, input)
 }
 
 #[cfg(unix)]
@@ -190,6 +228,7 @@ fn replace_after_cleanup(
     installation: Option<&crate::domain::Installation>,
     expected: &crate::domain::StableVersion,
     session_id: SessionId,
+    state_root: Option<&std::path::Path>,
 ) -> Result<SessionId, TerminalError> {
     use crate::ports::update::{InstallDetector as _, ProcessReplacer as _};
 
@@ -219,7 +258,7 @@ fn replace_after_cleanup(
     crate::adapters::update::verify_installed_version(&mut runner, &detected.executable, expected)
         .map_err(|error| TerminalError::Io(error.to_string()))?;
     crate::adapters::process::SystemProcessReplacer
-        .replace(&detected.executable, session_id)
+        .replace(&detected.executable, session_id, state_root)
         .map_err(|error| TerminalError::Io(error.to_string()))?;
     Ok(session_id)
 }
@@ -229,6 +268,7 @@ fn replace_after_cleanup(
     _installation: Option<&crate::domain::Installation>,
     _expected: &crate::domain::StableVersion,
     _session_id: SessionId,
+    _state_root: Option<&std::path::Path>,
 ) -> Result<SessionId, TerminalError> {
     Err(TerminalError::Io(
         "automatic update restart is unsupported on this platform".to_owned(),
@@ -267,6 +307,14 @@ fn start_optional_control(
     (Some(server), None)
 }
 
+fn enter_terminal(
+    preference: crate::ui::ThemePreference,
+) -> Result<(Theme, TerminalGuard<CrosstermControl>), TerminalError> {
+    let theme = super::palette::resolve(preference, supports_true_color());
+    let guard = TerminalGuard::enter(CrosstermControl)?;
+    Ok((theme, guard))
+}
+
 fn drive(
     terminal: &mut Terminal<CrosstermBackend<Stdout>>,
     app: &mut BoardApp,
@@ -289,14 +337,9 @@ fn drive(
             let effects = app.handle(UiInput::Key(UiKey::Quit), ids, &clock);
             enqueue_effects(app, lanes, effects, &mut pending)?;
         }
-        let persistence = drain_persistence(app, lanes, &mut pending, ids, &clock)?;
-        let external =
-            external_results::drain(app, lanes, &mut pending, ids, clock, pane_heartbeat)?;
-        let control = owner_control::drain(app, lanes, &mut pending, ids, clock)?;
-        let barrier_expired = app.expire_update_barrier(clock.now());
-        redraw |= persistence.changed || external.changed || control.changed || barrier_expired;
-        let worker_backlog =
-            persistence.budget_exhausted || external.budget_exhausted || control.budget_exhausted;
+        let (workers_changed, worker_backlog) =
+            drain_workers(app, lanes, &mut pending, ids, clock, pane_heartbeat)?;
+        redraw |= workers_changed || app.expire_update_barrier(clock.now());
         if app.edit_generation() != edit_generation {
             edit_generation = app.edit_generation();
             edit_deadline = app
@@ -351,6 +394,26 @@ fn drive(
             }
         }
     }
+}
+
+fn drain_workers(
+    app: &mut BoardApp,
+    lanes: &WorkerLanes<'_>,
+    pending: &mut PendingWork,
+    ids: &mut SystemIdGenerator,
+    clock: SystemClock,
+    pane_heartbeat: &mut Option<PaneHeartbeat>,
+) -> Result<(bool, bool), TerminalError> {
+    let persistence = drain_persistence(app, lanes, pending, ids, &clock)?;
+    let external = external_results::drain(app, lanes, pending, ids, clock, pane_heartbeat)?;
+    let control = owner_control::drain(app, lanes, pending, ids, clock)?;
+    let update = update_results::drain(app, lanes, pending)?;
+    let changed = persistence.changed || external.changed || control.changed || update.changed;
+    let backlog = persistence.budget_exhausted
+        || external.budget_exhausted
+        || control.budget_exhausted
+        || update.budget_exhausted;
+    Ok((changed, backlog))
 }
 
 pub(super) fn supports_true_color() -> bool {

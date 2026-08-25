@@ -122,7 +122,7 @@ fn handle_stream(
         let response = rejected(
             &request,
             "protocol_mismatch",
-            "presentation annotations require control protocol 2",
+            "request requires a newer control protocol",
         );
         let _written = write_response(stream, &response);
         return;

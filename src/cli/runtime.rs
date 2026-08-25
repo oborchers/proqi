@@ -33,6 +33,8 @@ pub(super) struct RuntimeContext {
     config_dir: PathBuf,
     recovery_dir: PathBuf,
     attachment_dir: PathBuf,
+    cache_dir: PathBuf,
+    state_root: Option<PathBuf>,
     installation: Option<crate::domain::Installation>,
     schema_lease: FileSchemaLease,
 }
@@ -49,6 +51,8 @@ impl RuntimeContext {
         let config_dir = paths.config_dir.clone();
         let recovery_dir = paths.data_dir.join("recovery");
         let attachment_dir = paths.data_dir.join("attachments");
+        let cache_dir = paths.cache_dir.clone();
+        let state_root = state_root.map(Path::to_path_buf);
         let clock = SystemClock;
         let mut ids = SystemIdGenerator;
         let installation = SystemInstallDetector::current().detect().ok();
@@ -76,6 +80,8 @@ impl RuntimeContext {
             config_dir,
             recovery_dir,
             attachment_dir,
+            cache_dir,
+            state_root,
             installation,
             schema_lease,
         })
@@ -107,6 +113,8 @@ impl RuntimeContext {
             recovery_directory: self.recovery_dir,
             attachment_directory,
             installation: self.installation,
+            cache_directory: self.cache_dir,
+            state_root: self.state_root,
         }
     }
 }

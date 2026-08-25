@@ -5,8 +5,8 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use super::error::{ApplicationError, ApplicationResult, FailureCode};
 use crate::domain::{
     BoardOperation, BoardOperationKind, ContentAnnotation, OperationId, OperationSequence,
-    RequestId, RevisionId, SessionBoard, SessionId, TextPosition, Thought, ThoughtId,
-    ThoughtRevision, Timestamp, UndoScope,
+    RequestId, RevisionId, SessionBoard, SessionId, StableVersion, TextPosition, Thought,
+    ThoughtId, ThoughtRevision, Timestamp, UndoScope,
 };
 use crate::ports::agent::{AgentTarget, SubmissionRequest};
 use crate::ports::{
@@ -58,6 +58,19 @@ pub enum ClipboardIntent {
     Copy,
     /// Delete only after a successful write.
     Cut,
+}
+
+/// Explicit user decision from an elected installation-wide update prompt.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum UpdateIntent {
+    /// Coordinate one verified Homebrew upgrade and restart all compatible sessions.
+    Install(StableVersion),
+    /// Defer this exact version until a later stale refresh.
+    Dismiss(StableVersion),
+    /// Suppress this exact version until a newer stable version exists.
+    Skip(StableVersion),
+    /// Show accurate standalone replacement instructions.
+    ViewInstructions(StableVersion),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -375,6 +388,8 @@ pub enum Action {
 /// Blocking work requested by the pure reducer.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Effect {
+    /// Execute one explicit installation-wide update decision outside the reducer lane.
+    Update(UpdateIntent),
     /// Discover live destination sessions for an explicit transfer picker.
     DiscoverTransferSessions,
     /// Copy one exact thought to another session before optional source removal.

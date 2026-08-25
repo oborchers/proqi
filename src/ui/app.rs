@@ -197,6 +197,7 @@ pub struct BoardApp {
     pending_submissions: BTreeMap<SubmissionId, PendingSubmission>,
     update_barrier: Option<update::UpdateBarrier>,
     update_restart: Option<crate::domain::StableVersion>,
+    update_prompt: Option<update::UpdatePrompt>,
 }
 
 impl BoardApp {
@@ -252,6 +253,7 @@ impl BoardApp {
             pending_submissions: BTreeMap::new(),
             update_barrier: None,
             update_restart: None,
+            update_prompt: None,
         }
     }
 
@@ -273,6 +275,9 @@ impl BoardApp {
             };
             self.request_quit();
             return effects;
+        }
+        if self.update_prompt.is_some() {
+            return self.handle_update_prompt_input(&input);
         }
         if self.update_barrier.is_some()
             && !matches!(input, UiInput::Resize { .. } | UiInput::HostFocusGained)

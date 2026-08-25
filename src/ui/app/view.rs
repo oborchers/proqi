@@ -214,13 +214,16 @@ impl BoardApp {
     }
 
     fn configure_overlay(&self, layout: &mut LayoutSnapshot) {
+        let update_items = usize::from(self.update_prompt.is_some()) * 3;
         let palette_items = self
             .palette
             .as_ref()
             .map_or(0, palette::PaletteState::match_count);
         let search_items = self.search_match_count();
         let transfer_items = self.transfer_match_count();
-        let preferred_rows = if self.help {
+        let preferred_rows = if self.update_prompt.is_some() {
+            4
+        } else if self.help {
             6
         } else if self.rename.is_some() {
             2
@@ -234,7 +237,10 @@ impl BoardApp {
             0
         };
         layout.configure_overlay(
-            palette_items.max(search_items).max(transfer_items),
+            palette_items
+                .max(search_items)
+                .max(transfer_items)
+                .max(update_items),
             preferred_rows,
         );
     }

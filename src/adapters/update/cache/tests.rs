@@ -1,4 +1,10 @@
-use std::fs;
+use std::{
+    fs,
+    sync::{
+        Arc, Barrier,
+        atomic::{AtomicUsize, Ordering},
+    },
+};
 
 use crate::{
     domain::{InstallationIdentity, StableVersion, Timestamp, UpdateCacheState},
@@ -52,6 +58,37 @@ fn refresh_prompt_and_installer_elections_are_independent() {
                 .is_some()
         );
     }
+}
+
+#[test]
+fn fifteen_simultaneous_installer_contenders_elect_exactly_one_owner() {
+    let temporary = tempfile::tempdir().expect("cache root");
+    let store = FileUpdateStateStore::new(temporary.path()).expect("store");
+    let start = Arc::new(Barrier::new(15));
+    let attempted = Arc::new(Barrier::new(15));
+    let winners = Arc::new(AtomicUsize::new(0));
+    let mut threads = Vec::new();
+    for _ in 0..15 {
+        let store = store.clone();
+        let start = Arc::clone(&start);
+        let attempted = Arc::clone(&attempted);
+        let winners = Arc::clone(&winners);
+        threads.push(std::thread::spawn(move || {
+            start.wait();
+            let lease = store
+                .try_lock(identity(), UpdateLockKind::Installer)
+                .expect("installer election");
+            if lease.is_some() {
+                winners.fetch_add(1, Ordering::AcqRel);
+            }
+            attempted.wait();
+            drop(lease);
+        }));
+    }
+    for thread in threads {
+        thread.join().expect("contender");
+    }
+    assert_eq!(winners.load(Ordering::Acquire), 1);
 }
 
 #[test]

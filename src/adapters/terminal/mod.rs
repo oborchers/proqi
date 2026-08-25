@@ -10,6 +10,7 @@ mod path_import;
 mod persistence;
 mod runner;
 mod settings;
+mod update_lane;
 
 use thiserror::Error;
 

@@ -242,11 +242,18 @@ pub trait ControlClient {
 mod tests {
     use crate::{
         adapters::memory::FakeIdGenerator,
-        domain::{ContentAnnotation, ContentAnnotationKind},
+        domain::{
+            ContentAnnotation, ContentAnnotationKind, InstallationIdentity, StableVersion,
+            Timestamp,
+        },
         ports::environment::IdGenerator,
+        ports::update::{UpdatePrepareReply, UpdatePrepareRequest},
     };
 
-    use super::{ControlMutation, ControlRequest};
+    use super::{
+        CONTROL_PROTOCOL_VERSION, ControlMutation, ControlRequest, ControlResponse, ControlResult,
+        ControlUpdateReceipt,
+    };
 
     #[test]
     fn plain_v1_add_stays_wire_compatible_and_annotations_require_v2() {
@@ -284,5 +291,43 @@ mod tests {
             position: None,
         };
         assert!(annotated.requires_protocol_two());
+    }
+
+    #[test]
+    fn update_prepare_request_and_receipt_round_trip_over_json() {
+        let mut ids = FakeIdGenerator::new(1_725_200_000_000);
+        let request = ControlRequest {
+            protocol: CONTROL_PROTOCOL_VERSION,
+            request_id: ids.request_id(),
+            session_id: ids.session_id(),
+            mutation: ControlMutation::UpdatePrepare {
+                request: UpdatePrepareRequest {
+                    operation_id: ids.request_id(),
+                    target_version: StableVersion::parse("1.2.3").expect("version"),
+                    installation_identity: InstallationIdentity::from_digest([7; 32]),
+                    deadline: Timestamp::from_millis(9),
+                },
+            },
+        };
+        let encoded = serde_json::to_vec(&request).expect("serialize request");
+        assert_eq!(
+            serde_json::from_slice::<ControlRequest>(&encoded).expect("deserialize request"),
+            request
+        );
+        let response = ControlResponse {
+            protocol: request.protocol,
+            request_id: request.request_id,
+            result: ControlResult::Update(ControlUpdateReceipt::Prepared(
+                UpdatePrepareReply::Ready {
+                    instance_id: ids.instance_id(),
+                    session_id: request.session_id,
+                },
+            )),
+        };
+        let encoded = serde_json::to_vec(&response).expect("serialize response");
+        assert_eq!(
+            serde_json::from_slice::<ControlResponse>(&encoded).expect("deserialize response"),
+            response
+        );
     }
 }

@@ -234,6 +234,7 @@ directory. Themes are `auto`, `light`, `dark`, or `limited`. Board bindings can
 be changed while portable editor shortcuts remain available:
 
 ```toml
+check_for_updates = true
 theme = "auto"
 
 [keybindings]
@@ -255,6 +256,26 @@ commands = ":"
 help = "?"
 quit = "q"
 ```
+
+Interactive release builds read the private installation-wide update cache at
+startup and refresh it in the background only when it is at least 24 hours old.
+Set `check_for_updates = false` to disable implicit checks. Debug builds,
+source installations, JSON commands, skills, and noninteractive commands do
+not perform implicit network requests.
+
+Run an explicit bounded check with:
+
+```shell
+proqi update check --json
+```
+
+Update checks contact only
+`https://api.github.com/repos/oborchers/proqi/releases/latest` over HTTPS.
+They send GitHub's release media type and API version, an optional safe ETag,
+and a `proqi/<version>` User-Agent. They require no authentication and send no
+thoughts, session data, paths, clipboard content, terminal content, or other
+Proqi state. Homebrew installation remains a separate explicit choice in the
+interactive update prompt.
 
 ## Development
 

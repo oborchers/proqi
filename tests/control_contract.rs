@@ -9,6 +9,8 @@ use serde_json::Value;
 const REQUEST: &str = include_str!("fixtures/control/v3/add.request.json");
 const ACCEPTED: &str = include_str!("fixtures/control/v3/add.accepted.json");
 const REJECTED: &str = include_str!("fixtures/control/v3/add.rejected.json");
+const UPDATE_PREPARE: &str = include_str!("fixtures/control/v3/update_prepare.request.json");
+const UPDATE_READY: &str = include_str!("fixtures/control/v3/update_prepare.ready.json");
 
 #[test]
 fn current_request_success_and_error_fixtures_round_trip_canonically() {
@@ -21,6 +23,16 @@ fn current_request_success_and_error_fixtures_round_trip_canonically() {
     assert_eq!(rejected.protocol, CONTROL_PROTOCOL_VERSION);
     assert!(matches!(accepted.result, ControlResult::Accepted(_)));
     assert!(matches!(rejected.result, ControlResult::Rejected { .. }));
+}
+
+#[test]
+fn current_update_readiness_fixtures_round_trip_canonically() {
+    let request: ControlRequest = assert_round_trip(UPDATE_PREPARE);
+    let response: ControlResponse = assert_round_trip(UPDATE_READY);
+
+    assert_eq!(request.protocol, CONTROL_PROTOCOL_VERSION);
+    assert_eq!(response.protocol, CONTROL_PROTOCOL_VERSION);
+    assert!(matches!(response.result, ControlResult::Update(_)));
 }
 
 #[test]

@@ -144,7 +144,7 @@ pub struct UpdatePrepareRequest {
 
 /// Participant readiness without user content or arbitrary diagnostics.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case", tag = "status")]
+#[serde(rename_all = "snake_case", tag = "readiness")]
 pub enum UpdatePrepareReply {
     /// Pending edits and durable effects have been flushed.
     Ready {
@@ -247,6 +247,7 @@ pub trait ProcessReplacer {
         &self,
         executable: &std::path::Path,
         session_id: SessionId,
+        state_root: Option<&std::path::Path>,
     ) -> Result<(), UpdateError>;
 }
 

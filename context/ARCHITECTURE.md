@@ -413,6 +413,11 @@ ignores drafts and prereleases, and sends no user content or Proqi state. The
 only optional request metadata is a bounded application name and version
 User-Agent required by GitHub.
 
+The sole release endpoint is
+`https://api.github.com/repos/oborchers/proqi/releases/latest`. Implicit access
+is restricted to interactive release builds with `check_for_updates = true`.
+Explicit `proqi update check --json` access is deliberate caller authority.
+
 ### Shared cache and election
 
 Update state is separate from SQLite thought data and private to the current
@@ -482,6 +487,10 @@ ordinary resume arguments. Cleanup is explicit because successful
 `CommandExt::exec` does not run Rust destructors. Standard input, output, error,
 and the inherited PTY remain attached, so no shell, terminal multiplexer, Herdr,
 or parent agent must recreate the pane.
+
+The replacement invocation preserves the ordinary resume identity and any
+explicit state-root argument. This keeps package tests and portable invocations
+on the same data paths instead of silently falling back to platform defaults.
 
 A failed `exec` does not undo successful peers. Where safe, the old process
 re-enters its session; otherwise its durable state remains normally resumable.

@@ -147,7 +147,8 @@ where
             .record_restart_state(installation, installed.clone(), true)
             .is_ok();
         let current = matching(self.registry.active_instances()?, installation);
-        let (requested, failed) = restart_all(self.gateway, current, operation_id, &installed);
+        let (requested, failed) =
+            restart_all(self.gateway, current, &ready, operation_id, &installed);
         let final_state = self
             .state
             .record_restart_state(installation, installed.clone(), !failed.is_empty())
@@ -200,6 +201,7 @@ fn preflight<G: UpdateParticipantGateway>(
 fn restart_all<G: UpdateParticipantGateway>(
     gateway: &mut G,
     participants: Vec<InstanceInfo>,
+    prepared: &[InstanceInfo],
     operation_id: RequestId,
     installed: &StableVersion,
 ) -> (usize, Vec<InstanceId>) {
@@ -211,6 +213,12 @@ fn restart_all<G: UpdateParticipantGateway>(
     let mut failed = Vec::new();
     for participant in participants {
         if participant.version == installed.to_string() {
+            if prepared
+                .iter()
+                .any(|ready| ready.instance_id == participant.instance_id)
+            {
+                let _released = gateway.release(&participant, operation_id);
+            }
             continue;
         }
         requested = requested.saturating_add(1);

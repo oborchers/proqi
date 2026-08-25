@@ -73,6 +73,41 @@ pub(super) fn render_picker(
     render_close(frame, overlay, theme);
 }
 
+pub(super) fn render_update(
+    frame: &mut Frame<'_>,
+    overlay: &OverlayLayout,
+    title: &str,
+    entries: &[String],
+    selected: usize,
+    theme: &Theme,
+) {
+    frame.render_widget(Clear, overlay.area);
+    frame.render_widget(
+        Block::default()
+            .title(Span::styled(
+                title,
+                Style::default()
+                    .fg(theme.accent)
+                    .add_modifier(Modifier::BOLD),
+            ))
+            .borders(Borders::ALL),
+        overlay.area,
+    );
+    for (index, (entry, area)) in entries.iter().zip(&overlay.items).enumerate() {
+        let prefix = if index == selected { "› " } else { "  " };
+        let style = if index == selected {
+            theme.focused_style().add_modifier(Modifier::BOLD)
+        } else {
+            theme.base_style()
+        };
+        frame.render_widget(
+            Paragraph::new(format!("{prefix}{entry}")).style(style),
+            *area,
+        );
+    }
+    render_close(frame, overlay, theme);
+}
+
 pub(super) fn render_text_prompt(
     frame: &mut Frame<'_>,
     overlay: &OverlayLayout,
