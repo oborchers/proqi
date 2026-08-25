@@ -135,8 +135,34 @@ impl Theme {
         };
         theme.foreground = foreground;
         theme.background = background;
-        theme.focused_surface = Some(Color::Rgb(surface.0, surface.1, surface.2));
+        let accent = accessible_accent(palette.background, palette.dark);
+        theme.accent = Color::Rgb(accent.0, accent.1, accent.2);
+        theme.accent_surface = theme.accent;
+        let on_accent = accessible_monochrome(accent);
+        theme.on_accent = Color::Rgb(on_accent.0, on_accent.1, on_accent.2);
+        theme.focused_surface = (contrast(palette.foreground, surface) >= 4.5
+            && contrast(accent, surface) >= 4.5)
+            .then_some(Color::Rgb(surface.0, surface.1, surface.2));
         theme
+    }
+}
+
+fn accessible_accent(background: (u8, u8, u8), dark: bool) -> (u8, u8, u8) {
+    let preferred = if dark { (112, 214, 155) } else { (45, 106, 79) };
+    let alternate = if dark { (45, 106, 79) } else { (112, 214, 155) };
+    [preferred, alternate, accessible_monochrome(background)]
+        .into_iter()
+        .find(|candidate| contrast(*candidate, background) >= 4.5)
+        .unwrap_or_else(|| accessible_monochrome(background))
+}
+
+fn accessible_monochrome(color: (u8, u8, u8)) -> (u8, u8, u8) {
+    let black = (0, 0, 0);
+    let white = (255, 255, 255);
+    if contrast(black, color) >= contrast(white, color) {
+        black
+    } else {
+        white
     }
 }
 
@@ -154,14 +180,12 @@ fn blend_channel(channel: u8, target: u8, percentage: u16) -> u8 {
     u8::try_from(value / 100).unwrap_or(u8::MAX)
 }
 
-#[cfg(test)]
 fn contrast(first: (u8, u8, u8), second: (u8, u8, u8)) -> f64 {
     let first = luminance(first);
     let second = luminance(second);
     (first.max(second) + 0.05) / (first.min(second) + 0.05)
 }
 
-#[cfg(test)]
 fn luminance(color: (u8, u8, u8)) -> f64 {
     [color.0, color.1, color.2]
         .map(|channel| {
@@ -180,9 +204,17 @@ fn luminance(color: (u8, u8, u8)) -> f64 {
 
 #[cfg(test)]
 mod tests {
+    use proptest::prelude::*;
     use ratatui_core::style::{Color, Modifier};
 
     use super::{TerminalPalette, Theme, ThemePreference, contrast};
+
+    fn rgb(color: Color) -> Option<(u8, u8, u8)> {
+        match color {
+            Color::Rgb(red, green, blue) => Some((red, green, blue)),
+            _ => None,
+        }
+    }
 
     #[test]
     fn limited_terminals_never_receive_rgb_colors() {
@@ -274,5 +306,48 @@ mod tests {
         assert!(contrast((45, 106, 79), (250, 250, 248)) >= 4.5);
         assert!(contrast((250, 250, 248), (45, 106, 79)) >= 4.5);
         assert_ne!(dark.accent, light.accent);
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(1_024))]
+
+        #[test]
+        fn generated_terminal_palettes_keep_proqi_owned_pairs_accessible(
+            candidate_foreground in any::<(u8, u8, u8)>(),
+            background in any::<(u8, u8, u8)>(),
+            dark in any::<bool>(),
+        ) {
+            let foreground = if contrast(candidate_foreground, background) >= 4.5 {
+                candidate_foreground
+            } else {
+                super::accessible_monochrome(background)
+            };
+            let theme = Theme::resolve_with_palette(
+                ThemePreference::Auto,
+                true,
+                Some(TerminalPalette { foreground, background, dark }),
+            );
+            let accent = rgb(theme.accent).expect("automatic accent is true color");
+            let on_accent = rgb(theme.on_accent).expect("automatic accent text is true color");
+
+            prop_assert_eq!(theme.foreground, Color::Rgb(
+                foreground.0,
+                foreground.1,
+                foreground.2,
+            ));
+            prop_assert!(contrast(accent, background) >= 4.5);
+            prop_assert!(contrast(on_accent, accent) >= 4.5);
+            if let Some(surface) = theme.focused_surface.and_then(rgb) {
+                prop_assert!(contrast(foreground, surface) >= 4.5);
+                prop_assert!(contrast(accent, surface) >= 4.5);
+            } else {
+                prop_assert!(
+                    theme
+                        .focused_style()
+                        .add_modifier
+                        .contains(Modifier::REVERSED)
+                );
+            }
+        }
     }
 }
