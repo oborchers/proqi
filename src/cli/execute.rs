@@ -46,7 +46,8 @@ enum ResumeRequest {
 pub(super) fn execute(cli: Cli) -> ExitCode {
     if let Some(Command::Completions { shell }) = cli.command.as_ref() {
         let mut command = Cli::command();
-        generate(*shell, &mut command, "proqi", &mut std::io::stdout());
+        let generator: clap_complete::Shell = (*shell).into();
+        generate(generator, &mut command, "proqi", &mut std::io::stdout());
         return ExitCode::SUCCESS;
     }
     let json_output = cli.json;

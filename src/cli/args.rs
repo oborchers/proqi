@@ -2,8 +2,7 @@
 
 use std::path::PathBuf;
 
-use clap::{Args, Parser, Subcommand};
-use clap_complete::Shell;
+use clap::{Args, Parser, Subcommand, ValueEnum};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -40,7 +39,7 @@ pub(super) enum Command {
     /// Generate a shell completion script on standard output.
     Completions {
         /// Shell whose completion syntax should be generated.
-        shell: Shell,
+        shell: CompletionShell,
     },
     /// Check the canonical GitHub stable release on demand.
     Update(UpdateArgs),
@@ -48,6 +47,23 @@ pub(super) enum Command {
     Sessions(SessionArgs),
     /// Inspect and mutate thoughts in one explicit session.
     Thoughts(ThoughtArgs),
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub(super) enum CompletionShell {
+    Bash,
+    Fish,
+    Zsh,
+}
+
+impl From<CompletionShell> for clap_complete::Shell {
+    fn from(value: CompletionShell) -> Self {
+        match value {
+            CompletionShell::Bash => Self::Bash,
+            CompletionShell::Fish => Self::Fish,
+            CompletionShell::Zsh => Self::Zsh,
+        }
+    }
 }
 
 #[derive(Debug, Args)]

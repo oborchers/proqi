@@ -72,5 +72,7 @@ mod tests {
             Some(super::args::Command::Completions { .. })
         ));
         assert!(Cli::try_parse_from(["proqi", "completions"]).is_err());
+        assert!(Cli::try_parse_from(["proqi", "completions", "elvish"]).is_err());
+        assert!(Cli::try_parse_from(["proqi", "completions", "powershell"]).is_err());
     }
 }
