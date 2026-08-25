@@ -86,7 +86,7 @@ fn assert_identity_and_completion_contract(product: &InstalledProduct) {
         .output()
         .expect("installed version");
     assert!(version.status.success());
-    assert_eq!(String::from_utf8_lossy(&version.stdout), "proqi 0.1.0\n");
+    assert_eq!(String::from_utf8_lossy(&version.stdout), "proqi 0.1.1\n");
     let help = product
         .command()
         .arg("--help")

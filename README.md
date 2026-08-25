@@ -321,7 +321,7 @@ The coordination path is designed and deterministically tested for the ordinary
 case of 10 to 15 concurrent Proqi instances. Notification, dismissal, and skip
 state are installation-wide so multiple boards cannot compete for attention.
 
-Standalone archives receive verified release instructions. `v0.1.0` does not
+Standalone archives receive verified release instructions. Proqi does not
 replace a standalone executable or promise a same-pane restart. Durable boards
 resume on the next normal start after the user replaces the archive.
 

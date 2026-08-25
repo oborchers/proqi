@@ -28,10 +28,9 @@ private material unless it is essential to reproduce the vulnerability. If
 sensitive material is essential, explain that first and wait for guidance
 before attaching it.
 
-The release checklist requires GitHub private vulnerability reporting to be
-enabled before `v0.1.0` is published. If that button is unavailable, open a
-public Issue containing no vulnerability details and ask the maintainer to
-enable a private reporting channel.
+GitHub private vulnerability reporting is the canonical reporting channel. If
+that button is unavailable, open a public Issue containing no vulnerability
+details and ask the maintainer to enable a private reporting channel.
 
 This project does not publish response-time or bounty commitments. Reports are
 reviewed and coordinated through the private GitHub advisory before any public

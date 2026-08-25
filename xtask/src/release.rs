@@ -284,8 +284,8 @@ mod tests {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .expect("xtask manifest has a workspace parent");
-        assert_eq!(workspace_version(root), Ok(Version::new(0, 1, 0)));
-        assert!(validate_release_notes(root, "v0.1.0").is_ok());
+        assert_eq!(workspace_version(root), Ok(Version::new(0, 1, 1)));
+        assert!(validate_release_notes(root, "v0.1.1").is_ok());
         assert!(validate_release_notes(root, "v9.9.9").is_err());
     }
 }

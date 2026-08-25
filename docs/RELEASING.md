@@ -32,7 +32,7 @@ cargo xtask coverage
 cargo xtask audit
 cargo xtask package
 cargo +1.88.0 xtask msrv
-cargo xtask release-plan v0.1.0
+cargo xtask release-plan v0.1.1
 cargo xtask release-rehearsal
 actionlint .github/workflows/ci.yml .github/workflows/release.yml
 zizmor --pedantic .github/workflows/ci.yml .github/workflows/release.yml
@@ -96,7 +96,7 @@ After the readiness audit:
 2. Wait for `Required CI result` to pass on Linux and macOS.
 3. Close superseded dependency pull requests only after their equivalent
    versions are present on `main`.
-4. Dispatch `Release` with `v0.1.0`. This is non-publishing rehearsal of the
+4. Dispatch `Release` with `v0.1.1`. This is non-publishing rehearsal of the
    exact hosted matrix and attestations.
 5. Inspect all three archives, checksums, SBOMs, attestations, and generated
    Homebrew formula from the successful run.
@@ -150,7 +150,8 @@ No Issues, pull request, administration, workflow, package, or organization
 permission is required. The first release may update the tap through the
 maintainer's existing authenticated CLI instead of creating a credential.
 
-Homebrew Core, bottles, casks, signing, and notarization are outside `v0.1.0`.
+Homebrew Core, bottles, casks, signing, and notarization are outside the current
+release.
 
 ## Verification after publication
 
@@ -166,7 +167,7 @@ gh attestation verify proqi-aarch64-apple-darwin.tar.gz \
 Repeat for Intel macOS and x86-64 GNU Linux. Verify that the SBOM attestation
 uses `https://spdx.dev/Document/v2.3`. Install through the public tap, run
 `brew test proqi`, launch the TUI, create and resume one session, and verify an
-explicit `proqi update check --json` sees `0.1.0`.
+explicit `proqi update check --json` sees `0.1.1`.
 
 Ordinary uninstall must leave user data intact:
 
