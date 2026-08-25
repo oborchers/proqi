@@ -26,7 +26,7 @@ sha2 = "=0.10.9"
 ratatui-core = { version = "=0.1.2", default-features = false, features = ["layout-cache", "underline-color"] }
 ratatui-crossterm = { version = "=0.1.2", default-features = false, features = ["crossterm_0_28", "underline-color"] }
 ratatui-widgets = { version = "=0.3.2", default-features = false }
-rusqlite = { version = "0.37.0", features = ["backup", "bundled"] }
+rusqlite = { version = "0.40.2", features = ["backup", "bundled"] }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.143"
 signal-hook = "0.3.18"
