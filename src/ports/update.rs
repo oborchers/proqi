@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::domain::{
-    Installation, InstallationIdentity, InstanceId, RequestId, SessionId, StableVersion, Timestamp,
-    UpdateCacheState,
+    Installation, InstallationIdentity, InstallationKind, InstanceId, RequestId, SessionId,
+    StableVersion, Timestamp, UpdateCacheState,
 };
 
 use super::runtime::InstanceInfo;
@@ -48,7 +48,11 @@ pub trait ReleaseSource {
     /// # Errors
     ///
     /// Returns bounded network, protocol, or response validation failures.
-    fn latest_stable(&mut self, etag: Option<&str>) -> Result<ReleaseObservation, UpdateError>;
+    fn latest_stable(
+        &mut self,
+        installation: InstallationKind,
+        etag: Option<&str>,
+    ) -> Result<ReleaseObservation, UpdateError>;
 }
 
 /// Deterministic installation-context detection.

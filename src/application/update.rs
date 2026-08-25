@@ -128,7 +128,9 @@ where
                 UpdateRefresh::InProgress,
             ));
         };
-        let observation = self.source.latest_stable(state.etag.as_deref())?;
+        let observation = self
+            .source
+            .latest_stable(installation.kind, state.etag.as_deref())?;
         let state = self.state.record_success(
             installation.identity,
             observation,

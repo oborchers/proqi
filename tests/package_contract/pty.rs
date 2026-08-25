@@ -18,7 +18,7 @@ use proqi::{
         update::{FileUpdateStateStore, SystemInstallDetector},
     },
     application::{UpdateCheckMode, UpdateRefresh, UpdateRestartCoordinator, UpdateService},
-    domain::{InstallationIdentity, InstanceId, StableVersion, Timestamp},
+    domain::{InstallationIdentity, InstallationKind, InstanceId, StableVersion, Timestamp},
     ports::{
         environment::{Clock as _, IdGenerator as _},
         runtime::InstanceInfo,
@@ -86,7 +86,11 @@ struct FakeSource {
 }
 
 impl ReleaseSource for FakeSource {
-    fn latest_stable(&mut self, _etag: Option<&str>) -> Result<ReleaseObservation, UpdateError> {
+    fn latest_stable(
+        &mut self,
+        _installation: InstallationKind,
+        _etag: Option<&str>,
+    ) -> Result<ReleaseObservation, UpdateError> {
         self.calls = self.calls.saturating_add(1);
         Ok(ReleaseObservation::Latest {
             version: StableVersion::parse("0.1.0").expect("package version"),

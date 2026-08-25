@@ -112,7 +112,11 @@ struct Source {
 }
 
 impl ReleaseSource for Source {
-    fn latest_stable(&mut self, _: Option<&str>) -> Result<ReleaseObservation, UpdateError> {
+    fn latest_stable(
+        &mut self,
+        _: InstallationKind,
+        _: Option<&str>,
+    ) -> Result<ReleaseObservation, UpdateError> {
         self.calls += 1;
         self.result.clone()
     }

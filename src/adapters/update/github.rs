@@ -6,11 +6,14 @@ use serde::Deserialize;
 use ureq::{Agent, http::header};
 
 use crate::{
-    domain::StableVersion,
+    domain::{InstallationKind, StableVersion},
     ports::update::{ReleaseObservation, ReleaseSource, UpdateError},
 };
 
 const LATEST_RELEASE_URL: &str = "https://api.github.com/repos/oborchers/proqi/releases/latest";
+const HOMEBREW_FORMULA_URL: &str =
+    "https://raw.githubusercontent.com/oborchers/homebrew-tap/main/Formula/proqi.rb";
+const RELEASE_PATH_MARKER: &str = "/releases/download/v";
 const MAX_RESPONSE_BYTES: u64 = 64 * 1024;
 const MAX_RESPONSE_HEADER_BYTES: usize = 16 * 1024;
 const MAX_ETAG_BYTES: usize = 256;
@@ -49,12 +52,23 @@ impl Default for GitHubReleaseSource {
 }
 
 impl ReleaseSource for GitHubReleaseSource {
-    fn latest_stable(&mut self, etag: Option<&str>) -> Result<ReleaseObservation, UpdateError> {
-        let mut request = self
-            .agent
-            .get(LATEST_RELEASE_URL)
-            .header(header::ACCEPT, "application/vnd.github+json")
-            .header("X-GitHub-Api-Version", "2022-11-28");
+    fn latest_stable(
+        &mut self,
+        installation: InstallationKind,
+        etag: Option<&str>,
+    ) -> Result<ReleaseObservation, UpdateError> {
+        let url = match installation {
+            InstallationKind::HomebrewFormula => HOMEBREW_FORMULA_URL,
+            InstallationKind::StandaloneArchive | InstallationKind::SourceOrUnknown => {
+                LATEST_RELEASE_URL
+            }
+        };
+        let mut request = self.agent.get(url);
+        if installation != InstallationKind::HomebrewFormula {
+            request = request
+                .header(header::ACCEPT, "application/vnd.github+json")
+                .header("X-GitHub-Api-Version", "2022-11-28");
+        }
         if let Some(etag) = etag.filter(|value| valid_etag(value)) {
             request = request.header(header::IF_NONE_MATCH, etag);
         }
@@ -76,7 +90,7 @@ impl ReleaseSource for GitHubReleaseSource {
                     .limit(MAX_RESPONSE_BYTES)
                     .read_to_vec()
                     .map_err(|error| map_transport_error(&error))?;
-                parse_release(&body, etag)
+                parse_observation(installation, &body, etag)
             }
             _ => Err(UpdateError::InvalidResponse),
         }
@@ -91,18 +105,52 @@ struct ReleasePayload {
     prerelease: bool,
 }
 
-fn parse_release(body: &[u8], etag: Option<String>) -> Result<ReleaseObservation, UpdateError> {
+fn parse_observation(
+    installation: InstallationKind,
+    body: &[u8],
+    etag: Option<String>,
+) -> Result<ReleaseObservation, UpdateError> {
     if body.len() > usize::try_from(MAX_RESPONSE_BYTES).unwrap_or(usize::MAX) {
         return Err(UpdateError::ResponseTooLarge);
     }
+    let version = match installation {
+        InstallationKind::HomebrewFormula => parse_formula(body)?,
+        InstallationKind::StandaloneArchive | InstallationKind::SourceOrUnknown => {
+            parse_release(body)?
+        }
+    };
+    Ok(ReleaseObservation::Latest { version, etag })
+}
+
+fn parse_release(body: &[u8]) -> Result<StableVersion, UpdateError> {
     let payload: ReleasePayload =
         serde_json::from_slice(body).map_err(|_| UpdateError::InvalidResponse)?;
     if payload.draft || payload.prerelease {
         return Err(UpdateError::InvalidResponse);
     }
-    let version =
-        StableVersion::parse_tag(&payload.tag_name).map_err(|_| UpdateError::InvalidResponse)?;
-    Ok(ReleaseObservation::Latest { version, etag })
+    StableVersion::parse_tag(&payload.tag_name).map_err(|_| UpdateError::InvalidResponse)
+}
+
+fn parse_formula(body: &[u8]) -> Result<StableVersion, UpdateError> {
+    let formula = std::str::from_utf8(body).map_err(|_| UpdateError::InvalidResponse)?;
+    let mut observed = None;
+    let mut matches = 0_usize;
+    for suffix in formula.split(RELEASE_PATH_MARKER).skip(1) {
+        let tag = suffix
+            .split_once('/')
+            .map(|(version, _)| format!("v{version}"))
+            .ok_or(UpdateError::InvalidResponse)?;
+        let version = StableVersion::parse_tag(&tag).map_err(|_| UpdateError::InvalidResponse)?;
+        if observed.as_ref().is_some_and(|prior| prior != &version) {
+            return Err(UpdateError::InvalidResponse);
+        }
+        observed = Some(version);
+        matches = matches.saturating_add(1);
+    }
+    if matches < 2 {
+        return Err(UpdateError::InvalidResponse);
+    }
+    observed.ok_or(UpdateError::InvalidResponse)
 }
 
 fn valid_etag(value: &str) -> bool {
@@ -125,15 +173,16 @@ fn map_transport_error(error: &ureq::Error) -> UpdateError {
 #[cfg(test)]
 mod tests {
     use crate::{
-        domain::StableVersion,
+        domain::{InstallationKind, StableVersion},
         ports::update::{ReleaseObservation, UpdateError},
     };
 
-    use super::{MAX_RESPONSE_BYTES, parse_release, valid_etag};
+    use super::{MAX_RESPONSE_BYTES, parse_formula, parse_observation, valid_etag};
 
     #[test]
     fn stable_payload_is_strict_and_preserves_bounded_etag() {
-        let observation = parse_release(
+        let observation = parse_observation(
+            InstallationKind::StandaloneArchive,
             br#"{"tag_name":"v0.2.0","draft":false,"prerelease":false}"#,
             Some("\"release-2\"".to_owned()),
         )
@@ -156,7 +205,33 @@ mod tests {
             br#"{"tag_name":"v0.2.0","draft":false}"#.as_slice(),
             br#"{"tag_name":"v0.2.0","draft":false,"prerelease":false,"extra":1}"#.as_slice(),
         ] {
-            assert_eq!(parse_release(body, None), Err(UpdateError::InvalidResponse));
+            assert_eq!(
+                parse_observation(InstallationKind::StandaloneArchive, body, None),
+                Err(UpdateError::InvalidResponse)
+            );
+        }
+    }
+
+    #[test]
+    fn formula_requires_consistent_immutable_release_urls() {
+        let formula = br#"
+          url "https://github.com/oborchers/proqi/releases/download/v0.2.0/linux.tar.gz"
+          url "https://github.com/oborchers/proqi/releases/download/v0.2.0/macos.tar.gz"
+        "#;
+        assert_eq!(
+            parse_formula(formula),
+            StableVersion::parse("0.2.0").map_err(|_| UpdateError::InvalidResponse)
+        );
+        for invalid in [
+            b"class Proqi < Formula".as_slice(),
+            br#"url "https://github.com/oborchers/proqi/releases/download/v0.2.0/a""#.as_slice(),
+            br#"
+              url "https://github.com/oborchers/proqi/releases/download/v0.2.0/a"
+              url "https://github.com/oborchers/proqi/releases/download/v0.3.0/b"
+            "#
+            .as_slice(),
+        ] {
+            assert_eq!(parse_formula(invalid), Err(UpdateError::InvalidResponse));
         }
     }
 
@@ -164,7 +239,7 @@ mod tests {
     fn response_and_etag_limits_are_enforced() {
         let oversized = vec![b'x'; usize::try_from(MAX_RESPONSE_BYTES).expect("limit") + 1];
         assert_eq!(
-            parse_release(&oversized, None),
+            parse_observation(InstallationKind::HomebrewFormula, &oversized, None),
             Err(UpdateError::ResponseTooLarge)
         );
         assert!(valid_etag("\"valid\""));
