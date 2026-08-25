@@ -28,10 +28,10 @@ private material unless it is essential to reproduce the vulnerability. If
 sensitive material is essential, explain that first and wait for guidance
 before attaching it.
 
-GitHub private vulnerability reporting is enabled as a repository setting when
-the repository becomes public. If that button is unavailable, open a public
-Issue containing no vulnerability details and ask the maintainer to enable a
-private reporting channel.
+The release checklist requires GitHub private vulnerability reporting to be
+enabled before `v0.1.0` is published. If that button is unavailable, open a
+public Issue containing no vulnerability details and ask the maintainer to
+enable a private reporting channel.
 
 This project does not publish response-time or bounty commitments. Reports are
 reviewed and coordinated through the private GitHub advisory before any public

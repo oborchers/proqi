@@ -45,6 +45,13 @@ mod tests {
     }
 
     #[test]
+    fn capability_help_describes_the_current_pre_one_contract() {
+        let help = Cli::command().render_long_help().to_string();
+        assert!(help.contains("Describe the current CLI and optional integrations"));
+        assert!(!help.contains("Describe the stable CLI"));
+    }
+
+    #[test]
     fn resume_accepts_an_optional_reference() {
         let picker = Cli::try_parse_from(["proqi", "-r"]).expect("picker arguments");
         assert_eq!(picker.resume, Some(None));

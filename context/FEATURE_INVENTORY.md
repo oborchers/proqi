@@ -113,22 +113,30 @@ prompts at wide, narrow, and shallow sizes, themes, durability, attachments,
 drag state, and four-direction agent controls. The snapshot expansion caught
 and fixed shallow-overlay footer collision and narrow browser-footer overflow.
 
-The release candidate still requires evidence or publication work in these
-areas:
+The complete local release gate passes on Apple silicon macOS: the canonical
+quality gate, 13 PTY scenarios, the coverage floor, dependency policy, the
+isolated installed-product contract, Rust 1.88, the exact three-target release
+plan, and the non-publishing release rehearsal. Actionlint passes. Zizmor
+reports no findings in offline mode. The generated formula passes Homebrew
+style inspection under its real `Formula/proqi.rb` name.
+
+Publication still requires evidence or external configuration in these areas:
 
 1. The macOS and Linux hosted CI result has not been rerun since the repository
    became public and the support matrix was narrowed.
 2. Release attestations exist only as workflow definitions. They cannot be
    verified until a hosted rehearsal produces them.
-3. The Homebrew formula generator and local rehearsal pass, but live formula
-   audit, install, and `brew test` against immutable public release assets have
-   not run.
+3. The Homebrew formula generator, unit tests, local rehearsal, and style check
+   pass, but Homebrew 6 requires a tapped formula name for strict audit. Strict
+   audit, installation, upgrade, and `brew test` against immutable public
+   release assets have not run.
 4. Repository About metadata, topics, social preview, private vulnerability
    reporting, branch rules, tag rules, and the protected release environment
    still require explicit reviewed application.
-5. The final README and release-note claims must be checked against this matrix
-   after the remaining work. Optional aggregate adoption reporting remains
-   deliberately unimplemented and is not a release blocker.
+
+The README, CLI help, Cargo metadata, release notes, and skill have been checked
+against this matrix. Optional aggregate adoption reporting remains deliberately
+unimplemented and is not a release blocker.
 
 This file will be refreshed after those gaps are resolved. The refreshed
 version must distinguish locally verified behavior, hosted CI evidence, and

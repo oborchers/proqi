@@ -34,7 +34,7 @@ pub(super) struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub(super) enum Command {
-    /// Describe the stable CLI and optional integrations.
+    /// Describe the current CLI and optional integrations.
     Capabilities,
     /// Generate a shell completion script on standard output.
     Completions {

@@ -22,11 +22,12 @@
   <img src="assets/proqi-demo.gif" width="1000" alt="Proqi browsing rich prompt context, deleting a temporary thought, creating and editing a prompt, reordering it, and copying it">
 </p>
 
-Follow-up prompts accumulate while coding agents are working. Keeping them in a
-generic editor means another application, more context switching, and no direct
-relationship to the active agent runtime. Proqi provides a local terminal
-scratchpad beside the session. Existing and new prompts remain editable until
-you copy one or submit it through a verified integration.
+Proqi is the thoughtpad for humans working with coding agents. Follow-up prompts
+accumulate while those agents are working. Keeping them in a generic editor
+means another application, more context switching, and no direct relationship
+to the active agent runtime. Proqi provides a local terminal scratchpad beside
+the session. Existing and new prompts remain editable until you copy one or
+submit it through a verified integration.
 
 Proqi works standalone in any supported terminal. It works best with
 [Herdr](https://github.com/herdrdev/herdr), where it can discover verified
