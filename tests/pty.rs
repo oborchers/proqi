@@ -386,6 +386,7 @@ fn raw_input_command(
         .args(arguments)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
         .spawn()
         .expect("spawn input command");
     child
