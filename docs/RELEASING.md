@@ -89,22 +89,21 @@ Manual and API-managed settings must also:
 
 ## CI rehearsal and release
 
-Keep the ordinary CI workflow disabled while local release work is in progress.
-After the readiness audit:
+The repository is public, but keep the ordinary CI workflow disabled while
+local release work is in progress. After the readiness audit:
 
-1. Make the repository public and re-enable CI.
-2. Push the consolidated `main` branch once.
-3. Wait for `Required CI result` to pass on Linux and macOS.
-4. Close superseded dependency pull requests only after their equivalent
+1. Re-enable CI and push the consolidated `main` branch once.
+2. Wait for `Required CI result` to pass on Linux and macOS.
+3. Close superseded dependency pull requests only after their equivalent
    versions are present on `main`.
-5. Dispatch `Release` with `v0.1.0`. This is non-publishing rehearsal of the
+4. Dispatch `Release` with `v0.1.0`. This is non-publishing rehearsal of the
    exact hosted matrix and attestations.
-6. Inspect all three archives, checksums, SBOMs, attestations, and generated
+5. Inspect all three archives, checksums, SBOMs, attestations, and generated
    Homebrew formula from the successful run.
-7. Create and push the annotated `v0.1.0` tag only after approval.
-8. Review the draft GitHub Release and approve the protected `release`
+6. Create and push the annotated `v0.1.0` tag only after approval.
+7. Review the draft GitHub Release and approve the protected `release`
    environment.
-9. Verify the published Release and every downloaded asset before updating the
+8. Verify the published Release and every downloaded asset before updating the
    tap.
 
 The release workflow never cancels an in-progress tag release. Any failed

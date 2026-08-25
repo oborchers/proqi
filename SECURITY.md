@@ -46,5 +46,5 @@ and Homebrew coordination.
 
 Proqi does not claim a security boundary against an administrator or a malicious
 process already running as the same operating-system user. It does prevent
-accidental cross-session mutation, fail open owner forwarding, shell
+accidental cross-session mutation, fail-closed owner forwarding, shell
 interpolation, unsafe path traversal, and unverified adjacent-agent submission.
