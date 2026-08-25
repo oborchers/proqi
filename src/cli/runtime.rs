@@ -30,7 +30,6 @@ pub(super) struct RuntimeContext {
     pub(super) clock: SystemClock,
     pub(super) ids: SystemIdGenerator,
     pub(super) cwd: PathBuf,
-    pub(super) data_dir: PathBuf,
     config_dir: PathBuf,
     recovery_dir: PathBuf,
     attachment_dir: PathBuf,
@@ -55,7 +54,6 @@ impl RuntimeContext {
             crate::adapters::diagnostics::SafeEvent::RuntimeOpening { instance_id },
         );
         let config_dir = paths.config_dir.clone();
-        let data_dir = paths.data_dir.clone();
         let recovery_dir = paths.data_dir.join("recovery");
         let attachment_dir = paths.data_dir.join("attachments");
         let cache_dir = paths.cache_dir.clone();
@@ -82,7 +80,6 @@ impl RuntimeContext {
             clock,
             ids,
             cwd,
-            data_dir,
             config_dir,
             recovery_dir,
             attachment_dir,

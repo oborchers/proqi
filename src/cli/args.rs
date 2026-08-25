@@ -45,6 +45,8 @@ pub(super) enum Command {
     Update(UpdateArgs),
     /// Collect a private, content-redacted local support bundle.
     Diagnostics(DiagnosticsArgs),
+    /// Run read-only local health checks without repairing state.
+    Doctor,
     /// List and manage resumable sessions.
     Sessions(SessionArgs),
     /// Inspect and mutate thoughts in one explicit session.

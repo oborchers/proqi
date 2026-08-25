@@ -4,30 +4,57 @@ use std::path::PathBuf;
 
 use serde_json::json;
 
-use super::{Outcome, RuntimeContext};
-use crate::cli::{args::DiagnosticsCommand, output::CliError};
+use std::path::Path;
 
-pub(super) fn execute(
-    context: &RuntimeContext,
-    command: DiagnosticsCommand,
-) -> Result<Outcome, CliError> {
-    match command {
-        DiagnosticsCommand::Collect { output } => collect(context, output),
+use super::Outcome;
+use crate::cli::{
+    args::{Cli, Command, DiagnosticsCommand},
+    output::CliError,
+};
+use crate::ports::environment::AppPaths;
+use crate::{adapters::runtime::SystemEnvironment, ports::environment::Environment as _};
+
+pub(super) fn early_outcome(cli: &Cli) -> Result<Option<Outcome>, CliError> {
+    let paths = match &cli.command {
+        Some(Command::Diagnostics(_) | Command::Doctor) => {
+            super::super::runtime::resolve_paths(cli.state_dir.as_deref())?
+        }
+        _ => return Ok(None),
+    };
+    match &cli.command {
+        Some(Command::Diagnostics(arguments)) => {
+            let cwd = SystemEnvironment
+                .current_directory()
+                .map_err(|error| CliError::new("environment_failed", error.to_string(), 1))?;
+            execute(&paths, &cwd, &arguments.command).map(Some)
+        }
+        Some(Command::Doctor) => super::doctor::execute(&paths).map(Some),
+        _ => Ok(None),
     }
 }
 
-fn collect(context: &RuntimeContext, output: Option<PathBuf>) -> Result<Outcome, CliError> {
+pub(super) fn execute(
+    paths: &AppPaths,
+    cwd: &Path,
+    command: &DiagnosticsCommand,
+) -> Result<Outcome, CliError> {
+    match command {
+        DiagnosticsCommand::Collect { output } => collect(paths, cwd, output.clone()),
+    }
+}
+
+fn collect(paths: &AppPaths, cwd: &Path, output: Option<PathBuf>) -> Result<Outcome, CliError> {
     let output = output.map_or_else(
-        || context.cwd.join("proqi-diagnostics.json"),
+        || cwd.join("proqi-diagnostics.json"),
         |path| {
             if path.is_absolute() {
                 path
             } else {
-                context.cwd.join(path)
+                cwd.join(path)
             }
         },
     );
-    let bundle = crate::adapters::diagnostics::collect_bundle(&context.data_dir, &output)
+    let bundle = crate::adapters::diagnostics::collect_bundle(&paths.data_dir, &output)
         .map_err(|error| CliError::new("diagnostics_failed", error.to_string(), 1))?;
     Ok(Outcome {
         data: json!({

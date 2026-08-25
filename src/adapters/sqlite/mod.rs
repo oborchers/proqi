@@ -2,6 +2,7 @@
 
 mod board_commit;
 mod compaction;
+mod doctor;
 mod history_commit;
 mod load;
 mod migration;
@@ -12,6 +13,8 @@ mod search;
 mod session_admin;
 mod submission;
 mod support;
+
+pub use doctor::{SqliteHealth, inspect_read_only_snapshot};
 
 use std::{path::PathBuf, thread, time::Duration};
 

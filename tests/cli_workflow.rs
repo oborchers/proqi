@@ -15,6 +15,8 @@ use serde_json::Value;
 
 #[path = "cli_workflow/diagnostics.rs"]
 mod diagnostics;
+#[path = "cli_workflow/doctor.rs"]
+mod doctor;
 
 fn run(root: &Path, arguments: &[&str], input: Option<&str>) -> Output {
     let mut command = Command::new(env!("CARGO_BIN_EXE_proqi"));
@@ -23,6 +25,7 @@ fn run(root: &Path, arguments: &[&str], input: Option<&str>) -> Output {
         .arg(root)
         .arg("--json")
         .args(arguments)
+        .env_remove("HERDR_ENV")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     if input.is_some() {

@@ -48,6 +48,21 @@ pub(super) fn execute_sessions(
     }
 }
 
+pub(super) fn cancelled_browser() -> Outcome {
+    Outcome {
+        data: json!({ "cancelled": true }),
+        human: "No session opened".to_owned(),
+    }
+}
+
+pub(super) fn opened_session(id: SessionId) -> Outcome {
+    let resume = format!("proqi -r {id}");
+    Outcome {
+        data: json!({ "session_id": id, "resume_command": resume }),
+        human: format!("Session {id}\nResume later: {resume}"),
+    }
+}
+
 fn manage_session(
     context: &mut RuntimeContext,
     reference: &str,

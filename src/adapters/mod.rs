@@ -4,6 +4,7 @@ pub mod attachment;
 pub mod clipboard;
 pub mod control;
 pub mod diagnostics;
+pub mod doctor;
 pub mod editor;
 pub mod herdr;
 pub mod memory;

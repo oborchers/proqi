@@ -335,9 +335,13 @@ Create a local support bundle explicitly with:
 
 ```shell
 proqi diagnostics collect --output proqi-diagnostics.json
+proqi doctor
+proqi --json doctor
 ```
 
-The command never uploads anything and never overwrites an existing file.
+Doctor performs content-redacted, read-only health checks without initializing,
+migrating, or repairing state. Diagnostic collection never uploads anything
+and never overwrites an existing file.
 Review the bundle before sharing it. See [SECURITY.md](SECURITY.md) for the
 support policy and private vulnerability reporting process.
 

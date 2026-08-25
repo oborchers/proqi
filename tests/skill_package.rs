@@ -41,6 +41,7 @@ fn canonical_skills_cli_installation_is_documented_as_a_separate_step() {
 fn debug_skill_is_read_only_first_and_issue_creation_requires_approval() {
     assert!(DEBUG_SKILL.starts_with("---\nname: proqi-debug\ndescription:"));
     assert!(DEBUG_SKILL.contains("proqi diagnostics collect --output"));
+    assert!(DEBUG_SKILL.contains("proqi --json doctor"));
     assert!(DEBUG_SKILL.contains("Do not mutate SQLite"));
     assert!(DEBUG_SKILL.contains("explicit approval"));
     assert!(DEBUG_SKILL.contains("gh issue create"));
@@ -57,6 +58,7 @@ fn debug_skill_is_read_only_first_and_issue_creation_requires_approval() {
 fn every_documented_command_family_remains_available() {
     for arguments in [
         &["capabilities", "--help"][..],
+        &["doctor", "--help"],
         &["sessions", "list", "--help"],
         &["thoughts", "list", "--help"],
         &["thoughts", "inspect", "--help"],

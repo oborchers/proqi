@@ -2,6 +2,7 @@
 
 mod capabilities;
 mod diagnostics;
+mod doctor;
 mod forwarding;
 mod sessions;
 mod transfer;
@@ -16,7 +17,7 @@ use serde_json::{Value, json};
 use crate::{
     adapters::terminal,
     application::SessionService,
-    domain::{OperationId, SessionId, ThoughtId, UndoScope},
+    domain::{OperationId, ThoughtId, UndoScope},
     ports::{
         environment::Clock,
         store::{CommitReceipt, DurableIdentity},
@@ -29,7 +30,7 @@ use super::{
     runtime::RuntimeContext,
 };
 
-use sessions::{browser_items, execute_sessions, list_sessions};
+use sessions::{browser_items, cancelled_browser, execute_sessions, list_sessions, opened_session};
 
 const MAX_THOUGHT_STDIN_BYTES: usize = 128 * 1024;
 
@@ -71,6 +72,9 @@ fn execute_inner(cli: Cli) -> Result<Outcome, CliError> {
         let paths = super::runtime::resolve_paths(cli.state_dir.as_deref())?;
         return update::execute(arguments, &paths.cache_dir);
     }
+    if let Some(outcome) = diagnostics::early_outcome(&cli)? {
+        return Ok(outcome);
+    }
     let context = RuntimeContext::open(cli.state_dir.as_deref())?;
     match cli.command {
         Some(Command::Sessions(arguments)) => {
@@ -81,7 +85,9 @@ fn execute_inner(cli: Cli) -> Result<Outcome, CliError> {
             let mut context = context;
             execute_thoughts(&mut context, arguments.command)
         }
-        Some(Command::Diagnostics(arguments)) => diagnostics::execute(&context, arguments.command),
+        Some(Command::Diagnostics(_) | Command::Doctor) => Err(CliError::arguments(
+            "diagnostic command was not dispatched".to_owned(),
+        )),
         Some(Command::Capabilities) => Ok(capabilities::outcome()),
         Some(Command::Completions { .. }) => Err(CliError::arguments(
             "completion generation was not dispatched".to_owned(),
@@ -181,21 +187,6 @@ fn browse_for_session(
                 ));
             }
         }
-    }
-}
-
-fn cancelled_browser() -> Outcome {
-    Outcome {
-        data: json!({ "cancelled": true }),
-        human: "No session opened".to_owned(),
-    }
-}
-
-fn opened_session(id: SessionId) -> Outcome {
-    let resume = format!("proqi -r {id}");
-    Outcome {
-        data: json!({ "session_id": id, "resume_command": resume }),
-        human: format!("Session {id}\nResume later: {resume}"),
     }
 }
 
