@@ -93,7 +93,6 @@ fn write_formula(
         r##"{warning}class Proqi < Formula
   desc "Agent-optimized terminal scratchpad for follow-up prompts"
   homepage "https://github.com/oborchers/proqi"
-  version "{version}"
   license "MIT"
 
   on_macos do
@@ -193,6 +192,7 @@ mod tests {
             contents.contains("desc \"Agent-optimized terminal scratchpad for follow-up prompts\"")
         );
         assert!(contents.contains("releases/download/v0.1.0"));
+        assert!(!contents.contains("version \"0.1.0\""));
         assert!(contents.contains("bin.install \"proqi-installation.json\""));
         assert!(!contents.contains("post_install"));
         assert!(!contents.contains("system \"brew\""));
