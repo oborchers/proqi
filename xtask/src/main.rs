@@ -50,10 +50,20 @@ fn execute() -> Result<(), String> {
         "clean-worktree" => clean_worktree(&root),
         "check" => check(&root),
         "test" => test(&root),
+        // Real PTY fixtures own process-wide terminal resources. Keep this
+        // dedicated runner serial while each test still exercises concurrency.
         "test-pty" => run(
             &root,
             "cargo",
-            ["test", "--workspace", "--all-features", "--test", "pty"],
+            [
+                "test",
+                "--workspace",
+                "--all-features",
+                "--test",
+                "pty",
+                "--",
+                "--test-threads=1",
+            ],
         ),
         "coverage" => coverage(&root),
         "audit" => audit(&root),

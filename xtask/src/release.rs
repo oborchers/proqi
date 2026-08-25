@@ -204,7 +204,18 @@ fn checksum(path: &Path) -> Result<String, String> {
         }
         hasher.update(&buffer[..read]);
     }
-    Ok(format!("{:x}", hasher.finalize()))
+    let digest = hasher.finalize();
+    Ok(hex_digest(digest.as_ref()))
+}
+
+fn hex_digest(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut encoded = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        encoded.push(char::from(HEX[usize::from(byte >> 4)]));
+        encoded.push(char::from(HEX[usize::from(byte & 0x0f)]));
+    }
+    encoded
 }
 
 fn generate_sbom(root: &Path, output: &Path) -> Result<(), String> {
@@ -265,7 +276,7 @@ fn filename(path: &Path) -> Result<String, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{validate_release_notes, validate_tag, workspace_version};
+    use super::{hex_digest, validate_release_notes, validate_tag, workspace_version};
     use semver::Version;
     use std::path::Path;
 
@@ -287,5 +298,10 @@ mod tests {
         assert_eq!(workspace_version(root), Ok(Version::new(0, 1, 1)));
         assert!(validate_release_notes(root, "v0.1.1").is_ok());
         assert!(validate_release_notes(root, "v9.9.9").is_err());
+    }
+
+    #[test]
+    fn digest_hex_encoding_is_lowercase_and_zero_padded() {
+        assert_eq!(hex_digest(&[0x00, 0x09, 0xaf, 0xff]), "0009afff");
     }
 }
