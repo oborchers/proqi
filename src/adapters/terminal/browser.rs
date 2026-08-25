@@ -41,7 +41,7 @@ pub(crate) fn pick_session(
         super::supervisor::SHUTDOWN_TIMEOUT,
     ));
     let selected = run_result;
-    let cleanup = super::runner::finish_runtime(Ok(()), [input_result, restoration_result]);
+    let cleanup = super::runner::finish::runtime(Ok(()), [input_result, restoration_result]);
     let selected = selected?;
     cleanup?;
     Ok(selected)

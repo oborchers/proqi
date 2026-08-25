@@ -31,7 +31,7 @@ use crate::{
 
 use super::{
     TerminalError,
-    supervisor::{ShutdownDeadline, join_before},
+    supervisor::{ShutdownDeadline, WorkerLifecycle, join_before},
 };
 
 enum ExternalRequest {
@@ -98,6 +98,7 @@ pub(super) struct ExternalLane {
     sender: Option<SyncSender<ExternalRequest>>,
     pub(super) receiver: Receiver<ExternalResult>,
     handle: Option<JoinHandle<()>>,
+    lifecycle: WorkerLifecycle,
 }
 
 impl ExternalLane {
@@ -109,20 +110,25 @@ impl ExternalLane {
     ) -> Self {
         let (request_sender, request_receiver) = sync_channel(32);
         let (result_sender, result_receiver) = sync_channel(32);
+        let lifecycle = WorkerLifecycle::default();
+        let worker_lifecycle = lifecycle.clone();
         let handle = thread::spawn(move || {
-            external_loop(
-                &request_receiver,
-                &result_sender,
-                recovery_directory,
-                attachment_directory,
-                presentation_source,
-                cancellation,
-            );
+            worker_lifecycle.run(|| {
+                external_loop(
+                    &request_receiver,
+                    &result_sender,
+                    recovery_directory,
+                    attachment_directory,
+                    presentation_source,
+                    cancellation,
+                );
+            });
         });
         Self {
             sender: Some(request_sender),
             receiver: result_receiver,
             handle: Some(handle),
+            lifecycle,
         }
     }
 
@@ -189,7 +195,16 @@ impl ExternalLane {
     }
 
     pub(super) fn request_stop(&mut self) {
+        self.lifecycle.request_stop();
         self.sender = None;
+    }
+
+    pub(super) fn worker_failure(&self) -> Option<TerminalError> {
+        self.lifecycle.failure("external")
+    }
+
+    pub(super) fn stopped_cleanly(&self) -> bool {
+        self.lifecycle.stopped_cleanly()
     }
 
     pub(super) fn stop(mut self, deadline: ShutdownDeadline) -> Result<(), TerminalError> {

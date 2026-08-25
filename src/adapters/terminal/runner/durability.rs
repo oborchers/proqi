@@ -112,15 +112,19 @@ pub(super) fn drain_persistence(
     ids: &mut impl crate::ports::environment::IdGenerator,
     clock: &impl crate::ports::environment::Clock,
 ) -> Result<DrainOutcome, TerminalError> {
-    let disconnected_is_clean = pending.persistence == 0;
     drain_bounded(
         || match lanes.persistence.receiver.try_recv() {
             Ok(result) => Ok(Some(result)),
             Err(TryRecvError::Empty) => Ok(None),
-            Err(TryRecvError::Disconnected) if disconnected_is_clean => Ok(None),
-            Err(TryRecvError::Disconnected) => Err(TerminalError::Worker(
-                "persistence result lane disconnected",
-            )),
+            Err(TryRecvError::Disconnected) if lanes.persistence.stopped_cleanly() => Ok(None),
+            Err(TryRecvError::Disconnected) => {
+                Err(lanes
+                    .persistence
+                    .worker_failure()
+                    .unwrap_or(TerminalError::Worker(
+                        "persistence result lane disconnected",
+                    )))
+            }
         },
         |result| complete_result(app, lanes, pending, ids, clock, result),
     )

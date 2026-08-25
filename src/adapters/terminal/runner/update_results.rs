@@ -21,15 +21,15 @@ pub(super) fn drain(
     lanes: &WorkerLanes<'_>,
     pending: &mut PendingWork,
 ) -> Result<DrainOutcome, TerminalError> {
-    let disconnected_is_clean = pending.update == 0;
     drain_bounded(
         || match lanes.update.receiver.try_recv() {
             Ok(result) => Ok(Some(result)),
             Err(TryRecvError::Empty) => Ok(None),
-            Err(TryRecvError::Disconnected) if disconnected_is_clean => Ok(None),
-            Err(TryRecvError::Disconnected) => {
-                Err(TerminalError::Worker("update result lane disconnected"))
-            }
+            Err(TryRecvError::Disconnected) if lanes.update.stopped_cleanly() => Ok(None),
+            Err(TryRecvError::Disconnected) => Err(lanes
+                .update
+                .worker_failure()
+                .unwrap_or(TerminalError::Worker("update result lane disconnected"))),
         },
         |result| {
             apply_result(app, pending, result);

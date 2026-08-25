@@ -25,19 +25,25 @@ impl OwnedLanes {
         self.update.request_stop();
     }
 
-    pub(super) fn stop(
+    pub(super) fn stop_control(
+        &mut self,
+        deadline: crate::adapters::terminal::supervisor::ShutdownDeadline,
+    ) -> Result<(), TerminalError> {
+        self.control.take().map_or(Ok(()), |server| {
+            server.stop_before(deadline.instant()).map_err(Into::into)
+        })
+    }
+
+    pub(super) fn stop_workers(
         mut self,
         deadline: crate::adapters::terminal::supervisor::ShutdownDeadline,
-    ) -> [Result<(), TerminalError>; 5] {
+    ) -> [Result<(), TerminalError>; 4] {
         self.request_stop();
         [
             self.input.stop(deadline),
             self.persistence.stop(deadline),
             self.external.stop(deadline),
             self.update.stop(deadline),
-            self.control.take().map_or(Ok(()), |server| {
-                server.stop_before(deadline.instant()).map_err(Into::into)
-            }),
         ]
     }
 }

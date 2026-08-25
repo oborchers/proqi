@@ -24,6 +24,7 @@ pub(super) struct PersistenceLane {
     sender: Option<SyncSender<PersistenceRequest>>,
     pub(super) receiver: Receiver<PersistenceResult>,
     handle: Option<JoinHandle<()>>,
+    lifecycle: super::supervisor::WorkerLifecycle,
 }
 
 fn persistence_loop(

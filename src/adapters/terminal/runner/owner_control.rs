@@ -35,6 +35,7 @@ pub(super) fn drain(
         || match control.receiver.try_recv() {
             Ok(envelope) => Ok(Some(envelope)),
             Err(TryRecvError::Empty) => Ok(None),
+            Err(TryRecvError::Disconnected) if control.is_stopping() => Ok(None),
             Err(TryRecvError::Disconnected) => {
                 Err(TerminalError::Worker("control request lane disconnected"))
             }

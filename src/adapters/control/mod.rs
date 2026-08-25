@@ -73,6 +73,10 @@ impl ControlServer {
         self.stop.store(true, Ordering::Release);
     }
 
+    pub(crate) fn is_stopping(&self) -> bool {
+        self.stop.load(Ordering::Acquire)
+    }
+
     /// Stop accepting clients and join before the shared shutdown deadline.
     pub(crate) fn stop_before(mut self, deadline: Instant) -> Result<(), ControlError> {
         self.request_stop();

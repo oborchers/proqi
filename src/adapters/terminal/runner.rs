@@ -4,6 +4,7 @@ mod diagnostics;
 mod durability;
 mod external_results;
 mod fairness;
+pub(super) mod finish;
 mod heartbeat;
 mod owned_lanes;
 mod owner_control;
@@ -200,11 +201,14 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
     let shutdown_deadline = shutdown.request();
     drop(terminal);
     let restoration_result = guard.finish();
+    let control_result = owned.stop_control(shutdown_deadline);
     drop((session_lease, schema_lease));
-    let lane_results = owned.stop(shutdown_deadline);
-    finish_runtime(
+    let lane_results = owned.stop_workers(shutdown_deadline);
+    finish::runtime(
         run_result,
-        lane_results.into_iter().chain([restoration_result]),
+        lane_results
+            .into_iter()
+            .chain([control_result, restoration_result]),
     )?;
     resume_after_update(
         installation.as_ref(),
@@ -259,26 +263,6 @@ fn resume_after_update(
     requested.map_or(Ok(session_id), |version| {
         replace_after_cleanup(installation, version, session_id, state_root)
     })
-}
-
-pub(super) fn finish_runtime(
-    run_result: Result<(), TerminalError>,
-    cleanup_results: impl IntoIterator<Item = Result<(), TerminalError>>,
-) -> Result<(), TerminalError> {
-    let mut failures = cleanup_results
-        .into_iter()
-        .filter_map(Result::err)
-        .map(|error| error.to_string())
-        .collect::<Vec<_>>();
-    if let Err(error) = run_result {
-        failures.insert(0, error.to_string());
-    }
-    diagnostics::shutdown_finished(failures.len());
-    if failures.is_empty() {
-        Ok(())
-    } else {
-        Err(TerminalError::Cleanup(failures.join("; ")))
-    }
 }
 
 fn replace_after_cleanup(
@@ -387,6 +371,9 @@ fn drive(
             termination_seen = true;
             let _deadline = shutdown.request();
             lanes.cancellation.cancel();
+            if let Some(control) = lanes.control {
+                control.request_stop();
+            }
             let effects = app.handle(UiInput::Key(UiKey::Quit), ids, &clock);
             enqueue_effects(app, lanes, effects, &mut pending)?;
         }
@@ -422,6 +409,9 @@ fn drive(
         if app.quit {
             let deadline = shutdown.request();
             lanes.cancellation.cancel();
+            if let Some(control) = lanes.control {
+                control.request_stop();
+            }
             if pending.is_empty() {
                 return Ok(());
             }

@@ -29,7 +29,7 @@ use crate::{
 
 use super::{
     TerminalError,
-    supervisor::{ShutdownDeadline, join_before},
+    supervisor::{ShutdownDeadline, WorkerLifecycle, join_before},
 };
 
 const UPDATE_DEADLINE_MILLIS: i64 = 45_000;
@@ -61,6 +61,7 @@ pub(super) struct UpdateLane {
     sender: Option<SyncSender<UpdateRequest>>,
     pub(super) receiver: Receiver<UpdateResult>,
     handle: Option<JoinHandle<()>>,
+    lifecycle: WorkerLifecycle,
 }
 
 impl UpdateLane {
@@ -72,20 +73,25 @@ impl UpdateLane {
     ) -> Self {
         let (request_sender, request_receiver) = sync_channel(4);
         let (result_sender, result_receiver) = sync_channel(4);
+        let lifecycle = WorkerLifecycle::default();
+        let worker_lifecycle = lifecycle.clone();
         let handle = thread::spawn(move || {
-            update_loop(
-                &request_receiver,
-                &result_sender,
-                &cache_directory,
-                installation.as_ref(),
-                &coordinator,
-                cancellation,
-            );
+            worker_lifecycle.run(|| {
+                update_loop(
+                    &request_receiver,
+                    &result_sender,
+                    &cache_directory,
+                    installation.as_ref(),
+                    &coordinator,
+                    cancellation,
+                );
+            });
         });
         Self {
             sender: Some(request_sender),
             receiver: result_receiver,
             handle: Some(handle),
+            lifecycle,
         }
     }
 
@@ -110,7 +116,16 @@ impl UpdateLane {
     }
 
     pub(super) fn request_stop(&mut self) {
+        self.lifecycle.request_stop();
         self.sender = None;
+    }
+
+    pub(super) fn worker_failure(&self) -> Option<TerminalError> {
+        self.lifecycle.failure("update")
+    }
+
+    pub(super) fn stopped_cleanly(&self) -> bool {
+        self.lifecycle.stopped_cleanly()
     }
 
     pub(super) fn stop(mut self, deadline: ShutdownDeadline) -> Result<(), TerminalError> {

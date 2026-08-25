@@ -92,6 +92,7 @@ fn full_and_disconnected_request_lanes_fail_without_blocking() {
         sender: Some(request_sender),
         receiver: result_receiver,
         handle: None,
+        lifecycle: super::super::supervisor::WorkerLifecycle::default(),
     };
     assert!(matches!(
         lane.send(&crate::application::Effect::DiscoverAgents),

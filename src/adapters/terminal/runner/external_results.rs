@@ -23,15 +23,15 @@ pub(super) fn drain(
     clock: SystemClock,
     pane_heartbeat: &mut Option<PaneHeartbeat>,
 ) -> Result<DrainOutcome, TerminalError> {
-    let disconnected_is_clean = pending.external == 0;
     drain_bounded(
         || match lanes.external.receiver.try_recv() {
             Ok(result) => Ok(Some(result)),
             Err(TryRecvError::Empty) => Ok(None),
-            Err(TryRecvError::Disconnected) if disconnected_is_clean => Ok(None),
-            Err(TryRecvError::Disconnected) => {
-                Err(TerminalError::Worker("external result lane disconnected"))
-            }
+            Err(TryRecvError::Disconnected) if lanes.external.stopped_cleanly() => Ok(None),
+            Err(TryRecvError::Disconnected) => Err(lanes
+                .external
+                .worker_failure()
+                .unwrap_or(TerminalError::Worker("external result lane disconnected"))),
         },
         |result| {
             pending.external = pending.external.saturating_sub(1);

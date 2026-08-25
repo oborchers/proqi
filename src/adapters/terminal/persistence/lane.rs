@@ -10,19 +10,25 @@ use crate::{
 };
 use std::sync::mpsc::{RecvTimeoutError, TrySendError};
 
-use crate::adapters::terminal::supervisor::{ShutdownDeadline, join_before};
+use crate::adapters::terminal::supervisor::{ShutdownDeadline, WorkerLifecycle, join_before};
 
 impl PersistenceLane {
     #[cfg(test)]
     pub(in crate::adapters::terminal) fn spawn(store: SqliteStore) -> Self {
         let (request_sender, request_receiver) = sync_channel(64);
         let (result_sender, result_receiver) = sync_channel(64);
-        let handle =
-            thread::spawn(move || persistence_loop(store, None, &request_receiver, &result_sender));
+        let lifecycle = WorkerLifecycle::default();
+        let worker_lifecycle = lifecycle.clone();
+        let handle = thread::spawn(move || {
+            worker_lifecycle.run(|| {
+                persistence_loop(store, None, &request_receiver, &result_sender);
+            });
+        });
         Self {
             sender: Some(request_sender),
             receiver: result_receiver,
             handle: Some(handle),
+            lifecycle,
         }
     }
 
@@ -34,13 +40,18 @@ impl PersistenceLane {
         let (request_sender, request_receiver) = sync_channel(64);
         let (result_sender, result_receiver) = sync_channel(64);
         let runtime = transfer::TransferRuntime::new(coordinator, cwd);
+        let lifecycle = WorkerLifecycle::default();
+        let worker_lifecycle = lifecycle.clone();
         let handle = thread::spawn(move || {
-            persistence_loop(store, Some(runtime), &request_receiver, &result_sender);
+            worker_lifecycle.run(|| {
+                persistence_loop(store, Some(runtime), &request_receiver, &result_sender);
+            });
         });
         Self {
             sender: Some(request_sender),
             receiver: result_receiver,
             handle: Some(handle),
+            lifecycle,
         }
     }
 
@@ -143,7 +154,16 @@ impl PersistenceLane {
     }
 
     pub(in crate::adapters::terminal) fn request_stop(&mut self) {
+        self.lifecycle.request_stop();
         self.sender = None;
+    }
+
+    pub(in crate::adapters::terminal) fn worker_failure(&self) -> Option<TerminalError> {
+        self.lifecycle.failure("persistence")
+    }
+
+    pub(in crate::adapters::terminal) fn stopped_cleanly(&self) -> bool {
+        self.lifecycle.stopped_cleanly()
     }
 
     pub(in crate::adapters::terminal) fn stop(
@@ -196,6 +216,7 @@ mod tests {
             sender: Some(request_sender),
             receiver: result_receiver,
             handle: None,
+            lifecycle: WorkerLifecycle::default(),
         };
         assert!(matches!(
             lane.retry(OperationSequence::new(2)),
