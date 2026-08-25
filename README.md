@@ -202,9 +202,12 @@ have been verified through Herdr's structured interface.
 
 Both actions use Herdr's semantic prompt operation:
 
-- `s Submit & remove` deletes the thought only after an accepted matching
+- `s Submit now & remove` submits immediately and deletes the thought only after an accepted matching
   receipt.
-- `S Submit & keep` sends the same thought and retains it.
+- `S Submit now & keep` submits immediately and retains the thought.
+
+Both actions work while the receiving agent is working. The receiving harness
+decides whether that input steers the current turn or becomes follow-up input.
 
 Ambiguity, timeout, rejection, receipt mismatch, or protocol mismatch always
 leaves the thought unchanged. Proqi never invokes a shell, injects raw keys,

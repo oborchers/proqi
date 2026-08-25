@@ -9,8 +9,10 @@ use crate::{
         },
         editor::CursorMovement,
         environment::{Clock, IdGenerator},
+        store::{StoreError, SubmissionAttempt, SubmissionAttemptState, SubmissionOutcome},
     },
 };
+use sha2::{Digest, Sha256};
 
 use super::{BoardApp, PendingSubmission, SubmissionMode, UiInput, UiKey};
 
@@ -51,54 +53,105 @@ impl BoardApp {
         }
     }
 
-    /// Complete one semantic prompt request. Failure never mutates the thought.
+    /// Persist the prepared intent before external delivery begins.
+    pub fn complete_submission_prepared(
+        &mut self,
+        submission_id: SubmissionId,
+        result: Result<(), StoreError>,
+    ) -> Vec<Effect> {
+        let Some(pending) = self.pending_submissions.get(&submission_id) else {
+            return Vec::new();
+        };
+        if let Err(error) = result {
+            self.pending_submissions.remove(&submission_id);
+            self.set_error(format!("Submission not started. Thought kept. {error}"));
+            return Vec::new();
+        }
+        vec![Effect::MarkSubmissionSending {
+            submission_id,
+            at: pending.at,
+        }]
+    }
+
+    /// Submit only after the sending transition is durable.
+    pub fn complete_submission_sending(
+        &mut self,
+        submission_id: SubmissionId,
+        result: Result<(), StoreError>,
+    ) -> Vec<Effect> {
+        let Some(pending) = self.pending_submissions.get(&submission_id) else {
+            return Vec::new();
+        };
+        if let Err(error) = result {
+            self.pending_submissions.remove(&submission_id);
+            self.set_error(format!("Submission not started. Thought kept. {error}"));
+            return Vec::new();
+        }
+        vec![Effect::SubmitAgent(pending.request.clone())]
+    }
+
+    /// Stage one external result for a durable terminal journal transition.
     pub fn complete_submission(
         &mut self,
         submission_id: SubmissionId,
         result: Result<SubmissionReceipt, AgentError>,
     ) -> Vec<Effect> {
-        let Some(pending) = self.pending_submissions.remove(&submission_id) else {
+        let Some(pending) = self.pending_submissions.get_mut(&submission_id) else {
             return Vec::new();
         };
-        let receipt = match result {
+        let completion = match result {
             Ok(receipt)
                 if receipt.submission_id == submission_id
                     && receipt.target == pending.request.target =>
             {
-                receipt
+                Ok(receipt)
             }
-            Ok(_) => {
-                self.set_error("Submission failed. Thought kept. Receipt did not match request.");
-                return Vec::new();
-            }
+            Ok(_) => Err(AgentError::Malformed(
+                "prompt receipt did not match the request".to_owned(),
+            )),
+            Err(error) => Err(error),
+        };
+        let deletion_operation_id = (completion.is_ok()
+            && pending.disposition == SubmissionDisposition::RemoveAfterSuccess)
+            .then_some(pending.operation_id);
+        let outcome = submission_outcome(&completion, deletion_operation_id, pending.at);
+        pending.completion = Some(completion);
+        vec![Effect::FinishSubmission {
+            submission_id,
+            outcome,
+        }]
+    }
+
+    /// Apply user-visible completion only after the journal terminal state is durable.
+    pub fn complete_submission_journaled(
+        &mut self,
+        submission_id: SubmissionId,
+        result: Result<(), StoreError>,
+    ) -> Vec<Effect> {
+        let Some(mut pending) = self.pending_submissions.remove(&submission_id) else {
+            return Vec::new();
+        };
+        let Some(completion) = pending.completion.take() else {
+            return Vec::new();
+        };
+        if let Err(error) = result {
+            let status = if completion.is_ok() {
+                "accepted"
+            } else {
+                "failed"
+            };
+            self.set_error(format!(
+                "Submission {status}, but its outcome was not saved. Thought kept. {error}"
+            ));
+            return Vec::new();
+        }
+        match completion {
+            Ok(receipt) => self.apply_accepted_submission(&pending, &receipt),
             Err(error) => {
                 self.set_error(format!("Submission failed. Thought kept. {error}"));
-                return Vec::new();
+                Vec::new()
             }
-        };
-        let mut effects = vec![Effect::StoreIntegrationContext {
-            session_id: self.state.board.session.id,
-            target: receipt.target.clone(),
-            verified_at: pending.at,
-        }];
-        if pending.disposition == SubmissionDisposition::RemoveAfterSuccess {
-            effects.extend(self.reduce(Action::DeleteThought {
-                operation_id: pending.operation_id,
-                thought_id: pending.thought_id,
-                kind: BoardOperationKind::SubmitAndRemove,
-                at: pending.at,
-            }));
         }
-        let outcome = match pending.disposition {
-            SubmissionDisposition::Keep => "thought kept",
-            SubmissionDisposition::RemoveAfterSuccess => "thought removed",
-        };
-        self.set_success(format!(
-            "submitted {} to {}, {outcome}",
-            direction_name(receipt.target.direction),
-            receipt.target.agent_name
-        ));
-        effects
     }
 
     pub(super) fn begin_delivery(
@@ -210,30 +263,160 @@ impl BoardApp {
             self.set_warning("select a thought before submitting");
             return Vec::new();
         };
+        if self
+            .pending_submissions
+            .values()
+            .any(|pending| pending.thought_id == thought.id)
+        {
+            self.set_warning("this thought already has a submission in progress");
+            return Vec::new();
+        }
+        let thought_id = thought.id;
+        let content = thought.content.clone();
         let submission_id = ids.submission_id();
+        let source_digest = digest(content.as_bytes());
+        let at = clock.now();
         let request = SubmissionRequest {
             submission_id,
-            target,
-            content: thought.content.clone(),
+            target: target.clone(),
+            content,
         };
         self.pending_submissions.insert(
             submission_id,
             PendingSubmission {
                 request: request.clone(),
-                thought_id: thought.id,
+                thought_id,
                 operation_id: ids.operation_id(),
-                at: clock.now(),
+                at,
                 disposition,
+                source_digest,
+                completion: None,
             },
         );
         self.set_info(match disposition {
-            SubmissionDisposition::Keep => "submitting, thought will be kept",
+            SubmissionDisposition::Keep => "submitting now, thought will be kept",
             SubmissionDisposition::RemoveAfterSuccess => {
-                "submitting, thought will be removed after acceptance"
+                "submitting now, thought will be removed after acceptance"
             }
         });
-        vec![Effect::SubmitAgent(request)]
+        vec![Effect::PrepareSubmission(SubmissionAttempt {
+            id: submission_id,
+            session_id: self.state.board.session.id,
+            thought_id,
+            source_digest,
+            source_sequence: self.state.board.session.last_durable_sequence,
+            disposition,
+            direction,
+            provider: target.provider.clone(),
+            protocol: target.protocol,
+            target_fingerprint: target_fingerprint(&target),
+            pre_state: target.readiness,
+            prepared_at: at,
+        })]
     }
+
+    fn apply_accepted_submission(
+        &mut self,
+        pending: &PendingSubmission,
+        receipt: &SubmissionReceipt,
+    ) -> Vec<Effect> {
+        let mut effects = vec![Effect::StoreIntegrationContext {
+            session_id: self.state.board.session.id,
+            target: receipt.target.clone(),
+            verified_at: pending.at,
+        }];
+        let unchanged =
+            self.current_thought_digest(pending.thought_id) == Some(pending.source_digest);
+        if pending.disposition == SubmissionDisposition::RemoveAfterSuccess && unchanged {
+            effects.extend(self.reduce(Action::DeleteThought {
+                operation_id: pending.operation_id,
+                thought_id: pending.thought_id,
+                kind: BoardOperationKind::SubmitAndRemove,
+                at: pending.at,
+            }));
+        }
+        let outcome = if pending.disposition == SubmissionDisposition::Keep {
+            "thought kept"
+        } else if unchanged {
+            "thought removed"
+        } else {
+            "thought changed during submission and was kept"
+        };
+        self.set_success(format!(
+            "submitted {} to {}, {outcome}",
+            direction_name(receipt.target.direction),
+            receipt.target.agent_name
+        ));
+        effects
+    }
+
+    fn current_thought_digest(&self, thought_id: crate::domain::ThoughtId) -> Option<[u8; 32]> {
+        if let Some((pending_id, snapshot)) = self.pending_edit_snapshot()
+            && pending_id == thought_id
+        {
+            return Some(digest(snapshot.content.as_bytes()));
+        }
+        self.state
+            .board
+            .thought(thought_id)
+            .filter(|thought| thought.is_live())
+            .map(|thought| digest(thought.content.as_bytes()))
+    }
+}
+
+fn submission_outcome(
+    result: &Result<SubmissionReceipt, AgentError>,
+    deletion_operation_id: Option<crate::domain::OperationId>,
+    at: crate::domain::Timestamp,
+) -> SubmissionOutcome {
+    match result {
+        Ok(receipt) => SubmissionOutcome {
+            state: SubmissionAttemptState::Accepted,
+            post_state: receipt.post_state,
+            error_code: None,
+            deletion_operation_id,
+            at,
+        },
+        Err(error) => SubmissionOutcome {
+            state: SubmissionAttemptState::Failed,
+            post_state: None,
+            error_code: Some(agent_error_code(error).to_owned()),
+            deletion_operation_id: None,
+            at,
+        },
+    }
+}
+
+fn agent_error_code(error: &AgentError) -> &'static str {
+    match error {
+        AgentError::Unavailable(_) => "unavailable",
+        AgentError::Unsupported(_) => "unsupported",
+        AgentError::Malformed(_) => "malformed",
+        AgentError::Ambiguous(_) => "ambiguous",
+        AgentError::TimedOut => "timed_out",
+        AgentError::Rejected { .. } => "rejected",
+        AgentError::Process(_) => "process_failed",
+    }
+}
+
+fn digest(bytes: &[u8]) -> [u8; 32] {
+    Sha256::digest(bytes).into()
+}
+
+fn target_fingerprint(target: &AgentTarget) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    for field in [
+        target.provider.as_str(),
+        target.workspace_id.as_str(),
+        target.tab_id.as_str(),
+        target.pane_id.as_str(),
+        target.agent_kind.as_str(),
+        target.agent_session_id.as_str(),
+    ] {
+        hasher.update(field.as_bytes());
+        hasher.update([0]);
+    }
+    hasher.finalize().into()
 }
 
 fn direction_name(direction: Direction) -> &'static str {

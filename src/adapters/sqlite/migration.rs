@@ -15,7 +15,7 @@ use crate::{
 
 use super::{
     StoreConfig,
-    schema::{MIGRATION_1, MIGRATION_2},
+    schema::{MIGRATION_1, MIGRATION_2, MIGRATION_3},
     support::{
         create_private_dir, map_sql_error, set_private_file_permissions, set_private_open_mode,
     },
@@ -60,7 +60,7 @@ pub(super) fn migrate(
     found: u32,
     at: Timestamp,
 ) -> Result<(), StoreError> {
-    if found > 1 {
+    if found > 2 {
         return Err(StoreError::MigrationRequired {
             found,
             supported: SUPPORTED_SCHEMA_VERSION,
@@ -69,10 +69,15 @@ pub(super) fn migrate(
     let transaction = connection
         .transaction_with_behavior(TransactionBehavior::Exclusive)
         .map_err(map_sql_error)?;
-    let migration = if found == 0 { MIGRATION_1 } else { MIGRATION_2 };
-    transaction
-        .execute_batch(migration)
-        .map_err(map_sql_error)?;
+    match found {
+        0 => transaction.execute_batch(MIGRATION_1),
+        1 => transaction
+            .execute_batch(MIGRATION_2)
+            .and_then(|()| transaction.execute_batch(MIGRATION_3)),
+        2 => transaction.execute_batch(MIGRATION_3),
+        _ => Ok(()),
+    }
+    .map_err(map_sql_error)?;
     transaction
         .execute(
             "UPDATE schema_meta SET migrated_at = ?1, storage_protocol = ?2 WHERE singleton = 1",

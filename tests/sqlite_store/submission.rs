@@ -1,0 +1,160 @@
+use super::*;
+
+fn attempt(
+    ids: &mut FakeIdGenerator,
+    state: &AppState,
+    thought_id: ThoughtId,
+    digest: [u8; 32],
+) -> SubmissionAttempt {
+    SubmissionAttempt {
+        id: ids.submission_id(),
+        session_id: state.board.session.id,
+        thought_id,
+        source_digest: digest,
+        source_sequence: state.board.session.last_durable_sequence,
+        disposition: SubmissionDisposition::RemoveAfterSuccess,
+        direction: Direction::Left,
+        provider: "herdr".to_owned(),
+        protocol: 19,
+        target_fingerprint: [31; 32],
+        pre_state: AgentState::Working,
+        prepared_at: Timestamp::from_millis(20),
+    }
+}
+
+fn state_of(connection: &Connection, id: proqi::domain::SubmissionId) -> String {
+    connection
+        .query_row(
+            "SELECT state FROM submission_attempts WHERE id = ?1",
+            [id.database_bytes().as_slice()],
+            |row| row.get(0),
+        )
+        .expect("submission state")
+}
+
+#[test]
+fn journal_is_redacted_and_one_thought_has_only_one_active_attempt() {
+    let fixture = DatabaseFixture::new();
+    let mut store = fixture.open();
+    let mut ids = FakeIdGenerator::new(1_000);
+    let mut state = session_state(&mut ids, &test_path("submission-journal"));
+    store
+        .commit(&OperationBatch::CreateSession(state.board.session.clone()))
+        .expect("create session");
+    let thought_id = create_thought(&mut store, &mut state, &mut ids, "ordinary thought", 2);
+    let first = attempt(&mut ids, &state, thought_id, [7; 32]);
+    let second = attempt(&mut ids, &state, thought_id, [8; 32]);
+
+    store.prepare_submission(&first).expect("prepare first");
+    assert!(matches!(
+        store.prepare_submission(&second),
+        Err(StoreError::Conflict(_))
+    ));
+
+    let connection = Connection::open(&fixture.config.database_path).expect("journal database");
+    let columns: String = connection
+        .query_row(
+            "SELECT group_concat(name, ',') FROM pragma_table_info('submission_attempts')",
+            [],
+            |row| row.get(0),
+        )
+        .expect("journal columns");
+    assert!(!columns.contains("content"));
+    assert!(!columns.contains("pane_id"));
+    assert!(!columns.contains("agent_session_id"));
+    let stored_provider: String = connection
+        .query_row(
+            "SELECT provider FROM submission_attempts WHERE id = ?1",
+            [first.id.database_bytes().as_slice()],
+            |row| row.get(0),
+        )
+        .expect("provider");
+    assert_eq!(stored_provider, "herdr");
+}
+
+#[test]
+fn journal_transitions_are_compare_and_set_and_recovery_is_conservative() {
+    let fixture = DatabaseFixture::new();
+    let mut store = fixture.open();
+    let mut ids = FakeIdGenerator::new(2_000);
+    let mut state = session_state(&mut ids, &test_path("submission-recovery"));
+    store
+        .commit(&OperationBatch::CreateSession(state.board.session.clone()))
+        .expect("create session");
+    let prepared_thought = create_thought(&mut store, &mut state, &mut ids, "prepared", 2);
+    let sending_thought = create_thought(&mut store, &mut state, &mut ids, "sending", 3);
+    let prepared = attempt(&mut ids, &state, prepared_thought, [9; 32]);
+    let sending = attempt(&mut ids, &state, sending_thought, [10; 32]);
+    store.prepare_submission(&prepared).expect("prepare");
+    store.prepare_submission(&sending).expect("prepare sending");
+    store
+        .mark_submission_sending(sending.id, Timestamp::from_millis(21))
+        .expect("mark sending");
+    assert!(matches!(
+        store.mark_submission_sending(sending.id, Timestamp::from_millis(22)),
+        Err(StoreError::Conflict(_))
+    ));
+
+    store
+        .recover_submissions(state.board.session.id, Timestamp::from_millis(23))
+        .expect("recover");
+    let connection = Connection::open(&fixture.config.database_path).expect("journal database");
+    assert_eq!(state_of(&connection, prepared.id), "cancelled");
+    assert_eq!(state_of(&connection, sending.id), "outcome_unknown");
+}
+
+#[test]
+fn accepted_receipt_persists_advisory_state_and_deletion_identity() {
+    let fixture = DatabaseFixture::new();
+    let mut store = fixture.open();
+    let mut ids = FakeIdGenerator::new(3_000);
+    let mut state = session_state(&mut ids, &test_path("submission-accepted"));
+    store
+        .commit(&OperationBatch::CreateSession(state.board.session.clone()))
+        .expect("create session");
+    let thought_id = create_thought(&mut store, &mut state, &mut ids, "accepted", 2);
+    let record = attempt(&mut ids, &state, thought_id, [11; 32]);
+    let deletion_id = ids.operation_id();
+    store.prepare_submission(&record).expect("prepare");
+    store
+        .mark_submission_sending(record.id, Timestamp::from_millis(21))
+        .expect("sending");
+    assert!(matches!(
+        store.finish_submission(
+            record.id,
+            &SubmissionOutcome {
+                state: SubmissionAttemptState::Sending,
+                post_state: None,
+                error_code: None,
+                deletion_operation_id: None,
+                at: Timestamp::from_millis(22),
+            },
+        ),
+        Err(StoreError::Integrity(_))
+    ));
+    store
+        .finish_submission(
+            record.id,
+            &SubmissionOutcome {
+                state: SubmissionAttemptState::Accepted,
+                post_state: Some(AgentState::Unknown),
+                error_code: None,
+                deletion_operation_id: Some(deletion_id),
+                at: Timestamp::from_millis(22),
+            },
+        )
+        .expect("finish");
+
+    let connection = Connection::open(&fixture.config.database_path).expect("journal database");
+    let fields: (String, String, Vec<u8>) = connection
+        .query_row(
+            "SELECT state, post_state, deletion_operation_id
+             FROM submission_attempts WHERE id = ?1",
+            [record.id.database_bytes().as_slice()],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .expect("accepted record");
+    assert_eq!(fields.0, "accepted");
+    assert_eq!(fields.1, "unknown");
+    assert_eq!(fields.2, deletion_id.database_bytes());
+}

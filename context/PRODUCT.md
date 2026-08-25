@@ -409,13 +409,16 @@ Directional lookup is never trusted without these independent checks. The
 product never guesses a target and never falls back to raw input injection.
 
 Prompt delivery has two dispositions over the same immediate semantic submit
-operation. `Submit & remove` is the default and deletes the thought only after
-an accepted matching receipt. `Submit & keep` sends the same prompt and retains
-the thought. Proqi verifies at submission time that the target exposes Herdr's
-semantic request and receipt contract. It never substitutes raw key injection.
+operation. `Submit now & remove` is the default and deletes the thought only
+after an accepted matching receipt. `Submit now & keep` sends the same prompt
+and retains the thought. Both may submit while the agent is working. The
+receiving harness decides whether the input steers the current turn or becomes
+follow-up input. Proqi verifies at submission time that the target exposes
+Herdr's semantic request and receipt contract. It never substitutes raw key
+injection.
 
 Each verified adjacent target appears once in the integration row, without its
-readiness label. `s Submit & remove` and `S Submit & keep` are shown only when
+readiness label. `s Submit now & remove` and `S Submit now & keep` are shown only when
 semantic submission is available. If exactly one eligible target supports an
 action, that action is direct. If several support it, delivery enters a
 directional targeting state.

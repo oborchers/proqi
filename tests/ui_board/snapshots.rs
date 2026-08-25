@@ -2,7 +2,7 @@ use super::*;
 
 use proqi::{
     domain::Direction,
-    ports::agent::{AgentReadiness, AgentTarget, PaneContext, PaneRect},
+    ports::agent::{AgentState, AgentTarget, PaneContext, PaneRect},
 };
 
 #[path = "../support/snapshots.rs"]
@@ -15,7 +15,7 @@ fn snapshot(fixture: &mut Fixture, width: u16, height: u16, theme: ThemePreferen
     snapshot_buffer(terminal.backend().buffer())
 }
 
-fn adjacent_target(direction: Direction, pane_id: &str, readiness: AgentReadiness) -> AgentTarget {
+fn adjacent_target(direction: Direction, pane_id: &str, readiness: AgentState) -> AgentTarget {
     let source = PaneContext {
         workspace_id: "w1".to_owned(),
         tab_id: "w1:t1".to_owned(),
@@ -28,6 +28,8 @@ fn adjacent_target(direction: Direction, pane_id: &str, readiness: AgentReadines
         },
     };
     AgentTarget {
+        provider: "herdr".to_owned(),
+        protocol: 19,
         direction,
         pane_id: pane_id.to_owned(),
         workspace_id: source.workspace_id.clone(),
@@ -110,10 +112,10 @@ fn four_direction_agent_controls_have_a_dedicated_footer_band() {
     fixture.input(UiInput::Paste("selected prompt".to_owned()));
     fixture.input(UiInput::Key(UiKey::Escape));
     fixture.app.complete_agent_discovery(Ok(vec![
-        adjacent_target(Direction::Up, "w1:p2", AgentReadiness::Idle),
-        adjacent_target(Direction::Right, "w1:p3", AgentReadiness::Working),
-        adjacent_target(Direction::Down, "w1:p4", AgentReadiness::Done),
-        adjacent_target(Direction::Left, "w1:p5", AgentReadiness::Idle),
+        adjacent_target(Direction::Up, "w1:p2", AgentState::Idle),
+        adjacent_target(Direction::Right, "w1:p3", AgentState::Working),
+        adjacent_target(Direction::Down, "w1:p4", AgentState::Done),
+        adjacent_target(Direction::Left, "w1:p5", AgentState::Idle),
     ]));
     insta::assert_snapshot!(snapshot(&mut fixture, 120, 12, ThemePreference::Dark));
 }

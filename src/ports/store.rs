@@ -4,14 +4,78 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::domain::{
-    BoardOperation, IntegrationContext, OperationId, OperationSequence, RevisionId, Session,
-    SessionBoard, SessionId, ThoughtId, ThoughtRevision, Timestamp, UndoScope,
+    BoardOperation, Direction, IntegrationContext, OperationId, OperationSequence, RevisionId,
+    Session, SessionBoard, SessionId, SubmissionId, ThoughtId, ThoughtRevision, Timestamp,
+    UndoScope,
 };
+use crate::ports::agent::{AgentState, SubmissionDisposition};
 
 /// Current storage schema understood by this binary.
-pub const SUPPORTED_SCHEMA_VERSION: u32 = 2;
+pub const SUPPORTED_SCHEMA_VERSION: u32 = 3;
 /// Current local storage protocol understood by this binary.
-pub const STORAGE_PROTOCOL_VERSION: u32 = 2;
+pub const STORAGE_PROTOCOL_VERSION: u32 = 3;
+
+/// Durable lifecycle state for one content-redacted agent submission.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SubmissionAttemptState {
+    /// Intent is durable but external delivery has not started.
+    Prepared,
+    /// External delivery may be in progress.
+    Sending,
+    /// A matching semantic receipt established acceptance.
+    Accepted,
+    /// Delivery failed before acceptance.
+    Failed,
+    /// A prepared intent was abandoned before delivery.
+    Cancelled,
+    /// Proqi restarted after delivery began without a durable outcome.
+    OutcomeUnknown,
+}
+
+/// Content-redacted durable submission record.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SubmissionAttempt {
+    /// Proqi submission identity.
+    pub id: SubmissionId,
+    /// Owning session.
+    pub session_id: SessionId,
+    /// Source thought.
+    pub thought_id: ThoughtId,
+    /// SHA-256 of the exact submitted content.
+    pub source_digest: [u8; 32],
+    /// Latest durable source sequence when prepared.
+    pub source_sequence: OperationSequence,
+    /// Keep or remove after durable acceptance.
+    pub disposition: SubmissionDisposition,
+    /// Adjacent target direction.
+    pub direction: Direction,
+    /// Integration provider name.
+    pub provider: String,
+    /// Negotiated provider protocol.
+    pub protocol: u32,
+    /// SHA-256 fingerprint of target identity, never the raw identity.
+    pub target_fingerprint: [u8; 32],
+    /// Verified target state before delivery.
+    pub pre_state: AgentState,
+    /// Creation time.
+    pub prepared_at: Timestamp,
+}
+
+/// Final durable fields for one submission attempt.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SubmissionOutcome {
+    /// Terminal attempt state.
+    pub state: SubmissionAttemptState,
+    /// Advisory harness state after acceptance.
+    pub post_state: Option<AgentState>,
+    /// Stable redacted failure code.
+    pub error_code: Option<String>,
+    /// Optional source deletion operation.
+    pub deletion_operation_id: Option<OperationId>,
+    /// Transition time.
+    pub at: Timestamp,
+}
 
 /// Whether this process proved it holds the exclusive schema lease.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -282,6 +346,60 @@ pub trait Store {
     ///
     /// Returns a typed conflict, busy, integrity, or I/O failure.
     fn commit(&mut self, batch: &OperationBatch) -> Result<Option<CommitReceipt>, StoreError>;
+
+    /// Durably reserve one thought for an external submission.
+    ///
+    /// # Errors
+    ///
+    /// Returns a conflict when the thought already has an active attempt, or a typed storage error.
+    fn prepare_submission(&mut self, _attempt: &SubmissionAttempt) -> Result<(), StoreError> {
+        Err(StoreError::Integrity(
+            "submission journal is unavailable".to_owned(),
+        ))
+    }
+
+    /// Compare and set one prepared submission to sending.
+    ///
+    /// # Errors
+    ///
+    /// Returns a conflict when the attempt is not prepared, or a typed storage error.
+    fn mark_submission_sending(
+        &mut self,
+        _id: SubmissionId,
+        _at: Timestamp,
+    ) -> Result<(), StoreError> {
+        Err(StoreError::Integrity(
+            "submission journal is unavailable".to_owned(),
+        ))
+    }
+
+    /// Compare and set one sending submission to a terminal outcome.
+    ///
+    /// # Errors
+    ///
+    /// Returns a conflict when the attempt is not sending, or a typed storage error.
+    fn finish_submission(
+        &mut self,
+        _id: SubmissionId,
+        _outcome: &SubmissionOutcome,
+    ) -> Result<(), StoreError> {
+        Err(StoreError::Integrity(
+            "submission journal is unavailable".to_owned(),
+        ))
+    }
+
+    /// Recover incomplete attempts only after acquiring their session lease.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed storage error without retrying any ambiguous delivery.
+    fn recover_submissions(
+        &mut self,
+        _session_id: SessionId,
+        _at: Timestamp,
+    ) -> Result<(), StoreError> {
+        Ok(())
+    }
 
     /// Move a session to recoverable trash.
     ///

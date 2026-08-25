@@ -4,7 +4,7 @@ use crate::{
     domain::Direction,
     ports::{
         agent::{
-            AgentCapabilities, AgentDeliveryCapabilities, AgentError, AgentReadiness, AgentTarget,
+            AgentCapabilities, AgentDeliveryCapabilities, AgentError, AgentState, AgentTarget,
             PaneContext, PaneRect,
         },
         environment::ProcessRunner,
@@ -212,6 +212,8 @@ fn eligible_target(
         .clone()
         .unwrap_or_else(|| format!("{kind} {}", agent.pane_id));
     Ok(AgentTarget {
+        provider: "herdr".to_owned(),
+        protocol: super::SUPPORTED_PROTOCOL,
         direction,
         pane_id: agent.pane_id.clone(),
         workspace_id: agent.workspace_id.clone(),
@@ -226,11 +228,11 @@ fn eligible_target(
     })
 }
 
-fn readiness(value: Option<RawReadiness>) -> Result<AgentReadiness, AgentError> {
+fn readiness(value: Option<RawReadiness>) -> Result<AgentState, AgentError> {
     match value {
-        Some(RawReadiness::Idle) => Ok(AgentReadiness::Idle),
-        Some(RawReadiness::Working) => Ok(AgentReadiness::Working),
-        Some(RawReadiness::Done) => Ok(AgentReadiness::Done),
+        Some(RawReadiness::Idle) => Ok(AgentState::Idle),
+        Some(RawReadiness::Working) => Ok(AgentState::Working),
+        Some(RawReadiness::Done) => Ok(AgentState::Done),
         Some(RawReadiness::Blocked | RawReadiness::Unknown) | None => Err(AgentError::Unsupported(
             "neighbor is not ready for safe prompt submission".to_owned(),
         )),

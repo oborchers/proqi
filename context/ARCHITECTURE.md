@@ -651,8 +651,20 @@ the resulting receipt without inventing its own queue semantics.
 Both visible actions invoke the same immediate semantic prompt command.
 `SubmissionDisposition::Keep` preserves the thought.
 `SubmissionDisposition::RemoveAfterSuccess` commits deletion only after an
-accepted receipt whose submission identifier matches the pending request. That
-deletion remains undoable. Every failure preserves the thought.
+accepted receipt whose submission identifier and target match the pending
+request. The matching `agent_prompted` receipt establishes acceptance. Any
+post-submit agent state is advisory, including `blocked`, `unknown`, or no
+reported state. The accepted outcome is journaled durably before an unchanged
+thought may be removed. That deletion remains undoable. Every failure preserves
+the thought.
+
+Submission attempts use a content-redacted SQLite journal. Proqi first reserves
+the thought in `prepared`, compare-and-sets it to `sending`, invokes Herdr with no
+open database transaction, then compare-and-sets a terminal result. Only one
+active attempt may exist per thought. Recovery changes `prepared` to `cancelled`
+and `sending` to `outcome_unknown`; it never automatically retries an ambiguous
+delivery. The journal stores a SHA-256 source digest and a target identity
+fingerprint, never prompt content or raw pane and agent session identifiers.
 
 `v0.1.0` implements this boundary against Herdr's structured schema
 and protocol discovery commands. Capability discovery verifies both the

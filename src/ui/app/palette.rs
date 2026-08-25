@@ -43,9 +43,9 @@ impl Command {
         (Self::Paste, "Paste native clipboard"),
         (
             Self::SubmitRemove,
-            "Submit & remove after success (default)",
+            "Submit now & remove after acceptance (default)",
         ),
-        (Self::SubmitKeep, "Submit & keep thought"),
+        (Self::SubmitKeep, "Submit now & keep thought"),
         (Self::SendSession, "Send to another Proqi session"),
         (
             Self::SendSessionRemove,

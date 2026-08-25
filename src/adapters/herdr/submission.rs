@@ -1,7 +1,7 @@
 //! Target revalidation and atomic semantic prompt submission.
 
 use crate::ports::{
-    agent::{AgentError, AgentGateway as _, AgentReadiness, SubmissionReceipt, SubmissionRequest},
+    agent::{AgentError, AgentGateway as _, AgentState, SubmissionReceipt, SubmissionRequest},
     environment::ProcessRunner,
 };
 
@@ -39,7 +39,7 @@ pub(super) fn submit<R: ProcessRunner>(
     Ok(SubmissionReceipt {
         submission_id: request.submission_id,
         target: target.clone(),
-        readiness: response_readiness(response.result.agent.agent_status)?,
+        post_state: response_state(response.result.agent.agent_status),
     })
 }
 
@@ -62,13 +62,13 @@ fn verify_prompted(
     Ok(())
 }
 
-fn response_readiness(value: Option<RawReadiness>) -> Result<AgentReadiness, AgentError> {
+const fn response_state(value: Option<RawReadiness>) -> Option<AgentState> {
     match value {
-        Some(RawReadiness::Idle) => Ok(AgentReadiness::Idle),
-        Some(RawReadiness::Working) => Ok(AgentReadiness::Working),
-        Some(RawReadiness::Done) => Ok(AgentReadiness::Done),
-        Some(RawReadiness::Blocked | RawReadiness::Unknown) | None => Err(AgentError::Malformed(
-            "prompt receipt has no accepted readiness state".to_owned(),
-        )),
+        Some(RawReadiness::Idle) => Some(AgentState::Idle),
+        Some(RawReadiness::Working) => Some(AgentState::Working),
+        Some(RawReadiness::Done) => Some(AgentState::Done),
+        Some(RawReadiness::Blocked) => Some(AgentState::Blocked),
+        Some(RawReadiness::Unknown) => Some(AgentState::Unknown),
+        None => None,
     }
 }

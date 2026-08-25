@@ -30,7 +30,11 @@ use crate::{
     },
     application::AppState,
     domain::{OperationSequence, RequestId, SessionId, ThoughtId},
-    ports::{environment::Clock as _, runtime::InstanceInfo, store::StoreError},
+    ports::{
+        environment::Clock as _,
+        runtime::InstanceInfo,
+        store::{Store as _, StoreError},
+    },
     ui::{BoardApp, Theme, UiInput, UiKey, render},
 };
 
@@ -154,7 +158,7 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
     require_interactive()?;
     let TerminalResources {
         state,
-        store,
+        mut store,
         coordinator,
         clock,
         mut ids,
@@ -169,6 +173,7 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
         state_root,
     } = resources;
     let session_id = state.board.session.id;
+    store.recover_submissions(session_id, clock.now())?;
     let (control, control_warning) = start_optional_control(&mut session_lease);
     let (theme, guard) = enter_terminal(settings.theme)?;
     let termination = TerminationGuard::register()?;

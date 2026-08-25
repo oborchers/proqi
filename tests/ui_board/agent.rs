@@ -3,7 +3,7 @@ use super::*;
 use proqi::{
     domain::Direction,
     ports::agent::{
-        AgentDeliveryCapabilities, AgentError, AgentReadiness, AgentTarget, PaneContext, PaneRect,
+        AgentDeliveryCapabilities, AgentError, AgentState, AgentTarget, PaneContext, PaneRect,
         SubmissionDisposition, SubmissionReceipt,
     },
 };
@@ -21,6 +21,8 @@ fn target(direction: Direction, pane_id: &str) -> AgentTarget {
         },
     };
     AgentTarget {
+        provider: "herdr".to_owned(),
+        protocol: 19,
         direction,
         pane_id: pane_id.to_owned(),
         workspace_id: source.workspace_id.clone(),
@@ -28,7 +30,7 @@ fn target(direction: Direction, pane_id: &str) -> AgentTarget {
         agent_kind: "codex".to_owned(),
         agent_name: format!("Codex {pane_id}"),
         agent_session_id: format!("session-{pane_id}"),
-        readiness: AgentReadiness::Idle,
+        readiness: AgentState::Idle,
         delivery: AgentDeliveryCapabilities::SUBMIT_ONLY,
         rect: PaneRect {
             x: 40,
@@ -46,6 +48,42 @@ fn prepare_thought(fixture: &mut Fixture) {
     fixture.input(UiInput::Key(UiKey::Escape));
 }
 
+fn start_submission(
+    fixture: &mut Fixture,
+    effects: &[Effect],
+) -> proqi::ports::agent::SubmissionRequest {
+    let [Effect::PrepareSubmission(attempt)] = effects else {
+        panic!("expected prepared submission");
+    };
+    let sending = fixture.app.complete_submission_prepared(attempt.id, Ok(()));
+    assert!(matches!(
+        sending.as_slice(),
+        [Effect::MarkSubmissionSending { .. }]
+    ));
+    let submitted = fixture.app.complete_submission_sending(attempt.id, Ok(()));
+    let [Effect::SubmitAgent(request)] = submitted.as_slice() else {
+        panic!("expected semantic submission");
+    };
+    request.clone()
+}
+
+fn finish_submission(
+    fixture: &mut Fixture,
+    request: &proqi::ports::agent::SubmissionRequest,
+    result: Result<SubmissionReceipt, AgentError>,
+) -> Vec<Effect> {
+    let journal = fixture
+        .app
+        .complete_submission(request.submission_id, result);
+    assert!(matches!(
+        journal.as_slice(),
+        [Effect::FinishSubmission { .. }]
+    ));
+    fixture
+        .app
+        .complete_submission_journaled(request.submission_id, Ok(()))
+}
+
 #[test]
 fn failed_submission_preserves_thought_and_accepted_remove_is_undoable() {
     let mut fixture = Fixture::new();
@@ -56,12 +94,8 @@ fn failed_submission_preserves_thought_and_accepted_remove_is_undoable() {
         .complete_agent_discovery(Ok(vec![target.clone()]));
 
     let failed = fixture.effects(UiInput::Key(UiKey::Character('s')));
-    let [Effect::SubmitAgent(failed_request)] = failed.as_slice() else {
-        panic!("expected semantic submission");
-    };
-    let no_mutation = fixture
-        .app
-        .complete_submission(failed_request.submission_id, Err(AgentError::TimedOut));
+    let failed_request = start_submission(&mut fixture, &failed);
+    let no_mutation = finish_submission(&mut fixture, &failed_request, Err(AgentError::TimedOut));
     assert!(no_mutation.is_empty());
     assert_eq!(fixture.app.state.board.live_thoughts().len(), 1);
     assert!(
@@ -72,16 +106,15 @@ fn failed_submission_preserves_thought_and_accepted_remove_is_undoable() {
     );
 
     let removing = fixture.effects(UiInput::Key(UiKey::Character('s')));
-    let [Effect::SubmitAgent(request)] = removing.as_slice() else {
-        panic!("expected submit-and-remove request");
-    };
+    let request = start_submission(&mut fixture, &removing);
     assert_eq!(request.content, "exact prompt\nGrüße 第二行");
-    let completion = fixture.app.complete_submission(
-        request.submission_id,
+    let completion = finish_submission(
+        &mut fixture,
+        &request,
         Ok(SubmissionReceipt {
             submission_id: request.submission_id,
             target: target.clone(),
-            readiness: AgentReadiness::Working,
+            post_state: Some(AgentState::Working),
         }),
     );
     assert!(matches!(
@@ -121,10 +154,17 @@ fn multiple_targets_require_direction_and_mouse_controls_use_verified_targets() 
         movement: CursorMovement::GraphemeForward,
         extend_selection: false,
     }));
-    assert!(matches!(
-        directed.as_slice(),
-        [Effect::SubmitAgent(request)] if request.target == right
-    ));
+    let request = start_submission(&mut fixture, &directed);
+    assert_eq!(request.target, right);
+    let _completed = finish_submission(
+        &mut fixture,
+        &request,
+        Ok(SubmissionReceipt {
+            submission_id: request.submission_id,
+            target: request.target.clone(),
+            post_state: Some(AgentState::Working),
+        }),
+    );
 
     let _layout = fixture.app.prepare_frame(Rect::new(0, 0, 100, 10));
     assert!(
@@ -149,10 +189,8 @@ fn multiple_targets_require_direction_and_mouse_controls_use_verified_targets() 
         row: control.y,
         kind: PointerKind::Down(PointerButton::Left),
     }));
-    assert!(matches!(
-        clicked.as_slice(),
-        [Effect::SubmitAgent(request)] if request.target == up
-    ));
+    let clicked_request = start_submission(&mut fixture, &clicked);
+    assert_eq!(clicked_request.target, up);
 }
 
 #[test]
@@ -206,8 +244,8 @@ fn controls_and_hint_disappear_when_discovery_is_unsupported() {
     let shown = draw(&mut fixture, 120, 6);
     let rendered = text(shown.backend().buffer());
     assert!(rendered.contains("← Codex"));
-    assert!(rendered.contains("s Submit & remove"));
-    assert!(rendered.contains("S Submit & keep"));
+    assert!(rendered.contains("s Submit now & remove"));
+    assert!(rendered.contains("S Submit now & keep"));
     assert!(!rendered.contains("working"));
     assert!(!rendered.contains(" Send"));
 
@@ -255,20 +293,115 @@ fn submit_and_keep_uses_the_same_semantic_request_and_preserves_the_thought() {
         .complete_agent_discovery(Ok(vec![target.clone()]));
 
     let effects = fixture.effects(UiInput::Key(UiKey::Character('S')));
-    let [Effect::SubmitAgent(request)] = effects.as_slice() else {
-        panic!("expected semantic submission");
-    };
-    let completion = fixture.app.complete_submission(
+    let request = start_submission(&mut fixture, &effects);
+    let completion = finish_submission(
+        &mut fixture,
+        &request,
+        Ok(SubmissionReceipt {
+            submission_id: request.submission_id,
+            target,
+            post_state: Some(AgentState::Working),
+        }),
+    );
+    assert!(
+        matches!(
+            completion.as_slice(),
+            [Effect::StoreIntegrationContext { .. }]
+        ),
+        "unexpected completion: {completion:?}"
+    );
+    assert_eq!(fixture.app.state.board.live_thoughts().len(), 1);
+}
+
+#[test]
+fn duplicate_submission_is_suppressed_while_the_first_attempt_is_active() {
+    let mut fixture = Fixture::new();
+    prepare_thought(&mut fixture);
+    fixture
+        .app
+        .complete_agent_discovery(Ok(vec![target(Direction::Left, "w1:p2")]));
+
+    let first = fixture.effects(UiInput::Key(UiKey::Character('s')));
+    assert!(matches!(first.as_slice(), [Effect::PrepareSubmission(_)]));
+    assert!(
+        fixture
+            .effects(UiInput::Key(UiKey::Character('s')))
+            .is_empty()
+    );
+    assert_eq!(
+        fixture.app.status_text(),
+        Some("this thought already has a submission in progress")
+    );
+}
+
+#[test]
+fn accepted_submission_is_kept_when_the_journal_cannot_record_the_outcome() {
+    let mut fixture = Fixture::new();
+    prepare_thought(&mut fixture);
+    let target = target(Direction::Left, "w1:p2");
+    fixture
+        .app
+        .complete_agent_discovery(Ok(vec![target.clone()]));
+    let effects = fixture.effects(UiInput::Key(UiKey::Character('s')));
+    let request = start_submission(&mut fixture, &effects);
+    let journal = fixture.app.complete_submission(
         request.submission_id,
         Ok(SubmissionReceipt {
             submission_id: request.submission_id,
             target,
-            readiness: AgentReadiness::Working,
+            post_state: Some(AgentState::Unknown),
         }),
     );
     assert!(matches!(
-        completion.as_slice(),
-        [Effect::StoreIntegrationContext { .. }]
+        journal.as_slice(),
+        [Effect::FinishSubmission { .. }]
     ));
+
+    let completion = fixture.app.complete_submission_journaled(
+        request.submission_id,
+        Err(proqi::ports::store::StoreError::DiskFull),
+    );
+    assert!(completion.is_empty());
     assert_eq!(fixture.app.state.board.live_thoughts().len(), 1);
+    assert!(fixture.app.status_text().is_some_and(|status| {
+        status.starts_with("Submission accepted, but its outcome was not saved")
+    }));
+}
+
+#[test]
+fn accepted_remove_keeps_a_thought_edited_during_delivery() {
+    let mut fixture = Fixture::new();
+    prepare_thought(&mut fixture);
+    let target = target(Direction::Left, "w1:p2");
+    fixture
+        .app
+        .complete_agent_discovery(Ok(vec![target.clone()]));
+    let effects = fixture.effects(UiInput::Key(UiKey::Character('s')));
+    let request = start_submission(&mut fixture, &effects);
+
+    fixture.input(UiInput::Key(UiKey::Enter));
+    fixture.input(UiInput::Key(UiKey::Character('!')));
+    let completion = finish_submission(
+        &mut fixture,
+        &request,
+        Ok(SubmissionReceipt {
+            submission_id: request.submission_id,
+            target,
+            post_state: Some(AgentState::Blocked),
+        }),
+    );
+
+    assert!(
+        matches!(
+            completion.as_slice(),
+            [Effect::StoreIntegrationContext { .. }]
+        ),
+        "unexpected completion: {completion:?}"
+    );
+    assert_eq!(fixture.app.state.board.live_thoughts().len(), 1);
+    assert!(
+        fixture.app.status_text().is_some_and(
+            |status| status.ends_with("thought changed during submission and was kept")
+        )
+    );
 }

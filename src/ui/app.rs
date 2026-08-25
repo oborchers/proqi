@@ -84,6 +84,9 @@ struct PendingSubmission {
     operation_id: crate::domain::OperationId,
     at: crate::domain::Timestamp,
     disposition: SubmissionDisposition,
+    source_digest: [u8; 32],
+    completion:
+        Option<Result<crate::ports::agent::SubmissionReceipt, crate::ports::agent::AgentError>>,
 }
 
 #[derive(Clone, Copy)]

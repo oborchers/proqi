@@ -68,6 +68,23 @@ pub(super) fn enqueue_effects(
         } else if let Effect::TransferThought(request) = effect {
             lanes.persistence.transfer_thought(request)?;
             pending.persistence = pending.persistence.saturating_add(1);
+        } else if let Effect::PrepareSubmission(attempt) = effect {
+            lanes.persistence.prepare_submission(attempt)?;
+            pending.persistence = pending.persistence.saturating_add(1);
+        } else if let Effect::MarkSubmissionSending { submission_id, at } = effect {
+            lanes
+                .persistence
+                .mark_submission_sending(submission_id, at)?;
+            pending.persistence = pending.persistence.saturating_add(1);
+        } else if let Effect::FinishSubmission {
+            submission_id,
+            outcome,
+        } = effect
+        {
+            lanes
+                .persistence
+                .finish_submission(submission_id, outcome)?;
+            pending.persistence = pending.persistence.saturating_add(1);
         } else if lanes.update.send(&effect)? {
             pending.update = pending.update.saturating_add(1);
         } else if lanes.external.send(&effect)? {
@@ -150,6 +167,30 @@ fn complete_result(
         PersistenceResult::Lookup { request_id, result } => {
             pending.persistence = pending.persistence.saturating_sub(1);
             return owner_control::complete_lookup(app, lanes, pending, clock, request_id, result);
+        }
+        PersistenceResult::SubmissionPrepared {
+            submission_id,
+            result,
+        } => {
+            pending.persistence = pending.persistence.saturating_sub(1);
+            let effects = app.complete_submission_prepared(submission_id, result);
+            enqueue_effects(app, lanes, effects, pending)?;
+        }
+        PersistenceResult::SubmissionSending {
+            submission_id,
+            result,
+        } => {
+            pending.persistence = pending.persistence.saturating_sub(1);
+            let effects = app.complete_submission_sending(submission_id, result);
+            enqueue_effects(app, lanes, effects, pending)?;
+        }
+        PersistenceResult::SubmissionFinished {
+            submission_id,
+            result,
+        } => {
+            pending.persistence = pending.persistence.saturating_sub(1);
+            let effects = app.complete_submission_journaled(submission_id, result);
+            enqueue_effects(app, lanes, effects, pending)?;
         }
     }
     Ok(true)

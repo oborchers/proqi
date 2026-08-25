@@ -157,11 +157,11 @@ fn submission_label(
     match disposition {
         SubmissionDisposition::RemoveAfterSuccess => (
             crate::ui::settings::key_label(keys.submit_remove),
-            " Submit & remove",
+            " Submit now & remove",
         ),
         SubmissionDisposition::Keep => (
             crate::ui::settings::key_label(keys.submit_keep),
-            " Submit & keep",
+            " Submit now & keep",
         ),
     }
 }

@@ -9,7 +9,7 @@ fn unsupported_and_migration_required_schemas_are_refused_without_changes() {
         SqliteStore::open(&refuse),
         Err(StoreError::MigrationRequired {
             found: 0,
-            supported: 2
+            supported: 3
         })
     ));
 
@@ -33,7 +33,7 @@ fn unsupported_and_migration_required_schemas_are_refused_without_changes() {
         SqliteStore::open(&config),
         Err(StoreError::UnsupportedSchema {
             found: 99,
-            supported: 2
+            supported: 3
         })
     ));
 
@@ -47,7 +47,7 @@ fn unsupported_and_migration_required_schemas_are_refused_without_changes() {
         SqliteStore::open(&protocol.config),
         Err(StoreError::UnsupportedStorageProtocol {
             found: 99,
-            supported: 2
+            supported: 3
         })
     ));
 }
@@ -130,8 +130,10 @@ fn version_one_database_migrates_annotations_forward_without_reinterpretation() 
     let connection = Connection::open(&fixture.config.database_path).expect("version one DB");
     connection
         .execute_batch(
-            "ALTER TABLE thoughts DROP COLUMN annotations_json;
-             DELETE FROM migration_history WHERE version = 2;
+            "DROP INDEX submission_attempts_active_thought;
+             DROP TABLE submission_attempts;
+             ALTER TABLE thoughts DROP COLUMN annotations_json;
+             DELETE FROM migration_history WHERE version IN (2, 3);
              UPDATE schema_meta SET schema_version = 1, storage_protocol = 1;",
         )
         .expect("downgrade fixture");
@@ -151,7 +153,15 @@ fn version_one_database_migrates_annotations_forward_without_reinterpretation() 
             |row| row.get(0),
         )
         .expect("annotation column");
-    assert_eq!((version, annotations_column), (2, 1));
+    let submissions_table: i64 = connection
+        .query_row(
+            "SELECT count(*) FROM sqlite_master
+             WHERE type = 'table' AND name = 'submission_attempts'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("submission table");
+    assert_eq!((version, annotations_column, submissions_table), (3, 1, 1));
 }
 
 #[test]

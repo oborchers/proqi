@@ -1,5 +1,6 @@
 //! Verified adjacent-agent discovery and semantic prompt submission.
 
+use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use thiserror::Error;
 
@@ -61,7 +62,8 @@ pub struct AgentCapabilities {
 }
 
 /// Durable board behavior after one accepted prompt submission.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum SubmissionDisposition {
     /// Preserve the submitted thought.
     Keep,
@@ -88,19 +90,28 @@ impl AgentDeliveryCapabilities {
 }
 
 /// Agent state known before submission.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum AgentReadiness {
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentState {
     /// Ready for new input.
     Idle,
     /// Currently processing and able to receive steering or queued input.
     Working,
     /// Settled after background work.
     Done,
+    /// Harness reported an explicit blocked state.
+    Blocked,
+    /// Harness could not determine the current state.
+    Unknown,
 }
 
 /// One independently verified adjacent agent.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AgentTarget {
+    /// Integration provider that verified this target.
+    pub provider: String,
+    /// Negotiated provider protocol.
+    pub protocol: u32,
     /// Direction from the Proqi pane.
     pub direction: Direction,
     /// Opaque target pane identifier.
@@ -116,7 +127,7 @@ pub struct AgentTarget {
     /// Stable harness session identity.
     pub agent_session_id: String,
     /// Verified readiness.
-    pub readiness: AgentReadiness,
+    pub readiness: AgentState,
     /// Delivery behaviors verified for this target.
     pub delivery: AgentDeliveryCapabilities,
     /// Target pane geometry.
@@ -143,8 +154,8 @@ pub struct SubmissionReceipt {
     pub submission_id: SubmissionId,
     /// Revalidated target that accepted the prompt.
     pub target: AgentTarget,
-    /// Harness state returned after acceptance.
-    pub readiness: AgentReadiness,
+    /// Advisory harness state returned after acceptance, when available.
+    pub post_state: Option<AgentState>,
 }
 
 /// Fail-closed integration error. Every variant leaves the thought unchanged.

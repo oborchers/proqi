@@ -185,8 +185,8 @@ fn board_shortcuts(app: &BoardApp) -> Vec<(String, &'static str)> {
     let keys = app.keybindings();
     let mut delivery = Vec::new();
     if app.supports_submission() {
-        delivery.push((keys.submit_remove.to_string(), "Submit & remove"));
-        delivery.push((keys.submit_keep.to_string(), "Submit & keep"));
+        delivery.push((keys.submit_remove.to_string(), "Submit now & remove"));
+        delivery.push((keys.submit_keep.to_string(), "Submit now & keep"));
     }
     let mut items = vec![
         (keys.new.to_string(), "New"),

@@ -78,8 +78,8 @@ pub(super) fn configure_agent_controls(
             _ => HitTarget::BeginDelivery(disposition),
         };
         let label_width = match disposition {
-            SubmissionDisposition::RemoveAfterSuccess => 17,
-            SubmissionDisposition::Keep => 15,
+            SubmissionDisposition::RemoveAfterSuccess => 21,
+            SubmissionDisposition::Keep => 19,
         };
         push(layout, &mut x, area, target, label_width);
     }

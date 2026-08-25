@@ -7,7 +7,7 @@ use crate::{
     domain::Direction,
     ports::{
         agent::{
-            AgentError, AgentGateway, AgentReadiness, AgentTarget, PaneContext, PanePresentation,
+            AgentError, AgentGateway, AgentState, AgentTarget, PaneContext, PanePresentation,
             PaneRect, SubmissionRequest,
         },
         environment::{IdGenerator, ProcessError, ProcessOutput, ProcessRequest, ProcessRunner},
@@ -15,6 +15,9 @@ use crate::{
 };
 
 use super::HerdrGateway;
+
+#[path = "tests/submission_receipts.rs"]
+mod submission_receipts;
 
 #[derive(Clone, Default)]
 struct FakeRunner {
@@ -206,7 +209,7 @@ fn all_directions_are_queried_and_only_independently_verified_agents_return() {
     let targets = gateway.adjacent_targets(&context).expect("targets");
     assert_eq!(targets.len(), 1);
     assert_eq!(targets[0].direction, Direction::Right);
-    assert_eq!(targets[0].readiness, AgentReadiness::Idle);
+    assert_eq!(targets[0].readiness, AgentState::Idle);
     let requests = runner.requests.borrow();
     let directional = requests
         .iter()
@@ -307,6 +310,8 @@ fn explicit_interactive_readiness_metadata_fails_closed() {
 
 fn target(context: &PaneContext) -> AgentTarget {
     AgentTarget {
+        provider: "herdr".to_owned(),
+        protocol: 19,
         direction: Direction::Right,
         pane_id: "w1:p2".to_owned(),
         workspace_id: "w1".to_owned(),
@@ -314,7 +319,7 @@ fn target(context: &PaneContext) -> AgentTarget {
         agent_kind: "codex".to_owned(),
         agent_name: "reviewer".to_owned(),
         agent_session_id: "agent-session-1".to_owned(),
-        readiness: AgentReadiness::Idle,
+        readiness: AgentState::Idle,
         delivery: crate::ports::agent::AgentDeliveryCapabilities::SUBMIT_ONLY,
         rect: right_rect(),
         source: context.clone(),
@@ -342,7 +347,7 @@ fn submission_revalidates_and_passes_exact_text_as_one_distinct_argument() {
         })
         .expect("accepted submission");
     assert_eq!(receipt.submission_id, submission_id);
-    assert_eq!(receipt.readiness, AgentReadiness::Working);
+    assert_eq!(receipt.post_state, Some(AgentState::Working));
     let requests = runner.requests.borrow();
     let prompt = requests.last().expect("prompt request");
     assert_eq!(prompt.program, OsString::from("herdr-fixture"));

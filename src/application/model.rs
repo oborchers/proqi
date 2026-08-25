@@ -1,17 +1,17 @@
 //! Application state, normalized actions, effects, and errors.
 
+mod effect;
+
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use super::error::{ApplicationError, ApplicationResult, FailureCode};
 use crate::domain::{
     BoardOperation, BoardOperationKind, ContentAnnotation, OperationId, OperationSequence,
-    RequestId, RevisionId, SessionBoard, SessionId, StableVersion, TextPosition, Thought,
-    ThoughtId, ThoughtRevision, Timestamp, UndoScope,
+    RequestId, RevisionId, SessionBoard, StableVersion, TextPosition, Thought, ThoughtId,
+    ThoughtRevision, Timestamp, UndoScope,
 };
-use crate::ports::agent::{AgentTarget, SubmissionRequest};
-use crate::ports::{
-    recovery::RecoveryDocument, store::OperationBatch, transfer::SessionTransferRequest,
-};
+
+pub use effect::Effect;
 
 /// Active interaction context.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -383,116 +383,4 @@ pub enum Action {
     },
     /// Ask the storage lane to retry one retained failed operation.
     RetryPersistence(OperationSequence),
-}
-
-/// Blocking work requested by the pure reducer.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum Effect {
-    /// Execute one explicit installation-wide update decision outside the reducer lane.
-    Update(UpdateIntent),
-    /// Discover live destination sessions for an explicit transfer picker.
-    DiscoverTransferSessions,
-    /// Copy one exact thought to another session before optional source removal.
-    TransferThought(SessionTransferRequest),
-    /// Persist an optimistic current-session rename.
-    RenameSession {
-        /// Owning session.
-        session_id: SessionId,
-        /// Previous name restored when persistence fails.
-        previous_name: Option<String>,
-        /// New name, or `None` to clear it.
-        name: Option<String>,
-    },
-    /// Discover verified adjacent agents without blocking the reducer lane.
-    DiscoverAgents,
-    /// Submit exact thought content through a verified semantic agent gateway.
-    SubmitAgent(SubmissionRequest),
-    /// Persist recognition-only context after an accepted submission.
-    StoreIntegrationContext {
-        /// Owning session.
-        session_id: SessionId,
-        /// Verified target used for the accepted submission.
-        target: AgentTarget,
-        /// Time at which the target was verified for submission.
-        verified_at: Timestamp,
-    },
-    /// Commit one new structural operation.
-    CommitBoardOperation(BoardOperation),
-    /// Commit one new editor revision.
-    CommitRevision(ThoughtRevision),
-    /// Atomically move one persistent history cursor and current state.
-    CommitHistoryMove {
-        /// Idempotent durable control identity.
-        operation_id: OperationId,
-        /// Owning session.
-        session_id: SessionId,
-        /// Explicit history scope.
-        scope: UndoScope,
-        /// Undo when true, redo when false.
-        undo: bool,
-        /// New monotonic commit sequence.
-        sequence: OperationSequence,
-        /// Event time.
-        at: Timestamp,
-    },
-    /// Write exact content through the clipboard adapter.
-    WriteClipboard {
-        /// Matching request identity.
-        request_id: RequestId,
-        /// Source thought.
-        thought_id: ThoughtId,
-        /// Copy or cut intent.
-        intent: ClipboardIntent,
-        /// Exact content, including line endings.
-        content: String,
-    },
-    /// Read exact content from the native clipboard.
-    ReadClipboard {
-        /// Matching request identity.
-        request_id: RequestId,
-    },
-    /// Atomically export the current in-memory board for recovery.
-    ExportRecovery {
-        /// Matching request identity.
-        request_id: RequestId,
-        /// Exact versioned snapshot.
-        document: Box<RecoveryDocument>,
-    },
-    /// Present a non-destructive user-visible status.
-    Notify {
-        /// Stable classification.
-        code: FailureCode,
-    },
-    /// Retry the retained durable batch for one sequence.
-    RetryPersistence {
-        /// Failed sequence to retry.
-        sequence: OperationSequence,
-    },
-}
-
-impl Effect {
-    /// Convert a persistence effect into its durable store request.
-    #[must_use]
-    pub fn persistence_batch(&self) -> Option<OperationBatch> {
-        match self {
-            Self::CommitBoardOperation(operation) => Some(OperationBatch::Board(operation.clone())),
-            Self::CommitRevision(revision) => Some(OperationBatch::Revision(revision.clone())),
-            Self::CommitHistoryMove {
-                operation_id,
-                session_id,
-                scope,
-                undo,
-                sequence,
-                at,
-            } => Some(OperationBatch::HistoryMove {
-                operation_id: *operation_id,
-                session_id: *session_id,
-                scope: *scope,
-                undo: *undo,
-                sequence: *sequence,
-                at: *at,
-            }),
-            _ => None,
-        }
-    }
 }

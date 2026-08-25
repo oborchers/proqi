@@ -8,6 +8,7 @@ mod operation_lookup;
 mod schema;
 mod search;
 mod session_admin;
+mod submission;
 mod support;
 
 use std::{path::PathBuf, thread, time::Duration};
@@ -21,7 +22,7 @@ use crate::{
     ports::store::{
         CommitReceipt, MigrationMode, OperationBatch, STORAGE_PROTOCOL_VERSION,
         SUPPORTED_SCHEMA_VERSION, SessionHit, SessionQuery, SessionSnapshot, Store, StoreError,
-        StoredOperationRequest,
+        StoredOperationRequest, SubmissionAttempt, SubmissionOutcome,
     },
 };
 
@@ -350,6 +351,34 @@ impl Store for SqliteStore {
 
     fn commit(&mut self, batch: &OperationBatch) -> Result<Option<CommitReceipt>, StoreError> {
         self.with_write_retry(|transaction| commit_batch(transaction, batch))
+    }
+
+    fn prepare_submission(&mut self, attempt: &SubmissionAttempt) -> Result<(), StoreError> {
+        self.with_write_retry(|transaction| submission::prepare(transaction, attempt))
+    }
+
+    fn mark_submission_sending(
+        &mut self,
+        id: crate::domain::SubmissionId,
+        at: Timestamp,
+    ) -> Result<(), StoreError> {
+        self.with_write_retry(|transaction| submission::mark_sending(transaction, id, at))
+    }
+
+    fn finish_submission(
+        &mut self,
+        id: crate::domain::SubmissionId,
+        outcome: &SubmissionOutcome,
+    ) -> Result<(), StoreError> {
+        self.with_write_retry(|transaction| submission::finish(transaction, id, outcome))
+    }
+
+    fn recover_submissions(
+        &mut self,
+        session_id: SessionId,
+        at: Timestamp,
+    ) -> Result<(), StoreError> {
+        self.with_write_retry(|transaction| submission::recover(transaction, session_id, at))
     }
 
     fn trash_session(&mut self, id: SessionId, at: Timestamp) -> Result<(), StoreError> {

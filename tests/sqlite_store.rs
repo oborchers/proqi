@@ -22,8 +22,12 @@ use proqi::{
         SessionBoard, TextPosition, ThoughtId, ThoughtPosition, Timestamp, UndoScope,
     },
     ports::{
+        agent::{AgentState, SubmissionDisposition},
         environment::IdGenerator,
-        store::{DurableIdentity, MigrationMode, OperationBatch, SessionQuery, Store, StoreError},
+        store::{
+            DurableIdentity, MigrationMode, OperationBatch, SessionQuery, Store, StoreError,
+            SubmissionAttempt, SubmissionAttemptState, SubmissionOutcome,
+        },
     },
 };
 use rusqlite::Connection;
@@ -126,3 +130,5 @@ mod concurrency;
 mod core;
 #[path = "sqlite_store/recovery.rs"]
 mod recovery;
+#[path = "sqlite_store/submission.rs"]
+mod submission;

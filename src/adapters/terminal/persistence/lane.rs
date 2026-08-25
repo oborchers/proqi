@@ -1,11 +1,13 @@
 //! Bounded persistence-lane lifecycle and request facade.
 
 use super::{
-    FileRuntimeCoordinator, OperationBatch, OperationId, OperationSequence, PersistenceLane,
-    PersistenceRequest, SessionId, SessionTransferRequest, SqliteStore, TerminalError,
-    persistence_loop, sync_channel, thread, transfer,
+    FileRuntimeCoordinator, OperationBatch, OperationSequence, PersistenceLane, PersistenceRequest,
+    SqliteStore, TerminalError, persistence_loop, sync_channel, thread, transfer,
 };
-use crate::domain::RequestId;
+use crate::{
+    domain::{OperationId, RequestId, SessionId},
+    ports::transfer::SessionTransferRequest,
+};
 use std::sync::mpsc::{RecvTimeoutError, TrySendError};
 
 use crate::adapters::terminal::supervisor::{ShutdownDeadline, join_before};
@@ -98,6 +100,32 @@ impl PersistenceLane {
         self.send(PersistenceRequest::Lookup {
             request_id,
             operation_id,
+        })
+    }
+
+    pub(in crate::adapters::terminal) fn prepare_submission(
+        &self,
+        attempt: crate::ports::store::SubmissionAttempt,
+    ) -> Result<(), TerminalError> {
+        self.send(PersistenceRequest::PrepareSubmission(Box::new(attempt)))
+    }
+
+    pub(in crate::adapters::terminal) fn mark_submission_sending(
+        &self,
+        submission_id: crate::domain::SubmissionId,
+        at: crate::domain::Timestamp,
+    ) -> Result<(), TerminalError> {
+        self.send(PersistenceRequest::MarkSubmissionSending { submission_id, at })
+    }
+
+    pub(in crate::adapters::terminal) fn finish_submission(
+        &self,
+        submission_id: crate::domain::SubmissionId,
+        outcome: crate::ports::store::SubmissionOutcome,
+    ) -> Result<(), TerminalError> {
+        self.send(PersistenceRequest::FinishSubmission {
+            submission_id,
+            outcome: Box::new(outcome),
         })
     }
 
