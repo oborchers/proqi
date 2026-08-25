@@ -93,6 +93,8 @@ fn write_formula(
         r##"{warning}class Proqi < Formula
   desc "Agent-optimized terminal scratchpad for follow-up prompts"
   homepage "https://github.com/oborchers/proqi"
+  url "{base}/proqi-x86_64-unknown-linux-gnu.tar.gz"
+  sha256 "{linux}"
   license "MIT"
 
   on_macos do
@@ -106,15 +108,11 @@ fn write_formula(
   end
 
   on_linux do
-    on_intel do
-      url "{base}/proqi-x86_64-unknown-linux-gnu.tar.gz"
-      sha256 "{linux}"
-    end
+    depends_on arch: :x86_64
   end
 
   def install
     bin.install "proqi"
-    bin.install "proqi-installation.json"
     bash_completion.install "completions/proqi.bash" => "proqi"
     zsh_completion.install "completions/_proqi"
     fish_completion.install "completions/proqi.fish"
@@ -193,7 +191,8 @@ mod tests {
         );
         assert!(contents.contains("releases/download/v0.1.0"));
         assert!(!contents.contains("version \"0.1.0\""));
-        assert!(contents.contains("bin.install \"proqi-installation.json\""));
+        assert!(contents.contains("depends_on arch: :x86_64"));
+        assert!(!contents.contains("bin.install \"proqi-installation.json\""));
         assert!(!contents.contains("post_install"));
         assert!(!contents.contains("system \"brew\""));
     }
