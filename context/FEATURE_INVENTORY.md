@@ -1,0 +1,132 @@
+# Proqi feature inventory
+
+Status: `v0.1.0` release-candidate baseline, recorded 2026-08-25 before the
+final OSS verification pass.
+
+This inventory connects observable behavior to implementation and test
+evidence. `Shipped` means a user can reach the behavior in the current native
+binary. `Conditional` means the behavior is shipped but requires a verified
+external context. `Internal` means the contract supports a user-facing feature
+without being a separate advertised feature. `Not shipped` means public copy
+must not imply that the behavior exists.
+
+## Terminal board
+
+| Capability | Status | Reachable behavior | Evidence |
+| --- | --- | --- | --- |
+| Fresh and resumable boards | Shipped | `proqi`, `proqi -c`, and `proqi -r [ID_OR_NAME]` open persisted local sessions. | `tests/cli_workflow.rs`, `tests/pty.rs` |
+| Board and edit modes | Shipped | Users navigate thoughts in board mode and enter exact multiline editing explicitly. | `tests/ui_board/navigation.rs`, `tests/editor_contract.rs` |
+| Thought creation | Shipped | `n`, the keyboard-focusable insertion row, its mouse target, and board paste create thoughts. An explicitly created blank is durable. | `tests/ui_board/blank.rs`, `tests/ui_mouse_actions.rs` |
+| Exact Unicode editing | Shipped | Grapheme-aware cursor movement preserves combining marks, emoji sequences, CJK, wide cells, tabs, CRLF, and whitespace. | `tests/editor_contract.rs`, `tests/ui_board.rs` |
+| Selection and cursor | Shipped | Keyboard and mouse selection, wrapped cursor placement, trailing newlines, and a terminal-owned blinking cursor are supported. | `tests/editor_contract.rs`, `tests/ui_board/navigation.rs` |
+| Copy, cut, and delete | Shipped | Copy preserves exact content. Cut and editor cut delete only after clipboard success. Delete retains undo history. | `tests/domain_reducer/clipboard.rs`, `tests/ui_board/clipboard.rs` |
+| Reordering | Shipped | Mouse drag, `J` and `K`, and shifted arrow keys move thoughts. Keyboard movement wraps at board edges. | `tests/ui_board/navigation.rs`, `tests/ui_board.rs` |
+| Persistent undo and redo | Shipped | Board and editor histories remain separate and survive process restart. | `tests/domain_reducer/history.rs`, `tests/sqlite_store/core.rs` |
+| Collapse and long content | Shipped | Long thoughts can collapse without changing canonical content. Scrolling is bounded and keeps focus and the insertion row reachable. | `tests/ui_board/composition.rs`, `tests/ui_board/navigation.rs` |
+| Search and command discovery | Shipped | Thought search, a searchable command palette, contextual help, keyboard control, and mouse control are available. | `tests/ui_board.rs`, `tests/ui_mouse_actions.rs` |
+| Responsive rendering | Shipped | One-column layout reflows across narrow, wide, tall, shallow, and repeated-resize viewports without mutating content or logical cursor state. | `tests/ui_board/composition.rs`, `tests/pty.rs` |
+| Theme and focus accessibility | Shipped | Auto, dark, light, and limited-color modes use non-color focus cues, terminal-aware surfaces, and tested contrast pairs. | `src/ui/theme.rs`, `tests/ui_board/snapshots.rs` |
+| Keyboard and mouse parity | Shipped | Core creation, focus, edit, search, help, recovery, footer, and drag interactions have both input paths where terminals expose them. | `tests/ui_mouse_actions.rs`, `tests/ui_board.rs` |
+| URL presentation | Shipped | Explicit HTTP and HTTPS ranges receive accent and underline styling without changing content. Activation remains a terminal capability. | `tests/ui_board/composition.rs` |
+
+## Content provenance and recovery
+
+| Capability | Status | Reachable behavior | Evidence |
+| --- | --- | --- | --- |
+| Bracketed and large paste | Shipped | A paste is one exact undo unit. Large pastes use an atomic folded presentation while canonical content stays intact. | `tests/editor_contract.rs`, `tests/ui_board/annotations.rs`, `tests/pty.rs` |
+| File paths and file drop | Shipped | Existing absolute paths, quoted paths, escaped Unicode paths, file URLs, and multi-file drops become attachment annotations without losing the exact path. | `src/adapters/terminal/path_import.rs`, `tests/pty/path_drop.rs` |
+| Clipboard images | Shipped | Native clipboard pixels are materialized as private PNG files and inserted as atomic image annotations. | `src/adapters/attachment/mod.rs`, `tests/ui_board/clipboard.rs` |
+| Folded annotations | Shipped | Images, files, and large pasted text render as accent placeholders with atomic navigation, selection, deletion, and restart-safe undo. | `tests/ui_board/annotations.rs`, `tests/sqlite_store/core.rs` |
+| Native clipboard with fallback | Shipped | Native text copy and paste are preferred. Bounded OSC 52 is the copy fallback where supported. Failure remains non-destructive and visible. | `src/adapters/clipboard/mod.rs`, `tests/ui_board/clipboard.rs` |
+| Autosave truthfulness | Shipped | Pending, durable, failed, and retry states reflect acknowledgement from persistence rather than optimistic UI state. | `tests/ui_board/durability.rs`, `src/adapters/terminal/persistence.rs` |
+| Recovery export | Shipped | Failed in-memory state can be exported atomically to a private recovery file without silently claiming durability. | `tests/recovery_export.rs` |
+| Crash recovery | Shipped | Acknowledged paste and mutations survive forced termination. Uncommitted SQLite writes roll back. Session leases release on process death. | `tests/pty/shutdown.rs`, `tests/sqlite_store/concurrency.rs`, `tests/runtime_coordination.rs` |
+
+## Sessions and persistence
+
+| Capability | Status | Reachable behavior | Evidence |
+| --- | --- | --- | --- |
+| Session browser | Shipped | Search uses optional name, launch path, and thought content. Results retain recency and directory context and show active, resumable, recovered, and trashed states. | `tests/ui_session_browser.rs`, `tests/pty.rs` |
+| Session naming | Shipped | Sessions can be renamed or cleared and resumed by unique name or canonical `ses_` identifier. | `tests/cli_workflow.rs`, `tests/ui_board/navigation.rs` |
+| Trash and pruning | Shipped | Session trash is recoverable. Permanent pruning requires an explicit confirmation flag. | `tests/cli_workflow.rs`, `tests/sqlite_store/core.rs` |
+| Local SQLite durability | Shipped | Bundled SQLite uses WAL, `synchronous=FULL`, forward migrations, backups, integrity checks, derived search indexes, and typed identifier BLOBs. | `tests/sqlite_store.rs`, `tests/sqlite_store/recovery.rs` |
+| Multiple instances | Shipped | Different sessions may be active concurrently. One authoritative lease prevents silent dual editing of the same session. | `tests/runtime_coordination.rs`, `tests/pty/active_control.rs` |
+| Active-session CLI forwarding | Shipped | Mutations targeting an active session travel through its verified owner and reducer rather than writing around it. | `tests/pty/active_control.rs`, `tests/control_contract.rs` |
+| Cross-session thought transfer | Shipped | A thought can be copied into another named or identified Proqi session and optionally removed only after destination durability. | `tests/cli_workflow.rs`, `src/ui/app/transfer.rs` |
+
+## Adjacent agent integration
+
+| Capability | Status | Reachable behavior | Evidence |
+| --- | --- | --- | --- |
+| Generic copy workflow | Shipped | Every thought can be copied or cut for native paste into any agent or application. | `tests/ui_board/clipboard.rs` |
+| Herdr discovery | Conditional | In a managed Herdr pane, Proqi discovers and independently verifies adjacent coding agents in all four directions. | `src/adapters/herdr`, `tests/herdr_executable.rs` |
+| Submit and keep | Conditional | A verified adjacent target receives the exact prompt through Herdr's semantic command, while the thought remains. | `tests/ui_board/agent.rs`, `src/adapters/herdr/submission.rs` |
+| Submit and remove | Conditional | The same semantic submission removes the thought only after the matching accepted receipt. Failure and ambiguity preserve it. | `tests/ui_board/agent.rs`, `src/ui/app/agent.rs` |
+| Pane presentation metadata | Conditional | A managed pane advertises display-only Proqi identity with bounded refresh and clean clearing. It does not impersonate a coding agent. | `src/adapters/herdr`, `src/adapters/terminal/runner/heartbeat.rs` |
+| Conversation inspection | Not shipped | Proqi does not read agent conversations, wait for responses, or use raw key injection as a fallback. | `context/PRODUCT.md`, `src/adapters/herdr` |
+
+## CLI and agent contract
+
+| Capability | Status | Reachable behavior | Evidence |
+| --- | --- | --- | --- |
+| Capability discovery | Shipped | `proqi capabilities --json` reports schema version, identifier encoding, bounds, control protocol, transfer, update, and Herdr capabilities. | `tests/cli_workflow.rs`, `src/cli/execute/capabilities.rs` |
+| Session commands | Shipped | List, search, rename, trash, restore, and prune have human and versioned JSON output. | `tests/cli_workflow.rs` |
+| Thought commands | Shipped | List, inspect, add through standard input, delete, move, cross-session send, undo, and redo are scriptable. | `tests/cli_workflow.rs` |
+| Typed identifiers | Shipped | `ses_`, `tht_`, `rev_`, `op_`, `ins_`, `req_`, and `sub_` preserve all UUIDv7 bits in canonical base32hex and reject wrong prefixes. | `tests/identifiers.rs`, `src/domain/identifiers.rs` |
+| Idempotent mutations | Shipped | Caller-supplied `op_` identities replay matching operations and reject reuse for different input or mutation types. | `tests/cli_contract.rs`, `tests/cli_workflow.rs` |
+| JSON fixtures | Shipped | Current success, error, control request, accepted receipt, and rejected receipt shapes are checked in and round-trip canonically. | `tests/fixtures`, `tests/cli_contract.rs`, `tests/control_contract.rs` |
+| Machine-readable errors | Shipped | Failures use the current versioned envelope, stable current error codes, and nonzero exits. | `tests/cli_contract.rs`, `src/cli/output.rs` |
+| Shell completions | Shipped | Bash, Fish, and Zsh completion output is generated by the installed binary and included in archives. | `tests/cli_smoke.rs`, `tests/package_contract.rs` |
+| Dedicated Proqi skill | Shipped | `skills/proqi/SKILL.md` discovers capabilities, uses JSON and standard input, addresses explicit sessions, and never reads SQLite or TUI output. | `tests/skill_package.rs` |
+| Pre-1.0 stability | Shipped policy | The JSON schema is versioned, but CLI compatibility before 1.0 is not promised. Breaking changes require release-note disclosure. | `README.md`, `context/PRODUCT.md` |
+
+## Updates and installed product
+
+| Capability | Status | Reachable behavior | Evidence |
+| --- | --- | --- | --- |
+| Explicit update check | Shipped | `proqi update check` queries the canonical stable GitHub release with bounded TLS HTTP, redirects, body, JSON, tag, and timeout handling. | `src/adapters/update/github.rs`, `src/cli/execute/update.rs` |
+| Implicit interactive check | Shipped | Release builds check asynchronously at most once per 24 hours. Debug, test, JSON, and noninteractive paths do not check implicitly. | `src/application/update.rs`, `src/adapters/terminal/runner.rs` |
+| Privacy and opt-out | Shipped | `check_for_updates = false` disables checks. Requests contain no thought, path, session, or installation content. | `src/ui/settings.rs`, `src/adapters/update/github.rs` |
+| Installation-wide election | Shipped | Shared cache and locks allow one refresh and one actionable prompt across one, ten, or fifteen concurrent participants. | `src/adapters/update/cache/tests.rs`, `src/application/update_coordination/tests.rs` |
+| Homebrew coordinated update | Shipped | After explicit confirmation, every verified participant saves, one direct `brew upgrade --formula oborchers/tap/proqi` runs, active sessions are rescanned, and each process independently cleans up and uses Unix `exec` to resume in place. | `tests/pty/update_control.rs`, `src/application/update_coordination.rs` |
+| Failure convergence | Shipped | Failed preflight aborts before installation. Installer and coordinator failures release ready peers. Partial restart is reported without rolling back successful peers. | `src/application/update_coordination/tests.rs`, `src/adapters/terminal/runner/update_results.rs` |
+| Standalone update | Shipped instructions only | Archive installs receive stable release instructions and resume normally after user-managed replacement. The binary does not replace itself. | `src/adapters/update/installation.rs`, `README.md` |
+| Package contract | Shipped locally | The isolated archive smoke covers version, help, completions, JSON creation, exact Unicode, reopen, active forwarding, migration backup, newer-schema refusal, terminal restoration, fake update installation, and same-PTY replacement on macOS. | `tests/package_contract.rs`, `tests/package_contract/pty.rs` |
+| Release artifacts | Prepared, not published | Three native archives, checksums, SPDX JSON SBOMs, attestations, notices, completions, and a generated formula are defined. No `v0.1.0` release exists yet. | `.github/workflows/release.yml`, `xtask/src/release.rs`, `xtask/src/homebrew.rs` |
+
+## Security, privacy, and operational boundaries
+
+| Capability | Status | Reachable behavior | Evidence |
+| --- | --- | --- | --- |
+| User-only local state | Shipped | Database, runtime, cache, configuration, attachments, diagnostics, backups, and recovery files use private permissions and reject unsafe symlink shapes. | adapter tests and `tests/recovery_export.rs` |
+| Bounded external input | Shipped | CLI thought input, control messages, HTTP bodies, diagnostics, markers, config, process output, and clipboard fallback are explicitly bounded. | ports and adapter constants, contract tests |
+| Direct process execution | Shipped | Herdr, installer, and verification commands use argument vectors and optional standard input without shell interpolation. | `src/adapters/process/mod.rs`, process tests |
+| Secret and content minimization | Shipped | Diagnostics are bounded and content-redacted. Release assets and public presentation checks reject private local paths. There is no telemetry. | `tests/cli_workflow.rs`, `xtask/src/public_assets.rs` |
+| Dependency policy | Shipped gate | Advisory, license, source, and duplicate checks are owned by `cargo xtask audit`; unsafe Rust is forbidden. | `deny.toml`, `Cargo.toml`, `src/lib.rs` |
+| Source and architecture policy | Shipped gate | First-party source files are limited to 500 lines, complexity is bounded, ignored artifacts are excluded, and inward dependency rules are mechanically checked. | `xtask/src/source_limits.rs`, `xtask/src/policy.rs` |
+
+## Baseline release gaps
+
+The current implementation is functionally broad, but this baseline does not
+yet establish release readiness in these areas:
+
+1. Complete-screen snapshots do not yet cover both session-browser layouts,
+   search and command overlays, or update prompts in wide, narrow, and shallow
+   viewports with keyboard and mouse geometry.
+2. The macOS and Linux hosted CI result has not been rerun since the repository
+   became public and the support matrix was narrowed.
+3. Release attestations exist only as workflow definitions. They cannot be
+   verified until a hosted rehearsal produces them.
+4. The Homebrew formula generator and local rehearsal pass, but live formula
+   audit, install, and `brew test` against immutable public release assets have
+   not run.
+5. Repository About metadata, topics, social preview, private vulnerability
+   reporting, branch rules, tag rules, and the protected release environment
+   still require explicit reviewed application.
+6. The final README and release-note claims must be checked against this matrix
+   after the remaining work. Optional aggregate adoption reporting remains
+   deliberately unimplemented and is not a release blocker.
+
+This file will be refreshed after those gaps are resolved. The refreshed
+version must distinguish locally verified behavior, hosted CI evidence, and
+publication actions that still require approval.
