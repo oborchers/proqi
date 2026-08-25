@@ -91,7 +91,7 @@ fn write_formula(
     };
     let formula = format!(
         r##"{warning}class Proqi < Formula
-  desc "An agent-optimized terminal scratchpad for follow-up prompts"
+  desc "Agent-optimized terminal scratchpad for follow-up prompts"
   homepage "https://github.com/oborchers/proqi"
   version "{version}"
   license "MIT"
@@ -189,6 +189,9 @@ mod tests {
         let formula = root.path().join("Formula/proqi.rb");
         generate(root.path(), &artifacts, &formula).expect("formula generation");
         let contents = fs::read_to_string(formula).expect("formula");
+        assert!(
+            contents.contains("desc \"Agent-optimized terminal scratchpad for follow-up prompts\"")
+        );
         assert!(contents.contains("releases/download/v0.1.0"));
         assert!(contents.contains("bin.install \"proqi-installation.json\""));
         assert!(!contents.contains("post_install"));
