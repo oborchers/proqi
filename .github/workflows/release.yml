@@ -244,15 +244,14 @@ jobs:
             target/release-assets/proqi.rb
 
   publish:
-    name: Publish approved release
+    name: Publish release
     if: github.event_name == 'push'
     needs: [plan, draft]
     runs-on: ubuntu-24.04
-    environment: release
     permissions:
-      contents: write # Publish the approved draft release.
+      contents: write # Publish the verified draft release.
     steps:
-      - name: Publish approved release
+      - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.plan.outputs.tag }}

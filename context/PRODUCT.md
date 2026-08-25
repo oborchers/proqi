@@ -916,10 +916,12 @@ are not used.
 
 Pull requests and `main` use one aggregate CI contract. Direct owner pushes
 remain allowed, force pushes do not. Immutable `vX.Y.Z` tags start a protected
-release workflow that builds a draft GitHub Release. Publication requires
-Oliver to review the notes and artifacts and approve the protected release
-environment. No package, tag, tap, repository visibility, or GitHub setting is
-changed without that explicit approval.
+release workflow that builds, verifies, and publishes a GitHub Release.
+Creating an allowed stable tag is Oliver's explicit authorization to publish
+that release. Stable-tag protection allows only Oliver's individual bypass, so
+no second environment approval duplicates that authorization. No package, tag,
+tap, repository visibility, or GitHub setting is changed without Oliver's
+explicit approval.
 
 ## Research and clean-room boundary
 
@@ -982,8 +984,9 @@ The current direction is grounded in these public primary sources:
 - Telemetry, update-check analytics, installation identifiers, or usage events.
 - Automatic update installation without explicit confirmation.
 - Standalone executable self-replacement in `v0.1.0`.
-- Public repository changes, tap creation, credentials, tags, or release
-  publication without Oliver's explicit approval.
+- Public repository changes, tap creation, credentials, or tags without
+  Oliver's explicit approval. Creating an allowed stable tag explicitly
+  approves the corresponding release publication.
 
 ## Later opportunities
 
