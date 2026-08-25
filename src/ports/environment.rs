@@ -109,6 +109,9 @@ pub enum ProcessError {
     /// Deadline elapsed and the child was terminated.
     #[error("process timed out")]
     TimedOut,
+    /// Runtime shutdown cancelled non-durable process work.
+    #[error("process cancelled")]
+    Cancelled,
     /// Captured output exceeded an adapter limit.
     #[error("process output exceeded the configured limit")]
     OutputLimit,

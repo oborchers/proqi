@@ -1,24 +1,51 @@
 //! Direct, bounded child-process execution without a shell.
 
+mod owned_child;
+
 use std::{
     io::{Read, Write},
     process::{Child, Command, Stdio},
-    sync::mpsc::{self, Receiver, RecvTimeoutError},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+        mpsc::{self, Receiver, RecvTimeoutError},
+    },
     thread::{self, JoinHandle},
     time::{Duration, Instant},
 };
 
-#[cfg(unix)]
-use rustix::process::{Pid, Signal, kill_process_group};
-
 use crate::ports::environment::{ProcessError, ProcessOutput, ProcessRequest, ProcessRunner};
+
+use owned_child::OwnedChild;
 
 const MAX_CAPTURE_BYTES: u64 = 1024 * 1024;
 const TERMINATION_GRACE: Duration = Duration::from_millis(250);
 
 /// Operating-system process runner with bounded output and a hard deadline.
-#[derive(Clone, Copy, Debug, Default)]
-pub struct SystemProcessRunner;
+#[derive(Clone, Debug, Default)]
+pub struct SystemProcessRunner {
+    cancellation: CancellationFlag,
+}
+
+/// Shared, idempotent cancellation for adapter-owned process work.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct CancellationFlag(Arc<AtomicBool>);
+
+impl CancellationFlag {
+    pub(crate) fn cancel(&self) {
+        self.0.store(true, Ordering::Release);
+    }
+
+    fn is_cancelled(&self) -> bool {
+        self.0.load(Ordering::Acquire)
+    }
+}
+
+impl SystemProcessRunner {
+    pub(crate) fn cancellable(cancellation: CancellationFlag) -> Self {
+        Self { cancellation }
+    }
+}
 
 /// Unix process-image replacement after explicit caller-owned cleanup.
 #[derive(Clone, Copy, Debug, Default)]
@@ -58,6 +85,9 @@ fn resume_args(
 
 impl ProcessRunner for SystemProcessRunner {
     fn run(&mut self, request: ProcessRequest) -> Result<ProcessOutput, ProcessError> {
+        if self.cancellation.is_cancelled() {
+            return Err(ProcessError::Cancelled);
+        }
         let mut command = Command::new(request.program);
         command
             .args(request.args)
@@ -69,23 +99,22 @@ impl ProcessRunner for SystemProcessRunner {
             use std::os::unix::process::CommandExt as _;
             command.process_group(0);
         }
-        let mut child = command
+        let child = command
             .spawn()
             .map_err(|error| ProcessError::Io(error.to_string()))?;
-        #[cfg(unix)]
-        let process_group = Pid::from_child(&child);
-        let stdin = child
-            .stdin
-            .take()
-            .ok_or_else(|| ProcessError::Io("child standard input is unavailable".to_owned()))?;
-        let stdout = child
-            .stdout
-            .take()
-            .ok_or_else(|| ProcessError::Io("child standard output is unavailable".to_owned()))?;
-        let stderr = child
-            .stderr
-            .take()
-            .ok_or_else(|| ProcessError::Io("child standard error is unavailable".to_owned()))?;
+        let mut child = OwnedChild::new(child);
+        let stdin =
+            child.child_mut().stdin.take().ok_or_else(|| {
+                ProcessError::Io("child standard input is unavailable".to_owned())
+            })?;
+        let stdout =
+            child.child_mut().stdout.take().ok_or_else(|| {
+                ProcessError::Io("child standard output is unavailable".to_owned())
+            })?;
+        let stderr =
+            child.child_mut().stderr.take().ok_or_else(|| {
+                ProcessError::Io("child standard error is unavailable".to_owned())
+            })?;
         let stdout_reader = read_in_background(stdout);
         let stderr_reader = read_in_background(stderr);
         let stdin_writer = write_in_background(stdin, request.stdin);
@@ -93,12 +122,12 @@ impl ProcessRunner for SystemProcessRunner {
         let execution = collect_execution(
             &mut child,
             deadline,
+            &self.cancellation,
             stdin_writer,
             stdout_reader,
             stderr_reader,
-            #[cfg(unix)]
-            process_group,
         )?;
+        child.disarm();
         let exit_code = execution.exit_code;
         let stdout = execution.stdout;
         let stderr = execution.stderr;
@@ -183,8 +212,15 @@ fn read_bounded(reader: impl Read) -> std::io::Result<BoundedRead> {
     Ok(BoundedRead { bytes, exceeded })
 }
 
-fn wait_for_exit(child: &mut Child, deadline: Deadline) -> Result<Option<i32>, ProcessError> {
+fn wait_for_exit(
+    child: &mut Child,
+    deadline: Deadline,
+    cancellation: &CancellationFlag,
+) -> Result<Option<i32>, ProcessError> {
     loop {
+        if cancellation.is_cancelled() {
+            return Err(ProcessError::Cancelled);
+        }
         if let Some(status) = child
             .try_wait()
             .map_err(|error| ProcessError::Io(error.to_string()))?
@@ -205,25 +241,21 @@ struct ExecutionOutput {
 }
 
 fn collect_execution(
-    child: &mut Child,
+    child: &mut OwnedChild,
     deadline: Deadline,
+    cancellation: &CancellationFlag,
     mut stdin: Worker<()>,
     mut stdout: Worker<BoundedRead>,
     mut stderr: Worker<BoundedRead>,
-    #[cfg(unix)] process_group: Pid,
 ) -> Result<ExecutionOutput, ProcessError> {
-    let result = wait_for_exit(child, deadline).and_then(|exit_code| {
+    let result = wait_for_exit(child.child_mut(), deadline, cancellation).and_then(|exit_code| {
         receive_worker(&mut stdin, deadline, "child input writer")?;
         let output = receive_worker(&mut stdout, deadline, "child output reader")?;
         let errors = receive_worker(&mut stderr, deadline, "child error reader")?;
         Ok((exit_code, output, errors))
     });
     if result.is_err() {
-        terminate_tree(
-            child,
-            #[cfg(unix)]
-            process_group,
-        );
+        child.terminate();
     }
     let cleanup = Deadline::new(TERMINATION_GRACE);
     let joins = [
@@ -281,25 +313,6 @@ fn finish_worker<T>(worker: &mut Worker<T>, deadline: Deadline) -> Result<(), Pr
         .map_err(|_| ProcessError::Io("child I/O worker panicked".to_owned()))
 }
 
-fn terminate_tree(child: &mut Child, #[cfg(unix)] process_group: Pid) {
-    #[cfg(unix)]
-    let _terminated = kill_process_group(process_group, Signal::TERM);
-    #[cfg(not(unix))]
-    let _terminated = child.kill();
-    let grace = Deadline::new(TERMINATION_GRACE);
-    while grace.remaining().is_some() {
-        if child.try_wait().ok().flatten().is_some() {
-            break;
-        }
-        thread::sleep(Duration::from_millis(5));
-    }
-    #[cfg(unix)]
-    let _killed = kill_process_group(process_group, Signal::KILL);
-    #[cfg(not(unix))]
-    let _killed = child.kill();
-    let _reaped = child.wait();
-}
-
 #[cfg(test)]
 mod tests {
     use std::ffi::OsString;
@@ -330,7 +343,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn arguments_and_standard_input_are_not_shell_interpolated() {
-        let mut runner = SystemProcessRunner;
+        let mut runner = SystemProcessRunner::default();
         let output = runner
             .run(ProcessRequest {
                 program: OsString::from("/bin/cat"),
@@ -346,7 +359,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn deadline_terminates_a_slow_process() {
-        let mut runner = SystemProcessRunner;
+        let mut runner = SystemProcessRunner::default();
         let result = runner.run(ProcessRequest {
             program: OsString::from("/bin/sleep"),
             args: vec![OsString::from("2")],
@@ -358,9 +371,31 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn shared_cancellation_terminates_running_process_work() {
+        let cancellation = super::CancellationFlag::default();
+        let worker_cancellation = cancellation.clone();
+        let handle = std::thread::spawn(move || {
+            let mut runner = SystemProcessRunner::cancellable(worker_cancellation);
+            runner.run(ProcessRequest {
+                program: OsString::from("/bin/sleep"),
+                args: vec![OsString::from("30")],
+                stdin: None,
+                timeout: Duration::from_secs(30),
+            })
+        });
+        std::thread::sleep(Duration::from_millis(30));
+        let started = std::time::Instant::now();
+        cancellation.cancel();
+        let result = handle.join().expect("process runner thread");
+        assert_eq!(result, Err(ProcessError::Cancelled));
+        assert!(started.elapsed() < Duration::from_secs(1));
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn inherited_output_pipe_cannot_extend_the_deadline() {
         let started = std::time::Instant::now();
-        let mut runner = SystemProcessRunner;
+        let mut runner = SystemProcessRunner::default();
         let result = runner.run(ProcessRequest {
             program: OsString::from("/bin/sh"),
             args: vec![OsString::from("-c"), OsString::from("sleep 2 &")],
@@ -377,7 +412,7 @@ mod tests {
         let temporary = tempfile::tempdir().expect("temporary fixture");
         let pid_file = temporary.path().join("grandchild.pid");
         let script = "sleep 30 & child=$!; echo $child > \"$1\"; wait";
-        let mut runner = SystemProcessRunner;
+        let mut runner = SystemProcessRunner::default();
         let result = runner.run(ProcessRequest {
             program: OsString::from("/bin/sh"),
             args: vec![

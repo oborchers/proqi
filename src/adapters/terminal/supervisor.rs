@@ -1,6 +1,7 @@
 //! Bounded, shared shutdown timing for terminal worker lanes.
 
 use std::{
+    sync::{Arc, Mutex},
     thread::JoinHandle,
     time::{Duration, Instant},
 };
@@ -8,6 +9,19 @@ use std::{
 use super::TerminalError;
 
 pub(super) const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(2);
+
+#[derive(Clone, Default)]
+pub(super) struct ShutdownCoordinator(Arc<Mutex<Option<ShutdownDeadline>>>);
+
+impl ShutdownCoordinator {
+    pub(super) fn request(&self) -> ShutdownDeadline {
+        let mut deadline = self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        *deadline.get_or_insert_with(|| ShutdownDeadline::after(SHUTDOWN_TIMEOUT))
+    }
+}
 
 #[derive(Clone, Copy)]
 pub(super) struct ShutdownDeadline(Instant);
@@ -52,7 +66,15 @@ pub(super) fn join_before(
 mod tests {
     use std::time::{Duration, Instant};
 
-    use super::{ShutdownDeadline, join_before};
+    use super::{ShutdownCoordinator, ShutdownDeadline, join_before};
+
+    #[test]
+    fn repeated_shutdown_requests_share_the_original_deadline() {
+        let shutdown = ShutdownCoordinator::default();
+        let first = shutdown.request().instant();
+        std::thread::sleep(Duration::from_millis(2));
+        assert_eq!(shutdown.request().instant(), first);
+    }
 
     #[test]
     fn nonresponsive_worker_never_blocks_shutdown_past_the_deadline() {

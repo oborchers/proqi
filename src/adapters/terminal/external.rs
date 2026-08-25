@@ -9,7 +9,10 @@ use std::{
 
 use crate::{
     adapters::{
-        attachment::FileAttachmentStore, clipboard::PlatformClipboard, herdr::HerdrGateway,
+        attachment::FileAttachmentStore,
+        clipboard::PlatformClipboard,
+        herdr::HerdrGateway,
+        process::{CancellationFlag, SystemProcessRunner},
         recovery::FileRecoveryExporter,
     },
     application::{ClipboardIntent, Effect},
@@ -102,6 +105,7 @@ impl ExternalLane {
         recovery_directory: PathBuf,
         attachment_directory: PathBuf,
         presentation_source: String,
+        cancellation: CancellationFlag,
     ) -> Self {
         let (request_sender, request_receiver) = sync_channel(32);
         let (result_sender, result_receiver) = sync_channel(32);
@@ -112,6 +116,7 @@ impl ExternalLane {
                 recovery_directory,
                 attachment_directory,
                 presentation_source,
+                cancellation,
             );
         });
         Self {
@@ -223,11 +228,13 @@ fn external_loop(
     recovery_directory: PathBuf,
     attachment_directory: PathBuf,
     presentation_source: String,
+    cancellation: CancellationFlag,
 ) {
     let mut clipboard = PlatformClipboard::new();
     let mut recovery = FileRecoveryExporter::new(recovery_directory);
     let mut attachments = FileAttachmentStore::new(attachment_directory);
-    let mut agents = HerdrGateway::from_environment(presentation_source);
+    let runner = SystemProcessRunner::cancellable(cancellation);
+    let mut agents = HerdrGateway::from_environment_with_runner(presentation_source, runner);
     while let Ok(request) = requests.recv() {
         let outcome = match request {
             ExternalRequest::DiscoverAgents => discover_agents(&mut agents),

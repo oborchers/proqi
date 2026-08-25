@@ -9,7 +9,7 @@ use std::{
 use crate::{
     adapters::{
         control::LocalUpdateControlClient,
-        process::SystemProcessRunner,
+        process::{CancellationFlag, SystemProcessRunner},
         runtime::{FileRuntimeCoordinator, SystemClock, SystemIdGenerator},
         update::{
             FileUpdateStateStore, GitHubReleaseSource, HomebrewFormulaInstaller,
@@ -68,6 +68,7 @@ impl UpdateLane {
         cache_directory: PathBuf,
         installation: Option<Installation>,
         coordinator: FileRuntimeCoordinator,
+        cancellation: CancellationFlag,
     ) -> Self {
         let (request_sender, request_receiver) = sync_channel(4);
         let (result_sender, result_receiver) = sync_channel(4);
@@ -78,6 +79,7 @@ impl UpdateLane {
                 &cache_directory,
                 installation.as_ref(),
                 &coordinator,
+                cancellation,
             );
         });
         Self {
@@ -147,12 +149,14 @@ fn update_loop(
     cache_directory: &Path,
     installation: Option<&Installation>,
     coordinator: &FileRuntimeCoordinator,
+    cancellation: CancellationFlag,
 ) {
     let Ok(state) = FileUpdateStateStore::new(cache_directory) else {
         while requests.recv().is_ok() {}
         return;
     };
     let mut prompt_lease: Option<Box<dyn UpdateLease>> = None;
+    let mut process = SystemProcessRunner::cancellable(cancellation);
     while let Ok(request) = requests.recv() {
         let Some(installation) = installation else {
             continue;
@@ -168,7 +172,7 @@ fn update_loop(
             .ok()
             .map(UpdateResult::Notice),
             UpdateRequest::Act(intent) => {
-                let action = act(&state, installation, coordinator, intent);
+                let action = act(&state, installation, coordinator, intent, &mut process);
                 prompt_lease = None;
                 Some(UpdateResult::Action(action))
             }
@@ -224,6 +228,7 @@ fn act(
     installation: &Installation,
     coordinator: &FileRuntimeCoordinator,
     intent: UpdateIntent,
+    process: &mut SystemProcessRunner,
 ) -> Result<UpdateActionResult, UpdateError> {
     match intent {
         UpdateIntent::Dismiss(version) => {
@@ -235,7 +240,9 @@ fn act(
             Ok(UpdateActionResult::Skipped)
         }
         UpdateIntent::ViewInstructions(version) => Ok(UpdateActionResult::Instructions(version)),
-        UpdateIntent::Install(version) => install(state, installation, coordinator, &version),
+        UpdateIntent::Install(version) => {
+            install(state, installation, coordinator, &version, process)
+        }
     }
 }
 
@@ -244,6 +251,7 @@ fn install(
     installation: &Installation,
     coordinator: &FileRuntimeCoordinator,
     version: &StableVersion,
+    process: &mut SystemProcessRunner,
 ) -> Result<UpdateActionResult, UpdateError> {
     if installation.kind != InstallationKind::HomebrewFormula {
         return Err(UpdateError::Installation(
@@ -254,8 +262,7 @@ fn install(
         .restart_executable
         .clone()
         .ok_or_else(|| UpdateError::Installation("active Homebrew path is absent".to_owned()))?;
-    let mut process = SystemProcessRunner;
-    let mut installer = HomebrewFormulaInstaller::new(&mut process, active);
+    let mut installer = HomebrewFormulaInstaller::new(process, active);
     let mut gateway = LocalUpdateControlClient::new(SystemIdGenerator);
     let now = SystemClock.now();
     let deadline = Timestamp::from_millis(now.as_millis().saturating_add(UPDATE_DEADLINE_MILLIS));

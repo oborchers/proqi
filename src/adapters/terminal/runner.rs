@@ -5,6 +5,7 @@ mod durability;
 mod external_results;
 mod fairness;
 mod heartbeat;
+mod owned_lanes;
 mod owner_control;
 mod update_results;
 
@@ -49,6 +50,7 @@ use super::{
 
 use durability::{drain_persistence, enqueue_effects};
 use heartbeat::PaneHeartbeat;
+use owned_lanes::OwnedLanes;
 
 /// Concrete runtime pieces retained for one interactive session.
 pub(crate) struct TerminalResources {
@@ -87,41 +89,7 @@ pub(super) struct WorkerLanes<'a> {
     pub(super) update: &'a super::update_lane::UpdateLane,
     pub(super) termination: &'a TerminationGuard,
     pub(super) instance: &'a InstanceInfo,
-}
-
-struct OwnedLanes {
-    control: Option<ControlServer>,
-    input: InputLane,
-    persistence: PersistenceLane,
-    external: ExternalLane,
-    update: super::update_lane::UpdateLane,
-}
-
-impl OwnedLanes {
-    fn request_stop(&mut self) {
-        self.input.request_stop();
-        if let Some(control) = self.control.as_ref() {
-            control.request_stop();
-        }
-        self.persistence.request_stop();
-        self.external.request_stop();
-        self.update.request_stop();
-    }
-
-    fn stop(mut self) -> [Result<(), TerminalError>; 5] {
-        self.request_stop();
-        let deadline =
-            super::supervisor::ShutdownDeadline::after(super::supervisor::SHUTDOWN_TIMEOUT);
-        [
-            self.input.stop(deadline),
-            self.persistence.stop(deadline),
-            self.external.stop(deadline),
-            self.update.stop(deadline),
-            self.control.take().map_or(Ok(()), |server| {
-                server.stop_before(deadline.instant()).map_err(Into::into)
-            }),
-        ]
-    }
+    pub(super) cancellation: &'a crate::adapters::process::CancellationFlag,
 }
 
 #[derive(Default)]
@@ -155,6 +123,10 @@ pub(super) struct PendingControl {
 /// # Errors
 ///
 /// Returns a typed setup, render, input, persistence, worker, or restoration failure.
+#[expect(
+    clippy::too_many_lines,
+    reason = "runtime composition keeps ownership and cleanup order visible"
+)]
 pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalError> {
     require_interactive()?;
     let TerminalResources {
@@ -192,6 +164,7 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
         installation.clone(),
     );
     let mut pane_heartbeat = None;
+    let shutdown = super::supervisor::ShutdownCoordinator::default();
     let check_for_updates = settings.check_for_updates;
     let mut app = BoardApp::with_settings(state, settings, RopeEditorFactory);
     if let Some(warning) = control_warning {
@@ -205,6 +178,7 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
         update: &owned.update,
         termination: &termination,
         instance: session_lease.info(),
+        cancellation: &owned.cancellation,
     };
     let run_result = owned.update.check(check_for_updates).and_then(|()| {
         drive(
@@ -215,6 +189,7 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
             clock,
             theme,
             &mut pane_heartbeat,
+            &shutdown,
         )
     });
     let requested_restart = app.update_restart().cloned();
@@ -222,10 +197,11 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
         let _cleared = heartbeat.clear(&owned.external);
     }
     diagnostics::begin_shutdown(&mut owned);
+    let shutdown_deadline = shutdown.request();
     drop(terminal);
     let restoration_result = guard.finish();
     drop((session_lease, schema_lease));
-    let lane_results = owned.stop();
+    let lane_results = owned.stop(shutdown_deadline);
     finish_runtime(
         run_result,
         lane_results.into_iter().chain([restoration_result]),
@@ -253,6 +229,7 @@ fn spawn_lanes(
     cache_directory: PathBuf,
     installation: Option<crate::domain::Installation>,
 ) -> OwnedLanes {
+    let cancellation = crate::adapters::process::CancellationFlag::default();
     OwnedLanes {
         control,
         input: InputLane::spawn(),
@@ -261,8 +238,15 @@ fn spawn_lanes(
             recovery_directory,
             attachment_directory,
             presentation_source,
+            cancellation.clone(),
         ),
-        update: super::update_lane::UpdateLane::spawn(cache_directory, installation, coordinator),
+        update: super::update_lane::UpdateLane::spawn(
+            cache_directory,
+            installation,
+            coordinator,
+            cancellation.clone(),
+        ),
+        cancellation,
     }
 }
 
@@ -327,7 +311,7 @@ fn replace_after_cleanup(
             "updated executable does not belong to this Homebrew installation".to_owned(),
         ));
     }
-    let mut runner = crate::adapters::process::SystemProcessRunner;
+    let mut runner = crate::adapters::process::SystemProcessRunner::default();
     crate::adapters::update::verify_installed_version(&mut runner, &detected.executable, expected)
         .map_err(|error| TerminalError::Io(error.to_string()))?;
     crate::adapters::process::SystemProcessReplacer
@@ -376,6 +360,11 @@ fn enter_terminal(
     Ok((theme, guard))
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    clippy::too_many_lines,
+    reason = "the terminal event loop keeps its injected runtime boundaries explicit"
+)]
 fn drive(
     terminal: &mut Terminal<CrosstermBackend<Stdout>>,
     app: &mut BoardApp,
@@ -384,6 +373,7 @@ fn drive(
     clock: SystemClock,
     theme: Theme,
     pane_heartbeat: &mut Option<PaneHeartbeat>,
+    shutdown: &super::supervisor::ShutdownCoordinator,
 ) -> Result<(), TerminalError> {
     let mut pending = PendingWork::default();
     let mut edit_generation = app.edit_generation();
@@ -395,6 +385,8 @@ fn drive(
     loop {
         if lanes.termination.requested() && !termination_seen {
             termination_seen = true;
+            let _deadline = shutdown.request();
+            lanes.cancellation.cancel();
             let effects = app.handle(UiInput::Key(UiKey::Quit), ids, &clock);
             enqueue_effects(app, lanes, effects, &mut pending)?;
         }
@@ -427,10 +419,17 @@ fn drive(
             })?;
             redraw = false;
         }
-        if app.quit && pending.is_empty() {
-            return Ok(());
-        }
         if app.quit {
+            let deadline = shutdown.request();
+            lanes.cancellation.cancel();
+            if pending.is_empty() {
+                return Ok(());
+            }
+            if deadline.expired() {
+                return Err(TerminalError::Worker(
+                    "runtime shutdown exceeded its shared deadline",
+                ));
+            }
             thread::sleep(Duration::from_millis(5));
             continue;
         }

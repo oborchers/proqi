@@ -57,14 +57,20 @@ impl HerdrGateway<crate::adapters::process::SystemProcessRunner> {
     /// Compose the installed Herdr binary and inherited managed-pane context.
     #[must_use]
     pub fn from_environment(presentation_source: String) -> Self {
+        Self::from_environment_with_runner(
+            presentation_source,
+            crate::adapters::process::SystemProcessRunner::default(),
+        )
+    }
+
+    pub(crate) fn from_environment_with_runner(
+        presentation_source: String,
+        runner: crate::adapters::process::SystemProcessRunner,
+    ) -> Self {
         let managed = std::env::var_os("HERDR_ENV").is_some_and(|value| value == "1")
             && std::env::var_os("PROQI_DISABLE_HERDR").is_none();
-        Self::new(
-            OsString::from("herdr"),
-            crate::adapters::process::SystemProcessRunner,
-            managed,
-        )
-        .with_presentation_source(presentation_source)
+        Self::new(OsString::from("herdr"), runner, managed)
+            .with_presentation_source(presentation_source)
     }
 }
 
@@ -169,6 +175,7 @@ impl<R: ProcessRunner> HerdrGateway<R> {
 fn process_error(error: ProcessError) -> AgentError {
     match error {
         ProcessError::TimedOut => AgentError::TimedOut,
+        ProcessError::Cancelled => AgentError::Process("process cancelled".to_owned()),
         ProcessError::Io(message) => AgentError::Process(message),
         ProcessError::OutputLimit => AgentError::Malformed("provider output exceeded limit".into()),
     }

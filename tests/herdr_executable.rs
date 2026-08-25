@@ -22,7 +22,7 @@ fn recorded_fake_executable_proves_direct_semantic_cli_contract() {
 
     let mut gateway = HerdrGateway::new(
         OsString::from(executable.as_os_str()),
-        SystemProcessRunner,
+        SystemProcessRunner::default(),
         true,
     );
     let capabilities = gateway.capabilities().expect("capabilities");
