@@ -248,6 +248,34 @@ and never scrapes the TUI or reads every scratchpad automatically. During the
 pre-1.0 series, agents must discover the installed CLI contract instead of
 assuming compatibility with another Proqi version.
 
+Install the skill globally with the canonical `skills` CLI after installing the
+`proqi` binary on `PATH`:
+
+```shell
+npx skills add oborchers/proqi --skill proqi -g
+```
+
+To install explicitly for both Codex and Claude Code:
+
+```shell
+npx skills add oborchers/proqi --skill proqi -g --agent codex --agent claude-code
+```
+
+The skill does not install the Proqi executable. Verify both parts with
+`proqi --json capabilities` before asking an agent to use it.
+
+For local failure investigation, install the separate, read-only-first debug
+skill:
+
+```shell
+npx skills add oborchers/proqi --skill proqi-debug -g
+```
+
+[`skills/proqi-debug/SKILL.md`](skills/proqi-debug/SKILL.md) explains the
+content-redacted diagnostics bundle, the SQLite durability model, safe failure
+classification, and the approval-gated process for opening a GitHub Issue. It
+never authorizes direct writes to the live database or automatic uploads.
+
 ## Updates and privacy
 
 Interactive release builds check the public stable GitHub Release endpoint in

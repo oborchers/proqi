@@ -1,0 +1,6 @@
+interface:
+  display_name: "Proqi Debug"
+  short_description: "Diagnose a reported Proqi failure"
+  default_prompt: "Use $proqi-debug to diagnose this Proqi failure safely."
+policy:
+  allow_implicit_invocation: false
