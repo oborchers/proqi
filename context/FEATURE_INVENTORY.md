@@ -1,7 +1,7 @@
 # Proqi feature inventory
 
-Status: `v0.1.0` release-candidate baseline, recorded 2026-08-25 before the
-final OSS verification pass.
+Status: public `v0.1.0` baseline, verified 2026-08-25 after the final OSS
+release and installation pass.
 
 This inventory connects observable behavior to implementation and test
 evidence. `Shipped` means a user can reach the behavior in the current native
@@ -92,7 +92,7 @@ must not imply that the behavior exists.
 | Failure convergence | Shipped | Failed preflight aborts before installation. Installer and coordinator failures release ready peers. Partial restart is reported without rolling back successful peers. | `src/application/update_coordination/tests.rs`, `src/adapters/terminal/runner/update_results.rs` |
 | Standalone update | Shipped instructions only | Archive installs receive stable release instructions and resume normally after user-managed replacement. The binary does not replace itself. | `src/adapters/update/installation.rs`, `README.md` |
 | Package contract | Shipped locally | The isolated archive smoke covers version, help, completions, JSON creation, exact Unicode, reopen, active forwarding, migration backup, newer-schema refusal, terminal restoration, fake update installation, and same-PTY replacement on macOS. | `tests/package_contract.rs`, `tests/package_contract/pty.rs` |
-| Release artifacts | Prepared, not published | Three native archives, checksums, SPDX JSON SBOMs, attestations, notices, completions, and a generated formula are defined. No `v0.1.0` release exists yet. | `.github/workflows/release.yml`, `xtask/src/release.rs`, `xtask/src/homebrew.rs` |
+| Release artifacts | Shipped | The public `v0.1.0` release contains three native archives, checksums, SPDX JSON SBOMs, attestations, notices, completions, and the generated Homebrew formula. | `.github/workflows/release.yml`, `xtask/src/release.rs`, `xtask/src/homebrew.rs`, public `v0.1.0` release |
 
 ## Security, privacy, and operational boundaries
 
@@ -105,7 +105,7 @@ must not imply that the behavior exists.
 | Dependency policy | Shipped gate | Advisory, license, source, and duplicate checks are owned by `cargo xtask audit`; unsafe Rust is forbidden. | `deny.toml`, `Cargo.toml`, `src/lib.rs` |
 | Source and architecture policy | Shipped gate | First-party source files are limited to 500 lines, complexity is bounded, ignored artifacts are excluded, and inward dependency rules are mechanically checked. | `xtask/src/source_limits.rs`, `xtask/src/policy.rs` |
 
-## Remaining release gaps
+## Public release verification
 
 The final visual pass now has 15 reviewed complete-screen snapshots. They cover
 the board, command and help overlays, both session-browser layouts, update
@@ -120,24 +120,21 @@ plan, and the non-publishing release rehearsal. Actionlint passes. Zizmor
 reports no findings in offline mode. The generated formula passes Homebrew
 style inspection under its real `Formula/proqi.rb` name.
 
-Publication still requires evidence or external configuration in these areas:
+Hosted CI passes on Linux and macOS after the repository became public. The
+exact tagged release commit passed its CI and non-publishing release rehearsal.
+The public release contains the expected archives, checksums, SPDX SBOMs,
+attestations, generated formula, and reviewed notes.
 
-1. The macOS and Linux hosted CI result has not been rerun since the repository
-   became public and the support matrix was narrowed.
-2. Release attestations exist only as workflow definitions. They cannot be
-   verified until a hosted rehearsal produces them.
-3. The Homebrew formula generator, unit tests, local rehearsal, and style check
-   pass, but Homebrew 6 requires a tapped formula name for strict audit. Strict
-   audit, installation, upgrade, and `brew test` against immutable public
-   release assets have not run.
-4. Repository About metadata, topics, social preview, private vulnerability
-   reporting, branch rules, tag rules, and the protected release environment
-   still require explicit reviewed application.
+The public `oborchers/homebrew-tap` formula passes Homebrew style, strict audit,
+all-platform parsing, reinstall, and `brew test`. The installed binary reports
+`proqi 0.1.0` and returns the current versioned capability envelope. The tap's
+hosted Linux and macOS workflow also passes.
+
+Repository metadata, topics, private vulnerability reporting, stable-tag
+protection, and `main` protection are active. Both rulesets give Oliver's
+individual GitHub user an `always` bypass. The release workflow publishes after
+an allowed stable tag is created, without a redundant environment approval.
 
 The README, CLI help, Cargo metadata, release notes, and skill have been checked
 against this matrix. Optional aggregate adoption reporting remains deliberately
 unimplemented and is not a release blocker.
-
-This file will be refreshed after those gaps are resolved. The refreshed
-version must distinguish locally verified behavior, hosted CI evidence, and
-publication actions that still require approval.
