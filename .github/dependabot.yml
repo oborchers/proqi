@@ -1,16 +1,18 @@
 version: 2
+
+multi-ecosystem-groups:
+  all-dependencies:
+    schedule:
+      interval: weekly
+    labels: [dependencies]
+
 updates:
   - package-ecosystem: cargo
     directory: /
-    schedule:
-      interval: weekly
-    labels: [dependencies, rust]
-    groups:
-      rust-patch-updates:
-        update-types: [patch]
+    patterns: ["*"]
+    multi-ecosystem-group: all-dependencies
 
   - package-ecosystem: github-actions
     directory: /
-    schedule:
-      interval: weekly
-    labels: [dependencies, github-actions]
+    patterns: ["*"]
+    multi-ecosystem-group: all-dependencies

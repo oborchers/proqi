@@ -13,10 +13,10 @@ arboard = { version = "=3.6.1", default-features = false, features = ["image-dat
 base64 = "0.22.1"
 clap = { version = "4.5.47", features = ["derive"] }
 clap_complete = "4.6.9"
-crossterm = "0.28.1"
+crossterm = "0.29.0"
 directories = "6.0.0"
 fs4 = "1.1.0"
-interprocess = "=2.4.2"
+interprocess = "=2.4.3"
 ignore = "0.4.33"
 linkify = "0.11.0"
 png = "=0.18.1"
@@ -24,19 +24,19 @@ ropey = "1.6.1"
 semver = { version = "=1.0.28", features = ["serde"] }
 sha2 = "=0.10.9"
 ratatui-core = { version = "=0.1.2", default-features = false, features = ["std", "layout-cache", "underline-color"] }
-ratatui-crossterm = { version = "=0.1.2", default-features = false, features = ["crossterm_0_28", "underline-color"] }
+ratatui-crossterm = { version = "=0.1.2", default-features = false, features = ["crossterm_0_29", "underline-color"] }
 ratatui-widgets = { version = "=0.3.2", default-features = false }
-rusqlite = { version = "0.37.0", features = ["backup", "bundled"] }
+rusqlite = { version = "0.40.2", features = ["backup", "bundled"] }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.143"
 signal-hook = "0.3.18"
 thiserror = "2.0.16"
 terminal-colorsaurus = "=1.0.3"
-toml = "0.9.8"
+toml = "1.1.4"
 tracing = { version = "0.1.44", default-features = false, features = ["std"] }
 tracing-subscriber = { version = "0.3.23", default-features = false, features = ["fmt"] }
 unicode-segmentation = "1.12.0"
-unicode-width = "=0.2.0"
+unicode-width = "=0.2.2"
 ureq = { version = "=3.4.0", default-features = false, features = ["rustls"] }
 uuid = { version = "1.18.1", features = ["serde", "v7"] }
 
