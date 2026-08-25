@@ -80,6 +80,7 @@ fn plan_output(root: &Path, requested_tag: Option<&str>) -> Result<Vec<u8>, Stri
     let version = workspace_version(root)?;
     let tag = requested_tag.map_or_else(|| format!("v{version}"), str::to_owned);
     validate_tag(&tag, &version)?;
+    validate_release_notes(root, &tag)?;
     let output = Command::new("dist")
         .args(["plan", "--tag", &tag, "--output-format", "json"])
         .current_dir(root)
@@ -92,6 +93,20 @@ fn plan_output(root: &Path, requested_tag: Option<&str>) -> Result<Vec<u8>, Stri
             "cargo-dist plan exited with {}: {}",
             output.status,
             String::from_utf8_lossy(&output.stderr)
+        ))
+    }
+}
+
+fn validate_release_notes(root: &Path, tag: &str) -> Result<(), String> {
+    let path = root.join(".github/release-notes").join(format!("{tag}.md"));
+    let metadata = fs::metadata(&path)
+        .map_err(|error| format!("release notes {} are unavailable: {error}", path.display()))?;
+    if metadata.is_file() && metadata.len() > 0 {
+        Ok(())
+    } else {
+        Err(format!(
+            "release notes {} must be a nonempty file",
+            path.display()
         ))
     }
 }
@@ -250,7 +265,7 @@ fn filename(path: &Path) -> Result<String, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{validate_tag, workspace_version};
+    use super::{validate_release_notes, validate_tag, workspace_version};
     use semver::Version;
     use std::path::Path;
 
@@ -270,5 +285,7 @@ mod tests {
             .parent()
             .expect("xtask manifest has a workspace parent");
         assert_eq!(workspace_version(root), Ok(Version::new(0, 1, 0)));
+        assert!(validate_release_notes(root, "v0.1.0").is_ok());
+        assert!(validate_release_notes(root, "v9.9.9").is_err());
     }
 }

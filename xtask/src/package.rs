@@ -23,7 +23,8 @@ pub(super) fn run(root: &Path) -> Result<(), String> {
             "--locked",
             "--workspace",
             "--all-features",
-            "--release",
+            "--profile",
+            "dist",
         ],
     )?;
     let temporary = tempfile::Builder::new()
@@ -41,7 +42,7 @@ pub(super) fn run(root: &Path) -> Result<(), String> {
 
 fn install_binary(root: &Path, temporary: &Path) -> Result<PathBuf, String> {
     let executable = executable_name();
-    let source = root.join("target/release").join(executable);
+    let source = root.join("target/dist").join(executable);
     let bin = temporary.join("install/bin");
     fs::create_dir_all(&bin).map_err(|error| format!("create install prefix: {error}"))?;
     let installed = bin.join(executable);

@@ -15,6 +15,7 @@ use crossterm::event::{
     self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent,
     MouseEventKind,
 };
+use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 
 use crate::ports::editor::CursorMovement;
 use crate::ui::{PointerButton, PointerInput, PointerKind, UiInput, UiKey};
@@ -47,6 +48,59 @@ trait EventSource: Send {
 }
 
 struct CrosstermEventSource;
+
+pub(crate) struct KeyInspection {
+    pub(crate) raw_event: String,
+    pub(crate) matched_action: Option<String>,
+}
+
+pub(crate) fn inspect_keypress() -> Result<KeyInspection, TerminalError> {
+    eprintln!("Press one key to inspect its terminal event and Proqi action.");
+    let guard = RawInputGuard::enter()?;
+    let key = loop {
+        match event::read()? {
+            Event::Key(key) if matches!(key.kind, KeyEventKind::Press | KeyEventKind::Repeat) => {
+                break key;
+            }
+            Event::FocusGained
+            | Event::FocusLost
+            | Event::Key(_)
+            | Event::Mouse(_)
+            | Event::Paste(_)
+            | Event::Resize(_, _) => {}
+        }
+    };
+    guard.finish()?;
+    Ok(KeyInspection {
+        raw_event: format!("{key:?}"),
+        matched_action: translate_key(key).map(|action| format!("{action:?}")),
+    })
+}
+
+struct RawInputGuard {
+    active: bool,
+}
+
+impl RawInputGuard {
+    fn enter() -> io::Result<Self> {
+        enable_raw_mode()?;
+        Ok(Self { active: true })
+    }
+
+    fn finish(mut self) -> io::Result<()> {
+        disable_raw_mode()?;
+        self.active = false;
+        Ok(())
+    }
+}
+
+impl Drop for RawInputGuard {
+    fn drop(&mut self) {
+        if self.active {
+            let _restored = disable_raw_mode();
+        }
+    }
+}
 
 impl EventSource for CrosstermEventSource {
     fn poll(&mut self, timeout: Duration) -> io::Result<bool> {

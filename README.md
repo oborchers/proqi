@@ -275,22 +275,34 @@ npx skills add oborchers/proqi --skill proqi-debug -g
 content-redacted diagnostics bundle, the SQLite durability model, safe failure
 classification, and the approval-gated process for opening a GitHub Issue. It
 never authorizes direct writes to the live database or automatic uploads.
+When a terminal sends an unexpected shortcut, inspect one key without opening
+SQLite or a Proqi session:
+
+```shell
+proqi diagnostics keypress
+```
+
+The command reports Crossterm's raw key event and the normalized Proqi action.
 
 ## Updates and privacy
 
-Interactive release builds check the public stable GitHub Release endpoint in
-the background at most once every 24 hours for one installation. Debug builds,
-source installations, JSON commands, skills, and other noninteractive commands
-do not perform implicit checks. Disable checks globally in `config.toml`:
+Interactive release builds check the installable version for their verified
+channel in the background at most once every 24 hours for one installation.
+Standalone archives use the public stable GitHub Release endpoint. Homebrew
+installations use the public tap formula, so Proqi never advertises a release
+before the tap can install it. Debug builds, source installations, JSON
+commands, skills, and other noninteractive commands do not perform implicit
+checks. Disable checks globally in `config.toml`:
 
 ```toml
 check_for_updates = false
 ```
 
-The request sends only GitHub's release media type and API version, an optional
-safe ETag, and a bounded `proqi/<version>` User-Agent. It sends no thoughts,
-session identifiers, paths, clipboard data, terminal content, installation ID,
-or runtime state. Run an explicit bounded check with:
+The release API request sends GitHub's release media type and API version. The
+tap request reads only the public formula. Both may send an optional safe ETag
+and a bounded `proqi/<version>` User-Agent. Neither sends thoughts, session
+identifiers, paths, clipboard data, terminal content, installation ID, or
+runtime state. Run an explicit bounded check with:
 
 ```shell
 proqi update check --json

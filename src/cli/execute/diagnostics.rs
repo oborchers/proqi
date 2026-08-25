@@ -40,7 +40,24 @@ pub(super) fn execute(
 ) -> Result<Outcome, CliError> {
     match command {
         DiagnosticsCommand::Collect { output } => collect(paths, cwd, output.clone()),
+        DiagnosticsCommand::Keypress => inspect_keypress(),
     }
+}
+
+fn inspect_keypress() -> Result<Outcome, CliError> {
+    crate::adapters::terminal::require_interactive()?;
+    let inspection = crate::adapters::terminal::inspect_keypress()?;
+    Ok(Outcome {
+        data: json!({
+            "raw_event": inspection.raw_event,
+            "matched_action": inspection.matched_action,
+        }),
+        human: format!(
+            "Raw event: {}\nMatched action: {}",
+            inspection.raw_event,
+            inspection.matched_action.as_deref().unwrap_or("none")
+        ),
+    })
 }
 
 fn collect(paths: &AppPaths, cwd: &Path, output: Option<PathBuf>) -> Result<Outcome, CliError> {

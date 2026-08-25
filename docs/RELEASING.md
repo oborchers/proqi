@@ -1,7 +1,7 @@
 # Releasing Proqi
 
-This runbook describes the reviewed `v0.1.0` release boundary. It does not grant
-publication authority by itself.
+This runbook describes the release boundary. It does not grant publication
+authority by itself.
 
 ## Release invariants
 
@@ -15,7 +15,8 @@ publication authority by itself.
   and SBOM attestation.
 - The release workflow has no dependency cache and every Action is pinned by
   full commit SHA.
-- A protected `release` environment separates draft creation from publication.
+- A `release` environment records and restricts the publication job without a
+  manual approval gate.
 - The Homebrew formula is generated only from the verified release checksums.
 
 ## Local release candidate gate
@@ -79,8 +80,8 @@ Manual and API-managed settings must also:
    the repository owner to push directly.
 4. Protect `v*` tags from deletion, non-fast-forward changes, and unauthorized
    creation.
-5. Configure the `release` environment with Oliver as the required reviewer and
-   prevent administrator bypass for publication.
+5. Configure the `release` environment without required reviewers. Restrict its
+   deployment branch and tag policy to the repository's stable release tags.
 6. Upload `assets/proqi-social-preview.png` through the repository social
    preview setting.
 7. Verify the default branch, visibility, MIT detection, contribution guide,
@@ -89,8 +90,7 @@ Manual and API-managed settings must also:
 
 ## CI rehearsal and release
 
-The repository is public, but keep the ordinary CI workflow disabled while
-local release work is in progress. After the readiness audit:
+After the readiness audit:
 
 1. Re-enable CI and push the consolidated `main` branch once.
 2. Wait for `Required CI result` to pass on Linux and macOS.
@@ -100,10 +100,9 @@ local release work is in progress. After the readiness audit:
    exact hosted matrix and attestations.
 5. Inspect all three archives, checksums, SBOMs, attestations, and generated
    Homebrew formula from the successful run.
-6. Create and push the annotated `v0.1.0` tag only after approval.
-7. Review the draft GitHub Release and approve the protected `release`
-   environment.
-8. Verify the published Release and every downloaded asset before updating the
+6. Create and push the annotated stable tag. A valid tag publishes without a
+   separate human approval gate.
+7. Verify the published Release and every downloaded asset before updating the
    tap.
 
 The release workflow never cancels an in-progress tag release. Any failed

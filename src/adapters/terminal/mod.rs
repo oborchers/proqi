@@ -18,6 +18,7 @@ use thiserror::Error;
 use crate::ports::{control::ControlError, runtime::RuntimeError, store::StoreError};
 
 pub(crate) use browser::pick_session;
+pub(crate) use input::inspect_keypress;
 pub(crate) use runner::{TerminalResources, require_interactive, run};
 pub(crate) use settings::load_settings;
 

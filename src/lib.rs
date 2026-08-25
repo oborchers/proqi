@@ -1,6 +1,10 @@
 //! Proqi application library.
 //!
 //! The library owns product behavior. The `proqi` binary is a thin adapter.
+//!
+//! ```
+//! assert!(proqi::domain::StableVersion::parse("0.1.0").is_ok());
+//! ```
 
 #![forbid(unsafe_code)]
 #![cfg_attr(

@@ -47,6 +47,7 @@ fn execute() -> Result<(), String> {
         "source-limits" => source_limits::check(&root),
         "architecture" => policy::check(&root),
         "assets" => public_assets::check(&root),
+        "clean-worktree" => clean_worktree(&root),
         "check" => check(&root),
         "test" => test(&root),
         "test-pty" => run(
@@ -102,6 +103,7 @@ fn print_help() {
          \n  cargo xtask source-limits\
          \n  cargo xtask architecture\
          \n  cargo xtask assets\
+         \n  cargo xtask clean-worktree\
          \n  cargo xtask check\
          \n  cargo xtask test\
          \n  cargo xtask test-pty\
@@ -131,6 +133,7 @@ fn setup(root: &Path) -> Result<(), String> {
         ("cargo", &["llvm-cov", "--version"][..]),
         ("cargo", &["deny", "--version"][..]),
         ("cargo", &["audit", "--version"][..]),
+        ("cargo", &["shear", "--version"][..]),
     ] {
         run(root, program, arguments.iter().copied())?;
     }
@@ -166,6 +169,25 @@ fn check_whitespace(root: &Path) -> Result<(), String> {
     run(root, "git", ["diff", "--check"])?;
     run(root, "git", ["diff", "--cached", "--check"])?;
     run(root, "git", ["show", "--check", "--format=", "HEAD"])
+}
+
+fn clean_worktree(root: &Path) -> Result<(), String> {
+    let output = Command::new("git")
+        .args(["status", "--porcelain", "--untracked-files=all"])
+        .current_dir(root)
+        .output()
+        .map_err(|error| format!("start git status: {error}"))?;
+    if !output.status.success() {
+        return Err(format!("git status exited with {}", output.status));
+    }
+    let changes = String::from_utf8(output.stdout)
+        .map_err(|error| format!("git status returned non-UTF-8 output: {error}"))?;
+    changes.is_empty().then_some(()).ok_or_else(|| {
+        format!(
+            "quality commands changed the checkout:\n{}",
+            changes.trim_end()
+        )
+    })
 }
 
 fn check_docs(root: &Path) -> Result<(), String> {
@@ -250,7 +272,8 @@ fn coverage(root: &Path) -> Result<(), String> {
 
 fn audit(root: &Path) -> Result<(), String> {
     run(root, "cargo", ["deny", "check"])?;
-    run(root, "cargo", ["audit", "--deny", "warnings"])
+    run(root, "cargo", ["audit", "--deny", "warnings"])?;
+    run(root, "cargo", ["shear", "--deny-warnings"])
 }
 
 fn run<I, S>(cwd: &Path, program: impl AsRef<OsStr>, arguments: I) -> Result<(), String>

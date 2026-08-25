@@ -295,6 +295,10 @@ mod active_control;
 mod path_drop;
 
 #[cfg(target_os = "macos")]
+#[path = "pty/key_inspector.rs"]
+mod key_inspector;
+
+#[cfg(target_os = "macos")]
 #[path = "pty/fairness.rs"]
 mod fairness;
 

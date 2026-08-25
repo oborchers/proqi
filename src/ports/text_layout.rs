@@ -127,11 +127,18 @@ fn segment_end(graphemes: &[(usize, &str)], start: usize, width: usize) -> (usiz
         }
         cells += grapheme_cells;
         end += 1;
-        if graphemes[end - 1].1.chars().all(char::is_whitespace) {
+        if breakable_whitespace(graphemes[end - 1].1) {
             whitespace_break = Some((end, cells));
         }
     }
     (end, cells)
+}
+
+fn breakable_whitespace(grapheme: &str) -> bool {
+    grapheme.chars().all(char::is_whitespace)
+        && !grapheme
+            .chars()
+            .any(|character| matches!(character, '\u{00a0}' | '\u{202f}'))
 }
 
 fn grapheme_width(grapheme: &str, column: usize) -> usize {
@@ -181,18 +188,23 @@ fn empty_row(logical_line: usize, byte: usize, grapheme: usize) -> WrappedRow {
 pub(crate) fn logical_lines(content: &str) -> Vec<LogicalLine> {
     let mut lines = Vec::new();
     let mut start = 0;
-    for (newline, _) in content.match_indices('\n') {
-        let content_end = if newline > start && content.as_bytes()[newline - 1] == b'\r' {
-            newline - 1
-        } else {
-            newline
-        };
+    for (separator, character) in content
+        .char_indices()
+        .filter(|(_, character)| matches!(character, '\n' | '\u{2028}' | '\u{2029}'))
+    {
+        let content_end =
+            if character == '\n' && separator > start && content.as_bytes()[separator - 1] == b'\r'
+            {
+                separator - 1
+            } else {
+                separator
+            };
         lines.push(LogicalLine {
             start,
             content_end,
-            end: newline + 1,
+            end: separator + character.len_utf8(),
         });
-        start = newline + 1;
+        start = separator + character.len_utf8();
     }
     lines.push(LogicalLine {
         start,
@@ -228,6 +240,34 @@ mod tests {
         assert_eq!(rows[1].visual.text, "界e\u{301}");
         assert_eq!(rows[2].visual.text, "界");
         assert_eq!(rows[1].visual.start_grapheme, 2);
+    }
+
+    #[test]
+    fn nonbreaking_spaces_do_not_become_wrap_boundaries() {
+        let rows = wrap_rows("alpha\u{a0}beta gamma", 9);
+        let visible = rows
+            .iter()
+            .map(|row| row.visual.text.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(visible, ["alpha\u{a0}bet", "a gamma"]);
+
+        let narrow = wrap_rows("one\u{202f}two three", 7);
+        assert_eq!(narrow[0].visual.text, "one\u{202f}two");
+    }
+
+    #[test]
+    fn mandatory_unicode_separators_create_distinct_logical_rows() {
+        let content = "one\u{2028}two\u{2029}three";
+        let rows = wrap_rows(content, 80);
+        let visible = rows
+            .iter()
+            .map(|row| row.visual.text.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(visible, ["one", "two", "three"]);
+        assert_eq!(
+            position_for_byte(content, "one\u{2028}".len()),
+            TextPosition::new(1, 0)
+        );
     }
 
     #[test]

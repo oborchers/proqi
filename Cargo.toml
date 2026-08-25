@@ -126,6 +126,7 @@ insta = "1.43.2"
 portable-pty = "0.9.0"
 proptest = "1.7.0"
 tempfile = "3.27.0"
+vt100 = "=0.16.2"
 
 [lints]
 workspace = true

@@ -82,4 +82,14 @@ mod tests {
         assert!(Cli::try_parse_from(["proqi", "completions", "elvish"]).is_err());
         assert!(Cli::try_parse_from(["proqi", "completions", "unknown-shell"]).is_err());
     }
+
+    #[test]
+    fn keypress_inspector_is_an_explicit_diagnostic_command() {
+        let parsed =
+            Cli::try_parse_from(["proqi", "diagnostics", "keypress"]).expect("keypress arguments");
+        assert!(matches!(
+            parsed.command,
+            Some(super::args::Command::Diagnostics(_))
+        ));
+    }
 }

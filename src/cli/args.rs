@@ -41,7 +41,7 @@ pub(super) enum Command {
         /// Shell whose completion syntax should be generated.
         shell: CompletionShell,
     },
-    /// Check the canonical GitHub stable release on demand.
+    /// Check the verified installation channel on demand.
     Update(UpdateArgs),
     /// Collect a private, content-redacted local support bundle.
     Diagnostics(DiagnosticsArgs),
@@ -67,6 +67,8 @@ pub(super) enum DiagnosticsCommand {
         #[arg(long, value_name = "PATH")]
         output: Option<PathBuf>,
     },
+    /// Show one raw terminal key event and its normalized Proqi action.
+    Keypress,
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
@@ -94,7 +96,7 @@ pub(super) struct UpdateArgs {
 
 #[derive(Clone, Copy, Debug, Subcommand)]
 pub(super) enum UpdateCommand {
-    /// Contact GitHub and report the latest stable release.
+    /// Report the latest stable version installable through this channel.
     Check,
 }
 
