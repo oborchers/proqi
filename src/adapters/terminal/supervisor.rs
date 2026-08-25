@@ -19,6 +19,39 @@ const EXITED: u8 = 2;
 const UNEXPECTED_EXIT: u8 = 3;
 const PANICKED: u8 = 4;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum WorkerRole {
+    Persistence,
+    External,
+    Update,
+}
+
+impl WorkerRole {
+    pub(super) const fn as_str(self) -> &'static str {
+        match self {
+            Self::Persistence => "persistence",
+            Self::External => "external",
+            Self::Update => "update",
+        }
+    }
+
+    const fn panicked_message(self) -> &'static str {
+        match self {
+            Self::Persistence => "persistence lane panicked",
+            Self::External => "external lane panicked",
+            Self::Update => "update lane panicked",
+        }
+    }
+
+    const fn exited_message(self) -> &'static str {
+        match self {
+            Self::Persistence => "persistence lane exited unexpectedly",
+            Self::External => "external lane exited unexpectedly",
+            Self::Update => "update lane exited unexpectedly",
+        }
+    }
+}
+
 #[derive(Clone, Default)]
 pub(super) struct WorkerLifecycle(Arc<AtomicU8>);
 
@@ -29,11 +62,13 @@ impl WorkerLifecycle {
                 .compare_exchange(RUNNING, STOPPING, Ordering::AcqRel, Ordering::Acquire);
     }
 
-    pub(super) fn run(&self, role: &'static str, work: impl FnOnce()) {
+    pub(super) fn run(&self, role: WorkerRole, work: impl FnOnce()) {
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(work));
         if outcome.is_err() {
             crate::adapters::diagnostics::record(
-                crate::adapters::diagnostics::SafeEvent::RuntimePanicked { role },
+                crate::adapters::diagnostics::SafeEvent::RuntimePanicked {
+                    role: role.as_str(),
+                },
             );
             self.0.store(PANICKED, Ordering::Release);
             return;
@@ -46,20 +81,10 @@ impl WorkerLifecycle {
         self.0.store(next, Ordering::Release);
     }
 
-    pub(super) fn failure(&self, role: &'static str) -> Option<TerminalError> {
+    pub(super) fn failure(&self, role: WorkerRole) -> Option<TerminalError> {
         match self.0.load(Ordering::Acquire) {
-            PANICKED => Some(TerminalError::Worker(match role {
-                "persistence" => "persistence lane panicked",
-                "external" => "external lane panicked",
-                "update" => "update lane panicked",
-                _ => "worker lane panicked",
-            })),
-            UNEXPECTED_EXIT => Some(TerminalError::Worker(match role {
-                "persistence" => "persistence lane exited unexpectedly",
-                "external" => "external lane exited unexpectedly",
-                "update" => "update lane exited unexpectedly",
-                _ => "worker lane exited unexpectedly",
-            })),
+            PANICKED => Some(TerminalError::Worker(role.panicked_message())),
+            UNEXPECTED_EXIT => Some(TerminalError::Worker(role.exited_message())),
             _ => None,
         }
     }
@@ -136,27 +161,29 @@ pub(super) fn join_before(
 mod tests {
     use std::time::{Duration, Instant};
 
-    use super::{ShutdownCoordinator, ShutdownDeadline, WorkerLifecycle, join_before};
+    use super::{ShutdownCoordinator, ShutdownDeadline, WorkerLifecycle, WorkerRole, join_before};
 
     #[test]
     fn worker_exit_is_clean_only_after_stop_was_requested() {
         let unexpected = WorkerLifecycle::default();
-        unexpected.run("update", || {});
-        assert!(unexpected.failure("update").is_some());
+        unexpected.run(WorkerRole::Update, || {});
+        assert!(unexpected.failure(WorkerRole::Update).is_some());
 
         let clean = WorkerLifecycle::default();
         clean.request_stop();
-        clean.run("update", || {});
-        assert!(clean.failure("update").is_none());
+        clean.run(WorkerRole::Update, || {});
+        assert!(clean.failure(WorkerRole::Update).is_none());
         assert!(clean.stopped_cleanly());
     }
 
     #[test]
     fn worker_panic_is_observable_without_propagating_the_payload() {
         let lifecycle = WorkerLifecycle::default();
-        lifecycle.run("external", || panic!("secret panic payload"));
+        lifecycle.run(WorkerRole::External, || panic!("secret panic payload"));
         assert_eq!(
-            lifecycle.failure("external").map(|error| error.to_string()),
+            lifecycle
+                .failure(WorkerRole::External)
+                .map(|error| error.to_string()),
             Some("terminal worker failed: external lane panicked".to_owned())
         );
     }

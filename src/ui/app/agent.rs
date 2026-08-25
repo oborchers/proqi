@@ -388,15 +388,7 @@ fn submission_outcome(
 }
 
 fn agent_error_code(error: &AgentError) -> &'static str {
-    match error {
-        AgentError::Unavailable(_) => "unavailable",
-        AgentError::Unsupported(_) => "unsupported",
-        AgentError::Malformed(_) => "malformed",
-        AgentError::Ambiguous(_) => "ambiguous",
-        AgentError::TimedOut => "timed_out",
-        AgentError::Rejected { .. } => "rejected",
-        AgentError::Process(_) => "process_failed",
-    }
+    error.stable_code().as_str()
 }
 
 fn digest(bytes: &[u8]) -> [u8; 32] {
@@ -420,12 +412,7 @@ fn target_fingerprint(target: &AgentTarget) -> [u8; 32] {
 }
 
 fn direction_name(direction: Direction) -> &'static str {
-    match direction {
-        Direction::Up => "up",
-        Direction::Right => "right",
-        Direction::Down => "down",
-        Direction::Left => "left",
-    }
+    direction.as_str()
 }
 
 fn discovery_status(target_count: usize) -> String {

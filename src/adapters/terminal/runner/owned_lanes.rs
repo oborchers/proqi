@@ -3,6 +3,7 @@
 use crate::adapters::{control::ControlServer, process::CancellationFlag};
 
 use super::{ExternalLane, InputLane, PersistenceLane, TerminalError};
+use crate::adapters::terminal::runner::finish::CleanupStage;
 
 pub(super) struct OwnedLanes {
     pub(super) control: Option<ControlServer>,
@@ -37,13 +38,13 @@ impl OwnedLanes {
     pub(super) fn stop_workers(
         mut self,
         deadline: crate::adapters::terminal::supervisor::ShutdownDeadline,
-    ) -> [(&'static str, Result<(), TerminalError>); 4] {
+    ) -> [(CleanupStage, Result<(), TerminalError>); 4] {
         self.request_stop();
         [
-            ("input", self.input.stop(deadline)),
-            ("persistence", self.persistence.stop(deadline)),
-            ("external", self.external.stop(deadline)),
-            ("update", self.update.stop(deadline)),
+            (CleanupStage::Input, self.input.stop(deadline)),
+            (CleanupStage::Persistence, self.persistence.stop(deadline)),
+            (CleanupStage::External, self.external.stop(deadline)),
+            (CleanupStage::Update, self.update.stop(deadline)),
         ]
     }
 }

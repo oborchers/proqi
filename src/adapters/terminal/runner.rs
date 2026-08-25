@@ -50,6 +50,7 @@ use super::{
 };
 
 use durability::{drain_persistence, enqueue_effects};
+use finish::CleanupStage::{Control, TerminalRestoration};
 use heartbeat::PaneHeartbeat;
 use owned_lanes::OwnedLanes;
 
@@ -203,8 +204,8 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
     finish::runtime(
         run_result,
         lane_results.into_iter().chain([
-            ("control", control_result),
-            ("terminal_restoration", restoration_result),
+            (Control, control_result),
+            (TerminalRestoration, restoration_result),
         ]),
         shutdown_deadline.elapsed(),
     )?;

@@ -163,7 +163,7 @@ pub fn record(event: SafeEvent<'_>) {
             event = "submission_transition",
             submission_id = %submission_id,
             state,
-            direction = direction_name(direction),
+            direction = direction.as_str(),
             provider,
             outcome
         ),
@@ -177,14 +177,5 @@ pub fn record(event: SafeEvent<'_>) {
             state,
             outcome
         ),
-    }
-}
-
-const fn direction_name(direction: Direction) -> &'static str {
-    match direction {
-        Direction::Up => "up",
-        Direction::Right => "right",
-        Direction::Down => "down",
-        Direction::Left => "left",
     }
 }

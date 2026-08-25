@@ -2,22 +2,49 @@
 
 use crate::adapters::terminal::TerminalError;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::adapters::terminal) enum CleanupStage {
+    Input,
+    Persistence,
+    External,
+    Update,
+    Control,
+    TerminalRestoration,
+    Runtime,
+}
+
+impl CleanupStage {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::Input => "input",
+            Self::Persistence => "persistence",
+            Self::External => "external",
+            Self::Update => "update",
+            Self::Control => "control",
+            Self::TerminalRestoration => "terminal_restoration",
+            Self::Runtime => "runtime",
+        }
+    }
+}
+
 pub(in crate::adapters::terminal) fn runtime(
     run_result: Result<(), TerminalError>,
-    cleanup_results: impl IntoIterator<Item = (&'static str, Result<(), TerminalError>)>,
+    cleanup_results: impl IntoIterator<Item = (CleanupStage, Result<(), TerminalError>)>,
     elapsed: std::time::Duration,
 ) -> Result<(), TerminalError> {
     let mut failures = cleanup_results
         .into_iter()
         .filter_map(|(stage, result)| result.err().map(|error| (stage, error)))
         .map(|(stage, error)| {
+            let stage = stage.as_str();
             super::diagnostics::cleanup_failed(stage);
             format!("{stage}: {error}")
         })
         .collect::<Vec<_>>();
     if let Err(error) = run_result {
-        super::diagnostics::cleanup_failed("runtime");
-        failures.insert(0, format!("runtime: {error}"));
+        let stage = CleanupStage::Runtime.as_str();
+        super::diagnostics::cleanup_failed(stage);
+        failures.insert(0, format!("{stage}: {error}"));
     }
     super::diagnostics::shutdown_finished(failures.len(), elapsed);
     if failures.is_empty() {

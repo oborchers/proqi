@@ -20,7 +20,7 @@ impl PersistenceLane {
         let lifecycle = WorkerLifecycle::default();
         let worker_lifecycle = lifecycle.clone();
         let handle = thread::spawn(move || {
-            worker_lifecycle.run("persistence", || {
+            worker_lifecycle.run(super::super::supervisor::WorkerRole::Persistence, || {
                 persistence_loop(store, None, &request_receiver, &result_sender);
             });
         });
@@ -44,7 +44,7 @@ impl PersistenceLane {
         let lifecycle = WorkerLifecycle::default();
         let worker_lifecycle = lifecycle.clone();
         let handle = thread::spawn(move || {
-            worker_lifecycle.run("persistence", || {
+            worker_lifecycle.run(super::super::supervisor::WorkerRole::Persistence, || {
                 persistence_loop(store, Some(runtime), &request_receiver, &result_sender);
             });
         });
@@ -160,7 +160,8 @@ impl PersistenceLane {
     }
 
     pub(in crate::adapters::terminal) fn worker_failure(&self) -> Option<TerminalError> {
-        self.lifecycle.failure("persistence")
+        self.lifecycle
+            .failure(super::super::supervisor::WorkerRole::Persistence)
     }
 
     pub(in crate::adapters::terminal) fn stopped_cleanly(&self) -> bool {

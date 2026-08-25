@@ -71,6 +71,17 @@ pub enum SubmissionDisposition {
     RemoveAfterSuccess,
 }
 
+impl SubmissionDisposition {
+    /// Stable representation used by persistence and diagnostics.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Keep => "keep",
+            Self::RemoveAfterSuccess => "remove_after_success",
+        }
+    }
+}
+
 /// Negotiated delivery behaviors. Unsupported actions stay absent from the UI.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct AgentDeliveryCapabilities {
@@ -103,6 +114,55 @@ pub enum AgentState {
     Blocked,
     /// Harness could not determine the current state.
     Unknown,
+}
+
+impl AgentState {
+    /// Stable representation used by integrations and persistence.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Idle => "idle",
+            Self::Working => "working",
+            Self::Done => "done",
+            Self::Blocked => "blocked",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
+/// Stable content-free classification for an agent integration failure.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AgentFailureCode {
+    /// Integration is not available in the current environment.
+    Unavailable,
+    /// Integration cannot provide the requested semantic capability.
+    Unsupported,
+    /// Provider response violated the negotiated contract.
+    Malformed,
+    /// Provider returned more than one matching target.
+    Ambiguous,
+    /// A bounded provider operation timed out.
+    TimedOut,
+    /// Provider explicitly rejected the operation.
+    Rejected,
+    /// Provider process execution failed.
+    ProcessFailed,
+}
+
+impl AgentFailureCode {
+    /// Stable machine-readable representation.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Unavailable => "unavailable",
+            Self::Unsupported => "unsupported",
+            Self::Malformed => "malformed",
+            Self::Ambiguous => "ambiguous",
+            Self::TimedOut => "timed_out",
+            Self::Rejected => "rejected",
+            Self::ProcessFailed => "process_failed",
+        }
+    }
 }
 
 /// One independently verified adjacent agent.
@@ -187,6 +247,22 @@ pub enum AgentError {
     /// Child-process execution failed.
     #[error("agent integration process failed: {0}")]
     Process(String),
+}
+
+impl AgentError {
+    /// Return the stable content-free failure classification.
+    #[must_use]
+    pub const fn stable_code(&self) -> AgentFailureCode {
+        match self {
+            Self::Unavailable(_) => AgentFailureCode::Unavailable,
+            Self::Unsupported(_) => AgentFailureCode::Unsupported,
+            Self::Malformed(_) => AgentFailureCode::Malformed,
+            Self::Ambiguous(_) => AgentFailureCode::Ambiguous,
+            Self::TimedOut => AgentFailureCode::TimedOut,
+            Self::Rejected { .. } => AgentFailureCode::Rejected,
+            Self::Process(_) => AgentFailureCode::ProcessFailed,
+        }
+    }
 }
 
 /// Optional provider-independent adjacent-agent boundary.

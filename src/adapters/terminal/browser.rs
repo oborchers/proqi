@@ -45,8 +45,11 @@ pub(crate) fn pick_session(
     let cleanup = super::runner::finish::runtime(
         Ok(()),
         [
-            ("input", input_result),
-            ("terminal_restoration", restoration_result),
+            (super::runner::finish::CleanupStage::Input, input_result),
+            (
+                super::runner::finish::CleanupStage::TerminalRestoration,
+                restoration_result,
+            ),
         ],
         shutdown.elapsed(),
     );

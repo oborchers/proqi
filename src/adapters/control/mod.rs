@@ -3,6 +3,7 @@
 mod client;
 #[cfg(all(test, unix))]
 mod protocol_tests;
+mod rejection;
 #[cfg(all(test, unix))]
 mod shutdown_tests;
 mod transport;
@@ -22,10 +23,11 @@ use std::{
 };
 
 use crate::ports::control::{
-    CONTROL_PROTOCOL_VERSION, ControlError, ControlRequest, ControlResponse, ControlResult,
-    MIN_CONTROL_PROTOCOL_VERSION,
+    CONTROL_PROTOCOL_VERSION, ControlError, ControlRejectionCode, ControlRequest, ControlResponse,
+    ControlResult, MIN_CONTROL_PROTOCOL_VERSION,
 };
 
+use rejection::rejected;
 use transport::{LocalListener, accept, read_request, write_response};
 
 const RESPONSE_TIMEOUT: Duration = Duration::from_secs(2);
@@ -170,7 +172,7 @@ fn handle_stream(
     if !(MIN_CONTROL_PROTOCOL_VERSION..=CONTROL_PROTOCOL_VERSION).contains(&request.protocol) {
         let response = rejected(
             &request,
-            "protocol_mismatch",
+            ControlRejectionCode::ProtocolMismatch,
             "unsupported control protocol",
         );
         let _written = write_response(stream, &response, stop);
@@ -179,7 +181,7 @@ fn handle_stream(
     if request.protocol < request.mutation.minimum_protocol() {
         let response = rejected(
             &request,
-            "protocol_mismatch",
+            ControlRejectionCode::ProtocolMismatch,
             "request requires a newer control protocol",
         );
         let _written = write_response(stream, &response, stop);
@@ -191,7 +193,7 @@ fn handle_stream(
         } else {
             rejected(
                 &request,
-                "request_id_conflict",
+                ControlRejectionCode::RequestIdConflict,
                 "request identity was reused",
             )
         };
@@ -204,14 +206,18 @@ fn handle_stream(
         response: response_sender,
     };
     let response = if sender.try_send(envelope).is_err() {
-        rejected(&request, "owner_busy", "owner control lane is full")
+        rejected(
+            &request,
+            ControlRejectionCode::OwnerBusy,
+            "owner control lane is full",
+        )
     } else {
         response_receiver
             .recv_timeout(RESPONSE_TIMEOUT)
             .unwrap_or_else(|_| {
                 rejected(
                     &request,
-                    "outcome_unknown",
+                    ControlRejectionCode::OutcomeUnknown,
                     "owner did not answer before the deadline; retry with the same operation id",
                 )
             })
@@ -238,17 +244,6 @@ fn cache_response(
     }
     order.push_back(request.request_id);
     cache.insert(request.request_id, (request, response));
-}
-
-fn rejected(request: &ControlRequest, code: &str, message: &str) -> ControlResponse {
-    ControlResponse {
-        protocol: request.protocol,
-        request_id: request.request_id,
-        result: ControlResult::Rejected {
-            code: code.to_owned(),
-            message: message.to_owned(),
-        },
-    }
 }
 
 #[cfg(all(test, unix))]

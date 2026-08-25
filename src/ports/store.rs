@@ -37,6 +37,21 @@ pub enum SubmissionAttemptState {
     OutcomeUnknown,
 }
 
+impl SubmissionAttemptState {
+    /// Stable representation used by SQLite and diagnostics.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Prepared => "prepared",
+            Self::Sending => "sending",
+            Self::Accepted => "accepted",
+            Self::Failed => "failed",
+            Self::Cancelled => "cancelled",
+            Self::OutcomeUnknown => "outcome_unknown",
+        }
+    }
+}
+
 /// Content-redacted durable submission record.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SubmissionAttempt {

@@ -3,9 +3,9 @@
 use rusqlite::{Transaction, params};
 
 use crate::{
-    domain::{Direction, SessionId, SubmissionId, Timestamp},
+    domain::{SessionId, SubmissionId, Timestamp},
     ports::{
-        agent::{AgentState, SubmissionDisposition},
+        agent::AgentState,
         store::{StoreError, SubmissionAttempt, SubmissionAttemptState, SubmissionOutcome},
     },
 };
@@ -29,12 +29,12 @@ pub(super) fn prepare(
                 attempt.thought_id.database_bytes().as_slice(),
                 attempt.source_digest.as_slice(),
                 i64::try_from(attempt.source_sequence.get()).unwrap_or(i64::MAX),
-                disposition_name(attempt.disposition),
-                direction_name(attempt.direction),
+                attempt.disposition.as_str(),
+                attempt.direction.as_str(),
                 attempt.provider,
                 i64::from(attempt.protocol),
                 attempt.target_fingerprint.as_slice(),
-                state_name(attempt.pre_state),
+                attempt.pre_state.as_str(),
                 attempt.prepared_at.as_millis(),
             ],
         )
@@ -71,8 +71,8 @@ pub(super) fn finish(
              WHERE id = ?1 AND state = 'sending'",
             params![
                 id.database_bytes().as_slice(),
-                attempt_state_name(outcome.state),
-                outcome.post_state.map(state_name),
+                outcome.state.as_str(),
+                outcome.post_state.map(AgentState::as_str),
                 outcome.error_code,
                 outcome
                     .deletion_operation_id
@@ -135,42 +135,5 @@ fn require_one(changed: usize, id: SubmissionId) -> Result<(), StoreError> {
         Err(StoreError::Conflict(format!(
             "submission {id} is not in the expected state"
         )))
-    }
-}
-
-const fn disposition_name(value: SubmissionDisposition) -> &'static str {
-    match value {
-        SubmissionDisposition::Keep => "keep",
-        SubmissionDisposition::RemoveAfterSuccess => "remove_after_success",
-    }
-}
-
-const fn direction_name(value: Direction) -> &'static str {
-    match value {
-        Direction::Up => "up",
-        Direction::Right => "right",
-        Direction::Down => "down",
-        Direction::Left => "left",
-    }
-}
-
-const fn state_name(value: AgentState) -> &'static str {
-    match value {
-        AgentState::Idle => "idle",
-        AgentState::Working => "working",
-        AgentState::Done => "done",
-        AgentState::Blocked => "blocked",
-        AgentState::Unknown => "unknown",
-    }
-}
-
-const fn attempt_state_name(value: SubmissionAttemptState) -> &'static str {
-    match value {
-        SubmissionAttemptState::Prepared => "prepared",
-        SubmissionAttemptState::Sending => "sending",
-        SubmissionAttemptState::Accepted => "accepted",
-        SubmissionAttemptState::Failed => "failed",
-        SubmissionAttemptState::Cancelled => "cancelled",
-        SubmissionAttemptState::OutcomeUnknown => "outcome_unknown",
     }
 }

@@ -309,10 +309,5 @@ const fn directions() -> [Direction; 4] {
 }
 
 pub(super) const fn direction_name(direction: Direction) -> &'static str {
-    match direction {
-        Direction::Up => "up",
-        Direction::Right => "right",
-        Direction::Down => "down",
-        Direction::Left => "left",
-    }
+    direction.as_str()
 }

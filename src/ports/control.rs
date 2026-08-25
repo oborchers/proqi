@@ -17,6 +17,56 @@ pub const MIN_CONTROL_PROTOCOL_VERSION: u32 = 1;
 /// Maximum encoded request or response, including framing newline.
 pub const MAX_CONTROL_MESSAGE_BYTES: usize = 1_048_576;
 
+/// Stable rejection codes emitted by the local owner-control protocol.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ControlRejectionCode {
+    /// Client and owner cannot negotiate a protocol version.
+    ProtocolMismatch,
+    /// One request identity was reused with a different payload.
+    RequestIdConflict,
+    /// Owner cannot admit another request without exceeding its bound.
+    OwnerBusy,
+    /// The external caller cannot know whether the operation completed.
+    OutcomeUnknown,
+    /// The active owner has begun shutting down.
+    OwnerShuttingDown,
+    /// The request addresses a different active session.
+    WrongSession,
+    /// A request reached a lane that cannot represent it.
+    InvalidControlRequest,
+    /// Another update already owns the preparation barrier.
+    AnotherUpdateIsPreparing,
+    /// Update release does not match the active operation.
+    UpdateOperationMismatch,
+    /// A durable operation identity was reused with a different mutation.
+    IdempotencyConflict,
+    /// The requested mutation did not produce a durable change.
+    NoDurableMutation,
+    /// The durable storage operation failed.
+    StorageFailed,
+}
+
+impl ControlRejectionCode {
+    /// Stable machine-readable representation.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::ProtocolMismatch => "protocol_mismatch",
+            Self::RequestIdConflict => "request_id_conflict",
+            Self::OwnerBusy => "owner_busy",
+            Self::OutcomeUnknown => "outcome_unknown",
+            Self::OwnerShuttingDown => "owner_shutting_down",
+            Self::WrongSession => "wrong_session",
+            Self::InvalidControlRequest => "invalid_control_request",
+            Self::AnotherUpdateIsPreparing => "another_update_is_preparing",
+            Self::UpdateOperationMismatch => "update_operation_mismatch",
+            Self::IdempotencyConflict => "idempotency_conflict",
+            Self::NoDurableMutation => "no_durable_mutation",
+            Self::StorageFailed => "storage_failed",
+        }
+    }
+}
+
 /// One mutation routed to the process owning a session reducer.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "mutation")]

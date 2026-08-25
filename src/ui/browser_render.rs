@@ -206,12 +206,7 @@ fn integration_lines(item: &super::SessionBrowserItem) -> (String, String) {
     item.hit.integration_context.as_ref().map_or_else(
         || ("integration: none".to_owned(), "agent: none".to_owned()),
         |context| {
-            let direction = match context.direction {
-                crate::domain::Direction::Up => "up",
-                crate::domain::Direction::Right => "right",
-                crate::domain::Direction::Down => "down",
-                crate::domain::Direction::Left => "left",
-            };
+            let direction = context.direction.as_str();
             (
                 format!("integration: {} / {direction}", context.provider),
                 format!("agent: {} ({})", context.agent_name, context.agent_kind),

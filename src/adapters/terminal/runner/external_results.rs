@@ -106,15 +106,7 @@ fn complete(
 }
 
 const fn agent_error_code(error: &crate::ports::agent::AgentError) -> &'static str {
-    match error {
-        crate::ports::agent::AgentError::Unavailable(_) => "unavailable",
-        crate::ports::agent::AgentError::Unsupported(_) => "unsupported",
-        crate::ports::agent::AgentError::Malformed(_) => "malformed",
-        crate::ports::agent::AgentError::Ambiguous(_) => "ambiguous",
-        crate::ports::agent::AgentError::TimedOut => "timed_out",
-        crate::ports::agent::AgentError::Rejected { .. } => "rejected",
-        crate::ports::agent::AgentError::Process(_) => "process_failed",
-    }
+    error.stable_code().as_str()
 }
 
 fn publish_discovered_identity(

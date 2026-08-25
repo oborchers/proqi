@@ -90,6 +90,19 @@ pub enum Direction {
     Left,
 }
 
+impl Direction {
+    /// Stable lowercase representation used at external and durable boundaries.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Up => "up",
+            Self::Right => "right",
+            Self::Down => "down",
+            Self::Left => "left",
+        }
+    }
+}
+
 /// A scratchpad session.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Session {

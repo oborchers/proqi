@@ -76,7 +76,7 @@ impl UpdateLane {
         let lifecycle = WorkerLifecycle::default();
         let worker_lifecycle = lifecycle.clone();
         let handle = thread::spawn(move || {
-            worker_lifecycle.run("update", || {
+            worker_lifecycle.run(super::supervisor::WorkerRole::Update, || {
                 update_loop(
                     &request_receiver,
                     &result_sender,
@@ -121,7 +121,8 @@ impl UpdateLane {
     }
 
     pub(super) fn worker_failure(&self) -> Option<TerminalError> {
-        self.lifecycle.failure("update")
+        self.lifecycle
+            .failure(super::supervisor::WorkerRole::Update)
     }
 
     pub(super) fn stopped_cleanly(&self) -> bool {

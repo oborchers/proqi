@@ -113,7 +113,7 @@ impl ExternalLane {
         let lifecycle = WorkerLifecycle::default();
         let worker_lifecycle = lifecycle.clone();
         let handle = thread::spawn(move || {
-            worker_lifecycle.run("external", || {
+            worker_lifecycle.run(super::supervisor::WorkerRole::External, || {
                 external_loop(
                     &request_receiver,
                     &result_sender,
@@ -200,7 +200,8 @@ impl ExternalLane {
     }
 
     pub(super) fn worker_failure(&self) -> Option<TerminalError> {
-        self.lifecycle.failure("external")
+        self.lifecycle
+            .failure(super::supervisor::WorkerRole::External)
     }
 
     pub(super) fn stopped_cleanly(&self) -> bool {

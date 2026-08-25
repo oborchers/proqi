@@ -7,7 +7,7 @@ use crate::{
     application::{ControlReplay, Effect, match_control_replay},
     domain::{RequestId, ThoughtId},
     ports::{
-        control::{ControlMutation, ControlResult, ControlUpdateReceipt},
+        control::{ControlMutation, ControlRejectionCode, ControlResult, ControlUpdateReceipt},
         environment::Clock as _,
         store::StoredOperationRequest,
         update::{UpdatePrepareReply, UpdateRestartReply},
@@ -56,7 +56,7 @@ fn queue_lookup(
 ) -> Result<bool, TerminalError> {
     if app.quit {
         envelope.respond(ControlResult::Rejected {
-            code: "owner_shutting_down".to_owned(),
+            code: ControlRejectionCode::OwnerShuttingDown.as_str().to_owned(),
             message: "active owner is shutting down; retry after the session becomes resumable"
                 .to_owned(),
         });
@@ -64,7 +64,7 @@ fn queue_lookup(
     }
     if envelope.request.session_id != app.state.board.session.id {
         envelope.respond(ControlResult::Rejected {
-            code: "wrong_session".to_owned(),
+            code: ControlRejectionCode::WrongSession.as_str().to_owned(),
             message: "request does not address the active owner session".to_owned(),
         });
         return Ok(false);
@@ -82,7 +82,9 @@ fn queue_lookup(
     let request_id = envelope.request.request_id;
     let Some(operation_id) = envelope.request.mutation.durable_operation_id() else {
         envelope.respond(ControlResult::Rejected {
-            code: "invalid_control_request".to_owned(),
+            code: ControlRejectionCode::InvalidControlRequest
+                .as_str()
+                .to_owned(),
             message: "update request reached the durable mutation lane".to_owned(),
         });
         return Ok(false);
@@ -93,7 +95,7 @@ fn queue_lookup(
             pending.control_lookups.insert(request_id, envelope);
         }
         Err(error) => envelope.respond(ControlResult::Rejected {
-            code: "owner_busy".to_owned(),
+            code: ControlRejectionCode::OwnerBusy.as_str().to_owned(),
             message: error.to_string(),
         }),
     }
@@ -166,7 +168,9 @@ fn queue_update_prepare(
         envelope.respond(ControlResult::Update(ControlUpdateReceipt::Prepared(
             UpdatePrepareReply::Blocked {
                 instance_id: lanes.instance.instance_id,
-                code: "another_update_is_preparing".to_owned(),
+                code: ControlRejectionCode::AnotherUpdateIsPreparing
+                    .as_str()
+                    .to_owned(),
             },
         )));
         return Ok(false);
@@ -237,7 +241,9 @@ fn respond_update_release(
         }));
     } else {
         envelope.respond(ControlResult::Rejected {
-            code: "update_operation_mismatch".to_owned(),
+            code: ControlRejectionCode::UpdateOperationMismatch
+                .as_str()
+                .to_owned(),
             message: "participant is not waiting for that update".to_owned(),
         });
     }
@@ -280,7 +286,9 @@ fn respond_to_replay(envelope: ControlEnvelope, existing: &StoredOperationReques
     ) {
         ControlReplay::Accepted(receipt) => ControlResult::Accepted(receipt),
         ControlReplay::Conflict => ControlResult::Rejected {
-            code: "idempotency_conflict".to_owned(),
+            code: ControlRejectionCode::IdempotencyConflict
+                .as_str()
+                .to_owned(),
             message: "operation identity belongs to another request".to_owned(),
         },
     };
@@ -317,7 +325,7 @@ fn queue_effect(
 ) -> Result<bool, TerminalError> {
     let [effect] = effects else {
         envelope.respond(ControlResult::Rejected {
-            code: "no_durable_mutation".to_owned(),
+            code: ControlRejectionCode::NoDurableMutation.as_str().to_owned(),
             message: "request produced no durable mutation".to_owned(),
         });
         return Ok(false);
@@ -331,7 +339,7 @@ fn queue_effect(
     if let Err(error) = lanes.persistence.commit(batch) {
         app.acknowledge_persistence(sequence, false);
         envelope.respond(ControlResult::Rejected {
-            code: "storage_failed".to_owned(),
+            code: ControlRejectionCode::StorageFailed.as_str().to_owned(),
             message: error.to_string(),
         });
         return Ok(true);
