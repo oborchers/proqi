@@ -456,6 +456,8 @@ fn owner_is_ready(product: &InstalledProduct, session: &str) -> bool {
             .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
             .is_some_and(|metadata| {
                 metadata["session_id"] == session
+                    && metadata["control_protocol"].as_u64()
+                        == Some(u64::from(proqi::ports::control::CONTROL_PROTOCOL_VERSION))
                     && metadata["control_endpoint"]
                         .as_str()
                         .is_some_and(|endpoint| std::path::Path::new(endpoint).exists())
