@@ -51,6 +51,23 @@ cognitive_complexity = "warn"
 excessive_nesting = "warn"
 module_name_repetitions = "allow"
 
+[profile.dist]
+inherits = "release"
+lto = "thin"
+
+[workspace.metadata.dist]
+allow-dirty = ["ci"]
+cargo-dist-version = "0.32.0"
+ci = ["github"]
+installers = []
+source-tarball = false
+targets = [
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+    "x86_64-unknown-linux-gnu",
+]
+unix-archive = ".tar.gz"
+
 [package]
 name = "proqi"
 version.workspace = true
@@ -61,6 +78,10 @@ repository = "https://github.com/oborchers/proqi"
 readme = "README.md"
 license.workspace = true
 publish = false
+
+[package.metadata.dist]
+all-features = true
+dist = true
 
 [dependencies]
 arboard.workspace = true

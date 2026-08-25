@@ -14,6 +14,7 @@ const INSTALL_MARKER: &[u8] =
     br#"{"schema_version":1,"product":"proqi","kind":"standalone_archive"}"#;
 
 pub(super) fn run(root: &Path) -> Result<(), String> {
+    generate_notices(root)?;
     super::run(
         root,
         "cargo",
@@ -83,6 +84,11 @@ fn stage_archive(
         .map_err(|error| format!("stage executable: {error}"))?;
     fs::copy(root.join("LICENSE"), stage.join("LICENSE"))
         .map_err(|error| format!("stage license: {error}"))?;
+    fs::copy(
+        root.join("target/package/THIRD-PARTY-NOTICES.md"),
+        stage.join("THIRD-PARTY-NOTICES.md"),
+    )
+    .map_err(|error| format!("stage third-party notices: {error}"))?;
     fs::write(stage.join("proqi-installation.json"), INSTALL_MARKER)
         .map_err(|error| format!("stage installation marker: {error}"))?;
     for (shell, filename) in [
@@ -116,6 +122,7 @@ fn append_archive_members(
     for relative in [
         executable_name(),
         "LICENSE",
+        "THIRD-PARTY-NOTICES.md",
         "proqi-installation.json",
         "completions/proqi.bash",
         "completions/_proqi",
@@ -150,6 +157,7 @@ fn verify_archive(archive: &Path, host: &str) -> Result<(), String> {
     let mut expected = [
         executable_name(),
         "LICENSE",
+        "THIRD-PARTY-NOTICES.md",
         "proqi-installation.json",
         "completions/proqi.bash",
         "completions/_proqi",
@@ -236,6 +244,35 @@ fn persist_archive(root: &Path, archive: &Path) -> Result<(), String> {
     Ok(())
 }
 
+pub(super) fn host_archive_path(root: &Path) -> Result<PathBuf, String> {
+    Ok(root
+        .join("target/package")
+        .join(format!("{}.tar.gz", package_name(&host_triple(root)?))))
+}
+
+fn generate_notices(root: &Path) -> Result<(), String> {
+    let output = root.join("target/package/THIRD-PARTY-NOTICES.md");
+    fs::create_dir_all(
+        output
+            .parent()
+            .ok_or_else(|| "notice output has no parent".to_owned())?,
+    )
+    .map_err(|error| format!("create notice output directory: {error}"))?;
+    super::run(
+        root,
+        "cargo",
+        [
+            "about",
+            "generate",
+            "about.hbs",
+            "--output-file",
+            output
+                .to_str()
+                .ok_or_else(|| "notice path is not UTF-8".to_owned())?,
+        ],
+    )
+}
+
 fn command_output<I, S>(program: &Path, arguments: I) -> Result<Vec<u8>, String>
 where
     I: IntoIterator<Item = S>,
@@ -259,7 +296,7 @@ where
 }
 
 fn package_name(host: &str) -> String {
-    format!("proqi-v{}-{host}", env!("CARGO_PKG_VERSION"))
+    format!("proqi-{host}")
 }
 
 const fn executable_name() -> &'static str {
@@ -273,7 +310,7 @@ mod tests {
 
     #[test]
     fn archive_paths_are_relative_and_cannot_escape() {
-        assert!(validate_member_path(Path::new("proqi-v0.1.0/proqi")).is_ok());
+        assert!(validate_member_path(Path::new("proqi-aarch64-apple-darwin/proqi")).is_ok());
         assert!(validate_member_path(Path::new("../proqi")).is_err());
         assert!(validate_member_path(Path::new("/tmp/proqi")).is_err());
     }

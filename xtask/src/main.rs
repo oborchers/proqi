@@ -12,8 +12,11 @@
     )
 )]
 
+mod homebrew;
 mod package;
 mod policy;
+mod public_assets;
+mod release;
 mod snapshots;
 mod source_limits;
 
@@ -43,6 +46,7 @@ fn execute() -> Result<(), String> {
         "format" => run(&root, "cargo", ["fmt", "--all"]),
         "source-limits" => source_limits::check(&root),
         "architecture" => policy::check(&root),
+        "assets" => public_assets::check(&root),
         "check" => check(&root),
         "test" => test(&root),
         "test-pty" => run(
@@ -53,6 +57,26 @@ fn execute() -> Result<(), String> {
         "coverage" => coverage(&root),
         "audit" => audit(&root),
         "package" => package::run(&root),
+        "release-plan" => {
+            let tag = env::args().nth(2);
+            release::plan(&root, tag.as_deref())
+        }
+        "release-rehearsal" => release::rehearse(&root),
+        "release-checksum" => {
+            let path = env::args()
+                .nth(2)
+                .ok_or_else(|| "release-checksum requires one archive path".to_owned())?;
+            release::print_checksum(&root, Path::new(&path))
+        }
+        "homebrew-formula" => {
+            let artifacts = env::args()
+                .nth(2)
+                .ok_or_else(|| "homebrew-formula requires an artifacts directory".to_owned())?;
+            let output = env::args()
+                .nth(3)
+                .ok_or_else(|| "homebrew-formula requires an output path".to_owned())?;
+            homebrew::generate(&root, Path::new(&artifacts), Path::new(&output))
+        }
         "msrv" => msrv(&root),
         "help" | "--help" | "-h" => {
             print_help();
@@ -77,12 +101,17 @@ fn print_help() {
          \n  cargo xtask format\
          \n  cargo xtask source-limits\
          \n  cargo xtask architecture\
+         \n  cargo xtask assets\
          \n  cargo xtask check\
          \n  cargo xtask test\
          \n  cargo xtask test-pty\
          \n  cargo xtask coverage\
          \n  cargo xtask audit\
-         \n  cargo xtask package"
+         \n  cargo xtask package\
+         \n  cargo xtask release-plan [vX.Y.Z]\
+         \n  cargo xtask release-rehearsal\
+         \n  cargo xtask release-checksum <archive>\
+         \n  cargo xtask homebrew-formula <artifacts-dir> <output>"
     );
 }
 
@@ -113,6 +142,7 @@ fn check(root: &Path) -> Result<(), String> {
     check_whitespace(root)?;
     source_limits::check(root)?;
     snapshots::check(root)?;
+    public_assets::check(root)?;
     policy::check(root)?;
     run(
         root,
