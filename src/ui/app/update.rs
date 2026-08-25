@@ -270,12 +270,15 @@ mod tests {
 
     fn app() -> (BoardApp, FakeIdGenerator, FakeClock) {
         let mut ids = FakeIdGenerator::new(1_800_000_000_000);
-        let session = Session::new(
+        let mut session = Session::new(
             ids.session_id(),
             std::env::temp_dir(),
             Timestamp::from_millis(1),
         )
         .expect("session");
+        session
+            .rename(Some("fixture".to_owned()))
+            .expect("fixture session name");
         let board = SessionBoard::new(session, Vec::new()).expect("board");
         (
             BoardApp::new(AppState::new(board), RopeEditorFactory),

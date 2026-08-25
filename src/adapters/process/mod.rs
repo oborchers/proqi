@@ -226,14 +226,20 @@ fn receive_until<T>(
 
 #[cfg(test)]
 mod tests {
-    use std::{ffi::OsString, time::Duration};
+    use std::ffi::OsString;
 
-    use crate::{
-        adapters::memory::FakeIdGenerator,
-        ports::environment::{IdGenerator as _, ProcessError, ProcessRequest, ProcessRunner},
-    };
+    #[cfg(unix)]
+    use std::time::Duration;
 
-    use super::{SystemProcessRunner, resume_args};
+    use crate::{adapters::memory::FakeIdGenerator, ports::environment::IdGenerator as _};
+
+    #[cfg(unix)]
+    use crate::ports::environment::{ProcessError, ProcessRequest, ProcessRunner};
+
+    use super::resume_args;
+
+    #[cfg(unix)]
+    use super::SystemProcessRunner;
 
     #[test]
     fn replacement_resume_arguments_preserve_an_explicit_state_root() {

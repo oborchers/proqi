@@ -23,7 +23,7 @@ png = "=0.18.1"
 ropey = "1.6.1"
 semver = { version = "=1.0.28", features = ["serde"] }
 sha2 = "=0.10.9"
-ratatui-core = { version = "=0.1.2", default-features = false, features = ["layout-cache", "underline-color"] }
+ratatui-core = { version = "=0.1.2", default-features = false, features = ["std", "layout-cache", "underline-color"] }
 ratatui-crossterm = { version = "=0.1.2", default-features = false, features = ["crossterm_0_28", "underline-color"] }
 ratatui-widgets = { version = "=0.3.2", default-features = false }
 rusqlite = { version = "0.37.0", features = ["backup", "bundled"] }
