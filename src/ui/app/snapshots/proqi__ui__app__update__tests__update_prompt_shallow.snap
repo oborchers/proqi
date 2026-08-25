@@ -1,0 +1,13 @@
+---
+source: src/ui/app/update.rs
+assertion_line: 384
+expression: "update_snapshot(72, 8)"
+---
+00│┌ update available · 1.2.3 ──────────────────────────────────────────[x]│
+01││                                                                      ││
+02││› Update and restart all 12 sessions                                  ││
+03││  Not now                                                             ││
+04││  Skip 1.2.3                                                          ││
+05││                                                                      ││
+06│└──────────────────────────────────────────────────────────────────────┘│
+07│  n New   : Commands  ? Shortcuts│

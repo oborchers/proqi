@@ -191,8 +191,12 @@ impl LayoutSnapshot {
 
     /// Attach modal geometry after application overlays are known.
     pub fn configure_overlay(&mut self, item_count: usize, preferred_rows: usize) {
-        self.overlay =
-            (preferred_rows > 0).then(|| overlay_layout(self.area, item_count, preferred_rows));
+        self.overlay = (preferred_rows > 0).then(|| {
+            let required = overlay_height(preferred_rows);
+            let covers_chrome = self.board.height < required;
+            let bounds = if covers_chrome { self.area } else { self.board };
+            overlay_layout(bounds, item_count, preferred_rows, covers_chrome)
+        });
     }
 
     /// Add only currently verified agent controls where footer width permits.
@@ -288,10 +292,19 @@ fn board_for_page(board: Rect, reserve_insert: bool) -> Rect {
     }
 }
 
-fn overlay_layout(area: Rect, item_count: usize, preferred_rows: usize) -> OverlayLayout {
-    let width = area.width.clamp(1, 58);
-    let requested_height = u16::try_from(preferred_rows.saturating_add(3)).unwrap_or(u16::MAX);
+fn overlay_layout(
+    area: Rect,
+    item_count: usize,
+    preferred_rows: usize,
+    cover_width: bool,
+) -> OverlayLayout {
+    let requested_height = overlay_height(preferred_rows);
     let height = area.height.clamp(1, requested_height.max(5));
+    let width = if cover_width || height == area.height {
+        area.width
+    } else {
+        area.width.clamp(1, 58)
+    };
     let modal = Rect::new(
         area.x + area.width.saturating_sub(width) / 2,
         area.y + area.height.saturating_sub(height) / 2,
@@ -316,6 +329,10 @@ fn overlay_layout(area: Rect, item_count: usize, preferred_rows: usize) -> Overl
         items,
         close: Rect::new(modal.right().saturating_sub(3), modal.y, 3, 1),
     }
+}
+
+fn overlay_height(preferred_rows: usize) -> u16 {
+    u16::try_from(preferred_rows.saturating_add(3)).unwrap_or(u16::MAX)
 }
 
 fn place_thoughts(
@@ -425,46 +442,4 @@ const fn contains(area: Rect, column: u16, row: u16) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
-    use std::collections::BTreeSet;
-
-    use super::{HitTarget, compute};
-    use crate::{
-        application::AppState,
-        domain::{Session, SessionBoard, SessionId, Timestamp},
-    };
-    use ratatui_core::layout::Rect;
-
-    fn empty_state() -> AppState {
-        let now = Timestamp::from_millis(1);
-        let session = Session::new(
-            SessionId::from_uuid(uuid::Uuid::now_v7()).expect("UUIDv7 session ID"),
-            "/tmp".into(),
-            now,
-        )
-        .expect("session");
-        AppState::new(SessionBoard::new(session, Vec::new()).expect("board"))
-    }
-
-    #[test]
-    fn empty_layout_exposes_shared_footer_and_insert_targets() {
-        let layout = compute(
-            &empty_state(),
-            None,
-            Rect::new(0, 0, 20, 5),
-            0,
-            &BTreeSet::new(),
-            true,
-            false,
-        );
-        assert_eq!(layout.header, Rect::new(0, 0, 20, 0));
-        let insert = layout.insert.expect("visible insertion row");
-        assert_eq!(layout.hit_test(insert.x, insert.y), Some(HitTarget::Insert));
-        assert!(
-            layout
-                .controls
-                .iter()
-                .any(|(target, _)| { matches!(target, HitTarget::Commands | HitTarget::Help) })
-        );
-    }
-}
+mod tests;

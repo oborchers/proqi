@@ -1,0 +1,50 @@
+---
+source: tests/ui_session_browser.rs
+assertion_line: 392
+expression: snapshot_buffer(terminal.backend().buffer())
+---
+SIZE 44x20
+
+TEXT
+00│ Resume a Proqi session│
+01│ Search: _│
+02│ Today│
+03│  Live agent  [active]│
+04│  2 thoughts  now  /work/proqi│
+05│ Yesterday│
+06││ Release follow-ups  [recovered]│
+07│  2 thoughts  1d ago  /work/release│
+08│  │ ses_068q40p201o010000000000008│
+09│  │ state: recovered│
+10│  │ origin: /work/release│
+11│  │ opened from: /work/release│
+12│  │ opened: 800000000  active: 800000000│
+13│  │ integration: none│
+14│  │ agent: none│
+15│  │ Confirm the archive on a clean machine│
+16│ Older│
+17│  Discarded draft  [trashed]│
+18│  2 thoughts  10d ago  /work/archive│
+19│ R Rename  D Trash  Enter Open  Esc Back│
+
+STYLE RUNS
+0: 0-43 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=BOLD
+1: 0-8 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE | 9-9 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 10-43 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+2: 0-43 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=BOLD
+3: 0-43 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+4: 0-43 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE
+5: 0-43 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=BOLD
+6: 0-43 fg=Rgb(112, 214, 155) bg=Rgb(39, 40, 48) mod=BOLD
+7: 0-43 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE
+8: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-43 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE
+9: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-43 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE
+10: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-43 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE
+11: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-43 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE
+12: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-43 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE
+13: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-43 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE
+14: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-43 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE
+15: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-43 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE
+16: 0-43 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=BOLD
+17: 0-43 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+18: 0-43 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE
+19: 0-0 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 1-1 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 2-10 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 11-11 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 12-19 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 20-24 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 25-31 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 32-34 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 35-43 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE

@@ -1,11 +1,14 @@
 //! Golden terminal snapshot policy.
 
-use std::fs;
 use std::path::{Path, PathBuf};
 
+#[cfg(test)]
+use std::fs;
+
+use ignore::WalkBuilder;
+
 pub(crate) fn check(root: &Path) -> Result<(), String> {
-    let snapshot_root = root.join("tests/ui_board/snapshots");
-    let files = snapshot_files(&snapshot_root)?;
+    let files = snapshot_files(root)?;
     let pending = files
         .iter()
         .filter(|path| path.extension().is_some_and(|extension| extension == "new"))
@@ -33,20 +36,24 @@ pub(crate) fn check(root: &Path) -> Result<(), String> {
 
 fn snapshot_files(directory: &Path) -> Result<Vec<PathBuf>, String> {
     let mut files = Vec::new();
-    for entry in fs::read_dir(directory)
-        .map_err(|error| format!("read snapshot directory {}: {error}", directory.display()))?
-    {
-        let entry = entry.map_err(|error| format!("read snapshot entry: {error}"))?;
-        if entry
-            .file_type()
-            .map_err(|error| format!("read snapshot file type: {error}"))?
-            .is_file()
-        {
-            files.push(entry.path());
+    for entry in WalkBuilder::new(directory).standard_filters(true).build() {
+        let entry = entry.map_err(|error| format!("walk snapshot files: {error}"))?;
+        if entry.file_type().is_some_and(|kind| kind.is_file()) && is_snapshot_file(entry.path()) {
+            files.push(entry.into_path());
         }
     }
     files.sort();
     Ok(files)
+}
+
+fn is_snapshot_file(path: &Path) -> bool {
+    path.extension()
+        .is_some_and(|extension| extension == "snap")
+        || (path.extension().is_some_and(|extension| extension == "new")
+            && path
+                .file_stem()
+                .and_then(|stem| Path::new(stem).extension())
+                .is_some_and(|extension| extension == "snap"))
 }
 
 fn relative(root: &Path, path: &Path) -> String {
@@ -64,8 +71,9 @@ mod tests {
     fn recognizes_pending_and_accepted_snapshot_extensions() {
         let accepted = Path::new("board.snap");
         let pending = Path::new("board.snap.new");
-        assert_eq!(accepted.extension(), Some("snap".as_ref()));
-        assert_eq!(pending.extension(), Some("new".as_ref()));
+        assert!(is_snapshot_file(accepted));
+        assert!(is_snapshot_file(pending));
+        assert!(!is_snapshot_file(Path::new("board.new")));
     }
 
     #[test]
@@ -75,5 +83,19 @@ mod tests {
             relative(root, Path::new("/repo/tests/board.snap.new")),
             "tests/board.snap.new"
         );
+    }
+
+    #[test]
+    fn discovers_snapshots_recursively_but_respects_ignored_directories() {
+        let root = tempfile::tempdir().expect("temporary root");
+        let nested = root.path().join("src/ui/snapshots");
+        fs::create_dir_all(&nested).expect("nested snapshot directory");
+        fs::write(nested.join("screen.snap"), "accepted").expect("accepted snapshot");
+        fs::write(nested.join("screen.snap.new"), "pending").expect("pending snapshot");
+        fs::write(nested.join("notes.txt"), "ordinary file").expect("ordinary file");
+
+        let files = snapshot_files(root.path()).expect("snapshot scan");
+        assert_eq!(files.len(), 2);
+        assert!(files.iter().all(|path| path.starts_with(root.path())));
     }
 }

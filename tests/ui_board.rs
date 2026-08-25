@@ -383,45 +383,6 @@ fn keyboard_selection_is_logical_and_visible() {
 }
 
 #[test]
-fn command_palette_is_searchable_and_mouse_operable() {
-    let mut fixture = Fixture::new();
-    fixture.paste("existing");
-    fixture.input(UiInput::Key(UiKey::Escape));
-    fixture.input(UiInput::Key(UiKey::Character(':')));
-    for character in "quit".chars() {
-        fixture.input(UiInput::Key(UiKey::Character(character)));
-    }
-    let terminal = draw(&mut fixture, 40, 12);
-    let rendered = text(terminal.backend().buffer());
-    assert!(rendered.contains(":quit"));
-    assert!(rendered.contains("Quit Proqi"));
-
-    fixture.pointer(2, 5, PointerKind::Down(PointerButton::Left));
-    assert!(fixture.app.quit);
-}
-
-#[test]
-fn palette_quit_is_global_and_shallow_navigation_stays_visible() {
-    let mut fixture = Fixture::new();
-    fixture.paste("existing");
-    fixture.input(UiInput::Key(UiKey::Escape));
-    fixture.input(UiInput::Key(UiKey::Character(':')));
-    let _terminal = draw(&mut fixture, 30, 5);
-    for _ in 0..10 {
-        fixture.input(UiInput::Key(UiKey::Move {
-            movement: CursorMovement::VisualDown,
-            extend_selection: false,
-        }));
-    }
-    let _terminal = draw(&mut fixture, 30, 5);
-    let (_, visible, selected) = fixture.app.palette_view().expect("palette");
-    assert!(selected < visible.len());
-
-    fixture.input(UiInput::Key(UiKey::Quit));
-    assert!(fixture.app.quit);
-}
-
-#[test]
 fn thought_search_filters_content_and_focuses_the_selected_match() {
     let mut fixture = Fixture::new();
     fixture.paste("first searchable prompt");
@@ -496,5 +457,7 @@ mod composition;
 mod durability;
 #[path = "ui_board/navigation.rs"]
 mod navigation;
+#[path = "ui_board/palette.rs"]
+mod palette;
 #[path = "ui_board/snapshots.rs"]
 mod snapshots;

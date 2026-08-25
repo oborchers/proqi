@@ -226,18 +226,52 @@ fn render_footer(
     layout: &BrowserLayout,
     theme: &Theme,
 ) {
-    let text = browser
-        .status
-        .as_deref()
-        .unwrap_or(" [R] rename  [D] trash  ↑↓ select  enter open  esc cancel");
+    if let Some(status) = browser.status.as_deref() {
+        frame.render_widget(
+            Paragraph::new(status).style(Style::default().fg(theme.error)),
+            layout.footer,
+        );
+        return;
+    }
     frame.render_widget(
-        Paragraph::new(text).style(Style::default().fg(if browser.status.is_some() {
-            theme.error
-        } else {
-            theme.muted
-        })),
+        Paragraph::new(footer_shortcuts(layout.footer.width, theme)),
         layout.footer,
     );
+}
+
+fn footer_shortcuts(width: u16, theme: &Theme) -> Line<'static> {
+    let items = if width >= 60 {
+        [
+            ("R", "Rename"),
+            ("D", "Trash"),
+            ("↑↓", "Select"),
+            ("Enter", "Open"),
+            ("Esc", "Cancel"),
+        ]
+        .as_slice()
+    } else if width >= 36 {
+        [
+            ("R", "Rename"),
+            ("D", "Trash"),
+            ("Enter", "Open"),
+            ("Esc", "Back"),
+        ]
+        .as_slice()
+    } else {
+        [("R", "Name"), ("D", "Trash"), ("Esc", "Back")].as_slice()
+    };
+    let mut spans = vec![Span::raw(" ")];
+    for (index, (key, label)) in items.iter().enumerate() {
+        if index > 0 {
+            spans.push(Span::raw("  "));
+        }
+        spans.push(Span::styled(*key, Style::default().fg(theme.accent)));
+        spans.push(Span::styled(
+            format!(" {label}"),
+            Style::default().fg(theme.foreground),
+        ));
+    }
+    Line::from(spans)
 }
 
 struct RectLine {

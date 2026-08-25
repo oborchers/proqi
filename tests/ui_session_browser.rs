@@ -13,6 +13,11 @@ use proqi::{
 };
 use ratatui_core::{backend::TestBackend, buffer::Buffer, terminal::Terminal};
 
+#[path = "support/snapshots.rs"]
+mod snapshot_support;
+
+use snapshot_support::snapshot_buffer;
+
 fn item(
     ids: &mut FakeIdGenerator,
     name: Option<&str>,
@@ -42,7 +47,7 @@ fn item(
 }
 
 fn test_path(name: &str) -> PathBuf {
-    std::env::temp_dir().join(name)
+    PathBuf::from("/work").join(name)
 }
 
 fn resumable() -> BrowserAvailability {
@@ -81,16 +86,20 @@ fn active(ids: &mut FakeIdGenerator, hit: SessionHit) -> SessionBrowserItem {
 }
 
 fn draw(browser: &mut SessionBrowser, width: u16, height: u16) -> Terminal<TestBackend> {
+    draw_theme(browser, width, height, ThemePreference::Auto)
+}
+
+fn draw_theme(
+    browser: &mut SessionBrowser,
+    width: u16,
+    height: u16,
+    preference: ThemePreference,
+) -> Terminal<TestBackend> {
     let mut terminal = Terminal::new(TestBackend::new(width, height)).expect("terminal");
     terminal
         .draw(|frame| {
             let layout = browser.prepare_frame(frame.area());
-            render_browser(
-                frame,
-                browser,
-                &layout,
-                &Theme::resolve(ThemePreference::Auto, true),
-            );
+            render_browser(frame, browser, &layout, &Theme::resolve(preference, true));
         })
         .expect("draw browser");
     terminal
@@ -334,4 +343,51 @@ fn keyboard_rename_and_trash_are_explicit_browser_actions() {
         browser.handle(UiInput::Key(UiKey::Character('D'))),
         BrowserAction::Trash(id)
     );
+}
+
+fn snapshot_browser() -> SessionBrowser {
+    let mut ids = FakeIdGenerator::new(1_725_000_000_000);
+    let active_seed = item(
+        &mut ids,
+        Some("Live agent"),
+        test_path("proqi"),
+        "Review persistence before release",
+        900_000_000,
+        resumable,
+    );
+    let entries = vec![
+        active(&mut ids, active_seed.hit),
+        item(
+            &mut ids,
+            Some("Release follow-ups"),
+            test_path("release"),
+            "Confirm the archive on a clean machine",
+            800_000_000,
+            recovered,
+        ),
+        item(
+            &mut ids,
+            Some("Discarded draft"),
+            test_path("archive"),
+            "Recover this session if needed",
+            1,
+            trashed,
+        ),
+    ];
+    SessionBrowser::new(entries, Timestamp::from_millis(900_000_000))
+}
+
+#[test]
+fn wide_browser_has_a_complete_reviewed_buffer() {
+    let mut browser = snapshot_browser();
+    let terminal = draw_theme(&mut browser, 100, 20, ThemePreference::Dark);
+    insta::assert_snapshot!(snapshot_buffer(terminal.backend().buffer()));
+}
+
+#[test]
+fn narrow_browser_has_a_complete_reviewed_buffer() {
+    let mut browser = snapshot_browser();
+    browser.handle(UiInput::Key(UiKey::Character('j')));
+    let terminal = draw_theme(&mut browser, 44, 20, ThemePreference::Dark);
+    insta::assert_snapshot!(snapshot_buffer(terminal.backend().buffer()));
 }

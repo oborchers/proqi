@@ -23,7 +23,7 @@ must not imply that the behavior exists.
 | Reordering | Shipped | Mouse drag, `J` and `K`, and shifted arrow keys move thoughts. Keyboard movement wraps at board edges. | `tests/ui_board/navigation.rs`, `tests/ui_board.rs` |
 | Persistent undo and redo | Shipped | Board and editor histories remain separate and survive process restart. | `tests/domain_reducer/history.rs`, `tests/sqlite_store/core.rs` |
 | Collapse and long content | Shipped | Long thoughts can collapse without changing canonical content. Scrolling is bounded and keeps focus and the insertion row reachable. | `tests/ui_board/composition.rs`, `tests/ui_board/navigation.rs` |
-| Search and command discovery | Shipped | Thought search, a searchable command palette, contextual help, keyboard control, and mouse control are available. | `tests/ui_board.rs`, `tests/ui_mouse_actions.rs` |
+| Search and command discovery | Shipped | Thought search, a searchable command palette, contextual help, keyboard control, and mouse control are available. | `tests/ui_board.rs`, `tests/ui_board/snapshots.rs`, `tests/ui_mouse_actions.rs` |
 | Responsive rendering | Shipped | One-column layout reflows across narrow, wide, tall, shallow, and repeated-resize viewports without mutating content or logical cursor state. | `tests/ui_board/composition.rs`, `tests/pty.rs` |
 | Theme and focus accessibility | Shipped | Auto, dark, light, and limited-color modes use non-color focus cues, terminal-aware surfaces, and tested contrast pairs. | `src/ui/theme.rs`, `tests/ui_board/snapshots.rs` |
 | Keyboard and mouse parity | Shipped | Core creation, focus, edit, search, help, recovery, footer, and drag interactions have both input paths where terminals expose them. | `tests/ui_mouse_actions.rs`, `tests/ui_board.rs` |
@@ -46,7 +46,7 @@ must not imply that the behavior exists.
 
 | Capability | Status | Reachable behavior | Evidence |
 | --- | --- | --- | --- |
-| Session browser | Shipped | Search uses optional name, launch path, and thought content. Results retain recency and directory context and show active, resumable, recovered, and trashed states. | `tests/ui_session_browser.rs`, `tests/pty.rs` |
+| Session browser | Shipped | Search uses optional name, launch path, and thought content. Results retain recency and directory context and show active, resumable, recovered, and trashed states in wide and narrow layouts. | `tests/ui_session_browser.rs`, `tests/snapshots`, `tests/pty.rs` |
 | Session naming | Shipped | Sessions can be renamed or cleared and resumed by unique name or canonical `ses_` identifier. | `tests/cli_workflow.rs`, `tests/ui_board/navigation.rs` |
 | Trash and pruning | Shipped | Session trash is recoverable. Permanent pruning requires an explicit confirmation flag. | `tests/cli_workflow.rs`, `tests/sqlite_store/core.rs` |
 | Local SQLite durability | Shipped | Bundled SQLite uses WAL, `synchronous=FULL`, forward migrations, backups, integrity checks, derived search indexes, and typed identifier BLOBs. | `tests/sqlite_store.rs`, `tests/sqlite_store/recovery.rs` |
@@ -88,7 +88,7 @@ must not imply that the behavior exists.
 | Implicit interactive check | Shipped | Release builds check asynchronously at most once per 24 hours. Debug, test, JSON, and noninteractive paths do not check implicitly. | `src/application/update.rs`, `src/adapters/terminal/runner.rs` |
 | Privacy and opt-out | Shipped | `check_for_updates = false` disables checks. Requests contain no thought, path, session, or installation content. | `src/ui/settings.rs`, `src/adapters/update/github.rs` |
 | Installation-wide election | Shipped | Shared cache and locks allow one refresh and one actionable prompt across one, ten, or fifteen concurrent participants. | `src/adapters/update/cache/tests.rs`, `src/application/update_coordination/tests.rs` |
-| Homebrew coordinated update | Shipped | After explicit confirmation, every verified participant saves, one direct `brew upgrade --formula oborchers/tap/proqi` runs, active sessions are rescanned, and each process independently cleans up and uses Unix `exec` to resume in place. | `tests/pty/update_control.rs`, `src/application/update_coordination.rs` |
+| Homebrew coordinated update | Shipped | After explicit confirmation, every verified participant saves, one direct `brew upgrade --formula oborchers/tap/proqi` runs, active sessions are rescanned, and each process independently cleans up and uses Unix `exec` to resume in place. The prompt has reviewed wide, narrow, and shallow buffers plus keyboard and mouse coverage. | `tests/pty/update_control.rs`, `src/application/update_coordination.rs`, `src/ui/app/snapshots` |
 | Failure convergence | Shipped | Failed preflight aborts before installation. Installer and coordinator failures release ready peers. Partial restart is reported without rolling back successful peers. | `src/application/update_coordination/tests.rs`, `src/adapters/terminal/runner/update_results.rs` |
 | Standalone update | Shipped instructions only | Archive installs receive stable release instructions and resume normally after user-managed replacement. The binary does not replace itself. | `src/adapters/update/installation.rs`, `README.md` |
 | Package contract | Shipped locally | The isolated archive smoke covers version, help, completions, JSON creation, exact Unicode, reopen, active forwarding, migration backup, newer-schema refusal, terminal restoration, fake update installation, and same-PTY replacement on macOS. | `tests/package_contract.rs`, `tests/package_contract/pty.rs` |
@@ -105,25 +105,28 @@ must not imply that the behavior exists.
 | Dependency policy | Shipped gate | Advisory, license, source, and duplicate checks are owned by `cargo xtask audit`; unsafe Rust is forbidden. | `deny.toml`, `Cargo.toml`, `src/lib.rs` |
 | Source and architecture policy | Shipped gate | First-party source files are limited to 500 lines, complexity is bounded, ignored artifacts are excluded, and inward dependency rules are mechanically checked. | `xtask/src/source_limits.rs`, `xtask/src/policy.rs` |
 
-## Baseline release gaps
+## Remaining release gaps
 
-The current implementation is functionally broad, but this baseline does not
-yet establish release readiness in these areas:
+The final visual pass now has 15 reviewed complete-screen snapshots. They cover
+the board, command and help overlays, both session-browser layouts, update
+prompts at wide, narrow, and shallow sizes, themes, durability, attachments,
+drag state, and four-direction agent controls. The snapshot expansion caught
+and fixed shallow-overlay footer collision and narrow browser-footer overflow.
 
-1. Complete-screen snapshots do not yet cover both session-browser layouts,
-   search and command overlays, or update prompts in wide, narrow, and shallow
-   viewports with keyboard and mouse geometry.
-2. The macOS and Linux hosted CI result has not been rerun since the repository
+The release candidate still requires evidence or publication work in these
+areas:
+
+1. The macOS and Linux hosted CI result has not been rerun since the repository
    became public and the support matrix was narrowed.
-3. Release attestations exist only as workflow definitions. They cannot be
+2. Release attestations exist only as workflow definitions. They cannot be
    verified until a hosted rehearsal produces them.
-4. The Homebrew formula generator and local rehearsal pass, but live formula
+3. The Homebrew formula generator and local rehearsal pass, but live formula
    audit, install, and `brew test` against immutable public release assets have
    not run.
-5. Repository About metadata, topics, social preview, private vulnerability
+4. Repository About metadata, topics, social preview, private vulnerability
    reporting, branch rules, tag rules, and the protected release environment
    still require explicit reviewed application.
-6. The final README and release-note claims must be checked against this matrix
+5. The final README and release-note claims must be checked against this matrix
    after the remaining work. Optional aggregate adoption reporting remains
    deliberately unimplemented and is not a release blocker.
 

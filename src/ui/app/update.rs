@@ -291,6 +291,33 @@ mod tests {
         StableVersion::parse("1.2.3").expect("stable version")
     }
 
+    fn update_snapshot(width: u16, height: u16) -> String {
+        let (mut app, _, _) = app();
+        app.present_update(version(), InstallationKind::HomebrewFormula, 12);
+        let mut terminal = Terminal::new(TestBackend::new(width, height)).expect("terminal");
+        terminal
+            .draw(|frame| {
+                let layout = app.prepare_frame(frame.area());
+                render(
+                    frame,
+                    &app,
+                    &layout,
+                    &Theme::resolve(ThemePreference::Dark, true),
+                );
+            })
+            .expect("draw");
+        let buffer = terminal.backend().buffer();
+        (0..buffer.area.height)
+            .map(|row| {
+                let content = (0..buffer.area.width)
+                    .map(|column| buffer[(column, row)].symbol())
+                    .collect::<String>();
+                format!("{row:02}│{}│", content.trim_end_matches(' '))
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
     #[test]
     fn barrier_blocks_competing_attempts_and_expires_safely() {
         let (mut app, mut ids, _) = app();
@@ -343,33 +370,17 @@ mod tests {
     }
 
     #[test]
-    fn update_prompt_has_a_complete_reviewed_buffer() {
-        let (mut app, _, _) = app();
-        app.present_update(version(), InstallationKind::HomebrewFormula, 12);
-        let mut terminal = Terminal::new(TestBackend::new(64, 12)).expect("terminal");
-        terminal
-            .draw(|frame| {
-                let layout = app.prepare_frame(frame.area());
-                render(
-                    frame,
-                    &app,
-                    &layout,
-                    &Theme::resolve(ThemePreference::Dark, true),
-                );
-            })
-            .expect("draw");
-        let buffer = terminal.backend().buffer();
-        let text = (0..buffer.area.height)
-            .map(|row| {
-                (0..buffer.area.width)
-                    .map(|column| buffer[(column, row)].symbol())
-                    .collect::<String>()
-                    .trim_end()
-                    .to_owned()
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
+    fn update_prompt_has_a_complete_wide_buffer() {
+        insta::assert_snapshot!("update_prompt_wide", update_snapshot(100, 18));
+    }
 
-        insta::assert_snapshot!(text);
+    #[test]
+    fn update_prompt_has_a_complete_narrow_buffer() {
+        insta::assert_snapshot!("update_prompt_narrow", update_snapshot(44, 16));
+    }
+
+    #[test]
+    fn update_prompt_has_a_complete_shallow_buffer() {
+        insta::assert_snapshot!("update_prompt_shallow", update_snapshot(72, 8));
     }
 }
