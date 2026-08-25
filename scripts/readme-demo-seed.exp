@@ -1,0 +1,59 @@
+#!/usr/bin/expect -f
+
+set timeout 15
+set binary [lindex $argv 0]
+set state [lindex $argv 1]
+
+if {$binary eq "" || $state eq ""} {
+    puts stderr "usage: readme-demo-seed.exp <binary> <state-directory>"
+    exit 2
+}
+
+set image "$state/demo-image.png"
+set context [join {
+    {Context line 01.}
+    {Context line 02.}
+    {Context line 03.}
+    {Context line 04.}
+    {Context line 05.}
+    {Context line 06.}
+    {Context line 07.}
+    {Context line 08.}
+    {Context line 09.}
+    {Context line 10.}
+    {Context line 11.}
+    {Context line 12.}
+    {Context line 13.}
+} "\n"]
+
+spawn -noecho $binary --state-dir $state -c
+expect -re {release follow-ups}
+after 300
+
+send -- "n"
+send -- "Review this screenshot: "
+send -- "\033\[200~$image\033\[201~"
+after 500
+send -- "\033"
+after 300
+
+send -- "n"
+send -- "Summarize this context: "
+send -- "\033\[200~$context\033\[201~"
+after 500
+send -- "\033"
+after 300
+
+send -- "n"
+send -- "Delete this temporary thought during the demo."
+after 500
+send -- "\033"
+after 300
+
+send -- "q"
+expect -re {Resume later:}
+set child [exp_pid]
+exec kill -KILL $child
+expect eof
+wait
+exit 0

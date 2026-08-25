@@ -1,0 +1,80 @@
+#!/usr/bin/expect -f
+
+set timeout 15
+set binary [lindex $argv 0]
+set state [lindex $argv 1]
+
+proc pause {milliseconds} {
+    set ::pause_complete 0
+    after $milliseconds {set ::pause_complete 1}
+    vwait ::pause_complete
+}
+
+proc type_text {text delay} {
+    foreach character [split $text ""] {
+        send -- $character
+        pause $delay
+    }
+}
+
+if {$binary eq "" || $state eq ""} {
+    puts stderr "usage: readme-demo-record.exp <binary> <state-directory>"
+    exit 2
+}
+
+spawn -noecho $binary --state-dir $state -c
+
+# The recorder is a nested PTY, so answer Proqi's bounded OSC palette probe as
+# the reference dark terminal. These are the same default colors used by the
+# visual contract snapshots: foreground #c9cde0 and background #181922.
+expect -exact "\033]10;?\007"
+send -- "\033]10;rgb:c9c9/cdcd/e0e0\007"
+expect -exact "\033]11;?\007"
+send -- "\033]11;rgb:1818/1919/2222\007"
+expect -exact "\033\[c"
+send -- "\033\[?1;2c"
+
+expect -re {release follow-ups}
+expect_background -re {.+} {}
+pause 800
+
+send -- "\033\[B"
+pause 700
+send -- "\033\[B"
+pause 700
+send -- "\033\[B"
+pause 700
+send -- "\033\[B"
+pause 700
+
+send -- "d"
+pause 800
+send -- "n"
+pause 300
+type_text "Ask the agent to verify the release archive." 24
+pause 700
+send -- "\033"
+pause 700
+
+send -- "\r"
+pause 500
+type_text " before publishing." 24
+pause 700
+send -- "\033"
+pause 700
+
+send -- "K"
+pause 700
+send -- "K"
+pause 700
+send -- "y"
+pause 1600
+
+expect_background
+send -- "q"
+expect -re {Resume later:}
+set child [exp_pid]
+exec kill -KILL $child
+expect eof
+wait
+exit 0

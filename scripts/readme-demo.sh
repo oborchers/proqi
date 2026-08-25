@@ -1,7 +1,8 @@
 #!/bin/sh
 set -eu
 
-demo_state="${TMPDIR:-/tmp}/proqi-readme-demo-vhs-private-alpha"
+demo_state="${TMPDIR:-/tmp}/proqi-readme-demo-v1"
+binary="./target/release/proqi"
 
 clean_state() {
     if [ -L "$demo_state" ]; then
@@ -16,28 +17,68 @@ clean_state() {
     fi
 }
 
+prepare() {
+    clean_state
+    umask 077
+    mkdir -p "$demo_state/config"
+    printf '%s\n' 'check_for_updates = false' 'theme = "dark"' \
+        > "$demo_state/config/config.toml"
+    cp assets/proqi-logo.png "$demo_state/demo-image.png"
+    session=$("$binary" --state-dir "$demo_state" --json \
+        | sed -n 's/.*"session_id":"\([^"]*\)".*/\1/p')
+    test -n "$session"
+    "$binary" --state-dir "$demo_state" --json sessions rename \
+        "$session" "release follow-ups" >/dev/null
+    printf '%s' 'Track the upstream issue at https://github.com/oborchers/proqi/issues' \
+        | "$binary" --state-dir "$demo_state" thoughts add "$session" >/dev/null
+    printf '%s\n' 'Release checklist:' \
+        '1. Verify checksums and attestations.' \
+        '2. Test the archive on a clean machine.' \
+        | "$binary" --state-dir "$demo_state" thoughts add "$session" >/dev/null
+}
+
+seed() {
+    expect scripts/readme-demo-seed.exp "$binary" "$demo_state"
+}
+
+record() {
+    command -v asciinema >/dev/null
+    command -v agg >/dev/null
+    command -v expect >/dev/null
+    prepare
+    seed >/dev/null
+    printf '%s\n' 'check_for_updates = false' 'theme = "auto"' \
+        > "$demo_state/config/config.toml"
+    export COLORTERM=truecolor
+    unset NO_COLOR
+    asciinema record --headless --overwrite --quiet --return \
+        --idle-time-limit 2 --window-size 92x30 \
+        --command "expect scripts/readme-demo-record.exp $binary $demo_state" \
+        target/proqi-demo.cast
+    agg --quiet --theme github-dark --font-family Menlo --font-size 20 \
+        --line-height 1.25 --fps-cap 30 --last-frame-duration 2 \
+        --select '0.2..90%' \
+        target/proqi-demo.cast assets/proqi-demo.gif
+}
+
 case "${1:-}" in
-    fresh)
-        clean_state
-        session=$(./target/release/proqi --state-dir "$demo_state" --json \
-            | sed -n 's/.*"session_id":"\([^"]*\)".*/\1/p')
-        test -n "$session"
-        printf '%s' 'Ask the agent to preserve Unicode and exact whitespace.' \
-            | ./target/release/proqi --state-dir "$demo_state" thoughts add "$session" >/dev/null
-        printf '%s' 'Review the SQLite recovery path before the next release.' \
-            | ./target/release/proqi --state-dir "$demo_state" thoughts add "$session" >/dev/null
-        printf '%s' 'Attach the failing screenshot, then compare all four adjacent agent panes.' \
-            | ./target/release/proqi --state-dir "$demo_state" thoughts add "$session" >/dev/null
-        exec ./target/release/proqi --state-dir "$demo_state" -r "$session"
+    prepare)
+        prepare
         ;;
-    resume)
-        exec ./target/release/proqi --state-dir "$demo_state" -c
+    seed)
+        seed
+        ;;
+    record)
+        record
+        ;;
+    open)
+        exec "$binary" --state-dir "$demo_state" -c
         ;;
     clean)
         clean_state
         ;;
     *)
-        echo "usage: $0 fresh|resume|clean" >&2
+        echo "usage: $0 prepare|seed|record|open|clean" >&2
         exit 2
         ;;
 esac

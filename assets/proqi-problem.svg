@@ -1,55 +1,48 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="520" viewBox="0 0 1200 520" role="img" aria-labelledby="title description">
-  <title id="title">From a generic side editor to a session-aware Proqi board</title>
-  <desc id="description">Four working agent panes beside an unstructured text scratchpad, followed by three focused, resumable Proqi thoughts.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="520" viewBox="0 0 1200 520" role="img" aria-labelledby="title description" data-flow="proqi-to-agent">
+  <title id="title">Proqi sends an editable follow-up prompt to a coding agent</title>
+  <desc id="description">A Proqi scratchpad on the left keeps follow-up prompts editable. A right-pointing copy or submit arrow carries one selected prompt into a coding-agent terminal on the right.</desc>
   <rect width="1200" height="520" rx="28" fill="#0d1117"/>
-  <text x="48" y="56" fill="#f0f6fc" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="24" font-weight="700">Agents keep working. Thoughts keep arriving.</text>
-  <text x="48" y="88" fill="#8b949e" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16">A generic editor remembers text, but not the agent session around it.</text>
+  <text x="48" y="58" fill="#f0f6fc" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="24" font-weight="700">Keep the next prompt editable until the agent is ready.</text>
+  <text x="48" y="90" fill="#8b949e" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16">Capture in Proqi, then copy or submit the selected thought to the coding-agent terminal.</text>
 
   <g transform="translate(48 126)">
-    <rect width="466" height="328" rx="18" fill="#161b22" stroke="#30363d"/>
-    <text x="22" y="34" fill="#8b949e" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14">terminal workspace</text>
+    <rect width="470" height="328" rx="18" fill="#161b22" stroke="#30363d"/>
+    <text x="22" y="34" fill="#8b949e" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14">proqi · release follow-ups · saved</text>
     <g fill="#0d1117" stroke="#30363d">
-      <rect x="20" y="52" width="202" height="112" rx="8"/>
-      <rect x="242" y="52" width="202" height="112" rx="8"/>
-      <rect x="20" y="184" width="202" height="112" rx="8"/>
-      <rect x="242" y="184" width="202" height="112" rx="8"/>
+      <rect x="20" y="52" width="428" height="64" rx="8"/>
+      <rect x="20" y="132" width="428" height="82" rx="8"/>
+      <rect x="20" y="230" width="428" height="64" rx="8"/>
     </g>
-    <g fill="#8b949e" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13">
-      <text x="38" y="82">codex  • working</text>
-      <text x="260" y="82">claude • working</text>
-      <text x="38" y="214">codex  • working</text>
-      <text x="260" y="214">agent  • waiting</text>
+    <rect x="20" y="132" width="428" height="82" rx="8" fill="#242930"/>
+    <rect x="20" y="132" width="5" height="82" rx="2" fill="#75d6a0"/>
+    <g fill="#c9d1d9" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14">
+      <text x="40" y="80">Clarify the expected recovery behavior.</text>
+      <text x="40" y="160">Review the persistence failure path,</text>
+      <text x="40" y="184">then add the smallest regression test.</text>
+      <text x="40" y="258">Compare the release notes with the CLI.</text>
     </g>
-    <g stroke="#30363d" stroke-width="5" stroke-linecap="round">
-      <path d="M38 104h128M38 120h96M38 136h142"/>
-      <path d="M260 104h132M260 120h118M260 136h84"/>
-      <path d="M38 236h140M38 252h104M38 268h126"/>
-      <path d="M260 236h128M260 252h76"/>
-    </g>
+    <text x="40" y="282" fill="#75d6a0" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">editable · reorderable · resumable</text>
   </g>
 
-  <path d="M536 290h62" stroke="#3fb950" stroke-width="4" stroke-linecap="round"/>
-  <path d="m584 276 16 14-16 14" fill="none" stroke="#3fb950" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <g aria-label="Copy or submit from Proqi to the coding agent">
+    <text x="535" y="256" fill="#75d6a0" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14">copy or</text>
+    <text x="545" y="278" fill="#75d6a0" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14">submit</text>
+    <path d="M536 300h86" stroke="#75d6a0" stroke-width="5" stroke-linecap="round"/>
+    <path d="m607 284 18 16-18 16" fill="none" stroke="#75d6a0" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
 
-  <g transform="translate(622 126)">
-    <rect width="530" height="328" rx="18" fill="#161b22" stroke="#30363d"/>
-    <text x="22" y="34" fill="#8b949e" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14">proqi • session saved</text>
-    <g fill="#0d1117" stroke="#30363d">
-      <rect x="20" y="52" width="488" height="64" rx="8"/>
-      <rect x="20" y="132" width="488" height="82" rx="8"/>
-      <rect x="20" y="230" width="488" height="64" rx="8"/>
+  <g transform="translate(646 126)">
+    <rect width="506" height="328" rx="18" fill="#161b22" stroke="#30363d"/>
+    <text x="22" y="34" fill="#8b949e" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14">coding-agent terminal</text>
+    <g fill="#8b949e" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13">
+      <text x="24" y="72">agent · working</text>
+      <text x="24" y="108">✓ inspected the storage adapter</text>
+      <text x="24" y="136">✓ reproduced the failure</text>
+      <text x="24" y="164">• running focused tests</text>
     </g>
-    <rect x="20" y="52" width="4" height="64" rx="2" fill="#3fb950"/>
-    <g fill="#c9d1d9" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14">
-      <text x="40" y="80">Preserve Unicode and exact whitespace.</text>
-      <text x="40" y="160">Review SQLite recovery before release.</text>
-      <text x="40" y="184" fill="#8b949e">Editable • reorderable • persistent undo</text>
-      <text x="40" y="258">Attach the failing screenshot path.</text>
-    </g>
-    <g fill="#3fb950" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">
-      <text x="432" y="102">focused</text>
-      <text x="437" y="200">saved</text>
-      <text x="437" y="280">saved</text>
-    </g>
+    <rect x="20" y="208" width="466" height="88" rx="8" fill="#242930" stroke="#3d444d"/>
+    <text x="38" y="238" fill="#75d6a0" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">received follow-up</text>
+    <text x="38" y="264" fill="#f0f6fc" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14">Review the persistence failure path,</text>
+    <text x="38" y="286" fill="#f0f6fc" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14">then add the smallest regression test.</text>
   </g>
 </svg>

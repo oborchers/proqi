@@ -5,91 +5,133 @@
 <h1 align="center">Proqi</h1>
 
 <p align="center">
-  <strong>The thoughtpad for humans working with agents.</strong><br>
-  Capture prompts, ideas, questions, and follow-ups while your agents are still busy.
+  <strong>The agent-optimized scratchpad for follow-up prompts.</strong><br>
+  Keep prompts editable beside a coding-agent session, then copy or submit them when the agent is ready.
 </p>
 
 <p align="center">
   <a href="https://github.com/oborchers/proqi/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/oborchers/proqi/ci.yml?branch=main&amp;logo=github&amp;label=CI"></a>
+  <a href="https://github.com/oborchers/proqi/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/oborchers/proqi?display_name=tag&amp;sort=semver"></a>
+  <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-75d6a0"></a>
+  <a href="https://github.com/herdrdev/herdr"><img alt="Works best with Herdr" src="https://img.shields.io/badge/works_best_with-Herdr-70d69b"></a>
   <img alt="Rust 1.88 or newer" src="https://img.shields.io/badge/Rust-1.88%2B-000000?logo=rust">
-  <img alt="Private alpha" src="https://img.shields.io/badge/status-private%20alpha-238636">
-  <img alt="Single native binary" src="https://img.shields.io/badge/runtime-single%20native%20binary-30363d">
+  <img alt="macOS and Linux" src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux-30363d">
 </p>
 
 <p align="center">
-  <img src="assets/proqi-demo.gif" width="1000" alt="Proqi board navigation, contextual help, autosave, and session resume">
+  <img src="assets/proqi-demo.gif" width="1000" alt="Proqi browsing rich prompt context, deleting a temporary thought, creating and editing a prompt, reordering it, and copying it">
 </p>
 
-## The problem
+Follow-up prompts accumulate while coding agents are working. Keeping them in a
+generic editor means another application, more context switching, and no direct
+relationship to the active agent runtime. Proqi provides a local terminal
+scratchpad beside the session. Existing and new prompts remain editable until
+you copy one or submit it through a verified integration.
 
-Working with several coding agents creates a second stream of work. While one
-agent is busy, the next correction, prompt, file path, or follow-up already
-arrives. A generic editor can hold that text, but it does not know which agent
-session it belongs to, whether a deletion was intentional, or how to restore
-the board after a terminal disappears.
-
-Proqi replaces that side editor with a terminal-native board. Each thought is
-independently editable, reorderable, copyable, recoverable, and scoped to one
-resumable session. It is deliberately not a FIFO queue. A thought may be used
-immediately or remain on the board for days.
+Proqi works standalone in any supported terminal. It works best with
+[Herdr](https://github.com/herdrdev/herdr), where it can discover verified
+adjacent coding agents and submit the selected thought directly without the
+manual clipboard handoff.
 
 <p align="center">
-  <img src="assets/proqi-problem.svg" width="1000" alt="Generic agent workspace compared with a session-aware Proqi board">
+  <img src="assets/proqi-problem.svg" width="1000" alt="Proqi keeps follow-up prompts editable and sends the selected prompt toward a coding-agent terminal">
 </p>
 
-## What Proqi does
+## What Proqi gives you
 
 | Need | Proqi behavior |
 | --- | --- |
-| Capture without context switching | Paste in board mode to create and focus a thought immediately |
-| Edit like a scratchpad | Multiline Unicode editing, selection, logical-line deletion, and editor undo |
-| Keep thoughts flexible | Reorder by keyboard, mouse, or drag, then expand or collapse long content |
-| Survive interruption | Autosave, exact resume commands, persistent undo, recovery export, and session trash |
-| Work beside any agent | Copy and cut work without an integration or account |
-| Pass local context | Drop files as paths or paste a clipboard image as a private, durable PNG path |
-| Automate safely | Versioned JSON CLI, typed identifiers, idempotent operations, and a repository skill |
-| Correct the wrong board | Send a thought to another named Proqi session, with optional removal after delivery |
-| Submit when verified | Optional Herdr submission to eligible panes above, below, left, or right |
+| Capture the next thought | Paste in board mode or click `+ New thought` to create and focus it |
+| Edit without compromise | Multiline Unicode editing, selection, logical-line deletion, and persistent editor undo |
+| Keep prompts flexible | Reorder by keyboard, mouse, or drag, then fold long context without changing its content |
+| Survive interruption | Autosave, exact resume guidance, session search, recovery export, and undo after restart |
+| Work beside any agent | Native copy and non-destructive cut work without an integration or account |
+| Pass local context | Drop files as paths or paste clipboard images into private session storage |
+| Correct the wrong board | Send a thought to another named Proqi session, optionally removing it after delivery |
+| Submit directly when verified | Optional Herdr delivery to eligible coding-agent panes in all four directions |
+| Automate safely | Versioned JSON, typed identifiers, idempotent mutations, and an explicit-invocation Proqi skill |
 
-The interface is one responsive column. Notes take their natural height until a
-viewport-derived cap is reached. Narrow panes remove chrome before hiding
-content, and rapid pane resizing preserves focus, cursor position, and scroll.
-Every core action has keyboard and mouse access.
+The board is a responsive one-column interface. Thoughts use their natural
+height until the viewport cap is reached. Rapid pane resizing preserves focus,
+the logical cursor, selection, and valid scroll bounds. Every core action has a
+keyboard and mouse path.
 
-Images, files, and large context stay compact while editing. Proqi renders
+Images, files, and large pastes stay compact while editing. Proqi renders
 `[Image 1]`, `[File 1]`, or
-`[Pasted text · 84 lines · 5,812 characters]` in the green accent while keeping
-the exact path or text available to copy, export, undo, resume, and submit.
+`[Pasted text · 84 lines · 5,812 characters]` while preserving the exact path or
+text for copy, export, undo, resume, and submission.
 
-## Private alpha quick start
+## Install
 
-Proqi is not published yet. Build the private alpha from this checkout with the
-checked-in Rust toolchain:
+### Homebrew
+
+Homebrew is the recommended installation on macOS and supported Linux systems:
 
 ```shell
-cargo build --locked
-cargo run --bin proqi
+brew install oborchers/tap/proqi
 ```
 
-The release binary has no Node, Python, or JVM runtime dependency:
+Homebrew may ask you to trust the individual formula because personal taps
+contain executable Ruby definitions. Trust only Proqi when whole-tap trust is
+unnecessary:
 
 ```shell
-cargo build --release --locked
-./target/release/proqi
+brew trust --formula oborchers/tap/proqi
+```
+
+Upgrade explicitly with:
+
+```shell
+brew upgrade --formula oborchers/tap/proqi
+```
+
+The formula installs immutable prebuilt artifacts, shell completions, and one
+native `proqi` executable. It performs no network activity during `post_install`
+and includes no independent self-updater.
+
+### Standalone archives
+
+Each [GitHub Release](https://github.com/oborchers/proqi/releases/latest)
+contains checksummed archives for exactly these targets:
+
+| Platform | Target | Archive |
+| --- | --- | --- |
+| Apple silicon macOS | `aarch64-apple-darwin` | `proqi-aarch64-apple-darwin.tar.gz` |
+| Intel macOS | `x86_64-apple-darwin` | `proqi-x86_64-apple-darwin.tar.gz` |
+| x86-64 GNU Linux | `x86_64-unknown-linux-gnu` | `proqi-x86_64-unknown-linux-gnu.tar.gz` |
+
+Verify the adjacent `.sha256` file before extracting. GitHub CLI can also
+verify the signed build provenance:
+
+```shell
+gh attestation verify proqi-aarch64-apple-darwin.tar.gz --repo oborchers/proqi
+```
+
+Keep `proqi-installation.json` beside a manually installed archive binary so
+Proqi can accurately identify the standalone installation. Archive builds have
+no Node, Python, JVM, or other language runtime dependency.
+
+Windows remains a compile and terminal-independent regression target in CI. It
+is not a supported `v0.1.0` installation or release target.
+
+## Start a board
+
+```shell
+proqi
 ```
 
 Paste text into the empty board, press `Esc` to return from editing, and press
-`?` for contextual help. Changes are autosaved. On exit, Proqi prints the exact
-command needed to resume the session.
-
-## Essential controls
+`?` for contextual shortcuts. Changes are autosaved. On exit, Proqi prints the
+exact command needed to resume that session.
 
 `Primary` means `Command` on macOS and `Ctrl` on other platforms. Portable
-fallbacks remain available when a terminal cannot report a particular modifier.
+fallbacks remain available when a terminal cannot report a modifier.
 
-| Board | Action |
+### Board controls
+
+| Input | Action |
 | --- | --- |
-| Paste or click `+` | Create and focus a thought |
+| Paste or click `+ New thought` | Create and focus a thought |
 | `j` / `k` or arrows | Focus the next or previous thought, including `+ New thought` |
 | `Enter` or `e` | Edit the focused thought |
 | `J` / `K`, `Shift+↑` / `Shift+↓`, or drag | Reorder the focused thought |
@@ -98,12 +140,14 @@ fallbacks remain available when a terminal cannot report a particular modifier.
 | `s`, then direction when needed | Submit and remove only after acceptance |
 | `S`, then direction when needed | Submit and keep the thought |
 | `u` | Undo the latest board operation |
-| `Space` | Collapse or expand a long thought |
+| `Space` | Fold or expand long context |
 | `/` | Search thought content |
 | `:` | Search commands |
 | `?` | Open contextual help |
 
-| Editor | Action |
+### Editor controls
+
+| Input | Action |
 | --- | --- |
 | `Esc` | Return to the board |
 | `Primary+A` | Select all text |
@@ -111,20 +155,17 @@ fallbacks remain available when a terminal cannot report a particular modifier.
 | `Primary+Z` | Undo an edit |
 | `Shift+Primary+Z` | Redo an edit |
 | `Primary+V` | Read the native clipboard |
-| `↑` / `↓` twice at a text boundary | Return to the board and focus the adjacent thought |
+| `↑` / `↓` twice at a boundary | Return to the board and focus the adjacent thought |
 
-Mouse users can focus and edit thoughts, place the cursor, drag a selection,
-scroll, reorder thoughts, search, click controls, use help, and choose Herdr
-targets.
+Mouse users can focus and edit thoughts, place the cursor, drag selections,
+scroll, reorder thoughts, click controls, use help, and choose verified Herdr
+targets. Moving onto folded context selects its complete canonical range.
+`Enter` expands the fold, while typing or deletion replaces it atomically.
 
-Clicking or moving onto folded context selects the complete placeholder.
-`Enter` expands it, while typing or deletion replaces the complete canonical
-range. Hidden content never traps the editing cursor.
+## Resume and organize sessions
 
-## Sessions that can be resumed
-
-Every Proqi process owns one session lease. Different sessions can run at the
-same time, but two processes cannot silently edit the same session.
+Every process owns one exclusive session lease. Different sessions can run at
+the same time, but two processes cannot silently edit the same session.
 
 ```shell
 proqi                         # open a fresh board
@@ -141,20 +182,38 @@ The session browser searches optional names, directory context, and thought
 content. It ranks the current directory without hiding other results and shows
 active, resumable, recovered, and trashed states in narrow and wide layouts.
 
-## Files, images, and the clipboard
+## Files, images, and clipboard safety
 
 A terminal file drop normally arrives as bracketed text. Proqi converts it only
 when the complete payload resolves unambiguously to existing absolute files.
 Quoted paths, escaped spaces, local file URLs, multiple paths, and Unicode names
-are supported. Ordinary prompt text remains exact, and dropped files are never
-read, copied, uploaded, or analyzed.
+are supported. Ordinary prompt text stays exact. Dropped files are never read,
+copied, uploaded, or analyzed.
 
-If the native clipboard contains raw image pixels, `Primary+V` validates the
-image, atomically writes a private PNG below the current session's data
-directory, and inserts its absolute path. A failure inserts nothing. Copy also
-has an OSC 52 fallback, but cut never deletes after an unconfirmed OSC 52 write.
+When the native clipboard contains raw image pixels, `Primary+V` validates the
+image, atomically writes a private PNG below the current session data directory,
+and inserts its path. A failure inserts nothing. Copy has an OSC 52 fallback,
+but cut never deletes after an unconfirmed OSC 52 write.
 
-## Scriptable CLI and agent skill
+## Best with Herdr
+
+Inside a Herdr-managed pane, Proqi can discover coding agents above, below,
+left, and right. A delivery control appears only after workspace, tab, geometry,
+edge overlap, agent kind, session identity, readiness, and protocol capability
+have been verified through Herdr's structured interface.
+
+Both actions use Herdr's semantic prompt operation:
+
+- `s Submit & remove` deletes the thought only after an accepted matching
+  receipt.
+- `S Submit & keep` sends the same thought and retains it.
+
+Ambiguity, timeout, rejection, receipt mismatch, or protocol mismatch always
+leaves the thought unchanged. Proqi never invokes a shell, injects raw keys,
+reads the conversation, or waits for the agent response. Herdr is optional. The
+complete standalone workflow works without it.
+
+## JSON CLI and Proqi skill
 
 The human CLI and versioned JSON contract use the same typed identifiers and
 durability rules:
@@ -172,66 +231,80 @@ proqi --json thoughts delete <session-id> <thought-id>
 proqi --json thoughts undo <session-id>
 ```
 
-Mutations accept a typed operation ID for durable idempotency. Commands aimed at
-an active session are forwarded through its verified local owner channel. They
-never write around the owning reducer. Unsupported or unverifiable forwarding
-is rejected as `session_busy`. Thought content supplied through standard input
-is bounded to 131,072 bytes so inactive and forwarded mutations share one safe
-transport contract. Discover the current bound through `proqi --json capabilities`.
+Mutations accept typed operation IDs for durable idempotency. Commands aimed at
+an active session are forwarded through its verified local owner channel on
+macOS and Linux. They never write around the owning reducer. Unsupported or
+unverifiable forwarding returns `session_busy`.
 
-Cross-session send accepts canonical session identifiers or unique exact names.
-It copies the complete canonical content and folded-context annotations. With
-`--remove`, Proqi commits the destination first and deletes the source only
-after receiving its durable receipt. If destination delivery fails, the source
-is unchanged. The same workflow is available from the TUI command palette as
-`Send to another Proqi session` and its remove-after-delivery variant.
+Cross-session send accepts a canonical session identifier or unique exact name.
+It copies canonical content and folded-context annotations. With `--remove`,
+Proqi commits the destination first and removes the source only after its durable
+receipt. Destination failure leaves the source unchanged.
 
-Verified owner forwarding is enabled on macOS and Linux. This private alpha
-returns `session_busy` on Windows until current-user named-pipe identity
-validation is implemented and exercised before a public alpha.
+[`skills/proqi/SKILL.md`](skills/proqi/SKILL.md) is an explicit-invocation skill
+that discovers capabilities first, uses standard input for arbitrary content,
+and never scrapes the TUI or reads every scratchpad automatically. During the
+pre-1.0 series, agents must discover the installed CLI contract instead of
+assuming compatibility with another Proqi version.
 
-The explicit-invocation skill at [`skills/proqi/SKILL.md`](skills/proqi/SKILL.md)
-describes only this stable JSON surface. It discovers capabilities first, uses
-standard input for arbitrary content, addresses the user-specified session, and
-does not scrape the TUI or read every scratchpad automatically.
+## Updates and privacy
 
-## Optional Herdr submission
+Interactive release builds check the public stable GitHub Release endpoint in
+the background at most once every 24 hours for one installation. Debug builds,
+source installations, JSON commands, skills, and other noninteractive commands
+do not perform implicit checks. Disable checks globally in `config.toml`:
 
-Inside a Herdr-managed pane, Proqi can discover coding agents directly above,
-below, left, and right. A delivery control appears only after the workspace, tab,
-geometry, edge overlap, agent kind, session identity, and readiness have all
-been verified through Herdr's structured protocol.
+```toml
+check_for_updates = false
+```
 
-Both actions use Herdr's immediate semantic prompt operation. `s Submit & remove`
-deletes the thought only after Herdr returns an accepted matching receipt.
-`S Submit & keep` sends the same prompt and retains the thought. Ambiguity,
-timeout, rejection, receipt mismatch, or protocol mismatch always leaves the
-thought unchanged. Proqi never invokes a shell, injects raw keys, reads the
-conversation, or waits for the agent response.
+The request sends only GitHub's release media type and API version, an optional
+safe ETag, and a bounded `proqi/<version>` User-Agent. It sends no thoughts,
+session identifiers, paths, clipboard data, terminal content, installation ID,
+or runtime state. Run an explicit bounded check with:
 
-Herdr is optional. The complete standalone workflow works without it. When
-available, Proqi also publishes a short-lived display-only `proqi` pane label
-so the scratchpad is distinguishable from adjacent named agent panes. It does
-not claim an agent identity, and the label expires automatically after an
-unclean process exit.
+```shell
+proqi update check --json
+```
 
-## Failure behavior
+Homebrew installations on macOS and Linux can choose **Update and restart all
+sessions**, **Not now**, or **Skip this version**. Proqi coordinates one update
+across every verified active instance that shares the installation. Each
+participant durably saves before the one shell-free
+`brew upgrade --formula oborchers/tap/proqi` invocation. A failed save, refused
+participant, timeout, or installer failure cancels safely. After success, each
+participant independently replaces its process image and resumes its ordinary
+session. Partial restart failures remain visible and recoverable.
 
-The footer distinguishes pending, saved, and failed persistence. If a durable
-write fails, Proqi retains the operation in memory, blocks destructive exit,
-and offers retry or an atomic private recovery export. Session trash is
-recoverable. Permanent pruning is separate and explicit.
+The coordination path is designed and deterministically tested for the ordinary
+case of 10 to 15 concurrent Proqi instances. Notification, dismissal, and skip
+state are installation-wide so multiple boards cannot compete for attention.
+
+Standalone archives receive verified release instructions. `v0.1.0` does not
+replace a standalone executable or promise a same-pane restart. Durable boards
+resume on the next normal start after the user replaces the archive.
+
+## Persistence, recovery, and security
+
+The footer distinguishes pending, saved, and failed persistence. A failed write
+stays in memory, blocks destructive exit, and offers retry or an atomic private
+recovery export. Session trash is recoverable. Permanent pruning is separate
+and explicit.
 
 SQLite uses WAL, full synchronous durability, bounded contention retry,
 forward-only migrations, backups before migration, integrity checks, and
 exclusive session leases. Persistent editor revisions and board inverse
-operations make undo and redo survive a process restart.
+operations make undo and redo survive a restart.
+
+Proqi stores content only in platform-native local application directories.
+Diagnostics are content-redacted and capped. See [SECURITY.md](SECURITY.md) for
+the support policy and private vulnerability reporting process.
 
 ## Configuration
 
 An optional `config.toml` lives in the platform-native Proqi configuration
 directory. Themes are `auto`, `light`, `dark`, or `limited`. Board bindings can
-be changed while portable editor shortcuts remain available:
+be customized while portable editor shortcuts remain available:
 
 ```toml
 check_for_updates = true
@@ -257,70 +330,79 @@ help = "?"
 quit = "q"
 ```
 
-Interactive release builds read the private installation-wide update cache at
-startup and refresh it in the background only when it is at least 24 hours old.
-Set `check_for_updates = false` to disable implicit checks. Debug builds,
-source installations, JSON commands, skills, and noninteractive commands do
-not perform implicit network requests.
+`brew uninstall proqi` removes the formula but deliberately leaves user data.
+Back up or remove the platform-native Proqi data, configuration, and cache
+directories separately only when you no longer need their sessions.
 
-Run an explicit bounded check with:
+## Release and support policy
 
-```shell
-proqi update check --json
-```
+Proqi is open-source software under the [MIT License](LICENSE). During the
+`0.x` series, only the latest stable release is supported, and JSON consumers
+must use capability discovery. There is currently no cloud synchronization,
+collaboration service, plugin system, Windows release, Homebrew Core formula,
+crate publication, npm package, Python package, container image, or telemetry.
 
-Update checks contact only
-`https://api.github.com/repos/oborchers/proqi/releases/latest` over HTTPS.
-They send GitHub's release media type and API version, an optional safe ETag,
-and a `proqi/<version>` User-Agent. They require no authentication and send no
-thoughts, session data, paths, clipboard content, terminal content, or other
-Proqi state. Homebrew installation remains a separate explicit choice in the
-interactive update prompt.
+Release archives include SHA-256 checksums, SPDX 2.3 JSON SBOMs, required
+third-party notices, shell completions, and GitHub OIDC-backed provenance and
+SBOM attestations. The public
+[`oborchers/homebrew-tap`](https://github.com/oborchers/homebrew-tap) formula is
+updated only after all referenced release assets are available and verified.
+
+Issues and focused pull requests are welcome. Read
+[CONTRIBUTING.md](CONTRIBUTING.md) and
+[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) before changing product scope,
+durable storage, public behavior, or architecture.
 
 ## Development
+
+Build from source with the checked-in toolchain:
+
+```shell
+git clone https://github.com/oborchers/proqi.git
+cd proqi
+cargo build --locked
+cargo run --bin proqi
+```
 
 The repository has one canonical automation surface:
 
 ```shell
-cargo xtask setup          # verify required local developer tools
-cargo xtask format         # apply formatting
-cargo xtask source-limits  # enforce the 500-line source-file ceiling
-cargo xtask architecture   # enforce dependency and adapter ownership
-cargo xtask check          # format, architecture, Clippy, docs, and tests
-cargo xtask test-pty       # real terminal scenarios on macOS
-cargo xtask coverage       # enforce the line-coverage floor
-cargo xtask audit          # advisories, licenses, sources, and dependencies
-cargo xtask package        # host archive and isolated installed-product contract
+cargo xtask setup              # verify required local developer tools
+cargo xtask format             # apply formatting
+cargo xtask source-limits      # enforce the 500-line source-file ceiling
+cargo xtask architecture       # enforce inward dependency boundaries
+cargo xtask assets             # verify public assets and recording fixtures
+cargo xtask check              # formatting, architecture, Clippy, docs, and tests
+cargo xtask test-pty           # real terminal scenarios on macOS
+cargo xtask coverage           # enforce the line-coverage floor
+cargo xtask audit              # advisories, licenses, sources, and dependencies
+cargo xtask package            # archive and isolated installed-product contract
+cargo xtask release-rehearsal  # non-publishing host release rehearsal
 ```
 
 Clippy warnings are denied. Rust functions are capped at 80 lines, cognitive
-complexity at 25, and nesting depth at 4. First-party source files are capped at
-500 physical lines. Any future frontend must add equivalent native complexity
-linting and remains subject to the same file ceiling.
+complexity at 25, and nesting depth at 4. Every first-party source file is
+capped at 500 physical lines. CI retains Linux, macOS, and Windows
+terminal-independent coverage, plus macOS PTY tests and the three-target
+release matrix. Windows does not produce a release artifact.
 
-CI runs the same gates on Linux, macOS, and Windows where applicable. Enable the
-optional local hook explicitly with `cargo xtask install-hooks`. Builds never
-change Git configuration automatically.
+Enable the optional local hook explicitly with `cargo xtask install-hooks`.
+Builds never change Git configuration automatically.
 
-Content-redacted diagnostics are written to the platform-native Proqi data
-directory under `diagnostics/proqi.log`. The private file is truncated at one
-MiB on process startup. Thought text, clipboard content, and command arguments
-are never logged.
-
-The demo is generated from the real release binary with
-[VHS](https://github.com/charmbracelet/vhs):
+The README demo uses the real release binary and deterministic temporary state:
 
 ```shell
-brew install vhs
-vhs assets/proqi-demo.tape
+brew install asciinema agg
+./scripts/readme-demo.sh record
 ```
 
-## Project status
+The social preview is generated from its checked-in SVG source with:
 
-This repository is a private alpha being prepared for Oliver's review. The
-final open-source license, Homebrew formula versus cask, signing, notarization,
-and publication setup remain deliberately undecided. Nothing in the current
-workflow publishes artifacts or changes repository visibility.
+```shell
+brew install librsvg
+./scripts/social-preview.sh
+```
 
 [`context/PRODUCT.md`](context/PRODUCT.md) defines user-visible behavior.
-[`context/ARCHITECTURE.md`](context/ARCHITECTURE.md) defines technical boundaries and invariants.
+[`context/ARCHITECTURE.md`](context/ARCHITECTURE.md) defines technical
+boundaries and durable invariants.
