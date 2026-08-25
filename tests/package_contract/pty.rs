@@ -128,7 +128,7 @@ fn assert_update_contract(product: &InstalledProduct) {
     let mut gateway = LocalUpdateControlClient::new(SystemIdGenerator);
     let deadline = Timestamp::from_millis(SystemClock.now().as_millis().saturating_add(10_000));
     let mut ids = SystemIdGenerator;
-    let before = active_participant(&registry, session);
+    let before = active_participant(&registry, session).expect("active package participant");
     let operation = ids.request_id();
     let ready = gateway
         .prepare(
@@ -223,7 +223,7 @@ fn assert_failed_exec_is_recoverable(product: &InstalledProduct) {
         .detect()
         .expect("failed-exec installation");
     let registry = update_registry(&homebrew, installation.identity);
-    let before = active_participant(&registry, session);
+    let before = active_participant(&registry, session).expect("active package participant");
     let mut ids = SystemIdGenerator;
     let operation = ids.request_id();
     let version = StableVersion::parse("0.1.0").expect("package version");
@@ -323,13 +323,12 @@ fn update_registry(
     .with_update_context(installation, UPDATE_CONTROL_PROTOCOL_VERSION)
 }
 
-fn active_participant(registry: &FileRuntimeCoordinator, session: &str) -> InstanceInfo {
+fn active_participant(registry: &FileRuntimeCoordinator, session: &str) -> Option<InstanceInfo> {
     registry
         .active_instances()
         .expect("scan package participants")
         .into_iter()
         .find(|participant| participant.session_id.to_string() == session)
-        .expect("active package participant")
 }
 
 fn wait_for_replacement(
@@ -339,8 +338,9 @@ fn wait_for_replacement(
 ) -> InstanceInfo {
     let deadline = Instant::now() + Duration::from_secs(8);
     loop {
-        let participant = active_participant(registry, session);
-        if participant.instance_id != previous {
+        if let Some(participant) = active_participant(registry, session)
+            && participant.instance_id != previous
+        {
             return participant;
         }
         assert!(Instant::now() < deadline, "installed owner did not exec");
