@@ -21,6 +21,7 @@ pub(super) fn drain(
     lanes: &WorkerLanes<'_>,
     pending: &mut PendingWork,
 ) -> Result<DrainOutcome, TerminalError> {
+    let input_boundary = lanes.input.latest_sequence();
     drain_bounded(
         || match lanes.update.receiver.try_recv() {
             Ok(result) => Ok(Some(result)),
@@ -32,16 +33,26 @@ pub(super) fn drain(
                 .unwrap_or(TerminalError::Worker("update result lane disconnected"))),
         },
         |result| {
-            apply_result(app, pending, result);
+            apply_result(app, pending, result, input_boundary);
             Ok(true)
         },
     )
 }
 
-fn apply_result(app: &mut BoardApp, pending: &mut PendingWork, result: UpdateResult) {
+fn apply_result(
+    app: &mut BoardApp,
+    pending: &mut PendingWork,
+    result: UpdateResult,
+    input_boundary: u64,
+) {
     match result {
         UpdateResult::Notice(notice) => {
-            app.present_update(notice.version, notice.installation, notice.participants);
+            app.present_update_protected(
+                notice.version,
+                notice.installation,
+                notice.participants,
+                input_boundary,
+            );
         }
         UpdateResult::Action(result) => {
             pending.update = pending.update.saturating_sub(1);

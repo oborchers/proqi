@@ -1,7 +1,7 @@
 //! Recoverable terminal ownership.
 
 use std::{
-    io::{self, stdout},
+    io::{self, Write as _, stdout},
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -11,52 +11,144 @@ use std::{
 use crossterm::{
     cursor::{Hide, SetCursorStyle, Show},
     event::{
-        DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture,
-        KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
+        DisableBracketedPaste, DisableFocusChange, DisableMouseCapture, EnableBracketedPaste,
+        EnableFocusChange, EnableMouseCapture, KeyboardEnhancementFlags,
+        PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
     },
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 
 use super::TerminalError;
+use crate::ui::KeyboardEnhancement;
 
 pub(super) trait TerminalControl {
     fn enter(&mut self) -> io::Result<()>;
     fn restore(&mut self) -> io::Result<()>;
 }
 
-pub(super) struct CrosstermControl;
+pub(super) struct CrosstermControl {
+    preference: KeyboardEnhancement,
+    enabled: u8,
+}
+
+const RAW_MODE: u8 = 1 << 0;
+const SCREEN_MODE: u8 = 1 << 1;
+const FOCUS_MODE: u8 = 1 << 2;
+const KEYBOARD_MODE: u8 = 1 << 3;
+
+impl CrosstermControl {
+    pub(super) const fn new(preference: KeyboardEnhancement) -> Self {
+        Self {
+            preference,
+            enabled: 0,
+        }
+    }
+
+    const fn has(&self, mode: u8) -> bool {
+        self.enabled & mode != 0
+    }
+
+    fn enable(&mut self, mode: u8) {
+        self.enabled |= mode;
+    }
+
+    fn disable(&mut self, mode: u8) {
+        self.enabled &= !mode;
+    }
+}
 
 impl TerminalControl for CrosstermControl {
     fn enter(&mut self) -> io::Result<()> {
         enable_raw_mode()?;
+        self.enable(RAW_MODE);
         execute!(
             stdout(),
             EnterAlternateScreen,
             EnableMouseCapture,
             EnableBracketedPaste,
-            PushKeyboardEnhancementFlags(
-                KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
-                    | KeyboardEnhancementFlags::REPORT_EVENT_TYPES
-                    | KeyboardEnhancementFlags::REPORT_ALTERNATE_KEYS
-            ),
             SetCursorStyle::BlinkingBlock,
             Hide
-        )
+        )?;
+        self.enable(SCREEN_MODE);
+        if execute!(stdout(), EnableFocusChange).is_ok() {
+            self.enable(FOCUS_MODE);
+        }
+        if self.preference == KeyboardEnhancement::Auto
+            && execute!(
+                stdout(),
+                PushKeyboardEnhancementFlags(compatible_keyboard_flags())
+            )
+            .is_ok()
+        {
+            self.enable(KEYBOARD_MODE);
+        }
+        Ok(())
     }
 
     fn restore(&mut self) -> io::Result<()> {
-        let screen = execute!(
-            stdout(),
-            Show,
-            SetCursorStyle::DefaultUserShape,
-            PopKeyboardEnhancementFlags,
-            DisableBracketedPaste,
-            DisableMouseCapture,
-            LeaveAlternateScreen
+        let mut first = None;
+        record(
+            &mut first,
+            execute!(stdout(), Show, SetCursorStyle::DefaultUserShape),
         );
-        let raw = disable_raw_mode();
-        screen.and(raw)
+        if self.has(KEYBOARD_MODE) {
+            record(&mut first, execute!(stdout(), PopKeyboardEnhancementFlags));
+            self.disable(KEYBOARD_MODE);
+        }
+        record(&mut first, reset_keyboard_reporting());
+        if self.has(FOCUS_MODE) {
+            record(&mut first, execute!(stdout(), DisableFocusChange));
+            self.disable(FOCUS_MODE);
+        }
+        if self.has(SCREEN_MODE) {
+            record(
+                &mut first,
+                execute!(
+                    stdout(),
+                    DisableBracketedPaste,
+                    DisableMouseCapture,
+                    LeaveAlternateScreen
+                ),
+            );
+            self.disable(SCREEN_MODE);
+        }
+        if self.has(RAW_MODE) {
+            record(&mut first, disable_raw_mode());
+            self.disable(RAW_MODE);
+        }
+        first.map_or(Ok(()), Err)
+    }
+}
+
+fn compatible_keyboard_flags() -> KeyboardEnhancementFlags {
+    let program = std::env::var("TERM_PROGRAM").unwrap_or_default();
+    let term = std::env::var("TERM").unwrap_or_default();
+    keyboard_flags(&program, &term)
+}
+
+fn keyboard_flags(program: &str, term: &str) -> KeyboardEnhancementFlags {
+    let mut flags = KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
+        | KeyboardEnhancementFlags::REPORT_ALTERNATE_KEYS;
+    let incompatible =
+        matches!(program, "iTerm.app" | "ghostty" | "Ghostty") || term.starts_with("tmux");
+    if !incompatible {
+        flags |= KeyboardEnhancementFlags::REPORT_EVENT_TYPES;
+    }
+    flags
+}
+
+fn reset_keyboard_reporting() -> io::Result<()> {
+    let mut output = stdout();
+    output.write_all(b"\x1b[<u\x1b[>4;0m")?;
+    output.flush()
+}
+
+fn record(first: &mut Option<io::Error>, result: io::Result<()>) {
+    if let Err(error) = result
+        && first.is_none()
+    {
+        *first = Some(error);
     }
 }
 
@@ -98,6 +190,67 @@ pub(super) struct TerminationGuard {
     requested: Arc<AtomicBool>,
     #[cfg(unix)]
     registrations: Vec<signal_hook::SigId>,
+}
+
+type PanicHook = dyn Fn(&std::panic::PanicHookInfo<'_>) + Send + Sync + 'static;
+
+pub(super) struct PanicHookGuard {
+    previous: Option<Arc<PanicHook>>,
+}
+
+impl PanicHookGuard {
+    pub(super) fn install() -> Self {
+        let owner = std::thread::current().id();
+        let previous: Arc<PanicHook> = std::panic::take_hook().into();
+        let chained: Arc<PanicHook> = Arc::clone(&previous);
+        std::panic::set_hook(Box::new(move |information| {
+            let is_owner = std::thread::current().id() == owner;
+            crate::adapters::diagnostics::record(
+                crate::adapters::diagnostics::SafeEvent::RuntimePanicked {
+                    role: if is_owner { "owner" } else { "worker" },
+                },
+            );
+            if is_owner {
+                let _restored = emergency_restore();
+            }
+            if is_owner {
+                chained(information);
+            }
+        }));
+        Self {
+            previous: Some(previous),
+        }
+    }
+}
+
+impl Drop for PanicHookGuard {
+    fn drop(&mut self) {
+        if let Some(previous) = self.previous.take() {
+            std::panic::set_hook(Box::new(move |information| previous(information)));
+        }
+    }
+}
+
+fn emergency_restore() -> io::Result<()> {
+    let mut first = None;
+    record(
+        &mut first,
+        execute!(stdout(), Show, SetCursorStyle::DefaultUserShape),
+    );
+    record(&mut first, execute!(stdout(), PopKeyboardEnhancementFlags));
+    record(&mut first, reset_keyboard_reporting());
+    record(&mut first, execute!(stdout(), DisableFocusChange));
+    record(
+        &mut first,
+        execute!(
+            stdout(),
+            DisableBracketedPaste,
+            DisableMouseCapture,
+            LeaveAlternateScreen
+        ),
+    );
+    record(&mut first, disable_raw_mode());
+    first.map_or(Ok(()), Err)
 }
 
 impl TerminationGuard {
@@ -152,7 +305,9 @@ mod tests {
         sync::{Arc, Mutex},
     };
 
-    use super::{TerminalControl, TerminalGuard};
+    use crossterm::event::KeyboardEnhancementFlags;
+
+    use super::{TerminalControl, TerminalGuard, keyboard_flags};
 
     #[derive(Clone)]
     struct FakeControl {
@@ -213,5 +368,20 @@ mod tests {
         });
         assert!(result.is_err());
         assert_eq!(*calls.lock().expect("calls"), ["enter", "restore"]);
+    }
+
+    #[test]
+    fn incompatible_transports_omit_event_type_reporting() {
+        let ordinary = keyboard_flags("Apple_Terminal", "xterm-256color");
+        assert!(ordinary.contains(KeyboardEnhancementFlags::REPORT_EVENT_TYPES));
+        for (program, term) in [
+            ("iTerm.app", "xterm-256color"),
+            ("ghostty", "xterm-ghostty"),
+            ("", "tmux-256color"),
+        ] {
+            let flags = keyboard_flags(program, term);
+            assert!(!flags.contains(KeyboardEnhancementFlags::REPORT_EVENT_TYPES));
+            assert!(flags.contains(KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES));
+        }
     }
 }

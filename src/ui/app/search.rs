@@ -8,10 +8,10 @@ use crate::{
     ports::environment::{Clock, IdGenerator},
 };
 
-use super::{BoardApp, UiInput, UiKey};
+use super::{BoardApp, UiInput, UiKey, query::QueryEditor};
 
 pub(super) struct SearchState {
-    query: String,
+    query: QueryEditor,
     selected: usize,
     scroll: usize,
 }
@@ -19,10 +19,14 @@ pub(super) struct SearchState {
 impl SearchState {
     fn new() -> Self {
         Self {
-            query: String::new(),
+            query: QueryEditor::default(),
             selected: 0,
             scroll: 0,
         }
+    }
+
+    pub(super) const fn query_cursor(&self) -> usize {
+        self.query.cursor()
     }
 }
 
@@ -45,7 +49,7 @@ impl BoardApp {
             .map(|thought| excerpt(&thought.content))
             .collect();
         Some((
-            search.query.clone(),
+            search.query.text().to_owned(),
             entries,
             search.selected.saturating_sub(search.scroll),
         ))
@@ -66,11 +70,11 @@ impl BoardApp {
         let UiInput::Key(key) = input else {
             return match input {
                 UiInput::Pointer(pointer) => self.handle_pointer(*pointer, ids, clock),
-                UiInput::Resize { .. }
-                | UiInput::HostFocusGained
-                | UiInput::Paste(_)
-                | UiInput::PasteAnnotated(_)
-                | UiInput::Key(_) => Vec::new(),
+                UiInput::Paste(value) => self.update_search_query(|query| query.paste(value)),
+                UiInput::PasteAnnotated(payload) => {
+                    self.update_search_query(|query| query.paste(&payload.content))
+                }
+                UiInput::Resize { .. } | UiInput::HostFocusGained | UiInput::Key(_) => Vec::new(),
             };
         };
         match *key {
@@ -78,7 +82,7 @@ impl BoardApp {
             UiKey::Enter => return self.execute_search_selected(),
             UiKey::Backspace => {
                 if let Some(search) = &mut self.search {
-                    search.query.pop();
+                    search.query.backspace();
                     search.selected = 0;
                     search.scroll = 0;
                 }
@@ -91,9 +95,19 @@ impl BoardApp {
                 movement: crate::ports::editor::CursorMovement::VisualDown,
                 ..
             } => self.move_search(1),
+            UiKey::Move { movement, .. } => {
+                if let Some(search) = &mut self.search {
+                    search.query.move_cursor(movement);
+                }
+            }
+            UiKey::Delete => {
+                if let Some(search) = &mut self.search {
+                    search.query.delete();
+                }
+            }
             UiKey::Character(character) if !character.is_control() => {
                 if let Some(search) = &mut self.search {
-                    search.query.push(character);
+                    search.query.insert_char(character);
                     search.selected = 0;
                     search.scroll = 0;
                 }
@@ -153,6 +167,7 @@ impl BoardApp {
         };
         let terms = search
             .query
+            .text()
             .to_lowercase()
             .split_whitespace()
             .map(str::to_owned)
@@ -167,6 +182,15 @@ impl BoardApp {
             })
             .map(|thought| thought.id)
             .collect()
+    }
+
+    fn update_search_query(&mut self, update: impl FnOnce(&mut QueryEditor)) -> Vec<Effect> {
+        if let Some(search) = &mut self.search {
+            update(&mut search.query);
+            search.selected = 0;
+            search.scroll = 0;
+        }
+        Vec::new()
     }
 }
 

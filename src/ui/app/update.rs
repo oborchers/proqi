@@ -18,14 +18,38 @@ pub(super) struct UpdatePrompt {
     installation: InstallationKind,
     participants: usize,
     selected: usize,
+    input_boundary: u64,
+    armed: bool,
 }
 
 impl BoardApp {
+    #[cfg(test)]
     pub(crate) fn present_update(
         &mut self,
         version: StableVersion,
         installation: InstallationKind,
         participants: usize,
+    ) {
+        self.install_update_prompt(version, installation, participants, 0, true);
+    }
+
+    pub(crate) fn present_update_protected(
+        &mut self,
+        version: StableVersion,
+        installation: InstallationKind,
+        participants: usize,
+        input_boundary: u64,
+    ) {
+        self.install_update_prompt(version, installation, participants, input_boundary, false);
+    }
+
+    fn install_update_prompt(
+        &mut self,
+        version: StableVersion,
+        installation: InstallationKind,
+        participants: usize,
+        input_boundary: u64,
+        armed: bool,
     ) {
         if installation == InstallationKind::SourceOrUnknown {
             return;
@@ -39,9 +63,23 @@ impl BoardApp {
             version,
             installation,
             participants,
-            selected: 0,
+            selected: 1,
+            input_boundary,
+            armed,
         });
         self.layout = None;
+    }
+
+    pub(crate) fn arm_update_prompt(&mut self) {
+        if let Some(prompt) = &mut self.update_prompt {
+            prompt.armed = true;
+        }
+    }
+
+    pub(crate) fn accept_update_input(&self, sequence: u64) -> bool {
+        self.update_prompt.as_ref().is_none_or(|prompt| {
+            prompt.armed && (sequence == 0 || sequence > prompt.input_boundary)
+        })
     }
 
     pub(super) fn handle_update_prompt_input(&mut self, input: &UiInput) -> Vec<Effect> {
@@ -338,11 +376,28 @@ mod tests {
 
         assert_eq!(
             effects,
-            vec![Effect::Update(UpdateIntent::Install(version()))]
+            vec![Effect::Update(UpdateIntent::Dismiss(version()))]
         );
 
         app.present_update(version(), InstallationKind::StandaloneArchive, 1);
         let effects = app.handle(UiInput::Key(UiKey::Escape), &mut ids, &clock);
+        assert_eq!(
+            effects,
+            vec![Effect::Update(UpdateIntent::Dismiss(version()))]
+        );
+    }
+
+    #[test]
+    fn protected_prompt_rejects_stale_input_until_its_first_frame() {
+        let (mut app, mut ids, clock) = app();
+        app.present_update_protected(version(), InstallationKind::HomebrewFormula, 1, 7);
+        assert!(!app.accept_update_input(7));
+        assert!(!app.accept_update_input(8));
+
+        app.arm_update_prompt();
+        assert!(!app.accept_update_input(7));
+        assert!(app.accept_update_input(8));
+        let effects = app.handle(UiInput::Key(UiKey::Enter), &mut ids, &clock);
         assert_eq!(
             effects,
             vec![Effect::Update(UpdateIntent::Dismiss(version()))]

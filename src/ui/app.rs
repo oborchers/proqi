@@ -8,6 +8,7 @@ mod editing;
 mod folds;
 mod palette;
 mod pointer;
+mod query;
 mod recovery;
 mod search;
 mod session;

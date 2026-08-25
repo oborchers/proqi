@@ -12,7 +12,7 @@ mod update_results;
 
 use std::{
     collections::BTreeMap,
-    io::{IsTerminal, Stdout, stdout},
+    io::{IsTerminal, Stdout, stdin, stdout},
     path::PathBuf,
     thread,
     time::{Duration, Instant},
@@ -43,7 +43,7 @@ use crate::{
 
 use super::{
     TerminalError,
-    control::{CrosstermControl, TerminalGuard, TerminationGuard},
+    control::{CrosstermControl, PanicHookGuard, TerminalGuard, TerminationGuard},
     external::ExternalLane,
     input::{InputLane, InputMessage},
     persistence::PersistenceLane,
@@ -73,7 +73,7 @@ pub(crate) struct TerminalResources {
 
 /// Refuse an interactive launch before it creates or opens durable state.
 pub(crate) fn require_interactive() -> Result<(), TerminalError> {
-    if stdout().is_terminal() {
+    if stdin().is_terminal() && stdout().is_terminal() {
         Ok(())
     } else {
         Err(TerminalError::Io(
@@ -149,7 +149,8 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
     let session_id = state.board.session.id;
     store.recover_submissions(session_id, clock.now())?;
     let (control, control_warning) = start_optional_control(&mut session_lease);
-    let (theme, guard) = enter_terminal(settings.theme)?;
+    let (theme, guard) = enter_terminal(settings.theme, settings.keyboard_enhancement)?;
+    let panic_hook = PanicHookGuard::install();
     let termination = TerminationGuard::register()?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
     let presentation_source = format!("proqi-{}", session_lease.info().instance_id);
@@ -201,6 +202,7 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
     let shutdown_deadline = shutdown.request();
     drop(terminal);
     let restoration_result = guard.finish();
+    drop(panic_hook);
     let control_result = owned.stop_control(shutdown_deadline);
     drop((session_lease, schema_lease));
     let lane_results = owned.stop_workers(shutdown_deadline);
@@ -338,9 +340,10 @@ fn start_optional_control(
 
 fn enter_terminal(
     preference: crate::ui::ThemePreference,
+    keyboard: crate::ui::KeyboardEnhancement,
 ) -> Result<(Theme, TerminalGuard<CrosstermControl>), TerminalError> {
     let theme = super::palette::resolve(preference, supports_true_color());
-    let guard = TerminalGuard::enter(CrosstermControl)?;
+    let guard = TerminalGuard::enter(CrosstermControl::new(keyboard))?;
     Ok((theme, guard))
 }
 
@@ -404,6 +407,7 @@ fn drive(
                 let layout = app.prepare_frame(frame.area());
                 render(frame, app, &layout, &theme);
             })?;
+            app.arm_update_prompt();
             redraw = false;
         }
         if app.quit {
@@ -429,7 +433,13 @@ fn drive(
             Duration::from_millis(30)
         };
         match lanes.input.receiver.recv_timeout(input_wait) {
-            Ok(InputMessage::Event(event)) => {
+            Ok(InputMessage::Event {
+                sequence,
+                input: event,
+            }) => {
+                if !app.accept_update_input(sequence) {
+                    continue;
+                }
                 if matches!(event, UiInput::Resize { .. }) {
                     agent_deadline = Some(Instant::now() + Duration::from_millis(250));
                 }

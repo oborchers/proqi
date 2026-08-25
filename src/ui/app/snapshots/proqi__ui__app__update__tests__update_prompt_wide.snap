@@ -9,8 +9,8 @@ expression: "update_snapshot(100, 18)"
 03││
 04│                     ┌ update available · 1.2.3 ────────────────────────────[x]│
 05│                     │                                                        ││
-06│                     │› Update and restart all 12 sessions                    ││
-07│                     │  Not now                                               ││
+06│                     │  Update and restart all 12 sessions                    ││
+07│                     │› Not now                                               ││
 08│                     │  Skip 1.2.3                                            ││
 09│                     │                                                        ││
 10│                     └────────────────────────────────────────────────────────┘│

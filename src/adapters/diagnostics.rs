@@ -50,6 +50,11 @@ pub enum SafeEvent<'a> {
         /// Number of cleanup stages that returned an error.
         cleanup_failures: usize,
     },
+    /// A runtime thread panicked without recording its payload.
+    RuntimePanicked {
+        /// Stable lane name or `owner`.
+        role: &'a str,
+    },
     /// One CLI command succeeded.
     CommandSucceeded,
     /// One CLI command failed with a stable code.
@@ -127,6 +132,9 @@ pub fn record(event: SafeEvent<'_>) {
         SafeEvent::ShutdownStarted => tracing::info!(event = "shutdown_started"),
         SafeEvent::ShutdownFinished { cleanup_failures } => {
             tracing::info!(event = "shutdown_finished", cleanup_failures);
+        }
+        SafeEvent::RuntimePanicked { role } => {
+            tracing::error!(event = "runtime_panicked", role);
         }
         SafeEvent::CommandSucceeded => tracing::info!(event = "command_succeeded"),
         SafeEvent::CommandFailed { code, exit } => {

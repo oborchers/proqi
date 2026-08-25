@@ -17,6 +17,17 @@ pub enum ThemePreference {
     Limited,
 }
 
+/// Optional enhanced keyboard reporting for compatible terminal emulators.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum KeyboardEnhancement {
+    /// Enable only the flags compatible with the detected terminal transport.
+    #[default]
+    Auto,
+    /// Use portable Crossterm key events without enhancement negotiation.
+    Disabled,
+}
+
 /// Complete UI configuration loaded from the platform config directory.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[serde(default, deny_unknown_fields)]
@@ -25,6 +36,8 @@ pub struct UiSettings {
     pub check_for_updates: bool,
     /// Theme preference.
     pub theme: ThemePreference,
+    /// Keyboard protocol negotiation.
+    pub keyboard_enhancement: KeyboardEnhancement,
     /// Remappable direct board keys.
     pub keybindings: KeyBindings,
 }
@@ -34,6 +47,7 @@ impl Default for UiSettings {
         Self {
             check_for_updates: true,
             theme: ThemePreference::default(),
+            keyboard_enhancement: KeyboardEnhancement::default(),
             keybindings: KeyBindings::default(),
         }
     }

@@ -11,6 +11,7 @@ use ratatui_widgets::{
     clear::Clear,
     paragraph::{Paragraph, Wrap},
 };
+use unicode_segmentation::UnicodeSegmentation as _;
 use unicode_width::UnicodeWidthStr as _;
 
 use crate::application::InteractionMode;
@@ -34,6 +35,7 @@ pub(super) fn render_help(
                             .fg(theme.accent)
                             .add_modifier(Modifier::BOLD),
                     ))
+                    .style(theme.base_style())
                     .borders(Borders::ALL),
             )
             .wrap(Wrap { trim: true }),
@@ -50,15 +52,20 @@ pub(super) fn render_picker(
 ) {
     frame.render_widget(Clear, overlay.area);
     frame.render_widget(
-        Block::default().title(picker.title).borders(Borders::ALL),
+        Block::default()
+            .title(picker.title)
+            .style(theme.base_style())
+            .borders(Borders::ALL),
         overlay.area,
     );
     let input = input_area(overlay);
+    let available = input.width.saturating_sub(1);
+    let (query, cursor) = visible_query(picker.query, picker.cursor, available);
     frame.render_widget(
-        Paragraph::new(format!("{}{query}", picker.prompt, query = picker.query))
-            .style(theme.focused_style()),
+        Paragraph::new(format!("{}{query}", picker.prompt)).style(theme.focused_style()),
         input,
     );
+    frame.set_cursor_position((input.x.saturating_add(1).saturating_add(cursor), input.y));
     for (index, (entry, area)) in picker.entries.iter().zip(&overlay.items).enumerate() {
         let style = if index == picker.selected {
             theme
@@ -90,6 +97,7 @@ pub(super) fn render_update(
                     .fg(theme.accent)
                     .add_modifier(Modifier::BOLD),
             ))
+            .style(theme.base_style())
             .borders(Borders::ALL),
         overlay.area,
     );
@@ -117,7 +125,10 @@ pub(super) fn render_text_prompt(
 ) {
     frame.render_widget(Clear, overlay.area);
     frame.render_widget(
-        Block::default().title(title).borders(Borders::ALL),
+        Block::default()
+            .title(title)
+            .style(theme.base_style())
+            .borders(Borders::ALL),
         overlay.area,
     );
     frame.render_widget(
@@ -148,8 +159,32 @@ pub(super) struct PickerView<'a> {
     pub(super) title: &'a str,
     pub(super) prompt: char,
     pub(super) query: &'a str,
+    pub(super) cursor: usize,
     pub(super) entries: &'a [String],
     pub(super) selected: usize,
+}
+
+fn visible_query(query: &str, cursor: usize, width: u16) -> (String, u16) {
+    let cursor = cursor.min(query.len());
+    let prefix = &query[..cursor];
+    let mut start = 0;
+    while prefix[start..].width() > usize::from(width) {
+        start = prefix[start..]
+            .grapheme_indices(true)
+            .nth(1)
+            .map_or(cursor, |(offset, _)| start + offset);
+    }
+    let mut end = query.len();
+    while query[start..end].width() > usize::from(width) {
+        end = query[..end]
+            .grapheme_indices(true)
+            .next_back()
+            .map_or(start, |(index, _)| index);
+    }
+    (
+        query[start..end].to_owned(),
+        u16::try_from(query[start..cursor].width()).unwrap_or(width),
+    )
 }
 
 fn render_close(frame: &mut Frame<'_>, overlay: &OverlayLayout, theme: &Theme) {

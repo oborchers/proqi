@@ -4,7 +4,7 @@ use std::{
     fmt, io,
     sync::{
         Arc,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
         mpsc::{Receiver, SyncSender, TrySendError, sync_channel},
     },
     thread::{self, JoinHandle},
@@ -59,13 +59,14 @@ impl EventSource for CrosstermEventSource {
 }
 
 pub(super) enum InputMessage {
-    Event(UiInput),
+    Event { sequence: u64, input: UiInput },
     Failed(InputFailure),
 }
 
 pub(super) struct InputLane {
     pub(super) receiver: Receiver<InputMessage>,
     stop: Arc<AtomicBool>,
+    latest_sequence: Arc<AtomicU64>,
     handle: Option<JoinHandle<()>>,
 }
 
@@ -77,11 +78,16 @@ impl InputLane {
     fn spawn_with_source(mut source: Box<dyn EventSource>) -> Self {
         let (sender, receiver) = sync_channel(64);
         let stop = Arc::new(AtomicBool::new(false));
+        let latest_sequence = Arc::new(AtomicU64::new(0));
         let worker_stop = Arc::clone(&stop);
-        let handle = thread::spawn(move || input_loop(&mut *source, &sender, &worker_stop));
+        let worker_sequence = Arc::clone(&latest_sequence);
+        let handle = thread::spawn(move || {
+            input_loop(&mut *source, &sender, &worker_stop, &worker_sequence);
+        });
         Self {
             receiver,
             stop,
+            latest_sequence,
             handle: Some(handle),
         }
     }
@@ -99,6 +105,10 @@ impl InputLane {
     pub(super) fn request_stop(&self) {
         self.stop.store(true, Ordering::Release);
     }
+
+    pub(super) fn latest_sequence(&self) -> u64 {
+        self.latest_sequence.load(Ordering::Acquire)
+    }
 }
 
 impl Drop for InputLane {
@@ -107,14 +117,19 @@ impl Drop for InputLane {
     }
 }
 
-fn input_loop(source: &mut dyn EventSource, sender: &SyncSender<InputMessage>, stop: &AtomicBool) {
+fn input_loop(
+    source: &mut dyn EventSource,
+    sender: &SyncSender<InputMessage>,
+    stop: &AtomicBool,
+    latest_sequence: &AtomicU64,
+) {
     let mut pending_resize = None;
     while !stop.load(Ordering::Acquire) {
         flush_resize(sender, &mut pending_resize);
         match source.poll(Duration::from_millis(40)) {
             Ok(false) => {}
             Ok(true) => match source.read() {
-                Ok(event) => deliver(event, sender, stop, &mut pending_resize),
+                Ok(event) => deliver(event, sender, stop, &mut pending_resize, latest_sequence),
                 Err(error) => {
                     let _sent = send_lossless(
                         sender,
@@ -151,6 +166,7 @@ fn deliver(
     sender: &SyncSender<InputMessage>,
     stop: &AtomicBool,
     pending_resize: &mut Option<UiInput>,
+    latest_sequence: &AtomicU64,
 ) {
     let Some(input) = translate(event) else {
         return;
@@ -158,7 +174,8 @@ fn deliver(
     if matches!(input, UiInput::Resize { .. }) {
         *pending_resize = Some(input);
     } else {
-        let _sent = send_lossless(sender, InputMessage::Event(input), stop);
+        let sequence = latest_sequence.fetch_add(1, Ordering::AcqRel) + 1;
+        let _sent = send_lossless(sender, InputMessage::Event { sequence, input }, stop);
     }
 }
 
@@ -166,8 +183,8 @@ fn flush_resize(sender: &SyncSender<InputMessage>, pending: &mut Option<UiInput>
     let Some(input) = pending.take() else {
         return;
     };
-    match sender.try_send(InputMessage::Event(input)) {
-        Err(TrySendError::Full(InputMessage::Event(input))) => *pending = Some(input),
+    match sender.try_send(InputMessage::Event { sequence: 0, input }) {
+        Err(TrySendError::Full(InputMessage::Event { input, .. })) => *pending = Some(input),
         Ok(())
         | Err(TrySendError::Disconnected(_) | TrySendError::Full(InputMessage::Failed(_))) => {}
     }

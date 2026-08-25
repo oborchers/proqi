@@ -29,9 +29,12 @@ impl WorkerLifecycle {
                 .compare_exchange(RUNNING, STOPPING, Ordering::AcqRel, Ordering::Acquire);
     }
 
-    pub(super) fn run(&self, work: impl FnOnce()) {
+    pub(super) fn run(&self, role: &'static str, work: impl FnOnce()) {
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(work));
         if outcome.is_err() {
+            crate::adapters::diagnostics::record(
+                crate::adapters::diagnostics::SafeEvent::RuntimePanicked { role },
+            );
             self.0.store(PANICKED, Ordering::Release);
             return;
         }
@@ -127,12 +130,12 @@ mod tests {
     #[test]
     fn worker_exit_is_clean_only_after_stop_was_requested() {
         let unexpected = WorkerLifecycle::default();
-        unexpected.run(|| {});
+        unexpected.run("update", || {});
         assert!(unexpected.failure("update").is_some());
 
         let clean = WorkerLifecycle::default();
         clean.request_stop();
-        clean.run(|| {});
+        clean.run("update", || {});
         assert!(clean.failure("update").is_none());
         assert!(clean.stopped_cleanly());
     }
@@ -140,7 +143,7 @@ mod tests {
     #[test]
     fn worker_panic_is_observable_without_propagating_the_payload() {
         let lifecycle = WorkerLifecycle::default();
-        lifecycle.run(|| panic!("secret panic payload"));
+        lifecycle.run("external", || panic!("secret panic payload"));
         assert_eq!(
             lifecycle.failure("external").map(|error| error.to_string()),
             Some("terminal worker failed: external lane panicked".to_owned())

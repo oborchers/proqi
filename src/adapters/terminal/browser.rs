@@ -12,7 +12,7 @@ use crate::{
 
 use super::{
     TerminalError,
-    control::{CrosstermControl, TerminalGuard, TerminationGuard},
+    control::{CrosstermControl, PanicHookGuard, TerminalGuard, TerminationGuard},
     input::{InputLane, InputMessage},
     runner::supports_true_color,
 };
@@ -28,7 +28,8 @@ pub(crate) fn pick_session(
     settings: &UiSettings,
 ) -> Result<BrowserAction, TerminalError> {
     let theme = super::palette::resolve(settings.theme, supports_true_color());
-    let guard = TerminalGuard::enter(CrosstermControl)?;
+    let guard = TerminalGuard::enter(CrosstermControl::new(crate::ui::KeyboardEnhancement::Auto))?;
+    let panic_hook = PanicHookGuard::install();
     let termination = TerminationGuard::register()?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
     let input = InputLane::spawn();
@@ -37,6 +38,7 @@ pub(crate) fn pick_session(
     input.request_stop();
     drop(terminal);
     let restoration_result = guard.finish();
+    drop(panic_hook);
     let input_result = input.stop(super::supervisor::ShutdownDeadline::after(
         super::supervisor::SHUTDOWN_TIMEOUT,
     ));
@@ -67,7 +69,7 @@ fn drive(
             dirty = false;
         }
         match input.receiver.recv_timeout(Duration::from_millis(40)) {
-            Ok(InputMessage::Event(event)) => match browser.handle(event) {
+            Ok(InputMessage::Event { input, .. }) => match browser.handle(input) {
                 BrowserAction::Continue => dirty = true,
                 action => return Ok(action),
             },

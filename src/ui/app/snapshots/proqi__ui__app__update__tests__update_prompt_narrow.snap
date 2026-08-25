@@ -8,8 +8,8 @@ expression: "update_snapshot(44, 16)"
 02││
 03│┌ update available · 1.2.3 ──────────────[x]│
 04││                                          ││
-05││› Update and restart all 12 sessions      ││
-06││  Not now                                 ││
+05││  Update and restart all 12 sessions      ││
+06││› Not now                                 ││
 07││  Skip 1.2.3                              ││
 08││                                          ││
 09│└──────────────────────────────────────────┘│

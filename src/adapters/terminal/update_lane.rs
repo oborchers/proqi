@@ -76,7 +76,7 @@ impl UpdateLane {
         let lifecycle = WorkerLifecycle::default();
         let worker_lifecycle = lifecycle.clone();
         let handle = thread::spawn(move || {
-            worker_lifecycle.run(|| {
+            worker_lifecycle.run("update", || {
                 update_loop(
                     &request_receiver,
                     &result_sender,

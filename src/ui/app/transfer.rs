@@ -11,10 +11,10 @@ use crate::{
     },
 };
 
-use super::{BoardApp, UiInput, UiKey};
+use super::{BoardApp, UiInput, UiKey, query::QueryEditor};
 
 pub(super) struct TransferState {
-    query: String,
+    query: QueryEditor,
     sessions: Vec<SessionHit>,
     selected: usize,
     scroll: usize,
@@ -36,7 +36,7 @@ impl BoardApp {
         };
         let mut effects = self.flush_pending_edit(ids, clock);
         self.transfer = Some(TransferState {
-            query: String::new(),
+            query: QueryEditor::default(),
             sessions: Vec::new(),
             selected: 0,
             scroll: 0,
@@ -110,7 +110,7 @@ impl BoardApp {
                 .collect()
         };
         Some((
-            state.query.clone(),
+            state.query.text().to_owned(),
             entries,
             state.selected.saturating_sub(state.scroll),
         ))
@@ -131,15 +131,19 @@ impl BoardApp {
         let UiInput::Key(key) = input else {
             return match input {
                 UiInput::Pointer(pointer) => self.handle_pointer(*pointer, ids, clock),
+                UiInput::Paste(value) => self.update_transfer_query(|query| query.paste(value)),
+                UiInput::PasteAnnotated(payload) => {
+                    self.update_transfer_query(|query| query.paste(&payload.content))
+                }
                 _ => Vec::new(),
             };
         };
         match *key {
             UiKey::Escape => self.transfer = None,
             UiKey::Enter => return self.choose_transfer(ids),
-            UiKey::Backspace => self.update_transfer_query(|query| {
-                query.pop();
-            }),
+            UiKey::Backspace => {
+                self.update_transfer_query(QueryEditor::backspace);
+            }
             UiKey::Move {
                 movement: CursorMovement::VisualUp,
                 ..
@@ -148,8 +152,14 @@ impl BoardApp {
                 movement: CursorMovement::VisualDown,
                 ..
             } => self.move_transfer(1),
+            UiKey::Move { movement, .. } => {
+                self.update_transfer_query(|query| query.move_cursor(movement));
+            }
+            UiKey::Delete => {
+                self.update_transfer_query(QueryEditor::delete);
+            }
             UiKey::Character(character) if !character.is_control() => {
-                self.update_transfer_query(|query| query.push(character));
+                self.update_transfer_query(|query| query.insert_char(character));
             }
             _ => {}
         }
@@ -187,12 +197,13 @@ impl BoardApp {
         request.map_or_else(Vec::new, |request| vec![Effect::TransferThought(request)])
     }
 
-    fn update_transfer_query(&mut self, update: impl FnOnce(&mut String)) {
+    fn update_transfer_query(&mut self, update: impl FnOnce(&mut QueryEditor)) -> Vec<Effect> {
         if let Some(state) = &mut self.transfer {
             update(&mut state.query);
             state.selected = 0;
             state.scroll = 0;
         }
+        Vec::new()
     }
 
     fn move_transfer(&mut self, delta: isize) {
@@ -217,8 +228,12 @@ impl BoardApp {
 }
 
 impl TransferState {
+    pub(super) const fn query_cursor(&self) -> usize {
+        self.query.cursor()
+    }
+
     fn matches(&self) -> Vec<&SessionHit> {
-        let query = self.query.to_lowercase();
+        let query = self.query.text().to_lowercase();
         self.sessions
             .iter()
             .filter(|hit| {

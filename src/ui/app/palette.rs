@@ -5,7 +5,7 @@ use crate::{
     ports::environment::{Clock, IdGenerator},
 };
 
-use super::{BoardApp, UiInput, UiKey};
+use super::{BoardApp, UiInput, UiKey, query::QueryEditor};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Command {
@@ -65,7 +65,7 @@ impl Command {
 }
 
 pub(super) struct PaletteState {
-    query: String,
+    query: QueryEditor,
     selected: usize,
     scroll: usize,
     submit_supported: bool,
@@ -74,16 +74,20 @@ pub(super) struct PaletteState {
 impl PaletteState {
     fn new(submit_supported: bool) -> Self {
         Self {
-            query: String::new(),
+            query: QueryEditor::default(),
             selected: 0,
             scroll: 0,
             submit_supported,
         }
     }
 
+    pub(super) const fn query_cursor(&self) -> usize {
+        self.query.cursor()
+    }
+
     pub(super) fn view(&self) -> (String, Vec<String>, usize) {
         (
-            self.query.clone(),
+            self.query.text().to_owned(),
             self.matches()
                 .into_iter()
                 .skip(self.scroll)
@@ -98,7 +102,7 @@ impl PaletteState {
     }
 
     fn matches(&self) -> Vec<(Command, &'static str)> {
-        let query = self.query.to_lowercase();
+        let query = self.query.text().to_lowercase();
         Command::ALL
             .into_iter()
             .filter(|(command, _)| self.available(*command))
@@ -172,11 +176,11 @@ impl BoardApp {
         let UiInput::Key(key) = input else {
             return match input {
                 UiInput::Pointer(pointer) => self.handle_pointer(*pointer, ids, clock),
-                UiInput::Resize { .. }
-                | UiInput::HostFocusGained
-                | UiInput::Paste(_)
-                | UiInput::PasteAnnotated(_)
-                | UiInput::Key(_) => Vec::new(),
+                UiInput::Paste(value) => self.update_palette_query(|query| query.paste(value)),
+                UiInput::PasteAnnotated(payload) => {
+                    self.update_palette_query(|query| query.paste(&payload.content))
+                }
+                UiInput::Resize { .. } | UiInput::HostFocusGained | UiInput::Key(_) => Vec::new(),
             };
         };
         match *key {
@@ -187,7 +191,7 @@ impl BoardApp {
             }
             UiKey::Backspace => {
                 if let Some(palette) = &mut self.palette {
-                    palette.query.pop();
+                    palette.query.backspace();
                     palette.clamp();
                 }
             }
@@ -199,14 +203,35 @@ impl BoardApp {
                 movement: crate::ports::editor::CursorMovement::VisualDown,
                 ..
             } => self.move_palette(1),
+            UiKey::Move { movement, .. } => {
+                if let Some(palette) = &mut self.palette {
+                    palette.query.move_cursor(movement);
+                }
+            }
+            UiKey::Delete => {
+                if let Some(palette) = &mut self.palette {
+                    palette.query.delete();
+                    palette.clamp();
+                }
+            }
             UiKey::Character(character) if !character.is_control() => {
                 if let Some(palette) = &mut self.palette {
-                    palette.query.push(character);
+                    palette.query.insert_char(character);
                     palette.selected = 0;
                     palette.scroll = 0;
                 }
             }
             _ => {}
+        }
+        Vec::new()
+    }
+
+    fn update_palette_query(&mut self, update: impl FnOnce(&mut QueryEditor)) -> Vec<Effect> {
+        if let Some(palette) = &mut self.palette {
+            update(&mut palette.query);
+            palette.selected = 0;
+            palette.scroll = 0;
+            palette.clamp();
         }
         Vec::new()
     }

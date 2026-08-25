@@ -44,3 +44,20 @@ fn palette_quit_is_global_and_shallow_navigation_stays_visible() {
     fixture.input(UiInput::Key(UiKey::Quit));
     assert!(fixture.app.quit);
 }
+
+#[test]
+fn palette_query_accepts_normalized_paste_and_grapheme_cursor_edits() {
+    let mut fixture = Fixture::new();
+    fixture.input(UiInput::Key(UiKey::Character(':')));
+    fixture.input(UiInput::Paste("qu\nit".to_owned()));
+    let (query, _, _) = fixture.app.palette_view().expect("palette");
+    assert_eq!(query, "qu it");
+
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::GraphemeBack,
+        extend_selection: false,
+    }));
+    fixture.input(UiInput::Key(UiKey::Character('!')));
+    let (query, _, _) = fixture.app.palette_view().expect("palette");
+    assert_eq!(query, "qu i!t");
+}

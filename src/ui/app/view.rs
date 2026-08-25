@@ -10,7 +10,7 @@ use crate::{
     ui::{HitTarget, KeyBindings, LayoutSnapshot, compute_layout},
 };
 
-use super::{BoardApp, palette};
+use super::{BoardApp, palette, search, transfer};
 
 impl BoardApp {
     /// Return the active editor snapshot, if edit mode is active.
@@ -124,6 +124,24 @@ impl BoardApp {
     #[must_use]
     pub fn session_transfer_view(&self) -> Option<(String, Vec<String>, usize)> {
         self.transfer_view()
+    }
+
+    /// UTF-8 byte cursor for the active searchable overlay query.
+    #[must_use]
+    pub fn overlay_query_cursor(&self) -> Option<usize> {
+        self.search
+            .as_ref()
+            .map(search::SearchState::query_cursor)
+            .or_else(|| {
+                self.transfer
+                    .as_ref()
+                    .map(transfer::TransferState::query_cursor)
+            })
+            .or_else(|| {
+                self.palette
+                    .as_ref()
+                    .map(palette::PaletteState::query_cursor)
+            })
     }
 
     /// Active board bindings used by hints and command translation.
