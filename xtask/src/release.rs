@@ -13,11 +13,7 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
 const DIST_VERSION: &str = "0.32.0";
-const TARGETS: [&str; 3] = [
-    "aarch64-apple-darwin",
-    "x86_64-apple-darwin",
-    "x86_64-unknown-linux-gnu",
-];
+use super::release_targets::ALL as TARGETS;
 
 pub(super) fn plan(root: &Path, requested_tag: Option<&str>) -> Result<(), String> {
     let output = plan_output(root, requested_tag)?;
@@ -35,7 +31,7 @@ pub(super) fn rehearse(root: &Path) -> Result<(), String> {
     let manifest: Value =
         serde_json::from_slice(&plan).map_err(|error| format!("parse cargo-dist plan: {error}"))?;
     validate_planned_targets(&manifest)?;
-    super::package::run(root)?;
+    super::package::run(root, None)?;
 
     let output = root.join("target/release-rehearsal");
     recreate_output(root, &output)?;

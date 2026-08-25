@@ -9,15 +9,24 @@ multi-ecosystem-groups:
 updates:
   - package-ecosystem: cargo
     directory: /
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 1
     patterns: ["*"]
     multi-ecosystem-group: all-dependencies
 
   - package-ecosystem: github-actions
     directory: /
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 1
     patterns: ["*"]
     multi-ecosystem-group: all-dependencies
 
   - package-ecosystem: rust-toolchain
     directory: /
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 1
     patterns: ["*"]
     multi-ecosystem-group: all-dependencies

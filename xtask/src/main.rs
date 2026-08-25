@@ -17,6 +17,7 @@ mod package;
 mod policy;
 mod public_assets;
 mod release;
+mod release_targets;
 mod snapshots;
 mod source_limits;
 
@@ -67,7 +68,10 @@ fn execute() -> Result<(), String> {
         ),
         "coverage" => coverage(&root),
         "audit" => audit(&root),
-        "package" => package::run(&root),
+        "package" => {
+            let notices = package_notices_argument()?;
+            package::run(&root, notices.as_deref())
+        }
         "release-plan" => {
             let tag = env::args().nth(2);
             release::plan(&root, tag.as_deref())
@@ -94,6 +98,15 @@ fn execute() -> Result<(), String> {
             Ok(())
         }
         other => Err(format!("unknown command `{other}`; run `cargo xtask help`")),
+    }
+}
+
+fn package_notices_argument() -> Result<Option<PathBuf>, String> {
+    let arguments = env::args().skip(2).collect::<Vec<_>>();
+    match arguments.as_slice() {
+        [] => Ok(None),
+        [flag, path] if flag == "--notices" => Ok(Some(PathBuf::from(path))),
+        _ => Err("package accepts only `--notices <path>`".to_owned()),
     }
 }
 

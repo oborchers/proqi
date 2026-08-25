@@ -34,8 +34,8 @@ cargo xtask package
 cargo +1.88.0 xtask msrv
 cargo xtask release-plan v0.1.1
 cargo xtask release-rehearsal
-actionlint .github/workflows/ci.yml .github/workflows/release.yml
-zizmor --pedantic .github/workflows/ci.yml .github/workflows/release.yml
+actionlint .github/workflows/ci.yml .github/workflows/release-candidate.yml .github/workflows/release.yml
+zizmor --pedantic .github/workflows/ci.yml .github/workflows/release-candidate.yml .github/workflows/release.yml
 git diff --check
 ```
 
@@ -96,14 +96,19 @@ After the readiness audit:
 2. Wait for `Required CI result` to pass on Linux and macOS.
 3. Close superseded dependency pull requests only after their equivalent
    versions are present on `main`.
-4. Dispatch `Release` with `v0.1.1`. This is non-publishing rehearsal of the
-   exact hosted matrix and attestations.
-5. Inspect all three archives, checksums, SBOMs, attestations, and generated
-   Homebrew formula from the successful run.
-6. Create and push the annotated stable tag. A valid tag publishes without a
-   separate human approval gate.
-7. Verify the published Release and every downloaded asset before updating the
-   tap.
+4. Dispatch `Release candidate` from `main` with the intended stable tag. This
+   performs the expensive hosted matrix exactly once and retains the immutable
+   candidate for seven days.
+5. Inspect all three archives, checksums, SBOMs, attestations, formula, manifest,
+   source commit, and artifact digest from that successful run.
+6. Create and push the annotated stable tag at the exact candidate commit. The
+   tag-triggered `Release` workflow downloads and verifies the candidate, adds
+   tag-bound attestations, and publishes those same bytes without rebuilding.
+7. If the candidate is absent or expired, delete the unpublished tag, dispatch
+   a replacement candidate for the same tag and commit, then recreate the tag.
+8. Verify the published Release and every downloaded asset. The public tap's
+   scheduled sync then verifies and publishes the formula without a persistent
+   cross-repository credential.
 
 The release workflow never cancels an in-progress tag release. Any failed
 target, smoke test, checksum, SBOM, attestation, or formula generation blocks
@@ -142,13 +147,11 @@ brew install oborchers/tap/proqi
 brew upgrade --formula oborchers/tap/proqi
 ```
 
-Ongoing cross-repository automation should use either a GitHub App or a
-fine-grained personal access token named `TAP_RELEASE_TOKEN`. If a token is
-used, scope it only to `oborchers/homebrew-tap`, grant only repository Contents
-read and write, set an expiration, and store it only as a Proqi Actions secret.
-No Issues, pull request, administration, workflow, package, or organization
-permission is required. The first release may update the tap through the
-maintainer's existing authenticated CLI instead of creating a credential.
+Ongoing formula synchronization is owned by `oborchers/homebrew-tap`. Its
+scheduled and manually dispatchable workflow uses only that repository's
+short-lived `GITHUB_TOKEN`. It verifies the latest stable Proqi release before
+committing one exact formula update. Proqi stores no tap token, personal access
+token, or GitHub App credential.
 
 Homebrew Core, bottles, casks, signing, and notarization are outside the current
 release.

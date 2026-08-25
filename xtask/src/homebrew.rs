@@ -4,11 +4,7 @@ use std::{collections::BTreeMap, fs, path::Path};
 
 use semver::Version;
 
-const TARGETS: [&str; 3] = [
-    "aarch64-apple-darwin",
-    "x86_64-apple-darwin",
-    "x86_64-unknown-linux-gnu",
-];
+use super::release_targets::{ALL as TARGETS, ARM_MACOS, INTEL_MACOS, LINUX_X86_64, archive_name};
 const PLACEHOLDER: &str = "0000000000000000000000000000000000000000000000000000000000000000";
 
 pub(super) fn generate(root: &Path, artifacts: &Path, output: &Path) -> Result<(), String> {
@@ -81,9 +77,9 @@ fn write_formula(
     checksums: &BTreeMap<String, String>,
     rehearsal: bool,
 ) -> Result<(), String> {
-    let arm = checksum(checksums, TARGETS[0])?;
-    let intel = checksum(checksums, TARGETS[1])?;
-    let linux = checksum(checksums, TARGETS[2])?;
+    let arm = checksum(checksums, ARM_MACOS)?;
+    let intel = checksum(checksums, INTEL_MACOS)?;
+    let linux = checksum(checksums, LINUX_X86_64)?;
     let warning = if rehearsal {
         "# Rehearsal only. CI replaces zero checksums with verified target digests.\n"
     } else {
@@ -137,10 +133,6 @@ fn checksum<'a>(checksums: &'a BTreeMap<String, String>, target: &str) -> Result
         .get(target)
         .map(String::as_str)
         .ok_or_else(|| format!("missing checksum for `{target}`"))
-}
-
-fn archive_name(target: &str) -> String {
-    format!("proqi-{target}.tar.gz")
 }
 
 fn resolve(root: &Path, path: &Path) -> std::path::PathBuf {

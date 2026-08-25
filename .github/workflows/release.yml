@@ -1,12 +1,6 @@
 name: Release
 
 on:
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: Exact stable release tag to rehearse
-        required: true
-        type: string
   push:
     tags:
       - "v*.*.*"
@@ -19,12 +13,17 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  plan:
-    name: Validate release plan
+  promote:
+    name: Promote verified candidate
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    outputs:
-      tag: ${{ steps.tag.outputs.value }}
+    timeout-minutes: 20
+    environment: release
+    permissions:
+      actions: read # Locate and download the exact cross-run candidate artifact.
+      artifact-metadata: write # Register tag-bound artifact attestations.
+      attestations: write # Verify candidate claims and publish tag-bound claims.
+      contents: write # Create or resume the immutable GitHub Release.
+      id-token: write # Sign tag-bound attestations with GitHub OIDC.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -32,233 +31,110 @@ jobs:
       - uses: taiki-e/install-action@6cd13508893c0e7eab5f273c2575d3859bd7229a # v2.86.6
         with:
           tool: cargo-dist@0.32.0
-      - id: tag
-        name: Select immutable release tag
+      - name: Validate immutable tag
+        run: cargo xtask release-plan "$GITHUB_REF_NAME"
+      - id: candidate
+        name: Locate exact successful candidate
         env:
-          DISPATCH_TAG: ${{ inputs.tag }}
-          EVENT_NAME: ${{ github.event_name }}
-          PUSH_TAG: ${{ github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
         run: |
-          if [[ "$EVENT_NAME" == "push" ]]; then
-            tag="$PUSH_TAG"
-          else
-            tag="$DISPATCH_TAG"
-          fi
-          echo "value=$tag" >> "$GITHUB_OUTPUT"
-          cargo xtask release-plan "$tag"
-
-  build:
-    name: Build release (${{ matrix.target }})
-    needs: plan
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: macos-15
-            target: aarch64-apple-darwin
-          - runner: macos-15-intel
-            target: x86_64-apple-darwin
-          - runner: ubuntu-24.04
-            target: x86_64-unknown-linux-gnu
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 40
-    permissions:
-      artifact-metadata: write # Register artifact metadata for attestations.
-      attestations: write # Publish provenance and SBOM attestations.
-      contents: read
-      id-token: write # Sign attestations with GitHub OIDC.
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: taiki-e/install-action@6cd13508893c0e7eab5f273c2575d3859bd7229a # v2.86.6
-        if: matrix.target != 'x86_64-apple-darwin'
-        with:
-          tool: cargo-about@0.9.2
-      - name: Install cargo-about from source on Intel macOS
-        if: matrix.target == 'x86_64-apple-darwin'
-        run: cargo install cargo-about --version 0.9.2 --locked --features cli
-      - name: Verify packaging tool
-        run: cargo about --version
-      - name: Verify native release runner
-        env:
-          EXPECTED_TARGET: ${{ matrix.target }}
-        run: |
-          actual="$(rustc -vV | sed -n 's/^host: //p')"
-          test "$actual" = "$EXPECTED_TARGET"
-      - name: Build and smoke installed archive
-        run: cargo xtask package
-      - name: Define target artifact paths
-        env:
-          TARGET: ${{ matrix.target }}
-        run: |
-          archive="target/package/proqi-${TARGET}.tar.gz"
-          test -f "$archive"
-          echo "ARCHIVE=$archive" >> "$GITHUB_ENV"
-          echo "SBOM=${archive}.spdx.json" >> "$GITHUB_ENV"
-      - name: Generate and verify checksum
-        run: |
-          cargo xtask release-checksum "$ARCHIVE" > "$ARCHIVE.sha256"
-          cd target/package
-          shasum -a 256 -c "$(basename "$ARCHIVE").sha256"
-      - name: Generate SPDX 2.3 JSON SBOM
-        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
-        with:
-          artifact-name: proqi-${{ matrix.target }}.spdx.json
-          format: spdx-json
-          output-file: ${{ env.SBOM }}
-          path: .
-          syft-version: v1.51.0
-          upload-artifact: false
-          upload-release-assets: false
-      - name: Validate SBOM and archive privacy
-        run: |
-          jq -e '.spdxVersion == "SPDX-2.3"' "$SBOM"
-          if rg -n '/Users/|/home/runner|Code\.nosync|TemporaryItems' "$SBOM"; then
+          artifact_name="release-candidate-${TAG}"
+          run_id=""
+          while read -r candidate_run; do
+            artifact_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${candidate_run}/artifacts" \
+              --jq ".artifacts[] | select(.name == \"${artifact_name}\" and .expired == false) | .id" | head -n 1)"
+            if [[ -n "$artifact_id" ]]; then
+              run_id="$candidate_run"
+              break
+            fi
+          done < <(gh api \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/release-candidate.yml/runs?event=workflow_dispatch&status=success&head_sha=${GITHUB_SHA}&per_page=100" \
+            --jq '.workflow_runs | sort_by(.created_at) | reverse | .[].id')
+          if [[ -z "$run_id" ]]; then
+            echo "No unexpired successful candidate exists for ${TAG} at ${GITHUB_SHA}. Delete the tag, dispatch Release candidate for that exact tag and commit, then recreate the tag." >&2
             exit 1
           fi
-          tar -tzf "$ARCHIVE" | sort > archive-members.txt
-          test "$(wc -l < archive-members.txt | tr -d ' ')" = 7
-      - name: Attest build provenance
-        uses: actions/attest@c32b4b8b198b65d0bd9d63490e847ff7b53989d4 # v4.0.0
-        with:
-          subject-path: ${{ env.ARCHIVE }}
-      - name: Attest SBOM
-        uses: actions/attest@c32b4b8b198b65d0bd9d63490e847ff7b53989d4 # v4.0.0
-        with:
-          sbom-path: ${{ env.SBOM }}
-          subject-path: ${{ env.ARCHIVE }}
-      - name: Upload verified target assets
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
-        with:
-          if-no-files-found: error
-          name: release-${{ matrix.target }}
-          path: |
-            ${{ env.ARCHIVE }}
-            ${{ env.ARCHIVE }}.sha256
-            ${{ env.SBOM }}
-
-  assemble:
-    name: Assemble release assets
-    needs: [plan, build]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    permissions:
-      attestations: read # Verify provenance and SBOM attestations before assembly.
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
+          echo "run-id=$run_id" >> "$GITHUB_OUTPUT"
+          echo "artifact-name=$artifact_name" >> "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
         with:
-          merge-multiple: true
+          github-token: ${{ github.token }}
+          name: ${{ steps.candidate.outputs.artifact-name }}
           path: target/release-assets
-          pattern: release-*
-      - name: Verify complete release set
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.candidate.outputs.run-id }}
+      - name: Verify manifest and every candidate byte
+        env:
+          CANDIDATE_RUN_ID: ${{ steps.candidate.outputs.run-id }}
+          TAG: ${{ github.ref_name }}
         run: |
           cd target/release-assets
-          expected="$RUNNER_TEMP/proqi-expected-release-assets.txt"
-          actual="$RUNNER_TEMP/proqi-actual-release-assets.txt"
-          {
-            for target in \
-              aarch64-apple-darwin \
-              x86_64-apple-darwin \
-              x86_64-unknown-linux-gnu
-            do
-              echo "proqi-${target}.tar.gz"
-              echo "proqi-${target}.tar.gz.sha256"
-              echo "proqi-${target}.tar.gz.spdx.json"
-            done
-          } | sort > "$expected"
-          find . -maxdepth 1 -type f -printf '%f\n' | sort > "$actual"
-          diff -u "$expected" "$actual"
-          for checksum in ./*.sha256; do shasum -a 256 -c "$checksum"; done
-          for sbom in ./*.spdx.json; do jq -e '.spdxVersion == "SPDX-2.3"' "$sbom"; done
-          cat ./*.sha256 | sort > SHA256SUMS
-      - name: Verify artifact attestations
+          jq -e --arg tag "$TAG" --arg sha "$GITHUB_SHA" --arg run_id "$CANDIDATE_RUN_ID" \
+            '.schema_version == 1 and .tag == $tag and .source_sha == $sha and .build_run_id == ($run_id | tonumber) and .workflow == "release-candidate.yml" and .targets == ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu"]' \
+            candidate-manifest.json
+          jq -r '.files[].name, "candidate-manifest.json"' candidate-manifest.json | sort > "$RUNNER_TEMP/expected-candidate-files"
+          find . -maxdepth 1 -type f -printf '%f\n' | sort > "$RUNNER_TEMP/actual-candidate-files"
+          diff -u "$RUNNER_TEMP/expected-candidate-files" "$RUNNER_TEMP/actual-candidate-files"
+          jq -r '.files[] | "\(.sha256)  \(.name)"' candidate-manifest.json | shasum -a 256 -c -
+          shasum -a 256 -c SHA256SUMS
+          ruby -c proqi.rb
+      - name: Verify candidate attestations against the source commit
         env:
           GH_TOKEN: ${{ github.token }}
-          REPOSITORY: ${{ github.repository }}
-          SIGNER_WORKFLOW: github.com/${{ github.repository }}/.github/workflows/release.yml
-          SOURCE_REF: ${{ github.ref }}
         run: |
           for archive in target/release-assets/*.tar.gz; do
-            gh attestation verify "$archive" \
-              --repo "$REPOSITORY" \
-              --signer-workflow "$SIGNER_WORKFLOW" \
-              --source-ref "$SOURCE_REF"
-            gh attestation verify "$archive" \
-              --repo "$REPOSITORY" \
-              --signer-workflow "$SIGNER_WORKFLOW" \
-              --source-ref "$SOURCE_REF" \
+            gh attestation verify "$archive" --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "github.com/${GITHUB_REPOSITORY}/.github/workflows/release-candidate.yml" \
+              --source-ref refs/heads/main --source-digest "$GITHUB_SHA"
+            gh attestation verify "$archive" --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "github.com/${GITHUB_REPOSITORY}/.github/workflows/release-candidate.yml" \
+              --source-ref refs/heads/main --source-digest "$GITHUB_SHA" \
               --predicate-type https://spdx.dev/Document/v2.3
           done
-      - name: Generate immutable Homebrew formula
-        run: |
-          cargo xtask homebrew-formula target/release-assets target/release-assets/proqi.rb
-          ruby -c target/release-assets/proqi.rb
-      - name: Upload assembled release assets
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+      - name: Bind provenance to the protected release tag
+        uses: actions/attest@c32b4b8b198b65d0bd9d63490e847ff7b53989d4 # v4.0.0
         with:
-          if-no-files-found: error
-          name: release-assembled
-          path: target/release-assets
-
-  draft:
-    name: Create draft release
-    if: github.event_name == 'push'
-    needs: [plan, assemble]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    permissions:
-      contents: write # Create the immutable draft release and upload assets.
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+          subject-path: target/release-assets/*.tar.gz
+      - name: Bind Apple silicon SBOM to the release tag
+        uses: actions/attest@c32b4b8b198b65d0bd9d63490e847ff7b53989d4 # v4.0.0
         with:
-          persist-credentials: false
-      - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+          subject-path: target/release-assets/proqi-aarch64-apple-darwin.tar.gz
+          sbom-path: target/release-assets/proqi-aarch64-apple-darwin.tar.gz.spdx.json
+      - name: Bind Intel macOS SBOM to the release tag
+        uses: actions/attest@c32b4b8b198b65d0bd9d63490e847ff7b53989d4 # v4.0.0
         with:
-          name: release-assembled
-          path: target/release-assets
-      - name: Create reviewable draft release
+          subject-path: target/release-assets/proqi-x86_64-apple-darwin.tar.gz
+          sbom-path: target/release-assets/proqi-x86_64-apple-darwin.tar.gz.spdx.json
+      - name: Bind Linux SBOM to the release tag
+        uses: actions/attest@c32b4b8b198b65d0bd9d63490e847ff7b53989d4 # v4.0.0
+        with:
+          subject-path: target/release-assets/proqi-x86_64-unknown-linux-gnu.tar.gz
+          sbom-path: target/release-assets/proqi-x86_64-unknown-linux-gnu.tar.gz.spdx.json
+      - name: Create, resume, or confirm the immutable release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.plan.outputs.tag }}
+          TAG: ${{ github.ref_name }}
         run: |
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG already exists and is immutable" >&2
-            exit 1
+          cd target/release-assets
+          mapfile -t assets < <(find . -maxdepth 1 -type f ! -name candidate-manifest.json -printf '%f\n' | sort)
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            existing="$RUNNER_TEMP/existing-release"
+            mkdir -p "$existing"
+            gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir "$existing"
+            for asset in "${assets[@]}"; do
+              test -f "$existing/$asset"
+              cmp "$asset" "$existing/$asset"
+            done
+            test "$(find "$existing" -maxdepth 1 -type f | wc -l | tr -d ' ')" = "${#assets[@]}"
+            draft="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)"
+            if [[ "$draft" = "false" ]]; then
+              echo "Release $TAG already contains the exact candidate bytes."
+              exit 0
+            fi
+          else
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft \
+              --notes-file "$GITHUB_WORKSPACE/.github/release-notes/${TAG}.md" \
+              --title "Proqi $TAG" --verify-tag "${assets[@]}"
           fi
-          gh release create "$TAG" \
-            --draft \
-            --notes-file ".github/release-notes/${TAG}.md" \
-            --title "Proqi $TAG" \
-            --verify-tag \
-            target/release-assets/proqi-aarch64-apple-darwin.tar.gz \
-            target/release-assets/proqi-aarch64-apple-darwin.tar.gz.sha256 \
-            target/release-assets/proqi-aarch64-apple-darwin.tar.gz.spdx.json \
-            target/release-assets/proqi-x86_64-apple-darwin.tar.gz \
-            target/release-assets/proqi-x86_64-apple-darwin.tar.gz.sha256 \
-            target/release-assets/proqi-x86_64-apple-darwin.tar.gz.spdx.json \
-            target/release-assets/proqi-x86_64-unknown-linux-gnu.tar.gz \
-            target/release-assets/proqi-x86_64-unknown-linux-gnu.tar.gz.sha256 \
-            target/release-assets/proqi-x86_64-unknown-linux-gnu.tar.gz.spdx.json \
-            target/release-assets/SHA256SUMS \
-            target/release-assets/proqi.rb
-
-  publish:
-    name: Publish release
-    if: github.event_name == 'push'
-    needs: [plan, draft]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    environment: release
-    permissions:
-      contents: write # Publish the verified draft release.
-    steps:
-      - name: Publish release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.plan.outputs.tag }}
-        run: gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest

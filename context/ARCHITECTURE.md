@@ -870,7 +870,9 @@ cargo xtask package
   terminal restoration, fake update installation, same-PTY Unix replacement,
   and failure recovery. The deterministic 15-participant update test remains in
   the normal suite. Package output stays below ignored `target/package` and is
-  never published by this command.
+  never published by this command. Hosted release jobs may supply one
+  pre-generated union notice file through `--notices`; local packaging generates
+  the same notices itself.
 
 The commands remain thin orchestrators around standard Cargo tools. They print
 the commands they run, propagate exit codes, avoid network access unless the
@@ -919,9 +921,12 @@ run on a schedule without weakening the required gate.
 ### Dependencies and repository policy
 
 Cargo.lock is committed because Proqi ships an application. Dependabot checks
-Cargo dependencies and GitHub Actions weekly. Dependency pull requests pass the
-same required gate as contributor pull requests. Automatic merging is limited
-to explicitly allowed low-risk patch updates after all required checks pass.
+Cargo dependencies, GitHub Actions, and the pinned Rust toolchain weekly, applies
+a routine update cooldown, and limits routine dependency work to one grouped
+pull request. Security updates remain exempt from cooldown. Dependency pull
+requests pass the same required gate as contributor pull requests. Automatic
+merging is limited to explicitly allowed low-risk patch updates after all
+required checks pass.
 Minor updates, all pre-1.0 compatibility changes, and security-sensitive crates
 receive human review.
 
@@ -949,10 +954,12 @@ teaches coding agents to use the installed application.
 
 ### Release pipeline
 
-Every release starts from an immutable protected `vX.Y.Z` tag after the
-aggregate gate has passed. The workflow rejects a tag that differs from the
-single Cargo workspace version. The `v0.1.0` matrix builds only Apple silicon
-macOS, Intel macOS, and x86-64 GNU Linux artifacts, preferably on native runners.
+Every release candidate starts from `main` after the aggregate gate has passed.
+A manual candidate workflow accepts an exact future `vX.Y.Z` tag, rejects a tag
+that differs from the single Cargo workspace version, and records the source
+commit. The matrix builds only Apple silicon macOS, Intel macOS, and x86-64 GNU
+Linux artifacts on native runners. One Linux job generates a union third-party
+notice file for all targets, so Intel macOS never compiles the packaging tool.
 
 A reviewed pinned `cargo-dist` configuration or equivalent narrow Rust tool
 stages archives containing one executable, MIT license, required notices, and
@@ -960,17 +967,27 @@ shell completions. Jobs create and verify SHA-256 manifests, SPDX JSON SBOMs,
 and GitHub OIDC Sigstore provenance attestations. Every third-party Action is
 pinned by full commit SHA and ordinary CI remains read-only.
 
-The workflow creates a draft GitHub Release only after every target, installed
-smoke, checksum, SBOM, attestation, and formula preparation step succeeds.
-GitHub Release notes are the only changelog. Oliver reviews notes and artifacts,
-then explicitly approves a protected environment before publication. Release
-runs are never cancelled through pull-request concurrency and existing assets
-for a version are immutable.
+The candidate workflow creates a seven-day immutable artifact only after every
+target, installed smoke, checksum, SBOM, attestation, formula, and manifest step
+succeeds. The manifest binds the future tag, source commit, build run, workflow,
+target registry, filenames, and file digests. A protected `vX.Y.Z` tag triggers a
+fast promotion workflow. Promotion locates the exact successful candidate for
+that tag and commit, verifies GitHub's artifact digest plus every internal hash
+and candidate attestation, adds tag-bound attestations, and publishes the same
+bytes. It never rebuilds. Missing or expired candidates fail with an explicit
+recovery instruction. Release creation is idempotent for absent releases,
+matching drafts, and already published identical assets. Conflicting assets
+fail closed. GitHub Release notes are the only changelog. The protected release
+environment has no manual approval gate. Release runs are never cancelled and
+existing assets for a version are immutable.
 
 Homebrew tap updates occur only after the referenced Release assets, checksums,
 and attestations are verified. The external `oborchers/homebrew-tap` repository
-contains `Formula/proqi.rb` and receives narrowly scoped credentials only after
-Oliver approves tap creation. Homebrew Core is outside `v0.1.0`.
+contains `Formula/proqi.rb` and owns a scheduled plus manually dispatchable sync
+workflow. That workflow uses only its short-lived repository `GITHUB_TOKEN`,
+refuses downgrades and conflicting same-version content, tests the candidate
+formula before committing it, and performs exact-version no-ops. Proqi stores no
+cross-repository credential. Homebrew Core remains outside scope.
 
 Package publication has no hidden local step. A credential-free rehearsal plans
 all three targets, builds and smokes the host artifact, and generates host

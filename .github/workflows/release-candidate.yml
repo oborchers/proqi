@@ -1,0 +1,230 @@
+name: Release candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Exact stable tag that this candidate will serve
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-candidate-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Validate candidate source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      tag: ${{ steps.plan.outputs.tag }}
+      source-sha: ${{ steps.plan.outputs.source-sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: taiki-e/install-action@6cd13508893c0e7eab5f273c2575d3859bd7229a # v2.86.6
+        with:
+          tool: cargo-dist@0.32.0
+      - id: plan
+        name: Validate tag, release notes, and successful main CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          test "$GITHUB_REF" = "refs/heads/main"
+          cargo xtask release-plan "$TAG"
+          conclusion="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --branch main --commit "$GITHUB_SHA" --limit 1 --json conclusion --jq '.[0].conclusion // ""')"
+          test "$conclusion" = "success"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "source-sha=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+
+  notices:
+    name: Generate union third-party notices
+    needs: plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: taiki-e/install-action@6cd13508893c0e7eab5f273c2575d3859bd7229a # v2.86.6
+        with:
+          tool: cargo-about@0.9.2
+      - name: Generate one notice set for every release target
+        run: |
+          mkdir -p target/release-notices
+          cargo about generate about.hbs --locked --workspace --all-features \
+            --target aarch64-apple-darwin \
+            --target x86_64-apple-darwin \
+            --target x86_64-unknown-linux-gnu \
+            --output-file target/release-notices/THIRD-PARTY-NOTICES.md
+          test -s target/release-notices/THIRD-PARTY-NOTICES.md
+      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          if-no-files-found: error
+          name: release-notices
+          path: target/release-notices/THIRD-PARTY-NOTICES.md
+          retention-days: 7
+
+  build:
+    name: Build candidate (${{ matrix.target }})
+    needs: [plan, notices]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            target: aarch64-apple-darwin
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+          - runner: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 35
+    permissions:
+      artifact-metadata: write # Register candidate artifacts for attestations.
+      attestations: write # Publish candidate provenance and SBOM attestations.
+      contents: read
+      id-token: write # Sign candidate attestations with GitHub OIDC.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          name: release-notices
+          path: target/release-notices
+      - name: Verify native runner and build installable archive
+        env:
+          EXPECTED_TARGET: ${{ matrix.target }}
+        run: |
+          actual="$(rustc -vV | sed -n 's/^host: //p')"
+          test "$actual" = "$EXPECTED_TARGET"
+          cargo xtask package --notices target/release-notices/THIRD-PARTY-NOTICES.md
+          archive="target/package/proqi-${EXPECTED_TARGET}.tar.gz"
+          test -f "$archive"
+          echo "ARCHIVE=$archive" >> "$GITHUB_ENV"
+          echo "SBOM=${archive}.spdx.json" >> "$GITHUB_ENV"
+      - name: Generate and verify checksum
+        run: |
+          cargo xtask release-checksum "$ARCHIVE" > "$ARCHIVE.sha256"
+          cd target/package
+          shasum -a 256 -c "$(basename "$ARCHIVE").sha256"
+      - name: Generate SPDX 2.3 JSON SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          artifact-name: proqi-${{ matrix.target }}.spdx.json
+          format: spdx-json
+          output-file: ${{ env.SBOM }}
+          path: .
+          syft-version: v1.51.0
+          upload-artifact: false
+          upload-release-assets: false
+      - name: Validate SBOM and archive privacy
+        run: |
+          jq -e '.spdxVersion == "SPDX-2.3"' "$SBOM"
+          if rg -n '/Users/|/home/runner|Code\.nosync|TemporaryItems' "$SBOM"; then exit 1; fi
+          tar -tzf "$ARCHIVE" | sort > archive-members.txt
+          test "$(wc -l < archive-members.txt | tr -d ' ')" = 7
+      - name: Attest candidate build provenance
+        uses: actions/attest@c32b4b8b198b65d0bd9d63490e847ff7b53989d4 # v4.0.0
+        with:
+          subject-path: ${{ env.ARCHIVE }}
+      - name: Attest candidate SBOM
+        uses: actions/attest@c32b4b8b198b65d0bd9d63490e847ff7b53989d4 # v4.0.0
+        with:
+          sbom-path: ${{ env.SBOM }}
+          subject-path: ${{ env.ARCHIVE }}
+      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          if-no-files-found: error
+          name: candidate-${{ matrix.target }}
+          path: |
+            ${{ env.ARCHIVE }}
+            ${{ env.ARCHIVE }}.sha256
+            ${{ env.SBOM }}
+          retention-days: 7
+
+  assemble:
+    name: Assemble immutable candidate
+    needs: [plan, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      attestations: read # Verify candidate attestations before assembly.
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          merge-multiple: true
+          path: target/release-assets
+          pattern: candidate-*
+      - name: Verify complete candidate set
+        run: |
+          cd target/release-assets
+          expected="$RUNNER_TEMP/proqi-expected-assets.txt"
+          actual="$RUNNER_TEMP/proqi-actual-assets.txt"
+          {
+            for target in aarch64-apple-darwin x86_64-apple-darwin x86_64-unknown-linux-gnu; do
+              echo "proqi-${target}.tar.gz"
+              echo "proqi-${target}.tar.gz.sha256"
+              echo "proqi-${target}.tar.gz.spdx.json"
+            done
+          } | sort > "$expected"
+          find . -maxdepth 1 -type f -printf '%f\n' | sort > "$actual"
+          diff -u "$expected" "$actual"
+          for checksum in ./*.sha256; do shasum -a 256 -c "$checksum"; done
+          for sbom in ./*.spdx.json; do jq -e '.spdxVersion == "SPDX-2.3"' "$sbom"; done
+          cat ./*.sha256 | sort > SHA256SUMS
+      - name: Verify candidate attestations
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ needs.plan.outputs.source-sha }}
+        run: |
+          for archive in target/release-assets/*.tar.gz; do
+            gh attestation verify "$archive" --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "github.com/${GITHUB_REPOSITORY}/.github/workflows/release-candidate.yml" \
+              --source-ref refs/heads/main --source-digest "$SOURCE_SHA"
+            gh attestation verify "$archive" --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "github.com/${GITHUB_REPOSITORY}/.github/workflows/release-candidate.yml" \
+              --source-ref refs/heads/main --source-digest "$SOURCE_SHA" \
+              --predicate-type https://spdx.dev/Document/v2.3
+          done
+      - name: Generate formula and candidate manifest
+        env:
+          SOURCE_SHA: ${{ needs.plan.outputs.source-sha }}
+          TAG: ${{ needs.plan.outputs.tag }}
+        run: |
+          cargo xtask homebrew-formula target/release-assets target/release-assets/proqi.rb
+          ruby -c target/release-assets/proqi.rb
+          cd target/release-assets
+          files="$(for file in *; do printf '%s  %s\n' "$(shasum -a 256 "$file" | cut -d ' ' -f 1)" "$file"; done | jq -Rn '[inputs | capture("^(?<sha256>[0-9a-f]{64})  (?<name>.+)$")]')"
+          jq -n --arg tag "$TAG" --arg source_sha "$SOURCE_SHA" --arg run_id "$GITHUB_RUN_ID" \
+            --argjson files "$files" \
+            '{schema_version: 1, tag: $tag, source_sha: $source_sha, build_run_id: ($run_id | tonumber), workflow: "release-candidate.yml", targets: ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu"], files: $files}' \
+            > candidate-manifest.json
+          jq -e '.schema_version == 1 and (.files | length == 11)' candidate-manifest.json
+      - id: upload
+        name: Upload immutable candidate
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          if-no-files-found: error
+          name: release-candidate-${{ needs.plan.outputs.tag }}
+          path: target/release-assets
+          retention-days: 7
+      - name: Summarize promotion identity
+        env:
+          ARTIFACT_DIGEST: ${{ steps.upload.outputs.artifact-digest }}
+          ARTIFACT_ID: ${{ steps.upload.outputs.artifact-id }}
+          TAG: ${{ needs.plan.outputs.tag }}
+        run: |
+          printf 'Candidate for %s\nRun: %s\nArtifact: %s\nDigest: %s\n' \
+            "$TAG" "$GITHUB_RUN_ID" "$ARTIFACT_ID" "$ARTIFACT_DIGEST" >> "$GITHUB_STEP_SUMMARY"

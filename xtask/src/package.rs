@@ -13,8 +13,8 @@ use tar::{Archive, Builder};
 const INSTALL_MARKER: &[u8] =
     br#"{"schema_version":1,"product":"proqi","kind":"standalone_archive"}"#;
 
-pub(super) fn run(root: &Path) -> Result<(), String> {
-    generate_notices(root)?;
+pub(super) fn run(root: &Path, notices: Option<&Path>) -> Result<(), String> {
+    prepare_notices(root, notices)?;
     super::run(
         root,
         "cargo",
@@ -251,7 +251,7 @@ pub(super) fn host_archive_path(root: &Path) -> Result<PathBuf, String> {
         .join(format!("{}.tar.gz", package_name(&host_triple(root)?))))
 }
 
-fn generate_notices(root: &Path) -> Result<(), String> {
+fn prepare_notices(root: &Path, source: Option<&Path>) -> Result<(), String> {
     let output = root.join("target/package/THIRD-PARTY-NOTICES.md");
     fs::create_dir_all(
         output
@@ -259,6 +259,20 @@ fn generate_notices(root: &Path) -> Result<(), String> {
             .ok_or_else(|| "notice output has no parent".to_owned())?,
     )
     .map_err(|error| format!("create notice output directory: {error}"))?;
+    if let Some(source) = source {
+        let source = if source.is_absolute() {
+            source.to_path_buf()
+        } else {
+            root.join(source)
+        };
+        fs::copy(&source, &output).map_err(|error| {
+            format!(
+                "copy pre-generated notices from {}: {error}",
+                source.display()
+            )
+        })?;
+        return Ok(());
+    }
     super::run(
         root,
         "cargo",
