@@ -89,19 +89,12 @@ fn write_and_install(
     sync_directory(directory)
 }
 
-#[cfg(unix)]
 fn sync_directory(path: &Path) -> Result<(), RecoveryError> {
     File::open(path)
         .and_then(|handle| handle.sync_all())
         .map_err(io_error)
 }
 
-#[cfg(not(unix))]
-fn sync_directory(_path: &Path) -> Result<(), RecoveryError> {
-    Ok(())
-}
-
-#[cfg(unix)]
 fn create_private_file(path: &Path) -> Result<File, RecoveryError> {
     use std::os::unix::fs::OpenOptionsExt;
     OpenOptions::new()
@@ -112,24 +105,9 @@ fn create_private_file(path: &Path) -> Result<File, RecoveryError> {
         .map_err(io_error)
 }
 
-#[cfg(not(unix))]
-fn create_private_file(path: &Path) -> Result<File, RecoveryError> {
-    OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(path)
-        .map_err(io_error)
-}
-
-#[cfg(unix)]
 fn set_private_directory(path: &Path) -> Result<(), RecoveryError> {
     use std::os::unix::fs::PermissionsExt;
     fs::set_permissions(path, fs::Permissions::from_mode(0o700)).map_err(io_error)
-}
-
-#[cfg(not(unix))]
-fn set_private_directory(_path: &Path) -> Result<(), RecoveryError> {
-    Ok(())
 }
 
 fn io_error(error: std::io::Error) -> RecoveryError {

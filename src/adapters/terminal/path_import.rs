@@ -119,12 +119,6 @@ fn file_url(encoded: &str) -> Option<PathBuf> {
         return None;
     }
     let decoded = percent_decode(local)?;
-    #[cfg(windows)]
-    let decoded = decoded
-        .strip_prefix('/')
-        .filter(|path| path.as_bytes().get(1) == Some(&b':'))
-        .unwrap_or(&decoded)
-        .to_owned();
     Some(PathBuf::from(decoded))
 }
 

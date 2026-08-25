@@ -149,9 +149,21 @@ jobs:
       - name: Verify complete release set
         run: |
           cd target/release-assets
-          test "$(find . -maxdepth 1 -name '*.tar.gz' | wc -l)" = 3
-          test "$(find . -maxdepth 1 -name '*.sha256' | wc -l)" = 3
-          test "$(find . -maxdepth 1 -name '*.spdx.json' | wc -l)" = 3
+          expected="$RUNNER_TEMP/proqi-expected-release-assets.txt"
+          actual="$RUNNER_TEMP/proqi-actual-release-assets.txt"
+          {
+            for target in \
+              aarch64-apple-darwin \
+              x86_64-apple-darwin \
+              x86_64-unknown-linux-gnu
+            do
+              echo "proqi-${target}.tar.gz"
+              echo "proqi-${target}.tar.gz.sha256"
+              echo "proqi-${target}.tar.gz.spdx.json"
+            done
+          } | sort > "$expected"
+          find . -maxdepth 1 -type f -printf '%f\n' | sort > "$actual"
+          diff -u "$expected" "$actual"
           for checksum in ./*.sha256; do shasum -a 256 -c "$checksum"; done
           for sbom in ./*.spdx.json; do jq -e '.spdxVersion == "SPDX-2.3"' "$sbom"; done
           cat ./*.sha256 | sort > SHA256SUMS
@@ -213,7 +225,17 @@ jobs:
             --notes-file ".github/release-notes/v0.1.0.md" \
             --title "Proqi $TAG" \
             --verify-tag \
-            target/release-assets/./*
+            target/release-assets/proqi-aarch64-apple-darwin.tar.gz \
+            target/release-assets/proqi-aarch64-apple-darwin.tar.gz.sha256 \
+            target/release-assets/proqi-aarch64-apple-darwin.tar.gz.spdx.json \
+            target/release-assets/proqi-x86_64-apple-darwin.tar.gz \
+            target/release-assets/proqi-x86_64-apple-darwin.tar.gz.sha256 \
+            target/release-assets/proqi-x86_64-apple-darwin.tar.gz.spdx.json \
+            target/release-assets/proqi-x86_64-unknown-linux-gnu.tar.gz \
+            target/release-assets/proqi-x86_64-unknown-linux-gnu.tar.gz.sha256 \
+            target/release-assets/proqi-x86_64-unknown-linux-gnu.tar.gz.spdx.json \
+            target/release-assets/SHA256SUMS \
+            target/release-assets/proqi.rb
 
   publish:
     name: Publish approved release

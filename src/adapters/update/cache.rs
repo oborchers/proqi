@@ -298,47 +298,25 @@ fn valid_etag(value: &str) -> bool {
         && !value.contains(['\r', '\n'])
 }
 
-#[cfg(unix)]
 fn set_private_open_mode(options: &mut OpenOptions) {
     use std::os::unix::fs::OpenOptionsExt as _;
     options.mode(0o600);
 }
 
-#[cfg(not(unix))]
-fn set_private_open_mode(_: &mut OpenOptions) {}
-
-#[cfg(unix)]
 fn set_private_file_permissions(path: &Path) -> std::io::Result<()> {
     use std::os::unix::fs::PermissionsExt as _;
     fs::set_permissions(path, fs::Permissions::from_mode(0o600))
 }
 
-#[cfg(not(unix))]
-fn set_private_file_permissions(_: &Path) -> std::io::Result<()> {
-    Ok(())
-}
-
-#[cfg(unix)]
 fn set_private_dir_permissions(path: &Path) -> std::io::Result<()> {
     use std::os::unix::fs::PermissionsExt as _;
     fs::set_permissions(path, fs::Permissions::from_mode(0o700))
 }
 
-#[cfg(not(unix))]
-fn set_private_dir_permissions(_: &Path) -> std::io::Result<()> {
-    Ok(())
-}
-
-#[cfg(unix)]
 fn sync_directory(path: &Path) -> Result<(), UpdateError> {
     File::open(path)
         .and_then(|file| file.sync_all())
         .map_err(state_error)
-}
-
-#[cfg(not(unix))]
-fn sync_directory(_: &Path) -> Result<(), UpdateError> {
-    Ok(())
 }
 
 fn state_error(error: impl std::fmt::Display) -> UpdateError {

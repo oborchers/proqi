@@ -1,4 +1,4 @@
-//! Cross-platform local owner-control client and server.
+//! Local owner-control client and server for supported Unix platforms.
 
 mod client;
 #[cfg(all(test, unix))]
@@ -278,16 +278,16 @@ mod tests {
             Err(ControlError::Rejected { code, .. }) if code == "request_id_conflict"
         ));
         let wrong_owner = InstanceInfo {
-            #[cfg(any(target_os = "linux", target_os = "windows"))]
+            #[cfg(target_os = "linux")]
             pid: owner.pid.saturating_add(1),
-            #[cfg(not(any(target_os = "linux", target_os = "windows")))]
+            #[cfg(not(target_os = "linux"))]
             control_protocol: None,
             ..owner
         };
         let error = LocalControlClient.send(&wrong_owner, &request);
-        #[cfg(any(target_os = "linux", target_os = "windows"))]
+        #[cfg(target_os = "linux")]
         assert!(matches!(error, Err(ControlError::InvalidPeer)));
-        #[cfg(not(any(target_os = "linux", target_os = "windows")))]
+        #[cfg(not(target_os = "linux"))]
         assert!(matches!(error, Err(ControlError::Unsupported)));
         server.stop().expect("server stop");
     }
@@ -424,7 +424,6 @@ mod tests {
         }
     }
 
-    #[cfg(unix)]
     fn endpoint(directory: &Path, suffix: &str) -> String {
         let private = directory.join("control");
         private_directory(&private);
@@ -434,19 +433,10 @@ mod tests {
             .into_owned()
     }
 
-    #[cfg(unix)]
     fn private_directory(path: &Path) {
         use std::os::unix::fs::DirBuilderExt as _;
         let mut builder = std::fs::DirBuilder::new();
         builder.mode(0o700);
         builder.create(path).expect("private endpoint parent");
     }
-
-    #[cfg(windows)]
-    fn endpoint(_directory: &Path, suffix: &str) -> String {
-        format!(r"\\.\pipe\proqi-test-{suffix}")
-    }
 }
-
-#[cfg(all(test, windows))]
-mod windows_tests;

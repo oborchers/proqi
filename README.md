@@ -111,9 +111,6 @@ Keep `proqi-installation.json` beside a manually installed archive binary so
 Proqi can accurately identify the standalone installation. Archive builds have
 no Node, Python, JVM, or other language runtime dependency.
 
-Windows remains a compile and terminal-independent regression target in CI. It
-is not a supported `v0.1.0` installation or release target.
-
 ## Start a board
 
 ```shell
@@ -124,7 +121,7 @@ Paste text into the empty board, press `Esc` to return from editing, and press
 `?` for contextual shortcuts. Changes are autosaved. On exit, Proqi prints the
 exact command needed to resume that session.
 
-`Primary` means `Command` on macOS and `Ctrl` on other platforms. Portable
+`Primary` means `Command` on macOS and `Ctrl` on Linux. Portable
 fallbacks remain available when a terminal cannot report a modifier.
 
 ### Board controls
@@ -339,8 +336,8 @@ directories separately only when you no longer need their sessions.
 Proqi is open-source software under the [MIT License](LICENSE). During the
 `0.x` series, only the latest stable release is supported, and JSON consumers
 must use capability discovery. There is currently no cloud synchronization,
-collaboration service, plugin system, Windows release, Homebrew Core formula,
-crate publication, npm package, Python package, container image, or telemetry.
+collaboration service, plugin system, Homebrew Core formula, crate publication,
+npm package, Python package, container image, or telemetry.
 
 Release archives include SHA-256 checksums, SPDX 2.3 JSON SBOMs, required
 third-party notices, shell completions, and GitHub OIDC-backed provenance and
@@ -382,9 +379,8 @@ cargo xtask release-rehearsal  # non-publishing host release rehearsal
 
 Clippy warnings are denied. Rust functions are capped at 80 lines, cognitive
 complexity at 25, and nesting depth at 4. Every first-party source file is
-capped at 500 physical lines. CI retains Linux, macOS, and Windows
-terminal-independent coverage, plus macOS PTY tests and the three-target
-release matrix. Windows does not produce a release artifact.
+capped at 500 physical lines. CI covers Linux and macOS, plus macOS PTY tests
+and the three-target release matrix.
 
 Enable the optional local hook explicitly with `cargo xtask install-hooks`.
 Builds never change Git configuration automatically.

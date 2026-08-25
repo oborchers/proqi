@@ -106,56 +106,18 @@ id_from_blob!(thought_id_from_blob, ThoughtId);
 id_from_blob!(operation_id_from_blob, OperationId);
 id_from_blob!(revision_id_from_blob, RevisionId);
 
-#[cfg(unix)]
 pub(super) fn path_to_bytes(path: &Path) -> Vec<u8> {
     use std::os::unix::ffi::OsStrExt;
     path.as_os_str().as_bytes().to_vec()
 }
 
-#[cfg(unix)]
 #[expect(
     clippy::unnecessary_wraps,
-    reason = "the cross-platform decoder has one fallible port signature"
+    reason = "the storage decoder shares one fallible port signature"
 )]
 pub(super) fn path_from_bytes(bytes: Vec<u8>) -> Result<PathBuf, StoreError> {
     use std::{ffi::OsString, os::unix::ffi::OsStringExt};
     Ok(PathBuf::from(OsString::from_vec(bytes)))
-}
-
-#[cfg(windows)]
-pub(super) fn path_to_bytes(path: &Path) -> Vec<u8> {
-    use std::os::windows::ffi::OsStrExt;
-    path.as_os_str()
-        .encode_wide()
-        .flat_map(u16::to_le_bytes)
-        .collect()
-}
-
-#[cfg(windows)]
-pub(super) fn path_from_bytes(bytes: Vec<u8>) -> Result<PathBuf, StoreError> {
-    use std::{ffi::OsString, os::windows::ffi::OsStringExt};
-    if bytes.len() % 2 != 0 {
-        return Err(StoreError::Corrupt(
-            "Windows path BLOB has odd length".to_owned(),
-        ));
-    }
-    let wide: Vec<u16> = bytes
-        .chunks_exact(2)
-        .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
-        .collect();
-    Ok(PathBuf::from(OsString::from_wide(&wide)))
-}
-
-#[cfg(not(any(unix, windows)))]
-pub(super) fn path_to_bytes(path: &Path) -> Vec<u8> {
-    path.to_string_lossy().as_bytes().to_vec()
-}
-
-#[cfg(not(any(unix, windows)))]
-pub(super) fn path_from_bytes(bytes: Vec<u8>) -> Result<PathBuf, StoreError> {
-    String::from_utf8(bytes)
-        .map(PathBuf::from)
-        .map_err(|error| StoreError::Corrupt(error.to_string()))
 }
 
 pub(super) fn create_private_dir(path: &Path) -> Result<(), StoreError> {
@@ -191,37 +153,21 @@ fn companion_path(database_path: &Path, suffix: &str) -> PathBuf {
     PathBuf::from(path)
 }
 
-#[cfg(unix)]
 pub(super) fn set_private_open_mode(options: &mut OpenOptions) {
     use std::os::unix::fs::OpenOptionsExt;
     options.mode(0o600);
 }
 
-#[cfg(not(unix))]
-pub(super) fn set_private_open_mode(_options: &mut OpenOptions) {}
-
-#[cfg(unix)]
 pub(super) fn set_private_file_permissions(path: &Path) -> Result<(), StoreError> {
     use std::os::unix::fs::PermissionsExt;
     fs::set_permissions(path, fs::Permissions::from_mode(0o600))
         .map_err(|error| StoreError::Io(error.to_string()))
 }
 
-#[cfg(not(unix))]
-pub(super) fn set_private_file_permissions(_path: &Path) -> Result<(), StoreError> {
-    Ok(())
-}
-
-#[cfg(unix)]
 fn set_private_dir_permissions(path: &Path) -> Result<(), StoreError> {
     use std::os::unix::fs::PermissionsExt;
     fs::set_permissions(path, fs::Permissions::from_mode(0o700))
         .map_err(|error| StoreError::Io(error.to_string()))
-}
-
-#[cfg(not(unix))]
-fn set_private_dir_permissions(_path: &Path) -> Result<(), StoreError> {
-    Ok(())
 }
 
 #[cfg(test)]

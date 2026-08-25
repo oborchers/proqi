@@ -403,33 +403,17 @@ fn io_error(error: std::io::Error) -> RuntimeError {
     RuntimeError::Io(error.to_string())
 }
 
-#[cfg(unix)]
 fn set_private_file_mode(options: &mut OpenOptions) {
     use std::os::unix::fs::OpenOptionsExt;
     options.mode(0o600);
 }
 
-#[cfg(not(unix))]
-fn set_private_file_mode(_options: &mut OpenOptions) {}
-
-#[cfg(unix)]
 fn set_private_file_permissions(path: &Path) -> std::io::Result<()> {
     use std::os::unix::fs::PermissionsExt;
     fs::set_permissions(path, fs::Permissions::from_mode(0o600))
 }
 
-#[cfg(not(unix))]
-fn set_private_file_permissions(_path: &Path) -> std::io::Result<()> {
-    Ok(())
-}
-
-#[cfg(unix)]
 fn set_private_dir_permissions(path: &Path) -> std::io::Result<()> {
     use std::os::unix::fs::PermissionsExt;
     fs::set_permissions(path, fs::Permissions::from_mode(0o700))
-}
-
-#[cfg(not(unix))]
-fn set_private_dir_permissions(_path: &Path) -> std::io::Result<()> {
-    Ok(())
 }

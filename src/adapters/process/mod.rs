@@ -20,7 +20,6 @@ pub struct SystemProcessRunner;
 #[derive(Clone, Copy, Debug, Default)]
 pub struct SystemProcessReplacer;
 
-#[cfg(unix)]
 impl crate::ports::update::ProcessReplacer for SystemProcessReplacer {
     fn replace(
         &self,
@@ -36,20 +35,6 @@ impl crate::ports::update::ProcessReplacer for SystemProcessReplacer {
         Err(crate::ports::update::UpdateError::Coordination(format!(
             "process replacement failed: {error}"
         )))
-    }
-}
-
-#[cfg(not(unix))]
-impl crate::ports::update::ProcessReplacer for SystemProcessReplacer {
-    fn replace(
-        &self,
-        _executable: &std::path::Path,
-        _session_id: crate::domain::SessionId,
-        _state_root: Option<&std::path::Path>,
-    ) -> Result<(), crate::ports::update::UpdateError> {
-        Err(crate::ports::update::UpdateError::Coordination(
-            "process replacement is unsupported on this platform".to_owned(),
-        ))
     }
 }
 

@@ -105,19 +105,12 @@ fn encode_png(file: &File, image: &RasterImage) -> Result<(), AttachmentError> {
         .map_err(|error| AttachmentError::Encoding(error.to_string()))
 }
 
-#[cfg(unix)]
 fn sync_directory(path: &Path) -> Result<(), AttachmentError> {
     File::open(path)
         .and_then(|handle| handle.sync_all())
         .map_err(io_error)
 }
 
-#[cfg(not(unix))]
-fn sync_directory(_path: &Path) -> Result<(), AttachmentError> {
-    Ok(())
-}
-
-#[cfg(unix)]
 fn create_private_file(path: &Path) -> Result<File, AttachmentError> {
     use std::os::unix::fs::OpenOptionsExt;
     OpenOptions::new()
@@ -128,24 +121,9 @@ fn create_private_file(path: &Path) -> Result<File, AttachmentError> {
         .map_err(io_error)
 }
 
-#[cfg(not(unix))]
-fn create_private_file(path: &Path) -> Result<File, AttachmentError> {
-    OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(path)
-        .map_err(io_error)
-}
-
-#[cfg(unix)]
 fn set_private_directory(path: &Path) -> Result<(), AttachmentError> {
     use std::os::unix::fs::PermissionsExt;
     fs::set_permissions(path, fs::Permissions::from_mode(0o700)).map_err(io_error)
-}
-
-#[cfg(not(unix))]
-fn set_private_directory(_path: &Path) -> Result<(), AttachmentError> {
-    Ok(())
 }
 
 fn invalid_directory(path: &Path) -> AttachmentError {

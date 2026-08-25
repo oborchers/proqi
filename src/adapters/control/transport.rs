@@ -1,4 +1,4 @@
-//! Bounded framed transport over Unix sockets with fail-closed Windows stubs.
+//! Bounded framed transport over Unix sockets.
 
 use std::{
     io::{Read, Write},
@@ -22,39 +22,28 @@ pub(super) type LocalStream = LocalSocketStream;
 
 pub(super) struct LocalListener {
     inner: LocalSocketListener,
-    #[cfg(unix)]
     endpoint: String,
 }
 
 impl LocalListener {
     pub(super) fn bind(endpoint: &str) -> Result<Self, ControlError> {
-        #[cfg(windows)]
-        {
-            let _ = endpoint;
-            Err(ControlError::Unsupported)
-        }
-        #[cfg(unix)]
-        {
-            secure_parent(endpoint)?;
-            let name = endpoint.to_fs_name::<GenericFilePath>().map_err(io_error)?;
-            let options = ListenerOptions::new()
-                .name(name)
-                .nonblocking(ListenerNonblockingMode::Accept);
-            let inner = options
-                .create_sync()
-                .map_err(|error| ControlError::Io(format!("bind failed: {error}")))?;
-            secure_endpoint(endpoint).map_err(|error| {
-                ControlError::Io(format!("endpoint validation failed: {error}"))
-            })?;
-            Ok(Self {
-                inner,
-                endpoint: endpoint.to_owned(),
-            })
-        }
+        secure_parent(endpoint)?;
+        let name = endpoint.to_fs_name::<GenericFilePath>().map_err(io_error)?;
+        let options = ListenerOptions::new()
+            .name(name)
+            .nonblocking(ListenerNonblockingMode::Accept);
+        let inner = options
+            .create_sync()
+            .map_err(|error| ControlError::Io(format!("bind failed: {error}")))?;
+        secure_endpoint(endpoint)
+            .map_err(|error| ControlError::Io(format!("endpoint validation failed: {error}")))?;
+        Ok(Self {
+            inner,
+            endpoint: endpoint.to_owned(),
+        })
     }
 }
 
-#[cfg(unix)]
 impl Drop for LocalListener {
     fn drop(&mut self) {
         let _ = std::fs::remove_file(&self.endpoint);
@@ -74,19 +63,11 @@ pub(super) fn accept(listener: &LocalListener) -> Result<Option<LocalStream>, Co
 }
 
 pub(super) fn connect(endpoint: &str, owner_pid: u32) -> Result<LocalStream, ControlError> {
-    #[cfg(windows)]
-    {
-        let _ = (endpoint, owner_pid);
-        Err(ControlError::Unsupported)
-    }
-    #[cfg(unix)]
-    {
-        let name = endpoint.to_fs_name::<GenericFilePath>().map_err(io_error)?;
-        let stream = LocalSocketStream::connect(name).map_err(io_error)?;
-        validate_server_peer(&stream, endpoint, owner_pid)?;
-        stream.set_nonblocking(true).map_err(io_error)?;
-        Ok(stream)
-    }
+    let name = endpoint.to_fs_name::<GenericFilePath>().map_err(io_error)?;
+    let stream = LocalSocketStream::connect(name).map_err(io_error)?;
+    validate_server_peer(&stream, endpoint, owner_pid)?;
+    stream.set_nonblocking(true).map_err(io_error)?;
+    Ok(stream)
 }
 
 pub(super) fn read_request(stream: &LocalStream) -> Result<ControlRequest, ControlError> {
@@ -191,7 +172,6 @@ fn secure_endpoint(endpoint: &str) -> Result<(), ControlError> {
     validate_private_parent(endpoint)
 }
 
-#[cfg(unix)]
 fn secure_parent(endpoint: &str) -> Result<(), ControlError> {
     let parent = std::path::Path::new(endpoint)
         .parent()
@@ -199,7 +179,6 @@ fn secure_parent(endpoint: &str) -> Result<(), ControlError> {
     validate_private_directory(parent)
 }
 
-#[cfg(unix)]
 fn validate_private_parent(endpoint: &str) -> Result<(), ControlError> {
     let parent = std::path::Path::new(endpoint)
         .parent()
@@ -207,7 +186,6 @@ fn validate_private_parent(endpoint: &str) -> Result<(), ControlError> {
     validate_private_directory(parent)
 }
 
-#[cfg(unix)]
 fn validate_private_directory(parent: &std::path::Path) -> Result<(), ControlError> {
     use std::os::unix::fs::PermissionsExt as _;
     let metadata = std::fs::symlink_metadata(parent).map_err(io_error)?;
@@ -217,7 +195,6 @@ fn validate_private_directory(parent: &std::path::Path) -> Result<(), ControlErr
     valid.then_some(()).ok_or(ControlError::InvalidPeer)
 }
 
-#[cfg(unix)]
 fn validate_client_peer(
     stream: &LocalStream,
     listener: &LocalListener,
@@ -232,15 +209,6 @@ fn validate_client_peer(
         .ok_or(ControlError::InvalidPeer)
 }
 
-#[cfg(windows)]
-fn validate_client_peer(
-    _stream: &LocalStream,
-    _listener: &LocalListener,
-) -> Result<(), ControlError> {
-    Err(ControlError::Unsupported)
-}
-
-#[cfg(unix)]
 fn validate_server_peer(
     stream: &LocalStream,
     endpoint: &str,
@@ -255,15 +223,6 @@ fn validate_server_peer(
     (pid_matches && peer.euid() == Some(metadata.uid()))
         .then_some(())
         .ok_or(ControlError::InvalidPeer)
-}
-
-#[cfg(windows)]
-fn validate_server_peer(
-    _stream: &LocalStream,
-    _endpoint: &str,
-    _owner_pid: u32,
-) -> Result<(), ControlError> {
-    Err(ControlError::Unsupported)
 }
 
 fn io_error(error: impl std::fmt::Display) -> ControlError {

@@ -477,7 +477,7 @@ forwarding `Cmd+C`, `Cmd+V`, or Meta keys consistently.
 
 Proqi supports familiar modifier shortcuts when the terminal reports them. In
 the user-facing keymap, `Meta` means the platform's primary application
-modifier: Command on macOS and Control on Windows and Linux. Internally this is
+modifier: Command on macOS and Control on Linux. Internally this is
 normalized as `Primary`, independently of the terminal's raw modifier name.
 
 Initial editing shortcuts include:
@@ -899,11 +899,6 @@ The first public version is `v0.1.0`. Release targets are:
 - Intel macOS.
 - x86-64 Linux using GNU libc.
 
-Windows compilation and terminal-independent tests remain useful engineering
-signals, but Windows is not a `v0.1.0` support or publication target. Named-pipe
-owner control, Windows terminal automation, signing, packaging, and update
-behavior require a separate future implementation goal.
-
 Distribution is limited to immutable GitHub Release archives and the
 `oborchers/homebrew-tap` personal tap. The tap provides one prebuilt Homebrew
 formula, installed with:
@@ -912,8 +907,8 @@ formula, installed with:
 brew install oborchers/tap/proqi
 ```
 
-There is no crates.io, npm, PyPI, WinGet, Docker, Homebrew Core, shell installer,
-PowerShell installer, or binary cask in `v0.1.0`. Release archives contain the
+There is no crates.io, npm, PyPI, Docker, Homebrew Core, shell installer, or
+binary cask in `v0.1.0`. Release archives contain the
 native executable, MIT license, required notices, and shell completions.
 Published artifacts also receive SHA-256 checksums, SPDX JSON SBOMs, and GitHub
 OIDC Sigstore build-provenance attestations. Paid Apple signing and notarization
@@ -987,7 +982,6 @@ The current direction is grounded in these public primary sources:
 - Telemetry, update-check analytics, installation identifiers, or usage events.
 - Automatic update installation without explicit confirmation.
 - Standalone executable self-replacement in `v0.1.0`.
-- Windows release artifacts or public Windows support claims.
 - Public repository changes, tap creation, credentials, tags, or release
   publication without Oliver's explicit approval.
 

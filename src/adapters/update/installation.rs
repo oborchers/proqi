@@ -125,21 +125,10 @@ fn identity(kind: InstallationKind, path: &Path) -> InstallationIdentity {
     InstallationIdentity::from_digest(hash.finalize().into())
 }
 
-#[cfg(unix)]
 fn identity_path_bytes(path: &Path) -> Vec<u8> {
     use std::os::unix::ffi::OsStrExt as _;
 
     path.as_os_str().as_bytes().to_vec()
-}
-
-#[cfg(windows)]
-fn identity_path_bytes(path: &Path) -> Vec<u8> {
-    use std::os::windows::ffi::OsStrExt as _;
-
-    path.as_os_str()
-        .encode_wide()
-        .flat_map(u16::to_le_bytes)
-        .collect()
 }
 
 #[cfg(test)]

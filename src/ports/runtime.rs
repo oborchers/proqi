@@ -30,7 +30,7 @@ pub struct InstanceInfo {
     /// Supported owner-control protocol, absent for older or unsupported processes.
     #[serde(default)]
     pub control_protocol: Option<u32>,
-    /// Platform local-socket or named-pipe endpoint, absent when unsupported.
+    /// User-only local control endpoint, absent when unavailable.
     #[serde(default)]
     pub control_endpoint: Option<String>,
     /// Optional all-session update coordination capability.

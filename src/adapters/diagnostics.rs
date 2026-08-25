@@ -72,15 +72,9 @@ fn create_private_dir(path: &Path) -> std::io::Result<()> {
     make_private(path)
 }
 
-#[cfg(unix)]
 fn make_private(path: &Path) -> std::io::Result<()> {
     use std::os::unix::fs::PermissionsExt as _;
 
     let mode = if path.is_dir() { 0o700 } else { 0o600 };
     fs::set_permissions(path, fs::Permissions::from_mode(mode))
-}
-
-#[cfg(not(unix))]
-fn make_private(_path: &Path) -> std::io::Result<()> {
-    Ok(())
 }

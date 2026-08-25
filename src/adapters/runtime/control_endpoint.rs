@@ -12,7 +12,6 @@ use super::{RuntimeError, io_error};
 #[cfg(unix)]
 const MAX_UNIX_ENDPOINT_BYTES: usize = 100;
 
-#[cfg(unix)]
 pub(super) fn prepare(
     runtime_dir: &Path,
     instance_id: InstanceId,
@@ -25,15 +24,6 @@ pub(super) fn prepare(
     Ok(Some(endpoint.to_string_lossy().into_owned()))
 }
 
-#[cfg(windows)]
-pub(super) fn prepare(
-    _runtime_dir: &Path,
-    _instance_id: InstanceId,
-) -> Result<Option<String>, RuntimeError> {
-    Ok(None)
-}
-
-#[cfg(unix)]
 pub(super) fn existing(
     runtime_dir: &Path,
     instance_id: InstanceId,
@@ -48,15 +38,6 @@ pub(super) fn existing(
     Ok(Some(endpoint))
 }
 
-#[cfg(windows)]
-pub(super) fn existing(
-    _runtime_dir: &Path,
-    _instance_id: InstanceId,
-) -> Result<Option<PathBuf>, RuntimeError> {
-    Ok(None)
-}
-
-#[cfg(unix)]
 fn endpoint_path(runtime_dir: &Path, instance_id: InstanceId) -> Result<PathBuf, RuntimeError> {
     use std::os::unix::fs::MetadataExt as _;
 
@@ -72,13 +53,11 @@ fn endpoint_path(runtime_dir: &Path, instance_id: InstanceId) -> Result<PathBuf,
         .join(format!("{instance_id}.sock")))
 }
 
-#[cfg(unix)]
 fn owner_uid(path: &Path) -> Result<u32, RuntimeError> {
     use std::os::unix::fs::MetadataExt as _;
     Ok(fs::metadata(path).map_err(io_error)?.uid())
 }
 
-#[cfg(unix)]
 fn prepare_owned_directory(path: &Path, owner_uid: u32) -> Result<(), RuntimeError> {
     match fs::symlink_metadata(path) {
         Ok(_) => validate_owned_directory(path, owner_uid),
@@ -90,7 +69,6 @@ fn prepare_owned_directory(path: &Path, owner_uid: u32) -> Result<(), RuntimeErr
     }
 }
 
-#[cfg(unix)]
 fn create_private_directory(path: &Path) -> Result<(), RuntimeError> {
     use std::os::unix::fs::DirBuilderExt as _;
     let mut builder = fs::DirBuilder::new();
@@ -98,7 +76,6 @@ fn create_private_directory(path: &Path) -> Result<(), RuntimeError> {
     builder.create(path).map_err(io_error)
 }
 
-#[cfg(unix)]
 fn validate_owned_directory(path: &Path, owner_uid: u32) -> Result<(), RuntimeError> {
     use std::os::unix::fs::{MetadataExt as _, PermissionsExt as _};
 
@@ -115,7 +92,7 @@ fn validate_owned_directory(path: &Path, owner_uid: u32) -> Result<(), RuntimeEr
     })
 }
 
-#[cfg(all(test, unix))]
+#[cfg(test)]
 mod tests {
     use std::os::unix::fs::symlink;
 

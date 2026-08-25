@@ -223,7 +223,6 @@ fn stop_frontend_lanes(
     (control, input)
 }
 
-#[cfg(unix)]
 fn replace_after_cleanup(
     installation: Option<&crate::domain::Installation>,
     expected: &crate::domain::StableVersion,
@@ -261,18 +260,6 @@ fn replace_after_cleanup(
         .replace(&detected.executable, session_id, state_root)
         .map_err(|error| TerminalError::Io(error.to_string()))?;
     Ok(session_id)
-}
-
-#[cfg(not(unix))]
-fn replace_after_cleanup(
-    _installation: Option<&crate::domain::Installation>,
-    _expected: &crate::domain::StableVersion,
-    _session_id: SessionId,
-    _state_root: Option<&std::path::Path>,
-) -> Result<SessionId, TerminalError> {
-    Err(TerminalError::Io(
-        "automatic update restart is unsupported on this platform".to_owned(),
-    ))
 }
 
 fn start_optional_control(

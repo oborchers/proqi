@@ -300,7 +300,7 @@ fn package_name(host: &str) -> String {
 }
 
 const fn executable_name() -> &'static str {
-    if cfg!(windows) { "proqi.exe" } else { "proqi" }
+    "proqi"
 }
 
 #[cfg(test)]

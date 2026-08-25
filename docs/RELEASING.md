@@ -89,12 +89,12 @@ Manual and API-managed settings must also:
 
 ## CI rehearsal and release
 
-Keep the ordinary CI workflow disabled while the repository is private if its
-metered minutes would be exhausted. After the readiness audit:
+Keep the ordinary CI workflow disabled while local release work is in progress.
+After the readiness audit:
 
 1. Make the repository public and re-enable CI.
 2. Push the consolidated `main` branch once.
-3. Wait for `Required CI result` to pass on Linux, macOS, and Windows.
+3. Wait for `Required CI result` to pass on Linux and macOS.
 4. Close superseded dependency pull requests only after their equivalent
    versions are present on `main`.
 5. Dispatch `Release` with `v0.1.0`. This is non-publishing rehearsal of the

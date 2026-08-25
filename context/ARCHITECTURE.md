@@ -73,10 +73,7 @@ large multi-crate abstraction hierarchy before one is needed.
   development command surface.
 
 The `v0.1.0` release targets are Apple silicon macOS, Intel macOS, and x86-64
-Linux using GNU libc. Windows remains a compile and terminal-independent test
-signal only. Named-pipe control, Windows packaging, terminal automation,
-signing, and updating are deferred to a separate future goal and are not public
-support claims.
+Linux using GNU libc.
 
 Rust provides a single native executable, predictable resource use, strong
 cross-platform support, and a mature terminal ecosystem. It also makes it
@@ -579,7 +576,7 @@ receives intentions such as `CreateThought`, `MoveCursor`, `CutThought`, or
 layout snapshot into the same intentions.
 
 Raw modifiers are normalized into semantic modifiers. `Primary` maps to
-Command on macOS and Control on Windows and Linux. Enhanced keyboard protocols
+Command on macOS and Control on Linux. Enhanced keyboard protocols
 are enabled when supported so Super and Meta events can be distinguished, but
 every action retains a terminal-safe fallback and a configurable binding.
 
@@ -695,11 +692,8 @@ a typed request through the owner's user-only local control endpoint. The owner
 turns that request into an ordinary action, then returns the durable operation
 receipt. It never writes around the owner.
 
-The local transport is a Unix-domain socket on macOS and Linux. Windows owner
-forwarding remains explicitly unsupported until a separate implementation uses
-a named pipe, verifies current-user token identity, and passes cross-user tests.
-There is no insecure fallback and `v0.1.0` makes no Windows support claim.
-Endpoint metadata lives beside runtime lock metadata. Peer-user validation,
+The local transport is a Unix-domain socket on macOS and Linux. There is no
+insecure fallback. Endpoint metadata lives beside runtime lock metadata. Peer-user validation,
 bounded messages, protocol negotiation, idempotency keys, and timeouts are
 mandatory. If forwarding is unsupported or the owner cannot be verified, the
 CLI returns `session_busy`.
@@ -845,7 +839,7 @@ cargo xtask package
 
 The commands remain thin orchestrators around standard Cargo tools. They print
 the commands they run, propagate exit codes, avoid network access unless the
-operation inherently requires it, and work on macOS, Linux, and Windows. A
+operation inherently requires it, and work on macOS and Linux. A
 failing subcommand fails the overall command immediately.
 
 Rust uses Clippy's `cognitive_complexity` lint with a threshold of 25 as a
@@ -866,7 +860,7 @@ Pull requests and pushes to the protected default branch run these jobs:
 
 - `quality` runs formatting, Clippy with warnings denied, and documentation
   checks on the pinned stable toolchain.
-- `test` runs the deterministic suite on macOS, Linux, and Windows. The matrix
+- `test` runs the deterministic suite on macOS and Linux. The matrix
   does not use fail-fast because all platform results are diagnostically useful.
 - `msrv` compiles and tests with the declared minimum supported Rust version.
 - `pty` runs terminal scenarios on each platform where the harness is supported.
@@ -1006,7 +1000,6 @@ The architecture leaves only later product expansion open:
 
 - Additional multiplexer and coding-agent adapters.
 - A separately reviewed standalone self-replacement mechanism after `v0.1.0`.
-- Windows owner control, packaging, signing, terminal automation, and updating.
 - Cloud sync, shared editing, and a public plugin API.
 - Homebrew Core submission after the project independently meets its policy.
 

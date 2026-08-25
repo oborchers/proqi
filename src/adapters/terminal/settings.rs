@@ -35,16 +35,10 @@ pub(crate) fn load_settings(config_dir: &Path) -> Result<UiSettings, TerminalErr
     Ok(settings)
 }
 
-#[cfg(unix)]
 fn ensure_private(path: &Path) -> Result<(), TerminalError> {
     use std::os::unix::fs::PermissionsExt;
     let permissions = fs::Permissions::from_mode(0o600);
     fs::set_permissions(path, permissions).map_err(|error| TerminalError::Config(error.to_string()))
-}
-
-#[cfg(not(unix))]
-fn ensure_private(_path: &Path) -> Result<(), TerminalError> {
-    Ok(())
 }
 
 #[cfg(test)]

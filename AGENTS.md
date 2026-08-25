@@ -76,9 +76,9 @@ These rules become mandatory with the first real TUI implementation:
 - Terminal setup uses an RAII guard. Tests prove restoration after normal exit,
   errors, panics, and supported termination signals.
 - Keyboard and mouse paths receive equivalent behavioral coverage. macOS PTY
-  tests cover startup, input, resize, and clean shutdown in CI. Linux and
-  Windows retain build and terminal-independent integration coverage until the
-  PTY driver is portable.
+  tests cover startup, input, resize, and clean shutdown in CI. Linux retains
+  build and terminal-independent integration coverage until the PTY driver is
+  portable.
 
 ## Design Context
 
