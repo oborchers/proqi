@@ -228,6 +228,7 @@ mod tests {
         adapters::{
             memory::FakeIdGenerator,
             sqlite::{RetryPolicy, StoreConfig},
+            terminal::supervisor::ShutdownDeadline,
         },
         application::{Action, AppState, Effect, reduce},
         domain::{OperationSequence, Session, SessionBoard, Timestamp},
@@ -323,7 +324,8 @@ mod tests {
                 .expect("retry completion"),
             PersistenceResult::RetryFinished
         ));
-        lane.stop().expect("stop lane");
+        lane.stop(ShutdownDeadline::after(std::time::Duration::from_secs(1)))
+            .expect("stop lane");
         let snapshot = setup
             .load_session(state.board.session.id)
             .expect("snapshot");
@@ -395,7 +397,8 @@ mod tests {
                 .expect("retry completion"),
             PersistenceResult::RetryFinished
         ));
-        lane.stop().expect("stop lane");
+        lane.stop(ShutdownDeadline::after(std::time::Duration::from_secs(1)))
+            .expect("stop lane");
         let snapshot = setup
             .load_session(state.board.session.id)
             .expect("snapshot");
@@ -448,7 +451,8 @@ mod tests {
             outcome,
             PersistenceResult::Metadata { result: Ok(()) }
         ));
-        lane.stop().expect("stop lane");
+        lane.stop(ShutdownDeadline::after(std::time::Duration::from_secs(1)))
+            .expect("stop lane");
         assert_eq!(
             setup
                 .load_session(session.id)

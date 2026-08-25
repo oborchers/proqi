@@ -34,14 +34,16 @@ pub(crate) fn pick_session(
     let input = InputLane::spawn();
     let mut browser = SessionBrowser::new(items, now);
     let run_result = drive(&mut terminal, &mut browser, &input, &termination, &theme);
-    let input_result = input
-        .stop()
-        .map_err(|_| TerminalError::Worker("browser input lane panicked"));
+    input.request_stop();
     drop(terminal);
     let restoration_result = guard.finish();
-    let selected = run_result?;
-    input_result?;
-    restoration_result?;
+    let input_result = input.stop(super::supervisor::ShutdownDeadline::after(
+        super::supervisor::SHUTDOWN_TIMEOUT,
+    ));
+    let selected = run_result;
+    let cleanup = super::runner::finish_runtime(Ok(()), [input_result, restoration_result]);
+    let selected = selected?;
+    cleanup?;
     Ok(selected)
 }
 
@@ -69,7 +71,9 @@ fn drive(
                 BrowserAction::Continue => dirty = true,
                 action => return Ok(action),
             },
-            Ok(InputMessage::Failed(message)) => return Err(TerminalError::Io(message)),
+            Ok(InputMessage::Failed(failure)) => {
+                return Err(TerminalError::Io(failure.to_string()));
+            }
             Err(RecvTimeoutError::Timeout) => {}
             Err(RecvTimeoutError::Disconnected) => {
                 return Err(TerminalError::Worker("browser input lane disconnected"));

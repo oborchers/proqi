@@ -1,4 +1,4 @@
-use std::{path::PathBuf, sync::mpsc::sync_channel};
+use std::{path::PathBuf, sync::mpsc::sync_channel, time::Duration};
 
 use crate::{
     adapters::memory::FakeIdGenerator,
@@ -102,5 +102,8 @@ fn full_and_disconnected_request_lanes_fail_without_blocking() {
         lane.send(&crate::application::Effect::DiscoverAgents),
         Err(super::TerminalError::Worker("external lane disconnected"))
     ));
-    lane.stop().expect("stop detached lane");
+    lane.stop(super::super::supervisor::ShutdownDeadline::after(
+        Duration::from_secs(1),
+    ))
+    .expect("stop detached lane");
 }

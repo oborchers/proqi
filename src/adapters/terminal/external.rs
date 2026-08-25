@@ -2,7 +2,7 @@
 
 use std::{
     path::PathBuf,
-    sync::mpsc::{Receiver, SyncSender, TrySendError, sync_channel},
+    sync::mpsc::{Receiver, RecvTimeoutError, SyncSender, TrySendError, sync_channel},
     thread::{self, JoinHandle},
     time::Duration,
 };
@@ -26,7 +26,10 @@ use crate::{
     ui::PastePayload,
 };
 
-use super::TerminalError;
+use super::{
+    TerminalError,
+    supervisor::{ShutdownDeadline, join_before},
+};
 
 enum ExternalRequest {
     DiscoverAgents,
@@ -180,20 +183,30 @@ impl ExternalLane {
             .map_err(|error| map_send_error(&error))
     }
 
-    pub(super) fn stop(self) -> Result<(), TerminalError> {
-        let Self {
-            sender,
-            receiver,
-            mut handle,
-        } = self;
-        drop(sender);
-        if handle.is_some() {
-            while receiver.recv().is_ok() {}
+    pub(super) fn request_stop(&mut self) {
+        self.sender = None;
+    }
+
+    pub(super) fn stop(mut self, deadline: ShutdownDeadline) -> Result<(), TerminalError> {
+        self.request_stop();
+        while !deadline.expired() {
+            match self.receiver.recv_timeout(deadline.remaining()) {
+                Ok(_) => {}
+                Err(RecvTimeoutError::Disconnected | RecvTimeoutError::Timeout) => break,
+            }
         }
-        match handle.take().map(JoinHandle::join) {
-            None | Some(Ok(())) => Ok(()),
-            Some(Err(_)) => Err(TerminalError::Worker("external lane panicked")),
-        }
+        join_before(
+            self.handle.take(),
+            deadline,
+            "external lane panicked",
+            "external lane did not stop before the shutdown deadline",
+        )
+    }
+}
+
+impl Drop for ExternalLane {
+    fn drop(&mut self) {
+        self.request_stop();
     }
 }
 

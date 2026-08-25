@@ -84,6 +84,10 @@ possible to ship without a Node, Python, or JVM runtime.
 - Ratatui owns terminal-independent drawing primitives and widget composition.
 - Crossterm owns terminal setup, input, resize, mouse, bracketed-paste, and
   capability handling.
+- Crossterm is temporarily pinned to audited upstream revision
+  `c006ee6efbd7bed45f1286ec9545d401f3ecb1fe`, which terminates Unix event reads
+  on terminal EOF and non-retryable I/O errors. Remove the pin only after an
+  equivalent released version passes the PTY-close regression suite.
 - Automatic mode queries the terminal foreground and background through a
   bounded terminal-adapter palette probe before alternate-screen setup and
   before the input lane starts. This ordering prevents the probe from consuming
@@ -97,6 +101,19 @@ possible to ship without a Node, Python, or JVM runtime.
   behind private state. Those constraints conflict with exact paste preservation
   and layout-derived mouse hit testing. Ratatui therefore renders Proqi's own
   editor snapshot rather than owning the text model.
+
+Terminal workers share one cancellation boundary and a two-second overall
+shutdown deadline. Cancellation is requested for every lane before any worker
+is joined. Terminal restoration and lease release are attempted independently
+of worker failures, and teardown reports all failures after every cleanup has
+run. `SIGINT` and `SIGTERM` request this bounded path. `SIGHUP` retains its
+operating-system default until a future design can guarantee restoration after
+terminal revocation without keeping a revoked input descriptor alive.
+
+Application subprocesses start in dedicated Unix process groups. Deadline or
+I/O failure sends `SIGTERM` to the group, waits 250 milliseconds, then sends
+`SIGKILL`, reaps the direct child, closes its pipes, and joins bounded I/O
+workers. No shell or unsafe Rust is required for this ownership boundary.
 
 There is no web view and no browser runtime. Playwright is therefore not the
 primary end-to-end tool. Terminal behavior is tested through pseudo-terminal

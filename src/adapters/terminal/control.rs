@@ -119,10 +119,10 @@ impl TerminationGuard {
 
 #[cfg(unix)]
 fn register_unix_signals(requested: &Arc<AtomicBool>) -> io::Result<Vec<signal_hook::SigId>> {
-    use signal_hook::consts::{SIGHUP, SIGINT, SIGTERM};
+    use signal_hook::consts::{SIGINT, SIGTERM};
 
     let mut registrations = Vec::new();
-    for signal in [SIGINT, SIGTERM, SIGHUP] {
+    for signal in [SIGINT, SIGTERM] {
         match signal_hook::flag::register(signal, Arc::clone(requested)) {
             Ok(registration) => registrations.push(registration),
             Err(error) => {

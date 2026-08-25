@@ -84,6 +84,41 @@ pub(super) struct WorkerLanes<'a> {
     pub(super) instance: &'a InstanceInfo,
 }
 
+struct OwnedLanes {
+    control: Option<ControlServer>,
+    input: InputLane,
+    persistence: PersistenceLane,
+    external: ExternalLane,
+    update: super::update_lane::UpdateLane,
+}
+
+impl OwnedLanes {
+    fn request_stop(&mut self) {
+        self.input.request_stop();
+        if let Some(control) = self.control.as_ref() {
+            control.request_stop();
+        }
+        self.persistence.request_stop();
+        self.external.request_stop();
+        self.update.request_stop();
+    }
+
+    fn stop(mut self) -> [Result<(), TerminalError>; 5] {
+        self.request_stop();
+        let deadline =
+            super::supervisor::ShutdownDeadline::after(super::supervisor::SHUTDOWN_TIMEOUT);
+        [
+            self.input.stop(deadline),
+            self.persistence.stop(deadline),
+            self.external.stop(deadline),
+            self.update.stop(deadline),
+            self.control.take().map_or(Ok(()), |server| {
+                server.stop_before(deadline.instant()).map_err(Into::into)
+            }),
+        ]
+    }
+}
+
 #[derive(Default)]
 pub(super) struct PendingWork {
     pub(super) persistence: usize,
@@ -138,64 +173,91 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
     let (theme, guard) = enter_terminal(settings.theme)?;
     let termination = TerminationGuard::register()?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
-    let input = InputLane::spawn();
-    let persistence = PersistenceLane::spawn_with_runtime(store, coordinator.clone(), cwd);
     let presentation_source = format!("proqi-{}", session_lease.info().instance_id);
-    let external = ExternalLane::spawn(
+    let mut owned = spawn_lanes(
+        control,
+        store,
+        coordinator,
+        cwd,
         recovery_directory,
         attachment_directory,
         presentation_source,
+        cache_directory,
+        installation.clone(),
     );
-    let update =
-        super::update_lane::UpdateLane::spawn(cache_directory, installation.clone(), coordinator);
-    update.check(settings.check_for_updates)?;
     let mut pane_heartbeat = None;
+    let check_for_updates = settings.check_for_updates;
     let mut app = BoardApp::with_settings(state, settings, RopeEditorFactory);
     if let Some(warning) = control_warning {
         app.set_warning(warning);
     }
     let lanes = WorkerLanes {
-        input: &input,
-        persistence: &persistence,
-        external: &external,
-        control: control.as_ref(),
-        update: &update,
+        input: &owned.input,
+        persistence: &owned.persistence,
+        external: &owned.external,
+        control: owned.control.as_ref(),
+        update: &owned.update,
         termination: &termination,
         instance: session_lease.info(),
     };
-    let run_result = drive(
-        &mut terminal,
-        &mut app,
-        &lanes,
-        &mut ids,
-        clock,
-        theme,
-        &mut pane_heartbeat,
-    );
+    let run_result = owned.update.check(check_for_updates).and_then(|()| {
+        drive(
+            &mut terminal,
+            &mut app,
+            &lanes,
+            &mut ids,
+            clock,
+            theme,
+            &mut pane_heartbeat,
+        )
+    });
     let requested_restart = app.update_restart().cloned();
     if let Some(heartbeat) = pane_heartbeat.as_mut() {
-        let _cleared = heartbeat.clear(&external);
+        let _cleared = heartbeat.clear(&owned.external);
     }
-    let (control_result, input_result) = stop_frontend_lanes(control, input);
-    let persistence_result = persistence.stop();
-    let external_result = external.stop();
-    let update_result = update.stop();
+    owned.request_stop();
     drop(terminal);
     let restoration_result = guard.finish();
     drop((session_lease, schema_lease));
-    run_result?;
-    input_result?;
-    persistence_result?;
-    external_result?;
-    update_result?;
-    control_result?;
-    restoration_result?;
+    let lane_results = owned.stop();
+    finish_runtime(
+        run_result,
+        lane_results.into_iter().chain([restoration_result]),
+    )?;
     resume_after_update(
         installation.as_ref(),
         requested_restart.as_ref(),
         session_id,
         state_root.as_deref(),
     )
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "composition root owns explicit adapter inputs"
+)]
+fn spawn_lanes(
+    control: Option<ControlServer>,
+    store: SqliteStore,
+    coordinator: FileRuntimeCoordinator,
+    cwd: PathBuf,
+    recovery_directory: PathBuf,
+    attachment_directory: PathBuf,
+    presentation_source: String,
+    cache_directory: PathBuf,
+    installation: Option<crate::domain::Installation>,
+) -> OwnedLanes {
+    OwnedLanes {
+        control,
+        input: InputLane::spawn(),
+        persistence: PersistenceLane::spawn_with_runtime(store, coordinator.clone(), cwd),
+        external: ExternalLane::spawn(
+            recovery_directory,
+            attachment_directory,
+            presentation_source,
+        ),
+        update: super::update_lane::UpdateLane::spawn(cache_directory, installation, coordinator),
+    }
 }
 
 fn resume_after_update(
@@ -209,18 +271,23 @@ fn resume_after_update(
     })
 }
 
-fn stop_frontend_lanes(
-    control: Option<ControlServer>,
-    input: InputLane,
-) -> (
-    Result<(), crate::ports::control::ControlError>,
-    Result<(), TerminalError>,
-) {
-    let control = control.map_or(Ok(()), ControlServer::stop);
-    let input = input
-        .stop()
-        .map_err(|_| TerminalError::Worker("input lane panicked"));
-    (control, input)
+pub(super) fn finish_runtime(
+    run_result: Result<(), TerminalError>,
+    cleanup_results: impl IntoIterator<Item = Result<(), TerminalError>>,
+) -> Result<(), TerminalError> {
+    let mut failures = cleanup_results
+        .into_iter()
+        .filter_map(Result::err)
+        .map(|error| error.to_string())
+        .collect::<Vec<_>>();
+    if let Err(error) = run_result {
+        failures.insert(0, error.to_string());
+    }
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(TerminalError::Cleanup(failures.join("; ")))
+    }
 }
 
 fn replace_after_cleanup(
@@ -374,7 +441,9 @@ fn drive(
                 enqueue_effects(app, lanes, effects, &mut pending)?;
                 redraw = true;
             }
-            Ok(InputMessage::Failed(message)) => return Err(TerminalError::Io(message)),
+            Ok(InputMessage::Failed(failure)) => {
+                return Err(TerminalError::Io(failure.to_string()));
+            }
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
                 return Err(TerminalError::Worker("input lane disconnected"));

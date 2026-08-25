@@ -1,6 +1,7 @@
 //! Crossterm event normalization and lossless input delivery.
 
 use std::{
+    fmt, io,
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -18,9 +19,48 @@ use crossterm::event::{
 use crate::ports::editor::CursorMovement;
 use crate::ui::{PointerButton, PointerInput, PointerKind, UiInput, UiKey};
 
+use super::{
+    TerminalError,
+    supervisor::{ShutdownDeadline, join_before},
+};
+
+#[derive(Debug, Eq, PartialEq)]
+pub(super) enum InputFailure {
+    EndOfFile,
+    TerminalRevoked,
+    Io(String),
+}
+
+impl fmt::Display for InputFailure {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::EndOfFile => formatter.write_str("terminal input reached end of file"),
+            Self::TerminalRevoked => formatter.write_str("terminal input was revoked"),
+            Self::Io(message) => write!(formatter, "terminal input failed: {message}"),
+        }
+    }
+}
+
+trait EventSource: Send {
+    fn poll(&mut self, timeout: Duration) -> io::Result<bool>;
+    fn read(&mut self) -> io::Result<Event>;
+}
+
+struct CrosstermEventSource;
+
+impl EventSource for CrosstermEventSource {
+    fn poll(&mut self, timeout: Duration) -> io::Result<bool> {
+        event::poll(timeout)
+    }
+
+    fn read(&mut self) -> io::Result<Event> {
+        event::read()
+    }
+}
+
 pub(super) enum InputMessage {
     Event(UiInput),
-    Failed(String),
+    Failed(InputFailure),
 }
 
 pub(super) struct InputLane {
@@ -31,10 +71,14 @@ pub(super) struct InputLane {
 
 impl InputLane {
     pub(super) fn spawn() -> Self {
+        Self::spawn_with_source(Box::new(CrosstermEventSource))
+    }
+
+    fn spawn_with_source(mut source: Box<dyn EventSource>) -> Self {
         let (sender, receiver) = sync_channel(64);
         let stop = Arc::new(AtomicBool::new(false));
         let worker_stop = Arc::clone(&stop);
-        let handle = thread::spawn(move || input_loop(&sender, &worker_stop));
+        let handle = thread::spawn(move || input_loop(&mut *source, &sender, &worker_stop));
         Self {
             receiver,
             stop,
@@ -42,32 +86,64 @@ impl InputLane {
         }
     }
 
-    pub(super) fn stop(mut self) -> thread::Result<()> {
+    pub(super) fn stop(mut self, deadline: ShutdownDeadline) -> Result<(), TerminalError> {
+        self.request_stop();
+        join_before(
+            self.handle.take(),
+            deadline,
+            "input lane panicked",
+            "input lane did not stop before the shutdown deadline",
+        )
+    }
+
+    pub(super) fn request_stop(&self) {
         self.stop.store(true, Ordering::Release);
-        self.handle.take().map_or(Ok(()), JoinHandle::join)
     }
 }
 
-fn input_loop(sender: &SyncSender<InputMessage>, stop: &AtomicBool) {
+impl Drop for InputLane {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Release);
+    }
+}
+
+fn input_loop(source: &mut dyn EventSource, sender: &SyncSender<InputMessage>, stop: &AtomicBool) {
     let mut pending_resize = None;
     while !stop.load(Ordering::Acquire) {
         flush_resize(sender, &mut pending_resize);
-        match event::poll(Duration::from_millis(40)) {
+        match source.poll(Duration::from_millis(40)) {
             Ok(false) => {}
-            Ok(true) => match event::read() {
+            Ok(true) => match source.read() {
                 Ok(event) => deliver(event, sender, stop, &mut pending_resize),
                 Err(error) => {
-                    let _sent =
-                        send_lossless(sender, InputMessage::Failed(error.to_string()), stop);
+                    let _sent = send_lossless(
+                        sender,
+                        InputMessage::Failed(classify_input_error(&error)),
+                        stop,
+                    );
                     return;
                 }
             },
             Err(error) => {
-                let _sent = send_lossless(sender, InputMessage::Failed(error.to_string()), stop);
+                let _sent = send_lossless(
+                    sender,
+                    InputMessage::Failed(classify_input_error(&error)),
+                    stop,
+                );
                 return;
             }
         }
     }
+}
+
+fn classify_input_error(error: &io::Error) -> InputFailure {
+    if error.kind() == io::ErrorKind::UnexpectedEof {
+        return InputFailure::EndOfFile;
+    }
+    if matches!(error.raw_os_error(), Some(5 | 6)) {
+        return InputFailure::TerminalRevoked;
+    }
+    InputFailure::Io(error.to_string())
 }
 
 fn deliver(
@@ -236,121 +312,5 @@ const fn move_key(movement: CursorMovement, extend_selection: bool) -> UiKey {
 }
 
 #[cfg(test)]
-mod tests {
-    use crossterm::event::{
-        Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent,
-        MouseEventKind,
-    };
-
-    use crate::ports::editor::CursorMovement;
-    use crate::ui::{PointerButton, PointerInput, PointerKind, UiInput, UiKey};
-
-    use super::translate;
-
-    #[test]
-    fn command_and_meta_shortcuts_share_semantics() {
-        for modifier in [
-            KeyModifiers::CONTROL,
-            KeyModifiers::SUPER,
-            KeyModifiers::META,
-        ] {
-            let event = Event::Key(KeyEvent::new(KeyCode::Char('a'), modifier));
-            assert_eq!(translate(event), Some(UiInput::Key(UiKey::SelectAll)));
-        }
-    }
-
-    #[test]
-    fn primary_clipboard_shortcuts_do_not_reuse_quit() {
-        for (character, expected) in [
-            ('c', UiKey::Copy),
-            ('x', UiKey::Cut),
-            ('v', UiKey::PasteClipboard),
-            ('q', UiKey::Quit),
-        ] {
-            let event = Event::Key(KeyEvent::new(
-                KeyCode::Char(character),
-                KeyModifiers::CONTROL,
-            ));
-            assert_eq!(translate(event), Some(UiInput::Key(expected)));
-        }
-    }
-
-    #[test]
-    fn release_is_ignored_and_repeat_preserves_auto_repeat() {
-        let release = Event::Key(KeyEvent::new_with_kind(
-            KeyCode::Char('n'),
-            KeyModifiers::NONE,
-            KeyEventKind::Release,
-        ));
-        assert_eq!(translate(release), None);
-        let repeat = Event::Key(KeyEvent::new_with_kind(
-            KeyCode::Char('n'),
-            KeyModifiers::NONE,
-            KeyEventKind::Repeat,
-        ));
-        assert_eq!(translate(repeat), Some(UiInput::Key(UiKey::Character('n'))));
-    }
-
-    #[test]
-    fn unknown_primary_character_shortcuts_never_insert_text() {
-        for modifier in [
-            KeyModifiers::CONTROL,
-            KeyModifiers::SUPER,
-            KeyModifiers::META,
-        ] {
-            let event = Event::Key(KeyEvent::new(KeyCode::Char('d'), modifier));
-            assert_eq!(translate(event), None);
-        }
-    }
-
-    #[test]
-    fn shift_and_word_navigation_remain_semantic() {
-        let select = Event::Key(KeyEvent::new(
-            KeyCode::Left,
-            KeyModifiers::SHIFT | KeyModifiers::ALT,
-        ));
-        assert_eq!(
-            translate(select),
-            Some(UiInput::Key(UiKey::Move {
-                movement: CursorMovement::WordBack,
-                extend_selection: true,
-            }))
-        );
-    }
-
-    #[test]
-    fn bracketed_paste_remains_one_exact_input() {
-        let content = "Grüße 👩‍💻\n第二行\n".to_owned();
-        assert_eq!(
-            translate(Event::Paste(content.clone())),
-            Some(UiInput::Paste(content))
-        );
-    }
-
-    #[test]
-    fn host_focus_is_a_semantic_refresh_signal() {
-        assert_eq!(
-            translate(Event::FocusGained),
-            Some(UiInput::HostFocusGained)
-        );
-        assert_eq!(translate(Event::FocusLost), None);
-    }
-
-    #[test]
-    fn mouse_coordinates_are_normalized_without_terminal_types() {
-        let event = Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Down(MouseButton::Left),
-            column: 7,
-            row: 3,
-            modifiers: KeyModifiers::NONE,
-        });
-        assert_eq!(
-            translate(event),
-            Some(UiInput::Pointer(PointerInput {
-                column: 7,
-                row: 3,
-                kind: PointerKind::Down(PointerButton::Left),
-            }))
-        );
-    }
-}
+#[path = "input/tests.rs"]
+mod tests;

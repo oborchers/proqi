@@ -1,12 +1,14 @@
 //! Bounded persistence-lane lifecycle and request facade.
 
 use super::{
-    FileRuntimeCoordinator, JoinHandle, OperationBatch, OperationId, OperationSequence,
-    PersistenceLane, PersistenceRequest, SessionId, SessionTransferRequest, SqliteStore,
-    TerminalError, persistence_loop, sync_channel, thread, transfer,
+    FileRuntimeCoordinator, OperationBatch, OperationId, OperationSequence, PersistenceLane,
+    PersistenceRequest, SessionId, SessionTransferRequest, SqliteStore, TerminalError,
+    persistence_loop, sync_channel, thread, transfer,
 };
 use crate::domain::RequestId;
-use std::sync::mpsc::TrySendError;
+use std::sync::mpsc::{RecvTimeoutError, TrySendError};
+
+use crate::adapters::terminal::supervisor::{ShutdownDeadline, join_before};
 
 impl PersistenceLane {
     #[cfg(test)]
@@ -112,20 +114,33 @@ impl PersistenceLane {
             })
     }
 
-    pub(in crate::adapters::terminal) fn stop(self) -> Result<(), TerminalError> {
-        let Self {
-            sender,
-            receiver,
-            mut handle,
-        } = self;
-        drop(sender);
-        if handle.is_some() {
-            while receiver.recv().is_ok() {}
+    pub(in crate::adapters::terminal) fn request_stop(&mut self) {
+        self.sender = None;
+    }
+
+    pub(in crate::adapters::terminal) fn stop(
+        mut self,
+        deadline: ShutdownDeadline,
+    ) -> Result<(), TerminalError> {
+        self.request_stop();
+        while !deadline.expired() {
+            match self.receiver.recv_timeout(deadline.remaining()) {
+                Ok(_) => {}
+                Err(RecvTimeoutError::Disconnected | RecvTimeoutError::Timeout) => break,
+            }
         }
-        match handle.take().map(JoinHandle::join) {
-            None | Some(Ok(())) => Ok(()),
-            Some(Err(_)) => Err(TerminalError::Worker("persistence lane panicked")),
-        }
+        join_before(
+            self.handle.take(),
+            deadline,
+            "persistence lane panicked",
+            "persistence lane did not stop before the shutdown deadline",
+        )
+    }
+}
+
+impl Drop for PersistenceLane {
+    fn drop(&mut self) {
+        self.request_stop();
     }
 }
 
@@ -163,7 +178,8 @@ mod tests {
             lane.retry(OperationSequence::new(3)),
             Err(TerminalError::Worker("persistence lane disconnected"))
         ));
-        lane.stop().expect("stop detached lane");
+        lane.stop(ShutdownDeadline::after(std::time::Duration::from_secs(1)))
+            .expect("stop detached lane");
     }
 
     #[test]
@@ -207,7 +223,8 @@ mod tests {
         lane.commit(OperationBatch::Board(operation.clone()))
             .expect("queue commit");
 
-        lane.stop().expect("drain and stop lane");
+        lane.stop(ShutdownDeadline::after(std::time::Duration::from_secs(1)))
+            .expect("drain and stop lane");
 
         let snapshot = setup.load_session(session.id).expect("durable snapshot");
         assert_eq!(

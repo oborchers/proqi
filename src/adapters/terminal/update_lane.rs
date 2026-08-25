@@ -2,7 +2,7 @@
 
 use std::{
     path::{Path, PathBuf},
-    sync::mpsc::{Receiver, SyncSender, TrySendError, sync_channel},
+    sync::mpsc::{Receiver, RecvTimeoutError, SyncSender, TrySendError, sync_channel},
     thread::{self, JoinHandle},
 };
 
@@ -27,7 +27,10 @@ use crate::{
     },
 };
 
-use super::TerminalError;
+use super::{
+    TerminalError,
+    supervisor::{ShutdownDeadline, join_before},
+};
 
 const UPDATE_DEADLINE_MILLIS: i64 = 45_000;
 
@@ -104,20 +107,30 @@ impl UpdateLane {
             .map_err(|error| map_send_error(&error))
     }
 
-    pub(super) fn stop(self) -> Result<(), TerminalError> {
-        let Self {
-            sender,
-            receiver,
-            mut handle,
-        } = self;
-        drop(sender);
-        if handle.is_some() {
-            while receiver.recv().is_ok() {}
+    pub(super) fn request_stop(&mut self) {
+        self.sender = None;
+    }
+
+    pub(super) fn stop(mut self, deadline: ShutdownDeadline) -> Result<(), TerminalError> {
+        self.request_stop();
+        while !deadline.expired() {
+            match self.receiver.recv_timeout(deadline.remaining()) {
+                Ok(_) => {}
+                Err(RecvTimeoutError::Disconnected | RecvTimeoutError::Timeout) => break,
+            }
         }
-        match handle.take().map(JoinHandle::join) {
-            None | Some(Ok(())) => Ok(()),
-            Some(Err(_)) => Err(TerminalError::Worker("update lane panicked")),
-        }
+        join_before(
+            self.handle.take(),
+            deadline,
+            "update lane panicked",
+            "update lane did not stop before the shutdown deadline",
+        )
+    }
+}
+
+impl Drop for UpdateLane {
+    fn drop(&mut self) {
+        self.request_stop();
     }
 }
 

@@ -2,15 +2,19 @@
 
 use std::{
     io::{Read, Write},
-    process::{Command, Stdio},
+    process::{Child, Command, Stdio},
     sync::mpsc::{self, Receiver, RecvTimeoutError},
-    thread,
+    thread::{self, JoinHandle},
     time::{Duration, Instant},
 };
+
+#[cfg(unix)]
+use rustix::process::{Pid, Signal, kill_process_group};
 
 use crate::ports::environment::{ProcessError, ProcessOutput, ProcessRequest, ProcessRunner};
 
 const MAX_CAPTURE_BYTES: u64 = 1024 * 1024;
+const TERMINATION_GRACE: Duration = Duration::from_millis(250);
 
 /// Operating-system process runner with bounded output and a hard deadline.
 #[derive(Clone, Copy, Debug, Default)]
@@ -60,9 +64,16 @@ impl ProcessRunner for SystemProcessRunner {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt as _;
+            command.process_group(0);
+        }
         let mut child = command
             .spawn()
             .map_err(|error| ProcessError::Io(error.to_string()))?;
+        #[cfg(unix)]
+        let process_group = Pid::from_child(&child);
         let stdin = child
             .stdin
             .take()
@@ -79,10 +90,18 @@ impl ProcessRunner for SystemProcessRunner {
         let stderr_reader = read_in_background(stderr);
         let stdin_writer = write_in_background(stdin, request.stdin);
         let deadline = Deadline::new(request.timeout);
-        let exit_code = wait_for_exit(&mut child, deadline)?;
-        receive_writer(&stdin_writer, deadline)?;
-        let stdout = receive_reader(&stdout_reader, deadline)?;
-        let stderr = receive_reader(&stderr_reader, deadline)?;
+        let execution = collect_execution(
+            &mut child,
+            deadline,
+            stdin_writer,
+            stdout_reader,
+            stderr_reader,
+            #[cfg(unix)]
+            process_group,
+        )?;
+        let exit_code = execution.exit_code;
+        let stdout = execution.stdout;
+        let stderr = execution.stderr;
         if stdout.exceeded || stderr.exceeded {
             return Err(ProcessError::OutputLimit);
         }
@@ -113,25 +132,31 @@ impl Deadline {
     }
 }
 
-fn read_in_background(
-    reader: impl Read + Send + 'static,
-) -> Receiver<std::io::Result<BoundedRead>> {
-    let (sender, receiver) = mpsc::channel();
-    thread::spawn(move || {
-        let _sent = sender.send(read_bounded(reader));
-    });
-    receiver
+struct Worker<T> {
+    receiver: Receiver<std::io::Result<T>>,
+    handle: Option<JoinHandle<()>>,
 }
 
-fn write_in_background(
-    writer: impl Write + Send + 'static,
-    input: Option<Vec<u8>>,
-) -> Receiver<std::io::Result<()>> {
+fn read_in_background(reader: impl Read + Send + 'static) -> Worker<BoundedRead> {
     let (sender, receiver) = mpsc::channel();
-    thread::spawn(move || {
+    let handle = thread::spawn(move || {
+        let _sent = sender.send(read_bounded(reader));
+    });
+    Worker {
+        receiver,
+        handle: Some(handle),
+    }
+}
+
+fn write_in_background(writer: impl Write + Send + 'static, input: Option<Vec<u8>>) -> Worker<()> {
+    let (sender, receiver) = mpsc::channel();
+    let handle = thread::spawn(move || {
         let _sent = sender.send(write_input(writer, input));
     });
-    receiver
+    Worker {
+        receiver,
+        handle: Some(handle),
+    }
 }
 
 fn write_input(mut writer: impl Write, input: Option<Vec<u8>>) -> std::io::Result<()> {
@@ -158,10 +183,7 @@ fn read_bounded(reader: impl Read) -> std::io::Result<BoundedRead> {
     Ok(BoundedRead { bytes, exceeded })
 }
 
-fn wait_for_exit(
-    child: &mut std::process::Child,
-    deadline: Deadline,
-) -> Result<Option<i32>, ProcessError> {
+fn wait_for_exit(child: &mut Child, deadline: Deadline) -> Result<Option<i32>, ProcessError> {
     loop {
         if let Some(status) = child
             .try_wait()
@@ -170,43 +192,112 @@ fn wait_for_exit(
             return Ok(status.code());
         }
         if deadline.remaining().is_none() {
-            let _killed = child.kill();
-            let _waited = child.wait();
             return Err(ProcessError::TimedOut);
         }
         thread::sleep(Duration::from_millis(5));
     }
 }
 
-fn receive_reader(
-    receiver: &Receiver<std::io::Result<BoundedRead>>,
-    deadline: Deadline,
-) -> Result<BoundedRead, ProcessError> {
-    receive_until(receiver, deadline, "child output reader")
+struct ExecutionOutput {
+    exit_code: Option<i32>,
+    stdout: BoundedRead,
+    stderr: BoundedRead,
 }
 
-fn receive_writer(
-    receiver: &Receiver<std::io::Result<()>>,
+fn collect_execution(
+    child: &mut Child,
     deadline: Deadline,
-) -> Result<(), ProcessError> {
-    receive_until(receiver, deadline, "child input writer")
+    mut stdin: Worker<()>,
+    mut stdout: Worker<BoundedRead>,
+    mut stderr: Worker<BoundedRead>,
+    #[cfg(unix)] process_group: Pid,
+) -> Result<ExecutionOutput, ProcessError> {
+    let result = wait_for_exit(child, deadline).and_then(|exit_code| {
+        receive_worker(&mut stdin, deadline, "child input writer")?;
+        let output = receive_worker(&mut stdout, deadline, "child output reader")?;
+        let errors = receive_worker(&mut stderr, deadline, "child error reader")?;
+        Ok((exit_code, output, errors))
+    });
+    if result.is_err() {
+        terminate_tree(
+            child,
+            #[cfg(unix)]
+            process_group,
+        );
+    }
+    let cleanup = Deadline::new(TERMINATION_GRACE);
+    let joins = [
+        finish_worker(&mut stdin, cleanup),
+        finish_worker(&mut stdout, cleanup),
+        finish_worker(&mut stderr, cleanup),
+    ];
+    if result.is_ok() {
+        for joined in joins {
+            joined?;
+        }
+    }
+    let (exit_code, stdout, stderr) = result?;
+    Ok(ExecutionOutput {
+        exit_code,
+        stdout,
+        stderr,
+    })
 }
 
-fn receive_until<T>(
-    receiver: &Receiver<std::io::Result<T>>,
+fn receive_worker<T>(
+    worker: &mut Worker<T>,
     deadline: Deadline,
-    worker: &str,
+    label: &str,
 ) -> Result<T, ProcessError> {
     let Some(remaining) = deadline.remaining() else {
         return Err(ProcessError::TimedOut);
     };
-    match receiver.recv_timeout(remaining) {
+    match worker.receiver.recv_timeout(remaining) {
         Ok(result) => result.map_err(|error| ProcessError::Io(error.to_string())),
         Err(RecvTimeoutError::Timeout) => Err(ProcessError::TimedOut),
         Err(RecvTimeoutError::Disconnected) => {
-            Err(ProcessError::Io(format!("{worker} stopped unexpectedly")))
+            Err(ProcessError::Io(format!("{label} stopped unexpectedly")))
         }
     }
+}
+
+fn finish_worker<T>(worker: &mut Worker<T>, deadline: Deadline) -> Result<(), ProcessError> {
+    while worker
+        .handle
+        .as_ref()
+        .is_some_and(|handle| !handle.is_finished())
+        && deadline.remaining().is_some()
+    {
+        thread::sleep(Duration::from_millis(2));
+    }
+    let Some(handle) = worker.handle.take() else {
+        return Ok(());
+    };
+    if !handle.is_finished() {
+        return Err(ProcessError::TimedOut);
+    }
+    handle
+        .join()
+        .map_err(|_| ProcessError::Io("child I/O worker panicked".to_owned()))
+}
+
+fn terminate_tree(child: &mut Child, #[cfg(unix)] process_group: Pid) {
+    #[cfg(unix)]
+    let _terminated = kill_process_group(process_group, Signal::TERM);
+    #[cfg(not(unix))]
+    let _terminated = child.kill();
+    let grace = Deadline::new(TERMINATION_GRACE);
+    while grace.remaining().is_some() {
+        if child.try_wait().ok().flatten().is_some() {
+            break;
+        }
+        thread::sleep(Duration::from_millis(5));
+    }
+    #[cfg(unix)]
+    let _killed = kill_process_group(process_group, Signal::KILL);
+    #[cfg(not(unix))]
+    let _killed = child.kill();
+    let _reaped = child.wait();
 }
 
 #[cfg(test)]
@@ -278,5 +369,39 @@ mod tests {
         });
         assert_eq!(result, Err(ProcessError::TimedOut));
         assert!(started.elapsed() < Duration::from_millis(500));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn timeout_terminates_a_grandchild_that_inherits_output_pipes() {
+        let temporary = tempfile::tempdir().expect("temporary fixture");
+        let pid_file = temporary.path().join("grandchild.pid");
+        let script = "sleep 30 & child=$!; echo $child > \"$1\"; wait";
+        let mut runner = SystemProcessRunner;
+        let result = runner.run(ProcessRequest {
+            program: OsString::from("/bin/sh"),
+            args: vec![
+                OsString::from("-c"),
+                OsString::from(script),
+                OsString::from("proqi-process-fixture"),
+                pid_file.as_os_str().to_owned(),
+            ],
+            stdin: None,
+            timeout: Duration::from_millis(50),
+        });
+        assert_eq!(result, Err(ProcessError::TimedOut));
+        let raw = std::fs::read_to_string(pid_file)
+            .expect("grandchild pid")
+            .trim()
+            .parse::<i32>()
+            .expect("numeric pid");
+        let pid = rustix::process::Pid::from_raw(raw).expect("positive pid");
+        for _ in 0..50 {
+            if rustix::process::test_kill_process(pid).is_err() {
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        panic!("grandchild survived process-tree cancellation");
     }
 }

@@ -75,6 +75,9 @@ These rules become mandatory with the first real TUI implementation:
   controls, and wrapped selections.
 - Terminal setup uses an RAII guard. Tests prove restoration after normal exit,
   errors, panics, and supported termination signals.
+- Terminal and subprocess workers must have idempotent cancellation and bounded
+  teardown. Never add an unbounded thread join or leave a spawned child without
+  a panic-safe ownership guard in tests.
 - Keyboard and mouse paths receive equivalent behavioral coverage. macOS PTY
   tests cover startup, input, resize, and clean shutdown in CI. Linux retains
   build and terminal-independent integration coverage until the PTY driver is

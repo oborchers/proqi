@@ -15,7 +15,7 @@ use std::{
         mpsc::{Receiver, SyncSender, sync_channel},
     },
     thread::{self, JoinHandle},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use crate::ports::control::{
@@ -69,22 +69,43 @@ impl ControlServer {
     }
 
     /// Stop accepting clients and join the server thread.
-    pub(crate) fn stop(mut self) -> Result<(), ControlError> {
-        self.join()
+    pub(crate) fn request_stop(&self) {
+        self.stop.store(true, Ordering::Release);
     }
 
-    fn join(&mut self) -> Result<(), ControlError> {
-        self.stop.store(true, Ordering::Release);
-        match self.handle.take().map(JoinHandle::join) {
-            None | Some(Ok(())) => Ok(()),
-            Some(Err(_)) => Err(ControlError::Io("control server panicked".to_owned())),
+    /// Stop accepting clients and join before the shared shutdown deadline.
+    pub(crate) fn stop_before(mut self, deadline: Instant) -> Result<(), ControlError> {
+        self.request_stop();
+        while self
+            .handle
+            .as_ref()
+            .is_some_and(|worker| !worker.is_finished())
+            && Instant::now() < deadline
+        {
+            thread::sleep(Duration::from_millis(2));
         }
+        let Some(worker) = self.handle.take() else {
+            return Ok(());
+        };
+        if !worker.is_finished() {
+            return Err(ControlError::Io(
+                "control server did not stop before the shutdown deadline".to_owned(),
+            ));
+        }
+        worker
+            .join()
+            .map_err(|_| ControlError::Io("control server panicked".to_owned()))
+    }
+
+    /// Stop accepting clients with the ordinary interactive deadline.
+    pub(crate) fn stop(self) -> Result<(), ControlError> {
+        self.stop_before(Instant::now() + Duration::from_secs(2))
     }
 }
 
 impl Drop for ControlServer {
     fn drop(&mut self) {
-        let _joined = self.join();
+        self.request_stop();
     }
 }
 

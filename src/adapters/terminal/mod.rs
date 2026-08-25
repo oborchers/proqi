@@ -10,6 +10,7 @@ mod path_import;
 mod persistence;
 mod runner;
 mod settings;
+mod supervisor;
 mod update_lane;
 
 use thiserror::Error;
@@ -32,6 +33,9 @@ pub enum TerminalError {
     /// A bounded worker lane ended unexpectedly.
     #[error("terminal worker failed: {0}")]
     Worker(&'static str),
+    /// One or more teardown operations failed after every cleanup was attempted.
+    #[error("terminal cleanup failed: {0}")]
+    Cleanup(String),
     /// User configuration is malformed or unsafe.
     #[error("terminal configuration failed: {0}")]
     Config(String),
