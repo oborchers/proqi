@@ -13,6 +13,9 @@ use proqi::{
 };
 use serde_json::Value;
 
+#[path = "cli_workflow/diagnostics.rs"]
+mod diagnostics;
+
 fn run(root: &Path, arguments: &[&str], input: Option<&str>) -> Output {
     let mut command = Command::new(env!("CARGO_BIN_EXE_proqi"));
     command
@@ -82,34 +85,6 @@ fn add_with_idempotency(root: &Path, session: &str, body: &str) -> String {
     let error: Value = serde_json::from_slice(&conflict.stdout).expect("error JSON");
     assert_eq!(error["error"]["code"], "idempotency_conflict");
     thought
-}
-
-#[test]
-fn file_diagnostics_are_private_bounded_and_content_redacted() {
-    let temporary = tempfile::tempdir().expect("temporary directory");
-    let session = create_session(temporary.path());
-    let secret = "never-log-this-thought-body";
-    let _thought = add_with_idempotency(temporary.path(), &session, secret);
-    let log_path = temporary.path().join("data/diagnostics/proqi.log");
-    let log = std::fs::read_to_string(&log_path).expect("diagnostic log");
-    assert!(log.contains("diagnostics_initialized"));
-    assert!(log.contains("command_succeeded"));
-    assert!(!log.contains(secret));
-    assert!(std::fs::metadata(&log_path).expect("log metadata").len() < 1024 * 1024);
-
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt as _;
-
-        assert_eq!(
-            std::fs::metadata(&log_path)
-                .expect("log metadata")
-                .permissions()
-                .mode()
-                & 0o777,
-            0o600
-        );
-    }
 }
 
 #[test]

@@ -30,6 +30,7 @@ pub(super) struct RuntimeContext {
     pub(super) clock: SystemClock,
     pub(super) ids: SystemIdGenerator,
     pub(super) cwd: PathBuf,
+    pub(super) data_dir: PathBuf,
     config_dir: PathBuf,
     recovery_dir: PathBuf,
     attachment_dir: PathBuf,
@@ -45,20 +46,24 @@ impl RuntimeContext {
             .current_directory()
             .map_err(|error| CliError::new("environment_failed", error.to_string(), 1))?;
         let paths = resolve_paths(state_root)?;
-        crate::adapters::diagnostics::initialize(&paths.data_dir)
+        let clock = SystemClock;
+        let mut ids = SystemIdGenerator;
+        let instance_id = ids.instance_id();
+        crate::adapters::diagnostics::initialize(&paths.data_dir, instance_id)
             .map_err(|error| CliError::new("diagnostics_failed", error.to_string(), 1))?;
-        tracing::info!(event = "runtime_opening");
+        crate::adapters::diagnostics::record(
+            crate::adapters::diagnostics::SafeEvent::RuntimeOpening { instance_id },
+        );
         let config_dir = paths.config_dir.clone();
+        let data_dir = paths.data_dir.clone();
         let recovery_dir = paths.data_dir.join("recovery");
         let attachment_dir = paths.data_dir.join("attachments");
         let cache_dir = paths.cache_dir.clone();
         let state_root = state_root.map(Path::to_path_buf);
-        let clock = SystemClock;
-        let mut ids = SystemIdGenerator;
         let installation = SystemInstallDetector::current().detect().ok();
         let coordinator = FileRuntimeCoordinator::new(
             paths.runtime_dir,
-            ids.instance_id(),
+            instance_id,
             cwd.clone(),
             clock.now(),
             env!("CARGO_PKG_VERSION"),
@@ -77,6 +82,7 @@ impl RuntimeContext {
             clock,
             ids,
             cwd,
+            data_dir,
             config_dir,
             recovery_dir,
             attachment_dir,

@@ -48,3 +48,21 @@ Proqi does not claim a security boundary against an administrator or a malicious
 process already running as the same operating-system user. It does prevent
 accidental cross-session mutation, fail-closed owner forwarding, shell
 interpolation, unsafe path traversal, and unverified adjacent-agent submission.
+
+## Local diagnostics
+
+Proqi writes typed JSONL lifecycle, command, and submission-state events to its
+platform-native data directory. These events omit thought content, clipboard
+content, session names, workspace paths, pane identifiers, and raw external
+responses. Submission records contain typed Proqi identifiers, direction,
+provider kind, state, and stable outcome codes only.
+
+Each running instance keeps at most five 1 MiB segments. Inactive logs are
+pruned toward a 20 MiB installation-wide ceiling. A live process owns a file
+lock, so retention never deletes an active instance's logs. Files and generated
+support bundles use user-only permissions on supported systems.
+
+`proqi diagnostics collect --output PATH` creates a versioned, local JSON
+bundle. It does not upload the result and refuses to overwrite an existing
+file. Review every bundle before sharing it because stable identifiers and
+operational timestamps can still provide diagnostic context.

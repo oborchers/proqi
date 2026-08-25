@@ -121,6 +121,7 @@ fn check_source(path: &Path, source: &str) -> Vec<String> {
         find_markers(path, &normalized, &["crate::adapters"], &mut violations);
     }
     enforce_adapter_ownership(path, &normalized, &path_text, &mut violations);
+    enforce_diagnostics_ownership(path, &normalized, &path_text, &mut violations);
     if path_text == "src/domain/mod.rs" && source.contains("pub mod ") {
         violations.push(format!(
             "{}: domain implementation modules must remain private",
@@ -128,6 +129,23 @@ fn check_source(path: &Path, source: &str) -> Vec<String> {
         ));
     }
     violations
+}
+
+fn enforce_diagnostics_ownership(
+    path: &Path,
+    source: &str,
+    path_text: &str,
+    violations: &mut Vec<String>,
+) {
+    let owns_diagnostics = path_text == "src/adapters/diagnostics.rs"
+        || path_text.starts_with("src/adapters/diagnostics/");
+    if (source.contains("tracing::") || source.contains("tracing_subscriber")) && !owns_diagnostics
+    {
+        violations.push(format!(
+            "{}: tracing is outside the typed diagnostics adapter",
+            path.display()
+        ));
+    }
 }
 
 fn normalized_paths(source: &str) -> Vec<String> {
@@ -303,6 +321,27 @@ mod tests {
             findings
                 .iter()
                 .any(|finding| finding.contains("crate::adapters"))
+        );
+    }
+
+    #[test]
+    fn tracing_outside_diagnostics_adapter_is_rejected() {
+        let findings = check_source(
+            Path::new("src/adapters/terminal/runner.rs"),
+            "tracing::info!(event = \"raw\");",
+        );
+        assert_eq!(findings.len(), 1);
+        assert!(findings[0].contains("typed diagnostics adapter"));
+    }
+
+    #[test]
+    fn tracing_inside_diagnostics_adapter_is_accepted() {
+        assert!(
+            check_source(
+                Path::new("src/adapters/diagnostics.rs"),
+                "tracing::info!(event = \"typed\");",
+            )
+            .is_empty()
         );
     }
 

@@ -69,6 +69,15 @@ pub(super) fn enqueue_effects(
             lanes.persistence.transfer_thought(request)?;
             pending.persistence = pending.persistence.saturating_add(1);
         } else if let Effect::PrepareSubmission(attempt) = effect {
+            crate::adapters::diagnostics::record(
+                crate::adapters::diagnostics::SafeEvent::Submission {
+                    submission_id: attempt.id,
+                    state: "preparing",
+                    direction: attempt.direction,
+                    provider: super::diagnostics::provider_name(&attempt.provider),
+                    outcome: None,
+                },
+            );
             lanes.persistence.prepare_submission(attempt)?;
             pending.persistence = pending.persistence.saturating_add(1);
         } else if let Effect::MarkSubmissionSending { submission_id, at } = effect {
@@ -173,6 +182,7 @@ fn complete_result(
             result,
         } => {
             pending.persistence = pending.persistence.saturating_sub(1);
+            record_submission_result(submission_id, "prepared", &result);
             let effects = app.complete_submission_prepared(submission_id, result);
             enqueue_effects(app, lanes, effects, pending)?;
         }
@@ -181,6 +191,7 @@ fn complete_result(
             result,
         } => {
             pending.persistence = pending.persistence.saturating_sub(1);
+            record_submission_result(submission_id, "sending", &result);
             let effects = app.complete_submission_sending(submission_id, result);
             enqueue_effects(app, lanes, effects, pending)?;
         }
@@ -189,11 +200,26 @@ fn complete_result(
             result,
         } => {
             pending.persistence = pending.persistence.saturating_sub(1);
+            record_submission_result(submission_id, "journaled", &result);
             let effects = app.complete_submission_journaled(submission_id, result);
             enqueue_effects(app, lanes, effects, pending)?;
         }
     }
     Ok(true)
+}
+
+fn record_submission_result(
+    submission_id: crate::domain::SubmissionId,
+    state: &'static str,
+    result: &Result<(), crate::ports::store::StoreError>,
+) {
+    crate::adapters::diagnostics::record(
+        crate::adapters::diagnostics::SafeEvent::SubmissionState {
+            submission_id,
+            state,
+            outcome: result.as_ref().err().map(storage_error_code),
+        },
+    );
 }
 
 fn complete_sequence(

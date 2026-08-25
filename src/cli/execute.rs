@@ -1,6 +1,7 @@
 //! CLI dispatch into the shared session service.
 
 mod capabilities;
+mod diagnostics;
 mod forwarding;
 mod sessions;
 mod transfer;
@@ -80,6 +81,7 @@ fn execute_inner(cli: Cli) -> Result<Outcome, CliError> {
             let mut context = context;
             execute_thoughts(&mut context, arguments.command)
         }
+        Some(Command::Diagnostics(arguments)) => diagnostics::execute(&context, arguments.command),
         Some(Command::Capabilities) => Ok(capabilities::outcome()),
         Some(Command::Completions { .. }) => Err(CliError::arguments(
             "completion generation was not dispatched".to_owned(),

@@ -1,5 +1,6 @@
 //! Bounded UI and persistence lane composition.
 
+mod diagnostics;
 mod durability;
 mod external_results;
 mod fairness;
@@ -220,7 +221,7 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
     if let Some(heartbeat) = pane_heartbeat.as_mut() {
         let _cleared = heartbeat.clear(&owned.external);
     }
-    owned.request_stop();
+    diagnostics::begin_shutdown(&mut owned);
     drop(terminal);
     let restoration_result = guard.finish();
     drop((session_lease, schema_lease));
@@ -288,6 +289,7 @@ pub(super) fn finish_runtime(
     if let Err(error) = run_result {
         failures.insert(0, error.to_string());
     }
+    diagnostics::shutdown_finished(failures.len());
     if failures.is_empty() {
         Ok(())
     } else {

@@ -144,7 +144,7 @@ impl From<TerminalError> for CliError {
 }
 
 pub(super) fn render_success<T: Serialize>(value: &T, human: &str, json_output: bool) -> ExitCode {
-    tracing::info!(event = "command_succeeded");
+    crate::adapters::diagnostics::record(crate::adapters::diagnostics::SafeEvent::CommandSucceeded);
     let result = if json_output {
         write_json(&json!({
             "schema_version": JSON_SCHEMA_VERSION,
@@ -161,11 +161,10 @@ pub(super) fn render_success<T: Serialize>(value: &T, human: &str, json_output: 
 }
 
 pub(super) fn render_error(error: &CliError, json_output: bool) -> ExitCode {
-    tracing::error!(
-        event = "command_failed",
-        code = error.code,
-        exit = error.exit
-    );
+    crate::adapters::diagnostics::record(crate::adapters::diagnostics::SafeEvent::CommandFailed {
+        code: error.code,
+        exit: error.exit,
+    });
     if json_output {
         let payload = json!({
             "schema_version": JSON_SCHEMA_VERSION,

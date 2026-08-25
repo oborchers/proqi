@@ -43,10 +43,28 @@ pub(super) enum Command {
     },
     /// Check the canonical GitHub stable release on demand.
     Update(UpdateArgs),
+    /// Collect a private, content-redacted local support bundle.
+    Diagnostics(DiagnosticsArgs),
     /// List and manage resumable sessions.
     Sessions(SessionArgs),
     /// Inspect and mutate thoughts in one explicit session.
     Thoughts(ThoughtArgs),
+}
+
+#[derive(Debug, Args)]
+pub(super) struct DiagnosticsArgs {
+    #[command(subcommand)]
+    pub(super) command: DiagnosticsCommand,
+}
+
+#[derive(Debug, Subcommand)]
+pub(super) enum DiagnosticsCommand {
+    /// Write retained structured events without uploading them.
+    Collect {
+        /// New output path. Existing files are never overwritten.
+        #[arg(long, value_name = "PATH")]
+        output: Option<PathBuf>,
+    },
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]

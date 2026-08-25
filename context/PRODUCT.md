@@ -102,6 +102,13 @@ only a bounded Proqi name and version User-Agent when required by GitHub. It is
 never implicit in debug or source builds, tests, JSON commands, the Proqi skill,
 or other noninteractive paths.
 
+Local diagnostics are structured, content-redacted, user-private, and bounded.
+They record lifecycle, stable command outcomes, and durable submission-state
+transitions without recording thought or clipboard content, session names,
+workspace paths, pane identifiers, or raw external responses. Users can
+explicitly collect retained events into a versioned local support bundle. Proqi
+never uploads the bundle and never overwrites an existing output file.
+
 ## Core concepts
 
 ### Session
@@ -818,7 +825,7 @@ Initial components:
 - `arboard` for local clipboard access.
 - OSC 52 as a terminal clipboard fallback where supported.
 - `serde` and TOML for configuration.
-- `tracing` for file-based diagnostics.
+- `tracing` for typed, structured, bounded file diagnostics.
 
 The editor, clipboard, storage, and rendering layers remain behind internal
 interfaces so their implementations can change without changing the product

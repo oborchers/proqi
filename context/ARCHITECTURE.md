@@ -141,7 +141,9 @@ without adding product value.
 - `clap` for interactive launch flags and scriptable subcommands.
 - `serde` with TOML for configuration and versioned machine output.
 - `arboard` for the native clipboard, with OSC 52 behind the same facade.
-- `tracing` for diagnostics with content redaction by default.
+- `tracing` behind one typed diagnostics adapter. Callers emit only reviewed
+  lifecycle, command, and submission-state fields. Direct tracing calls outside
+  the adapter are rejected by the executable architecture policy.
 - UUID version 7 identifiers for opaque, sortable entity IDs. Public IDs use a
   typed resource prefix plus 26 characters of canonical lowercase, unpadded
   base32hex. The encoding preserves all 128 UUID bits, is URL safe, and retains
@@ -748,9 +750,13 @@ or automatic scratchpad reads.
   above. Proqi has no telemetry.
 - Update requests contain no thought, clipboard, path, session, identifier,
   runtime, terminal, or usage data.
-- Diagnostic logs exclude thought and clipboard content by default.
-- Paths and agent metadata are logged only at an explicit diagnostic level and
-  are redactable in support bundles.
+- Diagnostic logs exclude thought content, clipboard content, session names,
+  workspace paths, pane identifiers, and raw external responses.
+- Each instance owns a locked JSONL stream with five 1 MiB segments. Startup
+  prunes inactive streams toward a 20 MiB installation-wide ceiling without
+  deleting active logs.
+- Explicit diagnostic collection writes one versioned, user-private local JSON
+  bundle, refuses overwrite, and performs no upload.
 - Database, backup, lock metadata, and config files use user-only permissions
   where the platform supports them.
 - Prompt content is never passed through a shell.

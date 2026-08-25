@@ -298,8 +298,20 @@ exclusive session leases. Persistent editor revisions and board inverse
 operations make undo and redo survive a restart.
 
 Proqi stores content only in platform-native local application directories.
-Diagnostics are content-redacted and capped. See [SECURITY.md](SECURITY.md) for
-the support policy and private vulnerability reporting process.
+Diagnostics are structured, content-redacted, user-private, and bounded. Each
+running instance retains at most five 1 MiB JSONL segments. Inactive logs are
+pruned toward a 20 MiB installation-wide ceiling. Active instance logs are
+never removed merely to satisfy that ceiling.
+
+Create a local support bundle explicitly with:
+
+```shell
+proqi diagnostics collect --output proqi-diagnostics.json
+```
+
+The command never uploads anything and never overwrites an existing file.
+Review the bundle before sharing it. See [SECURITY.md](SECURITY.md) for the
+support policy and private vulnerability reporting process.
 
 ## Configuration
 

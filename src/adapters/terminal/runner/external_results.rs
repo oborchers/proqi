@@ -88,7 +88,32 @@ fn complete(
         ExternalResult::AgentSubmitted {
             submission_id,
             result,
-        } => app.complete_submission(submission_id, *result),
+        } => {
+            let outcome = result
+                .as_ref()
+                .as_ref()
+                .map_or_else(|error| agent_error_code(error), |_| "accepted");
+            crate::adapters::diagnostics::record(
+                crate::adapters::diagnostics::SafeEvent::SubmissionState {
+                    submission_id,
+                    state: "delivered",
+                    outcome: Some(outcome),
+                },
+            );
+            app.complete_submission(submission_id, *result)
+        }
+    }
+}
+
+const fn agent_error_code(error: &crate::ports::agent::AgentError) -> &'static str {
+    match error {
+        crate::ports::agent::AgentError::Unavailable(_) => "unavailable",
+        crate::ports::agent::AgentError::Unsupported(_) => "unsupported",
+        crate::ports::agent::AgentError::Malformed(_) => "malformed",
+        crate::ports::agent::AgentError::Ambiguous(_) => "ambiguous",
+        crate::ports::agent::AgentError::TimedOut => "timed_out",
+        crate::ports::agent::AgentError::Rejected { .. } => "rejected",
+        crate::ports::agent::AgentError::Process(_) => "process_failed",
     }
 }
 

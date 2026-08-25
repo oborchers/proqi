@@ -1,80 +1,169 @@
-//! Private, bounded, content-redacted file diagnostics.
+//! Private, bounded, structured, content-redacted diagnostics.
 
-use std::{
-    fs::{self, OpenOptions},
-    path::{Path, PathBuf},
-    sync::{Mutex, OnceLock},
-};
+mod collect;
+mod writer;
+
+use std::{path::Path, sync::OnceLock};
 
 use thiserror::Error;
 use tracing::Level;
 use tracing_subscriber::util::SubscriberInitExt as _;
 
-const MAX_LOG_BYTES: u64 = 1024 * 1024;
+use crate::domain::{Direction, InstanceId, SubmissionId};
+
+pub use collect::{DiagnosticBundle, collect_bundle};
+use writer::RotatingMakeWriter;
+
 static INITIALIZED: OnceLock<()> = OnceLock::new();
 
-/// File-diagnostics initialization failure.
+/// Diagnostics initialization or collection failure.
 #[derive(Debug, Error)]
 pub enum DiagnosticsError {
     /// A private diagnostics directory or file could not be prepared.
     #[error("diagnostics I/O failed: {0}")]
     Io(#[from] std::io::Error),
+    /// Structured data could not be encoded or decoded.
+    #[error("diagnostics serialization failed: {0}")]
+    Serialization(#[from] serde_json::Error),
     /// Another tracing subscriber prevented Proqi from installing its file sink.
     #[error("diagnostics subscriber could not be installed: {0}")]
     Subscriber(String),
 }
 
-/// Install one process-wide, content-redacted file subscriber.
-///
-/// The log contains only events whose call sites explicitly provide safe typed
-/// metadata. Thought text, clipboard content, and command arguments are never
-/// attached automatically.
+/// Typed events whose fields are safe for the local diagnostic journal.
+#[derive(Clone, Copy, Debug)]
+pub enum SafeEvent<'a> {
+    /// Diagnostics became available for this instance.
+    Initialized {
+        /// Running process identity.
+        instance_id: InstanceId,
+    },
+    /// Runtime composition began.
+    RuntimeOpening {
+        /// Running process identity.
+        instance_id: InstanceId,
+    },
+    /// Terminal shutdown began.
+    ShutdownStarted,
+    /// Terminal shutdown finished.
+    ShutdownFinished {
+        /// Number of cleanup stages that returned an error.
+        cleanup_failures: usize,
+    },
+    /// One CLI command succeeded.
+    CommandSucceeded,
+    /// One CLI command failed with a stable code.
+    CommandFailed {
+        /// Stable machine-readable failure code.
+        code: &'a str,
+        /// Process exit status.
+        exit: u8,
+    },
+    /// One content-redacted submission transition occurred.
+    Submission {
+        /// Proqi-owned submission identity.
+        submission_id: SubmissionId,
+        /// Durable submission state.
+        state: &'a str,
+        /// Target direction without pane or workspace details.
+        direction: Direction,
+        /// Integration provider name.
+        provider: &'a str,
+        /// Optional stable result code.
+        outcome: Option<&'a str>,
+    },
+    /// One submission state changed without repeating target metadata.
+    SubmissionState {
+        /// Proqi-owned submission identity.
+        submission_id: SubmissionId,
+        /// Durable submission state.
+        state: &'a str,
+        /// Optional stable result code.
+        outcome: Option<&'a str>,
+    },
+}
+
+/// Install one process-wide JSONL subscriber for a typed running instance.
 ///
 /// # Errors
 ///
-/// Returns a typed error when the private directory, file, or subscriber cannot
-/// be initialized.
-pub fn initialize(data_dir: &Path) -> Result<PathBuf, DiagnosticsError> {
-    let directory = data_dir.join("diagnostics");
-    let path = directory.join("proqi.log");
+/// Returns a typed error when private files, rotation, retention, or subscriber
+/// installation fails.
+pub fn initialize(data_dir: &Path, instance_id: InstanceId) -> Result<(), DiagnosticsError> {
     if INITIALIZED.get().is_some() {
-        return Ok(path);
+        return Ok(());
     }
-    create_private_dir(&directory)?;
-    let rotate = fs::metadata(&path).is_ok_and(|metadata| metadata.len() >= MAX_LOG_BYTES);
-    let file = OpenOptions::new()
-        .create(true)
-        .write(true)
-        .append(!rotate)
-        .truncate(rotate)
-        .open(&path)?;
-    make_private(&path)?;
+    let writer = RotatingMakeWriter::open(&data_dir.join("diagnostics"), instance_id)?;
     tracing_subscriber::fmt()
-        .compact()
+        .json()
+        .flatten_event(true)
+        .with_current_span(false)
+        .with_span_list(false)
+        .with_ansi(false)
         .with_max_level(Level::INFO)
         .with_target(true)
-        .with_writer(Mutex::new(file))
+        .with_writer(writer)
         .finish()
         .try_init()
         .map_err(|error| DiagnosticsError::Subscriber(error.to_string()))?;
     INITIALIZED
         .set(())
         .map_err(|()| DiagnosticsError::Subscriber("initialization raced".to_owned()))?;
-    tracing::info!(
-        event = "diagnostics_initialized",
-        version = env!("CARGO_PKG_VERSION")
-    );
-    Ok(path)
+    record(SafeEvent::Initialized { instance_id });
+    Ok(())
 }
 
-fn create_private_dir(path: &Path) -> std::io::Result<()> {
-    fs::create_dir_all(path)?;
-    make_private(path)
+/// Record one typed event without accepting arbitrary user data.
+pub fn record(event: SafeEvent<'_>) {
+    match event {
+        SafeEvent::Initialized { instance_id } => tracing::info!(
+            event = "diagnostics_initialized",
+            version = env!("CARGO_PKG_VERSION"),
+            instance_id = %instance_id
+        ),
+        SafeEvent::RuntimeOpening { instance_id } => {
+            tracing::info!(event = "runtime_opening", instance_id = %instance_id);
+        }
+        SafeEvent::ShutdownStarted => tracing::info!(event = "shutdown_started"),
+        SafeEvent::ShutdownFinished { cleanup_failures } => {
+            tracing::info!(event = "shutdown_finished", cleanup_failures);
+        }
+        SafeEvent::CommandSucceeded => tracing::info!(event = "command_succeeded"),
+        SafeEvent::CommandFailed { code, exit } => {
+            tracing::error!(event = "command_failed", code, exit);
+        }
+        SafeEvent::Submission {
+            submission_id,
+            state,
+            direction,
+            provider,
+            outcome,
+        } => tracing::info!(
+            event = "submission_transition",
+            submission_id = %submission_id,
+            state,
+            direction = direction_name(direction),
+            provider,
+            outcome
+        ),
+        SafeEvent::SubmissionState {
+            submission_id,
+            state,
+            outcome,
+        } => tracing::info!(
+            event = "submission_transition",
+            submission_id = %submission_id,
+            state,
+            outcome
+        ),
+    }
 }
 
-fn make_private(path: &Path) -> std::io::Result<()> {
-    use std::os::unix::fs::PermissionsExt as _;
-
-    let mode = if path.is_dir() { 0o700 } else { 0o600 };
-    fs::set_permissions(path, fs::Permissions::from_mode(mode))
+const fn direction_name(direction: Direction) -> &'static str {
+    match direction {
+        Direction::Up => "up",
+        Direction::Right => "right",
+        Direction::Down => "down",
+        Direction::Left => "left",
+    }
 }
