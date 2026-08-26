@@ -106,9 +106,9 @@ After the readiness audit:
    tag-bound attestations, and publishes those same bytes without rebuilding.
 7. If the candidate is absent or expired, delete the unpublished tag, dispatch
    a replacement candidate for the same tag and commit, then recreate the tag.
-8. Verify the published Release and every downloaded asset. The public tap's
-   scheduled sync then verifies and publishes the formula without a persistent
-   cross-repository credential.
+8. Verify the published Release and every downloaded asset. Publication sends
+   a scoped `proqi_release_published` event to the public tap, which verifies
+   and publishes the formula. Its scheduled sync remains a recovery path.
 
 The release workflow never cancels an in-progress tag release. Any failed
 target, smoke test, checksum, SBOM, attestation, or formula generation blocks
@@ -147,11 +147,14 @@ brew install oborchers/tap/proqi
 brew upgrade --formula oborchers/tap/proqi
 ```
 
-Ongoing formula synchronization is owned by `oborchers/homebrew-tap`. Its
-scheduled and manually dispatchable workflow uses only that repository's
-short-lived `GITHUB_TOKEN`. It verifies the latest stable Proqi release before
-committing one exact formula update. Proqi stores no tap token, personal access
-token, or GitHub App credential.
+Ongoing formula synchronization is owned by `oborchers/homebrew-tap`. A GitHub
+App installed only on that repository sends a wake-up event after publication.
+The app has only `Contents: write`, its installation token is short-lived, and
+its private key is confined to Proqi's protected `release` environment. The tap
+then uses its own short-lived `GITHUB_TOKEN` to verify the latest stable Proqi
+release before committing one exact formula update. The scheduled and manually
+dispatchable paths remain available for reconciliation. No personal access
+token is stored in either repository.
 
 Homebrew Core, bottles, casks, signing, and notarization are outside the current
 release.

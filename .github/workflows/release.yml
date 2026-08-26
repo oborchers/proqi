@@ -138,3 +138,21 @@ jobs:
               --title "Proqi $TAG" --verify-tag "${assets[@]}"
           fi
           gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+      - id: tap-token
+        name: Create scoped tap notification token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.TAP_SYNC_APP_CLIENT_ID }}
+          private-key: ${{ secrets.TAP_SYNC_APP_PRIVATE_KEY }}
+          owner: oborchers
+          repositories: homebrew-tap
+          permission-contents: write
+      - name: Wake Homebrew tap synchronization
+        env:
+          GH_TOKEN: ${{ steps.tap-token.outputs.token }}
+          TAP_REPOSITORY: oborchers/homebrew-tap
+        run: |
+          gh api --method POST "repos/${TAP_REPOSITORY}/dispatches" \
+            -f event_type=proqi_release_published \
+            -F "client_payload[tag]=${GITHUB_REF_NAME}" \
+            -F "client_payload[source_sha]=${GITHUB_SHA}"
