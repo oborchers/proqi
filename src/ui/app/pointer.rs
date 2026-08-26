@@ -47,7 +47,11 @@ impl BoardApp {
         };
         effects.extend(match pointer.kind {
             PointerKind::Move => {
-                self.hovered = self.hit(pointer);
+                self.hovered = self
+                    .selected_thoughts
+                    .is_empty()
+                    .then(|| self.hit(pointer))
+                    .flatten();
                 Vec::new()
             }
             PointerKind::ScrollUp => self.scroll_pointer(-1),
@@ -212,7 +216,7 @@ impl BoardApp {
                 .layout
                 .as_ref()
                 .and_then(|layout| layout.thoughts.first())
-                .is_some_and(|thought| thought.hidden_rows > 0);
+                .is_some_and(|thought| thought.scrollable_hidden);
             if can_scroll_current {
                 self.first_visible_row += 1;
             } else if self.first_visible < maximum {

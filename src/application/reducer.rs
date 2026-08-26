@@ -5,10 +5,10 @@ use crate::application::model::{
     Action, AppState, ClipboardIntent, DurabilityState, Effect, InteractionMode,
 };
 
-use super::mutations::bulk::{delete_thoughts, set_collapsed_many};
+use super::mutations::bulk::{delete_thoughts, duplicate_thoughts, set_presentation_many};
 use super::mutations::{
     create_thought, delete_thought, edit_thought, finish_clipboard, history_move, move_thought,
-    request_clipboard, set_collapsed,
+    request_clipboard, set_presentation,
 };
 
 /// Reduce one action into current state and ordered effects.
@@ -35,8 +35,9 @@ pub fn reduce(state: &mut AppState, action: Action) -> ApplicationResult<Vec<Eff
         Action::DeleteThought { .. }
         | Action::DeleteThoughts { .. }
         | Action::MoveThought { .. }
-        | Action::SetCollapsed { .. }
-        | Action::SetCollapsedMany { .. } => reduce_board(state, &action),
+        | Action::SetPresentation { .. }
+        | Action::SetPresentationMany { .. }
+        | Action::DuplicateThoughts { .. } => reduce_board(state, &action),
         Action::Undo { .. } | Action::Redo { .. } => reduce_history(state, &action),
         Action::PersistenceCommitted(_)
         | Action::PersistenceFailed { .. }
@@ -55,8 +56,9 @@ const fn mutates_durable_state(action: &Action) -> bool {
             | Action::DeleteThought { .. }
             | Action::DeleteThoughts { .. }
             | Action::MoveThought { .. }
-            | Action::SetCollapsed { .. }
-            | Action::SetCollapsedMany { .. }
+            | Action::SetPresentation { .. }
+            | Action::SetPresentationMany { .. }
+            | Action::DuplicateThoughts { .. }
             | Action::Undo { .. }
             | Action::Redo { .. }
     )
@@ -214,18 +216,24 @@ fn reduce_board(state: &mut AppState, action: &Action) -> ApplicationResult<Vec<
             to,
             at,
         } => move_thought(state, *operation_id, *thought_id, *to, *at),
-        Action::SetCollapsed {
+        Action::SetPresentation {
             operation_id,
             thought_id,
-            collapsed,
+            presentation,
             at,
-        } => set_collapsed(state, *operation_id, *thought_id, *collapsed, *at),
-        Action::SetCollapsedMany {
+        } => set_presentation(state, *operation_id, *thought_id, *presentation, *at),
+        Action::SetPresentationMany {
             operation_id,
             thought_ids,
-            collapsed,
+            presentation,
             at,
-        } => set_collapsed_many(state, *operation_id, thought_ids, *collapsed, *at),
+        } => set_presentation_many(state, *operation_id, thought_ids, *presentation, *at),
+        Action::DuplicateThoughts {
+            operation_id,
+            thought_ids,
+            duplicate_ids,
+            at,
+        } => duplicate_thoughts(state, *operation_id, thought_ids, duplicate_ids, *at),
         _ => Err(ApplicationError::InvalidState),
     }
 }

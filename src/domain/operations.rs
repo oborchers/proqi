@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     DomainError, OperationId, OperationSequence, Session, SessionId, Thought, ThoughtId,
-    ThoughtPosition, Timestamp, validate_annotations,
+    ThoughtPosition, ThoughtPresentation, Timestamp, validate_annotations,
 };
 
 /// Explicit persistent undo scope.
@@ -36,6 +36,8 @@ pub enum BoardOperationKind {
     Reorder,
     /// Changed the explicit collapse preference.
     Collapse,
+    /// Duplicated one or more thoughts as one operation.
+    Duplicate,
     /// Deleted after an accepted adjacent-agent submission.
     SubmitAndRemove,
 }
@@ -72,12 +74,12 @@ pub enum BoardMutation {
         /// Desired position.
         to: ThoughtPosition,
     },
-    /// Set the explicit collapse preference.
-    SetCollapsed {
+    /// Set the durable presentation preference.
+    SetPresentation {
         /// Affected thought.
         thought_id: ThoughtId,
         /// New preference.
-        collapsed: bool,
+        presentation: ThoughtPresentation,
     },
 }
 
@@ -188,14 +190,14 @@ impl SessionBoard {
                 from,
                 to,
             } => self.move_thought(*thought_id, *from, *to, at)?,
-            BoardMutation::SetCollapsed {
+            BoardMutation::SetPresentation {
                 thought_id,
-                collapsed,
+                presentation,
             } => {
                 let thought = self
                     .thought_mut(*thought_id)
                     .ok_or(DomainError::ThoughtNotFound(*thought_id))?;
-                thought.collapsed = *collapsed;
+                thought.presentation = *presentation;
                 thought.updated_at = at;
             }
         }

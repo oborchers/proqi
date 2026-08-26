@@ -87,10 +87,11 @@ fn matches_collapse(
         && operation.kind == BoardOperationKind::Collapse
         && matches!(
             &operation.forward,
-            BoardMutation::SetCollapsed {
+            BoardMutation::SetPresentation {
                 thought_id: stored,
-                collapsed: stored_collapsed,
-            } if stored == thought_id && stored_collapsed == collapsed
+                presentation,
+            } if stored == thought_id
+                && presentation.is_collapsed() == *collapsed
         )
 }
 

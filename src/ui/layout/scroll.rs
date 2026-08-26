@@ -57,7 +57,7 @@ pub(super) fn maximum_first(
         );
         let reaches_end = layouts
             .last()
-            .is_some_and(|layout| layout.index + 1 == live_count);
+            .is_some_and(|layout| layout.index + 1 == live_count && !layout.viewport_clipped);
         if reaches_end {
             return candidate;
         }

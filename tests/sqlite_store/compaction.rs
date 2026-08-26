@@ -33,13 +33,13 @@ fn board_compaction_preserves_current_state_undo_and_idempotency() {
             session_id,
             sequence,
             kind: BoardOperationKind::Collapse,
-            forward: BoardMutation::SetCollapsed {
+            forward: BoardMutation::SetPresentation {
                 thought_id,
-                collapsed,
+                presentation: presentation(collapsed),
             },
-            inverse: BoardMutation::SetCollapsed {
+            inverse: BoardMutation::SetPresentation {
                 thought_id,
-                collapsed: !collapsed,
+                presentation: presentation(!collapsed),
             },
             created_at: Timestamp::from_millis(i64::try_from(index + 3).expect("timestamp")),
         };
@@ -99,13 +99,13 @@ fn compaction_preserves_every_redo_entry() {
                 session_id,
                 sequence: OperationSequence::new(index + 2),
                 kind: BoardOperationKind::Collapse,
-                forward: BoardMutation::SetCollapsed {
+                forward: BoardMutation::SetPresentation {
                     thought_id,
-                    collapsed,
+                    presentation: presentation(collapsed),
                 },
-                inverse: BoardMutation::SetCollapsed {
+                inverse: BoardMutation::SetPresentation {
                     thought_id,
-                    collapsed: !collapsed,
+                    presentation: presentation(!collapsed),
                 },
                 created_at: Timestamp::from_millis(i64::try_from(index + 3).expect("timestamp")),
             }))
@@ -133,6 +133,14 @@ fn compaction_preserves_every_redo_entry() {
         10
     );
     assert!(snapshot.board_history_cursor >= 1);
+}
+
+const fn presentation(collapsed: bool) -> ThoughtPresentation {
+    if collapsed {
+        ThoughtPresentation::Collapsed
+    } else {
+        ThoughtPresentation::Automatic
+    }
 }
 
 #[test]

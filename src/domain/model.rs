@@ -174,6 +174,51 @@ impl Session {
     }
 }
 
+/// Durable responsive rendering preference for one thought.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ThoughtPresentation {
+    /// Apply the responsive viewport cap only when content requires it.
+    #[default]
+    Automatic,
+    /// Always render the complete thought and let the board scroll around it.
+    Expanded,
+    /// Render a compact preview until the user expands it.
+    Collapsed,
+}
+
+impl ThoughtPresentation {
+    /// Stable SQLite and JSON-compatible representation.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Automatic => "automatic",
+            Self::Expanded => "expanded",
+            Self::Collapsed => "collapsed",
+        }
+    }
+
+    /// Parse a durable presentation value.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DomainError::InvalidThoughtPresentation`] for unknown values.
+    pub fn parse(value: &str) -> Result<Self, DomainError> {
+        match value {
+            "automatic" => Ok(Self::Automatic),
+            "expanded" => Ok(Self::Expanded),
+            "collapsed" => Ok(Self::Collapsed),
+            _ => Err(DomainError::InvalidThoughtPresentation(value.to_owned())),
+        }
+    }
+
+    /// Compatibility projection for the original collapsed boolean contract.
+    #[must_use]
+    pub const fn is_collapsed(self) -> bool {
+        matches!(self, Self::Collapsed)
+    }
+}
+
 /// One independently editable body of plain text.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Thought {
@@ -192,8 +237,9 @@ pub struct Thought {
     pub created_at: Timestamp,
     /// Last content or structural change.
     pub updated_at: Timestamp,
-    /// User presentation preference for a long thought.
-    pub collapsed: bool,
+    /// Durable user presentation preference.
+    #[serde(default)]
+    pub presentation: ThoughtPresentation,
     /// Soft-deletion time, if absent from the live board.
     pub deleted_at: Option<Timestamp>,
 }
@@ -216,7 +262,7 @@ impl Thought {
             position,
             created_at: now,
             updated_at: now,
-            collapsed: false,
+            presentation: ThoughtPresentation::Automatic,
             deleted_at: None,
         }
     }
@@ -340,6 +386,9 @@ pub struct OperationRecord {
 /// Domain validation failure.
 #[derive(Clone, Debug, Eq, Error, PartialEq)]
 pub enum DomainError {
+    /// A durable thought presentation value was unknown.
+    #[error("invalid thought presentation: {0}")]
+    InvalidThoughtPresentation(String),
     /// Session names cannot be whitespace-only.
     #[error("session name cannot be blank")]
     BlankSessionName,

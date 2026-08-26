@@ -2,7 +2,8 @@
 
 use super::{
     AppState, ApplicationError, ApplicationResult, BoardMutation, BoardOperation,
-    BoardOperationKind, Effect, OperationId, Thought, ThoughtId, Timestamp,
+    BoardOperationKind, Effect, OperationId, Thought, ThoughtId, ThoughtPosition,
+    ThoughtPresentation, Timestamp,
 };
 
 pub(in crate::application) fn delete_thoughts(
@@ -42,31 +43,31 @@ pub(in crate::application) fn delete_thoughts(
     Ok(vec![Effect::CommitBoardOperation(operation)])
 }
 
-pub(in crate::application) fn set_collapsed_many(
+pub(in crate::application) fn set_presentation_many(
     state: &mut AppState,
     operation_id: OperationId,
     thought_ids: &[ThoughtId],
-    collapsed: bool,
+    presentation: ThoughtPresentation,
     at: Timestamp,
 ) -> ApplicationResult<Vec<Effect>> {
     if thought_ids.len() == 1 {
-        return super::set_collapsed(state, operation_id, thought_ids[0], collapsed, at);
+        return super::set_presentation(state, operation_id, thought_ids[0], presentation, at);
     }
     let changed = selected_thoughts(state, thought_ids)?
         .into_iter()
-        .filter(|thought| thought.collapsed != collapsed)
-        .map(|thought| (thought.id, thought.collapsed))
+        .filter(|thought| thought.presentation != presentation)
+        .map(|thought| (thought.id, thought.presentation))
         .collect::<Vec<_>>();
     if changed.is_empty() {
         return Ok(Vec::new());
     }
     let forward = changed
         .iter()
-        .map(|(id, _)| collapse(*id, collapsed))
+        .map(|(id, _)| presentation_mutation(*id, presentation))
         .collect();
     let inverse = changed
         .iter()
-        .map(|(id, previous)| collapse(*id, *previous))
+        .map(|(id, previous)| presentation_mutation(*id, *previous))
         .collect();
     let operation = batch_operation(
         state,
@@ -77,6 +78,63 @@ pub(in crate::application) fn set_collapsed_many(
         at,
     )?;
     state.record_board_operation(&operation)?;
+    Ok(vec![Effect::CommitBoardOperation(operation)])
+}
+
+pub(in crate::application) fn duplicate_thoughts(
+    state: &mut AppState,
+    operation_id: OperationId,
+    thought_ids: &[ThoughtId],
+    duplicate_ids: &[ThoughtId],
+    at: Timestamp,
+) -> ApplicationResult<Vec<Effect>> {
+    if thought_ids.len() != duplicate_ids.len() || thought_ids.is_empty() {
+        return Err(ApplicationError::InvalidState);
+    }
+    let selected = selected_thoughts(state, thought_ids)?;
+    let insertion = usize::try_from(
+        selected
+            .last()
+            .ok_or(ApplicationError::InvalidState)?
+            .position
+            .get(),
+    )
+    .map_err(|_| ApplicationError::InvalidState)?
+    .saturating_add(1);
+    let duplicates = selected
+        .iter()
+        .zip(duplicate_ids)
+        .enumerate()
+        .map(|(offset, (source, duplicate_id))| {
+            let mut duplicate = source.clone();
+            duplicate.id = *duplicate_id;
+            duplicate.position = ThoughtPosition::new(super::position_u32(insertion + offset)?);
+            duplicate.created_at = at;
+            duplicate.updated_at = at;
+            duplicate.deleted_at = None;
+            Ok(duplicate)
+        })
+        .collect::<ApplicationResult<Vec<_>>>()?;
+    let forward = duplicates
+        .iter()
+        .cloned()
+        .map(|thought| BoardMutation::AddThought { thought })
+        .collect();
+    let inverse = duplicates
+        .iter()
+        .rev()
+        .map(|thought| deletion(thought, Some(at)))
+        .collect();
+    let operation = batch_operation(
+        state,
+        operation_id,
+        BoardOperationKind::Duplicate,
+        forward,
+        inverse,
+        at,
+    )?;
+    state.record_board_operation(&operation)?;
+    state.focused_thought = duplicate_ids.first().copied();
     Ok(vec![Effect::CommitBoardOperation(operation)])
 }
 
@@ -119,10 +177,13 @@ fn deletion(thought: &Thought, deleted_at: Option<Timestamp>) -> BoardMutation {
     }
 }
 
-const fn collapse(thought_id: ThoughtId, collapsed: bool) -> BoardMutation {
-    BoardMutation::SetCollapsed {
+const fn presentation_mutation(
+    thought_id: ThoughtId,
+    presentation: ThoughtPresentation,
+) -> BoardMutation {
+    BoardMutation::SetPresentation {
         thought_id,
-        collapsed,
+        presentation,
     }
 }
 

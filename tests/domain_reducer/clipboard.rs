@@ -178,21 +178,21 @@ fn board_reorder_delete_and_collapse_have_independent_undo_redo() {
     let collapse_at = fixture.time();
     reduce(
         &mut fixture.state,
-        Action::SetCollapsed {
+        Action::SetPresentation {
             operation_id: collapse_operation,
             thought_id: first,
-            collapsed: true,
+            presentation: proqi::domain::ThoughtPresentation::Collapsed,
             at: collapse_at,
         },
     )
     .expect("collapse");
-    assert!(fixture.state.board.thought(first).expect("first").collapsed);
+    assert_presentation(&fixture, first, ThoughtPresentation::Collapsed);
 
     move_history(&mut fixture, UndoScope::Board, true);
-    assert!(!fixture.state.board.thought(first).expect("first").collapsed);
+    assert_presentation(&fixture, first, ThoughtPresentation::Automatic);
 
     move_history(&mut fixture, UndoScope::Board, false);
-    assert!(fixture.state.board.thought(first).expect("first").collapsed);
+    assert_presentation(&fixture, first, ThoughtPresentation::Collapsed);
     fixture.state.board.validate().expect("normalized board");
 
     let delete_operation = fixture.operation_id();
@@ -226,6 +226,18 @@ fn board_reorder_delete_and_collapse_have_independent_undo_redo() {
             .is_live()
     );
     assert_eq!(fixture.state.board.live_thoughts()[0].id, second);
+}
+
+fn assert_presentation(fixture: &Fixture, thought_id: ThoughtId, expected: ThoughtPresentation) {
+    assert_eq!(
+        fixture
+            .state
+            .board
+            .thought(thought_id)
+            .expect("thought")
+            .presentation,
+        expected
+    );
 }
 
 #[test]

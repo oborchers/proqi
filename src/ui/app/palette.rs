@@ -18,6 +18,7 @@ enum Command {
     Copy,
     Cut,
     Paste,
+    Duplicate,
     SubmitRemove,
     SubmitKeep,
     RefreshAgents,
@@ -34,7 +35,7 @@ enum Command {
 }
 
 impl Command {
-    const ALL: [(Self, &'static str); 22] = [
+    const ALL: [(Self, &'static str); 23] = [
         (Self::New, "New thought"),
         (Self::RenameSession, "Rename session"),
         (Self::Edit, "Edit thought"),
@@ -42,6 +43,7 @@ impl Command {
         (Self::Copy, "Copy thought"),
         (Self::Cut, "Cut thought"),
         (Self::Paste, "Paste native clipboard"),
+        (Self::Duplicate, "Duplicate thought or selection"),
         (
             Self::SubmitRemove,
             "Submit and remove after acceptance (default)",
@@ -280,6 +282,7 @@ impl BoardApp {
             Command::Copy => self.copy_active(ids),
             Command::Cut => self.cut_active(ids, clock),
             Command::Paste => self.read_clipboard(ids),
+            Command::Duplicate => self.duplicate(ids, clock),
             Command::SubmitRemove => self.begin_delivery(
                 crate::ports::agent::SubmissionDisposition::RemoveAfterSuccess,
                 ids,

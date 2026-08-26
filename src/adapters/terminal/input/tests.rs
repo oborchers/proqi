@@ -136,6 +136,7 @@ fn primary_clipboard_shortcuts_do_not_reuse_quit() {
         ('c', UiKey::Copy),
         ('x', UiKey::Cut),
         ('v', UiKey::PasteClipboard),
+        ('d', UiKey::Duplicate),
         ('q', UiKey::Quit),
     ] {
         let event = Event::Key(KeyEvent::new(
@@ -169,7 +170,7 @@ fn unknown_primary_character_shortcuts_never_insert_text() {
         KeyModifiers::SUPER,
         KeyModifiers::META,
     ] {
-        let event = Event::Key(KeyEvent::new(KeyCode::Char('d'), modifier));
+        let event = Event::Key(KeyEvent::new(KeyCode::Char('b'), modifier));
         assert_eq!(translate(event), None);
     }
 }

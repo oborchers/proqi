@@ -412,8 +412,8 @@ pub(super) fn persist_board(
             .execute(
                 "INSERT INTO thoughts(
                     id, session_id, content, annotations_json, position, created_at, updated_at,
-                    collapsed, deleted_at, editor_history_cursor
-                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+                    collapsed, presentation, deleted_at, editor_history_cursor
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
                  ON CONFLICT(id) DO UPDATE SET
                     session_id = excluded.session_id,
                     content = excluded.content,
@@ -422,6 +422,7 @@ pub(super) fn persist_board(
                     created_at = excluded.created_at,
                     updated_at = excluded.updated_at,
                     collapsed = excluded.collapsed,
+                    presentation = excluded.presentation,
                     deleted_at = excluded.deleted_at",
                 params![
                     thought.id.database_bytes().as_slice(),
@@ -431,7 +432,8 @@ pub(super) fn persist_board(
                     i64::from(thought.position.get()),
                     thought.created_at.as_millis(),
                     thought.updated_at.as_millis(),
-                    i64::from(thought.collapsed),
+                    i64::from(thought.presentation.is_collapsed()),
+                    thought.presentation.as_str(),
                     thought.deleted_at.map(Timestamp::as_millis),
                     cursor,
                 ],

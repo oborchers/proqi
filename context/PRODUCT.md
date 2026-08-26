@@ -394,10 +394,16 @@ can be undone after restarting the application.
 
 `Space` toggles the focused thought in a visible board selection. Selected
 thoughts retain their board positions and receive the same non-color focus cue
-as the active thought. Copy, cut, delete, collapse, and adjacent-agent
+as the active thought. Copy, cut, delete, duplicate, collapse, and adjacent-agent
 submission address the selected set in board order. Each structural action is
 one persistent board operation and therefore one undo step. Reordering remains
 a single-thought action.
+
+`Meta+D` duplicates the focused thought or complete selection. Exact content,
+annotations, and presentation preferences are copied in board order directly
+below the source range. Duplicates receive fresh identities and timestamps,
+become the new selection, and are created as one persistent undo step. Entering
+edit mode or pressing `Escape` clears the complete board selection.
 
 Copy and submission concatenate exact thought content with one blank line
 between thoughts and no generated labels. A multi-thought Herdr submission is
@@ -491,6 +497,7 @@ bindings are:
 | Copy thought | `y` | Click copy control |
 | Cut thought | `x` | Click cut control |
 | Delete thought | `d` | Click delete control |
+| Duplicate thought or selection | `Meta+D` | Command palette |
 | Select or deselect thought | `Space` | Click the thought, then use the selection control |
 | Submit and remove after acceptance | `s`, when supported, then direction when needed | Click verified Submit control |
 | Submit and keep thought | `S`, when supported, then direction when needed | Click verified Submit & keep control |
@@ -1032,7 +1039,7 @@ The current direction is grounded in these public primary sources:
 
 These remain compatible with the vision but are not initial requirements:
 
-- Duplicate, merge, and split thought operations.
+- Merge and split thought operations.
 - External editor handoff through `$VISUAL` or `$EDITOR`.
 - Import and export as plain text, Markdown, or JSON.
 - Configurable retention and recoverable pruning.

@@ -56,14 +56,6 @@ pub(super) fn map_sql_error(error: rusqlite::Error) -> StoreError {
     }
 }
 
-pub(super) fn bool_from_i64(value: i64) -> Result<bool, StoreError> {
-    match value {
-        0 => Ok(false),
-        1 => Ok(true),
-        _ => Err(StoreError::Corrupt("invalid SQLite boolean".to_owned())),
-    }
-}
-
 pub(super) fn sequence_to_i64(sequence: OperationSequence) -> Result<i64, StoreError> {
     i64::try_from(sequence.get())
         .map_err(|_| StoreError::Corrupt("operation sequence exceeds SQLite range".to_owned()))

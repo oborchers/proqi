@@ -19,7 +19,8 @@ use proqi::{
     domain::{
         BoardMutation, BoardOperation, BoardOperationKind, ContentAnnotation,
         ContentAnnotationKind, Direction, IntegrationContext, OperationSequence, Session,
-        SessionBoard, TextPosition, ThoughtId, ThoughtPosition, Timestamp, UndoScope,
+        SessionBoard, TextPosition, ThoughtId, ThoughtPosition, ThoughtPresentation, Timestamp,
+        UndoScope,
     },
     ports::{
         agent::{AgentState, SubmissionDisposition},

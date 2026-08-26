@@ -370,7 +370,8 @@ event-sourced system.
 - `sessions`: identity, optional name, original and last-opened directories,
   timestamps, last durable operation sequence, and deletion state.
 - `thoughts`: session, exact current content, validated presentation annotations,
-  integer position, timestamps, collapse preference, and deletion state.
+  integer position, timestamps, durable automatic, expanded, or collapsed
+  presentation preference, and deletion state.
 - `thought_revisions`: coalesced text revisions with enough data to restore the
   previous and next content, annotations, and cursor state.
 - `operations`: ordered structural operations and their inverse payloads for
@@ -398,7 +399,7 @@ ordinary tables.
 - Undo and redo commit new current state and move the operation cursor
   atomically.
 - A multi-thought mutation is stored as one ordered batch with one inverse, so
-  delete, collapse, cut, and submit-and-remove remain one undo step.
+  delete, duplicate, collapse, cut, and submit-and-remove remain one undo step.
 - Soft deletion remains recoverable until explicit pruning.
 - Only the holder of the session lease may mutate that session.
 - All timestamps are stored as UTC integers and rendered in local time.

@@ -8,7 +8,7 @@ use crate::{
     domain::{
         BoardMutation, BoardOperation, BoardOperationKind, ContentAnnotation, DomainError,
         OperationId, RequestId, RevisionId, TextPosition, Thought, ThoughtId, ThoughtPosition,
-        ThoughtRevision, Timestamp, UndoScope, validate_annotations,
+        ThoughtPresentation, ThoughtRevision, Timestamp, UndoScope, validate_annotations,
     },
 };
 
@@ -245,15 +245,15 @@ pub(super) fn move_thought(
     Ok(vec![Effect::CommitBoardOperation(operation)])
 }
 
-pub(super) fn set_collapsed(
+pub(super) fn set_presentation(
     state: &mut AppState,
     operation_id: OperationId,
     thought_id: ThoughtId,
-    collapsed: bool,
+    presentation: ThoughtPresentation,
     at: Timestamp,
 ) -> ApplicationResult<Vec<Effect>> {
-    let previous = state.live_thought(thought_id)?.collapsed;
-    if previous == collapsed {
+    let previous = state.live_thought(thought_id)?.presentation;
+    if previous == presentation {
         return Ok(Vec::new());
     }
     let sequence = state.next_sequence()?;
@@ -262,13 +262,13 @@ pub(super) fn set_collapsed(
         session_id: state.board.session.id,
         sequence,
         kind: BoardOperationKind::Collapse,
-        forward: BoardMutation::SetCollapsed {
+        forward: BoardMutation::SetPresentation {
             thought_id,
-            collapsed,
+            presentation,
         },
-        inverse: BoardMutation::SetCollapsed {
+        inverse: BoardMutation::SetPresentation {
             thought_id,
-            collapsed: previous,
+            presentation: previous,
         },
         created_at: at,
     };

@@ -11,8 +11,8 @@ pub use identifiers::{
 };
 pub use model::{
     ContentAnnotation, ContentAnnotationKind, Direction, DomainError, IntegrationContext,
-    OperationRecord, OperationSequence, Session, Thought, ThoughtPosition, ThoughtRevision,
-    Timestamp, validate_annotations,
+    OperationRecord, OperationSequence, Session, Thought, ThoughtPosition, ThoughtPresentation,
+    ThoughtRevision, Timestamp, validate_annotations,
 };
 pub use operations::{BoardMutation, BoardOperation, BoardOperationKind, SessionBoard, UndoScope};
 pub use text::TextPosition;

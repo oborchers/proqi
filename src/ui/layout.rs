@@ -86,6 +86,10 @@ pub struct ThoughtLayout {
     pub overflow: Option<Rect>,
     /// Number of wrapped rows hidden by the cap.
     pub hidden_rows: usize,
+    /// Whether the viewport, rather than the presentation cap, clipped this allocation.
+    pub viewport_clipped: bool,
+    /// Whether line scrolling may reveal rows hidden from this presentation.
+    pub scrollable_hidden: bool,
     /// Wrapped rows clipped above the viewport for line-by-line board scrolling.
     pub content_row_offset: usize,
 }

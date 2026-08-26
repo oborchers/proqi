@@ -220,6 +220,64 @@ fn focused_editor_uses_the_terminal_cursor_without_painting_its_cell() {
 }
 
 #[test]
+fn expanded_overflow_reaches_later_thoughts_and_insertion_without_blank_overscroll() {
+    let mut fixture = Fixture::new();
+    let long = (1..=10)
+        .map(|line| format!("first line {line} contains enough text to wrap twice"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    durable_thought(&mut fixture, &long);
+    let first = fixture.app.state.board.live_thoughts()[0].id;
+    fixture.app.prepare_frame(Rect::new(0, 0, 42, 12));
+    fixture.input(UiInput::Key(UiKey::Character('c')));
+    durable_thought(&mut fixture, "final thought");
+    fixture.input(UiInput::Key(UiKey::Character('k')));
+    assert_eq!(fixture.app.state.focused_thought, Some(first));
+
+    for _ in 0..40 {
+        fixture.app.prepare_frame(Rect::new(0, 0, 42, 12));
+        fixture.pointer(1, 1, PointerKind::ScrollDown);
+    }
+    let layout = fixture.app.prepare_frame(Rect::new(0, 0, 42, 12));
+
+    assert!(layout.thoughts.iter().any(|thought| {
+        fixture
+            .app
+            .state
+            .board
+            .thought(thought.thought_id)
+            .is_some_and(|value| value.content == "final thought")
+    }));
+    assert!(layout.insert.is_some());
+}
+
+#[test]
+fn presentation_cycle_is_durable_and_recomputes_overflow_bounds() {
+    let mut fixture = Fixture::new();
+    durable_thought(&mut fixture, &["line"; 10].join("\n"));
+    let initial = fixture.app.prepare_frame(Rect::new(0, 0, 36, 12));
+    assert!(
+        initial.thoughts[0].hidden_rows > 0,
+        "layout: {:?}",
+        initial.thoughts[0]
+    );
+
+    fixture.input(UiInput::Key(UiKey::Character('c')));
+    assert_eq!(
+        fixture.app.state.board.live_thoughts()[0].presentation,
+        proqi::domain::ThoughtPresentation::Expanded
+    );
+    fixture.app.prepare_frame(Rect::new(0, 0, 36, 12));
+    fixture.input(UiInput::Key(UiKey::Character('c')));
+    assert_eq!(
+        fixture.app.state.board.live_thoughts()[0].presentation,
+        proqi::domain::ThoughtPresentation::Collapsed
+    );
+    let layout = fixture.app.prepare_frame(Rect::new(0, 0, 36, 12));
+    assert!(layout.thoughts[0].overflow.is_some());
+}
+
+#[test]
 fn drag_handle_uses_the_upper_center_cell_for_every_height() {
     for (height, expected_row) in [(1, 0), (2, 0), (3, 1), (4, 1), (5, 2), (6, 2)] {
         let mut fixture = Fixture::new();

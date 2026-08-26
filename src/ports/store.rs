@@ -15,9 +15,9 @@ use crate::ports::agent::{AgentState, SubmissionDisposition};
 pub use compaction::{CompactedOperationRequest, thought_payload_digest};
 
 /// Current storage schema understood by this binary.
-pub const SUPPORTED_SCHEMA_VERSION: u32 = 5;
+pub const SUPPORTED_SCHEMA_VERSION: u32 = 6;
 /// Current local storage protocol understood by this binary.
-pub const STORAGE_PROTOCOL_VERSION: u32 = 5;
+pub const STORAGE_PROTOCOL_VERSION: u32 = 6;
 
 /// One ordered, content-redacted source included in a submission.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

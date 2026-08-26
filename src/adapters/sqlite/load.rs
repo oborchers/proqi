@@ -5,15 +5,15 @@ use rusqlite::{Connection, OptionalExtension};
 use crate::{
     domain::{
         BoardOperation, ContentAnnotation, IntegrationContext, Session, SessionBoard, SessionId,
-        Thought, ThoughtId, ThoughtPosition, ThoughtRevision, Timestamp,
+        Thought, ThoughtId, ThoughtPosition, ThoughtPresentation, ThoughtRevision, Timestamp,
     },
     ports::store::{SessionSnapshot, StoreError},
 };
 
 use super::support::{
-    bool_from_i64, i64_to_u32, i64_to_usize, map_sql_error, operation_id_from_blob,
-    path_from_bytes, revision_id_from_blob, sequence_from_i64, session_id_from_blob,
-    thought_id_from_blob, validate_commit_sequence,
+    i64_to_u32, i64_to_usize, map_sql_error, operation_id_from_blob, path_from_bytes,
+    revision_id_from_blob, sequence_from_i64, session_id_from_blob, thought_id_from_blob,
+    validate_commit_sequence,
 };
 
 pub(super) fn load_snapshot(
@@ -138,7 +138,7 @@ fn load_thoughts(
 ) -> Result<Vec<Thought>, StoreError> {
     let mut statement = connection
         .prepare(
-            "SELECT id, session_id, content, annotations_json, position, created_at, updated_at, collapsed, deleted_at
+            "SELECT id, session_id, content, annotations_json, position, created_at, updated_at, presentation, deleted_at
              FROM thoughts WHERE session_id = ?1 ORDER BY deleted_at IS NOT NULL, position, id",
         )
         .map_err(map_sql_error)?;
@@ -152,14 +152,14 @@ fn load_thoughts(
                 row.get::<_, i64>(4)?,
                 row.get::<_, i64>(5)?,
                 row.get::<_, i64>(6)?,
-                row.get::<_, i64>(7)?,
+                row.get::<_, String>(7)?,
                 row.get::<_, Option<i64>>(8)?,
             ))
         })
         .map_err(map_sql_error)?;
     let mut thoughts = Vec::new();
     for row in rows {
-        let (id, owner, content, annotations, position, created, updated, collapsed, deleted) =
+        let (id, owner, content, annotations, position, created, updated, presentation, deleted) =
             row.map_err(map_sql_error)?;
         let annotations: Vec<ContentAnnotation> = serde_json::from_str(&annotations)
             .map_err(|error| StoreError::Corrupt(error.to_string()))?;
@@ -173,7 +173,8 @@ fn load_thoughts(
             position: ThoughtPosition::new(i64_to_u32(position)?),
             created_at: Timestamp::from_millis(created),
             updated_at: Timestamp::from_millis(updated),
-            collapsed: bool_from_i64(collapsed)?,
+            presentation: ThoughtPresentation::parse(&presentation)
+                .map_err(|error| StoreError::Corrupt(error.to_string()))?,
             deleted_at: deleted.map(Timestamp::from_millis),
         });
     }

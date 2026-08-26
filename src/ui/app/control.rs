@@ -57,10 +57,14 @@ impl BoardApp {
                 operation_id,
                 thought_id,
                 collapsed,
-            } => Action::SetCollapsed {
+            } => Action::SetPresentation {
                 operation_id: *operation_id,
                 thought_id: *thought_id,
-                collapsed: *collapsed,
+                presentation: if *collapsed {
+                    crate::domain::ThoughtPresentation::Collapsed
+                } else {
+                    crate::domain::ThoughtPresentation::Automatic
+                },
                 at,
             },
             ControlMutation::Add {

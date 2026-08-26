@@ -386,6 +386,7 @@ fn translate_key(key: KeyEvent) -> Option<UiKey> {
             KeyCode::Char('c') => Some(UiKey::Copy),
             KeyCode::Char('x') => Some(UiKey::Cut),
             KeyCode::Char('v') => Some(UiKey::PasteClipboard),
+            KeyCode::Char('d') => Some(UiKey::Duplicate),
             KeyCode::Char('q') => Some(UiKey::Quit),
             KeyCode::Char('u') => Some(UiKey::DeleteLine),
             KeyCode::Char('z') if key.modifiers.contains(KeyModifiers::SHIFT) => Some(UiKey::Redo),

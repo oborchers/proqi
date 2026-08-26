@@ -15,7 +15,7 @@ use crate::{
 
 use super::{
     StoreConfig,
-    schema::{MIGRATION_1, MIGRATION_2, MIGRATION_3, MIGRATION_4, MIGRATION_5},
+    schema::{MIGRATION_1, MIGRATION_2, MIGRATION_3, MIGRATION_4, MIGRATION_5, MIGRATION_6},
     support::{
         create_private_dir, map_sql_error, set_private_file_permissions, set_private_open_mode,
     },
@@ -60,7 +60,7 @@ pub(super) fn migrate(
     found: u32,
     at: Timestamp,
 ) -> Result<(), StoreError> {
-    if found > 4 {
+    if found >= SUPPORTED_SCHEMA_VERSION {
         return Err(StoreError::MigrationRequired {
             found,
             supported: SUPPORTED_SCHEMA_VERSION,
@@ -75,15 +75,21 @@ pub(super) fn migrate(
             .execute_batch(MIGRATION_2)
             .and_then(|()| transaction.execute_batch(MIGRATION_3))
             .and_then(|()| transaction.execute_batch(MIGRATION_4))
-            .and_then(|()| transaction.execute_batch(MIGRATION_5)),
+            .and_then(|()| transaction.execute_batch(MIGRATION_5))
+            .and_then(|()| transaction.execute_batch(MIGRATION_6)),
         2 => transaction
             .execute_batch(MIGRATION_3)
             .and_then(|()| transaction.execute_batch(MIGRATION_4))
-            .and_then(|()| transaction.execute_batch(MIGRATION_5)),
+            .and_then(|()| transaction.execute_batch(MIGRATION_5))
+            .and_then(|()| transaction.execute_batch(MIGRATION_6)),
         3 => transaction
             .execute_batch(MIGRATION_4)
-            .and_then(|()| transaction.execute_batch(MIGRATION_5)),
-        4 => transaction.execute_batch(MIGRATION_5),
+            .and_then(|()| transaction.execute_batch(MIGRATION_5))
+            .and_then(|()| transaction.execute_batch(MIGRATION_6)),
+        4 => transaction
+            .execute_batch(MIGRATION_5)
+            .and_then(|()| transaction.execute_batch(MIGRATION_6)),
+        5 => transaction.execute_batch(MIGRATION_6),
         _ => Ok(()),
     }
     .map_err(map_sql_error)?;

@@ -354,25 +354,36 @@ pub enum Action {
         /// Event time.
         at: Timestamp,
     },
-    /// Set the explicit collapse preference.
-    SetCollapsed {
+    /// Set the durable presentation preference.
+    SetPresentation {
         /// Durable operation identity.
         operation_id: OperationId,
         /// Affected thought.
         thought_id: ThoughtId,
         /// New preference.
-        collapsed: bool,
+        presentation: crate::domain::ThoughtPresentation,
         /// Event time.
         at: Timestamp,
     },
-    /// Set the same explicit collapse preference as one board-history operation.
-    SetCollapsedMany {
+    /// Set one presentation preference as one board-history operation.
+    SetPresentationMany {
         /// Durable operation identity.
         operation_id: OperationId,
         /// Thoughts to update in board order.
         thought_ids: Vec<ThoughtId>,
         /// New preference.
-        collapsed: bool,
+        presentation: crate::domain::ThoughtPresentation,
+        /// Event time.
+        at: Timestamp,
+    },
+    /// Duplicate one or more thoughts in board order as one operation.
+    DuplicateThoughts {
+        /// Durable operation identity.
+        operation_id: OperationId,
+        /// Source thoughts in board order.
+        thought_ids: Vec<ThoughtId>,
+        /// Fresh identities paired with the ordered sources.
+        duplicate_ids: Vec<ThoughtId>,
         /// Event time.
         at: Timestamp,
     },

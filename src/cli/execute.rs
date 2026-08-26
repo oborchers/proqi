@@ -285,7 +285,8 @@ fn list_thoughts(context: &mut RuntimeContext, reference: &str) -> Result<Outcom
                 "id": thought.id,
                 "position": thought.position,
                 "content": thought.content,
-                "collapsed": thought.collapsed,
+                "collapsed": thought.presentation.is_collapsed(),
+                "presentation": thought.presentation.as_str(),
                 "updated_at": thought.updated_at,
                 "content_sha256": content_digest_hex(&thought.content),
             })
@@ -337,7 +338,8 @@ fn inspect_thought(
                 "id": thought.id,
                 "content": thought.content,
                 "position": thought.position,
-                "collapsed": thought.collapsed,
+                "collapsed": thought.presentation.is_collapsed(),
+                "presentation": thought.presentation.as_str(),
                 "deleted_at": thought.deleted_at,
                 "content_sha256": content_digest_hex(&thought.content),
             }

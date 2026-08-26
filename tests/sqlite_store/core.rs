@@ -148,6 +148,63 @@ fn explicitly_created_blank_thought_survives_reopen_and_remains_undoable() {
 }
 
 #[test]
+fn expanded_presentation_survives_reopen_and_board_undo() {
+    let fixture = DatabaseFixture::new();
+    let mut store = fixture.open();
+    let mut ids = FakeIdGenerator::new(1_725_000_000_000);
+    let mut state = session_state(&mut ids, &test_path("proqi-presentation"));
+    let session_id = state.board.session.id;
+    store
+        .commit(&OperationBatch::CreateSession(state.board.session.clone()))
+        .expect("create session");
+    let thought_id = create_thought(&mut store, &mut state, &mut ids, "long thought", 2);
+    let presentation = one_effect(
+        &mut state,
+        Action::SetPresentation {
+            operation_id: ids.operation_id(),
+            thought_id,
+            presentation: ThoughtPresentation::Expanded,
+            at: Timestamp::from_millis(3),
+        },
+    );
+    persist_effect(&mut store, &presentation);
+    drop(store);
+
+    let mut reopened = fixture.open();
+    let snapshot = reopened
+        .load_session(session_id)
+        .expect("reopen presentation");
+    assert_eq!(
+        snapshot
+            .board
+            .thought(thought_id)
+            .expect("thought")
+            .presentation,
+        ThoughtPresentation::Expanded
+    );
+    let mut restored = AppState::from_snapshot(snapshot).expect("rehydrate presentation");
+    let undo = one_effect(
+        &mut restored,
+        Action::Undo {
+            operation_id: ids.operation_id(),
+            scope: UndoScope::Board,
+            at: Timestamp::from_millis(4),
+        },
+    );
+    persist_effect(&mut reopened, &undo);
+    assert_eq!(
+        reopened
+            .load_session(session_id)
+            .expect("undo presentation")
+            .board
+            .thought(thought_id)
+            .expect("thought")
+            .presentation,
+        ThoughtPresentation::Automatic
+    );
+}
+
+#[test]
 fn board_editor_and_persistent_history_survive_reopen() {
     let fixture = DatabaseFixture::new();
     let (store, mut state, mut ids, first, second) = seeded_history(&fixture);

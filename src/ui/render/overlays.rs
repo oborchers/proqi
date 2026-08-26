@@ -231,6 +231,7 @@ fn board_shortcuts(app: &BoardApp) -> Vec<(String, &'static str)> {
         (keys.copy.to_string(), "Copy"),
         (keys.cut.to_string(), "Cut"),
         (keys.delete.to_string(), "Delete"),
+        (primary("D"), "Duplicate"),
         (crate::ui::settings::key_label(keys.select), "Select"),
         (keys.undo.to_string(), "Undo"),
         (crate::ui::settings::key_label(keys.collapse), "Collapse"),

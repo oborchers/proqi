@@ -4,11 +4,13 @@ mod agent;
 mod clipboard;
 mod commands;
 mod control;
+mod duplicate;
 mod editing;
 mod folds;
 mod palette;
 mod pending_types;
 mod pointer;
+mod presentation;
 mod query;
 mod recovery;
 mod search;
@@ -119,6 +121,8 @@ pub enum UiKey {
     Cut,
     /// Read and paste the native clipboard.
     PasteClipboard,
+    /// Duplicate the focused or selected thoughts below the source range.
+    Duplicate,
 }
 
 /// Input translated from a concrete terminal backend.
@@ -469,6 +473,8 @@ impl BoardApp {
                 self.set_warning("thought has a submission in progress");
                 return;
             }
+            self.selected_thoughts.clear();
+            self.hovered = None;
             let _effects = self.reduce(Action::EnterEdit(thought_id));
             self.sync_editor_from_state();
         }

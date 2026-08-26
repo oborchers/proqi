@@ -35,6 +35,8 @@ CREATE TABLE thoughts (
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
     collapsed INTEGER NOT NULL DEFAULT 0 CHECK (collapsed IN (0, 1)),
+    presentation TEXT NOT NULL DEFAULT 'automatic'
+        CHECK (presentation IN ('automatic', 'expanded', 'collapsed')),
     deleted_at INTEGER,
     editor_history_cursor INTEGER NOT NULL DEFAULT 0 CHECK (editor_history_cursor >= 0)
 ) STRICT;
@@ -129,12 +131,13 @@ CREATE VIRTUAL TABLE session_search USING fts5(
 );
 
 INSERT INTO schema_meta(singleton, schema_version, storage_protocol, migrated_at)
-VALUES (1, 5, 5, 0);
+VALUES (1, 6, 6, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (1, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (2, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (3, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (4, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (5, 0);
+INSERT INTO migration_history(version, applied_at) VALUES (6, 0);
 ";
 
 pub(super) const MIGRATION_2: &str = r"
@@ -195,4 +198,12 @@ ON submission_attempt_items(thought_id)
 WHERE active = 1;
 UPDATE schema_meta SET schema_version = 5, storage_protocol = 5;
 INSERT INTO migration_history(version, applied_at) VALUES (5, 0);
+";
+
+pub(super) const MIGRATION_6: &str = r"
+ALTER TABLE thoughts ADD COLUMN presentation TEXT NOT NULL DEFAULT 'automatic'
+    CHECK (presentation IN ('automatic', 'expanded', 'collapsed'));
+UPDATE thoughts SET presentation = 'collapsed' WHERE collapsed = 1;
+UPDATE schema_meta SET schema_version = 6, storage_protocol = 6;
+INSERT INTO migration_history(version, applied_at) VALUES (6, 0);
 ";

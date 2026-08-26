@@ -70,7 +70,7 @@ where
         })
     }
 
-    /// Set one thought's explicit collapsed state as a board operation.
+    /// Set one thought's compatibility collapsed state as a board operation.
     ///
     /// # Errors
     ///
@@ -87,10 +87,14 @@ where
         let mut state = self.load_external_state(session_id)?;
         let effects = reduce(
             &mut state,
-            Action::SetCollapsed {
+            Action::SetPresentation {
                 operation_id,
                 thought_id,
-                collapsed,
+                presentation: if collapsed {
+                    crate::domain::ThoughtPresentation::Collapsed
+                } else {
+                    crate::domain::ThoughtPresentation::Automatic
+                },
                 at: self.clock.now(),
             },
         )?;

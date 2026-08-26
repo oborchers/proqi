@@ -134,8 +134,9 @@ fn version_one_database_migrates_annotations_forward_without_reinterpretation() 
              DROP TABLE submission_attempt_items;
              DROP INDEX submission_attempts_active_thought;
              DROP TABLE submission_attempts;
+             ALTER TABLE thoughts DROP COLUMN presentation;
              ALTER TABLE thoughts DROP COLUMN annotations_json;
-             DELETE FROM migration_history WHERE version IN (2, 3, 4, 5);
+             DELETE FROM migration_history WHERE version IN (2, 3, 4, 5, 6);
              UPDATE schema_meta SET schema_version = 1, storage_protocol = 1;",
         )
         .expect("downgrade fixture");
@@ -167,6 +168,50 @@ fn version_one_database_migrates_annotations_forward_without_reinterpretation() 
         (version, annotations_column, submissions_table),
         (i64::from(SUPPORTED_SCHEMA_VERSION), 1, 1)
     );
+}
+
+#[test]
+fn version_five_collapsed_flag_migrates_to_the_canonical_presentation() {
+    let fixture = DatabaseFixture::new();
+    let mut store = fixture.open();
+    let mut ids = FakeIdGenerator::new(1_725_000_000_000);
+    let mut state = session_state(&mut ids, &test_path("proqi-version-five"));
+    let session_id = state.board.session.id;
+    store
+        .commit(&OperationBatch::CreateSession(state.board.session.clone()))
+        .expect("create session");
+    let thought_id = create_thought(&mut store, &mut state, &mut ids, "legacy", 2);
+    let collapse = one_effect(
+        &mut state,
+        Action::SetPresentation {
+            operation_id: ids.operation_id(),
+            thought_id,
+            presentation: ThoughtPresentation::Collapsed,
+            at: Timestamp::from_millis(3),
+        },
+    );
+    persist_effect(&mut store, &collapse);
+    drop(store);
+
+    let connection = Connection::open(&fixture.config.database_path).expect("version five DB");
+    connection
+        .execute_batch(
+            "ALTER TABLE thoughts DROP COLUMN presentation;
+             DELETE FROM migration_history WHERE version = 6;
+             UPDATE schema_meta SET schema_version = 5, storage_protocol = 5;",
+        )
+        .expect("downgrade fixture");
+    drop(connection);
+
+    let mut migrated = fixture.open();
+    let thought = migrated
+        .load_session(session_id)
+        .expect("migrated session")
+        .board
+        .thought(thought_id)
+        .expect("migrated thought")
+        .clone();
+    assert_eq!(thought.presentation, ThoughtPresentation::Collapsed);
 }
 
 #[test]

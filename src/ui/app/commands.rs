@@ -23,6 +23,11 @@ impl BoardApp {
             return self.handle_insertion_key(key, ids, clock);
         }
         match key {
+            UiKey::Escape if !self.selected_thoughts.is_empty() => {
+                self.selected_thoughts.clear();
+                self.hovered = None;
+                self.layout = None;
+            }
             UiKey::Character(character) => {
                 return self.handle_board_command(character, ids, clock);
             }
@@ -48,6 +53,7 @@ impl BoardApp {
             UiKey::Copy => return self.copy_thought(ids),
             UiKey::Cut => return self.cut_thought(ids, clock),
             UiKey::PasteClipboard => return self.read_clipboard(ids),
+            UiKey::Duplicate => return self.duplicate(ids, clock),
             _ => {}
         }
         Vec::new()
@@ -83,6 +89,7 @@ impl BoardApp {
             | UiKey::DeleteLine
             | UiKey::Copy
             | UiKey::Cut
+            | UiKey::Duplicate
             | UiKey::Quit
             | UiKey::Move { .. } => Vec::new(),
         }
@@ -192,7 +199,8 @@ impl BoardApp {
             | UiKey::Quit
             | UiKey::Copy
             | UiKey::Cut
-            | UiKey::PasteClipboard => return Vec::new(),
+            | UiKey::PasteClipboard
+            | UiKey::Duplicate => return Vec::new(),
         };
         let movement = match &command {
             EditCommand::Move {
@@ -419,62 +427,6 @@ impl BoardApp {
         })
     }
 
-    pub(super) fn collapse(
-        &mut self,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-    ) -> Vec<Effect> {
-        let thought_ids = self.action_thought_ids();
-        if thought_ids.is_empty() {
-            return Vec::new();
-        }
-        if thought_ids.iter().any(|id| self.submission_locked(*id)) {
-            self.set_warning("selected thought has a submission in progress");
-            return Vec::new();
-        }
-        if thought_ids.len() > 1 {
-            let collapse = thought_ids.iter().any(|id| {
-                self.state
-                    .board
-                    .thought(*id)
-                    .is_some_and(|thought| !thought.collapsed)
-            });
-            for thought_id in &thought_ids {
-                self.expanded.remove(thought_id);
-            }
-            return self.reduce(Action::SetCollapsedMany {
-                operation_id: ids.operation_id(),
-                thought_ids,
-                collapsed: collapse,
-                at: clock.now(),
-            });
-        }
-        let thought_id = thought_ids[0];
-        let Some(thought) = self.state.board.thought(thought_id) else {
-            return Vec::new();
-        };
-        let collapsed = thought.collapsed;
-        let capped = self
-            .layout
-            .as_ref()
-            .and_then(|layout| layout.thought(thought_id))
-            .is_some_and(|layout| layout.hidden_rows > 0);
-        if !collapsed && self.expanded.remove(&thought_id) {
-            return Vec::new();
-        }
-        if !collapsed && capped {
-            self.expanded.insert(thought_id);
-            return Vec::new();
-        }
-        self.expanded.remove(&thought_id);
-        self.reduce(Action::SetCollapsed {
-            operation_id: ids.operation_id(),
-            thought_id,
-            collapsed: !collapsed,
-            at: clock.now(),
-        })
-    }
-
     pub(super) fn toggle_selection(&mut self) {
         let Some(thought_id) = self.state.focused_thought else {
             return;
@@ -482,6 +434,7 @@ impl BoardApp {
         if !self.selected_thoughts.remove(&thought_id) {
             self.selected_thoughts.insert(thought_id);
         }
+        self.hovered = None;
         self.layout = None;
     }
 }

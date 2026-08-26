@@ -123,8 +123,12 @@ impl BoardApp {
 
     /// Current hover target resolved from the latest rendered layout.
     #[must_use]
-    pub const fn hovered(&self) -> Option<HitTarget> {
-        self.hovered
+    pub fn hovered(&self) -> Option<HitTarget> {
+        if self.selected_thoughts.is_empty() {
+            self.hovered
+        } else {
+            None
+        }
     }
 
     /// Thought currently being dragged, when pointer reordering is active.

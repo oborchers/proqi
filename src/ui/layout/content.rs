@@ -6,7 +6,7 @@ use ratatui_core::layout::Rect;
 
 use crate::{
     application::AppState,
-    domain::{Thought, ThoughtId},
+    domain::{Thought, ThoughtId, ThoughtPresentation},
     ports::{editor::EditorSnapshot, text_layout::wrap_rows},
 };
 
@@ -181,18 +181,18 @@ fn place_thought(
     } else {
         0
     };
-    let explicit_cap = if context.expanded.contains(&thought.id) {
-        usize::from(context.board.height.max(1))
-    } else if thought.collapsed {
-        2
-    } else {
-        usize::from(responsive_cap(context.board.height))
+    let explicit_cap = match thought.presentation {
+        ThoughtPresentation::Expanded => natural,
+        ThoughtPresentation::Collapsed => 2,
+        ThoughtPresentation::Automatic if context.expanded.contains(&thought.id) => natural,
+        ThoughtPresentation::Automatic => usize::from(responsive_cap(context.board.height)),
     };
     let available = usize::from(context.board.bottom().saturating_sub(y));
-    let visible = natural
+    let desired = natural
         .saturating_sub(content_row_offset)
         .min(explicit_cap.max(1));
-    let height = u16::try_from(visible.min(available).max(1)).unwrap_or(u16::MAX);
+    let viewport_clipped = desired > available;
+    let height = u16::try_from(desired.min(available).max(1)).unwrap_or(u16::MAX);
     let area = Rect::new(context.board.x, y, context.board.width, height);
     let gutter = Rect::new(area.x, area.y, area.width.min(1), area.height);
     let text_area = Rect::new(
@@ -207,6 +207,8 @@ fn place_thought(
     } else {
         remaining_rows.saturating_sub(usize::from(height).saturating_sub(1))
     };
+    let scrollable_hidden =
+        hidden_rows > 0 && thought.presentation != ThoughtPresentation::Collapsed;
     let overflow = (hidden_rows > 0).then(|| {
         Rect::new(
             text_area.x,
@@ -224,6 +226,8 @@ fn place_thought(
         gutter,
         overflow,
         hidden_rows,
+        viewport_clipped,
+        scrollable_hidden,
         content_row_offset,
     }
 }

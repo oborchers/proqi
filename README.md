@@ -44,7 +44,7 @@ manual clipboard handoff.
 | --- | --- |
 | Capture the next thought | Paste in board mode or click `+ New thought` to create and focus it |
 | Edit without compromise | Multiline Unicode editing, selection, logical-line deletion, and persistent editor undo |
-| Keep prompts flexible | Reorder by keyboard, mouse, or drag, then collapse long context without changing its content |
+| Keep prompts flexible | Reorder or duplicate by keyboard, mouse, or drag, then collapse long context without changing its content |
 | Act on several prompts | Select thoughts with `Space`, then copy, cut, delete, collapse, or submit them as one ordered prompt |
 | Survive interruption | Autosave, exact resume guidance, session search, recovery export, and undo after restart |
 | Work beside any agent | Native copy and non-destructive cut work without an integration or account |
@@ -187,6 +187,7 @@ fallbacks remain available when a terminal cannot report a modifier.
 | `y` or `Primary+C` | Copy the complete thought |
 | `x` or `Primary+X` | Cut only after confirmed clipboard success |
 | `Space` | Add or remove the focused thought from the multi-selection |
+| `Primary+D` | Duplicate the focused thought or selection below its source range |
 | `s`, then direction when needed | Submit selected thoughts and remove only after acceptance |
 | `S`, then direction when needed | Submit selected thoughts and keep them |
 | `u` | Undo the latest board operation |
