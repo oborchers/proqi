@@ -5,6 +5,7 @@ use crate::application::model::{
     Action, AppState, ClipboardIntent, DurabilityState, Effect, InteractionMode,
 };
 
+use super::mutations::bulk::{delete_thoughts, set_collapsed_many};
 use super::mutations::{
     create_thought, delete_thought, edit_thought, finish_clipboard, history_move, move_thought,
     request_clipboard, set_collapsed,
@@ -31,9 +32,11 @@ pub fn reduce(state: &mut AppState, action: Action) -> ApplicationResult<Vec<Eff
         Action::CopyThought { .. } | Action::CutThought { .. } | Action::ClipboardResult { .. } => {
             reduce_clipboard(state, &action)
         }
-        Action::DeleteThought { .. } | Action::MoveThought { .. } | Action::SetCollapsed { .. } => {
-            reduce_board(state, &action)
-        }
+        Action::DeleteThought { .. }
+        | Action::DeleteThoughts { .. }
+        | Action::MoveThought { .. }
+        | Action::SetCollapsed { .. }
+        | Action::SetCollapsedMany { .. } => reduce_board(state, &action),
         Action::Undo { .. } | Action::Redo { .. } => reduce_history(state, &action),
         Action::PersistenceCommitted(_)
         | Action::PersistenceFailed { .. }
@@ -50,8 +53,10 @@ const fn mutates_durable_state(action: &Action) -> bool {
             | Action::EditThought { .. }
             | Action::CutThought { .. }
             | Action::DeleteThought { .. }
+            | Action::DeleteThoughts { .. }
             | Action::MoveThought { .. }
             | Action::SetCollapsed { .. }
+            | Action::SetCollapsedMany { .. }
             | Action::Undo { .. }
             | Action::Redo { .. }
     )
@@ -197,6 +202,12 @@ fn reduce_board(state: &mut AppState, action: &Action) -> ApplicationResult<Vec<
             kind,
             at,
         } => delete_thought(state, *operation_id, *thought_id, *kind, *at),
+        Action::DeleteThoughts {
+            operation_id,
+            thought_ids,
+            kind,
+            at,
+        } => delete_thoughts(state, *operation_id, thought_ids, *kind, *at),
         Action::MoveThought {
             operation_id,
             thought_id,
@@ -209,6 +220,12 @@ fn reduce_board(state: &mut AppState, action: &Action) -> ApplicationResult<Vec<
             collapsed,
             at,
         } => set_collapsed(state, *operation_id, *thought_id, *collapsed, *at),
+        Action::SetCollapsedMany {
+            operation_id,
+            thought_ids,
+            collapsed,
+            at,
+        } => set_collapsed_many(state, *operation_id, thought_ids, *collapsed, *at),
         _ => Err(ApplicationError::InvalidState),
     }
 }

@@ -94,6 +94,7 @@ fn render_board(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, 
             continue;
         };
         let focused = app.active_thought_id() == Some(thought_layout.thought_id);
+        let selected = app.thought_selected(thought_layout.thought_id);
         let hovered = matches!(
             app.hovered(),
             Some(HitTarget::Thought(id) | HitTarget::DragHandle(id) | HitTarget::Overflow(id))
@@ -105,7 +106,7 @@ fn render_board(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, 
             app.drag_target() == Some(thought_layout.index),
             theme,
         );
-        if focused || hovered {
+        if focused || hovered || selected {
             frame.render_widget(
                 Block::default().style(theme.focused_style()),
                 thought_layout.area,
@@ -123,7 +124,13 @@ fn render_board(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, 
         {
             render_editor(frame, app, thought_layout, theme);
         } else {
-            render_thought(frame, &presentation, thought_layout, focused, theme);
+            render_thought(
+                frame,
+                &presentation,
+                thought_layout,
+                focused || selected,
+                theme,
+            );
         }
     }
     if let Some(insert) = layout.insert {
@@ -209,6 +216,7 @@ fn render_thought(
         usize::from(layout.text_area.width.max(1)),
     )
     .into_iter()
+    .skip(layout.content_row_offset)
     .take(content_rows)
     .map(|row| {
         styled_line(

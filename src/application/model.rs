@@ -332,6 +332,17 @@ pub enum Action {
         /// Event time.
         at: Timestamp,
     },
+    /// Soft-delete several thoughts as one board-history operation.
+    DeleteThoughts {
+        /// Durable operation identity.
+        operation_id: OperationId,
+        /// Thoughts to delete in board order.
+        thought_ids: Vec<ThoughtId>,
+        /// Semantic deletion kind.
+        kind: BoardOperationKind,
+        /// Event time.
+        at: Timestamp,
+    },
     /// Reorder one live thought.
     MoveThought {
         /// Durable operation identity.
@@ -349,6 +360,17 @@ pub enum Action {
         operation_id: OperationId,
         /// Affected thought.
         thought_id: ThoughtId,
+        /// New preference.
+        collapsed: bool,
+        /// Event time.
+        at: Timestamp,
+    },
+    /// Set the same explicit collapse preference as one board-history operation.
+    SetCollapsedMany {
+        /// Durable operation identity.
+        operation_id: OperationId,
+        /// Thoughts to update in board order.
+        thought_ids: Vec<ThoughtId>,
         /// New preference.
         collapsed: bool,
         /// Event time.

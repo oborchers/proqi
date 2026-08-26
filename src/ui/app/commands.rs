@@ -123,6 +123,10 @@ impl BoardApp {
             Some(BoardCommand::MoveUp) => self.reorder(ids, clock, -1),
             Some(BoardCommand::MoveDown) => self.reorder(ids, clock, 1),
             Some(BoardCommand::Collapse) => self.collapse(ids, clock),
+            Some(BoardCommand::Select) => {
+                self.toggle_selection();
+                Vec::new()
+            }
             Some(BoardCommand::Search) => {
                 self.open_search();
                 Vec::new()
@@ -288,15 +292,21 @@ impl BoardApp {
     }
 
     pub(super) fn delete(&mut self, ids: &mut impl IdGenerator, clock: &impl Clock) -> Vec<Effect> {
-        let Some(thought_id) = self.state.focused_thought else {
+        let thought_ids = self.action_thought_ids();
+        if thought_ids.is_empty() {
             return Vec::new();
-        };
-        let effects = self.reduce(Action::DeleteThought {
+        }
+        if thought_ids.iter().any(|id| self.submission_locked(*id)) {
+            self.set_warning("selected thought has a submission in progress");
+            return Vec::new();
+        }
+        let effects = self.reduce(Action::DeleteThoughts {
             operation_id: ids.operation_id(),
-            thought_id,
+            thought_ids,
             kind: BoardOperationKind::Delete,
             at: clock.now(),
         });
+        self.selected_thoughts.clear();
         self.sync_empty_insertion_focus();
         effects
     }
@@ -360,7 +370,7 @@ impl BoardApp {
         let _effects = self.reduce(Action::FocusThought(Some(live[target].id)));
     }
 
-    fn sync_empty_insertion_focus(&mut self) {
+    pub(super) fn sync_empty_insertion_focus(&mut self) {
         if self.state.board.live_thoughts().is_empty() {
             self.insertion_focus = super::InsertionFocus::Active;
             self.layout = None;
@@ -379,6 +389,14 @@ impl BoardApp {
         let Some(thought_id) = self.state.focused_thought else {
             return Vec::new();
         };
+        if self.submission_locked(thought_id) {
+            self.set_warning("thought has a submission in progress");
+            return Vec::new();
+        }
+        if self.selected_thoughts.len() > 1 {
+            self.set_warning("reordering is unavailable for multiple selected thoughts");
+            return Vec::new();
+        }
         let live = self.state.board.live_thoughts();
         let Some(current) = live.iter().position(|thought| thought.id == thought_id) else {
             return Vec::new();
@@ -406,9 +424,32 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        let Some(thought_id) = self.state.focused_thought else {
+        let thought_ids = self.action_thought_ids();
+        if thought_ids.is_empty() {
             return Vec::new();
-        };
+        }
+        if thought_ids.iter().any(|id| self.submission_locked(*id)) {
+            self.set_warning("selected thought has a submission in progress");
+            return Vec::new();
+        }
+        if thought_ids.len() > 1 {
+            let collapse = thought_ids.iter().any(|id| {
+                self.state
+                    .board
+                    .thought(*id)
+                    .is_some_and(|thought| !thought.collapsed)
+            });
+            for thought_id in &thought_ids {
+                self.expanded.remove(thought_id);
+            }
+            return self.reduce(Action::SetCollapsedMany {
+                operation_id: ids.operation_id(),
+                thought_ids,
+                collapsed: collapse,
+                at: clock.now(),
+            });
+        }
+        let thought_id = thought_ids[0];
         let Some(thought) = self.state.board.thought(thought_id) else {
             return Vec::new();
         };
@@ -432,5 +473,15 @@ impl BoardApp {
             collapsed: !collapsed,
             at: clock.now(),
         })
+    }
+
+    pub(super) fn toggle_selection(&mut self) {
+        let Some(thought_id) = self.state.focused_thought else {
+            return;
+        };
+        if !self.selected_thoughts.remove(&thought_id) {
+            self.selected_thoughts.insert(thought_id);
+        }
+        self.layout = None;
     }
 }

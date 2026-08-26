@@ -220,8 +220,8 @@ fn board_shortcuts(app: &BoardApp) -> Vec<(String, &'static str)> {
     let keys = app.keybindings();
     let mut delivery = Vec::new();
     if app.supports_submission() {
-        delivery.push((keys.submit_remove.to_string(), "Submit now & remove"));
-        delivery.push((keys.submit_keep.to_string(), "Submit now & keep"));
+        delivery.push((keys.submit_remove.to_string(), "Submit"));
+        delivery.push((keys.submit_keep.to_string(), "Submit & keep"));
     }
     let mut items = vec![
         (keys.new.to_string(), "New"),
@@ -231,8 +231,9 @@ fn board_shortcuts(app: &BoardApp) -> Vec<(String, &'static str)> {
         (keys.copy.to_string(), "Copy"),
         (keys.cut.to_string(), "Cut"),
         (keys.delete.to_string(), "Delete"),
+        (crate::ui::settings::key_label(keys.select), "Select"),
         (keys.undo.to_string(), "Undo"),
-        (crate::ui::settings::key_label(keys.collapse), "Fold"),
+        (crate::ui::settings::key_label(keys.collapse), "Collapse"),
         (keys.search.to_string(), "Search"),
         (keys.commands.to_string(), "Commands"),
         (keys.help.to_string(), "Close"),

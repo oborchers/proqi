@@ -13,7 +13,8 @@ too small at the rendered README width.
 4. Delete an intentionally temporary thought and show the stable next focus.
 5. Create a new thought in three visible text-entry steps.
 6. Return to board mode, reopen the thought, and append a clarification.
-7. Reorder the thought twice, copy it, and leave the success state visible.
+7. Reorder the thought twice, select it with its neighbor, copy the ordered
+   multi-selection, and leave the success state visible.
 8. End on the composed board without build output, private data, or live network
    behavior.
 

@@ -1,6 +1,7 @@
 //! Responsive board geometry and layout-derived hit targets.
 
 mod chrome;
+mod content;
 mod controls;
 mod scroll;
 
@@ -14,7 +15,6 @@ use crate::{
     ports::{
         agent::{AgentTarget, SubmissionDisposition},
         editor::EditorSnapshot,
-        text_layout::wrap_rows,
     },
 };
 
@@ -39,6 +39,8 @@ pub enum HitTarget {
     Cut,
     /// Delete the focused thought without changing the clipboard.
     Delete,
+    /// Toggle the focused thought in the board selection.
+    Select,
     /// Display one independently verified adjacent target.
     Agent(Direction),
     /// Rename the current session.
@@ -84,6 +86,8 @@ pub struct ThoughtLayout {
     pub overflow: Option<Rect>,
     /// Number of wrapped rows hidden by the cap.
     pub hidden_rows: usize,
+    /// Wrapped rows clipped above the viewport for line-by-line board scrolling.
+    pub content_row_offset: usize,
 }
 
 /// Complete geometry used by both rendering and mouse resolution.
@@ -97,7 +101,11 @@ pub struct LayoutSnapshot {
     pub header: Rect,
     /// Complete footer allocation.
     pub footer: Rect,
-    /// Integration, mode, and durability context row.
+    /// Transient status row.
+    pub footer_status: Rect,
+    /// Durable, always-addressable session name row.
+    pub footer_name: Rect,
+    /// Mode, thought count, and durability row.
     pub footer_context: Rect,
     /// Contextual labeled actions.
     pub footer_actions: Rect,
@@ -109,10 +117,14 @@ pub struct LayoutSnapshot {
     pub insert: Option<Rect>,
     /// First visible live thought.
     pub first_index: usize,
+    /// Wrapped row offset within the first visible thought.
+    pub first_row_offset: usize,
     /// Greatest useful first-visible thought for the current content and viewport.
     pub max_first_index: usize,
     /// Responsive right-aligned session and board summary.
     pub footer_summary: String,
+    /// Responsive session identity.
+    pub footer_session_name: String,
     /// Footer command targets.
     pub controls: Vec<(HitTarget, Rect)>,
     /// Content width supplied to the editor.
@@ -134,8 +146,8 @@ pub struct OverlayLayout {
 
 impl LayoutSnapshot {
     /// Store the rendered footer summary and register its visible session-name target.
-    pub fn configure_footer_summary(&mut self, summary: String, session_name_width: u16) {
-        controls::configure_footer_summary(self, summary, session_name_width);
+    pub fn configure_footer_summary(&mut self, summary: String, session_name: String) {
+        controls::configure_footer_summary(self, summary, session_name);
     }
 
     /// Resolve one terminal cell through the same rectangles used to render.
@@ -192,10 +204,10 @@ impl LayoutSnapshot {
     /// Attach modal geometry after application overlays are known.
     pub fn configure_overlay(&mut self, item_count: usize, preferred_rows: usize) {
         self.overlay = (preferred_rows > 0).then(|| {
-            let required = overlay_height(preferred_rows);
+            let required = controls::overlay_height(preferred_rows);
             let covers_chrome = self.board.height < required;
             let bounds = if covers_chrome { self.area } else { self.board };
-            overlay_layout(bounds, item_count, preferred_rows, covers_chrome)
+            controls::overlay_layout(bounds, item_count, preferred_rows, covers_chrome)
         });
     }
 
@@ -220,51 +232,69 @@ pub fn compute(
     insertion_focused: bool,
     has_agents: bool,
 ) -> LayoutSnapshot {
-    let chrome = chrome::compute(area, state.mode, has_agents);
+    compute_with_density(
+        state,
+        editor,
+        area,
+        requested_first,
+        expanded,
+        insertion_focused,
+        has_agents,
+        false,
+        crate::ui::settings::BoardDensity::Comfortable,
+        0,
+    )
+}
+
+/// Compute board geometry with an explicit spacing preference.
+#[must_use]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "layout inputs are independent viewport contracts"
+)]
+pub fn compute_with_density(
+    state: &AppState,
+    editor: Option<&EditorSnapshot>,
+    area: Rect,
+    requested_first: usize,
+    expanded: &BTreeSet<ThoughtId>,
+    insertion_focused: bool,
+    has_agents: bool,
+    has_status: bool,
+    density: crate::ui::settings::BoardDensity,
+    requested_row_offset: usize,
+) -> LayoutSnapshot {
+    let chrome = chrome::compute(area, state.mode, has_agents, has_status);
     let board = chrome.board;
     let content_width = board.width.saturating_sub(2).max(1);
-    let live = state.board.live_thoughts();
-    let focus_index = state
-        .focused_thought
-        .and_then(|id| live.iter().position(|thought| thought.id == id));
-    let board_mode = matches!(state.mode, crate::application::InteractionMode::Board);
-    let max_first =
-        scroll::maximum_first(state, editor, board, content_width, expanded, board_mode);
-    let mut first = requested_first.min(max_first);
-    if insertion_focused {
-        first = max_first;
-    }
-    if focus_index.is_some_and(|index| index < first) {
-        first = focus_index.unwrap_or(first).min(max_first);
-    }
-    let mut thought_board = board_for_page(board, board_mode && first == max_first);
-    let mut thoughts = place_thoughts(state, editor, thought_board, content_width, first, expanded);
-    if focus_index.is_some_and(|index| !thoughts.iter().any(|layout| layout.index == index)) {
-        first = focus_index.unwrap_or(first).min(max_first);
-        thought_board = board_for_page(board, board_mode && first == max_first);
-        thoughts = place_thoughts(state, editor, thought_board, content_width, first, expanded);
-    }
-    let used_bottom = thoughts
-        .last()
-        .map_or(board.y, |layout| layout.area.bottom());
-    let insert_space = board.bottom().saturating_sub(used_bottom);
-    let insert = (board_mode && first == max_first && insert_space > 0).then(|| {
-        let y = used_bottom.saturating_add(u16::from(insert_space >= 2));
-        Rect::new(board.x, y, board.width, 1)
+    let content = content::visible_content(&content::ContentRequest {
+        state,
+        editor,
+        board,
+        requested_first,
+        content_width,
+        expanded,
+        insertion_focused,
+        density,
+        requested_row_offset,
     });
     LayoutSnapshot {
         area,
         board,
         header: chrome.header,
         footer: chrome.footer,
-        footer_context: chrome.context,
+        footer_status: chrome.status,
+        footer_name: chrome.name,
+        footer_context: chrome.state,
         footer_actions: chrome.actions,
         footer_agents: chrome.agents,
-        thoughts,
-        insert,
-        first_index: first,
-        max_first_index: max_first,
+        thoughts: content.thoughts,
+        insert: content.insert,
+        first_index: content.first,
+        first_row_offset: content.first_row_offset,
+        max_first_index: content.max_first,
         footer_summary: String::new(),
+        footer_session_name: String::new(),
         controls: chrome::controls(
             chrome.actions,
             state.mode,
@@ -284,164 +314,6 @@ pub fn compute(
         content_width,
         overlay: None,
     }
-}
-
-fn board_for_page(board: Rect, reserve_insert: bool) -> Rect {
-    if reserve_insert {
-        Rect::new(
-            board.x,
-            board.y,
-            board.width,
-            board.height.saturating_sub(1),
-        )
-    } else {
-        board
-    }
-}
-
-fn overlay_layout(
-    area: Rect,
-    item_count: usize,
-    preferred_rows: usize,
-    cover_width: bool,
-) -> OverlayLayout {
-    let requested_height = overlay_height(preferred_rows);
-    let height = area.height.clamp(1, requested_height.max(5));
-    let width = if cover_width || height == area.height {
-        area.width
-    } else {
-        area.width.clamp(1, 58)
-    };
-    let modal = Rect::new(
-        area.x + area.width.saturating_sub(width) / 2,
-        area.y + area.height.saturating_sub(height) / 2,
-        width,
-        height,
-    );
-    let items = (0..item_count.min(usize::from(height.saturating_sub(3))))
-        .map(|index| {
-            Rect::new(
-                modal.x.saturating_add(1),
-                modal
-                    .y
-                    .saturating_add(2)
-                    .saturating_add(u16::try_from(index).unwrap_or(u16::MAX)),
-                modal.width.saturating_sub(2),
-                1,
-            )
-        })
-        .collect();
-    OverlayLayout {
-        area: modal,
-        items,
-        close: Rect::new(modal.right().saturating_sub(3), modal.y, 3, 1),
-    }
-}
-
-fn overlay_height(preferred_rows: usize) -> u16 {
-    u16::try_from(preferred_rows.saturating_add(3)).unwrap_or(u16::MAX)
-}
-
-fn place_thoughts(
-    state: &AppState,
-    editor: Option<&EditorSnapshot>,
-    board: Rect,
-    content_width: u16,
-    first: usize,
-    expanded: &BTreeSet<ThoughtId>,
-) -> Vec<ThoughtLayout> {
-    let mut layouts = Vec::new();
-    let cap = responsive_cap(board.height);
-    let live = state.board.live_thoughts();
-    let remaining = live.len().saturating_sub(first);
-    let roomy = usize::from(board.height)
-        >= remaining.saturating_add(remaining.saturating_sub(1).saturating_mul(3));
-    let top_padding = u16::from(roomy && board.height >= 3 && remaining > 0);
-    let mut y = board.y.saturating_add(top_padding);
-    for (index, thought) in live.into_iter().enumerate().skip(first) {
-        if y >= board.bottom() {
-            break;
-        }
-        let separation = if roomy { 3 } else { 1 };
-        if !layouts.is_empty() && y.saturating_add(separation) >= board.bottom() {
-            break;
-        }
-        let separator_before = separator_before(board, &mut y, !layouts.is_empty(), roomy);
-        let editing = editor.is_some_and(|_| state.focused_thought == Some(thought.id));
-        let natural = editor
-            .filter(|_| state.focused_thought == Some(thought.id))
-            .map_or_else(
-                || wrapped_rows(&thought.content, content_width),
-                |snapshot| snapshot.visual_lines.len().max(1),
-            );
-        let explicit_cap = if expanded.contains(&thought.id) {
-            usize::from(board.height.max(1))
-        } else if thought.collapsed {
-            2
-        } else {
-            usize::from(cap)
-        };
-        let visible_rows = natural.min(explicit_cap.max(1));
-        let available = usize::from(board.bottom().saturating_sub(y));
-        let height = u16::try_from(visible_rows.min(available).max(1)).unwrap_or(u16::MAX);
-        let area = Rect::new(board.x, y, board.width, height);
-        let gutter = Rect::new(area.x, area.y, area.width.min(1), area.height);
-        let text_area = Rect::new(
-            area.x.saturating_add(2).min(area.right()),
-            area.y,
-            area.width.saturating_sub(2),
-            area.height,
-        );
-        let hidden_rows = if editing {
-            0
-        } else if natural > usize::from(height) {
-            natural.saturating_sub(usize::from(height).saturating_sub(1))
-        } else {
-            0
-        };
-        let overflow = (hidden_rows > 0).then(|| {
-            Rect::new(
-                text_area.x,
-                area.bottom().saturating_sub(1),
-                text_area.width,
-                1,
-            )
-        });
-        layouts.push(ThoughtLayout {
-            thought_id: thought.id,
-            index,
-            separator_before,
-            area,
-            text_area,
-            gutter,
-            overflow,
-            hidden_rows,
-        });
-        y = y.saturating_add(height);
-    }
-    layouts
-}
-
-fn separator_before(board: Rect, y: &mut u16, preceded: bool, roomy: bool) -> Option<Rect> {
-    preceded.then(|| {
-        let rule_y = if roomy { y.saturating_add(1) } else { *y };
-        let separator = Rect::new(
-            board.x.saturating_add(2).min(board.right()),
-            rule_y,
-            board.width.saturating_sub(2),
-            1,
-        );
-        *y = y.saturating_add(if roomy { 3 } else { 1 });
-        separator
-    })
-}
-
-fn responsive_cap(board_height: u16) -> u16 {
-    board_height.saturating_mul(2).div_ceil(3).max(3)
-}
-
-fn wrapped_rows(content: &str, width: u16) -> usize {
-    wrap_rows(content, usize::from(width.max(1))).len().max(1)
 }
 
 const fn contains(area: Rect, column: u16, row: u16) -> bool {

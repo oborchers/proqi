@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/oborchers/proqi/main/assets/proqi-demo.gif" width="1000" alt="Proqi browsing rich prompt context, deleting a temporary thought, creating and editing a prompt, reordering it, and copying it">
+  <img src="https://raw.githubusercontent.com/oborchers/proqi/main/assets/proqi-demo.gif" width="1000" alt="Proqi browsing rich prompt context, deleting a temporary thought, creating and editing a prompt, reordering it, and copying a multi-selection">
 </p>
 
 Proqi is the thoughtpad for humans working with coding agents. Follow-up prompts
@@ -44,7 +44,8 @@ manual clipboard handoff.
 | --- | --- |
 | Capture the next thought | Paste in board mode or click `+ New thought` to create and focus it |
 | Edit without compromise | Multiline Unicode editing, selection, logical-line deletion, and persistent editor undo |
-| Keep prompts flexible | Reorder by keyboard, mouse, or drag, then fold long context without changing its content |
+| Keep prompts flexible | Reorder by keyboard, mouse, or drag, then collapse long context without changing its content |
+| Act on several prompts | Select thoughts with `Space`, then copy, cut, delete, collapse, or submit them as one ordered prompt |
 | Survive interruption | Autosave, exact resume guidance, session search, recovery export, and undo after restart |
 | Work beside any agent | Native copy and non-destructive cut work without an integration or account |
 | Pass local context | Drop files as paths or paste clipboard images into private session storage |
@@ -55,7 +56,9 @@ manual clipboard handoff.
 The board is a responsive one-column interface. Thoughts use their natural
 height until the viewport cap is reached. Rapid pane resizing preserves focus,
 the logical cursor, selection, and valid scroll bounds. Every core action has a
-keyboard and mouse path.
+keyboard and mouse path. The footer assigns separate responsive rows to
+transient status, the session name, board state, actions, and verified agents,
+so a long session name cannot cover an error or remove the rename target.
 
 Images, files, and large pastes stay compact while editing. Proqi renders
 `[Image 1]`, `[File 1]`, or
@@ -183,10 +186,11 @@ fallbacks remain available when a terminal cannot report a modifier.
 | `J` / `K`, `Shift+↑` / `Shift+↓`, or drag | Reorder the focused thought |
 | `y` or `Primary+C` | Copy the complete thought |
 | `x` or `Primary+X` | Cut only after confirmed clipboard success |
-| `s`, then direction when needed | Submit and remove only after acceptance |
-| `S`, then direction when needed | Submit and keep the thought |
+| `Space` | Add or remove the focused thought from the multi-selection |
+| `s`, then direction when needed | Submit selected thoughts and remove only after acceptance |
+| `S`, then direction when needed | Submit selected thoughts and keep them |
 | `u` | Undo the latest board operation |
-| `Space` | Fold or expand long context |
+| `c` | Collapse or expand long context |
 | `/` | Search thought content |
 | `:` | Search commands |
 | `?` | Open contextual help |
@@ -248,11 +252,13 @@ left, and right. A delivery control appears only after workspace, tab, geometry,
 edge overlap, agent kind, session identity, readiness, and protocol capability
 have been verified through Herdr's structured interface.
 
-Both actions use Herdr's semantic prompt operation:
+Both actions use Herdr's semantic prompt operation. When several thoughts are
+selected, Proqi sends one prompt containing their exact content in board order,
+separated by one blank line:
 
-- `s Submit now & remove` submits immediately and deletes the thought only after an accepted matching
-  receipt.
-- `S Submit now & keep` submits immediately and retains the thought.
+- `s Submit` submits immediately and deletes the source thoughts only after an
+  accepted matching receipt.
+- `S Submit & keep` submits immediately and retains the source thoughts.
 
 Both actions work while the receiving agent is working. The receiving harness
 decides whether that input steers the current turn or becomes follow-up input.
@@ -273,6 +279,8 @@ proqi --json sessions list
 printf '%s' 'Review this exact prompt.' | proqi --json thoughts add <session-id>
 proqi --json thoughts list <session-id>
 proqi --json thoughts inspect <session-id> <thought-id>
+printf '%s' 'Exact replacement.' | proqi --json thoughts replace <session-id> <thought-id> --expected-sha256 <digest>
+proqi --json thoughts collapse <session-id> <thought-id> --collapsed true
 proqi --json thoughts move <session-id> <thought-id> <zero-based-position>
 proqi --json thoughts send <source-session> <thought-id> <destination-session>
 proqi --json thoughts send <source-session> <thought-id> <destination-session> --remove
@@ -280,10 +288,16 @@ proqi --json thoughts delete <session-id> <thought-id>
 proqi --json thoughts undo <session-id>
 ```
 
-Mutations accept typed operation IDs for durable idempotency. Commands aimed at
-an active session are forwarded through its verified local owner channel on
-macOS and Linux. They never write around the owning reducer. Unsupported or
-unverifiable forwarding returns `session_busy`.
+Mutations accept typed operation IDs for durable idempotency. Reads synchronize
+with an active owner before inspecting SQLite. Rename, add, exact replacement,
+collapse, move, delete, undo, and redo commands aimed at an active session are
+forwarded through its verified local owner channel on macOS and Linux. They
+never write around the owning reducer. An external replacement is an ordinary
+editor revision, so it participates in persistent undo and redo. It requires
+the `content_sha256` returned by list or inspect unless the caller deliberately
+uses `--force`. A thought with an in-flight agent submission is locked against
+both TUI and CLI mutation. Unsupported or unverifiable forwarding returns
+`session_busy`.
 
 Cross-session send accepts a canonical session identifier or unique exact name.
 It copies canonical content and folded-context annotations. With `--remove`,
@@ -414,6 +428,7 @@ be customized while portable editor shortcuts remain available:
 ```toml
 check_for_updates = true
 theme = "auto"
+density = "comfortable" # or "compact"
 
 [keybindings]
 new = "n"
@@ -428,7 +443,8 @@ focus_up = "k"
 focus_down = "j"
 move_up = "K"
 move_down = "J"
-collapse = " "
+collapse = "c"
+select = " "
 search = "/"
 commands = ":"
 help = "?"

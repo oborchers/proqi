@@ -8,7 +8,7 @@ use proqi::{
     },
 };
 
-fn target(direction: Direction, pane_id: &str) -> AgentTarget {
+pub(super) fn target(direction: Direction, pane_id: &str) -> AgentTarget {
     let source = PaneContext {
         workspace_id: "w1".to_owned(),
         tab_id: "w1:t1".to_owned(),
@@ -42,13 +42,13 @@ fn target(direction: Direction, pane_id: &str) -> AgentTarget {
     }
 }
 
-fn prepare_thought(fixture: &mut Fixture) {
+pub(super) fn prepare_thought(fixture: &mut Fixture) {
     let sequence = fixture.paste("exact prompt\nGrüße 第二行");
     fixture.app.acknowledge_persistence(sequence, true);
     fixture.input(UiInput::Key(UiKey::Escape));
 }
 
-fn start_submission(
+pub(super) fn start_submission(
     fixture: &mut Fixture,
     effects: &[Effect],
 ) -> proqi::ports::agent::SubmissionRequest {
@@ -67,7 +67,7 @@ fn start_submission(
     request.clone()
 }
 
-fn finish_submission(
+pub(super) fn finish_submission(
     fixture: &mut Fixture,
     request: &proqi::ports::agent::SubmissionRequest,
     result: Result<SubmissionReceipt, AgentError>,
@@ -128,6 +128,68 @@ fn failed_submission_preserves_thought_and_accepted_remove_is_undoable() {
     assert!(fixture.app.state.board.live_thoughts().is_empty());
 
     fixture.input(UiInput::Key(UiKey::Undo));
+    assert_eq!(fixture.app.state.board.live_thoughts().len(), 1);
+}
+
+#[test]
+fn accepted_receipt_ignores_volatile_target_metadata() {
+    let mut fixture = Fixture::new();
+    prepare_thought(&mut fixture);
+    let target = target(Direction::Right, "w1:p2");
+    fixture
+        .app
+        .complete_agent_discovery(Ok(vec![target.clone()]));
+    let effects = fixture.effects(UiInput::Key(UiKey::Character('s')));
+    let request = start_submission(&mut fixture, &effects);
+    let mut revalidated = target;
+    revalidated.readiness = AgentState::Blocked;
+    revalidated.agent_name = "Renamed agent".to_owned();
+    revalidated.rect.x = revalidated.rect.x.saturating_add(1);
+    revalidated.source.rect.width = revalidated.source.rect.width.saturating_add(1);
+
+    let completion = finish_submission(
+        &mut fixture,
+        &request,
+        Ok(SubmissionReceipt {
+            submission_id: request.submission_id,
+            target: revalidated,
+            post_state: Some(AgentState::Unknown),
+        }),
+    );
+    assert!(matches!(
+        completion.as_slice(),
+        [
+            Effect::StoreIntegrationContext { .. },
+            Effect::CommitBoardOperation(_)
+        ]
+    ));
+    assert!(fixture.app.state.board.live_thoughts().is_empty());
+}
+
+#[test]
+fn accepted_receipt_rejects_a_different_stable_target() {
+    let mut fixture = Fixture::new();
+    prepare_thought(&mut fixture);
+    let target = target(Direction::Right, "w1:p2");
+    fixture
+        .app
+        .complete_agent_discovery(Ok(vec![target.clone()]));
+    let effects = fixture.effects(UiInput::Key(UiKey::Character('s')));
+    let request = start_submission(&mut fixture, &effects);
+    let mut different = target;
+    different.agent_session_id = "different-session".to_owned();
+
+    let completion = finish_submission(
+        &mut fixture,
+        &request,
+        Ok(SubmissionReceipt {
+            submission_id: request.submission_id,
+            target: different,
+            post_state: Some(AgentState::Working),
+        }),
+    );
+
+    assert!(completion.is_empty());
     assert_eq!(fixture.app.state.board.live_thoughts().len(), 1);
 }
 
@@ -244,8 +306,8 @@ fn controls_and_hint_disappear_when_discovery_is_unsupported() {
     let shown = draw(&mut fixture, 120, 6);
     let rendered = text(shown.backend().buffer());
     assert!(rendered.contains("← Codex"));
-    assert!(rendered.contains("s Submit now & remove"));
-    assert!(rendered.contains("S Submit now & keep"));
+    assert!(rendered.contains("s Submit"));
+    assert!(rendered.contains("S Submit & keep"));
     assert!(!rendered.contains("working"));
     assert!(!rendered.contains(" Send"));
 
@@ -369,7 +431,7 @@ fn accepted_submission_is_kept_when_the_journal_cannot_record_the_outcome() {
 }
 
 #[test]
-fn accepted_remove_keeps_a_thought_edited_during_delivery() {
+fn in_flight_submission_locks_editing_until_the_receipt_is_journaled() {
     let mut fixture = Fixture::new();
     prepare_thought(&mut fixture);
     let target = target(Direction::Left, "w1:p2");
@@ -380,7 +442,19 @@ fn accepted_remove_keeps_a_thought_edited_during_delivery() {
     let request = start_submission(&mut fixture, &effects);
 
     fixture.input(UiInput::Key(UiKey::Enter));
+    assert_eq!(
+        fixture.app.status_text(),
+        Some("thought has a submission in progress")
+    );
     fixture.input(UiInput::Key(UiKey::Character('!')));
+    assert_eq!(
+        fixture.app.interaction_mode(),
+        proqi::application::InteractionMode::Board
+    );
+    assert_eq!(
+        fixture.app.state.board.live_thoughts()[0].content,
+        "exact prompt\nGrüße 第二行"
+    );
     let completion = finish_submission(
         &mut fixture,
         &request,
@@ -391,17 +465,12 @@ fn accepted_remove_keeps_a_thought_edited_during_delivery() {
         }),
     );
 
-    assert!(
-        matches!(
-            completion.as_slice(),
-            [Effect::StoreIntegrationContext { .. }]
-        ),
-        "unexpected completion: {completion:?}"
-    );
-    assert_eq!(fixture.app.state.board.live_thoughts().len(), 1);
-    assert!(
-        fixture.app.status_text().is_some_and(
-            |status| status.ends_with("thought changed during submission and was kept")
-        )
-    );
+    assert!(matches!(
+        completion.as_slice(),
+        [
+            Effect::StoreIntegrationContext { .. },
+            Effect::CommitBoardOperation(_)
+        ]
+    ));
+    assert!(fixture.app.state.board.live_thoughts().is_empty());
 }

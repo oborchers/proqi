@@ -102,6 +102,20 @@ CREATE TABLE submission_attempts (
     updated_at INTEGER NOT NULL
 ) STRICT;
 
+CREATE TABLE submission_attempt_items (
+    submission_id BLOB NOT NULL REFERENCES submission_attempts(id) ON DELETE CASCADE,
+    thought_id BLOB NOT NULL REFERENCES thoughts(id) ON DELETE CASCADE,
+    ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+    source_digest BLOB NOT NULL CHECK (length(source_digest) = 32),
+    active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
+    PRIMARY KEY(submission_id, ordinal),
+    UNIQUE(submission_id, thought_id)
+) STRICT;
+
+CREATE UNIQUE INDEX submission_attempt_items_active_thought
+ON submission_attempt_items(thought_id)
+WHERE active = 1;
+
 CREATE UNIQUE INDEX submission_attempts_active_thought
 ON submission_attempts(thought_id)
 WHERE state IN ('prepared', 'sending');
@@ -115,11 +129,12 @@ CREATE VIRTUAL TABLE session_search USING fts5(
 );
 
 INSERT INTO schema_meta(singleton, schema_version, storage_protocol, migrated_at)
-VALUES (1, 4, 4, 0);
+VALUES (1, 5, 5, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (1, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (2, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (3, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (4, 0);
+INSERT INTO migration_history(version, applied_at) VALUES (5, 0);
 ";
 
 pub(super) const MIGRATION_2: &str = r"
@@ -158,4 +173,26 @@ INSERT INTO migration_history(version, applied_at) VALUES (3, 0);
 pub(super) const MIGRATION_4: &str = r"
 UPDATE schema_meta SET schema_version = 4, storage_protocol = 4;
 INSERT INTO migration_history(version, applied_at) VALUES (4, 0);
+";
+
+pub(super) const MIGRATION_5: &str = r"
+CREATE TABLE submission_attempt_items (
+    submission_id BLOB NOT NULL REFERENCES submission_attempts(id) ON DELETE CASCADE,
+    thought_id BLOB NOT NULL REFERENCES thoughts(id) ON DELETE CASCADE,
+    ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+    source_digest BLOB NOT NULL CHECK (length(source_digest) = 32),
+    active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
+    PRIMARY KEY(submission_id, ordinal),
+    UNIQUE(submission_id, thought_id)
+) STRICT;
+INSERT INTO submission_attempt_items(submission_id, thought_id, ordinal, source_digest, active)
+SELECT id, thought_id, 0, source_digest,
+       CASE WHEN state IN ('prepared', 'sending') THEN 1 ELSE 0 END
+FROM submission_attempts;
+DROP INDEX submission_attempts_active_thought;
+CREATE UNIQUE INDEX submission_attempt_items_active_thought
+ON submission_attempt_items(thought_id)
+WHERE active = 1;
+UPDATE schema_meta SET schema_version = 5, storage_protocol = 5;
+INSERT INTO migration_history(version, applied_at) VALUES (5, 0);
 ";

@@ -23,6 +23,8 @@ if {$binary eq "" || $state eq ""} {
 }
 
 spawn -noecho $binary --state-dir $state -c
+set terminal_channel [exp_open -leaveopen]
+exec stty rows 30 columns 92 <@ $terminal_channel
 
 # The recorder is a nested PTY, so answer Proqi's bounded OSC palette probe as
 # the reference dark terminal. These are the same default colors used by the
@@ -67,14 +69,18 @@ send -- "K"
 pause 700
 send -- "K"
 pause 700
+send -- " "
+pause 500
+send -- "k"
+pause 500
+send -- " "
+pause 700
 send -- "y"
 pause 1600
 
 expect_background
 send -- "q"
 expect -re {Resume later:}
-set child [exp_pid]
-exec kill -KILL $child
 expect eof
 wait
 exit 0

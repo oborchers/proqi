@@ -8,7 +8,8 @@ use crate::{
     ports::{control::ControlMutation, store::Store},
 };
 
-use super::{CliError, Outcome, RuntimeContext, forwarding, parse_operation_id, parse_thought_id};
+use super::helpers::{parse_operation_id, parse_thought_id};
+use super::{CliError, Outcome, RuntimeContext, forwarding};
 
 pub(super) fn send_thought(
     context: &mut RuntimeContext,

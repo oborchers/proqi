@@ -1,5 +1,6 @@
 //! Terminal-independent session lifecycle and scriptable mutation service.
 
+mod external_edits;
 mod sessions;
 mod thoughts;
 

@@ -170,6 +170,28 @@ pub(super) enum ThoughtCommand {
         #[arg(long, value_name = "OP_ID")]
         operation_id: Option<String>,
     },
+    /// Replace standard input as one exact editor revision.
+    Replace {
+        session: String,
+        thought: String,
+        /// Required SHA-256 of current content.
+        #[arg(long, value_name = "HEX", required_unless_present = "force")]
+        expected_sha256: Option<String>,
+        /// Deliberately replace without a content precondition.
+        #[arg(long, conflicts_with = "expected_sha256")]
+        force: bool,
+    },
+    /// Set the durable collapsed state of one thought.
+    Collapse {
+        session: String,
+        thought: String,
+        /// True collapses; false expands.
+        #[arg(long, action = clap::ArgAction::Set)]
+        collapsed: bool,
+        /// Durable idempotency identity.
+        #[arg(long, value_name = "OP_ID")]
+        operation_id: Option<String>,
+    },
     /// Move one thought to a zero-based position.
     Move {
         session: String,

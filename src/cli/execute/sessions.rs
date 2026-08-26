@@ -31,8 +31,11 @@ pub(super) fn execute_sessions(
         } => {
             let mut service = session_service(context)?;
             let id = service.resolve_session(&session, true)?;
-            let name = if clear { None } else { name.as_deref() };
-            service.rename_session(id, name)?;
+            let name = if clear { None } else { name };
+            drop(service);
+            if !super::forwarding::rename_session(context, id, name.clone())? {
+                session_service(context)?.rename_session(id, name.as_deref())?;
+            }
             Ok(simple_session_outcome(id, "renamed"))
         }
         SessionCommand::Trash { session } => manage_session(context, &session, "trashed"),

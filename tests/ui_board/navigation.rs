@@ -134,7 +134,7 @@ fn durable_blank_thought_uses_board_commands_instead_of_implicit_typing() {
 }
 
 #[test]
-fn blocked_down_navigation_from_the_last_editor_focuses_the_insertion_row() {
+fn blocked_down_navigation_from_the_last_editor_creates_and_edits_a_blank() {
     let mut fixture = Fixture::new();
     durable_thought(&mut fixture, "last thought");
     fixture.input(UiInput::Key(UiKey::Enter));
@@ -146,13 +146,12 @@ fn blocked_down_navigation_from_the_last_editor_focuses_the_insertion_row() {
     fixture.input(visual(CursorMovement::VisualDown, false));
     fixture.input(visual(CursorMovement::VisualDown, false));
 
-    assert_eq!(
+    assert!(matches!(
         fixture.app.interaction_mode(),
-        proqi::application::InteractionMode::Board
-    );
-    assert!(fixture.app.insertion_focused());
-    let layout = fixture.app.prepare_frame(Rect::new(0, 0, 40, 7));
-    assert!(layout.insert.is_some());
+        proqi::application::InteractionMode::Edit { .. }
+    ));
+    assert_eq!(fixture.app.state.board.live_thoughts().len(), 2);
+    assert_eq!(fixture.app.editor_snapshot().expect("editor").content, "");
 }
 
 #[test]
@@ -262,6 +261,28 @@ fn an_underfilled_board_does_not_scroll_away_its_content() {
 }
 
 #[test]
+fn a_long_thought_scrolls_one_wrapped_row_at_a_time() {
+    let mut fixture = Fixture::new();
+    durable_thought(
+        &mut fixture,
+        "line 0\nline 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7",
+    );
+    let area = Rect::new(0, 0, 42, 9);
+    let initial = fixture.app.prepare_frame(area);
+    assert!(initial.thoughts[0].hidden_rows > 0);
+    assert_eq!(initial.first_row_offset, 0);
+
+    fixture.pointer(5, 2, PointerKind::ScrollDown);
+    let once = fixture.app.prepare_frame(area);
+    assert_eq!(once.first_index, 0);
+    assert_eq!(once.first_row_offset, 1);
+
+    fixture.pointer(5, 2, PointerKind::ScrollDown);
+    let twice = fixture.app.prepare_frame(area);
+    assert_eq!(twice.first_row_offset, 2);
+}
+
+#[test]
 fn overflowing_board_clamps_to_a_useful_last_page_and_resets_after_resize() {
     let mut fixture = Fixture::new();
     for index in 0..8 {
@@ -341,10 +362,10 @@ fn current_session_can_be_renamed_from_the_palette_and_footer() {
     );
     fixture.app.complete_session_rename(None, Ok(()));
     let confirmation = draw_theme(&mut fixture, 70, 10, ThemePreference::Dark);
-    assert!(text(confirmation.backend().buffer()).lines().any(|line| {
-        line.contains("session renamed")
-            && line.contains("Agent research · 1 thought · board · saving")
-    }));
+    let confirmation_text = text(confirmation.backend().buffer());
+    assert!(confirmation_text.contains("session renamed"));
+    assert!(confirmation_text.contains("Agent research"));
+    assert!(confirmation_text.contains("1 thought · board · saving"));
 
     let layout = fixture.app.prepare_frame(Rect::new(0, 0, 70, 10));
     let (_, area) = layout
@@ -401,5 +422,7 @@ fn failed_session_rename_restores_the_previous_durable_name() {
 
     fixture.input(UiInput::Key(UiKey::Escape));
     let restored = draw_theme(&mut fixture, 70, 10, ThemePreference::Dark);
-    assert!(text(restored.backend().buffer()).contains("Durable · 1 thought · board · saving"));
+    let restored_text = text(restored.backend().buffer());
+    assert!(restored_text.contains("Durable"));
+    assert!(restored_text.contains("1 thought · board · saving"));
 }

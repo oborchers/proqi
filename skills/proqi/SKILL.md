@@ -28,7 +28,10 @@ Act only after explicit invocation. Use the scriptable CLI, never TUI output.
    metadata files. The installed JSON CLI is the only application boundary.
 7. Perform only the requested mutation. Preserve operation receipts so the
    user can identify and reverse the change.
-8. Do not trigger update checks. JSON commands never check implicitly. Run an
+8. Treat `thought_locked` as authoritative. A thought with an in-flight agent
+   submission cannot be changed until its owner journals a terminal outcome.
+   Do not retry or bypass that lock.
+9. Do not trigger update checks. JSON commands never check implicitly. Run an
    explicit update command only when the user specifically requests one and the
    installed capabilities advertise it.
 
@@ -69,6 +72,28 @@ List thoughts only when requested, then inspect one specified thought:
 ```console
 proqi --json thoughts list ses_06g30t7dv5qv55n1ppn3clis3k
 proqi --json thoughts inspect ses_06g30t7dv5qv55n1ppn3clis3k tht_06g30t8fudrq55fdkk348i7388
+```
+
+List and inspect synchronize with an active session owner before reading. Both
+return `content_sha256`. Use that digest as the precondition for exact
+replacement so a concurrent human edit cannot be overwritten:
+
+```text
+argv:  ["proqi", "--json", "thoughts", "replace",
+        "ses_06g30t7dv5qv55n1ppn3clis3k",
+        "tht_06g30t8fudrq55fdkk348i7388",
+        "--expected-sha256", "<digest returned by inspect>"]
+stdin: Exact replacement content.
+```
+
+Use `--force` only when the user explicitly asks to replace the current content
+regardless of intervening edits. It never bypasses a submission lock. Exact
+replacement is an editor revision and can be reversed with thought-scoped undo.
+
+Set durable collapsed presentation explicitly when requested:
+
+```console
+proqi --json thoughts collapse ses_06g30t7dv5qv55n1ppn3clis3k tht_06g30t8fudrq55fdkk348i7388 --collapsed true
 ```
 
 Add exact content by direct process execution, with the prompt as standard

@@ -1,5 +1,7 @@
 //! Focused domain mutations used by the reducer router.
 
+pub(super) mod bulk;
+
 use super::error::{ApplicationError, ApplicationResult, FailureCode};
 use crate::{
     application::model::{AppState, ClipboardIntent, Effect, InteractionMode, PendingClipboard},

@@ -27,6 +27,8 @@ set context [join {
 } "\n"]
 
 spawn -noecho $binary --state-dir $state -c
+set terminal_channel [exp_open -leaveopen]
+exec stty rows 30 columns 92 <@ $terminal_channel
 expect -re {release follow-ups}
 after 300
 
@@ -52,8 +54,6 @@ after 300
 
 send -- "q"
 expect -re {Resume later:}
-set child [exp_pid]
-exec kill -KILL $child
 expect eof
 wait
 exit 0

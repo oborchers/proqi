@@ -44,6 +44,11 @@ pub enum BoardOperationKind {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "mutation")]
 pub enum BoardMutation {
+    /// Apply several structural changes as one reversible history entry.
+    Batch {
+        /// Ordered mutations whose combined result preserves board invariants.
+        mutations: Vec<BoardMutation>,
+    },
     /// Add a new thought or restore the same previously undone creation.
     AddThought {
         /// Complete thought snapshot.
@@ -167,6 +172,11 @@ impl SessionBoard {
         at: Timestamp,
     ) -> Result<(), DomainError> {
         match mutation {
+            BoardMutation::Batch { mutations } => {
+                for mutation in mutations {
+                    self.apply_mutation_in_place(mutation, at)?;
+                }
+            }
             BoardMutation::AddThought { thought } => self.add_or_restore(thought.clone(), at)?,
             BoardMutation::SetDeletion {
                 thought_id,

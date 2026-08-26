@@ -163,21 +163,20 @@ manager:
    be an editor-like application or a TUI application similar to...
    24 more lines                                                   expand
 
- n new   enter edit   y copy   x cut   s send   u undo   ? help
+ n new   y copy   x cut   space select   c collapse   s submit
 ```
 
 The green focus gutter is the strongest routine visual element. Notes have no
 heading row or decorative card chrome. Whole-thought controls can appear for
 the focused or hovered thought without permanently consuming a row.
 
-The board spends no permanent row on a repeated product header. The footer
-combines the optional session name, thought count, mode, and durability into one
-responsive summary. Separate rows contain labeled actions and only the verified
-agent targets that currently exist. Transient information and success messages
-share the left side of the summary row. Warnings and errors temporarily replace
-the summary so they can use the complete row. Status never changes footer
-height. Narrow panes shorten or remove secondary labels before any two regions
-can collide.
+The board spends no permanent row on a repeated product header. The footer can
+allocate up to five responsive bands: transient status, session name, thought
+count with mode and durability, labeled actions, and only the verified agent
+targets that currently exist. Empty optional bands consume no row. The session
+name remains a visible rename target at every supported height and truncates
+without covering status or board state. Narrow panes shorten secondary labels
+before any two regions can collide.
 
 ### Revision and operation history
 
@@ -265,9 +264,9 @@ Short and medium thoughts therefore remain fully readable in the board. This
 preserves the useful quality of the current Sublime Text scratchpad, where the
 next prompts can be read without opening them one by one.
 
-Adjacent visible thoughts use a deliberate three-row cadence when the viewport
-has room: one blank row, one quiet horizontal rule, and one blank row. Shallow
-panes compress that cadence to the rule alone. The rule belongs to the board
+Adjacent visible thoughts use a deliberate two-row cadence when the viewport
+has room: one quiet horizontal rule followed by one blank row. Shallow panes
+and the optional compact density use the rule alone. The rule belongs to the board
 presentation, is never a card border or mouse target, and is allocated only
 when the following thought can still receive a content row.
 
@@ -285,7 +284,9 @@ A collapsed thought shows:
 
 Expanding a long thought gives it the available board height without making
 other thoughts unreachable. Editing it opens the full editor viewport with
-internal scrolling.
+internal scrolling. Mouse-wheel board scrolling advances one wrapped row at a
+time before advancing to the next thought. It cannot overscroll an underfilled
+board or hide the final insertion row.
 
 Collapse is a presentation state. It never modifies content.
 
@@ -367,6 +368,8 @@ symbol. The user never needs a second action before typing.
 The insertion row is part of keyboard focus order. Moving down from the last
 thought focuses `+ New thought`. `Enter` or `n` creates a durable blank. Moving
 up or pressing `Esc` leaves the insertion row without creating anything.
+When an editor is already at the final thought, the second consecutive blocked
+downward movement creates the blank and enters its editor directly.
 
 When the board contains no thoughts, the insertion row owns keyboard focus by
 default. Printable keys remain board commands on the insertion row and on a
@@ -386,6 +389,23 @@ error.
 
 Deleting removes a thought without changing the clipboard. Both cut and delete
 can be undone after restarting the application.
+
+### Multi-selection
+
+`Space` toggles the focused thought in a visible board selection. Selected
+thoughts retain their board positions and receive the same non-color focus cue
+as the active thought. Copy, cut, delete, collapse, and adjacent-agent
+submission address the selected set in board order. Each structural action is
+one persistent board operation and therefore one undo step. Reordering remains
+a single-thought action.
+
+Copy and submission concatenate exact thought content with one blank line
+between thoughts and no generated labels. A multi-thought Herdr submission is
+one semantic prompt request, not several deliveries. For submit and remove, all
+unchanged source thoughts are removed together only after the matching accepted
+receipt is durably journaled. Every source thought is locked against TUI and CLI
+mutation from submission intent until the attempt reaches a terminal journaled
+state.
 
 ### Submit to an adjacent agent
 
@@ -416,16 +436,16 @@ Directional lookup is never trusted without these independent checks. The
 product never guesses a target and never falls back to raw input injection.
 
 Prompt delivery has two dispositions over the same immediate semantic submit
-operation. `Submit now & remove` is the default and deletes the thought only
-after an accepted matching receipt. `Submit now & keep` sends the same prompt
-and retains the thought. Both may submit while the agent is working. The
+operation. `Submit` is the default and deletes the source thought or selected
+thoughts only after an accepted matching receipt. `Submit & keep` sends the
+same prompt and retains the source. Both may submit while the agent is working. The
 receiving harness decides whether the input steers the current turn or becomes
 follow-up input. Proqi verifies at submission time that the target exposes
 Herdr's semantic request and receipt contract. It never substitutes raw key
 injection.
 
 Each verified adjacent target appears once in the integration row, without its
-readiness label. `s Submit now & remove` and `S Submit now & keep` are shown only when
+readiness label. `s Submit` and `S Submit & keep` are shown only when
 semantic submission is available. If exactly one eligible target supports an
 action, that action is direct. If several support it, delivery enters a
 directional targeting state.
@@ -471,11 +491,12 @@ bindings are:
 | Copy thought | `y` | Click copy control |
 | Cut thought | `x` | Click cut control |
 | Delete thought | `d` | Click delete control |
-| Submit and remove after acceptance | `s`, when supported, then direction when needed | Click verified Submit & remove control |
+| Select or deselect thought | `Space` | Click the thought, then use the selection control |
+| Submit and remove after acceptance | `s`, when supported, then direction when needed | Click verified Submit control |
 | Submit and keep thought | `S`, when supported, then direction when needed | Click verified Submit & keep control |
 | Undo board action | `u` | Click undo control when visible |
 | Move thought | `J` and `K`, or `Shift+↑` and `Shift+↓` | Drag thought handle |
-| Expand or collapse | `Space` | Click overflow indicator |
+| Expand or collapse | `c` | Click overflow indicator |
 | Search | `/` | Click search control |
 | Help | `?` | Click help control |
 | Exit | `q` | Click exit control |

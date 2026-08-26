@@ -27,7 +27,7 @@ use proqi::{
         store::{
             DurableIdentity, MigrationMode, OperationBatch, STORAGE_PROTOCOL_VERSION,
             SUPPORTED_SCHEMA_VERSION, SessionQuery, Store, StoreError, SubmissionAttempt,
-            SubmissionAttemptState, SubmissionOutcome,
+            SubmissionAttemptState, SubmissionOutcome, SubmissionSource,
         },
     },
 };
@@ -125,6 +125,8 @@ fn create_thought(
     thought_id
 }
 
+#[path = "sqlite_store/bulk.rs"]
+mod bulk;
 #[path = "sqlite_store/compaction.rs"]
 mod compaction;
 #[path = "sqlite_store/concurrency.rs"]

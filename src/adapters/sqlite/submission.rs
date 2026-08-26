@@ -16,6 +16,9 @@ pub(super) fn prepare(
     transaction: &Transaction<'_>,
     attempt: &SubmissionAttempt,
 ) -> Result<(), StoreError> {
+    let first_source = attempt.sources.first().ok_or_else(|| {
+        StoreError::Integrity("submission must contain at least one source thought".to_owned())
+    })?;
     transaction
         .execute(
             "INSERT INTO submission_attempts(
@@ -26,8 +29,8 @@ pub(super) fn prepare(
             params![
                 attempt.id.database_bytes().as_slice(),
                 attempt.session_id.database_bytes().as_slice(),
-                attempt.thought_id.database_bytes().as_slice(),
-                attempt.source_digest.as_slice(),
+                first_source.thought_id.database_bytes().as_slice(),
+                attempt.payload_digest.as_slice(),
                 i64::try_from(attempt.source_sequence.get()).unwrap_or(i64::MAX),
                 attempt.disposition.as_str(),
                 attempt.direction.as_str(),
@@ -39,6 +42,21 @@ pub(super) fn prepare(
             ],
         )
         .map_err(map_sql_error)?;
+    for (ordinal, source) in attempt.sources.iter().enumerate() {
+        transaction
+            .execute(
+                "INSERT INTO submission_attempt_items(
+                    submission_id, thought_id, ordinal, source_digest, active
+                 ) VALUES (?1, ?2, ?3, ?4, 1)",
+                params![
+                    attempt.id.database_bytes().as_slice(),
+                    source.thought_id.database_bytes().as_slice(),
+                    i64::try_from(ordinal).unwrap_or(i64::MAX),
+                    source.source_digest.as_slice(),
+                ],
+            )
+            .map_err(map_sql_error)?;
+    }
     Ok(())
 }
 
@@ -81,7 +99,8 @@ pub(super) fn finish(
             ],
         )
         .map_err(map_sql_error)?;
-    require_one(changed, id)
+    require_one(changed, id)?;
+    deactivate_sources(transaction, id)
 }
 
 pub(super) fn recover(
@@ -99,6 +118,25 @@ pub(super) fn recover(
                  updated_at = ?2
              WHERE session_id = ?1 AND state IN ('prepared', 'sending')",
             params![session_id.database_bytes().as_slice(), at.as_millis()],
+        )
+        .map_err(map_sql_error)?;
+    transaction
+        .execute(
+            "UPDATE submission_attempt_items SET active = 0
+             WHERE submission_id IN (
+                 SELECT id FROM submission_attempts WHERE session_id = ?1
+             )",
+            params![session_id.database_bytes().as_slice()],
+        )
+        .map_err(map_sql_error)?;
+    Ok(())
+}
+
+fn deactivate_sources(transaction: &Transaction<'_>, id: SubmissionId) -> Result<(), StoreError> {
+    transaction
+        .execute(
+            "UPDATE submission_attempt_items SET active = 0 WHERE submission_id = ?1",
+            [id.database_bytes().as_slice()],
         )
         .map_err(map_sql_error)?;
     Ok(())

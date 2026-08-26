@@ -3,12 +3,14 @@
 mod capabilities;
 mod diagnostics;
 mod doctor;
+mod external_thoughts;
 mod forwarding;
+mod helpers;
 mod sessions;
 mod transfer;
 mod update;
 
-use std::{io::Read, process::ExitCode, str::FromStr};
+use std::process::ExitCode;
 
 use clap::CommandFactory;
 use clap_complete::generate;
@@ -17,7 +19,7 @@ use serde_json::{Value, json};
 use crate::{
     adapters::terminal,
     application::SessionService,
-    domain::{OperationId, ThoughtId, UndoScope},
+    domain::{ThoughtId, UndoScope},
     ports::{
         environment::Clock,
         store::{CommitReceipt, DurableIdentity},
@@ -30,11 +32,12 @@ use super::{
     runtime::RuntimeContext,
 };
 
+use helpers::{
+    content_digest_hex, excerpt, parse_operation_id, parse_thought_id, read_standard_input,
+};
 use sessions::{browser_items, cancelled_browser, execute_sessions, list_sessions, opened_session};
 
-const MAX_THOUGHT_STDIN_BYTES: usize = 128 * 1024;
-
-struct Outcome {
+pub(super) struct Outcome {
     data: Value,
     human: String,
 }
@@ -209,6 +212,30 @@ fn execute_thoughts(
             thought,
             operation_id,
         } => delete_thought(context, &session, &thought, operation_id.as_deref()),
+        ThoughtCommand::Replace {
+            session,
+            thought,
+            expected_sha256,
+            force,
+        } => external_thoughts::replace(
+            context,
+            &session,
+            &thought,
+            expected_sha256.as_deref(),
+            force,
+        ),
+        ThoughtCommand::Collapse {
+            session,
+            thought,
+            collapsed,
+            operation_id,
+        } => external_thoughts::collapse(
+            context,
+            &session,
+            &thought,
+            collapsed,
+            operation_id.as_deref(),
+        ),
         ThoughtCommand::Move {
             session,
             thought,
@@ -245,6 +272,9 @@ fn execute_thoughts(
 fn list_thoughts(context: &mut RuntimeContext, reference: &str) -> Result<Outcome, CliError> {
     let mut service = session_service(context)?;
     let session_id = service.resolve_session(reference, true)?;
+    drop(service);
+    forwarding::sync(context, session_id)?;
+    let mut service = session_service(context)?;
     let snapshot = service.inspect_session(session_id)?;
     let thoughts: Vec<_> = snapshot
         .board
@@ -257,6 +287,7 @@ fn list_thoughts(context: &mut RuntimeContext, reference: &str) -> Result<Outcom
                 "content": thought.content,
                 "collapsed": thought.collapsed,
                 "updated_at": thought.updated_at,
+                "content_sha256": content_digest_hex(&thought.content),
             })
         })
         .collect();
@@ -288,6 +319,9 @@ fn inspect_thought(
     let thought_id = parse_thought_id(thought)?;
     let mut service = session_service(context)?;
     let session_id = service.resolve_session(session, true)?;
+    drop(service);
+    forwarding::sync(context, session_id)?;
+    let mut service = session_service(context)?;
     let snapshot = service.inspect_session(session_id)?;
     let thought = snapshot.board.thought(thought_id).ok_or_else(|| {
         CliError::new(
@@ -305,6 +339,7 @@ fn inspect_thought(
                 "position": thought.position,
                 "collapsed": thought.collapsed,
                 "deleted_at": thought.deleted_at,
+                "content_sha256": content_digest_hex(&thought.content),
             }
         }),
         human: thought.content.clone(),
@@ -396,7 +431,7 @@ fn move_history(
     Ok(receipt_outcome(receipt))
 }
 
-fn mutation_outcome(thought_id: ThoughtId, receipt: CommitReceipt) -> Outcome {
+pub(super) fn mutation_outcome(thought_id: ThoughtId, receipt: CommitReceipt) -> Outcome {
     let mut outcome = receipt_outcome(receipt);
     outcome.data["thought_id"] = json!(thought_id);
     outcome.human = format!("Thought {thought_id}\n{}", outcome.human);
@@ -429,7 +464,7 @@ fn receipt_outcome(receipt: CommitReceipt) -> Outcome {
     }
 }
 
-fn session_service(
+pub(super) fn session_service(
     context: &mut RuntimeContext,
 ) -> Result<
     SessionService<
@@ -449,42 +484,4 @@ fn session_service(
         context.cwd.clone(),
     )
     .map_err(Into::into)
-}
-
-fn parse_thought_id(value: &str) -> Result<ThoughtId, CliError> {
-    ThoughtId::from_str(value).map_err(|error| {
-        CliError::identifier(format!("invalid thought identifier {value}: {error}"))
-    })
-}
-
-fn parse_operation_id(value: Option<&str>) -> Result<Option<OperationId>, CliError> {
-    value
-        .map(|value| {
-            OperationId::from_str(value).map_err(|error| {
-                CliError::identifier(format!("invalid operation identifier {value}: {error}"))
-            })
-        })
-        .transpose()
-}
-
-fn read_standard_input() -> Result<String, CliError> {
-    let mut content = String::new();
-    std::io::stdin()
-        .take((MAX_THOUGHT_STDIN_BYTES + 1) as u64)
-        .read_to_string(&mut content)
-        .map_err(|error| CliError::input(format!("read standard input: {error}")))?;
-    if content.len() > MAX_THOUGHT_STDIN_BYTES {
-        return Err(CliError::input(format!(
-            "thought content exceeds the {MAX_THOUGHT_STDIN_BYTES}-byte standard-input limit"
-        )));
-    }
-    Ok(content)
-}
-
-fn excerpt(content: &str) -> String {
-    content
-        .chars()
-        .take(80)
-        .collect::<String>()
-        .replace('\n', " ")
 }

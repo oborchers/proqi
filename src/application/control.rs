@@ -47,6 +47,11 @@ pub(crate) fn match_control_replay(
         {
             Some(*thought_id)
         }
+        ControlMutation::SetCollapsed { thought_id, .. }
+            if matches_collapse(existing, session_id, mutation) =>
+        {
+            Some(*thought_id)
+        }
         ControlMutation::History { scope, undo, .. }
             if matches_history(existing, session_id, *scope, *undo) =>
         {
@@ -60,6 +65,33 @@ pub(crate) fn match_control_replay(
         thought_id,
         durable,
     })
+}
+
+fn matches_collapse(
+    existing: &StoredOperationRequest,
+    session_id: SessionId,
+    mutation: &ControlMutation,
+) -> bool {
+    let (
+        StoredOperationRequest::Board { operation, .. },
+        ControlMutation::SetCollapsed {
+            thought_id,
+            collapsed,
+            ..
+        },
+    ) = (existing, mutation)
+    else {
+        return false;
+    };
+    operation.session_id == session_id
+        && operation.kind == BoardOperationKind::Collapse
+        && matches!(
+            &operation.forward,
+            BoardMutation::SetCollapsed {
+                thought_id: stored,
+                collapsed: stored_collapsed,
+            } if stored == thought_id && stored_collapsed == collapsed
+        )
 }
 
 fn matches_add(

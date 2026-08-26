@@ -269,7 +269,7 @@ fn pending_and_failed_durability_are_visibly_distinct() {
     let failed = draw(&mut fixture, 50, 6);
     let failed_text = text(failed.backend().buffer());
     assert!(failed_text.contains("save failed · r Retry · w Export recovery"));
-    assert!(!failed_text.contains("edit · unsaved"));
+    assert!(failed_text.contains("edit · unsaved"));
 }
 
 #[test]
@@ -445,6 +445,10 @@ fn mouse_wheel_scrolls_editor_without_moving_cursor_or_selection() {
 
 #[path = "ui_board/agent.rs"]
 mod agent;
+#[path = "ui_board/agent_discovery.rs"]
+mod agent_discovery;
+#[path = "ui_board/agent_selection.rs"]
+mod agent_selection;
 #[path = "ui_board/annotations.rs"]
 mod annotations;
 #[path = "ui_board/blank.rs"]
@@ -459,5 +463,7 @@ mod durability;
 mod navigation;
 #[path = "ui_board/palette.rs"]
 mod palette;
+#[path = "ui_board/selection.rs"]
+mod selection;
 #[path = "ui_board/snapshots.rs"]
 mod snapshots;

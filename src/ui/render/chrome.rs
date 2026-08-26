@@ -23,6 +23,7 @@ pub(super) fn render_footer(
     theme: &Theme,
 ) {
     render_context(frame, app, layout, theme);
+    render_session_name(frame, app, layout, theme);
     let keys = app.keybindings();
     for (target, area) in &layout.controls {
         render_control(frame, app, *target, *area, keys, theme);
@@ -66,9 +67,6 @@ fn render_control(
 }
 
 fn render_context(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, theme: &Theme) {
-    if layout.footer_context.height == 0 {
-        return;
-    }
     let failed = matches!(app.state.durability, DurabilityState::Failed { .. });
     let recovery_only = matches!(
         app.state.durability,
@@ -92,9 +90,7 @@ fn render_context(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot
         },
         |(message, _)| message,
     );
-    let right = &layout.footer_summary;
-    let area = inset(layout.footer_context);
-    let text = compose(left, right, usize::from(area.width));
+    let status_area = inset(layout.footer_status);
     let color = status.map_or_else(
         || if failed { theme.error } else { theme.muted },
         |(_, severity)| match severity {
@@ -103,7 +99,46 @@ fn render_context(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot
             StatusSeverity::Error => theme.error,
         },
     );
-    frame.render_widget(Paragraph::new(text).style(Style::default().fg(color)), area);
+    if status_area.height > 0 && !left.is_empty() {
+        frame.render_widget(
+            Paragraph::new(truncate(left, usize::from(status_area.width)))
+                .style(Style::default().fg(color)),
+            status_area,
+        );
+    }
+    let state_area = inset(layout.footer_context);
+    if state_area.height > 0 {
+        frame.render_widget(
+            Paragraph::new(truncate(
+                &layout.footer_summary,
+                usize::from(state_area.width),
+            ))
+            .style(Style::default().fg(theme.muted)),
+            state_area,
+        );
+    }
+}
+
+fn render_session_name(
+    frame: &mut Frame<'_>,
+    app: &BoardApp,
+    layout: &LayoutSnapshot,
+    theme: &Theme,
+) {
+    let area = inset(layout.footer_name);
+    if area.height == 0 {
+        return;
+    }
+    let value = truncate(&layout.footer_session_name, usize::from(area.width));
+    let style = if app.hovered() == Some(HitTarget::RenameSession) {
+        theme.focused_style()
+    } else {
+        theme.base_style()
+    };
+    frame.render_widget(
+        Paragraph::new(value).style(style.fg(theme.foreground)),
+        area,
+    );
 }
 
 struct ControlLabel {
@@ -122,6 +157,7 @@ fn label(
         HitTarget::Copy => (crate::ui::settings::key_label(keys.copy), " Copy"),
         HitTarget::Cut => (crate::ui::settings::key_label(keys.cut), " Cut"),
         HitTarget::Delete => (crate::ui::settings::key_label(keys.delete), " Delete"),
+        HitTarget::Select => (crate::ui::settings::key_label(keys.select), " Select"),
         HitTarget::Undo => (crate::ui::settings::key_label(keys.undo), " Undo"),
         HitTarget::Search => (crate::ui::settings::key_label(keys.search), " Search"),
         HitTarget::Commands => (
@@ -168,11 +204,11 @@ fn submission_label(
     match disposition {
         SubmissionDisposition::RemoveAfterSuccess => (
             crate::ui::settings::key_label(keys.submit_remove),
-            " Submit now & remove",
+            " Submit",
         ),
         SubmissionDisposition::Keep => (
             crate::ui::settings::key_label(keys.submit_keep),
-            " Submit now & keep",
+            " Submit & keep",
         ),
     }
 }
@@ -190,20 +226,6 @@ fn inset(area: ratatui_core::layout::Rect) -> ratatui_core::layout::Rect {
         area.y,
         area.width.saturating_sub(4),
         area.height,
-    )
-}
-
-fn compose(left: &str, right: &str, width: usize) -> String {
-    let right = truncate(right, width);
-    let right_width = right.width();
-    if right_width >= width {
-        return right;
-    }
-    let left = truncate(left, width.saturating_sub(right_width + 1));
-    let left_width = left.width();
-    format!(
-        "{left}{}{right}",
-        " ".repeat(width - left_width - right_width)
     )
 }
 

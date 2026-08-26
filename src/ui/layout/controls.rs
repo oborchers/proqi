@@ -8,27 +8,65 @@ use crate::{
     ports::agent::{AgentTarget, SubmissionDisposition},
 };
 
-use super::{HitTarget, LayoutSnapshot};
+use super::{HitTarget, LayoutSnapshot, OverlayLayout};
+
+pub(super) fn overlay_layout(
+    area: Rect,
+    item_count: usize,
+    preferred_rows: usize,
+    cover_width: bool,
+) -> OverlayLayout {
+    let requested_height = overlay_height(preferred_rows);
+    let height = area.height.clamp(1, requested_height.max(5));
+    let width = if cover_width || height == area.height {
+        area.width
+    } else {
+        area.width.clamp(1, 58)
+    };
+    let modal = Rect::new(
+        area.x + area.width.saturating_sub(width) / 2,
+        area.y + area.height.saturating_sub(height) / 2,
+        width,
+        height,
+    );
+    let items = (0..item_count.min(usize::from(height.saturating_sub(3))))
+        .map(|index| {
+            Rect::new(
+                modal.x.saturating_add(1),
+                modal
+                    .y
+                    .saturating_add(2)
+                    .saturating_add(u16::try_from(index).unwrap_or(u16::MAX)),
+                modal.width.saturating_sub(2),
+                1,
+            )
+        })
+        .collect();
+    OverlayLayout {
+        area: modal,
+        items,
+        close: Rect::new(modal.right().saturating_sub(3), modal.y, 3, 1),
+    }
+}
+
+pub(super) fn overlay_height(preferred_rows: usize) -> u16 {
+    u16::try_from(preferred_rows.saturating_add(3)).unwrap_or(u16::MAX)
+}
 
 pub(super) fn configure_footer_summary(
     layout: &mut LayoutSnapshot,
     summary: String,
-    session_name_width: u16,
+    session_name: String,
 ) {
-    let area = inset(layout.footer_context);
-    let summary_width = width(&summary).min(area.width);
-    if session_name_width > 0 && area.height > 0 {
+    let area = inset(layout.footer_name);
+    if area.height > 0 {
         layout.controls.push((
             HitTarget::RenameSession,
-            Rect::new(
-                area.right().saturating_sub(summary_width),
-                area.y,
-                session_name_width.min(summary_width),
-                1,
-            ),
+            Rect::new(area.x, area.y, area.width, 1),
         ));
     }
     layout.footer_summary = summary;
+    layout.footer_session_name = session_name;
 }
 
 pub(super) fn configure_agent_controls(
@@ -78,8 +116,8 @@ pub(super) fn configure_agent_controls(
             _ => HitTarget::BeginDelivery(disposition),
         };
         let label_width = match disposition {
-            SubmissionDisposition::RemoveAfterSuccess => 21,
-            SubmissionDisposition::Keep => 19,
+            SubmissionDisposition::RemoveAfterSuccess => 9,
+            SubmissionDisposition::Keep => 16,
         };
         push(layout, &mut x, area, target, label_width);
     }

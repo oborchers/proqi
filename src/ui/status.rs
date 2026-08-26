@@ -55,13 +55,4 @@ impl BoardApp {
     pub(in crate::ui) fn status_view(&self) -> Option<(&str, StatusSeverity)> {
         self.status.as_ref().map(UiStatus::view)
     }
-
-    pub(super) fn status_is_prominent(&self) -> bool {
-        self.status.as_ref().is_some_and(|status| {
-            matches!(
-                status.severity,
-                StatusSeverity::Warning | StatusSeverity::Error
-            )
-        })
-    }
 }

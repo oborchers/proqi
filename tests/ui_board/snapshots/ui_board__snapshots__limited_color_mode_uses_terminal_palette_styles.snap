@@ -1,6 +1,6 @@
 ---
 source: tests/ui_board/snapshots.rs
-assertion_line: 141
+assertion_line: 106
 expression: "snapshot(&mut fixture, 48, 8, ThemePreference::Limited)"
 ---
 SIZE 48x8
@@ -11,8 +11,8 @@ TEXT
 02││
 03││
 04││
-05││
-06│                     1 thought · edit · saving│
+05│  proqi-ui-contract│
+06│  1 thought · edit · saving│
 07│  Esc Board  : Commands  ? Shortcuts│
 
 STYLE RUNS

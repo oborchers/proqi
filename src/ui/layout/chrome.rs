@@ -10,18 +10,27 @@ pub(super) struct ChromeLayout {
     pub(super) header: Rect,
     pub(super) board: Rect,
     pub(super) footer: Rect,
-    pub(super) context: Rect,
+    pub(super) status: Rect,
+    pub(super) name: Rect,
+    pub(super) state: Rect,
     pub(super) actions: Rect,
     pub(super) agents: Rect,
 }
 
-pub(super) fn compute(area: Rect, _mode: InteractionMode, has_agents: bool) -> ChromeLayout {
+pub(super) fn compute(
+    area: Rect,
+    _mode: InteractionMode,
+    has_agents: bool,
+    has_status: bool,
+) -> ChromeLayout {
     let header_height = 0;
     let available = area.height.saturating_sub(header_height);
     let actions_height = u16::from(available >= 2);
-    let context_height = u16::from(available >= 4);
+    let state_height = u16::from(available >= 3);
+    let name_height = u16::from(available >= 4);
     let agents_height = u16::from(has_agents && available >= 5);
-    let chrome_height = actions_height + context_height + agents_height;
+    let status_height = u16::from(has_status && available >= 6);
+    let chrome_height = actions_height + state_height + name_height + agents_height + status_height;
     let gap_height = u16::from(available.saturating_sub(chrome_height) >= 4);
     let footer_height = chrome_height + gap_height;
     let header = Rect::new(area.x, area.y, area.width, header_height);
@@ -33,8 +42,12 @@ pub(super) fn compute(area: Rect, _mode: InteractionMode, has_agents: bool) -> C
     );
     let footer = Rect::new(area.x, board.bottom(), area.width, footer_height);
     let mut row = footer.y.saturating_add(gap_height);
-    let context = Rect::new(area.x, row, area.width, context_height);
-    row = row.saturating_add(context_height);
+    let status = Rect::new(area.x, row, area.width, status_height);
+    row = row.saturating_add(status_height);
+    let name = Rect::new(area.x, row, area.width, name_height);
+    row = row.saturating_add(name_height);
+    let state = Rect::new(area.x, row, area.width, state_height);
+    row = row.saturating_add(state_height);
     let actions = Rect::new(area.x, row, area.width, actions_height);
     row = row.saturating_add(actions_height);
     let agents = Rect::new(area.x, row, area.width, agents_height);
@@ -42,7 +55,9 @@ pub(super) fn compute(area: Rect, _mode: InteractionMode, has_agents: bool) -> C
         header,
         board,
         footer,
-        context,
+        status,
+        name,
+        state,
         actions,
         agents,
     }
@@ -103,6 +118,7 @@ pub(super) fn controls(
             (HitTarget::Copy, 7),
             (HitTarget::Cut, 6),
             (HitTarget::Delete, 9),
+            (HitTarget::Select, 12),
             (HitTarget::Undo, 7),
             (HitTarget::Search, 9),
             (HitTarget::Commands, 11),

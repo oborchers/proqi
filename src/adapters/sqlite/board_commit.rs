@@ -190,11 +190,12 @@ fn commit_board(
     })
 }
 
-pub(super) const fn mutation_changes_search(mutation: &BoardMutation) -> bool {
-    matches!(
-        mutation,
-        BoardMutation::AddThought { .. } | BoardMutation::SetDeletion { .. }
-    )
+pub(super) fn mutation_changes_search(mutation: &BoardMutation) -> bool {
+    match mutation {
+        BoardMutation::Batch { mutations } => mutations.iter().any(mutation_changes_search),
+        BoardMutation::AddThought { .. } | BoardMutation::SetDeletion { .. } => true,
+        BoardMutation::MoveThought { .. } | BoardMutation::SetCollapsed { .. } => false,
+    }
 }
 
 fn commit_revision(

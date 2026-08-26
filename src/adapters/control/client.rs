@@ -39,6 +39,9 @@ impl ControlClient for LocalControlClient {
             ControlResult::Update(_) => Err(ControlError::Protocol(
                 "owner returned an update receipt for a durable mutation".to_owned(),
             )),
+            ControlResult::Metadata(_) => Err(ControlError::Protocol(
+                "owner returned a metadata receipt for a durable mutation".to_owned(),
+            )),
         }
     }
 }
@@ -68,6 +71,9 @@ impl ControlClient for CancellableLocalControlClient {
             ControlResult::Update(_) => Err(ControlError::Protocol(
                 "owner returned an update receipt for a durable mutation".to_owned(),
             )),
+            ControlResult::Metadata(_) => Err(ControlError::Protocol(
+                "owner returned a metadata receipt for a durable mutation".to_owned(),
+            )),
         }
     }
 }
@@ -92,6 +98,23 @@ impl<I> LocalUpdateControlClient<I> {
         Self {
             ids,
             cancellation: Some(cancellation),
+        }
+    }
+}
+
+impl LocalControlClient {
+    pub(crate) fn send_metadata(
+        owner: &InstanceInfo,
+        request: &ControlRequest,
+    ) -> Result<crate::ports::control::ControlMetadataReceipt, ControlError> {
+        match exchange(owner, request)? {
+            ControlResult::Metadata(receipt) => Ok(receipt),
+            ControlResult::Rejected { code, message } => {
+                Err(ControlError::Rejected { code, message })
+            }
+            ControlResult::Accepted(_) | ControlResult::Update(_) => Err(ControlError::Protocol(
+                "owner returned the wrong receipt for a metadata mutation".to_owned(),
+            )),
         }
     }
 }
@@ -177,6 +200,9 @@ impl<I: IdGenerator> LocalUpdateControlClient<I> {
             ControlResult::Accepted(_) => Err(coordination_error(
                 "owner returned a durable mutation receipt",
             )),
+            ControlResult::Metadata(_) => {
+                Err(coordination_error("owner returned a metadata receipt"))
+            }
         }
     }
 }

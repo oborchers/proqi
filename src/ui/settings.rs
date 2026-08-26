@@ -40,6 +40,8 @@ pub struct UiSettings {
     pub keyboard_enhancement: KeyboardEnhancement,
     /// Remappable direct board keys.
     pub keybindings: KeyBindings,
+    /// Vertical separation between thoughts.
+    pub density: BoardDensity,
 }
 
 impl Default for UiSettings {
@@ -49,8 +51,20 @@ impl Default for UiSettings {
             theme: ThemePreference::default(),
             keyboard_enhancement: KeyboardEnhancement::default(),
             keybindings: KeyBindings::default(),
+            density: BoardDensity::default(),
         }
     }
+}
+
+/// Board spacing preference.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum BoardDensity {
+    /// A restrained separator row between thoughts.
+    #[default]
+    Comfortable,
+    /// Minimize vertical separation in constrained panes.
+    Compact,
 }
 
 /// Direct character bindings for common board actions.
@@ -85,6 +99,8 @@ pub struct KeyBindings {
     pub move_down: char,
     /// Toggle expanded presentation.
     pub collapse: char,
+    /// Toggle the focused thought in the multi-selection.
+    pub select: char,
     /// Search thought content.
     pub search: char,
     /// Discover commands.
@@ -110,7 +126,8 @@ impl Default for KeyBindings {
             focus_down: 'j',
             move_up: 'K',
             move_down: 'J',
-            collapse: ' ',
+            collapse: 'c',
+            select: ' ',
             search: '/',
             commands: ':',
             help: '?',
@@ -134,6 +151,7 @@ pub(super) enum BoardCommand {
     MoveUp,
     MoveDown,
     Collapse,
+    Select,
     Search,
     Commands,
     Help,
@@ -156,6 +174,7 @@ impl KeyBindings {
             (self.move_up, BoardCommand::MoveUp),
             (self.move_down, BoardCommand::MoveDown),
             (self.collapse, BoardCommand::Collapse),
+            (self.select, BoardCommand::Select),
             (self.search, BoardCommand::Search),
             (self.commands, BoardCommand::Commands),
             (self.help, BoardCommand::Help),
@@ -186,6 +205,7 @@ impl KeyBindings {
             self.move_up,
             self.move_down,
             self.collapse,
+            self.select,
             self.search,
             self.commands,
             self.help,
@@ -211,7 +231,7 @@ pub(crate) fn key_label(key: char) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{BoardCommand, KeyBindings, UiSettings};
+    use super::{BoardCommand, BoardDensity, KeyBindings, UiSettings};
 
     #[test]
     fn partial_toml_uses_defaults_and_remaps_one_action() {
@@ -226,6 +246,12 @@ mod tests {
     fn update_checks_can_be_disabled_globally() {
         let settings: UiSettings = toml::from_str("check_for_updates = false").expect("settings");
         assert!(!settings.check_for_updates);
+    }
+
+    #[test]
+    fn compact_board_density_is_configurable() {
+        let settings: UiSettings = toml::from_str("density = 'compact'").expect("settings");
+        assert_eq!(settings.density, BoardDensity::Compact);
     }
 
     #[test]

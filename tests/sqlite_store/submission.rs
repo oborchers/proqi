@@ -9,8 +9,11 @@ fn attempt(
     SubmissionAttempt {
         id: ids.submission_id(),
         session_id: state.board.session.id,
-        thought_id,
-        source_digest: digest,
+        sources: vec![SubmissionSource {
+            thought_id,
+            source_digest: digest,
+        }],
+        payload_digest: digest,
         source_sequence: state.board.session.last_durable_sequence,
         disposition: SubmissionDisposition::RemoveAfterSuccess,
         direction: Direction::Left,

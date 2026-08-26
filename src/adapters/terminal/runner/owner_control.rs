@@ -11,7 +11,10 @@ use crate::{
     application::{ControlReplay, Effect, match_control_replay},
     domain::{RequestId, ThoughtId},
     ports::{
-        control::{ControlMutation, ControlRejectionCode, ControlResult, ControlUpdateReceipt},
+        control::{
+            ControlMetadataReceipt, ControlMutation, ControlRejectionCode, ControlResult,
+            ControlUpdateReceipt,
+        },
         environment::Clock as _,
         store::StoredOperationRequest,
         update::{UpdatePrepareReply, UpdateRestartReply},
@@ -85,6 +88,20 @@ fn queue_lookup(
     }
     let effects = app.flush_pending_edit(ids, &clock);
     super::durability::enqueue_effects(app, lanes, effects, pending)?;
+    if matches!(
+        envelope.request.mutation,
+        ControlMutation::RenameSession { .. }
+    ) {
+        return queue_metadata(app, lanes, pending, envelope, &clock);
+    }
+    if matches!(envelope.request.mutation, ControlMutation::Sync) {
+        pending.sync_controls.push_back(envelope);
+        complete_sync(pending);
+        return Ok(false);
+    }
+    if matches!(envelope.request.mutation, ControlMutation::Replace { .. }) {
+        return apply_mutation(app, lanes, pending, envelope, &clock);
+    }
     let request_id = envelope.request.request_id;
     let Some(operation_id) = envelope.request.mutation.durable_operation_id() else {
         envelope.respond(ControlResult::Rejected {
@@ -129,9 +146,70 @@ fn handle_update(
             Ok(queue_update_restart(app, lanes, pending, envelope, request))
         }
         ControlMutation::Add { .. }
+        | ControlMutation::RenameSession { .. }
+        | ControlMutation::Sync
+        | ControlMutation::Replace { .. }
+        | ControlMutation::SetCollapsed { .. }
         | ControlMutation::Delete { .. }
         | ControlMutation::Move { .. }
         | ControlMutation::History { .. } => Ok(false),
+    }
+}
+
+fn queue_metadata(
+    app: &mut BoardApp,
+    lanes: &WorkerLanes<'_>,
+    pending: &mut PendingWork,
+    envelope: ControlEnvelope,
+    clock: &impl crate::ports::environment::Clock,
+) -> Result<bool, TerminalError> {
+    match app.handle_control(&envelope.request.mutation, clock) {
+        Ok(effects) => {
+            super::durability::enqueue_effects(app, lanes, effects, pending)?;
+            pending.metadata_controls.push_back(envelope);
+            Ok(true)
+        }
+        Err(error) => {
+            envelope.respond(ControlResult::Rejected {
+                code: error.code().as_str().to_owned(),
+                message: error.to_string(),
+            });
+            Ok(false)
+        }
+    }
+}
+
+pub(super) fn complete_metadata(
+    pending: &mut PendingWork,
+    result: &Result<(), crate::ports::store::StoreError>,
+) {
+    let Some(envelope) = pending.metadata_controls.pop_front() else {
+        return;
+    };
+    let response = match result {
+        Ok(()) => {
+            let name = match &envelope.request.mutation {
+                ControlMutation::RenameSession { name } => name.clone(),
+                _ => None,
+            };
+            ControlResult::Metadata(ControlMetadataReceipt::SessionRenamed { name })
+        }
+        Err(error) => ControlResult::Rejected {
+            code: storage_error_code(error).to_owned(),
+            message: error.to_string(),
+        },
+    };
+    envelope.respond(response);
+}
+
+pub(super) fn complete_sync(pending: &mut PendingWork) {
+    if pending.persistence > 0 {
+        return;
+    }
+    while let Some(envelope) = pending.sync_controls.pop_front() {
+        envelope.respond(ControlResult::Metadata(
+            ControlMetadataReceipt::Synchronized,
+        ));
     }
 }
 

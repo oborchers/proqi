@@ -14,7 +14,10 @@ use crate::{
 };
 use sha2::{Digest, Sha256};
 
-use super::{BoardApp, PendingSubmission, SubmissionMode, UiInput, UiKey};
+use super::{
+    BoardApp, UiInput, UiKey,
+    pending_types::{PendingSubmission, PendingSubmissionSource, SubmissionMode},
+};
 
 impl BoardApp {
     /// Initial optional-integration discovery effect.
@@ -46,10 +49,11 @@ impl BoardApp {
                     self.set_warning(format!("direct submission unavailable: {error}"));
                 }
             }
-            Err(error) => {
+            Err(error) if was_refreshing => {
                 self.agent_targets.clear();
                 self.set_error(format!("direct submission unavailable: {error}"));
             }
+            Err(_) => self.agent_targets.clear(),
         }
     }
 
@@ -102,7 +106,7 @@ impl BoardApp {
         let completion = match result {
             Ok(receipt)
                 if receipt.submission_id == submission_id
-                    && receipt.target == pending.request.target =>
+                    && receipt.target.identity() == pending.request.target.identity() =>
             {
                 Ok(receipt)
             }
@@ -113,7 +117,7 @@ impl BoardApp {
         };
         let deletion_operation_id = (completion.is_ok()
             && pending.disposition == SubmissionDisposition::RemoveAfterSuccess)
-            .then_some(pending.operation_id);
+            .then_some(pending.deletion_operation_id);
         let outcome = submission_outcome(&completion, deletion_operation_id, pending.at);
         pending.completion = Some(completion);
         vec![Effect::FinishSubmission {
@@ -254,42 +258,65 @@ impl BoardApp {
             ));
             return Vec::new();
         }
-        let Some(thought) = self
-            .state
-            .focused_thought
-            .and_then(|id| self.state.board.thought(id))
-            .filter(|thought| thought.is_live())
-        else {
+        let thought_ids = self.action_thought_ids();
+        if thought_ids.is_empty() {
             self.set_warning("select a thought before submitting");
             return Vec::new();
-        };
-        if self
-            .pending_submissions
-            .values()
-            .any(|pending| pending.thought_id == thought.id)
-        {
-            self.set_warning("this thought already has a submission in progress");
+        }
+        if thought_ids.iter().any(|id| self.submission_locked(*id)) {
+            let message = if thought_ids.len() == 1 {
+                "this thought already has a submission in progress"
+            } else {
+                "a selected thought already has a submission in progress"
+            };
+            self.set_warning(message);
             return Vec::new();
         }
-        let thought_id = thought.id;
-        let content = thought.content.clone();
+        self.queue_submission(&target, disposition, &thought_ids, ids, clock)
+    }
+
+    fn queue_submission(
+        &mut self,
+        target: &AgentTarget,
+        disposition: SubmissionDisposition,
+        thought_ids: &[crate::domain::ThoughtId],
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        let source_contents = thought_ids
+            .iter()
+            .filter_map(|id| self.state.board.thought(*id))
+            .map(|thought| (thought.id, thought.content.clone()))
+            .collect::<Vec<_>>();
+        let content = source_contents
+            .iter()
+            .map(|(_, content)| content.as_str())
+            .collect::<Vec<_>>()
+            .join("\n\n");
         let submission_id = ids.submission_id();
-        let source_digest = digest(content.as_bytes());
+        let payload_digest = digest(content.as_bytes());
         let at = clock.now();
         let request = SubmissionRequest {
             submission_id,
             target: target.clone(),
             content,
         };
+        let sources = source_contents
+            .iter()
+            .map(|(thought_id, content)| PendingSubmissionSource {
+                thought_id: *thought_id,
+                source_digest: digest(content.as_bytes()),
+            })
+            .collect::<Vec<_>>();
+        let deletion_operation_id = ids.operation_id();
         self.pending_submissions.insert(
             submission_id,
             PendingSubmission {
                 request: request.clone(),
-                thought_id,
-                operation_id: ids.operation_id(),
+                sources,
                 at,
                 disposition,
-                source_digest,
+                deletion_operation_id,
                 completion: None,
             },
         );
@@ -299,20 +326,29 @@ impl BoardApp {
                 "submitting now, thought will be removed after acceptance"
             }
         });
-        vec![Effect::PrepareSubmission(SubmissionAttempt {
+        let attempt = SubmissionAttempt {
             id: submission_id,
             session_id: self.state.board.session.id,
-            thought_id,
-            source_digest,
+            sources: source_contents
+                .into_iter()
+                .map(
+                    |(thought_id, content)| crate::ports::store::SubmissionSource {
+                        thought_id,
+                        source_digest: digest(content.as_bytes()),
+                    },
+                )
+                .collect(),
+            payload_digest,
             source_sequence: self.state.board.session.last_durable_sequence,
             disposition,
-            direction,
+            direction: target.direction,
             provider: target.provider.clone(),
             protocol: target.protocol,
-            target_fingerprint: target_fingerprint(&target),
+            target_fingerprint: target_fingerprint(target),
             pre_state: target.readiness,
             prepared_at: at,
-        })]
+        };
+        vec![Effect::PrepareSubmission(attempt)]
     }
 
     fn apply_accepted_submission(
@@ -325,15 +361,23 @@ impl BoardApp {
             target: receipt.target.clone(),
             verified_at: pending.at,
         }];
-        let unchanged =
-            self.current_thought_digest(pending.thought_id) == Some(pending.source_digest);
+        let unchanged = pending.sources.iter().all(|source| {
+            self.current_thought_digest(source.thought_id) == Some(source.source_digest)
+        });
         if pending.disposition == SubmissionDisposition::RemoveAfterSuccess && unchanged {
-            effects.extend(self.reduce(Action::DeleteThought {
-                operation_id: pending.operation_id,
-                thought_id: pending.thought_id,
-                kind: BoardOperationKind::SubmitAndRemove,
-                at: pending.at,
-            }));
+            effects.extend(
+                self.reduce(Action::DeleteThoughts {
+                    operation_id: pending.deletion_operation_id,
+                    thought_ids: pending
+                        .sources
+                        .iter()
+                        .map(|source| source.thought_id)
+                        .collect(),
+                    kind: BoardOperationKind::SubmitAndRemove,
+                    at: pending.at,
+                }),
+            );
+            self.selected_thoughts.clear();
         }
         let outcome = if pending.disposition == SubmissionDisposition::Keep {
             "thought kept"
@@ -397,13 +441,16 @@ fn digest(bytes: &[u8]) -> [u8; 32] {
 
 fn target_fingerprint(target: &AgentTarget) -> [u8; 32] {
     let mut hasher = Sha256::new();
+    let identity = target.identity();
     for field in [
-        target.provider.as_str(),
-        target.workspace_id.as_str(),
-        target.tab_id.as_str(),
-        target.pane_id.as_str(),
-        target.agent_kind.as_str(),
-        target.agent_session_id.as_str(),
+        identity.provider.as_str(),
+        identity.workspace_id.as_str(),
+        identity.tab_id.as_str(),
+        identity.source_pane_id.as_str(),
+        identity.target_pane_id.as_str(),
+        identity.direction.as_str(),
+        identity.agent_kind.as_str(),
+        identity.agent_session_id.as_str(),
     ] {
         hasher.update(field.as_bytes());
         hasher.update([0]);

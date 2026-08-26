@@ -3,7 +3,9 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::domain::{ContentAnnotation, OperationId, RequestId, SessionId, ThoughtId, UndoScope};
+use crate::domain::{
+    ContentAnnotation, OperationId, RequestId, RevisionId, SessionId, ThoughtId, UndoScope,
+};
 
 use super::update::{
     UpdatePrepareReply, UpdatePrepareRequest, UpdateRestartReply, UpdateRestartRequest,
@@ -11,7 +13,7 @@ use super::update::{
 use super::{runtime::InstanceInfo, store::CommitReceipt};
 
 /// Current local owner-control protocol.
-pub const CONTROL_PROTOCOL_VERSION: u32 = 3;
+pub const CONTROL_PROTOCOL_VERSION: u32 = 4;
 /// Oldest owner-control protocol accepted for plain-text mutations.
 pub const MIN_CONTROL_PROTOCOL_VERSION: u32 = 1;
 /// Maximum encoded request or response, including framing newline.
@@ -71,6 +73,33 @@ impl ControlRejectionCode {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "mutation")]
 pub enum ControlMutation {
+    /// Rename or clear the active session through its owner.
+    RenameSession {
+        /// Replacement name, or `None` to clear it.
+        name: Option<String>,
+    },
+    /// Flush pending editor work before an active-session CLI read.
+    Sync,
+    /// Replace exact thought content as one persistent editor revision.
+    Replace {
+        /// Durable editor revision identity.
+        revision_id: RevisionId,
+        /// Thought to replace.
+        thought_id: ThoughtId,
+        /// Required SHA-256 of current content, omitted only for explicit force.
+        expected_digest: Option<[u8; 32]>,
+        /// Exact replacement content.
+        content: String,
+    },
+    /// Set one thought's durable collapse state.
+    SetCollapsed {
+        /// Durable board operation identity.
+        operation_id: OperationId,
+        /// Thought to update.
+        thought_id: ThoughtId,
+        /// Exact replacement state.
+        collapsed: bool,
+    },
     /// Create one exact-content thought.
     Add {
         /// Durable board operation identity.
@@ -135,8 +164,12 @@ impl ControlMutation {
             Self::Add { operation_id, .. }
             | Self::Delete { operation_id, .. }
             | Self::Move { operation_id, .. }
-            | Self::History { operation_id, .. } => Some(*operation_id),
+            | Self::History { operation_id, .. }
+            | Self::SetCollapsed { operation_id, .. } => Some(*operation_id),
             Self::UpdatePrepare { .. }
+            | Self::RenameSession { .. }
+            | Self::Sync
+            | Self::Replace { .. }
             | Self::UpdateRelease { .. }
             | Self::UpdateRestart { .. } => None,
         }
@@ -149,7 +182,12 @@ impl ControlMutation {
             Self::Add { thought_id, .. }
             | Self::Delete { thought_id, .. }
             | Self::Move { thought_id, .. } => Some(*thought_id),
+            Self::Replace { thought_id, .. } | Self::SetCollapsed { thought_id, .. } => {
+                Some(*thought_id)
+            }
             Self::History { .. }
+            | Self::RenameSession { .. }
+            | Self::Sync
             | Self::UpdatePrepare { .. }
             | Self::UpdateRelease { .. }
             | Self::UpdateRestart { .. } => None,
@@ -166,6 +204,14 @@ impl ControlMutation {
     #[must_use]
     pub fn minimum_protocol(&self) -> u32 {
         if matches!(
+            self,
+            Self::RenameSession { .. }
+                | Self::Replace { .. }
+                | Self::SetCollapsed { .. }
+                | Self::Sync
+        ) {
+            4
+        } else if matches!(
             self,
             Self::UpdatePrepare { .. } | Self::UpdateRelease { .. } | Self::UpdateRestart { .. }
         ) {
@@ -219,6 +265,8 @@ pub enum ControlResult {
     Accepted(ControlReceipt),
     /// Ephemeral update readiness or restart receipt.
     Update(ControlUpdateReceipt),
+    /// Durable metadata change without an operation sequence.
+    Metadata(ControlMetadataReceipt),
     /// Owner rejected the mutation without reporting it as durable.
     Rejected {
         /// Stable error code.
@@ -226,6 +274,19 @@ pub enum ControlResult {
         /// Human-readable explanation without thought content.
         message: String,
     },
+}
+
+/// Successful metadata result from the active owner.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "metadata")]
+pub enum ControlMetadataReceipt {
+    /// The session name is durable and visible in the owner.
+    SessionRenamed {
+        /// Durable replacement name.
+        name: Option<String>,
+    },
+    /// All owner work admitted before the request is durable.
+    Synchronized,
 }
 
 /// Successful typed result from update coordination over the owner endpoint.

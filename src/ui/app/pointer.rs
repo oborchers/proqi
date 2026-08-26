@@ -100,6 +100,10 @@ impl BoardApp {
             Some(HitTarget::Copy) => self.copy_active(ids),
             Some(HitTarget::Cut) => self.cut_active(ids, clock),
             Some(HitTarget::Delete) => self.delete(ids, clock),
+            Some(HitTarget::Select) => {
+                self.toggle_selection();
+                Vec::new()
+            }
             Some(HitTarget::Deliver(direction, disposition)) => {
                 self.deliver_to(direction, disposition, ids, clock)
             }
@@ -203,19 +207,55 @@ impl BoardApp {
             .layout
             .as_ref()
             .map_or(0, |layout| layout.max_first_index);
-        let next = self.first_visible.saturating_add_signed(delta).min(maximum);
-        if next == self.first_visible {
+        if delta > 0 {
+            let can_scroll_current = self
+                .layout
+                .as_ref()
+                .and_then(|layout| layout.thoughts.first())
+                .is_some_and(|thought| thought.hidden_rows > 0);
+            if can_scroll_current {
+                self.first_visible_row += 1;
+            } else if self.first_visible < maximum {
+                self.first_visible += 1;
+                self.first_visible_row = 0;
+            } else {
+                return Vec::new();
+            }
+        } else if self.first_visible_row > 0 {
+            self.first_visible_row -= 1;
+        } else if self.first_visible > 0 {
+            self.first_visible -= 1;
+            self.first_visible_row = self.first_thought_row_count().saturating_sub(1);
+        } else {
             return Vec::new();
         }
-        self.first_visible = next;
         self.manual_board_scroll = true;
         self.layout = None;
         Vec::new()
     }
 
+    fn first_thought_row_count(&self) -> usize {
+        let Some(thought) = self
+            .state
+            .board
+            .live_thoughts()
+            .get(self.first_visible)
+            .copied()
+        else {
+            return 1;
+        };
+        let content = self
+            .presentation_for_render(thought.id)
+            .map_or_else(|| thought.content.clone(), |view| view.content);
+        crate::ports::text_layout::wrap_rows(&content, usize::from(self.viewport.width.max(1)))
+            .len()
+            .max(1)
+    }
+
     fn focus(&mut self, thought_id: crate::domain::ThoughtId) {
         self.insertion_focus = super::InsertionFocus::Inactive;
         self.manual_board_scroll = false;
+        self.first_visible_row = 0;
         let _effects = self.reduce(Action::FocusThought(Some(thought_id)));
     }
 

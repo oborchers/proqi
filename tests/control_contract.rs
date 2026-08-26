@@ -6,11 +6,11 @@ use proqi::ports::control::{
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::Value;
 
-const REQUEST: &str = include_str!("fixtures/control/v3/add.request.json");
-const ACCEPTED: &str = include_str!("fixtures/control/v3/add.accepted.json");
-const REJECTED: &str = include_str!("fixtures/control/v3/add.rejected.json");
-const UPDATE_PREPARE: &str = include_str!("fixtures/control/v3/update_prepare.request.json");
-const UPDATE_READY: &str = include_str!("fixtures/control/v3/update_prepare.ready.json");
+const REQUEST: &str = include_str!("fixtures/control/v4/add.request.json");
+const ACCEPTED: &str = include_str!("fixtures/control/v4/add.accepted.json");
+const REJECTED: &str = include_str!("fixtures/control/v4/add.rejected.json");
+const UPDATE_PREPARE: &str = include_str!("fixtures/control/v4/update_prepare.request.json");
+const UPDATE_READY: &str = include_str!("fixtures/control/v4/update_prepare.ready.json");
 
 #[test]
 fn current_request_success_and_error_fixtures_round_trip_canonically() {

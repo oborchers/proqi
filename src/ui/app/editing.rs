@@ -62,8 +62,7 @@ impl BoardApp {
             self.insertion_focus = super::InsertionFocus::Inactive;
             effects.extend(self.reduce(Action::FocusThought(Some(target))));
         } else {
-            self.insertion_focus = super::InsertionFocus::Active;
-            self.layout = None;
+            effects.extend(self.create(crate::ui::PastePayload::text(String::new()), ids, clock));
         }
         effects
     }
@@ -149,6 +148,8 @@ impl BoardApp {
             }
         }
         self.edit_generation = self.edit_generation.wrapping_add(1);
+        self.manual_board_scroll = false;
+        self.layout = None;
     }
 
     /// Commit accumulated typing as one persistent editor revision.

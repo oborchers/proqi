@@ -50,6 +50,7 @@ fn active_tui_accepts_durable_idempotent_cli_mutations_before_crash() {
     let first = json_input_command(binary, state.path(), &first_args, first_body);
     let first_id = first["data"]["thought_id"].as_str().expect("first ID");
     assert_equivalent_commit_shape(&source_thought, &first);
+    exercise_live_metadata_and_editor(binary, state.path(), session, first_id, first_body);
     let replay = json_input_command(binary, state.path(), &first_args, first_body);
     let conflict = raw_input_command(binary, state.path(), &first_args, "changed");
     assert_idempotency(&first, &replay, &conflict);
@@ -87,6 +88,75 @@ fn active_tui_accepts_durable_idempotent_cli_mutations_before_crash() {
     let status = owner.wait().expect("wait for active owner workflow");
     assert!(status.success(), "active owner PTY exited with {status}");
     assert_recovered_state(binary, state.path(), session, second_id, transferred_id);
+}
+
+fn exercise_live_metadata_and_editor(
+    binary: &str,
+    state: &std::path::Path,
+    session: &str,
+    thought: &str,
+    original: &str,
+) {
+    let renamed = json_command(
+        binary,
+        state,
+        &["sessions", "rename", session, "Live owner"],
+    );
+    assert_eq!(renamed["data"]["status"], "renamed");
+    let listed = json_command(binary, state, &["thoughts", "list", session]);
+    let digest = listed["data"]["thoughts"][0]["content_sha256"]
+        .as_str()
+        .expect("content digest");
+    let replaced = json_input_command(
+        binary,
+        state,
+        &[
+            "thoughts",
+            "replace",
+            session,
+            thought,
+            "--expected-sha256",
+            digest,
+        ],
+        "external replacement",
+    );
+    assert_eq!(replaced["data"]["thought_id"], thought);
+    let inspected = json_command(binary, state, &["thoughts", "inspect", session, thought]);
+    assert_eq!(
+        inspected["data"]["thought"]["content"],
+        "external replacement"
+    );
+    json_command(
+        binary,
+        state,
+        &[
+            "thoughts",
+            "undo",
+            session,
+            "--thought",
+            thought,
+            "--operation-id",
+            &operation_id(),
+        ],
+    );
+    let restored = json_command(binary, state, &["thoughts", "inspect", session, thought]);
+    assert_eq!(restored["data"]["thought"]["content"], original);
+    for collapsed in ["true", "false"] {
+        json_command(
+            binary,
+            state,
+            &[
+                "thoughts",
+                "collapse",
+                session,
+                thought,
+                "--collapsed",
+                collapsed,
+                "--operation-id",
+                &operation_id(),
+            ],
+        );
+    }
 }
 
 fn spawn_owner(
@@ -236,6 +306,7 @@ fn assert_recovered_state(
 ) {
     let sessions = json_command(binary, state, &["sessions", "list"]);
     assert_eq!(sessions["data"]["sessions"][0]["state"], "recovered");
+    assert_eq!(sessions["data"]["sessions"][0]["name"], "Live owner");
     let thoughts = json_command(binary, state, &["thoughts", "list", session]);
     let live = thoughts["data"]["thoughts"].as_array().expect("thoughts");
     assert_eq!(live.len(), 2);

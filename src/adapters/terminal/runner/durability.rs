@@ -166,6 +166,7 @@ fn complete_result(
             result,
         } => {
             pending.persistence = pending.persistence.saturating_sub(1);
+            owner_control::complete_metadata(pending, &result);
             app.complete_session_rename(previous_name, result);
         }
         PersistenceResult::TransferSessions(result) => {
@@ -209,6 +210,7 @@ fn complete_result(
             enqueue_effects(app, lanes, effects, pending)?;
         }
     }
+    owner_control::complete_sync(pending);
     Ok(true)
 }
 

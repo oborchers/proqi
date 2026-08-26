@@ -1,14 +1,13 @@
 //! Read-only UI projections and frame preparation.
 
-use ratatui_core::layout::Rect;
-use unicode_width::UnicodeWidthStr as _;
-
 use crate::{
     application::{DurabilityState, InteractionMode},
     domain::ThoughtId,
     ports::{agent::AgentTarget, editor::EditorSnapshot, editor::TextViewport},
-    ui::{HitTarget, KeyBindings, LayoutSnapshot, compute_layout},
+    ui::{HitTarget, KeyBindings, LayoutSnapshot},
 };
+use ratatui_core::layout::Rect;
+use unicode_width::UnicodeWidthStr as _;
 
 use super::{BoardApp, palette, search, transfer};
 
@@ -62,6 +61,38 @@ impl BoardApp {
             return None;
         }
         self.state.focused_thought
+    }
+
+    /// Whether a thought belongs to the explicit board multi-selection.
+    #[must_use]
+    pub fn thought_selected(&self, thought_id: ThoughtId) -> bool {
+        self.selected_thoughts.contains(&thought_id)
+    }
+
+    /// Ordered thoughts addressed by the next board action.
+    pub(super) fn action_thought_ids(&self) -> Vec<ThoughtId> {
+        let selected = self
+            .state
+            .board
+            .live_thoughts()
+            .into_iter()
+            .filter(|thought| self.selected_thoughts.contains(&thought.id))
+            .map(|thought| thought.id)
+            .collect::<Vec<_>>();
+        if selected.is_empty() {
+            self.state.focused_thought.into_iter().collect()
+        } else {
+            selected
+        }
+    }
+
+    pub(super) fn submission_locked(&self, thought_id: ThoughtId) -> bool {
+        self.pending_submissions.values().any(|pending| {
+            pending
+                .sources
+                .iter()
+                .any(|source| source.thought_id == thought_id)
+        })
     }
 
     /// Number of currently visible durable thoughts.
@@ -185,7 +216,9 @@ impl BoardApp {
             layout_state.focused_thought = None;
         }
         let first_editor = self.editor_presentation();
-        let first = compute_layout(
+        let has_status = self.status.is_some()
+            || matches!(self.state.durability, DurabilityState::Failed { .. });
+        let first = crate::ui::layout::compute_with_density(
             &layout_state,
             first_editor.as_ref().map(|view| &view.snapshot),
             area,
@@ -193,11 +226,14 @@ impl BoardApp {
             &self.expanded,
             self.insertion_focused(),
             !self.agent_targets.is_empty(),
+            has_status,
+            self.settings.density,
+            self.first_visible_row,
         );
         let height = self.focused_height(&first);
         self.prepare_layout(TextViewport::new(first.content_width, height));
         let editor = self.editor_presentation();
-        let mut layout = compute_layout(
+        let mut layout = crate::ui::layout::compute_with_density(
             &layout_state,
             editor.as_ref().map(|view| &view.snapshot),
             area,
@@ -205,20 +241,18 @@ impl BoardApp {
             &self.expanded,
             self.insertion_focused(),
             !self.agent_targets.is_empty(),
+            has_status,
+            self.settings.density,
+            self.first_visible_row,
         );
         self.configure_overlay(&mut layout);
         layout.configure_agent_controls(&self.agent_targets, self.submission_mode());
-        let prominent = self.status_is_prominent()
-            || matches!(self.state.durability, DurabilityState::Failed { .. });
-        let (summary, name_width) = if prominent {
-            (String::new(), 0)
-        } else {
-            self.footer_summary(layout.footer_context.width.saturating_sub(4))
-        };
-        layout.configure_footer_summary(summary, name_width);
+        let summary = self.footer_summary(layout.footer_context.width.saturating_sub(4));
+        layout.configure_footer_summary(summary, self.session_display_name().to_owned());
         let final_height = self.focused_height(&layout);
         self.prepare_layout(TextViewport::new(layout.content_width, final_height));
         self.first_visible = layout.first_index;
+        self.first_visible_row = layout.first_row_offset;
         self.layout = Some(layout.clone());
         layout
     }
@@ -263,8 +297,7 @@ impl BoardApp {
         );
     }
 
-    fn footer_summary(&self, width: u16) -> (String, u16) {
-        let name = self.session_display_name();
+    fn footer_summary(&self, available_width: u16) -> String {
         let count = self.visible_thought_count();
         let noun = if count == 1 { "thought" } else { "thoughts" };
         let mode = match self.interaction_mode() {
@@ -272,20 +305,15 @@ impl BoardApp {
             InteractionMode::Edit { .. } => "edit",
         };
         let durability = self.durability_summary();
-        let full = format!("{name} · {count} {noun} · {mode} · {durability}");
-        if full.width() <= usize::from(width) {
-            return (full, u16::try_from(name.width()).unwrap_or(u16::MAX));
+        let complete = format!("{count} {noun} · {mode} · {durability}");
+        if complete.width() <= usize::from(available_width) {
+            return complete;
         }
-        for fallback in [
-            format!("{count} {noun} · {mode} · {durability}"),
-            format!("{mode} · {durability}"),
-            durability.to_owned(),
-        ] {
-            if fallback.width() <= usize::from(width) {
-                return (fallback, 0);
-            }
+        let compact = format!("{count} · {mode} · {durability}");
+        if compact.width() <= usize::from(available_width) {
+            return compact;
         }
-        (String::new(), 0)
+        format!("{count} {durability}")
     }
 
     pub(crate) fn session_display_name(&self) -> &str {

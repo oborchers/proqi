@@ -28,12 +28,13 @@ enum Command {
     MoveUp,
     MoveDown,
     Collapse,
+    Select,
     Help,
     Quit,
 }
 
 impl Command {
-    const ALL: [(Self, &'static str); 21] = [
+    const ALL: [(Self, &'static str); 22] = [
         (Self::New, "New thought"),
         (Self::RenameSession, "Rename session"),
         (Self::Edit, "Edit thought"),
@@ -43,9 +44,9 @@ impl Command {
         (Self::Paste, "Paste native clipboard"),
         (
             Self::SubmitRemove,
-            "Submit now & remove after acceptance (default)",
+            "Submit and remove after acceptance (default)",
         ),
-        (Self::SubmitKeep, "Submit now & keep thought"),
+        (Self::SubmitKeep, "Submit and keep thought"),
         (Self::SendSession, "Send to another Proqi session"),
         (
             Self::SendSessionRemove,
@@ -59,6 +60,7 @@ impl Command {
         (Self::MoveUp, "Move thought up"),
         (Self::MoveDown, "Move thought down"),
         (Self::Collapse, "Expand or collapse thought"),
+        (Self::Select, "Toggle thought selection"),
         (Self::Help, "Open contextual help"),
         (Self::Quit, "Quit Proqi"),
     ];
@@ -294,6 +296,10 @@ impl BoardApp {
             Command::MoveUp => self.reorder(ids, clock, -1),
             Command::MoveDown => self.reorder(ids, clock, 1),
             Command::Collapse => self.collapse(ids, clock),
+            Command::Select => {
+                self.toggle_selection();
+                Vec::new()
+            }
             Command::Help => {
                 self.help = true;
                 Vec::new()

@@ -15,9 +15,18 @@ use crate::ports::agent::{AgentState, SubmissionDisposition};
 pub use compaction::{CompactedOperationRequest, thought_payload_digest};
 
 /// Current storage schema understood by this binary.
-pub const SUPPORTED_SCHEMA_VERSION: u32 = 4;
+pub const SUPPORTED_SCHEMA_VERSION: u32 = 5;
 /// Current local storage protocol understood by this binary.
-pub const STORAGE_PROTOCOL_VERSION: u32 = 4;
+pub const STORAGE_PROTOCOL_VERSION: u32 = 5;
+
+/// One ordered, content-redacted source included in a submission.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SubmissionSource {
+    /// Source thought.
+    pub thought_id: ThoughtId,
+    /// SHA-256 of the exact source content.
+    pub source_digest: [u8; 32],
+}
 
 /// Durable lifecycle state for one content-redacted agent submission.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -59,10 +68,10 @@ pub struct SubmissionAttempt {
     pub id: SubmissionId,
     /// Owning session.
     pub session_id: SessionId,
-    /// Source thought.
-    pub thought_id: ThoughtId,
-    /// SHA-256 of the exact submitted content.
-    pub source_digest: [u8; 32],
+    /// Ordered source thoughts and their exact-content digests.
+    pub sources: Vec<SubmissionSource>,
+    /// SHA-256 of the complete concatenated prompt.
+    pub payload_digest: [u8; 32],
     /// Latest durable source sequence when prepared.
     pub source_sequence: OperationSequence,
     /// Keep or remove after durable acceptance.

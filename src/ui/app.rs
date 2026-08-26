@@ -7,6 +7,7 @@ mod control;
 mod editing;
 mod folds;
 mod palette;
+mod pending_types;
 mod pointer;
 mod query;
 mod recovery;
@@ -20,15 +21,12 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
     application::{
-        Action, AppState, ClipboardIntent, DurabilityState, Effect, FailureCode, InteractionMode,
-        reduce,
+        Action, AppState, DurabilityState, Effect, FailureCode, InteractionMode, reduce,
     },
     domain::{OperationSequence, RequestId, SubmissionId, ThoughtId},
     ports::{
-        agent::{AgentTarget, SubmissionDisposition, SubmissionRequest},
-        editor::{
-            CursorMovement, EditCommand, Editor, EditorFactory, EditorSnapshot, TextViewport,
-        },
+        agent::AgentTarget,
+        editor::{CursorMovement, EditCommand, Editor, EditorFactory, TextViewport},
         environment::{Clock, IdGenerator},
     },
 };
@@ -74,26 +72,9 @@ pub struct PointerInput {
     pub kind: PointerKind,
 }
 
-struct PendingEditorClipboard {
-    intent: ClipboardIntent,
-    before: EditorSnapshot,
-}
-
-struct PendingSubmission {
-    request: SubmissionRequest,
-    thought_id: ThoughtId,
-    operation_id: crate::domain::OperationId,
-    at: crate::domain::Timestamp,
-    disposition: SubmissionDisposition,
-    source_digest: [u8; 32],
-    completion:
-        Option<Result<crate::ports::agent::SubmissionReceipt, crate::ports::agent::AgentError>>,
-}
-
-#[derive(Clone, Copy)]
-struct SubmissionMode {
-    disposition: SubmissionDisposition,
-}
+use pending_types::{
+    PendingBoardClipboard, PendingEditorClipboard, PendingSubmission, SubmissionMode,
+};
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 enum InsertionFocus {
@@ -178,6 +159,7 @@ pub struct BoardApp {
     pub(in crate::ui) status: Option<crate::ui::status::UiStatus>,
     viewport: TextViewport,
     first_visible: usize,
+    first_visible_row: usize,
     manual_board_scroll: bool,
     layout: Option<LayoutSnapshot>,
     dragged_thought: Option<ThoughtId>,
@@ -191,8 +173,10 @@ pub struct BoardApp {
     transfer: Option<transfer::TransferState>,
     settings: UiSettings,
     expanded: BTreeSet<ThoughtId>,
+    selected_thoughts: BTreeSet<ThoughtId>,
     expanded_folds: BTreeSet<(ThoughtId, usize)>,
     pending_editor_clipboard: BTreeMap<RequestId, PendingEditorClipboard>,
+    pending_board_clipboard: BTreeMap<RequestId, PendingBoardClipboard>,
     pending_clipboard_reads: BTreeSet<RequestId>,
     pending_recovery_exports: BTreeSet<RequestId>,
     recovery_exported_for: Option<OperationSequence>,
@@ -234,6 +218,7 @@ impl BoardApp {
             status: None,
             viewport: TextViewport::default(),
             first_visible: 0,
+            first_visible_row: 0,
             manual_board_scroll: false,
             layout: None,
             dragged_thought: None,
@@ -247,8 +232,10 @@ impl BoardApp {
             transfer: None,
             settings,
             expanded: BTreeSet::new(),
+            selected_thoughts: BTreeSet::new(),
             expanded_folds: BTreeSet::new(),
             pending_editor_clipboard: BTreeMap::new(),
+            pending_board_clipboard: BTreeMap::new(),
             pending_clipboard_reads: BTreeSet::new(),
             pending_recovery_exports: BTreeSet::new(),
             recovery_exported_for: None,
@@ -478,6 +465,10 @@ impl BoardApp {
         self.insertion_focus = InsertionFocus::Inactive;
         self.edit_boundary = None;
         if let Some(thought_id) = self.state.focused_thought {
+            if self.submission_locked(thought_id) {
+                self.set_warning("thought has a submission in progress");
+                return;
+            }
             let _effects = self.reduce(Action::EnterEdit(thought_id));
             self.sync_editor_from_state();
         }

@@ -196,6 +196,47 @@ pub struct AgentTarget {
     pub source: PaneContext,
 }
 
+/// Stable identity used to match discovery and submission receipts.
+///
+/// Geometry, readiness, display names, and negotiated delivery metadata may
+/// legitimately change while one semantic prompt request is in flight.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AgentTargetIdentity {
+    /// Integration provider.
+    pub provider: String,
+    /// Integration workspace containing both panes.
+    pub workspace_id: String,
+    /// Integration tab containing both panes.
+    pub tab_id: String,
+    /// Source Proqi pane.
+    pub source_pane_id: String,
+    /// Target agent pane.
+    pub target_pane_id: String,
+    /// Verified direction from source to target.
+    pub direction: Direction,
+    /// Recognized agent harness.
+    pub agent_kind: String,
+    /// Stable harness session identity.
+    pub agent_session_id: String,
+}
+
+impl AgentTarget {
+    /// Return the stable receipt identity, excluding volatile presentation and state.
+    #[must_use]
+    pub fn identity(&self) -> AgentTargetIdentity {
+        AgentTargetIdentity {
+            provider: self.provider.clone(),
+            workspace_id: self.workspace_id.clone(),
+            tab_id: self.tab_id.clone(),
+            source_pane_id: self.source.pane_id.clone(),
+            target_pane_id: self.pane_id.clone(),
+            direction: self.direction,
+            agent_kind: self.agent_kind.clone(),
+            agent_session_id: self.agent_session_id.clone(),
+        }
+    }
+}
+
 /// One semantic prompt submission.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SubmissionRequest {

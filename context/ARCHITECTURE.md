@@ -377,6 +377,11 @@ event-sourced system.
   persistent undo and redo.
 - `integration_context`: optional last-known terminal and verified agent
   metadata. Pane IDs are hints, never durable identity.
+- `submission_attempts`: one content-redacted semantic delivery and its
+  aggregate payload digest, target fingerprint, disposition, and state.
+- `submission_attempt_items`: ordered source thought identities and per-source
+  digests for one delivery. A partial unique index permits at most one active
+  submission per thought.
 - `schema_meta`: schema version, migration history, and application storage
   protocol version.
 
@@ -392,6 +397,8 @@ ordinary tables.
 - Operation sequences increase monotonically within a session.
 - Undo and redo commit new current state and move the operation cursor
   atomically.
+- A multi-thought mutation is stored as one ordered batch with one inverse, so
+  delete, collapse, cut, and submit-and-remove remain one undo step.
 - Soft deletion remains recoverable until explicit pruning.
 - Only the holder of the session lease may mutate that session.
 - All timestamps are stored as UTC integers and rendered in local time.
@@ -678,19 +685,23 @@ Both visible actions invoke the same immediate semantic prompt command.
 `SubmissionDisposition::Keep` preserves the thought.
 `SubmissionDisposition::RemoveAfterSuccess` commits deletion only after an
 accepted receipt whose submission identifier and target match the pending
-request. The matching `agent_prompted` receipt establishes acceptance. Any
+request. Matching uses stable target identity fields and deliberately ignores
+volatile readiness, display names, and geometry observed after delivery. The
+matching `agent_prompted` receipt establishes acceptance. Any
 post-submit agent state is advisory, including `blocked`, `unknown`, or no
 reported state. The accepted outcome is journaled durably before an unchanged
 thought may be removed. That deletion remains undoable. Every failure preserves
 the thought.
 
 Submission attempts use a content-redacted SQLite journal. Proqi first reserves
-the thought in `prepared`, compare-and-sets it to `sending`, invokes Herdr with no
-open database transaction, then compare-and-sets a terminal result. Only one
-active attempt may exist per thought. Recovery changes `prepared` to `cancelled`
-and `sending` to `outcome_unknown`; it never automatically retries an ambiguous
-delivery. The journal stores a SHA-256 source digest and a target identity
-fingerprint, never prompt content or raw pane and agent session identifiers.
+every source thought in `prepared`, compare-and-sets the attempt to `sending`,
+invokes Herdr once with no open database transaction, then compare-and-sets a
+terminal result. Only one active attempt may reference a thought. Recovery
+changes `prepared` to `cancelled` and `sending` to `outcome_unknown`; it never
+automatically retries an ambiguous delivery. The journal stores ordered source
+identities, their SHA-256 digests, one aggregate payload digest, and a target
+identity fingerprint, never prompt content or raw pane and agent session
+identifiers.
 
 `v0.1.0` implements this boundary against Herdr's structured schema
 and protocol discovery commands. Capability discovery verifies both the
@@ -740,12 +751,13 @@ standard error. Thought bodies enter through standard input. A caller-supplied
 `op_` identity is resolved against its typed durable request before mutation,
 so matching retries return the original receipt and mismatched reuse fails.
 
-Read-only commands may inspect the shared database through the storage facade.
-A mutating CLI command first resolves the session owner. For an inactive
-session it acquires the ordinary session lease. For an active session it sends
-a typed request through the owner's user-only local control endpoint. The owner
-turns that request into an ordinary action, then returns the durable operation
-receipt. It never writes around the owner.
+Read-only commands synchronize with an active owner before inspecting the
+shared database through the storage facade. A mutating CLI command first
+resolves the session owner. For an inactive session it acquires the ordinary
+session lease. For an active session it sends a typed request through the
+owner's user-only local control endpoint. The owner turns that request into an
+ordinary action, then returns the durable operation or metadata receipt. It
+never writes around the owner.
 
 The local transport is a Unix-domain socket on macOS and Linux. There is no
 insecure fallback. Endpoint metadata lives beside runtime lock metadata. Peer-user validation,
@@ -753,13 +765,15 @@ bounded messages, protocol negotiation, idempotency keys, and timeouts are
 mandatory. If forwarding is unsupported or the owner cannot be verified, the
 CLI returns `session_busy`.
 
-Control protocol version 2 adds durable presentation annotations to thought
-creation. Plain additions remain compatible with version 1 owners. An
-annotation-bearing transfer requires version 2 and fails closed rather than
-discarding metadata. Cross-session delivery inspects the source, commits an
+Control protocol version 4 supports durable presentation annotations, session
+rename, owner synchronization, exact editor replacement, and durable collapse
+state. Exact replacement carries either the caller's expected SHA-256 content
+digest or an explicit force intention and enters the ordinary editor revision
+history. The owner rejects every mutation of a source thought while its
+submission is in flight. Cross-session delivery inspects the source, commits an
 idempotent destination creation through the verified owner or an acquired
-inactive-session lease, and only then requests an ordinary source deletion.
-No direct database write bypasses an active destination owner.
+inactive-session lease, and only then requests an ordinary source deletion. No
+direct database write bypasses an active destination owner.
 
 The Proqi skill contains instructions and examples, not privileged executable
 logic. It begins with capability discovery, passes arbitrary thought content by

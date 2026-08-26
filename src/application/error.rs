@@ -12,6 +12,10 @@ use crate::domain::{DomainError, ThoughtId};
 pub enum FailureCode {
     /// Requested thought is absent or deleted.
     ThoughtNotFound,
+    /// Exact replacement precondition no longer matches current content.
+    ContentConflict,
+    /// A thought is locked by an in-flight submission.
+    ThoughtLocked,
     /// Action is invalid in the current mode or history state.
     InvalidState,
     /// Clipboard access failed without mutating content.
@@ -30,6 +34,8 @@ impl FailureCode {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::ThoughtNotFound => "thought_not_found",
+            Self::ContentConflict => "content_conflict",
+            Self::ThoughtLocked => "thought_locked",
             Self::InvalidState => "invalid_state",
             Self::ClipboardFailed => "clipboard_failed",
             Self::StorageFailed => "storage_failed",
@@ -51,6 +57,12 @@ pub enum ApplicationError {
     /// Revision does not match current content or ownership.
     #[error("revision precondition failed for thought {0}")]
     RevisionConflict(ThoughtId),
+    /// Exact replacement digest no longer matches current content.
+    #[error("content precondition failed for thought {0}")]
+    ContentConflict(ThoughtId),
+    /// Mutation is forbidden during an in-flight submission.
+    #[error("thought has a submission in progress: {0}")]
+    ThoughtLocked(ThoughtId),
     /// An action requires another interaction state.
     #[error("action is invalid in the current application state")]
     InvalidState,
@@ -65,6 +77,8 @@ impl ApplicationError {
     pub const fn code(&self) -> FailureCode {
         match self {
             Self::ThoughtNotFound(_) => FailureCode::ThoughtNotFound,
+            Self::ContentConflict(_) => FailureCode::ContentConflict,
+            Self::ThoughtLocked(_) => FailureCode::ThoughtLocked,
             Self::RevisionConflict(_) | Self::InvalidState | Self::SequenceExhausted => {
                 FailureCode::InvalidState
             }

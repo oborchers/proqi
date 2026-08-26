@@ -112,7 +112,7 @@ fn chrome_and_thought_rhythm_are_responsive_and_non_overlapping() {
     let roomy = fixture.app.prepare_frame(Rect::new(0, 0, 60, 14));
     assert_eq!(roomy.thoughts[0].area.y, roomy.board.y + 1);
     let rule = roomy.thoughts[1].separator_before.expect("roomy rule");
-    assert_eq!(rule.y, roomy.thoughts[0].area.bottom() + 1);
+    assert_eq!(rule.y, roomy.thoughts[0].area.bottom());
     assert_eq!(roomy.thoughts[1].area.y, rule.bottom() + 1);
     assert!(roomy.header.bottom() <= roomy.board.y);
     assert!(roomy.board.bottom() <= roomy.footer.y);
@@ -126,10 +126,77 @@ fn chrome_and_thought_rhythm_are_responsive_and_non_overlapping() {
 }
 
 #[test]
+fn long_session_names_remain_visible_and_renameable_after_resize() {
+    let mut fixture = Fixture::new();
+    fixture
+        .app
+        .state
+        .board
+        .session
+        .rename(Some(
+            "aia-knowledge-platform-interface-with-a-long-context".to_owned(),
+        ))
+        .expect("session name");
+
+    for width in [80, 48, 24] {
+        let terminal = draw(&mut fixture, width, 8);
+        let rendered = text(terminal.backend().buffer());
+        assert!(rendered.contains("aia-knowledge"));
+        assert!(rendered.contains("saved"));
+        let layout = fixture.app.prepare_frame(Rect::new(0, 0, width, 8));
+        assert!(layout.footer_name.height > 0);
+        assert!(
+            layout
+                .controls
+                .iter()
+                .any(|(target, area)| { *target == HitTarget::RenameSession && area.width > 0 })
+        );
+    }
+}
+
+#[test]
+fn multiline_edit_at_the_end_reflows_and_keeps_the_cursor_visible() {
+    let mut fixture = Fixture::new();
+    for content in ["first", "second", "third"] {
+        fixture.paste(content);
+        fixture.input(UiInput::Key(UiKey::Escape));
+    }
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::VisualDown,
+        extend_selection: false,
+    }));
+    fixture.input(UiInput::Key(UiKey::Enter));
+    let active = fixture.app.active_thought_id().expect("new thought editor");
+    let before = fixture.app.prepare_frame(Rect::new(0, 0, 34, 12));
+    assert_eq!(
+        before.thought(active).expect("blank thought").area.height,
+        1
+    );
+
+    let content = (1..=8)
+        .map(|line| format!("line {line}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    fixture.input(UiInput::Paste(content));
+    let mut terminal = draw(&mut fixture, 34, 12);
+    let after = fixture.app.prepare_frame(Rect::new(0, 0, 34, 12));
+    let thought = after
+        .thought(active)
+        .expect("edited thought remains visible");
+    let cursor = terminal
+        .backend_mut()
+        .get_cursor_position()
+        .expect("visible terminal cursor");
+    assert!(thought.area.height > 1);
+    assert!(cursor.y >= thought.text_area.y && cursor.y < thought.text_area.bottom());
+    assert!(text(terminal.backend().buffer()).contains("line 8"));
+}
+
+#[test]
 fn narrow_empty_board_has_a_complete_explicit_buffer_snapshot() {
     let mut fixture = Fixture::new();
     assert_eq!(
         text(draw(&mut fixture, 12, 3).backend().buffer()),
-        "            \n+ New though\n  n New     "
+        "+ New though\n  0 saved   \n  n New     "
     );
 }

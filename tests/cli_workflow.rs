@@ -6,17 +6,15 @@ use std::{
     process::{Command, Output, Stdio},
 };
 
-use proqi::{
-    adapters::runtime::{FileRuntimeCoordinator, SystemIdGenerator},
-    domain::{SessionId, Timestamp},
-    ports::{environment::IdGenerator, runtime::RuntimeCoordinator},
-};
+use proqi::{adapters::runtime::SystemIdGenerator, ports::environment::IdGenerator};
 use serde_json::Value;
 
 #[path = "cli_workflow/diagnostics.rs"]
 mod diagnostics;
 #[path = "cli_workflow/doctor.rs"]
 mod doctor;
+#[path = "cli_workflow/session_contract.rs"]
+mod session_contract;
 
 fn run(root: &Path, arguments: &[&str], input: Option<&str>) -> Output {
     let mut command = Command::new(env!("CARGO_BIN_EXE_proqi"));
@@ -212,6 +210,74 @@ fn thought_mutations_round_trip_unicode_and_idempotency_across_processes() {
 }
 
 #[test]
+fn exact_replacement_requires_a_precondition_and_uses_editor_history() {
+    let temporary = tempfile::tempdir().expect("temporary directory");
+    let root = temporary.path();
+    let session = create_session(root);
+    let added = success(root, &["thoughts", "add", &session], Some("before"));
+    let thought = added["thought_id"].as_str().expect("thought ID");
+    let inspected = success(root, &["thoughts", "inspect", &session, thought], None);
+    let digest = inspected["thought"]["content_sha256"]
+        .as_str()
+        .expect("digest");
+
+    success(
+        root,
+        &[
+            "thoughts",
+            "replace",
+            &session,
+            thought,
+            "--expected-sha256",
+            digest,
+        ],
+        Some("replacement"),
+    );
+    let stale = run(
+        root,
+        &[
+            "thoughts",
+            "replace",
+            &session,
+            thought,
+            "--expected-sha256",
+            digest,
+        ],
+        Some("stale"),
+    );
+    assert!(!stale.status.success());
+    let error: Value = serde_json::from_slice(&stale.stdout).expect("conflict JSON");
+    assert_eq!(error["error"]["code"], "content_conflict");
+    success(
+        root,
+        &["thoughts", "replace", &session, thought, "--force"],
+        Some("forced"),
+    );
+    success(
+        root,
+        &["thoughts", "undo", &session, "--thought", thought],
+        None,
+    );
+    let restored = success(root, &["thoughts", "inspect", &session, thought], None);
+    assert_eq!(restored["thought"]["content"], "replacement");
+
+    success(
+        root,
+        &[
+            "thoughts",
+            "collapse",
+            &session,
+            thought,
+            "--collapsed",
+            "true",
+        ],
+        None,
+    );
+    let collapsed = success(root, &["thoughts", "inspect", &session, thought], None);
+    assert_eq!(collapsed["thought"]["collapsed"], true);
+}
+
+#[test]
 fn thoughts_copy_between_named_sessions_and_remove_only_after_delivery() {
     let temporary = tempfile::tempdir().expect("temporary directory");
     let root = temporary.path();
@@ -330,8 +396,12 @@ fn launch_modes_and_capability_discovery_have_stable_output() {
     let capabilities = success(root, &["capabilities"], None);
     assert_eq!(capabilities["cli_schema_version"], 1);
     assert_eq!(capabilities["active_session_control"], cfg!(unix));
-    assert_eq!(capabilities["control_protocol"], 3);
+    assert_eq!(capabilities["control_protocol"], 4);
+    assert_eq!(capabilities["active_session_read_sync"], true);
     assert_eq!(capabilities["cross_session_transfer"], true);
+    assert_eq!(capabilities["exact_thought_replacement"], true);
+    assert_eq!(capabilities["replacement_sha256_precondition"], true);
+    assert_eq!(capabilities["durable_thought_collapse"], true);
     assert_eq!(capabilities["max_thought_stdin_bytes"], 131_072);
     assert_eq!(capabilities["herdr_submission"], true);
     assert_eq!(capabilities["herdr_managed_pane_required"], true);
@@ -387,87 +457,4 @@ fn thought_standard_input_has_one_explicit_transport_safe_bound() {
             .expect("message")
             .contains("131072-byte")
     );
-}
-
-#[test]
-fn newer_schema_is_reported_as_unsupported() {
-    let temporary = tempfile::tempdir().expect("temporary directory");
-    let root = temporary.path();
-    create_session(root);
-    let connection =
-        rusqlite::Connection::open(root.join("data/proqi.sqlite3")).expect("open database fixture");
-    connection
-        .execute("UPDATE schema_meta SET schema_version = 999", [])
-        .expect("advance schema fixture");
-    drop(connection);
-
-    let output = run(root, &["sessions"], None);
-    assert!(!output.status.success());
-    let error: Value = serde_json::from_slice(&output.stdout).expect("error JSON");
-    assert_eq!(error["error"]["code"], "unsupported");
-}
-
-#[test]
-fn names_can_be_ambiguous_and_identifier_prefixes_are_strict() {
-    let temporary = tempfile::tempdir().expect("temporary directory");
-    let root = temporary.path();
-    let first = create_session(root);
-    let second = create_session(root);
-    success(root, &["sessions", "rename", &first, "same"], None);
-    success(root, &["sessions", "rename", &second, "same"], None);
-
-    let ambiguous = run(root, &["-r", "same"], None);
-    assert!(!ambiguous.status.success());
-    let error: Value = serde_json::from_slice(&ambiguous.stdout).expect("error JSON");
-    assert_eq!(error["error"]["code"], "ambiguous_session");
-    assert_eq!(
-        error["error"]["details"]["matches"]
-            .as_array()
-            .expect("matches")
-            .len(),
-        2
-    );
-
-    let wrong_prefix = first.replacen("ses_", "tht_", 1);
-    let rejected = run(root, &["thoughts", "list", &wrong_prefix], None);
-    assert!(!rejected.status.success());
-    let error: Value = serde_json::from_slice(&rejected.stdout).expect("error JSON");
-    assert_eq!(error["error"]["code"], "invalid_identifier");
-}
-
-#[test]
-fn active_session_conflict_is_structured_and_nonzero() {
-    let temporary = tempfile::tempdir().expect("temporary directory");
-    let root = temporary.path();
-    let session = create_session(root);
-    let before = success(root, &["sessions", "list"], None);
-    let opened_before = before["sessions"][0]["last_opened_at"]
-        .as_i64()
-        .expect("opening timestamp");
-    let session_id: SessionId = session.parse().expect("session ID");
-    let mut ids = SystemIdGenerator;
-    let coordinator = FileRuntimeCoordinator::new(
-        root.join("runtime"),
-        ids.instance_id(),
-        std::env::current_dir().expect("current directory"),
-        Timestamp::from_millis(1),
-        "test-owner",
-    )
-    .expect("runtime coordinator");
-    let _lease = coordinator
-        .acquire_session(session_id)
-        .expect("owner lease");
-
-    let output = run(root, &["-r", &session], None);
-    assert!(!output.status.success());
-    let error: Value = serde_json::from_slice(&output.stdout).expect("error JSON");
-    assert_eq!(error["error"]["code"], "session_busy");
-    assert_eq!(error["error"]["details"]["session_id"], session);
-    let mutation = run(root, &["thoughts", "add", &session], Some("blocked"));
-    assert!(!mutation.status.success());
-    let mutation_error: Value =
-        serde_json::from_slice(&mutation.stdout).expect("mutation error JSON");
-    assert_eq!(mutation_error["error"]["code"], "session_busy");
-    let after = success(root, &["sessions", "list"], None);
-    assert_eq!(after["sessions"][0]["last_opened_at"], opened_before);
 }
