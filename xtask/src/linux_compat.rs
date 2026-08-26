@@ -36,12 +36,27 @@ impl std::fmt::Display for GlibcVersion {
 }
 
 pub(super) fn verify_archive(root: &Path, archive: &Path) -> Result<(), String> {
-    let temporary = tempfile::Builder::new()
+    let temporary = verification_root()?;
+    let binary = inspect_at(archive, temporary.path())?;
+    verify_version(root, &binary)
+}
+
+pub(super) fn inspect_archive(archive: &Path) -> Result<String, String> {
+    let temporary = verification_root()?;
+    let binary = inspect_at(archive, temporary.path())?;
+    super::release::checksum(&binary)
+}
+
+fn verification_root() -> Result<tempfile::TempDir, String> {
+    tempfile::Builder::new()
         .prefix("proqi-linux-compat-")
         .tempdir()
-        .map_err(|error| format!("create Linux verification root: {error}"))?;
-    extract_archive(archive, temporary.path())?;
-    let binary = extracted_binary(temporary.path());
+        .map_err(|error| format!("create Linux verification root: {error}"))
+}
+
+fn inspect_at(archive: &Path, output: &Path) -> Result<PathBuf, String> {
+    extract_archive(archive, output)?;
+    let binary = extracted_binary(output);
     let metadata = binary
         .metadata()
         .map_err(|error| format!("inspect extracted {}: {error}", binary.display()))?;
@@ -52,7 +67,7 @@ pub(super) fn verify_archive(root: &Path, archive: &Path) -> Result<(), String> 
         ));
     }
     verify_symbol_ceiling(&binary)?;
-    verify_version(root, &binary)
+    Ok(binary)
 }
 
 fn extract_archive(archive: &Path, output: &Path) -> Result<(), String> {

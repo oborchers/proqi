@@ -13,6 +13,9 @@
 )]
 
 mod crate_package;
+mod debian;
+mod debian_container;
+mod debian_verify;
 mod homebrew;
 mod linux_compat;
 mod package;
@@ -75,6 +78,16 @@ fn execute() -> Result<(), String> {
             package::run(&root, notices.as_deref())
         }
         "crate-package" => crate_package::run(&root),
+        "debian-package" => {
+            let archive = required_path_argument("debian-package", 2, "Linux archive")?;
+            let output = required_path_argument("debian-package", 3, "output directory")?;
+            debian::package(&root, &archive, &output)
+        }
+        "verify-debian" => {
+            let archive = required_path_argument("verify-debian", 2, "Linux archive")?;
+            let package = required_path_argument("verify-debian", 3, "Debian package")?;
+            debian_container::verify(&root, &archive, &package)
+        }
         "release-plan" => {
             let tag = env::args().nth(2);
             release::plan(&root, tag.as_deref())
@@ -143,12 +156,25 @@ fn print_help() {
          \n  cargo xtask audit\
          \n  cargo xtask package\
          \n  cargo xtask crate-package\
+         \n  cargo xtask debian-package <linux-archive> <output-dir>\
+         \n  cargo xtask verify-debian <linux-archive> <deb>\
          \n  cargo xtask release-plan [vX.Y.Z]\
          \n  cargo xtask release-rehearsal\
          \n  cargo xtask release-checksum <archive>\
          \n  cargo xtask verify-linux-archive <archive>\
          \n  cargo xtask homebrew-formula <artifacts-dir> <output>"
     );
+}
+
+fn required_path_argument(
+    command: &str,
+    index: usize,
+    description: &str,
+) -> Result<PathBuf, String> {
+    env::args()
+        .nth(index)
+        .map(PathBuf::from)
+        .ok_or_else(|| format!("{command} requires a {description}"))
 }
 
 fn install_hooks(root: &Path) -> Result<(), String> {
