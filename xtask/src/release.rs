@@ -187,7 +187,7 @@ fn recreate_output(root: &Path, output: &Path) -> Result<(), String> {
     fs::create_dir_all(output).map_err(|error| format!("create rehearsal output: {error}"))
 }
 
-fn checksum(path: &Path) -> Result<String, String> {
+pub(super) fn checksum(path: &Path) -> Result<String, String> {
     let mut file = File::open(path).map_err(|error| format!("open {}: {error}", path.display()))?;
     let mut hasher = Sha256::new();
     let mut buffer = vec![0_u8; 64 * 1024].into_boxed_slice();

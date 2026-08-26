@@ -12,6 +12,7 @@
     )
 )]
 
+mod crate_package;
 mod homebrew;
 mod linux_compat;
 mod package;
@@ -73,6 +74,7 @@ fn execute() -> Result<(), String> {
             let notices = package_notices_argument()?;
             package::run(&root, notices.as_deref())
         }
+        "crate-package" => crate_package::run(&root),
         "release-plan" => {
             let tag = env::args().nth(2);
             release::plan(&root, tag.as_deref())
@@ -140,6 +142,7 @@ fn print_help() {
          \n  cargo xtask coverage\
          \n  cargo xtask audit\
          \n  cargo xtask package\
+         \n  cargo xtask crate-package\
          \n  cargo xtask release-plan [vX.Y.Z]\
          \n  cargo xtask release-rehearsal\
          \n  cargo xtask release-checksum <archive>\

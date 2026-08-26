@@ -99,6 +99,26 @@ fn nonresponsive_source_cannot_make_stop_wait_without_bound() {
 }
 
 #[test]
+fn stalled_registry_event_source_becomes_a_typed_failure() {
+    let lane = InputLane::spawn_with_source(Box::new(FakeSource {
+        polls: VecDeque::new(),
+        reads: VecDeque::new(),
+        delay: Duration::from_secs(2),
+        entered: None,
+    }));
+    let InputMessage::Failed(failure) = lane
+        .receiver
+        .recv_timeout(Duration::from_secs(1))
+        .expect("stalled source failure")
+    else {
+        panic!("expected a failure message");
+    };
+    assert_eq!(failure, InputFailure::Unresponsive);
+    lane.stop(ShutdownDeadline::after(Duration::from_secs(1)))
+        .expect("input supervisor stops without the stalled reader");
+}
+
+#[test]
 fn command_and_meta_shortcuts_share_semantics() {
     for modifier in [
         KeyModifiers::CONTROL,

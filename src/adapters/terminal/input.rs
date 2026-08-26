@@ -5,10 +5,10 @@ use std::{
     sync::{
         Arc,
         atomic::{AtomicBool, AtomicU64, Ordering},
-        mpsc::{Receiver, SyncSender, TrySendError, sync_channel},
+        mpsc::{Receiver, RecvTimeoutError, SyncSender, TrySendError, sync_channel},
     },
     thread::{self, JoinHandle},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use crossterm::event::{
@@ -29,6 +29,7 @@ use super::{
 pub(super) enum InputFailure {
     EndOfFile,
     TerminalRevoked,
+    Unresponsive,
     Io(String),
 }
 
@@ -37,10 +38,16 @@ impl fmt::Display for InputFailure {
         match self {
             Self::EndOfFile => formatter.write_str("terminal input reached end of file"),
             Self::TerminalRevoked => formatter.write_str("terminal input was revoked"),
+            Self::Unresponsive => formatter.write_str("terminal input became unresponsive"),
             Self::Io(message) => write!(formatter, "terminal input failed: {message}"),
         }
     }
 }
+
+const SOURCE_POLL_INTERVAL: Duration = Duration::from_millis(40);
+const MONITOR_INTERVAL: Duration = Duration::from_millis(50);
+const SOURCE_STALL_LIMIT: Duration = Duration::from_millis(500);
+const READER_JOIN_GRACE: Duration = Duration::from_millis(100);
 
 trait EventSource: Send {
     fn poll(&mut self, timeout: Duration) -> io::Result<bool>;
@@ -129,14 +136,14 @@ impl InputLane {
         Self::spawn_with_source(Box::new(CrosstermEventSource))
     }
 
-    fn spawn_with_source(mut source: Box<dyn EventSource>) -> Self {
+    fn spawn_with_source(source: Box<dyn EventSource>) -> Self {
         let (sender, receiver) = sync_channel(64);
         let stop = Arc::new(AtomicBool::new(false));
         let latest_sequence = Arc::new(AtomicU64::new(0));
         let worker_stop = Arc::clone(&stop);
         let worker_sequence = Arc::clone(&latest_sequence);
         let handle = thread::spawn(move || {
-            input_loop(&mut *source, &sender, &worker_stop, &worker_sequence);
+            supervise_input(source, &sender, &worker_stop, &worker_sequence);
         });
         Self {
             receiver,
@@ -171,36 +178,102 @@ impl Drop for InputLane {
     }
 }
 
-fn input_loop(
-    source: &mut dyn EventSource,
+enum SourceMessage {
+    Responsive,
+    Event(Event),
+    Failed(InputFailure),
+}
+
+fn supervise_input(
+    mut source: Box<dyn EventSource>,
     sender: &SyncSender<InputMessage>,
     stop: &AtomicBool,
     latest_sequence: &AtomicU64,
 ) {
+    let (source_sender, source_receiver) = sync_channel(64);
+    let source_stop = Arc::new(AtomicBool::new(false));
+    let reader_stop = Arc::clone(&source_stop);
+    let reader = thread::spawn(move || {
+        read_source(&mut *source, &source_sender, &reader_stop);
+    });
     let mut pending_resize = None;
+    let mut last_response = Instant::now();
     while !stop.load(Ordering::Acquire) {
         flush_resize(sender, &mut pending_resize);
-        match source.poll(Duration::from_millis(40)) {
-            Ok(false) => {}
-            Ok(true) => match source.read() {
-                Ok(event) => deliver(event, sender, stop, &mut pending_resize, latest_sequence),
-                Err(error) => {
-                    let _sent = send_lossless(
-                        sender,
-                        InputMessage::Failed(classify_input_error(&error)),
-                        stop,
-                    );
-                    return;
-                }
-            },
-            Err(error) => {
+        match source_receiver.recv_timeout(MONITOR_INTERVAL) {
+            Ok(SourceMessage::Responsive) => last_response = Instant::now(),
+            Ok(SourceMessage::Event(event)) => {
+                last_response = Instant::now();
+                deliver(event, sender, stop, &mut pending_resize, latest_sequence);
+            }
+            Ok(SourceMessage::Failed(failure)) => {
+                let _sent = send_lossless(sender, InputMessage::Failed(failure), stop);
+                break;
+            }
+            Err(RecvTimeoutError::Timeout) if last_response.elapsed() >= SOURCE_STALL_LIMIT => {
                 let _sent = send_lossless(
                     sender,
-                    InputMessage::Failed(classify_input_error(&error)),
+                    InputMessage::Failed(InputFailure::Unresponsive),
                     stop,
                 );
-                return;
+                break;
             }
+            Err(RecvTimeoutError::Timeout) => {}
+            Err(RecvTimeoutError::Disconnected) => {
+                let _sent = send_lossless(
+                    sender,
+                    InputMessage::Failed(InputFailure::Io(
+                        "terminal event reader exited unexpectedly".to_owned(),
+                    )),
+                    stop,
+                );
+                break;
+            }
+        }
+    }
+    source_stop.store(true, Ordering::Release);
+    let _joined = join_before(
+        Some(reader),
+        ShutdownDeadline::after(READER_JOIN_GRACE),
+        "terminal event reader panicked",
+        "terminal event reader did not stop",
+    );
+}
+
+fn read_source(
+    source: &mut dyn EventSource,
+    sender: &SyncSender<SourceMessage>,
+    stop: &AtomicBool,
+) {
+    while !stop.load(Ordering::Acquire) {
+        let message = match source.poll(SOURCE_POLL_INTERVAL) {
+            Ok(false) => SourceMessage::Responsive,
+            Ok(true) => match source.read() {
+                Ok(event) => SourceMessage::Event(event),
+                Err(error) => SourceMessage::Failed(classify_input_error(&error)),
+            },
+            Err(error) => SourceMessage::Failed(classify_input_error(&error)),
+        };
+        let failed = matches!(message, SourceMessage::Failed(_));
+        if !send_source(message, sender, stop) || failed {
+            return;
+        }
+    }
+}
+
+fn send_source(
+    mut message: SourceMessage,
+    sender: &SyncSender<SourceMessage>,
+    stop: &AtomicBool,
+) -> bool {
+    loop {
+        match sender.try_send(message) {
+            Ok(()) => return true,
+            Err(TrySendError::Full(returned)) if !stop.load(Ordering::Acquire) => {
+                message = returned;
+                thread::yield_now();
+            }
+            Err(TrySendError::Full(_) | TrySendError::Disconnected(_)) => return false,
         }
     }
 }

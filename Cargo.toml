@@ -57,9 +57,6 @@ module_name_repetitions = "allow"
 inherits = "release"
 lto = "thin"
 
-[patch.crates-io]
-crossterm = { git = "https://github.com/crossterm-rs/crossterm", rev = "c006ee6efbd7bed45f1286ec9545d401f3ecb1fe" }
-
 [workspace.metadata.dist]
 allow-dirty = ["ci"]
 cargo-dist-version = "0.32.0"
@@ -80,9 +77,14 @@ edition.workspace = true
 rust-version.workspace = true
 description = "An agent-optimized terminal scratchpad for follow-up prompts"
 repository = "https://github.com/oborchers/proqi"
+homepage = "https://github.com/oborchers/proqi"
 readme = "README.md"
 license.workspace = true
-publish = false
+authors = ["Oliver Borchers <oliver-borchers@gmx.net>"]
+keywords = ["tui", "terminal", "scratchpad", "ai-agents", "prompts"]
+categories = ["command-line-utilities"]
+publish = ["crates-io"]
+include = ["/src/**/*.rs", "/Cargo.toml", "/Cargo.lock", "/README.md", "/LICENSE"]
 
 [package.metadata.dist]
 all-features = true
@@ -134,3 +136,8 @@ workspace = true
 [[bin]]
 name = "proqi"
 path = "src/bin/proqi.rs"
+
+[lib]
+name = "proqi"
+path = "src/lib.rs"
+doc = false
