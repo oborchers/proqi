@@ -99,7 +99,7 @@ test -r /usr/share/bash-completion/completions/proqi
 test -r /usr/share/zsh/vendor-completions/_proqi
 test -r /usr/share/fish/vendor_completions.d/proqi.fish
 test -r /usr/share/doc/proqi/copyright
-mkdir -p /tmp/proqi-state
+install -d -m 700 /tmp/proqi-state
 proqi --state-dir /tmp/proqi-state --json capabilities > /tmp/capabilities.json
 grep -q '"ok":true' /tmp/capabilities.json
 proqi --state-dir /tmp/proqi-state --json doctor > /tmp/doctor.json
@@ -131,6 +131,7 @@ mod tests {
         assert!(script.contains("apt-get install -y /work/proqi_amd64.deb"));
         assert!(script.contains("proqi-wrong-architecture.deb"));
         assert!(script.contains("proqi-missing-dependency.deb"));
+        assert!(script.contains("install -d -m 700 /tmp/proqi-state"));
         assert!(script.contains("--json doctor"));
         assert!(script.contains("abc123"));
     }
