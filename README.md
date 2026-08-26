@@ -64,11 +64,10 @@ text for copy, export, undo, resume, and submission.
 
 ## Install
 
-> [!IMPORTANT]
-> The Cargo and Debian channels below are prepared on `main` but are not public
-> yet. Until the next release publishes them, use Homebrew or a standalone
-> archive. This notice will be removed only after both public artifacts have
-> been verified.
+> [!NOTE]
+> Cargo and Debian distribution begin with Proqi `0.1.2`. If the latest public
+> release is older, use Homebrew or a standalone archive until `0.1.2` is
+> available.
 
 ### Homebrew
 
