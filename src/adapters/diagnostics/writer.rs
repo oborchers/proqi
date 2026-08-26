@@ -201,9 +201,7 @@ fn remove_if_exists(path: &Path) -> io::Result<()> {
 }
 
 fn create_private_dir(path: &Path) -> io::Result<()> {
-    reject_symlink(path)?;
-    fs::create_dir_all(path)?;
-    make_private(path, 0o700)
+    crate::adapters::filesystem::prepare_private_dir(path)
 }
 
 fn open_private(path: &Path, truncate: bool) -> io::Result<File> {
@@ -235,11 +233,6 @@ fn reject_symlink(path: &Path) -> io::Result<()> {
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
         Err(error) => Err(error),
     }
-}
-
-fn make_private(path: &Path, mode: u32) -> io::Result<()> {
-    use std::os::unix::fs::PermissionsExt as _;
-    fs::set_permissions(path, fs::Permissions::from_mode(mode))
 }
 
 fn make_file_private(file: &File, mode: u32) -> io::Result<()> {

@@ -98,12 +98,13 @@ must not imply that the behavior exists.
 
 | Capability | Status | Reachable behavior | Evidence |
 | --- | --- | --- | --- |
-| User-only local state | Shipped | Database, runtime, cache, configuration, attachments, diagnostics, backups, and recovery files use private permissions and reject unsafe symlink shapes. | adapter tests and `tests/recovery_export.rs` |
+| User-only local state | Shipped | Ordinary startup preflights the explicit state root and its data, configuration, cache, and runtime leaves. SQLite also rejects linked database, companion, backup-directory, and backup-destination paths before following them. Private permissions remain enforced. | `tests/state_path_safety.rs`, `tests/sqlite_store/recovery.rs`, `tests/recovery_export.rs` |
 | Bounded external input | Shipped | CLI thought input, control messages, HTTP bodies, diagnostics, markers, config, process output, and clipboard fallback are explicitly bounded. | ports and adapter constants, contract tests |
 | Direct process execution | Shipped | Herdr, installer, and verification commands use argument vectors and optional standard input without shell interpolation. | `src/adapters/process/mod.rs`, process tests |
 | Secret and content minimization | Shipped | Diagnostics are bounded and content-redacted. Release assets and public presentation checks reject private local paths. There is no telemetry. | `tests/cli_workflow.rs`, `xtask/src/public_assets.rs` |
 | Dependency policy | Shipped gate | Advisory, license, source, and duplicate checks are owned by `cargo xtask audit`; unsafe Rust is forbidden. | `deny.toml`, `Cargo.toml`, `src/lib.rs` |
 | Source and architecture policy | Shipped gate | First-party source files are limited to 500 lines, complexity is bounded, ignored artifacts are excluded, and inward dependency rules are mechanically checked. | `xtask/src/source_limits.rs`, `xtask/src/policy.rs` |
+| GNU/Linux compatibility | Candidate gate | The x86-64 GNU archive is built on Ubuntu 22.04, rejects required symbols newer than `GLIBC_2.35`, and starts from the final archive on Ubuntu 22.04, Debian bookworm, and Ubuntu 24.04 before promotion. | `xtask/src/linux_compat.rs`, `.github/workflows/release-candidate.yml` |
 
 ## Public release verification
 

@@ -45,6 +45,7 @@ impl RuntimeContext {
             .current_directory()
             .map_err(|error| CliError::new("environment_failed", error.to_string(), 1))?;
         let paths = resolve_paths(state_root)?;
+        prepare_state_paths(&paths, state_root)?;
         let clock = SystemClock;
         let mut ids = SystemIdGenerator;
         let instance_id = ids.instance_id();
@@ -122,6 +123,26 @@ impl RuntimeContext {
     }
 }
 
+fn prepare_state_paths(paths: &AppPaths, state_root: Option<&Path>) -> Result<(), CliError> {
+    let mut directories = Vec::with_capacity(5);
+    if let Some(root) = state_root {
+        directories.push(root);
+    }
+    directories.extend([
+        paths.data_dir.as_path(),
+        paths.config_dir.as_path(),
+        paths.cache_dir.as_path(),
+        paths.runtime_dir.as_path(),
+    ]);
+    crate::adapters::filesystem::prepare_private_dirs(&directories).map_err(|error| {
+        CliError::new(
+            "unsafe_state_path",
+            format!("Proqi state paths are unsafe: {error}"),
+            2,
+        )
+    })
+}
+
 pub(super) fn resolve_paths(state_root: Option<&Path>) -> Result<AppPaths, CliError> {
     if let Some(root) = state_root {
         if !root.is_absolute() {
@@ -160,14 +181,109 @@ fn open_store(
         Ok(store) => Ok((store, shared)),
         Err(StoreError::MigrationRequired { .. }) => {
             drop(shared);
-            let exclusive = coordinator.acquire_schema_exclusive()?;
-            let migrate = StoreConfig::new(database, backups, MigrationMode::Allow, now);
-            let _migrated = SqliteStore::open(&migrate)?;
-            drop(exclusive);
-            let shared = coordinator.acquire_schema_shared()?;
-            let store = SqliteStore::open(&refuse)?;
-            Ok((store, shared))
+            finish_required_migration(coordinator, database, backups, &refuse, now)
         }
         Err(error) => Err(error.into()),
+    }
+}
+
+fn finish_required_migration(
+    coordinator: &FileRuntimeCoordinator,
+    database: PathBuf,
+    backups: PathBuf,
+    refuse: &StoreConfig,
+    now: Timestamp,
+) -> Result<(SqliteStore, FileSchemaLease), CliError> {
+    let exclusive = coordinator.acquire_schema_exclusive()?;
+    let migrate = StoreConfig::new(database, backups, MigrationMode::Allow, now);
+    let _revalidated = SqliteStore::open(&migrate)?;
+    drop(exclusive);
+    let shared = coordinator.acquire_schema_shared()?;
+    let store = SqliteStore::open(refuse)?;
+    Ok((store, shared))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+
+    use rusqlite::Connection;
+
+    use super::*;
+    use crate::{adapters::memory::FakeIdGenerator, ports::store::SUPPORTED_SCHEMA_VERSION};
+
+    #[test]
+    fn stale_migration_contender_revalidates_after_another_process_wins() {
+        let temporary = tempfile::tempdir().expect("temporary directory");
+        let data = temporary.path().join("data");
+        let backups = data.join("backups");
+        fs::create_dir(&data).expect("data directory");
+        let database = data.join("proqi.sqlite3");
+        Connection::open(&database)
+            .expect("legacy database")
+            .execute_batch("CREATE TABLE legacy(value TEXT); INSERT INTO legacy VALUES ('keep');")
+            .expect("legacy fixture");
+        let refuse = StoreConfig::new(
+            database.clone(),
+            backups.clone(),
+            MigrationMode::Refuse,
+            Timestamp::from_millis(1),
+        );
+        assert!(matches!(
+            SqliteStore::open(&refuse),
+            Err(StoreError::MigrationRequired { .. })
+        ));
+
+        let mut ids = FakeIdGenerator::new(1_725_000_000_000);
+        let runtime = temporary.path().join("runtime");
+        let winner = FileRuntimeCoordinator::new(
+            runtime.clone(),
+            ids.instance_id(),
+            temporary.path().to_path_buf(),
+            Timestamp::from_millis(1),
+            "winner",
+        )
+        .expect("winner coordinator");
+        let contender = FileRuntimeCoordinator::new(
+            runtime,
+            ids.instance_id(),
+            temporary.path().to_path_buf(),
+            Timestamp::from_millis(2),
+            "contender",
+        )
+        .expect("contender coordinator");
+        let winner_lease = winner.acquire_schema_exclusive().expect("winner lease");
+        drop(
+            SqliteStore::open(&StoreConfig::new(
+                database.clone(),
+                backups.clone(),
+                MigrationMode::Allow,
+                Timestamp::from_millis(2),
+            ))
+            .expect("winner migration"),
+        );
+        drop(winner_lease);
+
+        let (store, _shared) = finish_required_migration(
+            &contender,
+            database.clone(),
+            backups.clone(),
+            &refuse,
+            Timestamp::from_millis(3),
+        )
+        .expect("stale contender revalidates");
+        store.quick_check().expect("migrated integrity");
+        let connection = Connection::open(database).expect("verify database");
+        let schema: u32 = connection
+            .query_row("SELECT schema_version FROM schema_meta", [], |row| {
+                row.get(0)
+            })
+            .expect("schema version");
+        let legacy: String = connection
+            .query_row("SELECT value FROM legacy", [], |row| row.get(0))
+            .expect("legacy value");
+        assert_eq!(schema, SUPPORTED_SCHEMA_VERSION);
+        assert_eq!(legacy, "keep");
+        assert_eq!(fs::read_dir(backups).expect("backups").count(), 1);
     }
 }

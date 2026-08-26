@@ -101,12 +101,16 @@ pub fn inspect(paths: &AppPaths) -> DoctorReport {
 
 fn check_paths(paths: &AppPaths) -> DoctorCheck {
     timed("data_paths", "filesystem", || {
-        let entries = [
+        let mut entries = vec![
             ("data", &paths.data_dir),
             ("config", &paths.config_dir),
             ("cache", &paths.cache_dir),
             ("runtime", &paths.runtime_dir),
         ];
+        let shared_root = shared_state_root(paths);
+        if let Some(root) = &shared_root {
+            entries.push(("state_root", root));
+        }
         let unsafe_entries = entries
             .iter()
             .filter_map(|(name, path)| unsafe_path(path).then_some(*name))
@@ -115,7 +119,7 @@ fn check_paths(paths: &AppPaths) -> DoctorCheck {
             result(
                 DoctorStatus::Ok,
                 "state paths are private or not initialized",
-                json!({"checked": 4}),
+                json!({"checked": entries.len()}),
                 None,
             )
         } else {
@@ -127,6 +131,14 @@ fn check_paths(paths: &AppPaths) -> DoctorCheck {
             )
         }
     })
+}
+
+fn shared_state_root(paths: &AppPaths) -> Option<std::path::PathBuf> {
+    let parent = paths.data_dir.parent()?;
+    [&paths.config_dir, &paths.cache_dir, &paths.runtime_dir]
+        .iter()
+        .all(|path| path.parent() == Some(parent))
+        .then(|| parent.to_path_buf())
 }
 
 fn check_config(config_dir: &Path) -> DoctorCheck {
@@ -252,9 +264,10 @@ pub(super) fn metadata_if_present(path: &Path) -> Option<fs::Metadata> {
 }
 
 fn unsafe_path(path: &Path) -> bool {
-    metadata_if_present(path).is_some_and(|metadata| {
-        metadata.file_type().is_symlink() || !metadata.is_dir() || !private_mode(&metadata)
-    })
+    crate::adapters::filesystem::validate_directory_path(path).is_err()
+        || metadata_if_present(path).is_some_and(|metadata| {
+            metadata.file_type().is_symlink() || !metadata.is_dir() || !private_mode(&metadata)
+        })
 }
 
 #[cfg(unix)]

@@ -35,6 +35,9 @@ pub(super) fn run(root: &Path, notices: Option<&Path>) -> Result<(), String> {
     let host = host_triple(root)?;
     let archive = stage_archive(root, temporary.path(), &installed, &host)?;
     verify_archive(&archive, &host)?;
+    if host == super::release_targets::LINUX_X86_64 {
+        super::linux_compat::verify_archive(root, &archive)?;
+    }
     prepare_isolated_state(temporary.path())?;
     run_installed_contract(root, temporary.path(), &installed, &archive)?;
     persist_archive(root, &archive)

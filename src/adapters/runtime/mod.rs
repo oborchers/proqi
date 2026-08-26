@@ -1,8 +1,10 @@
 //! Process coordination, leases, paths, and local control transport.
 
 mod control_endpoint;
+mod schema_lock;
 mod system;
 
+pub use schema_lock::{FileSchemaLease, SchemaLockPolicy};
 pub use system::{NativePaths, SystemClock, SystemEnvironment, SystemIdGenerator};
 
 use std::{
@@ -34,6 +36,7 @@ pub struct FileRuntimeCoordinator {
     started_at: Timestamp,
     version: String,
     update: Option<UpdateInstanceContext>,
+    schema_lock_policy: SchemaLockPolicy,
 }
 
 impl FileRuntimeCoordinator {
@@ -64,7 +67,15 @@ impl FileRuntimeCoordinator {
             started_at,
             version: version.into(),
             update: None,
+            schema_lock_policy: SchemaLockPolicy::default(),
         })
+    }
+
+    /// Override bounded schema-lock timing, primarily for deterministic tests.
+    #[must_use]
+    pub const fn with_schema_lock_policy(mut self, policy: SchemaLockPolicy) -> Self {
+        self.schema_lock_policy = policy;
+        self
     }
 
     /// Advertise a verified installation and update-control protocol.
@@ -192,11 +203,19 @@ impl RuntimeCoordinator for FileRuntimeCoordinator {
     }
 
     fn acquire_schema_shared(&self) -> Result<Self::SharedSchemaLease, RuntimeError> {
-        schema_lease(&self.runtime_dir.join("schema.lock"), false)
+        schema_lock::acquire(
+            &self.runtime_dir.join("schema.lock"),
+            false,
+            self.schema_lock_policy,
+        )
     }
 
     fn acquire_schema_exclusive(&self) -> Result<Self::ExclusiveSchemaLease, RuntimeError> {
-        schema_lease(&self.runtime_dir.join("schema.lock"), true)
+        schema_lock::acquire(
+            &self.runtime_dir.join("schema.lock"),
+            true,
+            self.schema_lock_policy,
+        )
     }
 
     fn scan_runtime(&self) -> Result<RuntimeScan, RuntimeError> {
@@ -319,34 +338,6 @@ impl Drop for FileSessionLease {
     }
 }
 
-/// Shared or exclusive schema lease released automatically.
-#[derive(Debug)]
-pub struct FileSchemaLease {
-    file: File,
-}
-
-impl Lease for FileSchemaLease {}
-
-impl Drop for FileSchemaLease {
-    fn drop(&mut self) {
-        let _ = FileExt::unlock(&self.file);
-    }
-}
-
-fn schema_lease(path: &Path, exclusive: bool) -> Result<FileSchemaLease, RuntimeError> {
-    let file = open_private_file(path)?;
-    let result = if exclusive {
-        FileExt::try_lock(&file)
-    } else {
-        FileExt::try_lock_shared(&file)
-    };
-    match result {
-        Ok(()) => Ok(FileSchemaLease { file }),
-        Err(TryLockError::WouldBlock) => Err(RuntimeError::SchemaBusy),
-        Err(TryLockError::Error(error)) => Err(io_error(error)),
-    }
-}
-
 fn write_private_json(path: &Path, value: &InstanceInfo) -> Result<(), RuntimeError> {
     let bytes = serde_json::to_vec(value)
         .map_err(|error| RuntimeError::MalformedMetadata(error.to_string()))?;
@@ -367,8 +358,7 @@ fn replace_private_json(path: &Path, value: &InstanceInfo) -> Result<(), Runtime
 }
 
 fn create_private_dir(path: &Path) -> Result<(), RuntimeError> {
-    fs::create_dir_all(path).map_err(io_error)?;
-    set_private_dir_permissions(path).map_err(io_error)
+    crate::adapters::filesystem::prepare_private_dir(path).map_err(io_error)
 }
 
 fn open_private_file(path: &Path) -> Result<File, RuntimeError> {
@@ -411,9 +401,4 @@ fn set_private_file_mode(options: &mut OpenOptions) {
 fn set_private_file_permissions(path: &Path) -> std::io::Result<()> {
     use std::os::unix::fs::PermissionsExt;
     fs::set_permissions(path, fs::Permissions::from_mode(0o600))
-}
-
-fn set_private_dir_permissions(path: &Path) -> std::io::Result<()> {
-    use std::os::unix::fs::PermissionsExt;
-    fs::set_permissions(path, fs::Permissions::from_mode(0o700))
 }

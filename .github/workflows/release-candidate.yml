@@ -82,7 +82,7 @@ jobs:
             target: aarch64-apple-darwin
           - runner: macos-15-intel
             target: x86_64-apple-darwin
-          - runner: ubuntu-24.04
+          - runner: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 35
@@ -115,6 +115,25 @@ jobs:
           cargo xtask release-checksum "$ARCHIVE" > "$ARCHIVE.sha256"
           cd target/package
           shasum -a 256 -c "$(basename "$ARCHIVE").sha256"
+      - name: Verify GNU/Linux runtime compatibility
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        env:
+          DEBIAN_BOOKWORM_IMAGE: debian:bookworm-slim@sha256:88200866dfff7ea7f5cbcb6ec7c8a701889efe6fe859fe64d6990e4b07ea4171
+          UBUNTU_2204_IMAGE: ubuntu:22.04@sha256:2edbbc5dc405e9612ba3584ce95480277e3eb374407b5505fe26f17df77c7dbc
+          UBUNTU_2404_IMAGE: ubuntu:24.04@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517
+        run: |
+          cargo xtask verify-linux-archive "$ARCHIVE"
+          extracted="$RUNNER_TEMP/proqi-linux-runtime"
+          mkdir -p "$extracted"
+          tar -xzf "$ARCHIVE" -C "$extracted"
+          binary="$extracted/proqi-$EXPECTED_TARGET/proqi"
+          expected="proqi $(cargo metadata --locked --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "proqi") | .version')"
+          for image in "$UBUNTU_2204_IMAGE" "$DEBIAN_BOOKWORM_IMAGE" "$UBUNTU_2404_IMAGE"; do
+            actual="$(docker run --rm --platform linux/amd64 \
+              --mount "type=bind,src=$binary,dst=/opt/proqi,readonly" \
+              "$image" /opt/proqi --version)"
+            test "$actual" = "$expected"
+          done
       - name: Generate SPDX 2.3 JSON SBOM
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
         with:

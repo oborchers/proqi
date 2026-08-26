@@ -152,11 +152,12 @@ impl SqliteStore {
             .parent()
             .ok_or_else(|| StoreError::Io("database path has no parent".to_owned()))?;
         create_private_dir(parent)?;
+        validate_sqlite_paths(&config.database_path)?;
         let existed_with_content = config
             .database_path
-            .metadata()
+            .symlink_metadata()
             .is_ok_and(|metadata| metadata.len() > 0);
-        if !config.database_path.exists() {
+        if config.database_path.symlink_metadata().is_err() {
             create_private_file(&config.database_path)?;
         }
         let flags = OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE;
@@ -304,6 +305,16 @@ impl SqliteStore {
         }
         Err(StoreError::Busy)
     }
+}
+
+fn validate_sqlite_paths(database_path: &std::path::Path) -> Result<(), StoreError> {
+    support::validate_file_path(database_path)?;
+    for suffix in ["-wal", "-shm", "-journal"] {
+        let mut companion = database_path.as_os_str().to_os_string();
+        companion.push(suffix);
+        support::validate_file_path(std::path::Path::new(&companion))?;
+    }
+    Ok(())
 }
 
 impl Store for SqliteStore {

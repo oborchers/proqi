@@ -6,6 +6,7 @@ pub mod control;
 pub mod diagnostics;
 pub mod doctor;
 pub mod editor;
+pub(crate) mod filesystem;
 pub mod herdr;
 pub mod memory;
 pub mod process;

@@ -12,7 +12,7 @@ use std::{
 use proqi::{
     adapters::{
         memory::FakeIdGenerator,
-        runtime::{FileRuntimeCoordinator, NativePaths},
+        runtime::{FileRuntimeCoordinator, NativePaths, SchemaLockPolicy},
     },
     domain::{InstanceId, SessionId, Timestamp},
     ports::{
@@ -20,6 +20,11 @@ use proqi::{
         runtime::{RuntimeCoordinator, RuntimeError},
     },
 };
+
+const CHILD_LOCK_READY: &str = "PROQI_LOCK_READY";
+const CHILD_RUNTIME_ENV: &str = "PROQI_TEST_CHILD_RUNTIME";
+const CHILD_INSTANCE_ENV: &str = "PROQI_TEST_CHILD_INSTANCE";
+const CHILD_SESSION_ENV: &str = "PROQI_TEST_CHILD_SESSION";
 
 fn coordinator(runtime: PathBuf, instance_id: InstanceId, started: i64) -> FileRuntimeCoordinator {
     FileRuntimeCoordinator::new(
@@ -30,6 +35,17 @@ fn coordinator(runtime: PathBuf, instance_id: InstanceId, started: i64) -> FileR
         "test-version",
     )
     .expect("coordinator")
+}
+
+fn coordinator_with_schema_wait(
+    runtime: PathBuf,
+    instance_id: InstanceId,
+    started: i64,
+    timeout: Duration,
+) -> FileRuntimeCoordinator {
+    coordinator(runtime, instance_id, started).with_schema_lock_policy(
+        SchemaLockPolicy::new(timeout, Duration::from_millis(2)).expect("schema policy"),
+    )
 }
 
 #[test]
@@ -72,8 +88,9 @@ fn different_sessions_and_shared_schema_leases_can_coexist() {
     let temporary = tempfile::tempdir().expect("temporary directory");
     let runtime = temporary.path().join("runtime");
     let mut ids = FakeIdGenerator::new(1_725_000_000_000);
-    let first = coordinator(runtime.clone(), ids.instance_id(), 1);
-    let second = coordinator(runtime, ids.instance_id(), 2);
+    let timeout = Duration::from_millis(20);
+    let first = coordinator_with_schema_wait(runtime.clone(), ids.instance_id(), 1, timeout);
+    let second = coordinator_with_schema_wait(runtime, ids.instance_id(), 2, timeout);
     let _first_session = first
         .acquire_session(ids.session_id())
         .expect("first session");
@@ -93,6 +110,40 @@ fn different_sessions_and_shared_schema_leases_can_coexist() {
         second.acquire_schema_shared(),
         Err(RuntimeError::SchemaBusy)
     ));
+}
+
+#[test]
+fn schema_contender_waits_for_a_brief_holder_and_times_out_when_unavailable() {
+    let temporary = tempfile::tempdir().expect("temporary directory");
+    let runtime = temporary.path().join("runtime");
+    let mut ids = FakeIdGenerator::new(1_725_000_000_000);
+    let holder = coordinator_with_schema_wait(
+        runtime.clone(),
+        ids.instance_id(),
+        1,
+        Duration::from_millis(250),
+    );
+    let contender = coordinator_with_schema_wait(
+        runtime.clone(),
+        ids.instance_id(),
+        2,
+        Duration::from_millis(250),
+    );
+    let shared = holder.acquire_schema_shared().expect("shared lease");
+    let worker = thread::spawn(move || contender.acquire_schema_exclusive());
+    thread::sleep(Duration::from_millis(30));
+    drop(shared);
+    let exclusive = worker.join().expect("contender thread").expect("exclusive");
+
+    let bounded =
+        coordinator_with_schema_wait(runtime, ids.instance_id(), 3, Duration::from_millis(40));
+    let started = Instant::now();
+    assert!(matches!(
+        bounded.acquire_schema_shared(),
+        Err(RuntimeError::SchemaBusy)
+    ));
+    assert!(started.elapsed() >= Duration::from_millis(35));
+    drop(exclusive);
 }
 
 #[test]
@@ -161,20 +212,54 @@ fn stale_descriptive_metadata_is_removed_when_no_lock_exists() {
 #[test]
 #[ignore = "child fixture, driven by process_termination_releases_authoritative_lock"]
 fn child_process_holds_session_lock() {
-    let Ok(runtime) = std::env::var("PROQI_TEST_CHILD_RUNTIME") else {
+    let Ok(runtime) = std::env::var(CHILD_RUNTIME_ENV) else {
         return;
     };
-    let session =
-        SessionId::from_str(&std::env::var("PROQI_TEST_CHILD_SESSION").expect("child session"))
-            .expect("session ID");
+    let session = SessionId::from_str(&std::env::var(CHILD_SESSION_ENV).expect("child session"))
+        .expect("session ID");
     let instance =
-        InstanceId::from_str(&std::env::var("PROQI_TEST_CHILD_INSTANCE").expect("child instance"))
+        InstanceId::from_str(&std::env::var(CHILD_INSTANCE_ENV).expect("child instance"))
             .expect("instance ID");
     let owner = coordinator(PathBuf::from(runtime), instance, 1);
     let _lease = owner.acquire_session(session).expect("child lease");
-    println!("PROQI_LOCK_READY");
+    println!("{CHILD_LOCK_READY}");
     loop {
         thread::sleep(Duration::from_secs(1));
+    }
+}
+
+#[test]
+#[ignore = "child fixture, driven by process_termination_releases_schema_lock"]
+fn child_process_holds_schema_lock() {
+    let Ok(runtime) = std::env::var(CHILD_RUNTIME_ENV) else {
+        return;
+    };
+    let instance =
+        InstanceId::from_str(&std::env::var(CHILD_INSTANCE_ENV).expect("child instance"))
+            .expect("instance ID");
+    let owner = coordinator(PathBuf::from(runtime), instance, 1);
+    let _lease = owner.acquire_schema_exclusive().expect("schema lease");
+    println!("{CHILD_LOCK_READY}");
+    loop {
+        thread::sleep(Duration::from_secs(1));
+    }
+}
+
+fn wait_until_child_holds_lock(child: &mut std::process::Child) {
+    let stdout = child.stdout.take().expect("child stdout");
+    let mut reader = BufReader::new(stdout);
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let mut line = String::new();
+        let read = reader.read_line(&mut line).expect("child output");
+        assert!(read > 0, "child exited before acquiring the lock");
+        if line.contains(CHILD_LOCK_READY) {
+            return;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "child did not acquire lock in time"
+        );
     }
 }
 
@@ -193,29 +278,15 @@ fn process_termination_releases_authoritative_lock() {
         .arg("--ignored")
         .arg("--nocapture")
         .arg("--test-threads=1")
-        .env("PROQI_TEST_CHILD_RUNTIME", &runtime)
-        .env("PROQI_TEST_CHILD_SESSION", session_id.to_string())
-        .env("PROQI_TEST_CHILD_INSTANCE", child_instance.to_string())
+        .env(CHILD_RUNTIME_ENV, &runtime)
+        .env(CHILD_SESSION_ENV, session_id.to_string())
+        .env(CHILD_INSTANCE_ENV, child_instance.to_string())
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()
         .expect("spawn child");
-    let stdout = child.stdout.take().expect("child stdout");
-    let mut reader = BufReader::new(stdout);
-    let deadline = Instant::now() + Duration::from_secs(10);
-    loop {
-        let mut line = String::new();
-        let read = reader.read_line(&mut line).expect("child output");
-        assert!(read > 0, "child exited before acquiring the lock");
-        if line.contains("PROQI_LOCK_READY") {
-            break;
-        }
-        assert!(
-            Instant::now() < deadline,
-            "child did not acquire lock in time"
-        );
-    }
+    wait_until_child_holds_lock(&mut child);
     assert!(matches!(
         parent.acquire_session(session_id),
         Err(RuntimeError::SessionBusy { .. })
@@ -233,6 +304,46 @@ fn process_termination_releases_authoritative_lock() {
             result => panic!("lock was not released after process termination: {result:?}"),
         }
     }
+}
+
+#[test]
+fn process_termination_releases_schema_lock() {
+    let temporary = tempfile::tempdir().expect("temporary directory");
+    let runtime = temporary.path().join("runtime");
+    let mut ids = FakeIdGenerator::new(1_725_000_000_000);
+    let child_instance = ids.instance_id();
+    let parent = coordinator_with_schema_wait(
+        runtime.clone(),
+        ids.instance_id(),
+        2,
+        Duration::from_millis(40),
+    );
+    let executable = std::env::current_exe().expect("test executable");
+    let mut child = Command::new(executable)
+        .arg("--exact")
+        .arg("child_process_holds_schema_lock")
+        .arg("--ignored")
+        .arg("--nocapture")
+        .arg("--test-threads=1")
+        .env(CHILD_RUNTIME_ENV, &runtime)
+        .env(CHILD_INSTANCE_ENV, child_instance.to_string())
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("spawn child");
+    wait_until_child_holds_lock(&mut child);
+
+    assert!(matches!(
+        parent.acquire_schema_shared(),
+        Err(RuntimeError::SchemaBusy)
+    ));
+    child.kill().expect("terminate child");
+    child.wait().expect("reap child");
+
+    parent
+        .acquire_schema_shared()
+        .expect("schema lock released after child termination");
 }
 
 #[cfg(unix)]

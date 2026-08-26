@@ -73,7 +73,7 @@ large multi-crate abstraction hierarchy before one is needed.
   development command surface.
 
 The `v0.1.0` release targets are Apple silicon macOS, Intel macOS, and x86-64
-Linux using GNU libc.
+Linux using GNU libc 2.35 or newer.
 
 Rust provides a single native executable, predictable resource use, strong
 cross-platform support, and a mature terminal ecosystem. It also makes it
@@ -401,6 +401,10 @@ Migrations are forward-only and included in the binary. Before a migration, the
 application acquires the exclusive schema lock, creates a SQLite backup through
 the backup API, runs the migration transactionally, and performs `quick_check`.
 Failure preserves the previous database and produces a recovery path.
+
+Schema-lock acquisition waits for at most five seconds with bounded retries.
+This absorbs ordinary concurrent first-launch and brief migration contention,
+then returns the stable `schema_busy` error instead of waiting indefinitely.
 
 The application refuses to open a database schema newer than it understands.
 It does not attempt a best-effort downgrade. Export and explicit recovery tools
@@ -958,8 +962,11 @@ Every release candidate starts from `main` after the aggregate gate has passed.
 A manual candidate workflow accepts an exact future `vX.Y.Z` tag, rejects a tag
 that differs from the single Cargo workspace version, and records the source
 commit. The matrix builds only Apple silicon macOS, Intel macOS, and x86-64 GNU
-Linux artifacts on native runners. One Linux job generates a union third-party
-notice file for all targets, so Intel macOS never compiles the packaging tool.
+Linux artifacts on native runners. The GNU/Linux candidate is built on Ubuntu
+22.04, must not require a glibc symbol newer than `GLIBC_2.35`, and is started
+from its final archive on Ubuntu 22.04, Debian bookworm, and Ubuntu 24.04. One
+Linux job generates a union third-party notice file for all targets, so Intel
+macOS never compiles the packaging tool.
 
 A reviewed pinned `cargo-dist` configuration or equivalent narrow Rust tool
 stages archives containing one executable, MIT license, required notices, and

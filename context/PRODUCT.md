@@ -907,7 +907,7 @@ The first public version is `v0.1.0`. Release targets are:
 
 - Apple silicon macOS.
 - Intel macOS.
-- x86-64 Linux using GNU libc.
+- x86-64 Linux using GNU libc 2.35 or newer.
 
 Distribution is limited to immutable GitHub Release archives and the
 `oborchers/homebrew-tap` personal tap. The tap provides one prebuilt Homebrew

@@ -13,6 +13,7 @@
 )]
 
 mod homebrew;
+mod linux_compat;
 mod package;
 mod policy;
 mod public_assets;
@@ -83,6 +84,12 @@ fn execute() -> Result<(), String> {
                 .ok_or_else(|| "release-checksum requires one archive path".to_owned())?;
             release::print_checksum(&root, Path::new(&path))
         }
+        "verify-linux-archive" => {
+            let path = env::args()
+                .nth(2)
+                .ok_or_else(|| "verify-linux-archive requires one archive path".to_owned())?;
+            linux_compat::verify_archive(&root, Path::new(&path))
+        }
         "homebrew-formula" => {
             let artifacts = env::args()
                 .nth(2)
@@ -136,6 +143,7 @@ fn print_help() {
          \n  cargo xtask release-plan [vX.Y.Z]\
          \n  cargo xtask release-rehearsal\
          \n  cargo xtask release-checksum <archive>\
+         \n  cargo xtask verify-linux-archive <archive>\
          \n  cargo xtask homebrew-formula <artifacts-dir> <output>"
     );
 }

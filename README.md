@@ -101,6 +101,10 @@ contains checksummed archives for exactly these targets:
 | Intel macOS | `x86_64-apple-darwin` | `proqi-x86_64-apple-darwin.tar.gz` |
 | x86-64 GNU Linux | `x86_64-unknown-linux-gnu` | `proqi-x86_64-unknown-linux-gnu.tar.gz` |
 
+The GNU/Linux archive supports glibc 2.35 or newer. Release candidates are
+built on Ubuntu 22.04, checked for a `GLIBC_2.35` symbol ceiling, and started
+from the final archive on Ubuntu 22.04, Debian bookworm, and Ubuntu 24.04.
+
 Verify the adjacent `.sha256` file before extracting. GitHub CLI can also
 verify the signed build provenance:
 

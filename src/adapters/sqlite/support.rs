@@ -121,11 +121,12 @@ pub(super) fn path_from_bytes(bytes: Vec<u8>) -> Result<PathBuf, StoreError> {
 }
 
 pub(super) fn create_private_dir(path: &Path) -> Result<(), StoreError> {
-    fs::create_dir_all(path).map_err(|error| StoreError::Io(error.to_string()))?;
-    set_private_dir_permissions(path)
+    crate::adapters::filesystem::prepare_private_dir(path)
+        .map_err(|error| StoreError::Io(error.to_string()))
 }
 
 pub(super) fn create_private_file(path: &Path) -> Result<(), StoreError> {
+    validate_file_path(path)?;
     let mut options = OpenOptions::new();
     options.read(true).write(true).create_new(true);
     set_private_open_mode(&mut options);
@@ -138,9 +139,13 @@ pub(super) fn create_private_file(path: &Path) -> Result<(), StoreError> {
 
 pub(super) fn set_sqlite_permissions(database_path: &Path) -> Result<(), StoreError> {
     set_private_file_permissions(database_path)?;
-    for suffix in ["-wal", "-shm"] {
+    for suffix in ["-wal", "-shm", "-journal"] {
         let companion = companion_path(database_path, suffix);
-        if companion.exists() {
+        validate_file_path(&companion)?;
+        if companion
+            .symlink_metadata()
+            .is_ok_and(|metadata| metadata.is_file())
+        {
             set_private_file_permissions(&companion)?;
         }
     }
@@ -160,13 +165,14 @@ pub(super) fn set_private_open_mode(options: &mut OpenOptions) {
 
 pub(super) fn set_private_file_permissions(path: &Path) -> Result<(), StoreError> {
     use std::os::unix::fs::PermissionsExt;
+
+    validate_file_path(path)?;
     fs::set_permissions(path, fs::Permissions::from_mode(0o600))
         .map_err(|error| StoreError::Io(error.to_string()))
 }
 
-fn set_private_dir_permissions(path: &Path) -> Result<(), StoreError> {
-    use std::os::unix::fs::PermissionsExt;
-    fs::set_permissions(path, fs::Permissions::from_mode(0o700))
+pub(super) fn validate_file_path(path: &Path) -> Result<(), StoreError> {
+    crate::adapters::filesystem::validate_file_path(path)
         .map_err(|error| StoreError::Io(error.to_string()))
 }
 

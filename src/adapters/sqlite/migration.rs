@@ -138,7 +138,17 @@ fn reserve_backup_path(config: &StoreConfig, found: u32) -> Result<PathBuf, Stor
                     .map_err(|error| StoreError::Backup(error.to_string()))?;
                 return Ok(path);
             }
-            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                if path
+                    .symlink_metadata()
+                    .is_ok_and(|metadata| metadata.file_type().is_symlink())
+                {
+                    return Err(StoreError::Backup(format!(
+                        "unsafe backup destination is a symbolic link: {}",
+                        path.display()
+                    )));
+                }
+            }
             Err(error) => return Err(StoreError::Backup(error.to_string())),
         }
     }

@@ -7,6 +7,12 @@ fn doctor_reports_fresh_state_without_initializing_it() {
     let temporary = tempfile::tempdir().expect("temporary directory");
     let root = temporary.path().join("state");
     std::fs::create_dir(&root).expect("state root");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700))
+            .expect("private state root");
+    }
     let report = success(&root, &["doctor"], None);
     assert_eq!(report["schema_version"], 1);
     assert_eq!(report["overall_status"], "skipped");

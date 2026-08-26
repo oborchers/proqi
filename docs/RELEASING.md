@@ -9,6 +9,8 @@ authority by itself.
 - Stable tags use exact `vX.Y.Z` syntax and must equal the Cargo version.
 - Release artifacts exist only for Apple silicon macOS, Intel macOS, and
   x86-64 GNU Linux.
+- The GNU/Linux archive supports glibc 2.35 or newer. It is built on an Ubuntu
+  22.04 native runner and must pass the repository-owned ELF symbol ceiling.
 - Every archive includes the executable, MIT license, third-party notices,
   standalone installation marker, and Bash, Zsh, and Fish completions.
 - Every archive has a SHA-256 file, SPDX 2.3 JSON SBOM, provenance attestation,
@@ -31,6 +33,7 @@ cargo xtask test-pty
 cargo xtask coverage
 cargo xtask audit
 cargo xtask package
+cargo xtask verify-linux-archive target/package/proqi-x86_64-unknown-linux-gnu.tar.gz
 cargo +1.88.0 xtask msrv
 cargo xtask release-plan v0.1.1
 cargo xtask release-rehearsal
@@ -98,7 +101,10 @@ After the readiness audit:
    versions are present on `main`.
 4. Dispatch `Release candidate` from `main` with the intended stable tag. This
    performs the expensive hosted matrix exactly once and retains the immutable
-   candidate for seven days.
+   candidate for seven days. The Linux job builds on Ubuntu 22.04, enforces the
+   `GLIBC_2.35` ceiling with `cargo xtask verify-linux-archive`, and starts the
+   exact extracted archive in pinned Ubuntu 22.04, Debian bookworm, and Ubuntu
+   24.04 images.
 5. Inspect all three archives, checksums, SBOMs, attestations, formula, manifest,
    source commit, and artifact digest from that successful run.
 6. Create and push the annotated stable tag at the exact candidate commit. The

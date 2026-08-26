@@ -217,6 +217,60 @@ fn backup_failure_prevents_migration() {
 
 #[cfg(unix)]
 #[test]
+fn sqlite_symlink_shapes_are_rejected_without_touching_targets() {
+    use std::os::unix::fs::symlink;
+
+    for suffix in ["", "-wal", "-shm", "-journal"] {
+        let temporary = tempfile::tempdir().expect("fixture");
+        let database = temporary.path().join("proqi.sqlite3");
+        let target = temporary.path().join("target");
+        std::fs::write(&target, b"untouched").expect("target");
+        let mut linked = database.as_os_str().to_os_string();
+        linked.push(suffix);
+        symlink(&target, std::path::PathBuf::from(linked)).expect("symlink");
+        let config = StoreConfig::new(
+            database,
+            temporary.path().join("backups"),
+            MigrationMode::Allow,
+            Timestamp::from_millis(1),
+        );
+        assert!(matches!(SqliteStore::open(&config), Err(StoreError::Io(_))));
+        assert_eq!(std::fs::read(&target).expect("target bytes"), b"untouched");
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn symlinked_backup_destination_fails_closed() {
+    use std::os::unix::fs::symlink;
+
+    let temporary = tempfile::tempdir().expect("fixture");
+    let database = temporary.path().join("legacy.sqlite3");
+    Connection::open(&database)
+        .expect("legacy database")
+        .execute("CREATE TABLE legacy(value TEXT)", [])
+        .expect("legacy table");
+    let backups = temporary.path().join("backups");
+    std::fs::create_dir(&backups).expect("backup directory");
+    let target = temporary.path().join("target");
+    std::fs::write(&target, b"untouched").expect("target");
+    let timestamp = Timestamp::from_millis(7);
+    let destination = backups.join(format!(
+        "proqi-before-v0-{}-{}-0.sqlite3",
+        timestamp.as_millis(),
+        std::process::id()
+    ));
+    symlink(&target, destination).expect("backup destination symlink");
+    let config = StoreConfig::new(database, backups, MigrationMode::Allow, timestamp);
+    assert!(matches!(
+        SqliteStore::open(&config),
+        Err(StoreError::Backup(message)) if message.contains("symbolic link")
+    ));
+    assert_eq!(std::fs::read(&target).expect("target bytes"), b"untouched");
+}
+
+#[cfg(unix)]
+#[test]
 fn database_and_backup_permissions_are_user_only() {
     use std::os::unix::fs::PermissionsExt;
 
