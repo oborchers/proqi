@@ -96,7 +96,15 @@ fn help_overlay_remains_composed_in_a_shallow_viewport() {
         .find_map(|(target, area)| (*target == HitTarget::Help).then_some(*area))
         .expect("help control");
     fixture.pointer(help.x, help.y, PointerKind::Down(PointerButton::Left));
-    insta::assert_snapshot!(snapshot(&mut fixture, 42, 8, ThemePreference::Auto));
+    let platform = if cfg!(target_os = "macos") {
+        "macos"
+    } else {
+        "portable"
+    };
+    insta::assert_snapshot!(
+        format!("help_overlay_remains_composed_in_a_shallow_viewport_{platform}"),
+        snapshot(&mut fixture, 42, 8, ThemePreference::Auto)
+    );
 }
 
 #[test]
