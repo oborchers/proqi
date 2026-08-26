@@ -639,14 +639,19 @@ Existing shared schema leases remain the compatibility barrier. A new process
 does not migrate while an old process still holds a conflicting lease. It waits
 for bounded restart convergence or reports that restart remains pending.
 
-### Archive and unknown installations
+### Archive, Debian, Cargo, and unknown installations
 
 Standalone archive users receive the verified release URL and external
-replacement instructions. Proqi `v0.1.0` does not overwrite a standalone
-executable and does not promise same-pane restart for archive installations.
-Durable sessions resume on the next normal start after the user replaces the
-binary. Source and unknown installations receive accurate non-destructive
-guidance or no action.
+replacement instructions. Proqi does not overwrite a standalone executable and
+does not promise same-pane restart for archive installations. Durable sessions
+resume on the next normal start after the user replaces the binary.
+
+Debian package and Cargo installations never invoke their package manager from
+Proqi and do not receive an implicit package-manager update. Debian users
+download and verify the newest `proqi_amd64.deb`, then install that local file
+again. Cargo users rerun the documented Cargo installation command. Source and
+other unknown installations receive accurate non-destructive guidance or no
+action.
 
 No installer action is automatic. Update installation always requires an
 explicit user choice. A future standalone updater may implement a separately
@@ -918,7 +923,11 @@ brew install oborchers/tap/proqi
 ```
 
 There is no crates.io, npm, PyPI, Docker, Homebrew Core, shell installer, or
-binary cask in `v0.1.0`. Release archives contain the
+binary cask in `v0.1.0`. The prepared next release adds a crates.io binary
+package and one x86-64 Debian package without adding an APT repository. The
+crate requires Rust 1.88 or newer and does not establish a supported Rust
+library API. The Debian asset is installed as a verified local file and
+preserves user state on removal. Release archives contain the
 native executable, MIT license, required notices, and shell completions.
 Published artifacts also receive SHA-256 checksums, SPDX JSON SBOMs, and GitHub
 OIDC Sigstore build-provenance attestations. Paid Apple signing and notarization

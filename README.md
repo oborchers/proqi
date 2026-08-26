@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/proqi-logo.png" width="172" alt="Proqi logo">
+  <img src="https://raw.githubusercontent.com/oborchers/proqi/main/assets/proqi-logo.png" width="172" alt="Proqi logo">
 </p>
 
 <h1 align="center">Proqi</h1>
@@ -12,14 +12,14 @@
 <p align="center">
   <a href="https://github.com/oborchers/proqi/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/oborchers/proqi/ci.yml?branch=main&amp;logo=github&amp;label=CI"></a>
   <a href="https://github.com/oborchers/proqi/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/oborchers/proqi?display_name=tag&amp;sort=semver"></a>
-  <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-75d6a0"></a>
+  <a href="https://github.com/oborchers/proqi/blob/main/LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-75d6a0"></a>
   <a href="https://github.com/herdrdev/herdr"><img alt="Works best with Herdr" src="https://img.shields.io/badge/works_best_with-Herdr-70d69b"></a>
   <img alt="Rust 1.88 or newer" src="https://img.shields.io/badge/Rust-1.88%2B-000000?logo=rust">
   <img alt="macOS and Linux" src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux-30363d">
 </p>
 
 <p align="center">
-  <img src="assets/proqi-demo.gif" width="1000" alt="Proqi browsing rich prompt context, deleting a temporary thought, creating and editing a prompt, reordering it, and copying it">
+  <img src="https://raw.githubusercontent.com/oborchers/proqi/main/assets/proqi-demo.gif" width="1000" alt="Proqi browsing rich prompt context, deleting a temporary thought, creating and editing a prompt, reordering it, and copying it">
 </p>
 
 Proqi is the thoughtpad for humans working with coding agents. Follow-up prompts
@@ -35,7 +35,7 @@ adjacent coding agents and submit the selected thought directly without the
 manual clipboard handoff.
 
 <p align="center">
-  <img src="assets/proqi-problem.svg" width="1000" alt="Proqi keeps follow-up prompts editable and sends the selected prompt toward a coding-agent terminal">
+  <img src="https://raw.githubusercontent.com/oborchers/proqi/main/assets/proqi-problem.svg" width="1000" alt="Proqi keeps follow-up prompts editable and sends the selected prompt toward a coding-agent terminal">
 </p>
 
 ## What Proqi gives you
@@ -64,6 +64,12 @@ text for copy, export, undo, resume, and submission.
 
 ## Install
 
+> [!IMPORTANT]
+> The Cargo and Debian channels below are prepared on `main` but are not public
+> yet. Until the next release publishes them, use Homebrew or a standalone
+> archive. This notice will be removed only after both public artifacts have
+> been verified.
+
 ### Homebrew
 
 Homebrew is the recommended installation on macOS and supported Linux systems:
@@ -89,6 +95,45 @@ brew upgrade --formula oborchers/tap/proqi
 The formula installs immutable prebuilt artifacts, shell completions, and one
 native `proqi` executable. It performs no network activity during `post_install`
 and includes no independent self-updater.
+
+### Cargo
+
+Users who already have Rust 1.88 or newer can build and install the Proqi binary
+from crates.io:
+
+```shell
+cargo install proqi --locked
+```
+
+This compiles Proqi from source. The published crate exists to distribute the
+`proqi` executable; it does not establish a supported Rust library API. Cargo
+installations do not receive automatic package-manager updates from Proqi.
+
+### Debian and Ubuntu
+
+The release provides one `amd64` package for x86-64 Debian and Ubuntu systems
+with glibc 2.35 or newer. Download the package and its checksum from the latest
+GitHub Release, verify the exact bytes, then install the local file:
+
+```shell
+curl -fLO https://github.com/oborchers/proqi/releases/latest/download/proqi_amd64.deb
+curl -fLO https://github.com/oborchers/proqi/releases/latest/download/proqi_amd64.deb.sha256
+sha256sum --check proqi_amd64.deb.sha256
+sudo apt install ./proqi_amd64.deb
+```
+
+There is no Proqi APT repository. `apt update` will not discover new Proqi
+versions. To upgrade, download the newest `.deb` and install the local file
+again. Remove only package-owned files with:
+
+```shell
+sudo apt remove proqi
+```
+
+Removal deliberately preserves local Proqi sessions, configuration, and other
+state in the user's platform-native application directories. Proqi never runs
+`sudo`, `apt`, `dpkg`, or `cargo install` as an implicit update action. Linux
+ARM packages are not provided.
 
 ### Standalone archives
 
@@ -246,7 +291,7 @@ It copies canonical content and folded-context annotations. With `--remove`,
 Proqi commits the destination first and removes the source only after its durable
 receipt. Destination failure leaves the source unchanged.
 
-[`skills/proqi/SKILL.md`](skills/proqi/SKILL.md) is an explicit-invocation skill
+[`skills/proqi/SKILL.md`](https://github.com/oborchers/proqi/blob/main/skills/proqi/SKILL.md) is an explicit-invocation skill
 that discovers capabilities first, uses standard input for arbitrary content,
 and never scrapes the TUI or reads every scratchpad automatically. During the
 pre-1.0 series, agents must discover the installed CLI contract instead of
@@ -275,7 +320,7 @@ skill:
 npx skills add oborchers/proqi --skill proqi-debug -g
 ```
 
-[`skills/proqi-debug/SKILL.md`](skills/proqi-debug/SKILL.md) explains the
+[`skills/proqi-debug/SKILL.md`](https://github.com/oborchers/proqi/blob/main/skills/proqi-debug/SKILL.md) explains the
 content-redacted diagnostics bundle, the SQLite durability model, safe failure
 classification, and the approval-gated process for opening a GitHub Issue. It
 never authorizes direct writes to the live database or automatic uploads.
@@ -358,7 +403,7 @@ proqi --json doctor
 Doctor performs content-redacted, read-only health checks without initializing,
 migrating, or repairing state. Diagnostic collection never uploads anything
 and never overwrites an existing file.
-Review the bundle before sharing it. See [SECURITY.md](SECURITY.md) for the
+Review the bundle before sharing it. See [SECURITY.md](https://github.com/oborchers/proqi/blob/main/SECURITY.md) for the
 support policy and private vulnerability reporting process.
 
 ## Configuration
@@ -397,11 +442,12 @@ directories separately only when you no longer need their sessions.
 
 ## Release and support policy
 
-Proqi is open-source software under the [MIT License](LICENSE). During the
+Proqi is open-source software under the [MIT License](https://github.com/oborchers/proqi/blob/main/LICENSE). During the
 `0.x` series, only the latest stable release is supported, and JSON consumers
 must use capability discovery. There is currently no cloud synchronization,
-collaboration service, plugin system, Homebrew Core formula, crate publication,
-npm package, Python package, container image, or telemetry.
+collaboration service, plugin system, Homebrew Core formula, npm package,
+Python package, container image, or telemetry. The prepared crates.io package
+distributes the binary and does not define a supported Rust library API.
 
 Release archives include SHA-256 checksums, SPDX 2.3 JSON SBOMs, required
 third-party notices, shell completions, and GitHub OIDC-backed provenance and
@@ -410,8 +456,8 @@ SBOM attestations. The public
 updated only after all referenced release assets are available and verified.
 
 Issues and focused pull requests are welcome. Read
-[CONTRIBUTING.md](CONTRIBUTING.md) and
-[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) before changing product scope,
+[CONTRIBUTING.md](https://github.com/oborchers/proqi/blob/main/CONTRIBUTING.md) and
+[CODE_OF_CONDUCT.md](https://github.com/oborchers/proqi/blob/main/CODE_OF_CONDUCT.md) before changing product scope,
 durable storage, public behavior, or architecture.
 
 ## Development
@@ -463,6 +509,6 @@ brew install librsvg
 ./scripts/social-preview.sh
 ```
 
-[`context/PRODUCT.md`](context/PRODUCT.md) defines user-visible behavior.
-[`context/ARCHITECTURE.md`](context/ARCHITECTURE.md) defines technical
+[`context/PRODUCT.md`](https://github.com/oborchers/proqi/blob/main/context/PRODUCT.md) defines user-visible behavior.
+[`context/ARCHITECTURE.md`](https://github.com/oborchers/proqi/blob/main/context/ARCHITECTURE.md) defines technical
 boundaries and durable invariants.

@@ -462,6 +462,11 @@ Install detection is deterministic and testable. It distinguishes
 executable path plus package-owned metadata or another strong marker. A
 forgeable environment variable is never sufficient by itself.
 
+Cargo and Debian installations deliberately remain `SourceOrUnknown`. Neither
+channel has an automatic installer, and Proqi never invokes `cargo`, `apt`,
+`dpkg`, or `sudo` to replace itself. The Debian package therefore does not copy
+the standalone archive marker into `/usr`; doing so would misidentify its owner.
+
 ### Coordination protocol
 
 The existing current-user runtime registry and owner-control transport gain a
@@ -532,7 +537,7 @@ restart-pending state and retries after the old process leaves. It never migrate
 behind an older writer. This conservative barrier remains mandatory even though
 the public CLI has no compatibility guarantee before `1.0`.
 
-### Standalone and unknown installations
+### Standalone, Debian, Cargo, and unknown installations
 
 Standalone archives share version checking, prompt election, global dismissal,
 checkpointing, and ordinary resumable sessions. `v0.1.0` does not replace an
@@ -544,6 +549,12 @@ guidance or no action.
 Automatic standalone replacement remains behind a future updater port. It must
 not be approximated by writing over the running executable, invoking `curl`, or
 assuming a package manager.
+
+Debian and Cargo installations use their external package managers only through
+documented user commands. The Debian artifact is a directly downloaded local
+package, not an APT repository. Removing it deletes package-owned files only and
+never user state. Cargo publication distributes the `proqi` binary and does not
+make the internal library a supported API.
 
 ## Terminal rendering and input
 
@@ -877,6 +888,15 @@ cargo xtask package
   never published by this command. Hosted release jobs may supply one
   pre-generated union notice file through `--notices`; local packaging generates
   the same notices itself.
+- `crate-package` runs credential-free Cargo package and publication dry runs,
+  verifies an exact source-only member allowlist and normalized manifest,
+  installs from the extracted package into isolated Cargo state, and records
+  the `.crate` checksum and evidence without publishing.
+- `debian-package` consumes the verified x86-64 GNU/Linux archive and produces
+  `proqi_amd64.deb` from the identical executable. `verify-debian` proves its
+  metadata, derived dependencies, contents, permissions, lack of maintainer
+  scripts, and disposable install, remove, state-preservation, and reinstall
+  behavior on pinned Ubuntu 22.04, Ubuntu 24.04, and Debian bookworm images.
 
 The commands remain thin orchestrators around standard Cargo tools. They print
 the commands they run, propagate exit codes, avoid network access unless the
@@ -975,9 +995,12 @@ and GitHub OIDC Sigstore provenance attestations. Every third-party Action is
 pinned by full commit SHA and ordinary CI remains read-only.
 
 The candidate workflow creates a seven-day immutable artifact only after every
-target, installed smoke, checksum, SBOM, attestation, formula, and manifest step
-succeeds. The manifest binds the future tag, source commit, build run, workflow,
-target registry, filenames, and file digests. A protected `vX.Y.Z` tag triggers a
+target, installed smoke, crate dry run, Debian package contract, checksum, SBOM,
+attestation, formula, and manifest step succeeds. The Debian package reuses the
+verified Linux archive executable byte for byte. The manifest separates public
+release files from private crate and Debian evidence and binds the future tag,
+source commit, build run, workflow, target registry, filenames, and file
+digests. A protected `vX.Y.Z` tag triggers a
 fast promotion workflow. Promotion locates the exact successful candidate for
 that tag and commit, verifies GitHub's artifact digest plus every internal hash
 and candidate attestation, adds tag-bound attestations, and publishes the same
@@ -990,8 +1013,8 @@ existing assets for a version are immutable.
 
 Homebrew tap updates occur only after the referenced Release assets, checksums,
 and attestations are verified. The external `oborchers/homebrew-tap` repository
-contains `Formula/proqi.rb` and owns a scheduled plus manually dispatchable sync
-workflow. That workflow uses only its short-lived repository `GITHUB_TOKEN`,
+contains `Formula/proqi.rb` and owns an event-driven plus manually dispatchable
+sync workflow. That workflow uses only its short-lived repository `GITHUB_TOKEN`,
 refuses downgrades and conflicting same-version content, tests the candidate
 formula before committing it, and performs exact-version no-ops. Proqi stores no
 cross-repository credential. Homebrew Core remains outside scope.
@@ -1049,8 +1072,9 @@ as architecture.
 - Machine-readable JSON has an explicit schema version.
 - Breaking pre-`1.0` behavior is called out in GitHub Release notes.
 - Release archives contain one executable, MIT license, notices, and
-  completions. Checksums, SPDX SBOMs, and provenance attestations accompany the
-  archives as release assets.
+  completions. The Debian package contains the same Linux executable plus
+  conventional system completions and notices. Checksums, SPDX SBOMs, and
+  provenance attestations accompany every released binary artifact.
 - Package-manager updates never delete user sessions, configuration, or backups.
 
 ## Decisions deliberately deferred
