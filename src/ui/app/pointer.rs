@@ -229,7 +229,18 @@ impl BoardApp {
             self.first_visible_row -= 1;
         } else if self.first_visible > 0 {
             self.first_visible -= 1;
-            self.first_visible_row = self.first_thought_row_count().saturating_sub(1);
+            self.first_visible_row = if self
+                .state
+                .board
+                .live_thoughts()
+                .get(self.first_visible)
+                .is_some_and(|thought| {
+                    thought.presentation != crate::domain::ThoughtPresentation::Collapsed
+                }) {
+                self.first_thought_row_count().saturating_sub(1)
+            } else {
+                0
+            };
         } else {
             return Vec::new();
         }

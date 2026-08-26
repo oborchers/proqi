@@ -81,6 +81,15 @@ pub enum BoardMutation {
         /// New preference.
         presentation: ThoughtPresentation,
     },
+    /// Legacy v0.1.x payload retained only for lossless history migration.
+    #[doc(hidden)]
+    #[serde(rename = "set_collapsed")]
+    LegacySetCollapsed {
+        /// Affected thought.
+        thought_id: ThoughtId,
+        /// Original boolean presentation state.
+        collapsed: bool,
+    },
 }
 
 /// Durable operation with a complete inverse payload.
@@ -198,6 +207,20 @@ impl SessionBoard {
                     .thought_mut(*thought_id)
                     .ok_or(DomainError::ThoughtNotFound(*thought_id))?;
                 thought.presentation = *presentation;
+                thought.updated_at = at;
+            }
+            BoardMutation::LegacySetCollapsed {
+                thought_id,
+                collapsed,
+            } => {
+                let thought = self
+                    .thought_mut(*thought_id)
+                    .ok_or(DomainError::ThoughtNotFound(*thought_id))?;
+                thought.presentation = if *collapsed {
+                    ThoughtPresentation::Collapsed
+                } else {
+                    ThoughtPresentation::Automatic
+                };
                 thought.updated_at = at;
             }
         }

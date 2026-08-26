@@ -107,6 +107,7 @@ fn exercise_live_metadata_and_editor(
     let digest = listed["data"]["thoughts"][0]["content_sha256"]
         .as_str()
         .expect("content digest");
+    let revision = revision_id();
     let replaced = json_input_command(
         binary,
         state,
@@ -115,12 +116,30 @@ fn exercise_live_metadata_and_editor(
             "replace",
             session,
             thought,
+            "--revision-id",
+            &revision,
             "--expected-sha256",
             digest,
         ],
         "external replacement",
     );
     assert_eq!(replaced["data"]["thought_id"], thought);
+    let replay = json_input_command(
+        binary,
+        state,
+        &[
+            "thoughts",
+            "replace",
+            session,
+            thought,
+            "--revision-id",
+            &revision,
+            "--expected-sha256",
+            digest,
+        ],
+        "external replacement",
+    );
+    assert_eq!(replay["data"]["receipt"]["idempotent_replay"], true);
     let inspected = json_command(binary, state, &["thoughts", "inspect", session, thought]);
     assert_eq!(
         inspected["data"]["thought"]["content"],
@@ -321,4 +340,8 @@ fn assert_recovered_state(
 
 fn operation_id() -> String {
     SystemIdGenerator.operation_id().to_string()
+}
+
+fn revision_id() -> String {
+    SystemIdGenerator.revision_id().to_string()
 }

@@ -174,6 +174,9 @@ pub(super) enum ThoughtCommand {
     Replace {
         session: String,
         thought: String,
+        /// Durable idempotency identity for this editor revision.
+        #[arg(long, value_name = "REV_ID")]
+        revision_id: Option<String>,
         /// Required SHA-256 of current content.
         #[arg(long, value_name = "HEX", required_unless_present = "force")]
         expected_sha256: Option<String>,

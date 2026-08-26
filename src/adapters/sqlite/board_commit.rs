@@ -194,7 +194,9 @@ pub(super) fn mutation_changes_search(mutation: &BoardMutation) -> bool {
     match mutation {
         BoardMutation::Batch { mutations } => mutations.iter().any(mutation_changes_search),
         BoardMutation::AddThought { .. } | BoardMutation::SetDeletion { .. } => true,
-        BoardMutation::MoveThought { .. } | BoardMutation::SetPresentation { .. } => false,
+        BoardMutation::MoveThought { .. }
+        | BoardMutation::SetPresentation { .. }
+        | BoardMutation::LegacySetCollapsed { .. } => false,
     }
 }
 

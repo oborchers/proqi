@@ -74,9 +74,7 @@ pub struct PointerInput {
     pub kind: PointerKind,
 }
 
-use pending_types::{
-    PendingBoardClipboard, PendingEditorClipboard, PendingSubmission, SubmissionMode,
-};
+use pending_types::{PendingEditorClipboard, PendingSubmission, SubmissionMode};
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 enum InsertionFocus {
@@ -176,11 +174,9 @@ pub struct BoardApp {
     rename: Option<String>,
     transfer: Option<transfer::TransferState>,
     settings: UiSettings,
-    expanded: BTreeSet<ThoughtId>,
     selected_thoughts: BTreeSet<ThoughtId>,
     expanded_folds: BTreeSet<(ThoughtId, usize)>,
     pending_editor_clipboard: BTreeMap<RequestId, PendingEditorClipboard>,
-    pending_board_clipboard: BTreeMap<RequestId, PendingBoardClipboard>,
     pending_clipboard_reads: BTreeSet<RequestId>,
     pending_recovery_exports: BTreeSet<RequestId>,
     recovery_exported_for: Option<OperationSequence>,
@@ -235,11 +231,9 @@ impl BoardApp {
             rename: None,
             transfer: None,
             settings,
-            expanded: BTreeSet::new(),
             selected_thoughts: BTreeSet::new(),
             expanded_folds: BTreeSet::new(),
             pending_editor_clipboard: BTreeMap::new(),
-            pending_board_clipboard: BTreeMap::new(),
             pending_clipboard_reads: BTreeSet::new(),
             pending_recovery_exports: BTreeSet::new(),
             recovery_exported_for: None,

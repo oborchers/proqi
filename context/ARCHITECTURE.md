@@ -641,9 +641,10 @@ to split a paste heuristically.
 
 Board-mode printable keys always pass through the configured command map, even
 when the insertion row or a durable blank has focus. The second blocked
-downward movement at the end of the final edited thought exits edit mode and
-focuses the insertion row. Other edit boundaries use the same navigation state
-machine.
+downward movement at the end of a non-empty final edited thought creates a
+durable blank and enters its editor. Repeated movement while that blank remains
+empty cannot create additional thoughts. Other edit boundaries use the same
+navigation state machine.
 
 The normalized paste payload carries exact text plus optional typed provenance.
 Attachment annotations retain only presentation-safe metadata and byte ranges;
@@ -752,8 +753,10 @@ standard error. Thought bodies enter through standard input. A caller-supplied
 `op_` identity is resolved against its typed durable request before mutation,
 so matching retries return the original receipt and mismatched reuse fails.
 
-Read-only commands synchronize with an active owner before inspecting the
-shared database through the storage facade. A mutating CLI command first
+Read-only commands synchronize with a compatible active owner before inspecting
+the shared database through the storage facade. When a legacy owner predates
+the synchronization request, reads remain available from its last durable
+SQLite state instead of being misreported as a busy mutation. A mutating CLI command first
 resolves the session owner. For an inactive session it acquires the ordinary
 session lease. For an active session it sends a typed request through the
 owner's user-only local control endpoint. The owner turns that request into an
@@ -768,9 +771,9 @@ CLI returns `session_busy`.
 
 Control protocol version 4 supports durable presentation annotations, session
 rename, owner synchronization, exact editor replacement, and durable collapse
-state. Exact replacement carries either the caller's expected SHA-256 content
-digest or an explicit force intention and enters the ordinary editor revision
-history. The owner rejects every mutation of a source thought while its
+state. Exact replacement carries a typed `rev_` idempotency identity plus either
+the caller's expected SHA-256 content digest or an explicit force intention and
+enters the ordinary editor revision history. The owner rejects every mutation of a source thought while its
 submission is in flight. Cross-session delivery inspects the source, commits an
 idempotent destination creation through the verified owner or an acquired
 inactive-session lease, and only then requests an ordinary source deletion. No

@@ -76,6 +76,13 @@ pause 500
 send -- " "
 pause 700
 send -- "y"
+pause 900
+
+# Duplicate the selected pair with Command-D, then delete the duplicates as
+# one board operation. Kitty keyboard protocol encodes Super as modifier 9.
+send -- "\033\[100;9u"
+pause 1000
+send -- "d"
 pause 1600
 
 expect_background

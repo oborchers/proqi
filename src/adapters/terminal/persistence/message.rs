@@ -2,7 +2,7 @@
 
 use crate::{
     application::ThoughtMutation,
-    domain::{OperationId, OperationSequence, RequestId, SessionId, SubmissionId, Timestamp},
+    domain::{OperationSequence, RequestId, SessionId, SubmissionId, Timestamp},
     ports::{
         store::{
             CommitReceipt, OperationBatch, SessionHit, StoreError, StoredOperationRequest,
@@ -23,6 +23,7 @@ pub(in crate::adapters::terminal) enum PersistenceResult {
         result: Result<(), StoreError>,
     },
     SessionRenamed {
+        request_id: Option<RequestId>,
         previous_name: Option<String>,
         result: Result<(), StoreError>,
     },
@@ -53,6 +54,7 @@ pub(super) enum PersistenceRequest {
     Commit(Box<OperationBatch>),
     Metadata(Box<OperationBatch>),
     RenameSession {
+        request_id: Option<RequestId>,
         session_id: SessionId,
         previous_name: Option<String>,
         name: Option<String>,
@@ -64,7 +66,7 @@ pub(super) enum PersistenceRequest {
     Retry(OperationSequence),
     Lookup {
         request_id: RequestId,
-        operation_id: OperationId,
+        identity: crate::ports::store::DurableIdentity,
     },
     PrepareSubmission(Box<SubmissionAttempt>),
     MarkSubmissionSending {

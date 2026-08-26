@@ -1,12 +1,10 @@
 //! Responsive thought placement and line-level board scrolling.
 
-use std::collections::BTreeSet;
-
 use ratatui_core::layout::Rect;
 
 use crate::{
     application::AppState,
-    domain::{Thought, ThoughtId, ThoughtPresentation},
+    domain::{Thought, ThoughtPresentation},
     ports::{editor::EditorSnapshot, text_layout::wrap_rows},
 };
 
@@ -18,7 +16,6 @@ pub(super) struct ContentRequest<'a> {
     pub(super) board: Rect,
     pub(super) requested_first: usize,
     pub(super) content_width: u16,
-    pub(super) expanded: &'a BTreeSet<ThoughtId>,
     pub(super) insertion_focused: bool,
     pub(super) density: crate::ui::settings::BoardDensity,
     pub(super) requested_row_offset: usize,
@@ -47,7 +44,6 @@ pub(super) fn visible_content(request: &ContentRequest<'_>) -> VisibleContent {
         request.editor,
         request.board,
         request.content_width,
-        request.expanded,
         board_mode,
         request.density,
     );
@@ -101,7 +97,6 @@ fn thoughts_from(
             editor: request.editor,
             board,
             content_width: request.content_width,
-            expanded: request.expanded,
             density: request.density,
         },
         first,
@@ -114,7 +109,6 @@ pub(super) struct ThoughtPlacement<'a> {
     pub(super) editor: Option<&'a EditorSnapshot>,
     pub(super) board: Rect,
     pub(super) content_width: u16,
-    pub(super) expanded: &'a BTreeSet<ThoughtId>,
     pub(super) density: crate::ui::settings::BoardDensity,
 }
 
@@ -176,15 +170,15 @@ fn place_thought(
             || wrapped_rows(&thought.content, context.content_width),
             |snapshot| snapshot.visual_lines.len().max(1),
         );
-    let content_row_offset = if index == first && !editing {
-        requested_row_offset.min(natural.saturating_sub(1))
-    } else {
-        0
-    };
+    let content_row_offset =
+        if index == first && !editing && thought.presentation != ThoughtPresentation::Collapsed {
+            requested_row_offset.min(natural.saturating_sub(1))
+        } else {
+            0
+        };
     let explicit_cap = match thought.presentation {
         ThoughtPresentation::Expanded => natural,
         ThoughtPresentation::Collapsed => 2,
-        ThoughtPresentation::Automatic if context.expanded.contains(&thought.id) => natural,
         ThoughtPresentation::Automatic => usize::from(responsive_cap(context.board.height)),
     };
     let available = usize::from(context.board.bottom().saturating_sub(y));

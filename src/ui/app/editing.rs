@@ -57,6 +57,10 @@ impl BoardApp {
         if target.is_none() && movement != CursorMovement::VisualDown {
             return Vec::new();
         }
+        if target.is_none() && after.content.is_empty() {
+            self.edit_boundary = None;
+            return Vec::new();
+        }
         let mut effects = self.finish_edit(ids, clock);
         if let Some(target) = target {
             self.insertion_focus = super::InsertionFocus::Inactive;

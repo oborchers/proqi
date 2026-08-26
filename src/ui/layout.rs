@@ -5,8 +5,6 @@ mod content;
 mod controls;
 mod scroll;
 
-use std::collections::BTreeSet;
-
 use ratatui_core::layout::Rect;
 
 use crate::{
@@ -232,7 +230,6 @@ pub fn compute(
     editor: Option<&EditorSnapshot>,
     area: Rect,
     requested_first: usize,
-    expanded: &BTreeSet<ThoughtId>,
     insertion_focused: bool,
     has_agents: bool,
 ) -> LayoutSnapshot {
@@ -241,7 +238,6 @@ pub fn compute(
         editor,
         area,
         requested_first,
-        expanded,
         insertion_focused,
         has_agents,
         false,
@@ -261,7 +257,6 @@ pub fn compute_with_density(
     editor: Option<&EditorSnapshot>,
     area: Rect,
     requested_first: usize,
-    expanded: &BTreeSet<ThoughtId>,
     insertion_focused: bool,
     has_agents: bool,
     has_status: bool,
@@ -277,7 +272,6 @@ pub fn compute_with_density(
         board,
         requested_first,
         content_width,
-        expanded,
         insertion_focused,
         density,
         requested_row_offset,

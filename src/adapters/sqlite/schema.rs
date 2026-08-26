@@ -118,10 +118,6 @@ CREATE UNIQUE INDEX submission_attempt_items_active_thought
 ON submission_attempt_items(thought_id)
 WHERE active = 1;
 
-CREATE UNIQUE INDEX submission_attempts_active_thought
-ON submission_attempts(thought_id)
-WHERE state IN ('prepared', 'sending');
-
 CREATE VIRTUAL TABLE session_search USING fts5(
     session_id UNINDEXED,
     name,

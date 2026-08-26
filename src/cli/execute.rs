@@ -215,12 +215,14 @@ fn execute_thoughts(
         ThoughtCommand::Replace {
             session,
             thought,
+            revision_id,
             expected_sha256,
             force,
         } => external_thoughts::replace(
             context,
             &session,
             &thought,
+            revision_id.as_deref(),
             expected_sha256.as_deref(),
             force,
         ),

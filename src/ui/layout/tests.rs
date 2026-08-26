@@ -1,5 +1,3 @@
-use std::collections::BTreeSet;
-
 use ratatui_core::layout::Rect;
 
 use super::{HitTarget, compute};
@@ -21,15 +19,7 @@ fn empty_state() -> AppState {
 
 #[test]
 fn empty_layout_exposes_shared_footer_and_insert_targets() {
-    let layout = compute(
-        &empty_state(),
-        None,
-        Rect::new(0, 0, 20, 5),
-        0,
-        &BTreeSet::new(),
-        true,
-        false,
-    );
+    let layout = compute(&empty_state(), None, Rect::new(0, 0, 20, 5), 0, true, false);
     assert_eq!(layout.header, Rect::new(0, 0, 20, 0));
     let insert = layout.insert.expect("visible insertion row");
     assert_eq!(layout.hit_test(insert.x, insert.y), Some(HitTarget::Insert));
@@ -48,7 +38,6 @@ fn overlays_avoid_the_footer_or_deliberately_cover_the_full_shallow_frame() {
         None,
         Rect::new(0, 0, 72, 12),
         0,
-        &BTreeSet::new(),
         true,
         false,
     );
@@ -56,15 +45,7 @@ fn overlays_avoid_the_footer_or_deliberately_cover_the_full_shallow_frame() {
     let overlay = roomy.overlay.expect("roomy overlay");
     assert!(overlay.area.bottom() <= roomy.footer.y);
 
-    let mut shallow = compute(
-        &empty_state(),
-        None,
-        Rect::new(0, 0, 72, 8),
-        0,
-        &BTreeSet::new(),
-        true,
-        false,
-    );
+    let mut shallow = compute(&empty_state(), None, Rect::new(0, 0, 72, 8), 0, true, false);
     shallow.configure_overlay(3, 5);
     let overlay = shallow.overlay.expect("shallow overlay");
     assert_eq!(overlay.area.x, shallow.area.x);

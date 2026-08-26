@@ -13,6 +13,8 @@ use crate::{
 };
 
 use super::{SessionService, SessionServiceError, ThoughtMutation};
+use crate::application::{ControlReplay, match_control_replay};
+use crate::ports::control::ControlMutation;
 
 impl<S, R, C, I> SessionService<'_, S, R, C, I>
 where
@@ -35,7 +37,19 @@ where
         expected_digest: Option<[u8; 32]>,
         revision_id: RevisionId,
     ) -> Result<ThoughtMutation, SessionServiceError> {
+        let replay = ControlMutation::Replace {
+            revision_id,
+            thought_id,
+            expected_digest,
+            content: content.clone(),
+        };
+        if let Some(existing) = self.store.revision_request(revision_id)? {
+            return match_existing_replacement(&existing, session_id, thought_id, &replay);
+        }
         let _lease = self.runtime.acquire_session(session_id)?;
+        if let Some(existing) = self.store.revision_request(revision_id)? {
+            return match_existing_replacement(&existing, session_id, thought_id, &replay);
+        }
         let mut state = self.load_external_state(session_id)?;
         let thought = state
             .board
@@ -127,5 +141,23 @@ where
         self.store
             .commit(&batch)?
             .ok_or(SessionServiceError::NoDurableMutation)
+    }
+}
+
+fn match_existing_replacement(
+    existing: &crate::ports::store::StoredOperationRequest,
+    session_id: SessionId,
+    thought_id: ThoughtId,
+    mutation: &ControlMutation,
+) -> Result<ThoughtMutation, SessionServiceError> {
+    match match_control_replay(existing, session_id, mutation) {
+        ControlReplay::Accepted(receipt) => Ok(ThoughtMutation {
+            thought_id,
+            receipt: receipt.durable,
+        }),
+        ControlReplay::Conflict => Err(crate::ports::store::StoreError::Conflict(
+            "revision identity belongs to another replacement".to_owned(),
+        )
+        .into()),
     }
 }

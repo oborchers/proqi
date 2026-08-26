@@ -6,9 +6,8 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use super::error::{ApplicationError, ApplicationResult, FailureCode};
 use crate::domain::{
-    BoardOperation, BoardOperationKind, ContentAnnotation, OperationId, OperationSequence,
-    RequestId, RevisionId, SessionBoard, StableVersion, TextPosition, Thought, ThoughtId,
-    ThoughtRevision, Timestamp, UndoScope,
+    BoardOperation, OperationId, OperationSequence, RequestId, SessionBoard, StableVersion,
+    TextPosition, Thought, ThoughtId, ThoughtRevision, Timestamp,
 };
 
 pub use effect::Effect;
@@ -75,7 +74,7 @@ pub enum UpdateIntent {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct PendingClipboard {
-    pub(super) thought_id: ThoughtId,
+    pub(super) thought_ids: Vec<ThoughtId>,
     pub(super) intent: ClipboardIntent,
     pub(super) operation_id: Option<OperationId>,
     pub(super) at: Timestamp,
@@ -104,6 +103,7 @@ pub struct AppState {
     pub(super) board_history_cursor: usize,
     pub(super) editor_histories: HashMap<ThoughtId, EditorHistory>,
     pub(super) pending_clipboard: BTreeMap<RequestId, PendingClipboard>,
+    pub(super) locked_thoughts: BTreeSet<ThoughtId>,
     pub(super) pending_sequences: BTreeSet<OperationSequence>,
     pub(super) highest_sequence: OperationSequence,
 }
@@ -125,6 +125,7 @@ impl AppState {
             board_history_cursor: 0,
             editor_histories: HashMap::new(),
             pending_clipboard: BTreeMap::new(),
+            locked_thoughts: BTreeSet::new(),
             pending_sequences: BTreeSet::new(),
             highest_sequence: sequence,
         }
@@ -203,6 +204,20 @@ impl AppState {
             .ok_or(ApplicationError::ThoughtNotFound(id))
     }
 
+    /// Whether one source thought is protected by an in-flight submission.
+    #[must_use]
+    pub fn thought_locked(&self, id: ThoughtId) -> bool {
+        self.locked_thoughts.contains(&id)
+    }
+
+    /// Pending board clipboard purpose for UI-only success feedback.
+    #[must_use]
+    pub fn pending_clipboard_intent(&self, request_id: RequestId) -> Option<ClipboardIntent> {
+        self.pending_clipboard
+            .get(&request_id)
+            .map(|pending| pending.intent)
+    }
+
     pub(super) fn record_board_operation(
         &mut self,
         operation: &BoardOperation,
@@ -231,189 +246,4 @@ impl AppState {
             self.mode = InteractionMode::Board;
         }
     }
-}
-
-/// Normalized input or external result accepted by the reducer.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum Action {
-    /// Replace or clear the current session's optional name.
-    RenameSession {
-        /// New validated name, or `None` to clear it.
-        name: Option<String>,
-    },
-    /// Focus one live thought, or clear focus.
-    FocusThought(Option<ThoughtId>),
-    /// Enter the multiline editor for one live thought.
-    EnterEdit(ThoughtId),
-    /// Return from edit mode to the board.
-    ExitEdit,
-    /// Create a blank or pre-populated thought as one operation.
-    CreateThought {
-        /// New thought identity.
-        thought_id: ThoughtId,
-        /// Durable operation identity.
-        operation_id: OperationId,
-        /// Exact initial content.
-        content: String,
-        /// Durable presentation metadata over the exact initial content.
-        annotations: Vec<ContentAnnotation>,
-        /// Explicit insertion point, or the current insertion point.
-        insertion_index: Option<usize>,
-        /// Event time.
-        at: Timestamp,
-    },
-    /// Board-mode paste, intentionally equivalent to one create operation.
-    PasteAsThought {
-        /// New thought identity.
-        thought_id: ThoughtId,
-        /// Durable operation identity.
-        operation_id: OperationId,
-        /// Exact bracketed-paste payload.
-        content: String,
-        /// Durable presentation metadata over the exact paste payload.
-        annotations: Vec<ContentAnnotation>,
-        /// Event time.
-        at: Timestamp,
-    },
-    /// Apply one exact editor revision.
-    EditThought {
-        /// Edited thought.
-        thought_id: ThoughtId,
-        /// Stable revision identity.
-        revision_id: RevisionId,
-        /// Required current content.
-        before_content: String,
-        /// Replacement content.
-        after_content: String,
-        /// Presentation metadata required before the edit.
-        before_annotations: Vec<ContentAnnotation>,
-        /// Replacement presentation metadata.
-        after_annotations: Vec<ContentAnnotation>,
-        /// Cursor before the edit.
-        before_cursor: TextPosition,
-        /// Cursor after the edit.
-        after_cursor: TextPosition,
-        /// Event time.
-        at: Timestamp,
-    },
-    /// Request exact-content copy through the clipboard port.
-    CopyThought {
-        /// Idempotent external request identity.
-        request_id: RequestId,
-        /// Thought to copy.
-        thought_id: ThoughtId,
-    },
-    /// Request exact-content cut, deferring deletion until success.
-    CutThought {
-        /// Idempotent external request identity.
-        request_id: RequestId,
-        /// Durable operation used only after success.
-        operation_id: OperationId,
-        /// Thought to cut.
-        thought_id: ThoughtId,
-        /// Event time.
-        at: Timestamp,
-    },
-    /// Clipboard adapter result.
-    ClipboardResult {
-        /// Matching request.
-        request_id: RequestId,
-        /// Success or stable failure code.
-        result: Result<(), FailureCode>,
-    },
-    /// Soft-delete without touching the clipboard.
-    DeleteThought {
-        /// Durable operation identity.
-        operation_id: OperationId,
-        /// Thought to delete.
-        thought_id: ThoughtId,
-        /// Semantic deletion kind.
-        kind: BoardOperationKind,
-        /// Event time.
-        at: Timestamp,
-    },
-    /// Soft-delete several thoughts as one board-history operation.
-    DeleteThoughts {
-        /// Durable operation identity.
-        operation_id: OperationId,
-        /// Thoughts to delete in board order.
-        thought_ids: Vec<ThoughtId>,
-        /// Semantic deletion kind.
-        kind: BoardOperationKind,
-        /// Event time.
-        at: Timestamp,
-    },
-    /// Reorder one live thought.
-    MoveThought {
-        /// Durable operation identity.
-        operation_id: OperationId,
-        /// Thought to move.
-        thought_id: ThoughtId,
-        /// Desired zero-based live position.
-        to: usize,
-        /// Event time.
-        at: Timestamp,
-    },
-    /// Set the durable presentation preference.
-    SetPresentation {
-        /// Durable operation identity.
-        operation_id: OperationId,
-        /// Affected thought.
-        thought_id: ThoughtId,
-        /// New preference.
-        presentation: crate::domain::ThoughtPresentation,
-        /// Event time.
-        at: Timestamp,
-    },
-    /// Set one presentation preference as one board-history operation.
-    SetPresentationMany {
-        /// Durable operation identity.
-        operation_id: OperationId,
-        /// Thoughts to update in board order.
-        thought_ids: Vec<ThoughtId>,
-        /// New preference.
-        presentation: crate::domain::ThoughtPresentation,
-        /// Event time.
-        at: Timestamp,
-    },
-    /// Duplicate one or more thoughts in board order as one operation.
-    DuplicateThoughts {
-        /// Durable operation identity.
-        operation_id: OperationId,
-        /// Source thoughts in board order.
-        thought_ids: Vec<ThoughtId>,
-        /// Fresh identities paired with the ordered sources.
-        duplicate_ids: Vec<ThoughtId>,
-        /// Event time.
-        at: Timestamp,
-    },
-    /// Persistently undo one board operation or editor revision.
-    Undo {
-        /// Idempotent durable control identity.
-        operation_id: OperationId,
-        /// Explicit history scope.
-        scope: UndoScope,
-        /// Event time.
-        at: Timestamp,
-    },
-    /// Persistently redo one board operation or editor revision.
-    Redo {
-        /// Idempotent durable control identity.
-        operation_id: OperationId,
-        /// Explicit history scope.
-        scope: UndoScope,
-        /// Event time.
-        at: Timestamp,
-    },
-    /// Storage acknowledged one ordered sequence.
-    PersistenceCommitted(OperationSequence),
-    /// Storage failed one ordered sequence.
-    PersistenceFailed {
-        /// Failed sequence.
-        sequence: OperationSequence,
-        /// Stable failure class.
-        code: FailureCode,
-    },
-    /// Ask the storage lane to retry one retained failed operation.
-    RetryPersistence(OperationSequence),
 }

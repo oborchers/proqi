@@ -7,6 +7,7 @@ use crate::domain::{
     ContentAnnotation, OperationId, RequestId, RevisionId, SessionId, ThoughtId, UndoScope,
 };
 
+use super::store::DurableIdentity;
 use super::update::{
     UpdatePrepareReply, UpdatePrepareRequest, UpdateRestartReply, UpdateRestartRequest,
 };
@@ -172,6 +173,18 @@ impl ControlMutation {
             | Self::Replace { .. }
             | Self::UpdateRelease { .. }
             | Self::UpdateRestart { .. } => None,
+        }
+    }
+
+    /// Durable idempotency identity carried by a mutation.
+    #[must_use]
+    pub const fn durable_identity(&self) -> Option<DurableIdentity> {
+        match self {
+            Self::Replace { revision_id, .. } => Some(DurableIdentity::Revision(*revision_id)),
+            _ => match self.durable_operation_id() {
+                Some(operation_id) => Some(DurableIdentity::Operation(operation_id)),
+                None => None,
+            },
         }
     }
 

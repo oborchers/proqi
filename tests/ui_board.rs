@@ -463,7 +463,11 @@ mod durability;
 mod navigation;
 #[path = "ui_board/palette.rs"]
 mod palette;
+#[path = "ui_board/scroll_regressions.rs"]
+mod scroll_regressions;
 #[path = "ui_board/selection.rs"]
 mod selection;
 #[path = "ui_board/snapshots.rs"]
 mod snapshots;
+#[path = "ui_board/submission_locks.rs"]
+mod submission_locks;

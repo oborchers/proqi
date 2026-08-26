@@ -1,8 +1,12 @@
 //! Pure reducer and mutation helpers.
 
-use super::error::{ApplicationError, ApplicationResult};
+use super::{
+    Action,
+    error::{ApplicationError, ApplicationResult},
+    locks,
+};
 use crate::application::model::{
-    Action, AppState, ClipboardIntent, DurabilityState, Effect, InteractionMode,
+    AppState, ClipboardIntent, DurabilityState, Effect, InteractionMode,
 };
 
 use super::mutations::bulk::{delete_thoughts, duplicate_thoughts, set_presentation_many};
@@ -17,6 +21,7 @@ use super::mutations::{
 ///
 /// Returns a typed error when an action violates current state or domain invariants.
 pub fn reduce(state: &mut AppState, action: Action) -> ApplicationResult<Vec<Effect>> {
+    locks::ensure_action_unlocked(state, &action)?;
     if matches!(state.durability, DurabilityState::Failed { .. }) && mutates_durable_state(&action)
     {
         return Err(ApplicationError::InvalidState);
@@ -29,8 +34,11 @@ pub fn reduce(state: &mut AppState, action: Action) -> ApplicationResult<Vec<Eff
         Action::CreateThought { .. }
         | Action::PasteAsThought { .. }
         | Action::EditThought { .. } => reduce_content(state, action),
-        Action::CopyThought { .. } | Action::CutThought { .. } | Action::ClipboardResult { .. } => {
-            reduce_clipboard(state, &action)
+        Action::CopyThoughts { .. }
+        | Action::CutThoughts { .. }
+        | Action::ClipboardResult { .. } => reduce_clipboard(state, &action),
+        Action::BeginSubmission { .. } | Action::EndSubmission { .. } => {
+            locks::transition(state, &action)
         }
         Action::DeleteThought { .. }
         | Action::DeleteThoughts { .. }
@@ -52,7 +60,7 @@ const fn mutates_durable_state(action: &Action) -> bool {
             | Action::RenameSession { .. }
             | Action::PasteAsThought { .. }
             | Action::EditThought { .. }
-            | Action::CutThought { .. }
+            | Action::CutThoughts { .. }
             | Action::DeleteThought { .. }
             | Action::DeleteThoughts { .. }
             | Action::MoveThought { .. }
@@ -159,26 +167,26 @@ fn reduce_content(state: &mut AppState, action: Action) -> ApplicationResult<Vec
 
 fn reduce_clipboard(state: &mut AppState, action: &Action) -> ApplicationResult<Vec<Effect>> {
     match action {
-        Action::CopyThought {
+        Action::CopyThoughts {
             request_id,
-            thought_id,
+            thought_ids,
         } => request_clipboard(
             state,
             *request_id,
-            *thought_id,
+            thought_ids,
             ClipboardIntent::Copy,
             None,
             None,
         ),
-        Action::CutThought {
+        Action::CutThoughts {
             request_id,
             operation_id,
-            thought_id,
+            thought_ids,
             at,
         } => request_clipboard(
             state,
             *request_id,
-            *thought_id,
+            thought_ids,
             ClipboardIntent::Cut,
             Some(*operation_id),
             Some(*at),

@@ -16,11 +16,6 @@ impl BoardApp {
         mutation: &ControlMutation,
         clock: &impl Clock,
     ) -> Result<Vec<Effect>, ApplicationError> {
-        if let Some(thought_id) = mutation.thought_id()
-            && self.submission_locked(thought_id)
-        {
-            return Err(ApplicationError::ThoughtLocked(thought_id));
-        }
         let previous_mode = self.state.mode;
         let previous_focus = self.state.focused_thought;
         let at = clock.now();

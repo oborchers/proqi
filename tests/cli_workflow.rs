@@ -67,6 +67,10 @@ fn operation_id() -> String {
     SystemIdGenerator.operation_id().to_string()
 }
 
+fn revision_id() -> String {
+    SystemIdGenerator.revision_id().to_string()
+}
+
 fn rename(root: &Path, session: &str, name: &str) {
     let _renamed = success(root, &["sessions", "rename", session, name], None);
 }
@@ -220,19 +224,12 @@ fn exact_replacement_requires_a_precondition_and_uses_editor_history() {
     let digest = inspected["thought"]["content_sha256"]
         .as_str()
         .expect("digest");
+    let revision = revision_id();
 
-    success(
-        root,
-        &[
-            "thoughts",
-            "replace",
-            &session,
-            thought,
-            "--expected-sha256",
-            digest,
-        ],
-        Some("replacement"),
-    );
+    let replaced = exact_replace(root, &session, thought, &revision, digest, "replacement");
+    assert_eq!(replaced["receipt"]["idempotent_replay"], false);
+    let replay = exact_replace(root, &session, thought, &revision, digest, "replacement");
+    assert_eq!(replay["receipt"]["idempotent_replay"], true);
     let stale = run(
         root,
         &[
@@ -275,6 +272,30 @@ fn exact_replacement_requires_a_precondition_and_uses_editor_history() {
     );
     let collapsed = success(root, &["thoughts", "inspect", &session, thought], None);
     assert_eq!(collapsed["thought"]["collapsed"], true);
+}
+
+fn exact_replace(
+    root: &Path,
+    session: &str,
+    thought: &str,
+    revision: &str,
+    digest: &str,
+    content: &str,
+) -> Value {
+    success(
+        root,
+        &[
+            "thoughts",
+            "replace",
+            session,
+            thought,
+            "--revision-id",
+            revision,
+            "--expected-sha256",
+            digest,
+        ],
+        Some(content),
+    )
 }
 
 #[test]

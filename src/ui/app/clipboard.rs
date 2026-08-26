@@ -8,10 +8,7 @@ use crate::{
     },
 };
 
-use super::{
-    BoardApp,
-    pending_types::{PendingBoardClipboard, PendingEditorClipboard},
-};
+use super::{BoardApp, pending_types::PendingEditorClipboard};
 
 impl BoardApp {
     pub(super) fn copy_active(&mut self, ids: &mut impl IdGenerator) -> Vec<Effect> {
@@ -52,33 +49,19 @@ impl BoardApp {
         if thought_ids.is_empty() {
             return Vec::new();
         }
-        if thought_ids.iter().any(|id| self.submission_locked(*id)) {
-            self.set_warning("selected thought has a submission in progress");
-            return Vec::new();
-        }
-        let content = thought_ids
-            .iter()
-            .filter_map(|id| self.state.board.thought(*id))
-            .map(|thought| thought.content.as_str())
-            .collect::<Vec<_>>()
-            .join("\n\n");
         let request_id = ids.request_id();
-        let operation_id = ids.operation_id();
-        self.pending_board_clipboard.insert(
-            request_id,
-            PendingBoardClipboard {
-                intent,
-                thought_ids: thought_ids.clone(),
-                operation_id,
+        match intent {
+            ClipboardIntent::Copy => self.reduce(Action::CopyThoughts {
+                request_id,
+                thought_ids,
+            }),
+            ClipboardIntent::Cut => self.reduce(Action::CutThoughts {
+                request_id,
+                operation_id: ids.operation_id(),
+                thought_ids,
                 at,
-            },
-        );
-        vec![Effect::WriteClipboard {
-            request_id,
-            thought_id: thought_ids[0],
-            intent,
-            content,
-        }]
+            }),
+        }
     }
 
     pub(super) fn cut_thought(
@@ -114,10 +97,17 @@ impl BoardApp {
         if let Some(pending) = self.pending_editor_clipboard.remove(&request_id) {
             return self.complete_editor_clipboard(&pending, result, ids, clock);
         }
-        if let Some(pending) = self.pending_board_clipboard.remove(&request_id) {
-            return self.complete_board_clipboard(&pending, result);
+        let intent = self.state.pending_clipboard_intent(request_id);
+        let success = result.is_ok();
+        let effects = self.reduce(Action::ClipboardResult { request_id, result });
+        if success && intent == Some(ClipboardIntent::Copy) {
+            self.set_success("copied selected thoughts");
         }
-        self.reduce(Action::ClipboardResult { request_id, result })
+        if success && intent == Some(ClipboardIntent::Cut) && !effects.is_empty() {
+            self.selected_thoughts.clear();
+            self.sync_empty_insertion_focus();
+        }
+        effects
     }
 
     /// Complete one plain native clipboard read.
@@ -236,28 +226,5 @@ impl BoardApp {
         }
         self.apply_edit(EditCommand::DeleteForward);
         self.flush_pending_edit(ids, clock)
-    }
-
-    fn complete_board_clipboard(
-        &mut self,
-        pending: &PendingBoardClipboard,
-        result: Result<(), FailureCode>,
-    ) -> Vec<Effect> {
-        if let Err(code) = result {
-            return vec![Effect::Notify { code }];
-        }
-        if pending.intent == ClipboardIntent::Copy {
-            self.set_success("copied selected thoughts");
-            return Vec::new();
-        }
-        let effects = self.reduce(Action::DeleteThoughts {
-            operation_id: pending.operation_id,
-            thought_ids: pending.thought_ids.clone(),
-            kind: crate::domain::BoardOperationKind::Cut,
-            at: pending.at,
-        });
-        self.selected_thoughts.clear();
-        self.sync_empty_insertion_focus();
-        effects
     }
 }

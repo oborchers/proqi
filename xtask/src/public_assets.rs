@@ -139,12 +139,19 @@ fn check_demo_contract(root: &Path) -> Result<(), String> {
         "agg --quiet --theme github-dark",
         "unset NO_COLOR",
         "--window-size 92x30",
+        "fc-match",
+        "Meslo LG M DZ for Powerline",
     ] {
         if !wrapper.contains(marker) {
             return Err(format!("README demo lost required scene: {marker}"));
         }
     }
-    for marker in ["foreground #c9cde0", "background #181922", "send -- \"y\""] {
+    for marker in [
+        "foreground #c9cde0",
+        "background #181922",
+        "send -- \"y\"",
+        "send -- \"\\033\\[100;9u\"",
+    ] {
         if !recorder.contains(marker) {
             return Err(format!("README demo lost recorder contract: {marker}"));
         }

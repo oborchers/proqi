@@ -39,9 +39,6 @@ impl BoardApp {
         } else {
             ThoughtPresentation::Collapsed
         };
-        for thought_id in &thought_ids {
-            self.expanded.remove(thought_id);
-        }
         self.reduce(Action::SetPresentationMany {
             operation_id: ids.operation_id(),
             thought_ids,
@@ -65,7 +62,6 @@ impl BoardApp {
             .as_ref()
             .and_then(|layout| layout.thought(thought_id))
             .is_some_and(|layout| layout.hidden_rows > 0);
-        self.expanded.remove(&thought_id);
         let next = match presentation {
             ThoughtPresentation::Automatic if capped => ThoughtPresentation::Expanded,
             ThoughtPresentation::Automatic | ThoughtPresentation::Expanded => {

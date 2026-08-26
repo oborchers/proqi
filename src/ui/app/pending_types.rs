@@ -14,13 +14,6 @@ pub(super) struct PendingEditorClipboard {
     pub(super) before: EditorSnapshot,
 }
 
-pub(super) struct PendingBoardClipboard {
-    pub(super) intent: ClipboardIntent,
-    pub(super) thought_ids: Vec<ThoughtId>,
-    pub(super) operation_id: OperationId,
-    pub(super) at: Timestamp,
-}
-
 pub(super) struct PendingSubmission {
     pub(super) request: SubmissionRequest,
     pub(super) sources: Vec<PendingSubmissionSource>,

@@ -76,6 +76,7 @@ fn process_request(
             return results.send(PersistenceResult::Metadata { result }).is_ok();
         }
         PersistenceRequest::RenameSession {
+            request_id,
             session_id,
             previous_name,
             name,
@@ -83,6 +84,7 @@ fn process_request(
             let result = store.rename_session(session_id, name.as_deref());
             return results
                 .send(PersistenceResult::SessionRenamed {
+                    request_id,
                     previous_name,
                     result,
                 })
@@ -104,9 +106,16 @@ fn process_request(
         }
         PersistenceRequest::Lookup {
             request_id,
-            operation_id,
+            identity,
         } => {
-            let result = store.operation_request(operation_id);
+            let result = match identity {
+                crate::ports::store::DurableIdentity::Operation(operation_id) => {
+                    store.operation_request(operation_id)
+                }
+                crate::ports::store::DurableIdentity::Revision(revision_id) => {
+                    store.revision_request(revision_id)
+                }
+            };
             return results
                 .send(PersistenceResult::Lookup { request_id, result })
                 .is_ok();

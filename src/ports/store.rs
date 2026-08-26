@@ -158,6 +158,13 @@ pub enum StoredOperationRequest {
         /// Original durable receipt.
         receipt: CommitReceipt,
     },
+    /// Exact editor replacement revision.
+    Revision {
+        /// Original editor revision.
+        revision: Box<ThoughtRevision>,
+        /// Original durable receipt.
+        receipt: CommitReceipt,
+    },
     /// Content-redacted semantic replay data retained after history compaction.
     Compacted {
         /// Minimal fields required to compare a replay safely.
@@ -385,6 +392,16 @@ pub trait Store {
     fn operation_request(
         &mut self,
         id: OperationId,
+    ) -> Result<Option<StoredOperationRequest>, StoreError>;
+
+    /// Look up a prior editor revision for cross-process idempotency.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed corruption or persistence failure.
+    fn revision_request(
+        &mut self,
+        id: RevisionId,
     ) -> Result<Option<StoredOperationRequest>, StoreError>;
 
     /// Atomically apply one operation batch.

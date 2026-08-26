@@ -1,7 +1,6 @@
 # Proqi feature inventory
 
-Status: public `v0.1.1` baseline plus the verified `v0.1.2` release contract,
-reviewed 2026-08-26.
+Status: current `v0.2.0` release candidate, reviewed 2026-08-26.
 
 This inventory connects observable behavior to implementation and test
 evidence. `Shipped` means a user can reach the behavior in the current native
@@ -95,7 +94,7 @@ must not imply that the behavior exists.
 | Package contract | Shipped locally | The isolated archive smoke covers version, help, completions, JSON creation, exact Unicode, reopen, active forwarding, migration backup, newer-schema refusal, terminal restoration, fake update installation, and same-PTY replacement on macOS. | `tests/package_contract.rs`, `tests/package_contract/pty.rs` |
 | crates.io binary package | Verified release contract | The registry-restricted source package has an exact member allowlist, dry-run publication, normalized-manifest inspection, checksum evidence, isolated installation, MSRV coverage, and no supported Rust library API. It becomes public only after the separately authorized registry publication succeeds. | `Cargo.toml`, `xtask/src/crate_package.rs`, `.github/workflows/ci.yml` |
 | Debian package | Verified release contract | The immutable candidate builds `proqi_amd64.deb` from the exact verified Linux archive binary, derives runtime dependencies, omits maintainer scripts, preserves user state on removal, and tests the package on Ubuntu 22.04, Ubuntu 24.04, and Debian bookworm. It becomes public only with the authorized GitHub Release. There is no APT repository. | `xtask/src/debian.rs`, `xtask/src/debian_container.rs`, `.github/workflows/release-candidate.yml` |
-| Release artifacts | Shipped baseline plus verified promotion contract | The public `v0.1.1` release contains three native archives, checksums, SPDX JSON SBOMs, attestations, notices, completions, and the generated Homebrew formula. The `v0.1.2` promotion contract adds the Debian package without rebuilding. | `.github/workflows/release.yml`, `xtask/src/release.rs`, `xtask/src/homebrew.rs` |
+| Release artifacts | Shipped baseline plus verified promotion contract | Public releases contain three native archives, checksums, SPDX JSON SBOMs, attestations, notices, completions, a Debian package, and the generated Homebrew formula. Promotion reuses the verified release candidate without rebuilding. | `.github/workflows/release.yml`, `xtask/src/release.rs`, `xtask/src/homebrew.rs` |
 
 ## Security, privacy, and operational boundaries
 
@@ -130,9 +129,9 @@ The public release contains the expected archives, checksums, SPDX SBOMs,
 attestations, generated formula, and reviewed notes.
 
 The public `oborchers/homebrew-tap` formula passes Homebrew style, strict audit,
-all-platform parsing, reinstall, and `brew test`. The installed binary reports
-`proqi 0.1.1` and returns the current versioned capability envelope. The tap's
-hosted Linux and macOS workflow also passes.
+all-platform parsing, reinstall, and `brew test`. Installed release binaries
+return the current versioned capability envelope. The tap's hosted Linux and
+macOS workflow also passes.
 
 Repository metadata, topics, private vulnerability reporting, stable-tag
 protection, and `main` protection are active. Both rulesets give Oliver's

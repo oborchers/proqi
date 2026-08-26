@@ -42,7 +42,9 @@ pub(super) fn sync(context: &mut RuntimeContext, session_id: SessionId) -> Resul
         return Ok(());
     };
     let mutation = ControlMutation::Sync;
-    let protocol = required_protocol(&owner, &mutation)?;
+    let Some(protocol) = sync_protocol(owner.control_protocol)? else {
+        return Ok(());
+    };
     let request = ControlRequest {
         protocol,
         request_id: context.ids.request_id(),
@@ -261,6 +263,23 @@ fn required_protocol(owner: &InstanceInfo, mutation: &ControlMutation) -> Result
     Ok(protocol)
 }
 
+fn sync_protocol(advertised: Option<u32>) -> Result<Option<u32>, CliError> {
+    let Some(protocol) = advertised else {
+        return Ok(None);
+    };
+    if !(crate::ports::control::MIN_CONTROL_PROTOCOL_VERSION
+        ..=crate::ports::control::CONTROL_PROTOCOL_VERSION)
+        .contains(&protocol)
+    {
+        return Err(CliError::new(
+            "session_busy",
+            "active owner advertises an unsupported control protocol".to_owned(),
+            5,
+        ));
+    }
+    Ok((protocol >= ControlMutation::Sync.minimum_protocol()).then_some(protocol))
+}
+
 fn map_error(error: ControlError, owner: &InstanceInfo) -> CliError {
     let details = json!({
         "session_id": owner.session_id,
@@ -292,5 +311,21 @@ fn map_error(error: ControlError, owner: &InstanceInfo) -> CliError {
         | ControlError::Io(_) => {
             CliError::new("session_busy", error.to_string(), 5).with_details(details)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::sync_protocol;
+
+    #[test]
+    fn read_sync_degrades_for_legacy_owners_but_rejects_newer_protocols() {
+        assert_eq!(
+            sync_protocol(None).expect("unadvertised legacy owner"),
+            None
+        );
+        assert_eq!(sync_protocol(Some(3)).expect("protocol three owner"), None);
+        assert_eq!(sync_protocol(Some(4)).expect("current owner"), Some(4));
+        assert!(sync_protocol(Some(5)).is_err());
     }
 }

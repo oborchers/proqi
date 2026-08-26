@@ -187,6 +187,28 @@ pub enum ThoughtPresentation {
     Collapsed,
 }
 
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum CompatibleThoughtPresentation {
+    Presentation(ThoughtPresentation),
+    LegacyCollapsed(bool),
+}
+
+fn deserialize_thought_presentation<'de, D>(
+    deserializer: D,
+) -> Result<ThoughtPresentation, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Ok(
+        match CompatibleThoughtPresentation::deserialize(deserializer)? {
+            CompatibleThoughtPresentation::Presentation(presentation) => presentation,
+            CompatibleThoughtPresentation::LegacyCollapsed(true) => ThoughtPresentation::Collapsed,
+            CompatibleThoughtPresentation::LegacyCollapsed(false) => ThoughtPresentation::Automatic,
+        },
+    )
+}
+
 impl ThoughtPresentation {
     /// Stable SQLite and JSON-compatible representation.
     #[must_use]
@@ -238,7 +260,11 @@ pub struct Thought {
     /// Last content or structural change.
     pub updated_at: Timestamp,
     /// Durable user presentation preference.
-    #[serde(default)]
+    #[serde(
+        default,
+        alias = "collapsed",
+        deserialize_with = "deserialize_thought_presentation"
+    )]
     pub presentation: ThoughtPresentation,
     /// Soft-deletion time, if absent from the live board.
     pub deleted_at: Option<Timestamp>,

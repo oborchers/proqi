@@ -87,12 +87,7 @@ impl BoardApp {
     }
 
     pub(super) fn submission_locked(&self, thought_id: ThoughtId) -> bool {
-        self.pending_submissions.values().any(|pending| {
-            pending
-                .sources
-                .iter()
-                .any(|source| source.thought_id == thought_id)
-        })
+        self.state.thought_locked(thought_id)
     }
 
     /// Number of currently visible durable thoughts.
@@ -227,7 +222,6 @@ impl BoardApp {
             first_editor.as_ref().map(|view| &view.snapshot),
             area,
             self.first_visible,
-            &self.expanded,
             self.insertion_focused(),
             !self.agent_targets.is_empty(),
             has_status,
@@ -242,7 +236,6 @@ impl BoardApp {
             editor.as_ref().map(|view| &view.snapshot),
             area,
             first.first_index,
-            &self.expanded,
             self.insertion_focused(),
             !self.agent_targets.is_empty(),
             has_status,

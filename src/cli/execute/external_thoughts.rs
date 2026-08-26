@@ -2,7 +2,9 @@
 
 use crate::{adapters::runtime::SystemIdGenerator, ports::environment::IdGenerator as _};
 
-use super::helpers::{parse_operation_id, parse_thought_id, read_standard_input};
+use super::helpers::{
+    parse_operation_id, parse_revision_id, parse_thought_id, read_standard_input,
+};
 use super::{Outcome, forwarding, mutation_outcome};
 use crate::cli::{output::CliError, runtime::RuntimeContext};
 
@@ -10,6 +12,7 @@ pub(super) fn replace(
     context: &mut RuntimeContext,
     session: &str,
     thought: &str,
+    supplied_revision: Option<&str>,
     expected: Option<&str>,
     force: bool,
 ) -> Result<Outcome, CliError> {
@@ -22,7 +25,8 @@ pub(super) fn replace(
         })?)?)
     };
     let replacement = read_standard_input()?;
-    let revision_id = context.ids.revision_id();
+    let revision_id =
+        parse_revision_id(supplied_revision)?.unwrap_or_else(|| context.ids.revision_id());
     let mut service = super::session_service(context)?;
     let session_id = service.resolve_session(session, false)?;
     drop(service);

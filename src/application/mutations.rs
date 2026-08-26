@@ -3,6 +3,7 @@
 pub(super) mod bulk;
 
 use super::error::{ApplicationError, ApplicationResult, FailureCode};
+use super::mutations::bulk::delete_thoughts;
 use crate::{
     application::model::{AppState, ClipboardIntent, Effect, InteractionMode, PendingClipboard},
     domain::{
@@ -110,17 +111,38 @@ pub(super) fn edit_thought(
 pub(super) fn request_clipboard(
     state: &mut AppState,
     request_id: RequestId,
-    thought_id: ThoughtId,
+    thought_ids: &[ThoughtId],
     intent: ClipboardIntent,
     operation_id: Option<OperationId>,
     at: Option<Timestamp>,
 ) -> ApplicationResult<Vec<Effect>> {
-    let content = state.live_thought(thought_id)?.content.clone();
+    if thought_ids.is_empty() {
+        return Err(ApplicationError::InvalidState);
+    }
+    let selected = state
+        .board
+        .live_thoughts()
+        .into_iter()
+        .filter(|thought| thought_ids.contains(&thought.id))
+        .collect::<Vec<_>>();
+    if selected.len() != thought_ids.len() {
+        return Err(ApplicationError::InvalidState);
+    }
+    let ordered_ids = selected
+        .iter()
+        .map(|thought| thought.id)
+        .collect::<Vec<_>>();
+    let content = selected
+        .iter()
+        .map(|thought| thought.content.as_str())
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    let thought_id = ordered_ids[0];
     state
         .pending_clipboard
         .entry(request_id)
         .or_insert(PendingClipboard {
-            thought_id,
+            thought_ids: ordered_ids,
             intent,
             operation_id,
             at: at.unwrap_or_default(),
@@ -145,10 +167,17 @@ pub(super) fn finish_clipboard(
         return Ok(vec![Effect::Notify { code }]);
     }
     if pending.intent == ClipboardIntent::Cut {
-        return delete_thought(
+        if let Some(thought_id) = pending
+            .thought_ids
+            .iter()
+            .find(|thought_id| state.thought_locked(**thought_id))
+        {
+            return Err(ApplicationError::ThoughtLocked(*thought_id));
+        }
+        return delete_thoughts(
             state,
             pending.operation_id.ok_or(ApplicationError::InvalidState)?,
-            pending.thought_id,
+            &pending.thought_ids,
             BoardOperationKind::Cut,
             pending.at,
         );

@@ -4,7 +4,7 @@ use std::{io::Read as _, str::FromStr as _};
 
 use sha2::Digest as _;
 
-use crate::domain::{OperationId, ThoughtId};
+use crate::domain::{OperationId, RevisionId, ThoughtId};
 
 use super::CliError;
 
@@ -22,6 +22,16 @@ pub(super) fn parse_operation_id(value: Option<&str>) -> Result<Option<Operation
         .map(|value| {
             OperationId::from_str(value).map_err(|error| {
                 CliError::identifier(format!("invalid operation identifier {value}: {error}"))
+            })
+        })
+        .transpose()
+}
+
+pub(super) fn parse_revision_id(value: Option<&str>) -> Result<Option<RevisionId>, CliError> {
+    value
+        .map(|value| {
+            RevisionId::from_str(value).map_err(|error| {
+                CliError::identifier(format!("invalid revision identifier {value}: {error}"))
             })
         })
         .transpose()

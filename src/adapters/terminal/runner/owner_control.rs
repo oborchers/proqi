@@ -1,5 +1,7 @@
 //! Fair active-owner control routing through the live reducer.
 
+mod metadata;
+
 use std::sync::mpsc::TryRecvError;
 
 use crate::{
@@ -11,10 +13,7 @@ use crate::{
     application::{ControlReplay, Effect, match_control_replay},
     domain::{RequestId, ThoughtId},
     ports::{
-        control::{
-            ControlMetadataReceipt, ControlMutation, ControlRejectionCode, ControlResult,
-            ControlUpdateReceipt,
-        },
+        control::{ControlMutation, ControlRejectionCode, ControlResult, ControlUpdateReceipt},
         environment::Clock as _,
         store::StoredOperationRequest,
         update::{UpdatePrepareReply, UpdateRestartReply},
@@ -28,6 +27,8 @@ use super::{
     pending::PendingUpdateRestart,
     storage_error_code,
 };
+
+pub(super) use metadata::{complete as complete_metadata, complete_sync};
 
 pub(super) fn drain(
     app: &mut BoardApp,
@@ -92,18 +93,15 @@ fn queue_lookup(
         envelope.request.mutation,
         ControlMutation::RenameSession { .. }
     ) {
-        return queue_metadata(app, lanes, pending, envelope, &clock);
+        return metadata::queue(app, lanes, pending, envelope, &clock);
     }
     if matches!(envelope.request.mutation, ControlMutation::Sync) {
         pending.sync_controls.push_back(envelope);
         complete_sync(pending);
         return Ok(false);
     }
-    if matches!(envelope.request.mutation, ControlMutation::Replace { .. }) {
-        return apply_mutation(app, lanes, pending, envelope, &clock);
-    }
     let request_id = envelope.request.request_id;
-    let Some(operation_id) = envelope.request.mutation.durable_operation_id() else {
+    let Some(identity) = envelope.request.mutation.durable_identity() else {
         envelope.respond(ControlResult::Rejected {
             code: ControlRejectionCode::InvalidControlRequest
                 .as_str()
@@ -112,7 +110,7 @@ fn queue_lookup(
         });
         return Ok(false);
     };
-    match lanes.persistence.lookup(request_id, operation_id) {
+    match lanes.persistence.lookup(request_id, identity) {
         Ok(()) => {
             pending.persistence = pending.persistence.saturating_add(1);
             pending.control_lookups.insert(request_id, envelope);
@@ -153,63 +151,6 @@ fn handle_update(
         | ControlMutation::Delete { .. }
         | ControlMutation::Move { .. }
         | ControlMutation::History { .. } => Ok(false),
-    }
-}
-
-fn queue_metadata(
-    app: &mut BoardApp,
-    lanes: &WorkerLanes<'_>,
-    pending: &mut PendingWork,
-    envelope: ControlEnvelope,
-    clock: &impl crate::ports::environment::Clock,
-) -> Result<bool, TerminalError> {
-    match app.handle_control(&envelope.request.mutation, clock) {
-        Ok(effects) => {
-            super::durability::enqueue_effects(app, lanes, effects, pending)?;
-            pending.metadata_controls.push_back(envelope);
-            Ok(true)
-        }
-        Err(error) => {
-            envelope.respond(ControlResult::Rejected {
-                code: error.code().as_str().to_owned(),
-                message: error.to_string(),
-            });
-            Ok(false)
-        }
-    }
-}
-
-pub(super) fn complete_metadata(
-    pending: &mut PendingWork,
-    result: &Result<(), crate::ports::store::StoreError>,
-) {
-    let Some(envelope) = pending.metadata_controls.pop_front() else {
-        return;
-    };
-    let response = match result {
-        Ok(()) => {
-            let name = match &envelope.request.mutation {
-                ControlMutation::RenameSession { name } => name.clone(),
-                _ => None,
-            };
-            ControlResult::Metadata(ControlMetadataReceipt::SessionRenamed { name })
-        }
-        Err(error) => ControlResult::Rejected {
-            code: storage_error_code(error).to_owned(),
-            message: error.to_string(),
-        },
-    };
-    envelope.respond(response);
-}
-
-pub(super) fn complete_sync(pending: &mut PendingWork) {
-    if pending.persistence > 0 {
-        return;
-    }
-    while let Some(envelope) = pending.sync_controls.pop_front() {
-        envelope.respond(ControlResult::Metadata(
-            ControlMetadataReceipt::Synchronized,
-        ));
     }
 }
 

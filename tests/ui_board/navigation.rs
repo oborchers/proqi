@@ -1,13 +1,13 @@
 use super::*;
 
-fn visual(movement: CursorMovement, shifted: bool) -> UiInput {
+pub(super) fn visual(movement: CursorMovement, shifted: bool) -> UiInput {
     UiInput::Key(UiKey::Move {
         movement,
         extend_selection: shifted,
     })
 }
 
-fn durable_thought(fixture: &mut Fixture, content: &str) {
+pub(super) fn durable_thought(fixture: &mut Fixture, content: &str) {
     fixture.paste(content);
     fixture.input(UiInput::Key(UiKey::Escape));
 }

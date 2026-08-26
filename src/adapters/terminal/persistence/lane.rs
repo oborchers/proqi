@@ -5,7 +5,7 @@ use super::{
     SqliteStore, TerminalError, persistence_loop, sync_channel, thread, transfer,
 };
 use crate::{
-    domain::{OperationId, RequestId, SessionId},
+    domain::{RequestId, SessionId},
     ports::transfer::SessionTransferRequest,
 };
 use std::sync::mpsc::{RecvTimeoutError, TrySendError};
@@ -79,11 +79,13 @@ impl PersistenceLane {
 
     pub(in crate::adapters::terminal) fn rename_session(
         &self,
+        request_id: Option<RequestId>,
         session_id: SessionId,
         previous_name: Option<String>,
         name: Option<String>,
     ) -> Result<(), TerminalError> {
         self.send(PersistenceRequest::RenameSession {
+            request_id,
             session_id,
             previous_name,
             name,
@@ -107,11 +109,11 @@ impl PersistenceLane {
     pub(in crate::adapters::terminal) fn lookup(
         &self,
         request_id: RequestId,
-        operation_id: OperationId,
+        identity: crate::ports::store::DurableIdentity,
     ) -> Result<(), TerminalError> {
         self.send(PersistenceRequest::Lookup {
             request_id,
-            operation_id,
+            identity,
         })
     }
 

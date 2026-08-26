@@ -1,10 +1,12 @@
 //! Durable idempotency matching for owner-control requests.
 
+mod replacement;
+
 use crate::{
     domain::{BoardMutation, BoardOperationKind, SessionId},
     ports::{
         control::{ControlMutation, ControlReceipt},
-        store::{DurableIdentity, StoredOperationRequest},
+        store::StoredOperationRequest,
     },
 };
 
@@ -25,12 +27,13 @@ pub(crate) fn match_control_replay(
     let receipt = match existing {
         StoredOperationRequest::Board { receipt, .. }
         | StoredOperationRequest::HistoryMove { receipt, .. }
+        | StoredOperationRequest::Revision { receipt, .. }
         | StoredOperationRequest::Compacted { receipt, .. } => *receipt,
     };
-    let Some(operation_id) = mutation.durable_operation_id() else {
+    let Some(identity) = mutation.durable_identity() else {
         return ControlReplay::Conflict;
     };
-    if receipt.identity != DurableIdentity::Operation(operation_id) {
+    if receipt.identity != identity {
         return ControlReplay::Conflict;
     }
     let thought_id = match mutation {
@@ -56,6 +59,11 @@ pub(crate) fn match_control_replay(
             if matches_history(existing, session_id, *scope, *undo) =>
         {
             None
+        }
+        ControlMutation::Replace { thought_id, .. }
+            if replacement::matches(existing, session_id, mutation) =>
+        {
+            Some(*thought_id)
         }
         _ => return ControlReplay::Conflict,
     };
@@ -255,7 +263,9 @@ fn matches_history(
                 },
             ..
         } => *stored_session == session_id && *stored_scope == scope && *stored_undo == undo,
-        StoredOperationRequest::Board { .. } | StoredOperationRequest::Compacted { .. } => false,
+        StoredOperationRequest::Board { .. }
+        | StoredOperationRequest::Revision { .. }
+        | StoredOperationRequest::Compacted { .. } => false,
     }
 }
 

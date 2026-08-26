@@ -3,6 +3,7 @@ set -eu
 
 demo_state="${TMPDIR:-/tmp}/proqi-readme-demo-v1"
 binary="./target/release/proqi"
+demo_font='Meslo LG M DZ for Powerline'
 
 clean_state() {
     if [ -L "$demo_state" ]; then
@@ -45,6 +46,15 @@ record() {
     command -v asciinema >/dev/null
     command -v agg >/dev/null
     command -v expect >/dev/null
+    command -v fc-match >/dev/null
+    matched_font=$(fc-match -f '%{family}' "$demo_font")
+    case "$matched_font" in
+        "$demo_font"*) ;;
+        *)
+            echo "README demo requires the Ghostty font: $demo_font" >&2
+            exit 1
+            ;;
+    esac
     prepare
     seed >/dev/null
     printf '%s\n' 'check_for_updates = false' 'theme = "auto"' \
@@ -56,7 +66,7 @@ record() {
         --command "expect scripts/readme-demo-record.exp $binary $demo_state" \
         target/proqi-demo.cast
     agg --quiet --theme github-dark \
-        --font-family 'Meslo LG M DZ for Powerline' --font-size 20 \
+        --font-family "$demo_font" --font-size 20 \
         --line-height 1.25 --fps-cap 30 --last-frame-duration 2 \
         --select '0.2..90%' \
         target/proqi-demo.cast assets/proqi-demo.gif

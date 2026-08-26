@@ -1,7 +1,9 @@
 //! Application state, normalized actions, effects, errors, and reducer.
 
+mod action;
 mod control;
 mod error;
+mod locks;
 mod model;
 mod mutations;
 mod recovery;
@@ -13,10 +15,11 @@ mod test_support;
 mod update;
 mod update_coordination;
 
+pub use action::Action;
 pub(crate) use control::{ControlReplay, match_control_replay};
 pub use error::{ApplicationError, ApplicationResult, FailureCode};
 pub use model::{
-    Action, AppState, ClipboardIntent, DurabilityState, Effect, InteractionMode, UpdateIntent,
+    AppState, ClipboardIntent, DurabilityState, Effect, InteractionMode, UpdateIntent,
 };
 pub use recovery::capture_recovery;
 pub use reducer::reduce;

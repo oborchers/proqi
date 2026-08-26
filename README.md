@@ -67,11 +67,6 @@ text for copy, export, undo, resume, and submission.
 
 ## Install
 
-> [!NOTE]
-> Cargo and Debian distribution begin with Proqi `0.1.2`. If the latest public
-> release is older, use Homebrew or a standalone archive until `0.1.2` is
-> available.
-
 ### Homebrew
 
 Homebrew is the recommended installation on macOS and supported Linux systems:
@@ -280,7 +275,7 @@ proqi --json sessions list
 printf '%s' 'Review this exact prompt.' | proqi --json thoughts add <session-id>
 proqi --json thoughts list <session-id>
 proqi --json thoughts inspect <session-id> <thought-id>
-printf '%s' 'Exact replacement.' | proqi --json thoughts replace <session-id> <thought-id> --expected-sha256 <digest>
+printf '%s' 'Exact replacement.' | proqi --json thoughts replace <session-id> <thought-id> --revision-id <revision-id> --expected-sha256 <digest>
 proqi --json thoughts collapse <session-id> <thought-id> --collapsed true
 proqi --json thoughts move <session-id> <thought-id> <zero-based-position>
 proqi --json thoughts send <source-session> <thought-id> <destination-session>
@@ -289,8 +284,9 @@ proqi --json thoughts delete <session-id> <thought-id>
 proqi --json thoughts undo <session-id>
 ```
 
-Mutations accept typed operation IDs for durable idempotency. Reads synchronize
-with an active owner before inspecting SQLite. Rename, add, exact replacement,
+Mutations accept typed operation or revision IDs for durable idempotency. Reads
+synchronize with a compatible active owner before inspecting SQLite, and remain
+available from the last durable state of a legacy owner. Rename, add, exact replacement,
 collapse, move, delete, undo, and redo commands aimed at an active session are
 forwarded through its verified local owner channel on macOS and Linux. They
 never write around the owning reducer. An external replacement is an ordinary
@@ -514,9 +510,14 @@ Builds never change Git configuration automatically.
 The README demo uses the real release binary and deterministic temporary state:
 
 ```shell
-brew install asciinema agg
+brew install asciinema agg fontconfig
 ./scripts/readme-demo.sh record
 ```
+
+The recorder uses `Meslo LG M DZ for Powerline`, available from the
+[Powerline fonts repository](https://github.com/powerline/fonts/tree/master/Meslo%20Dotted).
+It verifies the exact family before rendering, so a missing font cannot
+silently change the published demo typography.
 
 The social preview is generated from its checked-in SVG source with:
 

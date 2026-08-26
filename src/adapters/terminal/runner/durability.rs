@@ -58,7 +58,7 @@ pub(super) fn enqueue_effects(
         {
             lanes
                 .persistence
-                .rename_session(session_id, previous_name, name)?;
+                .rename_session(None, session_id, previous_name, name)?;
             pending.persistence = pending.persistence.saturating_add(1);
         } else if let Effect::DiscoverTransferSessions = effect {
             lanes
@@ -162,11 +162,12 @@ fn complete_result(
             }
         }
         PersistenceResult::SessionRenamed {
+            request_id,
             previous_name,
             result,
         } => {
             pending.persistence = pending.persistence.saturating_sub(1);
-            owner_control::complete_metadata(pending, &result);
+            owner_control::complete_metadata(pending, request_id, &result);
             app.complete_session_rename(previous_name, result);
         }
         PersistenceResult::TransferSessions(result) => {

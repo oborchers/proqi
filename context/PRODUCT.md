@@ -900,6 +900,8 @@ Agent-facing commands provide versioned JSON, opaque IDs, structured errors,
 standard-input support for arbitrary text, and operation receipts. Mutations to
 an active session are forwarded to its owning Proqi process so they pass through
 the same reducer, lease, persistence, and undo rules as TUI actions.
+Exact replacement accepts a typed revision identifier so a retry can resolve to
+the original durable editor revision without applying the content twice.
 
 The skill never reads all scratchpad content merely because it is installed. It
 acts only when invoked, addresses the session requested by the user, and does

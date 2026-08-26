@@ -132,7 +132,6 @@ fn version_one_database_migrates_annotations_forward_without_reinterpretation() 
         .execute_batch(
             "DROP INDEX submission_attempt_items_active_thought;
              DROP TABLE submission_attempt_items;
-             DROP INDEX submission_attempts_active_thought;
              DROP TABLE submission_attempts;
              ALTER TABLE thoughts DROP COLUMN presentation;
              ALTER TABLE thoughts DROP COLUMN annotations_json;
@@ -168,10 +167,110 @@ fn version_one_database_migrates_annotations_forward_without_reinterpretation() 
         (version, annotations_column, submissions_table),
         (i64::from(SUPPORTED_SCHEMA_VERSION), 1, 1)
     );
+
+    let fresh = DatabaseFixture::new();
+    drop(fresh.open());
+    let fresh_connection =
+        Connection::open(&fresh.config.database_path).expect("fresh schema comparison");
+    assert_eq!(
+        schema_indexes(&connection),
+        schema_indexes(&fresh_connection),
+        "fresh and migrated databases must expose the same indexes"
+    );
+}
+
+fn schema_indexes(connection: &Connection) -> Vec<(String, String)> {
+    let mut statement = connection
+        .prepare(
+            "SELECT name, sql FROM sqlite_master
+             WHERE type = 'index' AND name NOT LIKE 'sqlite_%'
+             ORDER BY name",
+        )
+        .expect("schema index query");
+    statement
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .expect("schema index rows")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("schema index values")
+}
+
+#[test]
+fn legacy_thought_collapsed_field_deserializes_without_losing_state() {
+    let mut ids = FakeIdGenerator::new(1_725_000_000_000);
+    let state = session_state(&mut ids, &test_path("proqi-legacy-thought"));
+    let thought = proqi::domain::Thought::new(
+        ids.thought_id(),
+        state.board.session.id,
+        "legacy".to_owned(),
+        ThoughtPosition::new(0),
+        Timestamp::from_millis(1),
+    );
+    let json = serde_json::to_string(&thought)
+        .expect("serialize thought")
+        .replace("\"presentation\":\"automatic\"", "\"collapsed\":true");
+    let legacy: proqi::domain::Thought = serde_json::from_str(&json).expect("legacy thought");
+    assert_eq!(legacy.presentation, ThoughtPresentation::Collapsed);
 }
 
 #[test]
 fn version_five_collapsed_flag_migrates_to_the_canonical_presentation() {
+    let (fixture, mut ids, session_id, thought_id) = version_five_fixture();
+
+    let mut migrated = fixture.open();
+    let snapshot = migrated.load_session(session_id).expect("migrated session");
+    let thought = snapshot
+        .board
+        .thought(thought_id)
+        .expect("migrated thought")
+        .clone();
+    assert_eq!(thought.presentation, ThoughtPresentation::Collapsed);
+    let mut restored = AppState::from_snapshot(snapshot).expect("restore migrated history");
+    let undo = one_effect(
+        &mut restored,
+        Action::Undo {
+            operation_id: ids.operation_id(),
+            scope: UndoScope::Board,
+            at: Timestamp::from_millis(4),
+        },
+    );
+    persist_effect(&mut migrated, &undo);
+    assert_eq!(
+        migrated
+            .load_session(session_id)
+            .expect("undo result")
+            .board
+            .thought(thought_id)
+            .expect("thought after undo")
+            .presentation,
+        ThoughtPresentation::Automatic
+    );
+    let redo = one_effect(
+        &mut restored,
+        Action::Redo {
+            operation_id: ids.operation_id(),
+            scope: UndoScope::Board,
+            at: Timestamp::from_millis(5),
+        },
+    );
+    persist_effect(&mut migrated, &redo);
+    assert_eq!(
+        migrated
+            .load_session(session_id)
+            .expect("redo result")
+            .board
+            .thought(thought_id)
+            .expect("thought after redo")
+            .presentation,
+        ThoughtPresentation::Collapsed
+    );
+}
+
+fn version_five_fixture() -> (
+    DatabaseFixture,
+    FakeIdGenerator,
+    proqi::domain::SessionId,
+    proqi::domain::ThoughtId,
+) {
     let fixture = DatabaseFixture::new();
     let mut store = fixture.open();
     let mut ids = FakeIdGenerator::new(1_725_000_000_000);
@@ -192,26 +291,32 @@ fn version_five_collapsed_flag_migrates_to_the_canonical_presentation() {
     );
     persist_effect(&mut store, &collapse);
     drop(store);
+    downgrade_collapsed_fixture(&fixture);
+    (fixture, ids, session_id, thought_id)
+}
 
+fn downgrade_collapsed_fixture(fixture: &DatabaseFixture) {
     let connection = Connection::open(&fixture.config.database_path).expect("version five DB");
     connection
+        .execute(
+            "UPDATE board_operations
+             SET payload_json = replace(
+                 replace(payload_json,
+                     '\"mutation\":\"set_presentation\",\"presentation\":\"collapsed\"',
+                     '\"mutation\":\"set_collapsed\",\"collapsed\":true'),
+                 '\"mutation\":\"set_presentation\",\"presentation\":\"automatic\"',
+                 '\"mutation\":\"set_collapsed\",\"collapsed\":false')",
+            [],
+        )
+        .expect("literal legacy operation payloads");
+    connection
         .execute_batch(
-            "ALTER TABLE thoughts DROP COLUMN presentation;
+            "UPDATE thoughts SET collapsed = 1 WHERE id IS NOT NULL;
+             ALTER TABLE thoughts DROP COLUMN presentation;
              DELETE FROM migration_history WHERE version = 6;
              UPDATE schema_meta SET schema_version = 5, storage_protocol = 5;",
         )
         .expect("downgrade fixture");
-    drop(connection);
-
-    let mut migrated = fixture.open();
-    let thought = migrated
-        .load_session(session_id)
-        .expect("migrated session")
-        .board
-        .thought(thought_id)
-        .expect("migrated thought")
-        .clone();
-    assert_eq!(thought.presentation, ThoughtPresentation::Collapsed);
 }
 
 #[test]

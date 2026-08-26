@@ -1,7 +1,7 @@
 //! Verified directional submission and non-destructive completion.
 
 use crate::{
-    application::{Action, Effect},
+    application::{Action, Effect, reduce},
     domain::{BoardOperationKind, Direction, SubmissionId},
     ports::{
         agent::{
@@ -67,7 +67,9 @@ impl BoardApp {
             return Vec::new();
         };
         if let Err(error) = result {
+            let sources = pending_source_ids(pending);
             self.pending_submissions.remove(&submission_id);
+            self.release_submission_sources(sources);
             self.set_error(format!("Submission not started. Thought kept. {error}"));
             return Vec::new();
         }
@@ -87,7 +89,9 @@ impl BoardApp {
             return Vec::new();
         };
         if let Err(error) = result {
+            let sources = pending_source_ids(pending);
             self.pending_submissions.remove(&submission_id);
+            self.release_submission_sources(sources);
             self.set_error(format!("Submission not started. Thought kept. {error}"));
             return Vec::new();
         }
@@ -135,6 +139,7 @@ impl BoardApp {
         let Some(mut pending) = self.pending_submissions.remove(&submission_id) else {
             return Vec::new();
         };
+        self.release_submission_sources(pending_source_ids(&pending));
         let Some(completion) = pending.completion.take() else {
             return Vec::new();
         };
@@ -248,14 +253,11 @@ impl BoardApp {
             .find(|target| target.direction == direction)
             .cloned()
         else {
-            self.set_warning(format!("no verified agent {}", direction_name(direction)));
+            self.set_warning(format!("no verified agent {}", direction.as_str()));
             return Vec::new();
         };
         if !target.delivery.supports() {
-            self.set_warning(format!(
-                "submission is unavailable {}",
-                direction_name(direction)
-            ));
+            self.set_warning(format!("submission is unavailable {}", direction.as_str()));
             return Vec::new();
         }
         let thought_ids = self.action_thought_ids();
@@ -309,6 +311,19 @@ impl BoardApp {
             })
             .collect::<Vec<_>>();
         let deletion_operation_id = ids.operation_id();
+        let source_ids = sources
+            .iter()
+            .map(|source| source.thought_id)
+            .collect::<Vec<_>>();
+        if let Err(error) = reduce(
+            &mut self.state,
+            Action::BeginSubmission {
+                thought_ids: source_ids,
+            },
+        ) {
+            self.set_error(error.to_string());
+            return Vec::new();
+        }
         self.pending_submissions.insert(
             submission_id,
             PendingSubmission {
@@ -351,6 +366,12 @@ impl BoardApp {
         vec![Effect::PrepareSubmission(attempt)]
     }
 
+    fn release_submission_sources(&mut self, thought_ids: Vec<crate::domain::ThoughtId>) {
+        if let Err(error) = reduce(&mut self.state, Action::EndSubmission { thought_ids }) {
+            self.set_error(error.to_string());
+        }
+    }
+
     fn apply_accepted_submission(
         &mut self,
         pending: &PendingSubmission,
@@ -388,7 +409,7 @@ impl BoardApp {
         };
         self.set_success(format!(
             "submitted {} to {}, {outcome}",
-            direction_name(receipt.target.direction),
+            receipt.target.direction.as_str(),
             receipt.target.agent_name
         ));
         effects
@@ -406,6 +427,14 @@ impl BoardApp {
             .filter(|thought| thought.is_live())
             .map(|thought| digest(thought.content.as_bytes()))
     }
+}
+
+fn pending_source_ids(pending: &PendingSubmission) -> Vec<crate::domain::ThoughtId> {
+    pending
+        .sources
+        .iter()
+        .map(|source| source.thought_id)
+        .collect()
 }
 
 fn submission_outcome(
@@ -456,10 +485,6 @@ fn target_fingerprint(target: &AgentTarget) -> [u8; 32] {
         hasher.update([0]);
     }
     hasher.finalize().into()
-}
-
-fn direction_name(direction: Direction) -> &'static str {
-    direction.as_str()
 }
 
 fn discovery_status(target_count: usize) -> String {

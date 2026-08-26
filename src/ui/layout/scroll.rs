@@ -1,10 +1,8 @@
 //! Board scroll bounds derived from authoritative thought placement.
 
-use std::collections::BTreeSet;
-
 use ratatui_core::layout::Rect;
 
-use crate::{application::AppState, domain::ThoughtId, ports::editor::EditorSnapshot};
+use crate::{application::AppState, ports::editor::EditorSnapshot};
 
 pub(super) fn board_for_page(board: Rect, reserve_insert: bool) -> Rect {
     if reserve_insert {
@@ -24,7 +22,6 @@ pub(super) fn maximum_first(
     editor: Option<&EditorSnapshot>,
     board: Rect,
     content_width: u16,
-    expanded: &BTreeSet<ThoughtId>,
     include_insert: bool,
     density: crate::ui::settings::BoardDensity,
 ) -> usize {
@@ -49,7 +46,6 @@ pub(super) fn maximum_first(
                 editor,
                 board: thought_board,
                 content_width,
-                expanded,
                 density,
             },
             candidate,

@@ -47,9 +47,9 @@ fn copy_is_exact_and_never_mutates_the_board() {
     let request_id = fixture.ids.request_id();
     let effects = reduce(
         &mut fixture.state,
-        Action::CopyThought {
+        Action::CopyThoughts {
             request_id,
-            thought_id,
+            thought_ids: vec![thought_id],
         },
     )
     .expect("copy");
@@ -90,10 +90,10 @@ fn cut_deletes_only_after_clipboard_success() {
     let failed_at = fixture.time();
     reduce(
         &mut fixture.state,
-        Action::CutThought {
+        Action::CutThoughts {
             request_id: failed_request,
             operation_id: failed_operation,
-            thought_id,
+            thought_ids: vec![thought_id],
             at: failed_at,
         },
     )
@@ -126,10 +126,10 @@ fn cut_deletes_only_after_clipboard_success() {
     let at = fixture.time();
     reduce(
         &mut fixture.state,
-        Action::CutThought {
+        Action::CutThoughts {
             request_id,
             operation_id,
-            thought_id,
+            thought_ids: vec![thought_id],
             at,
         },
     )

@@ -369,6 +369,13 @@ impl Store for SqliteStore {
         operation_lookup::operation_request(&self.connection, id)
     }
 
+    fn revision_request(
+        &mut self,
+        id: crate::domain::RevisionId,
+    ) -> Result<Option<StoredOperationRequest>, StoreError> {
+        operation_lookup::revision_request(&self.connection, id)
+    }
+
     fn commit(&mut self, batch: &OperationBatch) -> Result<Option<CommitReceipt>, StoreError> {
         self.with_write_retry(|transaction| commit_batch(transaction, batch))
     }

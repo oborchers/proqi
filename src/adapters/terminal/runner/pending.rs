@@ -15,7 +15,7 @@ pub(super) struct PendingWork {
     pub(super) controls: BTreeMap<OperationSequence, PendingControl>,
     pub(super) control_lookups: BTreeMap<RequestId, ControlEnvelope>,
     pub(super) update_prepares: BTreeMap<RequestId, ControlEnvelope>,
-    pub(super) metadata_controls: VecDeque<ControlEnvelope>,
+    pub(super) metadata_controls: BTreeMap<RequestId, ControlEnvelope>,
     pub(super) sync_controls: VecDeque<ControlEnvelope>,
     pub(super) update_restart: Option<PendingUpdateRestart>,
     pub(super) update: usize,

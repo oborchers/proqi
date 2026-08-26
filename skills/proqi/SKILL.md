@@ -82,6 +82,7 @@ replacement so a concurrent human edit cannot be overwritten:
 argv:  ["proqi", "--json", "thoughts", "replace",
         "ses_06g30t7dv5qv55n1ppn3clis3k",
         "tht_06g30t8fudrq55fdkk348i7388",
+        "--revision-id", "rev_06g30t8fudrq55fdkm4b0acm6g",
         "--expected-sha256", "<digest returned by inspect>"]
 stdin: Exact replacement content.
 ```
@@ -89,6 +90,7 @@ stdin: Exact replacement content.
 Use `--force` only when the user explicitly asks to replace the current content
 regardless of intervening edits. It never bypasses a submission lock. Exact
 replacement is an editor revision and can be reversed with thought-scoped undo.
+Reuse the same `rev_` identifier only when retrying the exact same replacement.
 
 Set durable collapsed presentation explicitly when requested:
 
