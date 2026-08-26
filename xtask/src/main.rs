@@ -310,6 +310,10 @@ fn test(root: &Path) -> Result<(), String> {
 }
 
 fn coverage(root: &Path) -> Result<(), String> {
+    const PRODUCT_COVERAGE_FLOOR: &str = "70";
+    // Workspace tests still run; the report measures the shipped product, not this build driver.
+    const NON_SHIPPED_TOOLING: &str = "(^|/)xtask/";
+
     fs::create_dir_all(root.join("target/coverage"))
         .map_err(|error| format!("create coverage directory: {error}"))?;
     run(
@@ -324,8 +328,10 @@ fn coverage(root: &Path) -> Result<(), String> {
             "--lcov",
             "--output-path",
             "target/coverage/lcov.info",
+            "--ignore-filename-regex",
+            NON_SHIPPED_TOOLING,
             "--fail-under-lines",
-            "70",
+            PRODUCT_COVERAGE_FLOOR,
         ],
     )
 }
