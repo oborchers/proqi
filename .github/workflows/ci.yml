@@ -51,13 +51,17 @@ jobs:
   msrv:
     name: Minimum supported Rust
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - run: rustup toolchain install 1.88.0 --profile minimal
       - run: cargo +1.88.0 xtask msrv
+      - name: Verify packaged source with the minimum Rust toolchain
+        env:
+          RUSTUP_TOOLCHAIN: 1.88.0
+        run: cargo xtask crate-package
       - run: cargo xtask clean-worktree
 
   security:
@@ -106,7 +110,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-15, ubuntu-24.04]
+        os: [macos-15, ubuntu-22.04]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
@@ -118,12 +122,48 @@ jobs:
         with:
           tool: cargo-about@0.9.2
       - run: cargo xtask package
+      - run: cargo xtask crate-package
+      - name: Preserve verified Linux archive for Debian packaging
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          if-no-files-found: error
+          name: ci-linux-package
+          path: target/package/proqi-x86_64-unknown-linux-gnu.tar.gz
+          retention-days: 1
+      - run: cargo xtask clean-worktree
+
+  debian:
+    name: Debian package contract
+    needs: package
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: taiki-e/install-action@6cd13508893c0e7eab5f273c2575d3859bd7229a # v2.86.6
+        with:
+          tool: nfpm@2.47.0
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ci-linux-package
+          path: target/package
+      - name: Build and verify Debian artifact
+        run: |
+          cargo xtask debian-package \
+            target/package/proqi-x86_64-unknown-linux-gnu.tar.gz \
+            target/debian-package
+          cargo xtask verify-debian \
+            target/package/proqi-x86_64-unknown-linux-gnu.tar.gz \
+            target/debian-package/proqi_amd64.deb
       - run: cargo xtask clean-worktree
 
   check:
     name: Required CI result
     if: always()
-    needs: [quality, test, msrv, security, pty, coverage, package]
+    needs: [quality, test, msrv, security, pty, coverage, package, debian]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

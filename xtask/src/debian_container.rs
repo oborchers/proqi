@@ -2,7 +2,11 @@
 
 use std::{path::Path, process::Command};
 
-const IMAGES: [&str; 3] = ["ubuntu:22.04", "ubuntu:24.04", "debian:bookworm-slim"];
+const IMAGES: [&str; 3] = [
+    "ubuntu:22.04@sha256:2edbbc5dc405e9612ba3584ce95480277e3eb374407b5505fe26f17df77c7dbc",
+    "ubuntu:24.04@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517",
+    "debian:bookworm-slim@sha256:88200866dfff7ea7f5cbcb6ec7c8a701889efe6fe859fe64d6990e4b07ea4171",
+];
 
 pub(super) fn verify(root: &Path, archive: &Path, package: &Path) -> Result<(), String> {
     require_file(archive, "Linux archive")?;
@@ -70,6 +74,23 @@ fn container_script(digest: &str) -> String {
     format!(
         r#"export DEBIAN_FRONTEND=noninteractive
 apt-get update
+test "$(dpkg-deb --field /work/proqi_amd64.deb Package)" = "proqi"
+test "$(dpkg-deb --field /work/proqi_amd64.deb Version)" = "{version}-1"
+test "$(dpkg-deb --field /work/proqi_amd64.deb Architecture)" = "amd64"
+dpkg-deb --field /work/proqi_amd64.deb Depends | grep -q 'libc6 (>= 2.35)'
+dpkg-deb --field /work/proqi_amd64.deb Depends | grep -q 'libgcc-s1'
+dpkg-deb --contents /work/proqi_amd64.deb | grep -q './usr/bin/proqi'
+mkdir /tmp/wrong-architecture
+dpkg-deb --raw-extract /work/proqi_amd64.deb /tmp/wrong-architecture
+sed -i 's/^Architecture: amd64$/Architecture: arm64/' /tmp/wrong-architecture/DEBIAN/control
+dpkg-deb --build /tmp/wrong-architecture /tmp/proqi-wrong-architecture.deb
+if apt-get install -y /tmp/proqi-wrong-architecture.deb; then exit 1; fi
+mkdir /tmp/missing-dependency
+dpkg-deb --raw-extract /work/proqi_amd64.deb /tmp/missing-dependency
+sed -i 's/^Depends:.*$/Depends: proqi-deliberately-missing-dependency/' /tmp/missing-dependency/DEBIAN/control
+dpkg-deb --build /tmp/missing-dependency /tmp/proqi-missing-dependency.deb
+if apt-get install -y /tmp/proqi-missing-dependency.deb; then exit 1; fi
+if dpkg-query -W proqi >/dev/null 2>&1; then exit 1; fi
 apt-get install -y /work/proqi_amd64.deb
 test "$(proqi --version)" = "proqi {version}"
 test "$(sha256sum /usr/bin/proqi | cut -d' ' -f1)" = "{digest}"
@@ -78,10 +99,11 @@ test -r /usr/share/bash-completion/completions/proqi
 test -r /usr/share/zsh/vendor-completions/_proqi
 test -r /usr/share/fish/vendor_completions.d/proqi.fish
 test -r /usr/share/doc/proqi/copyright
-test -r /usr/lib/proqi/proqi-installation.json
 mkdir -p /tmp/proqi-state
 proqi --state-dir /tmp/proqi-state --json capabilities > /tmp/capabilities.json
 grep -q '"ok":true' /tmp/capabilities.json
+proqi --state-dir /tmp/proqi-state --json doctor > /tmp/doctor.json
+grep -q '"ok":true' /tmp/doctor.json
 proqi --state-dir /tmp/proqi-state --json > /tmp/session.json
 grep -q '"session_id"' /tmp/session.json
 test -f /tmp/proqi-state/data/proqi.sqlite3
@@ -107,6 +129,9 @@ mod tests {
         assert!(script.contains("apt-get remove -y proqi"));
         assert!(script.contains("test -f /tmp/proqi-state/data/proqi.sqlite3"));
         assert!(script.contains("apt-get install -y /work/proqi_amd64.deb"));
+        assert!(script.contains("proqi-wrong-architecture.deb"));
+        assert!(script.contains("proqi-missing-dependency.deb"));
+        assert!(script.contains("--json doctor"));
         assert!(script.contains("abc123"));
     }
 }

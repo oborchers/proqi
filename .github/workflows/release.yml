@@ -71,23 +71,23 @@ jobs:
         run: |
           cd target/release-assets
           jq -e --arg tag "$TAG" --arg sha "$GITHUB_SHA" --arg run_id "$CANDIDATE_RUN_ID" \
-            '.schema_version == 1 and .tag == $tag and .source_sha == $sha and .build_run_id == ($run_id | tonumber) and .workflow == "release-candidate.yml" and .targets == ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu"]' \
+            '.schema_version == 2 and .tag == $tag and .source_sha == $sha and .build_run_id == ($run_id | tonumber) and .workflow == "release-candidate.yml" and .targets == ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu"] and (.release_files | length == 14) and (.evidence_files | length == 4)' \
             candidate-manifest.json
-          jq -r '.files[].name, "candidate-manifest.json"' candidate-manifest.json | sort > "$RUNNER_TEMP/expected-candidate-files"
-          find . -maxdepth 1 -type f -printf '%f\n' | sort > "$RUNNER_TEMP/actual-candidate-files"
+          jq -r '.release_files[].name, .evidence_files[].name, "candidate-manifest.json"' candidate-manifest.json | sort > "$RUNNER_TEMP/expected-candidate-files"
+          find . -type f -printf '%P\n' | sort > "$RUNNER_TEMP/actual-candidate-files"
           diff -u "$RUNNER_TEMP/expected-candidate-files" "$RUNNER_TEMP/actual-candidate-files"
-          jq -r '.files[] | "\(.sha256)  \(.name)"' candidate-manifest.json | shasum -a 256 -c -
+          jq -r '.release_files[], .evidence_files[] | "\(.sha256)  \(.name)"' candidate-manifest.json | shasum -a 256 -c -
           shasum -a 256 -c SHA256SUMS
           ruby -c proqi.rb
       - name: Verify candidate attestations against the source commit
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          for archive in target/release-assets/*.tar.gz; do
-            gh attestation verify "$archive" --repo "$GITHUB_REPOSITORY" \
+          for artifact in target/release-assets/*.tar.gz target/release-assets/proqi_amd64.deb; do
+            gh attestation verify "$artifact" --repo "$GITHUB_REPOSITORY" \
               --signer-workflow "github.com/${GITHUB_REPOSITORY}/.github/workflows/release-candidate.yml" \
               --source-ref refs/heads/main --source-digest "$GITHUB_SHA"
-            gh attestation verify "$archive" --repo "$GITHUB_REPOSITORY" \
+            gh attestation verify "$artifact" --repo "$GITHUB_REPOSITORY" \
               --signer-workflow "github.com/${GITHUB_REPOSITORY}/.github/workflows/release-candidate.yml" \
               --source-ref refs/heads/main --source-digest "$GITHUB_SHA" \
               --predicate-type https://spdx.dev/Document/v2.3
@@ -95,7 +95,9 @@ jobs:
       - name: Bind provenance to the protected release tag
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
-          subject-path: target/release-assets/*.tar.gz
+          subject-path: |
+            target/release-assets/*.tar.gz
+            target/release-assets/proqi_amd64.deb
       - name: Bind Apple silicon SBOM to the release tag
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
@@ -111,13 +113,18 @@ jobs:
         with:
           subject-path: target/release-assets/proqi-x86_64-unknown-linux-gnu.tar.gz
           sbom-path: target/release-assets/proqi-x86_64-unknown-linux-gnu.tar.gz.spdx.json
+      - name: Bind Debian SBOM to the release tag
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: target/release-assets/proqi_amd64.deb
+          sbom-path: target/release-assets/proqi_amd64.deb.spdx.json
       - name: Create, resume, or confirm the immutable release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
           cd target/release-assets
-          mapfile -t assets < <(find . -maxdepth 1 -type f ! -name candidate-manifest.json -printf '%f\n' | sort)
+          mapfile -t assets < <(jq -r '.release_files[].name' candidate-manifest.json | sort)
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             existing="$RUNNER_TEMP/existing-release"
             mkdir -p "$existing"

@@ -18,7 +18,7 @@ pub(super) const PACKAGE_NAME: &str = "proqi_amd64.deb";
 const NFPM_VERSION: &str = "2.47.0";
 const MINIMUM_LIBC: &str = "2.35";
 const MAINTAINER: &str = "Oliver Borchers <oliver-borchers@gmx.net>";
-pub(super) const INSTALLED_PATHS: [(&str, &str, u32); 7] = [
+pub(super) const INSTALLED_PATHS: [(&str, &str, u32); 6] = [
     ("proqi", "/usr/bin/proqi", 0o755),
     (
         "proqi.bash",
@@ -35,11 +35,6 @@ pub(super) const INSTALLED_PATHS: [(&str, &str, u32); 7] = [
     (
         "THIRD-PARTY-NOTICES.md",
         "/usr/share/doc/proqi/THIRD-PARTY-NOTICES.md",
-        0o644,
-    ),
-    (
-        "proqi-installation.json",
-        "/usr/lib/proqi/proqi-installation.json",
         0o644,
     ),
 ];
@@ -170,10 +165,6 @@ fn stage_contents(root: &Path, extracted: &Path, stage: &Path) -> Result<(), Str
         (
             source.join("THIRD-PARTY-NOTICES.md"),
             stage.join("THIRD-PARTY-NOTICES.md"),
-        ),
-        (
-            source.join("proqi-installation.json"),
-            stage.join("proqi-installation.json"),
         ),
     ] {
         fs::copy(&from, &to)
