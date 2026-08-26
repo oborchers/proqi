@@ -142,6 +142,7 @@ jobs:
         if: matrix.target == 'x86_64-unknown-linux-gnu'
         env:
           DEBIAN_BOOKWORM_IMAGE: debian:bookworm-slim@sha256:88200866dfff7ea7f5cbcb6ec7c8a701889efe6fe859fe64d6990e4b07ea4171
+          EXPECTED_TARGET: ${{ matrix.target }}
           UBUNTU_2204_IMAGE: ubuntu:22.04@sha256:2edbbc5dc405e9612ba3584ce95480277e3eb374407b5505fe26f17df77c7dbc
           UBUNTU_2404_IMAGE: ubuntu:24.04@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517
         run: |
