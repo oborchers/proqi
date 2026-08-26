@@ -4,7 +4,7 @@ use std::{
     fs,
     io::{Read, Write},
     os::unix::fs::symlink,
-    process::{Command, Stdio},
+    process::Command,
     sync::{Arc, Mutex},
     thread,
     time::{Duration, Instant},
@@ -32,7 +32,7 @@ use proqi::{
 };
 use serde_json::Value;
 
-use super::{InstalledProduct, package_version, parse_success};
+use super::{InstalledProduct, package_version};
 
 struct PtyChild {
     child: Box<dyn Child + Send + Sync>,
@@ -47,8 +47,7 @@ pub(super) fn assert_active_owner_and_terminal_restoration(
 ) {
     let mut owner = spawn(product, session);
     wait_for_owner(product, session, &mut owner);
-    let forwarded = json_input(
-        product,
+    let forwarded = product.json_input(
         &["thoughts", "add", session],
         "forwarded through the installed owner Grüße 界",
     );
@@ -186,6 +185,9 @@ fn assert_fake_update_services(
     assert_eq!(source.calls, 1);
 
     let registry = update_registry(homebrew, installation);
+    let initiating = active_participant(&registry, session)
+        .expect("active package participant")
+        .instance_id;
     let mut gateway = LocalUpdateControlClient::new(SystemIdGenerator);
     let deadline = Timestamp::from_millis(SystemClock.now().as_millis().saturating_add(10_000));
     let mut ids = SystemIdGenerator;
@@ -194,11 +196,16 @@ fn assert_fake_update_services(
         calls: 0,
     };
     let failure = UpdateRestartCoordinator::new(&state, &registry, &mut gateway, &mut failing)
-        .execute(ids.request_id(), installation, &version, deadline);
+        .execute(
+            ids.request_id(),
+            initiating,
+            installation,
+            &version,
+            deadline,
+        );
     assert!(matches!(failure, Err(UpdateError::InstallerFailed)));
     assert_eq!(failing.calls, 1);
-    let usable = json_input(
-        homebrew,
+    let usable = homebrew.json_input(
         &["thoughts", "add", session],
         "installer failure kept this session usable",
     );
@@ -208,7 +215,13 @@ fn assert_fake_update_services(
         calls: 0,
     };
     let installed = UpdateRestartCoordinator::new(&state, &registry, &mut gateway, &mut succeeding)
-        .execute(ids.request_id(), installation, &version, deadline)
+        .execute(
+            ids.request_id(),
+            initiating,
+            installation,
+            &version,
+            deadline,
+        )
         .expect("coordinate one fake installation");
     assert_eq!(succeeding.calls, 1);
     assert_eq!(installed.prepared_participants, 1);
@@ -404,7 +417,11 @@ fn read_pty(mut reader: Box<dyn Read + Send>, output: &Mutex<Vec<u8>>) {
 
 fn finish(owner: PtyChild, timeout: Duration) -> Vec<u8> {
     let (success, output) = finish_with_status(owner, timeout);
-    assert!(success, "PTY owner exited unsuccessfully");
+    assert!(
+        success,
+        "PTY owner exited unsuccessfully: {}",
+        String::from_utf8_lossy(&output)
+    );
     output
 }
 
@@ -467,23 +484,6 @@ fn owner_is_ready(product: &InstalledProduct, session: &str) -> bool {
                         .is_some_and(|endpoint| std::path::Path::new(endpoint).exists())
             })
     })
-}
-
-fn json_input(product: &InstalledProduct, arguments: &[&str], input: &str) -> Value {
-    let mut command = product.state_command();
-    command
-        .arg("--json")
-        .args(arguments)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped());
-    let mut child = command.spawn().expect("spawn forwarded command");
-    child
-        .stdin
-        .take()
-        .expect("forwarded stdin")
-        .write_all(input.as_bytes())
-        .expect("write forwarded content");
-    parse_success(&child.wait_with_output().expect("wait for forwarding"))
 }
 
 fn assert_terminal_restored(output: &[u8]) {

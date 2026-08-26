@@ -19,7 +19,7 @@ use crate::{
     application::{
         Effect, UpdateAvailability, UpdateCheckMode, UpdateIntent, UpdateRestartCoordinator,
     },
-    domain::{Installation, InstallationKind, StableVersion, Timestamp},
+    domain::{Installation, InstallationKind, InstanceId, StableVersion, Timestamp},
     ports::{
         environment::{Clock as _, IdGenerator as _},
         runtime::InstanceInfo,
@@ -69,6 +69,7 @@ impl UpdateLane {
         cache_directory: PathBuf,
         installation: Option<Installation>,
         coordinator: FileRuntimeCoordinator,
+        initiating_instance: InstanceId,
         cancellation: CancellationFlag,
     ) -> Self {
         let (request_sender, request_receiver) = sync_channel(4);
@@ -83,6 +84,7 @@ impl UpdateLane {
                     &cache_directory,
                     installation.as_ref(),
                     &coordinator,
+                    initiating_instance,
                     cancellation,
                 );
             });
@@ -165,6 +167,7 @@ fn update_loop(
     cache_directory: &Path,
     installation: Option<&Installation>,
     coordinator: &FileRuntimeCoordinator,
+    initiating_instance: InstanceId,
     cancellation: CancellationFlag,
 ) {
     let Ok(state) = FileUpdateStateStore::new(cache_directory) else {
@@ -188,7 +191,14 @@ fn update_loop(
             .ok()
             .map(UpdateResult::Notice),
             UpdateRequest::Act(intent) => {
-                let action = act(&state, installation, coordinator, intent, &mut process);
+                let action = act(
+                    &state,
+                    installation,
+                    coordinator,
+                    initiating_instance,
+                    intent,
+                    &mut process,
+                );
                 prompt_lease = None;
                 Some(UpdateResult::Action(action))
             }
@@ -243,6 +253,7 @@ fn act(
     state: &FileUpdateStateStore,
     installation: &Installation,
     coordinator: &FileRuntimeCoordinator,
+    initiating_instance: InstanceId,
     intent: UpdateIntent,
     process: &mut SystemProcessRunner,
 ) -> Result<UpdateActionResult, UpdateError> {
@@ -256,9 +267,14 @@ fn act(
             Ok(UpdateActionResult::Skipped)
         }
         UpdateIntent::ViewInstructions(version) => Ok(UpdateActionResult::Instructions(version)),
-        UpdateIntent::Install(version) => {
-            install(state, installation, coordinator, &version, process)
-        }
+        UpdateIntent::Install(version) => install(
+            state,
+            installation,
+            coordinator,
+            initiating_instance,
+            &version,
+            process,
+        ),
     }
 }
 
@@ -266,6 +282,7 @@ fn install(
     state: &FileUpdateStateStore,
     installation: &Installation,
     coordinator: &FileRuntimeCoordinator,
+    initiating_instance: InstanceId,
     version: &StableVersion,
     process: &mut SystemProcessRunner,
 ) -> Result<UpdateActionResult, UpdateError> {
@@ -285,7 +302,13 @@ fn install(
     let deadline = Timestamp::from_millis(now.as_millis().saturating_add(UPDATE_DEADLINE_MILLIS));
     let mut ids = SystemIdGenerator;
     let execution = UpdateRestartCoordinator::new(state, coordinator, &mut gateway, &mut installer)
-        .execute(ids.request_id(), installation.identity, version, deadline)?;
+        .execute(
+            ids.request_id(),
+            initiating_instance,
+            installation.identity,
+            version,
+            deadline,
+        )?;
     Ok(UpdateActionResult::Executed(execution))
 }
 

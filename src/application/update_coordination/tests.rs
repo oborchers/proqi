@@ -193,6 +193,7 @@ fn one_ten_and_fifteen_participants_install_and_restart_once() {
         let mut ids = TestIds::new(1_800_000_000_000);
         let identity = InstallationIdentity::from_digest([31; 32]);
         let participants = participants(&mut ids, identity, count);
+        let initiating = participants[count / 2].instance_id;
         let registry = registry(participants.clone(), participants);
         let state = State::default();
         let mut gateway = Gateway::default();
@@ -201,6 +202,7 @@ fn one_ten_and_fifteen_participants_install_and_restart_once() {
         let result = UpdateRestartCoordinator::new(&state, &registry, &mut gateway, &mut installer)
             .execute(
                 operation_id,
+                initiating,
                 identity,
                 &version("0.2.0"),
                 Timestamp::from_millis(1_800_000_030_000),
@@ -212,6 +214,7 @@ fn one_ten_and_fifteen_participants_install_and_restart_once() {
         assert_eq!(installer.calls, 1);
         assert_eq!(gateway.prepared.len(), count);
         assert_eq!(gateway.restarted.len(), count);
+        assert_eq!(gateway.restarted.last(), Some(&initiating));
         assert!(!state.cache.borrow().restart_needed);
     }
 }
@@ -221,6 +224,7 @@ fn blocked_preflight_releases_ready_peers_before_installation() {
     let mut ids = TestIds::new(1_800_000_000_000);
     let identity = InstallationIdentity::from_digest([32; 32]);
     let participants = participants(&mut ids, identity, 4);
+    let initiating = participants[0].instance_id;
     let registry = Registry {
         scans: RefCell::new(VecDeque::from([participants])),
     };
@@ -233,6 +237,7 @@ fn blocked_preflight_releases_ready_peers_before_installation() {
     let result = UpdateRestartCoordinator::new(&state, &registry, &mut gateway, &mut installer)
         .execute(
             ids.request_id(),
+            initiating,
             identity,
             &version("0.2.0"),
             Timestamp::from_millis(1_800_000_030_000),
@@ -251,6 +256,7 @@ fn post_install_rescan_includes_new_sessions_and_records_partial_restart() {
     let mut ids = TestIds::new(1_800_000_000_000);
     let identity = InstallationIdentity::from_digest([33; 32]);
     let before = participants(&mut ids, identity, 2);
+    let initiating = before[0].instance_id;
     let mut after = before.clone();
     after.extend(participants(&mut ids, identity, 1));
     let failed = after[1].instance_id;
@@ -264,6 +270,7 @@ fn post_install_rescan_includes_new_sessions_and_records_partial_restart() {
     let result = UpdateRestartCoordinator::new(&state, &registry, &mut gateway, &mut installer)
         .execute(
             ids.request_id(),
+            initiating,
             identity,
             &version("0.2.0"),
             Timestamp::from_millis(1_800_000_030_000),
@@ -280,6 +287,7 @@ fn already_current_preflight_participants_are_released_after_installation() {
     let mut ids = TestIds::new(1_800_000_000_000);
     let identity = InstallationIdentity::from_digest([34; 32]);
     let mut current = participants(&mut ids, identity, 1);
+    let initiating = current[0].instance_id;
     current[0].version = "0.2.0".to_owned();
     let registry = registry(current.clone(), current);
     let state = State::default();
@@ -289,6 +297,7 @@ fn already_current_preflight_participants_are_released_after_installation() {
     let result = UpdateRestartCoordinator::new(&state, &registry, &mut gateway, &mut installer)
         .execute(
             ids.request_id(),
+            initiating,
             identity,
             &version("0.2.0"),
             Timestamp::from_millis(1_800_000_030_000),
@@ -305,6 +314,7 @@ fn unavailable_participant_aborts_and_releases_ready_peers() {
     let mut ids = TestIds::new(1_800_000_000_000);
     let identity = InstallationIdentity::from_digest([35; 32]);
     let participants = participants(&mut ids, identity, 3);
+    let initiating = participants[0].instance_id;
     let registry = Registry {
         scans: RefCell::new(VecDeque::from([participants])),
     };
@@ -318,6 +328,7 @@ fn unavailable_participant_aborts_and_releases_ready_peers() {
     let result = UpdateRestartCoordinator::new(&state, &registry, &mut gateway, &mut installer)
         .execute(
             ids.request_id(),
+            initiating,
             identity,
             &version("0.2.0"),
             Timestamp::from_millis(1_800_000_030_000),
@@ -337,6 +348,7 @@ fn installer_failure_releases_every_ready_participant() {
     let mut ids = TestIds::new(1_800_000_000_000);
     let identity = InstallationIdentity::from_digest([36; 32]);
     let participants = participants(&mut ids, identity, 3);
+    let initiating = participants[0].instance_id;
     let registry = Registry {
         scans: RefCell::new(VecDeque::from([participants])),
     };
@@ -350,6 +362,7 @@ fn installer_failure_releases_every_ready_participant() {
     let result = UpdateRestartCoordinator::new(&state, &registry, &mut gateway, &mut installer)
         .execute(
             ids.request_id(),
+            initiating,
             identity,
             &version("0.2.0"),
             Timestamp::from_millis(1_800_000_030_000),
@@ -358,6 +371,63 @@ fn installer_failure_releases_every_ready_participant() {
     assert_eq!(result, Err(UpdateError::InstallerFailed));
     assert_eq!(gateway.released.len(), 3);
     assert!(gateway.restarted.is_empty());
+}
+
+#[test]
+fn unregistered_coordinator_aborts_before_installation() {
+    let mut ids = TestIds::new(1_800_000_000_000);
+    let identity = InstallationIdentity::from_digest([37; 32]);
+    let participants = participants(&mut ids, identity, 2);
+    let registry = Registry {
+        scans: RefCell::new(VecDeque::from([participants])),
+    };
+    let state = State::default();
+    let mut gateway = Gateway::default();
+    let mut installer = successful_installer();
+    let missing = ids.instance_id();
+
+    let result = UpdateRestartCoordinator::new(&state, &registry, &mut gateway, &mut installer)
+        .execute(
+            ids.request_id(),
+            missing,
+            identity,
+            &version("0.2.0"),
+            Timestamp::from_millis(1_800_000_030_000),
+        )
+        .expect("abort unregistered coordinator");
+
+    assert!(matches!(
+        result.status,
+        UpdateExecutionStatus::Aborted { blocker, ref code }
+            if blocker == Some(missing) && code == "coordinator_not_registered"
+    ));
+    assert_eq!(installer.calls, 0);
+}
+
+#[test]
+fn coordinator_missing_after_installation_is_a_restart_failure() {
+    let mut ids = TestIds::new(1_800_000_000_000);
+    let identity = InstallationIdentity::from_digest([38; 32]);
+    let before = participants(&mut ids, identity, 1);
+    let initiating = before[0].instance_id;
+    let registry = registry(before, Vec::new());
+    let state = State::default();
+    let mut gateway = Gateway::default();
+    let mut installer = successful_installer();
+
+    let result = UpdateRestartCoordinator::new(&state, &registry, &mut gateway, &mut installer)
+        .execute(
+            ids.request_id(),
+            initiating,
+            identity,
+            &version("0.2.0"),
+            Timestamp::from_millis(1_800_000_030_000),
+        )
+        .expect("record missing coordinator");
+
+    assert_eq!(result.restart_requests, 1);
+    assert_eq!(result.restart_failed, vec![initiating]);
+    assert!(state.cache.borrow().restart_needed);
 }
 
 fn registry(before: Vec<InstanceInfo>, after: Vec<InstanceInfo>) -> Registry {

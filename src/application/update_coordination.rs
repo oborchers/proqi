@@ -92,11 +92,12 @@ where
     pub fn execute(
         &mut self,
         operation_id: RequestId,
+        initiating_instance: InstanceId,
         installation: InstallationIdentity,
         target: &StableVersion,
         deadline: Timestamp,
     ) -> Result<UpdateExecution, UpdateError> {
-        let Some(installer_lease) = self
+        let Some(_installer_lease) = self
             .state
             .try_lock(installation, UpdateLockKind::Installer)?
         else {
@@ -107,12 +108,22 @@ where
         };
         let participants = matching(self.registry.active_instances()?, installation);
         if participants.is_empty() {
-            drop(installer_lease);
             return Ok(aborted_execution(
                 operation_id,
                 0,
                 None,
                 "no_compatible_participants",
+            ));
+        }
+        if !participants
+            .iter()
+            .any(|participant| participant.instance_id == initiating_instance)
+        {
+            return Ok(aborted_execution(
+                operation_id,
+                0,
+                Some(initiating_instance),
+                "coordinator_not_registered",
             ));
         }
         let request = UpdatePrepareRequest {
@@ -125,7 +136,6 @@ where
             Ok(ready) => ready,
             Err(failure) => {
                 release_all(self.gateway, &failure.ready, operation_id);
-                drop(installer_lease);
                 return Ok(aborted_execution(
                     operation_id,
                     failure.ready.len(),
@@ -138,7 +148,6 @@ where
             Ok(installed) => installed,
             Err(error) => {
                 release_all(self.gateway, &ready, operation_id);
-                drop(installer_lease);
                 return Err(error);
             }
         };
@@ -147,13 +156,18 @@ where
             .record_restart_state(installation, installed.clone(), true)
             .is_ok();
         let current = matching(self.registry.active_instances()?, installation);
-        let (requested, failed) =
-            restart_all(self.gateway, current, &ready, operation_id, &installed);
+        let (requested, failed) = restart_all(
+            self.gateway,
+            current,
+            &ready,
+            operation_id,
+            initiating_instance,
+            &installed,
+        );
         let final_state = self
             .state
             .record_restart_state(installation, installed.clone(), !failed.is_empty())
             .is_ok();
-        drop(installer_lease);
         Ok(UpdateExecution {
             operation_id,
             prepared_participants: ready.len(),
@@ -200,9 +214,10 @@ fn preflight<G: UpdateParticipantGateway>(
 
 fn restart_all<G: UpdateParticipantGateway>(
     gateway: &mut G,
-    participants: Vec<InstanceInfo>,
+    mut participants: Vec<InstanceInfo>,
     prepared: &[InstanceInfo],
     operation_id: RequestId,
+    initiating_instance: InstanceId,
     installed: &StableVersion,
 ) -> (usize, Vec<InstanceId>) {
     let restart = UpdateRestartRequest {
@@ -211,22 +226,70 @@ fn restart_all<G: UpdateParticipantGateway>(
     };
     let mut requested = 0_usize;
     let mut failed = Vec::new();
-    for participant in participants {
-        if participant.version == installed.to_string() {
-            if prepared
-                .iter()
-                .any(|ready| ready.instance_id == participant.instance_id)
-            {
-                let _released = gateway.release(&participant, operation_id);
-            }
-            continue;
-        }
+    let initiating = participants
+        .iter()
+        .position(|participant| participant.instance_id == initiating_instance)
+        .map(|index| participants.remove(index));
+    for participant in &participants {
+        restart_participant(
+            gateway,
+            participant,
+            prepared,
+            operation_id,
+            installed,
+            &restart,
+            &mut requested,
+            &mut failed,
+        );
+    }
+    if let Some(participant) = initiating.as_ref() {
+        restart_participant(
+            gateway,
+            participant,
+            prepared,
+            operation_id,
+            installed,
+            &restart,
+            &mut requested,
+            &mut failed,
+        );
+    } else if prepared
+        .iter()
+        .any(|participant| participant.instance_id == initiating_instance)
+    {
         requested = requested.saturating_add(1);
-        if !restart_accepted(gateway, &participant, &restart) {
-            failed.push(participant.instance_id);
-        }
+        failed.push(initiating_instance);
     }
     (requested, failed)
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "restart accounting stays explicit at the coordination boundary"
+)]
+fn restart_participant<G: UpdateParticipantGateway>(
+    gateway: &mut G,
+    participant: &InstanceInfo,
+    prepared: &[InstanceInfo],
+    operation_id: RequestId,
+    installed: &StableVersion,
+    restart: &UpdateRestartRequest,
+    requested: &mut usize,
+    failed: &mut Vec<InstanceId>,
+) {
+    if participant.version == installed.to_string() {
+        if prepared
+            .iter()
+            .any(|ready| ready.instance_id == participant.instance_id)
+        {
+            let _released = gateway.release(participant, operation_id);
+        }
+        return;
+    }
+    *requested = (*requested).saturating_add(1);
+    if !restart_accepted(gateway, participant, restart) {
+        failed.push(participant.instance_id);
+    }
 }
 
 fn aborted_execution(

@@ -113,9 +113,9 @@ pub(super) fn write_request_until(
 pub(super) fn write_response(
     stream: &LocalStream,
     response: &ControlResponse,
-    stopping: &AtomicBool,
+    stopping: Option<&AtomicBool>,
 ) -> Result<(), ControlError> {
-    write_json(stream, response, Some(stopping))
+    write_json(stream, response, stopping)
 }
 
 fn write_json(

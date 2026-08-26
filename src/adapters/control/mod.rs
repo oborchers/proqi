@@ -4,12 +4,14 @@ mod client;
 #[cfg(all(test, unix))]
 mod protocol_tests;
 mod rejection;
+mod response;
 #[cfg(all(test, unix))]
 mod shutdown_tests;
 mod transport;
 
 pub(crate) use client::CancellableLocalControlClient;
 pub use client::{LocalControlClient, LocalUpdateControlClient};
+pub(crate) use response::{ControlDelivery, ControlDeliveryReceipt, ControlEnvelope};
 
 use std::{
     collections::{BTreeMap, VecDeque},
@@ -32,24 +34,6 @@ use transport::{LocalListener, accept, read_request, write_response};
 
 const RESPONSE_TIMEOUT: Duration = Duration::from_secs(2);
 const MAX_CACHED_REQUESTS: usize = 64;
-
-/// One verified request waiting for the owner reducer.
-pub(crate) struct ControlEnvelope {
-    pub(crate) request: ControlRequest,
-    response: SyncSender<ControlResponse>,
-}
-
-impl ControlEnvelope {
-    /// Respond exactly once to the waiting transport request.
-    pub(crate) fn respond(self, result: ControlResult) {
-        let response = ControlResponse {
-            protocol: self.request.protocol,
-            request_id: self.request.request_id,
-            result,
-        };
-        let _sent = self.response.send(response);
-    }
-}
 
 /// Bounded server lane attached to one active reducer owner.
 pub(crate) struct ControlServer {
@@ -175,7 +159,7 @@ fn handle_stream(
             ControlRejectionCode::ProtocolMismatch,
             "unsupported control protocol",
         );
-        let _written = write_response(stream, &response, stop);
+        let _written = write_response(stream, &response, Some(stop));
         return;
     }
     if request.protocol < request.mutation.minimum_protocol() {
@@ -184,7 +168,7 @@ fn handle_stream(
             ControlRejectionCode::ProtocolMismatch,
             "request requires a newer control protocol",
         );
-        let _written = write_response(stream, &response, stop);
+        let _written = write_response(stream, &response, Some(stop));
         return;
     }
     if let Some((original, response)) = cache.get(&request.request_id) {
@@ -197,38 +181,46 @@ fn handle_stream(
                 "request identity was reused",
             )
         };
-        let _written = write_response(stream, &response, stop);
+        let _written = write_response(stream, &response, Some(stop));
         return;
     }
-    let (response_sender, response_receiver) = sync_channel(1);
-    let envelope = ControlEnvelope {
-        request: request.clone(),
-        response: response_sender,
-    };
-    let response = if sender.try_send(envelope).is_err() {
-        rejected(
-            &request,
-            ControlRejectionCode::OwnerBusy,
-            "owner control lane is full",
-        )
-    } else {
-        response_receiver
+    let (envelope, response_receiver) = response::pending(request.clone());
+    let pending = match sender.try_send(envelope) {
+        Ok(()) => response_receiver
             .recv_timeout(RESPONSE_TIMEOUT)
-            .unwrap_or_else(|_| {
-                rejected(
-                    &request,
+            .map_err(|_| {
+                (
                     ControlRejectionCode::OutcomeUnknown,
                     "owner did not answer before the deadline; retry with the same operation id",
                 )
-            })
+            }),
+        Err(_) => Err((
+            ControlRejectionCode::OwnerBusy,
+            "owner control lane is full",
+        )),
     };
-    if matches!(
+    let response = match &pending {
+        Ok(pending) => pending.response.clone(),
+        Err((code, message)) => rejected(&request, *code, message),
+    };
+    let cacheable = matches!(
         response.result,
         ControlResult::Accepted(_) | ControlResult::Update(_)
-    ) {
-        cache_response(cache, cache_order, request, response.clone());
+    );
+    let confirmed = pending
+        .as_ref()
+        .is_ok_and(response::PendingResponse::is_confirmed);
+    if cacheable && !confirmed {
+        cache_response(cache, cache_order, request.clone(), response.clone());
     }
-    let _written = write_response(stream, &response, stop);
+    let written =
+        write_response(stream, &response, if confirmed { None } else { Some(stop) }).is_ok();
+    if cacheable && confirmed && written {
+        cache_response(cache, cache_order, request, response);
+    }
+    if let Ok(pending) = pending {
+        pending.complete(written);
+    }
 }
 
 fn cache_response(

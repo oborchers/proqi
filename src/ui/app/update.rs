@@ -11,6 +11,7 @@ use super::BoardApp;
 pub(super) struct UpdateBarrier {
     operation_id: RequestId,
     deadline: Timestamp,
+    reserved_restart: Option<StableVersion>,
 }
 
 pub(super) struct UpdatePrompt {
@@ -218,17 +219,16 @@ impl BoardApp {
         self.update_barrier = Some(UpdateBarrier {
             operation_id,
             deadline,
+            reserved_restart: None,
         });
         self.set_warning("Ready for Proqi update. Waiting for all sessions.");
         true
     }
 
     pub(crate) fn release_update_barrier(&mut self, operation_id: RequestId) -> bool {
-        if self
-            .update_barrier
-            .as_ref()
-            .is_none_or(|barrier| barrier.operation_id != operation_id)
-        {
+        if self.update_barrier.as_ref().is_none_or(|barrier| {
+            barrier.operation_id != operation_id || barrier.reserved_restart.is_some()
+        }) {
             return false;
         }
         self.update_barrier = None;
@@ -240,7 +240,7 @@ impl BoardApp {
         if self
             .update_barrier
             .as_ref()
-            .is_none_or(|barrier| now < barrier.deadline)
+            .is_none_or(|barrier| barrier.reserved_restart.is_some() || now < barrier.deadline)
         {
             return false;
         }
@@ -249,20 +249,41 @@ impl BoardApp {
         true
     }
 
-    pub(crate) fn request_update_restart(
+    pub(crate) fn reserve_update_restart(
         &mut self,
         operation_id: RequestId,
         installed: StableVersion,
     ) -> bool {
-        if self
-            .update_barrier
-            .as_ref()
-            .is_none_or(|barrier| barrier.operation_id != operation_id)
-        {
+        let Some(barrier) = self.update_barrier.as_mut() else {
+            return false;
+        };
+        if barrier.operation_id != operation_id || barrier.reserved_restart.is_some() {
             return false;
         }
-        self.update_restart = Some(installed);
-        self.quit = true;
+        barrier.reserved_restart = Some(installed);
+        true
+    }
+
+    pub(crate) fn finish_update_restart_delivery(
+        &mut self,
+        operation_id: RequestId,
+        delivered: bool,
+    ) -> bool {
+        let Some(barrier) = self.update_barrier.as_mut() else {
+            return false;
+        };
+        if barrier.operation_id != operation_id {
+            return false;
+        }
+        let Some(installed) = barrier.reserved_restart.take() else {
+            return false;
+        };
+        if delivered {
+            self.update_restart = Some(installed);
+            self.quit = true;
+        } else {
+            self.update_barrier = None;
+        }
         true
     }
 
@@ -364,6 +385,35 @@ mod tests {
         assert!(!app.begin_update_barrier(ids.request_id(), Timestamp::from_millis(11)));
         assert!(!app.expire_update_barrier(Timestamp::from_millis(9)));
         assert!(app.expire_update_barrier(Timestamp::from_millis(10)));
+        assert_eq!(app.update_barrier_operation(), None);
+    }
+
+    #[test]
+    fn restart_waits_for_confirmed_receipt_delivery() {
+        let (mut app, mut ids, _) = app();
+        let operation = ids.request_id();
+        let installed = version();
+        assert!(app.begin_update_barrier(operation, Timestamp::from_millis(10)));
+        assert!(app.reserve_update_restart(operation, installed.clone()));
+        assert!(!app.quit);
+        assert_eq!(app.update_restart(), None);
+        assert!(!app.expire_update_barrier(Timestamp::from_millis(20)));
+
+        assert!(app.finish_update_restart_delivery(operation, true));
+        assert!(app.quit);
+        assert_eq!(app.update_restart(), Some(&installed));
+    }
+
+    #[test]
+    fn failed_restart_delivery_keeps_the_owner_running() {
+        let (mut app, mut ids, _) = app();
+        let operation = ids.request_id();
+        assert!(app.begin_update_barrier(operation, Timestamp::from_millis(10)));
+        assert!(app.reserve_update_restart(operation, version()));
+
+        assert!(app.finish_update_restart_delivery(operation, false));
+        assert!(!app.quit);
+        assert_eq!(app.update_restart(), None);
         assert_eq!(app.update_barrier_operation(), None);
     }
 

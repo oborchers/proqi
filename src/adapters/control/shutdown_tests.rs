@@ -20,7 +20,10 @@ use crate::{
     },
 };
 
-use super::{CancellableLocalControlClient, ControlServer, LocalControlClient, transport};
+use super::{
+    CancellableLocalControlClient, ControlDelivery, ControlDeliveryReceipt, ControlServer,
+    LocalControlClient, transport,
+};
 
 #[test]
 fn shutdown_interrupts_a_partial_request_frame() {
@@ -94,6 +97,39 @@ fn durable_receipt_in_flight_survives_owner_shutdown() {
 }
 
 #[test]
+fn confirmed_receipt_survives_admission_close_for_one_hundred_cycles() {
+    for attempt in 0..100 {
+        let temporary = tempfile::tempdir().expect("temporary endpoint");
+        let mut ids = FakeIdGenerator::new(1_725_200_000_000 + attempt);
+        let request = request(&mut ids, "confirmed before shutdown");
+        let expected = receipt(&request);
+        let endpoint = endpoint(temporary.path(), "confirmed");
+        let server = ControlServer::spawn(&endpoint).expect("control server");
+        let owner = owner(&mut ids, request.session_id, endpoint);
+        let cancellation = CancellationFlag::default();
+        std::thread::scope(|scope| {
+            let client_cancellation = cancellation.clone();
+            let client = scope.spawn(|| {
+                CancellableLocalControlClient::new(client_cancellation).send(&owner, &request)
+            });
+            let envelope = server
+                .receiver
+                .recv_timeout(Duration::from_secs(2))
+                .expect("accepted request");
+            server.request_stop();
+            let delivery = envelope.respond_confirmed(ControlResult::Accepted(expected));
+            wait_for_delivery(&delivery);
+            assert_eq!(
+                client.join().expect("client thread").expect("receipt"),
+                expected
+            );
+            cancellation.cancel();
+        });
+        server.stop().expect("server stop");
+    }
+}
+
+#[test]
 fn runtime_cancellation_interrupts_an_unanswered_control_request() {
     let temporary = tempfile::tempdir().expect("temporary endpoint");
     let mut ids = FakeIdGenerator::new(1_725_200_000_000);
@@ -132,6 +168,24 @@ fn wait_for_active_stream(server: &ControlServer) {
         server.has_active_stream(),
         "server did not accept partial frame"
     );
+}
+
+fn wait_for_delivery(receipt: &ControlDeliveryReceipt) {
+    let deadline = Instant::now() + Duration::from_secs(2);
+    loop {
+        match receipt.try_recv() {
+            Ok(ControlDelivery::Delivered) => return,
+            Ok(ControlDelivery::Failed) | Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                panic!("confirmed response was not delivered");
+            }
+            Err(std::sync::mpsc::TryRecvError::Empty) if Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(2));
+            }
+            Err(std::sync::mpsc::TryRecvError::Empty) => {
+                panic!("confirmed response delivery timed out");
+            }
+        }
+    }
 }
 
 fn request(ids: &mut FakeIdGenerator, content: &str) -> ControlRequest {

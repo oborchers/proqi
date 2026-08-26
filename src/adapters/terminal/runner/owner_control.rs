@@ -3,7 +3,11 @@
 use std::sync::mpsc::TryRecvError;
 
 use crate::{
-    adapters::{control::ControlEnvelope, runtime::SystemClock, terminal::TerminalError},
+    adapters::{
+        control::{ControlDelivery, ControlEnvelope},
+        runtime::SystemClock,
+        terminal::TerminalError,
+    },
     application::{ControlReplay, Effect, match_control_replay},
     domain::{RequestId, ThoughtId},
     ports::{
@@ -18,6 +22,7 @@ use crate::{
 use super::{
     PendingControl, PendingWork, WorkerLanes,
     fairness::{DrainOutcome, drain_bounded},
+    pending::PendingUpdateRestart,
     storage_error_code,
 };
 
@@ -43,6 +48,7 @@ pub(super) fn drain(
         |envelope| queue_lookup(app, lanes, pending, ids, clock, envelope),
     )?;
     outcome.changed |= complete_update_prepares(app, pending, lanes.instance, clock);
+    outcome.changed |= complete_update_restart(app, pending)?;
     Ok(outcome)
 }
 
@@ -120,21 +126,63 @@ fn handle_update(
             Ok(released)
         }
         ControlMutation::UpdateRestart { request } => {
-            let accepted =
-                app.request_update_restart(request.operation_id, request.installed_version);
-            envelope.respond(ControlResult::Update(ControlUpdateReceipt::Restart(
-                UpdateRestartReply {
-                    instance_id: lanes.instance.instance_id,
-                    accepted,
-                },
-            )));
-            Ok(accepted)
+            Ok(queue_update_restart(app, lanes, pending, envelope, request))
         }
         ControlMutation::Add { .. }
         | ControlMutation::Delete { .. }
         | ControlMutation::Move { .. }
         | ControlMutation::History { .. } => Ok(false),
     }
+}
+
+fn queue_update_restart(
+    app: &mut BoardApp,
+    lanes: &WorkerLanes<'_>,
+    pending: &mut PendingWork,
+    envelope: ControlEnvelope,
+    request: crate::ports::update::UpdateRestartRequest,
+) -> bool {
+    let accepted = app.reserve_update_restart(request.operation_id, request.installed_version);
+    let result = ControlResult::Update(ControlUpdateReceipt::Restart(UpdateRestartReply {
+        instance_id: lanes.instance.instance_id,
+        accepted,
+    }));
+    if !accepted {
+        envelope.respond(result);
+        return false;
+    }
+    let delivery = envelope.respond_confirmed(result);
+    pending.update_restart = Some(PendingUpdateRestart {
+        operation_id: request.operation_id,
+        delivery,
+    });
+    if let Some(control) = lanes.control {
+        control.request_stop();
+    }
+    false
+}
+
+fn complete_update_restart(
+    app: &mut BoardApp,
+    pending: &mut PendingWork,
+) -> Result<bool, TerminalError> {
+    let Some(restart) = pending.update_restart.take() else {
+        return Ok(false);
+    };
+    let delivered = match restart.delivery.try_recv() {
+        Ok(ControlDelivery::Delivered) => true,
+        Ok(ControlDelivery::Failed) | Err(TryRecvError::Disconnected) => false,
+        Err(TryRecvError::Empty) => {
+            pending.update_restart = Some(restart);
+            return Ok(false);
+        }
+    };
+    if !app.finish_update_restart_delivery(restart.operation_id, delivered) {
+        return Err(TerminalError::Worker(
+            "restart delivery did not match the reserved update",
+        ));
+    }
+    Ok(true)
 }
 
 fn queue_update_prepare(

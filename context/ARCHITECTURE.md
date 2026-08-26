@@ -103,12 +103,15 @@ possible to ship without a Node, Python, or JVM runtime.
   editor snapshot rather than owning the text model.
 
 Terminal workers share one cancellation boundary and a two-second overall
-shutdown deadline. Cancellation is requested for every lane before any worker
-is joined. Terminal restoration and lease release are attempted independently
-of worker failures, and teardown reports all failures after every cleanup has
-run. `SIGINT` and `SIGTERM` request this bounded path. `SIGHUP` retains its
-operating-system default until a future design can guarantee restoration after
-terminal revocation without keeping a revoked input descriptor alive.
+shutdown deadline. Ordinary quit and termination cancel every lane before any
+worker is joined. An accepted update replacement first closes control admission,
+confirms delivery of its restart receipt, and lets the update coordinator consume
+that receipt before requesting shared cancellation. Terminal restoration and
+lease release are attempted independently of worker failures, and teardown
+reports all failures after every cleanup has run. `SIGINT` and `SIGTERM` request
+this bounded path. `SIGHUP` retains its operating-system default until a future
+design can guarantee restoration after terminal revocation without keeping a
+revoked input descriptor alive.
 
 Application subprocesses start in dedicated Unix process groups. Deadline or
 I/O failure sends `SIGTERM` to the group, waits 250 milliseconds, then sends
@@ -504,14 +507,20 @@ If installation fails or the result is ambiguous, no participant calls `exec`.
 Every old process returns to normal use after a bounded wait.
 
 After success, the coordinator rescans active instances and publishes the
-installed version. Each participant independently flushes required work,
-restores terminal modes, stops worker threads, closes control transport, releases
-session and schema leases, applies an explicit descriptor policy, resolves and
-verifies the active Homebrew Proqi path, and then calls Unix `exec` with its
-ordinary resume arguments. Cleanup is explicit because successful
-`CommandExt::exec` does not run Rust destructors. Standard input, output, error,
-and the inherited PTY remain attached, so no shell, terminal multiplexer, Herdr,
-or parent agent must recreate the pane.
+installed version. It addresses peer participants first and its own process
+last, so local shutdown cannot interrupt remaining restart requests. A
+participant reserves the matching restart, closes new control admission, and
+commits to shutdown only after the accepted receipt frame has been written to
+the verified local socket. A failed delivery leaves that participant running
+and records restart convergence as incomplete.
+
+Each participant then independently restores terminal modes, stops worker
+threads, closes control transport, releases session and schema leases, applies
+an explicit descriptor policy, resolves and verifies the active Homebrew Proqi
+path, and calls Unix `exec` with its ordinary resume arguments. Cleanup is
+explicit because successful `CommandExt::exec` does not run Rust destructors.
+Standard input, output, error, and the inherited PTY remain attached, so no
+shell, terminal multiplexer, Herdr, or parent agent must recreate the pane.
 
 The replacement invocation preserves the ordinary resume identity and any
 explicit state-root argument. This keeps package tests and portable invocations

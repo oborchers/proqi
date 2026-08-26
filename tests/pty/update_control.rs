@@ -72,7 +72,13 @@ fn real_owner_preflights_and_returns_to_use_after_one_fake_installation() {
 
     let result =
         UpdateRestartCoordinator::new(&update_state, &registry, &mut gateway, &mut installer)
-            .execute(ids.request_id(), installation.identity, &target, deadline)
+            .execute(
+                ids.request_id(),
+                participant.instance_id,
+                installation.identity,
+                &target,
+                deadline,
+            )
             .expect("coordinate update");
 
     assert_eq!(result.prepared_participants, 1, "{result:?}");

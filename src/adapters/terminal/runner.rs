@@ -8,10 +8,10 @@ pub(super) mod finish;
 mod heartbeat;
 mod owned_lanes;
 mod owner_control;
+mod pending;
 mod update_results;
 
 use std::{
-    collections::BTreeMap,
     io::{IsTerminal, Stdout, stdin, stdout},
     path::PathBuf,
     thread,
@@ -23,7 +23,7 @@ use ratatui_crossterm::CrosstermBackend;
 
 use crate::{
     adapters::{
-        control::{ControlEnvelope, ControlServer},
+        control::ControlServer,
         editor::RopeEditorFactory,
         runtime::{
             FileRuntimeCoordinator, FileSchemaLease, FileSessionLease, SystemClock,
@@ -32,7 +32,7 @@ use crate::{
         sqlite::SqliteStore,
     },
     application::AppState,
-    domain::{OperationSequence, RequestId, SessionId, ThoughtId},
+    domain::{InstanceId, SessionId},
     ports::{
         environment::Clock as _,
         runtime::InstanceInfo,
@@ -53,6 +53,7 @@ use durability::{drain_persistence, enqueue_effects};
 use finish::CleanupStage::{Control, TerminalRestoration};
 use heartbeat::PaneHeartbeat;
 use owned_lanes::OwnedLanes;
+use pending::{PendingControl, PendingWork};
 
 pub(crate) struct TerminalResources {
     pub(crate) state: AppState,
@@ -90,32 +91,6 @@ pub(super) struct WorkerLanes<'a> {
     pub(super) termination: &'a TerminationGuard,
     pub(super) instance: &'a InstanceInfo,
     pub(super) cancellation: &'a crate::adapters::process::CancellationFlag,
-}
-
-#[derive(Default)]
-pub(super) struct PendingWork {
-    pub(super) persistence: usize,
-    pub(super) external: usize,
-    pub(super) controls: BTreeMap<OperationSequence, PendingControl>,
-    pub(super) control_lookups: BTreeMap<RequestId, ControlEnvelope>,
-    pub(super) update_prepares: BTreeMap<RequestId, ControlEnvelope>,
-    pub(super) update: usize,
-}
-
-impl PendingWork {
-    fn is_empty(&self) -> bool {
-        self.persistence == 0
-            && self.external == 0
-            && self.controls.is_empty()
-            && self.control_lookups.is_empty()
-            && self.update_prepares.is_empty()
-            && self.update == 0
-    }
-}
-
-pub(super) struct PendingControl {
-    pub(super) envelope: ControlEnvelope,
-    pub(super) thought_id: Option<ThoughtId>,
 }
 
 /// Returns a typed setup, render, input, persistence, worker, or restoration failure.
@@ -159,6 +134,7 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
         presentation_source,
         cache_directory,
         installation.clone(),
+        session_lease.info().instance_id,
     );
     let mut pane_heartbeat = None;
     let shutdown = super::supervisor::ShutdownCoordinator::default();
@@ -231,6 +207,7 @@ fn spawn_lanes(
     presentation_source: String,
     cache_directory: PathBuf,
     installation: Option<crate::domain::Installation>,
+    initiating_instance: InstanceId,
 ) -> OwnedLanes {
     let cancellation = crate::adapters::process::CancellationFlag::default();
     OwnedLanes {
@@ -252,6 +229,7 @@ fn spawn_lanes(
             cache_directory,
             installation,
             coordinator,
+            initiating_instance,
             cancellation.clone(),
         ),
         cancellation,
@@ -414,7 +392,9 @@ fn drive(
         }
         if app.quit {
             let deadline = shutdown.request();
-            lanes.cancellation.cancel();
+            if app.update_restart().is_none() {
+                lanes.cancellation.cancel();
+            }
             if let Some(control) = lanes.control {
                 control.request_stop();
             }
