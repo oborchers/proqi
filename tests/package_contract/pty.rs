@@ -93,7 +93,7 @@ impl ReleaseSource for FakeSource {
     ) -> Result<ReleaseObservation, UpdateError> {
         self.calls = self.calls.saturating_add(1);
         Ok(ReleaseObservation::Latest {
-            version: StableVersion::parse("0.1.1").expect("package version"),
+            version: package_version(),
             etag: Some("package-smoke".to_owned()),
         })
     }
@@ -128,7 +128,7 @@ fn assert_update_contract(product: &InstalledProduct) {
         .expect("fake Homebrew installation");
     assert_fake_update_services(&homebrew, session, installation.identity);
     let registry = update_registry(&homebrew, installation.identity);
-    let version = StableVersion::parse("0.1.1").expect("package version");
+    let version = package_version();
     let mut gateway = LocalUpdateControlClient::new(SystemIdGenerator);
     let deadline = Timestamp::from_millis(SystemClock.now().as_millis().saturating_add(10_000));
     let mut ids = SystemIdGenerator;
@@ -172,7 +172,7 @@ fn assert_fake_update_services(
     installation: InstallationIdentity,
 ) {
     let state = FileUpdateStateStore::new(&homebrew.state.join("cache")).expect("update state");
-    let version = StableVersion::parse("0.1.1").expect("package version");
+    let version = package_version();
     let mut source = FakeSource { calls: 0 };
     let checked = UpdateService::new(
         &state,
@@ -230,7 +230,7 @@ fn assert_failed_exec_is_recoverable(product: &InstalledProduct) {
     let before = active_participant(&registry, session).expect("active package participant");
     let mut ids = SystemIdGenerator;
     let operation = ids.request_id();
-    let version = StableVersion::parse("0.1.1").expect("package version");
+    let version = package_version();
     let deadline = Timestamp::from_millis(SystemClock.now().as_millis().saturating_add(10_000));
     let mut gateway = LocalUpdateControlClient::new(SystemIdGenerator);
     let ready = gateway
@@ -286,7 +286,7 @@ fn assert_failed_exec_is_recoverable(product: &InstalledProduct) {
 fn fake_homebrew_product(product: &InstalledProduct, name: &str) -> InstalledProduct {
     let root = product.state.join(name);
     let prefix = root.join("prefix");
-    let keg = prefix.join("Cellar/proqi/0.1.1");
+    let keg = prefix.join(format!("Cellar/proqi/{}", env!("CARGO_PKG_VERSION")));
     let binary = keg.join("bin/proqi");
     fs::create_dir_all(binary.parent().expect("fake keg bin")).expect("create fake Homebrew keg");
     fs::copy(&product.binary, &binary).expect("copy package binary into fake keg");
@@ -321,7 +321,7 @@ fn update_registry(
         ids.instance_id(),
         product.working.clone(),
         SystemClock.now(),
-        "0.1.1",
+        env!("CARGO_PKG_VERSION"),
     )
     .expect("package update registry")
     .with_update_context(installation, UPDATE_CONTROL_PROTOCOL_VERSION)
@@ -333,6 +333,10 @@ fn active_participant(registry: &FileRuntimeCoordinator, session: &str) -> Optio
         .expect("scan package participants")
         .into_iter()
         .find(|participant| participant.session_id.to_string() == session)
+}
+
+fn package_version() -> StableVersion {
+    StableVersion::parse(env!("CARGO_PKG_VERSION")).expect("canonical package version")
 }
 
 fn wait_for_replacement(

@@ -21,7 +21,10 @@ fn help_and_version_are_available() {
         .output()
         .expect("run proqi --version");
     assert!(version.status.success());
-    assert_eq!(String::from_utf8_lossy(&version.stdout), "proqi 0.1.1\n");
+    assert_eq!(
+        String::from_utf8_lossy(&version.stdout),
+        format!("proqi {}\n", env!("CARGO_PKG_VERSION"))
+    );
 
     for shell in ["bash", "zsh", "fish"] {
         let completion = Command::new(binary)
