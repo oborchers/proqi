@@ -210,6 +210,11 @@ fn assert_archive_and_runtime_independence(product: &InstalledProduct) {
     );
 }
 
+fn package_version() -> proqi::domain::StableVersion {
+    proqi::domain::StableVersion::parse(env!("CARGO_PKG_VERSION"))
+        .expect("canonical package version")
+}
+
 fn run_for_state(product: &InstalledProduct, state: &Path, arguments: &[&str]) -> Output {
     let mut command = product.command();
     command

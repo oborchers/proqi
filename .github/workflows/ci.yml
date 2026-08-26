@@ -101,7 +101,7 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - uses: taiki-e/install-action@6cd13508893c0e7eab5f273c2575d3859bd7229a # v2.86.6
         with:
-          tool: cargo-nextest@0.9.143,cargo-llvm-cov@0.8.4
+          tool: cargo-nextest@0.9.143,cargo-llvm-cov@0.9.0
       - run: cargo xtask coverage
       - run: cargo xtask clean-worktree
 

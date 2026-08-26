@@ -32,7 +32,7 @@ use proqi::{
 };
 use serde_json::Value;
 
-use super::{InstalledProduct, parse_success};
+use super::{InstalledProduct, package_version, parse_success};
 
 struct PtyChild {
     child: Box<dyn Child + Send + Sync>,
@@ -333,10 +333,6 @@ fn active_participant(registry: &FileRuntimeCoordinator, session: &str) -> Optio
         .expect("scan package participants")
         .into_iter()
         .find(|participant| participant.session_id.to_string() == session)
-}
-
-fn package_version() -> StableVersion {
-    StableVersion::parse(env!("CARGO_PKG_VERSION")).expect("canonical package version")
 }
 
 fn wait_for_replacement(
