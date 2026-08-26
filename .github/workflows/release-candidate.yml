@@ -119,9 +119,7 @@ jobs:
           path: target/release-notices
       - name: Install pinned Debian packager
         if: matrix.target == 'x86_64-unknown-linux-gnu'
-        uses: taiki-e/install-action@6cd13508893c0e7eab5f273c2575d3859bd7229a # v2.86.6
-        with:
-          tool: nfpm@2.47.0
+        uses: ./.github/actions/install-nfpm
       - name: Verify native runner and build installable archive
         env:
           EXPECTED_TARGET: ${{ matrix.target }}
