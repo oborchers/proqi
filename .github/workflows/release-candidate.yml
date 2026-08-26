@@ -260,6 +260,8 @@ jobs:
           name: registry-evidence
           path: target/release-assets/evidence/crate
       - name: Verify complete candidate set
+        env:
+          TAG: ${{ needs.plan.outputs.tag }}
         run: |
           cd target/release-assets
           mkdir -p evidence/debian
@@ -282,7 +284,7 @@ jobs:
           for sbom in ./*.spdx.json; do jq -e '.spdxVersion == "SPDX-2.3"' "$sbom"; done
           cat ./*.sha256 | sort > SHA256SUMS
           (cd evidence/crate && shasum -a 256 -c proqi-*.crate.sha256)
-          jq -e --arg tag "${{ needs.plan.outputs.tag }}" \
+          jq -e --arg tag "$TAG" \
             '.schema_version == 1 and ("v" + .version) == $tag and .registry == "crates-io"' \
             evidence/crate/crate-evidence.json
           jq -e \
