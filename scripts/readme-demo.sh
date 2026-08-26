@@ -55,7 +55,8 @@ record() {
         --idle-time-limit 2 --window-size 92x30 \
         --command "expect scripts/readme-demo-record.exp $binary $demo_state" \
         target/proqi-demo.cast
-    agg --quiet --theme github-dark --font-family Menlo --font-size 20 \
+    agg --quiet --theme github-dark \
+        --font-family 'Meslo LG M DZ for Powerline' --font-size 20 \
         --line-height 1.25 --fps-cap 30 --last-frame-duration 2 \
         --select '0.2..90%' \
         target/proqi-demo.cast assets/proqi-demo.gif
