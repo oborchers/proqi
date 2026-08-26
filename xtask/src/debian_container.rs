@@ -112,7 +112,8 @@ test ! -e /usr/bin/proqi
 test -f /tmp/proqi-state/data/proqi.sqlite3
 apt-get install -y /work/proqi_amd64.deb
 proqi --state-dir /tmp/proqi-state --json sessions > /tmp/sessions.json
-grep -q '"session_id"' /tmp/sessions.json
+grep -q '"sessions"' /tmp/sessions.json
+grep -q '"id":"ses_' /tmp/sessions.json
 dpkg-query -W -f='${{Status}}' proqi | grep -q 'install ok installed'
 "#,
         version = env!("CARGO_PKG_VERSION")
@@ -133,6 +134,7 @@ mod tests {
         assert!(script.contains("proqi-missing-dependency.deb"));
         assert!(script.contains("install -d -m 700 /tmp/proqi-state"));
         assert!(script.contains("--json doctor"));
+        assert!(script.contains("'\"id\":\"ses_'"));
         assert!(script.contains("abc123"));
     }
 }
