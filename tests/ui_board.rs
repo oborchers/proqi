@@ -447,6 +447,8 @@ fn mouse_wheel_scrolls_editor_without_moving_cursor_or_selection() {
 mod agent;
 #[path = "ui_board/agent_discovery.rs"]
 mod agent_discovery;
+#[path = "ui_board/agent_pi.rs"]
+mod agent_pi;
 #[path = "ui_board/agent_selection.rs"]
 mod agent_selection;
 #[path = "ui_board/agent_session.rs"]

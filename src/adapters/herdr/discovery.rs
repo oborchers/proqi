@@ -147,7 +147,11 @@ fn verify_neighbor(
             "{pane_id} is not geometrically adjacent {direction:?}"
         )));
     }
-    let agent = unique_agent(&agents.agents, &pane_id)?;
+    let agent = match unique_agent(&agents.agents, &pane_id) {
+        Ok(agent) => agent,
+        Err(AgentError::Unsupported(_)) => return Ok(None),
+        Err(error) => return Err(error),
+    };
     match eligible_target(source, direction, rect, agent) {
         Ok(target) => Ok(Some(target)),
         Err(AgentError::Unsupported(_)) => Ok(None),

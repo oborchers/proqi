@@ -17,6 +17,8 @@ use crate::{
 
 use super::HerdrGateway;
 
+#[path = "tests/pi.rs"]
+mod pi;
 #[path = "tests/sessionless.rs"]
 mod sessionless;
 #[path = "tests/submission_receipts.rs"]
@@ -138,6 +140,15 @@ fn right_rect() -> PaneRect {
     }
 }
 
+fn up_rect() -> PaneRect {
+    PaneRect {
+        x: 15,
+        y: 0,
+        width: 10,
+        height: 10,
+    }
+}
+
 fn agent(pane_id: &str, workspace: &str, tab: &str, status: &str) -> Value {
     json!({
         "pane_id":pane_id,"workspace_id":workspace,"tab_id":tab,
@@ -219,6 +230,33 @@ fn all_directions_are_queried_and_only_independently_verified_agents_return() {
         .filter(|request| request.args.get(1) == Some(&OsString::from("neighbor")))
         .collect::<Vec<_>>();
     assert_eq!(directional.len(), 4);
+}
+
+#[test]
+fn ordinary_neighbor_without_agent_identity_does_not_hide_a_valid_target() {
+    let context = source();
+    let agents = vec![agent("w1:p2", "w1", "w1:t1", "idle")];
+    let mut responses = capability_responses(&context);
+    responses.push(success(json!({"result":{"agents":agents}})));
+    responses.push(success(neighbor(
+        &context,
+        Direction::Up,
+        Some(("w1:p-shell", up_rect())),
+    )));
+    responses.push(success(neighbor(
+        &context,
+        Direction::Right,
+        Some(("w1:p2", right_rect())),
+    )));
+    responses.push(success(neighbor(&context, Direction::Down, None)));
+    responses.push(success(neighbor(&context, Direction::Left, None)));
+    let (mut gateway, _) = gateway(responses);
+
+    let targets = gateway
+        .adjacent_targets(&context)
+        .expect("ordinary shell is ignored");
+    assert_eq!(targets.len(), 1);
+    assert_eq!(targets[0].direction, Direction::Right);
 }
 
 #[test]
