@@ -19,6 +19,8 @@ use super::HerdrGateway;
 
 #[path = "tests/cline.rs"]
 mod cline;
+#[path = "tests/opencode.rs"]
+mod opencode;
 #[path = "tests/pi.rs"]
 mod pi;
 #[path = "tests/sessionless.rs"]

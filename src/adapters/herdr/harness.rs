@@ -2,6 +2,7 @@
 
 use crate::ports::agent::{
     AgentError, AgentSessionBinding, AgentTarget, CLINE_AGENT_KIND, CODEX_AGENT_KIND, HarnessKind,
+    OPENCODE_AGENT_KIND,
 };
 
 use super::contract::AgentSession;
@@ -73,7 +74,9 @@ fn established_session(
 
 fn session_policy(kind: &HarnessKind) -> SessionPolicy {
     match kind.as_str() {
-        CODEX_AGENT_KIND | CLINE_AGENT_KIND => SessionPolicy::ProvisionalAllowed,
+        CODEX_AGENT_KIND | CLINE_AGENT_KIND | OPENCODE_AGENT_KIND => {
+            SessionPolicy::ProvisionalAllowed
+        }
         _ => SessionPolicy::Required,
     }
 }
@@ -87,6 +90,7 @@ mod tests {
         for (name, expected) in [
             (CODEX_AGENT_KIND, SessionPolicy::ProvisionalAllowed),
             (CLINE_AGENT_KIND, SessionPolicy::ProvisionalAllowed),
+            (OPENCODE_AGENT_KIND, SessionPolicy::ProvisionalAllowed),
             ("claude", SessionPolicy::Required),
             ("future-harness", SessionPolicy::Required),
         ] {

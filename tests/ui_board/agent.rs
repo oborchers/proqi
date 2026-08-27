@@ -10,6 +10,10 @@ use proqi::{
 };
 
 pub(super) fn target(direction: Direction, pane_id: &str) -> AgentTarget {
+    target_with_kind(direction, pane_id, CODEX_AGENT_KIND)
+}
+
+pub(super) fn target_with_kind(direction: Direction, pane_id: &str, harness: &str) -> AgentTarget {
     let source = PaneContext {
         workspace_id: "w1".to_owned(),
         tab_id: "w1:t1".to_owned(),
@@ -28,8 +32,8 @@ pub(super) fn target(direction: Direction, pane_id: &str) -> AgentTarget {
         pane_id: pane_id.to_owned(),
         workspace_id: source.workspace_id.clone(),
         tab_id: source.tab_id.clone(),
-        agent_kind: HarnessKind::new(CODEX_AGENT_KIND).expect("fixture harness"),
-        agent_name: format!("Codex {pane_id}"),
+        agent_kind: HarnessKind::new(harness).expect("fixture harness"),
+        agent_name: format!("{harness} {pane_id}"),
         agent_session: AgentSessionBinding::established(format!("session-{pane_id}"))
             .expect("fixture session"),
         readiness: AgentState::Idle,

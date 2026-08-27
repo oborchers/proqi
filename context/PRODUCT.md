@@ -443,7 +443,7 @@ A submission target is eligible only when all of the following are true:
 
 Directional lookup is never trusted without these independent checks. The
 product never guesses a target and never falls back to raw input injection.
-Otherwise eligible sessionless Codex and Cline panes are the explicit
+Otherwise eligible sessionless Codex, Cline, and OpenCode panes are the explicit
 provisional exceptions. Proqi revalidates the same empty pane and harness kind
 immediately before delivery and accepts only a matching receipt. Because Herdr
 can acknowledge the prompt before a session hook reports the new identity, a
@@ -465,10 +465,10 @@ sender submits concurrently. Overlapping inputs can therefore merge at the
 receiving harness even though Herdr returns an accepted receipt. Proqi treats
 this as a known integration limitation and preserves its ordinary verified
 submission workflow. Protocol 19 also has no stable pre-session agent-instance
-identity or atomic expected-instance precondition. Replacing one sessionless
-Codex or Cline process with another of the same kind in the same pane during the
-narrow interval between revalidation and delivery is therefore not detectable
-by Proqi.
+identity or atomic expected-instance precondition. Replacing one supported
+sessionless harness with another instance of the same kind in the same pane
+during the narrow interval between revalidation and delivery is therefore not
+detectable by Proqi.
 
 Each verified adjacent target appears once in the integration row, without its
 readiness label. `s Submit` and `S Submit & keep` are shown only when

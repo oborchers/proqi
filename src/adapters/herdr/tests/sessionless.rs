@@ -5,7 +5,7 @@ use crate::{
     ports::{
         agent::{
             AgentError, AgentGateway, AgentSessionBinding, CLAUDE_AGENT_KIND, CLINE_AGENT_KIND,
-            SubmissionRequest,
+            OPENCODE_AGENT_KIND, SubmissionRequest,
         },
         environment::IdGenerator,
     },
@@ -50,40 +50,44 @@ fn discovery_accepts_established_sessions_for_open_ended_harness_kinds() {
 }
 
 #[test]
-fn discovery_exposes_only_explicitly_compatible_sessionless_targets() {
-    let context = source();
-    for harness in ["codex", CLINE_AGENT_KIND] {
-        let candidate = with_harness(
+fn discovery_exposes_only_explicitly_supported_sessionless_targets() {
+    for harness in ["codex", CLINE_AGENT_KIND, OPENCODE_AGENT_KIND] {
+        let context = source();
+        let pane = with_harness(
             without_session(agent("w1:p2", "w1", "w1:t1", "idle")),
             harness,
         );
         let (mut gateway, _) = gateway(discovery_responses(
             &context,
-            json!([candidate]),
+            json!([pane]),
             Some(("w1:p2", right_rect())),
         ));
         let targets = gateway
             .adjacent_targets(&context)
-            .expect("compatible empty harness");
+            .expect("supported empty harness");
         assert_eq!(targets.len(), 1, "{harness}");
         assert!(targets[0].agent_session.is_provisional(), "{harness}");
     }
 
-    let claude = with_harness(
-        without_session(agent("w1:p2", "w1", "w1:t1", "idle")),
-        CLAUDE_AGENT_KIND,
-    );
-    let (mut claude_gateway, _) = gateway(discovery_responses(
-        &context,
-        json!([claude]),
-        Some(("w1:p2", right_rect())),
-    ));
-    assert!(
-        claude_gateway
-            .adjacent_targets(&context)
-            .expect("sessionless Claude is unsupported")
-            .is_empty()
-    );
+    for harness in [CLAUDE_AGENT_KIND, "future-harness"] {
+        let context = source();
+        let pane = with_harness(
+            without_session(agent("w1:p2", "w1", "w1:t1", "idle")),
+            harness,
+        );
+        let (mut gateway, _) = gateway(discovery_responses(
+            &context,
+            json!([pane]),
+            Some(("w1:p2", right_rect())),
+        ));
+        assert!(
+            gateway
+                .adjacent_targets(&context)
+                .expect("unsupported sessionless harness is hidden")
+                .is_empty(),
+            "{harness}"
+        );
+    }
 }
 
 #[test]

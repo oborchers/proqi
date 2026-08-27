@@ -15,6 +15,9 @@ pub const CLINE_AGENT_KIND: &str = "cline";
 /// Canonical adjacent-agent kind label for the Claude harness.
 pub const CLAUDE_AGENT_KIND: &str = "claude";
 
+/// Canonical adjacent-agent kind label for the `OpenCode` harness.
+pub const OPENCODE_AGENT_KIND: &str = "opencode";
+
 /// Validated, open-ended harness kind reported by an integration.
 ///
 /// This is intentionally not an enum: Herdr may add harnesses independently of

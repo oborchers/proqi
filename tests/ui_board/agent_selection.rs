@@ -3,8 +3,10 @@ use super::*;
 use proqi::{
     domain::Direction,
     ports::agent::{
-        AgentSessionBinding, AgentState, CLINE_AGENT_KIND, HarnessKind, SubmissionReceipt,
+        AgentSessionBinding, AgentState, CLAUDE_AGENT_KIND, CLINE_AGENT_KIND, CODEX_AGENT_KIND,
+        HarnessKind, OPENCODE_AGENT_KIND, SubmissionReceipt,
     },
+    ui::UiKey,
 };
 
 fn cline_target(direction: Direction, pane_id: &str) -> proqi::ports::agent::AgentTarget {
@@ -13,6 +15,50 @@ fn cline_target(direction: Direction, pane_id: &str) -> proqi::ports::agent::Age
     target.agent_name = format!("Cline {pane_id}");
     target.agent_session = AgentSessionBinding::provisional();
     target
+}
+
+#[test]
+fn opencode_routes_correctly_in_both_mixed_harness_positions() {
+    for (left_kind, right_kind, key, expected_kind) in [
+        (
+            CLAUDE_AGENT_KIND,
+            OPENCODE_AGENT_KIND,
+            'l',
+            OPENCODE_AGENT_KIND,
+        ),
+        (
+            OPENCODE_AGENT_KIND,
+            CODEX_AGENT_KIND,
+            'h',
+            OPENCODE_AGENT_KIND,
+        ),
+    ] {
+        let mut fixture = Fixture::new();
+        super::agent::prepare_thought(&mut fixture);
+        fixture.app.complete_agent_discovery(Ok(vec![
+            super::agent::target_with_kind(Direction::Left, "w1:p2", left_kind),
+            super::agent::target_with_kind(Direction::Right, "w1:p3", right_kind),
+        ]));
+
+        let rendered = text(draw(&mut fixture, 100, 10).backend().buffer());
+        assert!(rendered.contains(&format!("← {}", capitalize(left_kind))));
+        assert!(rendered.contains(&format!("→ {}", capitalize(right_kind))));
+        assert!(
+            fixture
+                .effects(UiInput::Key(UiKey::Character('s')))
+                .is_empty()
+        );
+        let effects = fixture.effects(UiInput::Key(UiKey::Character(key)));
+        let request = super::agent::start_submission(&mut fixture, &effects);
+        assert_eq!(request.target.agent_kind.as_str(), expected_kind);
+    }
+}
+
+fn capitalize(value: &str) -> String {
+    let mut characters = value.chars();
+    characters.next().map_or_else(String::new, |first| {
+        first.to_uppercase().collect::<String>() + characters.as_str()
+    })
 }
 
 #[test]
