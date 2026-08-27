@@ -707,8 +707,8 @@ Both visible actions invoke the same immediate semantic prompt command.
 accepted receipt whose submission identifier and target match the pending
 request. Matching uses stable target identity fields and deliberately ignores
 volatile readiness, display names, and geometry observed after delivery. The
-sole provisional transition permits a sessionless Codex request to match a
-receipt that preserves its pane and agent identity, whether the receipt already
+explicit provisional transitions permit sessionless Codex and Cline requests to
+match receipts that preserve pane and agent identity, whether a receipt already
 contains the new session or precedes the session hook. Established sessions
 still require exact identity.
 The matching `agent_prompted` receipt establishes acceptance. Any
@@ -737,20 +737,22 @@ contract. Initial discovery is silent so
 ordinary terminals retain an uncluttered board. An explicit refresh, or a
 submission attempt with no verified target, reports why direct submission is
 unavailable. Every submission revalidates the complete target immediately
-before invoking Herdr's semantic prompt operation. A ready sessionless Codex is
-eligible provisionally; other sessionless agents are hidden. A valid Codex
-session from the receipt replaces the provisional target immediately. When the
-receipt precedes the session hook, Proqi accepts the matching receipt and
-immediately rediscovers adjacent targets without retrying the prompt.
+before invoking Herdr's semantic prompt operation. Ready sessionless Codex and
+Cline targets are eligible provisionally; other sessionless agents are hidden.
+A valid session from either provisional harness replaces the provisional target
+immediately. When the receipt precedes the session hook, Proqi accepts the
+matching receipt and immediately rediscovers adjacent targets without retrying
+the prompt.
 
 Herdr protocol 19 acknowledges accepted text entry but does not guarantee a
 distinct prompt boundary when another sender submits concurrently. This is a
 known provider-contract limitation. Proqi retains target verification, receipt
 matching, durable journaling, and remove-only-after-acceptance semantics, but
 cannot prevent the receiving harness from merging overlapping inputs. Protocol
-19 also cannot atomically reject replacement of one sessionless Codex by
-another in the same pane between revalidation and delivery because it exposes
-neither a pre-session instance identity nor an expected-instance precondition.
+19 also cannot atomically reject replacement of one sessionless Codex or Cline
+process by another of the same kind in the same pane between revalidation and
+delivery because it exposes neither a pre-session instance identity nor an
+expected-instance precondition.
 
 Herdr also implements a separate display-only `PanePresentation` port. In a
 managed pane, the terminal runtime publishes `title=proqi` and

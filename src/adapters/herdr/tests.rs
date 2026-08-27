@@ -17,6 +17,8 @@ use crate::{
 
 use super::HerdrGateway;
 
+#[path = "tests/cline.rs"]
+mod cline;
 #[path = "tests/pi.rs"]
 mod pi;
 #[path = "tests/sessionless.rs"]

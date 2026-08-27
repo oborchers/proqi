@@ -4,7 +4,8 @@ use crate::{
     adapters::memory::FakeIdGenerator,
     ports::{
         agent::{
-            AgentError, AgentGateway, AgentSessionBinding, CLAUDE_AGENT_KIND, SubmissionRequest,
+            AgentError, AgentGateway, AgentSessionBinding, CLAUDE_AGENT_KIND, CLINE_AGENT_KIND,
+            SubmissionRequest,
         },
         environment::IdGenerator,
     },
@@ -49,19 +50,24 @@ fn discovery_accepts_established_sessions_for_open_ended_harness_kinds() {
 }
 
 #[test]
-fn discovery_exposes_only_sessionless_codex_targets() {
+fn discovery_exposes_only_explicitly_compatible_sessionless_targets() {
     let context = source();
-    let codex = without_session(agent("w1:p2", "w1", "w1:t1", "idle"));
-    let (mut codex_gateway, _) = gateway(discovery_responses(
-        &context,
-        json!([codex]),
-        Some(("w1:p2", right_rect())),
-    ));
-    let targets = codex_gateway
-        .adjacent_targets(&context)
-        .expect("empty Codex");
-    assert_eq!(targets.len(), 1);
-    assert!(targets[0].agent_session.is_provisional());
+    for harness in ["codex", CLINE_AGENT_KIND] {
+        let candidate = with_harness(
+            without_session(agent("w1:p2", "w1", "w1:t1", "idle")),
+            harness,
+        );
+        let (mut gateway, _) = gateway(discovery_responses(
+            &context,
+            json!([candidate]),
+            Some(("w1:p2", right_rect())),
+        ));
+        let targets = gateway
+            .adjacent_targets(&context)
+            .expect("compatible empty harness");
+        assert_eq!(targets.len(), 1, "{harness}");
+        assert!(targets[0].agent_session.is_provisional(), "{harness}");
+    }
 
     let claude = with_harness(
         without_session(agent("w1:p2", "w1", "w1:t1", "idle")),

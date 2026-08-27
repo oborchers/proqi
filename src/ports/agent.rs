@@ -9,6 +9,9 @@ use crate::domain::{Direction, SubmissionId};
 /// Canonical adjacent-agent kind label for the Codex harness.
 pub const CODEX_AGENT_KIND: &str = "codex";
 
+/// Canonical adjacent-agent kind label for the Cline harness.
+pub const CLINE_AGENT_KIND: &str = "cline";
+
 /// Canonical adjacent-agent kind label for the Claude harness.
 pub const CLAUDE_AGENT_KIND: &str = "claude";
 

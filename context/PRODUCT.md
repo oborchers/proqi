@@ -443,12 +443,13 @@ A submission target is eligible only when all of the following are true:
 
 Directional lookup is never trusted without these independent checks. The
 product never guesses a target and never falls back to raw input injection.
-An otherwise eligible sessionless Codex is the sole provisional exception:
-Proqi revalidates the same empty Codex pane immediately before delivery and
-accepts only a matching Codex receipt. Because Herdr can acknowledge the prompt
-before Codex's session hook reports the new identity, a still-provisional
-receipt triggers immediate rediscovery without resending. Other sessionless
-agent kinds remain ineligible.
+Otherwise eligible sessionless Codex and Cline panes are the explicit
+provisional exceptions. Proqi revalidates the same empty pane and harness kind
+immediately before delivery and accepts only a matching receipt. Because Herdr
+can acknowledge the prompt before a session hook reports the new identity, a
+still-provisional receipt triggers immediate rediscovery without resending. A
+later established session replaces the provisional binding and must match
+exactly thereafter. Other sessionless agent kinds remain ineligible.
 
 Prompt delivery has two dispositions over the same immediate semantic submit
 operation. `Submit` is the default and deletes the source thought or selected
@@ -465,8 +466,9 @@ receiving harness even though Herdr returns an accepted receipt. Proqi treats
 this as a known integration limitation and preserves its ordinary verified
 submission workflow. Protocol 19 also has no stable pre-session agent-instance
 identity or atomic expected-instance precondition. Replacing one sessionless
-Codex with another in the same pane during the narrow interval between
-revalidation and delivery is therefore not detectable by Proqi.
+Codex or Cline process with another of the same kind in the same pane during the
+narrow interval between revalidation and delivery is therefore not detectable
+by Proqi.
 
 Each verified adjacent target appears once in the integration row, without its
 readiness label. `s Submit` and `S Submit & keep` are shown only when

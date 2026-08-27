@@ -1,7 +1,7 @@
 //! Harness compatibility policy and session identity validation.
 
 use crate::ports::agent::{
-    AgentError, AgentSessionBinding, AgentTarget, CODEX_AGENT_KIND, HarnessKind,
+    AgentError, AgentSessionBinding, AgentTarget, CLINE_AGENT_KIND, CODEX_AGENT_KIND, HarnessKind,
 };
 
 use super::contract::AgentSession;
@@ -73,7 +73,7 @@ fn established_session(
 
 fn session_policy(kind: &HarnessKind) -> SessionPolicy {
     match kind.as_str() {
-        CODEX_AGENT_KIND => SessionPolicy::ProvisionalAllowed,
+        CODEX_AGENT_KIND | CLINE_AGENT_KIND => SessionPolicy::ProvisionalAllowed,
         _ => SessionPolicy::Required,
     }
 }
@@ -86,6 +86,7 @@ mod tests {
     fn only_explicitly_compatible_harnesses_allow_provisional_sessions() {
         for (name, expected) in [
             (CODEX_AGENT_KIND, SessionPolicy::ProvisionalAllowed),
+            (CLINE_AGENT_KIND, SessionPolicy::ProvisionalAllowed),
             ("claude", SessionPolicy::Required),
             ("future-harness", SessionPolicy::Required),
         ] {
