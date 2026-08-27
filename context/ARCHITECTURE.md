@@ -1003,6 +1003,10 @@ live Herdr session are gated smoke tests. Their deterministic equivalents remain
 required on every pull request. Live smoke tests run before releases and may also
 run on a schedule without weakening the required gate.
 
+New coding-agent harnesses use
+[`HARNESS_QUALIFICATION_CHECKLIST.md`](HARNESS_QUALIFICATION_CHECKLIST.md) for
+deterministic contract evidence, live Herdr user stories, and cleanup.
+
 ### Dependencies and repository policy
 
 Cargo.lock is committed because Proqi ships an application. Dependabot checks
