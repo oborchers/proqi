@@ -111,16 +111,18 @@ gh repo edit oborchers/proqi \
 Manual and API-managed settings must also:
 
 1. Enable private vulnerability reporting.
-2. Keep Issues enabled and Discussions disabled.
-3. Require the aggregate `Required CI result` check on `main` while allowing
+2. Enable dependency alerts, grouped Dependabot security updates, secret
+   scanning, and push protection.
+3. Keep Issues enabled and Discussions disabled.
+4. Require the aggregate `Required CI result` check on `main` while allowing
    the repository owner to push directly.
-4. Protect `v*` tags from deletion, non-fast-forward changes, and unauthorized
+5. Protect `v*` tags from deletion, non-fast-forward changes, and unauthorized
    creation.
-5. Configure the `release` environment without required reviewers. Restrict its
+6. Configure the `release` environment without required reviewers. Restrict its
    deployment branch and tag policy to the repository's stable release tags.
-6. Upload `assets/proqi-social-preview.png` through the repository social
+7. Upload `assets/proqi-social-preview.png` through the repository social
    preview setting.
-7. Verify the default branch, visibility, MIT detection, contribution guide,
+8. Verify the default branch, visibility, MIT detection, contribution guide,
    security policy, Code of Conduct, description, topics, Issues state, and
    Discussions state from the public repository view.
 
@@ -128,38 +130,38 @@ Manual and API-managed settings must also:
 
 After the readiness audit:
 
-1. Re-enable CI and push the consolidated `main` branch once.
-2. Wait for `Required CI result` to pass on Linux and macOS.
-3. Close superseded dependency pull requests only after their equivalent
-   versions are present on `main`.
-4. Dispatch `Release candidate` from `main` with the intended stable tag. This
-   performs the expensive hosted matrix exactly once and retains the immutable
-   candidate for seven days. The Linux job builds on Ubuntu 22.04, enforces the
-   `GLIBC_2.35` ceiling, starts the exact archive in pinned Ubuntu 22.04, Debian
-   bookworm, and Ubuntu 24.04 images, then builds and tests the Debian package
-   from that same binary. The credential-free crate job records the exact
-   `.crate`, its checksum, and dry-run evidence without publishing it.
-5. Inspect all three archives, the Debian package, checksums, SBOMs,
-   attestations, formula, crate evidence, Debian evidence, candidate manifest,
-   source commit, and artifact digest from that successful run.
-6. Obtain explicit approval for the exact annotated stable tag and create it at
-   the candidate commit. Pushing that tag is the single authorization to
-   publish the reviewed crate, GitHub Release, and Homebrew formula.
-7. The tag-triggered `Release` workflow downloads and verifies the candidate,
-   creates an immutable GitHub Release draft, publishes the exact crate through
-   crates.io trusted publishing, installs and tests the registry version, makes
-   the Release public, and wakes the Homebrew tap. It does not rebuild native
-   release artifacts.
-8. If the candidate is absent or expired, delete the unpublished tag, dispatch
-   a replacement candidate for the same tag and commit, then recreate the tag.
-9. Verify the published Release and every downloaded asset. Publication sends
-   a scoped `proqi_release_published` event to the public tap, which verifies
-   and publishes the formula. An explicit manual dispatch remains available
-   for recovery. The tap does not poll for releases.
+1. Prepare and review the Cargo version and
+   `.github/release-notes/vX.Y.Z.md`, then push `main`.
+2. Wait for `Required CI result` to pass on the exact release commit.
+3. Create the exact annotated stable tag at that commit and push it. The tag is
+   the single authorization to publish the crate, GitHub Release, and Homebrew
+   formula. Do not create an empty public GitHub Release by hand.
+4. The tag-triggered `Release` workflow calls the reusable candidate workflow.
+   It performs the expensive hosted matrix exactly once in the same run. The
+   Linux job builds on Ubuntu 22.04, enforces the `GLIBC_2.35` ceiling, starts
+   the archive in pinned Ubuntu 22.04, Debian bookworm, and Ubuntu 24.04 images,
+   and builds and tests the Debian package from that same binary. The
+   credential-free crate job records the exact `.crate`, checksum, and dry-run
+   evidence.
+5. The promotion job consumes that run's immutable candidate. It verifies every
+   byte and attestation, creates a GitHub Release draft, publishes the exact
+   crate through crates.io trusted publishing, installs and tests the registry
+   version, makes the Release public, downloads every public asset again, and
+   requires byte identity with the candidate.
+6. Only after public-byte verification does the workflow send the scoped
+   `proqi_release_published` event. The tap verifies and tests the formula before
+   committing it. No polling job is involved.
+7. If a promotion step fails, rerun the failed jobs in the same workflow run.
+   Successful native build jobs and their candidate artifacts are reused. The
+   standalone `Release candidate` dispatch remains available only for
+   preflight diagnosis or recovery and never publishes.
+8. Verify the published GitHub Release, crates.io version, and Homebrew formula.
 
 The release workflow never cancels an in-progress tag release. Any failed
 target, smoke test, checksum, SBOM, attestation, or formula generation blocks
-draft creation.
+publication. Routine release work therefore ends at reviewed release metadata
+and the protected tag. Every distribution step after that boundary is
+automatic and fail-closed.
 
 ## crates.io publication boundary
 
@@ -239,6 +241,11 @@ then uses its own short-lived `GITHUB_TOKEN` to verify the latest stable Proqi
 release before committing one exact formula update. An explicit manual dispatch
 remains available for recovery. No periodic release check runs, and no personal
 access token is stored in either repository.
+
+Dependabot version updates across Cargo, GitHub Actions, and the Rust toolchain
+arrive in one weekly pull request. Cargo security updates are grouped separately
+and opened immediately. Neither class is merged automatically: dependency diffs,
+lockfile changes, release notes, checks, and provenance remain human-reviewed.
 
 Homebrew Core, bottles, casks, signing, and notarization are outside the current
 release.

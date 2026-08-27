@@ -22,6 +22,7 @@ mod package;
 mod policy;
 mod public_assets;
 mod release;
+mod release_policy;
 mod release_targets;
 mod snapshots;
 mod source_limits;

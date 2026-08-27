@@ -1,6 +1,12 @@
 name: Release candidate
 
 on:
+  workflow_call:
+    inputs:
+      tag:
+        description: Exact stable tag that this candidate will serve
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       tag:
@@ -21,6 +27,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     outputs:
+      source-ref: ${{ steps.plan.outputs.source-ref }}
       tag: ${{ steps.plan.outputs.tag }}
       source-sha: ${{ steps.plan.outputs.source-sha }}
     steps:
@@ -36,12 +43,19 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}
         run: |
-          test "$GITHUB_REF" = "refs/heads/main"
+          case "$GITHUB_REF" in
+            refs/heads/main) ;;
+            refs/tags/*) test "$GITHUB_REF" = "refs/tags/$TAG" ;;
+            *) echo "release candidates require main or the exact release tag" >&2; exit 1 ;;
+          esac
           cargo xtask release-plan "$TAG"
           conclusion="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --branch main --commit "$GITHUB_SHA" --limit 1 --json conclusion --jq '.[0].conclusion // ""')"
           test "$conclusion" = "success"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "source-sha=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+          {
+            echo "source-ref=$GITHUB_REF"
+            echo "tag=$TAG"
+            echo "source-sha=$GITHUB_SHA"
+          } >> "$GITHUB_OUTPUT"
 
   notices:
     name: Generate union third-party notices
@@ -295,20 +309,22 @@ jobs:
             evidence/debian/debian-evidence.json
       - name: Verify candidate attestations
         env:
+          SOURCE_REF: ${{ needs.plan.outputs.source-ref }}
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ needs.plan.outputs.source-sha }}
         run: |
           for artifact in target/release-assets/*.tar.gz target/release-assets/proqi_amd64.deb; do
             gh attestation verify "$artifact" --repo "$GITHUB_REPOSITORY" \
               --signer-workflow "github.com/${GITHUB_REPOSITORY}/.github/workflows/release-candidate.yml" \
-              --source-ref refs/heads/main --source-digest "$SOURCE_SHA"
+              --source-ref "$SOURCE_REF" --source-digest "$SOURCE_SHA"
             gh attestation verify "$artifact" --repo "$GITHUB_REPOSITORY" \
               --signer-workflow "github.com/${GITHUB_REPOSITORY}/.github/workflows/release-candidate.yml" \
-              --source-ref refs/heads/main --source-digest "$SOURCE_SHA" \
+              --source-ref "$SOURCE_REF" --source-digest "$SOURCE_SHA" \
               --predicate-type https://spdx.dev/Document/v2.3
           done
       - name: Generate formula and candidate manifest
         env:
+          SOURCE_REF: ${{ needs.plan.outputs.source-ref }}
           SOURCE_SHA: ${{ needs.plan.outputs.source-sha }}
           TAG: ${{ needs.plan.outputs.tag }}
         run: |
@@ -317,11 +333,11 @@ jobs:
           cd target/release-assets
           release_files="$(find . -maxdepth 1 -type f ! -name candidate-manifest.json -printf '%P\n' | sort | while read -r file; do printf '%s  %s\n' "$(shasum -a 256 "$file" | cut -d ' ' -f 1)" "$file"; done | jq -Rn '[inputs | capture("^(?<sha256>[0-9a-f]{64})  (?<name>.+)$")]')"
           evidence_files="$(find evidence -type f -printf '%P\n' | sort | while read -r file; do name="evidence/$file"; printf '%s  %s\n' "$(shasum -a 256 "$name" | cut -d ' ' -f 1)" "$name"; done | jq -Rn '[inputs | capture("^(?<sha256>[0-9a-f]{64})  (?<name>.+)$")]')"
-          jq -n --arg tag "$TAG" --arg source_sha "$SOURCE_SHA" --arg run_id "$GITHUB_RUN_ID" \
+          jq -n --arg tag "$TAG" --arg source_ref "$SOURCE_REF" --arg source_sha "$SOURCE_SHA" --arg run_id "$GITHUB_RUN_ID" \
             --argjson release_files "$release_files" --argjson evidence_files "$evidence_files" \
-            '{schema_version: 2, tag: $tag, source_sha: $source_sha, build_run_id: ($run_id | tonumber), workflow: "release-candidate.yml", targets: ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu"], release_files: $release_files, evidence_files: $evidence_files}' \
+            '{schema_version: 3, tag: $tag, source_ref: $source_ref, source_sha: $source_sha, build_run_id: ($run_id | tonumber), workflow: "release-candidate.yml", targets: ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu"], release_files: $release_files, evidence_files: $evidence_files}' \
             > candidate-manifest.json
-          jq -e '.schema_version == 2 and (.release_files | length == 14) and (.evidence_files | length == 4)' candidate-manifest.json
+          jq -e '.schema_version == 3 and (.release_files | length == 14) and (.evidence_files | length == 4)' candidate-manifest.json
       - id: upload
         name: Upload immutable candidate
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

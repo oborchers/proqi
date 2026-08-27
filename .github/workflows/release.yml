@@ -13,13 +13,26 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  candidate:
+    name: Build and verify release candidate
+    uses: ./.github/workflows/release-candidate.yml
+    with:
+      tag: ${{ github.ref_name }}
+    permissions:
+      actions: read # Inspect the successful main CI run and exchange artifacts.
+      artifact-metadata: write # Register immutable candidate artifacts.
+      attestations: write # Publish candidate provenance and SBOM attestations.
+      contents: read
+      id-token: write # Sign candidate attestations with GitHub OIDC.
+
   promote:
     name: Promote verified candidate
+    needs: candidate
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     environment: release
     permissions:
-      actions: read # Locate and download the exact cross-run candidate artifact.
+      actions: read # Download the exact candidate artifact from this run.
       artifact-metadata: write # Register tag-bound artifact attestations.
       attestations: write # Verify candidate claims and publish tag-bound claims.
       contents: write # Create or resume the immutable GitHub Release.
@@ -33,45 +46,17 @@ jobs:
           tool: cargo-dist@0.32.0
       - name: Validate immutable tag
         run: cargo xtask release-plan "$GITHUB_REF_NAME"
-      - id: candidate
-        name: Locate exact successful candidate
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
-        run: |
-          artifact_name="release-candidate-${TAG}"
-          run_id=""
-          while read -r candidate_run; do
-            artifact_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${candidate_run}/artifacts" \
-              --jq ".artifacts[] | select(.name == \"${artifact_name}\" and .expired == false) | .id" | head -n 1)"
-            if [[ -n "$artifact_id" ]]; then
-              run_id="$candidate_run"
-              break
-            fi
-          done < <(gh api \
-            "repos/${GITHUB_REPOSITORY}/actions/workflows/release-candidate.yml/runs?event=workflow_dispatch&status=success&head_sha=${GITHUB_SHA}&per_page=100" \
-            --jq '.workflow_runs | sort_by(.created_at) | reverse | .[].id')
-          if [[ -z "$run_id" ]]; then
-            echo "No unexpired successful candidate exists for ${TAG} at ${GITHUB_SHA}. Delete the tag, dispatch Release candidate for that exact tag and commit, then recreate the tag." >&2
-            exit 1
-          fi
-          echo "run-id=$run_id" >> "$GITHUB_OUTPUT"
-          echo "artifact-name=$artifact_name" >> "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          github-token: ${{ github.token }}
-          name: ${{ steps.candidate.outputs.artifact-name }}
+          name: release-candidate-${{ github.ref_name }}
           path: target/release-assets
-          repository: ${{ github.repository }}
-          run-id: ${{ steps.candidate.outputs.run-id }}
       - name: Verify manifest and every candidate byte
         env:
-          CANDIDATE_RUN_ID: ${{ steps.candidate.outputs.run-id }}
           TAG: ${{ github.ref_name }}
         run: |
           cd target/release-assets
-          jq -e --arg tag "$TAG" --arg sha "$GITHUB_SHA" --arg run_id "$CANDIDATE_RUN_ID" \
-            '.schema_version == 2 and .tag == $tag and .source_sha == $sha and .build_run_id == ($run_id | tonumber) and .workflow == "release-candidate.yml" and .targets == ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu"] and (.release_files | length == 14) and (.evidence_files | length == 4)' \
+          jq -e --arg tag "$TAG" --arg ref "$GITHUB_REF" --arg sha "$GITHUB_SHA" --arg run_id "$GITHUB_RUN_ID" \
+            '.schema_version == 3 and .tag == $tag and .source_ref == $ref and .source_sha == $sha and .build_run_id == ($run_id | tonumber) and .workflow == "release-candidate.yml" and .targets == ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu"] and (.release_files | length == 14) and (.evidence_files | length == 4)' \
             candidate-manifest.json
           jq -r '.release_files[].name, .evidence_files[].name, "candidate-manifest.json"' candidate-manifest.json | sort > "$RUNNER_TEMP/expected-candidate-files"
           find . -type f -printf '%P\n' | sort > "$RUNNER_TEMP/actual-candidate-files"
@@ -86,10 +71,10 @@ jobs:
           for artifact in target/release-assets/*.tar.gz target/release-assets/proqi_amd64.deb; do
             gh attestation verify "$artifact" --repo "$GITHUB_REPOSITORY" \
               --signer-workflow "github.com/${GITHUB_REPOSITORY}/.github/workflows/release-candidate.yml" \
-              --source-ref refs/heads/main --source-digest "$GITHUB_SHA"
+              --source-ref "$GITHUB_REF" --source-digest "$GITHUB_SHA"
             gh attestation verify "$artifact" --repo "$GITHUB_REPOSITORY" \
               --signer-workflow "github.com/${GITHUB_REPOSITORY}/.github/workflows/release-candidate.yml" \
-              --source-ref refs/heads/main --source-digest "$GITHUB_SHA" \
+              --source-ref "$GITHUB_REF" --source-digest "$GITHUB_SHA" \
               --predicate-type https://spdx.dev/Document/v2.3
           done
       - name: Bind provenance to the protected release tag
@@ -244,6 +229,25 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+      - name: Verify every public release byte
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          metadata="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease,tagName)"
+          test "$(jq -r .tagName <<<"$metadata")" = "$TAG"
+          test "$(jq -r .isDraft <<<"$metadata")" = false
+          test "$(jq -r .isPrerelease <<<"$metadata")" = false
+          public="$RUNNER_TEMP/public-release"
+          mkdir -p "$public"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir "$public"
+          mapfile -t assets < <(jq -r '.release_files[].name' target/release-assets/candidate-manifest.json | sort)
+          find "$public" -maxdepth 1 -type f -printf '%f\n' | sort > "$RUNNER_TEMP/public-assets"
+          printf '%s\n' "${assets[@]}" > "$RUNNER_TEMP/candidate-assets"
+          diff -u "$RUNNER_TEMP/candidate-assets" "$RUNNER_TEMP/public-assets"
+          for asset in "${assets[@]}"; do
+            cmp "target/release-assets/$asset" "$public/$asset"
+          done
       - id: tap-token
         name: Create scoped tap notification token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0

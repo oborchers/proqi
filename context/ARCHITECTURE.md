@@ -1005,15 +1005,19 @@ teaches coding agents to use the installed application.
 
 ### Release pipeline
 
-Every release candidate starts from `main` after the aggregate gate has passed.
-A manual candidate workflow accepts an exact future `vX.Y.Z` tag, rejects a tag
-that differs from the single Cargo workspace version, and records the source
-commit. The matrix builds only Apple silicon macOS, Intel macOS, and x86-64 GNU
-Linux artifacts on native runners. The GNU/Linux candidate is built on Ubuntu
-22.04, must not require a glibc symbol newer than `GLIBC_2.35`, and is started
-from its final archive on Ubuntu 22.04, Debian bookworm, and Ubuntu 24.04. One
-Linux job generates a union third-party notice file for all targets, so Intel
-macOS never compiles the packaging tool.
+Every release candidate starts from a protected stable tag whose exact commit
+has passed the aggregate `main` gate. The tag-triggered release workflow calls
+the candidate workflow as a reusable workflow, so the expensive matrix and
+promotion share one run and one immutable artifact set. A manual candidate
+dispatch remains available only as a non-publishing preflight or recovery tool.
+Both entry points accept an exact `vX.Y.Z` tag, reject a tag that differs from
+the single Cargo workspace version, and record the source ref and commit. The
+matrix builds only Apple silicon macOS, Intel macOS, and x86-64 GNU Linux
+artifacts on native runners. The GNU/Linux candidate is built on Ubuntu 22.04,
+must not require a glibc symbol newer than `GLIBC_2.35`, and is started from its
+final archive on Ubuntu 22.04, Debian bookworm, and Ubuntu 24.04. One Linux job
+generates a union third-party notice file for all targets, so Intel macOS never
+compiles the packaging tool.
 
 A reviewed pinned `cargo-dist` configuration or equivalent narrow Rust tool
 stages archives containing one executable, MIT license, required notices, and
@@ -1027,12 +1031,11 @@ attestation, formula, and manifest step succeeds. The Debian package reuses the
 verified Linux archive executable byte for byte. The manifest separates public
 release files from private crate and Debian evidence and binds the future tag,
 source commit, build run, workflow, target registry, filenames, and file
-digests. A protected `vX.Y.Z` tag triggers a
-fast promotion workflow. Promotion locates the exact successful candidate for
-that tag and commit, verifies GitHub's artifact digest plus every internal hash
-and candidate attestation, adds tag-bound attestations, and publishes the same
-bytes. It never rebuilds. Missing or expired candidates fail with an explicit
-recovery instruction. Release creation is idempotent for absent releases,
+digests. Promotion downloads the candidate produced by the same tag run,
+verifies every internal hash and candidate attestation, adds tag-bound
+attestations, and publishes the same bytes. It never rebuilds successful native
+jobs. A failed promotion can be rerun while retaining their candidate artifacts.
+Release creation is idempotent for absent releases,
 matching drafts, and already published identical assets. Conflicting assets
 fail closed. GitHub Release notes are the only changelog. The protected release
 environment has no manual approval gate. Release runs are never cancelled and
@@ -1047,8 +1050,9 @@ GitHub Release draft first, reproduces and compares the candidate `.crate`,
 publishes only an absent version, verifies the public registry digest, and
 installs the exact registry version into disposable Cargo state. Existing
 matching registry bytes make a retry idempotent; mismatched bytes fail closed.
-The GitHub Release becomes public and Homebrew is notified only after this
-registry contract succeeds.
+The GitHub Release becomes public only after this registry contract succeeds.
+Promotion then downloads every public asset and requires exact byte identity
+with the candidate before Homebrew is notified.
 
 Homebrew tap updates occur only after the referenced Release assets, checksums,
 and attestations are verified. The external `oborchers/homebrew-tap` repository
