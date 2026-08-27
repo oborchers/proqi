@@ -150,37 +150,8 @@ const fn hex(byte: u8) -> Option<u8> {
 }
 
 fn split_drop_tokens(value: &str) -> Option<Vec<String>> {
-    let mut tokens = Vec::new();
-    let mut token = String::new();
-    let mut quote = None;
-    let mut characters = value.chars().peekable();
-    while let Some(character) = characters.next() {
-        match (quote, character) {
-            (Some(active), current) if current == active => quote = None,
-            (None, '\'' | '"') => quote = Some(character),
-            (None, current) if current.is_whitespace() => push_token(&mut tokens, &mut token),
-            (None | Some('"'), '\\') => {
-                let next = characters.peek().copied()?;
-                if next.is_whitespace() || matches!(next, '\\' | '\'' | '"') {
-                    token.push(characters.next()?);
-                } else {
-                    token.push(character);
-                }
-            }
-            _ => token.push(character),
-        }
-    }
-    if quote.is_some() {
-        return None;
-    }
-    push_token(&mut tokens, &mut token);
+    let tokens = shell_words::split(value).ok()?;
     (!tokens.is_empty()).then_some(tokens)
-}
-
-fn push_token(tokens: &mut Vec<String>, token: &mut String) {
-    if !token.is_empty() {
-        tokens.push(std::mem::take(token));
-    }
 }
 
 fn display_paths(paths: &[PathBuf]) -> String {
@@ -200,7 +171,7 @@ mod tests {
     #[test]
     fn file_urls_quotes_escapes_and_unicode_are_normalized_only_when_real() {
         let temporary = tempfile::tempdir().expect("temporary directory");
-        let first = temporary.path().join("Grüße 第一.png");
+        let first = temporary.path().join("Grüße 第一 (18).png");
         let second = temporary.path().join("two.txt");
         std::fs::write(&first, b"image").expect("first fixture");
         std::fs::write(&second, b"text").expect("second fixture");
@@ -221,11 +192,12 @@ mod tests {
             normalize_existing_files(&localhost).as_deref(),
             Some(second.to_string_lossy().as_ref())
         );
-        let escaped = format!(
-            "{} {}",
-            first.to_string_lossy().replace(' ', "\\ "),
-            second.display()
-        );
+        let escaped_first = first
+            .to_string_lossy()
+            .replace(' ', "\\ ")
+            .replace('(', "\\(")
+            .replace(')', "\\)");
+        let escaped = format!("{} {}", escaped_first, second.display());
         assert_eq!(
             normalize_existing_files(&escaped),
             Some(format!("{}\n{}", first.display(), second.display()))
@@ -248,6 +220,35 @@ mod tests {
     }
 
     #[test]
+    fn ghostty_shell_escaped_punctuation_becomes_an_image_attachment() {
+        let temporary = tempfile::tempdir().expect("temporary directory");
+        let file = temporary.path().join("Bild (18) [final] & notes #1.png");
+        std::fs::write(&file, b"image").expect("file fixture");
+        let escaped = file
+            .to_string_lossy()
+            .replace(' ', "\\ ")
+            .replace('(', "\\(")
+            .replace(')', "\\)")
+            .replace('[', "\\[")
+            .replace(']', "\\]")
+            .replace('&', "\\&")
+            .replace('#', "\\#");
+
+        let payload = annotate_existing_files(&escaped).expect("annotated image");
+        assert_eq!(payload.content, file.to_string_lossy());
+        assert_eq!(payload.annotations.len(), 1);
+        assert_eq!(payload.annotations[0].start, 0);
+        assert_eq!(payload.annotations[0].end, payload.content.len());
+        assert!(matches!(
+            &payload.annotations[0].kind,
+            ContentAnnotationKind::Attachment {
+                image: true,
+                display_name,
+            } if display_name == "Bild (18) [final] & notes #1.png"
+        ));
+    }
+
+    #[test]
     fn ordinary_or_nonexistent_prompt_text_is_never_rewritten() {
         assert_eq!(normalize_existing_files("write src/main.rs next"), None);
         assert_eq!(
@@ -258,6 +259,12 @@ mod tests {
             normalize_existing_files("file://remote-host/path.png"),
             None
         );
+        assert_eq!(
+            normalize_existing_files("/definitely/not/a/real/Bild\\ \\(18\\).png"),
+            None
+        );
+        assert_eq!(normalize_existing_files("write \\(tests\\) next"), None);
         assert_eq!(normalize_existing_files("'unterminated"), None);
+        assert_eq!(normalize_existing_files("/tmp/trailing\\"), None);
     }
 }

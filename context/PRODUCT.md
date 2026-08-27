@@ -306,7 +306,7 @@ Bracketed paste is treated as one semantic input event.
   character.
 - Dragging one or more files into Proqi inserts their absolute paths. In edit
   mode they enter the current thought; in board mode they create and focus one
-  thought. Unicode names, spaces, quotes, local file URLs, and common terminal
+  thought. Unicode names, spaces, quotes, local file URLs, and POSIX shell
   escaping remain supported.
 - When the native clipboard contains raw image pixels, `Ctrl+V` writes a private
   durable PNG inside the current Proqi session and inserts its absolute path.

@@ -310,8 +310,9 @@ or installation inserts nothing.
 Terminal file drops still arrive as bracketed text. The terminal adapter
 normalizes only payloads that resolve completely and unambiguously to existing
 absolute files. It supports local file URLs, quoted paths, escaped whitespace,
-multiple paths, and Unicode names. Ordinary prompt text remains exact. Dropped
-files remain external references and are never read or copied automatically.
+POSIX shell-escaped punctuation, multiple paths, and Unicode names. Ordinary
+prompt text remains exact. Dropped files remain external references and are
+never read or copied automatically.
 
 ### `AgentGateway`
 

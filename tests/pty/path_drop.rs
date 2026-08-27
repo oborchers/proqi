@@ -4,9 +4,13 @@ use super::{expect_command, json_command};
 fn escaped_unicode_file_drop_becomes_one_durable_absolute_path() {
     let state = tempfile::tempdir().expect("temporary state");
     let files = tempfile::tempdir().expect("temporary files");
-    let file = files.path().join("Grüße 第一 sample.png");
+    let file = files.path().join("Grüße 第一 sample (18).png");
     std::fs::write(&file, b"fixture image bytes").expect("file fixture");
-    let escaped = file.to_string_lossy().replace(' ', "\\ ");
+    let escaped = file
+        .to_string_lossy()
+        .replace(' ', "\\ ")
+        .replace('(', "\\(")
+        .replace(')', "\\)");
     let binary = env!("CARGO_BIN_EXE_proqi");
     let create = r#"
         log_user 0

@@ -24,6 +24,7 @@ png = "=0.18.1"
 ropey = "1.6.1"
 semver = { version = "=1.0.28", features = ["serde"] }
 sha2 = "=0.11.0"
+shell-words = "=1.1.1"
 ratatui-core = { version = "=0.1.2", default-features = false, features = ["std", "layout-cache", "underline-color"] }
 ratatui-crossterm = { version = "=0.1.2", default-features = false, features = ["crossterm_0_29", "underline-color"] }
 ratatui-widgets = { version = "=0.3.2", default-features = false }
@@ -105,6 +106,7 @@ png.workspace = true
 ropey.workspace = true
 semver.workspace = true
 sha2.workspace = true
+shell-words.workspace = true
 ratatui-core.workspace = true
 ratatui-crossterm.workspace = true
 ratatui-widgets.workspace = true

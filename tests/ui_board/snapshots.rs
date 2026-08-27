@@ -56,13 +56,13 @@ fn populated_board_with_folded_attachment() {
     fixture.input(UiInput::Paste("first prompt".to_owned()));
     fixture.input(UiInput::Key(UiKey::Escape));
     fixture.input(UiInput::PasteAnnotated(PastePayload::annotated(
-        "/private/tmp/screenshot.png".to_owned(),
+        "/private/tmp/Bild (18).png".to_owned(),
         vec![ContentAnnotation {
             start: 0,
-            end: "/private/tmp/screenshot.png".len(),
+            end: "/private/tmp/Bild (18).png".len(),
             kind: ContentAnnotationKind::Attachment {
                 image: true,
-                display_name: "screenshot.png".to_owned(),
+                display_name: "Bild (18).png".to_owned(),
             },
         }],
     )));

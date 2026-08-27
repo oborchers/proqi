@@ -34,7 +34,7 @@ must not imply that the behavior exists.
 | Capability | Status | Reachable behavior | Evidence |
 | --- | --- | --- | --- |
 | Bracketed and large paste | Shipped | A paste is one exact undo unit. Large pastes use an atomic folded presentation while canonical content stays intact. | `tests/editor_contract.rs`, `tests/ui_board/annotations.rs`, `tests/pty.rs` |
-| File paths and file drop | Shipped | Existing absolute paths, quoted paths, escaped Unicode paths, file URLs, and multi-file drops become attachment annotations without losing the exact path. | `src/adapters/terminal/path_import.rs`, `tests/pty/path_drop.rs` |
+| File paths and file drop | Shipped | Existing absolute paths, quoted paths, POSIX shell-escaped paths, file URLs, and multi-file drops become attachment annotations without losing the exact path. | `src/adapters/terminal/path_import.rs`, `tests/pty/path_drop.rs` |
 | Clipboard images | Shipped | Native clipboard pixels are materialized as private PNG files and inserted as atomic image annotations. | `src/adapters/attachment/mod.rs`, `tests/ui_board/clipboard.rs` |
 | Folded annotations | Shipped | Images, files, and large pasted text render as accent placeholders with atomic navigation, selection, deletion, and restart-safe undo. | `tests/ui_board/annotations.rs`, `tests/sqlite_store/core.rs` |
 | Native clipboard with fallback | Shipped | Native text copy and paste are preferred. Bounded OSC 52 is the copy fallback where supported. Failure remains non-destructive and visible. | `src/adapters/clipboard/mod.rs`, `tests/ui_board/clipboard.rs` |

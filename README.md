@@ -232,9 +232,9 @@ active, resumable, recovered, and trashed states in narrow and wide layouts.
 
 A terminal file drop normally arrives as bracketed text. Proqi converts it only
 when the complete payload resolves unambiguously to existing absolute files.
-Quoted paths, escaped spaces, local file URLs, multiple paths, and Unicode names
-are supported. Ordinary prompt text stays exact. Dropped files are never read,
-copied, uploaded, or analyzed.
+Quoted paths, POSIX shell-escaped paths, local file URLs, multiple paths, and
+Unicode names are supported. Ordinary prompt text stays exact. Dropped files
+are never read, copied, uploaded, or analyzed.
 
 When the native clipboard contains raw image pixels, `Primary+V` validates the
 image, atomically writes a private PNG below the current session data directory,
