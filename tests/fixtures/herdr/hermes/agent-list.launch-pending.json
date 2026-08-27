@@ -1,0 +1,24 @@
+{
+  "id": "fixture:agent:list",
+  "result": {
+    "agents": [
+      {
+        "pane_id": "w1:p2",
+        "workspace_id": "w1",
+        "tab_id": "w1:t1",
+        "agent": "hermes",
+        "name": "hermes-qualifier",
+        "agent_status": "idle",
+        "interactive_ready": false,
+        "launch_pending": true,
+        "agent_session": {
+          "agent": "hermes",
+          "kind": "id",
+          "source": "herdr:hermes",
+          "value": "hermes-session-fixture-a"
+        }
+      }
+    ],
+    "type": "agents"
+  }
+}

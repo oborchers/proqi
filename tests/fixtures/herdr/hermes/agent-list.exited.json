@@ -1,0 +1,7 @@
+{
+  "id": "fixture:agent:list",
+  "result": {
+    "agents": [],
+    "type": "agents"
+  }
+}
