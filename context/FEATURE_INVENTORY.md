@@ -15,7 +15,7 @@ must not imply that the behavior exists.
 | --- | --- | --- | --- |
 | Fresh and resumable boards | Shipped | `proqi`, `proqi -c`, and `proqi -r [ID_OR_NAME]` open persisted local sessions. | `tests/cli_workflow.rs`, `tests/pty.rs` |
 | Board and edit modes | Shipped | Users navigate thoughts in board mode and enter exact multiline editing explicitly. | `tests/ui_board/navigation.rs`, `tests/editor_contract.rs` |
-| Thought creation | Shipped | `n`, the keyboard-focusable insertion row, its mouse target, and board paste create thoughts. An explicitly created blank is durable. | `tests/ui_board/blank.rs`, `tests/ui_mouse_actions.rs` |
+| Thought creation | Shipped | `n`, the keyboard-focusable insertion row, its mouse target, board paste, and two consecutive downward navigation commands on the insertion row create thoughts. An explicitly created blank is durable. | `tests/ui_board/blank.rs`, `tests/ui_board/insertion_navigation.rs`, `tests/ui_mouse_actions.rs` |
 | Exact Unicode editing | Shipped | Grapheme-aware cursor movement preserves combining marks, emoji sequences, CJK, wide cells, tabs, CRLF, and whitespace. | `tests/editor_contract.rs`, `tests/ui_board.rs` |
 | Selection and cursor | Shipped | Keyboard and mouse selection, wrapped cursor placement, trailing newlines, and a terminal-owned blinking cursor are supported. | `tests/editor_contract.rs`, `tests/ui_board/navigation.rs` |
 | Copy, cut, and delete | Shipped | Copy preserves exact content. Cut and editor cut delete only after clipboard success. Delete retains undo history. | `tests/domain_reducer/clipboard.rs`, `tests/ui_board/clipboard.rs` |
@@ -59,7 +59,7 @@ must not imply that the behavior exists.
 | Capability | Status | Reachable behavior | Evidence |
 | --- | --- | --- | --- |
 | Generic copy workflow | Shipped | Every thought can be copied or cut for native paste into any agent or application. | `tests/ui_board/clipboard.rs` |
-| Herdr discovery | Conditional | In a managed Herdr pane, Proqi discovers and independently verifies adjacent coding agents in all four directions. | `src/adapters/herdr`, `tests/herdr_executable.rs` |
+| Herdr discovery | Conditional | In a managed Herdr pane, Proqi discovers and independently verifies adjacent coding agents in all four directions. A ready empty Codex may be provisional; a receipt that precedes its session hook triggers immediate rediscovery without resending. | `src/adapters/herdr`, `tests/herdr_executable.rs` |
 | Submit and keep | Conditional | A verified adjacent target receives one exact prompt through Herdr's semantic command, while every selected source thought remains. Concurrent senders can expose the protocol 19 prompt-boundary limitation. | `tests/ui_board/agent.rs`, `tests/ui_board/agent_selection.rs`, `src/adapters/herdr/submission.rs` |
 | Submit and remove | Conditional | The same semantic submission removes all unchanged selected sources as one operation only after the matching accepted receipt. Failure and ambiguity preserve them. | `tests/ui_board/agent.rs`, `tests/ui_board/agent_selection.rs`, `src/ui/app/agent.rs` |
 | Pane presentation metadata | Conditional | A managed pane advertises display-only Proqi identity with bounded refresh and clean clearing. It does not impersonate a coding agent. | `src/adapters/herdr`, `src/adapters/terminal/runner/heartbeat.rs` |

@@ -66,6 +66,12 @@ impl BoardApp {
         clock: &impl Clock,
     ) -> Vec<Effect> {
         match key {
+            UiKey::Character(character)
+                if self.settings.keybindings.command(character)
+                    == Some(BoardCommand::FocusDown) =>
+            {
+                self.confirm_insertion_creation(ids, clock)
+            }
             UiKey::Character(character) => self.handle_board_command(character, ids, clock),
             UiKey::Enter => self.create(PastePayload::text(String::new()), ids, clock),
             UiKey::Escape
@@ -81,7 +87,11 @@ impl BoardApp {
             UiKey::Redo => self.history(ids, clock, false),
             UiKey::Move {
                 movement: CursorMovement::VisualDown,
-                ..
+                extend_selection: false,
+            } => self.confirm_insertion_creation(ids, clock),
+            UiKey::Move {
+                movement: CursorMovement::VisualDown,
+                extend_selection: true,
             }
             | UiKey::Backspace
             | UiKey::Delete
@@ -92,6 +102,36 @@ impl BoardApp {
             | UiKey::Duplicate
             | UiKey::Quit
             | UiKey::Move { .. } => Vec::new(),
+        }
+    }
+
+    pub(super) fn reset_insertion_confirmation(&mut self, input: &crate::ui::UiInput) {
+        let continues = self.insertion_focused()
+            && match input {
+                crate::ui::UiInput::Key(UiKey::Move {
+                    movement: CursorMovement::VisualDown,
+                    extend_selection: false,
+                }) => true,
+                crate::ui::UiInput::Key(UiKey::Character(character)) => {
+                    self.settings.keybindings.command(*character) == Some(BoardCommand::FocusDown)
+                }
+                _ => false,
+            };
+        if !continues {
+            self.insertion_confirmation = super::InsertionConfirmation::Idle;
+        }
+    }
+
+    fn confirm_insertion_creation(
+        &mut self,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        if self.insertion_confirmation == super::InsertionConfirmation::Armed {
+            self.create(PastePayload::text(String::new()), ids, clock)
+        } else {
+            self.insertion_confirmation = super::InsertionConfirmation::Armed;
+            Vec::new()
         }
     }
 
@@ -351,6 +391,7 @@ impl BoardApp {
 
     pub(super) fn move_focus(&mut self, delta: isize) {
         self.manual_board_scroll = false;
+        self.insertion_confirmation = super::InsertionConfirmation::Idle;
         let live = self.state.board.live_thoughts();
         if live.is_empty() {
             self.insertion_focus = super::InsertionFocus::Active;

@@ -16,6 +16,7 @@ use sha2::{Digest, Sha256};
 
 use super::{
     BoardApp, UiInput, UiKey,
+    agent_identity::target_fingerprint,
     pending_types::{PendingSubmission, PendingSubmissionSource, SubmissionMode},
 };
 
@@ -110,7 +111,7 @@ impl BoardApp {
         let completion = match result {
             Ok(receipt)
                 if receipt.submission_id == submission_id
-                    && receipt.target.identity() == pending.request.target.identity() =>
+                    && pending.request.target.accepts_receipt(&receipt.target) =>
             {
                 Ok(receipt)
             }
@@ -377,6 +378,13 @@ impl BoardApp {
         pending: &PendingSubmission,
         receipt: &SubmissionReceipt,
     ) -> Vec<Effect> {
+        if let Some(target) = self
+            .agent_targets
+            .iter_mut()
+            .find(|target| target.identity() == pending.request.target.identity())
+        {
+            *target = receipt.target.clone();
+        }
         let mut effects = vec![Effect::StoreIntegrationContext {
             session_id: self.state.board.session.id,
             target: receipt.target.clone(),
@@ -412,6 +420,9 @@ impl BoardApp {
             receipt.target.direction.as_str(),
             receipt.target.agent_name
         ));
+        if receipt.target.agent_session_id.is_none() {
+            effects.push(Effect::DiscoverAgents);
+        }
         effects
     }
 
@@ -466,25 +477,6 @@ fn agent_error_code(error: &AgentError) -> &'static str {
 
 fn digest(bytes: &[u8]) -> [u8; 32] {
     Sha256::digest(bytes).into()
-}
-
-fn target_fingerprint(target: &AgentTarget) -> [u8; 32] {
-    let mut hasher = Sha256::new();
-    let identity = target.identity();
-    for field in [
-        identity.provider.as_str(),
-        identity.workspace_id.as_str(),
-        identity.tab_id.as_str(),
-        identity.source_pane_id.as_str(),
-        identity.target_pane_id.as_str(),
-        identity.direction.as_str(),
-        identity.agent_kind.as_str(),
-        identity.agent_session_id.as_str(),
-    ] {
-        hasher.update(field.as_bytes());
-        hasher.update([0]);
-    }
-    hasher.finalize().into()
 }
 
 fn discovery_status(target_count: usize) -> String {

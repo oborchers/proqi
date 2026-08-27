@@ -245,8 +245,12 @@ but cut never deletes after an unconfirmed OSC 52 write.
 
 Inside a Herdr-managed pane, Proqi can discover coding agents above, below,
 left, and right. A delivery control appears only after workspace, tab, geometry,
-edge overlap, agent kind, session identity, readiness, and protocol capability
-have been verified through Herdr's structured interface.
+edge overlap, agent kind, readiness, and protocol capability have been verified
+through Herdr's structured interface. Established agents also require an exact
+session identity. A verified empty Codex may appear provisionally before it has
+a session. If Herdr acknowledges the first prompt before Codex reports that
+session, Proqi accepts the matching receipt and immediately refreshes identity
+without sending the prompt again.
 
 Both actions use Herdr's semantic prompt operation. When several thoughts are
 selected, Proqi sends one prompt containing their exact content in board order,
@@ -262,7 +266,9 @@ decides whether that input steers the current turn or becomes follow-up input.
 Herdr protocol 19 does not guarantee a distinct prompt boundary when another
 sender submits at nearly the same time. Concurrent inputs may therefore merge
 at the receiving harness. Avoid simultaneous submissions when preserving that
-boundary is critical.
+boundary is critical. Protocol 19 also cannot distinguish replacement of one
+sessionless Codex by another in the same pane during the narrow interval
+between Proqi's revalidation and delivery.
 
 Ambiguity, timeout, rejection, receipt mismatch, or protocol mismatch always
 leaves the thought unchanged. Proqi never invokes a shell, injects raw keys,

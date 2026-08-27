@@ -449,6 +449,8 @@ mod agent;
 mod agent_discovery;
 #[path = "ui_board/agent_selection.rs"]
 mod agent_selection;
+#[path = "ui_board/agent_session.rs"]
+mod agent_session;
 #[path = "ui_board/annotations.rs"]
 mod annotations;
 #[path = "ui_board/blank.rs"]
@@ -459,6 +461,8 @@ mod clipboard;
 mod composition;
 #[path = "ui_board/durability.rs"]
 mod durability;
+#[path = "ui_board/insertion_navigation.rs"]
+mod insertion_navigation;
 #[path = "ui_board/navigation.rs"]
 mod navigation;
 #[path = "ui_board/palette.rs"]

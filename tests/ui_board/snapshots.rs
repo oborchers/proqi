@@ -2,7 +2,7 @@ use super::*;
 
 use proqi::{
     domain::Direction,
-    ports::agent::{AgentState, AgentTarget, PaneContext, PaneRect},
+    ports::agent::{AgentState, AgentTarget, CODEX_AGENT_KIND, PaneContext, PaneRect},
 };
 
 #[path = "../support/snapshots.rs"]
@@ -34,9 +34,9 @@ fn adjacent_target(direction: Direction, pane_id: &str, readiness: AgentState) -
         pane_id: pane_id.to_owned(),
         workspace_id: source.workspace_id.clone(),
         tab_id: source.tab_id.clone(),
-        agent_kind: "codex".to_owned(),
+        agent_kind: CODEX_AGENT_KIND.to_owned(),
         agent_name: format!("Codex {pane_id}"),
-        agent_session_id: format!("session-{pane_id}"),
+        agent_session_id: Some(format!("session-{pane_id}")),
         readiness,
         delivery: proqi::ports::agent::AgentDeliveryCapabilities::SUBMIT_ONLY,
         rect: source.rect,
@@ -73,8 +73,28 @@ fn populated_board_with_folded_attachment() {
 #[test]
 fn durable_blank_and_editing_surface() {
     let mut fixture = Fixture::new();
-    fixture.input(UiInput::Key(UiKey::Enter));
+    fixture.input(super::navigation::visual(
+        proqi::ports::editor::CursorMovement::VisualDown,
+        false,
+    ));
+    fixture.input(super::navigation::visual(
+        proqi::ports::editor::CursorMovement::VisualDown,
+        false,
+    ));
     insta::assert_snapshot!(snapshot(&mut fixture, 50, 9, ThemePreference::Light));
+}
+
+#[test]
+fn populated_insertion_double_down_enters_a_new_blank() {
+    let mut fixture = Fixture::new();
+    super::navigation::durable_thought(&mut fixture, "existing thought");
+    for _ in 0..3 {
+        fixture.input(super::navigation::visual(
+            proqi::ports::editor::CursorMovement::VisualDown,
+            false,
+        ));
+    }
+    insta::assert_snapshot!(snapshot(&mut fixture, 50, 10, ThemePreference::Dark));
 }
 
 #[test]

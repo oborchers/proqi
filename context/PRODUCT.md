@@ -368,7 +368,9 @@ symbol. The user never needs a second action before typing.
 
 The insertion row is part of keyboard focus order. Moving down from the last
 thought focuses `+ New thought`. `Enter` or `n` creates a durable blank. Moving
-up or pressing `Esc` leaves the insertion row without creating anything.
+up or pressing `Esc` leaves the insertion row without creating anything. Two
+consecutive downward navigation commands while the insertion row remains
+focused create the blank and enter its editor, including on an empty board.
 When an editor is already at the final thought, the second consecutive blocked
 downward movement creates the blank and enters its editor directly.
 
@@ -425,9 +427,9 @@ terminal. Submission controls appear only when an installed integration can
 identify an eligible adjacent agent with confidence.
 
 Herdr is the first supported integration. It provides directional pane lookup,
-agent detection, session identity, readiness state, and an agent-aware prompt
-operation. Proqi uses that semantic operation instead of simulating arbitrary
-terminal keystrokes.
+agent detection, optional session identity, readiness state, and an agent-aware
+prompt operation. Proqi uses that semantic operation instead of simulating
+arbitrary terminal keystrokes.
 
 A submission target is eligible only when all of the following are true:
 
@@ -441,6 +443,12 @@ A submission target is eligible only when all of the following are true:
 
 Directional lookup is never trusted without these independent checks. The
 product never guesses a target and never falls back to raw input injection.
+An otherwise eligible sessionless Codex is the sole provisional exception:
+Proqi revalidates the same empty Codex pane immediately before delivery and
+accepts only a matching Codex receipt. Because Herdr can acknowledge the prompt
+before Codex's session hook reports the new identity, a still-provisional
+receipt triggers immediate rediscovery without resending. Other sessionless
+agent kinds remain ineligible.
 
 Prompt delivery has two dispositions over the same immediate semantic submit
 operation. `Submit` is the default and deletes the source thought or selected
@@ -455,7 +463,10 @@ Herdr protocol 19 does not guarantee a distinct user-turn boundary when another
 sender submits concurrently. Overlapping inputs can therefore merge at the
 receiving harness even though Herdr returns an accepted receipt. Proqi treats
 this as a known integration limitation and preserves its ordinary verified
-submission workflow.
+submission workflow. Protocol 19 also has no stable pre-session agent-instance
+identity or atomic expected-instance precondition. Replacing one sessionless
+Codex with another in the same pane during the narrow interval between
+revalidation and delivery is therefore not detectable by Proqi.
 
 Each verified adjacent target appears once in the integration row, without its
 readiness label. `s Submit` and `S Submit & keep` are shown only when

@@ -414,7 +414,8 @@ mod tests {
             application::ApplicationError,
             domain::Direction,
             ports::agent::{
-                AgentDeliveryCapabilities, AgentState, AgentTarget, PaneContext, PaneRect,
+                AgentDeliveryCapabilities, AgentState, AgentTarget, CODEX_AGENT_KIND, PaneContext,
+                PaneRect,
             },
             ui::UiKey,
         };
@@ -456,9 +457,9 @@ mod tests {
             pane_id: "target".to_owned(),
             workspace_id: source.workspace_id.clone(),
             tab_id: source.tab_id.clone(),
-            agent_kind: "codex".to_owned(),
+            agent_kind: CODEX_AGENT_KIND.to_owned(),
             agent_name: "Codex".to_owned(),
-            agent_session_id: "agent-session".to_owned(),
+            agent_session_id: Some("agent-session".to_owned()),
             readiness: AgentState::Working,
             delivery: AgentDeliveryCapabilities::SUBMIT_ONLY,
             rect: PaneRect {

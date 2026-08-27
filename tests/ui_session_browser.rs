@@ -5,7 +5,9 @@ use std::path::PathBuf;
 use proqi::{
     adapters::memory::FakeIdGenerator,
     domain::{Direction, IntegrationContext, Timestamp},
-    ports::{environment::IdGenerator, runtime::InstanceInfo, store::SessionHit},
+    ports::{
+        agent::CODEX_AGENT_KIND, environment::IdGenerator, runtime::InstanceInfo, store::SessionHit,
+    },
     ui::{
         BrowserAction, BrowserAvailability, PointerButton, PointerInput, PointerKind,
         SessionBrowser, SessionBrowserItem, Theme, ThemePreference, UiInput, UiKey, render_browser,
@@ -234,7 +236,7 @@ fn wide_and_narrow_buffers_show_states_groups_and_selected_detail() {
     items[0].hit.integration_context = Some(IntegrationContext {
         provider: "herdr".to_owned(),
         direction: Direction::Left,
-        agent_kind: "codex".to_owned(),
+        agent_kind: CODEX_AGENT_KIND.to_owned(),
         agent_name: "Codex review".to_owned(),
         workspace_hint: Some("proqi".to_owned()),
         tab_hint: Some("main".to_owned()),

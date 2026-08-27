@@ -1,6 +1,7 @@
 //! Terminal-independent board interaction state.
 
 mod agent;
+mod agent_identity;
 mod clipboard;
 mod commands;
 mod control;
@@ -82,6 +83,13 @@ enum InsertionFocus {
     #[default]
     Inactive,
     Active,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+enum InsertionConfirmation {
+    #[default]
+    Idle,
+    Armed,
 }
 
 /// Normalized keys accepted by the board UI.
@@ -170,6 +178,7 @@ pub struct BoardApp {
     drag_target: Option<usize>,
     hovered: Option<HitTarget>,
     insertion_focus: InsertionFocus,
+    insertion_confirmation: InsertionConfirmation,
     edit_boundary: Option<CursorMovement>,
     palette: Option<palette::PaletteState>,
     search: Option<search::SearchState>,
@@ -228,6 +237,7 @@ impl BoardApp {
             drag_target: None,
             hovered: None,
             insertion_focus,
+            insertion_confirmation: InsertionConfirmation::Idle,
             edit_boundary: None,
             palette: None,
             search: None,
@@ -288,6 +298,7 @@ impl BoardApp {
         ) {
             self.edit_boundary = None;
         }
+        self.reset_insertion_confirmation(&input);
         if self.palette.is_some() {
             return self.handle_palette_input(&input, ids, clock);
         }
@@ -409,6 +420,7 @@ impl BoardApp {
         clock: &impl Clock,
     ) -> Vec<Effect> {
         self.insertion_focus = InsertionFocus::Inactive;
+        self.insertion_confirmation = InsertionConfirmation::Idle;
         let effects = self.reduce(Action::CreateThought {
             thought_id: ids.thought_id(),
             operation_id: ids.operation_id(),

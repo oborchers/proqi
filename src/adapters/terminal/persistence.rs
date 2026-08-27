@@ -438,7 +438,7 @@ mod tests {
         let context = crate::domain::IntegrationContext {
             provider: "herdr".to_owned(),
             direction: crate::domain::Direction::Right,
-            agent_kind: "codex".to_owned(),
+            agent_kind: crate::ports::agent::CODEX_AGENT_KIND.to_owned(),
             agent_name: "fixture".to_owned(),
             workspace_hint: Some("w1".to_owned()),
             tab_hint: Some("w1:t1".to_owned()),

@@ -6,6 +6,12 @@ use thiserror::Error;
 
 use crate::domain::{Direction, SubmissionId};
 
+/// Canonical adjacent-agent kind label for the Codex harness.
+pub const CODEX_AGENT_KIND: &str = "codex";
+
+/// Canonical adjacent-agent kind label for the Claude harness.
+pub const CLAUDE_AGENT_KIND: &str = "claude";
+
 /// Terminal-cell rectangle reported by an integration.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PaneRect {
@@ -184,8 +190,8 @@ pub struct AgentTarget {
     pub agent_kind: String,
     /// User-facing identity.
     pub agent_name: String,
-    /// Stable harness session identity.
-    pub agent_session_id: String,
+    /// Stable harness session identity, absent before an empty Codex creates one.
+    pub agent_session_id: Option<String>,
     /// Verified readiness.
     pub readiness: AgentState,
     /// Delivery behaviors verified for this target.
@@ -216,8 +222,8 @@ pub struct AgentTargetIdentity {
     pub direction: Direction,
     /// Recognized agent harness.
     pub agent_kind: String,
-    /// Stable harness session identity.
-    pub agent_session_id: String,
+    /// Stable harness session identity, absent only for a provisional empty Codex.
+    pub agent_session_id: Option<String>,
 }
 
 impl AgentTarget {
@@ -234,6 +240,28 @@ impl AgentTarget {
             agent_kind: self.agent_kind.clone(),
             agent_session_id: self.agent_session_id.clone(),
         }
+    }
+
+    /// Whether a receipt preserves an established or provisional target identity.
+    #[must_use]
+    pub fn accepts_receipt(&self, receipt: &Self) -> bool {
+        let expected = self.identity();
+        let actual = receipt.identity();
+        expected.provider == actual.provider
+            && expected.workspace_id == actual.workspace_id
+            && expected.tab_id == actual.tab_id
+            && expected.source_pane_id == actual.source_pane_id
+            && expected.target_pane_id == actual.target_pane_id
+            && expected.direction == actual.direction
+            && expected.agent_kind == actual.agent_kind
+            && match (&expected.agent_session_id, &actual.agent_session_id) {
+                (Some(expected), Some(actual)) => !expected.trim().is_empty() && expected == actual,
+                (None, Some(actual)) => {
+                    expected.agent_kind == CODEX_AGENT_KIND && !actual.trim().is_empty()
+                }
+                (None, None) => expected.agent_kind == CODEX_AGENT_KIND,
+                (Some(_), None) => false,
+            }
     }
 }
 

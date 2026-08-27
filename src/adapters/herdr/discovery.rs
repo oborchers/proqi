@@ -5,7 +5,7 @@ use crate::{
     ports::{
         agent::{
             AgentCapabilities, AgentDeliveryCapabilities, AgentError, AgentState, AgentTarget,
-            PaneContext, PaneRect,
+            CODEX_AGENT_KIND, PaneContext, PaneRect,
         },
         environment::ProcessRunner,
     },
@@ -14,8 +14,8 @@ use crate::{
 use super::{
     DISCOVERY_TIMEOUT, HerdrGateway, SUPPORTED_PROTOCOL, SUPPORTED_SCHEMA,
     contract::{
-        AgentsBody, CurrentBody, Envelope, LayoutBody, NeighborBody, PaneInfo, RawReadiness,
-        SchemaDocument, SnapshotBody,
+        AgentSession, AgentsBody, CurrentBody, Envelope, LayoutBody, NeighborBody, PaneInfo,
+        RawReadiness, SchemaDocument, SnapshotBody,
     },
 };
 
@@ -194,18 +194,7 @@ fn eligible_target(
         .as_ref()
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| AgentError::Unsupported("neighbor is not a recognized agent".to_owned()))?;
-    let session = agent.agent_session.as_ref().ok_or_else(|| {
-        AgentError::Unsupported("neighbor has no agent session identity".to_owned())
-    })?;
-    if session.value.trim().is_empty()
-        || session.agent != *kind
-        || session.kind.trim().is_empty()
-        || session.source.trim().is_empty()
-    {
-        return Err(AgentError::Malformed(
-            "agent session identity is inconsistent".to_owned(),
-        ));
-    }
+    let agent_session_id = eligible_session(kind, agent.agent_session.as_ref())?;
     let readiness = readiness(agent.agent_status)?;
     let name = agent
         .name
@@ -220,12 +209,37 @@ fn eligible_target(
         tab_id: agent.tab_id.clone(),
         agent_kind: kind.clone(),
         agent_name: name,
-        agent_session_id: session.value.clone(),
+        agent_session_id,
         readiness,
         delivery: AgentDeliveryCapabilities::SUBMIT_ONLY,
         rect,
         source: source.clone(),
     })
+}
+
+fn eligible_session(
+    kind: &str,
+    session: Option<&AgentSession>,
+) -> Result<Option<String>, AgentError> {
+    let Some(session) = session else {
+        return if kind == CODEX_AGENT_KIND {
+            Ok(None)
+        } else {
+            Err(AgentError::Unsupported(
+                "neighbor has no agent session identity".to_owned(),
+            ))
+        };
+    };
+    if session.value.trim().is_empty()
+        || session.agent != kind
+        || session.kind.trim().is_empty()
+        || session.source.trim().is_empty()
+    {
+        return Err(AgentError::Malformed(
+            "agent session identity is inconsistent".to_owned(),
+        ));
+    }
+    Ok(Some(session.value.clone()))
 }
 
 fn readiness(value: Option<RawReadiness>) -> Result<AgentState, AgentError> {

@@ -7,8 +7,8 @@ use crate::{
     domain::Direction,
     ports::{
         agent::{
-            AgentError, AgentGateway, AgentState, AgentTarget, PaneContext, PanePresentation,
-            PaneRect, SubmissionRequest,
+            AgentError, AgentGateway, AgentState, AgentTarget, CODEX_AGENT_KIND, PaneContext,
+            PanePresentation, PaneRect, SubmissionRequest,
         },
         environment::{IdGenerator, ProcessError, ProcessOutput, ProcessRequest, ProcessRunner},
     },
@@ -16,6 +16,8 @@ use crate::{
 
 use super::HerdrGateway;
 
+#[path = "tests/sessionless.rs"]
+mod sessionless;
 #[path = "tests/submission_receipts.rs"]
 mod submission_receipts;
 
@@ -138,8 +140,8 @@ fn right_rect() -> PaneRect {
 fn agent(pane_id: &str, workspace: &str, tab: &str, status: &str) -> Value {
     json!({
         "pane_id":pane_id,"workspace_id":workspace,"tab_id":tab,
-        "agent":"codex","name":"reviewer","agent_status":status,
-        "agent_session":{"agent":"codex","kind":"id","source":"herdr:codex","value":"agent-session-1"}
+        "agent":CODEX_AGENT_KIND,"name":"reviewer","agent_status":status,
+        "agent_session":{"agent":CODEX_AGENT_KIND,"kind":"id","source":"herdr:codex","value":"agent-session-1"}
     })
 }
 
@@ -316,9 +318,9 @@ fn target(context: &PaneContext) -> AgentTarget {
         pane_id: "w1:p2".to_owned(),
         workspace_id: "w1".to_owned(),
         tab_id: "w1:t1".to_owned(),
-        agent_kind: "codex".to_owned(),
+        agent_kind: CODEX_AGENT_KIND.to_owned(),
         agent_name: "reviewer".to_owned(),
-        agent_session_id: "agent-session-1".to_owned(),
+        agent_session_id: Some("agent-session-1".to_owned()),
         readiness: AgentState::Idle,
         delivery: crate::ports::agent::AgentDeliveryCapabilities::SUBMIT_ONLY,
         rect: right_rect(),

@@ -406,7 +406,7 @@ fn integration_context_round_trips_without_conversation_content() {
     let context = IntegrationContext {
         provider: "herdr".to_owned(),
         direction: Direction::Left,
-        agent_kind: "codex".to_owned(),
+        agent_kind: proqi::ports::agent::CODEX_AGENT_KIND.to_owned(),
         agent_name: "Codex".to_owned(),
         workspace_hint: Some("workspace".to_owned()),
         tab_hint: Some("tab".to_owned()),

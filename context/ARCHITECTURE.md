@@ -658,8 +658,10 @@ Board-mode printable keys always pass through the configured command map, even
 when the insertion row or a durable blank has focus. The second blocked
 downward movement at the end of a non-empty final edited thought creates a
 durable blank and enters its editor. Repeated movement while that blank remains
-empty cannot create additional thoughts. Other edit boundaries use the same
-navigation state machine.
+empty cannot create additional thoughts. On the insertion row, two consecutive
+semantic downward navigation commands perform the same durable create-and-edit
+transition; unrelated or reorder input clears the confirmation. Other edit
+boundaries use the same navigation state machine.
 
 The normalized paste payload carries exact text plus optional typed provenance.
 Attachment annotations retain only presentation-safe metadata and byte ranges;
@@ -687,7 +689,7 @@ The adapter:
 - Detects Herdr and negotiates its client and server protocol.
 - Resolves neighboring panes in all four directions.
 - Independently verifies pane identity, workspace, tab, geometry, agent type,
-  session identity, and interactive state.
+  optional session identity, and interactive state.
 - Invokes the semantic prompt command directly without a shell.
 - Passes text as a distinct argument or standard input supported by the
   integration. It never interpolates prompt text into shell syntax.
@@ -704,7 +706,11 @@ Both visible actions invoke the same immediate semantic prompt command.
 accepted receipt whose submission identifier and target match the pending
 request. Matching uses stable target identity fields and deliberately ignores
 volatile readiness, display names, and geometry observed after delivery. The
-matching `agent_prompted` receipt establishes acceptance. Any
+sole provisional transition permits a sessionless Codex request to match a
+receipt that preserves its pane and agent identity, whether the receipt already
+contains the new session or precedes the session hook. Established sessions
+still require exact identity.
+The matching `agent_prompted` receipt establishes acceptance. Any
 post-submit agent state is advisory, including `blocked`, `unknown`, or no
 reported state. The accepted outcome is journaled durably before an unchanged
 thought may be removed. That deletion remains undoable. Every failure preserves
@@ -730,13 +736,20 @@ contract. Initial discovery is silent so
 ordinary terminals retain an uncluttered board. An explicit refresh, or a
 submission attempt with no verified target, reports why direct submission is
 unavailable. Every submission revalidates the complete target immediately
-before invoking Herdr's semantic prompt operation.
+before invoking Herdr's semantic prompt operation. A ready sessionless Codex is
+eligible provisionally; other sessionless agents are hidden. A valid Codex
+session from the receipt replaces the provisional target immediately. When the
+receipt precedes the session hook, Proqi accepts the matching receipt and
+immediately rediscovers adjacent targets without retrying the prompt.
 
 Herdr protocol 19 acknowledges accepted text entry but does not guarantee a
 distinct prompt boundary when another sender submits concurrently. This is a
 known provider-contract limitation. Proqi retains target verification, receipt
 matching, durable journaling, and remove-only-after-acceptance semantics, but
-cannot prevent the receiving harness from merging overlapping inputs.
+cannot prevent the receiving harness from merging overlapping inputs. Protocol
+19 also cannot atomically reject replacement of one sessionless Codex by
+another in the same pane between revalidation and delivery because it exposes
+neither a pre-session instance identity nor an expected-instance precondition.
 
 Herdr also implements a separate display-only `PanePresentation` port. In a
 managed pane, the terminal runtime publishes `title=proqi` and

@@ -35,10 +35,11 @@ pub(super) fn submit<R: ProcessRunner>(
         &["agent", "prompt", &target.pane_id, &request.content],
         SUBMISSION_TIMEOUT,
     )?;
-    verify_prompted(target, &response.result)?;
+    let mut accepted_target = target.clone();
+    accepted_target.agent_session_id = verify_prompted(target, &response.result)?;
     Ok(SubmissionReceipt {
         submission_id: request.submission_id,
-        target: target.clone(),
+        target: accepted_target,
         post_state: response_state(response.result.agent.agent_status),
     })
 }
@@ -46,20 +47,48 @@ pub(super) fn submit<R: ProcessRunner>(
 fn verify_prompted(
     target: &crate::ports::agent::AgentTarget,
     response: &PromptBody,
-) -> Result<(), AgentError> {
-    let session = response.agent.agent_session.as_ref();
+) -> Result<Option<String>, AgentError> {
+    let session_id = receipt_session(target, response.agent.agent_session.as_ref())?;
     if response.kind != "agent_prompted"
         || response.agent.pane_id != target.pane_id
         || response.agent.workspace_id != target.workspace_id
         || response.agent.tab_id != target.tab_id
         || response.agent.agent.as_deref() != Some(&target.agent_kind)
-        || session.map(|value| value.value.as_str()) != Some(&target.agent_session_id)
     {
         return Err(AgentError::Malformed(
             "prompt receipt does not match the verified target".to_owned(),
         ));
     }
-    Ok(())
+    Ok(session_id)
+}
+
+fn receipt_session(
+    target: &crate::ports::agent::AgentTarget,
+    session: Option<&super::contract::AgentSession>,
+) -> Result<Option<String>, AgentError> {
+    let Some(session) = session else {
+        return if target.agent_session_id.is_none() {
+            Ok(None)
+        } else {
+            Err(AgentError::Malformed(
+                "prompt receipt lost its agent session identity".to_owned(),
+            ))
+        };
+    };
+    if session.agent != target.agent_kind
+        || session.kind.trim().is_empty()
+        || session.source.trim().is_empty()
+        || session.value.trim().is_empty()
+        || target
+            .agent_session_id
+            .as_ref()
+            .is_some_and(|expected| expected != &session.value)
+    {
+        return Err(AgentError::Malformed(
+            "prompt receipt has an inconsistent agent session identity".to_owned(),
+        ));
+    }
+    Ok(Some(session.value.clone()))
 }
 
 const fn response_state(value: Option<RawReadiness>) -> Option<AgentState> {
