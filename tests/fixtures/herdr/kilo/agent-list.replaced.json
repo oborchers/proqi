@@ -1,0 +1,23 @@
+{
+  "id": "fixture:agent:list",
+  "result": {
+    "agents": [
+      {
+        "agent": "kilo",
+        "agent_session": {
+          "agent": "kilo",
+          "kind": "id",
+          "source": "herdr:kilo",
+          "value": "ses_fixture_kilo_replacement"
+        },
+        "agent_status": "idle",
+        "interactive_ready": true,
+        "name": "kilo-reviewer",
+        "pane_id": "w1:p2",
+        "tab_id": "w1:t1",
+        "workspace_id": "w1"
+      }
+    ],
+    "type": "agent_list"
+  }
+}

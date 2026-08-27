@@ -21,6 +21,8 @@ use super::HerdrGateway;
 mod cline;
 #[path = "tests/hermes.rs"]
 mod hermes;
+#[path = "tests/kilo.rs"]
+mod kilo;
 #[path = "tests/opencode.rs"]
 mod opencode;
 #[path = "tests/pi.rs"]

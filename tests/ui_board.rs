@@ -467,6 +467,8 @@ mod composition;
 mod durability;
 #[path = "ui_board/insertion_navigation.rs"]
 mod insertion_navigation;
+#[path = "ui_board/kilo.rs"]
+mod kilo;
 #[path = "ui_board/navigation.rs"]
 mod navigation;
 #[path = "ui_board/palette.rs"]
