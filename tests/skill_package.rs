@@ -1,6 +1,6 @@
 //! Repository skill packaging and stable CLI discovery contracts.
 
-use std::{process::Command, str::FromStr};
+use std::{fs, path::Path, process::Command, str::FromStr};
 
 use proqi::domain::{OperationId, SessionId, ThoughtId};
 
@@ -9,6 +9,8 @@ const OPENAI: &str = include_str!("../skills/proqi/agents/openai.yaml");
 const DEBUG_SKILL: &str = include_str!("../skills/proqi-debug/SKILL.md");
 const DEBUG_OPENAI: &str = include_str!("../skills/proqi-debug/agents/openai.yaml");
 const DEBUG_STORAGE: &str = include_str!("../skills/proqi-debug/references/storage.md");
+const RELEASE_SKILL: &str = include_str!("../.agents/skills/release/SKILL.md");
+const RELEASE_NOTES: &str = include_str!("../.agents/skills/release/references/release-notes.md");
 const README: &str = include_str!("../README.md");
 
 #[test]
@@ -52,6 +54,30 @@ fn debug_skill_is_read_only_first_and_issue_creation_requires_approval() {
     assert!(DEBUG_STORAGE.contains("`-wal` and"));
     assert!(DEBUG_STORAGE.contains("copied independently"));
     assert!(README.contains("npx skills add oborchers/proqi --skill proqi-debug -g"));
+}
+
+#[test]
+fn local_release_skill_requires_exact_publication_confirmation() {
+    assert!(RELEASE_SKILL.starts_with("---\nname: release\ndescription:"));
+    assert!(RELEASE_SKILL.contains("This is a repository-local maintainer skill."));
+    assert!(RELEASE_SKILL.contains("Always stop immediately before creating or pushing"));
+    assert!(RELEASE_SKILL.contains("This confirmation is mandatory"));
+    assert!(RELEASE_SKILL.contains("Do not infer it from earlier authority."));
+    assert!(RELEASE_SKILL.contains("Do not create or publish a GitHub\n   Release manually."));
+    assert!(RELEASE_NOTES.contains(".github/release-notes/vX.Y.Z.md"));
+    assert!(RELEASE_NOTES.contains("## Review checklist"));
+
+    let claude_skill = Path::new(env!("CARGO_MANIFEST_DIR")).join(".claude/skills/release");
+    assert!(
+        fs::symlink_metadata(&claude_skill)
+            .expect("Claude release skill metadata")
+            .file_type()
+            .is_symlink()
+    );
+    assert_eq!(
+        fs::read_link(claude_skill).expect("Claude release skill target"),
+        Path::new("../../.agents/skills/release")
+    );
 }
 
 #[test]
