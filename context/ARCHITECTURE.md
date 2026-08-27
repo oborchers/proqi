@@ -707,8 +707,7 @@ Both visible actions invoke the same immediate semantic prompt command.
 accepted receipt whose submission identifier and target match the pending
 request. Matching uses stable target identity fields and deliberately ignores
 volatile readiness, display names, and geometry observed after delivery. The
-explicit provisional transitions permit sessionless Codex, Cline, Kilo, or
-OpenCode
+explicit provisional transitions permit sessionless Codex, Kilo, or OpenCode
 requests to match a receipt that preserves pane and agent identity, whether the
 receipt already contains the new session or precedes the session hook.
 Established sessions still require exact identity.
@@ -739,7 +738,7 @@ ordinary terminals retain an uncluttered board. An explicit refresh, or a
 submission attempt with no verified target, reports why direct submission is
 unavailable. Every submission revalidates the complete target immediately
 before invoking Herdr's semantic prompt operation. Ready sessionless Codex,
-Cline, Kilo, and OpenCode targets are eligible provisionally; other sessionless
+Kilo, and OpenCode targets are eligible provisionally; other sessionless
 agents are hidden. A valid session from the matching receipt replaces the
 provisional target immediately. When the receipt precedes the session hook,
 Proqi accepts the

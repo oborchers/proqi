@@ -247,7 +247,7 @@ Inside a Herdr-managed pane, Proqi can discover coding agents above, below,
 left, and right. A delivery control appears only after workspace, tab, geometry,
 edge overlap, agent kind, readiness, and protocol capability have been verified
 through Herdr's structured interface. Established agents also require an exact
-session identity. Codex, Cline, Kilo, and OpenCode may appear provisionally
+session identity. Codex, Kilo, and OpenCode may appear provisionally
 before they have a session. If Herdr acknowledges the first prompt before a
 session hook reports an identity, Proqi accepts the matching receipt and
 immediately refreshes discovery without sending the prompt again.
@@ -259,14 +259,13 @@ Compatibility was qualified against Herdr 0.8.0/protocol 19:
 | Claude Code | Supported | Established identity | Uses Herdr's established-session path |
 | Codex | Supported | Provisional first prompt, then established | Same-pane replacement race applies before the first session exists |
 | OpenCode | Conditional | Provisional first prompt; resume may remain sessionless | Install the official OpenCode integration; resumed identity reporting is blocked by [Herdr issue #2548](https://github.com/herdrdev/herdr/issues/2548) |
-| Cline | Conditional | Provisional | Herdr 0.8.0 has no installable Cline state hook, so session and settled lifecycle reporting remain incomplete |
+| Cline | Deferred | Not supported | Requalify after Herdr provides a stable Cline state/session hook |
 | Kilo | Conditional | Provisional first prompt, then established | Install the official Kilo integration; the protocol-19 provisional replacement race remains |
 | Pi | Supported | Established after startup trust | Install the official Pi integration |
 | Hermes | Supported | Established before eligibility | Install the official Hermes integration |
 
 The detailed qualification records are
-[OpenCode](context/harnesses/opencode.md),
-[Cline](context/harnesses/cline.md), [Kilo](context/harnesses/kilo.md),
+[OpenCode](context/harnesses/opencode.md), [Kilo](context/harnesses/kilo.md),
 [Pi](context/harnesses/pi.md), and [Hermes](context/harnesses/hermes.md).
 
 Both actions use Herdr's semantic prompt operation. When several thoughts are

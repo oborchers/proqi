@@ -443,7 +443,7 @@ A submission target is eligible only when all of the following are true:
 
 Directional lookup is never trusted without these independent checks. The
 product never guesses a target and never falls back to raw input injection.
-Otherwise eligible sessionless Codex, Cline, Kilo, and OpenCode panes are the
+Otherwise eligible sessionless Codex, Kilo, and OpenCode panes are the
 explicit provisional exceptions. Kilo cannot report a stable conversation
 identity until its first prompt begins, even with the official hook installed.
 Proqi revalidates the same empty pane immediately before delivery and accepts

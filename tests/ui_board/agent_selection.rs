@@ -3,19 +3,10 @@ use super::*;
 use proqi::{
     domain::Direction,
     ports::agent::{
-        AgentSessionBinding, AgentState, CLAUDE_AGENT_KIND, CLINE_AGENT_KIND, CODEX_AGENT_KIND,
-        HarnessKind, OPENCODE_AGENT_KIND, SubmissionReceipt,
+        AgentState, CLAUDE_AGENT_KIND, CODEX_AGENT_KIND, OPENCODE_AGENT_KIND, SubmissionReceipt,
     },
     ui::UiKey,
 };
-
-fn cline_target(direction: Direction, pane_id: &str) -> proqi::ports::agent::AgentTarget {
-    let mut target = super::agent::target(direction, pane_id);
-    target.agent_kind = HarnessKind::new(CLINE_AGENT_KIND).expect("fixture harness");
-    target.agent_name = format!("Cline {pane_id}");
-    target.agent_session = AgentSessionBinding::provisional();
-    target
-}
 
 #[test]
 fn opencode_routes_correctly_in_both_mixed_harness_positions() {
@@ -101,39 +92,4 @@ fn selected_thoughts_submit_once_in_board_order_and_remove_as_one_undo_step() {
 
     fixture.input(UiInput::Key(UiKey::Undo));
     assert_eq!(fixture.app.state.board.live_thoughts().len(), 2);
-}
-
-#[test]
-fn mixed_rows_route_to_cline_in_both_candidate_positions() {
-    for (cline_direction, choice, expected_row) in [
-        (Direction::Left, 'h', "← Cline   → Codex"),
-        (Direction::Right, 'l', "← Codex   → Cline"),
-    ] {
-        let mut fixture = Fixture::new();
-        super::agent::prepare_thought(&mut fixture);
-        let left = if cline_direction == Direction::Left {
-            cline_target(Direction::Left, "w1:p2")
-        } else {
-            super::agent::target(Direction::Left, "w1:p2")
-        };
-        let right = if cline_direction == Direction::Right {
-            cline_target(Direction::Right, "w1:p3")
-        } else {
-            super::agent::target(Direction::Right, "w1:p3")
-        };
-        fixture.app.complete_agent_discovery(Ok(vec![left, right]));
-
-        let rendered = text(draw(&mut fixture, 120, 12).backend().buffer());
-        assert!(rendered.contains(expected_row), "{rendered}");
-        assert!(
-            fixture
-                .effects(UiInput::Key(UiKey::Character('S')))
-                .is_empty()
-        );
-        let effects = fixture.effects(UiInput::Key(UiKey::Character(choice)));
-        let request = super::agent::start_submission(&mut fixture, &effects);
-        assert_eq!(request.target.direction, cline_direction);
-        assert_eq!(request.target.agent_kind.as_str(), CLINE_AGENT_KIND);
-        assert!(request.target.agent_session.is_provisional());
-    }
 }

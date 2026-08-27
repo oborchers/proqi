@@ -17,8 +17,6 @@ use crate::{
 
 use super::HerdrGateway;
 
-#[path = "tests/cline.rs"]
-mod cline;
 #[path = "tests/hermes.rs"]
 mod hermes;
 #[path = "tests/kilo.rs"]
