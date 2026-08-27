@@ -18,6 +18,9 @@ pub const CLAUDE_AGENT_KIND: &str = "claude";
 /// Canonical adjacent-agent kind label for the `OpenCode` harness.
 pub const OPENCODE_AGENT_KIND: &str = "opencode";
 
+/// Canonical adjacent-agent kind label for the Kilo harness.
+pub const KILO_AGENT_KIND: &str = "kilo";
+
 /// Validated, open-ended harness kind reported by an integration.
 ///
 /// This is intentionally not an enum: Herdr may add harnesses independently of

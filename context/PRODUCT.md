@@ -5,7 +5,7 @@ Status: v0.1.0 product contract
 Product name: Proqi
 
 Command: `proqi`
-Last updated: 2026-08-25
+Last updated: 2026-08-27
 
 ## Vision
 
@@ -443,10 +443,12 @@ A submission target is eligible only when all of the following are true:
 
 Directional lookup is never trusted without these independent checks. The
 product never guesses a target and never falls back to raw input injection.
-Otherwise eligible sessionless Codex, Cline, and OpenCode panes are the explicit
-provisional exceptions. Proqi revalidates the same empty pane and harness kind
-immediately before delivery and accepts only a matching receipt. Because Herdr
-can acknowledge the prompt before a session hook reports the new identity, a
+Otherwise eligible sessionless Codex, Cline, Kilo, and OpenCode panes are the
+explicit provisional exceptions. Kilo cannot report a stable conversation
+identity until its first prompt begins, even with the official hook installed.
+Proqi revalidates the same empty pane immediately before delivery and accepts
+only a matching receipt for the same harness kind. Because Herdr can
+acknowledge the prompt before a session hook reports the new identity, a
 still-provisional receipt triggers immediate rediscovery without resending. A
 later established session replaces the provisional binding and must match
 exactly thereafter. Other sessionless agent kinds remain ineligible.

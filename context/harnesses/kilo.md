@@ -1,6 +1,6 @@
 # Kilo harness qualification
 
-Status: passed for established Kilo sessions
+Status: conditional pass for full Kilo submission support
 
 This is the unique qualification record for Herdr harness kind `kilo`. It
 applies to the implementation commit containing this file, based on
@@ -17,8 +17,9 @@ session identifiers, private paths, credentials, or conversation transcripts.
   `54547cd`
 - [x] Platform and terminal: macOS 15.7.1 arm64, Herdr-managed terminal panes
 - [x] Qualification date: 2026-08-27
-- [x] Result: pass for established sessions; a fresh sessionless Kilo remains
-  deliberately ineligible until Kilo creates or resumes a conversation
+- [x] Result: conditional pass; fresh sessionless first-prompt delivery and
+  established delivery both work, with the documented protocol-19 same-pane,
+  same-kind provisional replacement race
 - [x] Deterministic evidence:
   `src/adapters/herdr/tests/kilo.rs`, `tests/ui_board/kilo.rs`, and the redacted
   JSON under `tests/fixtures/herdr/kilo`
@@ -29,8 +30,8 @@ session identifiers, private paths, credentials, or conversation transcripts.
 ## Completion rule
 
 - [x] Every required item below is checked.
-- [x] The conditional sessionless section is marked not applicable to Proqi
-  delivery, with the remaining product limitation stated explicitly.
+- [x] The conditional sessionless section is completed, with the remaining
+  protocol-19 replacement limitation stated explicitly.
 - [x] Deterministic tests use recorded redacted JSON and do not depend on live
   credentials, user configuration, timing, or a Herdr server.
 - [x] Live tests used the real Kilo harness inside Herdr; credentials were
@@ -62,8 +63,8 @@ session identifiers, private paths, credentials, or conversation transcripts.
 
 ### Readiness and lifecycle
 
-- [x] Sessionless, launch-pending, and explicitly noninteractive Kilo fixtures
-  are hidden.
+- [x] Ready sessionless Kilo is an explicit provisional target; launch-pending
+  and explicitly noninteractive Kilo fixtures remain hidden.
 - [x] Live `idle` corresponded to an interactive Kilo ready for input.
 - [x] A live semantic prompt produced an observed `working` transition.
 - [x] Completed unseen work settled as `done`; seen work settled as `idle` or
@@ -87,8 +88,9 @@ session identifiers, private paths, credentials, or conversation transcripts.
   argument with no shell interpolation.
 - [x] Each live operation produced one Kilo submission and one
   `agent_prompted` receipt.
-- [x] Accepted receipts matched pane, workspace, tab, kind, and established
-  session; replacement-session receipts fail closed.
+- [x] Accepted receipts matched pane, workspace, tab, kind, and the applicable
+  provisional or established session policy; replacement-session receipts fail
+  closed.
 - [x] Prompts from settled state produced observed working/done transitions.
 - [x] A prompt sent while Kilo was working was accepted as follow-up input and
   processed after the active turn; Proqi does not reinterpret that policy.
@@ -111,8 +113,8 @@ session identifiers, private paths, credentials, or conversation transcripts.
   list and layout snapshot.
 - [x] Self, cross-tab, cross-workspace, non-overlapping, invalid-geometry,
   duplicate, and ambiguous candidates fail closed in deterministic tests.
-- [x] One established Kilo appeared exactly once with the correct arrow,
-  `Kilo` label, and live display name.
+- [x] One provisional or established Kilo appeared exactly once with the
+  correct arrow, `Kilo` label, and live display name.
 - [x] Passive unsupported discovery remained silent; explicit refresh reported
   that no verified adjacent agent existed.
 - [x] Refresh after live start, exit, and replacement updated the same running
@@ -138,7 +140,7 @@ session identifiers, private paths, credentials, or conversation transcripts.
 
 ### One adjacent Kilo
 
-- [x] One established live Kilo exposed direct `s Submit` and
+- [x] One provisional or established live Kilo exposed direct `s Submit` and
   `S Submit & keep` actions.
 - [x] Live Submit & keep returned acceptance and preserved the source.
 - [x] Live Submit removed the unchanged source only after acceptance.
@@ -202,37 +204,48 @@ session identifiers, private paths, credentials, or conversation transcripts.
 
 ### Required default
 
-- [x] A fresh Kilo is interactive before it has a conversation identity; Proqi
-  did not consider it eligible.
-- [x] Live explicit refresh beside that fresh Kilo showed no verified target.
-- [x] After a native Kilo prompt caused the official hook to publish a stable
-  identity, refresh exposed the Kilo target automatically.
-- [x] Established Kilo uses the generic open `HarnessKind` and required-session
-  policy with no Kilo-specific product branch.
-- [x] No `KILO_AGENT_KIND` constant was added because product logic does not
-  branch on Kilo.
+- [x] A fresh Kilo is interactive before it has a conversation identity and is
+  exposed as an explicit provisional target.
+- [x] Live initial discovery beside that fresh Kilo showed one verified `Kilo`
+  target without requiring a native bootstrap prompt.
+- [x] After the official hook published a stable identity, explicit discovery
+  upgraded the target to the established session.
+- [x] Established Kilo continues to use the generic open `HarnessKind` path.
+- [x] Product logic branches only in the centralized `SessionPolicy`, using the
+  canonical `KILO_AGENT_KIND` constant.
 
-### Conditional sessionless delivery: not applicable
+### Conditional sessionless delivery: completed
 
-Kilo 7.5.5 does not publish a stable session until its first prompt begins,
-even when the official Herdr Kilo integration is installed. Proqi does not
-deliver that first prompt: unlike Codex, Kilo has no reviewed provisional
-identity exception. The user must begin or resume the Kilo conversation
-natively, after which established-session support is complete.
+Kilo 7.5.5 cannot publish a stable session until its first prompt begins, even
+when the official Herdr Kilo integration is installed. Proqi therefore uses a
+reviewed provisional identity made from the revalidated pane, workspace, tab,
+direction, geometry, and exact Kilo kind, then requires a matching semantic
+receipt. This is the strongest identity protocol 19 exposes before the hook.
 
-- [x] The missing pre-prompt identity and user-visible limitation are
-  documented above.
-- [x] The official Herdr session hook is installed and was preferred over any
-  weakened Proqi identity policy.
-- [x] Provisional Kilo support is not proposed; no replacement guarantee is
-  substituted for a missing session ID.
-- [x] Sessionless revalidation, provisional receipt timing, first-prompt
-  disposition, immediate post-receipt rediscovery, later provisional-to-
-  established delivery, and the protocol-19 same-kind replacement race are
-  not applicable because Proqi sends no sessionless Kilo prompt.
-- [x] Established Kilo targets still revalidate pane, workspace, tab,
-  direction, geometry, kind, and exact session immediately before delivery.
-- [x] Established receipts that lose or change session identity fail closed.
+- [x] The missing pre-prompt identity is documented in the product and
+  architecture contracts.
+- [x] The official Herdr session hook remained installed and supplied the
+  established identity as soon as Kilo created the conversation.
+- [x] The provisional replacement guarantee and its protocol limitation are
+  documented above and below.
+- [x] A sessionless target revalidates pane, workspace, tab, direction,
+  geometry, readiness, and exact Kilo kind immediately before delivery.
+- [x] Proqi accepts only a matching `agent_prompted` semantic receipt and has no
+  raw-key fallback.
+- [x] Recorded fixtures separately cover a first receipt that already contains
+  the new session and a receipt that precedes the session hook.
+- [x] The live first prompt took the pre-hook receipt path; Proqi immediately
+  rediscovered sessionless Kilo and did not resend.
+- [x] The live first prompt arrived exactly once and `Submit & keep` preserved
+  its source; an established follow-up used `Submit`, removed only after
+  acceptance, and was restored by undo.
+- [x] After post-hook discovery, the next live Proqi prompt revalidated and
+  received the same established Kilo session identity.
+- [x] Established receipts that lose or change session identity fail closed in
+  separate recorded regressions.
+- [x] Protocol 19 cannot distinguish replacement by another sessionless Kilo in
+  the same pane between revalidation and delivery because it exposes neither a
+  pre-session instance ID nor an atomic expected-instance precondition.
 
 ## 5. Switching, races, and failure safety
 
@@ -267,21 +280,22 @@ natively, after which established-session support is complete.
 - [x] Fixtures and errors contain no credential or conversation content.
 - [x] Terminal setup, process ownership, cancellation, and teardown remain the
   existing panic-safe bounded paths.
-- [x] Copy and cut remain available when Kilo is sessionless or unavailable.
+- [x] Copy and cut remain available when Kilo is unavailable.
 - [x] Proqi has no raw-key delivery fallback.
 
 ## 7. Automated evidence
 
-- [x] Recorded redacted Kilo JSON covers established detection/identity,
-  sessionless and unready states, exit, accepted receipt, replacement before
-  delivery, and replaced-session receipt.
+- [x] Recorded redacted Kilo JSON covers established and provisional
+  detection/identity, unready state, exit, both valid first-receipt timings,
+  replacement before delivery, and changed/lost established-session receipts.
 - [x] Generic discovery tests cover valid/invalid identity, readiness,
   workspace, tab, geometry, edge overlap, ambiguity, and all directions.
 - [x] Generic plus Kilo submission tests cover exact payload, acceptance,
   mismatch, timeout, rejection/error mapping, malformed output, and target
   replacement.
-- [x] Kilo provisional receipt-timing tests are not applicable because
-  sessionless Kilo is never eligible.
+- [x] Separate Kilo adapter and UI tests cover receipt-with-session and receipt-
+  before-hook timing, immediate no-resend rediscovery, target upgrade, keep,
+  remove, undo, and established follow-up identity.
 - [x] UI tests cover one/multiple targets, Kilo in both mixed positions,
   keyboard/mouse direction choice, keep/remove, failure, and in-flight locks.
 - [x] Existing deterministic UI suites cover narrow, wide, tall, shallow, and
@@ -305,13 +319,19 @@ natively, after which established-session support is complete.
   buffers.
 - [x] Proqi acceptance was verified independently before Kilo's response.
 - [x] One-target, both mixed rows, four directions, switching, stale-target
-  safety, working follow-up, and fresh-session hiding were exercised.
+  safety, working follow-up, and fresh-session first-prompt delivery were
+  exercised across the original and follow-up qualification runs.
+- [x] Sanitized live timing evidence recorded only session presence and prompt-
+  call count: initial and submission revalidation were sessionless, the first
+  receipt preceded the hook, immediate rediscovery ran without a second prompt,
+  later discovery was established, and the follow-up receipt carried a session.
 - [x] Tool approval remained enabled; the one requested permission was rejected.
 - [x] Test thoughts were removed, Proqi and Kilo exited, isolated tabs were
   closed, temporary state was deleted, and the original tab/layout focus was
   restored.
 - [x] Final `git status --short` contains only intended source evidence before
   commit and is empty after commit.
-- [x] Unsupported scenario: Proqi cannot submit the first prompt to a fresh
-  sessionless Kilo. It fails closed until the official hook reports an
-  established identity; no other scenario in this checklist is unsupported.
+- [x] Conditional limitation: protocol 19 cannot detect same-pane, same-kind
+  replacement of one sessionless Kilo by another during the narrow interval
+  between revalidation and delivery. No checklist scenario is otherwise
+  unsupported.

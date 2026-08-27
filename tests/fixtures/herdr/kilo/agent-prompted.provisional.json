@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "ok": true,
+  "result": {
+    "type": "agent_prompted",
+    "agent": {
+      "pane_id": "w1:p2",
+      "workspace_id": "w1",
+      "tab_id": "w1:t1",
+      "agent": "kilo",
+      "name": "kilo-reviewer",
+      "agent_status": "working",
+      "interactive_ready": true
+    }
+  }
+}

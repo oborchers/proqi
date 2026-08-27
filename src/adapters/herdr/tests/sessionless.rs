@@ -5,7 +5,7 @@ use crate::{
     ports::{
         agent::{
             AgentError, AgentGateway, AgentSessionBinding, CLAUDE_AGENT_KIND, CLINE_AGENT_KIND,
-            OPENCODE_AGENT_KIND, SubmissionRequest,
+            KILO_AGENT_KIND, OPENCODE_AGENT_KIND, SubmissionRequest,
         },
         environment::IdGenerator,
     },
@@ -51,7 +51,12 @@ fn discovery_accepts_established_sessions_for_open_ended_harness_kinds() {
 
 #[test]
 fn discovery_exposes_only_explicitly_supported_sessionless_targets() {
-    for harness in ["codex", CLINE_AGENT_KIND, OPENCODE_AGENT_KIND] {
+    for harness in [
+        "codex",
+        CLINE_AGENT_KIND,
+        KILO_AGENT_KIND,
+        OPENCODE_AGENT_KIND,
+    ] {
         let context = source();
         let pane = with_harness(
             without_session(agent("w1:p2", "w1", "w1:t1", "idle")),

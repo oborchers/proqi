@@ -7,7 +7,7 @@ use crate::{
     ports::{
         agent::{
             AgentError, AgentGateway, AgentSessionBinding, AgentState, HarnessKind,
-            SubmissionRequest,
+            KILO_AGENT_KIND, SubmissionRequest,
         },
         environment::IdGenerator,
     },
@@ -43,6 +43,14 @@ const REPLACED_RECEIPT: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/tests/fixtures/herdr/kilo/agent-prompted.replaced.json"
 ));
+const PROVISIONAL_RECEIPT: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/tests/fixtures/herdr/kilo/agent-prompted.provisional.json"
+));
+const LOST_SESSION_RECEIPT: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/tests/fixtures/herdr/kilo/agent-prompted.lost-session.json"
+));
 
 fn recorded(document: &str) -> Value {
     serde_json::from_str(document).expect("recorded Kilo fixture")
@@ -55,10 +63,16 @@ fn recorded_agents(document: &str) -> Value {
 fn kilo_target() -> crate::ports::agent::AgentTarget {
     let context = source();
     let mut target = target(&context);
-    target.agent_kind = HarnessKind::new("kilo").expect("Kilo harness kind");
+    target.agent_kind = HarnessKind::new(KILO_AGENT_KIND).expect("Kilo harness kind");
     target.agent_name = "kilo-reviewer".to_owned();
     target.agent_session = AgentSessionBinding::established("ses_fixture_kilo_established")
         .expect("Kilo fixture session");
+    target
+}
+
+fn provisional_kilo_target() -> crate::ports::agent::AgentTarget {
+    let mut target = kilo_target();
+    target.agent_session = AgentSessionBinding::provisional();
     target
 }
 
@@ -74,7 +88,7 @@ fn recorded_kilo_detection_uses_the_generic_established_session_path() {
 
     let targets = gateway.adjacent_targets(&context).expect("Kilo target");
     assert_eq!(targets.len(), 1);
-    assert_eq!(targets[0].agent_kind.as_str(), "kilo");
+    assert_eq!(targets[0].agent_kind.as_str(), KILO_AGENT_KIND);
     assert_eq!(
         targets[0].agent_session.as_id(),
         Some("ses_fixture_kilo_established")
@@ -83,22 +97,34 @@ fn recorded_kilo_detection_uses_the_generic_established_session_path() {
 }
 
 #[test]
-fn recorded_kilo_sessionless_unready_and_exit_states_stay_hidden() {
-    for fixture in [SESSIONLESS, UNREADY] {
-        let context = source();
-        let responses = discovery_responses(
-            &context,
-            recorded_agents(fixture),
-            Some(("w1:p2", right_rect())),
-        );
-        let (mut gateway, _) = gateway(responses);
-        assert!(
-            gateway
-                .adjacent_targets(&context)
-                .expect("unsupported Kilo state is hidden")
-                .is_empty()
-        );
-    }
+fn recorded_kilo_sessionless_is_provisional_while_unready_and_exit_stay_hidden() {
+    let context = source();
+    let responses = discovery_responses(
+        &context,
+        recorded_agents(SESSIONLESS),
+        Some(("w1:p2", right_rect())),
+    );
+    let (mut provisional_gateway, _) = gateway(responses);
+    let targets = provisional_gateway
+        .adjacent_targets(&context)
+        .expect("provisional Kilo target");
+    assert_eq!(targets.len(), 1);
+    assert_eq!(targets[0].agent_kind.as_str(), KILO_AGENT_KIND);
+    assert!(targets[0].agent_session.is_provisional());
+
+    let context = source();
+    let responses = discovery_responses(
+        &context,
+        recorded_agents(UNREADY),
+        Some(("w1:p2", right_rect())),
+    );
+    let (mut unready_gateway, _) = gateway(responses);
+    assert!(
+        unready_gateway
+            .adjacent_targets(&context)
+            .expect("unready Kilo state is hidden")
+            .is_empty()
+    );
 
     let context = source();
     let responses = discovery_responses(
@@ -106,11 +132,62 @@ fn recorded_kilo_sessionless_unready_and_exit_states_stay_hidden() {
         recorded_agents(EXITED),
         Some(("w1:p2", right_rect())),
     );
-    let (mut gateway, _) = gateway(responses);
+    let (mut exited_gateway, _) = gateway(responses);
     assert!(matches!(
-        gateway.adjacent_targets(&context),
+        exited_gateway.adjacent_targets(&context),
         Err(AgentError::Unsupported(_))
     ));
+}
+
+#[test]
+fn recorded_kilo_first_receipt_may_establish_the_session() {
+    let context = source();
+    let mut responses = discovery_responses(
+        &context,
+        recorded_agents(SESSIONLESS),
+        Some(("w1:p2", right_rect())),
+    );
+    responses.push(success(recorded(ACCEPTED)));
+    let (mut gateway, runner) = gateway(responses);
+    let mut ids = FakeIdGenerator::new(1_725_200_000_000);
+
+    let receipt = gateway
+        .submit(SubmissionRequest {
+            submission_id: ids.submission_id(),
+            target: provisional_kilo_target(),
+            content: "first Kilo prompt".to_owned(),
+        })
+        .expect("session-establishing Kilo receipt");
+
+    assert_eq!(
+        receipt.target.agent_session.as_id(),
+        Some("ses_fixture_kilo_established")
+    );
+    assert_eq!(semantic_prompt_count(&runner.requests.borrow()), 1);
+}
+
+#[test]
+fn recorded_kilo_first_receipt_may_precede_the_session_hook() {
+    let context = source();
+    let mut responses = discovery_responses(
+        &context,
+        recorded_agents(SESSIONLESS),
+        Some(("w1:p2", right_rect())),
+    );
+    responses.push(success(recorded(PROVISIONAL_RECEIPT)));
+    let (mut gateway, runner) = gateway(responses);
+    let mut ids = FakeIdGenerator::new(1_725_200_000_000);
+
+    let receipt = gateway
+        .submit(SubmissionRequest {
+            submission_id: ids.submission_id(),
+            target: provisional_kilo_target(),
+            content: "first Kilo prompt before hook".to_owned(),
+        })
+        .expect("matching provisional Kilo receipt");
+
+    assert!(receipt.target.agent_session.is_provisional());
+    assert_eq!(semantic_prompt_count(&runner.requests.borrow()), 1);
 }
 
 #[test]
@@ -136,7 +213,7 @@ fn recorded_kilo_receipt_accepts_one_exact_semantic_prompt() {
         .expect("matching Kilo receipt");
 
     assert_eq!(receipt.submission_id, submission_id);
-    assert_eq!(receipt.target.agent_kind.as_str(), "kilo");
+    assert_eq!(receipt.target.agent_kind.as_str(), KILO_AGENT_KIND);
     assert_eq!(receipt.post_state, Some(AgentState::Working));
     let requests = runner.requests.borrow();
     let request = requests.last().expect("semantic prompt request");
@@ -189,4 +266,36 @@ fn recorded_kilo_receipt_with_a_replaced_session_fails_closed() {
         }),
         Err(AgentError::Malformed(_))
     ));
+}
+
+#[test]
+fn recorded_established_kilo_receipt_without_a_session_fails_closed() {
+    let context = source();
+    let mut responses = discovery_responses(
+        &context,
+        recorded_agents(ESTABLISHED),
+        Some(("w1:p2", right_rect())),
+    );
+    responses.push(success(recorded(LOST_SESSION_RECEIPT)));
+    let (mut gateway, _) = gateway(responses);
+    let mut ids = FakeIdGenerator::new(1_725_200_000_000);
+
+    assert!(matches!(
+        gateway.submit(SubmissionRequest {
+            submission_id: ids.submission_id(),
+            target: kilo_target(),
+            content: "preserve after lost identity".to_owned(),
+        }),
+        Err(AgentError::Malformed(_))
+    ));
+}
+
+fn semantic_prompt_count(requests: &[crate::ports::environment::ProcessRequest]) -> usize {
+    requests
+        .iter()
+        .filter(|request| {
+            request.args.first() == Some(&OsString::from("agent"))
+                && request.args.get(1) == Some(&OsString::from("prompt"))
+        })
+        .count()
 }
