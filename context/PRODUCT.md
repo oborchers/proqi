@@ -583,6 +583,9 @@ Mouse support includes:
 - Single click focus on every visible note and control.
 - Cursor placement at the clicked text cell.
 - Drag selection inside text.
+- Double-click selection of complete Unicode words and word-granular dragging.
+- Triple-click selection of logical lines and line-granular dragging.
+- Shift-click extension using the active click granularity.
 - Scroll wheel and trackpad scrolling.
 - Drag reordering through a dedicated handle or gutter.
 - Clickable `+` controls at active thought insertion points.

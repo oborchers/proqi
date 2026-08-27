@@ -257,6 +257,7 @@ fn multiple_targets_require_direction_and_mouse_controls_use_verified_targets() 
         column: control.x,
         row: control.y,
         kind: PointerKind::Down(PointerButton::Left),
+        extend_selection: false,
     }));
     let clicked_request = start_submission(&mut fixture, &clicked);
     assert_eq!(clicked_request.target, up);

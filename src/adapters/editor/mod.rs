@@ -1,5 +1,6 @@
 //! Rope-backed multiline editor implementation.
 
+mod pointer;
 mod text;
 
 use std::cmp::Ordering;
@@ -52,6 +53,7 @@ pub struct RopeEditor {
     viewport: TextViewport,
     scroll_row: usize,
     preferred_column: Option<usize>,
+    pointer_selection: Option<pointer::PointerSelection>,
 }
 
 impl Default for RopeEditor {
@@ -63,6 +65,7 @@ impl Default for RopeEditor {
             viewport: TextViewport::default(),
             scroll_row: 0,
             preferred_column: None,
+            pointer_selection: None,
         }
     }
 }
@@ -91,6 +94,7 @@ impl RopeEditor {
             self.undo.push(before);
             self.redo.clear();
             self.preferred_column = None;
+            self.pointer_selection = None;
             self.ensure_cursor_visible();
             true
         } else {
@@ -282,16 +286,19 @@ impl Editor for RopeEditor {
                 movement,
                 extend_selection,
             } => {
+                self.pointer_selection = None;
                 self.move_cursor(movement, extend_selection);
                 false
             }
             EditCommand::SelectAll => {
+                self.pointer_selection = None;
                 self.state.selection_anchor_byte = Some(0);
                 self.state.cursor_byte = self.state.text.len_bytes();
                 self.ensure_cursor_visible();
                 false
             }
             EditCommand::ClearSelection => {
+                self.pointer_selection = None;
                 self.state.selection_anchor_byte = None;
                 false
             }
@@ -299,28 +306,24 @@ impl Editor for RopeEditor {
                 position,
                 extend_selection,
             } => {
+                self.pointer_selection = None;
                 let byte = byte_for_position(&self.content(), position);
                 self.set_cursor_byte(byte, extend_selection);
                 false
             }
-            EditCommand::PointerStart { row, column } => {
-                let position = self.position_at_cell(row, column);
-                let byte = byte_for_position(&self.content(), position);
-                self.set_cursor_byte(byte, false);
-                self.state.selection_anchor_byte = Some(byte);
-                false
-            }
-            EditCommand::PointerDrag { row, column } => {
-                let position = self.position_at_cell(row, column);
-                let byte = byte_for_position(&self.content(), position);
-                self.set_cursor_byte(byte, true);
-                false
-            }
+            EditCommand::PointerStart {
+                position,
+                granularity,
+                extend_selection,
+            } => self.begin_pointer_selection(position, granularity, extend_selection),
+            EditCommand::PointerDrag { position } => self.extend_pointer_selection(position),
+            EditCommand::PointerEnd => self.end_pointer_selection(),
             EditCommand::Undo => {
                 if let Some(previous) = self.undo.pop() {
                     self.redo.push(self.state.clone());
                     self.state = previous;
                     self.preferred_column = None;
+                    self.pointer_selection = None;
                     self.ensure_cursor_visible();
                     true
                 } else {
@@ -332,6 +335,7 @@ impl Editor for RopeEditor {
                     self.undo.push(self.state.clone());
                     self.state = next;
                     self.preferred_column = None;
+                    self.pointer_selection = None;
                     self.ensure_cursor_visible();
                     true
                 } else {
@@ -396,6 +400,7 @@ impl Editor for RopeEditor {
         self.undo.clear();
         self.redo.clear();
         self.preferred_column = None;
+        self.pointer_selection = None;
         self.ensure_cursor_visible();
     }
 

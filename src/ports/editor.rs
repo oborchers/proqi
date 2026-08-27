@@ -62,6 +62,17 @@ pub enum CursorMovement {
     DocumentEnd,
 }
 
+/// Unit used when a pointer begins or extends a text selection.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SelectionGranularity {
+    /// Grapheme-granular caret placement and dragging.
+    Grapheme,
+    /// Complete Unicode word under the pointer.
+    Word,
+    /// Complete newline-delimited logical line.
+    LogicalLine,
+}
+
 /// A normalized editor command.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum EditCommand {
@@ -97,18 +108,20 @@ pub enum EditCommand {
     },
     /// Begin a pointer selection at a viewport cell.
     PointerStart {
-        /// Zero-based viewport row.
-        row: u16,
-        /// Zero-based viewport column.
-        column: u16,
+        /// Canonical logical position under the pointer.
+        position: TextPosition,
+        /// Selection unit established by the click count.
+        granularity: SelectionGranularity,
+        /// Whether to extend the existing selection rather than replace it.
+        extend_selection: bool,
     },
-    /// Extend a pointer selection to a viewport cell.
+    /// Extend the active pointer selection to a logical position.
     PointerDrag {
-        /// Zero-based viewport row.
-        row: u16,
-        /// Zero-based viewport column.
-        column: u16,
+        /// Canonical logical position under the pointer.
+        position: TextPosition,
     },
+    /// Finish the active pointer selection gesture.
+    PointerEnd,
     /// Undo one editor operation.
     Undo,
     /// Redo one editor operation.

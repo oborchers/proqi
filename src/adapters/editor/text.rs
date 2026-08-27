@@ -46,6 +46,18 @@ fn word_segments(content: &str) -> Vec<(usize, usize)> {
         .collect()
 }
 
+pub(super) fn word_range(content: &str, cursor: usize) -> Option<(usize, usize)> {
+    word_segments(content)
+        .into_iter()
+        .find(|(start, end)| *start <= cursor && cursor < *end)
+}
+
+pub(super) fn grapheme_range(content: &str, cursor: usize) -> (usize, usize) {
+    let start = cursor.min(content.len());
+    let end = next_boundary(content, start).unwrap_or(start);
+    (start, end)
+}
+
 pub(super) fn word_back(content: &str, cursor: usize) -> usize {
     word_segments(content)
         .into_iter()

@@ -204,8 +204,10 @@ fallbacks remain available when a terminal cannot report a modifier.
 | `↑` / `↓` twice at a boundary | Return to the board and focus the adjacent thought |
 
 Mouse users can focus and edit thoughts, place the cursor, drag selections,
-scroll, reorder thoughts, click controls, use help, and choose verified Herdr
-targets. Moving onto folded context selects its complete canonical range.
+double-click words, triple-click logical lines, extend with Shift-click, scroll,
+reorder thoughts, click controls, use help, and choose verified Herdr targets.
+Holding the final click while dragging extends by complete words or logical
+lines. Moving onto folded context selects its complete canonical range.
 `Enter` expands the fold, while typing or deletion replaces it atomically.
 
 ## Resume and organize sessions

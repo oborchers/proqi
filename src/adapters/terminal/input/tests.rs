@@ -222,6 +222,26 @@ fn mouse_coordinates_are_normalized_without_terminal_types() {
             column: 7,
             row: 3,
             kind: PointerKind::Down(PointerButton::Left),
+            extend_selection: false,
+        }))
+    );
+}
+
+#[test]
+fn shifted_mouse_input_preserves_selection_extension_intent() {
+    let event = Event::Mouse(MouseEvent {
+        kind: MouseEventKind::Down(MouseButton::Left),
+        column: 4,
+        row: 2,
+        modifiers: KeyModifiers::SHIFT,
+    });
+    assert_eq!(
+        translate(event),
+        Some(UiInput::Pointer(PointerInput {
+            column: 4,
+            row: 2,
+            kind: PointerKind::Down(PointerButton::Left),
+            extend_selection: true,
         }))
     );
 }

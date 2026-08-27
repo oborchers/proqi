@@ -365,6 +365,7 @@ fn translate_mouse(mouse: MouseEvent) -> Option<PointerInput> {
         column: mouse.column,
         row: mouse.row,
         kind,
+        extend_selection: mouse.modifiers.contains(KeyModifiers::SHIFT),
     })
 }
 

@@ -60,7 +60,12 @@ impl Fixture {
     }
 
     fn pointer(&mut self, column: u16, row: u16, kind: PointerKind) {
-        self.input(UiInput::Pointer(PointerInput { column, row, kind }));
+        self.input(UiInput::Pointer(PointerInput {
+            column,
+            row,
+            kind,
+            extend_selection: false,
+        }));
     }
 
     fn paste(&mut self, content: &str) -> OperationSequence {
@@ -473,6 +478,8 @@ mod kilo;
 mod navigation;
 #[path = "ui_board/palette.rs"]
 mod palette;
+#[path = "ui_board/pointer_selection.rs"]
+mod pointer_selection;
 #[path = "ui_board/scroll_regressions.rs"]
 mod scroll_regressions;
 #[path = "ui_board/selection.rs"]

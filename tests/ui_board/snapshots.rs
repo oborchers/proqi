@@ -139,6 +139,22 @@ fn limited_color_mode_uses_terminal_palette_styles() {
 }
 
 #[test]
+fn double_clicked_word_has_a_visible_editor_selection() {
+    let mut fixture = Fixture::new();
+    fixture.input(UiInput::Paste("select precise wording".to_owned()));
+    let _initial = draw(&mut fixture, 48, 8);
+    let area = fixture.app.prepare_frame(Rect::new(0, 0, 48, 8)).thoughts[0].text_area;
+    let column = area.x.saturating_add(8);
+    for _ in 0..2 {
+        fixture.pointer(column, area.y, PointerKind::Down(PointerButton::Left));
+        let _pressed = draw(&mut fixture, 48, 8);
+        fixture.pointer(column, area.y, PointerKind::Up(PointerButton::Left));
+        let _released = draw(&mut fixture, 48, 8);
+    }
+    insta::assert_snapshot!(snapshot(&mut fixture, 48, 8, ThemePreference::Dark));
+}
+
+#[test]
 fn four_direction_agent_controls_have_a_dedicated_footer_band() {
     let mut fixture = Fixture::new();
     fixture.input(UiInput::Paste("selected prompt".to_owned()));

@@ -271,9 +271,11 @@ trait Editor {
 ```
 
 `EditCommand` covers insertion, deletion, movement, selection, paste, undo,
-redo, and mouse placement. `TextPosition` is logical and survives wrapping and
-resize. The facade prevents a library-specific cursor model from leaking into
-the application.
+redo, and mouse placement. Pointer selection carries explicit grapheme, Unicode
+word, or logical-line granularity after the UI deterministically recognizes
+single, double, and triple clicks through its injected clock. `TextPosition` is
+logical and survives wrapping and resize. The facade prevents a library-specific
+cursor model from leaking into the application.
 
 ### `LayoutEngine`
 

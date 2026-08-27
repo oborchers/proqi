@@ -3,7 +3,7 @@
 use proqi::adapters::editor::RopeEditor;
 use proqi::{
     domain::TextPosition,
-    ports::editor::{CursorMovement, EditCommand, Editor, TextViewport},
+    ports::editor::{CursorMovement, EditCommand, Editor, SelectionGranularity, TextViewport},
 };
 
 fn editor(text: &str) -> impl Editor {
@@ -71,10 +71,16 @@ fn mouse_cursor_and_drag_selection_follow_wrapped_cells() {
     let mut editor = editor("ab日本cd");
     editor.set_viewport(TextViewport::new(4, 3));
 
-    editor.apply(EditCommand::PointerStart { row: 0, column: 2 });
+    editor.apply(EditCommand::PointerStart {
+        position: editor.position_at_cell(0, 2),
+        granularity: SelectionGranularity::Grapheme,
+        extend_selection: false,
+    });
     assert_eq!(editor.snapshot().cursor, TextPosition::new(0, 2));
 
-    editor.apply(EditCommand::PointerDrag { row: 1, column: 3 });
+    editor.apply(EditCommand::PointerDrag {
+        position: editor.position_at_cell(1, 3),
+    });
     assert_eq!(editor.selected_text().as_deref(), Some("日本c"));
 }
 
@@ -102,11 +108,111 @@ fn cursor_crosses_logical_and_wrapped_line_boundaries() {
 #[test]
 fn pointer_click_without_drag_does_not_create_an_empty_selection() {
     let mut editor = editor("abc");
-    editor.apply(EditCommand::PointerStart { row: 0, column: 2 });
+    editor.apply(EditCommand::PointerStart {
+        position: editor.position_at_cell(0, 2),
+        granularity: SelectionGranularity::Grapheme,
+        extend_selection: false,
+    });
     assert_eq!(editor.snapshot().selection, None);
 
     let deleted = editor.apply(EditCommand::DeleteBack);
     assert_eq!(deleted.snapshot.content, "ac");
+}
+
+#[test]
+fn pointer_word_selection_uses_unicode_boundaries_and_safe_fallbacks() {
+    let text = "alpha_beta Grüße e\u{301} 👩🏽‍💻!";
+    let mut editor = editor(text);
+
+    for (position, expected) in [
+        (TextPosition::new(0, 12), "Grüße"),
+        (TextPosition::new(0, 17), "e\u{301}"),
+        (TextPosition::new(0, 19), "👩🏽‍💻"),
+        (TextPosition::new(0, 20), "!"),
+    ] {
+        editor.apply(EditCommand::PointerStart {
+            position,
+            granularity: SelectionGranularity::Word,
+            extend_selection: false,
+        });
+        assert_eq!(editor.selected_text().as_deref(), Some(expected));
+        editor.apply(EditCommand::PointerEnd);
+    }
+
+    editor.apply(EditCommand::PointerStart {
+        position: TextPosition::new(0, 21),
+        granularity: SelectionGranularity::Word,
+        extend_selection: false,
+    });
+    assert_eq!(editor.selected_text(), None);
+}
+
+#[test]
+fn pointer_word_drag_extends_in_both_directions_by_complete_words() {
+    let mut editor = editor("first middle last");
+    editor.apply(EditCommand::PointerStart {
+        position: TextPosition::new(0, 7),
+        granularity: SelectionGranularity::Word,
+        extend_selection: false,
+    });
+    assert_eq!(editor.selected_text().as_deref(), Some("middle"));
+
+    editor.apply(EditCommand::PointerDrag {
+        position: TextPosition::new(0, 16),
+    });
+    assert_eq!(editor.selected_text().as_deref(), Some("middle last"));
+
+    editor.apply(EditCommand::PointerDrag {
+        position: TextPosition::new(0, 1),
+    });
+    assert_eq!(editor.selected_text().as_deref(), Some("first middle"));
+}
+
+#[test]
+fn pointer_line_selection_uses_logical_lines_and_preserves_delimiters() {
+    let mut editor = editor("one\r\ntwo\n\nlast");
+    for (position, expected) in [
+        (TextPosition::new(0, 1), "one\r\n"),
+        (TextPosition::new(1, 1), "two\n"),
+        (TextPosition::new(2, 0), "\n"),
+        (TextPosition::new(3, 2), "last"),
+    ] {
+        editor.apply(EditCommand::PointerStart {
+            position,
+            granularity: SelectionGranularity::LogicalLine,
+            extend_selection: false,
+        });
+        assert_eq!(editor.selected_text().as_deref(), Some(expected));
+        editor.apply(EditCommand::PointerEnd);
+    }
+}
+
+#[test]
+fn pointer_word_selection_never_splits_cjk_graphemes() {
+    let mut editor = editor("日本語 次");
+    editor.apply(EditCommand::PointerStart {
+        position: TextPosition::new(0, 1),
+        granularity: SelectionGranularity::Word,
+        extend_selection: false,
+    });
+    assert_eq!(editor.selected_text().as_deref(), Some("本"));
+}
+
+#[test]
+fn shifted_pointer_selection_extends_from_the_existing_anchor() {
+    let mut editor = editor("first middle last");
+    editor.apply(EditCommand::PointerStart {
+        position: TextPosition::new(0, 7),
+        granularity: SelectionGranularity::Word,
+        extend_selection: false,
+    });
+    editor.apply(EditCommand::PointerEnd);
+    editor.apply(EditCommand::PointerStart {
+        position: TextPosition::new(0, 16),
+        granularity: SelectionGranularity::Word,
+        extend_selection: true,
+    });
+    assert_eq!(editor.selected_text().as_deref(), Some("middle last"));
 }
 
 #[test]

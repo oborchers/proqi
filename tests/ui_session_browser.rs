@@ -291,6 +291,7 @@ fn mouse_uses_rendered_rows_and_footer_geometry() {
             column: row.x,
             row: row.y,
             kind: PointerKind::Down(PointerButton::Left),
+            extend_selection: false,
         })),
         BrowserAction::Open(id)
     );
@@ -301,6 +302,7 @@ fn mouse_uses_rendered_rows_and_footer_geometry() {
             column: footer.x.saturating_add(12),
             row: footer.y,
             kind: PointerKind::Down(PointerButton::Left),
+            extend_selection: false,
         })),
         BrowserAction::Trash(id)
     );
@@ -309,6 +311,7 @@ fn mouse_uses_rendered_rows_and_footer_geometry() {
             column: footer.x.saturating_add(30),
             row: footer.y,
             kind: PointerKind::Down(PointerButton::Left),
+            extend_selection: false,
         })),
         BrowserAction::Cancel
     );

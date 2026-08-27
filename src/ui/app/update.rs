@@ -466,6 +466,7 @@ mod tests {
                 column: skip.x,
                 row: skip.y,
                 kind: PointerKind::Down(PointerButton::Left),
+                extend_selection: false,
             }),
             &mut ids,
             &clock,

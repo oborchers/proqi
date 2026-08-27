@@ -2,8 +2,9 @@
 
 use crate::{
     application::{Action, Effect, InteractionMode},
+    domain::{ThoughtId, Timestamp},
     ports::{
-        editor::EditCommand,
+        editor::{EditCommand, SelectionGranularity},
         environment::{Clock, IdGenerator},
     },
 };
@@ -11,7 +12,32 @@ use crate::{
 use super::{BoardApp, PointerButton, PointerInput, PointerKind};
 use crate::ui::HitTarget;
 
+const MULTI_CLICK_MILLIS: i64 = 500;
+
+#[derive(Clone, Copy)]
+pub(super) struct PointerClick {
+    thought_id: ThoughtId,
+    column: u16,
+    row: u16,
+    at: Timestamp,
+    count: u8,
+}
+
 impl BoardApp {
+    pub(super) fn reset_pointer_click_for_input(&mut self, input: &crate::ui::UiInput) {
+        if !matches!(
+            input,
+            crate::ui::UiInput::Pointer(PointerInput {
+                kind: PointerKind::Down(PointerButton::Left)
+                    | PointerKind::Up(PointerButton::Left)
+                    | PointerKind::Move,
+                ..
+            })
+        ) {
+            self.pointer_click = None;
+        }
+    }
+
     pub(super) fn handle_recovery_pointer(
         &mut self,
         pointer: PointerInput,
@@ -72,9 +98,13 @@ impl BoardApp {
     ) -> Vec<Effect> {
         let target = self.hit(pointer);
         self.hovered = target;
+        if !matches!(target, Some(HitTarget::Thought(_))) {
+            self.pointer_click = None;
+        }
         match target {
             Some(HitTarget::Thought(thought_id)) => {
-                self.focus_and_place_cursor(thought_id, pointer)
+                let click_count = self.register_text_click(thought_id, pointer, clock.now());
+                self.focus_and_place_cursor(thought_id, pointer, click_count)
             }
             Some(HitTarget::DragHandle(thought_id)) => {
                 self.focus(thought_id);
@@ -139,11 +169,15 @@ impl BoardApp {
                 self.close_overlay();
                 Vec::new()
             }
-            Some(HitTarget::Agent(_)) | None => Vec::new(),
+            Some(HitTarget::Agent(_)) | None => {
+                self.pointer_click = None;
+                Vec::new()
+            }
         }
     }
 
     fn pointer_drag(&mut self, pointer: PointerInput) -> Vec<Effect> {
+        self.pointer_click = None;
         if self.dragged_thought.is_some() {
             self.drag_target = self.position_at(pointer.row);
             return Vec::new();
@@ -159,14 +193,12 @@ impl BoardApp {
             return Vec::new();
         };
         let position = self.projected_position_at_cell(row, column);
-        self.apply_edit(EditCommand::SetCursor {
-            position,
-            extend_selection: true,
-        });
+        self.apply_edit(EditCommand::PointerDrag { position });
         Vec::new()
     }
 
     fn pointer_up(&mut self, ids: &mut impl IdGenerator, clock: &impl Clock) -> Vec<Effect> {
+        self.apply_edit(EditCommand::PointerEnd);
         let thought_id = self.dragged_thought.take();
         let target = self.drag_target.take();
         match (thought_id, target) {
@@ -182,6 +214,7 @@ impl BoardApp {
         &mut self,
         thought_id: crate::domain::ThoughtId,
         pointer: PointerInput,
+        click_count: u8,
     ) -> Vec<Effect> {
         let cell = self.editor_cell(thought_id, pointer);
         self.focus(thought_id);
@@ -193,11 +226,49 @@ impl BoardApp {
             return Vec::new();
         }
         let position = self.projected_position_at_cell(row, column);
-        self.apply_edit(EditCommand::SetCursor {
+        let granularity = match click_count {
+            2 => SelectionGranularity::Word,
+            3 => SelectionGranularity::LogicalLine,
+            _ => SelectionGranularity::Grapheme,
+        };
+        self.apply_edit(EditCommand::PointerStart {
             position,
-            extend_selection: false,
+            granularity,
+            extend_selection: pointer.extend_selection,
         });
         Vec::new()
+    }
+
+    fn register_text_click(
+        &mut self,
+        thought_id: ThoughtId,
+        pointer: PointerInput,
+        now: Timestamp,
+    ) -> u8 {
+        let repeated = self.pointer_click.is_some_and(|previous| {
+            previous.thought_id == thought_id
+                && previous.column.abs_diff(pointer.column) <= 1
+                && previous.row.abs_diff(pointer.row) <= 1
+                && now
+                    .as_millis()
+                    .checked_sub(previous.at.as_millis())
+                    .is_some_and(|elapsed| (0..=MULTI_CLICK_MILLIS).contains(&elapsed))
+        });
+        let count = self.pointer_click.map_or(1, |previous| {
+            if repeated && previous.count < 3 {
+                previous.count + 1
+            } else {
+                1
+            }
+        });
+        self.pointer_click = Some(PointerClick {
+            thought_id,
+            column: pointer.column,
+            row: pointer.row,
+            at: now,
+            count,
+        });
+        count
     }
 
     fn scroll_pointer(&mut self, delta: isize) -> Vec<Effect> {

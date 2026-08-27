@@ -74,6 +74,8 @@ pub struct PointerInput {
     pub row: u16,
     /// Normalized pointer event.
     pub kind: PointerKind,
+    /// Whether Shift requests extension of the existing text selection.
+    pub extend_selection: bool,
 }
 
 use pending_types::{PendingEditorClipboard, PendingSubmission, SubmissionMode};
@@ -176,6 +178,7 @@ pub struct BoardApp {
     layout: Option<LayoutSnapshot>,
     dragged_thought: Option<ThoughtId>,
     drag_target: Option<usize>,
+    pointer_click: Option<pointer::PointerClick>,
     hovered: Option<HitTarget>,
     insertion_focus: InsertionFocus,
     insertion_confirmation: InsertionConfirmation,
@@ -235,6 +238,7 @@ impl BoardApp {
             layout: None,
             dragged_thought: None,
             drag_target: None,
+            pointer_click: None,
             hovered: None,
             insertion_focus,
             insertion_confirmation: InsertionConfirmation::Idle,
@@ -266,6 +270,17 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
+        self.reset_pointer_click_for_input(&input);
+        if self.help
+            || self.update_prompt.is_some()
+            || self.palette.is_some()
+            || self.transfer.is_some()
+            || self.rename.is_some()
+            || self.search.is_some()
+            || self.submission_mode.is_some()
+        {
+            self.pointer_click = None;
+        }
         if self.help {
             return self.handle_help_input(&input);
         }
