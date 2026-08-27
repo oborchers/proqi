@@ -93,14 +93,15 @@ impl RuntimeContext {
 
     pub(super) fn terminal_settings(
         &self,
-    ) -> Result<crate::ui::UiSettings, crate::adapters::terminal::TerminalError> {
+    ) -> Result<crate::adapters::terminal::LoadedSettings, crate::adapters::terminal::TerminalError>
+    {
         crate::adapters::terminal::load_settings(&self.config_dir)
     }
 
     pub(super) fn into_terminal(
         self,
         session: LeasedSession<crate::adapters::runtime::FileSessionLease>,
-        settings: crate::ui::UiSettings,
+        settings: crate::adapters::terminal::LoadedSettings,
     ) -> TerminalResources {
         let (state, session_lease) = session.into_parts();
         let attachment_directory = self.attachment_dir.join(state.board.session.id.to_string());

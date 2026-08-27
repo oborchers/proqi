@@ -64,7 +64,7 @@ pub(crate) struct TerminalResources {
     pub(crate) cwd: PathBuf,
     pub(crate) session_lease: FileSessionLease,
     pub(crate) schema_lease: FileSchemaLease,
-    pub(crate) settings: crate::ui::UiSettings,
+    pub(crate) settings: super::LoadedSettings,
     pub(crate) recovery_directory: PathBuf,
     pub(crate) attachment_directory: PathBuf,
     pub(crate) installation: Option<crate::domain::Installation>,
@@ -119,7 +119,7 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
     let session_id = state.board.session.id;
     store.recover_submissions(session_id, clock.now())?;
     let (control, control_warning) = start_optional_control(&mut session_lease);
-    let (theme, guard) = enter_terminal(settings.theme, settings.keyboard_enhancement)?;
+    let (theme, guard) = enter_terminal(&settings.theme, settings.ui.keyboard_enhancement)?;
     let panic_hook = PanicHookGuard::install();
     let termination = TerminationGuard::register()?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
@@ -138,8 +138,8 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
     );
     let mut pane_heartbeat = None;
     let shutdown = super::supervisor::ShutdownCoordinator::default();
-    let check_for_updates = settings.check_for_updates;
-    let mut app = BoardApp::with_settings(state, settings, RopeEditorFactory);
+    let check_for_updates = settings.ui.check_for_updates;
+    let mut app = BoardApp::with_settings(state, settings.ui, RopeEditorFactory);
     if let Some(warning) = control_warning {
         app.set_warning(warning);
     }
@@ -319,10 +319,10 @@ fn start_optional_control(
 }
 
 fn enter_terminal(
-    preference: crate::ui::ThemePreference,
+    recipe: &crate::ui::ThemeRecipe,
     keyboard: crate::ui::KeyboardEnhancement,
 ) -> Result<(Theme, TerminalGuard<CrosstermControl>), TerminalError> {
-    let theme = super::palette::resolve(preference, supports_true_color());
+    let theme = super::palette::resolve(recipe, supports_true_color())?;
     let guard = TerminalGuard::enter(CrosstermControl::new(keyboard))?;
     Ok((theme, guard))
 }

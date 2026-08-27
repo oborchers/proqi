@@ -67,7 +67,10 @@ fn files_use_the_minimal_accent_placeholder_without_exposing_the_path() {
     assert!(!rendered.contains("context.pdf"));
     let area = fixture.app.prepare_frame(Rect::new(0, 0, 60, 8)).thoughts[0].text_area;
     let cell = &terminal.backend().buffer()[(area.x, area.y)];
-    assert_eq!(cell.fg, Theme::resolve(ThemePreference::Dark, true).accent);
+    assert_eq!(
+        cell.fg,
+        Theme::resolve(ThemePreference::Dark, true).annotation
+    );
 }
 
 #[test]
@@ -424,7 +427,7 @@ proptest! {
 }
 
 #[test]
-fn folded_tokens_use_the_accent_and_bold_non_color_cue() {
+fn folded_tokens_use_the_annotation_role_and_bold_non_color_cue() {
     let mut fixture = Fixture::new();
     fixture.input(UiInput::PasteAnnotated(image_payload(
         "/tmp/screenshot.png",
@@ -434,6 +437,6 @@ fn folded_tokens_use_the_accent_and_bold_non_color_cue() {
     let text = layout.thoughts[0].text_area;
     let cell = &terminal.backend().buffer()[(text.x, text.y)];
     let theme = Theme::resolve(ThemePreference::Dark, true);
-    assert_eq!(cell.fg, theme.accent);
+    assert_eq!(cell.fg, theme.annotation);
     assert!(cell.modifier.contains(ratatui_core::style::Modifier::BOLD));
 }

@@ -1,0 +1,19 @@
+# Proqi custom theme schema. Every omitted role inherits from `base`.
+schema_version = 1
+name = "Proqi dark"
+base = "dark"
+
+[colors]
+foreground = "#E8E4DF"
+background = "#0F0D0A"
+accent = "#70D69B"
+accent_surface = "#2D6A4F"
+on_accent = "#FAFAF8"
+muted = "#B0A9A0"
+divider = "#2A2520"
+focused_surface = "#272830"
+link = "#70D69B"
+annotation = "#70D69B"
+success = "#70D69B"
+warning = "#70D69B"
+error = "#FF6B6B"

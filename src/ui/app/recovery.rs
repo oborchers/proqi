@@ -8,9 +8,40 @@ use crate::{
     ports::environment::{Clock, IdGenerator},
 };
 
-use super::BoardApp;
+use super::{BoardApp, UiInput, UiKey};
 
 impl BoardApp {
+    pub(super) fn is_failed_recovery_quit(&self, input: &UiInput) -> bool {
+        matches!(self.state.durability, DurabilityState::Failed { .. })
+            && matches!(
+                input,
+                UiInput::Key(UiKey::Character(character))
+                    if *character == self.settings.keybindings.quit
+            )
+    }
+
+    pub(super) fn handle_failed_recovery_input(
+        &mut self,
+        input: &UiInput,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Option<Vec<Effect>> {
+        if !matches!(self.state.durability, DurabilityState::Failed { .. }) {
+            return None;
+        }
+        match input {
+            UiInput::Key(UiKey::Character(crate::ui::settings::RECOVERY_RETRY_KEY)) => {
+                Some(self.retry_persistence())
+            }
+            UiInput::Key(UiKey::Character(crate::ui::settings::RECOVERY_EXPORT_KEY)) => {
+                Some(self.export_recovery(ids, clock))
+            }
+            UiInput::Pointer(pointer) => Some(self.handle_recovery_pointer(*pointer, ids, clock)),
+            UiInput::Resize { .. } | UiInput::HostFocusGained => None,
+            UiInput::Key(_) | UiInput::Paste(_) | UiInput::PasteAnnotated(_) => Some(Vec::new()),
+        }
+    }
+
     pub(super) fn export_recovery(
         &mut self,
         ids: &mut impl IdGenerator,

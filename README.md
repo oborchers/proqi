@@ -259,6 +259,11 @@ separated by one blank line:
 Both actions work while the receiving agent is working. The receiving harness
 decides whether that input steers the current turn or becomes follow-up input.
 
+Herdr protocol 19 does not guarantee a distinct prompt boundary when another
+sender submits at nearly the same time. Concurrent inputs may therefore merge
+at the receiving harness. Avoid simultaneous submissions when preserving that
+boundary is critical.
+
 Ambiguity, timeout, rejection, receipt mismatch, or protocol mismatch always
 leaves the thought unchanged. Proqi never invokes a shell, injects raw keys,
 reads the conversation, or waits for the agent response. Herdr is optional. The
@@ -419,13 +424,20 @@ support policy and private vulnerability reporting process.
 ## Configuration
 
 An optional `config.toml` lives in the platform-native Proqi configuration
-directory. Themes are `auto`, `light`, `dark`, or `limited`. Board bindings can
-be customized while portable editor shortcuts remain available:
+directory. The default `auto` theme preserves the terminal palette and applies
+Proqi's adaptive mint accents. The built-ins are `auto`, `light`, `dark`, and
+`limited`. Every semantic color can also be overridden while portable editor
+shortcuts remain available:
 
 ```toml
 check_for_updates = true
 theme = "auto"
 density = "comfortable" # or "compact"
+
+[theme_overrides]
+# link = "#7DD3FC"
+# annotation = "#70D69B"
+# focused_surface = "none"
 
 [keybindings]
 new = "n"
@@ -447,6 +459,26 @@ commands = ":"
 help = "?"
 quit = "q"
 ```
+
+To install a complete local theme, set `theme` to an absolute TOML path or a
+path relative to `config.toml`:
+
+```toml
+theme = "themes/my-theme.toml"
+
+# Optional final overrides take precedence over the theme file.
+[theme_overrides]
+accent = "#70D69B"
+```
+
+Theme files use semantic roles rather than widget-specific colors. Start with
+the checked-in [`proqi-dark.toml`](https://github.com/oborchers/proqi/blob/main/docs/themes/proqi-dark.toml)
+example. Colors must use `#RRGGBB`; `focused_surface` additionally accepts
+`"none"`. Proqi accepts theme-file symlinks, bounds local files to 64 KiB, and
+does not fetch remote themes. A custom theme that fails Proqi's WCAG contrast
+checks is rejected before the terminal interface starts. Limited-color
+terminals use the safe terminal-native fallback because custom RGB colors
+cannot be represented faithfully.
 
 `brew uninstall proqi` removes the formula but deliberately leaves user data.
 Back up or remove the platform-native Proqi data, configuration, and cache

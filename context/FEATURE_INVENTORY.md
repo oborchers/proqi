@@ -25,7 +25,7 @@ must not imply that the behavior exists.
 | Collapse and long content | Shipped | `c` collapses long thoughts without changing canonical content. Scrolling is bounded, advances by wrapped row, and keeps focus and the insertion row reachable. | `tests/ui_board/composition.rs`, `tests/ui_board/navigation.rs` |
 | Search and command discovery | Shipped | Thought search, a searchable command palette, contextual help, keyboard control, and mouse control are available. | `tests/ui_board.rs`, `tests/ui_board/snapshots.rs`, `tests/ui_mouse_actions.rs` |
 | Responsive rendering | Shipped | One-column layout reflows across narrow, wide, tall, shallow, and repeated-resize viewports without mutating content or logical cursor state. | `tests/ui_board/composition.rs`, `tests/pty.rs` |
-| Theme and focus accessibility | Shipped | Auto, dark, light, and limited-color modes use non-color focus cues, terminal-aware surfaces, and tested contrast pairs. | `src/ui/theme.rs`, `tests/ui_board/snapshots.rs` |
+| Theme and focus accessibility | Shipped | Auto, dark, light, and limited-color modes plus bounded local semantic theme files and inline overrides use non-color focus cues, terminal-aware surfaces, and enforced contrast pairs. | `src/ui/theme.rs`, `src/ui/theme/`, `src/adapters/terminal/settings.rs`, `tests/ui_board/snapshots.rs` |
 | Keyboard and mouse parity | Shipped | Core creation, focus, edit, search, help, recovery, footer, and drag interactions have both input paths where terminals expose them. | `tests/ui_mouse_actions.rs`, `tests/ui_board.rs` |
 | URL presentation | Shipped | Explicit HTTP and HTTPS ranges receive accent and underline styling without changing content. Activation remains a terminal capability. | `tests/ui_board/composition.rs` |
 
@@ -60,7 +60,7 @@ must not imply that the behavior exists.
 | --- | --- | --- | --- |
 | Generic copy workflow | Shipped | Every thought can be copied or cut for native paste into any agent or application. | `tests/ui_board/clipboard.rs` |
 | Herdr discovery | Conditional | In a managed Herdr pane, Proqi discovers and independently verifies adjacent coding agents in all four directions. | `src/adapters/herdr`, `tests/herdr_executable.rs` |
-| Submit and keep | Conditional | A verified adjacent target receives one exact prompt through Herdr's semantic command, while every selected source thought remains. | `tests/ui_board/agent.rs`, `tests/ui_board/agent_selection.rs`, `src/adapters/herdr/submission.rs` |
+| Submit and keep | Conditional | A verified adjacent target receives one exact prompt through Herdr's semantic command, while every selected source thought remains. Concurrent senders can expose the protocol 19 prompt-boundary limitation. | `tests/ui_board/agent.rs`, `tests/ui_board/agent_selection.rs`, `src/adapters/herdr/submission.rs` |
 | Submit and remove | Conditional | The same semantic submission removes all unchanged selected sources as one operation only after the matching accepted receipt. Failure and ambiguity preserve them. | `tests/ui_board/agent.rs`, `tests/ui_board/agent_selection.rs`, `src/ui/app/agent.rs` |
 | Pane presentation metadata | Conditional | A managed pane advertises display-only Proqi identity with bounded refresh and clean clearing. It does not impersonate a coding agent. | `src/adapters/herdr`, `src/adapters/terminal/runner/heartbeat.rs` |
 | Conversation inspection | Not shipped | Proqi does not read agent conversations, wait for responses, or use raw key injection as a fallback. | `context/PRODUCT.md`, `src/adapters/herdr` |

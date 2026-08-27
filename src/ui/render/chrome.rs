@@ -95,7 +95,8 @@ fn render_context(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot
         || if failed { theme.error } else { theme.muted },
         |(_, severity)| match severity {
             StatusSeverity::Info => theme.muted,
-            StatusSeverity::Success | StatusSeverity::Warning => theme.accent,
+            StatusSeverity::Success => theme.success,
+            StatusSeverity::Warning => theme.warning,
             StatusSeverity::Error => theme.error,
         },
     );

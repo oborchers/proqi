@@ -8,7 +8,7 @@ use std::{fmt, fs, path::Path, time::Instant};
 use serde::Serialize;
 use serde_json::{Value, json};
 
-use crate::{ports::environment::AppPaths, ui::UiSettings};
+use crate::ports::environment::AppPaths;
 
 const WARNING_DISK_BYTES: u64 = 256 * 1024 * 1024;
 const FAILURE_DISK_BYTES: u64 = 32 * 1024 * 1024;
@@ -164,24 +164,19 @@ fn check_config(config_dir: &Path) -> DoctorCheck {
                 Some("Use a private regular config.toml no larger than 64 KiB."),
             );
         }
-        let valid = fs::read_to_string(&path)
-            .ok()
-            .and_then(|value| toml::from_str::<UiSettings>(&value).ok())
-            .is_some_and(|settings| settings.keybindings.validate().is_ok());
-        if valid {
-            result(
+        match crate::adapters::terminal::inspect_settings(config_dir) {
+            Ok(settings) => result(
                 DoctorStatus::Ok,
                 "configuration is valid",
-                json!({"present": true}),
+                json!({"present": true, "theme_source": settings.theme_source()}),
                 None,
-            )
-        } else {
-            result(
+            ),
+            Err(_) => result(
                 DoctorStatus::Fail,
                 "configuration cannot be parsed safely",
                 json!({"present": true}),
                 Some("Correct config.toml or move it aside and retry."),
-            )
+            ),
         }
     })
 }

@@ -1,5 +1,7 @@
 use super::*;
 
+use proqi::domain::Direction;
+
 pub(super) fn visual(movement: CursorMovement, shifted: bool) -> UiInput {
     UiInput::Key(UiKey::Move {
         movement,
@@ -95,6 +97,41 @@ fn help_is_modal_and_escape_closes_it_without_mutating_the_board() {
     assert_eq!(
         fixture.app.state.board.live_thoughts()[0].content,
         "unchanged"
+    );
+}
+
+#[test]
+fn shallow_two_column_help_scrolls_to_every_shortcut() {
+    let mut fixture = Fixture::new();
+    fixture.input(UiInput::Key(UiKey::Character('?')));
+    let _initial = draw(&mut fixture, 42, 8);
+    fixture.input(visual(CursorMovement::VisualDown, false));
+    fixture.input(visual(CursorMovement::VisualDown, false));
+    let terminal = draw(&mut fixture, 42, 8);
+    assert!(text(terminal.backend().buffer()).contains("Quit"));
+
+    fixture.pointer(1, 1, PointerKind::ScrollUp);
+    let terminal = draw(&mut fixture, 42, 8);
+    assert!(text(terminal.backend().buffer()).contains("Collapse"));
+}
+
+#[test]
+fn wide_help_uses_at_most_two_strictly_aligned_columns() {
+    let mut fixture = Fixture::new();
+    fixture
+        .app
+        .complete_agent_discovery(Ok(vec![super::agent::target(Direction::Left, "w1:p2")]));
+    fixture.input(UiInput::Key(UiKey::Character('?')));
+    let terminal = draw(&mut fixture, 80, 14);
+    let rendered = text(terminal.backend().buffer());
+    assert!(rendered.contains("Submit & keep"));
+    let quit = rendered
+        .lines()
+        .find(|line| line.contains("Quit"))
+        .expect("quit row");
+    assert!(
+        quit.split_once('│')
+            .is_some_and(|(_, content)| content.starts_with('q'))
     );
 }
 
@@ -385,102 +422,4 @@ fn overflowing_board_scrolls_to_the_insertion_row_without_blank_overscroll() {
     let clamped = fixture.app.prepare_frame(area);
     assert_eq!(clamped.first_index, final_page.first_index);
     assert!(clamped.insert.is_some());
-}
-
-#[test]
-fn current_session_can_be_renamed_from_the_palette_and_footer() {
-    let mut fixture = Fixture::new();
-    durable_thought(&mut fixture, "existing");
-    fixture.input(UiInput::Key(UiKey::Character(':')));
-    for character in "rename session".chars() {
-        fixture.input(UiInput::Key(UiKey::Character(character)));
-    }
-    fixture.input(UiInput::Key(UiKey::Enter));
-    assert_eq!(fixture.app.session_rename_view(), Some(""));
-    let rename_layout = fixture.app.prepare_frame(Rect::new(0, 0, 70, 10));
-    let rename_input = rename_layout.overlay.expect("rename overlay").area;
-    let terminal = draw_theme(&mut fixture, 70, 10, ThemePreference::Dark);
-    assert_eq!(
-        terminal.backend().buffer()[(rename_input.x + 1, rename_input.y + 1)].bg,
-        Theme::resolve(ThemePreference::Dark, true)
-            .focused_surface
-            .expect("surface")
-    );
-    for character in "Agent research".chars() {
-        fixture.input(UiInput::Key(UiKey::Character(character)));
-    }
-    let effects = fixture.effects(UiInput::Key(UiKey::Enter));
-    assert!(matches!(
-        effects.as_slice(),
-        [Effect::RenameSession { name: Some(name), .. }] if name == "Agent research"
-    ));
-    assert_eq!(
-        fixture.app.state.board.session.name.as_deref(),
-        Some("Agent research")
-    );
-    fixture.app.complete_session_rename(None, Ok(()));
-    let confirmation = draw_theme(&mut fixture, 70, 10, ThemePreference::Dark);
-    let confirmation_text = text(confirmation.backend().buffer());
-    assert!(confirmation_text.contains("session renamed"));
-    assert!(confirmation_text.contains("Agent research"));
-    assert!(confirmation_text.contains("1 thought · board · saving"));
-
-    let layout = fixture.app.prepare_frame(Rect::new(0, 0, 70, 10));
-    let (_, area) = layout
-        .controls
-        .iter()
-        .find(|(target, _)| *target == HitTarget::RenameSession)
-        .expect("rename target");
-    fixture.pointer(area.x, area.y, PointerKind::Move);
-    let terminal = draw_theme(&mut fixture, 70, 10, ThemePreference::Dark);
-    assert_eq!(
-        terminal.backend().buffer()[(area.x, area.y)].bg,
-        Theme::resolve(ThemePreference::Dark, true)
-            .focused_surface
-            .expect("focused surface")
-    );
-    assert_eq!(terminal.backend().buffer()[(area.x, area.y)].symbol(), "A");
-    fixture.pointer(area.x, area.y, PointerKind::Down(PointerButton::Left));
-    assert_eq!(fixture.app.session_rename_view(), Some("Agent research"));
-}
-
-#[test]
-fn failed_session_rename_restores_the_previous_durable_name() {
-    let mut fixture = Fixture::new();
-    durable_thought(&mut fixture, "existing");
-    fixture.app.state.board.session.name = Some("Durable".to_owned());
-    fixture.input(UiInput::Key(UiKey::Character(':')));
-    for character in "rename session".chars() {
-        fixture.input(UiInput::Key(UiKey::Character(character)));
-    }
-    fixture.input(UiInput::Key(UiKey::Enter));
-    for _ in 0.."Durable".len() {
-        fixture.input(UiInput::Key(UiKey::Backspace));
-    }
-    fixture.input(UiInput::Key(UiKey::Character('N')));
-    let _effects = fixture.effects(UiInput::Key(UiKey::Enter));
-    fixture.app.complete_session_rename(
-        Some("Durable".to_owned()),
-        Err(proqi::ports::store::StoreError::Busy),
-    );
-    assert_eq!(
-        fixture.app.state.board.session.name.as_deref(),
-        Some("Durable")
-    );
-    assert!(
-        fixture
-            .app
-            .status_text()
-            .is_some_and(|status| status.contains("failed"))
-    );
-    let failed = draw_theme(&mut fixture, 70, 10, ThemePreference::Dark);
-    let failed_text = text(failed.backend().buffer());
-    assert!(failed_text.contains("session rename failed"));
-    assert!(!failed_text.contains("Durable · 1 thought · board · saving"));
-
-    fixture.input(UiInput::Key(UiKey::Escape));
-    let restored = draw_theme(&mut fixture, 70, 10, ThemePreference::Dark);
-    let restored_text = text(restored.backend().buffer());
-    assert!(restored_text.contains("Durable"));
-    assert!(restored_text.contains("1 thought · board · saving"));
 }

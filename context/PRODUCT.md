@@ -444,11 +444,17 @@ product never guesses a target and never falls back to raw input injection.
 Prompt delivery has two dispositions over the same immediate semantic submit
 operation. `Submit` is the default and deletes the source thought or selected
 thoughts only after an accepted matching receipt. `Submit & keep` sends the
-same prompt and retains the source. Both may submit while the agent is working. The
-receiving harness decides whether the input steers the current turn or becomes
-follow-up input. Proqi verifies at submission time that the target exposes
-Herdr's semantic request and receipt contract. It never substitutes raw key
-injection.
+same prompt and retains the source. Both may submit while the agent is working.
+The receiving harness decides whether the input steers the current turn or
+becomes follow-up input. Proqi verifies at submission time that the target
+exposes Herdr's semantic request and receipt contract. It never substitutes raw
+key injection.
+
+Herdr protocol 19 does not guarantee a distinct user-turn boundary when another
+sender submits concurrently. Overlapping inputs can therefore merge at the
+receiving harness even though Herdr returns an accepted receipt. Proqi treats
+this as a known integration limitation and preserves its ordinary verified
+submission workflow.
 
 Each verified adjacent target appears once in the integration row, without its
 readiness label. `s Submit` and `S Submit & keep` are shown only when
@@ -795,7 +801,11 @@ thought should look like readable text with focus, not like a dashboard card.
 
 ### Theme behavior
 
-The default theme is `auto`, with explicit `light` and `dark` overrides.
+The default theme is `auto`, with explicit `light`, `dark`, and `limited`
+overrides. Users may replace any semantic color through inline configuration or
+a bounded local TOML theme file. Relative theme paths resolve from the Proqi
+configuration directory, and inline overrides take precedence over file roles.
+The current adaptive Proqi palette remains the exact default.
 Automatic detection uses terminal capabilities where available and falls back
 to terminal-native foreground and background colors rather than guessing an
 unsafe contrast pair.
@@ -807,6 +817,13 @@ exact foreground. The same semantic focus surface is used for thoughts,
 insertion rows, session-name affordances, footer controls, modal selections,
 and hover states. A failed query retains terminal-native colors plus the
 non-color focus gutter.
+
+Custom themes use versioned schemas and semantic roles for foreground,
+background, accents, focus, links, annotations, statuses, dividers, and errors.
+They are loaded only at launch. Proqi does not download themes or maintain a
+theme registry. Custom palettes that fail required text, focus, accent-surface,
+or control contrast are rejected with the failing role pair rather than
+silently altered.
 
 The product remains usable in terminals without true color. The fallback uses
 default foreground and background, one supported green accent, bold, dim, and

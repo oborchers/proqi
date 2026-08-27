@@ -273,7 +273,13 @@ impl BoardApp {
         let preferred_rows = if self.update_prompt.is_some() {
             4
         } else if self.help {
-            6
+            let item_count = if matches!(self.interaction_mode(), InteractionMode::Edit { .. }) {
+                7
+            } else {
+                15 + usize::from(self.supports_submission()) * 2
+            };
+            let columns = usize::from(layout.board.width >= 48) + 1;
+            item_count.div_ceil(columns)
         } else if self.rename.is_some() {
             2
         } else if self.palette.is_some() {

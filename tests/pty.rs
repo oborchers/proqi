@@ -3,6 +3,10 @@
 use std::process::Command;
 
 #[cfg(target_os = "macos")]
+#[path = "pty/recovery.rs"]
+mod recovery;
+
+#[cfg(target_os = "macos")]
 use serde_json::Value;
 
 #[test]

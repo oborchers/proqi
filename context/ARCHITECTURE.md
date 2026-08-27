@@ -143,6 +143,16 @@ without adding product value.
 
 - `clap` for interactive launch flags and scriptable subcommands.
 - `serde` with TOML for configuration and versioned machine output.
+
+Theme configuration is parsed by the terminal adapter before terminal entry.
+The UI receives one resolved semantic `Theme`; widgets never read files or
+interpret user color strings. A theme recipe consists of a built-in base, an
+optional versioned local TOML file, and final inline overrides. Local theme
+files are bounded regular-file targets, may be reached through a symlink, and
+never invoke network or shell behavior. The resolver validates every custom
+role pair against Proqi's WCAG contrast policy before the terminal guard enters
+raw mode. Terminals without reliable true-color support receive the built-in
+limited palette instead of an inaccurate custom approximation.
 - `arboard` for the native clipboard, with OSC 52 behind the same facade.
 - `tracing` behind one typed diagnostics adapter. Callers emit only reviewed
   lifecycle, command, and submission-state fields. Direct tracing calls outside
@@ -716,6 +726,12 @@ ordinary terminals retain an uncluttered board. An explicit refresh, or a
 submission attempt with no verified target, reports why direct submission is
 unavailable. Every submission revalidates the complete target immediately
 before invoking Herdr's semantic prompt operation.
+
+Herdr protocol 19 acknowledges accepted text entry but does not guarantee a
+distinct prompt boundary when another sender submits concurrently. This is a
+known provider-contract limitation. Proqi retains target verification, receipt
+matching, durable journaling, and remove-only-after-acceptance semantics, but
+cannot prevent the receiving harness from merging overlapping inputs.
 
 Herdr also implements a separate display-only `PanePresentation` port. In a
 managed pane, the terminal runtime publishes `title=proqi` and

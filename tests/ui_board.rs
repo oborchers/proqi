@@ -467,6 +467,8 @@ mod palette;
 mod scroll_regressions;
 #[path = "ui_board/selection.rs"]
 mod selection;
+#[path = "ui_board/session_navigation.rs"]
+mod session_navigation;
 #[path = "ui_board/snapshots.rs"]
 mod snapshots;
 #[path = "ui_board/submission_locks.rs"]

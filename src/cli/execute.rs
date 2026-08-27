@@ -149,10 +149,7 @@ fn execute_launch(
     };
     let id = session.state.board.session.id;
     if interactive {
-        let resources = context.into_terminal(
-            session,
-            settings.unwrap_or_else(crate::ui::UiSettings::default),
-        );
+        let resources = context.into_terminal(session, settings.unwrap_or_default());
         let _closed = terminal::run(resources)?;
     }
     Ok(opened_session(id))
@@ -160,7 +157,7 @@ fn execute_launch(
 
 fn browse_for_session(
     context: &mut RuntimeContext,
-    settings: &crate::ui::UiSettings,
+    settings: &crate::adapters::terminal::LoadedSettings,
 ) -> Result<
     Option<crate::application::LeasedSession<crate::adapters::runtime::FileSessionLease>>,
     CliError,

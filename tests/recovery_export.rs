@@ -137,7 +137,7 @@ fn failed_ui_state_offers_retry_and_an_exact_recovery_effect() {
     app.acknowledge_persistence(sequence, false);
 
     assert!(
-        app.handle(UiInput::Key(UiKey::Quit), &mut ids, &clock)
+        app.handle(UiInput::Key(UiKey::Character('q')), &mut ids, &clock)
             .is_empty()
     );
     assert!(!app.quit);
@@ -173,6 +173,76 @@ fn failed_ui_state_offers_retry_and_an_exact_recovery_effect() {
         }
     );
     app.complete_recovery_export(*request_id, Ok(std::env::temp_dir().join("recovered.json")));
-    app.handle(UiInput::Key(UiKey::Quit), &mut ids, &clock);
+    app.handle(UiInput::Key(UiKey::Character('q')), &mut ids, &clock);
     assert!(app.quit);
+}
+
+#[test]
+fn failed_recovery_uses_the_configured_quit_key() {
+    let (mut state, mut ids, clock) = state();
+    let effects = reduce(
+        &mut state,
+        Action::CreateThought {
+            thought_id: ids.thought_id(),
+            operation_id: ids.operation_id(),
+            content: "unsaved".to_owned(),
+            annotations: Vec::new(),
+            insertion_index: None,
+            at: clock.now(),
+        },
+    )
+    .expect("create");
+    let sequence = effects[0]
+        .persistence_batch()
+        .and_then(|batch| batch.sequence())
+        .expect("sequence");
+    let mut settings = proqi::ui::UiSettings::default();
+    settings.keybindings.quit = 'z';
+    let mut app =
+        BoardApp::with_settings(state, settings, proqi::adapters::editor::RopeEditorFactory);
+    app.acknowledge_persistence(sequence, false);
+    let export = app.handle(UiInput::Key(UiKey::Character('w')), &mut ids, &clock);
+    let [Effect::ExportRecovery { request_id, .. }] = export.as_slice() else {
+        panic!("expected recovery effect");
+    };
+    app.complete_recovery_export(*request_id, Ok(std::env::temp_dir().join("recovered.json")));
+
+    app.handle(UiInput::Key(UiKey::Character('q')), &mut ids, &clock);
+    assert!(!app.quit);
+    app.handle(UiInput::Key(UiKey::Character('z')), &mut ids, &clock);
+    assert!(app.quit);
+}
+
+#[test]
+fn stale_recovery_export_does_not_authorize_quit() {
+    let (mut state, mut ids, clock) = state();
+    for content in ["first", "second"] {
+        reduce(
+            &mut state,
+            Action::CreateThought {
+                thought_id: ids.thought_id(),
+                operation_id: ids.operation_id(),
+                content: content.to_owned(),
+                annotations: Vec::new(),
+                insertion_index: None,
+                at: clock.now(),
+            },
+        )
+        .expect("create");
+    }
+    let mut app = BoardApp::new(state, proqi::adapters::editor::RopeEditorFactory);
+    app.acknowledge_persistence(OperationSequence::new(2), false);
+    let export = app.handle(UiInput::Key(UiKey::Character('w')), &mut ids, &clock);
+    let [Effect::ExportRecovery { request_id, .. }] = export.as_slice() else {
+        panic!("expected recovery effect");
+    };
+    app.complete_recovery_export(*request_id, Ok(std::env::temp_dir().join("stale.json")));
+    app.acknowledge_persistence(OperationSequence::new(1), false);
+
+    app.handle(UiInput::Key(UiKey::Character('q')), &mut ids, &clock);
+    assert!(!app.quit);
+    assert_eq!(
+        app.status_text(),
+        Some("retry the save or export recovery before quitting")
+    );
 }

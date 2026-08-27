@@ -2,20 +2,8 @@
 
 use serde::Deserialize;
 
-/// Explicit or capability-derived terminal theme.
-#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq)]
-#[serde(rename_all = "lowercase")]
-pub enum ThemePreference {
-    /// Inherit terminal foreground and background, adapting to capabilities.
-    #[default]
-    Auto,
-    /// Explicit light palette.
-    Light,
-    /// Explicit dark palette.
-    Dark,
-    /// Terminal-native limited-color fallback.
-    Limited,
-}
+pub(crate) const RECOVERY_RETRY_KEY: char = 'r';
+pub(crate) const RECOVERY_EXPORT_KEY: char = 'w';
 
 /// Optional enhanced keyboard reporting for compatible terminal emulators.
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq)]
@@ -29,13 +17,10 @@ pub enum KeyboardEnhancement {
 }
 
 /// Complete UI configuration loaded from the platform config directory.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[serde(default, deny_unknown_fields)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct UiSettings {
     /// Permit on-demand stable release checks in interactive release builds.
     pub check_for_updates: bool,
-    /// Theme preference.
-    pub theme: ThemePreference,
     /// Keyboard protocol negotiation.
     pub keyboard_enhancement: KeyboardEnhancement,
     /// Remappable direct board keys.
@@ -48,7 +33,6 @@ impl Default for UiSettings {
     fn default() -> Self {
         Self {
             check_for_updates: true,
-            theme: ThemePreference::default(),
             keyboard_enhancement: KeyboardEnhancement::default(),
             keybindings: KeyBindings::default(),
             density: BoardDensity::default(),
@@ -191,6 +175,9 @@ impl KeyBindings {
     ///
     /// Returns an error for control characters or duplicate bindings.
     pub fn validate(&self) -> Result<(), &'static str> {
+        if matches!(self.quit, RECOVERY_RETRY_KEY | RECOVERY_EXPORT_KEY) {
+            return Err("the quit binding cannot use the reserved recovery keys r or w");
+        }
         let values = [
             self.new,
             self.edit,
@@ -231,28 +218,7 @@ pub(crate) fn key_label(key: char) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{BoardCommand, BoardDensity, KeyBindings, UiSettings};
-
-    #[test]
-    fn partial_toml_uses_defaults_and_remaps_one_action() {
-        let settings: UiSettings = toml::from_str("[keybindings]\nnew = 't'").expect("settings");
-        assert!(settings.check_for_updates);
-        assert_eq!(settings.keybindings.command('t'), Some(BoardCommand::New));
-        assert_eq!(settings.keybindings.edit, 'e');
-        assert!(settings.keybindings.validate().is_ok());
-    }
-
-    #[test]
-    fn update_checks_can_be_disabled_globally() {
-        let settings: UiSettings = toml::from_str("check_for_updates = false").expect("settings");
-        assert!(!settings.check_for_updates);
-    }
-
-    #[test]
-    fn compact_board_density_is_configurable() {
-        let settings: UiSettings = toml::from_str("density = 'compact'").expect("settings");
-        assert_eq!(settings.density, BoardDensity::Compact);
-    }
+    use super::KeyBindings;
 
     #[test]
     fn ambiguous_bindings_are_rejected() {
@@ -262,16 +228,13 @@ mod tests {
     }
 
     #[test]
-    fn legacy_delivery_names_map_to_the_new_submission_dispositions() {
-        let settings: UiSettings =
-            toml::from_str("[keybindings]\nsend = 'a'\nsubmit = 'A'").expect("settings");
-        assert_eq!(
-            settings.keybindings.command('a'),
-            Some(BoardCommand::SubmitRemove)
-        );
-        assert_eq!(
-            settings.keybindings.command('A'),
-            Some(BoardCommand::SubmitKeep)
-        );
+    fn recovery_keys_cannot_be_used_for_quit() {
+        for reserved in ['r', 'w'] {
+            let bindings = KeyBindings {
+                quit: reserved,
+                ..KeyBindings::default()
+            };
+            assert!(bindings.validate().is_err());
+        }
     }
 }

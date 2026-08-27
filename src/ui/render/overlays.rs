@@ -26,19 +26,24 @@ pub(super) fn render_help(
 ) {
     frame.render_widget(Clear, overlay.area);
     frame.render_widget(
-        Paragraph::new(help_lines(app, theme, overlay.area.width.saturating_sub(2)))
-            .block(
-                Block::default()
-                    .title(Span::styled(
-                        " proqi shortcuts ",
-                        Style::default()
-                            .fg(theme.accent)
-                            .add_modifier(Modifier::BOLD),
-                    ))
-                    .style(theme.base_style())
-                    .borders(Borders::ALL),
-            )
-            .wrap(Wrap { trim: true }),
+        Paragraph::new(help_lines(
+            app,
+            theme,
+            overlay.area.width.saturating_sub(2),
+            overlay.area.height.saturating_sub(2),
+        ))
+        .block(
+            Block::default()
+                .title(Span::styled(
+                    " proqi shortcuts ",
+                    Style::default()
+                        .fg(theme.accent)
+                        .add_modifier(Modifier::BOLD),
+                ))
+                .style(theme.base_style())
+                .borders(Borders::ALL),
+        )
+        .wrap(Wrap { trim: true }),
         overlay.area,
     );
     render_close(frame, overlay, theme);
@@ -194,14 +199,17 @@ fn render_close(frame: &mut Frame<'_>, overlay: &OverlayLayout, theme: &Theme) {
     );
 }
 
-fn help_lines(app: &BoardApp, theme: &Theme, width: u16) -> Vec<Line<'static>> {
+fn help_lines(app: &BoardApp, theme: &Theme, width: u16, height: u16) -> Vec<Line<'static>> {
     let keys = app.keybindings();
     let items = if matches!(app.interaction_mode(), InteractionMode::Edit { .. }) {
         edit_shortcuts(keys)
     } else {
         board_shortcuts(app)
     };
-    shortcut_grid(&items, width, theme)
+    let lines = shortcut_grid(&items, width, theme);
+    let capacity = usize::from(height);
+    let scroll = app.help_scroll().min(lines.len().saturating_sub(capacity));
+    lines.into_iter().skip(scroll).take(capacity).collect()
 }
 
 fn edit_shortcuts(keys: &crate::ui::KeyBindings) -> Vec<(String, &'static str)> {
@@ -249,15 +257,18 @@ fn shortcut_grid(
     width: u16,
     theme: &Theme,
 ) -> Vec<Line<'static>> {
-    let columns = if width >= 48 {
-        3
-    } else if width >= 30 {
+    let key_width = items.iter().map(|(key, _)| key.width()).max().unwrap_or(1);
+    let widest = items
+        .iter()
+        .map(|(_, label)| key_width + 1 + label.width())
+        .max()
+        .unwrap_or(1);
+    let columns = if usize::from(width) >= widest.saturating_mul(2) {
         2
     } else {
         1
     };
     let cell_width = usize::from(width) / columns;
-    let key_width = items.iter().map(|(key, _)| key.width()).max().unwrap_or(1);
     items
         .chunks(columns)
         .map(|row| shortcut_row(row, columns, cell_width, key_width, theme))

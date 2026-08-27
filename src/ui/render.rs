@@ -305,8 +305,10 @@ fn styled_line(
                 .any(|fold| fold.collapsed && byte >= fold.start && byte < fold.end);
             let linked = links.iter().any(|range| range.contains(&byte));
             column = column.saturating_add(width);
-            let mut style = Style::default().fg(if folded || linked {
-                theme.accent
+            let mut style = Style::default().fg(if folded {
+                theme.annotation
+            } else if linked {
+                theme.link
             } else {
                 theme.foreground
             });

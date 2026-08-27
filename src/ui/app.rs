@@ -7,6 +7,7 @@ mod control;
 mod duplicate;
 mod editing;
 mod folds;
+mod help;
 mod palette;
 mod pending_types;
 mod pointer;
@@ -157,6 +158,7 @@ pub struct BoardApp {
     pub quit: bool,
     /// Whether contextual help is visible.
     pub help: bool,
+    help_scroll: usize,
     /// Transient human-readable status.
     pub(in crate::ui) status: Option<crate::ui::status::UiStatus>,
     viewport: TextViewport,
@@ -215,6 +217,7 @@ impl BoardApp {
             edit_generation: 0,
             quit: false,
             help: false,
+            help_scroll: 0,
             status: None,
             viewport: TextViewport::default(),
             first_visible: 0,
@@ -256,7 +259,7 @@ impl BoardApp {
         if self.help {
             return self.handle_help_input(&input);
         }
-        if input == UiInput::Key(UiKey::Quit) {
+        if input == UiInput::Key(UiKey::Quit) || self.is_failed_recovery_quit(&input) {
             let effects = if matches!(self.state.durability, DurabilityState::Failed { .. }) {
                 Vec::new()
             } else {
@@ -302,18 +305,8 @@ impl BoardApp {
         {
             return effects;
         }
-        if matches!(self.state.durability, DurabilityState::Failed { .. }) {
-            match input {
-                UiInput::Key(UiKey::Character('r')) => return self.retry_persistence(),
-                UiInput::Key(UiKey::Character('w')) => return self.export_recovery(ids, clock),
-                UiInput::Pointer(pointer) => {
-                    return self.handle_recovery_pointer(pointer, ids, clock);
-                }
-                UiInput::Resize { .. } | UiInput::HostFocusGained => {}
-                UiInput::Key(_) | UiInput::Paste(_) | UiInput::PasteAnnotated(_) => {
-                    return Vec::new();
-                }
-            }
+        if let Some(effects) = self.handle_failed_recovery_input(&input, ids, clock) {
+            return effects;
         }
         match input {
             UiInput::HostFocusGained => Self::discover_agents(),
@@ -331,37 +324,6 @@ impl BoardApp {
                 InteractionMode::Edit { .. } => self.handle_edit_key(key, ids, clock),
             },
         }
-    }
-
-    fn handle_help_input(&mut self, input: &UiInput) -> Vec<Effect> {
-        match input {
-            UiInput::Key(UiKey::Escape) => self.help = false,
-            UiInput::Key(UiKey::Character(character))
-                if *character == self.settings.keybindings.help =>
-            {
-                self.help = false;
-            }
-            UiInput::Resize { .. } => {
-                self.layout = None;
-                self.hovered = None;
-            }
-            UiInput::Pointer(pointer) => {
-                if self
-                    .layout
-                    .as_ref()
-                    .and_then(|layout| layout.hit_test(pointer.column, pointer.row))
-                    == Some(HitTarget::CloseOverlay)
-                    && matches!(pointer.kind, PointerKind::Down(PointerButton::Left))
-                {
-                    self.help = false;
-                }
-            }
-            UiInput::HostFocusGained
-            | UiInput::Key(_)
-            | UiInput::Paste(_)
-            | UiInput::PasteAnnotated(_) => {}
-        }
-        Vec::new()
     }
 
     /// Rebuild the editor adapter when reducer state changes externally.

@@ -7,7 +7,7 @@ use ratatui_crossterm::CrosstermBackend;
 
 use crate::{
     domain::Timestamp,
-    ui::{BrowserAction, SessionBrowser, SessionBrowserItem, Theme, UiSettings, render_browser},
+    ui::{BrowserAction, SessionBrowser, SessionBrowserItem, Theme, render_browser},
 };
 
 use super::{
@@ -25,10 +25,10 @@ use super::{
 pub(crate) fn pick_session(
     items: Vec<SessionBrowserItem>,
     now: Timestamp,
-    settings: &UiSettings,
+    settings: &super::LoadedSettings,
 ) -> Result<BrowserAction, TerminalError> {
-    let theme = super::palette::resolve(settings.theme, supports_true_color());
-    let guard = TerminalGuard::enter(CrosstermControl::new(crate::ui::KeyboardEnhancement::Auto))?;
+    let theme = super::palette::resolve(&settings.theme, supports_true_color())?;
+    let guard = TerminalGuard::enter(CrosstermControl::new(settings.ui.keyboard_enhancement))?;
     let panic_hook = PanicHookGuard::install();
     let termination = TerminationGuard::register()?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;

@@ -19,7 +19,7 @@ fn remapped_board_binding_changes_behavior_and_visible_hint() {
 }
 
 #[test]
-fn explicit_web_urls_use_accent_and_underline_without_changing_content() {
+fn explicit_web_urls_use_link_role_and_underline_without_changing_content() {
     let mut fixture = Fixture::new();
     let content = "See https://google.com? now";
     fixture.paste(content);
@@ -28,7 +28,7 @@ fn explicit_web_urls_use_accent_and_underline_without_changing_content() {
     let area = fixture.app.prepare_frame(Rect::new(0, 0, 60, 8)).thoughts[0].text_area;
     let theme = Theme::resolve(ThemePreference::Dark, true);
     let url = &terminal.backend().buffer()[(area.x + 4, area.y)];
-    assert_eq!(url.fg, theme.accent);
+    assert_eq!(url.fg, theme.link);
     assert!(
         url.modifier
             .contains(ratatui_core::style::Modifier::UNDERLINED)

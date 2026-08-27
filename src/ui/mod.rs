@@ -21,5 +21,6 @@ pub use browser::{
 pub use browser_render::render_browser;
 pub use layout::{HitTarget, LayoutSnapshot, ThoughtLayout, compute as compute_layout};
 pub use render::render;
-pub use settings::{KeyBindings, KeyboardEnhancement, ThemePreference, UiSettings};
-pub use theme::{TerminalPalette, Theme};
+pub use settings::{BoardDensity, KeyBindings, KeyboardEnhancement, UiSettings};
+pub use theme::{TerminalPalette, Theme, ThemePreference};
+pub(crate) use theme::{ThemeOverrides, ThemeRecipe};

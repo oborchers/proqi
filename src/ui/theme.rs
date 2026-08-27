@@ -2,7 +2,12 @@
 
 use ratatui_core::style::{Color, Modifier, Style};
 
-use super::ThemePreference;
+mod config;
+mod validation;
+
+pub use config::ThemePreference;
+pub(crate) use config::{SurfaceColor, ThemeColor, ThemeOverrides, ThemeRecipe};
+pub(crate) use validation::ThemeError;
 
 /// Terminal colors discovered before the full-screen interface starts.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -36,6 +41,14 @@ pub struct Theme {
     pub focused_surface: Option<Color>,
     /// Semantic failure color.
     pub error: Color,
+    /// Explicit links in thought content.
+    pub link: Color,
+    /// Folded image, file, and pasted-text annotations.
+    pub annotation: Color,
+    /// Successful transient status.
+    pub success: Color,
+    /// Warning transient status.
+    pub warning: Color,
 }
 
 impl Theme {
@@ -66,6 +79,10 @@ impl Theme {
                 divider: Color::Rgb(224, 217, 207),
                 focused_surface: Some(Color::Rgb(236, 236, 240)),
                 error: Color::Red,
+                link: Color::Rgb(45, 106, 79),
+                annotation: Color::Rgb(45, 106, 79),
+                success: Color::Rgb(45, 106, 79),
+                warning: Color::Rgb(45, 106, 79),
             },
             ThemePreference::Dark => Self {
                 foreground: Color::Rgb(232, 228, 223),
@@ -77,6 +94,10 @@ impl Theme {
                 divider: Color::Rgb(42, 37, 32),
                 focused_surface: Some(Color::Rgb(39, 40, 48)),
                 error: Color::LightRed,
+                link: Color::Rgb(112, 214, 155),
+                annotation: Color::Rgb(112, 214, 155),
+                success: Color::Rgb(112, 214, 155),
+                warning: Color::Rgb(112, 214, 155),
             },
             ThemePreference::Auto => match palette {
                 Some(palette) => Self::automatic(palette),
@@ -84,6 +105,26 @@ impl Theme {
             },
             ThemePreference::Limited => Self::limited(),
         }
+    }
+
+    /// Resolve and validate a fully loaded built-in or custom recipe.
+    pub(crate) fn resolve_recipe(
+        recipe: &ThemeRecipe,
+        true_color: bool,
+        palette: Option<TerminalPalette>,
+    ) -> Result<Self, ThemeError> {
+        if !true_color || matches!(recipe.base, ThemePreference::Limited) {
+            return Ok(Self::limited());
+        }
+        let mut theme = Self::resolve_with_palette(recipe.base, true_color, palette);
+        if recipe.custom && matches!(theme.foreground, Color::Reset) {
+            return Ok(Self::limited());
+        }
+        theme.apply(&recipe.colors);
+        if recipe.custom {
+            validation::validate(&theme)?;
+        }
+        Ok(theme)
     }
 
     /// Base foreground and background style.
@@ -112,6 +153,10 @@ impl Theme {
             divider: Color::DarkGray,
             focused_surface: None,
             error: Color::Red,
+            link: Color::Green,
+            annotation: Color::Green,
+            success: Color::Green,
+            warning: Color::Green,
         }
     }
 
@@ -143,7 +188,45 @@ impl Theme {
         theme.focused_surface = (contrast(palette.foreground, surface) >= 4.5
             && contrast(accent, surface) >= 4.5)
             .then_some(Color::Rgb(surface.0, surface.1, surface.2));
+        theme.link = theme.accent;
+        theme.annotation = theme.accent;
+        theme.success = theme.accent;
+        theme.warning = theme.accent;
         theme
+    }
+
+    fn apply(&mut self, colors: &ThemeOverrides) {
+        macro_rules! apply {
+            ($field:ident) => {
+                if let Some(color) = colors.$field {
+                    self.$field = color.into();
+                }
+            };
+        }
+        apply!(foreground);
+        apply!(background);
+        apply!(accent);
+        apply!(accent_surface);
+        apply!(on_accent);
+        apply!(muted);
+        apply!(divider);
+        apply!(link);
+        apply!(annotation);
+        apply!(success);
+        apply!(warning);
+        apply!(error);
+        if let Some(surface) = colors.focused_surface {
+            self.focused_surface = match surface {
+                SurfaceColor::Color(color) => Some(color.into()),
+                SurfaceColor::None => None,
+            };
+        }
+    }
+}
+
+impl From<ThemeColor> for Color {
+    fn from(value: ThemeColor) -> Self {
+        Self::Rgb(value.0, value.1, value.2)
     }
 }
 
@@ -180,34 +263,14 @@ fn blend_channel(channel: u8, target: u8, percentage: u16) -> u8 {
     u8::try_from(value / 100).unwrap_or(u8::MAX)
 }
 
-fn contrast(first: (u8, u8, u8), second: (u8, u8, u8)) -> f64 {
-    let first = luminance(first);
-    let second = luminance(second);
-    (first.max(second) + 0.05) / (first.min(second) + 0.05)
-}
-
-fn luminance(color: (u8, u8, u8)) -> f64 {
-    [color.0, color.1, color.2]
-        .map(|channel| {
-            let value = f64::from(channel) / 255.0;
-            if value <= 0.040_45 {
-                value / 12.92
-            } else {
-                ((value + 0.055) / 1.055).powf(2.4)
-            }
-        })
-        .into_iter()
-        .zip([0.2126, 0.7152, 0.0722])
-        .map(|(channel, weight)| channel * weight)
-        .sum()
-}
+use validation::contrast;
 
 #[cfg(test)]
 mod tests {
     use proptest::prelude::*;
     use ratatui_core::style::{Color, Modifier};
 
-    use super::{TerminalPalette, Theme, ThemePreference, contrast};
+    use super::{TerminalPalette, Theme, ThemeOverrides, ThemePreference, ThemeRecipe, contrast};
 
     fn rgb(color: Color) -> Option<(u8, u8, u8)> {
         match color {
@@ -306,6 +369,31 @@ mod tests {
         assert!(contrast((45, 106, 79), (250, 250, 248)) >= 4.5);
         assert!(contrast((250, 250, 248), (45, 106, 79)) >= 4.5);
         assert_ne!(dark.accent, light.accent);
+    }
+
+    #[test]
+    fn inaccessible_custom_theme_is_rejected_before_rendering() {
+        let colors: ThemeOverrides =
+            toml::from_str("foreground = '#101010'\nbackground = '#111111'").expect("overrides");
+        let recipe = ThemeRecipe::custom(ThemePreference::Dark, colors);
+        let error = Theme::resolve_recipe(&recipe, true, None).expect_err("contrast failure");
+        assert!(error.to_string().contains("foreground on background"));
+    }
+
+    #[test]
+    fn inline_overrides_are_validated_like_theme_files() {
+        let colors: ThemeOverrides = toml::from_str("link = '#111111'").expect("overrides");
+        let recipe = ThemeRecipe::built_in(ThemePreference::Dark, colors);
+        assert!(Theme::resolve_recipe(&recipe, true, None).is_err());
+    }
+
+    #[test]
+    fn custom_rgb_theme_degrades_to_limited_colors_when_required() {
+        let colors: ThemeOverrides = toml::from_str("link = '#7DD3FC'").expect("overrides");
+        let recipe = ThemeRecipe::custom(ThemePreference::Dark, colors);
+        let theme = Theme::resolve_recipe(&recipe, false, None).expect("limited fallback");
+        assert_eq!(theme.foreground, Color::Reset);
+        assert_eq!(theme.link, Color::Green);
     }
 
     proptest! {
