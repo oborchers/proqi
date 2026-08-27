@@ -2,7 +2,7 @@ use super::*;
 
 use proqi::{
     domain::Direction,
-    ports::agent::{AgentState, SubmissionReceipt},
+    ports::agent::{AgentSessionBinding, AgentState, SubmissionReceipt},
 };
 
 #[test]
@@ -10,7 +10,7 @@ fn accepted_first_prompt_upgrades_the_cached_target_session() {
     let mut fixture = Fixture::new();
     super::agent::prepare_thought(&mut fixture);
     let mut provisional = super::agent::target(Direction::Left, "w1:p2");
-    provisional.agent_session_id = None;
+    provisional.agent_session = AgentSessionBinding::provisional();
     fixture
         .app
         .complete_agent_discovery(Ok(vec![provisional.clone()]));
@@ -18,7 +18,8 @@ fn accepted_first_prompt_upgrades_the_cached_target_session() {
     let effects = fixture.effects(UiInput::Key(UiKey::Character('S')));
     let request = super::agent::start_submission(&mut fixture, &effects);
     let mut established = provisional;
-    established.agent_session_id = Some("new-codex-session".to_owned());
+    established.agent_session =
+        AgentSessionBinding::established("new-codex-session").expect("fixture session");
     let completion = super::agent::finish_submission(
         &mut fixture,
         &request,
@@ -45,7 +46,7 @@ fn a_receipt_before_the_session_hook_is_accepted_and_refreshes_identity() {
     let mut fixture = Fixture::new();
     super::agent::prepare_thought(&mut fixture);
     let mut provisional = super::agent::target(Direction::Left, "w1:p2");
-    provisional.agent_session_id = None;
+    provisional.agent_session = AgentSessionBinding::provisional();
     fixture
         .app
         .complete_agent_discovery(Ok(vec![provisional.clone()]));
@@ -67,7 +68,7 @@ fn a_receipt_before_the_session_hook_is_accepted_and_refreshes_identity() {
         [
             Effect::StoreIntegrationContext { target, .. },
             Effect::DiscoverAgents
-        ] if target.agent_session_id.is_none()
+        ] if target.agent_session.is_provisional()
     ));
     assert_eq!(fixture.app.state.board.live_thoughts().len(), 1);
     assert_eq!(fixture.app.agent_targets(), [provisional.clone()]);
@@ -77,7 +78,8 @@ fn a_receipt_before_the_session_hook_is_accepted_and_refreshes_identity() {
     );
 
     let mut established = provisional;
-    established.agent_session_id = Some("new-codex-session".to_owned());
+    established.agent_session =
+        AgentSessionBinding::established("new-codex-session").expect("fixture session");
     fixture
         .app
         .complete_agent_discovery(Ok(vec![established.clone()]));

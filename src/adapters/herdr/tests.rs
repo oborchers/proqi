@@ -7,8 +7,9 @@ use crate::{
     domain::Direction,
     ports::{
         agent::{
-            AgentError, AgentGateway, AgentState, AgentTarget, CODEX_AGENT_KIND, PaneContext,
-            PanePresentation, PaneRect, SubmissionRequest,
+            AgentError, AgentGateway, AgentSessionBinding, AgentState, AgentTarget,
+            CODEX_AGENT_KIND, HarnessKind, PaneContext, PanePresentation, PaneRect,
+            SubmissionRequest,
         },
         environment::{IdGenerator, ProcessError, ProcessOutput, ProcessRequest, ProcessRunner},
     },
@@ -318,9 +319,10 @@ fn target(context: &PaneContext) -> AgentTarget {
         pane_id: "w1:p2".to_owned(),
         workspace_id: "w1".to_owned(),
         tab_id: "w1:t1".to_owned(),
-        agent_kind: CODEX_AGENT_KIND.to_owned(),
+        agent_kind: HarnessKind::new(CODEX_AGENT_KIND).expect("fixture harness"),
         agent_name: "reviewer".to_owned(),
-        agent_session_id: Some("agent-session-1".to_owned()),
+        agent_session: AgentSessionBinding::established("agent-session-1")
+            .expect("fixture session"),
         readiness: AgentState::Idle,
         delivery: crate::ports::agent::AgentDeliveryCapabilities::SUBMIT_ONLY,
         rect: right_rect(),

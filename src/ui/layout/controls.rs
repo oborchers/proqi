@@ -138,7 +138,7 @@ fn agent_width(target: &AgentTarget) -> u16 {
     let direction = match target.direction {
         Direction::Up | Direction::Right | Direction::Down | Direction::Left => 1,
     };
-    direction + 1 + width(&target.agent_kind)
+    direction + 1 + width(target.agent_kind.as_str())
 }
 
 fn width(value: &str) -> u16 {

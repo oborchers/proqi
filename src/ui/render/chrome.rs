@@ -180,7 +180,7 @@ fn label(
                 .find(|target| target.direction == direction);
             let detail = target.map_or_else(
                 || " Agent".to_owned(),
-                |target| format!(" {}", compact_agent_name(&target.agent_kind)),
+                |target| format!(" {}", compact_agent_name(target.agent_kind.as_str())),
             );
             return ControlLabel {
                 key: direction_symbol(direction).to_owned(),

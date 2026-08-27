@@ -2,7 +2,10 @@ use super::*;
 
 use proqi::{
     domain::Direction,
-    ports::agent::{AgentState, AgentTarget, CODEX_AGENT_KIND, PaneContext, PaneRect},
+    ports::agent::{
+        AgentSessionBinding, AgentState, AgentTarget, CODEX_AGENT_KIND, HarnessKind, PaneContext,
+        PaneRect,
+    },
 };
 
 #[path = "../support/snapshots.rs"]
@@ -34,9 +37,10 @@ fn adjacent_target(direction: Direction, pane_id: &str, readiness: AgentState) -
         pane_id: pane_id.to_owned(),
         workspace_id: source.workspace_id.clone(),
         tab_id: source.tab_id.clone(),
-        agent_kind: CODEX_AGENT_KIND.to_owned(),
+        agent_kind: HarnessKind::new(CODEX_AGENT_KIND).expect("fixture harness"),
         agent_name: format!("Codex {pane_id}"),
-        agent_session_id: Some(format!("session-{pane_id}")),
+        agent_session: AgentSessionBinding::established(format!("session-{pane_id}"))
+            .expect("fixture session"),
         readiness,
         delivery: proqi::ports::agent::AgentDeliveryCapabilities::SUBMIT_ONLY,
         rect: source.rect,

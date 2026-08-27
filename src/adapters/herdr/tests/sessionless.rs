@@ -3,7 +3,9 @@ use serde_json::{Value, json};
 use crate::{
     adapters::memory::FakeIdGenerator,
     ports::{
-        agent::{AgentError, AgentGateway, CLAUDE_AGENT_KIND, SubmissionRequest},
+        agent::{
+            AgentError, AgentGateway, AgentSessionBinding, CLAUDE_AGENT_KIND, SubmissionRequest,
+        },
         environment::IdGenerator,
     },
 };
@@ -15,6 +17,35 @@ fn without_session(mut pane: Value) -> Value {
         .expect("agent object")
         .remove("agent_session");
     pane
+}
+
+fn with_harness(mut pane: Value, harness: &str) -> Value {
+    pane["agent"] = json!(harness);
+    if let Some(session) = pane
+        .as_object_mut()
+        .and_then(|fields| fields.get_mut("agent_session"))
+    {
+        session["agent"] = json!(harness);
+    }
+    pane
+}
+
+#[test]
+fn discovery_accepts_established_sessions_for_open_ended_harness_kinds() {
+    for harness in ["codex", "claude", "opencode", "future-harness"] {
+        let context = source();
+        let pane = with_harness(agent("w1:p2", "w1", "w1:t1", "idle"), harness);
+        let (mut gateway, _) = gateway(discovery_responses(
+            &context,
+            json!([pane]),
+            Some(("w1:p2", right_rect())),
+        ));
+
+        let targets = gateway.adjacent_targets(&context).expect("valid discovery");
+        assert_eq!(targets.len(), 1, "{harness}");
+        assert_eq!(targets[0].agent_kind.as_str(), harness);
+        assert_eq!(targets[0].agent_session.as_id(), Some("agent-session-1"));
+    }
 }
 
 #[test]
@@ -30,10 +61,12 @@ fn discovery_exposes_only_sessionless_codex_targets() {
         .adjacent_targets(&context)
         .expect("empty Codex");
     assert_eq!(targets.len(), 1);
-    assert_eq!(targets[0].agent_session_id, None);
+    assert!(targets[0].agent_session.is_provisional());
 
-    let mut claude = without_session(agent("w1:p2", "w1", "w1:t1", "idle"));
-    claude["agent"] = json!(CLAUDE_AGENT_KIND);
+    let claude = with_harness(
+        without_session(agent("w1:p2", "w1", "w1:t1", "idle")),
+        CLAUDE_AGENT_KIND,
+    );
     let (mut claude_gateway, _) = gateway(discovery_responses(
         &context,
         json!([claude]),
@@ -59,7 +92,7 @@ fn first_prompt_establishes_the_session_identity() {
     }})));
     let (mut gateway, runner) = gateway(responses);
     let mut provisional = target(&context);
-    provisional.agent_session_id = None;
+    provisional.agent_session = AgentSessionBinding::provisional();
     let mut ids = FakeIdGenerator::new(1_725_200_000_000);
     let receipt = gateway
         .submit(SubmissionRequest {
@@ -70,7 +103,7 @@ fn first_prompt_establishes_the_session_identity() {
         .expect("session-establishing prompt");
 
     assert_eq!(
-        receipt.target.agent_session_id.as_deref(),
+        receipt.target.agent_session.as_id(),
         Some("agent-session-1")
     );
     assert_eq!(
@@ -86,7 +119,7 @@ fn a_session_appearing_before_submission_is_a_target_change() {
     let responses = discovery_responses(&context, json!(agents), Some(("w1:p2", right_rect())));
     let (mut gateway, runner) = gateway(responses);
     let mut provisional = target(&context);
-    provisional.agent_session_id = None;
+    provisional.agent_session = AgentSessionBinding::provisional();
     let mut ids = FakeIdGenerator::new(1_725_200_000_000);
 
     assert!(matches!(
@@ -123,7 +156,7 @@ fn first_prompt_receipt_may_precede_the_session_hook() {
     }})));
     let (mut gateway, _) = gateway(responses);
     let mut provisional = target(&context);
-    provisional.agent_session_id = None;
+    provisional.agent_session = AgentSessionBinding::provisional();
     let mut ids = FakeIdGenerator::new(1_725_200_000_000);
 
     let receipt = gateway
@@ -133,7 +166,7 @@ fn first_prompt_receipt_may_precede_the_session_hook() {
             content: "accepted before the session hook".to_owned(),
         })
         .expect("matching provisional receipt");
-    assert_eq!(receipt.target.agent_session_id, None);
+    assert!(receipt.target.agent_session.is_provisional());
 }
 
 #[test]
@@ -149,7 +182,7 @@ fn inconsistent_first_session_identity_fails_closed() {
     }})));
     let (mut gateway, _) = gateway(responses);
     let mut provisional = target(&context);
-    provisional.agent_session_id = None;
+    provisional.agent_session = AgentSessionBinding::provisional();
     let mut ids = FakeIdGenerator::new(1_725_200_000_000);
 
     assert!(matches!(

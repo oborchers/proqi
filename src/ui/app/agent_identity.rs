@@ -19,7 +19,7 @@ pub(super) fn target_fingerprint(target: &AgentTarget) -> [u8; 32] {
         hasher.update(field.as_bytes());
         hasher.update([0]);
     }
-    match &identity.agent_session_id {
+    match identity.agent_session.as_id() {
         Some(session_id) => {
             hasher.update([1]);
             hasher.update(session_id.as_bytes());

@@ -420,7 +420,7 @@ impl BoardApp {
             receipt.target.direction.as_str(),
             receipt.target.agent_name
         ));
-        if receipt.target.agent_session_id.is_none() {
+        if receipt.target.agent_session.is_provisional() {
             effects.push(Effect::DiscoverAgents);
         }
         effects

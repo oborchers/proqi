@@ -414,8 +414,8 @@ mod tests {
             application::ApplicationError,
             domain::Direction,
             ports::agent::{
-                AgentDeliveryCapabilities, AgentState, AgentTarget, CODEX_AGENT_KIND, PaneContext,
-                PaneRect,
+                AgentDeliveryCapabilities, AgentSessionBinding, AgentState, AgentTarget,
+                CODEX_AGENT_KIND, HarnessKind, PaneContext, PaneRect,
             },
             ui::UiKey,
         };
@@ -457,9 +457,10 @@ mod tests {
             pane_id: "target".to_owned(),
             workspace_id: source.workspace_id.clone(),
             tab_id: source.tab_id.clone(),
-            agent_kind: CODEX_AGENT_KIND.to_owned(),
+            agent_kind: HarnessKind::new(CODEX_AGENT_KIND).expect("fixture harness"),
             agent_name: "Codex".to_owned(),
-            agent_session_id: Some("agent-session".to_owned()),
+            agent_session: AgentSessionBinding::established("agent-session")
+                .expect("fixture session"),
             readiness: AgentState::Working,
             delivery: AgentDeliveryCapabilities::SUBMIT_ONLY,
             rect: PaneRect {

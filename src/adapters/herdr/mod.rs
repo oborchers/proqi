@@ -2,6 +2,7 @@
 
 mod contract;
 mod discovery;
+mod harness;
 mod submission;
 #[cfg(test)]
 mod tests;

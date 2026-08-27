@@ -1,7 +1,7 @@
 //! Verified adjacent-agent discovery and semantic prompt submission.
 
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
+use std::{fmt, time::Duration};
 use thiserror::Error;
 
 use crate::domain::{Direction, SubmissionId};
@@ -11,6 +11,73 @@ pub const CODEX_AGENT_KIND: &str = "codex";
 
 /// Canonical adjacent-agent kind label for the Claude harness.
 pub const CLAUDE_AGENT_KIND: &str = "claude";
+
+/// Validated, open-ended harness kind reported by an integration.
+///
+/// This is intentionally not an enum: Herdr may add harnesses independently of
+/// Proqi, and established-session harnesses require no Proqi code change.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct HarnessKind(String);
+
+impl HarnessKind {
+    /// Construct a non-empty harness kind.
+    #[must_use]
+    pub fn new(value: impl Into<String>) -> Option<Self> {
+        let value = value.into();
+        (!value.trim().is_empty()).then_some(Self(value))
+    }
+
+    /// Return the integration's canonical harness label.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for HarnessKind {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
+/// Whether a verified target already has a stable harness session identity.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AgentSessionBinding(Option<String>);
+
+impl AgentSessionBinding {
+    /// Construct a target waiting for its first harness session.
+    #[must_use]
+    pub const fn provisional() -> Self {
+        Self(None)
+    }
+
+    /// Construct a validated established session binding.
+    #[must_use]
+    pub fn established(value: impl Into<String>) -> Option<Self> {
+        let value = value.into();
+        (!value.trim().is_empty()).then_some(Self(Some(value)))
+    }
+
+    /// Return the stable session identity, when established.
+    #[must_use]
+    pub fn as_id(&self) -> Option<&str> {
+        self.0.as_deref()
+    }
+
+    /// Whether the target is waiting for its first harness session.
+    #[must_use]
+    pub const fn is_provisional(&self) -> bool {
+        self.0.is_none()
+    }
+
+    pub(crate) fn accepts_receipt(&self, receipt: &Self) -> bool {
+        match (self.as_id(), receipt.as_id()) {
+            (Some(expected), Some(actual)) => expected == actual,
+            (None, _) => true,
+            (Some(_), None) => false,
+        }
+    }
+}
 
 /// Terminal-cell rectangle reported by an integration.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -187,11 +254,11 @@ pub struct AgentTarget {
     /// Opaque tab identifier matching the source.
     pub tab_id: String,
     /// Recognized harness kind.
-    pub agent_kind: String,
+    pub agent_kind: HarnessKind,
     /// User-facing identity.
     pub agent_name: String,
-    /// Stable harness session identity, absent before an empty Codex creates one.
-    pub agent_session_id: Option<String>,
+    /// Stable or provisional harness session binding.
+    pub agent_session: AgentSessionBinding,
     /// Verified readiness.
     pub readiness: AgentState,
     /// Delivery behaviors verified for this target.
@@ -221,9 +288,9 @@ pub struct AgentTargetIdentity {
     /// Verified direction from source to target.
     pub direction: Direction,
     /// Recognized agent harness.
-    pub agent_kind: String,
-    /// Stable harness session identity, absent only for a provisional empty Codex.
-    pub agent_session_id: Option<String>,
+    pub agent_kind: HarnessKind,
+    /// Stable or provisional harness session binding.
+    pub agent_session: AgentSessionBinding,
 }
 
 impl AgentTarget {
@@ -238,7 +305,7 @@ impl AgentTarget {
             target_pane_id: self.pane_id.clone(),
             direction: self.direction,
             agent_kind: self.agent_kind.clone(),
-            agent_session_id: self.agent_session_id.clone(),
+            agent_session: self.agent_session.clone(),
         }
     }
 
@@ -254,14 +321,9 @@ impl AgentTarget {
             && expected.target_pane_id == actual.target_pane_id
             && expected.direction == actual.direction
             && expected.agent_kind == actual.agent_kind
-            && match (&expected.agent_session_id, &actual.agent_session_id) {
-                (Some(expected), Some(actual)) => !expected.trim().is_empty() && expected == actual,
-                (None, Some(actual)) => {
-                    expected.agent_kind == CODEX_AGENT_KIND && !actual.trim().is_empty()
-                }
-                (None, None) => expected.agent_kind == CODEX_AGENT_KIND,
-                (Some(_), None) => false,
-            }
+            && expected
+                .agent_session
+                .accepts_receipt(&actual.agent_session)
     }
 }
 

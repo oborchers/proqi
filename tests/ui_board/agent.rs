@@ -3,8 +3,9 @@ use super::*;
 use proqi::{
     domain::Direction,
     ports::agent::{
-        AgentDeliveryCapabilities, AgentError, AgentState, AgentTarget, CODEX_AGENT_KIND,
-        PaneContext, PaneRect, SubmissionDisposition, SubmissionReceipt,
+        AgentDeliveryCapabilities, AgentError, AgentSessionBinding, AgentState, AgentTarget,
+        CODEX_AGENT_KIND, HarnessKind, PaneContext, PaneRect, SubmissionDisposition,
+        SubmissionReceipt,
     },
 };
 
@@ -27,9 +28,10 @@ pub(super) fn target(direction: Direction, pane_id: &str) -> AgentTarget {
         pane_id: pane_id.to_owned(),
         workspace_id: source.workspace_id.clone(),
         tab_id: source.tab_id.clone(),
-        agent_kind: CODEX_AGENT_KIND.to_owned(),
+        agent_kind: HarnessKind::new(CODEX_AGENT_KIND).expect("fixture harness"),
         agent_name: format!("Codex {pane_id}"),
-        agent_session_id: Some(format!("session-{pane_id}")),
+        agent_session: AgentSessionBinding::established(format!("session-{pane_id}"))
+            .expect("fixture session"),
         readiness: AgentState::Idle,
         delivery: AgentDeliveryCapabilities::SUBMIT_ONLY,
         rect: PaneRect {
@@ -177,7 +179,8 @@ fn accepted_receipt_rejects_a_different_stable_target() {
     let effects = fixture.effects(UiInput::Key(UiKey::Character('s')));
     let request = start_submission(&mut fixture, &effects);
     let mut different = target;
-    different.agent_session_id = Some("different-session".to_owned());
+    different.agent_session =
+        AgentSessionBinding::established("different-session").expect("fixture session");
 
     let completion = finish_submission(
         &mut fixture,
