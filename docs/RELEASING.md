@@ -21,8 +21,12 @@ authority by itself.
   provenance attestation, and SBOM attestation.
 - The release workflow has no dependency cache and every Action is pinned by
   full commit SHA.
-- A `release` environment records and restricts the publication job without a
-  manual approval gate.
+- A `release` environment accepts only `v*.*.*` tags and records the
+  publication job without a manual approval gate. The release-plan validation
+  remains authoritative for canonical stable semantic versions.
+- crates.io trusts only `oborchers/proqi`, `release.yml`, and the `release`
+  environment through GitHub OIDC. No long-lived registry token is available
+  to GitHub Actions.
 - The Homebrew formula is generated only from the verified release checksums.
 
 ## Local release candidate gate
@@ -138,14 +142,14 @@ After the readiness audit:
 5. Inspect all three archives, the Debian package, checksums, SBOMs,
    attestations, formula, crate evidence, Debian evidence, candidate manifest,
    source commit, and artifact digest from that successful run.
-6. Obtain explicit approval for the exact crates.io version and source commit.
-   Publish only that reviewed version as described below, then verify a fresh
-   registry installation. This approval does not authorize a GitHub tag.
-7. Obtain separate explicit approval for the exact annotated stable tag and
-   GitHub Release. Create and push the tag at the candidate commit. The
-   tag-triggered `Release` workflow downloads and verifies the candidate, adds
-   tag-bound attestations, and publishes the same archives and Debian bytes
-   without rebuilding. The tag also authorizes the documented Homebrew wake-up.
+6. Obtain explicit approval for the exact annotated stable tag and create it at
+   the candidate commit. Pushing that tag is the single authorization to
+   publish the reviewed crate, GitHub Release, and Homebrew formula.
+7. The tag-triggered `Release` workflow downloads and verifies the candidate,
+   creates an immutable GitHub Release draft, publishes the exact crate through
+   crates.io trusted publishing, installs and tests the registry version, makes
+   the Release public, and wakes the Homebrew tap. It does not rebuild native
+   release artifacts.
 8. If the candidate is absent or expired, delete the unpublished tag, dispatch
    a replacement candidate for the same tag and commit, then recreate the tag.
 9. Verify the published Release and every downloaded asset. Publication sends
@@ -159,41 +163,40 @@ draft creation.
 
 ## crates.io publication boundary
 
-The Cargo API token is not available to CI and must not be written to the
-repository, Cargo credentials, a temporary file, logs, diagnostics, shell
-history, or another password store. Use the existing 1Password Cargo
-Environment to expose `CARGO_REGISTRY_TOKEN` only to the one explicitly
-approved publication process. Do not inspect or print the value.
+The `proqi` crate configures one crates.io trusted publisher:
 
-Immediately before publication, confirm that the worktree is clean, `HEAD`
-matches the reviewed candidate source, the Cargo version matches the intended
-tag, the package name and version are available, and `cargo xtask
-crate-package` still passes. The only authorized registry mutation is:
-
-```shell
-cargo publish --locked
+```text
+Repository owner: oborchers
+Repository:       proqi
+Workflow:         release.yml
+Environment:      release
 ```
 
-After crates.io accepts the version, install the exact registry version into a
-fresh disposable Cargo root and run `proqi --version`, `proqi capabilities
---json`, and one isolated state command. Confirm that crates.io renders the
-README without broken local links. A published crate version is immutable and
-must never be overwritten or republished.
+The protected release job requests GitHub OIDC identity only after the exact
+candidate and tag have passed validation. The pinned official crates.io action
+exchanges that identity for a short-lived token and revokes it when the job
+ends. No long-lived Cargo token is stored in GitHub, Cargo credentials, the
+repository, workflow artifacts, logs, diagnostics, or local release state.
 
-Publication authorities remain independent:
+Before publishing, the workflow requires the Cargo version, tag, candidate
+evidence, locally reproduced `.crate`, and SHA-256 digest to agree. It creates
+the GitHub Release as a draft, then runs `cargo publish --locked`. The public
+registry archive must match the candidate digest before the workflow installs
+the exact registry version into fresh Cargo state and exercises its versioned
+JSON contract. Only then may the GitHub Release become public and notify the
+Homebrew tap.
 
-- crates.io approval authorizes only `cargo publish --locked` for the reviewed
-  package version.
-- GitHub approval authorizes only the reviewed stable tag and Release; it also
-  triggers the already documented Homebrew synchronization.
-- The Homebrew tap verifies and publishes only after the GitHub Release exists.
+Promotion is idempotent. When the registry version already exists, the workflow
+downloads it and requires byte identity with the reviewed candidate rather than
+publishing again. This also recovers when Cargo reports a false-negative after
+an accepted upload. A missing, yanked, mismatched, or unverifiable registry
+version fails closed. The GitHub Release remains a draft and Homebrew receives
+no event.
 
-If crates.io succeeds and GitHub fails, keep the registry version intact, fix
-the GitHub path without rebuilding or changing bytes, and report the partial
-release. If GitHub succeeds and crates.io fails, do not change the Release; fix
-the registry problem only when the same version remains publishable. If
-immutable bytes or versions can no longer align, recover through a new semantic
-version rather than overwriting, deleting, or retagging public artifacts.
+If crates.io succeeds and a later GitHub step fails, rerun the same tag workflow.
+It verifies the immutable registry bytes and resumes publication. If immutable
+bytes or versions cannot align, recover through a new semantic version rather
+than overwriting, deleting, or retagging public artifacts.
 
 ## Public Homebrew tap
 

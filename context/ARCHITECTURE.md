@@ -1038,6 +1038,18 @@ fail closed. GitHub Release notes are the only changelog. The protected release
 environment has no manual approval gate. Release runs are never cancelled and
 existing assets for a version are immutable.
 
+The same protected promotion job publishes the verified crate through
+crates.io trusted publishing. The crate trusts only the Proqi repository,
+`release.yml`, and the `release` environment. GitHub OIDC is exchanged through
+the pinned official crates.io action for one short-lived token, so no
+long-lived registry credential exists in CI. Promotion creates or verifies the
+GitHub Release draft first, reproduces and compares the candidate `.crate`,
+publishes only an absent version, verifies the public registry digest, and
+installs the exact registry version into disposable Cargo state. Existing
+matching registry bytes make a retry idempotent; mismatched bytes fail closed.
+The GitHub Release becomes public and Homebrew is notified only after this
+registry contract succeeds.
+
 Homebrew tap updates occur only after the referenced Release assets, checksums,
 and attestations are verified. The external `oborchers/homebrew-tap` repository
 contains `Formula/proqi.rb` and owns an event-driven plus manually dispatchable

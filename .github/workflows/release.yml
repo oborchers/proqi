@@ -118,7 +118,8 @@ jobs:
         with:
           subject-path: target/release-assets/proqi_amd64.deb
           sbom-path: target/release-assets/proqi_amd64.deb.spdx.json
-      - name: Create, resume, or confirm the immutable release
+      - id: github_release
+        name: Create or verify the immutable release draft
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
@@ -137,14 +138,112 @@ jobs:
             draft="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)"
             if [[ "$draft" = "false" ]]; then
               echo "Release $TAG already contains the exact candidate bytes."
-              exit 0
             fi
           else
             gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft \
               --notes-file "$GITHUB_WORKSPACE/.github/release-notes/${TAG}.md" \
               --title "Proqi $TAG" --verify-tag "${assets[@]}"
+            draft=true
           fi
-          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+          echo "is_draft=$draft" >> "$GITHUB_OUTPUT"
+      - id: registry
+        name: Verify the registry candidate and publication state
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version="${TAG#v}"
+          evidence="target/release-assets/evidence/crate"
+          crate="proqi-${version}.crate"
+          jq -e --arg version "$version" --arg crate "$crate" \
+            '.schema_version == 1 and .package == "proqi" and .version == $version and .registry == "crates-io" and .crate == $crate and (.sha256 | test("^[0-9a-f]{64}$"))' \
+            "$evidence/crate-evidence.json"
+          expected_sha="$(jq -r '.sha256' "$evidence/crate-evidence.json")"
+          test "$(shasum -a 256 "$evidence/$crate" | cut -d ' ' -f 1)" = "$expected_sha"
+          cargo package --locked
+          cmp "target/package/$crate" "$evidence/$crate"
+
+          response="$RUNNER_TEMP/crates-io-version.json"
+          status="$(curl --silent --show-error --location --output "$response" --write-out '%{http_code}' \
+            --user-agent "proqi-release/${version}" "https://crates.io/api/v1/crates/proqi/${version}")"
+          case "$status" in
+            200)
+              jq -e --arg version "$version" '.version.num == $version and .version.yanked == false' "$response"
+              curl --fail --silent --show-error --location --user-agent "proqi-release/${version}" \
+                --output "$RUNNER_TEMP/$crate" "https://crates.io/api/v1/crates/proqi/${version}/download"
+              test "$(shasum -a 256 "$RUNNER_TEMP/$crate" | cut -d ' ' -f 1)" = "$expected_sha"
+              publish_required=false
+              ;;
+            404)
+              publish_required=true
+              ;;
+            *)
+              echo "crates.io returned unexpected HTTP status $status" >&2
+              exit 1
+              ;;
+          esac
+          {
+            echo "crate=$crate"
+            echo "expected_sha=$expected_sha"
+            echo "publish_required=$publish_required"
+            echo "version=$version"
+          } >> "$GITHUB_OUTPUT"
+      - id: crates_auth
+        name: Create short-lived crates.io publishing token
+        if: steps.registry.outputs.publish_required == 'true'
+        uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
+      - id: crates_publish
+        name: Publish the verified crate
+        if: steps.registry.outputs.publish_required == 'true'
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.crates_auth.outputs.token }}
+        run: |
+          set +e
+          cargo publish --locked
+          status=$?
+          set -e
+          echo "exit_status=$status" >> "$GITHUB_OUTPUT"
+      - name: Verify the public crates.io installation
+        env:
+          CRATE: ${{ steps.registry.outputs.crate }}
+          EXPECTED_SHA: ${{ steps.registry.outputs.expected_sha }}
+          PUBLISH_EXIT: ${{ steps.crates_publish.outputs.exit_status }}
+          VERSION: ${{ steps.registry.outputs.version }}
+        run: |
+          response="$RUNNER_TEMP/crates-io-published.json"
+          published="$RUNNER_TEMP/published-$CRATE"
+          for attempt in {1..30}; do
+            status="$(curl --silent --show-error --location --output "$response" --write-out '%{http_code}' \
+              --user-agent "proqi-release/${VERSION}" "https://crates.io/api/v1/crates/proqi/${VERSION}")"
+            if [[ "$status" = "200" ]] && jq -e --arg version "$VERSION" \
+              '.version.num == $version and .version.yanked == false' "$response" >/dev/null; then
+              curl --fail --silent --show-error --location --user-agent "proqi-release/${VERSION}" \
+                --output "$published" "https://crates.io/api/v1/crates/proqi/${VERSION}/download"
+              if [[ "$(shasum -a 256 "$published" | cut -d ' ' -f 1)" = "$EXPECTED_SHA" ]]; then
+                break
+              fi
+            fi
+            if [[ "$attempt" = "30" ]]; then
+              echo "crates.io did not expose the exact verified crate before the deadline (cargo publish exit ${PUBLISH_EXIT:-not-run})" >&2
+              exit 1
+            fi
+            sleep 5
+          done
+
+          cargo_home="$RUNNER_TEMP/registry-cargo-home"
+          install_root="$RUNNER_TEMP/registry-install"
+          CARGO_HOME="$cargo_home" cargo install proqi --version "=$VERSION" --locked --root "$install_root"
+          binary="$install_root/bin/proqi"
+          test "$("$binary" --version)" = "proqi $VERSION"
+          PROQI_DISABLE_HERDR=1 "$binary" capabilities --json \
+            | jq -e '.schema_version == 1 and .ok == true and (.data.commands | index("sessions"))'
+          PROQI_DISABLE_HERDR=1 "$binary" --state-dir "$RUNNER_TEMP/registry-state" --json \
+            | jq -e '.schema_version == 1 and .ok == true and (.data.session_id | startswith("ses_"))'
+      - name: Publish the verified GitHub Release
+        if: steps.github_release.outputs.is_draft == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
       - id: tap-token
         name: Create scoped tap notification token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0

@@ -37,6 +37,7 @@ pub(crate) fn check(root: &Path) -> Result<(), String> {
         classify(relative, &mut layer_counts);
         violations.extend(check_source(relative, &source));
     }
+    violations.extend(check_release_workflow(root)?);
     if layer_counts.contains(&0) {
         return Err(format!(
             "architecture scan was incomplete: domain={}, application={}, ports={}, adapters={}, ui={}, cli={}",
@@ -60,6 +61,57 @@ pub(crate) fn check(root: &Path) -> Result<(), String> {
             "architecture policy violations:\n{}",
             violations.join("\n")
         ))
+    }
+}
+
+fn check_release_workflow(root: &Path) -> Result<Vec<String>, String> {
+    let path = root.join(".github/workflows/release.yml");
+    let source =
+        fs::read_to_string(&path).map_err(|error| format!("read {}: {error}", path.display()))?;
+    Ok(release_workflow_findings(&source))
+}
+
+fn release_workflow_findings(source: &str) -> Vec<String> {
+    const REQUIRED: [&str; 8] = [
+        "environment: release",
+        "id-token: write",
+        "rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5",
+        "CARGO_REGISTRY_TOKEN: ${{ steps.crates_auth.outputs.token }}",
+        "cargo publish --locked",
+        "cargo install proqi --version \"=$VERSION\" --locked",
+        "https://crates.io/api/v1/crates/proqi/${VERSION}/download",
+        "name: Wake Homebrew tap synchronization",
+    ];
+    let mut findings = REQUIRED
+        .iter()
+        .filter(|marker| !source.contains(**marker))
+        .map(|marker| format!(".github/workflows/release.yml: missing `{marker}`"))
+        .collect::<Vec<_>>();
+    if source.contains("CARGO_REGISTRY_TOKEN: ${{ secrets.") {
+        findings.push(
+            ".github/workflows/release.yml: long-lived registry secret is forbidden".to_owned(),
+        );
+    }
+    enforce_workflow_order(source, &mut findings);
+    findings
+}
+
+fn enforce_workflow_order(source: &str, findings: &mut Vec<String>) {
+    const ORDERED: [&str; 5] = [
+        "name: Create or verify the immutable release draft",
+        "name: Create short-lived crates.io publishing token",
+        "name: Publish the verified crate",
+        "name: Publish the verified GitHub Release",
+        "name: Wake Homebrew tap synchronization",
+    ];
+    let positions = ORDERED
+        .iter()
+        .filter_map(|marker| source.find(marker))
+        .collect::<Vec<_>>();
+    if positions.len() == ORDERED.len() && !positions.windows(2).all(|pair| pair[0] < pair[1]) {
+        findings.push(
+            ".github/workflows/release.yml: publication steps violate release ordering".to_owned(),
+        );
     }
 }
 
@@ -362,5 +414,35 @@ mod tests {
     fn test_only_adapter_fixture_is_accepted() {
         let source = "#[cfg(test)] mod tests { use crate::{adapters::memory::FakeClock}; }";
         assert!(check_source(Path::new("src/application/model.rs"), source).is_empty());
+    }
+
+    #[test]
+    fn trusted_registry_workflow_is_accepted() {
+        let source = include_str!("../../.github/workflows/release.yml");
+        assert!(release_workflow_findings(source).is_empty());
+    }
+
+    #[test]
+    fn registry_secret_and_inverted_release_order_are_rejected() {
+        let source = include_str!("../../.github/workflows/release.yml")
+            .replace(
+                "CARGO_REGISTRY_TOKEN: ${{ steps.crates_auth.outputs.token }}",
+                "CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}",
+            )
+            .replace(
+                "name: Publish the verified GitHub Release",
+                "name: Publish the verified GitHub Release early",
+            )
+            .replace(
+                "name: Create or verify the immutable release draft",
+                "name: Publish the verified GitHub Release",
+            )
+            .replace(
+                "name: Publish the verified GitHub Release early",
+                "name: Create or verify the immutable release draft",
+            );
+        let findings = release_workflow_findings(&source);
+        assert!(findings.iter().any(|finding| finding.contains("secret")));
+        assert!(findings.iter().any(|finding| finding.contains("ordering")));
     }
 }
