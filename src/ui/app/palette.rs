@@ -22,6 +22,7 @@ enum Command {
     SubmitRemove,
     SubmitKeep,
     RefreshAgents,
+    CheckUpdates,
     RetryStorage,
     ExportRecovery,
     Undo,
@@ -35,7 +36,7 @@ enum Command {
 }
 
 impl Command {
-    const ALL: [(Self, &'static str); 23] = [
+    const ALL: [(Self, &'static str); 24] = [
         (Self::New, "New thought"),
         (Self::RenameSession, "Rename session"),
         (Self::Edit, "Edit thought"),
@@ -55,6 +56,7 @@ impl Command {
             "Send to another Proqi session and remove thought",
         ),
         (Self::RefreshAgents, "Refresh adjacent agents"),
+        (Self::CheckUpdates, "Check for updates"),
         (Self::RetryStorage, "Retry failed save"),
         (Self::ExportRecovery, "Export recovery file"),
         (Self::Undo, "Undo board action"),
@@ -292,6 +294,9 @@ impl BoardApp {
                 self.begin_delivery(crate::ports::agent::SubmissionDisposition::Keep, ids, clock)
             }
             Command::RefreshAgents => self.refresh_agents(),
+            Command::CheckUpdates => {
+                vec![Effect::Update(crate::application::UpdateIntent::CheckNow)]
+            }
             Command::RetryStorage => self.retry_persistence(),
             Command::ExportRecovery => self.export_recovery(ids, clock),
             Command::Undo => self.history(ids, clock, true),

@@ -52,8 +52,17 @@ pub(super) enum UpdateActionResult {
     Executed(crate::application::UpdateExecution),
 }
 
+pub(super) enum ManualCheckResult {
+    Current(StableVersion),
+    Suppressed(StableVersion),
+    InProgress,
+    Instructions(StableVersion),
+    Prompt(UpdateNotice),
+}
+
 pub(super) enum UpdateResult {
     Notice(UpdateNotice),
+    ManualCheck(Result<ManualCheckResult, UpdateError>),
     Action(Result<UpdateActionResult, UpdateError>),
 }
 
@@ -178,18 +187,43 @@ fn update_loop(
     let mut process = SystemProcessRunner::cancellable(cancellation);
     while let Ok(request) = requests.recv() {
         let Some(installation) = installation else {
+            let result = match request {
+                UpdateRequest::Check { .. } => None,
+                UpdateRequest::Act(UpdateIntent::CheckNow) => Some(UpdateResult::ManualCheck(Err(
+                    UpdateError::Installation("installation could not be identified".to_owned()),
+                ))),
+                UpdateRequest::Act(_) => Some(UpdateResult::Action(Err(
+                    UpdateError::Installation("installation could not be identified".to_owned()),
+                ))),
+            };
+            if let Some(result) = result
+                && results.send(result).is_err()
+            {
+                return;
+            }
             continue;
         };
         let result = match request {
-            UpdateRequest::Check { enabled } => check(
+            UpdateRequest::Check { enabled } => match check(
                 &state,
                 installation,
                 coordinator,
                 enabled,
                 &mut prompt_lease,
-            )
-            .ok()
-            .map(UpdateResult::Notice),
+            ) {
+                Ok(notice) => notice.map(UpdateResult::Notice),
+                Err(error) => {
+                    record_check_failure("startup", &error);
+                    None
+                }
+            },
+            UpdateRequest::Act(UpdateIntent::CheckNow) => {
+                let result = check_now(&state, installation, coordinator, &mut prompt_lease);
+                if let Err(error) = &result {
+                    record_check_failure("manual", error);
+                }
+                Some(UpdateResult::ManualCheck(result))
+            }
             UpdateRequest::Act(intent) => {
                 let action = act(
                     &state,
@@ -211,13 +245,53 @@ fn update_loop(
     }
 }
 
+fn check_now(
+    state: &FileUpdateStateStore,
+    installation: &Installation,
+    coordinator: &FileRuntimeCoordinator,
+    prompt_lease: &mut Option<Box<dyn UpdateLease>>,
+) -> Result<ManualCheckResult, UpdateError> {
+    let installed = StableVersion::parse(env!("CARGO_PKG_VERSION"))
+        .map_err(|_| UpdateError::InvalidResponse)?;
+    let detector = SystemInstallDetector::for_executable(installation.executable.clone());
+    let mut source = GitHubReleaseSource::new();
+    let result =
+        crate::application::UpdateService::new(state, &mut source, &detector, &SystemClock)
+            .check(installed.clone(), UpdateCheckMode::Explicit)?;
+    if result.refresh == crate::application::UpdateRefresh::InProgress {
+        return Ok(ManualCheckResult::InProgress);
+    }
+    let Some(version) = result.latest_version else {
+        return Ok(ManualCheckResult::Current(installed));
+    };
+    match result.availability {
+        UpdateAvailability::Current => Ok(ManualCheckResult::Current(installed)),
+        UpdateAvailability::Suppressed => Ok(ManualCheckResult::Suppressed(version)),
+        UpdateAvailability::Available if installation.kind == InstallationKind::SourceOrUnknown => {
+            Ok(ManualCheckResult::Instructions(version))
+        }
+        UpdateAvailability::Available => {
+            let Some(lease) = state.try_lock(installation.identity, UpdateLockKind::Prompt)? else {
+                return Ok(ManualCheckResult::InProgress);
+            };
+            let participants = compatible_participants(coordinator, installation)?;
+            *prompt_lease = Some(lease);
+            Ok(ManualCheckResult::Prompt(UpdateNotice {
+                version,
+                installation: installation.kind,
+                participants: participants.max(1),
+            }))
+        }
+    }
+}
+
 fn check(
     state: &FileUpdateStateStore,
     installation: &Installation,
     coordinator: &FileRuntimeCoordinator,
     enabled: bool,
     prompt_lease: &mut Option<Box<dyn UpdateLease>>,
-) -> Result<UpdateNotice, UpdateError> {
+) -> Result<Option<UpdateNotice>, UpdateError> {
     let installed = StableVersion::parse(env!("CARGO_PKG_VERSION"))
         .map_err(|_| UpdateError::InvalidResponse)?;
     let detector = SystemInstallDetector::for_executable(installation.executable.clone());
@@ -225,28 +299,41 @@ fn check(
     let result =
         crate::application::UpdateService::new(state, &mut source, &detector, &SystemClock).check(
             installed,
-            UpdateCheckMode::Implicit {
+            UpdateCheckMode::Startup {
                 enabled,
                 release_build: !cfg!(debug_assertions),
                 interactive: true,
             },
         )?;
     if result.availability != UpdateAvailability::Available {
-        return Err(UpdateError::Coordination("no_actionable_update".to_owned()));
+        return Ok(None);
     }
     let version = result.latest_version.ok_or(UpdateError::InvalidResponse)?;
     let Some(lease) = state.try_lock(installation.identity, UpdateLockKind::Prompt)? else {
-        return Err(UpdateError::Coordination(
-            "prompt_owned_elsewhere".to_owned(),
-        ));
+        return Ok(None);
     };
     let participants = compatible_participants(coordinator, installation)?;
     *prompt_lease = Some(lease);
-    Ok(UpdateNotice {
+    Ok(Some(UpdateNotice {
         version,
         installation: installation.kind,
         participants: participants.max(1),
-    })
+    }))
+}
+
+fn record_check_failure(mode: &'static str, error: &UpdateError) {
+    let code = match error {
+        UpdateError::Network => "network",
+        UpdateError::InvalidResponse => "invalid_response",
+        UpdateError::ResponseTooLarge => "response_too_large",
+        UpdateError::Installation(_) => "installation",
+        UpdateError::State(_) => "state",
+        UpdateError::Coordination(_) => "coordination",
+        UpdateError::InstallerFailed => "installer",
+    };
+    crate::adapters::diagnostics::record(
+        crate::adapters::diagnostics::SafeEvent::UpdateCheckFailed { mode, code },
+    );
 }
 
 fn act(
@@ -258,6 +345,9 @@ fn act(
     process: &mut SystemProcessRunner,
 ) -> Result<UpdateActionResult, UpdateError> {
     match intent {
+        UpdateIntent::CheckNow => Err(UpdateError::Coordination(
+            "update_check_routed_as_action".to_owned(),
+        )),
         UpdateIntent::Dismiss(version) => {
             state.dismiss(installation.identity, version)?;
             Ok(UpdateActionResult::Dismissed)

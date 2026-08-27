@@ -19,7 +19,7 @@ pub enum KeyboardEnhancement {
 /// Complete UI configuration loaded from the platform config directory.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct UiSettings {
-    /// Permit on-demand stable release checks in interactive release builds.
+    /// Permit automatic stable-release checks on interactive release startup.
     pub check_for_updates: bool,
     /// Keyboard protocol negotiation.
     pub keyboard_enhancement: KeyboardEnhancement,

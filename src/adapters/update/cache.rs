@@ -94,6 +94,27 @@ impl UpdateStateStore for FileUpdateStateStore {
         }
     }
 
+    fn begin_refresh(
+        &self,
+        installation: InstallationIdentity,
+        observed_generation: Option<u64>,
+    ) -> Result<Option<UpdateCacheState>, UpdateError> {
+        let mut advanced = false;
+        let state = self.mutate(installation, |state| {
+            if observed_generation.is_some_and(|generation| generation != state.refresh_generation)
+            {
+                return Ok(());
+            }
+            state.refresh_generation =
+                state.refresh_generation.checked_add(1).ok_or_else(|| {
+                    UpdateError::State("update refresh generation exhausted".to_owned())
+                })?;
+            advanced = true;
+            Ok(())
+        })?;
+        Ok(advanced.then_some(state))
+    }
+
     fn record_success(
         &self,
         installation: InstallationIdentity,

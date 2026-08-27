@@ -7,14 +7,65 @@ use std::{
 };
 
 use crate::{
-    domain::{InstallationIdentity, StableVersion, Timestamp, UpdateCacheState},
-    ports::update::{ReleaseObservation, UpdateLockKind, UpdateStateStore as _},
+    application::{UpdateCheckMode, UpdateRefresh, UpdateService},
+    domain::{
+        Installation, InstallationIdentity, InstallationKind, StableVersion, Timestamp,
+        UpdateCacheState,
+    },
+    ports::{
+        environment::Clock,
+        update::{
+            InstallDetector, ReleaseObservation, ReleaseSource, UpdateError, UpdateLockKind,
+            UpdateStateStore as _,
+        },
+    },
 };
 
 use super::FileUpdateStateStore;
 
 fn identity() -> InstallationIdentity {
     InstallationIdentity::from_digest([19; 32])
+}
+
+struct Detector;
+
+struct FixedClock(Timestamp);
+
+impl Clock for FixedClock {
+    fn now(&self) -> Timestamp {
+        self.0
+    }
+}
+
+impl InstallDetector for Detector {
+    fn detect(&self) -> Result<Installation, UpdateError> {
+        Ok(Installation {
+            identity: identity(),
+            kind: InstallationKind::StandaloneArchive,
+            executable: "/verified/proqi".into(),
+            restart_executable: None,
+        })
+    }
+}
+
+struct ContendedSource {
+    calls: Arc<AtomicUsize>,
+    attempted: Arc<Barrier>,
+}
+
+impl ReleaseSource for ContendedSource {
+    fn latest_stable(
+        &mut self,
+        _: InstallationKind,
+        _: Option<&str>,
+    ) -> Result<ReleaseObservation, UpdateError> {
+        self.calls.fetch_add(1, Ordering::AcqRel);
+        self.attempted.wait();
+        Ok(ReleaseObservation::Latest {
+            version: StableVersion::parse("0.2.0").expect("latest"),
+            etag: Some("safe-etag".to_owned()),
+        })
+    }
 }
 
 #[test]
@@ -58,6 +109,82 @@ fn refresh_prompt_and_installer_elections_are_independent() {
                 .is_some()
         );
     }
+}
+
+#[test]
+fn refresh_generations_coalesce_stale_startups_but_not_explicit_checks() {
+    let temporary = tempfile::tempdir().expect("cache root");
+    let store = FileUpdateStateStore::new(temporary.path()).expect("store");
+    let first = store
+        .begin_refresh(identity(), Some(0))
+        .expect("first startup")
+        .expect("generation owner");
+    assert_eq!(first.refresh_generation, 1);
+    assert_eq!(
+        store
+            .begin_refresh(identity(), Some(0))
+            .expect("stale startup"),
+        None
+    );
+    let explicit = store
+        .begin_refresh(identity(), None)
+        .expect("explicit refresh")
+        .expect("explicit owner");
+    assert_eq!(explicit.refresh_generation, 2);
+}
+
+#[test]
+fn fifteen_concurrent_startups_produce_one_refresh() {
+    let temporary = tempfile::tempdir().expect("cache root");
+    let state = Arc::new(FileUpdateStateStore::new(temporary.path()).expect("state"));
+    let start = Arc::new(Barrier::new(15));
+    let attempted = Arc::new(Barrier::new(15));
+    let calls = Arc::new(AtomicUsize::new(0));
+    let mut threads = Vec::new();
+    for _ in 0..15 {
+        let state = Arc::clone(&state);
+        let start = Arc::clone(&start);
+        let attempted = Arc::clone(&attempted);
+        let calls = Arc::clone(&calls);
+        threads.push(std::thread::spawn(move || {
+            let clock = FixedClock(Timestamp::from_millis(1_800_000_000_000));
+            let mut source = ContendedSource { calls, attempted };
+            start.wait();
+            let result = UpdateService::new(state.as_ref(), &mut source, &Detector, &clock)
+                .check(
+                    StableVersion::parse("0.1.0").expect("installed"),
+                    UpdateCheckMode::Startup {
+                        enabled: true,
+                        release_build: true,
+                        interactive: true,
+                    },
+                )
+                .expect("check");
+            if result.refresh == UpdateRefresh::InProgress {
+                source.attempted.wait();
+            }
+            result.refresh
+        }));
+    }
+    let outcomes = threads
+        .into_iter()
+        .map(|thread| thread.join().expect("contender"))
+        .collect::<Vec<_>>();
+    assert_eq!(calls.load(Ordering::Acquire), 1);
+    assert_eq!(
+        outcomes
+            .iter()
+            .filter(|outcome| **outcome == UpdateRefresh::Refreshed)
+            .count(),
+        1
+    );
+    assert_eq!(
+        outcomes
+            .iter()
+            .filter(|outcome| **outcome == UpdateRefresh::InProgress)
+            .count(),
+        14
+    );
 }
 
 #[test]

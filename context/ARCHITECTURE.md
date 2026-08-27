@@ -442,11 +442,13 @@ stable versions, installation identities, update choices, participants, and
 operation state without containing URLs, shell strings, environment snapshots,
 or terminal content.
 
-Only interactive release builds schedule an implicit check. Debug and source
+Only interactive release builds schedule a startup check. Debug and source
 builds, tests, JSON commands, skill invocations, and other noninteractive paths
-do not. `proqi update check --json` is the explicit machine-readable exception.
-The application reads cached state synchronously and schedules at most one
-background refresh when the last successful check is at least 24 hours old.
+do not. `proqi update check --json` and the command palette's explicit check are
+the deliberate exceptions. Every eligible startup schedules a nonblocking
+background refresh. Concurrent processes that observed the same private cache
+generation coalesce into one request, while a later startup advances the
+generation and checks again.
 
 The HTTPS adapter uses bounded connection, response, redirect, body, and retry
 limits. It requests the latest stable GitHub Release without authentication,
@@ -454,29 +456,32 @@ ignores drafts and prereleases, and sends no user content or Proqi state. The
 only optional request metadata is a bounded application name and version
 User-Agent required by GitHub.
 
-The sole release endpoint is
-`https://api.github.com/repos/oborchers/proqi/releases/latest`. Implicit access
-is restricted to interactive release builds with `check_for_updates = true`.
-Explicit `proqi update check --json` access is deliberate caller authority.
+Standalone checks use
+`https://api.github.com/repos/oborchers/proqi/releases/latest`. Homebrew checks
+read the public `oborchers/homebrew-tap` formula so they never advertise an
+uninstallable release. Startup access is restricted to interactive release
+builds with `check_for_updates = true`. Explicit CLI and command-palette access
+is deliberate caller authority.
 
 ### Shared cache and election
 
 Update state is separate from SQLite thought data and private to the current
 user. It stores only:
 
-- Latest stable version and last successful check time.
+- Latest stable version, refresh generation, and last successful check time.
 - Exact dismissed and skipped versions.
 - Last observed installed version.
 - Whether an older running process may still need restart.
 - Optional bounded safe HTTP cache metadata.
 
 The cache is atomic, bounded, corruption-tolerant, and protected by an explicit
-installation-wide lock. Corruption is treated as a miss. One compare-and-swap
-or lock transaction elects a network refresher, prompt owner, and installer
-coordinator, so 10 to 15 concurrent processes still produce at most one request,
-one actionable prompt, and one installer. `Not now`, `Skip this version`, and
-configuration opt-out update the shared state atomically and are observed by
-every process.
+installation-wide lock. Corruption is treated as a miss. One generation
+comparison and lock transaction elects a network refresher, prompt owner, and
+installer coordinator, so 10 to 15 concurrent startups still produce at most
+one request, one actionable prompt, and one installer. `Not now` lasts until
+the next successful eligible startup refresh. `Skip this version` and
+configuration opt-out update shared state atomically and are observed by every
+process.
 
 Install detection is deterministic and testable. It distinguishes
 `HomebrewFormula`, `StandaloneArchive`, and `SourceOrUnknown` using the canonical

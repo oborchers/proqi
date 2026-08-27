@@ -67,6 +67,16 @@ impl UpdateStateStore for State {
             .or(Ok(None))
     }
 
+    fn begin_refresh(
+        &self,
+        _: InstallationIdentity,
+        _: Option<u64>,
+    ) -> Result<Option<UpdateCacheState>, UpdateError> {
+        let mut cache = self.cache.borrow_mut();
+        cache.refresh_generation = cache.refresh_generation.saturating_add(1);
+        Ok(Some(cache.clone()))
+    }
+
     fn record_success(
         &self,
         _: InstallationIdentity,

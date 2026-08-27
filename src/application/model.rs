@@ -62,9 +62,11 @@ pub enum ClipboardIntent {
 /// Explicit user decision from an elected installation-wide update prompt.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum UpdateIntent {
+    /// Perform one explicit background lookup from the command palette.
+    CheckNow,
     /// Coordinate one verified Homebrew upgrade and restart all compatible sessions.
     Install(StableVersion),
-    /// Defer this exact version until a later stale refresh.
+    /// Defer this exact version until the next successful startup refresh.
     Dismiss(StableVersion),
     /// Suppress this exact version until a newer stable version exists.
     Skip(StableVersion),

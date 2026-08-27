@@ -270,7 +270,10 @@ the public bytes.
 Install the exact published crate version into a fresh Cargo root and verify
 its version and JSON capabilities. Install through the public tap, run `brew
 test proqi`, launch the TUI, create and resume one session, and verify an
-explicit `proqi update check --json` sees the released Cargo version.
+explicit `proqi update check --json` sees the released Cargo version. Before
+upgrading the prior Homebrew installation, launch it with isolated state and
+verify that an ordinary interactive startup offers the newly published formula
+without an explicit check.
 
 Ordinary uninstall must leave user data intact:
 

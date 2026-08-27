@@ -166,9 +166,11 @@ pub struct Installation {
 pub struct UpdateCacheState {
     /// Latest observed stable release.
     pub latest_stable: Option<StableVersion>,
+    /// Monotonic generation advanced before each elected refresh attempt.
+    pub refresh_generation: u64,
     /// Last successful GitHub check.
     pub last_checked_at: Option<Timestamp>,
-    /// Exact version deferred until the next stale refresh.
+    /// Exact version deferred until the next successful startup refresh.
     pub dismissed_version: Option<StableVersion>,
     /// Exact version suppressed until a later stable version exists.
     pub skipped_version: Option<StableVersion>,
@@ -195,7 +197,7 @@ pub enum UpdateValueError {
 mod tests {
     use std::str::FromStr as _;
 
-    use super::{InstallationIdentity, StableVersion};
+    use super::{InstallationIdentity, StableVersion, UpdateCacheState};
 
     #[test]
     fn stable_versions_are_canonical_and_ordered() {
@@ -220,5 +222,11 @@ mod tests {
         assert_eq!(identity.as_bytes(), digest);
         assert!(InstallationIdentity::from_str(&encoded.to_uppercase()).is_err());
         assert!(InstallationIdentity::from_str(&encoded[..62]).is_err());
+    }
+
+    #[test]
+    fn legacy_update_cache_defaults_the_refresh_generation() {
+        let state: UpdateCacheState = serde_json::from_str("{}").expect("legacy cache");
+        assert_eq!(state.refresh_generation, 0);
     }
 }

@@ -71,6 +71,13 @@ pub enum SafeEvent<'a> {
         /// Process exit status.
         exit: u8,
     },
+    /// One content-free update lookup failed.
+    UpdateCheckFailed {
+        /// `startup` or `manual`.
+        mode: &'a str,
+        /// Stable coarse failure code.
+        code: &'a str,
+    },
     /// One content-redacted submission transition occurred.
     Submission {
         /// Proqi-owned submission identity.
@@ -152,6 +159,9 @@ pub fn record(event: SafeEvent<'_>) {
         SafeEvent::CommandSucceeded => tracing::info!(event = "command_succeeded"),
         SafeEvent::CommandFailed { code, exit } => {
             tracing::error!(event = "command_failed", code, exit);
+        }
+        SafeEvent::UpdateCheckFailed { mode, code } => {
+            tracing::warn!(event = "update_check_failed", mode, code);
         }
         SafeEvent::Submission {
             submission_id,

@@ -41,6 +41,22 @@ impl UpdateStateStore for State {
         }
     }
 
+    fn begin_refresh(
+        &self,
+        _: InstallationIdentity,
+        observed_generation: Option<u64>,
+    ) -> Result<Option<UpdateCacheState>, UpdateError> {
+        let mut cache = self.cache.borrow_mut();
+        if observed_generation.is_some_and(|generation| generation != cache.refresh_generation) {
+            return Ok(None);
+        }
+        cache.refresh_generation = cache
+            .refresh_generation
+            .checked_add(1)
+            .ok_or_else(|| UpdateError::State("generation exhausted".to_owned()))?;
+        Ok(Some(cache.clone()))
+    }
+
     fn record_success(
         &self,
         _: InstallationIdentity,
@@ -111,6 +127,14 @@ struct Source {
     result: Result<ReleaseObservation, UpdateError>,
 }
 
+impl State {
+    fn release_refresh_lock(&self) {
+        self.locks
+            .borrow_mut()
+            .remove(&(UpdateLockKind::Refresh as u8));
+    }
+}
+
 impl ReleaseSource for Source {
     fn latest_stable(
         &mut self,
@@ -123,35 +147,7 @@ impl ReleaseSource for Source {
 }
 
 #[test]
-fn fifteen_implicit_contenders_produce_one_refresh() {
-    let state = State::default();
-    let detector = Detector(InstallationKind::StandaloneArchive);
-    let clock = TestClock(Timestamp::from_millis(1_800_000_000_000));
-    let mut source = Source {
-        calls: 0,
-        result: Ok(ReleaseObservation::Latest {
-            version: StableVersion::parse("0.2.0").expect("latest"),
-            etag: Some("safe-etag".to_owned()),
-        }),
-    };
-    for _ in 0..15 {
-        let result = UpdateService::new(&state, &mut source, &detector, &clock)
-            .check(
-                StableVersion::parse("0.1.0").expect("installed"),
-                UpdateCheckMode::Implicit {
-                    enabled: true,
-                    release_build: true,
-                    interactive: true,
-                },
-            )
-            .expect("check");
-        assert_eq!(result.availability, super::UpdateAvailability::Available);
-    }
-    assert_eq!(source.calls, 1);
-}
-
-#[test]
-fn implicit_exclusions_never_contact_the_source() {
+fn startup_exclusions_never_contact_the_source() {
     for (kind, enabled, release_build, interactive) in [
         (InstallationKind::StandaloneArchive, false, true, true),
         (InstallationKind::StandaloneArchive, true, false, true),
@@ -168,7 +164,7 @@ fn implicit_exclusions_never_contact_the_source() {
         let _result = UpdateService::new(&state, &mut source, &detector, &clock)
             .check(
                 StableVersion::parse("0.1.0").expect("installed"),
-                UpdateCheckMode::Implicit {
+                UpdateCheckMode::Startup {
                     enabled,
                     release_build,
                     interactive,
@@ -197,36 +193,37 @@ fn explicit_check_reports_network_failure_without_cached_claims() {
 }
 
 #[test]
-fn fresh_cache_is_nonblocking_and_compares_equal_or_older_versions_correctly() {
-    for latest in ["0.1.0", "0.0.9"] {
-        let state = State::default();
-        state.cache.replace(UpdateCacheState {
-            latest_stable: Some(StableVersion::parse(latest).expect("latest")),
-            last_checked_at: Some(Timestamp::from_millis(1_799_999_999_999)),
-            ..UpdateCacheState::default()
-        });
-        let detector = Detector(InstallationKind::StandaloneArchive);
-        let clock = TestClock(Timestamp::from_millis(1_800_000_000_000));
-        let mut source = Source {
-            calls: 0,
-            result: Err(UpdateError::Network),
-        };
+fn every_successive_startup_refreshes_even_when_the_cache_is_recent() {
+    let state = State::default();
+    state.cache.replace(UpdateCacheState {
+        latest_stable: Some(StableVersion::parse("0.1.0").expect("latest")),
+        last_checked_at: Some(Timestamp::from_millis(1_799_999_999_999)),
+        ..UpdateCacheState::default()
+    });
+    let detector = Detector(InstallationKind::StandaloneArchive);
+    let clock = TestClock(Timestamp::from_millis(1_800_000_000_000));
+    let mut source = Source {
+        calls: 0,
+        result: Ok(ReleaseObservation::NotModified),
+    };
 
+    for expected_generation in 1..=2 {
         let result = UpdateService::new(&state, &mut source, &detector, &clock)
             .check(
                 StableVersion::parse("0.1.0").expect("installed"),
-                UpdateCheckMode::Implicit {
+                UpdateCheckMode::Startup {
                     enabled: true,
                     release_build: true,
                     interactive: true,
                 },
             )
-            .expect("cached check");
-
+            .expect("startup check");
         assert_eq!(result.availability, UpdateAvailability::Current);
-        assert_eq!(result.refresh, UpdateRefresh::Cached);
-        assert_eq!(source.calls, 0);
+        assert_eq!(result.refresh, UpdateRefresh::Refreshed);
+        assert_eq!(state.cache.borrow().refresh_generation, expected_generation);
+        state.release_refresh_lock();
     }
+    assert_eq!(source.calls, 2);
 }
 
 #[test]
@@ -243,13 +240,16 @@ fn exact_suppression_does_not_hide_a_later_release() {
     let clock = TestClock(Timestamp::from_millis(2));
     let mut source = Source {
         calls: 0,
-        result: Err(UpdateError::Network),
+        result: Ok(ReleaseObservation::Latest {
+            version: StableVersion::parse("0.3.0").expect("latest"),
+            etag: None,
+        }),
     };
 
     let result = UpdateService::new(&state, &mut source, &detector, &clock)
         .check(
             StableVersion::parse("0.1.0").expect("installed"),
-            UpdateCheckMode::Implicit {
+            UpdateCheckMode::Startup {
                 enabled: true,
                 release_build: true,
                 interactive: true,
@@ -258,38 +258,42 @@ fn exact_suppression_does_not_hide_a_later_release() {
         .expect("later release");
 
     assert_eq!(result.availability, UpdateAvailability::Available);
-    assert_eq!(source.calls, 0);
+    assert_eq!(source.calls, 1);
 }
 
 #[test]
-fn exact_twenty_four_hour_boundary_is_stale() {
+fn a_successful_startup_refresh_clears_not_now_but_preserves_an_exact_skip() {
     let state = State::default();
     state.cache.replace(UpdateCacheState {
-        latest_stable: Some(StableVersion::parse("0.1.0").expect("cached")),
-        last_checked_at: Some(Timestamp::from_millis(1_800_000_000_000)),
+        latest_stable: Some(StableVersion::parse("0.2.0").expect("cached")),
+        dismissed_version: Some(StableVersion::parse("0.2.0").expect("dismissed")),
+        skipped_version: Some(StableVersion::parse("0.2.0").expect("skipped")),
         ..UpdateCacheState::default()
     });
     let detector = Detector(InstallationKind::StandaloneArchive);
-    let clock = TestClock(Timestamp::from_millis(1_800_086_400_000));
+    let clock = TestClock(Timestamp::from_millis(1_800_000_000_001));
     let mut source = Source {
         calls: 0,
-        result: Ok(ReleaseObservation::Latest {
-            version: StableVersion::parse("0.2.0").expect("latest"),
-            etag: None,
-        }),
+        result: Ok(ReleaseObservation::NotModified),
     };
 
     let result = UpdateService::new(&state, &mut source, &detector, &clock)
         .check(
             StableVersion::parse("0.1.0").expect("installed"),
-            UpdateCheckMode::Implicit {
+            UpdateCheckMode::Startup {
                 enabled: true,
                 release_build: true,
                 interactive: true,
             },
         )
-        .expect("stale refresh");
+        .expect("startup refresh");
 
     assert_eq!(result.refresh, UpdateRefresh::Refreshed);
+    assert_eq!(result.availability, UpdateAvailability::Suppressed);
+    assert_eq!(state.cache.borrow().dismissed_version, None);
+    assert_eq!(
+        state.cache.borrow().skipped_version,
+        Some(StableVersion::parse("0.2.0").expect("skipped"))
+    );
     assert_eq!(source.calls, 1);
 }

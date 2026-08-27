@@ -3,22 +3,20 @@
 use serde::Serialize;
 
 use crate::{
-    domain::{InstallationKind, StableVersion, Timestamp, UpdateCacheState},
+    domain::{InstallationKind, StableVersion, UpdateCacheState},
     ports::{
         environment::Clock,
         update::{InstallDetector, ReleaseSource, UpdateError, UpdateLockKind, UpdateStateStore},
     },
 };
 
-const CHECK_INTERVAL_MILLIS: i64 = 24 * 60 * 60 * 1_000;
-
 /// Why an update check is being considered.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum UpdateCheckMode {
     /// User explicitly invoked `proqi update check`.
     Explicit,
-    /// Interactive startup may schedule a background refresh.
-    Implicit {
+    /// Each eligible interactive startup schedules a background refresh.
+    Startup {
         /// Global configuration switch.
         enabled: bool,
         /// Compiled without debug assertions as a release product.
@@ -67,6 +65,8 @@ pub enum UpdateRefresh {
     Refreshed,
     /// Another process owns the one permitted refresh.
     InProgress,
+    /// Another startup already refreshed the generation observed by this process.
+    Coalesced,
 }
 
 /// Coordinates update decisions through injected platform boundaries.
@@ -100,7 +100,7 @@ where
     /// # Errors
     ///
     /// Explicit checks return typed installation, cache, and network failures.
-    /// Implicit callers should treat failures as quiet diagnostics.
+    /// Startup callers should treat failures as quiet diagnostics.
     pub fn check(
         &mut self,
         installed: StableVersion,
@@ -108,8 +108,7 @@ where
     ) -> Result<UpdateCheckResult, UpdateError> {
         let installation = self.detector.detect()?;
         let state = self.state.load(installation.identity)?;
-        let now = self.clock.now();
-        if !should_refresh(&state, now, installation.kind, mode) {
+        if !should_refresh(installation.kind, mode) {
             return Ok(result(
                 installation.kind,
                 installed,
@@ -128,9 +127,27 @@ where
                 UpdateRefresh::InProgress,
             ));
         };
+        let observed_generation = match mode {
+            UpdateCheckMode::Explicit => None,
+            UpdateCheckMode::Startup { .. } => Some(state.refresh_generation),
+        };
+        let Some(refresh_state) = self
+            .state
+            .begin_refresh(installation.identity, observed_generation)?
+        else {
+            drop(refresh_lease);
+            let current = self.state.load(installation.identity)?;
+            return Ok(result(
+                installation.kind,
+                installed,
+                current,
+                UpdateRefresh::Coalesced,
+            ));
+        };
         let observation = self
             .source
-            .latest_stable(installation.kind, state.etag.as_deref())?;
+            .latest_stable(installation.kind, refresh_state.etag.as_deref())?;
+        let now = self.clock.now();
         let state = self.state.record_success(
             installation.identity,
             observation,
@@ -147,15 +164,10 @@ where
     }
 }
 
-fn should_refresh(
-    state: &UpdateCacheState,
-    now: Timestamp,
-    installation: InstallationKind,
-    mode: UpdateCheckMode,
-) -> bool {
+fn should_refresh(installation: InstallationKind, mode: UpdateCheckMode) -> bool {
     match mode {
         UpdateCheckMode::Explicit => true,
-        UpdateCheckMode::Implicit {
+        UpdateCheckMode::Startup {
             enabled,
             release_build,
             interactive,
@@ -164,15 +176,8 @@ fn should_refresh(
                 && release_build
                 && interactive
                 && installation != InstallationKind::SourceOrUnknown
-                && !is_fresh(state, now)
         }
     }
-}
-
-fn is_fresh(state: &UpdateCacheState, now: Timestamp) -> bool {
-    state.last_checked_at.is_some_and(|checked| {
-        now < checked || now.as_millis().saturating_sub(checked.as_millis()) < CHECK_INTERVAL_MILLIS
-    })
 }
 
 fn result(

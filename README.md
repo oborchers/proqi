@@ -350,13 +350,14 @@ The command reports Crossterm's raw key event and the normalized Proqi action.
 
 ## Updates and privacy
 
-Interactive release builds check the installable version for their verified
-channel in the background at most once every 24 hours for one installation.
+Every eligible interactive release startup checks the installable version for
+its verified channel in the background. Concurrent Proqi startups share one
+request and one prompt, while the next independent startup checks again.
 Standalone archives use the public stable GitHub Release endpoint. Homebrew
 installations use the public tap formula, so Proqi never advertises a release
 before the tap can install it. Debug builds, source installations, JSON
-commands, skills, and other noninteractive commands do not perform implicit
-checks. Disable checks globally in `config.toml`:
+commands, skills, and other noninteractive commands do not perform automatic
+checks. Disable startup checks globally in `config.toml`:
 
 ```toml
 check_for_updates = false
@@ -372,6 +373,9 @@ runtime state. Run an explicit bounded check with:
 proqi update check --json
 ```
 
+The searchable command palette also includes **Check for updates**. An explicit
+check is user-authorized even when automatic startup checks are disabled.
+
 Homebrew installations on macOS and Linux can choose **Update and restart all
 sessions**, **Not now**, or **Skip this version**. Proqi coordinates one update
 across every verified active instance that shares the installation. Each
@@ -384,6 +388,8 @@ session. Partial restart failures remain visible and recoverable.
 The coordination path is designed and deterministically tested for the ordinary
 case of 10 to 15 concurrent Proqi instances. Notification, dismissal, and skip
 state are installation-wide so multiple boards cannot compete for attention.
+**Not now** lasts until the next successful eligible startup check. **Skip this
+version** remains active until a newer release exists.
 
 Standalone archives receive verified release instructions. Proqi does not
 replace a standalone executable or promise a same-pane restart. Durable boards

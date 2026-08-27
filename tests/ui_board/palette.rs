@@ -61,3 +61,20 @@ fn palette_query_accepts_normalized_paste_and_grapheme_cursor_edits() {
     let (query, _, _) = fixture.app.palette_view().expect("palette");
     assert_eq!(query, "qu i!t");
 }
+
+#[test]
+fn palette_exposes_an_explicit_update_check() {
+    let mut fixture = Fixture::new();
+    fixture.input(UiInput::Key(UiKey::Character(':')));
+    for character in "check for updates".chars() {
+        fixture.input(UiInput::Key(UiKey::Character(character)));
+    }
+    let (_, entries, selected) = fixture.app.palette_view().expect("palette");
+    assert_eq!(entries, vec!["Check for updates"]);
+    assert_eq!(selected, 0);
+    let effects = fixture.effects(UiInput::Key(UiKey::Enter));
+    assert_eq!(
+        effects,
+        vec![Effect::Update(proqi::application::UpdateIntent::CheckNow)]
+    );
+}

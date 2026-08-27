@@ -5,7 +5,7 @@ use std::sync::mpsc::TryRecvError;
 use crate::{
     adapters::terminal::{
         TerminalError,
-        update_lane::{UpdateActionResult, UpdateResult},
+        update_lane::{ManualCheckResult, UpdateActionResult, UpdateResult},
     },
     application::{UpdateExecution, UpdateExecutionStatus},
     ui::BoardApp,
@@ -58,6 +58,40 @@ fn apply_result(
             pending.update = pending.update.saturating_sub(1);
             app.complete_update_action(action_message(result));
         }
+        UpdateResult::ManualCheck(result) => {
+            pending.update = pending.update.saturating_sub(1);
+            apply_manual_check(app, result, input_boundary);
+        }
+    }
+}
+
+fn apply_manual_check(
+    app: &mut BoardApp,
+    result: Result<ManualCheckResult, crate::ports::update::UpdateError>,
+    input_boundary: u64,
+) {
+    match result {
+        Ok(ManualCheckResult::Prompt(notice)) => app.present_update_protected(
+            notice.version,
+            notice.installation,
+            notice.participants,
+            input_boundary,
+        ),
+        Ok(ManualCheckResult::Current(version)) => {
+            app.complete_update_action(Ok(format!("Proqi {version} is current.")));
+        }
+        Ok(ManualCheckResult::Suppressed(version)) => app.complete_update_action(Ok(format!(
+            "Proqi {version} is available but skipped for this installation."
+        ))),
+        Ok(ManualCheckResult::InProgress) => app.complete_update_action(Ok(
+            "Another Proqi session is checking for updates.".to_owned(),
+        )),
+        Ok(ManualCheckResult::Instructions(version)) => app.complete_update_action(Ok(format!(
+            "Proqi {version} is available at https://github.com/oborchers/proqi/releases/latest"
+        ))),
+        Err(_) => app.complete_update_action(Err(
+            "Update check failed. Proqi remains available offline.".to_owned(),
+        )),
     }
 }
 

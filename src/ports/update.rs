@@ -85,6 +85,21 @@ pub trait UpdateStateStore {
         kind: UpdateLockKind,
     ) -> Result<Option<Box<dyn UpdateLease>>, UpdateError>;
 
+    /// Atomically begin a refresh when the caller still represents the observed generation.
+    ///
+    /// Passing `None` forces an explicitly requested refresh. Passing a generation coalesces
+    /// concurrent startup checks that observed the same state. The returned state contains the
+    /// incremented generation, while `None` means another startup already advanced it.
+    ///
+    /// # Errors
+    ///
+    /// Returns a private atomic cache-write failure or generation overflow.
+    fn begin_refresh(
+        &self,
+        installation: InstallationIdentity,
+        observed_generation: Option<u64>,
+    ) -> Result<Option<UpdateCacheState>, UpdateError>;
+
     /// Atomically merge a successful release observation.
     ///
     /// # Errors
@@ -98,7 +113,7 @@ pub trait UpdateStateStore {
         checked_at: Timestamp,
     ) -> Result<UpdateCacheState, UpdateError>;
 
-    /// Defer one exact release until a later stale refresh.
+    /// Defer one exact release until the next successful startup refresh.
     ///
     /// # Errors
     ///

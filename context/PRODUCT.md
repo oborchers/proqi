@@ -96,11 +96,12 @@ search, copy, submission, and JSON automation require no network service. Proqi
 has no telemetry and never sends thought content, paths, identifiers, clipboard
 data, or session state for analytics.
 
-Interactive release builds perform a bounded, disableable stable-release check
-against GitHub at most once every 24 hours per installation. The check sends
-only a bounded Proqi name and version User-Agent when required by GitHub. It is
-never implicit in debug or source builds, tests, JSON commands, the Proqi skill,
-or other noninteractive paths.
+Every eligible interactive release startup performs a bounded, disableable
+stable-release check against GitHub in the background. Concurrent startups are
+coalesced into one request and one actionable prompt for the installation. The
+check sends only a bounded Proqi name and version User-Agent when required by
+GitHub. It is never implicit in debug or source builds, tests, JSON commands,
+the Proqi skill, or other noninteractive paths.
 
 Local diagnostics are structured, content-redacted, user-private, and bounded.
 They record lifecycle, stable command outcomes, and durable submission-state
@@ -623,16 +624,21 @@ checks consider stable GitHub Releases only. Drafts, prereleases, malformed
 tags, and older or equal versions never produce a prompt.
 
 Interactive release builds enable `check_for_updates = true` by default. The
-setting can be disabled globally. Check results, `Not now`, and
-`Skip this version` are installation-wide so 10 to 15 adjacent Proqi processes
-do not each contact GitHub or compete for attention. A shared private cache
-stores only the latest stable version, check time, exact dismissed or skipped
-version, observed installed version, restart-needed state, and bounded HTTP
-cache metadata. Cache corruption is a miss and never blocks startup.
+setting can be disabled globally. Check results, `Not now`, and `Skip this
+version` are installation-wide so 10 to 15 adjacent Proqi processes do not each
+contact GitHub or compete for attention. `Not now` defers the release until the
+next successful eligible startup check. `Skip this version` remains exact and
+durable until a later release exists. A shared private cache stores only the
+latest stable version, refresh generation, last successful check time, exact
+dismissed or skipped version, observed installed version, restart-needed state,
+and bounded HTTP cache metadata. Cache corruption is a miss and never blocks
+startup.
 
-At most one process refreshes a stale cache and at most one process owns the
-actionable prompt. Other sessions continue normally. JSON commands, the Proqi
-skill, and noninteractive commands never check unless the user explicitly runs
+At most one process refreshes the generation observed by a concurrent startup
+cohort, and at most one process owns the actionable prompt. A later independent
+startup checks again. Other sessions continue normally. The command palette
+offers an explicit `Check for updates` action. JSON commands, the Proqi skill,
+and noninteractive commands never check unless the user explicitly runs
 `proqi update check --json`.
 
 ### Homebrew update and restart
@@ -1099,8 +1105,9 @@ Specifically:
 - Deleted thoughts and text edits can be undone after restarting.
 - Simultaneous instances do not mix sessions or silently lose writes.
 - Installation through Homebrew requires no language runtime setup.
-- One installation-wide update check and one prompt serve 10 to 15 simultaneous
-  sessions without transmitting user content.
+- One installation-wide update request and one prompt serve 10 to 15
+  simultaneous startups without transmitting user content, while a later
+  startup checks again.
 - A confirmed Homebrew update either checkpoints every verified participant
   before one installer runs or aborts before installation.
 - Successful Homebrew updates resume macOS and Linux sessions through ordinary
