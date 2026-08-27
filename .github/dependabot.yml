@@ -4,6 +4,7 @@ multi-ecosystem-groups:
   all-dependencies:
     schedule:
       interval: weekly
+    open-pull-requests-limit: 1
     labels: [dependencies]
 
 updates:
@@ -15,7 +16,6 @@ updates:
       security-updates:
         applies-to: security-updates
         patterns: ["*"]
-    open-pull-requests-limit: 1
     patterns: ["*"]
     multi-ecosystem-group: all-dependencies
 
@@ -23,7 +23,6 @@ updates:
     directory: /
     cooldown:
       default-days: 7
-    open-pull-requests-limit: 1
     patterns: ["*"]
     multi-ecosystem-group: all-dependencies
 
@@ -31,6 +30,5 @@ updates:
     directory: /
     cooldown:
       default-days: 7
-    open-pull-requests-limit: 1
     patterns: ["*"]
     multi-ecosystem-group: all-dependencies
