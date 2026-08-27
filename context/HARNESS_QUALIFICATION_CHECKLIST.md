@@ -240,9 +240,10 @@ Do not add a closed enum merely to recognize a new established-session harness.
 
 ### Conditional: a harness cannot identify a session before its first prompt
 
-This is not automatically supported. Sessionless Codex is the sole current
-exception. Do not extend provisional eligibility to another harness implicitly;
-record its replacement identity guarantee and remaining limitation explicitly.
+This is not automatically supported. Codex, Cline, Kilo, and OpenCode are the
+current explicit exceptions. Do not extend provisional eligibility to another
+harness implicitly; record its replacement identity guarantee and remaining
+limitation explicitly.
 
 - [ ] Document why the harness cannot report a stable session before input.
 - [ ] Prefer fixing the Herdr integration or harness hook so the session is

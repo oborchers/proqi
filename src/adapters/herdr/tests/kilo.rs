@@ -133,10 +133,12 @@ fn recorded_kilo_sessionless_is_provisional_while_unready_and_exit_stay_hidden()
         Some(("w1:p2", right_rect())),
     );
     let (mut exited_gateway, _) = gateway(responses);
-    assert!(matches!(
-        exited_gateway.adjacent_targets(&context),
-        Err(AgentError::Unsupported(_))
-    ));
+    assert!(
+        exited_gateway
+            .adjacent_targets(&context)
+            .expect("exited Kilo target is absent")
+            .is_empty()
+    );
 }
 
 #[test]
