@@ -414,7 +414,11 @@ fn forms(root: &ScanRoot, name: &str) -> Vec<InvocationForm> {
     token
         .map(|token| {
             vec![InvocationForm {
-                harness: root.harness,
+                harness: if root.harness == InvocationHarness::AgentSkills {
+                    InvocationHarness::Codex
+                } else {
+                    root.harness
+                },
                 token,
             }]
         })

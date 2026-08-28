@@ -7,7 +7,7 @@ means the definition is useful catalog evidence but cannot be inserted.
 
 | Harness / ecosystem | Kind | Project roots | Global roots | Plugin scope | Inserted form | Portability decision |
 | --- | --- | --- | --- | --- | --- | --- |
-| Agent Skills / npx skills | Skill | `.agents/skills` | `~/.agents/skills`, `~/.config/agents/skills` | Harness-specific | `$name` where supported | `SKILL.md` metadata is portable; a receiving harness still decides availability |
+| Agent Skills / npx skills | Skill | `.agents/skills` | `~/.agents/skills`, `~/.config/agents/skills` | Harness-specific | `$name` for the documented Codex form | `SKILL.md` metadata is portable; exact forms retain their receiving harness and a receiving harness still decides availability |
 | OpenAI Codex | Skill | `.agents/skills` from cwd through repository root | `~/.agents/skills`; `~/.codex/skills` as npx-skills compatibility | Bundled/system skills are outside user configuration | `$name` | First-class Agent Skills support |
 | OpenAI Codex | Agent | `.codex/agents/*.toml` | `~/.codex/agents/*.toml` | None documented | Catalog-only | Codex documents natural-language delegation and `/agent` thread management, not an exact per-agent token |
 | Claude Code | Skill | `.claude/skills/**/SKILL.md` from cwd through repository root | `~/.claude/skills` | Installed plugin `skills/` | `/name`; plugin `/plugin:name` | Skill wins a same-name legacy command in Claude; Proqi preserves both typed records and orders documented precedence |
@@ -27,24 +27,42 @@ precede user agents; plugin definitions remain lowest. Canonical paths collapse
 symlink aliases while same-name definitions with distinct type or source remain
 separately labeled.
 
-## Target-aware built-in exception
+## Target boundaries and shared built-ins
 
-`/plan` is the only non-filesystem invocation Proqi supplies. It appears as an
-ordinary Command result only at byte zero of a thought when verified adjacent
-Codex or Claude Code targets exist. Leading whitespace, later lines, partial
-names such as `/planner`, and in-body `/plan` text do not match.
+If verified adjacent targets map to documented harnesses, completion and
+highlighting include only forms accepted by those harnesses. A Codex-only target
+therefore does not offer `.claude` forms, a Claude-only target does not offer
+Codex forms, and several known targets contribute their union. With no
+recognized adjacent target, all documented forms remain available as a
+scratchpad authoring fallback. Submission remains exact plain text rather than
+a runtime validation or execution boundary.
+
+The checked-in shared-command table supplies `/plan` and `/goal`, both
+documented by Codex and Claude Code. Each appears as a shared Command result only
+at byte zero of a thought when a verified adjacent target for either harness
+exists. Labels describe compatibility as `Codex/Claude Code`; target detection
+controls availability separately. Leading whitespace, later lines, partial
+names such as `/planner`, and in-body starter prose do not match or highlight.
 
 For a multi-thought submission to either supported harness, Proqi preserves a
-complete `/plan` starter on the first thought and omits duplicate starters from
-later thoughts in the outbound prompt. It removes the token and one following
-whitespace separator only. Source thoughts remain byte-for-byte unchanged.
+complete `/plan` or `/goal` starter on the first thought and omits either shared
+starter from later thoughts in the outbound prompt. It removes the token and one
+following whitespace separator only. Source thoughts remain byte-for-byte
+unchanged.
+
+Exact compatible invocation tokens are detected with bounded, sigil-aware
+ranges outside fenced code and receive the same annotation color plus bold cue
+as folded image and large-paste placeholders. The styling is render-only: it
+does not create durable annotations or change editor text, wrapping, cursor
+positions, persistence, or undo.
 
 ## Evidence and licenses
 
 - [Claude Code skills and slash commands](https://code.claude.com/docs/en/slash-commands), [subagents](https://code.claude.com/docs/en/sub-agents), and [plugin manifests](https://code.claude.com/docs/en/plugins-reference) are vendor documentation.
 - [OpenAI Codex skills](https://developers.openai.com/codex/skills/) and [subagents](https://developers.openai.com/codex/subagents/) are vendor documentation.
-- [OpenAI Codex developer commands](https://developers.openai.com/codex/cli/slash-commands/) documents `/plan` and its inline prompt form.
+- [OpenAI Codex developer commands](https://learn.chatgpt.com/docs/developer-commands?surface=cli) documents `/plan`, `/goal`, and their CLI availability.
 - [OpenCode commands](https://opencode.ai/docs/commands/) and [agents](https://opencode.ai/v2/docs/agents/) are vendor documentation.
 - [Agent Skills specification](https://agentskills.io/specification) defines bounded `SKILL.md` metadata.
 - [Vercel Labs `skills`](https://github.com/vercel-labs/skills) informed the compatibility-root table and is MIT licensed. No source code was copied.
 - [Pi](https://github.com/earendil-works/pi) documentation informed prompt and skill roots and is MIT licensed. No source code was copied.
+- The [OpenAI Codex](https://github.com/openai/codex) TUI's render-only mention highlighting informed the separation between exact text and styled ranges. The reviewed source was commit `8bcac28f93f78b70d1159d97dbf11254bfb56a49`, licensed Apache-2.0; no source code was copied.

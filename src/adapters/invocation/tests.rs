@@ -49,6 +49,7 @@ fn globals_are_independent_while_project_entries_follow_the_cwd() {
 
     assert_eq!(left.global, right.global);
     assert_eq!(left.global[0].forms[0].token, "$global-one");
+    assert_eq!(left.global[0].forms[0].harness, InvocationHarness::Codex);
     assert_eq!(left.project[0].forms[0].token, "/api-check");
     assert_eq!(right.project[0].forms[0].token, "@agent-reviewer");
 }

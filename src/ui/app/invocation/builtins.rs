@@ -1,4 +1,4 @@
-//! Target-aware built-in invocation choices.
+//! Target-aware built-in invocation choices shared by documented harnesses.
 
 use crate::{
     ports::{
@@ -10,17 +10,72 @@ use crate::{
 
 use super::{Choice, InvocationPopup};
 
-const PLAN_TOKEN: &str = "/plan";
+#[derive(Clone, Copy)]
+struct SharedStarter {
+    token: &'static str,
+    search_name: &'static str,
+}
 
-pub(super) fn plan_choice(app: &BoardApp, popup: &InvocationPopup) -> Option<Choice> {
-    let harnesses = plan_harnesses(app)?;
-    if !starts_prompt(app, popup) || !matches_query(popup) {
-        return None;
+const SHARED_STARTERS: [SharedStarter; 2] = [
+    SharedStarter {
+        token: "/goal",
+        search_name: "goal",
+    },
+    SharedStarter {
+        token: "/plan",
+        search_name: "plan",
+    },
+];
+
+pub(super) fn choices(app: &BoardApp, popup: &InvocationPopup) -> Vec<Choice> {
+    if !starts_prompt(app, popup) || !supports_shared_starters(app) {
+        return Vec::new();
     }
-    Some(Choice {
-        token: PLAN_TOKEN.to_owned(),
-        label: format!("{PLAN_TOKEN}  Built-in Command · {harnesses}"),
-    })
+    SHARED_STARTERS
+        .iter()
+        .copied()
+        .filter(|starter| matches_query(*starter, popup))
+        .map(|starter| Choice {
+            token: starter.token.to_owned(),
+            label: format!("{}  Shared Command · Codex/Claude Code", starter.token),
+        })
+        .collect()
+}
+
+pub(super) fn tokens(app: &BoardApp) -> impl Iterator<Item = &'static str> {
+    let available = supports_shared_starters(app);
+    SHARED_STARTERS
+        .iter()
+        .filter(move |_| available)
+        .map(|starter| starter.token)
+}
+
+pub(in crate::ui::app) fn without_later_shared_starter(content: &str) -> &str {
+    let Some(starter) = SHARED_STARTERS
+        .iter()
+        .find(|starter| content.starts_with(starter.token))
+    else {
+        return content;
+    };
+    let Some(remainder) = content.get(starter.token.len()..) else {
+        return content;
+    };
+    let Some(separator) = remainder.chars().next() else {
+        return remainder;
+    };
+    if !separator.is_whitespace() {
+        return content;
+    }
+    let separator_len = if remainder.starts_with("\r\n") {
+        2
+    } else {
+        separator.len_utf8()
+    };
+    &remainder[separator_len..]
+}
+
+pub(super) fn is_shared_starter(token: &str) -> bool {
+    SHARED_STARTERS.iter().any(|starter| starter.token == token)
 }
 
 pub(super) fn starts_prompt(app: &BoardApp, popup: &InvocationPopup) -> bool {
@@ -35,33 +90,23 @@ pub(super) fn starts_prompt(app: &BoardApp, popup: &InvocationPopup) -> bool {
     )
 }
 
-fn matches_query(popup: &InvocationPopup) -> bool {
+fn matches_query(starter: SharedStarter, popup: &InvocationPopup) -> bool {
     let query = popup.query.to_lowercase();
     if popup.manual {
-        PLAN_TOKEN.contains(&query) || "plan".contains(&query)
+        starter.token.contains(&query) || starter.search_name.contains(&query)
     } else {
-        PLAN_TOKEN.starts_with(&query)
+        starter.token.starts_with(&query)
     }
 }
 
-fn plan_harnesses(app: &BoardApp) -> Option<&'static str> {
-    let mut codex = false;
-    let mut claude = false;
-    for target in app
-        .agent_targets()
+fn supports_shared_starters(app: &BoardApp) -> bool {
+    app.agent_targets()
         .iter()
         .filter(|target| target.delivery.supports())
-    {
-        match target.agent_kind.as_str() {
-            CODEX_AGENT_KIND => codex = true,
-            CLAUDE_AGENT_KIND => claude = true,
-            _ => {}
-        }
-    }
-    match (codex, claude) {
-        (true, true) => Some("Codex/Claude Code"),
-        (true, false) => Some("Codex"),
-        (false, true) => Some("Claude Code"),
-        (false, false) => None,
-    }
+        .any(|target| {
+            matches!(
+                target.agent_kind.as_str(),
+                CODEX_AGENT_KIND | CLAUDE_AGENT_KIND
+            )
+        })
 }

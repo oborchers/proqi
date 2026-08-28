@@ -410,10 +410,11 @@ edit mode or pressing `Escape` clears the complete board selection.
 
 Copy concatenates exact thought content with one blank line between thoughts
 and no generated labels. Submission does the same except for one target-aware
-plan-mode rule: when Codex or Claude Code receives several thoughts, `/plan` is
-recognized only as a complete token at byte zero, remains only on the first
-thought, and is omitted from later thought starts in the outbound payload.
-In-body text and every stored thought remain exact. A multi-thought Herdr
+shared-starter rule: when Codex or Claude Code receives several thoughts,
+`/plan` and `/goal` are recognized only as complete tokens at byte zero. The
+first thought's starter remains, and either starter is omitted from later
+thought starts in the outbound payload. In-body text and every stored thought
+remain exact. A multi-thought Herdr
 submission is one semantic prompt request, not several deliveries. For submit
 and remove, all unchanged source thoughts are removed together only after the
 matching accepted receipt is durably journaled. Every source thought is locked
@@ -591,10 +592,19 @@ harness precedence. Startup, explicit command-palette refresh, and debounced
 host focus replace generation-tagged results; an older in-flight project scan
 cannot leak into a newer cwd.
 
-One deliberately narrow built-in sits beside filesystem results: `/plan` is
-offered as an ordinary Command only at byte zero when a verified adjacent Codex
-or Claude Code target exists. It receives no special styling and never matches
-leading whitespace, another line, or in-body prose.
+A small data-driven built-in table sits beside filesystem results: `/plan` and
+`/goal` are offered as shared Commands only at byte zero when a verified
+adjacent Codex or Claude Code target exists. Exact discovered invocations and
+these shared starters use the annotation color and bold non-color cue already
+used for folded image and large-paste placeholders. Leading whitespace, another
+line, partial tokens, and in-body starter prose remain ordinary text.
+
+When a verified adjacent target maps to a documented catalog harness,
+completion and highlighting include only compatible forms; several known
+targets contribute their union. With no recognized target, Proqi retains the
+catalog-wide authoring fallback. Submission still transfers exact plain text:
+Proqi does not execute invocations or claim that a receiving harness has loaded
+a particular filesystem definition.
 
 With `smart_lists = true`, the default, `Enter` continues `-`, `*`, and `+`
 items, one-to-nine-digit ordered markers ending in `.` or `)`, and unchecked or

@@ -228,14 +228,19 @@ insertable only where its harness documents an exact user-facing token; for
 example, Claude Code agents use `@agent-name`, while Codex agent TOML files stay
 catalog-only because Codex documents natural-language delegation rather than an
 equivalent token. **Insert discovered invocation** remains available in the
-command palette. See the reviewed [compatibility table](docs/INVOCATIONS.md).
+command palette. Exact compatible invocations in thought text use the same
+annotation color and bold cue as folded image and large-paste placeholders. A
+verified recognized adjacent harness filters insertable forms to that harness;
+without one, Proqi keeps the catalog-wide authoring fallback. See the reviewed
+[compatibility table](docs/INVOCATIONS.md).
 
-The sole built-in exception is `/plan`: with a verified adjacent Codex or
-Claude Code target, it appears as an ordinary Command completion only at the
-first byte of a thought. When several thoughts are submitted together, only a
-complete `/plan` starting the first thought is retained; duplicate starters on
-later thoughts are omitted from the outbound prompt, while stored and in-body
-text remain unchanged.
+The small shared built-in table contains `/plan` and `/goal`, both documented by
+Codex and Claude Code. With a verified adjacent target for either harness, they
+appear as shared Command completions only at the first byte of a thought. When
+several thoughts are submitted together, only a complete shared starter on the
+first thought is retained; `/plan` or `/goal` starters on later thoughts are
+omitted from the outbound prompt, while stored and in-body text remain
+unchanged.
 
 ## Resume and organize sessions
 

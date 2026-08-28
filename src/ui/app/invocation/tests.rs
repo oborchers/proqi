@@ -156,22 +156,22 @@ mod contract {
     }
 
     #[test]
-    fn built_in_plan_completes_only_at_prompt_start_for_codex_and_claude() {
+    fn shared_starters_complete_only_at_prompt_start_for_codex_and_claude() {
         let cwd = tempfile::tempdir().expect("tempdir");
-        for (harness, label) in [
-            (CODEX_AGENT_KIND, "Codex"),
-            (CLAUDE_AGENT_KIND, "Claude Code"),
-        ] {
-            let (mut app, mut ids, clock) = app("/pl", cwd.path());
-            app.complete_agent_discovery(Ok(vec![target(harness)]));
-            assert_eq!(
-                app.invocation_view().expect("plan popup").1,
-                vec![format!("/plan  Built-in Command · {label}")]
-            );
-            app.handle(UiInput::Key(UiKey::Enter), &mut ids, &clock);
-            assert_eq!(app.editor_snapshot().expect("editor").content, "/plan ");
-            app.handle(UiInput::Key(UiKey::Undo), &mut ids, &clock);
-            assert_eq!(app.editor_snapshot().expect("editor").content, "/pl");
+        for harness in [CODEX_AGENT_KIND, CLAUDE_AGENT_KIND] {
+            for (partial, token) in [("/pl", "/plan"), ("/go", "/goal")] {
+                let (mut app, mut ids, clock) = app(partial, cwd.path());
+                app.complete_agent_discovery(Ok(vec![target(harness)]));
+                assert_eq!(
+                    app.invocation_view().expect("starter popup").1,
+                    vec![format!("{token}  Shared Command · Codex/Claude Code")]
+                );
+                app.handle(UiInput::Key(UiKey::Enter), &mut ids, &clock);
+                assert_eq!(
+                    app.editor_snapshot().expect("editor").content,
+                    format!("{token} ")
+                );
+            }
         }
 
         for content in ["prefix /pl", " /pl", "\n/pl"] {
@@ -190,7 +190,7 @@ mod contract {
     }
 
     #[test]
-    fn built_in_plan_manual_picker_requires_a_supported_target_and_byte_zero() {
+    fn shared_starter_picker_requires_a_supported_target_and_byte_zero() {
         let cwd = tempfile::tempdir().expect("tempdir");
         let (mut supported, mut ids, clock) = app("task", cwd.path());
         supported.complete_agent_discovery(Ok(vec![target(CODEX_AGENT_KIND)]));
@@ -205,13 +205,42 @@ mod contract {
         supported.open_invocation_picker();
         assert_eq!(
             supported.invocation_view().expect("manual picker").1,
-            vec!["/plan  Built-in Command · Codex"]
+            vec![
+                "/goal  Shared Command · Codex/Claude Code",
+                "/plan  Shared Command · Codex/Claude Code",
+            ]
         );
 
         let (mut unsupported, _, _) = app("/pl", cwd.path());
         unsupported.complete_agent_discovery(Ok(vec![target(OPENCODE_AGENT_KIND)]));
         unsupported.refresh_invocation_popup();
         assert!(unsupported.invocation_view().is_none());
+    }
+
+    #[test]
+    fn known_targets_filter_forms_while_no_known_target_keeps_authoring_fallback() {
+        let cwd = tempfile::tempdir().expect("tempdir");
+        let codex = entry("$review", InvocationKind::Skill, InvocationScope::Project);
+        let mut claude = entry("/audit", InvocationKind::Command, InvocationScope::Project);
+        claude.source = InvocationHarness::ClaudeCode;
+        claude.forms[0].harness = InvocationHarness::ClaudeCode;
+
+        for (target_kind, expected) in [
+            (Some(CODEX_AGENT_KIND), vec!["$review  Project Skill"]),
+            (Some(CLAUDE_AGENT_KIND), vec!["/audit  Project Command"]),
+            (
+                None,
+                vec!["$review  Project Skill", "/audit  Project Command"],
+            ),
+        ] {
+            let (mut app, _, _) = app("text", cwd.path());
+            if let Some(target_kind) = target_kind {
+                app.complete_agent_discovery(Ok(vec![target(target_kind)]));
+            }
+            install(&mut app, cwd.path(), vec![codex.clone(), claude.clone()]);
+            app.open_invocation_picker();
+            assert_eq!(app.invocation_view().expect("manual picker").1, expected);
+        }
     }
 
     #[test]
@@ -447,7 +476,7 @@ mod contract {
     }
 
     #[test]
-    fn plan_completion_popup_snapshot_is_visually_an_ordinary_command() {
+    fn shared_starter_popup_snapshot_is_visually_an_ordinary_command() {
         insta::assert_snapshot!("invocation_plan_starter", plan_completion_snapshot());
     }
 

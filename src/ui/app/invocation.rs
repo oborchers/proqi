@@ -19,7 +19,11 @@ use crate::{
 use super::BoardApp;
 
 #[path = "invocation/builtins.rs"]
-mod builtins;
+pub(in crate::ui::app) mod builtins;
+#[path = "invocation/compatibility.rs"]
+mod compatibility;
+#[path = "invocation/highlight.rs"]
+mod highlight;
 
 const MAX_RESULTS: usize = 20;
 
@@ -351,15 +355,20 @@ impl BoardApp {
 
     fn invocation_choices(&self, popup: &InvocationPopup) -> Vec<Choice> {
         let query = popup.query.to_lowercase();
-        let built_in_plan = builtins::plan_choice(self, popup);
+        let built_ins = builtins::choices(self, popup);
         let starts_prompt = builtins::starts_prompt(self, popup);
         let mut candidates = self
             .invocation_project
             .iter()
             .chain(&self.invocation_global)
             .flat_map(|entry| entry.forms.iter().map(move |form| (entry, form)))
-            .filter(|(_, form)| form.token != "/plan" || starts_prompt)
-            .filter(|(_, form)| built_in_plan.is_none() || form.token != "/plan")
+            .filter(|(_, form)| compatibility::supports_form(self, form))
+            .filter(|(_, form)| !builtins::is_shared_starter(&form.token) || starts_prompt)
+            .filter(|(_, form)| {
+                !built_ins
+                    .iter()
+                    .any(|built_in| built_in.token == form.token)
+            })
             .filter(|(entry, form)| choice_matches(entry, form, popup.manual, &query))
             .collect::<Vec<_>>();
         candidates.sort_by(|(left_entry, left_form), (right_entry, right_form)| {
@@ -371,12 +380,12 @@ impl BoardApp {
                 .then_with(|| left_entry.source.cmp(&right_entry.source))
                 .then_with(|| left_entry.canonical_path.cmp(&right_entry.canonical_path))
         });
-        candidates.truncate(MAX_RESULTS.saturating_sub(usize::from(built_in_plan.is_some())));
+        candidates.truncate(MAX_RESULTS.saturating_sub(built_ins.len()));
         let duplicate_tokens = candidates
             .iter()
             .map(|(_, form)| form.token.as_str())
             .collect::<Vec<_>>();
-        built_in_plan
+        built_ins
             .into_iter()
             .chain(candidates.drain(..).map(|(entry, form)| {
                 Choice {

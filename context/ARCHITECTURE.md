@@ -388,13 +388,23 @@ the existing editor selection to that range, and performs one semantic paste.
 The resulting `TextChangeSet` continues through annotation rebasing and editor
 undo without a parallel text-mutation contract.
 
-The UI composes one target-aware built-in beside those catalog results: `/plan`
-is available only at byte zero when verified adjacent Codex or Claude Code
-targets exist. It remains an ordinary Command choice rather than fabricated
-filesystem evidence. Outbound multi-thought assembly for either harness keeps a
-complete leading `/plan` only on the first thought and removes the token plus
-one separator from later thought starts. It never rewrites stored sources,
-partial names, leading whitespace, or in-body text.
+The UI composes a small data-driven shared-command table beside catalog results:
+`/plan` and `/goal` are available only at byte zero when verified adjacent Codex
+or Claude Code targets exist. They remain ordinary Command choices rather than
+fabricated filesystem evidence. Outbound multi-thought assembly for either
+harness keeps the complete leading shared starter only on the first thought and
+removes a `/plan` or `/goal` token plus one separator from later thought starts.
+It never rewrites stored sources, partial names, leading whitespace, or in-body
+text.
+
+Invocation forms carry their receiving harness independently from the source
+ecosystem. When verified adjacent targets map to known harnesses, completion and
+render-only highlighting filter forms to that target set; with no known target,
+the authoring catalog remains available. Highlight ranges are recomputed from
+exact bounded tokens and decorate terminal cells with the existing annotation
+semantic role without changing editor text, cursor geometry, persistence, or
+undo. Outbound submission remains plain text and therefore does not claim live
+harness enablement.
 
 An explicitly created empty thought is an ordinary durable domain entity. Its
 creation is committed through the same board operation as populated thoughts,

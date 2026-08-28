@@ -142,6 +142,7 @@ fn render_board(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, 
         } else {
             render_thought(
                 frame,
+                app,
                 &presentation,
                 thought_layout,
                 focused || selected,
@@ -219,12 +220,14 @@ fn render_gutter(
 
 fn render_thought(
     frame: &mut Frame<'_>,
+    app: &BoardApp,
     presentation: &crate::ui::annotations::Presentation,
     layout: &ThoughtLayout,
     focused: bool,
     theme: &Theme,
 ) {
     let links = url_ranges(&presentation.content);
+    let invocations = app.invocation_ranges(&presentation.content);
     let content_rows =
         usize::from(layout.text_area.height).saturating_sub(usize::from(layout.overflow.is_some()));
     let rendered_lines = wrap_rows(
@@ -240,6 +243,7 @@ fn render_thought(
             &row.visual,
             &presentation.folds,
             &links,
+            &invocations,
             theme,
         )
     })
@@ -270,12 +274,22 @@ fn render_editor(frame: &mut Frame<'_>, app: &BoardApp, layout: &ThoughtLayout, 
     };
     let snapshot = &presentation.snapshot;
     let links = url_ranges(&snapshot.content);
+    let invocations = app.invocation_ranges(&snapshot.content);
     let visible = snapshot
         .visual_lines
         .iter()
         .skip(snapshot.scroll_row)
         .take(usize::from(layout.text_area.height))
-        .map(|line| styled_line(&snapshot.content, line, &presentation.folds, &links, theme))
+        .map(|line| {
+            styled_line(
+                &snapshot.content,
+                line,
+                &presentation.folds,
+                &links,
+                &invocations,
+                theme,
+            )
+        })
         .collect::<Vec<_>>();
     frame.render_widget(
         Paragraph::new(visible).style(Style::default().fg(theme.foreground)),
@@ -302,6 +316,7 @@ fn styled_line(
     line: &crate::ports::editor::VisualLine,
     folds: &[crate::ui::annotations::PresentedFold],
     links: &[std::ops::Range<usize>],
+    invocations: &[std::ops::Range<usize>],
     theme: &Theme,
 ) -> Line<'static> {
     let source = content
@@ -320,15 +335,16 @@ fn styled_line(
                 .iter()
                 .any(|fold| fold.collapsed && byte >= fold.start && byte < fold.end);
             let linked = links.iter().any(|range| range.contains(&byte));
+            let invocation = invocations.iter().any(|range| range.contains(&byte));
             column = column.saturating_add(width);
-            let mut style = Style::default().fg(if folded {
+            let mut style = Style::default().fg(if folded || invocation {
                 theme.annotation
             } else if linked {
                 theme.link
             } else {
                 theme.foreground
             });
-            if folded {
+            if folded || invocation {
                 style = style.add_modifier(Modifier::BOLD);
             }
             if linked {

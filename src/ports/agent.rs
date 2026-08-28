@@ -342,8 +342,9 @@ pub struct SubmissionRequest {
     pub target: AgentTarget,
     /// Outbound semantic prompt assembled from exact source thoughts.
     ///
-    /// When several thoughts target Codex or Claude Code, duplicate `/plan`
-    /// starters after the first thought are omitted without mutating the sources.
+    /// When several thoughts target Codex or Claude Code, duplicate `/plan` or
+    /// `/goal` starters after the first thought are omitted without mutating
+    /// the sources.
     pub content: String,
 }
 
