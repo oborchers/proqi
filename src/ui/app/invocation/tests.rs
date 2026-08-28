@@ -60,7 +60,11 @@ mod contract {
         (app, ids, FakeClock::new(Timestamp::from_millis(2)))
     }
 
-    fn entry(token: &str, kind: InvocationKind, scope: InvocationScope) -> InvocationEntry {
+    pub(super) fn entry(
+        token: &str,
+        kind: InvocationKind,
+        scope: InvocationScope,
+    ) -> InvocationEntry {
         InvocationEntry {
             name: token[1..].to_owned(),
             description: Some("Fixture description".to_owned()),
@@ -139,10 +143,9 @@ mod contract {
         );
 
         app.refresh_invocation_popup();
-        assert_eq!(
-            app.invocation_view().expect("popup").1[0],
-            "$plan  Project Skill"
-        );
+        let choice = &app.invocation_view().expect("popup").1[0];
+        assert_eq!(choice.token, "$plan");
+        assert_eq!(choice.qualifier, "Project Skill");
         app.handle(UiInput::Key(UiKey::Enter), &mut ids, &clock);
         assert_eq!(
             app.editor_snapshot().expect("editor").content,
@@ -163,10 +166,9 @@ mod contract {
             for (partial, token) in [("/pl", "/plan"), ("/go", "/goal")] {
                 let (mut app, mut ids, clock) = app(partial, cwd.path());
                 app.complete_agent_discovery(Ok(vec![target(harness)]));
-                assert_eq!(
-                    app.invocation_view().expect("starter popup").1,
-                    vec![format!("{token}  Shared Command")]
-                );
+                let choices = app.invocation_view().expect("starter popup").1;
+                assert_eq!(choices[0].token, token);
+                assert_eq!(choices[0].qualifier, "Shared Command");
                 app.handle(UiInput::Key(UiKey::Enter), &mut ids, &clock);
                 assert_eq!(
                     app.editor_snapshot().expect("editor").content,
@@ -204,10 +206,11 @@ mod contract {
             &clock,
         );
         supported.open_invocation_picker();
-        assert_eq!(
-            supported.invocation_view().expect("manual picker").1,
-            vec!["/goal  Shared Command", "/plan  Shared Command",]
-        );
+        let choices = supported.invocation_view().expect("manual picker").1;
+        assert_eq!(choices[0].token, "/goal");
+        assert_eq!(choices[0].qualifier, "Shared Command");
+        assert_eq!(choices[1].token, "/plan");
+        assert_eq!(choices[1].qualifier, "Shared Command");
 
         let (mut unsupported, _, _) = app("/pl", cwd.path());
         unsupported.complete_agent_discovery(Ok(vec![target(OPENCODE_AGENT_KIND)]));
@@ -224,11 +227,11 @@ mod contract {
         claude.forms[0].harness = InvocationHarness::ClaudeCode;
 
         for (target_kind, expected) in [
-            (Some(CODEX_AGENT_KIND), vec!["$review  Project Skill"]),
-            (Some(CLAUDE_AGENT_KIND), vec!["/audit  Project Command"]),
+            (Some(CODEX_AGENT_KIND), vec![("$review", "Project Skill")]),
+            (Some(CLAUDE_AGENT_KIND), vec![("/audit", "Project Command")]),
             (
                 None,
-                vec!["$review  Project Skill", "/audit  Project Command"],
+                vec![("$review", "Project Skill"), ("/audit", "Project Command")],
             ),
         ] {
             let (mut app, _, _) = app("text", cwd.path());
@@ -237,7 +240,12 @@ mod contract {
             }
             install(&mut app, cwd.path(), vec![codex.clone(), claude.clone()]);
             app.open_invocation_picker();
-            assert_eq!(app.invocation_view().expect("manual picker").1, expected);
+            let choices = app.invocation_view().expect("manual picker").1;
+            assert_eq!(choices.len(), expected.len());
+            for (choice, (token, qualifier)) in choices.iter().zip(expected) {
+                assert_eq!(choice.token, token);
+                assert_eq!(choice.qualifier, qualifier);
+            }
         }
     }
 
@@ -270,54 +278,6 @@ mod contract {
                 "unexpected popup for {content:?}"
             );
         }
-    }
-
-    #[test]
-    fn same_slash_token_retains_typed_disambiguation() {
-        let cwd = tempfile::tempdir().expect("tempdir");
-        let (mut app, _, _) = app("/pl", cwd.path());
-        let mut skill = entry("/plan", InvocationKind::Skill, InvocationScope::Project);
-        skill.source = InvocationHarness::ClaudeCode;
-        skill.forms[0].harness = InvocationHarness::ClaudeCode;
-        let mut command = entry("/plan", InvocationKind::Command, InvocationScope::Project);
-        command.source = InvocationHarness::ClaudeCode;
-        command.forms[0].harness = InvocationHarness::ClaudeCode;
-        install(&mut app, cwd.path(), vec![skill, command]);
-        app.refresh_invocation_popup();
-
-        let labels = app.invocation_view().expect("typed results").1;
-        assert!(labels.iter().any(|label| label.contains("Project Skill")));
-        assert!(labels.iter().any(|label| label.contains("Project Command")));
-        assert!(labels.iter().all(|label| label.contains("Claude")));
-    }
-
-    #[test]
-    fn documented_precedence_orders_global_claude_skills_before_project_skills() {
-        let cwd = tempfile::tempdir().expect("tempdir");
-        let (mut app, _, _) = app("/pl", cwd.path());
-        let mut project = entry("/plan", InvocationKind::Skill, InvocationScope::Project);
-        project.precedence = 25;
-        project.forms[0].precedence = 25;
-        project.canonical_path = PathBuf::from("/fixture/project-plan");
-        let mut global = entry("/plan", InvocationKind::Skill, InvocationScope::Global);
-        global.precedence = 5;
-        global.forms[0].precedence = 5;
-        global.canonical_path = PathBuf::from("/fixture/global-plan");
-        let refresh = app.refresh_invocations();
-        let [crate::application::Effect::DiscoverInvocations(request)] = refresh.as_slice() else {
-            panic!("refresh effect");
-        };
-        app.complete_invocation_discovery(Ok(InvocationDiscovery {
-            generation: request.generation,
-            cwd: cwd.path().to_owned(),
-            global: vec![global],
-            project: vec![project],
-        }));
-        app.refresh_invocation_popup();
-
-        let labels = app.invocation_view().expect("ordered results").1;
-        assert!(labels[0].contains("Global Skill"));
-        assert!(labels[1].contains("Project Skill"));
     }
 
     #[test]

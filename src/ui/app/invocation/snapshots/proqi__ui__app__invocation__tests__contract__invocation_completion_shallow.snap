@@ -1,10 +1,11 @@
 ---
 source: src/ui/app/invocation/tests.rs
+assertion_line: 450
 expression: "completion_snapshot(28, 6)"
 ---
 00│┌ discovered invocations [x]│
 01││›$pl                      ││
-02││$plan  Project Skill      ││
-03││$plugin  Global Skill     ││
+02││$plan        Project Skill││
+03││$plugin       Global Skill││
 04│└──────────────────────────┘│
 05│  Esc Board  : Commands│

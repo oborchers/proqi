@@ -24,6 +24,10 @@ pub(in crate::ui::app) mod builtins;
 mod compatibility;
 #[path = "invocation/highlight.rs"]
 mod highlight;
+#[path = "invocation/view.rs"]
+mod view;
+
+pub(in crate::ui) use view::InvocationChoiceView;
 
 const MAX_RESULTS: usize = 20;
 
@@ -38,7 +42,7 @@ pub(super) struct InvocationPopup {
 #[derive(Clone)]
 struct Choice {
     token: String,
-    label: String,
+    qualifier: String,
 }
 
 impl BoardApp {
@@ -123,7 +127,7 @@ impl BoardApp {
         });
     }
 
-    pub(super) fn invocation_view(&self) -> Option<(String, Vec<String>, usize)> {
+    pub(super) fn invocation_view(&self) -> Option<(String, Vec<InvocationChoiceView>, usize)> {
         let popup = self.invocation_popup.as_ref()?;
         let choices = self.invocation_choices(popup);
         Some((
@@ -131,7 +135,10 @@ impl BoardApp {
             choices
                 .into_iter()
                 .skip(popup.scroll)
-                .map(|choice| choice.label)
+                .map(|choice| InvocationChoiceView {
+                    token: choice.token,
+                    qualifier: choice.qualifier,
+                })
                 .collect(),
             popup.selected.saturating_sub(popup.scroll),
         ))
@@ -392,7 +399,7 @@ impl BoardApp {
                     > 1;
                 Choice {
                     token: form.token.clone(),
-                    label: choice_label(entry, form, duplicate_token),
+                    qualifier: choice_qualifier(entry, form, duplicate_token),
                 }
             }))
             .collect()
@@ -416,13 +423,8 @@ fn choice_matches(
             .is_some_and(|description| description.to_lowercase().contains(query))
 }
 
-fn choice_label(entry: &InvocationEntry, form: &InvocationForm, show_source: bool) -> String {
-    let base = format!(
-        "{}  {} {}",
-        form.token,
-        entry.scope.label(),
-        entry.kind.label()
-    );
+fn choice_qualifier(entry: &InvocationEntry, form: &InvocationForm, show_source: bool) -> String {
+    let base = format!("{} {}", entry.scope.label(), entry.kind.label());
     if show_source {
         let harness = match form.harness {
             crate::ports::invocation::InvocationHarness::ClaudeCode => "Claude",

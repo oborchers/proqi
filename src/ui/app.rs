@@ -46,6 +46,7 @@ use super::{
     input::{PointerButton, PointerInput, PointerKind, UiInput, UiKey},
 };
 
+pub(in crate::ui) use invocation::InvocationChoiceView;
 use pending_types::{PendingEditorClipboard, PendingSubmission, SubmissionMode};
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]

@@ -1,12 +1,13 @@
 ---
 source: src/ui/app/invocation/tests.rs
+assertion_line: 445
 expression: "completion_snapshot(40, 12)"
 ---
 00││
 01│┌ discovered invocations ────────────[x]│
 02││›$pl                                  ││
-03││$plan  Project Skill                  ││
-04││$plugin  Global Skill                 ││
+03││$plan                    Project Skill││
+04││$plugin                   Global Skill││
 05│└──────────────────────────────────────┘│
 06││
 07││

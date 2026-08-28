@@ -9,7 +9,7 @@ use crate::{
 use ratatui_core::layout::Rect;
 use unicode_width::UnicodeWidthStr as _;
 
-use super::{BoardApp, palette, search, transfer};
+use super::{BoardApp, invocation::InvocationChoiceView, palette, search, transfer};
 
 impl BoardApp {
     /// Return the active editor snapshot, if edit mode is active.
@@ -146,7 +146,9 @@ impl BoardApp {
 
     /// Filtered discovered invocations and current selection for rendering.
     #[must_use]
-    pub fn discovered_invocation_view(&self) -> Option<(String, Vec<String>, usize)> {
+    pub(in crate::ui) fn discovered_invocation_view(
+        &self,
+    ) -> Option<(String, Vec<InvocationChoiceView>, usize)> {
         self.invocation_view()
     }
 

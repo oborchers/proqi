@@ -15,7 +15,10 @@ use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{application::InteractionMode, ports::text_layout::wrap_rows};
 
-use super::{BoardApp, HitTarget, LayoutSnapshot, Theme, ThoughtLayout};
+use super::{
+    BoardApp, HitTarget, LayoutSnapshot, Theme, ThoughtLayout, app::InvocationChoiceView,
+    layout::OverlayLayout,
+};
 
 /// Render the complete board into one terminal frame.
 pub fn render(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, theme: &Theme) {
@@ -28,15 +31,15 @@ pub fn render(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, th
         }
     } else if let Some((query, entries, selected)) = app.search_view() {
         if let Some(overlay) = &layout.overlay {
-            overlays::render_picker(
+            render_plain_picker(
                 frame,
                 overlay,
-                overlays::PickerView {
+                app,
+                PlainPickerView {
                     title: " thoughts ",
                     prompt: '/',
-                    query: &query,
-                    cursor: app.overlay_query_cursor().unwrap_or(query.len()),
-                    entries: &entries,
+                    query,
+                    entries,
                     selected,
                 },
                 theme,
@@ -44,15 +47,15 @@ pub fn render(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, th
         }
     } else if let Some((query, entries, selected)) = app.session_transfer_view() {
         if let Some(overlay) = &layout.overlay {
-            overlays::render_picker(
+            render_plain_picker(
                 frame,
                 overlay,
-                overlays::PickerView {
+                app,
+                PlainPickerView {
                     title: " send to Proqi session ",
                     prompt: '/',
-                    query: &query,
-                    cursor: app.overlay_query_cursor().unwrap_or(query.len()),
-                    entries: &entries,
+                    query,
+                    entries,
                     selected,
                 },
                 theme,
@@ -60,15 +63,13 @@ pub fn render(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, th
         }
     } else if let Some((query, entries, selected)) = app.discovered_invocation_view() {
         if let Some(overlay) = &layout.overlay {
-            overlays::render_picker(
+            render_invocation_picker(
                 frame,
                 overlay,
-                overlays::PickerView {
-                    title: " discovered invocations ",
-                    prompt: '›',
-                    query: &query,
-                    cursor: app.overlay_query_cursor().unwrap_or(query.len()),
-                    entries: &entries,
+                app,
+                InvocationPickerView {
+                    query,
+                    entries,
                     selected,
                 },
                 theme,
@@ -76,15 +77,15 @@ pub fn render(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, th
         }
     } else if let Some((query, entries, selected)) = app.palette_view() {
         if let Some(overlay) = &layout.overlay {
-            overlays::render_picker(
+            render_plain_picker(
                 frame,
                 overlay,
-                overlays::PickerView {
+                app,
+                PlainPickerView {
                     title: " commands ",
                     prompt: ':',
-                    query: &query,
-                    cursor: app.overlay_query_cursor().unwrap_or(query.len()),
-                    entries: &entries,
+                    query,
+                    entries,
                     selected,
                 },
                 theme,
@@ -99,6 +100,84 @@ pub fn render(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, th
     {
         overlays::render_help(frame, app, overlay, theme);
     }
+}
+
+struct PlainPickerView {
+    title: &'static str,
+    prompt: char,
+    query: String,
+    entries: Vec<String>,
+    selected: usize,
+}
+
+fn render_plain_picker(
+    frame: &mut Frame<'_>,
+    overlay: &OverlayLayout,
+    app: &BoardApp,
+    picker: PlainPickerView,
+    theme: &Theme,
+) {
+    let PlainPickerView {
+        title,
+        prompt,
+        query,
+        entries,
+        selected,
+    } = picker;
+    let rows = entries
+        .iter()
+        .map(|entry| overlays::PickerRow::plain(entry))
+        .collect::<Vec<_>>();
+    overlays::render_picker(
+        frame,
+        overlay,
+        overlays::PickerView {
+            title,
+            prompt,
+            query: &query,
+            cursor: app.overlay_query_cursor().unwrap_or(query.len()),
+            entries: &rows,
+            selected,
+        },
+        theme,
+    );
+}
+
+struct InvocationPickerView {
+    query: String,
+    entries: Vec<InvocationChoiceView>,
+    selected: usize,
+}
+
+fn render_invocation_picker(
+    frame: &mut Frame<'_>,
+    overlay: &OverlayLayout,
+    app: &BoardApp,
+    picker: InvocationPickerView,
+    theme: &Theme,
+) {
+    let InvocationPickerView {
+        query,
+        entries,
+        selected,
+    } = picker;
+    let rows = entries
+        .iter()
+        .map(|entry| overlays::PickerRow::fields(&entry.token, &entry.qualifier))
+        .collect::<Vec<_>>();
+    overlays::render_picker(
+        frame,
+        overlay,
+        overlays::PickerView {
+            title: " discovered invocations ",
+            prompt: '›',
+            query: &query,
+            cursor: app.overlay_query_cursor().unwrap_or(query.len()),
+            entries: &rows,
+            selected,
+        },
+        theme,
+    );
 }
 
 fn render_board(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, theme: &Theme) {

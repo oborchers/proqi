@@ -80,7 +80,10 @@ pub(super) fn render_picker(
         } else {
             theme.base_style()
         };
-        frame.render_widget(Paragraph::new(entry.as_str()).style(style), *area);
+        frame.render_widget(
+            Paragraph::new(picker_row(*entry, area.width)).style(style),
+            *area,
+        );
     }
     render_close(frame, overlay, theme);
 }
@@ -165,8 +168,70 @@ pub(super) struct PickerView<'a> {
     pub(super) prompt: char,
     pub(super) query: &'a str,
     pub(super) cursor: usize,
-    pub(super) entries: &'a [String],
+    pub(super) entries: &'a [PickerRow<'a>],
     pub(super) selected: usize,
+}
+
+#[derive(Clone, Copy)]
+pub(super) struct PickerRow<'a> {
+    primary: &'a str,
+    secondary: Option<&'a str>,
+}
+
+impl<'a> PickerRow<'a> {
+    pub(super) const fn plain(primary: &'a str) -> Self {
+        Self {
+            primary,
+            secondary: None,
+        }
+    }
+
+    pub(super) const fn fields(primary: &'a str, secondary: &'a str) -> Self {
+        Self {
+            primary,
+            secondary: Some(secondary),
+        }
+    }
+}
+
+fn picker_row(entry: PickerRow<'_>, width: u16) -> String {
+    let width = usize::from(width);
+    let primary_width = entry.primary.width();
+    if let Some(secondary) = entry.secondary {
+        let secondary_width = secondary.width();
+        if primary_width
+            .saturating_add(2)
+            .saturating_add(secondary_width)
+            <= width
+        {
+            let gap = width.saturating_sub(primary_width + secondary_width);
+            return format!("{}{}{secondary}", entry.primary, " ".repeat(gap));
+        }
+    }
+    ellipsize(entry.primary, width)
+}
+
+fn ellipsize(value: &str, width: usize) -> String {
+    if value.width() <= width {
+        return value.to_owned();
+    }
+    if width == 0 {
+        return String::new();
+    }
+    let mut cells = 0;
+    let mut visible = value
+        .graphemes(true)
+        .take_while(|grapheme| {
+            let next = cells + grapheme.width();
+            let keep = next < width;
+            if keep {
+                cells = next;
+            }
+            keep
+        })
+        .collect::<String>();
+    visible.push('…');
+    visible
 }
 
 fn visible_query(query: &str, cursor: usize, width: u16) -> (String, u16) {
@@ -307,5 +372,35 @@ fn primary(suffix: &str) -> String {
         format!("⌘{suffix}")
     } else {
         format!("Ctrl+{suffix}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{PickerRow, picker_row};
+    use unicode_width::UnicodeWidthStr as _;
+
+    #[test]
+    fn two_field_row_right_aligns_qualifier() {
+        assert_eq!(
+            picker_row(PickerRow::fields("$skill", "Global Skill"), 24),
+            "$skill      Global Skill"
+        );
+    }
+
+    #[test]
+    fn narrow_row_hides_qualifier_before_token() {
+        assert_eq!(
+            picker_row(PickerRow::fields("$long-skill", "Global Skill"), 11),
+            "$long-skill"
+        );
+    }
+
+    #[test]
+    fn overlong_token_ellipsizes_on_grapheme_and_cell_boundaries() {
+        let rendered = picker_row(PickerRow::fields("$界界e\u{301}🙂", "Global Skill"), 5);
+
+        assert_eq!(rendered, "$界…");
+        assert!(rendered.width() <= 5);
     }
 }
