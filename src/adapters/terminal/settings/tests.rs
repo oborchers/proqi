@@ -11,8 +11,21 @@ fn missing_config_uses_the_adaptive_default() {
     let directory = tempfile::tempdir().expect("config directory");
     let settings = load_settings(directory.path()).expect("defaults");
     assert_eq!(settings.ui.keybindings.new, 'n');
+    assert_eq!(settings.ui.keybindings.range_select, 'v');
     assert_eq!(settings.theme.base, ThemePreference::Auto);
     assert_eq!(settings.theme_source, ThemeSource::BuiltIn);
+}
+
+#[test]
+fn range_selection_latch_binding_is_remappable() {
+    let directory = tempfile::tempdir().expect("config directory");
+    fs::write(
+        directory.path().join("config.toml"),
+        "[keybindings]\nrange_select = 'b'\n",
+    )
+    .expect("write config");
+    let settings = load_settings(directory.path()).expect("settings");
+    assert_eq!(settings.ui.keybindings.range_select, 'b');
 }
 
 #[test]

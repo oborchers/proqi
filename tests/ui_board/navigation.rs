@@ -15,7 +15,7 @@ pub(super) fn durable_thought(fixture: &mut Fixture, content: &str) {
 }
 
 #[test]
-fn arrows_and_jk_share_focus_and_reorder_intentions_on_the_board() {
+fn arrows_and_jk_share_focus_while_shift_arrows_select_and_uppercase_jk_reorder() {
     let mut arrows = Fixture::new();
     for content in ["first", "second", "third"] {
         durable_thought(&mut arrows, content);
@@ -31,7 +31,6 @@ fn arrows_and_jk_share_focus_and_reorder_intentions_on_the_board() {
     assert_eq!(letters.app.state.focused_thought, arrow_focus);
 
     arrows.input(visual(CursorMovement::VisualUp, true));
-    letters.input(UiInput::Key(UiKey::Character('K')));
     let arrow_order = arrows
         .app
         .state
@@ -40,6 +39,19 @@ fn arrows_and_jk_share_focus_and_reorder_intentions_on_the_board() {
         .iter()
         .map(|thought| thought.content.as_str())
         .collect::<Vec<_>>();
+    assert_eq!(arrow_order, ["first", "second", "third"]);
+    let arrow_selected = arrows
+        .app
+        .state
+        .board
+        .live_thoughts()
+        .into_iter()
+        .filter(|thought| arrows.app.thought_selected(thought.id))
+        .map(|thought| thought.content.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(arrow_selected, ["first", "second"]);
+
+    letters.input(UiInput::Key(UiKey::Character('K')));
     let letter_order = letters
         .app
         .state
@@ -48,7 +60,6 @@ fn arrows_and_jk_share_focus_and_reorder_intentions_on_the_board() {
         .iter()
         .map(|thought| thought.content.as_str())
         .collect::<Vec<_>>();
-    assert_eq!(letter_order, arrow_order);
     assert_eq!(letter_order, ["second", "first", "third"]);
 }
 
@@ -129,10 +140,7 @@ fn wide_help_uses_at_most_two_strictly_aligned_columns() {
         .lines()
         .find(|line| line.contains("Quit"))
         .expect("quit row");
-    assert!(
-        quit.split_once('│')
-            .is_some_and(|(_, content)| content.starts_with('q'))
-    );
+    assert!(quit.contains("q       Quit"), "{quit}");
 }
 
 #[test]

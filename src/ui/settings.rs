@@ -85,6 +85,8 @@ pub struct KeyBindings {
     pub collapse: char,
     /// Toggle the focused thought in the multi-selection.
     pub select: char,
+    /// Latch contiguous range selection.
+    pub range_select: char,
     /// Search thought content.
     pub search: char,
     /// Discover commands.
@@ -112,6 +114,7 @@ impl Default for KeyBindings {
             move_down: 'J',
             collapse: 'c',
             select: ' ',
+            range_select: 'v',
             search: '/',
             commands: ':',
             help: '?',
@@ -136,6 +139,7 @@ pub(super) enum BoardCommand {
     MoveDown,
     Collapse,
     Select,
+    RangeSelect,
     Search,
     Commands,
     Help,
@@ -159,6 +163,7 @@ impl KeyBindings {
             (self.move_down, BoardCommand::MoveDown),
             (self.collapse, BoardCommand::Collapse),
             (self.select, BoardCommand::Select),
+            (self.range_select, BoardCommand::RangeSelect),
             (self.search, BoardCommand::Search),
             (self.commands, BoardCommand::Commands),
             (self.help, BoardCommand::Help),
@@ -193,6 +198,7 @@ impl KeyBindings {
             self.move_down,
             self.collapse,
             self.select,
+            self.range_select,
             self.search,
             self.commands,
             self.help,

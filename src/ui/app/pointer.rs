@@ -74,8 +74,7 @@ impl BoardApp {
         effects.extend(match pointer.kind {
             PointerKind::Move => {
                 self.hovered = self
-                    .selected_thoughts
-                    .is_empty()
+                    .selection_is_empty()
                     .then(|| self.hit(pointer))
                     .flatten();
                 Vec::new()
@@ -103,8 +102,7 @@ impl BoardApp {
         }
         match target {
             Some(HitTarget::Thought(thought_id)) => {
-                let click_count = self.register_text_click(thought_id, pointer, clock.now());
-                self.focus_and_place_cursor(thought_id, pointer, click_count)
+                self.handle_thought_pointer(thought_id, pointer, clock.now())
             }
             Some(HitTarget::DragHandle(thought_id)) => {
                 self.focus(thought_id);
@@ -146,6 +144,9 @@ impl BoardApp {
             }
             Some(HitTarget::Undo) => self.history(ids, clock, true),
             Some(HitTarget::Help) => {
+                if !self.help {
+                    self.deactivate_range_latch();
+                }
                 self.help = !self.help;
                 Vec::new()
             }
@@ -174,6 +175,23 @@ impl BoardApp {
                 Vec::new()
             }
         }
+    }
+
+    fn handle_thought_pointer(
+        &mut self,
+        thought_id: ThoughtId,
+        pointer: PointerInput,
+        now: Timestamp,
+    ) -> Vec<Effect> {
+        if matches!(self.state.mode, InteractionMode::Board)
+            && (pointer.extend_selection || self.range_latched())
+        {
+            self.pointer_click = None;
+            self.extend_range_to(thought_id);
+            return Vec::new();
+        }
+        let click_count = self.register_text_click(thought_id, pointer, now);
+        self.focus_and_place_cursor(thought_id, pointer, click_count)
     }
 
     fn pointer_drag(&mut self, pointer: PointerInput) -> Vec<Effect> {
@@ -339,6 +357,7 @@ impl BoardApp {
     }
 
     fn focus(&mut self, thought_id: crate::domain::ThoughtId) {
+        self.clear_range_for_focus_change();
         self.insertion_focus = super::InsertionFocus::Inactive;
         self.manual_board_scroll = false;
         self.first_visible_row = 0;

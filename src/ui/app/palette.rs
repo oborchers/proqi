@@ -31,12 +31,13 @@ enum Command {
     MoveDown,
     Collapse,
     Select,
+    RangeSelect,
     Help,
     Quit,
 }
 
 impl Command {
-    const ALL: [(Self, &'static str); 24] = [
+    const ALL: [(Self, &'static str); 25] = [
         (Self::New, "New thought"),
         (Self::RenameSession, "Rename session"),
         (Self::Edit, "Edit thought"),
@@ -65,6 +66,7 @@ impl Command {
         (Self::MoveDown, "Move thought down"),
         (Self::Collapse, "Expand or collapse thought"),
         (Self::Select, "Toggle thought selection"),
+        (Self::RangeSelect, "Start contiguous range selection"),
         (Self::Help, "Open contextual help"),
         (Self::Quit, "Quit Proqi"),
     ];
@@ -131,6 +133,7 @@ impl PaletteState {
 
 impl BoardApp {
     pub(super) fn open_palette(&mut self) {
+        self.deactivate_range_latch();
         self.help = false;
         self.search = None;
         self.palette = Some(PaletteState::new(self.supports_submission()));
@@ -306,6 +309,10 @@ impl BoardApp {
             Command::Collapse => self.collapse(ids, clock),
             Command::Select => {
                 self.toggle_selection();
+                Vec::new()
+            }
+            Command::RangeSelect => {
+                self.activate_range_latch();
                 Vec::new()
             }
             Command::Help => {

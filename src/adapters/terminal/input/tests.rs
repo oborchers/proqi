@@ -161,6 +161,19 @@ fn release_is_ignored_and_repeat_preserves_auto_repeat() {
         KeyEventKind::Repeat,
     ));
     assert_eq!(translate(repeat), Some(UiInput::Key(UiKey::Character('n'))));
+
+    let repeated_range = Event::Key(KeyEvent::new_with_kind(
+        KeyCode::Down,
+        KeyModifiers::SHIFT,
+        KeyEventKind::Repeat,
+    ));
+    assert_eq!(
+        translate(repeated_range),
+        Some(UiInput::Key(UiKey::Move {
+            movement: CursorMovement::VisualDown,
+            extend_selection: true,
+        }))
+    );
 }
 
 #[test]

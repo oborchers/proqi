@@ -16,6 +16,7 @@ mod presentation;
 mod query;
 mod recovery;
 mod search;
+mod selection;
 mod session;
 mod transfer;
 mod update;
@@ -74,7 +75,7 @@ pub struct PointerInput {
     pub row: u16,
     /// Normalized pointer event.
     pub kind: PointerKind,
-    /// Whether Shift requests extension of the existing text selection.
+    /// Whether Shift requests extension of the active text or board selection.
     pub extend_selection: bool,
 }
 
@@ -188,7 +189,7 @@ pub struct BoardApp {
     rename: Option<String>,
     transfer: Option<transfer::TransferState>,
     settings: UiSettings,
-    selected_thoughts: BTreeSet<ThoughtId>,
+    selection: selection::BoardSelection,
     expanded_folds: BTreeSet<(ThoughtId, usize)>,
     pending_editor_clipboard: BTreeMap<RequestId, PendingEditorClipboard>,
     pending_clipboard_reads: BTreeSet<RequestId>,
@@ -248,7 +249,7 @@ impl BoardApp {
             rename: None,
             transfer: None,
             settings,
-            selected_thoughts: BTreeSet::new(),
+            selection: selection::BoardSelection::default(),
             expanded_folds: BTreeSet::new(),
             pending_editor_clipboard: BTreeMap::new(),
             pending_clipboard_reads: BTreeSet::new(),
@@ -434,6 +435,7 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
+        self.clear_board_selection();
         self.insertion_focus = InsertionFocus::Inactive;
         self.insertion_confirmation = InsertionConfirmation::Idle;
         let effects = self.reduce(Action::CreateThought {
@@ -456,8 +458,7 @@ impl BoardApp {
                 self.set_warning("thought has a submission in progress");
                 return;
             }
-            self.selected_thoughts.clear();
-            self.hovered = None;
+            self.clear_board_selection();
             let _effects = self.reduce(Action::EnterEdit(thought_id));
             self.sync_editor_from_state();
         }
@@ -470,7 +471,17 @@ impl BoardApp {
 
     fn reduce(&mut self, action: Action) -> Vec<Effect> {
         match reduce(&mut self.state, action) {
-            Ok(effects) => effects,
+            Ok(effects) => {
+                let order = self
+                    .state
+                    .board
+                    .live_thoughts()
+                    .into_iter()
+                    .map(|thought| thought.id)
+                    .collect::<Vec<_>>();
+                self.selection.reconcile(&order);
+                effects
+            }
             Err(error) => {
                 self.set_error(error.to_string());
                 Vec::new()

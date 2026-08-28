@@ -178,10 +178,12 @@ fallbacks remain available when a terminal cannot report a modifier.
 | Paste or click `+ New thought` | Create and focus a thought |
 | `j` / `k` or arrows | Focus the next or previous thought, including `+ New thought` |
 | `Enter` or `e` | Edit the focused thought |
-| `J` / `K`, `Shift+↑` / `Shift+↓`, or drag | Reorder the focused thought |
+| `J` / `K`, or drag | Reorder the focused thought |
 | `y` or `Primary+C` | Copy the complete thought |
 | `x` or `Primary+X` | Cut only after confirmed clipboard success |
 | `Space` | Add or remove the focused thought from the multi-selection |
+| `Shift+↑` / `Shift+↓` | Extend or shrink one anchored contiguous range |
+| `v`, then arrows, `j` / `k`, or a thought click | Latch modifier-free contiguous range selection |
 | `Primary+D` | Duplicate the focused thought or selection below its source range |
 | `s`, then direction when needed | Submit selected thoughts and remove only after acceptance |
 | `S`, then direction when needed | Submit selected thoughts and keep them |
@@ -204,7 +206,7 @@ fallbacks remain available when a terminal cannot report a modifier.
 | `↑` / `↓` twice at a boundary | Return to the board and focus the adjacent thought |
 
 Mouse users can focus and edit thoughts, place the cursor, drag selections,
-double-click words, triple-click logical lines, extend with Shift-click, scroll,
+double-click words, triple-click logical lines, extend text or board ranges with Shift-click, scroll,
 reorder thoughts, click controls, use help, and choose verified Herdr targets.
 Holding the final click while dragging extends by complete words or logical
 lines. Moving onto folded context selects its complete canonical range.
@@ -484,6 +486,7 @@ move_up = "K"
 move_down = "J"
 collapse = "c"
 select = " "
+range_select = "v"
 search = "/"
 commands = ":"
 help = "?"

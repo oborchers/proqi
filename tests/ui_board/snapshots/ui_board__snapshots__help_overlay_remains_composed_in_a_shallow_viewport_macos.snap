@@ -10,8 +10,8 @@ TEXT
 02││j/k     Move        J/K     Reorder     ││
 03││y       Copy        x       Cut         ││
 04││d       Delete      ⌘D      Duplicate   ││
-05││Space   Select      u       Undo        ││
-06││c       Collapse    /       Search      ││
+05││Space   Select      v       Range       ││
+06││u       Undo        c       Collapse    ││
 07│└────────────────────────────────────────┘│
 
 STYLE RUNS

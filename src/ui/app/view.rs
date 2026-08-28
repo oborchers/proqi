@@ -66,19 +66,19 @@ impl BoardApp {
     /// Whether a thought belongs to the explicit board multi-selection.
     #[must_use]
     pub fn thought_selected(&self, thought_id: ThoughtId) -> bool {
-        self.selected_thoughts.contains(&thought_id)
+        self.selection.contains(thought_id)
     }
 
     /// Ordered thoughts addressed by the next board action.
     pub(super) fn action_thought_ids(&self) -> Vec<ThoughtId> {
-        let selected = self
+        let order = self
             .state
             .board
             .live_thoughts()
             .into_iter()
-            .filter(|thought| self.selected_thoughts.contains(&thought.id))
             .map(|thought| thought.id)
             .collect::<Vec<_>>();
+        let selected = self.selection.selected_in(&order);
         if selected.is_empty() {
             self.state.focused_thought.into_iter().collect()
         } else {
@@ -119,7 +119,7 @@ impl BoardApp {
     /// Current hover target resolved from the latest rendered layout.
     #[must_use]
     pub fn hovered(&self) -> Option<HitTarget> {
-        if self.selected_thoughts.is_empty() {
+        if self.selection_is_empty() {
             self.hovered
         } else {
             None
@@ -276,7 +276,7 @@ impl BoardApp {
             let item_count = if matches!(self.interaction_mode(), InteractionMode::Edit { .. }) {
                 7
             } else {
-                15 + usize::from(self.supports_submission()) * 2
+                16 + usize::from(self.supports_submission()) * 2
             };
             let columns = usize::from(layout.board.width >= 48) + 1;
             item_count.div_ceil(columns)
@@ -304,6 +304,7 @@ impl BoardApp {
         let count = self.visible_thought_count();
         let noun = if count == 1 { "thought" } else { "thoughts" };
         let mode = match self.interaction_mode() {
+            InteractionMode::Board if self.range_latched() => "range",
             InteractionMode::Board => "board",
             InteractionMode::Edit { .. } => "edit",
         };

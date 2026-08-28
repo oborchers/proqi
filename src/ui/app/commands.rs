@@ -23,10 +23,8 @@ impl BoardApp {
             return self.handle_insertion_key(key, ids, clock);
         }
         match key {
-            UiKey::Escape if !self.selected_thoughts.is_empty() => {
-                self.selected_thoughts.clear();
-                self.hovered = None;
-                self.layout = None;
+            UiKey::Escape if !self.selection_is_empty() || self.range_latched() => {
+                self.clear_board_selection();
             }
             UiKey::Character(character) => {
                 return self.handle_board_command(character, ids, clock);
@@ -35,19 +33,27 @@ impl BoardApp {
             UiKey::Move {
                 movement: CursorMovement::VisualUp,
                 extend_selection: true,
-            } => return self.reorder(ids, clock, -1),
+            } => self.extend_range_by(-1),
             UiKey::Move {
                 movement: CursorMovement::VisualDown,
                 extend_selection: true,
-            } => return self.reorder(ids, clock, 1),
+            } => self.extend_range_by(1),
             UiKey::Move {
                 movement: CursorMovement::VisualUp,
                 extend_selection: false,
-            } => self.move_focus(-1),
+            } if self.range_latched() => self.extend_range_by(-1),
             UiKey::Move {
                 movement: CursorMovement::VisualDown,
                 extend_selection: false,
-            } => self.move_focus(1),
+            } if self.range_latched() => self.extend_range_by(1),
+            UiKey::Move {
+                movement: CursorMovement::VisualUp,
+                extend_selection: false,
+            } => self.move_focus_outside_range(-1),
+            UiKey::Move {
+                movement: CursorMovement::VisualDown,
+                extend_selection: false,
+            } => self.move_focus_outside_range(1),
             UiKey::Undo => return self.history(ids, clock, true),
             UiKey::Redo => return self.history(ids, clock, false),
             UiKey::Copy => return self.copy_thought(ids),
@@ -141,6 +147,19 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
+        if self.range_latched() {
+            match self.settings.keybindings.command(character) {
+                Some(BoardCommand::FocusUp) => {
+                    self.extend_range_by(-1);
+                    return Vec::new();
+                }
+                Some(BoardCommand::FocusDown) => {
+                    self.extend_range_by(1);
+                    return Vec::new();
+                }
+                _ => {}
+            }
+        }
         match self.settings.keybindings.command(character) {
             Some(BoardCommand::New) => self.create(PastePayload::text(String::new()), ids, clock),
             Some(BoardCommand::Edit) => {
@@ -160,11 +179,11 @@ impl BoardApp {
             }
             Some(BoardCommand::Undo) => self.history(ids, clock, true),
             Some(BoardCommand::FocusUp) => {
-                self.move_focus(-1);
+                self.move_focus_outside_range(-1);
                 Vec::new()
             }
             Some(BoardCommand::FocusDown) => {
-                self.move_focus(1);
+                self.move_focus_outside_range(1);
                 Vec::new()
             }
             Some(BoardCommand::MoveUp) => self.reorder(ids, clock, -1),
@@ -172,6 +191,10 @@ impl BoardApp {
             Some(BoardCommand::Collapse) => self.collapse(ids, clock),
             Some(BoardCommand::Select) => {
                 self.toggle_selection();
+                Vec::new()
+            }
+            Some(BoardCommand::RangeSelect) => {
+                self.activate_range_latch();
                 Vec::new()
             }
             Some(BoardCommand::Search) => {
@@ -183,6 +206,9 @@ impl BoardApp {
                 Vec::new()
             }
             Some(BoardCommand::Help) => {
+                if !self.help {
+                    self.deactivate_range_latch();
+                }
                 self.help = !self.help;
                 Vec::new()
             }
@@ -354,7 +380,7 @@ impl BoardApp {
             kind: BoardOperationKind::Delete,
             at: clock.now(),
         });
-        self.selected_thoughts.clear();
+        self.clear_board_selection();
         self.sync_empty_insertion_focus();
         effects
     }
@@ -442,7 +468,7 @@ impl BoardApp {
             self.set_warning("thought has a submission in progress");
             return Vec::new();
         }
-        if self.selected_thoughts.len() > 1 {
+        if self.selection_len() > 1 {
             self.set_warning("reordering is unavailable for multiple selected thoughts");
             return Vec::new();
         }
@@ -466,16 +492,5 @@ impl BoardApp {
             to: target,
             at: clock.now(),
         })
-    }
-
-    pub(super) fn toggle_selection(&mut self) {
-        let Some(thought_id) = self.state.focused_thought else {
-            return;
-        };
-        if !self.selected_thoughts.remove(&thought_id) {
-            self.selected_thoughts.insert(thought_id);
-        }
-        self.hovered = None;
-        self.layout = None;
     }
 }

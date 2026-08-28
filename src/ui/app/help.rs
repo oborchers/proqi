@@ -82,7 +82,7 @@ impl BoardApp {
         let item_count = if matches!(self.interaction_mode(), InteractionMode::Edit { .. }) {
             7
         } else {
-            15 + usize::from(self.supports_submission()) * 2
+            16 + usize::from(self.supports_submission()) * 2
         };
         let columns = usize::from(overlay.area.width >= 48) + 1;
         let rows = item_count.div_ceil(columns);

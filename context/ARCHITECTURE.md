@@ -666,6 +666,16 @@ semantic downward navigation commands perform the same durable create-and-edit
 transition; unrelated or reorder input clears the confirmation. Other edit
 boundaries use the same navigation state machine.
 
+Board multi-selection is transient UI state with two explicit, non-overlapping
+forms: an arbitrary identity set and an anchored contiguous range. A range
+stores stable thought identities for its anchor and focused endpoint and derives
+its selected identities from current live board order. Shifted vertical movement
+and the remappable range latch update the endpoint without wrapping or addressing
+the insertion row. Pointer extension resolves through the current layout
+snapshot before entering edit mode. Bulk application actions continue to receive
+only ordered thought identities and do not depend on terminal modifiers or this
+UI selection representation.
+
 The normalized paste payload carries exact text plus optional typed provenance.
 Attachment annotations retain only presentation-safe metadata and byte ranges;
 the absolute path remains the canonical text. Large-paste annotations retain
