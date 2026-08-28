@@ -72,9 +72,13 @@ The brief must contain:
   comments, and use the user's configured Git/GitHub identity;
 - the pull-request and structured-handoff requirements below.
 
-Submit the brief through `herdr agent prompt ... --wait`. Inspect `agent get`
-and `agent read` whenever Herdr reports `blocked`, `unknown`, a timeout, or a
-stalled prompt. Do not blindly resend a prompt.
+Submit the brief through `herdr agent prompt ...` without `--wait`. Dispatching
+must return after Herdr accepts the prompt so independent lanes can start in
+parallel; a long-running goal must not turn prompt submission into a timeout.
+Use `agent get`, `agent read`, and a separate `agent wait` only for deliberate
+monitoring after every intended lane has been dispatched. Inspect the agent
+before responding to `blocked`, `unknown`, a monitoring timeout, or a stalled
+prompt. Do not blindly resend a prompt.
 
 ## Exploration checkpoint
 
