@@ -16,6 +16,7 @@ enum Command {
     SendSession,
     SendSessionRemove,
     Edit,
+    PlainNewline,
     Delete,
     Copy,
     Cut,
@@ -38,12 +39,13 @@ enum Command {
 }
 
 impl Command {
-    const ALL: [(Self, &'static str); 26] = [
+    const ALL: [(Self, &'static str); 27] = [
         (Self::New, "New thought"),
         (Self::RenameSession, "Rename session"),
         (Self::CopySessionId, "Copy session ID"),
         (Self::CopyResume, "Copy resume command"),
         (Self::Edit, "Edit thought"),
+        (Self::PlainNewline, "Insert plain newline"),
         (Self::Delete, "Delete thought"),
         (Self::Copy, "Copy thought"),
         (Self::Cut, "Cut thought"),
@@ -79,15 +81,17 @@ pub(super) struct PaletteState {
     selected: usize,
     scroll: usize,
     submit_supported: bool,
+    plain_newline_supported: bool,
 }
 
 impl PaletteState {
-    fn new(submit_supported: bool) -> Self {
+    fn new(submit_supported: bool, plain_newline_supported: bool) -> Self {
         Self {
             query: QueryEditor::default(),
             selected: 0,
             scroll: 0,
             submit_supported,
+            plain_newline_supported,
         }
     }
 
@@ -123,6 +127,7 @@ impl PaletteState {
     fn available(&self, command: Command) -> bool {
         match command {
             Command::SubmitRemove | Command::SubmitKeep => self.submit_supported,
+            Command::PlainNewline => self.plain_newline_supported,
             _ => true,
         }
     }
@@ -137,7 +142,10 @@ impl BoardApp {
     pub(super) fn open_palette(&mut self) {
         self.help = false;
         self.search = None;
-        self.palette = Some(PaletteState::new(self.supports_submission()));
+        self.palette = Some(PaletteState::new(
+            self.supports_submission(),
+            !self.insertion_focused() && self.state.focused_thought.is_some(),
+        ));
     }
 
     pub(super) fn close_overlay(&mut self) {
@@ -285,6 +293,15 @@ impl BoardApp {
             Command::Edit => {
                 self.enter_edit();
                 Vec::new()
+            }
+            Command::PlainNewline => {
+                if !matches!(
+                    self.state.mode,
+                    crate::application::InteractionMode::Edit { .. }
+                ) {
+                    self.enter_edit();
+                }
+                self.insert_newline(false, ids, clock)
             }
             Command::Delete => self.delete(ids, clock),
             Command::Copy => self.copy_active(ids),

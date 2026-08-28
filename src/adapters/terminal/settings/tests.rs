@@ -12,6 +12,7 @@ fn missing_config_uses_the_adaptive_default() {
     let settings = load_settings(directory.path()).expect("defaults");
     assert_eq!(settings.ui.keybindings.new, 'n');
     assert!(!settings.ui.show_session_id);
+    assert!(settings.ui.smart_lists);
     assert_eq!(settings.theme.base, ThemePreference::Auto);
     assert_eq!(settings.theme_source, ThemeSource::BuiltIn);
 }
@@ -28,6 +29,7 @@ fn existing_settings_remain_compatible() {
     assert_eq!(settings.ui.keybindings.new, 't');
     assert!(!settings.ui.check_for_updates);
     assert!(!settings.ui.show_session_id);
+    assert!(settings.ui.smart_lists);
     assert_eq!(settings.ui.density, BoardDensity::Compact);
     assert_eq!(settings.theme.base, ThemePreference::Dark);
 }
@@ -49,6 +51,18 @@ fn session_identifier_visibility_is_opt_in_and_type_checked() {
     )
     .expect("write invalid config");
     assert!(load_settings(directory.path()).is_err());
+}
+
+#[test]
+fn smart_lists_can_be_disabled_without_changing_existing_config_defaults() {
+    let directory = tempfile::tempdir().expect("config directory");
+    fs::write(
+        directory.path().join("config.toml"),
+        "smart_lists = false\n",
+    )
+    .expect("write config");
+    let settings = load_settings(directory.path()).expect("settings");
+    assert!(!settings.ui.smart_lists);
 }
 
 #[test]

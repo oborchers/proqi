@@ -76,6 +76,65 @@ fn editor_history_is_separate_from_board_history() {
 }
 
 #[test]
+fn smart_continuation_and_exit_remain_two_persistent_editor_revisions() {
+    let mut fixture = Fixture::new();
+    let thought_id = fixture.create("- first");
+    for (before, after, before_cursor, after_cursor) in [
+        (
+            "- first",
+            "- first\n- ",
+            TextPosition::new(0, 7),
+            TextPosition::new(1, 2),
+        ),
+        (
+            "- first\n- ",
+            "- first\n",
+            TextPosition::new(1, 2),
+            TextPosition::new(1, 0),
+        ),
+    ] {
+        let revision_id = fixture.ids.revision_id();
+        let at = fixture.time();
+        reduce(
+            &mut fixture.state,
+            Action::EditThought {
+                thought_id,
+                revision_id,
+                before_content: before.to_owned(),
+                after_content: after.to_owned(),
+                before_annotations: Vec::new(),
+                after_annotations: Vec::new(),
+                before_cursor,
+                after_cursor,
+                at,
+            },
+        )
+        .expect("smart list revision");
+    }
+    assert_eq!(fixture.state.editor_history_cursor(thought_id), 2);
+    move_history(&mut fixture, UndoScope::Editor { thought_id }, true);
+    assert_eq!(
+        fixture
+            .state
+            .board
+            .thought(thought_id)
+            .expect("thought")
+            .content,
+        "- first\n- "
+    );
+    move_history(&mut fixture, UndoScope::Editor { thought_id }, true);
+    assert_eq!(
+        fixture
+            .state
+            .board
+            .thought(thought_id)
+            .expect("thought")
+            .content,
+        "- first"
+    );
+}
+
+#[test]
 fn undoing_a_nonfocused_create_keeps_the_next_insertion_valid() {
     let mut fixture = Fixture::new();
     let first = fixture.create("first");

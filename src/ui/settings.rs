@@ -23,6 +23,8 @@ pub struct UiSettings {
     pub check_for_updates: bool,
     /// Show the complete canonical session identifier beside the session name when it fits.
     pub show_session_id: bool,
+    /// Continue recognized Markdown list items when Enter inserts a newline.
+    pub smart_lists: bool,
     /// Keyboard protocol negotiation.
     pub keyboard_enhancement: KeyboardEnhancement,
     /// Remappable direct board keys.
@@ -36,6 +38,7 @@ impl Default for UiSettings {
         Self {
             check_for_updates: true,
             show_session_id: false,
+            smart_lists: true,
             keyboard_enhancement: KeyboardEnhancement::default(),
             keybindings: KeyBindings::default(),
             density: BoardDensity::default(),

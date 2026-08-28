@@ -250,3 +250,16 @@ fn expanded_debug_session_identity_preserves_footer_band_order() {
     fixture.app.acknowledge_persistence(second, true);
     insta::assert_snapshot!(snapshot(&mut fixture, 80, 11, ThemePreference::Dark));
 }
+
+#[test]
+fn plain_newline_fallback_is_visible_in_the_command_palette() {
+    let mut fixture = Fixture::new();
+    let sequence = fixture.paste("- list item");
+    fixture.app.acknowledge_persistence(sequence, true);
+    fixture.input(UiInput::Key(UiKey::Escape));
+    fixture.input(UiInput::Key(UiKey::Character(':')));
+    for character in "plain newline".chars() {
+        fixture.input(UiInput::Key(UiKey::Character(character)));
+    }
+    insta::assert_snapshot!(snapshot(&mut fixture, 72, 14, ThemePreference::Dark));
+}

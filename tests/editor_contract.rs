@@ -2,6 +2,8 @@
 
 #[path = "editor_contract/changes.rs"]
 mod changes;
+#[path = "editor_contract/smart_lists.rs"]
+mod smart_lists;
 
 use proqi::adapters::editor::RopeEditor;
 use proqi::{

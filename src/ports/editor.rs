@@ -86,6 +86,8 @@ pub enum EditCommand {
     Paste(String),
     /// Insert a line feed.
     InsertNewline,
+    /// Insert a newline with conservative Markdown list continuation.
+    InsertSmartNewline,
     /// Delete the grapheme before the cursor or the selection.
     DeleteBack,
     /// Delete the grapheme after the cursor or the selection.

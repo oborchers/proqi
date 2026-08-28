@@ -82,9 +82,13 @@ Inside Herdr:
    contract. If that companion skill is unavailable, use the Herdr CLI help
    directly rather than blocking an otherwise capable Claude or Codex worker.
 2. Reuse the selected implementation workspace when it exists. Otherwise open
-   the selected temporary worktree as a Herdr workspace. Create only disposable
-   test tabs or panes in that workspace, address them by explicit IDs with
-   `--no-focus`, and record every resource created.
+   the selected temporary worktree as a Herdr workspace. Prefer a disposable
+   sibling pane in the implementation agent's existing tab so the agent and
+   live demonstration remain visible together. Use a new tab only when the
+   current tab cannot retain usable pane geometry or the demonstration genuinely
+   requires an isolated layout. Never create a new tab merely for convenience.
+   Address every disposable pane or tab by an explicit ID with `--no-focus`,
+   and record every resource created.
 3. Build the exact checkout with `cargo build --locked --bin proqi`. Launch its
    real binary in a disposable pane with a private temporary `--state-dir`.
 4. Seed only synthetic walkthrough sessions and thoughts. Never inspect or
