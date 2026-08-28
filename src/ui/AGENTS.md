@@ -12,6 +12,19 @@ interaction rules for the Ratatui interface.
 - Calculate layout and mouse hit targets together from the same rectangles.
   Never maintain an independent hit-test geometry model. Ignore mouse input
   when no hit map from the current rendered frame is available.
+- Use `ports::text_layout` for terminal-cell width, display substitution,
+  clipping, ellipsis, wrapping, and byte/cell conversion. Do not add a second
+  Unicode-width or truncation implementation inside a widget.
+- Use the shared UI geometry helpers for rectangle containment and derived hit
+  regions. A zero-width or zero-height rectangle is never interactive.
+- Visible control text, its measured width, and its hit target derive from
+  `ui::control_labels`. Contextual shortcut contents and responsive row counts
+  derive from `ui::shortcuts`. Do not duplicate those labels or item counts in
+  renderers, layout code, help overlays, or pointer handlers.
+- When adding another render-only annotation such as a URL, invocation, fold,
+  or future placeholder, keep recognition independent from styling and reuse
+  the canonical text-layout projection. It must not mutate canonical content,
+  editor positions, persistence, or undo.
 - Store logical editor positions. Recompute wrapped visual rows, terminal cell
   columns, cursor placement, selection geometry, and scroll bounds after each
   layout change.
@@ -59,6 +72,9 @@ interaction rules for the Ratatui interface.
 - Test individual widgets or render functions against in-memory buffers.
 - Test complete board states with Ratatui's `TestBackend`, including cursor
   positions and repeated resize sequences.
+- For every clickable control, test the rendered label and the exact current
+  frame hit region together, including remapped wide keys, narrow layouts, and
+  controls that disappear or receive zero area.
 - Cover empty, populated, editing, selection, collapsed, pending-save,
   failed-save, help, and modal states.
 - Unicode cases include wide CJK, combining marks, emoji sequences,

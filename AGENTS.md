@@ -47,6 +47,33 @@ domain <- ports <- application <- adapters and UI composition
 - Constructors enforce invariants. Keep fields private when direct mutation
   could produce invalid state.
 
+## Single-source ownership and module structure
+
+- When the same semantic rule, label, geometry calculation, protocol token, or
+  policy has three consumers, move it to one named owner in the innermost
+  appropriate layer. Two consumers should share it when drift would produce an
+  incorrect or unsafe result. Do not create a generic utility module without a
+  clear domain owner.
+- Rendering, measurement, hit testing, help, and command dispatch derive from
+  the same semantic definitions. Do not keep parallel constants or reconstruct
+  one consumer's behavior from another consumer's formatted output.
+- Prefer typed identifiers, enums, value objects, and exhaustive matching for
+  closed sets. Keep external compatibility strings at translation boundaries;
+  do not use strings as internal dispatch keys when the variants are known.
+- A behavior-preserving refactor preserves public Rust paths, CLI and JSON
+  spelling, durable encodings, error classification, and snapshot content unless
+  the task explicitly authorizes a contract change.
+- Split modules by responsibility and ownership, not merely to satisfy a line or
+  complexity limit. Moving unrelated functions into a vaguely named file or
+  compacting readable code is not an acceptable lint fix.
+- Keep behavior-owned tests beside the implementation, using an adjacent
+  `tests.rs` or `tests/` module when inline tests obscure production code. Move
+  cross-layer contracts, process tests, and PTY scenarios to top-level `tests/`.
+  The 500-line ceiling applies equally to production and test source.
+- Before introducing a new abstraction, find the current canonical owner and
+  extend it when the responsibility matches. Remove superseded paths in the same
+  change so two sources of truth cannot remain live.
+
 ## Rust guardrails
 
 - Unsafe Rust is forbidden unless an explicit architecture decision documents
