@@ -83,14 +83,18 @@ pub struct KeyBindings {
     pub focus_up: char,
     /// Move focus downward.
     pub focus_down: char,
-    /// Reorder upward.
-    pub move_up: char,
-    /// Reorder downward.
-    pub move_down: char,
+    /// Extend a range upward; Primary plus this shifted key reorders upward.
+    #[serde(alias = "move_up")]
+    pub range_up: char,
+    /// Extend a range downward; Primary plus this shifted key reorders downward.
+    #[serde(alias = "move_down")]
+    pub range_down: char,
     /// Toggle expanded presentation.
     pub collapse: char,
     /// Toggle the focused thought in the multi-selection.
     pub select: char,
+    /// Latch contiguous range selection.
+    pub range_select: char,
     /// Search thought content.
     pub search: char,
     /// Discover commands.
@@ -114,10 +118,11 @@ impl Default for KeyBindings {
             undo: 'u',
             focus_up: 'k',
             focus_down: 'j',
-            move_up: 'K',
-            move_down: 'J',
+            range_up: 'K',
+            range_down: 'J',
             collapse: 'c',
             select: ' ',
+            range_select: 'v',
             search: '/',
             commands: ':',
             help: '?',
@@ -138,10 +143,11 @@ pub(super) enum BoardCommand {
     Undo,
     FocusUp,
     FocusDown,
-    MoveUp,
-    MoveDown,
+    RangeUp,
+    RangeDown,
     Collapse,
     Select,
+    RangeSelect,
     Search,
     Commands,
     Help,
@@ -161,10 +167,11 @@ impl KeyBindings {
             (self.undo, BoardCommand::Undo),
             (self.focus_up, BoardCommand::FocusUp),
             (self.focus_down, BoardCommand::FocusDown),
-            (self.move_up, BoardCommand::MoveUp),
-            (self.move_down, BoardCommand::MoveDown),
+            (self.range_up, BoardCommand::RangeUp),
+            (self.range_down, BoardCommand::RangeDown),
             (self.collapse, BoardCommand::Collapse),
             (self.select, BoardCommand::Select),
+            (self.range_select, BoardCommand::RangeSelect),
             (self.search, BoardCommand::Search),
             (self.commands, BoardCommand::Commands),
             (self.help, BoardCommand::Help),
@@ -195,10 +202,11 @@ impl KeyBindings {
             self.undo,
             self.focus_up,
             self.focus_down,
-            self.move_up,
-            self.move_down,
+            self.range_up,
+            self.range_down,
             self.collapse,
             self.select,
+            self.range_select,
             self.search,
             self.commands,
             self.help,

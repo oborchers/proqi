@@ -402,6 +402,21 @@ submission address the selected set in board order. Each structural action is
 one persistent board operation and therefore one undo step. Reordering remains
 a single-thought action.
 
+`Shift+Up` and `Shift+Down`, or equivalently `K` and `J`, start or update one
+contiguous selection from a stable thought anchor to the focused endpoint.
+Reversing direction shrinks the range and then extends it past the anchor
+without changing that anchor. Range movement stops at the first and last live
+thoughts, never wraps, and never includes the insertion row. Starting a range
+replaces any arbitrary `Space` selection. Pressing `Space` explicitly returns
+to discontiguous toggle behavior; the two selection models are never merged
+implicitly.
+
+The remappable `v` binding latches range selection for terminals that cannot
+forward Shift reliably. While latched, arrows and the configured next/previous
+thought bindings extend or shrink the range, and clicking a thought extends to
+it. `Escape` clears the range and latch. Opening a modal releases the latch,
+and entering thought edit mode clears every board selection.
+
 `Meta+D` duplicates the focused thought or complete selection. Exact content,
 annotations, and presentation preferences are copied in board order directly
 below the source range. Duplicates receive fresh identities and timestamps,
@@ -497,8 +512,9 @@ the agent state but does not reinterpret the harness's behavior.
 
 ### Reordering
 
-Thoughts can be moved up and down with direct keys and mouse drag. Reordering is
-immediate, autosaved, and undoable.
+Thoughts can be moved up and down with `Meta+Shift+Up` and
+`Meta+Shift+Down`, equivalently `Meta+K` and `Meta+J`, or with mouse drag.
+Reordering is immediate, autosaved, and undoable.
 
 Keyboard reordering wraps across the board boundaries. Moving the last thought
 down places it first, and moving the first thought up places it last. Mouse drag
@@ -521,10 +537,11 @@ bindings are:
 | Delete thought | `d` | Click delete control |
 | Duplicate thought or selection | `Meta+D` | Command palette |
 | Select or deselect thought | `Space` | Click the thought, then use the selection control |
+| Select contiguous range | `Shift+↑` / `Shift+↓`, `K` / `J`, or `v` then arrows or `j` / `k` | Shift-click a thought, or use `v` then click it |
 | Submit and remove after acceptance | `s`, when supported, then direction when needed | Click verified Submit control |
 | Submit and keep thought | `S`, when supported, then direction when needed | Click verified Submit & keep control |
 | Undo board action | `u` | Click undo control when visible |
-| Move thought | `J` and `K`, or `Shift+↑` and `Shift+↓` | Drag thought handle |
+| Move thought | `Meta+Shift+↑` / `Meta+Shift+↓`, or `Meta+K` / `Meta+J` | Drag thought handle |
 | Expand or collapse | `c` | Click overflow indicator |
 | Search | `/` | Click search control |
 | Help | `?` | Click help control |
@@ -598,6 +615,8 @@ Mouse support includes:
 - Double-click selection of complete Unicode words and word-granular dragging.
 - Triple-click selection of logical lines and line-granular dragging.
 - Shift-click extension using the active click granularity.
+- Shift-click contiguous board-range extension, with the `v` latch as a
+  modifier-free fallback.
 - Scroll wheel and trackpad scrolling.
 - Drag reordering through a dedicated handle or gutter.
 - Clickable `+` controls at active thought insertion points.
@@ -1057,6 +1076,11 @@ The current direction is grounded in these public primary sources:
 - [Ratatui](https://github.com/ratatui/ratatui) and
   [tui-textarea](https://github.com/rhysd/tui-textarea) for openly licensed TUI
   and editor primitives.
+- [Yazi](https://github.com/sxyazi/yazi), including its MIT-licensed
+  terminal-safe `v` visual selection mode and separate `Space` toggle model.
+- [Apple's public Mac selection guidance](https://support.apple.com/guide/mac-help/mchlp1378/mac)
+  for first-item/last-item inclusive adjacent selection behavior. No Apple
+  implementation code is used.
 - [CommonMark 0.31.2](https://spec.commonmark.org/0.31.2/) under CC BY-SA 4.0
   for list-marker, thematic-break, fenced-code, and indented-code behavior.
 - [CodeMirror Markdown](https://github.com/codemirror/lang-markdown) under MIT

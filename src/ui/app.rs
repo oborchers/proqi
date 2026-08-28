@@ -15,7 +15,9 @@ mod pointer;
 mod presentation;
 mod query;
 mod recovery;
+mod reorder;
 mod search;
+mod selection;
 mod session;
 mod transfer;
 mod update;
@@ -35,48 +37,10 @@ use crate::{
     },
 };
 
-use super::{HitTarget, LayoutSnapshot, PastePayload, UiSettings};
-
-/// Mouse button after terminal-backend normalization.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum PointerButton {
-    /// Primary button used for all required interactions.
-    Left,
-    /// Middle button, retained for portable event normalization.
-    Middle,
-    /// Secondary button, never required by Proqi.
-    Right,
-}
-
-/// Semantic pointer event kind.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum PointerKind {
-    /// Button pressed.
-    Down(PointerButton),
-    /// Button released.
-    Up(PointerButton),
-    /// Pointer moved while a button is held.
-    Drag(PointerButton),
-    /// Pointer moved without a button.
-    Move,
-    /// Scroll toward earlier content.
-    ScrollUp,
-    /// Scroll toward later content.
-    ScrollDown,
-}
-
-/// Terminal-cell pointer location and semantic event kind.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PointerInput {
-    /// Zero-based terminal column.
-    pub column: u16,
-    /// Zero-based terminal row.
-    pub row: u16,
-    /// Normalized pointer event.
-    pub kind: PointerKind,
-    /// Whether Shift requests extension of the existing text selection.
-    pub extend_selection: bool,
-}
+use super::{
+    HitTarget, LayoutSnapshot, PastePayload, UiSettings,
+    input::{PointerButton, PointerInput, PointerKind, UiInput, UiKey},
+};
 
 use pending_types::{PendingEditorClipboard, PendingSubmission, SubmissionMode};
 
@@ -92,68 +56,6 @@ enum InsertionConfirmation {
     #[default]
     Idle,
     Armed,
-}
-
-/// Normalized keys accepted by the board UI.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum UiKey {
-    /// Request a clean application exit from any mode.
-    Quit,
-    /// Insert one Unicode scalar value.
-    Character(char),
-    /// Insert a line break or enter the focused thought.
-    Enter,
-    /// Return from edit mode.
-    Escape,
-    /// Delete the preceding grapheme.
-    Backspace,
-    /// Delete the following grapheme.
-    Delete,
-    /// Move logically or visually, optionally extending selection.
-    Move {
-        /// Backend-independent cursor intention.
-        movement: CursorMovement,
-        /// Whether to extend the active selection.
-        extend_selection: bool,
-    },
-    /// Select the complete thought.
-    SelectAll,
-    /// Delete the current logical line.
-    DeleteLine,
-    /// Undo in the active history scope.
-    Undo,
-    /// Redo in the active history scope.
-    Redo,
-    /// Copy the active thought or editor selection.
-    Copy,
-    /// Cut the active thought or editor selection after clipboard success.
-    Cut,
-    /// Read and paste the native clipboard.
-    PasteClipboard,
-    /// Duplicate the focused or selected thoughts below the source range.
-    Duplicate,
-}
-
-/// Input translated from a concrete terminal backend.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum UiInput {
-    /// One normalized key command.
-    Key(UiKey),
-    /// One complete bracketed or clipboard paste.
-    Paste(String),
-    /// One complete paste with adapter-derived presentation provenance.
-    PasteAnnotated(PastePayload),
-    /// Latest terminal cell dimensions.
-    Resize {
-        /// Latest reported terminal width.
-        width: u16,
-        /// Latest reported terminal height.
-        height: u16,
-    },
-    /// Terminal host focus returned to this pane.
-    HostFocusGained,
-    /// One normalized mouse or trackpad event.
-    Pointer(PointerInput),
 }
 
 /// Mutable UI state around the pure application reducer.
@@ -188,7 +90,7 @@ pub struct BoardApp {
     rename: Option<String>,
     transfer: Option<transfer::TransferState>,
     settings: UiSettings,
-    selected_thoughts: BTreeSet<ThoughtId>,
+    selection: selection::BoardSelection,
     expanded_folds: BTreeSet<(ThoughtId, usize)>,
     pending_editor_clipboard: BTreeMap<RequestId, PendingEditorClipboard>,
     pending_session_clipboard: BTreeMap<RequestId, crate::application::ClipboardIntent>,
@@ -249,7 +151,7 @@ impl BoardApp {
             rename: None,
             transfer: None,
             settings,
-            selected_thoughts: BTreeSet::new(),
+            selection: selection::BoardSelection::default(),
             expanded_folds: BTreeSet::new(),
             pending_editor_clipboard: BTreeMap::new(),
             pending_session_clipboard: BTreeMap::new(),
@@ -436,6 +338,7 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
+        self.clear_board_selection();
         self.insertion_focus = InsertionFocus::Inactive;
         self.insertion_confirmation = InsertionConfirmation::Idle;
         let effects = self.reduce(Action::CreateThought {
@@ -458,8 +361,7 @@ impl BoardApp {
                 self.set_warning("thought has a submission in progress");
                 return;
             }
-            self.selected_thoughts.clear();
-            self.hovered = None;
+            self.clear_board_selection();
             let _effects = self.reduce(Action::EnterEdit(thought_id));
             self.sync_editor_from_state();
         }
@@ -472,7 +374,17 @@ impl BoardApp {
 
     fn reduce(&mut self, action: Action) -> Vec<Effect> {
         match reduce(&mut self.state, action) {
-            Ok(effects) => effects,
+            Ok(effects) => {
+                let order = self
+                    .state
+                    .board
+                    .live_thoughts()
+                    .into_iter()
+                    .map(|thought| thought.id)
+                    .collect::<Vec<_>>();
+                self.selection.reconcile(&order);
+                effects
+            }
             Err(error) => {
                 self.set_error(error.to_string());
                 Vec::new()

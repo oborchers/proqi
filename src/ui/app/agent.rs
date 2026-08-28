@@ -170,6 +170,7 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
+        self.deactivate_range_latch();
         if self.agent_targets.is_empty() {
             return self.refresh_agents();
         }
@@ -406,7 +407,7 @@ impl BoardApp {
                     at: pending.at,
                 }),
             );
-            self.selected_thoughts.clear();
+            self.clear_board_selection();
         }
         let outcome = if pending.disposition == SubmissionDisposition::Keep {
             "thought kept"

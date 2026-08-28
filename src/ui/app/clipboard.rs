@@ -150,7 +150,7 @@ impl BoardApp {
             self.set_success("copied selected thoughts");
         }
         if success && intent == Some(ClipboardIntent::Cut) && !effects.is_empty() {
-            self.selected_thoughts.clear();
+            self.clear_board_selection();
             self.sync_empty_insertion_focus();
         }
         effects

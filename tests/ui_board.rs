@@ -474,6 +474,8 @@ mod durability;
 mod insertion_navigation;
 #[path = "ui_board/kilo.rs"]
 mod kilo;
+#[path = "ui_board/movement_symmetry.rs"]
+mod movement_symmetry;
 #[path = "ui_board/navigation.rs"]
 mod navigation;
 #[path = "ui_board/palette.rs"]

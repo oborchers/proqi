@@ -32,6 +32,7 @@ impl SearchState {
 
 impl BoardApp {
     pub(super) fn open_search(&mut self) {
+        self.deactivate_range_latch();
         self.help = false;
         self.palette = None;
         self.search = Some(SearchState::new());
@@ -136,6 +137,7 @@ impl BoardApp {
         let Some(thought_id) = thought_id else {
             return Vec::new();
         };
+        self.clear_range_for_focus_change();
         self.manual_board_scroll = false;
         self.reduce(Action::FocusThought(Some(thought_id)))
     }

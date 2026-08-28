@@ -21,6 +21,11 @@ cd proqi
 cargo xtask check
 ```
 
+On a Docker host, including macOS, `cargo xtask ci-linux` runs the
+repository-owned Linux quality, test, MSRV, dependency, coverage, package, and
+Debian gates inside a pinned official Rust image. Its cache remains below
+ignored `target/`.
+
 `cargo xtask setup` reports missing tools. It does not modify global state.
 The optional checked-in pre-commit hook is enabled explicitly with:
 
@@ -97,7 +102,8 @@ cargo xtask package
 
 - Format Rust with the checked-in rustfmt configuration.
 - Treat every Clippy warning as an error.
-- Keep every first-party source file at or below 500 physical lines.
+- Keep every first-party implementation source file at or below 500 physical
+  lines. Public documentation and prose are exempt.
 - Keep Rust functions within the checked-in function-length, cognitive
   complexity, and nesting thresholds.
 - Keep production code free of `unwrap`, `expect`, `panic!`, `unreachable!`,
