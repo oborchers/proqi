@@ -404,6 +404,23 @@ impl BoardApp {
         effects
     }
 
+    fn expand_and_enter_edit(
+        &mut self,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        let Some(thought_id) = self.state.focused_thought else {
+            return Vec::new();
+        };
+        if self.submission_locked(thought_id) {
+            self.set_warning("thought has a submission in progress");
+            return Vec::new();
+        }
+        let effects = self.expand_thought(thought_id, ids, clock);
+        self.enter_edit();
+        effects
+    }
+
     fn enter_edit(&mut self) {
         self.insertion_focus = InsertionFocus::Inactive;
         self.edit_boundary = None;

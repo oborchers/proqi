@@ -11,6 +11,10 @@ mod recovery;
 mod reorder;
 
 #[cfg(target_os = "macos")]
+#[path = "pty/collapsed_entry.rs"]
+mod collapsed_entry;
+
+#[cfg(target_os = "macos")]
 #[path = "pty/invocation.rs"]
 mod invocation;
 

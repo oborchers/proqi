@@ -298,18 +298,18 @@ impl BoardApp {
             Command::CopyResume => self.copy_resume_command(ids),
             Command::SendSession => self.begin_session_transfer(false, ids, clock),
             Command::SendSessionRemove => self.begin_session_transfer(true, ids, clock),
-            Command::Edit => {
-                self.enter_edit();
-                Vec::new()
-            }
+            Command::Edit => self.expand_and_enter_edit(ids, clock),
             Command::PlainNewline => {
-                if !matches!(
+                let mut effects = if matches!(
                     self.state.mode,
                     crate::application::InteractionMode::Edit { .. }
                 ) {
-                    self.enter_edit();
-                }
-                self.insert_newline(false, ids, clock)
+                    Vec::new()
+                } else {
+                    self.expand_and_enter_edit(ids, clock)
+                };
+                effects.extend(self.insert_newline(false, ids, clock));
+                effects
             }
             Command::Delete => self.delete(ids, clock),
             Command::Copy => self.copy_active(ids),
@@ -326,8 +326,14 @@ impl BoardApp {
             }
             Command::RefreshAgents => self.refresh_agents(),
             Command::InsertInvocation => {
+                let effects =
+                    if matches!(self.state.mode, crate::application::InteractionMode::Board) {
+                        self.expand_and_enter_edit(ids, clock)
+                    } else {
+                        Vec::new()
+                    };
                 self.open_invocation_picker();
-                Vec::new()
+                effects
             }
             Command::RefreshInvocations => self.refresh_invocations(),
             Command::CheckUpdates => {

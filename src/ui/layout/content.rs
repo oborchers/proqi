@@ -176,15 +176,19 @@ fn place_thought(
         } else {
             0
         };
-    let explicit_cap = match thought.presentation {
-        ThoughtPresentation::Expanded => natural,
-        ThoughtPresentation::Collapsed => 2,
-        ThoughtPresentation::Automatic => usize::from(responsive_cap(context.board.height)),
+    let explicit_cap = if editing {
+        natural
+    } else {
+        match thought.presentation {
+            ThoughtPresentation::Expanded => natural,
+            ThoughtPresentation::Collapsed => 2,
+            ThoughtPresentation::Automatic => usize::from(responsive_cap(context.board.height)),
+        }
     };
     let available = usize::from(context.board.bottom().saturating_sub(y));
-    let desired = natural
-        .saturating_sub(content_row_offset)
-        .min(explicit_cap.max(1));
+    let remaining_rows = natural.saturating_sub(content_row_offset);
+    let presentation_clipped = remaining_rows > explicit_cap.max(1);
+    let desired = remaining_rows.min(explicit_cap.max(1));
     let viewport_clipped = desired > available;
     let height = u16::try_from(desired.min(available).max(1)).unwrap_or(u16::MAX);
     let area = Rect::new(context.board.x, y, context.board.width, height);
@@ -195,14 +199,14 @@ fn place_thought(
         area.width.saturating_sub(2),
         area.height,
     );
-    let remaining_rows = natural.saturating_sub(content_row_offset);
-    let hidden_rows = if editing || remaining_rows <= usize::from(height) {
+    let hidden_rows = if editing || !presentation_clipped {
         0
     } else {
         remaining_rows.saturating_sub(usize::from(height).saturating_sub(1))
     };
-    let scrollable_hidden =
-        hidden_rows > 0 && thought.presentation != ThoughtPresentation::Collapsed;
+    let scrollable_hidden = !editing
+        && remaining_rows > usize::from(height)
+        && thought.presentation != ThoughtPresentation::Collapsed;
     let overflow = (hidden_rows > 0).then(|| {
         Rect::new(
             text_area.x,

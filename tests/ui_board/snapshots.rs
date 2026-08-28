@@ -276,6 +276,25 @@ fn long_paste_stays_folded_and_accented_in_edit_mode() {
 }
 
 #[test]
+fn expanded_long_thought_uses_the_viewport_without_a_second_expand_control() {
+    let mut fixture = Fixture::new();
+    let content = (0..9)
+        .map(|line| format!("line {line} wraps with Grüße 界 and ordinary words"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    super::navigation::durable_thought(&mut fixture, &content);
+    let area = Rect::new(0, 0, 44, 12);
+    let initial = fixture.app.prepare_frame(area);
+    let overflow = initial.thoughts[0].overflow.expect("automatic cap");
+    fixture.pointer(
+        overflow.x,
+        overflow.y,
+        PointerKind::Down(PointerButton::Left),
+    );
+    insta::assert_snapshot!(snapshot(&mut fixture, 44, 12, ThemePreference::Dark));
+}
+
+#[test]
 fn command_palette_has_a_complete_searchable_buffer() {
     let mut fixture = Fixture::new();
     let sequence = fixture.paste("review release readiness");

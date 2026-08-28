@@ -21,6 +21,41 @@ pub(super) struct EditorPresentation {
     cursor_display_byte: usize,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum BoardCellTarget {
+    Position(TextPosition),
+    Fold {
+        canonical_start: usize,
+        canonical_end: usize,
+    },
+}
+
+pub(super) fn board_cell_target(
+    canonical: &str,
+    presentation: &Presentation,
+    width: u16,
+    row: usize,
+    column: u16,
+) -> Option<BoardCellTarget> {
+    let rows = wrap_rows(&presentation.content, usize::from(width.max(1)));
+    let wrapped = rows.get(row)?;
+    let display = byte_at_cell(&presentation.content, wrapped, usize::from(column));
+    if let Some(fold) = presentation.folds.iter().find(|fold| {
+        fold.collapsed
+            && display >= fold.start
+            && (display < fold.end || (display == fold.end && fold.start == wrapped.end_byte))
+    }) {
+        return Some(BoardCellTarget::Fold {
+            canonical_start: fold.canonical_start,
+            canonical_end: fold.canonical_end,
+        });
+    }
+    Some(BoardCellTarget::Position(position_for_byte(
+        canonical,
+        unproject_byte(display, &presentation.folds),
+    )))
+}
+
 impl EditorPresentation {
     pub(super) fn fold_at_cell(&self, row: u16, column: u16) -> Option<&PresentedFold> {
         let row = self
