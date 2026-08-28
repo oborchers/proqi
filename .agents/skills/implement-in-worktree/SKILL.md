@@ -105,9 +105,20 @@ blocked transition, keep the goal active and still report immediately.
   user work.
 - Run focused tests during development and every repository-required canonical
   gate before committing. Review all snapshot or golden-file diffs explicitly.
+- For live TUI, Herdr, harness, API, PTY, or visual qualification, the worker may
+  create disposable test tabs and panes inside its assigned Herdr workspace.
+  Address them by explicit IDs with `--no-focus`; never reuse the invoking
+  coordinator's pane, another workstream's workspace, or a user's unrelated
+  pane. Temporary test panes do not authorize another implementation agent,
+  worktree, or parallel implementation owner.
 - When the feature integrates with Herdr or a harness, exercise the real
   structured API and relevant UI/PTY behavior in the worker's Herdr workspace.
   A mock-only result is insufficient when live qualification is feasible.
+- Record every temporary test tab and pane as it is created. Close those
+  disposable resources before handoff, remove only test state created by the
+  worker, and report the live scenarios exercised plus any resource that could
+  not be cleaned up. Preserve the implementation pane and worktree for primary
+  review.
 - Inspect the final diff, status, new files, generated artifacts, and commit
   identity. Commit coherent changes without secrets or machine-specific paths.
 - Push only the topic branch. Open a pull request against `main` with a concise
