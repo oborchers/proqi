@@ -162,6 +162,15 @@ fn invocation_picker_keys_are_normalized_without_literal_editor_input() {
         translate(Event::Key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE))),
         Some(UiInput::Key(UiKey::Tab))
     );
+    for event in [
+        KeyEvent::new(KeyCode::BackTab, KeyModifiers::SHIFT),
+        KeyEvent::new(KeyCode::Tab, KeyModifiers::SHIFT),
+    ] {
+        assert_eq!(
+            translate(Event::Key(event)),
+            Some(UiInput::Key(UiKey::BackTab))
+        );
+    }
 }
 
 #[test]

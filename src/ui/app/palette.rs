@@ -17,6 +17,8 @@ enum Command {
     SendSessionRemove,
     Edit,
     PlainNewline,
+    Indent,
+    Outdent,
     Delete,
     Copy,
     Cut,
@@ -42,13 +44,15 @@ enum Command {
 }
 
 impl Command {
-    const ALL: [(Self, &'static str); 30] = [
+    const ALL: [(Self, &'static str); 32] = [
         (Self::New, "New thought"),
         (Self::RenameSession, "Rename session"),
         (Self::CopySessionId, "Copy session ID"),
         (Self::CopyResume, "Copy resume command"),
         (Self::Edit, "Edit thought"),
         (Self::PlainNewline, "Insert plain newline"),
+        (Self::Indent, "Indent line or selection"),
+        (Self::Outdent, "Outdent line or selection"),
         (Self::Delete, "Delete thought"),
         (Self::Copy, "Copy thought"),
         (Self::Cut, "Cut thought"),
@@ -133,7 +137,9 @@ impl PaletteState {
     fn available(&self, command: Command) -> bool {
         match command {
             Command::SubmitRemove | Command::SubmitKeep => self.submit_supported,
-            Command::PlainNewline => self.plain_newline_supported,
+            Command::PlainNewline | Command::Indent | Command::Outdent => {
+                self.plain_newline_supported
+            }
             _ => true,
         }
     }
@@ -310,6 +316,15 @@ impl BoardApp {
                     self.enter_edit();
                 }
                 self.insert_newline(false, ids, clock)
+            }
+            Command::Indent | Command::Outdent => {
+                if !matches!(
+                    self.state.mode,
+                    crate::application::InteractionMode::Edit { .. }
+                ) {
+                    self.enter_edit();
+                }
+                self.apply_indentation(command == Command::Outdent, ids, clock)
             }
             Command::Delete => self.delete(ids, clock),
             Command::Copy => self.copy_active(ids),

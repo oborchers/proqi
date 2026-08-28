@@ -322,3 +322,16 @@ fn plain_newline_fallback_is_visible_in_the_command_palette() {
     }
     insta::assert_snapshot!(snapshot(&mut fixture, 72, 14, ThemePreference::Dark));
 }
+
+#[test]
+fn indentation_fallbacks_are_visible_in_the_command_palette() {
+    let mut fixture = Fixture::new();
+    let sequence = fixture.paste("- parent\n  - child");
+    fixture.app.acknowledge_persistence(sequence, true);
+    fixture.input(UiInput::Key(UiKey::Escape));
+    fixture.input(UiInput::Key(UiKey::Character(':')));
+    for character in "dent line".chars() {
+        fixture.input(UiInput::Key(UiKey::Character(character)));
+    }
+    insta::assert_snapshot!(snapshot(&mut fixture, 72, 14, ThemePreference::Dark));
+}

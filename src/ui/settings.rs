@@ -25,6 +25,8 @@ pub struct UiSettings {
     pub show_session_id: bool,
     /// Continue recognized Markdown list items when Enter inserts a newline.
     pub smart_lists: bool,
+    /// Spaces inserted for one list indentation level when alignment is not inferable.
+    pub list_indent_width: u8,
     /// Keyboard protocol negotiation.
     pub keyboard_enhancement: KeyboardEnhancement,
     /// Remappable direct board keys.
@@ -39,6 +41,7 @@ impl Default for UiSettings {
             check_for_updates: true,
             show_session_id: false,
             smart_lists: true,
+            list_indent_width: 2,
             keyboard_enhancement: KeyboardEnhancement::default(),
             keybindings: KeyBindings::default(),
             density: BoardDensity::default(),

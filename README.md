@@ -205,6 +205,8 @@ fallbacks remain available when a terminal cannot report a modifier.
 | `Shift+Primary+Z` | Redo an edit |
 | `Primary+V` | Read the native clipboard |
 | `Enter` | Continue `-`, `*`, `+`, ordered, and task list items; exit an empty top-level item |
+| `Tab` | Nest a list item or indent selected logical lines; insert configured spaces elsewhere |
+| `Shift+Tab` | Outdent one recognized list level without changing ordinary text |
 | `↑` / `↓` twice at a boundary | Return to the board and focus the adjacent thought |
 | Type `$name`, `/name`, or supported `@name` | Open matching local invocation completion |
 | `↑` / `↓` or `Primary+P` / `Primary+N` | Move through invocation results |
@@ -217,10 +219,12 @@ reorder thoughts, click controls, use help, and choose verified Herdr targets.
 Holding the final click while dragging extends by complete words or logical
 lines. Moving onto folded context selects its complete canonical range.
 `Enter` expands the fold, while typing or deletion replaces it atomically.
-Press `Esc`, open `:`, and choose `Insert plain newline` to bypass list
-continuation without relying on a terminal modifier; mouse users can open the
-palette directly while editing. Set `smart_lists = false` to keep every ordinary
-editor `Enter` plain.
+Press `Esc`, open `:`, and choose `Insert plain newline`, `Indent line or
+selection`, or `Outdent line or selection` when the terminal does not forward a
+modifier; mouse users can open the palette directly while editing. An empty
+nested item outdents one level before a later top-level `Enter` exits the list.
+Set `smart_lists = false` to keep every ordinary editor `Enter` plain and disable
+structure-aware outdent; `Tab` still inserts `list_indent_width` spaces exactly.
 
 Proqi's invocation catalog is an authoring aid, not a skill executor or live
 harness integration. It refreshes bounded project and machine-global roots at
@@ -499,6 +503,7 @@ shortcuts remain available:
 check_for_updates = true
 show_session_id = false # opt in to the complete ses_... value in the footer
 smart_lists = true
+list_indent_width = 2 # 1-8 spaces; optimized for narrow adjacent panes
 theme = "auto"
 density = "comfortable" # or "compact"
 

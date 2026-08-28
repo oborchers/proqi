@@ -114,6 +114,7 @@ impl BoardApp {
             | UiKey::Duplicate
             | UiKey::Quit
             | UiKey::Tab
+            | UiKey::BackTab
             | UiKey::PickerPrevious
             | UiKey::PickerNext
             | UiKey::PrimaryCharacter(_)
@@ -253,6 +254,9 @@ impl BoardApp {
         }
         if matches!(key, UiKey::Enter) && self.should_insert_smart_newline() {
             return self.insert_newline(true, ids, clock);
+        }
+        if matches!(key, UiKey::Tab | UiKey::BackTab) {
+            return self.apply_indentation(matches!(key, UiKey::BackTab), ids, clock);
         }
         let adjacent_fold = match key {
             UiKey::Backspace => self.delete_adjacent_fold(true),
