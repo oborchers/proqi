@@ -118,7 +118,12 @@ impl RopeEditor {
         changes
     }
 
-    fn replace_byte_range(&mut self, start: usize, end: usize, replacement: &str) -> AppliedRange {
+    pub(super) fn replace_byte_range(
+        &mut self,
+        start: usize,
+        end: usize,
+        replacement: &str,
+    ) -> AppliedRange {
         let start_char = self.state.text.byte_to_char(start);
         let end_char = self.state.text.byte_to_char(end);
         self.state.text.remove(start_char..end_char);

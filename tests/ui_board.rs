@@ -486,6 +486,8 @@ mod scroll_regressions;
 mod selection;
 #[path = "ui_board/session_navigation.rs"]
 mod session_navigation;
+#[path = "ui_board/smart_lists.rs"]
+mod smart_lists;
 #[path = "ui_board/snapshots.rs"]
 mod snapshots;
 #[path = "ui_board/submission_locks.rs"]
