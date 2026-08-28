@@ -1,6 +1,7 @@
 //! Terminal-independent board interaction state.
 
 mod agent;
+mod agent_delivery;
 mod agent_identity;
 mod clipboard;
 mod commands;

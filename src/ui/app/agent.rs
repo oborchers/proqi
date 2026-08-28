@@ -2,12 +2,11 @@
 
 use crate::{
     application::{Action, Effect, reduce},
-    domain::{BoardOperationKind, Direction, SubmissionId},
+    domain::{BoardOperationKind, SubmissionId},
     ports::{
         agent::{
             AgentError, AgentTarget, SubmissionDisposition, SubmissionReceipt, SubmissionRequest,
         },
-        editor::CursorMovement,
         environment::{Clock, IdGenerator},
         store::{StoreError, SubmissionAttempt, SubmissionAttemptState, SubmissionOutcome},
     },
@@ -15,9 +14,9 @@ use crate::{
 use sha2::{Digest, Sha256};
 
 use super::{
-    BoardApp, UiInput, UiKey,
+    BoardApp,
     agent_identity::target_fingerprint,
-    pending_types::{PendingSubmission, PendingSubmissionSource, SubmissionMode},
+    pending_types::{PendingSubmission, PendingSubmissionSource},
 };
 
 impl BoardApp {
@@ -70,9 +69,10 @@ impl BoardApp {
         };
         if let Err(error) = result {
             let sources = pending_source_ids(pending);
+            let kept = kept_sentence(sources.len());
             self.pending_submissions.remove(&submission_id);
             self.release_submission_sources(sources);
-            self.set_error(format!("Submission not started. Thought kept. {error}"));
+            self.set_error(format!("Submission not started. {kept}. {error}"));
             return Vec::new();
         }
         vec![Effect::MarkSubmissionSending {
@@ -92,9 +92,10 @@ impl BoardApp {
         };
         if let Err(error) = result {
             let sources = pending_source_ids(pending);
+            let kept = kept_sentence(sources.len());
             self.pending_submissions.remove(&submission_id);
             self.release_submission_sources(sources);
-            self.set_error(format!("Submission not started. Thought kept. {error}"));
+            self.set_error(format!("Submission not started. {kept}. {error}"));
             return Vec::new();
         }
         vec![Effect::SubmitAgent(pending.request.clone())]
@@ -151,136 +152,23 @@ impl BoardApp {
             } else {
                 "failed"
             };
+            let kept = kept_sentence(pending.sources.len());
             self.set_error(format!(
-                "Submission {status}, but its outcome was not saved. Thought kept. {error}"
+                "Submission {status}, but its outcome was not saved. {kept}. {error}"
             ));
             return Vec::new();
         }
         match completion {
             Ok(receipt) => self.apply_accepted_submission(&pending, &receipt),
             Err(error) => {
-                self.set_error(format!("Submission failed. Thought kept. {error}"));
+                let kept = kept_sentence(pending.sources.len());
+                self.set_error(format!("Submission failed. {kept}. {error}"));
                 Vec::new()
             }
         }
     }
 
-    pub(super) fn begin_delivery(
-        &mut self,
-        disposition: SubmissionDisposition,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-    ) -> Vec<Effect> {
-        self.deactivate_range_latch();
-        if self.agent_targets.is_empty() {
-            return self.refresh_agents();
-        }
-        let eligible = self
-            .agent_targets
-            .iter()
-            .filter(|target| target.delivery.supports())
-            .map(|target| target.direction)
-            .collect::<Vec<_>>();
-        match eligible.as_slice() {
-            [] => {
-                self.set_warning("submission is unavailable for verified adjacent agents");
-                Vec::new()
-            }
-            [direction] => self.deliver_to(*direction, disposition, ids, clock),
-            _ => {
-                self.submission_mode = Some(SubmissionMode { disposition });
-                self.set_info("choose agent direction with arrows or h/j/k/l");
-                Vec::new()
-            }
-        }
-    }
-
-    pub(super) fn handle_submission_input(
-        &mut self,
-        input: &UiInput,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-    ) -> Option<Vec<Effect>> {
-        let mode = self.submission_mode?;
-        let direction = match input {
-            UiInput::Key(UiKey::Escape) => {
-                self.submission_mode = None;
-                self.set_info("submission cancelled");
-                return Some(Vec::new());
-            }
-            UiInput::Key(
-                UiKey::Character('h')
-                | UiKey::Move {
-                    movement: CursorMovement::GraphemeBack,
-                    ..
-                },
-            ) => Direction::Left,
-            UiInput::Key(
-                UiKey::Character('l')
-                | UiKey::Move {
-                    movement: CursorMovement::GraphemeForward,
-                    ..
-                },
-            ) => Direction::Right,
-            UiInput::Key(
-                UiKey::Character('k')
-                | UiKey::Move {
-                    movement: CursorMovement::VisualUp,
-                    ..
-                },
-            ) => Direction::Up,
-            UiInput::Key(
-                UiKey::Character('j')
-                | UiKey::Move {
-                    movement: CursorMovement::VisualDown,
-                    ..
-                },
-            ) => Direction::Down,
-            UiInput::Resize { .. } | UiInput::HostFocusGained | UiInput::Pointer(_) => return None,
-            _ => return Some(Vec::new()),
-        };
-        self.submission_mode = None;
-        Some(self.deliver_to(direction, mode.disposition, ids, clock))
-    }
-
-    pub(super) fn deliver_to(
-        &mut self,
-        direction: Direction,
-        disposition: SubmissionDisposition,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-    ) -> Vec<Effect> {
-        let Some(target) = self
-            .agent_targets
-            .iter()
-            .find(|target| target.direction == direction)
-            .cloned()
-        else {
-            self.set_warning(format!("no verified agent {}", direction.as_str()));
-            return Vec::new();
-        };
-        if !target.delivery.supports() {
-            self.set_warning(format!("submission is unavailable {}", direction.as_str()));
-            return Vec::new();
-        }
-        let thought_ids = self.action_thought_ids();
-        if thought_ids.is_empty() {
-            self.set_warning("select a thought before submitting");
-            return Vec::new();
-        }
-        if thought_ids.iter().any(|id| self.submission_locked(*id)) {
-            let message = if thought_ids.len() == 1 {
-                "this thought already has a submission in progress"
-            } else {
-                "a selected thought already has a submission in progress"
-            };
-            self.set_warning(message);
-            return Vec::new();
-        }
-        self.queue_submission(&target, disposition, &thought_ids, ids, clock)
-    }
-
-    fn queue_submission(
+    pub(super) fn queue_submission(
         &mut self,
         target: &AgentTarget,
         disposition: SubmissionDisposition,
@@ -291,8 +179,13 @@ impl BoardApp {
         let source_contents = thought_ids
             .iter()
             .filter_map(|id| self.state.board.thought(*id))
+            .filter(|thought| thought.is_live())
             .map(|thought| (thought.id, thought.content.clone()))
             .collect::<Vec<_>>();
+        if source_contents.len() != thought_ids.len() {
+            self.set_warning("board changed before submission; thoughts kept");
+            return Vec::new();
+        }
         let content = crate::application::join_prompt_for_target(target, &source_contents);
         let submission_id = ids.submission_id();
         let payload_digest = digest(content.as_bytes());
@@ -310,6 +203,7 @@ impl BoardApp {
             })
             .collect::<Vec<_>>();
         let deletion_operation_id = ids.operation_id();
+        let multiple = sources.len() > 1;
         let source_ids = sources
             .iter()
             .map(|source| source.thought_id)
@@ -334,12 +228,7 @@ impl BoardApp {
                 completion: None,
             },
         );
-        self.set_info(match disposition {
-            SubmissionDisposition::Keep => "submitting now, thought will be kept",
-            SubmissionDisposition::RemoveAfterSuccess => {
-                "submitting now, thought will be removed after acceptance"
-            }
-        });
+        self.set_info(submission_progress(disposition, multiple));
         let attempt = SubmissionAttempt {
             id: submission_id,
             session_id: self.state.board.session.id,
@@ -406,12 +295,18 @@ impl BoardApp {
             );
             self.clear_board_selection();
         }
-        let outcome = if pending.disposition == SubmissionDisposition::Keep {
-            "thought kept"
-        } else if unchanged {
-            "thought removed"
-        } else {
-            "thought changed during submission and was kept"
+        let multiple = pending.sources.len() > 1;
+        let outcome = match (pending.disposition, unchanged, multiple) {
+            (SubmissionDisposition::Keep, _, false) => "thought kept",
+            (SubmissionDisposition::Keep, _, true) => "thoughts kept",
+            (SubmissionDisposition::RemoveAfterSuccess, true, false) => "thought removed",
+            (SubmissionDisposition::RemoveAfterSuccess, true, true) => "thoughts removed",
+            (SubmissionDisposition::RemoveAfterSuccess, false, false) => {
+                "thought changed during submission and was kept"
+            }
+            (SubmissionDisposition::RemoveAfterSuccess, false, true) => {
+                "thoughts changed during submission and were kept"
+            }
         };
         self.set_success(format!(
             "submitted {} to {}, {outcome}",
@@ -444,6 +339,27 @@ fn pending_source_ids(pending: &PendingSubmission) -> Vec<crate::domain::Thought
         .iter()
         .map(|source| source.thought_id)
         .collect()
+}
+
+fn kept_sentence(source_count: usize) -> &'static str {
+    if source_count == 1 {
+        "Thought kept"
+    } else {
+        "Thoughts kept"
+    }
+}
+
+fn submission_progress(disposition: SubmissionDisposition, multiple: bool) -> &'static str {
+    match (disposition, multiple) {
+        (SubmissionDisposition::Keep, false) => "submitting now, thought will be kept",
+        (SubmissionDisposition::Keep, true) => "submitting now, thoughts will be kept",
+        (SubmissionDisposition::RemoveAfterSuccess, false) => {
+            "submitting now, thought will be removed after acceptance"
+        }
+        (SubmissionDisposition::RemoveAfterSuccess, true) => {
+            "submitting now, thoughts will be removed after acceptance"
+        }
+    }
 }
 
 fn submission_outcome(

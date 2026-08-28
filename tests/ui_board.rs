@@ -484,6 +484,8 @@ mod palette;
 mod pointer_selection;
 #[path = "ui_board/scroll_regressions.rs"]
 mod scroll_regressions;
+#[path = "ui_board/select_all.rs"]
+mod select_all;
 #[path = "ui_board/selection.rs"]
 mod selection;
 #[path = "ui_board/session_navigation.rs"]
@@ -494,3 +496,5 @@ mod smart_lists;
 mod snapshots;
 #[path = "ui_board/submission_locks.rs"]
 mod submission_locks;
+#[path = "ui_board/submit_all.rs"]
+mod submit_all;

@@ -62,6 +62,9 @@ impl BoardApp {
         clock: &impl Clock,
     ) -> Vec<Effect> {
         self.edit_boundary = None;
+        if self.submission_mode.is_some() {
+            return self.handle_submission_pointer(pointer, ids, clock);
+        }
         let mut effects = match pointer.kind {
             PointerKind::Down(_) | PointerKind::Drag(_) | PointerKind::Up(_) => {
                 self.flush_pending_edit(ids, clock)
@@ -84,6 +87,26 @@ impl BoardApp {
             PointerKind::Down(_) | PointerKind::Up(_) | PointerKind::Drag(_) => Vec::new(),
         });
         effects
+    }
+
+    fn handle_submission_pointer(
+        &mut self,
+        pointer: PointerInput,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        let target = self.hit(pointer);
+        if matches!(pointer.kind, PointerKind::Move) {
+            self.hovered = target;
+            return Vec::new();
+        }
+        let Some(HitTarget::Deliver(direction, disposition)) = target else {
+            return Vec::new();
+        };
+        if !matches!(pointer.kind, PointerKind::Down(PointerButton::Left)) {
+            return Vec::new();
+        }
+        self.deliver_to(direction, disposition, ids, clock)
     }
 
     fn pointer_down(

@@ -22,8 +22,11 @@ enum Command {
     Cut,
     Paste,
     Duplicate,
+    SelectAll,
     SubmitRemove,
     SubmitKeep,
+    SubmitAllRemove,
+    SubmitAllKeep,
     RefreshAgents,
     InsertInvocation,
     RefreshInvocations,
@@ -42,7 +45,7 @@ enum Command {
 }
 
 impl Command {
-    const ALL: [(Self, &'static str); 30] = [
+    const ALL: [(Self, &'static str); 33] = [
         (Self::New, "New thought"),
         (Self::RenameSession, "Rename session"),
         (Self::CopySessionId, "Copy session ID"),
@@ -54,11 +57,17 @@ impl Command {
         (Self::Cut, "Cut thought"),
         (Self::Paste, "Paste native clipboard"),
         (Self::Duplicate, "Duplicate thought or selection"),
+        (Self::SelectAll, "Select all thoughts"),
         (
             Self::SubmitRemove,
             "Submit and remove after acceptance (default)",
         ),
         (Self::SubmitKeep, "Submit and keep thought"),
+        (
+            Self::SubmitAllRemove,
+            "Submit all and remove after acceptance",
+        ),
+        (Self::SubmitAllKeep, "Submit all and keep"),
         (Self::SendSession, "Send to another Proqi session"),
         (
             Self::SendSessionRemove,
@@ -132,7 +141,10 @@ impl PaletteState {
 
     fn available(&self, command: Command) -> bool {
         match command {
-            Command::SubmitRemove | Command::SubmitKeep => self.submit_supported,
+            Command::SubmitRemove
+            | Command::SubmitKeep
+            | Command::SubmitAllRemove
+            | Command::SubmitAllKeep => self.submit_supported,
             Command::PlainNewline => self.plain_newline_supported,
             _ => true,
         }
@@ -288,6 +300,9 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
+        if let Some(effects) = self.execute_submission_command(command, ids, clock) {
+            return effects;
+        }
         match command {
             Command::New => self.create(crate::ui::PastePayload::text(String::new()), ids, clock),
             Command::RenameSession => {
@@ -316,14 +331,22 @@ impl BoardApp {
             Command::Cut => self.cut_active(ids, clock),
             Command::Paste => self.read_clipboard(ids),
             Command::Duplicate => self.duplicate(ids, clock),
-            Command::SubmitRemove => self.begin_delivery(
-                crate::ports::agent::SubmissionDisposition::RemoveAfterSuccess,
-                ids,
-                clock,
-            ),
-            Command::SubmitKeep => {
-                self.begin_delivery(crate::ports::agent::SubmissionDisposition::Keep, ids, clock)
+            Command::SelectAll => {
+                let effects = if matches!(
+                    self.state.mode,
+                    crate::application::InteractionMode::Edit { .. }
+                ) {
+                    self.finish_edit(ids, clock)
+                } else {
+                    Vec::new()
+                };
+                self.select_all_thoughts();
+                effects
             }
+            Command::SubmitRemove
+            | Command::SubmitKeep
+            | Command::SubmitAllRemove
+            | Command::SubmitAllKeep => Vec::new(),
             Command::RefreshAgents => self.refresh_agents(),
             Command::InsertInvocation => {
                 self.open_invocation_picker();
@@ -356,6 +379,24 @@ impl BoardApp {
                 self.request_quit();
                 Vec::new()
             }
+        }
+    }
+
+    fn execute_submission_command(
+        &mut self,
+        command: Command,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Option<Vec<Effect>> {
+        use crate::ports::agent::SubmissionDisposition::{Keep, RemoveAfterSuccess};
+        match command {
+            Command::SubmitRemove => Some(self.begin_delivery(RemoveAfterSuccess, ids, clock)),
+            Command::SubmitKeep => Some(self.begin_delivery(Keep, ids, clock)),
+            Command::SubmitAllRemove => {
+                Some(self.begin_delivery_all(RemoveAfterSuccess, ids, clock))
+            }
+            Command::SubmitAllKeep => Some(self.begin_delivery_all(Keep, ids, clock)),
+            _ => None,
         }
     }
 }

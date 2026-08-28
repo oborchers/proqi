@@ -402,6 +402,11 @@ submission address the selected set in board order. Each structural action is
 one persistent board operation and therefore one undo step. Reordering remains
 a single-thought action.
 
+The configurable `a` board command selects every live thought in board order.
+Forwarded `Primary+A` has the same board meaning. Repeating either spelling is
+idempotent, and `Escape` clears the complete board selection. In edit mode,
+`Primary+A` continues to select only the current thought's text.
+
 `Shift+Up` and `Shift+Down`, or equivalently `K` and `J`, start or update one
 contiguous selection from a stable thought anchor to the focused endpoint.
 Reversing direction shrinks the range and then extends it past the anchor
@@ -435,6 +440,13 @@ and remove, all unchanged source thoughts are removed together only after the
 matching accepted receipt is durably journaled. Every source thought is locked
 against TUI and CLI mutation from submission intent until the attempt reaches a
 terminal journaled state.
+
+The command palette also exposes `Select all thoughts`,
+`Submit all and remove after acceptance`, and `Submit all and keep`. The two
+submit-all actions address the complete live board directly, without changing
+the visible selection or requiring a confirmation. An empty board produces no
+submission. When several verified destinations make direction ambiguous, the
+ordinary directional chooser remains the only extra step.
 
 ### Submit to an adjacent agent
 
@@ -542,6 +554,7 @@ bindings are:
 | Delete thought | `d` | Click delete control |
 | Duplicate thought or selection | `Meta+D` | Command palette |
 | Select or deselect thought | `Space` | Click the thought, then use the selection control |
+| Select all thoughts | `a` or `Primary+A` | Command palette |
 | Select contiguous range | `Shift+↑` / `Shift+↓`, `K` / `J`, or `v` then arrows or `j` / `k` | Shift-click a thought, or use `v` then click it |
 | Submit and remove after acceptance | `s`, when supported, then direction when needed | Click verified Submit control |
 | Submit and keep thought | `S`, when supported, then direction when needed | Click verified Submit & keep control |
@@ -569,9 +582,9 @@ Initial editing shortcuts include:
 | Select all text in the focused thought | `Meta+A` | `Ctrl+A` or command palette |
 | Delete the current logical line | `Meta+U` | `Ctrl+U` or command palette |
 
-Select all is scoped to the current thought in edit mode. It does not select
-all thoughts in board mode. Delete line removes one newline-delimited logical
-line, not only the currently wrapped visual row, and is one undoable edit.
+Select all is scoped to the current thought in edit mode and to every live
+thought in board mode. Delete line removes one newline-delimited logical line,
+not only the currently wrapped visual row, and is one undoable edit.
 
 Many terminals consume Command shortcuts before a TUI can receive them. Proqi
 therefore supports enhanced keyboard protocols where available, configurable

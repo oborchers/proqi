@@ -28,7 +28,8 @@ pub(super) struct PendingSubmissionSource {
     pub(super) source_digest: [u8; 32],
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub(super) struct SubmissionMode {
     pub(super) disposition: SubmissionDisposition,
+    pub(super) thought_ids: Vec<ThoughtId>,
 }

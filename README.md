@@ -183,6 +183,7 @@ fallbacks remain available when a terminal cannot report a modifier.
 | `y` or `Primary+C` | Copy the complete thought |
 | `x` or `Primary+X` | Cut only after confirmed clipboard success |
 | `Space` | Add or remove the focused thought from the multi-selection |
+| `a` or `Primary+A` | Select every live thought; repeat safely, `Esc` clears |
 | `Shift+↑` / `Shift+↓`, or `K` / `J` | Extend or shrink one anchored contiguous range |
 | `v`, then arrows, `j` / `k`, or a thought click | Latch modifier-free contiguous range selection |
 | `Primary+D` | Duplicate the focused thought or selection below its source range |
@@ -313,6 +314,12 @@ separated by one blank line:
 - `s Submit` submits immediately and deletes the source thoughts only after an
   accepted matching receipt.
 - `S Submit & keep` submits immediately and retains the source thoughts.
+
+The command palette adds **Select all thoughts**, **Submit all and remove after
+acceptance**, and **Submit all and keep**. The submit-all actions address every
+live thought directly, without toggling the visible selection or opening a
+confirmation. Empty boards send nothing. Several verified destinations still
+use the ordinary directional chooser; one verified destination submits directly.
 
 Both actions work while the receiving agent is working. The receiving harness
 decides whether that input steers the current turn or becomes follow-up input.
@@ -522,6 +529,7 @@ range_up = "K"
 range_down = "J"
 collapse = "c"
 select = " "
+select_all = "a"
 range_select = "v"
 search = "/"
 commands = ":"
