@@ -122,3 +122,26 @@ fn mode_aware_alt_navigation_keeps_board_focus_movement_unchanged() {
         TextPosition::new(0, 6)
     );
 }
+
+#[test]
+fn contextual_help_uses_platform_primary_labels_for_fast_navigation() {
+    let mut fixture = Fixture::new();
+    fixture.paste("one\ntwo\nthree\nfour\nfive\nsix");
+    let help = fixture
+        .app
+        .prepare_frame(Rect::new(0, 0, 80, 14))
+        .controls
+        .into_iter()
+        .find_map(|(target, area)| (target == HitTarget::Help).then_some(area))
+        .expect("help control");
+    fixture.pointer(help.x, help.y, PointerKind::Down(PointerButton::Left));
+    let terminal = draw(&mut fixture, 80, 14);
+    let rendered = text(terminal.backend().buffer());
+    assert!(rendered.contains("Alt+↑/↓  Jump 5 rows"));
+    let primary = if cfg!(target_os = "macos") {
+        "⌘↑/⌘↓    Start/end"
+    } else {
+        "Ctrl+↑/Ctrl+↓ Start/end"
+    };
+    assert!(rendered.contains(primary));
+}

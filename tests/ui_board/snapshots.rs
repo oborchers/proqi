@@ -335,6 +335,7 @@ fn fast_navigation_fallbacks_are_visible_in_the_command_palette() {
 }
 
 #[test]
+#[cfg(target_os = "macos")]
 fn fast_navigation_shortcuts_are_visible_in_edit_help() {
     let mut fixture = Fixture::new();
     fixture.paste("one\ntwo\nthree\nfour\nfive\nsix");
