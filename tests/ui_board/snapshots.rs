@@ -108,6 +108,7 @@ fn discovered_invocations_use_the_annotation_visual_role() {
                 forms: vec![InvocationForm {
                     harness: InvocationHarness::Codex,
                     token: "$review".to_owned(),
+                    precedence: 20,
                 }],
                 canonical_path: std::path::PathBuf::from("/fixture/review/SKILL.md"),
                 precedence: 20,

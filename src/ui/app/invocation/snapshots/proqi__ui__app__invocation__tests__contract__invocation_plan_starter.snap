@@ -1,12 +1,12 @@
 ---
 source: src/ui/app/invocation/tests.rs
-assertion_line: 449
+assertion_line: 480
 expression: plan_completion_snapshot()
 ---
 00││
 01│┌ discovered invocations ────────────────────[x]│
 02││›/pl                                          ││
-03││/plan  Shared Command · Codex/Claude Code     ││
+03││/plan  Shared Command                         ││
 04││                                              ││
 05│└──────────────────────────────────────────────┘│
 06│  Esc Board  : Commands  ? Shortcuts│

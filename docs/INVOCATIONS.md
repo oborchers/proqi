@@ -25,7 +25,12 @@ farther project roots; project precedes global for Codex, OpenCode, and Pi;
 Claude personal skills/commands precede project while Claude project agents
 precede user agents; plugin definitions remain lowest. Canonical paths collapse
 symlink aliases while same-name definitions with distinct type or source remain
-separately labeled.
+separately labeled. When a `.claude/skills` entry resolves to the corresponding
+physical `.agents/skills` definition, `.agents` remains the canonical owner and
+the one catalog entry retains both `$name` and `/name` with independent harness
+precedence. The reverse symlink direction does not gain shared forms. Copy-mode
+installations remain separate harness-specific entries because their physical
+definitions can diverge even when names and metadata initially match.
 
 ## Target boundaries and shared built-ins
 
@@ -40,9 +45,9 @@ a runtime validation or execution boundary.
 The checked-in shared-command table supplies `/plan` and `/goal`, both
 documented by Codex and Claude Code. Each appears as a shared Command result only
 at byte zero of a thought when a verified adjacent target for either harness
-exists. Labels describe compatibility as `Codex/Claude Code`; target detection
-controls availability separately. Leading whitespace, later lines, partial
-names such as `/planner`, and in-body starter prose do not match or highlight.
+exists. Their compact label is `Shared Command`; target detection controls
+availability separately. Leading whitespace, later lines, partial names such as
+`/planner`, and in-body starter prose do not match or highlight.
 
 For a multi-thought submission to either supported harness, Proqi preserves a
 complete `/plan` or `/goal` starter on the first thought and omits either shared

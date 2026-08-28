@@ -90,6 +90,8 @@ pub struct InvocationForm {
     pub harness: InvocationHarness,
     /// Exact canonical token, including its `$`, `/`, or `@` sigil.
     pub token: String,
+    /// Harness-specific root precedence used when ordering this form.
+    pub precedence: u16,
 }
 
 /// One bounded definition discovered from the local filesystem.
@@ -109,7 +111,7 @@ pub struct InvocationEntry {
     pub forms: Vec<InvocationForm>,
     /// Canonical physical definition path used only for identity and precedence.
     pub canonical_path: PathBuf,
-    /// Lower values sort before lower-precedence definitions.
+    /// Lower values sort before lower-precedence definitions without forms.
     pub precedence: u16,
 }
 

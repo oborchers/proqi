@@ -37,7 +37,7 @@ pub(super) fn choices(app: &BoardApp, popup: &InvocationPopup) -> Vec<Choice> {
         .filter(|starter| matches_query(*starter, popup))
         .map(|starter| Choice {
             token: starter.token.to_owned(),
-            label: format!("{}  Shared Command · Codex/Claude Code", starter.token),
+            label: format!("{}  Shared Command", starter.token),
         })
         .collect()
 }

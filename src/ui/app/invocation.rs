@@ -372,33 +372,27 @@ impl BoardApp {
             .filter(|(entry, form)| choice_matches(entry, form, popup.manual, &query))
             .collect::<Vec<_>>();
         candidates.sort_by(|(left_entry, left_form), (right_entry, right_form)| {
-            left_entry
+            left_form
                 .precedence
-                .cmp(&right_entry.precedence)
+                .cmp(&right_form.precedence)
                 .then_with(|| left_form.token.cmp(&right_form.token))
                 .then_with(|| left_entry.kind.cmp(&right_entry.kind))
                 .then_with(|| left_entry.source.cmp(&right_entry.source))
                 .then_with(|| left_entry.canonical_path.cmp(&right_entry.canonical_path))
         });
         candidates.truncate(MAX_RESULTS.saturating_sub(built_ins.len()));
-        let duplicate_tokens = candidates
-            .iter()
-            .map(|(_, form)| form.token.as_str())
-            .collect::<Vec<_>>();
+        let visible = candidates.clone();
         built_ins
             .into_iter()
             .chain(candidates.drain(..).map(|(entry, form)| {
+                let duplicate_token = visible
+                    .iter()
+                    .filter(|(_, visible_form)| visible_form.token == form.token)
+                    .count()
+                    > 1;
                 Choice {
                     token: form.token.clone(),
-                    label: choice_label(
-                        entry,
-                        form,
-                        duplicate_tokens
-                            .iter()
-                            .filter(|token| **token == form.token)
-                            .count()
-                            > 1,
-                    ),
+                    label: choice_label(entry, form, duplicate_token),
                 }
             }))
             .collect()
@@ -430,7 +424,11 @@ fn choice_label(entry: &InvocationEntry, form: &InvocationForm, show_source: boo
         entry.kind.label()
     );
     if show_source {
-        format!("{base} · {}", form.harness.label())
+        let harness = match form.harness {
+            crate::ports::invocation::InvocationHarness::ClaudeCode => "Claude",
+            harness => harness.label(),
+        };
+        format!("{base} · {harness}")
     } else {
         base
     }

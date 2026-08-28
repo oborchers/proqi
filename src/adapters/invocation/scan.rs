@@ -1,5 +1,4 @@
 use std::{
-    collections::BTreeSet,
     fs,
     path::{Path, PathBuf},
 };
@@ -14,6 +13,11 @@ use super::{
     metadata,
     roots::{self, CompatibilityRoot, RootShape},
 };
+
+#[path = "scan/consolidate.rs"]
+mod consolidate;
+
+use consolidate::ObservedEntry;
 
 const MAX_ROOTS: usize = 128;
 const MAX_DEPTH: usize = 6;
@@ -80,21 +84,18 @@ impl InvocationCatalog for FilesystemInvocationCatalog {
                 .cmp(&right.precedence)
                 .then_with(|| left.path.cmp(&right.path))
         });
-        let mut seen = BTreeSet::new();
         let mut visited = 0;
-        let mut project = Vec::new();
-        let mut global = Vec::new();
+        let mut observations = Vec::new();
         for root in roots {
-            let target = if root.scope == InvocationScope::Project {
-                &mut project
-            } else {
-                &mut global
-            };
-            scan_root(&root, target, &mut seen, &mut visited);
-            if project.len().saturating_add(global.len()) >= MAX_ENTRIES {
+            scan_root(&root, &mut observations, &mut visited);
+            if observations.len() >= MAX_ENTRIES {
                 break;
             }
         }
+        let entries = consolidate::entries(observations);
+        let (mut project, mut global): (Vec<_>, Vec<_>) = entries
+            .into_iter()
+            .partition(|entry| entry.scope == InvocationScope::Project);
         sort_entries(&mut project);
         sort_entries(&mut global);
         Ok(InvocationDiscovery {
@@ -167,21 +168,16 @@ fn additional_roots(cwd: &Path, additional: &[AdditionalInvocationRoot]) -> Vec<
         .collect()
 }
 
-fn scan_root(
-    root: &ScanRoot,
-    entries: &mut Vec<InvocationEntry>,
-    seen: &mut BTreeSet<PathBuf>,
-    visited: &mut usize,
-) {
+fn scan_root(root: &ScanRoot, entries: &mut Vec<ObservedEntry>, visited: &mut usize) {
     if entries.len() >= MAX_ENTRIES || *visited >= MAX_VISITED_PATHS {
         return;
     }
     if root.path.is_file() {
         match root.shape {
             RootShape::MarkdownCommands | RootShape::MarkdownAgents => {
-                push_markdown(root, &root.path, None, entries, seen);
+                push_markdown(root, &root.path, None, entries);
             }
-            RootShape::TomlAgents => push_toml(root, &root.path, entries, seen),
+            RootShape::TomlAgents => push_toml(root, &root.path, entries),
             RootShape::Skills => {}
         }
         return;
@@ -189,15 +185,14 @@ fn scan_root(
     if !root.path.is_dir() {
         return;
     }
-    walk(root, &root.path, 0, entries, seen, visited);
+    walk(root, &root.path, 0, entries, visited);
 }
 
 fn walk(
     root: &ScanRoot,
     directory: &Path,
     depth: usize,
-    entries: &mut Vec<InvocationEntry>,
-    seen: &mut BTreeSet<PathBuf>,
+    entries: &mut Vec<ObservedEntry>,
     visited: &mut usize,
 ) {
     if depth > MAX_DEPTH || entries.len() >= MAX_ENTRIES || *visited >= MAX_VISITED_PATHS {
@@ -206,7 +201,7 @@ fn walk(
     if root.shape == RootShape::Skills {
         let definition = directory.join("SKILL.md");
         if definition.is_file() {
-            push_markdown(root, &definition, Some(directory), entries, seen);
+            push_markdown(root, &definition, Some(directory), entries);
             return;
         }
     }
@@ -229,20 +224,20 @@ fn walk(
             continue;
         };
         if file_type.is_dir() {
-            walk(root, &path, depth.saturating_add(1), entries, seen, visited);
+            walk(root, &path, depth.saturating_add(1), entries, visited);
         } else if file_type.is_symlink() && path.is_dir() && root.shape == RootShape::Skills {
             let definition = path.join("SKILL.md");
             if definition.is_file() {
-                push_markdown(root, &definition, Some(&path), entries, seen);
+                push_markdown(root, &definition, Some(&path), entries);
             }
         } else if path.extension().and_then(|extension| extension.to_str()) == Some(extension(root))
         {
             match root.shape {
                 RootShape::Skills => {}
                 RootShape::MarkdownCommands | RootShape::MarkdownAgents => {
-                    push_markdown(root, &path, None, entries, seen);
+                    push_markdown(root, &path, None, entries);
                 }
-                RootShape::TomlAgents => push_toml(root, &path, entries, seen),
+                RootShape::TomlAgents => push_toml(root, &path, entries),
             }
         }
     }
@@ -259,8 +254,7 @@ fn push_markdown(
     root: &ScanRoot,
     definition: &Path,
     skill_directory: Option<&Path>,
-    entries: &mut Vec<InvocationEntry>,
-    seen: &mut BTreeSet<PathBuf>,
+    entries: &mut Vec<ObservedEntry>,
 ) {
     let Ok(file_metadata) = fs::metadata(definition) else {
         return;
@@ -314,28 +308,14 @@ fn push_markdown(
             metadata.description,
             Vec::new(),
             entries,
-            seen,
         );
         return;
     }
     let forms = forms(root, &name);
-    push(
-        root,
-        definition,
-        name,
-        metadata.description,
-        forms,
-        entries,
-        seen,
-    );
+    push(root, definition, name, metadata.description, forms, entries);
 }
 
-fn push_toml(
-    root: &ScanRoot,
-    definition: &Path,
-    entries: &mut Vec<InvocationEntry>,
-    seen: &mut BTreeSet<PathBuf>,
-) {
+fn push_toml(root: &ScanRoot, definition: &Path, entries: &mut Vec<ObservedEntry>) {
     let Some(metadata) = metadata::toml_agent(definition) else {
         return;
     };
@@ -352,7 +332,6 @@ fn push_toml(
         metadata.description,
         Vec::new(),
         entries,
-        seen,
     );
 }
 
@@ -362,25 +341,24 @@ fn push(
     name: String,
     description: Option<String>,
     forms: Vec<InvocationForm>,
-    entries: &mut Vec<InvocationEntry>,
-    seen: &mut BTreeSet<PathBuf>,
+    entries: &mut Vec<ObservedEntry>,
 ) {
     let Ok(canonical_path) = fs::canonicalize(definition) else {
         return;
     };
-    if !seen.insert(canonical_path.clone()) {
-        return;
-    }
-    entries.push(InvocationEntry {
-        name,
-        description,
-        kind: root.kind,
-        scope: root.scope,
-        source: root.harness,
-        forms,
-        canonical_path,
-        precedence: root.precedence,
-    });
+    entries.push(consolidate::observe(
+        root,
+        InvocationEntry {
+            name,
+            description,
+            kind: root.kind,
+            scope: root.scope,
+            source: root.harness,
+            forms,
+            canonical_path,
+            precedence: root.precedence,
+        },
+    ));
 }
 
 fn forms(root: &ScanRoot, name: &str) -> Vec<InvocationForm> {
@@ -420,6 +398,7 @@ fn forms(root: &ScanRoot, name: &str) -> Vec<InvocationForm> {
                     root.harness
                 },
                 token,
+                precedence: root.precedence,
             }]
         })
         .unwrap_or_default()

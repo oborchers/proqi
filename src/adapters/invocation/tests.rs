@@ -126,6 +126,13 @@ fn symlinks_are_canonicalized_and_invalid_or_large_metadata_is_skipped() {
             .count(),
         1
     );
+    let linked = result
+        .project
+        .iter()
+        .find(|entry| entry.name == "linked")
+        .expect("linked skill");
+    assert_eq!(linked.forms.len(), 1);
+    assert_eq!(linked.forms[0].token, "$linked");
     assert!(result.project.iter().all(|entry| entry.name != "huge"));
     assert!(
         result
@@ -133,6 +140,115 @@ fn symlinks_are_canonicalized_and_invalid_or_large_metadata_is_skipped() {
             .iter()
             .all(|entry| !entry.name.contains(char::is_control))
     );
+}
+
+#[cfg(unix)]
+#[test]
+fn claude_skill_symlink_into_project_agents_root_retains_both_forms() {
+    let fixture = TempDir::new().expect("tempdir");
+    let home = fixture.path().join("home");
+    let cwd = fixture.path().join("repo");
+    write(&cwd.join(".git/HEAD"), "ref: refs/heads/main\n");
+    let agent_skill = cwd.join(".agents/skills/shared");
+    write(
+        &agent_skill.join("SKILL.md"),
+        "---\nname: shared\ndescription: Shared skill\n---\nbody",
+    );
+    fs::create_dir_all(cwd.join(".claude/skills")).expect("claude skills root");
+    std::os::unix::fs::symlink(&agent_skill, cwd.join(".claude/skills/shared"))
+        .expect("claude skill alias");
+
+    let result = discover(&home, &cwd);
+    let [entry] = result.project.as_slice() else {
+        panic!("one shared project skill");
+    };
+    assert_eq!(entry.source, InvocationHarness::AgentSkills);
+    assert_eq!(entry.precedence, 20);
+    assert_eq!(
+        entry
+            .forms
+            .iter()
+            .map(|form| (form.token.as_str(), form.harness, form.precedence))
+            .collect::<Vec<_>>(),
+        vec![
+            ("$shared", InvocationHarness::Codex, 20),
+            ("/shared", InvocationHarness::ClaudeCode, 25),
+        ]
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn symlinked_global_claude_skills_root_retains_harness_precedence() {
+    let fixture = TempDir::new().expect("tempdir");
+    let home = fixture.path().join("home");
+    let cwd = fixture.path().join("repo");
+    write(&cwd.join(".git/HEAD"), "ref: refs/heads/main\n");
+    write(
+        &home.join(".agents/skills/shared/SKILL.md"),
+        "---\nname: shared\ndescription: Shared skill\n---\nbody",
+    );
+    fs::create_dir_all(home.join(".claude")).expect("claude root");
+    std::os::unix::fs::symlink(home.join(".agents/skills"), home.join(".claude/skills"))
+        .expect("claude skills alias");
+
+    let result = discover(&home, &cwd);
+    let [entry] = result.global.as_slice() else {
+        panic!("one shared global skill");
+    };
+    assert_eq!(entry.source, InvocationHarness::AgentSkills);
+    assert_eq!(entry.precedence, 5);
+    assert_eq!(entry.forms[0].token, "/shared");
+    assert_eq!(entry.forms[0].precedence, 5);
+    assert_eq!(entry.forms[1].token, "$shared");
+    assert_eq!(entry.forms[1].precedence, 40);
+}
+
+#[test]
+fn copied_agent_and_claude_skills_remain_independent() {
+    let fixture = TempDir::new().expect("tempdir");
+    let home = fixture.path().join("home");
+    let cwd = fixture.path().join("repo");
+    write(&cwd.join(".git/HEAD"), "ref: refs/heads/main\n");
+    for root in [".agents/skills", ".claude/skills"] {
+        write(
+            &cwd.join(root).join("shared/SKILL.md"),
+            "---\nname: shared\ndescription: Shared skill\n---\nbody",
+        );
+    }
+
+    let result = discover(&home, &cwd);
+    assert_eq!(result.project.len(), 2);
+    assert_ne!(
+        result.project[0].canonical_path,
+        result.project[1].canonical_path
+    );
+    assert_eq!(result.project[0].forms[0].token, "$shared");
+    assert_eq!(result.project[1].forms[0].token, "/shared");
+}
+
+#[cfg(unix)]
+#[test]
+fn reverse_agent_symlink_does_not_fabricate_a_shared_skill() {
+    let fixture = TempDir::new().expect("tempdir");
+    let home = fixture.path().join("home");
+    let cwd = fixture.path().join("repo");
+    write(&cwd.join(".git/HEAD"), "ref: refs/heads/main\n");
+    let claude_skill = cwd.join(".claude/skills/shared");
+    write(
+        &claude_skill.join("SKILL.md"),
+        "---\nname: shared\ndescription: Shared skill\n---\nbody",
+    );
+    fs::create_dir_all(cwd.join(".agents/skills")).expect("agent skills root");
+    std::os::unix::fs::symlink(&claude_skill, cwd.join(".agents/skills/shared"))
+        .expect("reverse alias");
+
+    let result = discover(&home, &cwd);
+    let [entry] = result.project.as_slice() else {
+        panic!("one canonicalized skill");
+    };
+    assert_eq!(entry.forms.len(), 1);
+    assert_eq!(entry.forms[0].token, "$shared");
 }
 
 #[test]

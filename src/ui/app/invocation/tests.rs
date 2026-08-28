@@ -32,7 +32,7 @@ mod contract {
 
     use crate::ui::BoardApp;
 
-    fn app(content: &str, cwd: &Path) -> (BoardApp, FakeIdGenerator, FakeClock) {
+    pub(super) fn app(content: &str, cwd: &Path) -> (BoardApp, FakeIdGenerator, FakeClock) {
         let mut ids = FakeIdGenerator::new(1_900_000_000_000);
         let mut session = Session::new(ids.session_id(), cwd.to_owned(), Timestamp::from_millis(1))
             .expect("session");
@@ -70,13 +70,14 @@ mod contract {
             forms: vec![InvocationForm {
                 harness: InvocationHarness::Codex,
                 token: token.to_owned(),
+                precedence: 10,
             }],
             canonical_path: PathBuf::from(format!("/fixture/{}", &token[1..])),
             precedence: 10,
         }
     }
 
-    fn install(app: &mut BoardApp, cwd: &Path, entries: Vec<InvocationEntry>) {
+    pub(super) fn install(app: &mut BoardApp, cwd: &Path, entries: Vec<InvocationEntry>) {
         let effects = app.refresh_invocations();
         let [crate::application::Effect::DiscoverInvocations(request)] = effects.as_slice() else {
             panic!("refresh effect");
@@ -89,7 +90,7 @@ mod contract {
         }));
     }
 
-    fn target(harness: &str) -> AgentTarget {
+    pub(super) fn target(harness: &str) -> AgentTarget {
         let source = PaneContext {
             workspace_id: "w1".to_owned(),
             tab_id: "w1:t1".to_owned(),
@@ -164,7 +165,7 @@ mod contract {
                 app.complete_agent_discovery(Ok(vec![target(harness)]));
                 assert_eq!(
                     app.invocation_view().expect("starter popup").1,
-                    vec![format!("{token}  Shared Command · Codex/Claude Code")]
+                    vec![format!("{token}  Shared Command")]
                 );
                 app.handle(UiInput::Key(UiKey::Enter), &mut ids, &clock);
                 assert_eq!(
@@ -205,10 +206,7 @@ mod contract {
         supported.open_invocation_picker();
         assert_eq!(
             supported.invocation_view().expect("manual picker").1,
-            vec![
-                "/goal  Shared Command · Codex/Claude Code",
-                "/plan  Shared Command · Codex/Claude Code",
-            ]
+            vec!["/goal  Shared Command", "/plan  Shared Command",]
         );
 
         let (mut unsupported, _, _) = app("/pl", cwd.path());
@@ -290,7 +288,7 @@ mod contract {
         let labels = app.invocation_view().expect("typed results").1;
         assert!(labels.iter().any(|label| label.contains("Project Skill")));
         assert!(labels.iter().any(|label| label.contains("Project Command")));
-        assert!(labels.iter().all(|label| label.contains("Claude Code")));
+        assert!(labels.iter().all(|label| label.contains("Claude")));
     }
 
     #[test]
@@ -299,9 +297,11 @@ mod contract {
         let (mut app, _, _) = app("/pl", cwd.path());
         let mut project = entry("/plan", InvocationKind::Skill, InvocationScope::Project);
         project.precedence = 25;
+        project.forms[0].precedence = 25;
         project.canonical_path = PathBuf::from("/fixture/project-plan");
         let mut global = entry("/plan", InvocationKind::Skill, InvocationScope::Global);
         global.precedence = 5;
+        global.forms[0].precedence = 5;
         global.canonical_path = PathBuf::from("/fixture/global-plan");
         let refresh = app.refresh_invocations();
         let [crate::application::Effect::DiscoverInvocations(request)] = refresh.as_slice() else {
@@ -490,3 +490,6 @@ mod contract {
         insta::assert_snapshot!("invocation_completion_shallow", completion_snapshot(28, 6));
     }
 }
+
+#[path = "alias_tests.rs"]
+mod alias_tests;
