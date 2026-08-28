@@ -1,0 +1,16 @@
+---
+source: src/ui/app/invocation/tests.rs
+expression: "completion_snapshot(40, 12)"
+---
+00││
+01│┌ discovered invocations ────────────[x]│
+02││›$pl                                  ││
+03││$plan  Project Skill                  ││
+04││$plugin  Global Skill                 ││
+05│└──────────────────────────────────────┘│
+06││
+07││
+08││
+09│  fixture│
+10│  1 thought · edit · saved│
+11│  Esc Board  : Commands  ? Shortcuts│

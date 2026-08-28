@@ -101,6 +101,9 @@ impl BoardApp {
             | UiKey::Cut
             | UiKey::Duplicate
             | UiKey::Quit
+            | UiKey::Tab
+            | UiKey::PickerPrevious
+            | UiKey::PickerNext
             | UiKey::Move { .. } => Vec::new(),
         }
     }
@@ -240,7 +243,10 @@ impl BoardApp {
             | UiKey::Copy
             | UiKey::Cut
             | UiKey::PasteClipboard
-            | UiKey::Duplicate => return Vec::new(),
+            | UiKey::Duplicate
+            | UiKey::Tab
+            | UiKey::PickerPrevious
+            | UiKey::PickerNext => return Vec::new(),
         };
         let movement = match &command {
             EditCommand::Move {

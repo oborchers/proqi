@@ -44,6 +44,7 @@ manual clipboard handoff.
 | --- | --- |
 | Capture the next thought | Paste in board mode or click `+ New thought` to create and focus it |
 | Edit without compromise | Multiline Unicode editing, selection, logical-line deletion, and persistent editor undo |
+| Reuse local agent tooling | Complete discovered skills, commands, and invokable agents while authoring without executing them |
 | Keep prompts flexible | Reorder or duplicate by keyboard, mouse, or drag, then collapse long context without changing its content |
 | Act on several prompts | Select thoughts with `Space`, then copy, cut, delete, collapse, or submit them as one ordered prompt |
 | Survive interruption | Autosave, exact resume guidance, session search, recovery export, and undo after restart |
@@ -202,6 +203,10 @@ fallbacks remain available when a terminal cannot report a modifier.
 | `Shift+Primary+Z` | Redo an edit |
 | `Primary+V` | Read the native clipboard |
 | `↑` / `↓` twice at a boundary | Return to the board and focus the adjacent thought |
+| Type `$name`, `/name`, or supported `@name` | Open matching local invocation completion |
+| `↑` / `↓` or `Primary+P` / `Primary+N` | Move through invocation results |
+| `Enter`, `Tab`, click | Insert the exact invocation plus a separator as one undoable edit |
+| `Esc` | Close invocation completion without changing text |
 
 Mouse users can focus and edit thoughts, place the cursor, drag selections,
 double-click words, triple-click logical lines, extend with Shift-click, scroll,
@@ -209,6 +214,16 @@ reorder thoughts, click controls, use help, and choose verified Herdr targets.
 Holding the final click while dragging extends by complete words or logical
 lines. Moving onto folded context selects its complete canonical range.
 `Enter` expands the fold, while typing or deletion replaces it atomically.
+
+Proqi's invocation catalog is an authoring aid, not a skill executor or live
+harness integration. It refreshes bounded project and machine-global roots at
+startup, from **Refresh invocations**, and after debounced terminal focus. The
+picker labels project/global scope and Skill/Command/Agent kind. A definition is
+insertable only where its harness documents an exact user-facing token; for
+example, Claude Code agents use `@agent-name`, while Codex agent TOML files stay
+catalog-only because Codex documents natural-language delegation rather than an
+equivalent token. **Insert discovered invocation** remains available in the
+command palette. See the reviewed [compatibility table](docs/INVOCATIONS.md).
 
 ## Resume and organize sessions
 
@@ -488,6 +503,19 @@ search = "/"
 commands = ":"
 help = "?"
 quit = "q"
+```
+
+Additional local roots are optional and must state their definition kind,
+harness parser, and scope explicitly. Relative project roots resolve from the
+session cwd; global roots must be absolute. Remote roots and an
+implicit plugin scope are rejected:
+
+```toml
+[[invocation_roots]]
+path = "tooling/prompts"
+kind = "command" # skill, command, or agent
+harness = "open_code" # agent_skills, codex, claude_code, open_code, pi, configured
+scope = "project" # project or global
 ```
 
 To install a complete local theme, set `theme` to an absolute TOML path or a

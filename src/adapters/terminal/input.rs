@@ -393,6 +393,8 @@ fn translate_key(key: KeyEvent) -> Option<UiKey> {
             KeyCode::Char('z') if key.modifiers.contains(KeyModifiers::SHIFT) => Some(UiKey::Redo),
             KeyCode::Char('z') => Some(UiKey::Undo),
             KeyCode::Char('y') => Some(UiKey::Redo),
+            KeyCode::Char('p') => Some(UiKey::PickerPrevious),
+            KeyCode::Char('n') => Some(UiKey::PickerNext),
             _ => None,
         };
         if command.is_some() || matches!(key.code, KeyCode::Char(_)) {
@@ -409,6 +411,7 @@ fn translate_key(key: KeyEvent) -> Option<UiKey> {
     match key.code {
         KeyCode::Char(character) => Some(UiKey::Character(character)),
         KeyCode::Enter => Some(UiKey::Enter),
+        KeyCode::Tab | KeyCode::BackTab => Some(UiKey::Tab),
         KeyCode::Esc => Some(UiKey::Escape),
         KeyCode::Backspace => Some(UiKey::Backspace),
         KeyCode::Delete => Some(UiKey::Delete),

@@ -124,22 +124,25 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
     let termination = TerminationGuard::register()?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
     let presentation_source = format!("proqi-{}", session_lease.info().instance_id);
+    let invocation_roots = settings.invocation_roots.clone();
     let mut owned = spawn_lanes(
         control,
         store,
         coordinator,
-        cwd,
+        cwd.clone(),
         recovery_directory,
         attachment_directory,
         presentation_source,
         cache_directory,
         installation.clone(),
         session_lease.info().instance_id,
+        invocation_roots,
     );
     let mut pane_heartbeat = None;
     let shutdown = super::supervisor::ShutdownCoordinator::default();
     let check_for_updates = settings.ui.check_for_updates;
-    let mut app = BoardApp::with_settings(state, settings.ui, RopeEditorFactory);
+    let mut app =
+        BoardApp::with_settings_and_cwd(state, settings.ui, cwd.clone(), RopeEditorFactory);
     if let Some(warning) = control_warning {
         app.set_warning(warning);
     }
@@ -208,6 +211,7 @@ fn spawn_lanes(
     cache_directory: PathBuf,
     installation: Option<crate::domain::Installation>,
     initiating_instance: InstanceId,
+    invocation_roots: Vec<crate::ports::invocation::AdditionalInvocationRoot>,
 ) -> OwnedLanes {
     let cancellation = crate::adapters::process::CancellationFlag::default();
     OwnedLanes {
@@ -219,11 +223,12 @@ fn spawn_lanes(
             cwd,
             cancellation.clone(),
         ),
-        external: ExternalLane::spawn(
+        external: ExternalLane::spawn_with_invocation_roots(
             recovery_directory,
             attachment_directory,
             presentation_source,
             cancellation.clone(),
+            invocation_roots,
         ),
         update: super::update_lane::UpdateLane::spawn(
             cache_directory,
@@ -346,8 +351,11 @@ fn drive(
     let mut edit_generation = app.edit_generation();
     let mut edit_deadline = None;
     let mut agent_deadline = None;
+    let mut invocation_deadline = None;
     let mut termination_seen = false;
     enqueue_effects(app, lanes, BoardApp::discover_agents(), &mut pending)?;
+    let invocation_effects = app.refresh_invocations();
+    enqueue_effects(app, lanes, invocation_effects, &mut pending)?;
     let mut redraw = true;
     loop {
         if lanes.termination.requested() && !termination_seen {
@@ -378,6 +386,11 @@ fn drive(
         if agent_deadline.is_some_and(|deadline| Instant::now() >= deadline) {
             enqueue_effects(app, lanes, BoardApp::discover_agents(), &mut pending)?;
             agent_deadline = None;
+        }
+        if invocation_deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+            let effects = app.refresh_invocations();
+            enqueue_effects(app, lanes, effects, &mut pending)?;
+            invocation_deadline = None;
         }
         if let Some(heartbeat) = pane_heartbeat.as_mut() {
             let _refreshed = heartbeat.refresh_if_due(lanes.external);
@@ -425,6 +438,9 @@ fn drive(
                 }
                 if matches!(event, UiInput::Resize { .. }) {
                     agent_deadline = Some(Instant::now() + Duration::from_millis(250));
+                }
+                if matches!(event, UiInput::HostFocusGained) {
+                    invocation_deadline = Some(Instant::now() + Duration::from_millis(180));
                 }
                 let effects = app.handle(event, ids, &clock);
                 enqueue_effects(app, lanes, effects, &mut pending)?;

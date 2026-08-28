@@ -567,6 +567,25 @@ Edit mode behaves like a focused multiline text editor. It supports:
 - Horizontal content represented through wrapping, not a hidden horizontal
   scroll mode by default.
 - Optional external editor handoff later.
+- Best-effort completion of bounded local Skill, Command, and Agent definitions
+  where their source harness documents an exact authoring token.
+
+Invocation completion is authoring-only. Proqi never executes a discovered
+definition, reads its instruction body into the catalog, inspects a live agent
+conversation, or claims the adjacent harness has enabled it. `$`, `/`, and
+evidence-backed `@` tokens open only in edit mode and only when the token at the
+logical cursor plausibly matches an insertable catalog form. Shell variables,
+URLs, paths, fenced code, ordinary prose, board/search/palette modes, and other
+modals do not trigger the popup. Scope and conceptual kind remain visible
+without relying on color. Enter, Tab, pointer selection, and terminal-safe
+keyboard navigation insert the exact canonical token plus a separator as one
+undoable edit.
+
+Machine-global entries survive cwd changes. Project entries follow the cwd
+through the repository root with deterministic nearest-root and documented
+harness precedence. Startup, explicit command-palette refresh, and debounced
+host focus replace generation-tagged results; an older in-flight project scan
+cannot leak into a newer cwd.
 
 Leaving edit mode returns to the same board position and keeps the edited
 thought selected.

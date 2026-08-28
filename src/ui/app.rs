@@ -9,6 +9,8 @@ mod duplicate;
 mod editing;
 mod folds;
 mod help;
+mod input;
+mod invocation;
 mod palette;
 mod pending_types;
 mod pointer;
@@ -21,7 +23,10 @@ mod transfer;
 mod update;
 mod view;
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    path::PathBuf,
+};
 
 use crate::{
     application::{
@@ -36,47 +41,7 @@ use crate::{
 };
 
 use super::{HitTarget, LayoutSnapshot, PastePayload, UiSettings};
-
-/// Mouse button after terminal-backend normalization.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum PointerButton {
-    /// Primary button used for all required interactions.
-    Left,
-    /// Middle button, retained for portable event normalization.
-    Middle,
-    /// Secondary button, never required by Proqi.
-    Right,
-}
-
-/// Semantic pointer event kind.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum PointerKind {
-    /// Button pressed.
-    Down(PointerButton),
-    /// Button released.
-    Up(PointerButton),
-    /// Pointer moved while a button is held.
-    Drag(PointerButton),
-    /// Pointer moved without a button.
-    Move,
-    /// Scroll toward earlier content.
-    ScrollUp,
-    /// Scroll toward later content.
-    ScrollDown,
-}
-
-/// Terminal-cell pointer location and semantic event kind.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PointerInput {
-    /// Zero-based terminal column.
-    pub column: u16,
-    /// Zero-based terminal row.
-    pub row: u16,
-    /// Normalized pointer event.
-    pub kind: PointerKind,
-    /// Whether Shift requests extension of the existing text selection.
-    pub extend_selection: bool,
-}
+pub use input::{PointerButton, PointerInput, PointerKind, UiInput, UiKey};
 
 use pending_types::{PendingEditorClipboard, PendingSubmission, SubmissionMode};
 
@@ -92,68 +57,6 @@ enum InsertionConfirmation {
     #[default]
     Idle,
     Armed,
-}
-
-/// Normalized keys accepted by the board UI.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum UiKey {
-    /// Request a clean application exit from any mode.
-    Quit,
-    /// Insert one Unicode scalar value.
-    Character(char),
-    /// Insert a line break or enter the focused thought.
-    Enter,
-    /// Return from edit mode.
-    Escape,
-    /// Delete the preceding grapheme.
-    Backspace,
-    /// Delete the following grapheme.
-    Delete,
-    /// Move logically or visually, optionally extending selection.
-    Move {
-        /// Backend-independent cursor intention.
-        movement: CursorMovement,
-        /// Whether to extend the active selection.
-        extend_selection: bool,
-    },
-    /// Select the complete thought.
-    SelectAll,
-    /// Delete the current logical line.
-    DeleteLine,
-    /// Undo in the active history scope.
-    Undo,
-    /// Redo in the active history scope.
-    Redo,
-    /// Copy the active thought or editor selection.
-    Copy,
-    /// Cut the active thought or editor selection after clipboard success.
-    Cut,
-    /// Read and paste the native clipboard.
-    PasteClipboard,
-    /// Duplicate the focused or selected thoughts below the source range.
-    Duplicate,
-}
-
-/// Input translated from a concrete terminal backend.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum UiInput {
-    /// One normalized key command.
-    Key(UiKey),
-    /// One complete bracketed or clipboard paste.
-    Paste(String),
-    /// One complete paste with adapter-derived presentation provenance.
-    PasteAnnotated(PastePayload),
-    /// Latest terminal cell dimensions.
-    Resize {
-        /// Latest reported terminal width.
-        width: u16,
-        /// Latest reported terminal height.
-        height: u16,
-    },
-    /// Terminal host focus returned to this pane.
-    HostFocusGained,
-    /// One normalized mouse or trackpad event.
-    Pointer(PointerInput),
 }
 
 /// Mutable UI state around the pure application reducer.
@@ -184,6 +87,7 @@ pub struct BoardApp {
     insertion_confirmation: InsertionConfirmation,
     edit_boundary: Option<CursorMovement>,
     palette: Option<palette::PaletteState>,
+    invocation_popup: Option<invocation::InvocationPopup>,
     search: Option<search::SearchState>,
     rename: Option<String>,
     transfer: Option<transfer::TransferState>,
@@ -200,6 +104,10 @@ pub struct BoardApp {
     update_barrier: Option<update::UpdateBarrier>,
     update_restart: Option<crate::domain::StableVersion>,
     update_prompt: Option<update::UpdatePrompt>,
+    invocation_cwd: PathBuf,
+    invocation_generation: u64,
+    invocation_global: Vec<crate::ports::invocation::InvocationEntry>,
+    invocation_project: Vec<crate::ports::invocation::InvocationEntry>,
 }
 
 impl BoardApp {
@@ -214,6 +122,17 @@ impl BoardApp {
     pub fn with_settings(
         state: AppState,
         settings: UiSettings,
+        editor_factory: impl EditorFactory + 'static,
+    ) -> Self {
+        Self::with_settings_and_cwd(state, settings, PathBuf::new(), editor_factory)
+    }
+
+    /// Construct a board with validated settings and an explicit discovery cwd.
+    #[must_use]
+    pub fn with_settings_and_cwd(
+        state: AppState,
+        settings: UiSettings,
+        invocation_cwd: PathBuf,
         editor_factory: impl EditorFactory + 'static,
     ) -> Self {
         let insertion_focus = if state.board.live_thoughts().is_empty() {
@@ -244,6 +163,7 @@ impl BoardApp {
             insertion_confirmation: InsertionConfirmation::Idle,
             edit_boundary: None,
             palette: None,
+            invocation_popup: None,
             search: None,
             rename: None,
             transfer: None,
@@ -260,6 +180,10 @@ impl BoardApp {
             update_barrier: None,
             update_restart: None,
             update_prompt: None,
+            invocation_cwd,
+            invocation_generation: 0,
+            invocation_global: Vec::new(),
+            invocation_project: Vec::new(),
         }
     }
 
@@ -274,6 +198,7 @@ impl BoardApp {
         if self.help
             || self.update_prompt.is_some()
             || self.palette.is_some()
+            || self.invocation_popup.is_some()
             || self.transfer.is_some()
             || self.rename.is_some()
             || self.search.is_some()
@@ -317,6 +242,9 @@ impl BoardApp {
         if self.palette.is_some() {
             return self.handle_palette_input(&input, ids, clock);
         }
+        if self.invocation_popup.is_some() {
+            return self.handle_invocation_input(&input, ids, clock);
+        }
         if self.transfer.is_some() {
             return self.handle_transfer_input(&input, ids, clock);
         }
@@ -334,6 +262,15 @@ impl BoardApp {
         if let Some(effects) = self.handle_failed_recovery_input(&input, ids, clock) {
             return effects;
         }
+        self.handle_primary_input(input, ids, clock)
+    }
+
+    fn handle_primary_input(
+        &mut self,
+        input: UiInput,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
         match input {
             UiInput::HostFocusGained => Self::discover_agents(),
             UiInput::Resize { .. } => {
@@ -343,11 +280,23 @@ impl BoardApp {
                 Vec::new()
             }
             UiInput::Pointer(pointer) => self.handle_pointer(pointer, ids, clock),
-            UiInput::Paste(content) => self.paste_payload(PastePayload::text(content), ids, clock),
-            UiInput::PasteAnnotated(payload) => self.paste_payload(payload, ids, clock),
+            UiInput::Paste(content) => {
+                let effects = self.paste_payload(PastePayload::text(content), ids, clock);
+                self.refresh_invocation_popup();
+                effects
+            }
+            UiInput::PasteAnnotated(payload) => {
+                let effects = self.paste_payload(payload, ids, clock);
+                self.refresh_invocation_popup();
+                effects
+            }
             UiInput::Key(key) => match self.interaction_mode() {
                 InteractionMode::Board => self.handle_board_key(key, ids, clock),
-                InteractionMode::Edit { .. } => self.handle_edit_key(key, ids, clock),
+                InteractionMode::Edit { .. } => {
+                    let effects = self.handle_edit_key(key, ids, clock);
+                    self.refresh_invocation_popup();
+                    effects
+                }
             },
         }
     }

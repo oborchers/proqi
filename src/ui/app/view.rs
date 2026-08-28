@@ -144,6 +144,12 @@ impl BoardApp {
         self.palette.as_ref().map(palette::PaletteState::view)
     }
 
+    /// Filtered discovered invocations and current selection for rendering.
+    #[must_use]
+    pub fn discovered_invocation_view(&self) -> Option<(String, Vec<String>, usize)> {
+        self.invocation_view()
+    }
+
     /// Current session-name input when the rename prompt is active.
     #[must_use]
     pub fn session_rename_view(&self) -> Option<&str> {
@@ -167,6 +173,7 @@ impl BoardApp {
                     .as_ref()
                     .map(transfer::TransferState::query_cursor)
             })
+            .or_else(|| self.invocation_query_cursor())
             .or_else(|| {
                 self.palette
                     .as_ref()
@@ -268,6 +275,7 @@ impl BoardApp {
             .palette
             .as_ref()
             .map_or(0, palette::PaletteState::match_count);
+        let invocation_items = self.invocation_match_count();
         let search_items = self.search_match_count();
         let transfer_items = self.transfer_match_count();
         let preferred_rows = if self.update_prompt.is_some() {
@@ -282,6 +290,8 @@ impl BoardApp {
             item_count.div_ceil(columns)
         } else if self.rename.is_some() {
             2
+        } else if self.invocation_popup.is_some() {
+            invocation_items.max(2)
         } else if self.palette.is_some() {
             palette_items.max(2)
         } else if self.transfer.is_some() {
@@ -295,6 +305,7 @@ impl BoardApp {
             palette_items
                 .max(search_items)
                 .max(transfer_items)
+                .max(invocation_items)
                 .max(update_items),
             preferred_rows,
         );

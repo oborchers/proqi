@@ -8,6 +8,7 @@ pub mod doctor;
 pub mod editor;
 pub(crate) mod filesystem;
 pub mod herdr;
+pub mod invocation;
 pub mod memory;
 pub mod process;
 pub mod recovery;

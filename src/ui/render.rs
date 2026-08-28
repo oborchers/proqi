@@ -58,6 +58,22 @@ pub fn render(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, th
                 theme,
             );
         }
+    } else if let Some((query, entries, selected)) = app.discovered_invocation_view() {
+        if let Some(overlay) = &layout.overlay {
+            overlays::render_picker(
+                frame,
+                overlay,
+                overlays::PickerView {
+                    title: " discovered invocations ",
+                    prompt: '›',
+                    query: &query,
+                    cursor: app.overlay_query_cursor().unwrap_or(query.len()),
+                    entries: &entries,
+                    selected,
+                },
+                theme,
+            );
+        }
     } else if let Some((query, entries, selected)) = app.palette_view() {
         if let Some(overlay) = &layout.overlay {
             overlays::render_picker(

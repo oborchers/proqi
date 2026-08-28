@@ -7,6 +7,7 @@ use crate::{
     },
     ports::{
         agent::{AgentTarget, SubmissionRequest},
+        invocation::InvocationDiscoveryRequest,
         recovery::RecoveryDocument,
         store::{OperationBatch, SubmissionAttempt, SubmissionOutcome},
         transfer::SessionTransferRequest,
@@ -35,6 +36,8 @@ pub enum Effect {
     },
     /// Discover verified adjacent agents without blocking the reducer lane.
     DiscoverAgents,
+    /// Refresh bounded authoring definitions without blocking the reducer lane.
+    DiscoverInvocations(InvocationDiscoveryRequest),
     /// Submit exact thought content through a verified semantic agent gateway.
     SubmitAgent(SubmissionRequest),
     /// Durably prepare a redacted submission attempt before external delivery.
