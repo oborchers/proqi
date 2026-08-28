@@ -15,7 +15,10 @@ use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{application::InteractionMode, ports::text_layout::wrap_rows};
 
-use super::{BoardApp, HitTarget, LayoutSnapshot, Theme, ThoughtLayout};
+use super::{
+    BoardApp, HitTarget, LayoutSnapshot, Theme, ThoughtLayout, app::InvocationChoiceView,
+    layout::OverlayLayout,
+};
 
 /// Render the complete board into one terminal frame.
 pub fn render(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, theme: &Theme) {
@@ -28,15 +31,15 @@ pub fn render(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, th
         }
     } else if let Some((query, entries, selected)) = app.search_view() {
         if let Some(overlay) = &layout.overlay {
-            overlays::render_picker(
+            render_plain_picker(
                 frame,
                 overlay,
-                overlays::PickerView {
+                app,
+                PlainPickerView {
                     title: " thoughts ",
                     prompt: '/',
-                    query: &query,
-                    cursor: app.overlay_query_cursor().unwrap_or(query.len()),
-                    entries: &entries,
+                    query,
+                    entries,
                     selected,
                 },
                 theme,
@@ -44,15 +47,29 @@ pub fn render(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, th
         }
     } else if let Some((query, entries, selected)) = app.session_transfer_view() {
         if let Some(overlay) = &layout.overlay {
-            overlays::render_picker(
+            render_plain_picker(
                 frame,
                 overlay,
-                overlays::PickerView {
+                app,
+                PlainPickerView {
                     title: " send to Proqi session ",
                     prompt: '/',
-                    query: &query,
-                    cursor: app.overlay_query_cursor().unwrap_or(query.len()),
-                    entries: &entries,
+                    query,
+                    entries,
+                    selected,
+                },
+                theme,
+            );
+        }
+    } else if let Some((query, entries, selected)) = app.discovered_invocation_view() {
+        if let Some(overlay) = &layout.overlay {
+            render_invocation_picker(
+                frame,
+                overlay,
+                app,
+                InvocationPickerView {
+                    query,
+                    entries,
                     selected,
                 },
                 theme,
@@ -60,15 +77,15 @@ pub fn render(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, th
         }
     } else if let Some((query, entries, selected)) = app.palette_view() {
         if let Some(overlay) = &layout.overlay {
-            overlays::render_picker(
+            render_plain_picker(
                 frame,
                 overlay,
-                overlays::PickerView {
+                app,
+                PlainPickerView {
                     title: " commands ",
                     prompt: ':',
-                    query: &query,
-                    cursor: app.overlay_query_cursor().unwrap_or(query.len()),
-                    entries: &entries,
+                    query,
+                    entries,
                     selected,
                 },
                 theme,
@@ -83,6 +100,84 @@ pub fn render(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, th
     {
         overlays::render_help(frame, app, overlay, theme);
     }
+}
+
+struct PlainPickerView {
+    title: &'static str,
+    prompt: char,
+    query: String,
+    entries: Vec<String>,
+    selected: usize,
+}
+
+fn render_plain_picker(
+    frame: &mut Frame<'_>,
+    overlay: &OverlayLayout,
+    app: &BoardApp,
+    picker: PlainPickerView,
+    theme: &Theme,
+) {
+    let PlainPickerView {
+        title,
+        prompt,
+        query,
+        entries,
+        selected,
+    } = picker;
+    let rows = entries
+        .iter()
+        .map(|entry| overlays::PickerRow::plain(entry))
+        .collect::<Vec<_>>();
+    overlays::render_picker(
+        frame,
+        overlay,
+        overlays::PickerView {
+            title,
+            prompt,
+            query: &query,
+            cursor: app.overlay_query_cursor().unwrap_or(query.len()),
+            entries: &rows,
+            selected,
+        },
+        theme,
+    );
+}
+
+struct InvocationPickerView {
+    query: String,
+    entries: Vec<InvocationChoiceView>,
+    selected: usize,
+}
+
+fn render_invocation_picker(
+    frame: &mut Frame<'_>,
+    overlay: &OverlayLayout,
+    app: &BoardApp,
+    picker: InvocationPickerView,
+    theme: &Theme,
+) {
+    let InvocationPickerView {
+        query,
+        entries,
+        selected,
+    } = picker;
+    let rows = entries
+        .iter()
+        .map(|entry| overlays::PickerRow::fields(&entry.token, &entry.qualifier))
+        .collect::<Vec<_>>();
+    overlays::render_picker(
+        frame,
+        overlay,
+        overlays::PickerView {
+            title: " discovered invocations ",
+            prompt: '›',
+            query: &query,
+            cursor: app.overlay_query_cursor().unwrap_or(query.len()),
+            entries: &rows,
+            selected,
+        },
+        theme,
+    );
 }
 
 fn render_board(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, theme: &Theme) {
@@ -126,6 +221,7 @@ fn render_board(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, 
         } else {
             render_thought(
                 frame,
+                app,
                 &presentation,
                 thought_layout,
                 focused || selected,
@@ -203,12 +299,14 @@ fn render_gutter(
 
 fn render_thought(
     frame: &mut Frame<'_>,
+    app: &BoardApp,
     presentation: &crate::ui::annotations::Presentation,
     layout: &ThoughtLayout,
     focused: bool,
     theme: &Theme,
 ) {
     let links = url_ranges(&presentation.content);
+    let invocations = app.invocation_ranges(&presentation.content);
     let content_rows =
         usize::from(layout.text_area.height).saturating_sub(usize::from(layout.overflow.is_some()));
     let rendered_lines = wrap_rows(
@@ -224,6 +322,7 @@ fn render_thought(
             &row.visual,
             &presentation.folds,
             &links,
+            &invocations,
             theme,
         )
     })
@@ -254,12 +353,22 @@ fn render_editor(frame: &mut Frame<'_>, app: &BoardApp, layout: &ThoughtLayout, 
     };
     let snapshot = &presentation.snapshot;
     let links = url_ranges(&snapshot.content);
+    let invocations = app.invocation_ranges(&snapshot.content);
     let visible = snapshot
         .visual_lines
         .iter()
         .skip(snapshot.scroll_row)
         .take(usize::from(layout.text_area.height))
-        .map(|line| styled_line(&snapshot.content, line, &presentation.folds, &links, theme))
+        .map(|line| {
+            styled_line(
+                &snapshot.content,
+                line,
+                &presentation.folds,
+                &links,
+                &invocations,
+                theme,
+            )
+        })
         .collect::<Vec<_>>();
     frame.render_widget(
         Paragraph::new(visible).style(Style::default().fg(theme.foreground)),
@@ -286,6 +395,7 @@ fn styled_line(
     line: &crate::ports::editor::VisualLine,
     folds: &[crate::ui::annotations::PresentedFold],
     links: &[std::ops::Range<usize>],
+    invocations: &[std::ops::Range<usize>],
     theme: &Theme,
 ) -> Line<'static> {
     let source = content
@@ -304,15 +414,16 @@ fn styled_line(
                 .iter()
                 .any(|fold| fold.collapsed && byte >= fold.start && byte < fold.end);
             let linked = links.iter().any(|range| range.contains(&byte));
+            let invocation = invocations.iter().any(|range| range.contains(&byte));
             column = column.saturating_add(width);
-            let mut style = Style::default().fg(if folded {
+            let mut style = Style::default().fg(if folded || invocation {
                 theme.annotation
             } else if linked {
                 theme.link
             } else {
                 theme.foreground
             });
-            if folded {
+            if folded || invocation {
                 style = style.add_modifier(Modifier::BOLD);
             }
             if linked {

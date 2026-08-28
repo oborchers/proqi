@@ -56,6 +56,12 @@ pub enum UiKey {
     PrimaryCharacter(char),
     /// Insert a line break or enter the focused thought.
     Enter,
+    /// Accept a focused authoring completion without inserting a literal tab.
+    Tab,
+    /// Move to the previous bounded picker result.
+    PickerPrevious,
+    /// Move to the next bounded picker result.
+    PickerNext,
     /// Return from edit mode.
     Escape,
     /// Delete the preceding grapheme.

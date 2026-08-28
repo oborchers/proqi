@@ -149,15 +149,7 @@ impl BoardApp {
             Some(HitTarget::ExitEdit) => self.finish_edit(ids, clock),
             Some(HitTarget::Retry) => self.retry_persistence(),
             Some(HitTarget::ExportRecovery) => self.export_recovery(ids, clock),
-            Some(HitTarget::PaletteItem(index)) => {
-                if self.search.is_some() {
-                    self.execute_search_visible_index(index)
-                } else if self.transfer.is_some() {
-                    self.choose_transfer_visible(index, ids)
-                } else {
-                    self.execute_palette_visible_index(index, ids, clock)
-                }
-            }
+            Some(HitTarget::PaletteItem(index)) => self.activate_palette_item(index, ids, clock),
             Some(HitTarget::CloseOverlay) => {
                 self.close_overlay();
                 Vec::new()
@@ -166,6 +158,23 @@ impl BoardApp {
                 self.pointer_click = None;
                 Vec::new()
             }
+        }
+    }
+
+    fn activate_palette_item(
+        &mut self,
+        index: usize,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        if self.search.is_some() {
+            self.execute_search_visible_index(index)
+        } else if self.transfer.is_some() {
+            self.choose_transfer_visible(index, ids)
+        } else if self.execute_invocation_visible_index(index) {
+            Vec::new()
+        } else {
+            self.execute_palette_visible_index(index, ids, clock)
         }
     }
 

@@ -9,8 +9,42 @@ use crate::{
     },
 };
 
-use super::BoardApp;
+use super::{BoardApp, UiKey};
 use crate::ui::annotations;
+
+pub(super) fn command_for_key(key: UiKey, adjacent_fold: bool) -> Option<(EditCommand, bool)> {
+    match key {
+        UiKey::Character(character) => Some((EditCommand::InsertChar(character), false)),
+        UiKey::Enter => Some((EditCommand::InsertNewline, false)),
+        UiKey::Backspace => Some((EditCommand::DeleteBack, adjacent_fold)),
+        UiKey::Delete => Some((EditCommand::DeleteForward, adjacent_fold)),
+        UiKey::Move {
+            movement,
+            extend_selection,
+        } => Some((
+            EditCommand::Move {
+                movement,
+                extend_selection,
+            },
+            true,
+        )),
+        UiKey::SelectAll => Some((EditCommand::SelectAll, true)),
+        UiKey::DeleteLine => Some((EditCommand::DeleteLogicalLine, true)),
+        UiKey::Escape
+        | UiKey::PrimaryCharacter(_)
+        | UiKey::PrimaryShiftMove { .. }
+        | UiKey::Undo
+        | UiKey::Redo
+        | UiKey::Quit
+        | UiKey::Copy
+        | UiKey::Cut
+        | UiKey::PasteClipboard
+        | UiKey::Duplicate
+        | UiKey::Tab
+        | UiKey::PickerPrevious
+        | UiKey::PickerNext => None,
+    }
+}
 
 pub(super) struct PendingEdit {
     thought_id: ThoughtId,

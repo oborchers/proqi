@@ -9,6 +9,7 @@ mod duplicate;
 mod editing;
 mod folds;
 mod help;
+mod invocation;
 mod palette;
 mod pending_types;
 mod pointer;
@@ -23,7 +24,10 @@ mod transfer;
 mod update;
 mod view;
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    path::PathBuf,
+};
 
 use crate::{
     application::{
@@ -42,6 +46,7 @@ use super::{
     input::{PointerButton, PointerInput, PointerKind, UiInput, UiKey},
 };
 
+pub(in crate::ui) use invocation::InvocationChoiceView;
 use pending_types::{PendingEditorClipboard, PendingSubmission, SubmissionMode};
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -86,6 +91,7 @@ pub struct BoardApp {
     insertion_confirmation: InsertionConfirmation,
     edit_boundary: Option<CursorMovement>,
     palette: Option<palette::PaletteState>,
+    invocation_popup: Option<invocation::InvocationPopup>,
     search: Option<search::SearchState>,
     rename: Option<String>,
     transfer: Option<transfer::TransferState>,
@@ -103,6 +109,10 @@ pub struct BoardApp {
     update_barrier: Option<update::UpdateBarrier>,
     update_restart: Option<crate::domain::StableVersion>,
     update_prompt: Option<update::UpdatePrompt>,
+    invocation_cwd: PathBuf,
+    invocation_generation: u64,
+    invocation_global: Vec<crate::ports::invocation::InvocationEntry>,
+    invocation_project: Vec<crate::ports::invocation::InvocationEntry>,
 }
 
 impl BoardApp {
@@ -117,6 +127,17 @@ impl BoardApp {
     pub fn with_settings(
         state: AppState,
         settings: UiSettings,
+        editor_factory: impl EditorFactory + 'static,
+    ) -> Self {
+        Self::with_settings_and_cwd(state, settings, PathBuf::new(), editor_factory)
+    }
+
+    /// Construct a board with validated settings and an explicit discovery cwd.
+    #[must_use]
+    pub fn with_settings_and_cwd(
+        state: AppState,
+        settings: UiSettings,
+        invocation_cwd: PathBuf,
         editor_factory: impl EditorFactory + 'static,
     ) -> Self {
         let insertion_focus = if state.board.live_thoughts().is_empty() {
@@ -147,6 +168,7 @@ impl BoardApp {
             insertion_confirmation: InsertionConfirmation::Idle,
             edit_boundary: None,
             palette: None,
+            invocation_popup: None,
             search: None,
             rename: None,
             transfer: None,
@@ -164,6 +186,10 @@ impl BoardApp {
             update_barrier: None,
             update_restart: None,
             update_prompt: None,
+            invocation_cwd,
+            invocation_generation: 0,
+            invocation_global: Vec::new(),
+            invocation_project: Vec::new(),
         }
     }
 
@@ -178,6 +204,7 @@ impl BoardApp {
         if self.help
             || self.update_prompt.is_some()
             || self.palette.is_some()
+            || self.invocation_popup.is_some()
             || self.transfer.is_some()
             || self.rename.is_some()
             || self.search.is_some()
@@ -221,6 +248,9 @@ impl BoardApp {
         if self.palette.is_some() {
             return self.handle_palette_input(&input, ids, clock);
         }
+        if self.invocation_popup.is_some() {
+            return self.handle_invocation_input(&input, ids, clock);
+        }
         if self.transfer.is_some() {
             return self.handle_transfer_input(&input, ids, clock);
         }
@@ -238,6 +268,15 @@ impl BoardApp {
         if let Some(effects) = self.handle_failed_recovery_input(&input, ids, clock) {
             return effects;
         }
+        self.handle_primary_input(input, ids, clock)
+    }
+
+    fn handle_primary_input(
+        &mut self,
+        input: UiInput,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
         match input {
             UiInput::HostFocusGained => Self::discover_agents(),
             UiInput::Resize { .. } => {
@@ -247,11 +286,23 @@ impl BoardApp {
                 Vec::new()
             }
             UiInput::Pointer(pointer) => self.handle_pointer(pointer, ids, clock),
-            UiInput::Paste(content) => self.paste_payload(PastePayload::text(content), ids, clock),
-            UiInput::PasteAnnotated(payload) => self.paste_payload(payload, ids, clock),
+            UiInput::Paste(content) => {
+                let effects = self.paste_payload(PastePayload::text(content), ids, clock);
+                self.refresh_invocation_popup();
+                effects
+            }
+            UiInput::PasteAnnotated(payload) => {
+                let effects = self.paste_payload(payload, ids, clock);
+                self.refresh_invocation_popup();
+                effects
+            }
             UiInput::Key(key) => match self.interaction_mode() {
                 InteractionMode::Board => self.handle_board_key(key, ids, clock),
-                InteractionMode::Edit { .. } => self.handle_edit_key(key, ids, clock),
+                InteractionMode::Edit { .. } => {
+                    let effects = self.handle_edit_key(key, ids, clock);
+                    self.refresh_invocation_popup();
+                    effects
+                }
             },
         }
     }

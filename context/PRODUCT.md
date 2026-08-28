@@ -423,13 +423,18 @@ below the source range. Duplicates receive fresh identities and timestamps,
 become the new selection, and are created as one persistent undo step. Entering
 edit mode or pressing `Escape` clears the complete board selection.
 
-Copy and submission concatenate exact thought content with one blank line
-between thoughts and no generated labels. A multi-thought Herdr submission is
-one semantic prompt request, not several deliveries. For submit and remove, all
-unchanged source thoughts are removed together only after the matching accepted
-receipt is durably journaled. Every source thought is locked against TUI and CLI
-mutation from submission intent until the attempt reaches a terminal journaled
-state.
+Copy concatenates exact thought content with one blank line between thoughts
+and no generated labels. Submission does the same except for one target-aware
+shared-starter rule: when Codex or Claude Code receives several thoughts,
+`/plan` and `/goal` are recognized only as complete tokens at byte zero. The
+first thought's starter remains, and either starter is omitted from later
+thought starts in the outbound payload. In-body text and every stored thought
+remain exact. A multi-thought Herdr
+submission is one semantic prompt request, not several deliveries. For submit
+and remove, all unchanged source thoughts are removed together only after the
+matching accepted receipt is durably journaled. Every source thought is locked
+against TUI and CLI mutation from submission intent until the attempt reaches a
+terminal journaled state.
 
 ### Submit to an adjacent agent
 
@@ -584,6 +589,39 @@ Edit mode behaves like a focused multiline text editor. It supports:
 - Horizontal content represented through wrapping, not a hidden horizontal
   scroll mode by default.
 - Optional external editor handoff later.
+- Best-effort completion of bounded local Skill, Command, and Agent definitions
+  where their source harness documents an exact authoring token.
+
+Invocation completion is authoring-only. Proqi never executes a discovered
+definition, reads its instruction body into the catalog, inspects a live agent
+conversation, or claims the adjacent harness has enabled it. `$`, `/`, and
+evidence-backed `@` tokens open only in edit mode and only when the token at the
+logical cursor plausibly matches an insertable catalog form. Shell variables,
+URLs, paths, fenced code, ordinary prose, board/search/palette modes, and other
+modals do not trigger the popup. Scope and conceptual kind remain visible
+without relying on color. Enter, Tab, pointer selection, and terminal-safe
+keyboard navigation insert the exact canonical token plus a separator as one
+undoable edit.
+
+Machine-global entries survive cwd changes. Project entries follow the cwd
+through the repository root with deterministic nearest-root and documented
+harness precedence. Startup, explicit command-palette refresh, and debounced
+host focus replace generation-tagged results; an older in-flight project scan
+cannot leak into a newer cwd.
+
+A small data-driven built-in table sits beside filesystem results: `/plan` and
+`/goal` are offered as shared Commands only at byte zero when a verified
+adjacent Codex or Claude Code target exists. Exact discovered invocations and
+these shared starters use the annotation color and bold non-color cue already
+used for folded image and large-paste placeholders. Leading whitespace, another
+line, partial tokens, and in-body starter prose remain ordinary text.
+
+When a verified adjacent target maps to a documented catalog harness,
+completion and highlighting include only compatible forms; several known
+targets contribute their union. With no recognized target, Proqi retains the
+catalog-wide authoring fallback. Submission still transfers exact plain text:
+Proqi does not execute invocations or claim that a receiving harness has loaded
+a particular filesystem definition.
 
 With `smart_lists = true`, the default, `Enter` continues `-`, `*`, and `+`
 items, one-to-nine-digit ordered markers ending in `.` or `)`, and unchecked or

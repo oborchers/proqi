@@ -85,6 +85,10 @@ fn complete(
             app.complete_agent_discovery(result);
             Vec::new()
         }
+        ExternalResult::InvocationsDiscovered(result) => {
+            app.complete_invocation_discovery(result);
+            Vec::new()
+        }
         ExternalResult::AgentSubmitted {
             submission_id,
             result,

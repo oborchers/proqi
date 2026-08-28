@@ -11,6 +11,10 @@ mod recovery;
 mod reorder;
 
 #[cfg(target_os = "macos")]
+#[path = "pty/invocation.rs"]
+mod invocation;
+
+#[cfg(target_os = "macos")]
 use serde_json::Value;
 
 #[test]

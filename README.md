@@ -44,6 +44,7 @@ manual clipboard handoff.
 | --- | --- |
 | Capture the next thought | Paste in board mode or click `+ New thought` to create and focus it |
 | Edit without compromise | Multiline Unicode editing, selection, logical-line deletion, and persistent editor undo |
+| Reuse local agent tooling | Complete discovered skills, commands, and invokable agents while authoring without executing them |
 | Keep prompts flexible | Reorder or duplicate by keyboard, mouse, or drag, then collapse long context without changing its content |
 | Act on several prompts | Select thoughts with `Space`, then copy, cut, delete, collapse, or submit them as one ordered prompt |
 | Survive interruption | Autosave, exact resume guidance, session search, recovery export, and undo after restart |
@@ -205,6 +206,10 @@ fallbacks remain available when a terminal cannot report a modifier.
 | `Primary+V` | Read the native clipboard |
 | `Enter` | Continue `-`, `*`, `+`, ordered, and task list items; exit an empty top-level item |
 | `↑` / `↓` twice at a boundary | Return to the board and focus the adjacent thought |
+| Type `$name`, `/name`, or supported `@name` | Open matching local invocation completion |
+| `↑` / `↓` or `Primary+P` / `Primary+N` | Move through invocation results |
+| `Enter`, `Tab`, click | Insert the exact invocation plus a separator as one undoable edit |
+| `Esc` | Close invocation completion without changing text |
 
 Mouse users can focus and edit thoughts, place the cursor, drag selections,
 double-click words, triple-click logical lines, extend text or board ranges with Shift-click, scroll,
@@ -216,6 +221,30 @@ Press `Esc`, open `:`, and choose `Insert plain newline` to bypass list
 continuation without relying on a terminal modifier; mouse users can open the
 palette directly while editing. Set `smart_lists = false` to keep every ordinary
 editor `Enter` plain.
+
+Proqi's invocation catalog is an authoring aid, not a skill executor or live
+harness integration. It refreshes bounded project and machine-global roots at
+startup, from **Refresh invocations**, and after debounced terminal focus. The
+picker labels project/global scope and Skill/Command/Agent kind. A definition is
+insertable only where its harness documents an exact user-facing token; for
+example, Claude Code agents use `@agent-name`, while Codex agent TOML files stay
+catalog-only because Codex documents natural-language delegation rather than an
+equivalent token. **Insert discovered invocation** remains available in the
+command palette. A Claude skill symlink into the corresponding `.agents/skills`
+definition retains both harness forms; independent copy-mode installations stay
+separate because either copy may diverge. Exact compatible invocations in
+thought text use the same annotation color and bold cue as folded image and
+large-paste placeholders. A verified recognized adjacent harness filters
+insertable forms to that harness; without one, Proqi keeps the catalog-wide
+authoring fallback. See the reviewed [compatibility table](docs/INVOCATIONS.md).
+
+The small shared built-in table contains `/plan` and `/goal`, both documented by
+Codex and Claude Code. With a verified adjacent target for either harness, they
+appear with the compact `Shared Command` label only at the first byte of a
+thought. When several thoughts are submitted together, only a complete shared
+starter on the first thought is retained; `/plan` or `/goal` starters on later
+thoughts are omitted from the outbound prompt, while stored and in-body text
+remain unchanged.
 
 ## Resume and organize sessions
 
@@ -498,6 +527,19 @@ search = "/"
 commands = ":"
 help = "?"
 quit = "q"
+```
+
+Additional local roots are optional and must state their definition kind,
+harness parser, and scope explicitly. Relative project roots resolve from the
+session cwd; global roots must be absolute. Remote roots and an
+implicit plugin scope are rejected:
+
+```toml
+[[invocation_roots]]
+path = "tooling/prompts"
+kind = "command" # skill, command, or agent
+harness = "open_code" # agent_skills, codex, claude_code, open_code, pi, configured
+scope = "project" # project or global
 ```
 
 The command palette always offers **Copy session ID** and **Copy resume

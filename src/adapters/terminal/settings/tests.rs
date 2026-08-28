@@ -2,7 +2,10 @@ use std::fs;
 
 use ratatui_core::style::Color;
 
-use crate::ui::{BoardDensity, Theme, ThemePreference};
+use crate::{
+    ports::invocation::{InvocationHarness, InvocationKind, InvocationScope},
+    ui::{BoardDensity, Theme, ThemePreference},
+};
 
 use super::{ThemeSource, load_settings};
 
@@ -61,6 +64,41 @@ fn existing_settings_remain_compatible() {
     assert!(settings.ui.smart_lists);
     assert_eq!(settings.ui.density, BoardDensity::Compact);
     assert_eq!(settings.theme.base, ThemePreference::Dark);
+}
+
+#[test]
+fn additional_invocation_roots_require_explicit_typed_metadata() {
+    let directory = tempfile::tempdir().expect("config directory");
+    fs::write(
+        directory.path().join("config.toml"),
+        "[[invocation_roots]]\npath = 'tooling/prompts'\nkind = 'command'\nharness = 'open_code'\nscope = 'project'\n",
+    )
+    .expect("write config");
+    let settings = load_settings(directory.path()).expect("settings");
+    assert_eq!(settings.invocation_roots.len(), 1);
+    let root = &settings.invocation_roots[0];
+    assert_eq!(root.kind, InvocationKind::Command);
+    assert_eq!(root.harness, InvocationHarness::OpenCode);
+    assert_eq!(root.scope, InvocationScope::Project);
+}
+
+#[test]
+fn remote_or_plugin_scoped_additional_roots_fail_closed() {
+    for (path, scope) in [
+        ("https://example.com/skills", "global"),
+        ("skills", "plugin"),
+        ("skills", "global"),
+    ] {
+        let directory = tempfile::tempdir().expect("config directory");
+        fs::write(
+            directory.path().join("config.toml"),
+            format!(
+                "[[invocation_roots]]\npath = '{path}'\nkind = 'skill'\nharness = 'configured'\nscope = '{scope}'\n"
+            ),
+        )
+        .expect("write config");
+        assert!(load_settings(directory.path()).is_err());
+    }
 }
 
 #[test]

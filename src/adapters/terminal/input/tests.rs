@@ -148,6 +148,23 @@ fn primary_clipboard_shortcuts_do_not_reuse_quit() {
 }
 
 #[test]
+fn invocation_picker_keys_are_normalized_without_literal_editor_input() {
+    for (code, expected) in [
+        (KeyCode::Char('p'), UiKey::PickerPrevious),
+        (KeyCode::Char('n'), UiKey::PickerNext),
+    ] {
+        assert_eq!(
+            translate(Event::Key(KeyEvent::new(code, KeyModifiers::CONTROL))),
+            Some(UiInput::Key(expected))
+        );
+    }
+    assert_eq!(
+        translate(Event::Key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE))),
+        Some(UiInput::Key(UiKey::Tab))
+    );
+}
+
+#[test]
 fn release_is_ignored_and_repeat_preserves_auto_repeat() {
     let release = Event::Key(KeyEvent::new_with_kind(
         KeyCode::Char('n'),

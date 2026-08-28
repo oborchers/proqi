@@ -9,7 +9,7 @@ use crate::{
     },
 };
 
-use super::{BoardApp, PastePayload, UiKey};
+use super::{BoardApp, PastePayload, UiKey, editing};
 use crate::ui::settings::BoardCommand;
 
 impl BoardApp {
@@ -113,6 +113,9 @@ impl BoardApp {
             | UiKey::Cut
             | UiKey::Duplicate
             | UiKey::Quit
+            | UiKey::Tab
+            | UiKey::PickerPrevious
+            | UiKey::PickerNext
             | UiKey::PrimaryCharacter(_)
             | UiKey::PrimaryShiftMove { .. }
             | UiKey::Move { .. } => Vec::new(),
@@ -256,33 +259,8 @@ impl BoardApp {
             UiKey::Delete => self.delete_adjacent_fold(false),
             _ => false,
         };
-        let (command, boundary) = match key {
-            UiKey::Character(character) => (EditCommand::InsertChar(character), false),
-            UiKey::Enter => (EditCommand::InsertNewline, false),
-            UiKey::Backspace => (EditCommand::DeleteBack, adjacent_fold),
-            UiKey::Delete => (EditCommand::DeleteForward, adjacent_fold),
-            UiKey::Move {
-                movement,
-                extend_selection,
-            } => (
-                EditCommand::Move {
-                    movement,
-                    extend_selection,
-                },
-                true,
-            ),
-            UiKey::SelectAll => (EditCommand::SelectAll, true),
-            UiKey::DeleteLine => (EditCommand::DeleteLogicalLine, true),
-            UiKey::Escape
-            | UiKey::PrimaryCharacter(_)
-            | UiKey::PrimaryShiftMove { .. }
-            | UiKey::Undo
-            | UiKey::Redo
-            | UiKey::Quit
-            | UiKey::Copy
-            | UiKey::Cut
-            | UiKey::PasteClipboard
-            | UiKey::Duplicate => return Vec::new(),
+        let Some((command, boundary)) = editing::command_for_key(key, adjacent_fold) else {
+            return Vec::new();
         };
         let movement = match &command {
             EditCommand::Move {

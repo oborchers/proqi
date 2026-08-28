@@ -365,6 +365,50 @@ error return, panic, and termination signals supported by the platform.
 wall-clock time, identifiers, platform directories, or subprocess execution
 would otherwise make tests nondeterministic.
 
+`InvocationCatalog` is a blocking port implemented by the bounded filesystem
+adapter and owned by the existing external worker lane. Its durable conceptual
+model separates Skill, Command, and Agent from harness provenance, project /
+global / plugin scope, and optional evidence-backed invocation forms. This
+prevents a Claude-specific rewrite when another documented harness adds an
+equivalent layer, and prevents catalog-only definitions from being fabricated
+into insertable tokens.
+
+Discovery reads only small metadata prefixes and never stores instruction
+bodies. The adapter caps roots, ancestor depth, recursion, entries, file sizes,
+metadata strings, plugin registries, and manifest component paths. It follows
+only explicitly encountered symlink definitions, canonicalizes physical paths
+for deduplication, and never crawls the home directory. Compatibility roots are
+checked in; extra roots enter through validated configuration with explicit
+kind, harness, and scope. Project and global vectors remain separate.
+
+The UI owner assigns a generation and cwd to each refresh. Results update state
+only when both still match, so stale external work cannot leak an older project
+catalog. Completion derives a byte range from the exact editor snapshot, moves
+the existing editor selection to that range, and performs one semantic paste.
+The resulting `TextChangeSet` continues through annotation rebasing and editor
+undo without a parallel text-mutation contract.
+
+The UI composes a small data-driven shared-command table beside catalog results:
+`/plan` and `/goal` are available only at byte zero when verified adjacent Codex
+or Claude Code targets exist. They remain ordinary Command choices rather than
+fabricated filesystem evidence. Outbound multi-thought assembly for either
+harness keeps the complete leading shared starter only on the first thought and
+removes a `/plan` or `/goal` token plus one separator from later thought starts.
+It never rewrites stored sources, partial names, leading whitespace, or in-body
+text.
+
+Invocation forms carry their receiving harness independently from the source
+ecosystem. When verified adjacent targets map to known harnesses, completion and
+render-only highlighting filter forms to that target set; with no known target,
+the authoring catalog remains available. Highlight ranges are recomputed from
+exact bounded tokens and decorate terminal cells with the existing annotation
+semantic role without changing editor text, cursor geometry, persistence, or
+undo. Forms retain harness-specific precedence. A `.claude/skills` symlink into
+the corresponding physical `.agents/skills` definition contributes its Claude
+form to the Agent Skills-owned entry, while independent copies remain separate
+definitions. Outbound submission remains plain text and therefore does not
+claim live harness enablement.
+
 An explicitly created empty thought is an ordinary durable domain entity. Its
 creation is committed through the same board operation as populated thoughts,
 so it participates in session ordering, resume, undo, redo, and crash recovery.

@@ -6,6 +6,7 @@ pub mod clipboard;
 pub mod control;
 pub mod editor;
 pub mod environment;
+pub mod invocation;
 pub mod recovery;
 pub mod runtime;
 pub mod store;

@@ -7,6 +7,9 @@ use std::{
 
 use serde::Deserialize;
 
+use crate::ports::invocation::{
+    AdditionalInvocationRoot, InvocationHarness, InvocationKind, InvocationScope,
+};
 use crate::ui::{
     BoardDensity, KeyBindings, KeyboardEnhancement, ThemeOverrides, ThemePreference, ThemeRecipe,
     UiSettings,
@@ -22,6 +25,7 @@ const THEME_SCHEMA_VERSION: u16 = 1;
 pub(crate) struct LoadedSettings {
     pub(crate) ui: UiSettings,
     pub(crate) theme: ThemeRecipe,
+    pub(crate) invocation_roots: Vec<AdditionalInvocationRoot>,
     theme_source: ThemeSource,
 }
 
@@ -52,6 +56,7 @@ struct SettingsDocument {
     keyboard_enhancement: KeyboardEnhancement,
     keybindings: KeyBindings,
     density: BoardDensity,
+    invocation_roots: Vec<InvocationRootDocument>,
 }
 
 impl Default for SettingsDocument {
@@ -65,8 +70,18 @@ impl Default for SettingsDocument {
             keyboard_enhancement: KeyboardEnhancement::default(),
             keybindings: KeyBindings::default(),
             density: BoardDensity::default(),
+            invocation_roots: Vec::new(),
         }
     }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct InvocationRootDocument {
+    path: String,
+    kind: InvocationKind,
+    harness: InvocationHarness,
+    scope: InvocationScope,
 }
 
 #[derive(Debug, Deserialize)]
@@ -114,11 +129,46 @@ fn parse_settings(config_dir: &Path, content: &str) -> Result<LoadedSettings, Te
         density: document.density,
     };
     let (theme, theme_source) = load_theme(config_dir, &document.theme, document.theme_overrides)?;
+    let invocation_roots = validate_invocation_roots(document.invocation_roots)?;
     Ok(LoadedSettings {
         ui,
         theme,
+        invocation_roots,
         theme_source,
     })
+}
+
+fn validate_invocation_roots(
+    roots: Vec<InvocationRootDocument>,
+) -> Result<Vec<AdditionalInvocationRoot>, TerminalError> {
+    if roots.len() > 32 {
+        return Err(TerminalError::Config(
+            "invocation_roots supports at most 32 entries".to_owned(),
+        ));
+    }
+    roots
+        .into_iter()
+        .map(|root| {
+            if root.path.trim().is_empty()
+                || root.path.chars().count() > 1_024
+                || root.path.chars().any(char::is_control)
+                || root.path.contains("://")
+                || root.scope == InvocationScope::Plugin
+                || (root.scope == InvocationScope::Global && !Path::new(&root.path).is_absolute())
+            {
+                return Err(TerminalError::Config(
+                    "each invocation root needs a local path; global roots must be absolute"
+                        .to_owned(),
+                ));
+            }
+            Ok(AdditionalInvocationRoot {
+                path: PathBuf::from(root.path),
+                kind: root.kind,
+                harness: root.harness,
+                scope: root.scope,
+            })
+        })
+        .collect()
 }
 
 fn load_theme(

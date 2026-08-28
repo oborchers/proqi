@@ -12,6 +12,7 @@ use crate::{
         attachment::FileAttachmentStore,
         clipboard::PlatformClipboard,
         herdr::HerdrGateway,
+        invocation::FilesystemInvocationCatalog,
         process::{CancellationFlag, SystemProcessRunner},
         recovery::FileRecoveryExporter,
     },
@@ -24,6 +25,10 @@ use crate::{
         },
         attachment::AttachmentStore,
         clipboard::{Clipboard, ClipboardContent, ClipboardError, ClipboardWrite},
+        invocation::{
+            AdditionalInvocationRoot, InvocationCatalog, InvocationCatalogError,
+            InvocationDiscovery, InvocationDiscoveryRequest,
+        },
         recovery::{RecoveryDocument, RecoveryError, RecoveryExporter},
     },
     ui::PastePayload,
@@ -36,6 +41,7 @@ use super::{
 
 enum ExternalRequest {
     DiscoverAgents,
+    DiscoverInvocations(InvocationDiscoveryRequest),
     SubmitAgent(Box<SubmissionRequest>),
     PublishPane {
         pane_id: String,
@@ -65,6 +71,7 @@ pub(super) enum ExternalResult {
         pane_id: Option<String>,
         result: Result<Vec<AgentTarget>, AgentError>,
     },
+    InvocationsDiscovered(Result<InvocationDiscovery, InvocationCatalogError>),
     AgentSubmitted {
         submission_id: crate::domain::SubmissionId,
         result: Box<Result<SubmissionReceipt, AgentError>>,
@@ -102,11 +109,12 @@ pub(super) struct ExternalLane {
 }
 
 impl ExternalLane {
-    pub(super) fn spawn(
+    pub(super) fn spawn_with_invocation_roots(
         recovery_directory: PathBuf,
         attachment_directory: PathBuf,
         presentation_source: String,
         cancellation: CancellationFlag,
+        invocation_roots: Vec<AdditionalInvocationRoot>,
     ) -> Self {
         let (request_sender, request_receiver) = sync_channel(32);
         let (result_sender, result_receiver) = sync_channel(32);
@@ -121,6 +129,7 @@ impl ExternalLane {
                     attachment_directory,
                     presentation_source,
                     cancellation,
+                    invocation_roots,
                 );
             });
         });
@@ -135,6 +144,9 @@ impl ExternalLane {
     pub(super) fn send(&self, effect: &Effect) -> Result<bool, TerminalError> {
         let request = match effect {
             Effect::DiscoverAgents => ExternalRequest::DiscoverAgents,
+            Effect::DiscoverInvocations(request) => {
+                ExternalRequest::DiscoverInvocations(request.clone())
+            }
             Effect::SubmitAgent(request) => ExternalRequest::SubmitAgent(Box::new(request.clone())),
             Effect::WriteClipboard {
                 request_id,
@@ -245,15 +257,20 @@ fn external_loop(
     attachment_directory: PathBuf,
     presentation_source: String,
     cancellation: CancellationFlag,
+    invocation_roots: Vec<AdditionalInvocationRoot>,
 ) {
     let mut clipboard = PlatformClipboard::new();
     let mut recovery = FileRecoveryExporter::new(recovery_directory);
     let mut attachments = FileAttachmentStore::new(attachment_directory);
     let runner = SystemProcessRunner::cancellable(cancellation);
     let mut agents = HerdrGateway::from_environment_with_runner(presentation_source, runner);
+    let mut invocations = FilesystemInvocationCatalog::system(invocation_roots);
     while let Ok(request) = requests.recv() {
         let outcome = match request {
             ExternalRequest::DiscoverAgents => discover_agents(&mut agents),
+            ExternalRequest::DiscoverInvocations(request) => {
+                ExternalResult::InvocationsDiscovered(invocations.discover(request))
+            }
             ExternalRequest::SubmitAgent(request) => {
                 let submission_id = request.submission_id;
                 ExternalResult::AgentSubmitted {
