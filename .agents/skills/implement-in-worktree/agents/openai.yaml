@@ -1,0 +1,6 @@
+interface:
+  display_name: "Implement in Worktree"
+  short_description: "Run one autonomous Herdr implementation lane"
+  default_prompt: "Use $implement-in-worktree to implement this ticket in an isolated Herdr worktree and return a green pull request."
+policy:
+  allow_implicit_invocation: false
