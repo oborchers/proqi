@@ -3,16 +3,16 @@
 use sha2::{Digest as _, Sha256};
 
 use crate::{
-    application::{Action, AppState, Effect, reduce},
+    application::{Action, reduce},
     domain::{OperationId, RevisionId, SessionId, TextPosition, ThoughtId},
     ports::{
         environment::{Clock, IdGenerator},
         runtime::RuntimeCoordinator,
-        store::{CommitReceipt, Store},
+        store::Store,
     },
 };
 
-use super::{SessionService, SessionServiceError, ThoughtMutation};
+use super::{SessionService, SessionServiceError, ThoughtMutation, match_replay};
 use crate::application::{ControlReplay, match_control_replay};
 use crate::ports::control::ControlMutation;
 
@@ -50,7 +50,7 @@ where
         if let Some(existing) = self.store.revision_request(revision_id)? {
             return match_existing_replacement(&existing, session_id, thought_id, &replay);
         }
-        let mut state = self.load_external_state(session_id)?;
+        let mut state = self.load_live_state(session_id)?;
         let thought = state
             .board
             .thought(thought_id)
@@ -77,7 +77,7 @@ where
                 at: self.clock.now(),
             },
         )?;
-        let receipt = self.commit_external(&effects)?;
+        let receipt = self.commit_single_effect(&effects)?;
         Ok(ThoughtMutation {
             thought_id,
             receipt,
@@ -97,8 +97,19 @@ where
         collapsed: bool,
         operation_id: OperationId,
     ) -> Result<ThoughtMutation, SessionServiceError> {
+        let replay = ControlMutation::SetCollapsed {
+            operation_id,
+            thought_id,
+            collapsed,
+        };
+        if let Some(existing) = self.store.operation_request(operation_id)? {
+            return match_existing_mutation(&existing, session_id, thought_id, &replay);
+        }
         let _lease = self.runtime.acquire_session(session_id)?;
-        let mut state = self.load_external_state(session_id)?;
+        if let Some(existing) = self.store.operation_request(operation_id)? {
+            return match_existing_mutation(&existing, session_id, thought_id, &replay);
+        }
+        let mut state = self.load_live_state(session_id)?;
         let effects = reduce(
             &mut state,
             Action::SetPresentation {
@@ -112,35 +123,11 @@ where
                 at: self.clock.now(),
             },
         )?;
-        let receipt = self.commit_external(&effects)?;
+        let receipt = self.commit_single_effect(&effects)?;
         Ok(ThoughtMutation {
             thought_id,
             receipt,
         })
-    }
-
-    fn load_external_state(&mut self, id: SessionId) -> Result<AppState, SessionServiceError> {
-        self.store.compact_session(id)?;
-        let snapshot = self.store.load_session(id)?;
-        if snapshot.board.session.deleted_at.is_some() {
-            return Err(SessionServiceError::SessionTrashed(id));
-        }
-        Ok(AppState::from_snapshot(snapshot)?)
-    }
-
-    fn commit_external(
-        &mut self,
-        effects: &[Effect],
-    ) -> Result<CommitReceipt, SessionServiceError> {
-        let [effect] = effects else {
-            return Err(SessionServiceError::NoDurableMutation);
-        };
-        let batch = effect
-            .persistence_batch()
-            .ok_or(SessionServiceError::NoDurableMutation)?;
-        self.store
-            .commit(&batch)?
-            .ok_or(SessionServiceError::NoDurableMutation)
     }
 }
 
@@ -160,4 +147,17 @@ fn match_existing_replacement(
         )
         .into()),
     }
+}
+
+fn match_existing_mutation(
+    existing: &crate::ports::store::StoredOperationRequest,
+    session_id: SessionId,
+    thought_id: ThoughtId,
+    mutation: &ControlMutation,
+) -> Result<ThoughtMutation, SessionServiceError> {
+    let receipt = match_replay(existing, session_id, mutation)?;
+    Ok(ThoughtMutation {
+        thought_id,
+        receipt: receipt.durable,
+    })
 }

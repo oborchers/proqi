@@ -11,10 +11,12 @@ pub use identifiers::{
 };
 pub use model::{
     ContentAnnotation, ContentAnnotationKind, Direction, DomainError, IntegrationContext,
-    OperationRecord, OperationSequence, Session, Thought, ThoughtPosition, ThoughtPresentation,
-    ThoughtRevision, Timestamp, validate_annotations,
+    OperationSequence, Session, Thought, ThoughtPosition, ThoughtPresentation, ThoughtRevision,
+    Timestamp, validate_annotations,
 };
-pub use operations::{BoardMutation, BoardOperation, BoardOperationKind, SessionBoard, UndoScope};
+pub use operations::{
+    BoardMutation, BoardOperation, BoardOperationKind, OperationRecord, SessionBoard, UndoScope,
+};
 pub use text::TextPosition;
 pub use update::{
     Installation, InstallationIdentity, InstallationKind, StableVersion, UpdateCacheState,

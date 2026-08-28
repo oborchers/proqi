@@ -84,10 +84,9 @@ possible to ship without a Node, Python, or JVM runtime.
 - Ratatui owns terminal-independent drawing primitives and widget composition.
 - Crossterm owns terminal setup, input, resize, mouse, bracketed-paste, and
   capability handling.
-- Crossterm is temporarily pinned to audited upstream revision
-  `c006ee6efbd7bed45f1286ec9545d401f3ecb1fe`, which terminates Unix event reads
-  on terminal EOF and non-retryable I/O errors. Remove the pin only after an
-  equivalent released version passes the PTY-close regression suite.
+- Crossterm 0.29 is resolved from crates.io. The PTY-close regression suite
+  continuously verifies that Unix event reads terminate on terminal EOF and
+  non-retryable I/O errors.
 - Automatic mode queries the terminal foreground and background through a
   bounded terminal-adapter palette probe before alternate-screen setup and
   before the input lane starts. This ordering prevents the probe from consuming
@@ -985,6 +984,7 @@ cargo xtask install-hooks
 cargo xtask format
 cargo xtask source-limits
 cargo xtask architecture
+cargo xtask quality
 cargo xtask check
 cargo xtask test
 cargo xtask ci-linux
@@ -1003,15 +1003,19 @@ cargo xtask package
   above 500 physical lines, including JavaScript, TypeScript, stylesheet, HTML,
   Vue, Svelte, and Astro sources. Public documentation and prose, including the
   README and architecture and product contracts, are deliberately exempt.
+  The same ceiling applies to test code. When inline tests begin to obscure an
+  implementation, move them into an adjacent behavior-owned `tests` module;
+  do not compress either production or test code merely to satisfy the limit.
 - `architecture` verifies the inward dependency graph, canonical domain API,
   and ownership of SQLite, terminal, process, environment, and filesystem
   implementation dependencies. Its detector tests include accepted and
   rejected examples, and the scan fails if expected source layers are absent.
-- `check` runs the normal pre-push gate: formatting in check mode, Git
-  whitespace validation for unstaged, staged, and committed HEAD content,
-  Clippy for all targets and features, source limits, reviewed-snapshot policy,
-  documentation warnings, and the deterministic test suite through
-  `cargo-nextest`.
+- `quality` runs formatting in check mode, Git whitespace validation for
+  unstaged, staged, and committed HEAD content, Clippy for all targets and
+  features, source limits, reviewed-snapshot policy, and documentation warnings
+  without rerunning the deterministic test suite.
+- `check` remains the canonical local and pre-push aggregate: it runs `quality`
+  followed by `test`.
 - `test` runs the deterministic unit, contract, and integration suites.
 - `ci-linux` copies the current checkout without Git metadata or build output
   into an ephemeral `linux/amd64` Docker workspace and runs the Linux quality,

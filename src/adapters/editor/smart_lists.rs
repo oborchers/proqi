@@ -137,11 +137,12 @@ fn whitespace_prefix(value: &str) -> usize {
 
 fn indentation_columns(indentation: &str) -> usize {
     indentation.chars().fold(0, |column, character| {
-        if character == '\t' {
-            column + (4 - column % 4)
-        } else {
-            column + 1
-        }
+        let mut buffer = [0; 4];
+        column
+            + crate::ports::text_layout::grapheme_cell_width(
+                character.encode_utf8(&mut buffer),
+                column,
+            )
     })
 }
 

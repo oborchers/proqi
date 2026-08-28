@@ -6,13 +6,9 @@ use ratatui_core::{
     text::{Line, Span},
 };
 use ratatui_widgets::paragraph::Paragraph;
-use unicode_segmentation::UnicodeSegmentation as _;
 use unicode_width::UnicodeWidthStr as _;
 
-use crate::{
-    application::DurabilityState, domain::Direction, ports::agent::SubmissionDisposition,
-    ui::status::StatusSeverity,
-};
+use crate::{application::DurabilityState, ui::status::StatusSeverity};
 
 use super::super::{BoardApp, HitTarget, LayoutSnapshot, Theme};
 
@@ -41,13 +37,16 @@ fn render_control(
     keys: &crate::ui::KeyBindings,
     theme: &Theme,
 ) {
-    let label = if target == HitTarget::RenameSession {
-        ControlLabel {
-            key: String::new(),
-            text: app.session_display_name().to_owned(),
-        }
-    } else {
-        label(app, target, area.width, keys)
+    let label = match target {
+        HitTarget::Agent(direction) => app
+            .agent_targets()
+            .iter()
+            .find(|target| target.direction == direction)
+            .map(crate::ui::control_labels::agent),
+        _ => crate::ui::control_labels::action(target, area.width <= 6, keys),
+    };
+    let Some(label) = label else {
+        return;
     };
     let available = usize::from(area.width).saturating_sub(label.key.width());
     let text = truncate(&label.text, available);
@@ -93,7 +92,7 @@ fn render_context(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot
         },
         |(message, _)| message,
     );
-    let status_area = inset(layout.footer_status);
+    let status_area = crate::ui::geometry::inset_horizontal(layout.footer_status, 2);
     let color = status.map_or_else(
         || if failed { theme.error } else { theme.muted },
         |(_, severity)| match severity {
@@ -110,7 +109,7 @@ fn render_context(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot
             status_area,
         );
     }
-    let state_area = inset(layout.footer_context);
+    let state_area = crate::ui::geometry::inset_horizontal(layout.footer_context, 2);
     if state_area.height > 0 {
         frame.render_widget(
             Paragraph::new(truncate(
@@ -129,7 +128,7 @@ fn render_session_identity(
     layout: &LayoutSnapshot,
     theme: &Theme,
 ) {
-    let area = inset(layout.footer_name);
+    let area = crate::ui::geometry::inset_horizontal(layout.footer_name, 2);
     if area.height == 0 {
         return;
     }
@@ -187,114 +186,6 @@ fn render_identity_hover(
     );
 }
 
-struct ControlLabel {
-    key: String,
-    text: String,
-}
-
-fn label(
-    app: &BoardApp,
-    target: HitTarget,
-    width: u16,
-    keys: &crate::ui::KeyBindings,
-) -> ControlLabel {
-    let (key, text) = match target {
-        HitTarget::Insert => (crate::ui::settings::key_label(keys.new), " New"),
-        HitTarget::Copy => (crate::ui::settings::key_label(keys.copy), " Copy"),
-        HitTarget::Cut => (crate::ui::settings::key_label(keys.cut), " Cut"),
-        HitTarget::Delete => (crate::ui::settings::key_label(keys.delete), " Delete"),
-        HitTarget::Select => (crate::ui::settings::key_label(keys.select), " Select"),
-        HitTarget::Undo => (crate::ui::settings::key_label(keys.undo), " Undo"),
-        HitTarget::Search => (crate::ui::settings::key_label(keys.search), " Search"),
-        HitTarget::Commands => (
-            crate::ui::settings::key_label(keys.commands),
-            if width <= 6 { " Menu" } else { " Commands" },
-        ),
-        HitTarget::Help => (
-            crate::ui::settings::key_label(keys.help),
-            if width <= 6 { " Help" } else { " Shortcuts" },
-        ),
-        HitTarget::Quit => (crate::ui::settings::key_label(keys.quit), " Quit"),
-        HitTarget::ExitEdit => ("Esc".to_owned(), " Board"),
-        HitTarget::Retry => ("r".to_owned(), " Retry"),
-        HitTarget::ExportRecovery => ("w".to_owned(), " Export"),
-        HitTarget::Agent(direction) => {
-            let target = app
-                .agent_targets()
-                .iter()
-                .find(|target| target.direction == direction);
-            let detail = target.map_or_else(
-                || " Agent".to_owned(),
-                |target| format!(" {}", compact_agent_name(target.agent_kind.as_str())),
-            );
-            return ControlLabel {
-                key: direction_symbol(direction).to_owned(),
-                text: detail,
-            };
-        }
-        HitTarget::BeginDelivery(disposition) | HitTarget::Deliver(_, disposition) => {
-            submission_label(disposition, keys)
-        }
-        _ => (String::new(), ""),
-    };
-    ControlLabel {
-        key,
-        text: text.to_owned(),
-    }
-}
-
-fn submission_label(
-    disposition: SubmissionDisposition,
-    keys: &crate::ui::KeyBindings,
-) -> (String, &'static str) {
-    match disposition {
-        SubmissionDisposition::RemoveAfterSuccess => (
-            crate::ui::settings::key_label(keys.submit_remove),
-            " Submit",
-        ),
-        SubmissionDisposition::Keep => (
-            crate::ui::settings::key_label(keys.submit_keep),
-            " Submit & keep",
-        ),
-    }
-}
-
-fn compact_agent_name(kind: &str) -> String {
-    let mut characters = kind.chars();
-    characters.next().map_or_else(String::new, |first| {
-        first.to_uppercase().collect::<String>() + characters.as_str()
-    })
-}
-
-fn inset(area: ratatui_core::layout::Rect) -> ratatui_core::layout::Rect {
-    ratatui_core::layout::Rect::new(
-        area.x.saturating_add(2),
-        area.y,
-        area.width.saturating_sub(4),
-        area.height,
-    )
-}
-
 fn truncate(value: &str, width: usize) -> String {
-    let mut cells = 0;
-    value
-        .graphemes(true)
-        .take_while(|grapheme| {
-            let next = cells + grapheme.width();
-            let keep = next <= width;
-            if keep {
-                cells = next;
-            }
-            keep
-        })
-        .collect()
-}
-
-const fn direction_symbol(direction: Direction) -> &'static str {
-    match direction {
-        Direction::Up => "↑",
-        Direction::Right => "→",
-        Direction::Down => "↓",
-        Direction::Left => "←",
-    }
+    crate::ports::text_layout::truncate_cells(value, width)
 }

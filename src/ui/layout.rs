@@ -165,33 +165,37 @@ impl LayoutSnapshot {
     #[must_use]
     pub fn hit_test(&self, column: u16, row: u16) -> Option<HitTarget> {
         if let Some(overlay) = &self.overlay {
-            if contains(overlay.close, column, row) {
+            if crate::ui::geometry::contains(overlay.close, column, row) {
                 return Some(HitTarget::CloseOverlay);
             }
             return overlay.items.iter().enumerate().find_map(|(index, area)| {
-                contains(*area, column, row).then_some(HitTarget::PaletteItem(index))
+                crate::ui::geometry::contains(*area, column, row)
+                    .then_some(HitTarget::PaletteItem(index))
             });
         }
         for thought in &self.thoughts {
-            if contains(thought.gutter, column, row) {
+            if crate::ui::geometry::contains(thought.gutter, column, row) {
                 return Some(HitTarget::DragHandle(thought.thought_id));
             }
             if thought
                 .overflow
-                .is_some_and(|area| contains(area, column, row))
+                .is_some_and(|area| crate::ui::geometry::contains(area, column, row))
             {
                 return Some(HitTarget::Overflow(thought.thought_id));
             }
-            if contains(thought.text_area, column, row) {
+            if crate::ui::geometry::contains(thought.text_area, column, row) {
                 return Some(HitTarget::Thought(thought.thought_id));
             }
         }
-        if self.insert.is_some_and(|area| contains(area, column, row)) {
+        if self
+            .insert
+            .is_some_and(|area| crate::ui::geometry::contains(area, column, row))
+        {
             return Some(HitTarget::Insert);
         }
-        self.controls
-            .iter()
-            .find_map(|(target, area)| contains(*area, column, row).then_some(*target))
+        self.controls.iter().find_map(|(target, area)| {
+            crate::ui::geometry::contains(*area, column, row).then_some(*target)
+        })
     }
 
     /// Find current visible geometry for a thought.
@@ -228,7 +232,21 @@ impl LayoutSnapshot {
         targets: &[AgentTarget],
         selection: Option<SubmissionDisposition>,
     ) {
-        controls::configure_agent_controls(self, targets, selection);
+        controls::configure_agent_controls(
+            self,
+            targets,
+            selection,
+            &crate::ui::KeyBindings::default(),
+        );
+    }
+
+    pub(crate) fn configure_agent_controls_with_keys(
+        &mut self,
+        targets: &[AgentTarget],
+        selection: Option<SubmissionDisposition>,
+        keybindings: &crate::ui::KeyBindings,
+    ) {
+        controls::configure_agent_controls(self, targets, selection, keybindings);
     }
 }
 
@@ -252,6 +270,7 @@ pub fn compute(
         false,
         crate::ui::settings::BoardDensity::Comfortable,
         0,
+        &crate::ui::KeyBindings::default(),
     )
 }
 
@@ -271,8 +290,9 @@ pub fn compute_with_density(
     has_status: bool,
     density: crate::ui::settings::BoardDensity,
     requested_row_offset: usize,
+    keybindings: &crate::ui::KeyBindings,
 ) -> LayoutSnapshot {
-    let chrome = chrome::compute(area, state.mode, has_agents, has_status);
+    let chrome = chrome::compute(area, has_agents, has_status);
     let board = chrome.board;
     let content_width = board.width.saturating_sub(2).max(1);
     let content = content::visible_content(&content::ContentRequest {
@@ -318,14 +338,11 @@ pub fn compute_with_density(
                 }
             ),
             state.focused_thought.is_some(),
+            keybindings,
         ),
         content_width,
         overlay: None,
     }
-}
-
-const fn contains(area: Rect, column: u16, row: u16) -> bool {
-    column >= area.x && column < area.right() && row >= area.y && row < area.bottom()
 }
 
 #[cfg(test)]

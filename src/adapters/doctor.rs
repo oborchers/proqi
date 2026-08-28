@@ -191,7 +191,7 @@ fn check_disk(data_dir: &Path) -> DoctorCheck {
                 None,
             );
         };
-        match fs2::available_space(existing) {
+        match fs4::available_space(existing) {
             Ok(bytes) if bytes < FAILURE_DISK_BYTES => result(
                 DoctorStatus::Fail,
                 "available disk space is critically low",

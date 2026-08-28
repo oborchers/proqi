@@ -1,4 +1,4 @@
-//! Terminal-independent text value types shared by domain and editor ports.
+//! Logical text values owned by the domain.
 
 /// A logical position measured in Unicode grapheme clusters.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Deserialize, serde::Serialize)]

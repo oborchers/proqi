@@ -6,6 +6,7 @@ mod error;
 mod locks;
 mod model;
 mod mutations;
+mod prompt;
 mod recovery;
 mod reducer;
 mod rehydrate;
@@ -21,10 +22,14 @@ pub use error::{ApplicationError, ApplicationResult, FailureCode};
 pub use model::{
     AppState, ClipboardIntent, DurabilityState, Effect, InteractionMode, UpdateIntent,
 };
+pub(crate) use prompt::{
+    SHARED_PROMPT_STARTERS, SharedPromptStarter, join_prompt_for_target, supports_shared_starters,
+};
 pub use recovery::capture_recovery;
 pub use reducer::reduce;
 pub use service::{LeasedSession, SessionService, SessionServiceError, ThoughtMutation};
 pub use update::{
     UpdateAvailability, UpdateCheckMode, UpdateCheckResult, UpdateRefresh, UpdateService,
 };
+pub(crate) use update_coordination::is_compatible_update_participant;
 pub use update_coordination::{UpdateExecution, UpdateExecutionStatus, UpdateRestartCoordinator};

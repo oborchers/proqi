@@ -70,14 +70,14 @@ fn render_header(
     layout: &BrowserLayout,
     theme: &Theme,
 ) {
-    let title = RectLine::new(layout.header, 0);
+    let title = crate::ui::geometry::row(layout.header, 0);
     frame.render_widget(
         Paragraph::new(" Resume a Proqi session").style(
             Style::default()
                 .fg(theme.accent)
                 .add_modifier(Modifier::BOLD),
         ),
-        title.area,
+        title,
     );
     if layout.header.height > 1 {
         let rename = browser.rename_value();
@@ -95,7 +95,7 @@ fn render_header(
                 Span::styled("_", Style::default().fg(theme.accent)),
             ]))
             .style(style),
-            RectLine::new(layout.header, 1).area,
+            crate::ui::geometry::row(layout.header, 1),
         );
     }
 }
@@ -141,7 +141,7 @@ fn render_result(
             item.availability.label()
         ))
         .style(style),
-        RectLine::new(area, 0).area,
+        crate::ui::geometry::row(area, 0),
     );
     if area.height > 1 {
         frame.render_widget(
@@ -151,7 +151,7 @@ fn render_result(
                 item.hit.last_opened_cwd.display()
             ))
             .style(Style::default().fg(theme.muted)),
-            RectLine::new(area, 1).area,
+            crate::ui::geometry::row(area, 1),
         );
     }
 }
@@ -228,60 +228,16 @@ fn render_footer(
         );
         return;
     }
-    frame.render_widget(
-        Paragraph::new(footer_shortcuts(layout.footer.width, theme)),
-        layout.footer,
-    );
-}
-
-fn footer_shortcuts(width: u16, theme: &Theme) -> Line<'static> {
-    let items = if width >= 60 {
-        [
-            ("R", "Rename"),
-            ("D", "Trash"),
-            ("↑↓", "Select"),
-            ("Enter", "Open"),
-            ("Esc", "Cancel"),
-        ]
-        .as_slice()
-    } else if width >= 36 {
-        [
-            ("R", "Rename"),
-            ("D", "Trash"),
-            ("Enter", "Open"),
-            ("Esc", "Back"),
-        ]
-        .as_slice()
-    } else {
-        [("R", "Name"), ("D", "Trash"), ("Esc", "Back")].as_slice()
-    };
-    let mut spans = vec![Span::raw(" ")];
-    for (index, (key, label)) in items.iter().enumerate() {
-        if index > 0 {
-            spans.push(Span::raw("  "));
-        }
-        spans.push(Span::styled(*key, Style::default().fg(theme.accent)));
-        spans.push(Span::styled(
-            format!(" {label}"),
-            Style::default().fg(theme.foreground),
-        ));
-    }
-    Line::from(spans)
-}
-
-struct RectLine {
-    area: ratatui_core::layout::Rect,
-}
-
-impl RectLine {
-    fn new(area: ratatui_core::layout::Rect, offset: u16) -> Self {
-        Self {
-            area: ratatui_core::layout::Rect::new(
-                area.x,
-                area.y.saturating_add(offset),
-                area.width,
-                u16::from(offset < area.height),
-            ),
-        }
+    for control in super::browser::browser_footer_controls(layout.footer) {
+        frame.render_widget(
+            Paragraph::new(Line::from(vec![
+                Span::styled(control.key, Style::default().fg(theme.accent)),
+                Span::styled(
+                    format!(" {}", control.label),
+                    Style::default().fg(theme.foreground),
+                ),
+            ])),
+            control.area,
+        );
     }
 }

@@ -138,6 +138,29 @@ fn narrow_footer_keeps_the_mouse_operable_command_palette() {
 }
 
 #[test]
+fn remapped_wide_key_label_and_mouse_target_share_the_same_width() {
+    let mut settings = UiSettings::default();
+    settings.keybindings.new = ' ';
+    let mut fixture = Fixture::with_settings(settings);
+    let layout = fixture.app.prepare_frame(Rect::new(0, 0, 80, 8));
+    let area = layout
+        .controls
+        .iter()
+        .find_map(|(target, area)| (*target == HitTarget::Insert).then_some(*area))
+        .expect("remapped New control");
+    assert!(
+        area.width >= 9,
+        "Space New must fit its complete hit target"
+    );
+    assert!(matches!(
+        fixture
+            .click(HitTarget::Insert, Size::new(80, 8))
+            .as_slice(),
+        [Effect::CommitBoardOperation(_)]
+    ));
+}
+
+#[test]
 fn search_control_and_result_are_mouse_operable() {
     let mut fixture = Fixture::new();
     assert!(

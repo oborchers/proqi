@@ -133,7 +133,7 @@ mod tests {
             assert!(DOCKERFILE.contains(contract), "missing {contract}");
         }
         for command in [
-            "cargo xtask check",
+            "cargo xtask quality",
             "cargo xtask test",
             "cargo +1.88.0 xtask msrv",
             "cargo xtask audit",

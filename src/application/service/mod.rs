@@ -11,13 +11,26 @@ use thiserror::Error;
 use crate::{
     domain::{DomainError, SessionId, ThoughtId},
     ports::{
+        control::{ControlMutation, ControlReceipt},
         environment::{Clock, IdGenerator},
         runtime::{RuntimeCoordinator, RuntimeError},
-        store::{CommitReceipt, Store, StoreError},
+        store::{CommitReceipt, Store, StoreError, StoredOperationRequest},
     },
 };
 
-use super::{AppState, ApplicationError};
+use super::{AppState, ApplicationError, Effect};
+use super::{ControlReplay, match_control_replay};
+
+fn match_replay(
+    existing: &StoredOperationRequest,
+    session_id: SessionId,
+    mutation: &ControlMutation,
+) -> Result<ControlReceipt, SessionServiceError> {
+    match match_control_replay(existing, session_id, mutation) {
+        ControlReplay::Accepted(receipt) => Ok(receipt),
+        ControlReplay::Conflict => Err(SessionServiceError::IdempotencyConflict),
+    }
+}
 
 /// Application facade shared by CLI and terminal UI composition.
 pub struct SessionService<'a, S, R, C, I> {
@@ -57,6 +70,30 @@ where
             ids,
             cwd,
         })
+    }
+
+    fn load_live_state(&mut self, id: SessionId) -> Result<AppState, SessionServiceError> {
+        self.store.compact_session(id)?;
+        let snapshot = self.store.load_session(id)?;
+        if snapshot.board.session.deleted_at.is_some() {
+            return Err(SessionServiceError::SessionTrashed(id));
+        }
+        Ok(AppState::from_snapshot(snapshot)?)
+    }
+
+    fn commit_single_effect(
+        &mut self,
+        effects: &[Effect],
+    ) -> Result<CommitReceipt, SessionServiceError> {
+        let [effect] = effects else {
+            return Err(SessionServiceError::NoDurableMutation);
+        };
+        let batch = effect
+            .persistence_batch()
+            .ok_or(SessionServiceError::NoDurableMutation)?;
+        self.store
+            .commit(&batch)?
+            .ok_or(SessionServiceError::NoDurableMutation)
     }
 }
 

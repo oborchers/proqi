@@ -2,7 +2,7 @@
 
 use ratatui_core::layout::Rect;
 
-use crate::application::InteractionMode;
+use crate::{application::InteractionMode, ui::KeyBindings};
 
 use super::HitTarget;
 
@@ -17,12 +17,7 @@ pub(super) struct ChromeLayout {
     pub(super) agents: Rect,
 }
 
-pub(super) fn compute(
-    area: Rect,
-    _mode: InteractionMode,
-    has_agents: bool,
-    has_status: bool,
-) -> ChromeLayout {
+pub(super) fn compute(area: Rect, has_agents: bool, has_status: bool) -> ChromeLayout {
     let header_height = 0;
     let available = area.height.saturating_sub(header_height);
     let actions_height = u16::from(available >= 2);
@@ -69,67 +64,120 @@ pub(super) fn controls(
     persistence_failed: bool,
     retry_available: bool,
     has_focus: bool,
+    keys: &KeyBindings,
 ) -> Vec<(HitTarget, Rect)> {
     if area.height == 0 || area.width == 0 {
         return Vec::new();
     }
-    let candidates = if persistence_failed && retry_available {
-        vec![
-            (HitTarget::Retry, 8),
-            (HitTarget::ExportRecovery, 10),
-            (HitTarget::Help, 12),
-        ]
-    } else if persistence_failed {
-        vec![(HitTarget::ExportRecovery, 10), (HitTarget::Help, 12)]
-    } else if !has_focus && matches!(mode, InteractionMode::Board) && area.width < 24 {
-        vec![(HitTarget::Insert, 7), (HitTarget::Help, 6)]
-    } else if !has_focus && matches!(mode, InteractionMode::Board) {
-        vec![
-            (HitTarget::Insert, 7),
-            (HitTarget::Commands, 11),
-            (HitTarget::Help, 12),
-        ]
-    } else if area.width < 24 {
-        vec![(HitTarget::Commands, 6), (HitTarget::Help, 6)]
-    } else if area.width < 60 && matches!(mode, InteractionMode::Edit { .. }) {
-        vec![
-            (HitTarget::ExitEdit, 10),
-            (HitTarget::Commands, 11),
-            (HitTarget::Help, 12),
-        ]
-    } else if area.width < 60 {
-        vec![
-            (HitTarget::Insert, 7),
-            (HitTarget::Commands, 11),
-            (HitTarget::Help, 12),
-        ]
-    } else if matches!(mode, InteractionMode::Edit { .. }) {
-        vec![
-            (HitTarget::ExitEdit, 10),
-            (HitTarget::Copy, 7),
-            (HitTarget::Cut, 6),
-            (HitTarget::Undo, 7),
-            (HitTarget::Commands, 11),
-            (HitTarget::Help, 12),
-        ]
-    } else {
-        vec![
-            (HitTarget::Insert, 7),
-            (HitTarget::Copy, 7),
-            (HitTarget::Cut, 6),
-            (HitTarget::Delete, 9),
-            (HitTarget::Select, 12),
-            (HitTarget::Undo, 7),
-            (HitTarget::Search, 9),
-            (HitTarget::Commands, 11),
-            (HitTarget::Help, 12),
-        ]
-    };
+    let candidates = control_candidates(
+        area.width,
+        mode,
+        persistence_failed,
+        retry_available,
+        has_focus,
+        keys,
+    );
     let inset_width = area.width.saturating_sub(4);
     place(
         Rect::new(area.x.saturating_add(2), area.y, inset_width, area.height),
         &candidates,
     )
+}
+
+fn control_candidates(
+    width: u16,
+    mode: InteractionMode,
+    persistence_failed: bool,
+    retry_available: bool,
+    has_focus: bool,
+    keys: &KeyBindings,
+) -> Vec<(HitTarget, u16)> {
+    if persistence_failed && retry_available {
+        candidates(
+            &[
+                (HitTarget::Retry, false),
+                (HitTarget::ExportRecovery, false),
+                (HitTarget::Help, false),
+            ],
+            keys,
+        )
+    } else if persistence_failed {
+        candidates(
+            &[(HitTarget::ExportRecovery, false), (HitTarget::Help, false)],
+            keys,
+        )
+    } else if !has_focus && matches!(mode, InteractionMode::Board) && width < 24 {
+        candidates(&[(HitTarget::Insert, false), (HitTarget::Help, true)], keys)
+    } else if !has_focus && matches!(mode, InteractionMode::Board) {
+        candidates(
+            &[
+                (HitTarget::Insert, false),
+                (HitTarget::Commands, false),
+                (HitTarget::Help, false),
+            ],
+            keys,
+        )
+    } else if width < 24 {
+        candidates(
+            &[(HitTarget::Commands, true), (HitTarget::Help, true)],
+            keys,
+        )
+    } else if width < 60 && matches!(mode, InteractionMode::Edit { .. }) {
+        candidates(
+            &[
+                (HitTarget::ExitEdit, false),
+                (HitTarget::Commands, false),
+                (HitTarget::Help, false),
+            ],
+            keys,
+        )
+    } else if width < 60 {
+        candidates(
+            &[
+                (HitTarget::Insert, false),
+                (HitTarget::Commands, false),
+                (HitTarget::Help, false),
+            ],
+            keys,
+        )
+    } else if matches!(mode, InteractionMode::Edit { .. }) {
+        candidates(
+            &[
+                (HitTarget::ExitEdit, false),
+                (HitTarget::Copy, false),
+                (HitTarget::Cut, false),
+                (HitTarget::Undo, false),
+                (HitTarget::Commands, false),
+                (HitTarget::Help, false),
+            ],
+            keys,
+        )
+    } else {
+        candidates(
+            &[
+                (HitTarget::Insert, false),
+                (HitTarget::Copy, false),
+                (HitTarget::Cut, false),
+                (HitTarget::Delete, false),
+                (HitTarget::Select, false),
+                (HitTarget::Undo, false),
+                (HitTarget::Search, false),
+                (HitTarget::Commands, false),
+                (HitTarget::Help, false),
+            ],
+            keys,
+        )
+    }
+}
+
+fn candidates(items: &[(HitTarget, bool)], keys: &KeyBindings) -> Vec<(HitTarget, u16)> {
+    items
+        .iter()
+        .filter_map(|&(target, compact)| {
+            crate::ui::control_labels::action_width(target, compact, keys)
+                .map(|width| (target, width))
+        })
+        .collect()
 }
 
 fn place(area: Rect, candidates: &[(HitTarget, u16)]) -> Vec<(HitTarget, Rect)> {

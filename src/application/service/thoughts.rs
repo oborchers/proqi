@@ -1,19 +1,17 @@
 //! Thought mutations routed through the reducer and durable store.
 
 use crate::{
-    application::{Action, AppState, Effect, reduce},
-    domain::{
-        BoardMutation, BoardOperationKind, ContentAnnotation, OperationId, SessionId, ThoughtId,
-        UndoScope,
-    },
+    application::{Action, reduce},
+    domain::{BoardOperationKind, ContentAnnotation, OperationId, SessionId, ThoughtId, UndoScope},
     ports::{
+        control::ControlMutation,
         environment::{Clock, IdGenerator},
         runtime::RuntimeCoordinator,
-        store::{CommitReceipt, Store, StoredOperationRequest},
+        store::{CommitReceipt, Store},
     },
 };
 
-use super::{SessionService, SessionServiceError, ThoughtMutation};
+use super::{SessionService, SessionServiceError, ThoughtMutation, match_replay};
 
 impl<S, R, C, I> SessionService<'_, S, R, C, I>
 where
@@ -63,26 +61,19 @@ where
         } else {
             self.ids.thought_id()
         };
+        let replay = ControlMutation::Add {
+            operation_id,
+            thought_id,
+            content: content.clone(),
+            annotations: annotations.clone(),
+            position,
+        };
         if let Some(existing) = self.store.operation_request(operation_id)? {
-            return match_existing_add(
-                &existing,
-                session_id,
-                thought_id,
-                &content,
-                &annotations,
-                position,
-            );
+            return match_existing_thought(&existing, session_id, &replay);
         }
         let _lease = self.runtime.acquire_session(session_id)?;
         if let Some(existing) = self.store.operation_request(operation_id)? {
-            return match_existing_add(
-                &existing,
-                session_id,
-                thought_id,
-                &content,
-                &annotations,
-                position,
-            );
+            return match_existing_thought(&existing, session_id, &replay);
         }
         let mut state = self.load_live_state(session_id)?;
         let effects = reduce(
@@ -115,12 +106,16 @@ where
         supplied_operation: Option<OperationId>,
     ) -> Result<ThoughtMutation, SessionServiceError> {
         let operation_id = supplied_operation.unwrap_or_else(|| self.ids.operation_id());
+        let replay = ControlMutation::Delete {
+            operation_id,
+            thought_id,
+        };
         if let Some(existing) = self.store.operation_request(operation_id)? {
-            return match_existing_delete(&existing, session_id, thought_id);
+            return match_existing_thought(&existing, session_id, &replay);
         }
         let _lease = self.runtime.acquire_session(session_id)?;
         if let Some(existing) = self.store.operation_request(operation_id)? {
-            return match_existing_delete(&existing, session_id, thought_id);
+            return match_existing_thought(&existing, session_id, &replay);
         }
         let mut state = self.load_live_state(session_id)?;
         let effects = reduce(
@@ -152,12 +147,17 @@ where
         supplied_operation: Option<OperationId>,
     ) -> Result<ThoughtMutation, SessionServiceError> {
         let operation_id = supplied_operation.unwrap_or_else(|| self.ids.operation_id());
+        let replay = ControlMutation::Move {
+            operation_id,
+            thought_id,
+            position,
+        };
         if let Some(existing) = self.store.operation_request(operation_id)? {
-            return match_existing_move(&existing, session_id, thought_id, position);
+            return match_existing_thought(&existing, session_id, &replay);
         }
         let _lease = self.runtime.acquire_session(session_id)?;
         if let Some(existing) = self.store.operation_request(operation_id)? {
-            return match_existing_move(&existing, session_id, thought_id, position);
+            return match_existing_thought(&existing, session_id, &replay);
         }
         let mut state = self.load_live_state(session_id)?;
         let effects = reduce(
@@ -189,12 +189,17 @@ where
         supplied_operation: Option<OperationId>,
     ) -> Result<CommitReceipt, SessionServiceError> {
         let operation_id = supplied_operation.unwrap_or_else(|| self.ids.operation_id());
+        let replay = ControlMutation::History {
+            operation_id,
+            scope,
+            undo,
+        };
         if let Some(existing) = self.store.operation_request(operation_id)? {
-            return match_existing_history(&existing, session_id, scope, undo);
+            return Ok(match_replay(&existing, session_id, &replay)?.durable);
         }
         let _lease = self.runtime.acquire_session(session_id)?;
         if let Some(existing) = self.store.operation_request(operation_id)? {
-            return match_existing_history(&existing, session_id, scope, undo);
+            return Ok(match_replay(&existing, session_id, &replay)?.durable);
         }
         let mut state = self.load_live_state(session_id)?;
         let action = if undo {
@@ -213,206 +218,19 @@ where
         let effects = reduce(&mut state, action)?;
         self.commit_single_effect(&effects)
     }
-
-    fn load_live_state(&mut self, id: SessionId) -> Result<AppState, SessionServiceError> {
-        self.store.compact_session(id)?;
-        let snapshot = self.store.load_session(id)?;
-        if snapshot.board.session.deleted_at.is_some() {
-            return Err(SessionServiceError::SessionTrashed(id));
-        }
-        Ok(AppState::from_snapshot(snapshot)?)
-    }
-
-    fn commit_single_effect(
-        &mut self,
-        effects: &[Effect],
-    ) -> Result<CommitReceipt, SessionServiceError> {
-        let [effect] = effects else {
-            return Err(SessionServiceError::NoDurableMutation);
-        };
-        let batch = effect
-            .persistence_batch()
-            .ok_or(SessionServiceError::NoDurableMutation)?;
-        self.store
-            .commit(&batch)?
-            .ok_or(SessionServiceError::NoDurableMutation)
-    }
 }
 
-fn match_existing_add(
-    existing: &StoredOperationRequest,
+fn match_existing_thought(
+    existing: &crate::ports::store::StoredOperationRequest,
     session_id: SessionId,
-    thought_id: ThoughtId,
-    content: &str,
-    annotations: &[ContentAnnotation],
-    position: Option<usize>,
+    mutation: &ControlMutation,
 ) -> Result<ThoughtMutation, SessionServiceError> {
-    if let StoredOperationRequest::Compacted { replay, receipt } = existing {
-        let crate::ports::store::CompactedOperationRequest::Add {
-            session_id: stored_session,
-            thought_id: stored_thought,
-            payload_digest,
-            position: stored_position,
-        } = replay
-        else {
-            return Err(SessionServiceError::IdempotencyConflict);
-        };
-        let digest = crate::ports::store::thought_payload_digest(content, annotations)?;
-        if *stored_session == session_id
-            && *stored_thought == thought_id
-            && *payload_digest == digest
-            && position.is_none_or(|value| value == *stored_position)
-        {
-            return Ok(ThoughtMutation {
-                thought_id,
-                receipt: *receipt,
-            });
-        }
-        return Err(SessionServiceError::IdempotencyConflict);
-    }
-    let StoredOperationRequest::Board { operation, receipt } = existing else {
-        return Err(SessionServiceError::IdempotencyConflict);
-    };
-    let BoardMutation::AddThought { thought } = &operation.forward else {
-        return Err(SessionServiceError::IdempotencyConflict);
-    };
-    let expected_position = position.and_then(|value| u32::try_from(value).ok());
-    if operation.session_id != session_id
-        || operation.kind != BoardOperationKind::Create
-        || thought.id != thought_id
-        || thought.content != content
-        || thought.annotations != annotations
-        || expected_position.is_some_and(|value| thought.position.get() != value)
-    {
-        return Err(SessionServiceError::IdempotencyConflict);
-    }
+    let thought_id = mutation
+        .thought_id()
+        .ok_or(SessionServiceError::IdempotencyConflict)?;
+    let receipt = match_replay(existing, session_id, mutation)?;
     Ok(ThoughtMutation {
         thought_id,
-        receipt: *receipt,
+        receipt: receipt.durable,
     })
-}
-
-fn match_existing_delete(
-    existing: &StoredOperationRequest,
-    session_id: SessionId,
-    thought_id: ThoughtId,
-) -> Result<ThoughtMutation, SessionServiceError> {
-    if let StoredOperationRequest::Compacted { replay, receipt } = existing {
-        if matches!(
-            replay,
-            crate::ports::store::CompactedOperationRequest::Delete {
-                session_id: stored_session,
-                thought_id: stored_thought,
-            } if *stored_session == session_id && *stored_thought == thought_id
-        ) {
-            return Ok(ThoughtMutation {
-                thought_id,
-                receipt: *receipt,
-            });
-        }
-        return Err(SessionServiceError::IdempotencyConflict);
-    }
-    let StoredOperationRequest::Board { operation, receipt } = existing else {
-        return Err(SessionServiceError::IdempotencyConflict);
-    };
-    let BoardMutation::SetDeletion {
-        thought_id: stored,
-        deleted_at: Some(_),
-        ..
-    } = &operation.forward
-    else {
-        return Err(SessionServiceError::IdempotencyConflict);
-    };
-    if operation.session_id != session_id
-        || operation.kind != BoardOperationKind::Delete
-        || *stored != thought_id
-    {
-        return Err(SessionServiceError::IdempotencyConflict);
-    }
-    Ok(ThoughtMutation {
-        thought_id,
-        receipt: *receipt,
-    })
-}
-
-fn match_existing_move(
-    existing: &StoredOperationRequest,
-    session_id: SessionId,
-    thought_id: ThoughtId,
-    position: usize,
-) -> Result<ThoughtMutation, SessionServiceError> {
-    if let StoredOperationRequest::Compacted { replay, receipt } = existing {
-        if matches!(
-            replay,
-            crate::ports::store::CompactedOperationRequest::Move {
-                session_id: stored_session,
-                thought_id: stored_thought,
-                position: stored_position,
-            } if *stored_session == session_id
-                && *stored_thought == thought_id
-                && *stored_position == position
-        ) {
-            return Ok(ThoughtMutation {
-                thought_id,
-                receipt: *receipt,
-            });
-        }
-        return Err(SessionServiceError::IdempotencyConflict);
-    }
-    let StoredOperationRequest::Board { operation, receipt } = existing else {
-        return Err(SessionServiceError::IdempotencyConflict);
-    };
-    let BoardMutation::MoveThought {
-        thought_id: stored,
-        to,
-        ..
-    } = &operation.forward
-    else {
-        return Err(SessionServiceError::IdempotencyConflict);
-    };
-    if operation.session_id != session_id
-        || operation.kind != BoardOperationKind::Reorder
-        || *stored != thought_id
-        || usize::try_from(to.get()).ok() != Some(position)
-    {
-        return Err(SessionServiceError::IdempotencyConflict);
-    }
-    Ok(ThoughtMutation {
-        thought_id,
-        receipt: *receipt,
-    })
-}
-
-fn match_existing_history(
-    existing: &StoredOperationRequest,
-    session_id: SessionId,
-    scope: UndoScope,
-    undo: bool,
-) -> Result<CommitReceipt, SessionServiceError> {
-    if let StoredOperationRequest::Compacted { replay, receipt } = existing {
-        if matches!(
-            replay,
-            crate::ports::store::CompactedOperationRequest::History {
-                session_id: stored_session,
-                scope: stored_scope,
-                undo: stored_undo,
-            } if *stored_session == session_id && *stored_scope == scope && *stored_undo == undo
-        ) {
-            return Ok(*receipt);
-        }
-        return Err(SessionServiceError::IdempotencyConflict);
-    }
-    let StoredOperationRequest::HistoryMove {
-        session_id: stored_session,
-        scope: stored_scope,
-        undo: stored_undo,
-        receipt,
-    } = existing
-    else {
-        return Err(SessionServiceError::IdempotencyConflict);
-    };
-    if *stored_session != session_id || *stored_scope != scope || *stored_undo != undo {
-        return Err(SessionServiceError::IdempotencyConflict);
-    }
-    Ok(*receipt)
 }

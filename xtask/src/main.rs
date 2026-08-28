@@ -17,6 +17,7 @@ mod debian;
 mod debian_container;
 mod debian_verify;
 mod homebrew;
+mod instructions;
 mod linux_ci;
 mod linux_compat;
 mod package;
@@ -56,6 +57,7 @@ fn execute() -> Result<(), String> {
         "architecture" => policy::check(&root),
         "assets" => public_assets::check(&root),
         "clean-worktree" => clean_worktree(&root),
+        "quality" => quality(&root),
         "check" => check(&root),
         "test" => test(&root),
         "ci-linux" => linux_ci::run(&root),
@@ -152,6 +154,7 @@ fn print_help() {
          \n  cargo xtask architecture\
          \n  cargo xtask assets\
          \n  cargo xtask clean-worktree\
+         \n  cargo xtask quality\
          \n  cargo xtask check\
          \n  cargo xtask test\
          \n  cargo xtask ci-linux\
@@ -205,6 +208,11 @@ fn setup(root: &Path) -> Result<(), String> {
 }
 
 fn check(root: &Path) -> Result<(), String> {
+    quality(root)?;
+    test(root)
+}
+
+fn quality(root: &Path) -> Result<(), String> {
     run(root, "cargo", ["fmt", "--all", "--", "--check"])?;
     check_whitespace(root)?;
     source_limits::check(root)?;
@@ -225,8 +233,7 @@ fn check(root: &Path) -> Result<(), String> {
             "warnings",
         ],
     )?;
-    check_docs(root)?;
-    test(root)
+    check_docs(root)
 }
 
 fn check_whitespace(root: &Path) -> Result<(), String> {

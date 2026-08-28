@@ -37,6 +37,7 @@ pub(crate) fn check(root: &Path) -> Result<(), String> {
         classify(relative, &mut layer_counts);
         violations.extend(check_source(relative, &source));
     }
+    violations.extend(crate::instructions::check(root)?);
     violations.extend(crate::release_policy::check(root)?);
     if layer_counts.contains(&0) {
         return Err(format!(
@@ -103,6 +104,9 @@ fn classify(path: &Path, counts: &mut [usize; 6]) {
 
 fn check_source(path: &Path, source: &str) -> Vec<String> {
     let path_text = slash_path(path);
+    if path_text.ends_with("/tests.rs") || path_text.contains("/tests/") {
+        return Vec::new();
+    }
     let normalized = normalized_paths(source).join("\n");
     let mut violations = Vec::new();
     if path_text.starts_with("src/domain/") {
@@ -121,6 +125,7 @@ fn check_source(path: &Path, source: &str) -> Vec<String> {
     } else if path_text.starts_with("src/ui/") {
         find_markers(path, &normalized, &["crate::adapters"], &mut violations);
     }
+    enforce_layer_edges(path, &normalized, &path_text, &mut violations);
     enforce_adapter_ownership(path, &normalized, &path_text, &mut violations);
     enforce_diagnostics_ownership(path, &normalized, &path_text, &mut violations);
     if path_text == "src/domain/mod.rs" && source.contains("pub mod ") {
@@ -130,6 +135,24 @@ fn check_source(path: &Path, source: &str) -> Vec<String> {
         ));
     }
     violations
+}
+
+fn enforce_layer_edges(path: &Path, source: &str, path_text: &str, violations: &mut Vec<String>) {
+    let layered = [
+        "src/domain/",
+        "src/ports/",
+        "src/application/",
+        "src/adapters/",
+        "src/ui/",
+    ]
+    .iter()
+    .any(|prefix| path_text.starts_with(prefix));
+    if layered {
+        find_markers(path, source, &["crate::cli"], violations);
+    }
+    if path_text.starts_with("src/adapters/") && !path_text.starts_with("src/adapters/terminal/") {
+        find_markers(path, source, &["crate::ui"], violations);
+    }
 }
 
 fn enforce_diagnostics_ownership(
@@ -360,8 +383,35 @@ mod tests {
     }
 
     #[test]
+    fn inner_layers_and_nonterminal_adapters_cannot_import_outer_composition() {
+        let cli = check_source(
+            Path::new("src/adapters/sqlite/load.rs"),
+            "use crate::cli::RuntimeContext;",
+        );
+        assert!(cli.iter().any(|finding| finding.contains("crate::cli")));
+        let ui = check_source(
+            Path::new("src/adapters/sqlite/load.rs"),
+            "use crate::ui::BoardApp;",
+        );
+        assert!(ui.iter().any(|finding| finding.contains("crate::ui")));
+        assert!(
+            check_source(
+                Path::new("src/adapters/terminal/runner.rs"),
+                "use crate::ui::BoardApp;",
+            )
+            .is_empty()
+        );
+    }
+
+    #[test]
     fn test_only_adapter_fixture_is_accepted() {
         let source = "#[cfg(test)] mod tests { use crate::{adapters::memory::FakeClock}; }";
         assert!(check_source(Path::new("src/application/model.rs"), source).is_empty());
+    }
+
+    #[test]
+    fn adjacent_test_modules_keep_the_same_test_only_dependency_boundary() {
+        let source = "use crate::{adapters::memory::FakeClock}; use std::env;";
+        assert!(check_source(Path::new("src/application/control/tests.rs"), source).is_empty());
     }
 }

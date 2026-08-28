@@ -9,6 +9,19 @@ use super::{
     ThoughtPosition, ThoughtPresentation, Timestamp, validate_annotations,
 };
 
+/// Durable structural operation record.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct OperationRecord {
+    /// Stable operation identity.
+    pub id: OperationId,
+    /// Owning session.
+    pub session_id: SessionId,
+    /// Monotonic sequence in the session.
+    pub sequence: OperationSequence,
+    /// Creation time.
+    pub created_at: Timestamp,
+}
+
 /// Explicit persistent undo scope.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "scope")]
@@ -234,6 +247,7 @@ impl SessionBoard {
     ///
     /// Returns a domain error for duplicate identities, wrong ownership, or invalid positions.
     pub fn validate(&self) -> Result<(), DomainError> {
+        self.session.validate()?;
         let mut identities = HashSet::with_capacity(self.thoughts.len());
         for thought in &self.thoughts {
             if !identities.insert(thought.id) {

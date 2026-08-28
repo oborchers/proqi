@@ -306,14 +306,63 @@ fn mouse_uses_rendered_rows_and_footer_geometry() {
         })),
         BrowserAction::Trash(id)
     );
+    for column in [20, 31] {
+        assert_eq!(
+            browser.handle(UiInput::Pointer(PointerInput {
+                column: footer.x.saturating_add(column),
+                row: footer.y,
+                kind: PointerKind::Down(PointerButton::Left),
+                extend_selection: false,
+            })),
+            BrowserAction::Continue,
+            "non-action footer label at column {column} must not reuse adjacent hit geometry"
+        );
+    }
     assert_eq!(
         browser.handle(UiInput::Pointer(PointerInput {
-            column: footer.x.saturating_add(30),
+            column: footer.x.saturating_add(43),
             row: footer.y,
             kind: PointerKind::Down(PointerButton::Left),
             extend_selection: false,
         })),
         BrowserAction::Cancel
+    );
+
+    let narrow = browser.prepare_frame(ratatui_core::layout::Rect::new(0, 0, 44, 10));
+    assert_eq!(
+        browser.handle(UiInput::Pointer(PointerInput {
+            column: narrow.footer.x.saturating_add(20),
+            row: narrow.footer.y,
+            kind: PointerKind::Down(PointerButton::Left),
+            extend_selection: false,
+        })),
+        BrowserAction::Continue,
+        "the narrow Enter label must not inherit the Trash hit target"
+    );
+}
+
+#[test]
+fn zero_height_browser_has_no_phantom_footer_target() {
+    let mut ids = FakeIdGenerator::new(1_725_000_000_000);
+    let entry = item(
+        &mut ids,
+        Some("Zero height"),
+        test_path("zero-height"),
+        "hidden",
+        10,
+        resumable,
+    );
+    let mut browser = SessionBrowser::new(vec![entry], Timestamp::from_millis(20));
+    let empty = browser.prepare_frame(ratatui_core::layout::Rect::new(0, 0, 44, 0));
+    assert_eq!(empty.footer.height, 0);
+    assert_eq!(
+        browser.handle(UiInput::Pointer(PointerInput {
+            column: 0,
+            row: 0,
+            kind: PointerKind::Down(PointerButton::Left),
+            extend_selection: false,
+        })),
+        BrowserAction::Continue,
     );
 }
 

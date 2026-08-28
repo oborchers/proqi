@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::{OperationId, RevisionId, SessionId, TextPosition, ThoughtId};
+use super::{RevisionId, SessionId, TextPosition, ThoughtId};
 
 /// UTC milliseconds since the Unix epoch.
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
@@ -157,6 +157,24 @@ impl Session {
             return Err(DomainError::BlankSessionName);
         }
         self.name = name;
+        Ok(())
+    }
+
+    /// Validate restored session paths and optional naming invariants.
+    ///
+    /// # Errors
+    ///
+    /// Returns a domain error when persisted state bypassed constructor invariants.
+    pub fn validate(&self) -> Result<(), DomainError> {
+        validate_absolute_path(&self.origin_cwd)?;
+        validate_absolute_path(&self.last_opened_cwd)?;
+        if self
+            .name
+            .as_deref()
+            .is_some_and(|value| value.trim().is_empty())
+        {
+            return Err(DomainError::BlankSessionName);
+        }
         Ok(())
     }
 
@@ -394,19 +412,6 @@ pub struct IntegrationContext {
     pub pane_hint: Option<String>,
     /// Time at which the context was independently verified.
     pub verified_at: Timestamp,
-}
-
-/// Durable structural operation record.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct OperationRecord {
-    /// Stable operation identity.
-    pub id: OperationId,
-    /// Owning session.
-    pub session_id: SessionId,
-    /// Monotonic sequence in the session.
-    pub sequence: OperationSequence,
-    /// Creation time.
-    pub created_at: Timestamp,
 }
 
 /// Domain validation failure.

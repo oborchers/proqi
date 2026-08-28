@@ -104,12 +104,70 @@ pub struct BrowserLayout {
     pub footer: Rect,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum BrowserHit {
     Item(usize),
     Rename,
     Trash,
     Cancel,
     None,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct BrowserFooterControl {
+    pub(super) hit: BrowserHit,
+    pub(super) key: &'static str,
+    pub(super) label: &'static str,
+    pub(super) area: Rect,
+}
+
+pub(super) fn browser_footer_controls(area: Rect) -> Vec<BrowserFooterControl> {
+    if area.width == 0 || area.height == 0 {
+        return Vec::new();
+    }
+    let items = if area.width >= 60 {
+        [
+            (BrowserHit::Rename, "R", "Rename"),
+            (BrowserHit::Trash, "D", "Trash"),
+            (BrowserHit::None, "↑↓", "Select"),
+            (BrowserHit::None, "Enter", "Open"),
+            (BrowserHit::Cancel, "Esc", "Cancel"),
+        ]
+        .as_slice()
+    } else if area.width >= 36 {
+        [
+            (BrowserHit::Rename, "R", "Rename"),
+            (BrowserHit::Trash, "D", "Trash"),
+            (BrowserHit::None, "Enter", "Open"),
+            (BrowserHit::Cancel, "Esc", "Back"),
+        ]
+        .as_slice()
+    } else {
+        [
+            (BrowserHit::Rename, "R", "Name"),
+            (BrowserHit::Trash, "D", "Trash"),
+            (BrowserHit::Cancel, "Esc", "Back"),
+        ]
+        .as_slice()
+    };
+    let mut x = area.x.saturating_add(1);
+    items
+        .iter()
+        .map(|&(hit, key, label)| {
+            let width = crate::ports::text_layout::terminal_cell_width(key)
+                .saturating_add(1)
+                .saturating_add(crate::ports::text_layout::terminal_cell_width(label));
+            let width = u16::try_from(width).unwrap_or(u16::MAX);
+            let control = BrowserFooterControl {
+                hit,
+                key,
+                label,
+                area: Rect::new(x, area.y, width.min(area.right().saturating_sub(x)), 1),
+            };
+            x = x.saturating_add(width).saturating_add(2);
+            control
+        })
+        .collect()
 }
 
 /// Result of handling one browser input.

@@ -5,6 +5,8 @@ use std::time::Duration;
 use serde::Deserialize;
 use ureq::{Agent, http::header};
 
+use super::etag::valid as valid_etag;
+
 use crate::{
     domain::{InstallationKind, StableVersion},
     ports::update::{ReleaseObservation, ReleaseSource, UpdateError},
@@ -16,7 +18,6 @@ const HOMEBREW_FORMULA_URL: &str =
 const RELEASE_PATH_MARKER: &str = "/releases/download/v";
 const MAX_RESPONSE_BYTES: u64 = 64 * 1024;
 const MAX_RESPONSE_HEADER_BYTES: usize = 16 * 1024;
-const MAX_ETAG_BYTES: usize = 256;
 const UPDATE_REQUEST_TIMEOUT: Duration = Duration::from_millis(1_500);
 
 /// Fetches the latest supported stable release from the canonical repository.
@@ -152,15 +153,6 @@ fn parse_formula(body: &[u8]) -> Result<StableVersion, UpdateError> {
         return Err(UpdateError::InvalidResponse);
     }
     observed.ok_or(UpdateError::InvalidResponse)
-}
-
-fn valid_etag(value: &str) -> bool {
-    !value.is_empty()
-        && value.len() <= MAX_ETAG_BYTES
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_graphic() || byte == b' ')
-        && !value.bytes().any(|byte| matches!(byte, b'\r' | b'\n'))
 }
 
 fn map_transport_error(error: &ureq::Error) -> UpdateError {

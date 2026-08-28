@@ -3,10 +3,7 @@
 use ratatui_core::layout::Rect;
 use unicode_width::UnicodeWidthStr as _;
 
-use crate::{
-    domain::Direction,
-    ports::agent::{AgentTarget, SubmissionDisposition},
-};
+use crate::ports::agent::{AgentTarget, SubmissionDisposition};
 
 use super::{HitTarget, LayoutSnapshot, OverlayLayout};
 
@@ -59,7 +56,7 @@ pub(super) fn configure_footer_summary(
     session_name: String,
     session_id: Option<String>,
 ) {
-    let area = inset(layout.footer_name);
+    let area = crate::ui::geometry::inset_horizontal(layout.footer_name, 2);
     if area.height > 0 {
         configure_session_targets(layout, area, &session_name, session_id.as_deref());
     }
@@ -106,15 +103,16 @@ pub(super) fn configure_agent_controls(
     layout: &mut LayoutSnapshot,
     targets: &[AgentTarget],
     selection: Option<SubmissionDisposition>,
+    keybindings: &crate::ui::KeyBindings,
 ) {
-    let area = inset(layout.footer_agents);
+    let area = crate::ui::geometry::inset_horizontal(layout.footer_agents, 2);
     if area.height == 0 {
         return;
     }
     let mut x = area.x;
     if let Some(disposition) = selection {
         for target in targets.iter().filter(|target| target.delivery.supports()) {
-            let label_width = agent_width(target);
+            let label_width = crate::ui::control_labels::agent(target).width();
             push(
                 layout,
                 &mut x,
@@ -126,7 +124,7 @@ pub(super) fn configure_agent_controls(
         return;
     }
     for target in targets {
-        let label_width = agent_width(target);
+        let label_width = crate::ui::control_labels::agent(target).width();
         push(
             layout,
             &mut x,
@@ -148,10 +146,7 @@ pub(super) fn configure_agent_controls(
             [only] => HitTarget::Deliver(only.direction, disposition),
             _ => HitTarget::BeginDelivery(disposition),
         };
-        let label_width = match disposition {
-            SubmissionDisposition::RemoveAfterSuccess => 9,
-            SubmissionDisposition::Keep => 16,
-        };
+        let label_width = crate::ui::control_labels::submission_width(disposition, keybindings);
         push(layout, &mut x, area, target, label_width);
     }
 }
@@ -167,22 +162,6 @@ fn push(layout: &mut LayoutSnapshot, x: &mut u16, area: Rect, target: HitTarget,
     }
 }
 
-fn agent_width(target: &AgentTarget) -> u16 {
-    let direction = match target.direction {
-        Direction::Up | Direction::Right | Direction::Down | Direction::Left => 1,
-    };
-    direction + 1 + width(target.agent_kind.as_str())
-}
-
 fn width(value: &str) -> u16 {
     u16::try_from(value.width()).unwrap_or(u16::MAX)
-}
-
-fn inset(area: Rect) -> Rect {
-    Rect::new(
-        area.x.saturating_add(2),
-        area.y,
-        area.width.saturating_sub(4),
-        area.height,
-    )
 }

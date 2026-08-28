@@ -2,19 +2,19 @@
 
 use ratatui_core::layout::Rect;
 
-use super::{BrowserEntryLayout, BrowserHit, BrowserLayout, SessionBrowser};
+use crate::ui::geometry::contains;
+
+use super::{
+    BrowserEntryLayout, BrowserHit, BrowserLayout, SessionBrowser, browser_footer_controls,
+};
 
 impl BrowserLayout {
     pub(super) fn hit_test(&self, column: u16, row: u16) -> BrowserHit {
         if contains(self.footer, column, row) {
-            let offset = column.saturating_sub(self.footer.x);
-            return if offset < 11 {
-                BrowserHit::Rename
-            } else if offset < 22 {
-                BrowserHit::Trash
-            } else {
-                BrowserHit::Cancel
-            };
+            return browser_footer_controls(self.footer)
+                .iter()
+                .find(|control| contains(control.area, column, row))
+                .map_or(BrowserHit::None, |control| control.hit);
         }
         self.entries
             .iter()
@@ -117,8 +117,4 @@ fn inline_detail(area: Rect, y: &mut u16) -> Rect {
     );
     *y = y.saturating_add(height);
     detail
-}
-
-fn contains(area: Rect, column: u16, row: u16) -> bool {
-    column >= area.x && column < area.right() && row >= area.y && row < area.bottom()
 }

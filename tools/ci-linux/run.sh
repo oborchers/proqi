@@ -26,7 +26,7 @@ use_target() {
 
 use_target stable
 
-cargo xtask check
+cargo xtask quality
 cargo xtask clean-worktree
 cargo xtask test
 cargo xtask clean-worktree

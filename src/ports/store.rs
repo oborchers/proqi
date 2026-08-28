@@ -1,9 +1,9 @@
 //! Persistence facade expressed in domain terms.
 
 mod compaction;
+mod error;
 
 use serde::{Deserialize, Serialize};
-use thiserror::Error;
 
 use crate::domain::{
     BoardOperation, Direction, IntegrationContext, OperationId, OperationSequence, RevisionId,
@@ -13,6 +13,7 @@ use crate::domain::{
 use crate::ports::agent::{AgentState, SubmissionDisposition};
 
 pub use compaction::{CompactedOperationRequest, thought_payload_digest};
+pub use error::{StoreError, StoreFailureCode};
 
 /// Current storage schema understood by this binary.
 pub const SUPPORTED_SCHEMA_VERSION: u32 = 6;
@@ -276,68 +277,6 @@ pub struct SessionHit {
     pub integration_context: Option<IntegrationContext>,
     /// Whether the session is in recoverable trash.
     pub trashed: bool,
-}
-
-/// Typed persistence failure.
-#[derive(Clone, Debug, Eq, Error, PartialEq)]
-pub enum StoreError {
-    /// SQLite writer remained contended after bounded retries.
-    #[error("storage is busy")]
-    Busy,
-    /// A requested durable record does not exist.
-    #[error("storage record not found: {0}")]
-    NotFound(String),
-    /// Current state does not satisfy a commit precondition.
-    #[error("storage conflict: {0}")]
-    Conflict(String),
-    /// Database or index integrity validation failed.
-    #[error("storage integrity check failed: {0}")]
-    Integrity(String),
-    /// Database schema is newer than this binary.
-    #[error("unsupported storage schema {found}, maximum supported is {supported}")]
-    UnsupportedSchema {
-        /// Schema found on disk.
-        found: u32,
-        /// Maximum supported schema.
-        supported: u32,
-    },
-    /// Storage protocol is newer even though the table schema is recognized.
-    #[error("unsupported storage protocol {found}, maximum supported is {supported}")]
-    UnsupportedStorageProtocol {
-        /// Protocol found on disk.
-        found: u32,
-        /// Maximum supported protocol.
-        supported: u32,
-    },
-    /// Schema is older but this process lacks exclusive migration authority.
-    #[error("storage schema {found} requires migration to {supported}")]
-    MigrationRequired {
-        /// Schema found on disk.
-        found: u32,
-        /// Required schema.
-        supported: u32,
-    },
-    /// A pre-migration backup could not be completed.
-    #[error("storage backup failed: {0}")]
-    Backup(String),
-    /// Database contents or identifiers are malformed.
-    #[error("storage is corrupt or malformed: {0}")]
-    Corrupt(String),
-    /// Filesystem operation failed.
-    #[error("storage I/O failed: {0}")]
-    Io(String),
-    /// JSON operation payload could not be encoded or decoded.
-    #[error("storage serialization failed: {0}")]
-    Serialization(String),
-    /// A validated domain invariant rejected persisted state.
-    #[error("stored domain invariant failed: {0}")]
-    Invariant(String),
-    /// Available storage could not accept a write.
-    #[error("storage device is full")]
-    DiskFull,
-    /// The in-memory recovery queue cannot safely retain another failed write.
-    #[error("failed write exceeds bounded recovery capacity")]
-    RecoveryCapacity,
 }
 
 /// Local durable store used by the TUI and CLI.

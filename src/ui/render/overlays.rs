@@ -14,8 +14,6 @@ use ratatui_widgets::{
 use unicode_segmentation::UnicodeSegmentation as _;
 use unicode_width::UnicodeWidthStr as _;
 
-use crate::application::InteractionMode;
-
 use super::super::{BoardApp, Theme, layout::OverlayLayout};
 
 pub(super) fn render_help(
@@ -212,26 +210,7 @@ fn picker_row(entry: PickerRow<'_>, width: u16) -> String {
 }
 
 fn ellipsize(value: &str, width: usize) -> String {
-    if value.width() <= width {
-        return value.to_owned();
-    }
-    if width == 0 {
-        return String::new();
-    }
-    let mut cells = 0;
-    let mut visible = value
-        .graphemes(true)
-        .take_while(|grapheme| {
-            let next = cells + grapheme.width();
-            let keep = next < width;
-            if keep {
-                cells = next;
-            }
-            keep
-        })
-        .collect::<String>();
-    visible.push('…');
-    visible
+    crate::ports::text_layout::ellipsize_cells(value, width)
 }
 
 fn visible_query(query: &str, cursor: usize, width: u16) -> (String, u16) {
@@ -265,61 +244,11 @@ fn render_close(frame: &mut Frame<'_>, overlay: &OverlayLayout, theme: &Theme) {
 }
 
 fn help_lines(app: &BoardApp, theme: &Theme, width: u16, height: u16) -> Vec<Line<'static>> {
-    let keys = app.keybindings();
-    let items = if matches!(app.interaction_mode(), InteractionMode::Edit { .. }) {
-        edit_shortcuts(keys)
-    } else {
-        board_shortcuts(app)
-    };
+    let items = crate::ui::shortcuts::items(app);
     let lines = shortcut_grid(&items, width, theme);
     let capacity = usize::from(height);
     let scroll = app.help_scroll().min(lines.len().saturating_sub(capacity));
     lines.into_iter().skip(scroll).take(capacity).collect()
-}
-
-fn edit_shortcuts(keys: &crate::ui::KeyBindings) -> Vec<(String, &'static str)> {
-    vec![
-        ("Esc".to_owned(), "Board"),
-        (primary("A"), "Select all"),
-        (primary("U"), "Delete line"),
-        (primary("Z"), "Undo"),
-        (primary("Shift+Z"), "Redo"),
-        (keys.commands.to_string(), "Commands"),
-        (keys.help.to_string(), "Close"),
-    ]
-}
-
-fn board_shortcuts(app: &BoardApp) -> Vec<(String, &'static str)> {
-    let keys = app.keybindings();
-    let mut delivery = Vec::new();
-    if app.supports_submission() {
-        delivery.push((keys.submit_remove.to_string(), "Submit"));
-        delivery.push((keys.submit_keep.to_string(), "Submit & keep"));
-    }
-    let mut items = vec![
-        (keys.new.to_string(), "New"),
-        (format!("Enter/{}", keys.edit), "Edit"),
-        (format!("{}/{}", keys.focus_down, keys.focus_up), "Move"),
-        (format!("{}/{}", keys.range_down, keys.range_up), "Range"),
-        (
-            primary(&format!("{}/{}", keys.range_down, keys.range_up)),
-            "Reorder",
-        ),
-        (keys.copy.to_string(), "Copy"),
-        (keys.cut.to_string(), "Cut"),
-        (keys.delete.to_string(), "Delete"),
-        (primary("D"), "Duplicate"),
-        (crate::ui::settings::key_label(keys.select), "Select"),
-        (crate::ui::settings::key_label(keys.range_select), "Latch"),
-        (keys.undo.to_string(), "Undo"),
-        (crate::ui::settings::key_label(keys.collapse), "Collapse"),
-        (keys.search.to_string(), "Search"),
-        (keys.commands.to_string(), "Commands"),
-        (keys.help.to_string(), "Close"),
-    ];
-    items.extend(delivery);
-    items.push((keys.quit.to_string(), "Quit"));
-    items
 }
 
 fn shortcut_grid(
@@ -327,17 +256,7 @@ fn shortcut_grid(
     width: u16,
     theme: &Theme,
 ) -> Vec<Line<'static>> {
-    let key_width = items.iter().map(|(key, _)| key.width()).max().unwrap_or(1);
-    let widest = items
-        .iter()
-        .map(|(_, label)| key_width + 1 + label.width())
-        .max()
-        .unwrap_or(1);
-    let columns = if usize::from(width) >= widest.saturating_mul(2) {
-        2
-    } else {
-        1
-    };
+    let (columns, key_width) = crate::ui::shortcuts::grid_metrics(items, width);
     let cell_width = usize::from(width) / columns;
     items
         .chunks(columns)
@@ -365,14 +284,6 @@ fn shortcut_row(
         }
     }
     Line::from(spans)
-}
-
-fn primary(suffix: &str) -> String {
-    if cfg!(target_os = "macos") {
-        format!("⌘{suffix}")
-    } else {
-        format!("Ctrl+{suffix}")
-    }
 }
 
 #[cfg(test)]

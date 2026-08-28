@@ -1,6 +1,7 @@
 //! GitHub release, installation detection, and private update-state adapters.
 
 mod cache;
+mod etag;
 mod github;
 mod installation;
 mod installer;

@@ -457,17 +457,7 @@ fn url_ranges(content: &str) -> Vec<std::ops::Range<usize>> {
 }
 
 fn visible_grapheme(grapheme: &str, column: usize) -> (String, usize) {
-    if grapheme == "\t" {
-        let width = 4 - column % 4;
-        (" ".repeat(width), width)
-    } else if grapheme.chars().any(char::is_control) {
-        ("�".to_owned(), 1)
-    } else {
-        (
-            grapheme.to_owned(),
-            unicode_width::UnicodeWidthStr::width(grapheme),
-        )
-    }
+    crate::ports::text_layout::display_grapheme(grapheme, column)
 }
 
 #[cfg(test)]

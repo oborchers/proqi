@@ -14,12 +14,11 @@ use super::{
     roots::{self, CompatibilityRoot, RootShape},
 };
 
-#[path = "scan/consolidate.rs"]
 mod consolidate;
 
 use consolidate::ObservedEntry;
 
-const MAX_ROOTS: usize = 128;
+pub(super) const MAX_ROOTS: usize = 128;
 const MAX_DEPTH: usize = 6;
 const MAX_ENTRIES: usize = 2_048;
 const MAX_VISITED_PATHS: usize = 8_192;

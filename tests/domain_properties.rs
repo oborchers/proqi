@@ -63,3 +63,25 @@ proptest! {
         prop_assert_eq!(created, initial);
     }
 }
+
+#[test]
+fn restored_boards_revalidate_session_constructor_invariants() {
+    let mut ids = FakeIdGenerator::new(1_725_000_000_000);
+    let mut session = Session::new(
+        ids.session_id(),
+        std::env::temp_dir().join("proqi-session-validation"),
+        Timestamp::from_millis(1),
+    )
+    .expect("session");
+    session.last_opened_cwd = "relative".into();
+    assert!(SessionBoard::new(session, Vec::new()).is_err());
+
+    let mut session = Session::new(
+        ids.session_id(),
+        std::env::temp_dir().join("proqi-session-validation"),
+        Timestamp::from_millis(1),
+    )
+    .expect("session");
+    session.name = Some("  ".to_owned());
+    assert!(SessionBoard::new(session, Vec::new()).is_err());
+}

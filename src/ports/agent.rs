@@ -18,6 +18,9 @@ pub const OPENCODE_AGENT_KIND: &str = "opencode";
 /// Canonical adjacent-agent kind label for the Kilo harness.
 pub const KILO_AGENT_KIND: &str = "kilo";
 
+/// Canonical adjacent-agent kind label for the Pi harness.
+pub const PI_AGENT_KIND: &str = "pi";
+
 /// Validated, open-ended harness kind reported by an integration.
 ///
 /// This is intentionally not an enum: Herdr may add harnesses independently of

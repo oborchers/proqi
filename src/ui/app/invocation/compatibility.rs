@@ -3,13 +3,11 @@
 use std::collections::BTreeSet;
 
 use crate::ports::{
-    agent::{CLAUDE_AGENT_KIND, CODEX_AGENT_KIND, OPENCODE_AGENT_KIND},
+    agent::{CLAUDE_AGENT_KIND, CODEX_AGENT_KIND, OPENCODE_AGENT_KIND, PI_AGENT_KIND},
     invocation::{InvocationForm, InvocationHarness},
 };
 
 use crate::ui::app::BoardApp;
-
-const PI_AGENT_KIND: &str = "pi";
 
 pub(super) fn supports_form(app: &BoardApp, form: &InvocationForm) -> bool {
     let targets = target_harnesses(app);

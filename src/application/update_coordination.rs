@@ -15,6 +15,21 @@ use crate::{
     },
 };
 
+/// Whether one active process can participate in the current all-session update protocol.
+#[must_use]
+pub(crate) fn is_compatible_update_participant(
+    participant: &InstanceInfo,
+    installation: InstallationIdentity,
+) -> bool {
+    participant.storage_protocol == STORAGE_PROTOCOL_VERSION
+        && participant.control_protocol == Some(crate::ports::control::CONTROL_PROTOCOL_VERSION)
+        && participant.control_endpoint.is_some()
+        && participant.update.as_ref().is_some_and(|context| {
+            context.installation_identity == installation
+                && context.protocol == UPDATE_CONTROL_PROTOCOL_VERSION
+        })
+}
+
 /// Final result of one elected update attempt.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct UpdateExecution {
@@ -314,14 +329,7 @@ fn aborted_execution(
 fn matching(instances: Vec<InstanceInfo>, installation: InstallationIdentity) -> Vec<InstanceInfo> {
     instances
         .into_iter()
-        .filter(|info| {
-            info.storage_protocol == STORAGE_PROTOCOL_VERSION
-                && info.control_endpoint.is_some()
-                && info.update.as_ref().is_some_and(|context| {
-                    context.installation_identity == installation
-                        && context.protocol == UPDATE_CONTROL_PROTOCOL_VERSION
-                })
-        })
+        .filter(|info| is_compatible_update_participant(info, installation))
         .collect()
 }
 

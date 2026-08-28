@@ -47,7 +47,7 @@ impl RopeEditor {
         position: TextPosition,
         granularity: SelectionGranularity,
         extend_selection: bool,
-    ) -> bool {
+    ) {
         let content = self.content();
         let byte = byte_for_position(&content, position);
         let target = Self::selection_range_at(&content, byte, granularity);
@@ -66,12 +66,11 @@ impl RopeEditor {
             granularity,
         });
         self.extend_pointer_selection(position);
-        false
     }
 
-    pub(super) fn extend_pointer_selection(&mut self, position: TextPosition) -> bool {
+    pub(super) fn extend_pointer_selection(&mut self, position: TextPosition) {
         let Some(pointer) = self.pointer_selection else {
-            return false;
+            return;
         };
         let content = self.content();
         let byte = byte_for_position(&content, position);
@@ -86,11 +85,9 @@ impl RopeEditor {
         self.state.selection_anchor_byte = Some(anchor);
         self.state.cursor_byte = cursor;
         self.ensure_cursor_visible();
-        false
     }
 
-    pub(super) fn end_pointer_selection(&mut self) -> bool {
+    pub(super) fn end_pointer_selection(&mut self) {
         self.pointer_selection = None;
-        false
     }
 }

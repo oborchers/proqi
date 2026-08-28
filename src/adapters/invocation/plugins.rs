@@ -22,7 +22,7 @@ pub(super) fn roots(home: &Path, cwd: &Path, existing: usize) -> Vec<ScanRoot> {
     let mut output = Vec::new();
     for (registry_name, installations) in plugins.iter().take(MAX_PLUGINS) {
         for installation in installations.as_array().into_iter().flatten().take(4) {
-            if output.len().saturating_add(existing) >= 128 {
+            if output.len().saturating_add(existing) >= super::scan::MAX_ROOTS {
                 return output;
             }
             let Some(path) = installation

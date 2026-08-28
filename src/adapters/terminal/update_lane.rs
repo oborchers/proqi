@@ -416,10 +416,5 @@ fn compatible_participants(
 }
 
 fn compatible(participant: &InstanceInfo, installation: &Installation) -> bool {
-    participant.control_protocol == Some(crate::ports::control::CONTROL_PROTOCOL_VERSION)
-        && participant.control_endpoint.is_some()
-        && participant.update.as_ref().is_some_and(|context| {
-            context.installation_identity == installation.identity
-                && context.protocol == crate::ports::update::UPDATE_CONTROL_PROTOCOL_VERSION
-        })
+    crate::application::is_compatible_update_participant(participant, installation.identity)
 }

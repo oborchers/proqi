@@ -10,6 +10,8 @@ use std::{
 
 use fs4::{FileExt, TryLockError};
 
+use super::etag::valid as valid_etag;
+
 use crate::{
     domain::{InstallationIdentity, StableVersion, Timestamp, UpdateCacheState},
     ports::update::{
@@ -18,7 +20,6 @@ use crate::{
 };
 
 const MAX_STATE_BYTES: u64 = 16 * 1024;
-const MAX_ETAG_BYTES: usize = 256;
 const STATE_LOCK_ATTEMPTS: usize = 100;
 
 /// Filesystem-backed update state rooted in the platform cache directory.
@@ -308,15 +309,6 @@ fn prepare_private_dir(path: &Path) -> Result<(), UpdateError> {
         Err(error) => return Err(state_error(error)),
     }
     set_private_dir_permissions(path).map_err(state_error)
-}
-
-fn valid_etag(value: &str) -> bool {
-    !value.is_empty()
-        && value.len() <= MAX_ETAG_BYTES
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_graphic() || byte == b' ')
-        && !value.contains(['\r', '\n'])
 }
 
 fn set_private_open_mode(options: &mut OpenOptions) {

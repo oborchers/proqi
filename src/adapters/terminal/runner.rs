@@ -487,10 +487,5 @@ pub(super) fn supports_true_color() -> bool {
 }
 
 pub(super) const fn storage_error_code(error: &StoreError) -> &'static str {
-    match error {
-        StoreError::Busy => "storage_busy",
-        StoreError::DiskFull => "storage_full",
-        StoreError::RecoveryCapacity => "recovery_capacity",
-        _ => "storage_failed",
-    }
+    error.failure_code().control_str()
 }

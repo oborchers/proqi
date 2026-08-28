@@ -38,15 +38,19 @@ pub(super) fn execute_sessions(
             }
             Ok(simple_session_outcome(id, "renamed"))
         }
-        SessionCommand::Trash { session } => manage_session(context, &session, "trashed"),
-        SessionCommand::Restore { session } => manage_session(context, &session, "restored"),
+        SessionCommand::Trash { session } => {
+            manage_session(context, &session, SessionManagement::Trash)
+        }
+        SessionCommand::Restore { session } => {
+            manage_session(context, &session, SessionManagement::Restore)
+        }
         SessionCommand::Prune { session, yes } => {
             if !yes {
                 return Err(CliError::arguments(
                     "permanent pruning requires --yes".to_owned(),
                 ));
             }
-            manage_session(context, &session, "pruned")
+            manage_session(context, &session, SessionManagement::Prune)
         }
     }
 }
@@ -69,17 +73,33 @@ pub(super) fn opened_session(id: SessionId) -> Outcome {
 fn manage_session(
     context: &mut RuntimeContext,
     reference: &str,
-    action: &str,
+    action: SessionManagement,
 ) -> Result<Outcome, CliError> {
     let mut service = session_service(context)?;
     let id = service.resolve_session(reference, true)?;
     match action {
-        "trashed" => service.trash_session(id)?,
-        "restored" => service.restore_session(id)?,
-        "pruned" => service.prune_session(id)?,
-        _ => return Err(CliError::unsupported(action.to_owned())),
+        SessionManagement::Trash => service.trash_session(id)?,
+        SessionManagement::Restore => service.restore_session(id)?,
+        SessionManagement::Prune => service.prune_session(id)?,
     }
-    Ok(simple_session_outcome(id, action))
+    Ok(simple_session_outcome(id, action.label()))
+}
+
+#[derive(Clone, Copy)]
+enum SessionManagement {
+    Trash,
+    Restore,
+    Prune,
+}
+
+impl SessionManagement {
+    const fn label(self) -> &'static str {
+        match self {
+            Self::Trash => "trashed",
+            Self::Restore => "restored",
+            Self::Prune => "pruned",
+        }
+    }
 }
 
 fn simple_session_outcome(id: SessionId, action: &str) -> Outcome {

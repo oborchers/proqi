@@ -611,7 +611,8 @@ cargo xtask format             # apply formatting
 cargo xtask source-limits      # enforce the 500-line source-file ceiling
 cargo xtask architecture       # enforce inward dependency boundaries
 cargo xtask assets             # verify public assets and recording fixtures
-cargo xtask check              # formatting, architecture, Clippy, docs, and tests
+cargo xtask quality            # formatting, architecture, Clippy, and docs
+cargo xtask check              # canonical aggregate: quality plus tests
 cargo xtask ci-linux           # mirror Linux CI command gates in pinned Docker
 cargo xtask test-pty           # real terminal scenarios on macOS
 cargo xtask coverage           # enforce the line-coverage floor

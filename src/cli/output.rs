@@ -8,7 +8,10 @@ use serde_json::{Value, json};
 use crate::{
     adapters::terminal::TerminalError,
     application::{ApplicationError, SessionServiceError},
-    ports::{runtime::RuntimeError, store::StoreError},
+    ports::{
+        runtime::RuntimeError,
+        store::{StoreError, StoreFailureCode},
+    },
 };
 
 pub(super) const JSON_SCHEMA_VERSION: u32 = 1;
@@ -32,10 +35,6 @@ impl CliError {
 
     pub(super) fn identifier(message: String) -> Self {
         Self::new("invalid_identifier", message, 2)
-    }
-
-    pub(super) fn unsupported(message: String) -> Self {
-        Self::new("unsupported", message, 6)
     }
 
     pub(super) fn new(code: &'static str, message: String, exit: u8) -> Self {
@@ -101,17 +100,22 @@ impl From<RuntimeError> for CliError {
 
 impl From<StoreError> for CliError {
     fn from(error: StoreError) -> Self {
-        let (code, exit) = match &error {
-            StoreError::Busy => ("storage_busy", 5),
-            StoreError::NotFound(_) => ("not_found", 3),
-            StoreError::Conflict(_) => ("conflict", 7),
-            StoreError::UnsupportedSchema { .. }
-            | StoreError::UnsupportedStorageProtocol { .. }
-            | StoreError::MigrationRequired { .. } => ("unsupported", 6),
-            StoreError::DiskFull => ("disk_full", 1),
-            _ => ("storage_failed", 1),
+        Self::storage(error.failure_code(), error.to_string())
+    }
+}
+
+impl CliError {
+    pub(super) fn storage(code: StoreFailureCode, message: String) -> Self {
+        let exit = match code {
+            StoreFailureCode::Busy => 5,
+            StoreFailureCode::NotFound => 3,
+            StoreFailureCode::Conflict => 7,
+            StoreFailureCode::Unsupported => 6,
+            StoreFailureCode::DiskFull
+            | StoreFailureCode::RecoveryCapacity
+            | StoreFailureCode::Failed => 1,
         };
-        Self::new(code, error.to_string(), exit)
+        Self::new(code.cli_str(), message, exit)
     }
 }
 

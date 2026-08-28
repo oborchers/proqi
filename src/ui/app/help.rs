@@ -1,6 +1,6 @@
 //! Contextual-help navigation kept separate from board mutations.
 
-use crate::application::{Effect, InteractionMode};
+use crate::application::Effect;
 use crate::ports::editor::CursorMovement;
 
 use super::{BoardApp, HitTarget, PointerButton, PointerKind, UiInput, UiKey};
@@ -87,13 +87,7 @@ impl BoardApp {
         else {
             return 0;
         };
-        let item_count = if matches!(self.interaction_mode(), InteractionMode::Edit { .. }) {
-            7
-        } else {
-            17 + usize::from(self.supports_submission()) * 2
-        };
-        let columns = usize::from(overlay.area.width >= 48) + 1;
-        let rows = item_count.div_ceil(columns);
+        let rows = crate::ui::shortcuts::row_count(self, overlay.area.width.saturating_sub(2));
         rows.saturating_sub(usize::from(overlay.area.height.saturating_sub(2)))
     }
 

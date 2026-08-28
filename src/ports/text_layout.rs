@@ -1,11 +1,67 @@
 //! Canonical grapheme and terminal-cell wrapping shared by editor and board UI.
 
-use unicode_segmentation::UnicodeSegmentation as _;
-use unicode_width::UnicodeWidthStr;
-
 use crate::domain::TextPosition;
+use unicode_segmentation::UnicodeSegmentation as _;
+use unicode_width::UnicodeWidthStr as _;
 
 use super::editor::VisualLine;
+
+const TAB_WIDTH: usize = 4;
+
+pub(crate) fn grapheme_cell_width(grapheme: &str, column: usize) -> usize {
+    if grapheme == "\t" {
+        TAB_WIDTH - column % TAB_WIDTH
+    } else if grapheme.chars().any(char::is_control) {
+        1
+    } else {
+        grapheme.width()
+    }
+}
+
+pub(crate) fn display_grapheme(grapheme: &str, column: usize) -> (String, usize) {
+    let width = grapheme_cell_width(grapheme, column);
+    let display = if grapheme == "\t" {
+        " ".repeat(width)
+    } else if grapheme.chars().any(char::is_control) {
+        "�".to_owned()
+    } else {
+        grapheme.to_owned()
+    };
+    (display, width)
+}
+
+pub(crate) fn truncate_cells(value: &str, width: usize) -> String {
+    let mut cells = 0_usize;
+    value
+        .graphemes(true)
+        .take_while(|grapheme| {
+            let next = cells.saturating_add(grapheme_cell_width(grapheme, cells));
+            let keep = next <= width;
+            if keep {
+                cells = next;
+            }
+            keep
+        })
+        .collect()
+}
+
+pub(crate) fn ellipsize_cells(value: &str, width: usize) -> String {
+    if terminal_cell_width(value) <= width {
+        return value.to_owned();
+    }
+    if width == 0 {
+        return String::new();
+    }
+    let mut visible = truncate_cells(value, width.saturating_sub(1));
+    visible.push('…');
+    visible
+}
+
+pub(crate) fn terminal_cell_width(value: &str) -> usize {
+    value.graphemes(true).fold(0, |cells, grapheme| {
+        cells + grapheme_cell_width(grapheme, cells)
+    })
+}
 
 #[derive(Clone, Copy)]
 pub(crate) struct LogicalLine {
@@ -65,7 +121,7 @@ pub(crate) fn byte_at_cell(content: &str, row: &WrappedRow, target: usize) -> us
     let text = &content[row.start_byte..row.end_byte];
     let mut cells = 0;
     for (offset, grapheme) in text.grapheme_indices(true) {
-        let width = grapheme_width(grapheme, cells);
+        let width = grapheme_cell_width(grapheme, cells);
         if target < cells + width {
             return row.start_byte + offset;
         }
@@ -78,7 +134,9 @@ pub(crate) fn cell_column_at_byte(content: &str, row: &WrappedRow, byte: usize) 
     let end = byte.min(row.end_byte);
     content[row.start_byte..end]
         .graphemes(true)
-        .fold(0, |cells, grapheme| cells + grapheme_width(grapheme, cells))
+        .fold(0, |cells, grapheme| {
+            cells + grapheme_cell_width(grapheme, cells)
+        })
 }
 
 pub(crate) fn wrapped_row_index(rows: &[WrappedRow], byte: usize) -> usize {
@@ -121,7 +179,7 @@ fn segment_end(graphemes: &[(usize, &str)], start: usize, width: usize) -> (usiz
     let mut cells = 0;
     let mut whitespace_break = None;
     while end < graphemes.len() {
-        let grapheme_cells = grapheme_width(graphemes[end].1, cells);
+        let grapheme_cells = grapheme_cell_width(graphemes[end].1, cells);
         if end > start && cells + grapheme_cells > width {
             return whitespace_break.unwrap_or((end, cells));
         }
@@ -141,28 +199,12 @@ fn breakable_whitespace(grapheme: &str) -> bool {
             .any(|character| matches!(character, '\u{00a0}' | '\u{202f}'))
 }
 
-fn grapheme_width(grapheme: &str, column: usize) -> usize {
-    if grapheme == "\t" {
-        4 - column % 4
-    } else if grapheme.chars().any(char::is_control) {
-        1
-    } else {
-        UnicodeWidthStr::width(grapheme)
-    }
-}
-
 fn display_text(graphemes: &[(usize, &str)]) -> String {
     let mut display = String::new();
     let mut cells = 0;
     for (_, grapheme) in graphemes {
-        let width = grapheme_width(grapheme, cells);
-        if *grapheme == "\t" {
-            display.push_str(&" ".repeat(width));
-        } else if grapheme.chars().any(char::is_control) {
-            display.push('�');
-        } else {
-            display.push_str(grapheme);
-        }
+        let (visible, width) = display_grapheme(grapheme, cells);
+        display.push_str(&visible);
         cells += width;
     }
     display

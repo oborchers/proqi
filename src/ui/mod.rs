@@ -5,11 +5,14 @@ mod app;
 mod browser;
 mod browser_render;
 mod browser_summary;
+mod control_labels;
+mod geometry;
 mod input;
 mod layout;
 mod projection;
 mod render;
 mod settings;
+mod shortcuts;
 mod status;
 mod theme;
 

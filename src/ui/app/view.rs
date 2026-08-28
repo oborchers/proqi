@@ -236,6 +236,7 @@ impl BoardApp {
             has_status,
             self.settings.density,
             self.first_visible_row,
+            &self.settings.keybindings,
         );
         let height = self.focused_height(&first);
         self.prepare_layout(TextViewport::new(first.content_width, height));
@@ -250,9 +251,14 @@ impl BoardApp {
             has_status,
             self.settings.density,
             self.first_visible_row,
+            &self.settings.keybindings,
         );
         self.configure_overlay(&mut layout);
-        layout.configure_agent_controls(&self.agent_targets, self.submission_mode());
+        layout.configure_agent_controls_with_keys(
+            &self.agent_targets,
+            self.submission_mode(),
+            &self.settings.keybindings,
+        );
         let summary = self.footer_summary(layout.footer_context.width.saturating_sub(4));
         let session_id = self
             .settings
@@ -291,13 +297,8 @@ impl BoardApp {
         let preferred_rows = if self.update_prompt.is_some() {
             4
         } else if self.help {
-            let item_count = if matches!(self.interaction_mode(), InteractionMode::Edit { .. }) {
-                7
-            } else {
-                16 + usize::from(self.supports_submission()) * 2
-            };
-            let columns = usize::from(layout.board.width >= 48) + 1;
-            item_count.div_ceil(columns)
+            let content_width = layout.board.width.min(58).saturating_sub(2);
+            crate::ui::shortcuts::row_count(self, content_width)
         } else if self.rename.is_some() {
             2
         } else if self.invocation_popup.is_some() {
