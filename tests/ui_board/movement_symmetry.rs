@@ -1,3 +1,4 @@
+use super::navigation::{durable_thought, visual};
 use super::*;
 
 #[test]

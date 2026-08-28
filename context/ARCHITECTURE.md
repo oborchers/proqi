@@ -943,6 +943,7 @@ cargo xtask source-limits
 cargo xtask architecture
 cargo xtask check
 cargo xtask test
+cargo xtask ci-linux
 cargo xtask test-pty
 cargo xtask coverage
 cargo xtask audit
@@ -968,6 +969,11 @@ cargo xtask package
   documentation warnings, and the deterministic test suite through
   `cargo-nextest`.
 - `test` runs the deterministic unit, contract, and integration suites.
+- `ci-linux` copies the current checkout without Git metadata or build output
+  into an ephemeral `linux/amd64` Docker workspace and runs the Linux quality,
+  test, MSRV, dependency, coverage, package, and Debian commands from CI in a
+  pinned official Rust image. Only its reusable tool cache persists below
+  ignored `target/`.
 - `test-pty` builds the real binary and runs pseudo-terminal scenarios.
 - `coverage` uses `cargo-llvm-cov` and produces machine-readable and human
   reports from the same tests used in CI.

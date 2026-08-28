@@ -6,7 +6,7 @@ SIZE 42x8
 
 TEXT
 00│┌ proqi shortcuts ─────────────────────[x]│
-01││n       New         Enter/e Edit        ││
+01││n        New        Enter/e  Edit       ││
 02││j/k      Move       J/K      Range      ││
 03││Ctrl+J/K Reorder    y        Copy       ││
 04││x        Cut        d        Delete     ││

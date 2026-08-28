@@ -2,8 +2,6 @@ use super::*;
 
 use proqi::domain::Direction;
 
-mod movement_symmetry;
-
 pub(super) fn visual(movement: CursorMovement, shifted: bool) -> UiInput {
     UiInput::Key(UiKey::Move {
         movement,
@@ -94,7 +92,11 @@ fn wide_help_uses_at_most_two_strictly_aligned_columns() {
         .lines()
         .find(|line| line.contains("Quit"))
         .expect("quit row");
-    assert!(quit.contains("q       Quit"), "{quit}");
+    let first = rendered
+        .lines()
+        .find(|line| line.contains("New"))
+        .expect("first shortcut row");
+    assert_eq!(quit.find("Quit"), first.find("New"), "{quit}");
 }
 
 #[test]

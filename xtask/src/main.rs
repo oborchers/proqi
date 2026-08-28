@@ -17,6 +17,7 @@ mod debian;
 mod debian_container;
 mod debian_verify;
 mod homebrew;
+mod linux_ci;
 mod linux_compat;
 mod package;
 mod policy;
@@ -57,6 +58,7 @@ fn execute() -> Result<(), String> {
         "clean-worktree" => clean_worktree(&root),
         "check" => check(&root),
         "test" => test(&root),
+        "ci-linux" => linux_ci::run(&root),
         // Real PTY fixtures own process-wide terminal resources. Keep this
         // dedicated runner serial while each test still exercises concurrency.
         "test-pty" => run(
@@ -152,6 +154,7 @@ fn print_help() {
          \n  cargo xtask clean-worktree\
          \n  cargo xtask check\
          \n  cargo xtask test\
+         \n  cargo xtask ci-linux\
          \n  cargo xtask test-pty\
          \n  cargo xtask coverage\
          \n  cargo xtask audit\
