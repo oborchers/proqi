@@ -5,8 +5,8 @@
 <h1 align="center">Proqi</h1>
 
 <p align="center">
-  <strong>The agent-optimized scratchpad for follow-up prompts.</strong><br>
-  Keep prompts editable beside a coding-agent session, then copy or submit them when the agent is ready.
+  <strong>The terminal-native power-user prompt composer.</strong><br>
+  Draft, refine, combine, and deliver exact prompts while your coding agents keep working.
 </p>
 
 <p align="center">
@@ -19,39 +19,80 @@
 </p>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/oborchers/proqi/main/assets/proqi-demo.gif" width="1000" alt="Proqi browsing rich prompt context, deleting a temporary thought, creating and editing a prompt, reordering it, and copying a multi-selection">
+  <img src="https://raw.githubusercontent.com/oborchers/proqi/main/assets/proqi-demo.gif" width="1000" alt="Proqi refining independent prompt thoughts, reordering them, and copying an ordered selection">
 </p>
 
-Proqi is the thoughtpad for humans working with coding agents. Follow-up prompts
-accumulate while those agents are working. Keeping them in a generic editor
-means another application, more context switching, and no direct relationship
-to the active agent runtime. Proqi provides a local terminal scratchpad beside
-the session. Existing and new prompts remain editable until you copy one or
-submit it through a verified integration.
+[Why Proqi](#compose-before-you-interrupt) ·
+[Workflow](#one-board-from-rough-context-to-exact-prompt) ·
+[Install](#install) ·
+[Controls](#board-controls) ·
+[Commands](#json-cli-and-proqi-skill) ·
+[Resume](#resume-and-organize-sessions) ·
+[Screenshots](#screenshots-files-and-clipboard-safety) ·
+[Privacy](#updates-and-privacy) ·
+[Configuration](#configuration) ·
+[Compatibility](#best-with-herdr)
 
-Proqi works standalone in any supported terminal. It works best with
-[Herdr](https://github.com/herdrdev/herdr), where it can discover verified
-adjacent coding agents and submit the selected thought directly without the
-manual clipboard handoff.
+Proqi is a terminal-native power-user prompt composer for developers coordinating
+multiple coding agents. It gives each session a durable, editable board for rough
+thoughts, alternatives, screenshots, and exact context, then turns the board into
+one ordered prompt when you are ready.
+
+## Compose before you interrupt
+
+Codex, Claude Code, and similar CLI harnesses are built around one active
+conversational stream. That is the right surface for working with the agent in
+front of you. It is less comfortable for drafting a later prompt, preserving two
+alternatives, combining several thoughts, managing multiple screenshots, or
+steering a different agent while the current one is still working. Rough material
+often ends up copied between the active composer and temporary documents.
+
+Proqi keeps that preparation in a quiet local board beside the conversation.
+Capture independent thoughts as they occur, edit their exact text, recover edits
+and board operations after a restart, reorder or range-select them, and concatenate
+the whole board for one deliberate handoff. Local skill, command, and agent
+discovery helps you author supported invocation tokens without executing them.
+On macOS, one board can also act as a screenshot inbox: captures become
+annotatable thoughts without dragging files across panes or risking a drop into
+the agent composer.
+
+The standalone workflow works in any supported terminal: compose, concatenate,
+and move prompts through the native clipboard. Native adjacent-agent submission is
+available only through a verified [Herdr](https://github.com/herdrdev/herdr)
+integration. Proqi does not claim native delivery to arbitrary terminals, agents,
+or multiplexers.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/oborchers/proqi/main/assets/proqi-problem.svg" width="1000" alt="Proqi keeps follow-up prompts editable and sends the selected prompt toward a coding-agent terminal">
+  <img src="https://raw.githubusercontent.com/oborchers/proqi/main/assets/proqi-problem.svg" width="1000" alt="Proqi keeps prompt composition separate from the active agent conversation, with optional verified delivery through Herdr">
 </p>
+
+## One board, from rough context to exact prompt
+
+1. Keep working in your browser or editor while the coding agent continues its
+   current turn.
+2. Capture rough text and macOS screenshots into Proqi. Each remains an
+   independent thought, so screenshots can be annotated and alternatives can
+   coexist without entering the agent conversation.
+3. Refine the exact text, discover local invocations, select a contiguous range,
+   and reorder the thoughts into the prompt you mean to send.
+4. Copy the concatenated board for any destination, or submit the exact ordered
+   board to a verified adjacent agent through Herdr—without first interrupting
+   that agent to draft it there.
 
 ## What Proqi gives you
 
 | Need | Proqi behavior |
 | --- | --- |
-| Capture the next thought | Paste in board mode or click `+ New thought` to create and focus it |
-| Edit without compromise | Multiline Unicode editing, selection, logical-line deletion, and persistent editor undo |
+| Capture thoughts independently | Paste text or create a thought without committing it to a conversation |
+| Collect macOS screenshots | Turn captures into annotatable thoughts in one board instead of dragging them across panes |
+| Refine exact prompt text | Multiline Unicode editing, selection, logical-line deletion, and persistent editor undo |
+| Preserve alternatives | Duplicate, revise, reorder, or remove thoughts with durable board undo and recovery |
+| Compose the final prompt | Use range selection or the whole board, concatenated in visible order with one blank line between thoughts |
 | Reuse local agent tooling | Complete discovered skills, commands, and invokable agents while authoring without executing them |
-| Keep prompts flexible | Reorder or duplicate by keyboard, mouse, or drag, then collapse long context without changing its content |
-| Act on several prompts | Select thoughts with `Space`, then copy, cut, delete, collapse, or submit them as one ordered prompt |
 | Survive interruption | Autosave, exact resume guidance, session search, recovery export, and undo after restart |
-| Work beside any agent | Native copy and non-destructive cut work without an integration or account |
-| Pass local context | Drop files as paths or paste clipboard images into private session storage |
+| Work with any destination | Native copy and non-destructive cut work without an integration or account |
 | Correct the wrong board | Send a thought to another named Proqi session, optionally removing it after delivery |
-| Submit directly when verified | Optional Herdr delivery to eligible coding-agent panes in all four directions |
+| Submit directly when verified | Optional Herdr delivery to eligible adjacent coding-agent panes in all four directions |
 | Automate safely | Versioned JSON, typed identifiers, idempotent mutations, and an explicit-invocation Proqi skill |
 
 The board is a responsive one-column interface. Thoughts use their natural
@@ -266,7 +307,13 @@ The session browser searches optional names, directory context, and thought
 content. It ranks the current directory without hiding other results and shows
 active, resumable, recovered, and trashed states in narrow and wide layouts.
 
-## Files, images, and clipboard safety
+## Screenshots, files, and clipboard safety
+
+On macOS, the screenshot inbox turns captures into private, annotatable thoughts
+on one board. Keep working in the browser or editor, take the screenshot, then
+return to Proqi to add the prompt text around it. Nothing needs to be dragged
+across terminal panes, where a file could otherwise land in the adjacent agent's
+composer. Proqi does not upload or analyze screenshot content.
 
 A terminal file drop normally arrives as bracketed text. Proqi converts it only
 when the complete payload resolves unambiguously to existing absolute files.
