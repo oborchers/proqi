@@ -2,7 +2,10 @@
 
 use crate::{
     application::Effect,
-    ports::environment::{Clock, IdGenerator},
+    ports::{
+        editor::CursorMovement,
+        environment::{Clock, IdGenerator},
+    },
 };
 
 use super::{BoardApp, UiInput, UiKey, query::QueryEditor};
@@ -17,6 +20,10 @@ enum Command {
     SendSessionRemove,
     Edit,
     PlainNewline,
+    JumpUp,
+    JumpDown,
+    ThoughtStart,
+    ThoughtEnd,
     Delete,
     Copy,
     Cut,
@@ -42,13 +49,17 @@ enum Command {
 }
 
 impl Command {
-    const ALL: [(Self, &'static str); 30] = [
+    const ALL: [(Self, &'static str); 34] = [
         (Self::New, "New thought"),
         (Self::RenameSession, "Rename session"),
         (Self::CopySessionId, "Copy session ID"),
         (Self::CopyResume, "Copy resume command"),
         (Self::Edit, "Edit thought"),
         (Self::PlainNewline, "Insert plain newline"),
+        (Self::JumpUp, "Jump cursor up 5 visual rows"),
+        (Self::JumpDown, "Jump cursor down 5 visual rows"),
+        (Self::ThoughtStart, "Move cursor to thought beginning"),
+        (Self::ThoughtEnd, "Move cursor to thought end"),
         (Self::Delete, "Delete thought"),
         (Self::Copy, "Copy thought"),
         (Self::Cut, "Cut thought"),
@@ -133,7 +144,11 @@ impl PaletteState {
     fn available(&self, command: Command) -> bool {
         match command {
             Command::SubmitRemove | Command::SubmitKeep => self.submit_supported,
-            Command::PlainNewline => self.plain_newline_supported,
+            Command::PlainNewline
+            | Command::JumpUp
+            | Command::JumpDown
+            | Command::ThoughtStart
+            | Command::ThoughtEnd => self.plain_newline_supported,
             _ => true,
         }
     }
@@ -311,6 +326,10 @@ impl BoardApp {
                 }
                 self.insert_newline(false, ids, clock)
             }
+            Command::JumpUp => self.cursor_move(CursorMovement::VisualJumpUp, ids, clock),
+            Command::JumpDown => self.cursor_move(CursorMovement::VisualJumpDown, ids, clock),
+            Command::ThoughtStart => self.cursor_move(CursorMovement::DocumentStart, ids, clock),
+            Command::ThoughtEnd => self.cursor_move(CursorMovement::DocumentEnd, ids, clock),
             Command::Delete => self.delete(ids, clock),
             Command::Copy => self.copy_active(ids),
             Command::Cut => self.cut_active(ids, clock),
@@ -357,5 +376,27 @@ impl BoardApp {
                 Vec::new()
             }
         }
+    }
+
+    fn cursor_move(
+        &mut self,
+        movement: CursorMovement,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        if !matches!(
+            self.state.mode,
+            crate::application::InteractionMode::Edit { .. }
+        ) {
+            self.enter_edit();
+        }
+        self.handle_edit_key(
+            UiKey::Move {
+                movement,
+                extend_selection: false,
+            },
+            ids,
+            clock,
+        )
     }
 }

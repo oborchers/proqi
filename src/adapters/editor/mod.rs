@@ -12,7 +12,7 @@ use ropey::Rope;
 use crate::domain::TextPosition;
 use crate::ports::editor::{
     CellRange, CursorMovement, EditCommand, EditOutcome, Editor, EditorFactory, EditorSnapshot,
-    TextChangeSet, TextSelection, TextViewport,
+    FAST_NAVIGATION_ROWS, TextChangeSet, TextSelection, TextViewport,
 };
 use crate::ports::text_layout::{
     WrappedRow, byte_at_cell, byte_for_position, cell_column_at_byte, logical_lines,
@@ -137,27 +137,34 @@ impl RopeEditor {
             CursorMovement::DocumentEnd => content.len(),
             CursorMovement::VisualUp => self.vertical_target(-1),
             CursorMovement::VisualDown => self.vertical_target(1),
+            CursorMovement::VisualJumpUp => {
+                self.vertical_target(-FAST_NAVIGATION_ROWS.cast_signed())
+            }
+            CursorMovement::VisualJumpDown => {
+                self.vertical_target(FAST_NAVIGATION_ROWS.cast_signed())
+            }
         };
         if !matches!(
             movement,
-            CursorMovement::VisualUp | CursorMovement::VisualDown
+            CursorMovement::VisualUp
+                | CursorMovement::VisualDown
+                | CursorMovement::VisualJumpUp
+                | CursorMovement::VisualJumpDown
         ) {
             self.preferred_column = None;
         }
         self.set_cursor_byte(target, extend_selection);
     }
 
-    fn vertical_target(&mut self, direction: i8) -> usize {
+    fn vertical_target(&mut self, rows: isize) -> usize {
         let wrapped = self.wrapped_lines();
         let current_index = wrapped_row_index(&wrapped, self.state.cursor_byte);
         let current = &wrapped[current_index];
         let current_column = cell_column_at_byte(&self.content(), current, self.state.cursor_byte);
         let preferred = *self.preferred_column.get_or_insert(current_column);
-        let target_index = if direction < 0 {
-            current_index.saturating_sub(1)
-        } else {
-            (current_index + 1).min(wrapped.len().saturating_sub(1))
-        };
+        let target_index = current_index
+            .saturating_add_signed(rows)
+            .min(wrapped.len().saturating_sub(1));
         byte_at_cell(&self.content(), &wrapped[target_index], preferred)
     }
 

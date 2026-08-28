@@ -1,4 +1,5 @@
 use super::*;
+use proqi::domain::TextPosition;
 
 #[test]
 fn command_palette_is_searchable_and_mouse_operable() {
@@ -77,6 +78,56 @@ fn palette_exposes_an_explicit_update_check() {
         effects,
         vec![Effect::Update(proqi::application::UpdateIntent::CheckNow)]
     );
+}
+
+#[test]
+fn palette_fallbacks_execute_all_four_fast_editor_movements() {
+    let content = (0..8)
+        .map(|row| format!("row {row}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    for (query, expected) in [
+        ("jump cursor up", TextPosition::new(2, 5)),
+        ("jump cursor down", TextPosition::new(5, 0)),
+        ("thought beginning", TextPosition::new(0, 0)),
+        ("thought end", TextPosition::new(7, 5)),
+    ] {
+        let mut fixture = Fixture::new();
+        navigation::durable_thought(&mut fixture, &content);
+        fixture.input(UiInput::Key(UiKey::Enter));
+        fixture.input(UiInput::Key(UiKey::Move {
+            movement: if matches!(query, "jump cursor down" | "thought end") {
+                CursorMovement::DocumentStart
+            } else {
+                CursorMovement::DocumentEnd
+            },
+            extend_selection: false,
+        }));
+        let commands = fixture
+            .app
+            .prepare_frame(Rect::new(0, 0, 80, 8))
+            .controls
+            .into_iter()
+            .find_map(|(target, area)| (target == HitTarget::Commands).then_some(area))
+            .expect("commands control");
+        fixture.pointer(
+            commands.x,
+            commands.y,
+            PointerKind::Down(PointerButton::Left),
+        );
+        for character in query.chars() {
+            fixture.input(UiInput::Key(UiKey::Character(character)));
+        }
+        let (_, entries, selected) = fixture.app.palette_view().expect("palette");
+        assert_eq!(entries.len(), 1, "query {query:?}: {entries:?}");
+        assert_eq!(selected, 0);
+        fixture.input(UiInput::Key(UiKey::Enter));
+        assert_eq!(
+            fixture.app.editor_snapshot().expect("editor").cursor,
+            expected,
+            "query {query:?}"
+        );
+    }
 }
 
 #[test]

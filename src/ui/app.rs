@@ -200,6 +200,7 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
+        let input = self.resolve_edit_navigation(input);
         self.reset_pointer_click_for_input(&input);
         if self.help
             || self.update_prompt.is_some()
@@ -269,6 +270,34 @@ impl BoardApp {
             return effects;
         }
         self.handle_primary_input(input, ids, clock)
+    }
+
+    fn resolve_edit_navigation(&self, input: UiInput) -> UiInput {
+        let UiInput::Key(UiKey::EditNavigation {
+            editor_movement,
+            board_movement,
+        }) = input
+        else {
+            return input;
+        };
+        let overlay_open = self.help
+            || self.update_prompt.is_some()
+            || self.palette.is_some()
+            || self.invocation_popup.is_some()
+            || self.transfer.is_some()
+            || self.rename.is_some()
+            || self.search.is_some()
+            || self.submission_mode.is_some();
+        let movement =
+            if !overlay_open && matches!(self.interaction_mode(), InteractionMode::Edit { .. }) {
+                editor_movement
+            } else {
+                board_movement
+            };
+        UiInput::Key(UiKey::Move {
+            movement,
+            extend_selection: false,
+        })
     }
 
     fn handle_primary_input(

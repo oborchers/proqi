@@ -31,6 +31,7 @@ pub(super) fn command_for_key(key: UiKey, adjacent_fold: bool) -> Option<(EditCo
         UiKey::SelectAll => Some((EditCommand::SelectAll, true)),
         UiKey::DeleteLine => Some((EditCommand::DeleteLogicalLine, true)),
         UiKey::Escape
+        | UiKey::EditNavigation { .. }
         | UiKey::PrimaryCharacter(_)
         | UiKey::PrimaryShiftMove { .. }
         | UiKey::Undo

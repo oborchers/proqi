@@ -265,6 +265,68 @@ fn shift_and_word_navigation_remain_semantic() {
 }
 
 #[test]
+fn unshifted_alt_and_platform_primary_arrows_preserve_both_mode_intentions() {
+    assert_eq!(
+        translate(Event::Key(KeyEvent::new(KeyCode::Up, KeyModifiers::ALT,))),
+        Some(UiInput::Key(UiKey::EditNavigation {
+            editor_movement: CursorMovement::VisualJumpUp,
+            board_movement: CursorMovement::VisualUp,
+        }))
+    );
+    assert_eq!(
+        translate(Event::Key(KeyEvent::new(KeyCode::Down, KeyModifiers::ALT,))),
+        Some(UiInput::Key(UiKey::EditNavigation {
+            editor_movement: CursorMovement::VisualJumpDown,
+            board_movement: CursorMovement::VisualDown,
+        }))
+    );
+
+    let modifier = if cfg!(target_os = "macos") {
+        KeyModifiers::SUPER
+    } else {
+        KeyModifiers::CONTROL
+    };
+    let board_up = if cfg!(target_os = "macos") {
+        CursorMovement::DocumentStart
+    } else {
+        CursorMovement::VisualUp
+    };
+    let board_down = if cfg!(target_os = "macos") {
+        CursorMovement::DocumentEnd
+    } else {
+        CursorMovement::VisualDown
+    };
+    assert_eq!(
+        translate(Event::Key(KeyEvent::new(KeyCode::Up, modifier))),
+        Some(UiInput::Key(UiKey::EditNavigation {
+            editor_movement: CursorMovement::DocumentStart,
+            board_movement: board_up,
+        }))
+    );
+    assert_eq!(
+        translate(Event::Key(KeyEvent::new(KeyCode::Down, modifier))),
+        Some(UiInput::Key(UiKey::EditNavigation {
+            editor_movement: CursorMovement::DocumentEnd,
+            board_movement: board_down,
+        }))
+    );
+}
+
+#[test]
+fn shifted_alt_arrows_keep_the_existing_one_row_selection_intention() {
+    assert_eq!(
+        translate(Event::Key(KeyEvent::new(
+            KeyCode::Down,
+            KeyModifiers::ALT | KeyModifiers::SHIFT,
+        ))),
+        Some(UiInput::Key(UiKey::Move {
+            movement: CursorMovement::VisualDown,
+            extend_selection: true,
+        }))
+    );
+}
+
+#[test]
 fn bracketed_paste_remains_one_exact_input() {
     let content = "Grüße 👩‍💻\n第二行\n".to_owned();
     assert_eq!(

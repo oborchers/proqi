@@ -470,6 +470,8 @@ mod clipboard;
 mod composition;
 #[path = "ui_board/durability.rs"]
 mod durability;
+#[path = "ui_board/fast_navigation.rs"]
+mod fast_navigation;
 #[path = "ui_board/insertion_navigation.rs"]
 mod insertion_navigation;
 #[path = "ui_board/kilo.rs"]

@@ -204,6 +204,8 @@ fallbacks remain available when a terminal cannot report a modifier.
 | `Primary+Z` | Undo an edit |
 | `Shift+Primary+Z` | Redo an edit |
 | `Primary+V` | Read the native clipboard |
+| `Alt+↑` / `Alt+↓` | Jump exactly five wrapped visual rows while preserving the preferred terminal-cell column |
+| `Primary+↑` / `Primary+↓` | Move to the exact beginning or end of the current thought |
 | `Enter` | Continue `-`, `*`, `+`, ordered, and task list items; exit an empty top-level item |
 | `↑` / `↓` twice at a boundary | Return to the board and focus the adjacent thought |
 | Type `$name`, `/name`, or supported `@name` | Open matching local invocation completion |
@@ -219,8 +221,12 @@ lines. Moving onto folded context selects its complete canonical range.
 `Enter` expands the fold, while typing or deletion replaces it atomically.
 Press `Esc`, open `:`, and choose `Insert plain newline` to bypass list
 continuation without relying on a terminal modifier; mouse users can open the
-palette directly while editing. Set `smart_lists = false` to keep every ordinary
-editor `Enter` plain.
+palette directly while editing. The palette also exposes both five-row jumps
+and both thought-boundary movements when a terminal consumes the preferred
+chords. Shift-modified arrow chords retain their existing selection and board
+range/reorder behavior; fast selection extension is intentionally not assigned
+in this version. Set `smart_lists = false` to keep every ordinary editor `Enter`
+plain.
 
 Proqi's invocation catalog is an authoring aid, not a skill executor or live
 harness integration. It refreshes bounded project and machine-global roots at
