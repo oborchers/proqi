@@ -57,6 +57,18 @@ pub enum ClipboardIntent {
     Copy,
     /// Delete only after a successful write.
     Cut,
+    /// Copy the complete canonical identity of the current session.
+    CopySessionId,
+    /// Copy the exact command that resumes the current session.
+    CopyResumeCommand,
+}
+
+impl ClipboardIntent {
+    /// Whether a successful OSC 52 emission is sufficient for this non-destructive intent.
+    #[must_use]
+    pub const fn supports_osc52(self) -> bool {
+        !matches!(self, Self::Cut)
+    }
 }
 
 /// Explicit user decision from an elected installation-wide update prompt.

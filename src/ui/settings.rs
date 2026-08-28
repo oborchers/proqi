@@ -21,6 +21,8 @@ pub enum KeyboardEnhancement {
 pub struct UiSettings {
     /// Permit automatic stable-release checks on interactive release startup.
     pub check_for_updates: bool,
+    /// Show the complete canonical session identifier beside the session name when it fits.
+    pub show_session_id: bool,
     /// Keyboard protocol negotiation.
     pub keyboard_enhancement: KeyboardEnhancement,
     /// Remappable direct board keys.
@@ -33,6 +35,7 @@ impl Default for UiSettings {
     fn default() -> Self {
         Self {
             check_for_updates: true,
+            show_session_id: false,
             keyboard_enhancement: KeyboardEnhancement::default(),
             keybindings: KeyBindings::default(),
             density: BoardDensity::default(),

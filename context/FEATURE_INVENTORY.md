@@ -48,6 +48,7 @@ must not imply that the behavior exists.
 | --- | --- | --- | --- |
 | Session browser | Shipped | Search uses optional name, launch path, and thought content. Results retain recency and directory context and show active, resumable, recovered, and trashed states in wide and narrow layouts. | `tests/ui_session_browser.rs`, `tests/snapshots`, `tests/pty.rs` |
 | Session naming | Shipped | Sessions can be renamed or cleared and resumed by unique name or canonical `ses_` identifier. | `tests/cli_workflow.rs`, `tests/ui_board/navigation.rs` |
+| Debug session identity | Shipped | `show_session_id = true` adds the complete muted canonical identifier beside the footer name only when it fits. Its mouse target and the always-available palette actions copy the ID or exact resume command without durable mutation. | `tests/ui_board/session_navigation.rs`, `tests/ui_board/palette.rs`, `tests/ui_mouse_actions.rs` |
 | Trash and pruning | Shipped | Session trash is recoverable. Permanent pruning requires an explicit confirmation flag. | `tests/cli_workflow.rs`, `tests/sqlite_store/core.rs` |
 | Local SQLite durability | Shipped | Bundled SQLite uses WAL, `synchronous=FULL`, forward migrations, backups, integrity checks, derived search indexes, and typed identifier BLOBs. | `tests/sqlite_store.rs`, `tests/sqlite_store/recovery.rs` |
 | Multiple instances | Shipped | Different sessions may be active concurrently. One authoritative lease prevents silent dual editing of the same session. | `tests/runtime_coordination.rs`, `tests/pty/active_control.rs` |

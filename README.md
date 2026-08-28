@@ -461,6 +461,7 @@ shortcuts remain available:
 
 ```toml
 check_for_updates = true
+show_session_id = false # opt in to the complete ses_... value in the footer
 theme = "auto"
 density = "comfortable" # or "compact"
 
@@ -489,6 +490,12 @@ commands = ":"
 help = "?"
 quit = "q"
 ```
+
+The command palette always offers **Copy session ID** and **Copy resume
+command**, even when the identifier is hidden in a narrow footer. When
+`show_session_id = true`, the muted identifier appears beside the session name
+only if its complete canonical value fits; clicking it copies that complete
+value while the name remains a rename target.
 
 To install a complete local theme, set `theme` to an absolute TOML path or a
 path relative to `config.toml`:

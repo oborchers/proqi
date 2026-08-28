@@ -85,9 +85,9 @@ pub enum Effect {
     WriteClipboard {
         /// External request identity.
         request_id: RequestId,
-        /// Source thought.
-        thought_id: ThoughtId,
-        /// Copy or cut behavior.
+        /// Source thought for thought or editor content; absent for session metadata.
+        thought_id: Option<ThoughtId>,
+        /// Typed copy or cut behavior.
         intent: ClipboardIntent,
         /// Exact clipboard content.
         content: String,

@@ -61,7 +61,40 @@ impl BoardApp {
                 thought_ids,
                 at,
             }),
+            ClipboardIntent::CopySessionId | ClipboardIntent::CopyResumeCommand => Vec::new(),
         }
+    }
+
+    pub(super) fn copy_session_id(&mut self, ids: &mut impl IdGenerator) -> Vec<Effect> {
+        self.write_session_metadata(
+            ids,
+            ClipboardIntent::CopySessionId,
+            self.state.board.session.id.to_string(),
+        )
+    }
+
+    pub(super) fn copy_resume_command(&mut self, ids: &mut impl IdGenerator) -> Vec<Effect> {
+        self.write_session_metadata(
+            ids,
+            ClipboardIntent::CopyResumeCommand,
+            format!("proqi -r {}", self.state.board.session.id),
+        )
+    }
+
+    fn write_session_metadata(
+        &mut self,
+        ids: &mut impl IdGenerator,
+        intent: ClipboardIntent,
+        content: String,
+    ) -> Vec<Effect> {
+        let request_id = ids.request_id();
+        self.pending_session_clipboard.insert(request_id, intent);
+        vec![Effect::WriteClipboard {
+            request_id,
+            thought_id: None,
+            intent,
+            content,
+        }]
     }
 
     pub(super) fn cut_thought(
@@ -96,6 +129,19 @@ impl BoardApp {
     ) -> Vec<Effect> {
         if let Some(pending) = self.pending_editor_clipboard.remove(&request_id) {
             return self.complete_editor_clipboard(&pending, result, ids, clock);
+        }
+        if let Some(intent) = self.pending_session_clipboard.remove(&request_id) {
+            match result {
+                Ok(()) => match intent {
+                    ClipboardIntent::CopySessionId => self.set_success("copied session ID"),
+                    ClipboardIntent::CopyResumeCommand => {
+                        self.set_success("copied resume command");
+                    }
+                    ClipboardIntent::Copy | ClipboardIntent::Cut => {}
+                },
+                Err(code) => self.notify(code),
+            }
+            return Vec::new();
         }
         let intent = self.state.pending_clipboard_intent(request_id);
         let success = result.is_ok();
@@ -187,7 +233,7 @@ impl BoardApp {
         );
         vec![Effect::WriteClipboard {
             request_id,
-            thought_id: *thought_id,
+            thought_id: Some(*thought_id),
             intent,
             content,
         }]

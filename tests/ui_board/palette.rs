@@ -78,3 +78,62 @@ fn palette_exposes_an_explicit_update_check() {
         vec![Effect::Update(proqi::application::UpdateIntent::CheckNow)]
     );
 }
+
+#[test]
+fn palette_copies_typed_session_metadata_exactly_and_reports_results() {
+    let mut fixture = Fixture::new();
+    let session_id = fixture.app.state.board.session.id.to_string();
+    fixture.input(UiInput::Key(UiKey::Character(':')));
+    for character in "copy session id".chars() {
+        fixture.input(UiInput::Key(UiKey::Character(character)));
+    }
+    let copy_id = fixture.effects(UiInput::Key(UiKey::Enter));
+    let [
+        Effect::WriteClipboard {
+            request_id,
+            thought_id: None,
+            intent: ClipboardIntent::CopySessionId,
+            content,
+        },
+    ] = copy_id.as_slice()
+    else {
+        panic!("expected typed session ID clipboard effect");
+    };
+    assert_eq!(content, &session_id);
+    fixture
+        .app
+        .complete_clipboard_write(*request_id, Ok(()), &mut fixture.ids, &fixture.clock);
+    assert_eq!(fixture.app.status_text(), Some("copied session ID"));
+
+    fixture.input(UiInput::Key(UiKey::Character(':')));
+    for character in "copy resume command".chars() {
+        fixture.input(UiInput::Key(UiKey::Character(character)));
+    }
+    let copy_resume = fixture.effects(UiInput::Key(UiKey::Enter));
+    let [
+        Effect::WriteClipboard {
+            request_id,
+            thought_id: None,
+            intent: ClipboardIntent::CopyResumeCommand,
+            content,
+        },
+    ] = copy_resume.as_slice()
+    else {
+        panic!("expected typed resume-command clipboard effect");
+    };
+    assert_eq!(content, &format!("proqi -r {session_id}"));
+    let durable_before = fixture.app.state.clone();
+    fixture.app.complete_clipboard_write(
+        *request_id,
+        Err(FailureCode::ClipboardFailed),
+        &mut fixture.ids,
+        &fixture.clock,
+    );
+    assert_eq!(fixture.app.state, durable_before);
+    assert!(
+        fixture
+            .app
+            .status_text()
+            .is_some_and(|status| status.contains("clipboard unavailable"))
+    );
+}
