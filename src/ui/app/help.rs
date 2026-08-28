@@ -6,6 +6,14 @@ use crate::ports::editor::CursorMovement;
 use super::{BoardApp, HitTarget, PointerButton, PointerKind, UiInput, UiKey};
 
 impl BoardApp {
+    pub(super) fn toggle_help(&mut self) -> Vec<Effect> {
+        if !self.help {
+            self.deactivate_range_latch();
+        }
+        self.help = !self.help;
+        Vec::new()
+    }
+
     pub(super) fn handle_help_input(&mut self, input: &UiInput) -> Vec<Effect> {
         match input {
             UiInput::Key(UiKey::Escape) => self.close_help(),

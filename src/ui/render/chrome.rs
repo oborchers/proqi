@@ -23,9 +23,12 @@ pub(super) fn render_footer(
     theme: &Theme,
 ) {
     render_context(frame, app, layout, theme);
-    render_session_name(frame, app, layout, theme);
+    render_session_identity(frame, app, layout, theme);
     let keys = app.keybindings();
     for (target, area) in &layout.controls {
+        if matches!(target, HitTarget::RenameSession | HitTarget::CopySessionId) {
+            continue;
+        }
         render_control(frame, app, *target, *area, keys, theme);
     }
 }
@@ -120,7 +123,7 @@ fn render_context(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot
     }
 }
 
-fn render_session_name(
+fn render_session_identity(
     frame: &mut Frame<'_>,
     app: &BoardApp,
     layout: &LayoutSnapshot,
@@ -130,15 +133,57 @@ fn render_session_name(
     if area.height == 0 {
         return;
     }
-    let value = truncate(&layout.footer_session_name, usize::from(area.width));
-    let style = if app.hovered() == Some(HitTarget::RenameSession) {
-        theme.focused_style()
+    let name = if layout.footer_session_id.is_some() {
+        layout.footer_session_name.clone()
     } else {
-        theme.base_style()
+        truncate(&layout.footer_session_name, usize::from(area.width))
+    };
+    let mut spans = vec![Span::styled(name, Style::default().fg(theme.foreground))];
+    if let Some(session_id) = &layout.footer_session_id {
+        spans.push(Span::styled(" · ", Style::default().fg(theme.muted)));
+        spans.push(Span::styled(
+            session_id.clone(),
+            Style::default().fg(theme.muted),
+        ));
+    }
+    frame.render_widget(
+        Paragraph::new(Line::from(spans)).style(theme.base_style()),
+        area,
+    );
+    render_identity_hover(frame, app, layout, theme, HitTarget::RenameSession);
+    render_identity_hover(frame, app, layout, theme, HitTarget::CopySessionId);
+}
+
+fn render_identity_hover(
+    frame: &mut Frame<'_>,
+    app: &BoardApp,
+    layout: &LayoutSnapshot,
+    theme: &Theme,
+    target: HitTarget,
+) {
+    if app.hovered() != Some(target) {
+        return;
+    }
+    let Some((_, area)) = layout
+        .controls
+        .iter()
+        .find(|(candidate, _)| *candidate == target)
+    else {
+        return;
+    };
+    let (value, color) = match target {
+        HitTarget::RenameSession => (&layout.footer_session_name, theme.foreground),
+        HitTarget::CopySessionId => {
+            let Some(session_id) = &layout.footer_session_id else {
+                return;
+            };
+            (session_id, theme.muted)
+        }
+        _ => return,
     };
     frame.render_widget(
-        Paragraph::new(value).style(style.fg(theme.foreground)),
-        area,
+        Paragraph::new(value.as_str()).style(theme.focused_style().fg(color)),
+        *area,
     );
 }
 

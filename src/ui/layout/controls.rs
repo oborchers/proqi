@@ -57,16 +57,49 @@ pub(super) fn configure_footer_summary(
     layout: &mut LayoutSnapshot,
     summary: String,
     session_name: String,
+    session_id: Option<String>,
 ) {
     let area = inset(layout.footer_name);
     if area.height > 0 {
-        layout.controls.push((
-            HitTarget::RenameSession,
-            Rect::new(area.x, area.y, area.width, 1),
-        ));
+        configure_session_targets(layout, area, &session_name, session_id.as_deref());
     }
     layout.footer_summary = summary;
     layout.footer_session_name = session_name;
+    layout.footer_session_id = session_id.filter(|id| {
+        area.height > 0
+            && width(&layout.footer_session_name)
+                .saturating_add(3)
+                .saturating_add(width(id))
+                <= area.width
+    });
+}
+
+fn configure_session_targets(
+    layout: &mut LayoutSnapshot,
+    area: Rect,
+    session_name: &str,
+    session_id: Option<&str>,
+) {
+    let name_width = width(session_name);
+    let id_width = session_id.map_or(0, width);
+    let id_fits =
+        session_id.is_some() && name_width.saturating_add(3).saturating_add(id_width) <= area.width;
+    let rename_width = if id_fits { name_width } else { area.width };
+    layout.controls.push((
+        HitTarget::RenameSession,
+        Rect::new(area.x, area.y, rename_width, 1),
+    ));
+    if id_fits {
+        layout.controls.push((
+            HitTarget::CopySessionId,
+            Rect::new(
+                area.x.saturating_add(name_width).saturating_add(3),
+                area.y,
+                id_width,
+                1,
+            ),
+        ));
+    }
 }
 
 pub(super) fn configure_agent_controls(

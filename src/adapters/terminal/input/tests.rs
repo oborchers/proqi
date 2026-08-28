@@ -213,6 +213,22 @@ fn bracketed_paste_remains_one_exact_input() {
 }
 
 #[test]
+fn enter_is_normalized_independently_from_exact_bracketed_paste() {
+    assert_eq!(
+        translate(Event::Key(KeyEvent::new(
+            KeyCode::Enter,
+            KeyModifiers::NONE,
+        ))),
+        Some(UiInput::Key(UiKey::Enter))
+    );
+    let list = "- pasted".to_owned();
+    assert_eq!(
+        translate(Event::Paste(list.clone())),
+        Some(UiInput::Paste(list))
+    );
+}
+
+#[test]
 fn host_focus_is_a_semantic_refresh_signal() {
     assert_eq!(
         translate(Event::FocusGained),

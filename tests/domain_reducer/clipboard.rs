@@ -57,7 +57,7 @@ fn copy_is_exact_and_never_mutates_the_board() {
         effects,
         vec![Effect::WriteClipboard {
             request_id,
-            thought_id,
+            thought_id: Some(thought_id),
             intent: ClipboardIntent::Copy,
             content: "  exact\r\n".to_owned(),
         }]

@@ -50,10 +50,7 @@ impl BoardApp {
         match self.hit(pointer) {
             Some(HitTarget::Retry) => self.retry_persistence(),
             Some(HitTarget::ExportRecovery) => self.export_recovery(ids, clock),
-            Some(HitTarget::Help) => {
-                self.help = !self.help;
-                Vec::new()
-            }
+            Some(HitTarget::Help) => self.toggle_help(),
             _ => Vec::new(),
         }
     }
@@ -129,6 +126,7 @@ impl BoardApp {
                 self.begin_session_rename();
                 Vec::new()
             }
+            Some(HitTarget::CopySessionId) => self.copy_session_id(ids),
             Some(HitTarget::Copy) => self.copy_active(ids),
             Some(HitTarget::Cut) => self.cut_active(ids, clock),
             Some(HitTarget::Delete) => self.delete(ids, clock),
@@ -143,13 +141,7 @@ impl BoardApp {
                 self.begin_delivery(disposition, ids, clock)
             }
             Some(HitTarget::Undo) => self.history(ids, clock, true),
-            Some(HitTarget::Help) => {
-                if !self.help {
-                    self.deactivate_range_latch();
-                }
-                self.help = !self.help;
-                Vec::new()
-            }
+            Some(HitTarget::Help) => self.toggle_help(),
             Some(HitTarget::Quit) => {
                 self.request_quit();
                 Vec::new()

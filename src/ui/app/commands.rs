@@ -205,13 +205,7 @@ impl BoardApp {
                 self.open_palette();
                 Vec::new()
             }
-            Some(BoardCommand::Help) => {
-                if !self.help {
-                    self.deactivate_range_latch();
-                }
-                self.help = !self.help;
-                Vec::new()
-            }
+            Some(BoardCommand::Help) => self.toggle_help(),
             Some(BoardCommand::Quit) => {
                 self.request_quit();
                 Vec::new()
@@ -236,6 +230,9 @@ impl BoardApp {
             && self.leave_selected_fold(movement, extend_selection)
         {
             return self.flush_pending_edit(ids, clock);
+        }
+        if matches!(key, UiKey::Enter) && self.should_insert_smart_newline() {
+            return self.insert_newline(true, ids, clock);
         }
         let adjacent_fold = match key {
             UiKey::Backspace => self.delete_adjacent_fold(true),

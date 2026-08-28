@@ -653,6 +653,17 @@ every action retains a terminal-safe fallback and a configurable binding.
 deletes one newline-delimited logical line as a single undoable edit. Logical
 line commands operate on the text model and are independent of visual wrapping.
 
+The default `smart_lists = true` setting maps an unselected editor `Enter` to a
+terminal-independent smart-newline command. The editor recognizes only the
+bounded CommonMark-style markers supported by the product contract, preserves
+the document's local LF or CRLF convention, and reports continuation or marker
+removal as one explicit text-change transaction. The UI flushes that transaction
+as one persistent revision. Selection replacement uses the ordinary newline
+command, bracketed paste remains a distinct exact payload, and the command
+palette exposes the ordinary newline command directly. This boundary can later
+gain explicit indentation commands without making Tab or Shift+Tab part of the
+current behavior.
+
 Bracketed paste is one payload and one undoable edit. When no thought is
 selected, paste creates and focuses a new thought. The application never tries
 to split a paste heuristically.
