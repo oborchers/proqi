@@ -6,6 +6,14 @@ use crate::ports::editor::CursorMovement;
 use super::{BoardApp, HitTarget, PointerButton, PointerKind, UiInput, UiKey};
 
 impl BoardApp {
+    pub(super) fn toggle_help(&mut self) -> Vec<Effect> {
+        if !self.help {
+            self.deactivate_range_latch();
+        }
+        self.help = !self.help;
+        Vec::new()
+    }
+
     pub(super) fn handle_help_input(&mut self, input: &UiInput) -> Vec<Effect> {
         match input {
             UiInput::Key(UiKey::Escape) => self.close_help(),
@@ -82,7 +90,7 @@ impl BoardApp {
         let item_count = if matches!(self.interaction_mode(), InteractionMode::Edit { .. }) {
             7
         } else {
-            15 + usize::from(self.supports_submission()) * 2
+            17 + usize::from(self.supports_submission()) * 2
         };
         let columns = usize::from(overlay.area.width >= 48) + 1;
         let rows = item_count.div_ceil(columns);

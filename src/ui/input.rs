@@ -1,6 +1,8 @@
-//! Backend-normalized board input contracts.
+//! Terminal-independent keyboard and pointer input values.
 
-use crate::{ports::editor::CursorMovement, ui::PastePayload};
+use crate::ports::editor::CursorMovement;
+
+use super::PastePayload;
 
 /// Mouse button after terminal-backend normalization.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -39,7 +41,7 @@ pub struct PointerInput {
     pub row: u16,
     /// Normalized pointer event.
     pub kind: PointerKind,
-    /// Whether Shift requests extension of the existing text selection.
+    /// Whether Shift requests extension of the active text or board selection.
     pub extend_selection: bool,
 }
 
@@ -50,6 +52,8 @@ pub enum UiKey {
     Quit,
     /// Insert one Unicode scalar value.
     Character(char),
+    /// A printable character reported with Primary for board-keymap resolution.
+    PrimaryCharacter(char),
     /// Insert a line break or enter the focused thought.
     Enter,
     /// Accept a focused authoring completion without inserting a literal tab.
@@ -70,6 +74,14 @@ pub enum UiKey {
         movement: CursorMovement,
         /// Whether to extend the active selection.
         extend_selection: bool,
+    },
+    /// Vertical movement reported with both Primary and Shift modifiers.
+    ///
+    /// Board mode interprets this as thought reordering. Edit mode preserves
+    /// the terminal's corresponding selection movement.
+    PrimaryShiftMove {
+        /// Backend-independent editor movement for this chord.
+        movement: CursorMovement,
     },
     /// Select the complete thought.
     SelectAll,

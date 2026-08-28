@@ -693,6 +693,14 @@ Command on macOS and Control on Linux. Enhanced keyboard protocols
 are enabled when supported so Super and Meta events can be distinguished, but
 every action retains a terminal-safe fallback and a configurable binding.
 
+Vertical board input uses one semantic modifier ladder for both arrow and
+configured character spellings: plain input moves focus, Shift extends an
+anchored range, and Primary+Shift reorders one thought. Input normalization
+preserves otherwise unknown Primary character chords until the board keymap
+can resolve the configured shifted range key, including when enhanced keyboard
+reporting encodes the shifted character without a separate Shift flag. It must
+not let arrow and `j`/`k`-style bindings acquire different intentions.
+
 `Primary+A` selects the entire current thought only in edit mode. `Primary+U`
 deletes one newline-delimited logical line as a single undoable edit. Logical
 line commands operate on the text model and are independent of visual wrapping.
@@ -720,6 +728,16 @@ empty cannot create additional thoughts. On the insertion row, two consecutive
 semantic downward navigation commands perform the same durable create-and-edit
 transition; unrelated or reorder input clears the confirmation. Other edit
 boundaries use the same navigation state machine.
+
+Board multi-selection is transient UI state with two explicit, non-overlapping
+forms: an arbitrary identity set and an anchored contiguous range. A range
+stores stable thought identities for its anchor and focused endpoint and derives
+its selected identities from current live board order. Shifted vertical movement
+and the remappable range latch update the endpoint without wrapping or addressing
+the insertion row. Pointer extension resolves through the current layout
+snapshot before entering edit mode. Bulk application actions continue to receive
+only ordered thought identities and do not depend on terminal modifiers or this
+UI selection representation.
 
 The normalized paste payload carries exact text plus optional typed provenance.
 Attachment annotations retain only presentation-safe metadata and byte ranges;
@@ -969,6 +987,7 @@ cargo xtask source-limits
 cargo xtask architecture
 cargo xtask check
 cargo xtask test
+cargo xtask ci-linux
 cargo xtask test-pty
 cargo xtask coverage
 cargo xtask audit
@@ -982,7 +1001,8 @@ cargo xtask package
 - `format` applies `rustfmt` and any repository-owned text formatting.
 - `source-limits` rejects every first-party Rust or common frontend source file
   above 500 physical lines, including JavaScript, TypeScript, stylesheet, HTML,
-  Vue, Svelte, and Astro sources.
+  Vue, Svelte, and Astro sources. Public documentation and prose, including the
+  README and architecture and product contracts, are deliberately exempt.
 - `architecture` verifies the inward dependency graph, canonical domain API,
   and ownership of SQLite, terminal, process, environment, and filesystem
   implementation dependencies. Its detector tests include accepted and
@@ -993,6 +1013,11 @@ cargo xtask package
   documentation warnings, and the deterministic test suite through
   `cargo-nextest`.
 - `test` runs the deterministic unit, contract, and integration suites.
+- `ci-linux` copies the current checkout without Git metadata or build output
+  into an ephemeral `linux/amd64` Docker workspace and runs the Linux quality,
+  test, MSRV, dependency, coverage, package, and Debian commands from CI in a
+  pinned official Rust image. Only its reusable tool cache persists below
+  ignored `target/`.
 - `test-pty` builds the real binary and runs pseudo-terminal scenarios.
 - `coverage` uses `cargo-llvm-cov` and produces machine-readable and human
   reports from the same tests used in CI.

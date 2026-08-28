@@ -12,6 +12,7 @@ use super::{BoardApp, PointerButton, PointerKind, UiInput, UiKey};
 
 impl BoardApp {
     pub(super) fn begin_session_rename(&mut self) {
+        self.deactivate_range_latch();
         self.help = false;
         self.palette = None;
         self.search = None;

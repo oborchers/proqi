@@ -9,7 +9,6 @@ mod duplicate;
 mod editing;
 mod folds;
 mod help;
-mod input;
 mod invocation;
 mod palette;
 mod pending_types;
@@ -17,7 +16,9 @@ mod pointer;
 mod presentation;
 mod query;
 mod recovery;
+mod reorder;
 mod search;
+mod selection;
 mod session;
 mod transfer;
 mod update;
@@ -40,8 +41,10 @@ use crate::{
     },
 };
 
-use super::{HitTarget, LayoutSnapshot, PastePayload, UiSettings};
-pub use input::{PointerButton, PointerInput, PointerKind, UiInput, UiKey};
+use super::{
+    HitTarget, LayoutSnapshot, PastePayload, UiSettings,
+    input::{PointerButton, PointerInput, PointerKind, UiInput, UiKey},
+};
 
 use pending_types::{PendingEditorClipboard, PendingSubmission, SubmissionMode};
 
@@ -92,7 +95,7 @@ pub struct BoardApp {
     rename: Option<String>,
     transfer: Option<transfer::TransferState>,
     settings: UiSettings,
-    selected_thoughts: BTreeSet<ThoughtId>,
+    selection: selection::BoardSelection,
     expanded_folds: BTreeSet<(ThoughtId, usize)>,
     pending_editor_clipboard: BTreeMap<RequestId, PendingEditorClipboard>,
     pending_session_clipboard: BTreeMap<RequestId, crate::application::ClipboardIntent>,
@@ -169,7 +172,7 @@ impl BoardApp {
             rename: None,
             transfer: None,
             settings,
-            selected_thoughts: BTreeSet::new(),
+            selection: selection::BoardSelection::default(),
             expanded_folds: BTreeSet::new(),
             pending_editor_clipboard: BTreeMap::new(),
             pending_session_clipboard: BTreeMap::new(),
@@ -385,6 +388,7 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
+        self.clear_board_selection();
         self.insertion_focus = InsertionFocus::Inactive;
         self.insertion_confirmation = InsertionConfirmation::Idle;
         let effects = self.reduce(Action::CreateThought {
@@ -407,8 +411,7 @@ impl BoardApp {
                 self.set_warning("thought has a submission in progress");
                 return;
             }
-            self.selected_thoughts.clear();
-            self.hovered = None;
+            self.clear_board_selection();
             let _effects = self.reduce(Action::EnterEdit(thought_id));
             self.sync_editor_from_state();
         }
@@ -421,7 +424,17 @@ impl BoardApp {
 
     fn reduce(&mut self, action: Action) -> Vec<Effect> {
         match reduce(&mut self.state, action) {
-            Ok(effects) => effects,
+            Ok(effects) => {
+                let order = self
+                    .state
+                    .board
+                    .live_thoughts()
+                    .into_iter()
+                    .map(|thought| thought.id)
+                    .collect::<Vec<_>>();
+                self.selection.reconcile(&order);
+                effects
+            }
             Err(error) => {
                 self.set_error(error.to_string());
                 Vec::new()

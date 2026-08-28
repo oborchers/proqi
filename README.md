@@ -179,10 +179,12 @@ fallbacks remain available when a terminal cannot report a modifier.
 | Paste or click `+ New thought` | Create and focus a thought |
 | `j` / `k` or arrows | Focus the next or previous thought, including `+ New thought` |
 | `Enter` or `e` | Edit the focused thought |
-| `J` / `K`, `Shift+↑` / `Shift+↓`, or drag | Reorder the focused thought |
+| `Meta+J` / `Meta+K`, `Meta+Shift+↓` / `Meta+Shift+↑`, or drag | Reorder the focused thought |
 | `y` or `Primary+C` | Copy the complete thought |
 | `x` or `Primary+X` | Cut only after confirmed clipboard success |
 | `Space` | Add or remove the focused thought from the multi-selection |
+| `Shift+↑` / `Shift+↓`, or `K` / `J` | Extend or shrink one anchored contiguous range |
+| `v`, then arrows, `j` / `k`, or a thought click | Latch modifier-free contiguous range selection |
 | `Primary+D` | Duplicate the focused thought or selection below its source range |
 | `s`, then direction when needed | Submit selected thoughts and remove only after acceptance |
 | `S`, then direction when needed | Submit selected thoughts and keep them |
@@ -210,7 +212,7 @@ fallbacks remain available when a terminal cannot report a modifier.
 | `Esc` | Close invocation completion without changing text |
 
 Mouse users can focus and edit thoughts, place the cursor, drag selections,
-double-click words, triple-click logical lines, extend with Shift-click, scroll,
+double-click words, triple-click logical lines, extend text or board ranges with Shift-click, scroll,
 reorder thoughts, click controls, use help, and choose verified Herdr targets.
 Holding the final click while dragging extends by complete words or logical
 lines. Moving onto folded context selects its complete canonical range.
@@ -516,10 +518,11 @@ submit_keep = "S"
 undo = "u"
 focus_up = "k"
 focus_down = "j"
-move_up = "K"
-move_down = "J"
+range_up = "K"
+range_down = "J"
 collapse = "c"
 select = " "
+range_select = "v"
 search = "/"
 commands = ":"
 help = "?"
@@ -609,6 +612,7 @@ cargo xtask source-limits      # enforce the 500-line source-file ceiling
 cargo xtask architecture       # enforce inward dependency boundaries
 cargo xtask assets             # verify public assets and recording fixtures
 cargo xtask check              # formatting, architecture, Clippy, docs, and tests
+cargo xtask ci-linux           # mirror Linux CI command gates in pinned Docker
 cargo xtask test-pty           # real terminal scenarios on macOS
 cargo xtask coverage           # enforce the line-coverage floor
 cargo xtask audit              # advisories, licenses, sources, and dependencies

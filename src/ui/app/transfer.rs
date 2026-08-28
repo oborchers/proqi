@@ -30,6 +30,7 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
+        self.deactivate_range_latch();
         let Some(source_thought_id) = self.active_thought_id() else {
             self.set_warning("select a thought before sending it to another session");
             return Vec::new();

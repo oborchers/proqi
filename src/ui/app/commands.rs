@@ -9,7 +9,7 @@ use crate::{
     },
 };
 
-use super::{BoardApp, PastePayload, UiKey};
+use super::{BoardApp, PastePayload, UiKey, editing};
 use crate::ui::settings::BoardCommand;
 
 impl BoardApp {
@@ -23,31 +23,43 @@ impl BoardApp {
             return self.handle_insertion_key(key, ids, clock);
         }
         match key {
-            UiKey::Escape if !self.selected_thoughts.is_empty() => {
-                self.selected_thoughts.clear();
-                self.hovered = None;
-                self.layout = None;
+            UiKey::Escape if !self.selection_is_empty() || self.range_latched() => {
+                self.clear_board_selection();
             }
             UiKey::Character(character) => {
                 return self.handle_board_command(character, ids, clock);
+            }
+            UiKey::PrimaryCharacter(character) => {
+                return self.reorder_from_character(character, ids, clock);
+            }
+            UiKey::PrimaryShiftMove { movement } => {
+                return self.reorder_from_movement(movement, ids, clock);
             }
             UiKey::Enter => self.enter_edit(),
             UiKey::Move {
                 movement: CursorMovement::VisualUp,
                 extend_selection: true,
-            } => return self.reorder(ids, clock, -1),
+            } => self.extend_range_by(-1),
             UiKey::Move {
                 movement: CursorMovement::VisualDown,
                 extend_selection: true,
-            } => return self.reorder(ids, clock, 1),
+            } => self.extend_range_by(1),
             UiKey::Move {
                 movement: CursorMovement::VisualUp,
                 extend_selection: false,
-            } => self.move_focus(-1),
+            } if self.range_latched() => self.extend_range_by(-1),
             UiKey::Move {
                 movement: CursorMovement::VisualDown,
                 extend_selection: false,
-            } => self.move_focus(1),
+            } if self.range_latched() => self.extend_range_by(1),
+            UiKey::Move {
+                movement: CursorMovement::VisualUp,
+                extend_selection: false,
+            } => self.move_focus_outside_range(-1),
+            UiKey::Move {
+                movement: CursorMovement::VisualDown,
+                extend_selection: false,
+            } => self.move_focus_outside_range(1),
             UiKey::Undo => return self.history(ids, clock, true),
             UiKey::Redo => return self.history(ids, clock, false),
             UiKey::Copy => return self.copy_thought(ids),
@@ -104,6 +116,8 @@ impl BoardApp {
             | UiKey::Tab
             | UiKey::PickerPrevious
             | UiKey::PickerNext
+            | UiKey::PrimaryCharacter(_)
+            | UiKey::PrimaryShiftMove { .. }
             | UiKey::Move { .. } => Vec::new(),
         }
     }
@@ -144,6 +158,19 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
+        if self.range_latched() {
+            match self.settings.keybindings.command(character) {
+                Some(BoardCommand::FocusUp) => {
+                    self.extend_range_by(-1);
+                    return Vec::new();
+                }
+                Some(BoardCommand::FocusDown) => {
+                    self.extend_range_by(1);
+                    return Vec::new();
+                }
+                _ => {}
+            }
+        }
         match self.settings.keybindings.command(character) {
             Some(BoardCommand::New) => self.create(PastePayload::text(String::new()), ids, clock),
             Some(BoardCommand::Edit) => {
@@ -163,18 +190,28 @@ impl BoardApp {
             }
             Some(BoardCommand::Undo) => self.history(ids, clock, true),
             Some(BoardCommand::FocusUp) => {
-                self.move_focus(-1);
+                self.move_focus_outside_range(-1);
                 Vec::new()
             }
             Some(BoardCommand::FocusDown) => {
-                self.move_focus(1);
+                self.move_focus_outside_range(1);
                 Vec::new()
             }
-            Some(BoardCommand::MoveUp) => self.reorder(ids, clock, -1),
-            Some(BoardCommand::MoveDown) => self.reorder(ids, clock, 1),
+            Some(BoardCommand::RangeUp) => {
+                self.extend_range_by(-1);
+                Vec::new()
+            }
+            Some(BoardCommand::RangeDown) => {
+                self.extend_range_by(1);
+                Vec::new()
+            }
             Some(BoardCommand::Collapse) => self.collapse(ids, clock),
             Some(BoardCommand::Select) => {
                 self.toggle_selection();
+                Vec::new()
+            }
+            Some(BoardCommand::RangeSelect) => {
+                self.activate_range_latch();
                 Vec::new()
             }
             Some(BoardCommand::Search) => {
@@ -185,10 +222,7 @@ impl BoardApp {
                 self.open_palette();
                 Vec::new()
             }
-            Some(BoardCommand::Help) => {
-                self.help = !self.help;
-                Vec::new()
-            }
+            Some(BoardCommand::Help) => self.toggle_help(),
             Some(BoardCommand::Quit) => {
                 self.request_quit();
                 Vec::new()
@@ -203,6 +237,9 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
+        let Some(key) = normalize_edit_key(key) else {
+            return Vec::new();
+        };
         if let Some(effects) = self.handle_edit_effect(key, ids, clock) {
             return effects;
         }
@@ -214,7 +251,7 @@ impl BoardApp {
         {
             return self.flush_pending_edit(ids, clock);
         }
-        if self.should_insert_smart_newline(key) {
+        if matches!(key, UiKey::Enter) && self.should_insert_smart_newline() {
             return self.insert_newline(true, ids, clock);
         }
         let adjacent_fold = match key {
@@ -222,34 +259,8 @@ impl BoardApp {
             UiKey::Delete => self.delete_adjacent_fold(false),
             _ => false,
         };
-        let (command, boundary) = match key {
-            UiKey::Character(character) => (EditCommand::InsertChar(character), false),
-            UiKey::Enter => (EditCommand::InsertNewline, false),
-            UiKey::Backspace => (EditCommand::DeleteBack, adjacent_fold),
-            UiKey::Delete => (EditCommand::DeleteForward, adjacent_fold),
-            UiKey::Move {
-                movement,
-                extend_selection,
-            } => (
-                EditCommand::Move {
-                    movement,
-                    extend_selection,
-                },
-                true,
-            ),
-            UiKey::SelectAll => (EditCommand::SelectAll, true),
-            UiKey::DeleteLine => (EditCommand::DeleteLogicalLine, true),
-            UiKey::Escape
-            | UiKey::Undo
-            | UiKey::Redo
-            | UiKey::Quit
-            | UiKey::Copy
-            | UiKey::Cut
-            | UiKey::PasteClipboard
-            | UiKey::Duplicate
-            | UiKey::Tab
-            | UiKey::PickerPrevious
-            | UiKey::PickerNext => return Vec::new(),
+        let Some((command, boundary)) = editing::command_for_key(key, adjacent_fold) else {
+            return Vec::new();
         };
         let movement = match &command {
             EditCommand::Move {
@@ -279,14 +290,6 @@ impl BoardApp {
             effects.extend(self.flush_pending_edit(ids, clock));
         }
         effects
-    }
-
-    fn should_insert_smart_newline(&self, key: UiKey) -> bool {
-        matches!(key, UiKey::Enter)
-            && self.settings.smart_lists
-            && self
-                .editor_snapshot()
-                .is_some_and(|snapshot| snapshot.selection.is_none())
     }
 
     fn handle_edit_effect(
@@ -371,7 +374,7 @@ impl BoardApp {
             kind: BoardOperationKind::Delete,
             at: clock.now(),
         });
-        self.selected_thoughts.clear();
+        self.clear_board_selection();
         self.sync_empty_insertion_focus();
         effects
     }
@@ -444,55 +447,15 @@ impl BoardApp {
             self.insertion_focus = super::InsertionFocus::Inactive;
         }
     }
+}
 
-    pub(super) fn reorder(
-        &mut self,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-        delta: isize,
-    ) -> Vec<Effect> {
-        self.manual_board_scroll = false;
-        let Some(thought_id) = self.state.focused_thought else {
-            return Vec::new();
-        };
-        if self.submission_locked(thought_id) {
-            self.set_warning("thought has a submission in progress");
-            return Vec::new();
-        }
-        if self.selected_thoughts.len() > 1 {
-            self.set_warning("reordering is unavailable for multiple selected thoughts");
-            return Vec::new();
-        }
-        let live = self.state.board.live_thoughts();
-        let Some(current) = live.iter().position(|thought| thought.id == thought_id) else {
-            return Vec::new();
-        };
-        if live.len() <= 1 {
-            return Vec::new();
-        }
-        let target = if delta < 0 {
-            current.checked_sub(1).unwrap_or(live.len() - 1)
-        } else if current + 1 == live.len() {
-            0
-        } else {
-            current + 1
-        };
-        self.reduce(Action::MoveThought {
-            operation_id: ids.operation_id(),
-            thought_id,
-            to: target,
-            at: clock.now(),
-        })
-    }
-
-    pub(super) fn toggle_selection(&mut self) {
-        let Some(thought_id) = self.state.focused_thought else {
-            return;
-        };
-        if !self.selected_thoughts.remove(&thought_id) {
-            self.selected_thoughts.insert(thought_id);
-        }
-        self.hovered = None;
-        self.layout = None;
+fn normalize_edit_key(key: UiKey) -> Option<UiKey> {
+    match key {
+        UiKey::PrimaryShiftMove { movement } => Some(UiKey::Move {
+            movement,
+            extend_selection: true,
+        }),
+        UiKey::PrimaryCharacter(_) => None,
+        key => Some(key),
     }
 }

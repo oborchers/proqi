@@ -185,6 +185,19 @@ fn limited_color_mode_uses_terminal_palette_styles() {
 }
 
 #[test]
+fn contiguous_range_latch_has_a_complete_visible_board_state() {
+    let mut fixture = Fixture::new();
+    for content in ["alpha", "Grüße 👩‍💻", "第二行", "omega"] {
+        fixture.input(UiInput::Paste(content.to_owned()));
+        fixture.input(UiInput::Key(UiKey::Escape));
+    }
+    fixture.input(UiInput::Key(UiKey::Character('k')));
+    fixture.input(UiInput::Key(UiKey::Character('v')));
+    fixture.input(UiInput::Key(UiKey::Character('k')));
+    insta::assert_snapshot!(snapshot(&mut fixture, 52, 14, ThemePreference::Dark));
+}
+
+#[test]
 fn double_clicked_word_has_a_visible_editor_selection() {
     let mut fixture = Fixture::new();
     fixture.input(UiInput::Paste("select precise wording".to_owned()));

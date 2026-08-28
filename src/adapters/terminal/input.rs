@@ -397,8 +397,11 @@ fn translate_key(key: KeyEvent) -> Option<UiKey> {
             KeyCode::Char('n') => Some(UiKey::PickerNext),
             _ => None,
         };
-        if command.is_some() || matches!(key.code, KeyCode::Char(_)) {
+        if command.is_some() {
             return command;
+        }
+        if let KeyCode::Char(character) = key.code {
+            return Some(UiKey::PrimaryCharacter(character));
         }
     }
     let extend_selection = key.modifiers.contains(KeyModifiers::SHIFT);
@@ -415,20 +418,22 @@ fn translate_key(key: KeyEvent) -> Option<UiKey> {
         KeyCode::Esc => Some(UiKey::Escape),
         KeyCode::Backspace => Some(UiKey::Backspace),
         KeyCode::Delete => Some(UiKey::Delete),
-        KeyCode::Up => Some(move_key(
+        KeyCode::Up => Some(vertical_key(
             if document {
                 CursorMovement::DocumentStart
             } else {
                 CursorMovement::VisualUp
             },
+            primary,
             extend_selection,
         )),
-        KeyCode::Down => Some(move_key(
+        KeyCode::Down => Some(vertical_key(
             if document {
                 CursorMovement::DocumentEnd
             } else {
                 CursorMovement::VisualDown
             },
+            primary,
             extend_selection,
         )),
         KeyCode::Left => Some(move_key(
@@ -450,6 +455,14 @@ fn translate_key(key: KeyEvent) -> Option<UiKey> {
         KeyCode::Home => Some(move_key(CursorMovement::LineStart, extend_selection)),
         KeyCode::End => Some(move_key(CursorMovement::LineEnd, extend_selection)),
         _ => None,
+    }
+}
+
+const fn vertical_key(movement: CursorMovement, primary: bool, extend_selection: bool) -> UiKey {
+    if primary && extend_selection {
+        UiKey::PrimaryShiftMove { movement }
+    } else {
+        move_key(movement, extend_selection)
     }
 }
 

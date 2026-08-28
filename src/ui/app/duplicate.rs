@@ -34,10 +34,8 @@ impl BoardApp {
         if effects.is_empty() {
             return effects;
         }
-        self.selected_thoughts = duplicate_ids.iter().copied().collect();
-        self.hovered = None;
+        self.replace_board_selection(duplicate_ids.iter().copied());
         self.manual_board_scroll = false;
-        self.layout = None;
         effects
     }
 }

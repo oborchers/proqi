@@ -38,8 +38,10 @@ fn selected_fully_visible_thoughts_collapse_as_one_undo_step_but_cannot_reorder(
     for content in ["first", "second"] {
         fixture.paste(content);
         fixture.input(UiInput::Key(UiKey::Escape));
-        fixture.input(UiInput::Key(UiKey::Character(' ')));
     }
+    fixture.input(UiInput::Key(UiKey::Character(' ')));
+    fixture.input(UiInput::Key(UiKey::Character('k')));
+    fixture.input(UiInput::Key(UiKey::Character(' ')));
     let _layout = fixture.app.prepare_frame(Rect::new(0, 0, 50, 12));
 
     let collapse = fixture.effects(UiInput::Key(UiKey::Character('c')));
@@ -58,7 +60,7 @@ fn selected_fully_visible_thoughts_collapse_as_one_undo_step_but_cannot_reorder(
     );
     assert!(
         fixture
-            .effects(UiInput::Key(UiKey::Character('J')))
+            .effects(UiInput::Key(UiKey::PrimaryCharacter('J')))
             .is_empty()
     );
 
@@ -72,6 +74,234 @@ fn selected_fully_visible_thoughts_collapse_as_one_undo_step_but_cannot_reorder(
             .iter()
             .all(|thought| thought.presentation == proqi::domain::ThoughtPresentation::Automatic)
     );
+}
+
+fn selected_contents(fixture: &Fixture) -> Vec<&str> {
+    fixture
+        .app
+        .state
+        .board
+        .live_thoughts()
+        .into_iter()
+        .filter(|thought| fixture.app.thought_selected(thought.id))
+        .map(|thought| thought.content.as_str())
+        .collect()
+}
+
+fn range_move(fixture: &mut Fixture, movement: CursorMovement) {
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement,
+        extend_selection: true,
+    }));
+}
+
+#[test]
+fn shifted_arrows_shrink_and_reverse_around_a_stable_anchor() {
+    let mut fixture = Fixture::new();
+    for content in ["first", "second", "third", "fourth", "fifth"] {
+        fixture.paste(content);
+        fixture.input(UiInput::Key(UiKey::Escape));
+    }
+    fixture.input(UiInput::Key(UiKey::Character('k')));
+    fixture.input(UiInput::Key(UiKey::Character('k')));
+
+    range_move(&mut fixture, CursorMovement::VisualUp);
+    assert_eq!(selected_contents(&fixture), ["second", "third"]);
+    range_move(&mut fixture, CursorMovement::VisualDown);
+    assert_eq!(selected_contents(&fixture), ["third"]);
+    range_move(&mut fixture, CursorMovement::VisualDown);
+    assert_eq!(selected_contents(&fixture), ["third", "fourth"]);
+    range_move(&mut fixture, CursorMovement::VisualDown);
+    assert_eq!(selected_contents(&fixture), ["third", "fourth", "fifth"]);
+    range_move(&mut fixture, CursorMovement::VisualUp);
+    assert_eq!(selected_contents(&fixture), ["third", "fourth"]);
+
+    let focused = fixture.app.state.focused_thought.expect("range endpoint");
+    assert_eq!(
+        fixture
+            .app
+            .state
+            .board
+            .thought(focused)
+            .expect("thought")
+            .content,
+        "fourth"
+    );
+}
+
+#[test]
+fn starting_a_range_replaces_arbitrary_selection_and_space_returns_to_toggle_selection() {
+    let mut fixture = Fixture::new();
+    for content in ["first", "second", "third", "fourth"] {
+        fixture.paste(content);
+        fixture.input(UiInput::Key(UiKey::Escape));
+    }
+    fixture.input(UiInput::Key(UiKey::Character(' ')));
+    fixture.input(UiInput::Key(UiKey::Character('k')));
+    fixture.input(UiInput::Key(UiKey::Character('k')));
+    fixture.input(UiInput::Key(UiKey::Character(' ')));
+    assert_eq!(selected_contents(&fixture), ["second", "fourth"]);
+
+    range_move(&mut fixture, CursorMovement::VisualDown);
+    assert_eq!(selected_contents(&fixture), ["second", "third"]);
+
+    fixture.input(UiInput::Key(UiKey::Character(' ')));
+    assert_eq!(selected_contents(&fixture), ["second"]);
+    fixture.input(UiInput::Key(UiKey::Character('j')));
+    assert_eq!(selected_contents(&fixture), ["second"]);
+}
+
+#[test]
+fn range_latch_extends_with_repeated_arrows_and_jk_without_wrapping_or_insertion() {
+    let mut fixture = Fixture::new();
+    for content in ["first", "second", "third"] {
+        fixture.paste(content);
+        fixture.input(UiInput::Key(UiKey::Escape));
+    }
+    fixture.input(UiInput::Key(UiKey::Character('k')));
+    fixture.input(UiInput::Key(UiKey::Character('v')));
+
+    fixture.input(UiInput::Key(UiKey::Character('k')));
+    fixture.input(UiInput::Key(UiKey::Character('k')));
+    assert_eq!(selected_contents(&fixture), ["first", "second"]);
+    assert!(!fixture.app.insertion_focused());
+
+    fixture.input(UiInput::Key(UiKey::Character('j')));
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::VisualDown,
+        extend_selection: false,
+    }));
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::VisualDown,
+        extend_selection: false,
+    }));
+    assert_eq!(selected_contents(&fixture), ["second", "third"]);
+    assert!(!fixture.app.insertion_focused());
+}
+
+#[test]
+fn escape_and_edit_entry_clear_range_and_latch_consistently() {
+    let mut fixture = Fixture::new();
+    for content in ["first", "second", "third"] {
+        fixture.paste(content);
+        fixture.input(UiInput::Key(UiKey::Escape));
+    }
+    fixture.input(UiInput::Key(UiKey::Character('v')));
+    fixture.input(UiInput::Key(UiKey::Character('k')));
+    fixture.input(UiInput::Key(UiKey::Escape));
+    assert!(selected_contents(&fixture).is_empty());
+
+    fixture.input(UiInput::Key(UiKey::Character('j')));
+    assert!(selected_contents(&fixture).is_empty());
+    fixture.input(UiInput::Key(UiKey::Character('v')));
+    fixture.input(UiInput::Key(UiKey::Character('k')));
+    fixture.input(UiInput::Key(UiKey::Enter));
+    assert!(selected_contents(&fixture).is_empty());
+    assert!(matches!(
+        fixture.app.interaction_mode(),
+        proqi::application::InteractionMode::Edit { .. }
+    ));
+}
+
+#[test]
+fn range_survives_reflow_and_shift_click_uses_current_hit_geometry_with_unicode() {
+    let mut fixture = Fixture::new();
+    for content in ["alpha", "Grüße 👩‍💻", "第二行", "omega"] {
+        fixture.paste(content);
+        fixture.input(UiInput::Key(UiKey::Escape));
+    }
+    fixture.input(UiInput::Key(UiKey::Character('k')));
+    fixture.input(UiInput::Key(UiKey::Character('k')));
+    let _wide = fixture.app.prepare_frame(Rect::new(0, 0, 60, 14));
+    let narrow = fixture.app.prepare_frame(Rect::new(0, 0, 24, 14));
+    let target = narrow.thoughts[3].text_area;
+    fixture.input(UiInput::Pointer(PointerInput {
+        column: target.x,
+        row: target.y,
+        kind: PointerKind::Down(PointerButton::Left),
+        extend_selection: true,
+    }));
+
+    assert_eq!(selected_contents(&fixture), ["Grüße 👩‍💻", "第二行", "omega"]);
+    assert!(matches!(
+        fixture.app.interaction_mode(),
+        proqi::application::InteractionMode::Board
+    ));
+    let copy = fixture.effects(UiInput::Key(UiKey::Copy));
+    assert!(matches!(
+        copy.as_slice(),
+        [Effect::WriteClipboard { content, .. }]
+            if content == "Grüße 👩‍💻\n\n第二行\n\nomega"
+    ));
+}
+
+#[test]
+fn latch_click_is_a_modifier_free_mouse_fallback_and_modal_entry_releases_the_latch() {
+    let mut fixture = Fixture::new();
+    for content in ["first", "second", "third"] {
+        fixture.paste(content);
+        fixture.input(UiInput::Key(UiKey::Escape));
+    }
+    fixture.input(UiInput::Key(UiKey::Character('v')));
+    let layout = fixture.app.prepare_frame(Rect::new(0, 0, 50, 12));
+    let target = layout.thoughts[0].text_area;
+    fixture.pointer(target.x, target.y, PointerKind::Down(PointerButton::Left));
+    assert_eq!(selected_contents(&fixture), ["first", "second", "third"]);
+
+    fixture.input(UiInput::Key(UiKey::Character('?')));
+    fixture.input(UiInput::Key(UiKey::Escape));
+    fixture.input(UiInput::Key(UiKey::Character('j')));
+    assert!(selected_contents(&fixture).is_empty());
+}
+
+#[test]
+fn search_focus_transition_clears_an_anchored_range() {
+    let mut fixture = Fixture::new();
+    for content in ["needle first", "second", "third"] {
+        fixture.paste(content);
+        fixture.input(UiInput::Key(UiKey::Escape));
+    }
+    fixture.input(UiInput::Key(UiKey::Character('v')));
+    fixture.input(UiInput::Key(UiKey::Character('k')));
+    assert_eq!(selected_contents(&fixture), ["second", "third"]);
+
+    fixture.input(UiInput::Key(UiKey::Character('/')));
+    for character in "needle".chars() {
+        fixture.input(UiInput::Key(UiKey::Character(character)));
+    }
+    fixture.input(UiInput::Key(UiKey::Enter));
+
+    assert!(selected_contents(&fixture).is_empty());
+    let focused = fixture.app.state.focused_thought.expect("search focus");
+    assert_eq!(
+        fixture
+            .app
+            .state
+            .board
+            .thought(focused)
+            .expect("thought")
+            .content,
+        "needle first"
+    );
+}
+
+#[test]
+fn range_latch_uses_the_remappable_board_binding() {
+    let mut settings = UiSettings::default();
+    settings.keybindings.range_select = 'b';
+    let mut fixture = Fixture::with_settings(settings);
+    for content in ["first", "second"] {
+        fixture.paste(content);
+        fixture.input(UiInput::Key(UiKey::Escape));
+    }
+
+    fixture.input(UiInput::Key(UiKey::Character('v')));
+    fixture.input(UiInput::Key(UiKey::Character('k')));
+    assert!(selected_contents(&fixture).is_empty());
+    fixture.input(UiInput::Key(UiKey::Character('j')));
+    fixture.input(UiInput::Key(UiKey::Character('b')));
+    fixture.input(UiInput::Key(UiKey::Character('k')));
+    assert_eq!(selected_contents(&fixture), ["first", "second"]);
 }
 
 #[test]
