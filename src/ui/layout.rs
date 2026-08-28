@@ -43,6 +43,8 @@ pub enum HitTarget {
     Agent(Direction),
     /// Rename the current session.
     RenameSession,
+    /// Copy the complete canonical current-session identifier.
+    CopySessionId,
     /// Submit to one verified direction with explicit post-acceptance behavior.
     Deliver(Direction, SubmissionDisposition),
     /// Choose a verified direction for one submission intention.
@@ -127,6 +129,8 @@ pub struct LayoutSnapshot {
     pub footer_summary: String,
     /// Responsive session identity.
     pub footer_session_name: String,
+    /// Complete session identifier when it fits beside the untruncated name.
+    pub footer_session_id: Option<String>,
     /// Footer command targets.
     pub controls: Vec<(HitTarget, Rect)>,
     /// Content width supplied to the editor.
@@ -148,8 +152,13 @@ pub struct OverlayLayout {
 
 impl LayoutSnapshot {
     /// Store the rendered footer summary and register its visible session-name target.
-    pub fn configure_footer_summary(&mut self, summary: String, session_name: String) {
-        controls::configure_footer_summary(self, summary, session_name);
+    pub fn configure_footer_summary(
+        &mut self,
+        summary: String,
+        session_name: String,
+        session_id: Option<String>,
+    ) {
+        controls::configure_footer_summary(self, summary, session_name, session_id);
     }
 
     /// Resolve one terminal cell through the same rectangles used to render.
@@ -293,6 +302,7 @@ pub fn compute_with_density(
         max_first_index: content.max_first,
         footer_summary: String::new(),
         footer_session_name: String::new(),
+        footer_session_id: None,
         controls: chrome::controls(
             chrome.actions,
             state.mode,

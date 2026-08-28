@@ -131,6 +131,7 @@ impl BoardApp {
                 self.begin_session_rename();
                 Vec::new()
             }
+            Some(HitTarget::CopySessionId) => self.copy_session_id(ids),
             Some(HitTarget::Copy) => self.copy_active(ids),
             Some(HitTarget::Cut) => self.cut_active(ids, clock),
             Some(HitTarget::Delete) => self.delete(ids, clock),

@@ -11,6 +11,8 @@ use super::{BoardApp, UiInput, UiKey, query::QueryEditor};
 enum Command {
     New,
     RenameSession,
+    CopySessionId,
+    CopyResume,
     SendSession,
     SendSessionRemove,
     Edit,
@@ -37,9 +39,11 @@ enum Command {
 }
 
 impl Command {
-    const ALL: [(Self, &'static str); 25] = [
+    const ALL: [(Self, &'static str); 27] = [
         (Self::New, "New thought"),
         (Self::RenameSession, "Rename session"),
+        (Self::CopySessionId, "Copy session ID"),
+        (Self::CopyResume, "Copy resume command"),
         (Self::Edit, "Edit thought"),
         (Self::PlainNewline, "Insert plain newline"),
         (Self::Delete, "Delete thought"),
@@ -282,6 +286,8 @@ impl BoardApp {
                 self.begin_session_rename();
                 Vec::new()
             }
+            Command::CopySessionId => self.copy_session_id(ids),
+            Command::CopyResume => self.copy_resume_command(ids),
             Command::SendSession => self.begin_session_transfer(false, ids, clock),
             Command::SendSessionRemove => self.begin_session_transfer(true, ids, clock),
             Command::Edit => {
