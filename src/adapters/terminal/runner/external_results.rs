@@ -4,7 +4,7 @@ use std::{io::Write as _, sync::mpsc::TryRecvError};
 
 use crate::{
     adapters::terminal::{TerminalError, external::ExternalResult},
-    application::{ClipboardIntent, FailureCode},
+    application::FailureCode,
     ports::clipboard::ClipboardWrite,
     ui::BoardApp,
 };
@@ -60,7 +60,7 @@ fn complete(
                 Ok(ClipboardWrite::Native) => true,
                 Ok(ClipboardWrite::Osc52(sequence)) => {
                     let emitted = write_osc52(&sequence).is_ok();
-                    emitted && intent == ClipboardIntent::Copy
+                    emitted && intent.supports_osc52()
                 }
                 Err(_) => false,
             };

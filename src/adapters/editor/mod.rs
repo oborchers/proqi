@@ -2,6 +2,7 @@
 
 mod mutation;
 mod pointer;
+mod smart_lists;
 mod text;
 
 use std::cmp::Ordering;
@@ -199,6 +200,7 @@ impl Editor for RopeEditor {
             EditCommand::InsertNewline => {
                 self.mutate(|editor| editor.replace_selection_or_insert("\n"))
             }
+            EditCommand::InsertSmartNewline => self.mutate(Self::insert_smart_newline),
             EditCommand::DeleteBack => self.mutate(Self::delete_back),
             EditCommand::DeleteForward => self.mutate(Self::delete_forward),
             EditCommand::DeleteLogicalLine => self.mutate(Self::delete_logical_line),

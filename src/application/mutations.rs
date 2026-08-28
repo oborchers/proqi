@@ -149,7 +149,7 @@ pub(super) fn request_clipboard(
         });
     Ok(vec![Effect::WriteClipboard {
         request_id,
-        thought_id,
+        thought_id: Some(thought_id),
         intent,
         content,
     }])

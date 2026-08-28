@@ -49,6 +49,8 @@ enum ThemeSource {
 #[serde(default, deny_unknown_fields)]
 struct SettingsDocument {
     check_for_updates: bool,
+    show_session_id: bool,
+    smart_lists: bool,
     theme: String,
     theme_overrides: ThemeOverrides,
     keyboard_enhancement: KeyboardEnhancement,
@@ -61,6 +63,8 @@ impl Default for SettingsDocument {
     fn default() -> Self {
         Self {
             check_for_updates: true,
+            show_session_id: false,
+            smart_lists: true,
             theme: "auto".to_owned(),
             theme_overrides: ThemeOverrides::default(),
             keyboard_enhancement: KeyboardEnhancement::default(),
@@ -118,6 +122,8 @@ fn parse_settings(config_dir: &Path, content: &str) -> Result<LoadedSettings, Te
         .map_err(|error| TerminalError::Config(error.to_owned()))?;
     let ui = UiSettings {
         check_for_updates: document.check_for_updates,
+        show_session_id: document.show_session_id,
+        smart_lists: document.smart_lists,
         keyboard_enhancement: document.keyboard_enhancement,
         keybindings: document.keybindings,
         density: document.density,

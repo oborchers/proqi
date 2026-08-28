@@ -596,6 +596,18 @@ offered as an ordinary Command only at byte zero when a verified adjacent Codex
 or Claude Code target exists. It receives no special styling and never matches
 leading whitespace, another line, or in-body prose.
 
+With `smart_lists = true`, the default, `Enter` continues `-`, `*`, and `+`
+items, one-to-nine-digit ordered markers ending in `.` or `)`, and unchecked or
+checked task items. Ordered continuation increments only the new marker, and
+task continuation always starts unchecked. Exact indentation, marker spacing,
+delimiter, Unicode content, annotations, and LF or CRLF convention remain
+unchanged. An empty generated top-level item exits by removing its marker as
+one persistent editor revision. Selection replacement and paste stay exact and
+never invoke list continuation. Escaped markers, thematic breaks, fenced code,
+and conservatively detected indented code remain plain text. The command
+palette provides an explicit plain-newline action without requiring a terminal
+modifier. Nested Tab and Shift+Tab indentation remain a later feature.
+
 Leaving edit mode returns to the same board position and keeps the edited
 thought selected.
 
@@ -1073,6 +1085,12 @@ The current direction is grounded in these public primary sources:
 - [Ratatui](https://github.com/ratatui/ratatui) and
   [tui-textarea](https://github.com/rhysd/tui-textarea) for openly licensed TUI
   and editor primitives.
+- [CommonMark 0.31.2](https://spec.commonmark.org/0.31.2/) under CC BY-SA 4.0
+  for list-marker, thematic-break, fenced-code, and indented-code behavior.
+- [CodeMirror Markdown](https://github.com/codemirror/lang-markdown) under MIT
+  as an interaction reference for specialized list continuation with a plain
+  newline fallback. Proqi's implementation is independent and deliberately
+  does not cascade-renumber later items.
 - [SQLite WAL documentation](https://www.sqlite.org/wal.html) for local
   persistence and concurrent instance behavior.
 - [Homebrew's Formula Cookbook](https://docs.brew.sh/Formula-Cookbook) and

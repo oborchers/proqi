@@ -214,6 +214,9 @@ impl BoardApp {
         {
             return self.flush_pending_edit(ids, clock);
         }
+        if self.should_insert_smart_newline(key) {
+            return self.insert_newline(true, ids, clock);
+        }
         let adjacent_fold = match key {
             UiKey::Backspace => self.delete_adjacent_fold(true),
             UiKey::Delete => self.delete_adjacent_fold(false),
@@ -276,6 +279,14 @@ impl BoardApp {
             effects.extend(self.flush_pending_edit(ids, clock));
         }
         effects
+    }
+
+    fn should_insert_smart_newline(&self, key: UiKey) -> bool {
+        matches!(key, UiKey::Enter)
+            && self.settings.smart_lists
+            && self
+                .editor_snapshot()
+                .is_some_and(|snapshot| snapshot.selection.is_none())
     }
 
     fn handle_edit_effect(

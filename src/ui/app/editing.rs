@@ -21,6 +21,22 @@ pub(super) struct PendingEdit {
 }
 
 impl BoardApp {
+    pub(super) fn insert_newline(
+        &mut self,
+        smart: bool,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        let mut effects = self.flush_pending_edit(ids, clock);
+        self.apply_edit(if smart {
+            EditCommand::InsertSmartNewline
+        } else {
+            EditCommand::InsertNewline
+        });
+        effects.extend(self.flush_pending_edit(ids, clock));
+        effects
+    }
+
     pub(super) fn finish_boundary_navigation(
         &mut self,
         movement: CursorMovement,

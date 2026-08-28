@@ -252,7 +252,15 @@ impl BoardApp {
         self.configure_overlay(&mut layout);
         layout.configure_agent_controls(&self.agent_targets, self.submission_mode());
         let summary = self.footer_summary(layout.footer_context.width.saturating_sub(4));
-        layout.configure_footer_summary(summary, self.session_display_name().to_owned());
+        let session_id = self
+            .settings
+            .show_session_id
+            .then(|| self.state.board.session.id.to_string());
+        layout.configure_footer_summary(
+            summary,
+            self.session_display_name().to_owned(),
+            session_id,
+        );
         let final_height = self.focused_height(&layout);
         self.prepare_layout(TextViewport::new(layout.content_width, final_height));
         self.first_visible = layout.first_index;

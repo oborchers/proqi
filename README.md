@@ -202,6 +202,7 @@ fallbacks remain available when a terminal cannot report a modifier.
 | `Primary+Z` | Undo an edit |
 | `Shift+Primary+Z` | Redo an edit |
 | `Primary+V` | Read the native clipboard |
+| `Enter` | Continue `-`, `*`, `+`, ordered, and task list items; exit an empty top-level item |
 | `↑` / `↓` twice at a boundary | Return to the board and focus the adjacent thought |
 | Type `$name`, `/name`, or supported `@name` | Open matching local invocation completion |
 | `↑` / `↓` or `Primary+P` / `Primary+N` | Move through invocation results |
@@ -214,6 +215,10 @@ reorder thoughts, click controls, use help, and choose verified Herdr targets.
 Holding the final click while dragging extends by complete words or logical
 lines. Moving onto folded context selects its complete canonical range.
 `Enter` expands the fold, while typing or deletion replaces it atomically.
+Press `Esc`, open `:`, and choose `Insert plain newline` to bypass list
+continuation without relying on a terminal modifier; mouse users can open the
+palette directly while editing. Set `smart_lists = false` to keep every ordinary
+editor `Enter` plain.
 
 Proqi's invocation catalog is an authoring aid, not a skill executor or live
 harness integration. It refreshes bounded project and machine-global roots at
@@ -483,6 +488,8 @@ shortcuts remain available:
 
 ```toml
 check_for_updates = true
+show_session_id = false # opt in to the complete ses_... value in the footer
+smart_lists = true
 theme = "auto"
 density = "comfortable" # or "compact"
 
@@ -524,6 +531,12 @@ kind = "command" # skill, command, or agent
 harness = "open_code" # agent_skills, codex, claude_code, open_code, pi, configured
 scope = "project" # project or global
 ```
+
+The command palette always offers **Copy session ID** and **Copy resume
+command**, even when the identifier is hidden in a narrow footer. When
+`show_session_id = true`, the muted identifier appears beside the session name
+only if its complete canonical value fits; clicking it copies that complete
+value while the name remains a rename target.
 
 To install a complete local theme, set `theme` to an absolute TOML path or a
 path relative to `config.toml`:

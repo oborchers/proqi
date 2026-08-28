@@ -5,7 +5,7 @@ use proqi::{
     application::{AppState, Effect, FailureCode, InteractionMode},
     domain::{Session, SessionBoard, Thought, ThoughtPosition, Timestamp},
     ports::environment::IdGenerator,
-    ui::{BoardApp, HitTarget, PointerButton, PointerInput, PointerKind, UiInput},
+    ui::{BoardApp, HitTarget, PointerButton, PointerInput, PointerKind, UiInput, UiSettings},
 };
 use ratatui_core::layout::{Rect, Size};
 
@@ -17,6 +17,10 @@ struct Fixture {
 
 impl Fixture {
     fn new() -> Self {
+        Self::with_settings(UiSettings::default())
+    }
+
+    fn with_settings(settings: UiSettings) -> Self {
         let mut ids = FakeIdGenerator::new(1_725_300_000_000);
         let now = Timestamp::from_millis(10);
         let session = Session::new(
@@ -34,8 +38,9 @@ impl Fixture {
         );
         let board = SessionBoard::new(session, vec![thought]).expect("board");
         Self {
-            app: BoardApp::new(
+            app: BoardApp::with_settings(
                 AppState::new(board),
+                settings,
                 proqi::adapters::editor::RopeEditorFactory,
             ),
             ids,
@@ -63,6 +68,33 @@ impl Fixture {
             &self.clock,
         )
     }
+}
+
+#[test]
+fn visible_session_id_mouse_target_matches_palette_copy_intent() {
+    let mut fixture = Fixture::with_settings(UiSettings {
+        show_session_id: true,
+        ..UiSettings::default()
+    });
+    fixture.app.state.board.session.name = Some("Mouse selection QA".to_owned());
+    let session_id = fixture.app.state.board.session.id.to_string();
+    let effects = fixture.click(HitTarget::CopySessionId, Size::new(80, 8));
+    let [
+        Effect::WriteClipboard {
+            request_id,
+            thought_id: None,
+            intent: proqi::application::ClipboardIntent::CopySessionId,
+            content,
+        },
+    ] = effects.as_slice()
+    else {
+        panic!("expected session ID clipboard effect");
+    };
+    assert_eq!(content, &session_id);
+    fixture
+        .app
+        .complete_clipboard_write(*request_id, Ok(()), &mut fixture.ids, &fixture.clock);
+    assert_eq!(fixture.app.status_text(), Some("copied session ID"));
 }
 
 #[test]
