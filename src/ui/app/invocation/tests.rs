@@ -10,8 +10,14 @@ mod contract {
             memory::{FakeClock, FakeIdGenerator},
         },
         application::{AppState, InteractionMode},
-        domain::{Session, SessionBoard, Thought, ThoughtPosition, Timestamp},
+        domain::{Direction, Session, SessionBoard, Thought, ThoughtPosition, Timestamp},
         ports::{
+            agent::{
+                AgentDeliveryCapabilities, AgentSessionBinding, AgentState, AgentTarget,
+                CLAUDE_AGENT_KIND, CODEX_AGENT_KIND, HarnessKind, OPENCODE_AGENT_KIND, PaneContext,
+                PaneRect,
+            },
+            editor::CursorMovement,
             environment::IdGenerator as _,
             invocation::{
                 InvocationDiscovery, InvocationEntry, InvocationForm, InvocationHarness,
@@ -83,6 +89,40 @@ mod contract {
         }));
     }
 
+    fn target(harness: &str) -> AgentTarget {
+        let source = PaneContext {
+            workspace_id: "w1".to_owned(),
+            tab_id: "w1:t1".to_owned(),
+            pane_id: "w1:p1".to_owned(),
+            rect: PaneRect {
+                x: 0,
+                y: 0,
+                width: 20,
+                height: 20,
+            },
+        };
+        AgentTarget {
+            provider: "herdr".to_owned(),
+            protocol: 19,
+            direction: Direction::Right,
+            pane_id: "w1:p2".to_owned(),
+            workspace_id: source.workspace_id.clone(),
+            tab_id: source.tab_id.clone(),
+            agent_kind: HarnessKind::new(harness).expect("harness"),
+            agent_name: harness.to_owned(),
+            agent_session: AgentSessionBinding::established("session").expect("session"),
+            readiness: AgentState::Idle,
+            delivery: AgentDeliveryCapabilities::SUBMIT_ONLY,
+            rect: PaneRect {
+                x: 20,
+                y: 0,
+                width: 20,
+                height: 20,
+            },
+            source,
+        }
+    }
+
     #[test]
     fn completion_replaces_only_the_token_at_the_cursor_and_undoes_once() {
         let cwd = tempfile::tempdir().expect("tempdir");
@@ -113,6 +153,65 @@ mod contract {
             app.editor_snapshot().expect("editor").content,
             "$pl middle $pl"
         );
+    }
+
+    #[test]
+    fn built_in_plan_completes_only_at_prompt_start_for_codex_and_claude() {
+        let cwd = tempfile::tempdir().expect("tempdir");
+        for (harness, label) in [
+            (CODEX_AGENT_KIND, "Codex"),
+            (CLAUDE_AGENT_KIND, "Claude Code"),
+        ] {
+            let (mut app, mut ids, clock) = app("/pl", cwd.path());
+            app.complete_agent_discovery(Ok(vec![target(harness)]));
+            assert_eq!(
+                app.invocation_view().expect("plan popup").1,
+                vec![format!("/plan  Built-in Command · {label}")]
+            );
+            app.handle(UiInput::Key(UiKey::Enter), &mut ids, &clock);
+            assert_eq!(app.editor_snapshot().expect("editor").content, "/plan ");
+            app.handle(UiInput::Key(UiKey::Undo), &mut ids, &clock);
+            assert_eq!(app.editor_snapshot().expect("editor").content, "/pl");
+        }
+
+        for content in ["prefix /pl", " /pl", "\n/pl"] {
+            let (mut app, _, _) = app(content, cwd.path());
+            app.complete_agent_discovery(Ok(vec![target(CODEX_AGENT_KIND)]));
+            let mut discovered = entry("/plan", InvocationKind::Command, InvocationScope::Project);
+            discovered.source = InvocationHarness::ClaudeCode;
+            discovered.forms[0].harness = InvocationHarness::ClaudeCode;
+            install(&mut app, cwd.path(), vec![discovered]);
+            app.refresh_invocation_popup();
+            assert!(
+                app.invocation_view().is_none(),
+                "unexpected plan popup for {content:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn built_in_plan_manual_picker_requires_a_supported_target_and_byte_zero() {
+        let cwd = tempfile::tempdir().expect("tempdir");
+        let (mut supported, mut ids, clock) = app("task", cwd.path());
+        supported.complete_agent_discovery(Ok(vec![target(CODEX_AGENT_KIND)]));
+        supported.handle(
+            UiInput::Key(UiKey::Move {
+                movement: CursorMovement::DocumentStart,
+                extend_selection: false,
+            }),
+            &mut ids,
+            &clock,
+        );
+        supported.open_invocation_picker();
+        assert_eq!(
+            supported.invocation_view().expect("manual picker").1,
+            vec!["/plan  Built-in Command · Codex"]
+        );
+
+        let (mut unsupported, _, _) = app("/pl", cwd.path());
+        unsupported.complete_agent_discovery(Ok(vec![target(OPENCODE_AGENT_KIND)]));
+        unsupported.refresh_invocation_popup();
+        assert!(unsupported.invocation_view().is_none());
     }
 
     #[test]
@@ -317,6 +416,39 @@ mod contract {
             })
             .collect::<Vec<_>>()
             .join("\n")
+    }
+
+    fn plan_completion_snapshot() -> String {
+        let cwd = tempfile::tempdir().expect("tempdir");
+        let (mut app, _, _) = app("/pl", cwd.path());
+        app.complete_agent_discovery(Ok(vec![target(CODEX_AGENT_KIND)]));
+        let mut terminal = Terminal::new(TestBackend::new(48, 8)).expect("terminal");
+        terminal
+            .draw(|frame| {
+                let layout = app.prepare_frame(frame.area());
+                render(
+                    frame,
+                    &app,
+                    &layout,
+                    &Theme::resolve(ThemePreference::Dark, true),
+                );
+            })
+            .expect("draw");
+        let buffer = terminal.backend().buffer();
+        (0..buffer.area.height)
+            .map(|row| {
+                let content = (0..buffer.area.width)
+                    .map(|column| buffer[(column, row)].symbol())
+                    .collect::<String>();
+                format!("{row:02}│{}│", content.trim_end_matches(' '))
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    #[test]
+    fn plan_completion_popup_snapshot_is_visually_an_ordinary_command() {
+        insta::assert_snapshot!("invocation_plan_starter", plan_completion_snapshot());
     }
 
     #[test]

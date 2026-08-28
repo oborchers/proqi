@@ -93,3 +93,53 @@ fn selected_thoughts_submit_once_in_board_order_and_remove_as_one_undo_step() {
     fixture.input(UiInput::Key(UiKey::Undo));
     assert_eq!(fixture.app.state.board.live_thoughts().len(), 2);
 }
+
+#[test]
+fn merged_plan_prompt_keeps_only_the_first_thought_starter() {
+    for harness in [CODEX_AGENT_KIND, CLAUDE_AGENT_KIND] {
+        let mut fixture = Fixture::new();
+        fixture.paste("/plan first task with an internal /plan reference");
+        fixture.input(UiInput::Key(UiKey::Escape));
+        fixture.paste("/plan second task keeps internal /plan prose");
+        fixture.input(UiInput::Key(UiKey::Escape));
+        fixture.input(UiInput::Key(UiKey::Character(' ')));
+        fixture.input(UiInput::Key(UiKey::Character('k')));
+        fixture.input(UiInput::Key(UiKey::Character(' ')));
+        fixture
+            .app
+            .complete_agent_discovery(Ok(vec![super::agent::target_with_kind(
+                Direction::Left,
+                "w1:p2",
+                harness,
+            )]));
+
+        let effects = fixture.effects(UiInput::Key(UiKey::Character('s')));
+        let request = super::agent::start_submission(&mut fixture, &effects);
+        assert_eq!(
+            request.content,
+            "/plan first task with an internal /plan reference\n\nsecond task keeps internal /plan prose"
+        );
+        assert_eq!(
+            fixture.app.state.board.live_thoughts()[1].content,
+            "/plan second task keeps internal /plan prose"
+        );
+
+        let mut without_first_starter = Fixture::new();
+        without_first_starter.paste("ordinary first task with /plan prose");
+        without_first_starter.input(UiInput::Key(UiKey::Escape));
+        without_first_starter.paste("/plan later task");
+        without_first_starter.input(UiInput::Key(UiKey::Escape));
+        without_first_starter.input(UiInput::Key(UiKey::Character(' ')));
+        without_first_starter.input(UiInput::Key(UiKey::Character('k')));
+        without_first_starter.input(UiInput::Key(UiKey::Character(' ')));
+        without_first_starter.app.complete_agent_discovery(Ok(vec![
+            super::agent::target_with_kind(Direction::Left, "w1:p2", harness),
+        ]));
+        let effects = without_first_starter.effects(UiInput::Key(UiKey::Character('s')));
+        let request = super::agent::start_submission(&mut without_first_starter, &effects);
+        assert_eq!(
+            request.content,
+            "ordinary first task with /plan prose\n\nlater task"
+        );
+    }
+}

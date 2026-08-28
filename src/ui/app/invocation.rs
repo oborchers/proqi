@@ -18,6 +18,9 @@ use crate::{
 
 use super::BoardApp;
 
+#[path = "invocation/builtins.rs"]
+mod builtins;
+
 const MAX_RESULTS: usize = 20;
 
 pub(super) struct InvocationPopup {
@@ -30,7 +33,7 @@ pub(super) struct InvocationPopup {
 
 #[derive(Clone)]
 struct Choice {
-    form: InvocationForm,
+    token: String,
     label: String,
 }
 
@@ -281,7 +284,7 @@ impl BoardApp {
             position: position_for_byte(&snapshot.content, range.end),
             extend_selection: true,
         });
-        self.apply_edit(EditCommand::Paste(format!("{} ", choice.form.token)));
+        self.apply_edit(EditCommand::Paste(format!("{} ", choice.token)));
         self.invocation_popup = None;
     }
 
@@ -348,11 +351,15 @@ impl BoardApp {
 
     fn invocation_choices(&self, popup: &InvocationPopup) -> Vec<Choice> {
         let query = popup.query.to_lowercase();
+        let built_in_plan = builtins::plan_choice(self, popup);
+        let starts_prompt = builtins::starts_prompt(self, popup);
         let mut candidates = self
             .invocation_project
             .iter()
             .chain(&self.invocation_global)
             .flat_map(|entry| entry.forms.iter().map(move |form| (entry, form)))
+            .filter(|(_, form)| form.token != "/plan" || starts_prompt)
+            .filter(|(_, form)| built_in_plan.is_none() || form.token != "/plan")
             .filter(|(entry, form)| choice_matches(entry, form, popup.manual, &query))
             .collect::<Vec<_>>();
         candidates.sort_by(|(left_entry, left_form), (right_entry, right_form)| {
@@ -364,25 +371,27 @@ impl BoardApp {
                 .then_with(|| left_entry.source.cmp(&right_entry.source))
                 .then_with(|| left_entry.canonical_path.cmp(&right_entry.canonical_path))
         });
-        candidates.truncate(MAX_RESULTS);
+        candidates.truncate(MAX_RESULTS.saturating_sub(usize::from(built_in_plan.is_some())));
         let duplicate_tokens = candidates
             .iter()
             .map(|(_, form)| form.token.as_str())
             .collect::<Vec<_>>();
-        candidates
-            .drain(..)
-            .map(|(entry, form)| Choice {
-                form: form.clone(),
-                label: choice_label(
-                    entry,
-                    form,
-                    duplicate_tokens
-                        .iter()
-                        .filter(|token| **token == form.token)
-                        .count()
-                        > 1,
-                ),
-            })
+        built_in_plan
+            .into_iter()
+            .chain(candidates.drain(..).map(|(entry, form)| {
+                Choice {
+                    token: form.token.clone(),
+                    label: choice_label(
+                        entry,
+                        form,
+                        duplicate_tokens
+                            .iter()
+                            .filter(|token| **token == form.token)
+                            .count()
+                            > 1,
+                    ),
+                }
+            }))
             .collect()
     }
 }

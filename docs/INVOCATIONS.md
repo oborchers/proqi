@@ -27,10 +27,23 @@ precede user agents; plugin definitions remain lowest. Canonical paths collapse
 symlink aliases while same-name definitions with distinct type or source remain
 separately labeled.
 
+## Target-aware built-in exception
+
+`/plan` is the only non-filesystem invocation Proqi supplies. It appears as an
+ordinary Command result only at byte zero of a thought when verified adjacent
+Codex or Claude Code targets exist. Leading whitespace, later lines, partial
+names such as `/planner`, and in-body `/plan` text do not match.
+
+For a multi-thought submission to either supported harness, Proqi preserves a
+complete `/plan` starter on the first thought and omits duplicate starters from
+later thoughts in the outbound prompt. It removes the token and one following
+whitespace separator only. Source thoughts remain byte-for-byte unchanged.
+
 ## Evidence and licenses
 
 - [Claude Code skills and slash commands](https://code.claude.com/docs/en/slash-commands), [subagents](https://code.claude.com/docs/en/sub-agents), and [plugin manifests](https://code.claude.com/docs/en/plugins-reference) are vendor documentation.
 - [OpenAI Codex skills](https://developers.openai.com/codex/skills/) and [subagents](https://developers.openai.com/codex/subagents/) are vendor documentation.
+- [OpenAI Codex developer commands](https://developers.openai.com/codex/cli/slash-commands/) documents `/plan` and its inline prompt form.
 - [OpenCode commands](https://opencode.ai/docs/commands/) and [agents](https://opencode.ai/v2/docs/agents/) are vendor documentation.
 - [Agent Skills specification](https://agentskills.io/specification) defines bounded `SKILL.md` metadata.
 - [Vercel Labs `skills`](https://github.com/vercel-labs/skills) informed the compatibility-root table and is MIT licensed. No source code was copied.

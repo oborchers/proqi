@@ -408,13 +408,17 @@ below the source range. Duplicates receive fresh identities and timestamps,
 become the new selection, and are created as one persistent undo step. Entering
 edit mode or pressing `Escape` clears the complete board selection.
 
-Copy and submission concatenate exact thought content with one blank line
-between thoughts and no generated labels. A multi-thought Herdr submission is
-one semantic prompt request, not several deliveries. For submit and remove, all
-unchanged source thoughts are removed together only after the matching accepted
-receipt is durably journaled. Every source thought is locked against TUI and CLI
-mutation from submission intent until the attempt reaches a terminal journaled
-state.
+Copy concatenates exact thought content with one blank line between thoughts
+and no generated labels. Submission does the same except for one target-aware
+plan-mode rule: when Codex or Claude Code receives several thoughts, `/plan` is
+recognized only as a complete token at byte zero, remains only on the first
+thought, and is omitted from later thought starts in the outbound payload.
+In-body text and every stored thought remain exact. A multi-thought Herdr
+submission is one semantic prompt request, not several deliveries. For submit
+and remove, all unchanged source thoughts are removed together only after the
+matching accepted receipt is durably journaled. Every source thought is locked
+against TUI and CLI mutation from submission intent until the attempt reaches a
+terminal journaled state.
 
 ### Submit to an adjacent agent
 
@@ -586,6 +590,11 @@ through the repository root with deterministic nearest-root and documented
 harness precedence. Startup, explicit command-palette refresh, and debounced
 host focus replace generation-tagged results; an older in-flight project scan
 cannot leak into a newer cwd.
+
+One deliberately narrow built-in sits beside filesystem results: `/plan` is
+offered as an ordinary Command only at byte zero when a verified adjacent Codex
+or Claude Code target exists. It receives no special styling and never matches
+leading whitespace, another line, or in-body prose.
 
 Leaving edit mode returns to the same board position and keeps the edited
 thought selected.

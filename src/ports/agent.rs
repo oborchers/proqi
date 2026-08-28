@@ -340,7 +340,10 @@ pub struct SubmissionRequest {
     pub submission_id: SubmissionId,
     /// Previously verified target, revalidated immediately before submission.
     pub target: AgentTarget,
-    /// Exact thought content.
+    /// Outbound semantic prompt assembled from exact source thoughts.
+    ///
+    /// When several thoughts target Codex or Claude Code, duplicate `/plan`
+    /// starters after the first thought are omitted without mutating the sources.
     pub content: String,
 }
 

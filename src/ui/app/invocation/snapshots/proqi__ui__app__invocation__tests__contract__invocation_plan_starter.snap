@@ -1,0 +1,13 @@
+---
+source: src/ui/app/invocation/tests.rs
+assertion_line: 449
+expression: plan_completion_snapshot()
+---
+00││
+01│┌ discovered invocations ────────────────────[x]│
+02││›/pl                                          ││
+03││/plan  Built-in Command · Codex               ││
+04││                                              ││
+05│└──────────────────────────────────────────────┘│
+06│  Esc Board  : Commands  ? Shortcuts│
+07│  → Codex   s Submit    S Submit & keep│

@@ -20,6 +20,9 @@ use super::{
     pending_types::{PendingSubmission, PendingSubmissionSource, SubmissionMode},
 };
 
+#[path = "agent/prompt.rs"]
+mod prompt;
+
 impl BoardApp {
     /// Initial optional-integration discovery effect.
     #[must_use]
@@ -56,6 +59,7 @@ impl BoardApp {
             }
             Err(_) => self.agent_targets.clear(),
         }
+        self.refresh_invocation_popup();
     }
 
     /// Persist the prepared intent before external delivery begins.
@@ -291,11 +295,7 @@ impl BoardApp {
             .filter_map(|id| self.state.board.thought(*id))
             .map(|thought| (thought.id, thought.content.clone()))
             .collect::<Vec<_>>();
-        let content = source_contents
-            .iter()
-            .map(|(_, content)| content.as_str())
-            .collect::<Vec<_>>()
-            .join("\n\n");
+        let content = prompt::join_for_target(target, &source_contents);
         let submission_id = ids.submission_id();
         let payload_digest = digest(content.as_bytes());
         let at = clock.now();
