@@ -1,13 +1,24 @@
 //! Reusable behavioral contract for multiline editor backends.
 
+#[path = "editor_contract/changes.rs"]
+mod changes;
+
 use proqi::adapters::editor::RopeEditor;
 use proqi::{
     domain::TextPosition,
-    ports::editor::{CursorMovement, EditCommand, Editor, SelectionGranularity, TextViewport},
+    ports::editor::{
+        CursorMovement, EditCommand, EditOutcome, Editor, SelectionGranularity, TextViewport,
+    },
 };
 
 fn editor(text: &str) -> impl Editor {
     RopeEditor::new(text)
+}
+
+fn assert_change(outcome: &EditOutcome, old: std::ops::Range<usize>, new: std::ops::Range<usize>) {
+    assert_eq!(outcome.changes.len(), 1);
+    assert_eq!(outcome.changes.as_slice()[0].old_range(), old);
+    assert_eq!(outcome.changes.as_slice()[0].new_range(), new);
 }
 
 #[test]
@@ -17,16 +28,144 @@ fn large_multiline_paste_is_one_exact_undo_unit() {
     let paste = unit.repeat(20_000);
 
     let inserted = editor.apply(EditCommand::Paste(paste.clone()));
-    assert!(inserted.content_changed);
+    assert_change(&inserted, 0..0, 0..paste.len());
     assert_eq!(inserted.snapshot.content, paste);
 
     let undone = editor.apply(EditCommand::Undo);
-    assert!(undone.content_changed);
+    assert_change(&undone, 0..paste.len(), 0..0);
     assert_eq!(undone.snapshot.content, "");
-    assert!(!editor.apply(EditCommand::Undo).content_changed);
+    assert!(editor.apply(EditCommand::Undo).changes.is_empty());
 
     let redone = editor.apply(EditCommand::Redo);
+    assert_change(&redone, 0..0, 0..paste.len());
     assert_eq!(redone.snapshot.content, paste);
+}
+
+#[test]
+fn insertion_paste_and_newline_report_exact_ranges_and_cursor_state() {
+    let mut editor = editor("");
+    let inserted = editor.apply(EditCommand::InsertChar('日'));
+    assert_change(&inserted, 0..0, 0..3);
+    assert_eq!(inserted.snapshot.cursor, TextPosition::new(0, 1));
+    assert_eq!(inserted.snapshot.selection, None);
+
+    let payload = "e\u{301}👩🏽‍💻\r\n";
+    let pasted = editor.apply(EditCommand::Paste(payload.to_owned()));
+    assert_change(&pasted, 3..3, 3..3 + payload.len());
+    assert_eq!(pasted.snapshot.content, format!("日{payload}"));
+    assert_eq!(pasted.snapshot.cursor, TextPosition::new(1, 0));
+
+    let newline = editor.apply(EditCommand::InsertNewline);
+    let start = pasted.snapshot.content.len();
+    assert_change(&newline, start..start, start..start + 1);
+    assert_eq!(newline.snapshot.cursor, TextPosition::new(2, 0));
+}
+
+#[test]
+fn selection_replacement_and_cut_deletion_report_exact_ranges() {
+    let mut editor = editor("a日本z");
+    editor.apply(EditCommand::SetCursor {
+        position: TextPosition::new(0, 1),
+        extend_selection: false,
+    });
+    for _ in 0..2 {
+        editor.apply(EditCommand::Move {
+            movement: CursorMovement::GraphemeForward,
+            extend_selection: true,
+        });
+    }
+    let replaced = editor.apply(EditCommand::Paste("🙂".to_owned()));
+    assert_change(&replaced, 1..7, 1..5);
+    assert_eq!(replaced.snapshot.content, "a🙂z");
+    assert_eq!(replaced.snapshot.cursor, TextPosition::new(0, 2));
+    assert_eq!(replaced.snapshot.selection, None);
+
+    editor.apply(EditCommand::SetCursor {
+        position: TextPosition::new(0, 1),
+        extend_selection: false,
+    });
+    editor.apply(EditCommand::Move {
+        movement: CursorMovement::GraphemeForward,
+        extend_selection: true,
+    });
+    let cut_deletion = editor.apply(EditCommand::DeleteForward);
+    assert_change(&cut_deletion, 1..5, 1..1);
+    assert_eq!(cut_deletion.snapshot.content, "az");
+    assert_eq!(cut_deletion.snapshot.cursor, TextPosition::new(0, 1));
+    assert_eq!(cut_deletion.snapshot.selection, None);
+}
+
+#[test]
+fn backward_and_forward_delete_report_complete_grapheme_byte_ranges() {
+    let combining = "e\u{301}";
+    let combining_content = format!("A{combining}B");
+    let mut combining_editor = editor(&combining_content);
+    combining_editor.apply(EditCommand::SetCursor {
+        position: TextPosition::new(0, 2),
+        extend_selection: false,
+    });
+    let backward = combining_editor.apply(EditCommand::DeleteBack);
+    assert_change(&backward, 1..1 + combining.len(), 1..1);
+    assert_eq!(backward.snapshot.content, "AB");
+    assert_eq!(backward.snapshot.cursor, TextPosition::new(0, 1));
+
+    let emoji = "👩🏽‍💻";
+    let emoji_content = format!("A{emoji}界");
+    let mut emoji_editor = editor(&emoji_content);
+    emoji_editor.apply(EditCommand::SetCursor {
+        position: TextPosition::new(0, 1),
+        extend_selection: false,
+    });
+    let forward = emoji_editor.apply(EditCommand::DeleteForward);
+    assert_change(&forward, 1..1 + emoji.len(), 1..1);
+    assert_eq!(forward.snapshot.content, "A界");
+    assert_eq!(forward.snapshot.cursor, TextPosition::new(0, 1));
+}
+
+#[test]
+fn logical_line_deletion_reports_crlf_and_missing_final_newline_ranges() {
+    let mut crlf_editor = editor("one\r\ntwo\r\nthree");
+    crlf_editor.apply(EditCommand::SetCursor {
+        position: TextPosition::new(1, 1),
+        extend_selection: false,
+    });
+    let middle = crlf_editor.apply(EditCommand::DeleteLogicalLine);
+    assert_change(&middle, 5..10, 5..5);
+    assert_eq!(middle.snapshot.content, "one\r\nthree");
+
+    let mut final_line_editor = editor("one\n最後");
+    final_line_editor.apply(EditCommand::SetCursor {
+        position: TextPosition::new(1, 1),
+        extend_selection: false,
+    });
+    let last = final_line_editor.apply(EditCommand::DeleteLogicalLine);
+    assert_change(&last, 3..10, 3..3);
+    assert_eq!(last.snapshot.content, "one");
+    assert_eq!(last.snapshot.cursor, TextPosition::new(0, 3));
+}
+
+#[test]
+fn movement_and_content_neutral_replacement_report_no_changes() {
+    let mut editor = editor("same");
+    let movement = editor.apply(EditCommand::Move {
+        movement: CursorMovement::DocumentEnd,
+        extend_selection: false,
+    });
+    assert!(movement.changes.is_empty());
+    assert!(
+        editor
+            .apply(EditCommand::Paste(String::new()))
+            .changes
+            .is_empty()
+    );
+    assert!(editor.apply(EditCommand::DeleteForward).changes.is_empty());
+
+    editor.apply(EditCommand::SelectAll);
+    let replacement = editor.apply(EditCommand::Paste("same".to_owned()));
+    assert!(replacement.changes.is_empty());
+    assert_eq!(replacement.snapshot.content, "same");
+    assert_eq!(replacement.snapshot.selection, None);
+    assert_eq!(replacement.snapshot.cursor, TextPosition::new(0, 4));
 }
 
 #[test]
@@ -272,12 +411,14 @@ fn repeated_resize_reflows_without_mutating_logical_state() {
 fn replacement_clamps_cursor_and_resets_transient_history() {
     let mut editor = editor("first\nvery long second line");
     editor.apply(EditCommand::Paste(" changed".to_owned()));
-    editor.replace_content("short\n日本語".to_owned(), TextPosition::new(9, 99));
+    let before_len = editor.snapshot().content.len();
+    let replaced = editor.replace_content("short\n日本語".to_owned(), TextPosition::new(9, 99));
+    assert_change(&replaced, 0..before_len, 0.."short\n日本語".len());
 
     let snapshot = editor.snapshot();
     assert_eq!(snapshot.cursor, TextPosition::new(1, 3));
     assert_eq!(snapshot.content, "short\n日本語");
-    assert!(!editor.apply(EditCommand::Undo).content_changed);
+    assert!(editor.apply(EditCommand::Undo).changes.is_empty());
 }
 
 #[test]

@@ -368,13 +368,13 @@ impl BoardApp {
             && *current == thought_id
         {
             if self.pending_edit.is_none() && editor.snapshot().content != content {
-                editor.replace_content(content, restored_cursor.unwrap_or_default());
+                let _outcome = editor.replace_content(content, restored_cursor.unwrap_or_default());
             }
         } else {
             let mut editor = self.editor_factory.create(&content);
             editor.set_viewport(self.viewport);
             if let Some(cursor) = restored_cursor {
-                editor.replace_content(content, cursor);
+                let _outcome = editor.replace_content(content, cursor);
             } else {
                 let _outcome = editor.apply(EditCommand::Move {
                     movement: CursorMovement::DocumentEnd,

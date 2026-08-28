@@ -1,5 +1,9 @@
 //! Editor contract expressed without terminal-library input types.
 
+mod change;
+
+pub use change::{OffsetAffinity, TextChange, TextChangeError, TextChangeSet, TextCoordinateSpace};
+
 use crate::domain::TextPosition;
 
 /// A normalized text selection.
@@ -178,8 +182,8 @@ pub struct EditorSnapshot {
 /// Result of applying one normalized editor command.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EditOutcome {
-    /// Whether document content changed.
-    pub content_changed: bool,
+    /// Exact ordered changes from the command's input document to `snapshot.content`.
+    pub changes: TextChangeSet,
     /// Latest complete state.
     pub snapshot: EditorSnapshot,
 }
@@ -198,8 +202,8 @@ pub trait Editor {
     /// Return the current complete state.
     fn snapshot(&self) -> EditorSnapshot;
 
-    /// Replace all content and restore the nearest valid logical cursor.
-    fn replace_content(&mut self, text: String, cursor: TextPosition);
+    /// Replace all content, report that reset explicitly, and restore the nearest valid cursor.
+    fn replace_content(&mut self, text: String, cursor: TextPosition) -> EditOutcome;
 
     /// Resolve a visible viewport cell to a logical text position.
     fn position_at_cell(&self, row: u16, column: u16) -> TextPosition;

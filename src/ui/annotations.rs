@@ -3,6 +3,7 @@
 use unicode_segmentation::UnicodeSegmentation as _;
 
 use crate::domain::{ContentAnnotation, ContentAnnotationKind};
+use crate::ports::editor::{OffsetAffinity, TextChange, TextChangeSet};
 
 const LARGE_PASTE_LINES: usize = 12;
 const LARGE_PASTE_GRAPHEMES: usize = 1_200;
@@ -177,66 +178,61 @@ fn plain(content: &str) -> Presentation {
 pub(super) fn rebase(
     before: &str,
     after: &str,
+    changes: &TextChangeSet,
     annotations: &[ContentAnnotation],
     inserted: &[ContentAnnotation],
 ) -> Vec<ContentAnnotation> {
-    let (before_start, before_end, after_start, after_end) = changed_span(before, after);
-    let removed = before_end.saturating_sub(before_start);
-    let added = after_end.saturating_sub(after_start);
     let mut rebased = annotations
         .iter()
-        .filter_map(|annotation| {
-            if annotation.end <= before_start {
-                Some(annotation.clone())
-            } else if annotation.start >= before_end {
-                Some(shift(annotation, added, removed))
-            } else {
-                None
-            }
+        .filter(|annotation| {
+            !changes
+                .as_slice()
+                .iter()
+                .any(|change| intersects(annotation, change))
         })
+        .filter_map(|annotation| map_annotation(before, changes, annotation))
         .collect::<Vec<_>>();
-    rebased.extend(inserted.iter().map(|annotation| ContentAnnotation {
-        start: after_start.saturating_add(annotation.start),
-        end: after_start.saturating_add(annotation.end),
-        kind: annotation.kind.clone(),
-    }));
+    if let [change] = changes.as_slice() {
+        let new_range = change.new_range();
+        rebased.extend(inserted.iter().filter_map(|annotation| {
+            let start = new_range.start.checked_add(annotation.start)?;
+            let end = new_range.start.checked_add(annotation.end)?;
+            (end <= new_range.end && after.get(start..end).is_some()).then(|| ContentAnnotation {
+                start,
+                end,
+                kind: annotation.kind.clone(),
+            })
+        }));
+    }
     rebased.sort_by_key(|annotation| annotation.start);
     rebased
 }
 
-fn shift(annotation: &ContentAnnotation, added: usize, removed: usize) -> ContentAnnotation {
-    ContentAnnotation {
-        start: annotation
-            .start
-            .saturating_add(added)
-            .saturating_sub(removed),
-        end: annotation.end.saturating_add(added).saturating_sub(removed),
-        kind: annotation.kind.clone(),
+fn intersects(annotation: &ContentAnnotation, change: &TextChange) -> bool {
+    let old = change.old_range();
+    if old.is_empty() {
+        annotation.start < old.start && old.start < annotation.end
+    } else {
+        old.start < annotation.end && annotation.start < old.end
     }
 }
 
-fn changed_span(before: &str, after: &str) -> (usize, usize, usize, usize) {
-    let prefix = before
-        .char_indices()
-        .zip(after.char_indices())
-        .take_while(|((_, left), (_, right))| left == right)
-        .last()
-        .map_or(0, |((offset, value), _)| offset + value.len_utf8());
-    let before_tail = &before[prefix..];
-    let after_tail = &after[prefix..];
-    let suffix = before_tail
-        .chars()
-        .rev()
-        .zip(after_tail.chars().rev())
-        .take_while(|(left, right)| left == right)
-        .map(|(character, _)| character.len_utf8())
-        .sum::<usize>();
-    (
-        prefix,
-        before.len().saturating_sub(suffix),
-        prefix,
-        after.len().saturating_sub(suffix),
-    )
+fn map_annotation(
+    before: &str,
+    changes: &TextChangeSet,
+    annotation: &ContentAnnotation,
+) -> Option<ContentAnnotation> {
+    let start = changes
+        .map_old_offset(before, annotation.start, OffsetAffinity::After)
+        .ok()?;
+    let end = changes
+        .map_old_offset(before, annotation.end, OffsetAffinity::Before)
+        .ok()?;
+    (start < end).then(|| ContentAnnotation {
+        start,
+        end,
+        kind: annotation.kind.clone(),
+    })
 }
 
 fn grouped(value: usize) -> String {
@@ -250,3 +246,6 @@ fn grouped(value: usize) -> String {
     }
     output
 }
+
+#[cfg(test)]
+mod tests;

@@ -1,5 +1,6 @@
 //! Rope-backed multiline editor implementation.
 
+mod mutation;
 mod pointer;
 mod text;
 
@@ -10,7 +11,7 @@ use ropey::Rope;
 use crate::domain::TextPosition;
 use crate::ports::editor::{
     CellRange, CursorMovement, EditCommand, EditOutcome, Editor, EditorFactory, EditorSnapshot,
-    TextSelection, TextViewport,
+    TextChangeSet, TextSelection, TextViewport,
 };
 use crate::ports::text_layout::{
     WrappedRow, byte_at_cell, byte_for_position, cell_column_at_byte, logical_lines,
@@ -48,8 +49,8 @@ impl State {
 /// Rope-backed editor with grapheme-safe positions and exact content storage.
 pub struct RopeEditor {
     state: State,
-    undo: Vec<State>,
-    redo: Vec<State>,
+    undo: Vec<mutation::HistoryEntry>,
+    redo: Vec<mutation::HistoryEntry>,
     viewport: TextViewport,
     scroll_row: usize,
     preferred_column: Option<usize>,
@@ -88,29 +89,6 @@ impl RopeEditor {
         self.state.text.to_string()
     }
 
-    fn mutate(&mut self, operation: impl FnOnce(&mut Self) -> bool) -> bool {
-        let before = self.state.clone();
-        if operation(self) {
-            self.undo.push(before);
-            self.redo.clear();
-            self.preferred_column = None;
-            self.pointer_selection = None;
-            self.ensure_cursor_visible();
-            true
-        } else {
-            false
-        }
-    }
-
-    fn replace_byte_range(&mut self, start: usize, end: usize, replacement: &str) {
-        let start_char = self.state.text.byte_to_char(start);
-        let end_char = self.state.text.byte_to_char(end);
-        self.state.text.remove(start_char..end_char);
-        self.state.text.insert(start_char, replacement);
-        self.state.cursor_byte = start + replacement.len();
-        self.state.selection_anchor_byte = None;
-    }
-
     fn selection_bytes(&self) -> Option<(usize, usize)> {
         let anchor = self.state.selection_anchor_byte?;
         if anchor == self.state.cursor_byte {
@@ -121,64 +99,6 @@ impl RopeEditor {
             Ordering::Greater => (self.state.cursor_byte, anchor),
             Ordering::Equal => return None,
         })
-    }
-
-    fn replace_selection_or_insert(&mut self, text: &str) -> bool {
-        if text.is_empty() && self.selection_bytes().is_none() {
-            return false;
-        }
-        let (start, end) = self
-            .selection_bytes()
-            .unwrap_or((self.state.cursor_byte, self.state.cursor_byte));
-        self.replace_byte_range(start, end, text);
-        true
-    }
-
-    fn delete_back(&mut self) -> bool {
-        if let Some((start, end)) = self.selection_bytes() {
-            self.replace_byte_range(start, end, "");
-            return start != end;
-        }
-        let content = self.content();
-        let Some(previous) = previous_boundary(&content, self.state.cursor_byte) else {
-            return false;
-        };
-        self.replace_byte_range(previous, self.state.cursor_byte, "");
-        true
-    }
-
-    fn delete_forward(&mut self) -> bool {
-        if let Some((start, end)) = self.selection_bytes() {
-            self.replace_byte_range(start, end, "");
-            return start != end;
-        }
-        let content = self.content();
-        let Some(next) = next_boundary(&content, self.state.cursor_byte) else {
-            return false;
-        };
-        self.replace_byte_range(self.state.cursor_byte, next, "");
-        true
-    }
-
-    fn delete_logical_line(&mut self) -> bool {
-        let content = self.content();
-        let lines = logical_lines(&content);
-        let position = position_for_byte(&content, self.state.cursor_byte);
-        let line_index = position.line.min(lines.len().saturating_sub(1));
-        let line = lines[line_index];
-
-        let (start, end) = if lines.len() == 1 {
-            (0, content.len())
-        } else if line_index + 1 < lines.len() {
-            (line.start, line.end)
-        } else {
-            (lines[line_index - 1].content_end, line.end)
-        };
-        if start == end {
-            return false;
-        }
-        self.replace_byte_range(start, end, "");
-        true
     }
 
     fn set_cursor_byte(&mut self, byte: usize, extend_selection: bool) {
@@ -269,7 +189,7 @@ impl RopeEditor {
 
 impl Editor for RopeEditor {
     fn apply(&mut self, command: EditCommand) -> EditOutcome {
-        let content_changed = match command {
+        let changes = match command {
             EditCommand::InsertChar(character) => {
                 self.mutate(|editor| editor.replace_selection_or_insert(&character.to_string()))
             }
@@ -288,19 +208,19 @@ impl Editor for RopeEditor {
             } => {
                 self.pointer_selection = None;
                 self.move_cursor(movement, extend_selection);
-                false
+                TextChangeSet::unchanged(self.state.text.len_bytes())
             }
             EditCommand::SelectAll => {
                 self.pointer_selection = None;
                 self.state.selection_anchor_byte = Some(0);
                 self.state.cursor_byte = self.state.text.len_bytes();
                 self.ensure_cursor_visible();
-                false
+                TextChangeSet::unchanged(self.state.text.len_bytes())
             }
             EditCommand::ClearSelection => {
                 self.pointer_selection = None;
                 self.state.selection_anchor_byte = None;
-                false
+                TextChangeSet::unchanged(self.state.text.len_bytes())
             }
             EditCommand::SetCursor {
                 position,
@@ -309,43 +229,30 @@ impl Editor for RopeEditor {
                 self.pointer_selection = None;
                 let byte = byte_for_position(&self.content(), position);
                 self.set_cursor_byte(byte, extend_selection);
-                false
+                TextChangeSet::unchanged(self.state.text.len_bytes())
             }
             EditCommand::PointerStart {
                 position,
                 granularity,
                 extend_selection,
-            } => self.begin_pointer_selection(position, granularity, extend_selection),
-            EditCommand::PointerDrag { position } => self.extend_pointer_selection(position),
-            EditCommand::PointerEnd => self.end_pointer_selection(),
-            EditCommand::Undo => {
-                if let Some(previous) = self.undo.pop() {
-                    self.redo.push(self.state.clone());
-                    self.state = previous;
-                    self.preferred_column = None;
-                    self.pointer_selection = None;
-                    self.ensure_cursor_visible();
-                    true
-                } else {
-                    false
-                }
+            } => {
+                self.begin_pointer_selection(position, granularity, extend_selection);
+                TextChangeSet::unchanged(self.state.text.len_bytes())
             }
-            EditCommand::Redo => {
-                if let Some(next) = self.redo.pop() {
-                    self.undo.push(self.state.clone());
-                    self.state = next;
-                    self.preferred_column = None;
-                    self.pointer_selection = None;
-                    self.ensure_cursor_visible();
-                    true
-                } else {
-                    false
-                }
+            EditCommand::PointerDrag { position } => {
+                self.extend_pointer_selection(position);
+                TextChangeSet::unchanged(self.state.text.len_bytes())
             }
+            EditCommand::PointerEnd => {
+                self.end_pointer_selection();
+                TextChangeSet::unchanged(self.state.text.len_bytes())
+            }
+            EditCommand::Undo => self.undo_edit(),
+            EditCommand::Redo => self.redo_edit(),
         };
 
         EditOutcome {
-            content_changed,
+            changes,
             snapshot: self.snapshot(),
         }
     }
@@ -390,7 +297,9 @@ impl Editor for RopeEditor {
         }
     }
 
-    fn replace_content(&mut self, text: String, cursor: TextPosition) {
+    fn replace_content(&mut self, text: String, cursor: TextPosition) -> EditOutcome {
+        let before = self.content();
+        let changes = TextChangeSet::replace_all(&before, &text);
         let byte = byte_for_position(&text, cursor);
         self.state = State {
             text: Rope::from_str(&text),
@@ -402,6 +311,10 @@ impl Editor for RopeEditor {
         self.preferred_column = None;
         self.pointer_selection = None;
         self.ensure_cursor_visible();
+        EditOutcome {
+            changes,
+            snapshot: self.snapshot(),
+        }
     }
 
     fn position_at_cell(&self, row: u16, column: u16) -> TextPosition {

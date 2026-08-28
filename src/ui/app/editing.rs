@@ -109,11 +109,14 @@ impl BoardApp {
         let edit = self.editor.as_mut().and_then(|(thought_id, editor)| {
             let before = editor.snapshot();
             let outcome = editor.apply(command);
-            outcome
-                .content_changed
-                .then_some((*thought_id, before, outcome.snapshot))
+            (!outcome.changes.is_empty()).then_some((
+                *thought_id,
+                before,
+                outcome.snapshot,
+                outcome.changes,
+            ))
         });
-        let Some((thought_id, before, after)) = edit else {
+        let Some((thought_id, before, after, changes)) = edit else {
             return;
         };
         self.clear_expanded_folds(thought_id);
@@ -133,6 +136,7 @@ impl BoardApp {
         let after_annotations = annotations::rebase(
             &before.content,
             &after.content,
+            &changes,
             &current_annotations,
             inserted_annotations,
         );
