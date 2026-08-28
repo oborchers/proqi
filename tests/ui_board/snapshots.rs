@@ -228,3 +228,16 @@ fn command_palette_has_a_complete_searchable_buffer() {
     }
     insta::assert_snapshot!(snapshot(&mut fixture, 72, 18, ThemePreference::Dark));
 }
+
+#[test]
+fn plain_newline_fallback_is_visible_in_the_command_palette() {
+    let mut fixture = Fixture::new();
+    let sequence = fixture.paste("- list item");
+    fixture.app.acknowledge_persistence(sequence, true);
+    fixture.input(UiInput::Key(UiKey::Escape));
+    fixture.input(UiInput::Key(UiKey::Character(':')));
+    for character in "plain newline".chars() {
+        fixture.input(UiInput::Key(UiKey::Character(character)));
+    }
+    insta::assert_snapshot!(snapshot(&mut fixture, 72, 14, ThemePreference::Dark));
+}

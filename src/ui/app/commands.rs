@@ -211,6 +211,14 @@ impl BoardApp {
         {
             return self.flush_pending_edit(ids, clock);
         }
+        if matches!(key, UiKey::Enter)
+            && self.settings.smart_lists
+            && self
+                .editor_snapshot()
+                .is_some_and(|snapshot| snapshot.selection.is_none())
+        {
+            return self.insert_newline(true, ids, clock);
+        }
         let adjacent_fold = match key {
             UiKey::Backspace => self.delete_adjacent_fold(true),
             UiKey::Delete => self.delete_adjacent_fold(false),

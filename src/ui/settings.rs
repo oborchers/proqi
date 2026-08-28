@@ -21,6 +21,8 @@ pub enum KeyboardEnhancement {
 pub struct UiSettings {
     /// Permit automatic stable-release checks on interactive release startup.
     pub check_for_updates: bool,
+    /// Continue recognized Markdown list items when Enter inserts a newline.
+    pub smart_lists: bool,
     /// Keyboard protocol negotiation.
     pub keyboard_enhancement: KeyboardEnhancement,
     /// Remappable direct board keys.
@@ -33,6 +35,7 @@ impl Default for UiSettings {
     fn default() -> Self {
         Self {
             check_for_updates: true,
+            smart_lists: true,
             keyboard_enhancement: KeyboardEnhancement::default(),
             keybindings: KeyBindings::default(),
             density: BoardDensity::default(),
