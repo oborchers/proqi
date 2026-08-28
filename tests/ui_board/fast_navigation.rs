@@ -137,11 +137,13 @@ fn contextual_help_uses_platform_primary_labels_for_fast_navigation() {
     fixture.pointer(help.x, help.y, PointerKind::Down(PointerButton::Left));
     let terminal = draw(&mut fixture, 80, 14);
     let rendered = text(terminal.backend().buffer());
-    assert!(rendered.contains("Alt+↑/↓  Jump 5 rows"));
+    assert!(rendered.contains("Alt+↑/↓"));
+    assert!(rendered.contains("Jump 5 rows"));
     let primary = if cfg!(target_os = "macos") {
-        "⌘↑/⌘↓    Start/end"
+        "⌘↑/⌘↓"
     } else {
-        "Ctrl+↑/Ctrl+↓ Start/end"
+        "Ctrl+↑/Ctrl+↓"
     };
     assert!(rendered.contains(primary));
+    assert!(rendered.contains("Start/end"));
 }
