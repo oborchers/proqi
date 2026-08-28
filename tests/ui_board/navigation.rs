@@ -2,6 +2,8 @@ use super::*;
 
 use proqi::domain::Direction;
 
+mod movement_symmetry;
+
 pub(super) fn visual(movement: CursorMovement, shifted: bool) -> UiInput {
     UiInput::Key(UiKey::Move {
         movement,
@@ -15,61 +17,12 @@ pub(super) fn durable_thought(fixture: &mut Fixture, content: &str) {
 }
 
 #[test]
-fn arrows_and_jk_share_focus_while_shift_arrows_select_and_uppercase_jk_reorder() {
-    let mut arrows = Fixture::new();
-    for content in ["first", "second", "third"] {
-        durable_thought(&mut arrows, content);
-    }
-    arrows.input(visual(CursorMovement::VisualUp, false));
-    let arrow_focus = arrows.app.state.focused_thought;
-
-    let mut letters = Fixture::new();
-    for content in ["first", "second", "third"] {
-        durable_thought(&mut letters, content);
-    }
-    letters.input(UiInput::Key(UiKey::Character('k')));
-    assert_eq!(letters.app.state.focused_thought, arrow_focus);
-
-    arrows.input(visual(CursorMovement::VisualUp, true));
-    let arrow_order = arrows
-        .app
-        .state
-        .board
-        .live_thoughts()
-        .iter()
-        .map(|thought| thought.content.as_str())
-        .collect::<Vec<_>>();
-    assert_eq!(arrow_order, ["first", "second", "third"]);
-    let arrow_selected = arrows
-        .app
-        .state
-        .board
-        .live_thoughts()
-        .into_iter()
-        .filter(|thought| arrows.app.thought_selected(thought.id))
-        .map(|thought| thought.content.as_str())
-        .collect::<Vec<_>>();
-    assert_eq!(arrow_selected, ["first", "second"]);
-
-    letters.input(UiInput::Key(UiKey::Character('K')));
-    let letter_order = letters
-        .app
-        .state
-        .board
-        .live_thoughts()
-        .iter()
-        .map(|thought| thought.content.as_str())
-        .collect::<Vec<_>>();
-    assert_eq!(letter_order, ["second", "first", "third"]);
-}
-
-#[test]
 fn keyboard_reordering_wraps_at_both_board_edges() {
     let mut fixture = Fixture::new();
     for content in ["first", "second", "third"] {
         durable_thought(&mut fixture, content);
     }
-    fixture.input(UiInput::Key(UiKey::Character('J')));
+    fixture.input(UiInput::Key(UiKey::PrimaryCharacter('J')));
     assert_eq!(
         fixture
             .app
@@ -81,7 +34,7 @@ fn keyboard_reordering_wraps_at_both_board_edges() {
             .collect::<Vec<_>>(),
         ["third", "first", "second"]
     );
-    fixture.input(UiInput::Key(UiKey::Character('K')));
+    fixture.input(UiInput::Key(UiKey::PrimaryCharacter('K')));
     assert_eq!(
         fixture
             .app
@@ -116,6 +69,7 @@ fn shallow_two_column_help_scrolls_to_every_shortcut() {
     let mut fixture = Fixture::new();
     fixture.input(UiInput::Key(UiKey::Character('?')));
     let _initial = draw(&mut fixture, 42, 8);
+    fixture.input(visual(CursorMovement::VisualDown, false));
     fixture.input(visual(CursorMovement::VisualDown, false));
     fixture.input(visual(CursorMovement::VisualDown, false));
     let terminal = draw(&mut fixture, 42, 8);

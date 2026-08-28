@@ -55,7 +55,9 @@ domain <- ports <- application <- adapters and UI composition
   `todo!`, or `unimplemented!`. Return typed errors. A proven invariant may use
   a narrow
   `#[expect(..., reason = "...")]` instead of a broad allow.
-- Every first-party source file is at most 500 physical lines.
+- Every first-party implementation source file is at most 500 physical lines.
+  Public documentation and prose such as `README.md` and `context/*.md` are
+  exempt; preserve the detail those contracts need.
 - Rust functions are limited by the checked-in Clippy cognitive-complexity,
   function-length, and nesting thresholds.
 - Keep tests deterministic. Inject clocks, identifiers, paths, and process
@@ -82,6 +84,11 @@ These rules become mandatory with the first real TUI implementation:
   tests cover startup, input, resize, and clean shutdown in CI. Linux retains
   build and terminal-independent integration coverage until the PTY driver is
   portable.
+- Treat Up/Down arrows and the configured `k`/`j`-style vertical board keys as
+  equivalent spellings of the same intention at every modifier level. The
+  preferred ladder is plain focus movement, Shift range extension, and
+  Primary+Shift single-thought reordering; do not assign different semantics
+  merely because one spelling is an arrow and the other is a character key.
 
 ## Design Context
 

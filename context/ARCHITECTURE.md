@@ -649,6 +649,14 @@ Command on macOS and Control on Linux. Enhanced keyboard protocols
 are enabled when supported so Super and Meta events can be distinguished, but
 every action retains a terminal-safe fallback and a configurable binding.
 
+Vertical board input uses one semantic modifier ladder for both arrow and
+configured character spellings: plain input moves focus, Shift extends an
+anchored range, and Primary+Shift reorders one thought. Input normalization
+preserves otherwise unknown Primary character chords until the board keymap
+can resolve the configured shifted range key, including when enhanced keyboard
+reporting encodes the shifted character without a separate Shift flag. It must
+not let arrow and `j`/`k`-style bindings acquire different intentions.
+
 `Primary+A` selects the entire current thought only in edit mode. `Primary+U`
 deletes one newline-delimited logical line as a single undoable edit. Logical
 line commands operate on the text model and are independent of visual wrapping.
@@ -948,7 +956,8 @@ cargo xtask package
 - `format` applies `rustfmt` and any repository-owned text formatting.
 - `source-limits` rejects every first-party Rust or common frontend source file
   above 500 physical lines, including JavaScript, TypeScript, stylesheet, HTML,
-  Vue, Svelte, and Astro sources.
+  Vue, Svelte, and Astro sources. Public documentation and prose, including the
+  README and architecture and product contracts, are deliberately exempt.
 - `architecture` verifies the inward dependency graph, canonical domain API,
   and ownership of SQLite, terminal, process, environment, and filesystem
   implementation dependencies. Its detector tests include accepted and

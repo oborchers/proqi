@@ -174,6 +174,47 @@ fn release_is_ignored_and_repeat_preserves_auto_repeat() {
             extend_selection: true,
         }))
     );
+
+    let repeated_reorder = Event::Key(KeyEvent::new_with_kind(
+        KeyCode::Down,
+        KeyModifiers::SHIFT | KeyModifiers::SUPER,
+        KeyEventKind::Repeat,
+    ));
+    assert_eq!(
+        translate(repeated_reorder),
+        Some(UiInput::Key(UiKey::PrimaryShiftMove {
+            movement: CursorMovement::DocumentEnd,
+        }))
+    );
+}
+
+#[test]
+fn primary_shift_arrow_and_character_chords_remain_board_semantics() {
+    let arrow = Event::Key(KeyEvent::new(
+        KeyCode::Up,
+        KeyModifiers::SHIFT | KeyModifiers::CONTROL,
+    ));
+    assert_eq!(
+        translate(arrow),
+        Some(UiInput::Key(UiKey::PrimaryShiftMove {
+            movement: CursorMovement::VisualUp,
+        }))
+    );
+
+    let character = Event::Key(KeyEvent::new(
+        KeyCode::Char('K'),
+        KeyModifiers::SHIFT | KeyModifiers::SUPER,
+    ));
+    assert_eq!(
+        translate(character),
+        Some(UiInput::Key(UiKey::PrimaryCharacter('K')))
+    );
+
+    let alternate_report = Event::Key(KeyEvent::new(KeyCode::Char('K'), KeyModifiers::SUPER));
+    assert_eq!(
+        translate(alternate_report),
+        Some(UiInput::Key(UiKey::PrimaryCharacter('K')))
+    );
 }
 
 #[test]
@@ -184,7 +225,10 @@ fn unknown_primary_character_shortcuts_never_insert_text() {
         KeyModifiers::META,
     ] {
         let event = Event::Key(KeyEvent::new(KeyCode::Char('b'), modifier));
-        assert_eq!(translate(event), None);
+        assert_eq!(
+            translate(event),
+            Some(UiInput::Key(UiKey::PrimaryCharacter('b')))
+        );
     }
 }
 

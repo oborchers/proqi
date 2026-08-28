@@ -11,11 +11,26 @@ fn missing_config_uses_the_adaptive_default() {
     let directory = tempfile::tempdir().expect("config directory");
     let settings = load_settings(directory.path()).expect("defaults");
     assert_eq!(settings.ui.keybindings.new, 'n');
+    assert_eq!(settings.ui.keybindings.range_up, 'K');
+    assert_eq!(settings.ui.keybindings.range_down, 'J');
     assert_eq!(settings.ui.keybindings.range_select, 'v');
     assert!(!settings.ui.show_session_id);
     assert!(settings.ui.smart_lists);
     assert_eq!(settings.theme.base, ThemePreference::Auto);
     assert_eq!(settings.theme_source, ThemeSource::BuiltIn);
+}
+
+#[test]
+fn legacy_reorder_binding_names_migrate_to_shifted_range_keys() {
+    let directory = tempfile::tempdir().expect("config directory");
+    fs::write(
+        directory.path().join("config.toml"),
+        "[keybindings]\nmove_up = 'W'\nmove_down = 'G'\n",
+    )
+    .expect("write config");
+    let settings = load_settings(directory.path()).expect("settings");
+    assert_eq!(settings.ui.keybindings.range_up, 'W');
+    assert_eq!(settings.ui.keybindings.range_down, 'G');
 }
 
 #[test]

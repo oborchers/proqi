@@ -178,11 +178,11 @@ fallbacks remain available when a terminal cannot report a modifier.
 | Paste or click `+ New thought` | Create and focus a thought |
 | `j` / `k` or arrows | Focus the next or previous thought, including `+ New thought` |
 | `Enter` or `e` | Edit the focused thought |
-| `J` / `K`, or drag | Reorder the focused thought |
+| `Meta+J` / `Meta+K`, `Meta+Shift+↓` / `Meta+Shift+↑`, or drag | Reorder the focused thought |
 | `y` or `Primary+C` | Copy the complete thought |
 | `x` or `Primary+X` | Cut only after confirmed clipboard success |
 | `Space` | Add or remove the focused thought from the multi-selection |
-| `Shift+↑` / `Shift+↓` | Extend or shrink one anchored contiguous range |
+| `Shift+↑` / `Shift+↓`, or `K` / `J` | Extend or shrink one anchored contiguous range |
 | `v`, then arrows, `j` / `k`, or a thought click | Latch modifier-free contiguous range selection |
 | `Primary+D` | Duplicate the focused thought or selection below its source range |
 | `s`, then direction when needed | Submit selected thoughts and remove only after acceptance |
@@ -489,8 +489,8 @@ submit_keep = "S"
 undo = "u"
 focus_up = "k"
 focus_down = "j"
-move_up = "K"
-move_down = "J"
+range_up = "K"
+range_down = "J"
 collapse = "c"
 select = " "
 range_select = "v"

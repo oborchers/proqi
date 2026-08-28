@@ -7,6 +7,10 @@ use std::process::Command;
 mod recovery;
 
 #[cfg(target_os = "macos")]
+#[path = "pty/reorder.rs"]
+mod reorder;
+
+#[cfg(target_os = "macos")]
 use serde_json::Value;
 
 #[test]

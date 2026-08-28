@@ -29,6 +29,12 @@ impl BoardApp {
             UiKey::Character(character) => {
                 return self.handle_board_command(character, ids, clock);
             }
+            UiKey::PrimaryCharacter(character) => {
+                return self.reorder_from_character(character, ids, clock);
+            }
+            UiKey::PrimaryShiftMove { movement } => {
+                return self.reorder_from_movement(movement, ids, clock);
+            }
             UiKey::Enter => self.enter_edit(),
             UiKey::Move {
                 movement: CursorMovement::VisualUp,
@@ -107,6 +113,8 @@ impl BoardApp {
             | UiKey::Cut
             | UiKey::Duplicate
             | UiKey::Quit
+            | UiKey::PrimaryCharacter(_)
+            | UiKey::PrimaryShiftMove { .. }
             | UiKey::Move { .. } => Vec::new(),
         }
     }
@@ -186,8 +194,14 @@ impl BoardApp {
                 self.move_focus_outside_range(1);
                 Vec::new()
             }
-            Some(BoardCommand::MoveUp) => self.reorder(ids, clock, -1),
-            Some(BoardCommand::MoveDown) => self.reorder(ids, clock, 1),
+            Some(BoardCommand::RangeUp) => {
+                self.extend_range_by(-1);
+                Vec::new()
+            }
+            Some(BoardCommand::RangeDown) => {
+                self.extend_range_by(1);
+                Vec::new()
+            }
             Some(BoardCommand::Collapse) => self.collapse(ids, clock),
             Some(BoardCommand::Select) => {
                 self.toggle_selection();
@@ -220,6 +234,9 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
+        let Some(key) = normalize_edit_key(key) else {
+            return Vec::new();
+        };
         if let Some(effects) = self.handle_edit_effect(key, ids, clock) {
             return effects;
         }
@@ -257,6 +274,8 @@ impl BoardApp {
             UiKey::SelectAll => (EditCommand::SelectAll, true),
             UiKey::DeleteLine => (EditCommand::DeleteLogicalLine, true),
             UiKey::Escape
+            | UiKey::PrimaryCharacter(_)
+            | UiKey::PrimaryShiftMove { .. }
             | UiKey::Undo
             | UiKey::Redo
             | UiKey::Quit
@@ -450,44 +469,15 @@ impl BoardApp {
             self.insertion_focus = super::InsertionFocus::Inactive;
         }
     }
+}
 
-    pub(super) fn reorder(
-        &mut self,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-        delta: isize,
-    ) -> Vec<Effect> {
-        self.manual_board_scroll = false;
-        let Some(thought_id) = self.state.focused_thought else {
-            return Vec::new();
-        };
-        if self.submission_locked(thought_id) {
-            self.set_warning("thought has a submission in progress");
-            return Vec::new();
-        }
-        if self.selection_len() > 1 {
-            self.set_warning("reordering is unavailable for multiple selected thoughts");
-            return Vec::new();
-        }
-        let live = self.state.board.live_thoughts();
-        let Some(current) = live.iter().position(|thought| thought.id == thought_id) else {
-            return Vec::new();
-        };
-        if live.len() <= 1 {
-            return Vec::new();
-        }
-        let target = if delta < 0 {
-            current.checked_sub(1).unwrap_or(live.len() - 1)
-        } else if current + 1 == live.len() {
-            0
-        } else {
-            current + 1
-        };
-        self.reduce(Action::MoveThought {
-            operation_id: ids.operation_id(),
-            thought_id,
-            to: target,
-            at: clock.now(),
-        })
+fn normalize_edit_key(key: UiKey) -> Option<UiKey> {
+    match key {
+        UiKey::PrimaryShiftMove { movement } => Some(UiKey::Move {
+            movement,
+            extend_selection: true,
+        }),
+        UiKey::PrimaryCharacter(_) => None,
+        key => Some(key),
     }
 }

@@ -60,7 +60,7 @@ fn selected_fully_visible_thoughts_collapse_as_one_undo_step_but_cannot_reorder(
     );
     assert!(
         fixture
-            .effects(UiInput::Key(UiKey::Character('J')))
+            .effects(UiInput::Key(UiKey::PrimaryCharacter('J')))
             .is_empty()
     );
 
