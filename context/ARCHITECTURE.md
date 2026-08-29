@@ -5,7 +5,7 @@ Status: v0.1.0 architecture contract
 Project: Proqi
 
 Command: `proqi`
-Last updated: 2026-08-27
+Last updated: 2026-08-29
 
 ## Purpose
 
@@ -343,6 +343,29 @@ new-image capture is an explicit opt-in. The watcher never captures a screen,
 mutates system preferences, uploads an image, or copies or rewrites its source.
 Only the bounded header required to validate type and dimensions is read.
 
+A terminal-independent activity policy always bounds a listening lease by a
+positive inactivity interval and positive unattended-admission count. The UI
+owner observes an injected process-relative monotonic clock. Deliberate input
+renews both bounds; passive terminal and watcher events do not. Candidate
+allowance is reserved on ordered admission rather than durable success, so
+retries cannot reopen capacity and one watcher batch cannot cross the hard cap.
+Automatic pause reuses the ordinary bounded final reconciliation, durable drain,
+and capture-lock release path. Resume creates a new watcher and baseline rather
+than replaying the paused interval.
+
+After the watcher has truthfully stopped, the application may emit one typed
+content-free pause-notification effect. Notification routing is disabled by
+default and selected only at runtime composition. A managed Herdr pane queues a
+direct, shell-free `herdr notification show` request on the bounded cancellable
+external lane; Herdr command construction remains owned by the Herdr adapter.
+Outside Herdr, the terminal adapter writes bounded OSC 9 only for recognized
+standalone Ghostty or iTerm2 hosts outside known tmux transport. A managed pane
+with Herdr integration disabled uses neither route, and a failed Herdr request
+never falls back to OSC. Output contains fixed product text plus the typed
+numeric threshold. Queue, process, timeout, cancellation, rejection, and write
+failure are non-fatal because persistent TUI state, not external presentation,
+is the safety boundary.
+
 ### `AgentGateway`
 
 ```rust
@@ -397,7 +420,7 @@ error return, panic, and termination signals supported by the platform.
 
 ### Small deterministic ports
 
-`Clock`, `IdGenerator`, `Paths`, and `ProcessRunner` are injected wherever
+`Clock`, `MonotonicClock`, `IdGenerator`, `Paths`, and `ProcessRunner` are injected wherever
 wall-clock time, identifiers, platform directories, or subprocess execution
 would otherwise make tests nondeterministic.
 

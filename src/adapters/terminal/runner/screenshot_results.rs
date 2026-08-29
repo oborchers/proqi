@@ -1,6 +1,6 @@
 //! Screenshot watcher results applied on the owner UI lane.
 
-use std::sync::mpsc::TryRecvError;
+use std::{sync::mpsc::TryRecvError, time::Duration};
 
 use crate::{
     adapters::terminal::{TerminalError, screenshot_lane::ScreenshotResult},
@@ -18,6 +18,7 @@ pub(super) fn drain(
     lanes: &WorkerLanes<'_>,
     pending: &mut PendingWork,
     capture: &mut CaptureRuntime,
+    monotonic_now: Duration,
 ) -> Result<DrainOutcome, TerminalError> {
     drain_bounded(
         || match lanes.screenshot.receiver.try_recv() {
@@ -29,7 +30,11 @@ pub(super) fn drain(
                 .worker_failure()
                 .unwrap_or(TerminalError::Worker("screenshot result lane disconnected"))),
         },
-        |result| apply_result(app, pending, capture, result),
+        |result| {
+            let effects = apply_result(app, pending, capture, monotonic_now, result)?;
+            super::durability::enqueue_effects(app, lanes, effects, pending)?;
+            Ok(true)
+        },
     )
 }
 
@@ -37,9 +42,10 @@ fn apply_result(
     app: &mut BoardApp,
     pending: &mut PendingWork,
     capture: &mut CaptureRuntime,
+    monotonic_now: Duration,
     result: ScreenshotResult,
-) -> Result<bool, TerminalError> {
-    match result {
+) -> Result<Vec<crate::application::Effect>, TerminalError> {
+    let effects = match result {
         ScreenshotResult::Started(lease) => {
             pending.screenshot = pending.screenshot.saturating_sub(1);
             if capture.lease.replace(lease).is_some() {
@@ -48,30 +54,31 @@ fn apply_result(
                 ));
             }
             capture.takeover_stopping = false;
-            app.screenshot_started();
+            app.screenshot_started(monotonic_now);
+            Vec::new()
         }
-        ScreenshotResult::Candidates(candidates) => {
-            app.queue_screenshot_candidates(candidates);
-        }
+        ScreenshotResult::Candidates(candidates) => app.queue_screenshot_candidates(candidates),
         ScreenshotResult::Conflict(Some(owner)) => {
             pending.screenshot = pending.screenshot.saturating_sub(1);
             if owner.capture_protocol == crate::ports::control::CAPTURE_CONTROL_PROTOCOL_VERSION
                 && owner.control_protocol == crate::ports::control::CONTROL_PROTOCOL_VERSION
             {
                 app.screenshot_conflict(*owner);
+                Vec::new()
             } else {
-                app.screenshot_failed(&ScreenshotError::IncompatibleOwner);
+                app.screenshot_failed(&ScreenshotError::IncompatibleOwner)
             }
         }
         ScreenshotResult::Conflict(None) => {
             pending.screenshot = pending.screenshot.saturating_sub(1);
-            app.screenshot_failed(&ScreenshotError::Watcher);
+            app.screenshot_failed(&ScreenshotError::Watcher)
         }
         ScreenshotResult::Stopped(candidates) => {
             pending.screenshot = pending.screenshot.saturating_sub(1);
-            app.queue_screenshot_candidates(candidates);
-            app.screenshot_stopped();
+            let mut effects = app.queue_screenshot_candidates(candidates);
+            effects.extend(app.screenshot_stopped());
             capture.release_when_drained = true;
+            effects
         }
         ScreenshotResult::Failed {
             error,
@@ -82,10 +89,10 @@ fn apply_result(
                 capture.lease = None;
             }
             capture.release_when_drained = release_when_drained;
-            app.screenshot_failed(&error);
+            app.screenshot_failed(&error)
         }
-    }
-    Ok(true)
+    };
+    Ok(effects)
 }
 
 pub(super) fn release_if_drained(app: &BoardApp, capture: &mut CaptureRuntime) {
@@ -103,11 +110,12 @@ mod tests {
         adapters::{
             editor::RopeEditorFactory, memory::FakeIdGenerator, runtime::FileRuntimeCoordinator,
         },
-        application::AppState,
+        application::{AppState, Effect, ScreenshotPauseReason},
         domain::{Session, SessionBoard, Timestamp},
         ports::{
             environment::IdGenerator as _,
             runtime::{CaptureCoordinator as _, RuntimeCoordinator as _},
+            screenshot::ScreenshotActivityPolicy,
         },
     };
 
@@ -151,6 +159,17 @@ mod tests {
             AppState::new(SessionBoard::new(session, Vec::new()).expect("board")),
             RopeEditorFactory,
         );
+        app.configure_screenshot_activity(
+            ScreenshotActivityPolicy::new(1, 10).expect("activity policy"),
+        );
+        app.screenshot_started(Duration::ZERO);
+        assert!(matches!(
+            app.advance_screenshot_activity(Duration::from_secs(60))
+                .as_slice(),
+            [Effect::Screenshot(
+                crate::application::ScreenshotIntent::Disable
+            )]
+        ));
         let mut pending = PendingWork {
             screenshot: 1,
             ..PendingWork::default()
@@ -160,16 +179,23 @@ mod tests {
             ..CaptureRuntime::default()
         };
 
-        apply_result(
+        let effects = apply_result(
             &mut app,
             &mut pending,
             &mut capture,
+            Duration::ZERO,
             ScreenshotResult::Failed {
                 error: ScreenshotError::Watcher,
                 release_when_drained: true,
             },
         )
         .expect("apply failure");
+        assert_eq!(
+            effects,
+            vec![Effect::NotifyScreenshotPause(
+                ScreenshotPauseReason::Inactivity { minutes: 1 }
+            )]
+        );
         assert!(capture.lease.is_some());
         release_if_drained(&app, &mut capture);
         assert!(capture.lease.is_none());

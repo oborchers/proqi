@@ -2,11 +2,17 @@ use crate::{
     adapters::{editor::RopeEditorFactory, memory::FakeIdGenerator},
     application::AppState,
     domain::{Session, SessionBoard, Thought, ThoughtPosition, Timestamp},
-    ports::{environment::IdGenerator as _, runtime::CaptureOwnerInfo},
+    ports::{
+        environment::IdGenerator as _, runtime::CaptureOwnerInfo,
+        screenshot::ScreenshotActivityPolicy,
+    },
     ui::{BoardApp, Theme, ThemePreference, render},
 };
 use ratatui_core::{backend::TestBackend, terminal::Terminal};
+use std::time::Duration;
 
+#[path = "tests/activity.rs"]
+mod activity;
 #[path = "tests/behavior.rs"]
 mod behavior;
 
@@ -34,11 +40,32 @@ fn takeover_overlay_has_a_complete_shallow_snapshot() {
 #[test]
 fn listening_indicator_is_present_without_permanent_status_chrome() {
     let (mut app, _) = app_with_thought();
-    app.screenshot_started();
+    app.screenshot_started(Duration::ZERO);
     app.status = None;
     let snapshot = render_snapshot(&mut app, 72, 10);
     assert!(snapshot.contains("inbox listening"));
     assert!(!snapshot.contains("Screenshot Inbox is listening"));
+}
+
+#[test]
+fn paused_inbox_has_a_persistent_wide_snapshot() {
+    insta::with_settings!({snapshot_path => "../../snapshots"}, {
+        insta::assert_snapshot!("screenshot_paused_wide", paused_snapshot(82, 12));
+    });
+}
+
+#[test]
+fn paused_inbox_has_a_persistent_narrow_snapshot() {
+    insta::with_settings!({snapshot_path => "../../snapshots"}, {
+        insta::assert_snapshot!("screenshot_paused_narrow", paused_snapshot(38, 10));
+    });
+}
+
+#[test]
+fn paused_inbox_has_a_persistent_shallow_snapshot() {
+    insta::with_settings!({snapshot_path => "../../snapshots"}, {
+        insta::assert_snapshot!("screenshot_paused_shallow", paused_snapshot(62, 6));
+    });
 }
 
 fn takeover_snapshot(width: u16, height: u16) -> String {
@@ -54,6 +81,15 @@ fn takeover_snapshot(width: u16, height: u16) -> String {
         control_endpoint: "private-control-endpoint".to_owned(),
         started_at: Timestamp::from_millis(1),
     });
+    render_snapshot(&mut app, width, height)
+}
+
+fn paused_snapshot(width: u16, height: u16) -> String {
+    let (mut app, _) = app_with_thought();
+    app.configure_screenshot_activity(ScreenshotActivityPolicy::new(20, 10).expect("pause policy"));
+    app.screenshot_started(Duration::ZERO);
+    app.advance_screenshot_activity(Duration::from_secs(20 * 60));
+    app.screenshot_stopped();
     render_snapshot(&mut app, width, height)
 }
 

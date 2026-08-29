@@ -29,14 +29,14 @@ use crate::{
         editor::RopeEditorFactory,
         runtime::{
             FileCaptureLease, FileRuntimeCoordinator, FileSchemaLease, FileSessionLease,
-            SystemClock, SystemIdGenerator,
+            SystemClock, SystemIdGenerator, SystemMonotonicClock,
         },
         sqlite::SqliteStore,
     },
     application::AppState,
     domain::SessionId,
     ports::{
-        environment::Clock as _,
+        environment::{Clock as _, MonotonicClock},
         runtime::InstanceInfo,
         store::{Store as _, StoreError},
     },
@@ -45,7 +45,7 @@ use crate::{
 
 use super::{
     TerminalError,
-    control::{CrosstermControl, PanicHookGuard, TerminalGuard, TerminationGuard},
+    control::{PanicHookGuard, TerminationGuard},
     external::ExternalLane,
     input::{InputLane, InputMessage},
     persistence::PersistenceLane,
@@ -92,6 +92,8 @@ pub(super) struct WorkerLanes<'a> {
     pub(super) control: Option<&'a ControlServer>,
     pub(super) update: &'a super::update_lane::UpdateLane,
     pub(super) screenshot: &'a ScreenshotLane,
+    pub(super) notification: &'a super::notification::PauseNotificationRouter,
+    pub(super) monotonic: &'a dyn MonotonicClock,
     pub(super) termination: &'a TerminationGuard,
     pub(super) instance: &'a InstanceInfo,
     pub(super) cancellation: &'a crate::adapters::process::CancellationFlag,
@@ -131,14 +133,22 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
     } = resources;
     let session_id = state.board.session.id;
     store.recover_submissions(session_id, clock.now())?;
-    let (control, control_warning) = start_optional_control(&mut session_lease);
-    let (theme, guard) = enter_terminal(&settings.theme, settings.ui.keyboard_enhancement)?;
+    let (control, control_warning) = composition::start_optional_control(&mut session_lease);
+    let (theme, guard) =
+        composition::enter_terminal(&settings.theme, settings.ui.keyboard_enhancement)?;
     let panic_hook = PanicHookGuard::install();
     let termination = TerminationGuard::register()?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
     let presentation_source = format!("proqi-{}", session_lease.info().instance_id);
     let invocation_roots = settings.invocation_roots.clone();
     let screenshot_settings = settings.screenshot.clone();
+    let screenshot_activity = settings.screenshot.activity_policy();
+    let terminal_host = super::host::TerminalHost::detect();
+    let notification = super::notification::PauseNotificationRouter::new(
+        settings.screenshot.notify_terminal_on_auto_pause(),
+        crate::adapters::herdr::HerdrEnvironment::detect(),
+        &terminal_host,
+    );
     let mut owned = composition::spawn_lanes(
         control,
         store,
@@ -159,9 +169,11 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
     let check_for_updates = settings.ui.check_for_updates;
     let mut app =
         BoardApp::with_settings_and_cwd(state, settings.ui, cwd.clone(), RopeEditorFactory);
+    app.configure_screenshot_activity(screenshot_activity);
     if let Some(warning) = control_warning {
         app.set_warning(warning);
     }
+    let monotonic = SystemMonotonicClock::default();
     let lanes = WorkerLanes {
         input: &owned.input,
         persistence: &owned.persistence,
@@ -169,6 +181,8 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
         control: owned.control.as_ref(),
         update: &owned.update,
         screenshot: &owned.screenshot,
+        notification: &notification,
+        monotonic: &monotonic,
         termination: &termination,
         instance: session_lease.info(),
         cancellation: &owned.cancellation,
@@ -263,47 +277,6 @@ fn replace_after_cleanup(
     Ok(session_id)
 }
 
-fn start_optional_control(
-    session_lease: &mut FileSessionLease,
-) -> (Option<ControlServer>, Option<String>) {
-    let Some(endpoint) = session_lease.control_endpoint() else {
-        return (
-            None,
-            Some("active-session CLI forwarding is unavailable on this platform".to_owned()),
-        );
-    };
-    let server = match ControlServer::spawn(endpoint) {
-        Ok(server) => server,
-        Err(error) => {
-            return (
-                None,
-                Some(format!(
-                    "active-session CLI forwarding unavailable: {error}"
-                )),
-            );
-        }
-    };
-    if let Err(error) = session_lease.publish_control() {
-        let _stopped = server.stop();
-        return (
-            None,
-            Some(format!(
-                "active-session CLI forwarding unavailable: {error}"
-            )),
-        );
-    }
-    (Some(server), None)
-}
-
-fn enter_terminal(
-    recipe: &crate::ui::ThemeRecipe,
-    keyboard: crate::ui::KeyboardEnhancement,
-) -> Result<(Theme, TerminalGuard<CrosstermControl>), TerminalError> {
-    let theme = super::palette::resolve(recipe, supports_true_color())?;
-    let guard = TerminalGuard::enter(CrosstermControl::new(keyboard))?;
-    Ok((theme, guard))
-}
-
 #[expect(
     clippy::too_many_arguments,
     clippy::too_many_lines,
@@ -339,6 +312,10 @@ fn drive(
                 control.request_stop();
             }
             let effects = app.handle(UiInput::Key(UiKey::Quit), ids, &clock);
+            enqueue_effects(app, lanes, effects, &mut pending)?;
+        }
+        if !termination_seen {
+            let effects = app.advance_screenshot_activity(lanes.monotonic.now());
             enqueue_effects(app, lanes, effects, &mut pending)?;
         }
         let (workers_changed, worker_backlog) = drain_workers(
@@ -435,6 +412,7 @@ fn drive(
                 if matches!(event, UiInput::HostFocusGained) {
                     invocation_deadline = Some(Instant::now() + Duration::from_millis(180));
                 }
+                app.note_screenshot_activity(&event, lanes.monotonic.now());
                 let effects = app.handle(event, ids, &clock);
                 enqueue_effects(app, lanes, effects, &mut pending)?;
                 redraw = true;
@@ -463,7 +441,8 @@ fn drain_workers(
     let external = external_results::drain(app, lanes, pending, ids, clock, pane_heartbeat)?;
     let control = owner_control::drain(app, lanes, pending, capture, ids, clock)?;
     let update = update_results::drain(app, lanes, pending)?;
-    let screenshot = screenshot_results::drain(app, lanes, pending, capture)?;
+    let screenshot =
+        screenshot_results::drain(app, lanes, pending, capture, lanes.monotonic.now())?;
     let changed = persistence.changed
         || external.changed
         || control.changed

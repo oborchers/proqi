@@ -24,6 +24,21 @@ fn missing_config_uses_the_narrow_pane_default() {
     assert!(settings.screenshot.directory.is_none());
     assert!(settings.screenshot.filename_patterns.is_empty());
     assert!(!settings.screenshot.capture_all_new_images);
+    assert_eq!(
+        settings
+            .screenshot
+            .activity_policy()
+            .inactivity_timeout_minutes(),
+        20
+    );
+    assert_eq!(
+        settings
+            .screenshot
+            .activity_policy()
+            .max_unattended_captures(),
+        10
+    );
+    assert!(!settings.screenshot.notify_terminal_on_auto_pause());
     assert_eq!(settings.ui.keybindings.select_all, 'a');
     assert!(!settings.ui.show_session_id);
     assert!(settings.ui.smart_lists);
@@ -58,7 +73,9 @@ fn screenshot_inbox_settings_are_typed_bounded_and_remappable() {
              capture_all_new_images = true\n\
              supported_types = ['png', 'jpeg']\n\
              min_file_bytes = 128\nmax_file_bytes = 4096\n\
-             max_dimension = 2048\nmax_pixels = 2000000\ndebounce_ms = 500\n",
+             max_dimension = 2048\nmax_pixels = 2000000\ndebounce_ms = 500\n\
+             inactivity_timeout_minutes = 45\nmax_unattended_captures = 12\n\
+             notify_terminal_on_auto_pause = true\n",
             watched.to_string_lossy(),
         ),
     )
@@ -73,6 +90,21 @@ fn screenshot_inbox_settings_are_typed_bounded_and_remappable() {
     assert!(settings.screenshot.capture_all_new_images);
     assert_eq!(settings.screenshot.bounds.max_file_bytes, 4096);
     assert_eq!(settings.screenshot.debounce_ms, 500);
+    assert_eq!(
+        settings
+            .screenshot
+            .activity_policy()
+            .inactivity_timeout_minutes(),
+        45
+    );
+    assert_eq!(
+        settings
+            .screenshot
+            .activity_policy()
+            .max_unattended_captures(),
+        12
+    );
+    assert!(settings.screenshot.notify_terminal_on_auto_pause());
 }
 
 #[test]
@@ -82,6 +114,10 @@ fn screenshot_inbox_rejects_relative_unknown_and_conflicting_configuration() {
         "[screenshot_inbox]\nsupported_types = ['webp']\n",
         "[screenshot_inbox]\nmax_file_bytes = 0\n",
         "[screenshot_inbox]\nunknown = true\n",
+        "[screenshot_inbox]\ninactivity_timeout_minutes = 0\n",
+        "[screenshot_inbox]\ninactivity_timeout_minutes = 1441\n",
+        "[screenshot_inbox]\nmax_unattended_captures = 0\n",
+        "[screenshot_inbox]\nmax_unattended_captures = 101\n",
         "[keybindings]\nscreenshot_inbox = 'n'\n",
     ] {
         let directory = tempfile::tempdir().expect("config directory");

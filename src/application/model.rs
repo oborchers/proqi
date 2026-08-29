@@ -104,6 +104,34 @@ pub enum ScreenshotIntent {
     },
 }
 
+/// Safety threshold that automatically stopped one screenshot listening lease.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ScreenshotPauseReason {
+    /// No deliberate Proqi interaction occurred for the configured interval.
+    Inactivity {
+        /// Configured whole-minute interval.
+        minutes: u16,
+    },
+    /// The configured number of candidates was admitted without interaction.
+    CaptureLimit {
+        /// Configured unattended capture limit.
+        captures: u16,
+    },
+}
+
+impl ScreenshotPauseReason {
+    /// Content-free threshold description shared by user-facing adapters.
+    #[must_use]
+    pub fn description(self) -> String {
+        match self {
+            Self::Inactivity { minutes: 1 } => "1 minute without activity".to_owned(),
+            Self::Inactivity { minutes } => format!("{minutes} minutes without activity"),
+            Self::CaptureLimit { captures: 1 } => "1 unattended capture".to_owned(),
+            Self::CaptureLimit { captures } => format!("{captures} unattended captures"),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct PendingClipboard {
     pub(super) thought_ids: Vec<ThoughtId>,

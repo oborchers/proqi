@@ -11,12 +11,12 @@ use crate::{
     adapters::{
         attachment::FileAttachmentStore,
         clipboard::PlatformClipboard,
-        herdr::HerdrGateway,
+        herdr::{HerdrGateway, HerdrPauseNotifier},
         invocation::FilesystemInvocationCatalog,
         process::{CancellationFlag, SystemProcessRunner},
         recovery::FileRecoveryExporter,
     },
-    application::{ClipboardIntent, Effect},
+    application::{ClipboardIntent, Effect, ScreenshotPauseReason},
     domain::RequestId,
     ports::{
         agent::{
@@ -52,6 +52,7 @@ enum ExternalRequest {
         pane_id: String,
         sequence: u64,
     },
+    NotifyScreenshotPause(ScreenshotPauseReason),
     Write {
         request_id: RequestId,
         intent: ClipboardIntent,
@@ -198,6 +199,13 @@ impl ExternalLane {
         })
     }
 
+    pub(super) fn notify_screenshot_pause(
+        &self,
+        reason: ScreenshotPauseReason,
+    ) -> Result<(), TerminalError> {
+        self.send_request(ExternalRequest::NotifyScreenshotPause(reason))
+    }
+
     fn send_request(&self, request: ExternalRequest) -> Result<(), TerminalError> {
         self.sender
             .as_ref()
@@ -263,6 +271,7 @@ fn external_loop(
     let mut recovery = FileRecoveryExporter::new(recovery_directory);
     let mut attachments = FileAttachmentStore::new(attachment_directory);
     let runner = SystemProcessRunner::cancellable(cancellation);
+    let mut notifications = HerdrPauseNotifier::from_environment_with_runner(runner.clone());
     let mut agents = HerdrGateway::from_environment_with_runner(presentation_source, runner);
     let mut invocations = FilesystemInvocationCatalog::system(invocation_roots);
     while let Ok(request) = requests.recv() {
@@ -288,6 +297,10 @@ fn external_loop(
             }
             ExternalRequest::ClearPane { pane_id, sequence } => {
                 let _cleared = agents.clear(&pane_id, sequence);
+                continue;
+            }
+            ExternalRequest::NotifyScreenshotPause(reason) => {
+                let _notified = notifications.notify(reason);
                 continue;
             }
             ExternalRequest::Write {

@@ -7,7 +7,9 @@ mod system;
 
 pub use capture::FileCaptureLease;
 pub use schema_lock::{FileSchemaLease, SchemaLockPolicy};
-pub use system::{NativePaths, SystemClock, SystemEnvironment, SystemIdGenerator};
+pub use system::{
+    NativePaths, SystemClock, SystemEnvironment, SystemIdGenerator, SystemMonotonicClock,
+};
 
 use std::{
     collections::BTreeMap,

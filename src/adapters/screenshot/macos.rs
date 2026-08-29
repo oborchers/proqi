@@ -16,19 +16,18 @@ use sha2::{Digest as _, Sha256};
 use xattr::FileExt as _;
 
 use super::pattern::wildcard_match;
-use crate::ports::screenshot::{
-    MAX_RECONCILIATION_ENTRIES, ScreenshotCancellation, ScreenshotCandidate, ScreenshotError,
-    ScreenshotFingerprint, ScreenshotImageType, ScreenshotInboxConfig,
+use crate::ports::{
+    environment::MonotonicClock,
+    screenshot::{
+        MAX_RECONCILIATION_ENTRIES, ScreenshotCancellation, ScreenshotCandidate, ScreenshotError,
+        ScreenshotFingerprint, ScreenshotImageType, ScreenshotInboxConfig,
+    },
 };
 
 const FINAL_EVENT_LIMIT: usize = 32;
 
 trait DirectoryEvents: Send {
     fn wait(&mut self, timeout: Duration) -> Result<bool, ScreenshotError>;
-}
-
-trait MonotonicClock: Send + Sync {
-    fn now(&self) -> Duration;
 }
 
 struct KqueueEvents(Watcher);

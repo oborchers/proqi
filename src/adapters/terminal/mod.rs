@@ -3,8 +3,10 @@
 mod browser;
 mod control;
 mod external;
+mod host;
 mod input;
 mod integration;
+mod notification;
 mod palette;
 mod path_import;
 mod persistence;

@@ -7,6 +7,7 @@ use crate::{
 
 use super::{
     BoardApp, UiInput, UiKey, palette_handoff::EditorSelectionHandoff, query::QueryEditor,
+    screenshot::ScreenshotPaletteAction,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -99,7 +100,7 @@ pub(super) struct PaletteState {
     scroll: usize,
     submit_supported: bool,
     plain_newline_supported: bool,
-    screenshot_enabled: bool,
+    screenshot_action: ScreenshotPaletteAction,
     selection_handoff: Option<EditorSelectionHandoff>,
 }
 
@@ -107,7 +108,7 @@ impl PaletteState {
     fn new(
         submit_supported: bool,
         plain_newline_supported: bool,
-        screenshot_enabled: bool,
+        screenshot_action: ScreenshotPaletteAction,
         selection_handoff: Option<EditorSelectionHandoff>,
     ) -> Self {
         Self {
@@ -116,7 +117,7 @@ impl PaletteState {
             scroll: 0,
             submit_supported,
             plain_newline_supported,
-            screenshot_enabled,
+            screenshot_action,
             selection_handoff,
         }
     }
@@ -147,8 +148,12 @@ impl PaletteState {
             .into_iter()
             .filter(|(command, _)| self.available(*command))
             .map(|(command, label)| {
-                let label = if command == Command::ScreenshotInbox && self.screenshot_enabled {
-                    "Disable Screenshot Inbox"
+                let label = if command == Command::ScreenshotInbox {
+                    match self.screenshot_action {
+                        ScreenshotPaletteAction::Enable => label,
+                        ScreenshotPaletteAction::Disable => "Disable Screenshot Inbox",
+                        ScreenshotPaletteAction::Resume => "Resume Screenshot Inbox",
+                    }
                 } else {
                     label
                 };
@@ -185,7 +190,7 @@ impl BoardApp {
         self.palette = Some(PaletteState::new(
             self.supports_submission(),
             !self.insertion_focused() && self.state.focused_thought.is_some(),
-            self.screenshot_enabled_for_palette(),
+            self.screenshot_palette_action(),
             self.palette_selection_handoff.take(),
         ));
     }

@@ -10,6 +10,70 @@ pub const MAX_FILENAME_PATTERNS: usize = 32;
 pub const MAX_FILENAME_PATTERN_CHARS: usize = 160;
 /// Maximum entries inspected by one bounded non-recursive reconciliation.
 pub const MAX_RECONCILIATION_ENTRIES: usize = 10_000;
+/// Default inactivity safety bound for one listening lease.
+pub const DEFAULT_INACTIVITY_TIMEOUT_MINUTES: u16 = 20;
+/// Default unattended capture safety bound for one listening lease.
+pub const DEFAULT_MAX_UNATTENDED_CAPTURES: u16 = 10;
+/// Largest configurable inactivity safety bound.
+pub const MAX_INACTIVITY_TIMEOUT_MINUTES: u16 = 1_440;
+/// Largest configurable unattended capture safety bound.
+pub const MAX_UNATTENDED_CAPTURES: u16 = 100;
+
+/// Validated safety policy for one explicitly enabled capture lease.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ScreenshotActivityPolicy {
+    inactivity_timeout_minutes: u16,
+    max_unattended_captures: u16,
+}
+
+impl Default for ScreenshotActivityPolicy {
+    fn default() -> Self {
+        Self {
+            inactivity_timeout_minutes: DEFAULT_INACTIVITY_TIMEOUT_MINUTES,
+            max_unattended_captures: DEFAULT_MAX_UNATTENDED_CAPTURES,
+        }
+    }
+}
+
+impl ScreenshotActivityPolicy {
+    /// Construct an always-enabled, conservatively bounded policy.
+    #[must_use]
+    pub const fn new(
+        inactivity_timeout_minutes: u16,
+        max_unattended_captures: u16,
+    ) -> Option<Self> {
+        if inactivity_timeout_minutes == 0
+            || inactivity_timeout_minutes > MAX_INACTIVITY_TIMEOUT_MINUTES
+            || max_unattended_captures == 0
+            || max_unattended_captures > MAX_UNATTENDED_CAPTURES
+        {
+            None
+        } else {
+            Some(Self {
+                inactivity_timeout_minutes,
+                max_unattended_captures,
+            })
+        }
+    }
+
+    /// Full unchanged interval required before automatic pause.
+    #[must_use]
+    pub const fn inactivity_timeout(self) -> Duration {
+        Duration::from_secs(self.inactivity_timeout_minutes as u64 * 60)
+    }
+
+    /// Configured whole-minute value for truthful presentation.
+    #[must_use]
+    pub const fn inactivity_timeout_minutes(self) -> u16 {
+        self.inactivity_timeout_minutes
+    }
+
+    /// Maximum candidates admitted without deliberate interaction.
+    #[must_use]
+    pub const fn max_unattended_captures(self) -> u16 {
+        self.max_unattended_captures
+    }
+}
 
 /// Image types accepted by the first screenshot inbox.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]

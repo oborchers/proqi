@@ -64,6 +64,11 @@ pub(super) fn enqueue_effects(
                 pending.external = pending.external.saturating_add(1);
             }
             Effect::Notify { code } => app.notify(code),
+            Effect::NotifyScreenshotPause(reason) => {
+                lanes
+                    .notification
+                    .notify_screenshot_pause(reason, lanes.external);
+            }
             Effect::Screenshot(intent) => {
                 match intent {
                     crate::application::ScreenshotIntent::Enable => lanes.screenshot.enable()?,

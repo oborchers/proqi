@@ -5,7 +5,7 @@ Status: v0.1.0 product contract
 Product name: Proqi
 
 Command: `proqi`
-Last updated: 2026-08-27
+Last updated: 2026-08-29
 
 ## Vision
 
@@ -378,6 +378,33 @@ byte and dimension bounds.
 While active, restrained footer chrome says `inbox listening`; accepted batches
 report `1 new capture` or `N new captures` without taking an active editor's
 focus or caret. The palette action becomes `Disable Screenshot Inbox`.
+
+Every listening period has two mandatory configurable safety bounds, defaulting
+to 20 minutes without deliberate Proqi interaction and 10 unattended admitted
+captures. Keyboard input, paste, pointer click or drag, and scrolling renew both
+bounds; resize, host-focus, bare pointer motion, and watcher activity do not.
+The first bound reached reconciles and stops capture, drains already admitted
+durable outcomes, and releases capture authority. A burst admits only the
+remaining ordered prefix and can never cross the capture bound. Files observed
+after the bound remain untouched.
+
+Automatic pause is persistent in the live TUI as `inbox paused · inactive` or
+`inbox paused · N captures`, with a longer content-free explanation in the
+status row. The palette action becomes `Resume Screenshot Inbox`. Resume starts
+a fresh bounded lease and activation baseline, so files accumulated while
+paused are never imported retrospectively. Restart begins with capture off.
+
+Users may opt into one best-effort pause notification. A managed Herdr pane uses
+Herdr's notification hook to cross its embedded terminal boundary. Outside
+Herdr, a verified standalone Ghostty or iTerm2 host receives OSC 9. Proqi never
+attempts both routes, and explicitly disabled Herdr integration does not fall
+back to OSC inside a managed pane. Herdr, the terminal, and macOS own permission
+and presentation; a delivered notification may remain only in Notification
+Center depending on alert style, Focus mode, and host settings. There is no
+reliable presentation acknowledgement. The persistent TUI state is the safety
+boundary. Notification text contains only the configured threshold, never
+paths, filenames, image content, or other user-controlled bytes. A native macOS
+notification companion is outside this version.
 
 One authoritative current-user installation-wide OS lock is independent from
 session leases, so exactly one process receives screenshots. A compatible

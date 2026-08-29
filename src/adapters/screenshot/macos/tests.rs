@@ -9,12 +9,15 @@ use std::{
     time::Duration,
 };
 
-use super::{DirectoryEvents, MacScreenshotWatcher, MonotonicClock, system_nanos};
+use super::{DirectoryEvents, MacScreenshotWatcher, system_nanos};
 use crate::{
     adapters::screenshot::pattern::wildcard_match,
-    ports::screenshot::{
-        ScreenshotBounds, ScreenshotCancellation, ScreenshotError, ScreenshotImageType,
-        ScreenshotInboxConfig,
+    ports::{
+        environment::MonotonicClock,
+        screenshot::{
+            ScreenshotBounds, ScreenshotCancellation, ScreenshotError, ScreenshotImageType,
+            ScreenshotInboxConfig,
+        },
     },
 };
 

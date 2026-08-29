@@ -23,7 +23,7 @@ pub(crate) use control::{ControlReplay, match_control_replay};
 pub use error::{ApplicationError, ApplicationResult, FailureCode};
 pub use model::{
     AppState, ClipboardIntent, DurabilityState, Effect, InteractionMode, ScreenshotIntent,
-    UpdateIntent,
+    ScreenshotPauseReason, UpdateIntent,
 };
 pub(crate) use prompt::{
     SHARED_PROMPT_STARTERS, SharedPromptStarter, join_prompt_for_target, supports_shared_starters,

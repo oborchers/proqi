@@ -194,7 +194,7 @@ fallbacks remain available when a terminal cannot report a modifier.
 | `c` | Collapse or expand long context |
 | `/` | Search thought content |
 | `:` | Search commands |
-| `i` | Enable or disable the macOS-only Screenshot Inbox |
+| `i` | Enable, disable, or resume the macOS-only Screenshot Inbox |
 | `?` | Open contextual help |
 
 ### Editor controls
@@ -569,6 +569,29 @@ over**. Takeover asks the verified owner to reconcile and durably drain its
 accepted captures before releasing the operating-system lock; a live or
 incompatible owner is never force-unlocked.
 
+Listening is always bounded. Proqi pauses after 20 minutes without deliberate
+keyboard, paste, or pointer interaction, or after 10 unattended captures,
+whichever happens first. The persistent footer changes to
+`inbox paused · inactive` or `inbox paused · 10 captures`, and the command
+palette offers **Resume Screenshot Inbox**. Resuming takes a fresh snapshot, so
+files accumulated while paused are not imported retrospectively. Both safety
+bounds are configurable but cannot be disabled.
+
+An optional best-effort notification can accompany automatic pause. It is off
+by default. Inside a managed Herdr pane, Proqi uses Herdr's notification hook so
+the message can cross the embedded terminal boundary. Outside Herdr, verified
+standalone Ghostty and iTerm2 sessions receive OSC 9. Proqi never attempts both
+routes. A managed pane with Herdr integration explicitly disabled receives no
+external notification because OSC would be consumed inside the embedded
+terminal.
+
+The terminal host, Herdr, and macOS own notification permission and
+presentation. A delivered notification may appear only in Notification Center
+instead of as a desktop banner depending on alert style, Focus mode, and host
+settings, and Proqi receives no reliable presentation acknowledgement. The
+persistent in-app paused state remains authoritative and contains no screenshot
+filename or content.
+
 The optional settings below show every default. `filename_patterns` contains
 user-defined, language-appropriate filename fallbacks; there is no built-in
 localization table. `capture_all_new_images` must be set explicitly to accept
@@ -585,6 +608,9 @@ max_file_bytes = 67108864
 max_dimension = 16384
 max_pixels = 100000000
 debounce_ms = 350
+inactivity_timeout_minutes = 20 # 1..=1440; cannot be disabled
+max_unattended_captures = 10 # 1..=100; cannot be disabled
+notify_terminal_on_auto_pause = false # Herdr hook, or standalone Ghostty/iTerm2 OSC 9
 ```
 
 Additional local roots are optional and must state their definition kind,

@@ -221,7 +221,7 @@ impl BoardApp {
     pub fn prepare_frame(&mut self, area: Rect) -> LayoutSnapshot {
         let layout_state = self.presentation_state();
         let first_editor = self.editor_presentation();
-        let has_status = self.status.is_some()
+        let has_status = self.status_view().is_some()
             || matches!(self.state.durability, DurabilityState::Failed { .. });
         let (first, first_scroll) = crate::ui::layout::compute_for_app(
             &layout_state,
@@ -331,23 +331,22 @@ impl BoardApp {
             InteractionMode::Edit { .. } => "edit",
         };
         let durability = self.durability_summary();
-        let inbox = if self.screenshot_listening() {
-            " · inbox listening"
-        } else {
-            ""
-        };
+        let inbox = self
+            .screenshot_footer_state(false)
+            .map_or_else(String::new, |label| format!(" · {label}"));
         let complete = format!("{count} {noun} · {mode} · {durability}{inbox}");
         if complete.width() <= usize::from(available_width) {
             return complete;
         }
-        let compact_inbox = if self.screenshot_listening() {
-            " · inbox"
-        } else {
-            ""
-        };
+        let compact_inbox = self
+            .screenshot_footer_state(true)
+            .map_or_else(String::new, |label| format!(" · {label}"));
         let compact = format!("{count} · {mode} · {durability}{compact_inbox}");
         if compact.width() <= usize::from(available_width) {
             return compact;
+        }
+        if let Some(paused) = self.screenshot_footer_state(true) {
+            return paused;
         }
         format!("{count} {durability}")
     }

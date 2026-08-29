@@ -20,6 +20,7 @@ use crossterm::{
 };
 
 use super::TerminalError;
+use super::host::TerminalHost;
 use crate::ui::KeyboardEnhancement;
 
 pub(super) trait TerminalControl {
@@ -122,17 +123,13 @@ impl TerminalControl for CrosstermControl {
 }
 
 fn compatible_keyboard_flags() -> KeyboardEnhancementFlags {
-    let program = std::env::var("TERM_PROGRAM").unwrap_or_default();
-    let term = std::env::var("TERM").unwrap_or_default();
-    keyboard_flags(&program, &term)
+    keyboard_flags(&TerminalHost::detect())
 }
 
-fn keyboard_flags(program: &str, term: &str) -> KeyboardEnhancementFlags {
+fn keyboard_flags(host: &TerminalHost) -> KeyboardEnhancementFlags {
     let mut flags = KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
         | KeyboardEnhancementFlags::REPORT_ALTERNATE_KEYS;
-    let incompatible =
-        matches!(program, "iTerm.app" | "ghostty" | "Ghostty") || term.starts_with("tmux");
-    if !incompatible {
+    if host.supports_keyboard_event_types() {
         flags |= KeyboardEnhancementFlags::REPORT_EVENT_TYPES;
     }
     flags
@@ -308,6 +305,7 @@ mod tests {
     use crossterm::event::KeyboardEnhancementFlags;
 
     use super::{TerminalControl, TerminalGuard, keyboard_flags};
+    use crate::adapters::terminal::host::TerminalHost;
 
     #[derive(Clone)]
     struct FakeControl {
@@ -372,14 +370,17 @@ mod tests {
 
     #[test]
     fn incompatible_transports_omit_event_type_reporting() {
-        let ordinary = keyboard_flags("Apple_Terminal", "xterm-256color");
+        let ordinary = keyboard_flags(&TerminalHost::from_values(
+            "Apple_Terminal",
+            "xterm-256color",
+        ));
         assert!(ordinary.contains(KeyboardEnhancementFlags::REPORT_EVENT_TYPES));
         for (program, term) in [
             ("iTerm.app", "xterm-256color"),
             ("ghostty", "xterm-ghostty"),
             ("", "tmux-256color"),
         ] {
-            let flags = keyboard_flags(program, term);
+            let flags = keyboard_flags(&TerminalHost::from_values(program, term));
             assert!(!flags.contains(KeyboardEnhancementFlags::REPORT_EVENT_TYPES));
             assert!(flags.contains(KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES));
         }

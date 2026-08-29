@@ -5,10 +5,14 @@ use std::path::PathBuf;
 use crate::{
     adapters::{
         control::ControlServer,
-        runtime::FileRuntimeCoordinator,
+        runtime::{FileRuntimeCoordinator, FileSessionLease},
         sqlite::SqliteStore,
         terminal::{
-            external::ExternalLane, input::InputLane, persistence::PersistenceLane,
+            TerminalError,
+            control::{CrosstermControl, TerminalGuard},
+            external::ExternalLane,
+            input::InputLane,
+            persistence::PersistenceLane,
             screenshot_lane::ScreenshotLane,
         },
     },
@@ -17,6 +21,47 @@ use crate::{
 };
 
 use super::owned_lanes::OwnedLanes;
+
+pub(super) fn start_optional_control(
+    session_lease: &mut FileSessionLease,
+) -> (Option<ControlServer>, Option<String>) {
+    let Some(endpoint) = session_lease.control_endpoint() else {
+        return (
+            None,
+            Some("active-session CLI forwarding is unavailable on this platform".to_owned()),
+        );
+    };
+    let server = match ControlServer::spawn(endpoint) {
+        Ok(server) => server,
+        Err(error) => {
+            return (
+                None,
+                Some(format!(
+                    "active-session CLI forwarding unavailable: {error}"
+                )),
+            );
+        }
+    };
+    if let Err(error) = session_lease.publish_control() {
+        let _stopped = server.stop();
+        return (
+            None,
+            Some(format!(
+                "active-session CLI forwarding unavailable: {error}"
+            )),
+        );
+    }
+    (Some(server), None)
+}
+
+pub(super) fn enter_terminal(
+    recipe: &crate::ui::ThemeRecipe,
+    keyboard: crate::ui::KeyboardEnhancement,
+) -> Result<(crate::ui::Theme, TerminalGuard<CrosstermControl>), TerminalError> {
+    let theme = super::super::palette::resolve(recipe, super::supports_true_color())?;
+    let guard = TerminalGuard::enter(CrosstermControl::new(keyboard))?;
+    Ok((theme, guard))
+}
 
 #[expect(
     clippy::too_many_arguments,
@@ -72,17 +117,5 @@ pub(super) fn spawn_lanes(
 }
 
 fn terminal_host_label() -> String {
-    let value = std::env::var("TERM_PROGRAM")
-        .ok()
-        .filter(|value| {
-            !value.is_empty() && value.chars().count() <= 80 && !value.chars().any(char::is_control)
-        })
-        .unwrap_or_else(|| "the terminal host running Proqi".to_owned());
-    match value.as_str() {
-        "Apple_Terminal" => "Terminal".to_owned(),
-        "iTerm.app" => "iTerm2".to_owned(),
-        "ghostty" | "Ghostty" => "Ghostty".to_owned(),
-        "vscode" => "Visual Studio Code".to_owned(),
-        _ => value,
-    }
+    super::super::host::TerminalHost::detect().label()
 }

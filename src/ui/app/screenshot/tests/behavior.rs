@@ -18,10 +18,12 @@ use crate::{
     ui::{BoardApp, PointerButton, PointerInput, PointerKind, UiInput, UiKey},
 };
 use ratatui_core::layout::Rect;
+use std::time::Duration;
 
 #[test]
 fn durable_capture_preserves_an_active_editor_and_exact_path_annotation() {
     let (mut app, mut ids, clock, original_id) = app_with_thought();
+    app.screenshot_started(Duration::ZERO);
     app.state.mode = InteractionMode::Edit {
         thought_id: original_id,
     };
@@ -47,6 +49,7 @@ fn durable_capture_preserves_an_active_editor_and_exact_path_annotation() {
 #[test]
 fn newest_capture_in_one_detection_burst_is_left_ready_for_annotation() {
     let (mut app, mut ids, clock, _) = app_with_thought();
+    app.screenshot_started(Duration::ZERO);
     app.queue_screenshot_candidates([candidate(4), candidate(5)]);
 
     let first = next_commit(&mut app, &mut ids, &clock);
@@ -68,6 +71,7 @@ fn newest_capture_in_one_detection_burst_is_left_ready_for_annotation() {
 #[test]
 fn separated_capture_feedback_restarts_at_one() {
     let (mut app, mut ids, clock, _) = app_with_thought();
+    app.screenshot_started(Duration::ZERO);
     app.queue_screenshot_candidates([candidate(6)]);
     let first = next_commit(&mut app, &mut ids, &clock);
     app.complete_screenshot_capture(Ok(created(&first)), &mut ids, &clock);
@@ -83,6 +87,7 @@ fn separated_capture_feedback_restarts_at_one() {
 #[test]
 fn failed_capture_has_no_partial_thought_and_is_explicitly_retryable() {
     let (mut app, mut ids, clock, _) = app_with_thought();
+    app.screenshot_started(Duration::ZERO);
     app.queue_screenshot_candidates([candidate(8)]);
     let commit = next_commit(&mut app, &mut ids, &clock);
     app.complete_screenshot_capture(Err(StoreError::Busy), &mut ids, &clock);
@@ -98,6 +103,7 @@ fn failed_capture_has_no_partial_thought_and_is_explicitly_retryable() {
 #[test]
 fn retry_rebuilds_after_an_intervening_durable_editor_change() {
     let (mut app, mut ids, clock, original_id) = app_with_thought();
+    app.screenshot_started(Duration::ZERO);
     app.queue_screenshot_candidates([candidate(18)]);
     let failed = next_commit(&mut app, &mut ids, &clock);
     app.complete_screenshot_capture(Err(StoreError::Busy), &mut ids, &clock);
@@ -127,6 +133,7 @@ fn retry_rebuilds_after_an_intervening_durable_editor_change() {
 #[test]
 fn failed_first_capture_in_a_burst_retries_then_drains_in_order() {
     let (mut app, mut ids, clock, _) = app_with_thought();
+    app.screenshot_started(Duration::ZERO);
     app.queue_screenshot_candidates([candidate(13), candidate(14)]);
     let first = next_commit(&mut app, &mut ids, &clock);
     app.complete_screenshot_capture(Err(StoreError::Busy), &mut ids, &clock);
@@ -147,6 +154,7 @@ fn failed_first_capture_in_a_burst_retries_then_drains_in_order() {
 #[test]
 fn quit_during_capture_is_deferred_and_flushes_the_live_editor() {
     let (mut app, mut ids, clock, original_id) = app_with_thought();
+    app.screenshot_started(Duration::ZERO);
     app.state.mode = InteractionMode::Edit {
         thought_id: original_id,
     };
@@ -174,6 +182,7 @@ fn quit_during_capture_is_deferred_and_flushes_the_live_editor() {
 #[test]
 fn deferred_quit_retries_one_transient_capture_failure_before_finishing() {
     let (mut app, mut ids, clock, _) = app_with_thought();
+    app.screenshot_started(Duration::ZERO);
     app.queue_screenshot_candidates([candidate(18)]);
     let capture = next_commit(&mut app, &mut ids, &clock);
     app.handle(UiInput::Key(UiKey::Quit), &mut ids, &clock);
@@ -195,6 +204,7 @@ fn deferred_quit_retries_one_transient_capture_failure_before_finishing() {
 #[test]
 fn explicit_editor_interaction_prevents_burst_auto_advance() {
     let (mut app, mut ids, clock, _) = app_with_thought();
+    app.screenshot_started(Duration::ZERO);
     app.queue_screenshot_candidates([candidate(16), candidate(17)]);
     let first = next_commit(&mut app, &mut ids, &clock);
     let first_id = capture_thought_id(&first);
@@ -248,7 +258,7 @@ fn palette_names_are_exact_in_both_states() {
     );
     app.close_overlay();
 
-    app.screenshot_started();
+    app.screenshot_started(Duration::ZERO);
     app.open_palette();
     let (_, entries, _) = app.palette_view().expect("palette");
     assert!(
