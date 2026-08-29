@@ -110,7 +110,7 @@ impl RopeEditor {
         let touched = touched_lines(&lines, self.state.cursor_byte, self.selection_bytes());
         let markers = touched
             .iter()
-            .map(|index| indentation_marker_at(&content, &lines, *index, width))
+            .map(|index| outdent_marker_at(&content, &lines, *index, width))
             .collect::<Vec<_>>();
         if !markers.iter().any(Option::is_some) {
             return None;
@@ -217,6 +217,29 @@ fn indentation_marker_at<'a>(
     Some(marker)
 }
 
+fn outdent_marker_at<'a>(
+    content: &'a str,
+    lines: &[LogicalLine],
+    line_index: usize,
+    width: u8,
+) -> Option<ListMarker<'a>> {
+    if let Some(marker) = indentation_marker_at(content, lines, line_index, width) {
+        return Some(marker);
+    }
+    let line = *lines.get(line_index)?;
+    let line_text = &content[line.start..line.content_end];
+    let marker = parse_marker(line_text)?;
+    let indentation_end = line.start + marker.indentation.len();
+    if is_thematic_break(line_text)
+        || inside_fenced_code(content, line.start)
+        || whitespace_suffix_range(content, line.start, indentation_end, width).is_none()
+        || !has_outdent_list_context(content, lines, line_index, marker.indentation, width)
+    {
+        return None;
+    }
+    Some(marker)
+}
+
 fn has_adjacent_list_context(content: &str, lines: &[LogicalLine], line_index: usize) -> bool {
     for index in (0..line_index).rev() {
         let line = lines[index];
@@ -232,6 +255,46 @@ fn has_adjacent_list_context(content: &str, lines: &[LogicalLine], line_index: u
         }
     }
     false
+}
+
+fn has_outdent_list_context(
+    content: &str,
+    lines: &[LogicalLine],
+    line_index: usize,
+    indentation: &str,
+    width: u8,
+) -> bool {
+    let mut saw_peer = false;
+    for index in (0..line_index).rev() {
+        let line = lines[index];
+        let text = &content[line.start..line.content_end];
+        if text.trim_matches([' ', '\t']).is_empty() {
+            return false;
+        }
+        if marker_at(content, lines, index).is_some() {
+            return true;
+        }
+        if parse_marker(text).is_some_and(|peer| {
+            peer.indentation == indentation
+                && !is_thematic_break(text)
+                && !inside_fenced_code(content, line.start)
+                && (peer.indentation.contains('\t')
+                    || whitespace_suffix_range(
+                        content,
+                        line.start,
+                        line.start + peer.indentation.len(),
+                        width,
+                    )
+                    .is_some())
+        }) {
+            saw_peer = true;
+            continue;
+        }
+        if !text.starts_with([' ', '\t']) {
+            return false;
+        }
+    }
+    line_index == 0 || saw_peer
 }
 
 fn indentation_unit(marker: ListMarker<'_>, width: u8) -> String {

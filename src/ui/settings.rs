@@ -25,7 +25,7 @@ pub struct UiSettings {
     pub show_session_id: bool,
     /// Continue recognized Markdown list items when Enter inserts a newline.
     pub smart_lists: bool,
-    /// Spaces inserted for one list indentation level when alignment is not inferable.
+    /// Spaces inserted for every list indentation level.
     pub list_indent_width: u8,
     /// Keyboard protocol negotiation.
     pub keyboard_enhancement: KeyboardEnhancement,

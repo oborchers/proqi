@@ -88,7 +88,7 @@ pub enum EditCommand {
     InsertNewline,
     /// Insert a newline with conservative Markdown list continuation.
     InsertSmartNewline {
-        /// Space indentation used when no parent alignment can be inferred.
+        /// Spaces used for every list indentation level.
         indent_width: u8,
     },
     /// Indent the current list item or every selected logical line.

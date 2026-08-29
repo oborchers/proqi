@@ -222,16 +222,71 @@ fn configured_levels_remain_reversibly_nested_beside_a_list() {
         assert_eq!(outcome.snapshot.content, expected);
     }
 
-    let mut code = at_end("paragraph\n    - code");
-    assert!(
-        code.apply(EditCommand::Outdent {
-            width: 2,
-            smart_lists: true,
-        })
-        .changes
-        .is_empty()
-    );
-    assert_eq!(code.snapshot().content, "paragraph\n    - code");
+    for (width, before) in [
+        (2, "paragraph\n    - code"),
+        (8, "paragraph\n        - code"),
+    ] {
+        let mut code = at_end(before);
+        assert!(
+            code.apply(EditCommand::Outdent {
+                width,
+                smart_lists: true,
+            })
+            .changes
+            .is_empty()
+        );
+        assert_eq!(code.snapshot().content, before);
+    }
+}
+
+#[test]
+fn configured_width_extremes_round_trip_complete_list_selections() {
+    let before = "- parent\r\n9. child\r\n100. tail";
+    for width in [1, 8] {
+        let mut editor = editor(before);
+        editor.apply(EditCommand::SetCursor {
+            position: TextPosition::default(),
+            extend_selection: false,
+        });
+        editor.apply(EditCommand::SetCursor {
+            position: TextPosition::new(2, 9),
+            extend_selection: true,
+        });
+        for level in 1..=3 {
+            let outcome = editor.apply(EditCommand::Indent {
+                width,
+                smart_lists: true,
+            });
+            let indentation = " ".repeat(usize::from(width) * level);
+            assert_eq!(
+                outcome.snapshot.content,
+                format!("{indentation}- parent\r\n{indentation}9. child\r\n{indentation}100. tail")
+            );
+            assert_eq!(outcome.changes.len(), 3);
+        }
+        for level in (0..3).rev() {
+            let outcome = editor.apply(EditCommand::Outdent {
+                width,
+                smart_lists: true,
+            });
+            let indentation = " ".repeat(usize::from(width) * level);
+            assert_eq!(
+                outcome.snapshot.content,
+                format!("{indentation}- parent\r\n{indentation}9. child\r\n{indentation}100. tail")
+            );
+            assert_eq!(outcome.changes.len(), 3);
+        }
+        assert_eq!(editor.snapshot().content, before);
+        assert!(
+            editor
+                .apply(EditCommand::Outdent {
+                    width,
+                    smart_lists: true,
+                })
+                .changes
+                .is_empty()
+        );
+    }
 }
 
 #[test]

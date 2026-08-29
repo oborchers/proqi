@@ -110,6 +110,35 @@ fn tab_and_backtab_use_one_configured_unit_per_persistent_revision() {
 }
 
 #[test]
+fn maximum_width_selected_list_round_trips_as_two_persistent_revisions() {
+    let before = "- parent\r\n9. child\r\n100. tail";
+    let mut fixture = Fixture::with_settings(UiSettings {
+        list_indent_width: 8,
+        ..UiSettings::default()
+    });
+    fixture.paste(before);
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::DocumentStart,
+        extend_selection: false,
+    }));
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::DocumentEnd,
+        extend_selection: true,
+    }));
+
+    let indent = fixture.effects(UiInput::Key(UiKey::Tab));
+    assert_eq!(
+        revision(&indent).after_content,
+        "        - parent\r\n        9. child\r\n        100. tail"
+    );
+    assert!(!fixture.app.has_pending_edit());
+
+    let outdent = fixture.effects(UiInput::Key(UiKey::BackTab));
+    assert_eq!(revision(&outdent).after_content, before);
+    assert!(!fixture.app.has_pending_edit());
+}
+
+#[test]
 fn selected_line_indentation_excludes_a_column_zero_endpoint_and_preserves_annotations() {
     let path = "context.txt";
     let content = format!("- one\n- Grüße 👩🏽‍💻\n{path}");

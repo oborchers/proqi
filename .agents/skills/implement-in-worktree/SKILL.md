@@ -118,6 +118,31 @@ blocked transition, keep the goal active and still report immediately.
 - When the feature integrates with Herdr or a harness, exercise the real
   structured API and relevant UI/PTY behavior in the worker's Herdr workspace.
   A mock-only result is insufficient when live qualification is feasible.
+- Treat `herdr pane send-text` as literal text injection, not as a terminal key
+  event transport. Do not use it to qualify escape sequences, modifier chords,
+  BackTab, bracketed paste framing, or another exact terminal protocol. When
+  `pane send-keys` does not expose the required key distinctly, drive the exact
+  bytes through a real PTY tool such as Expect inside the disposable pane.
+- A successful pane send proves only that Herdr enqueued the input. Likewise,
+  `pane wait-output` searches immediately and may match text that was already
+  present. Prove each live step with a unique new screen postcondition, terminal
+  transcript event, durable revision, or external-state inspection; a generic
+  label such as `saved`, `ready`, or `complete` is not transition evidence.
+- Define the live oracle before combining stress dimensions. Seed fixtures
+  through a stable CLI or API when fixture creation is not the behavior under
+  test, exercise one invariant first, and inspect its exact durable result before
+  adding load, resize, repetition, Unicode, or another neighboring state. A
+  compound script whose timeout could mean transport, setup, rendering,
+  persistence, eligibility, or teardown is not useful completion evidence.
+- Derive changed and deliberately unchanged cases from the feature contract.
+  Keep supported actions separate from conservative no-ops so a correct refusal
+  is not misdiagnosed as dropped input. Increase content size and repetition
+  only after the minimal case proves the same path with an unambiguous oracle.
+- When a PTY driver echoes child terminal traffic into a Herdr pane, terminal
+  capability queries can elicit replies that remain buffered as later shell
+  input. Keep child terminal traffic contained (for example, Expect
+  `log_user 0`), emit only explicit text sentinels, and verify the pane is back
+  at an uncontaminated shell before reusing it.
 - Before handoff, run the implemented feature from the exact topic-branch build
   in a disposable live pane inside the assigned Herdr workspace and actively try
   to break it. This is a completion gate, not an optional walkthrough or a
