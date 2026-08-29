@@ -403,7 +403,7 @@ impl BoardApp {
         ))
     }
 
-    fn hit(&self, pointer: PointerInput) -> Option<HitTarget> {
+    pub(super) fn hit(&self, pointer: PointerInput) -> Option<HitTarget> {
         self.layout
             .as_ref()
             .and_then(|layout| layout.hit_test(pointer.column, pointer.row))

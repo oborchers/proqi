@@ -145,6 +145,7 @@ impl BoardApp {
             return Vec::new();
         }
         let mut effects = self.finish_edit(ids, clock);
+        self.palette_selection_handoff = None;
         if let Some(target) = target {
             self.insertion_focus = super::InsertionFocus::Inactive;
             effects.extend(self.reduce(Action::FocusThought(Some(target))));

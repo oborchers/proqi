@@ -154,7 +154,7 @@ fn empty_nested_items_outdent_one_level_before_top_level_exit() {
 }
 
 #[test]
-fn tab_aligns_nested_markers_to_parent_content_without_renumbering() {
+fn tab_uses_configured_width_without_renumbering() {
     let before = "10. parent\r\n11. child\r\n12. later";
     let mut editor = at_end(before);
     editor.apply(EditCommand::SetCursor {
@@ -167,9 +167,9 @@ fn tab_aligns_nested_markers_to_parent_content_without_renumbering() {
     });
     assert_eq!(
         indented.snapshot.content,
-        "10. parent\r\n    11. child\r\n12. later"
+        "10. parent\r\n  11. child\r\n12. later"
     );
-    assert_eq!(indented.snapshot.cursor, TextPosition::new(1, 13));
+    assert_eq!(indented.snapshot.cursor, TextPosition::new(1, 11));
     assert_eq!(indented.changes.len(), 1);
 
     let outdented = editor.apply(EditCommand::Outdent {
@@ -185,7 +185,7 @@ fn tab_aligns_nested_markers_to_parent_content_without_renumbering() {
 }
 
 #[test]
-fn tab_preserves_existing_tabs_and_uses_configured_spaces_without_a_parent() {
+fn tab_preserves_existing_tabs_and_otherwise_uses_configured_spaces() {
     let mut tabbed = at_end("- root\n  1. parent\n\t - first\n\t - child");
     let outcome = tabbed.apply(EditCommand::Indent {
         width: 2,
@@ -193,7 +193,7 @@ fn tab_preserves_existing_tabs_and_uses_configured_spaces_without_a_parent() {
     });
     assert_eq!(
         outcome.snapshot.content,
-        "- root\n  1. parent\n\t - first\n\t   - child"
+        "- root\n  1. parent\n\t - first\n\t \t- child"
     );
 
     let mut first = at_end("- first");
@@ -205,7 +205,7 @@ fn tab_preserves_existing_tabs_and_uses_configured_spaces_without_a_parent() {
 }
 
 #[test]
-fn configured_fallback_levels_remain_reversibly_nested_beside_a_list() {
+fn configured_levels_remain_reversibly_nested_beside_a_list() {
     let mut editor = at_end("- parent\n- child");
     for expected in ["- parent\n  - child", "- parent\n    - child"] {
         let outcome = editor.apply(EditCommand::Indent {
@@ -232,6 +232,74 @@ fn configured_fallback_levels_remain_reversibly_nested_beside_a_list() {
         .is_empty()
     );
     assert_eq!(code.snapshot().content, "paragraph\n    - code");
+}
+
+#[test]
+fn marker_digit_width_never_changes_the_configured_indent_unit() {
+    for before in [
+        "- parent\n- child\n- later",
+        "9. parent\n10. child\n11. later",
+        "10. parent\n11. child\n12. later",
+        "99. parent\n100. child\n101. later",
+        "100. parent\n101. child\n102. later",
+    ] {
+        let child = before.lines().nth(1).expect("child line");
+        let later = before.lines().nth(2).expect("later line");
+        let mut editor = editor(before);
+        editor.apply(EditCommand::SetCursor {
+            position: TextPosition::new(1, child.chars().count()),
+            extend_selection: false,
+        });
+
+        let once = editor.apply(EditCommand::Indent {
+            width: 2,
+            smart_lists: true,
+        });
+        assert_eq!(
+            once.snapshot.content,
+            format!(
+                "{}\n  {child}\n{later}",
+                before.lines().next().expect("parent line")
+            )
+        );
+        assert_eq!(once.changes.len(), 1);
+
+        let twice = editor.apply(EditCommand::Indent {
+            width: 2,
+            smart_lists: true,
+        });
+        assert_eq!(
+            twice.snapshot.content,
+            format!(
+                "{}\n    {child}\n{later}",
+                before.lines().next().expect("parent line")
+            )
+        );
+        assert_eq!(twice.changes.len(), 1);
+
+        for expected in [&once.snapshot.content, before] {
+            let outdented = editor.apply(EditCommand::Outdent {
+                width: 2,
+                smart_lists: true,
+            });
+            assert_eq!(outdented.snapshot.content, expected);
+            assert_eq!(outdented.changes.len(), 1);
+        }
+    }
+}
+
+#[test]
+fn ordered_empty_item_outdents_one_fixed_level_per_enter() {
+    let mut editor = at_end("100. parent\n    101. ");
+    for expected in [
+        "100. parent\n  101. ",
+        "100. parent\n101. ",
+        "100. parent\n",
+    ] {
+        let outcome = editor.apply(EditCommand::InsertSmartNewline { indent_width: 2 });
+        assert_eq!(outcome.snapshot.content, expected);
+        assert_eq!(outcome.changes.len(), 1);
+    }
 }
 
 #[test]

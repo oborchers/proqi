@@ -10,7 +10,7 @@ use crate::{
 use super::{ThemeSource, load_settings};
 
 #[test]
-fn missing_config_uses_the_adaptive_default() {
+fn missing_config_uses_the_narrow_pane_default() {
     let directory = tempfile::tempdir().expect("config directory");
     let settings = load_settings(directory.path()).expect("defaults");
     assert_eq!(settings.ui.keybindings.new, 'n');

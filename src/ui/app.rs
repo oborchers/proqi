@@ -90,6 +90,7 @@ pub struct BoardApp {
     insertion_focus: InsertionFocus,
     insertion_confirmation: InsertionConfirmation,
     edit_boundary: Option<CursorMovement>,
+    palette_selection_handoff: Option<palette::EditorSelectionHandoff>,
     palette: Option<palette::PaletteState>,
     invocation_popup: Option<invocation::InvocationPopup>,
     search: Option<search::SearchState>,
@@ -167,6 +168,7 @@ impl BoardApp {
             insertion_focus,
             insertion_confirmation: InsertionConfirmation::Idle,
             edit_boundary: None,
+            palette_selection_handoff: None,
             palette: None,
             invocation_popup: None,
             search: None,
@@ -277,6 +279,7 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
+        self.invalidate_palette_selection_handoff(&input);
         match input {
             UiInput::HostFocusGained => Self::discover_agents(),
             UiInput::Resize { .. } => {

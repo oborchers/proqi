@@ -223,6 +223,8 @@ Press `Esc`, open `:`, and choose `Insert plain newline`, `Indent line or
 selection`, or `Outdent line or selection` when the terminal does not forward a
 modifier; mouse users can open the palette directly while editing. An empty
 nested item outdents one level before a later top-level `Enter` exits the list.
+Every nesting level uses exactly `list_indent_width` spaces regardless of bullet
+or ordered-marker width; tab-indented lists retain tabs.
 Set `smart_lists = false` to keep every ordinary editor `Enter` plain and disable
 structure-aware outdent; `Tab` still inserts `list_indent_width` spaces exactly.
 

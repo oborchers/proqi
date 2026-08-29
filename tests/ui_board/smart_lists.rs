@@ -83,7 +83,7 @@ fn nested_empty_enter_outdents_then_exits_as_separate_persistent_revisions() {
 }
 
 #[test]
-fn tab_and_backtab_are_one_persistent_revision_each_with_configured_alignment() {
+fn tab_and_backtab_use_one_configured_unit_per_persistent_revision() {
     let settings = UiSettings {
         list_indent_width: 3,
         ..UiSettings::default()
@@ -97,7 +97,7 @@ fn tab_and_backtab_are_one_persistent_revision_each_with_configured_alignment() 
     let indent = fixture.effects(UiInput::Key(UiKey::Tab));
     assert_eq!(
         revision(&indent).after_content,
-        "10. parent\r\n    11. child\r\n12. later"
+        "10. parent\r\n   11. child\r\n12. later"
     );
     assert!(!fixture.app.has_pending_edit());
 
@@ -324,4 +324,145 @@ fn command_palette_indents_by_keyboard_and_outdents_by_mouse() {
         extend_selection: false,
     }));
     assert_eq!(revision(&outdent).after_content, "- parent\n- child");
+}
+
+#[test]
+fn keyboard_palette_restores_a_column_zero_multiline_selection_once() {
+    let before = "- parent\n- child\n- untouched";
+    let mut fixture = Fixture::new();
+    fixture.paste(before);
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::DocumentStart,
+        extend_selection: false,
+    }));
+    for _ in 0..2 {
+        fixture.input(UiInput::Key(UiKey::Move {
+            movement: CursorMovement::VisualDown,
+            extend_selection: true,
+        }));
+    }
+    fixture.input(UiInput::Key(UiKey::Escape));
+    fixture.input(UiInput::Key(UiKey::Character(':')));
+    for character in "indent line".chars() {
+        fixture.input(UiInput::Key(UiKey::Character(character)));
+    }
+
+    let effects = fixture.effects(UiInput::Key(UiKey::Enter));
+    assert_eq!(
+        revision(&effects).after_content,
+        "  - parent\n  - child\n- untouched"
+    );
+    let snapshot = fixture.app.editor_snapshot().expect("editor");
+    assert_eq!(
+        snapshot.selection,
+        Some(proqi::ports::editor::TextSelection {
+            start: proqi::domain::TextPosition::new(0, 2),
+            end: proqi::domain::TextPosition::new(2, 0),
+        })
+    );
+    assert_eq!(fixture.effects(UiInput::Key(UiKey::Undo)).len(), 1);
+    assert_eq!(
+        fixture.app.editor_snapshot().expect("editor").content,
+        before
+    );
+}
+
+#[test]
+fn mouse_palette_restores_a_reverse_multiline_selection() {
+    let mut fixture = Fixture::new();
+    fixture.paste("  - parent\n  - child\n- untouched");
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::DocumentStart,
+        extend_selection: false,
+    }));
+    for _ in 0..2 {
+        fixture.input(UiInput::Key(UiKey::Move {
+            movement: CursorMovement::VisualDown,
+            extend_selection: false,
+        }));
+    }
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::DocumentStart,
+        extend_selection: true,
+    }));
+    fixture.input(UiInput::Key(UiKey::Escape));
+
+    let commands = fixture
+        .app
+        .prepare_frame(Rect::new(0, 0, 80, 8))
+        .controls
+        .into_iter()
+        .find_map(|(target, area)| (target == HitTarget::Commands).then_some(area))
+        .expect("commands control");
+    fixture.pointer(
+        commands.x,
+        commands.y,
+        PointerKind::Down(PointerButton::Left),
+    );
+    for character in "outdent line".chars() {
+        fixture.input(UiInput::Key(UiKey::Character(character)));
+    }
+    let item = fixture
+        .app
+        .prepare_frame(Rect::new(0, 0, 80, 8))
+        .overlay
+        .expect("palette")
+        .items[0];
+    let effects = fixture.effects(UiInput::Pointer(PointerInput {
+        column: item.x,
+        row: item.y,
+        kind: PointerKind::Down(PointerButton::Left),
+        extend_selection: false,
+    }));
+    assert_eq!(
+        revision(&effects).after_content,
+        "- parent\n- child\n- untouched"
+    );
+    let snapshot = fixture.app.editor_snapshot().expect("editor");
+    assert_eq!(snapshot.cursor, proqi::domain::TextPosition::new(0, 0));
+    assert_eq!(
+        snapshot.selection,
+        Some(proqi::ports::editor::TextSelection {
+            start: proqi::domain::TextPosition::new(0, 0),
+            end: proqi::domain::TextPosition::new(2, 0),
+        })
+    );
+}
+
+#[test]
+fn cancelling_the_palette_discards_the_selection_handoff() {
+    let mut fixture = Fixture::new();
+    fixture.paste("- parent\n- child\n- untouched");
+    fixture.input(UiInput::Key(UiKey::SelectAll));
+    fixture.input(UiInput::Key(UiKey::Escape));
+    fixture.input(UiInput::Key(UiKey::Character(':')));
+    fixture.input(UiInput::Key(UiKey::Escape));
+    fixture.input(UiInput::Key(UiKey::Character(':')));
+    for character in "indent line".chars() {
+        fixture.input(UiInput::Key(UiKey::Character(character)));
+    }
+
+    let effects = fixture.effects(UiInput::Key(UiKey::Enter));
+    assert_eq!(
+        revision(&effects).after_content,
+        "- parent\n- child\n  - untouched"
+    );
+}
+
+#[test]
+fn board_navigation_discards_the_selection_handoff() {
+    let mut fixture = Fixture::new();
+    fixture.paste("- first");
+    fixture.input(UiInput::Key(UiKey::Escape));
+    fixture.paste("- second");
+    fixture.input(UiInput::Key(UiKey::SelectAll));
+    fixture.input(UiInput::Key(UiKey::Escape));
+    fixture.input(UiInput::Key(UiKey::Character('k')));
+    fixture.input(UiInput::Key(UiKey::Character(':')));
+    for character in "indent line".chars() {
+        fixture.input(UiInput::Key(UiKey::Character(character)));
+    }
+
+    let effects = fixture.effects(UiInput::Key(UiKey::Enter));
+    assert_eq!(revision(&effects).after_content, "  - first");
 }

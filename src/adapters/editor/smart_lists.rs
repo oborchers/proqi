@@ -47,7 +47,7 @@ impl RopeEditor {
             if marker.indentation.is_empty() {
                 return Some(self.replace_byte_range(line.start, cursor, ""));
             }
-            if let Some(range) = outdent_range(&content, &lines, line_index, marker, indent_width) {
+            if let Some(range) = outdent_range(&content, line, marker, indent_width) {
                 let removed = range.len();
                 let applied = self.replace_byte_range(range.start, range.end, "");
                 self.state.cursor_byte = cursor.saturating_sub(removed);
@@ -74,7 +74,7 @@ impl RopeEditor {
                     indentation,
                 )]);
             };
-            let insert = indentation_for(&content, &lines, line_index, marker, width);
+            let insert = indentation_unit(marker, width);
             let at = lines[line_index].start + marker.indentation.len();
             return self.replace_byte_ranges(&[(at..at, insert)]);
         }
@@ -93,10 +93,7 @@ impl RopeEditor {
                     },
                     |marker| {
                         let at = lines[line_index].start + marker.indentation.len();
-                        (
-                            at..at,
-                            indentation_for(&content, &lines, line_index, marker, width),
-                        )
+                        (at..at, indentation_unit(marker, width))
                     },
                 )
             })
@@ -124,7 +121,7 @@ impl RopeEditor {
             .filter_map(|(line_index, marker)| {
                 let range = marker.map_or_else(
                     || ordinary_outdent_range(&content, lines[line_index], width),
-                    |marker| outdent_range(&content, &lines, line_index, marker, width),
+                    |marker| outdent_range(&content, lines[line_index], marker, width),
                 )?;
                 Some((range, String::new()))
             })
@@ -152,23 +149,6 @@ impl ListMarker<'_> {
 
     fn indentation_columns(&self) -> usize {
         indentation_columns(self.indentation)
-    }
-
-    fn content_column(&self, line: &str) -> usize {
-        indentation_columns(&line[..self.content_offset()])
-    }
-
-    fn content_offset(&self) -> usize {
-        let marker = match self.marker {
-            Marker::Bullet(bullet) => bullet.len_utf8(),
-            Marker::Ordered { number, delimiter } => number.len() + delimiter.len_utf8(),
-        };
-        self.indentation.len()
-            + marker
-            + self.spacing.len()
-            + self
-                .task_spacing
-                .map_or(0, |task_spacing| 3 + task_spacing.len())
     }
 }
 
@@ -206,9 +186,7 @@ fn marker_at<'a>(
     if is_thematic_break(line_text) || inside_fenced_code(content, line.start) {
         return None;
     }
-    if marker.indentation_columns() <= 3
-        || parent_marker(content, lines, line_index, marker).is_some()
-    {
+    if marker.indentation_columns() <= 3 {
         Some(marker)
     } else {
         None
@@ -228,11 +206,12 @@ fn indentation_marker_at<'a>(
     let line_text = &content[line.start..line.content_end];
     let marker = parse_marker(line_text)?;
     let indentation_end = line.start + marker.indentation.len();
-    if is_thematic_break(line_text)
-        || inside_fenced_code(content, line.start)
-        || whitespace_suffix_range(content, line.start, indentation_end, width).is_none()
-        || !has_adjacent_list_context(content, lines, line_index)
-    {
+    if is_thematic_break(line_text) || inside_fenced_code(content, line.start) {
+        return None;
+    }
+    let has_indentation_unit = marker.indentation.contains('\t')
+        || whitespace_suffix_range(content, line.start, indentation_end, width).is_some();
+    if !has_indentation_unit || !has_adjacent_list_context(content, lines, line_index) {
         return None;
     }
     Some(marker)
@@ -255,51 +234,7 @@ fn has_adjacent_list_context(content: &str, lines: &[LogicalLine], line_index: u
     false
 }
 
-fn parent_marker<'a>(
-    content: &'a str,
-    lines: &[LogicalLine],
-    line_index: usize,
-    marker: ListMarker<'a>,
-) -> Option<ListMarker<'a>> {
-    let target = marker.indentation_columns();
-    (0..line_index).rev().find_map(|index| {
-        let candidate = marker_at(content, lines, index)?;
-        let line = lines[index];
-        let text = &content[line.start..line.content_end];
-        (candidate.content_column(text) == target).then_some(candidate)
-    })
-}
-
-fn previous_at_same_level<'a>(
-    content: &'a str,
-    lines: &[LogicalLine],
-    line_index: usize,
-    marker: ListMarker<'a>,
-) -> Option<(ListMarker<'a>, &'a str)> {
-    let target = marker.indentation_columns();
-    (0..line_index).rev().find_map(|index| {
-        let candidate = marker_at(content, lines, index)?;
-        let line = lines[index];
-        let text = &content[line.start..line.content_end];
-        (candidate.indentation_columns() == target).then_some((candidate, text))
-    })
-}
-
-fn indentation_for(
-    content: &str,
-    lines: &[LogicalLine],
-    line_index: usize,
-    marker: ListMarker<'_>,
-    width: u8,
-) -> String {
-    if let Some((parent, line)) = previous_at_same_level(content, lines, line_index, marker) {
-        let columns = parent
-            .content_column(line)
-            .saturating_sub(marker.indentation_columns());
-        if columns > 0 {
-            return " ".repeat(columns);
-        }
-    }
+fn indentation_unit(marker: ListMarker<'_>, width: u8) -> String {
     if marker.indentation.contains('\t') {
         "\t".to_owned()
     } else {
@@ -309,20 +244,12 @@ fn indentation_for(
 
 fn outdent_range(
     content: &str,
-    lines: &[LogicalLine],
-    line_index: usize,
+    line: LogicalLine,
     marker: ListMarker<'_>,
     width: u8,
 ) -> Option<Range<usize>> {
-    let line = lines[line_index];
     let indentation_start = line.start;
     let indentation_end = line.start + marker.indentation.len();
-    if let Some(parent) = parent_marker(content, lines, line_index, marker)
-        && marker.indentation.starts_with(parent.indentation)
-    {
-        let start = indentation_start + parent.indentation.len();
-        return (start < indentation_end).then_some(start..indentation_end);
-    }
     whitespace_suffix_range(content, indentation_start, indentation_end, width)
 }
 
@@ -347,7 +274,7 @@ fn whitespace_suffix_range(
         && prefix[prefix.len() - spaces..]
             .bytes()
             .all(|byte| byte == b' '))
-    .then_some(end - spaces..end)
+    .then(|| end - spaces..end)
 }
 
 fn parse_marker(line: &str) -> Option<ListMarker<'_>> {

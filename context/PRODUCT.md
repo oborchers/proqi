@@ -638,10 +638,11 @@ outdents it one level. An empty nested item outdents one level without inserting
 a newline; a later `Enter` at top level exits the list. Multi-line indentation
 addresses every selected logical line except a following line touched only by a
 column-zero endpoint. Each intention is one editor undo step and one persistent
-revision. New indentation aligns with the preceding parent item's content when
-that relationship is recognized, preserves existing tabs, and otherwise uses
-the configurable `list_indent_width`, which defaults to two spaces for narrow
-panes. Ordered markers elsewhere are never cascade-renumbered. Outside supported
+revision. Every nesting level uses the configurable `list_indent_width`, which
+defaults to two spaces for narrow panes, regardless of a list marker's display
+width. Existing tab-indented lists add and remove one tab per level without
+rewriting their prefix bytes. Ordered markers elsewhere are never
+cascade-renumbered. Outside supported
 list context, `Tab` inserts the configured spaces exactly and `Shift+Tab` leaves
 ordinary text unchanged. The palette exposes indent and outdent actions for
 keyboard and mouse use without modifier forwarding. With `smart_lists = false`,

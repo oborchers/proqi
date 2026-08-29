@@ -2,6 +2,8 @@
 
 use crate::{
     application::Effect,
+    domain::{TextPosition, ThoughtId},
+    ports::editor::{EditCommand, TextSelection},
     ports::environment::{Clock, IdGenerator},
 };
 
@@ -92,16 +94,22 @@ pub(super) struct PaletteState {
     scroll: usize,
     submit_supported: bool,
     plain_newline_supported: bool,
+    selection_handoff: Option<EditorSelectionHandoff>,
 }
 
 impl PaletteState {
-    fn new(submit_supported: bool, plain_newline_supported: bool) -> Self {
+    fn new(
+        submit_supported: bool,
+        plain_newline_supported: bool,
+        selection_handoff: Option<EditorSelectionHandoff>,
+    ) -> Self {
         Self {
             query: QueryEditor::default(),
             selected: 0,
             scroll: 0,
             submit_supported,
             plain_newline_supported,
+            selection_handoff,
         }
     }
 
@@ -150,6 +158,13 @@ impl PaletteState {
     }
 }
 
+pub(super) struct EditorSelectionHandoff {
+    thought_id: ThoughtId,
+    content: String,
+    selection: TextSelection,
+    cursor: TextPosition,
+}
+
 impl BoardApp {
     pub(super) fn open_palette(&mut self) {
         self.deactivate_range_latch();
@@ -158,7 +173,47 @@ impl BoardApp {
         self.palette = Some(PaletteState::new(
             self.supports_submission(),
             !self.insertion_focused() && self.state.focused_thought.is_some(),
+            self.palette_selection_handoff.take(),
         ));
+    }
+
+    pub(super) fn capture_palette_selection_handoff(&mut self) {
+        self.palette_selection_handoff = self.editor_snapshot().and_then(|snapshot| {
+            Some(EditorSelectionHandoff {
+                thought_id: self.active_thought_id()?,
+                content: snapshot.content,
+                selection: snapshot.selection?,
+                cursor: snapshot.cursor,
+            })
+        });
+    }
+
+    pub(super) fn invalidate_palette_selection_handoff(&mut self, input: &UiInput) {
+        let preserves = match input {
+            UiInput::Resize { .. } | UiInput::HostFocusGained => true,
+            UiInput::Pointer(pointer) if matches!(pointer.kind, crate::ui::PointerKind::Move) => {
+                true
+            }
+            UiInput::Key(UiKey::Character(character)) => {
+                self.settings.keybindings.command(*character)
+                    == Some(crate::ui::settings::BoardCommand::Commands)
+            }
+            UiInput::Pointer(pointer)
+                if matches!(
+                    pointer.kind,
+                    crate::ui::PointerKind::Down(crate::ui::PointerButton::Left)
+                ) =>
+            {
+                self.hit(*pointer) == Some(crate::ui::HitTarget::Commands)
+            }
+            UiInput::Key(_)
+            | UiInput::Pointer(_)
+            | UiInput::Paste(_)
+            | UiInput::PasteAnnotated(_) => false,
+        };
+        if !preserves {
+            self.palette_selection_handoff = None;
+        }
     }
 
     pub(super) fn close_overlay(&mut self) {
@@ -180,9 +235,13 @@ impl BoardApp {
             .as_ref()
             .and_then(|palette| palette.matches().get(index).copied())
             .map(|(command, _)| command);
+        let selection_handoff = self
+            .palette
+            .as_mut()
+            .and_then(|palette| palette.selection_handoff.take());
         self.palette = None;
         command.map_or_else(Vec::new, |command| {
-            self.execute_command(command, ids, clock)
+            self.execute_command(command, selection_handoff, ids, clock)
         })
     }
 
@@ -291,6 +350,7 @@ impl BoardApp {
     fn execute_command(
         &mut self,
         command: Command,
+        selection_handoff: Option<EditorSelectionHandoff>,
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
@@ -324,6 +384,7 @@ impl BoardApp {
                 ) {
                     self.enter_edit();
                 }
+                self.restore_palette_selection_handoff(selection_handoff);
                 self.apply_indentation(command == Command::Outdent, ids, clock)
             }
             Command::Delete => self.delete(ids, clock),
@@ -372,5 +433,38 @@ impl BoardApp {
                 Vec::new()
             }
         }
+    }
+
+    fn restore_palette_selection_handoff(&mut self, handoff: Option<EditorSelectionHandoff>) {
+        let Some(handoff) = handoff else {
+            return;
+        };
+        let valid = matches!(
+            self.state.mode,
+            crate::application::InteractionMode::Edit { thought_id }
+                if thought_id == handoff.thought_id
+        ) && self
+            .state
+            .board
+            .thought(handoff.thought_id)
+            .is_some_and(|thought| thought.content == handoff.content);
+        if !valid {
+            return;
+        }
+        let anchor = if handoff.cursor == handoff.selection.start {
+            handoff.selection.end
+        } else if handoff.cursor == handoff.selection.end {
+            handoff.selection.start
+        } else {
+            return;
+        };
+        self.apply_edit(EditCommand::SetCursor {
+            position: anchor,
+            extend_selection: false,
+        });
+        self.apply_edit(EditCommand::SetCursor {
+            position: handoff.cursor,
+            extend_selection: true,
+        });
     }
 }

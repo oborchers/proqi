@@ -335,6 +335,7 @@ impl BoardApp {
     ) -> Vec<Effect> {
         self.edit_boundary = None;
         let thought_id = self.active_thought_id();
+        self.capture_palette_selection_handoff();
         let effects = self.flush_pending_edit(ids, clock);
         if let Some(thought_id) = thought_id {
             self.clear_expanded_folds(thought_id);
