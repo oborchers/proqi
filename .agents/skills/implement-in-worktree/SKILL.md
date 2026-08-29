@@ -64,17 +64,21 @@ The brief must contain:
   and useful upstream or open-source implementations;
 - permission to use read-only research subagents when valuable, while keeping a
   single implementation owner and avoiding overlapping edits;
-- focused and canonical test expectations, snapshot review, real Herdr/API/PTY
-  or visual verification when relevant, and the prohibition against weakening
-  gates;
+- focused and canonical test expectations, snapshot review, and the mandatory
+  live Herdr stress checkpoint below, including real API, PTY, or visual paths
+  that the feature exposes, plus the prohibition against weakening gates;
 - permission boundaries for credentials and external actions: use only supplied
   credentials, never copy secrets into prompts, files, logs, commits, PRs, or
   comments, and use the user's configured Git/GitHub identity;
 - the pull-request and structured-handoff requirements below.
 
-Submit the brief through `herdr agent prompt ... --wait`. Inspect `agent get`
-and `agent read` whenever Herdr reports `blocked`, `unknown`, a timeout, or a
-stalled prompt. Do not blindly resend a prompt.
+Submit the brief through `herdr agent prompt ...` without `--wait`. Dispatching
+must return after Herdr accepts the prompt so independent lanes can start in
+parallel; a long-running goal must not turn prompt submission into a timeout.
+Use `agent get`, `agent read`, and a separate `agent wait` only for deliberate
+monitoring after every intended lane has been dispatched. Inspect the agent
+before responding to `blocked`, `unknown`, a monitoring timeout, or a stalled
+prompt. Do not blindly resend a prompt.
 
 ## Exploration checkpoint
 
@@ -114,6 +118,54 @@ blocked transition, keep the goal active and still report immediately.
 - When the feature integrates with Herdr or a harness, exercise the real
   structured API and relevant UI/PTY behavior in the worker's Herdr workspace.
   A mock-only result is insufficient when live qualification is feasible.
+- Treat `herdr pane send-text` as literal text injection, not as a terminal key
+  event transport. Do not use it to qualify escape sequences, modifier chords,
+  BackTab, bracketed paste framing, or another exact terminal protocol. When
+  `pane send-keys` does not expose the required key distinctly, drive the exact
+  bytes through a real PTY tool such as Expect inside the disposable pane.
+- A successful pane send proves only that Herdr enqueued the input. Likewise,
+  `pane wait-output` searches immediately and may match text that was already
+  present. Prove each live step with a unique new screen postcondition, terminal
+  transcript event, durable revision, or external-state inspection; a generic
+  label such as `saved`, `ready`, or `complete` is not transition evidence.
+- Define the live oracle before combining stress dimensions. Seed fixtures
+  through a stable CLI or API when fixture creation is not the behavior under
+  test, exercise one invariant first, and inspect its exact durable result before
+  adding load, resize, repetition, Unicode, or another neighboring state. A
+  compound script whose timeout could mean transport, setup, rendering,
+  persistence, eligibility, or teardown is not useful completion evidence.
+- Derive changed and deliberately unchanged cases from the feature contract.
+  Keep supported actions separate from conservative no-ops so a correct refusal
+  is not misdiagnosed as dropped input. Increase content size and repetition
+  only after the minimal case proves the same path with an unambiguous oracle.
+- When a PTY driver echoes child terminal traffic into a Herdr pane, terminal
+  capability queries can elicit replies that remain buffered as later shell
+  input. Keep child terminal traffic contained (for example, Expect
+  `log_user 0`), emit only explicit text sentinels, and verify the pane is back
+  at an uncontaminated shell before reusing it.
+- Before handoff, run the implemented feature from the exact topic-branch build
+  in a disposable live pane inside the assigned Herdr workspace and actively try
+  to break it. This is a completion gate, not an optional walkthrough or a
+  substitute for automated tests.
+- Derive an adversarial matrix from the feature's actual risks. At minimum,
+  exercise applicable boundary and empty inputs, unusually large content or
+  collections, overflow and narrow/shallow layouts, Unicode and control-heavy
+  text, rapid or repeated input, repeated activation/deactivation, cancellation,
+  resize/reflow, and restart or recovery. Repeat idempotent actions enough to
+  prove that they converge on the same result without duplicate durable writes,
+  deliveries, receipts, or resources. For a nonvisual feature, drive the real
+  command, API, persistence, or integration path from that live pane rather than
+  inventing a cosmetic TUI scenario.
+- Exercise meaningful combinations with neighboring state such as editing,
+  selection, collapse, scrolling, pending persistence, failure, retry, and undo
+  when the ticket can interact with them. Use both keyboard and mouse paths when
+  the behavior has both. Do not use private user content or perform an
+  irreversible external action merely to manufacture stress evidence.
+- Treat every failure found during the stress pass as implementation work:
+  reproduce it with a focused automated regression where practical, fix it, and
+  rerun the relevant stress case and canonical gate. An unresolved defect means
+  the lane is blocked or incomplete and must be reported; it cannot be hidden as
+  a residual risk while declaring the goal complete.
 - Record every temporary test tab and pane as it is created. Close those
   disposable resources before handoff, remove only test state created by the
   worker, and report the live scenarios exercised plus any resource that could
@@ -144,7 +196,9 @@ pane containing:
 
 - pull-request URL, branch, base and head SHAs, and worktree/workspace IDs;
 - implementation summary and important design decisions;
-- focused, canonical, live, and manual verification performed;
+- focused and canonical verification plus a concrete stress-test matrix listing
+  the live inputs, repetitions, boundary conditions, state combinations, and
+  observed results; never summarize this only as "manual testing passed";
 - CI status and any residual risks or intentionally deferred work;
 - exact cleanup identifiers.
 

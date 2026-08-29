@@ -10,9 +10,9 @@ use crate::{
 };
 
 use super::{BoardApp, PointerButton, PointerInput, PointerKind};
-use crate::ui::HitTarget;
+use crate::ui::{HitTarget, projection::BoardCellTarget};
 
-const MULTI_CLICK_MILLIS: i64 = 500;
+pub(super) const MULTI_CLICK_MILLIS: i64 = 500;
 
 #[derive(Clone, Copy)]
 pub(super) struct PointerClick {
@@ -62,6 +62,14 @@ impl BoardApp {
         clock: &impl Clock,
     ) -> Vec<Effect> {
         self.edit_boundary = None;
+        if self.submission_mode.is_some() {
+            return self.handle_submission_pointer(pointer, ids, clock);
+        }
+        if matches!(pointer.kind, PointerKind::Down(PointerButton::Left))
+            && self.consume_repeated_overlay_activation(pointer, clock.now())
+        {
+            return Vec::new();
+        }
         let mut effects = match pointer.kind {
             PointerKind::Down(_) | PointerKind::Drag(_) | PointerKind::Up(_) => {
                 self.flush_pending_edit(ids, clock)
@@ -86,6 +94,26 @@ impl BoardApp {
         effects
     }
 
+    fn handle_submission_pointer(
+        &mut self,
+        pointer: PointerInput,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        let target = self.hit(pointer);
+        if matches!(pointer.kind, PointerKind::Move) {
+            self.hovered = target;
+            return Vec::new();
+        }
+        let Some(HitTarget::Deliver(direction, disposition)) = target else {
+            return Vec::new();
+        };
+        if !matches!(pointer.kind, PointerKind::Down(PointerButton::Left)) {
+            return Vec::new();
+        }
+        self.deliver_to(direction, disposition, ids, clock)
+    }
+
     fn pointer_down(
         &mut self,
         pointer: PointerInput,
@@ -99,17 +127,21 @@ impl BoardApp {
         }
         match target {
             Some(HitTarget::Thought(thought_id)) => {
-                self.handle_thought_pointer(thought_id, pointer, clock.now())
+                self.handle_thought_pointer(thought_id, pointer, ids, clock)
             }
             Some(HitTarget::DragHandle(thought_id)) => {
+                let expand = self.activation_needs_expansion(thought_id);
                 self.focus(thought_id);
+                if expand {
+                    return self.expand_thought(thought_id, ids, clock);
+                }
                 self.dragged_thought = Some(thought_id);
                 self.drag_target = self.position_at(pointer.row);
                 Vec::new()
             }
             Some(HitTarget::Overflow(thought_id)) => {
                 self.focus(thought_id);
-                self.collapse(ids, clock)
+                self.expand_thought(thought_id, ids, clock)
             }
             Some(HitTarget::Insert) => {
                 self.create(crate::ui::PastePayload::text(String::new()), ids, clock)
@@ -149,7 +181,9 @@ impl BoardApp {
             Some(HitTarget::ExitEdit) => self.finish_edit(ids, clock),
             Some(HitTarget::Retry) => self.retry_persistence(),
             Some(HitTarget::ExportRecovery) => self.export_recovery(ids, clock),
-            Some(HitTarget::PaletteItem(index)) => self.activate_palette_item(index, ids, clock),
+            Some(HitTarget::PaletteItem(index)) => {
+                self.activate_palette_item(index, pointer, ids, clock)
+            }
             Some(HitTarget::CloseOverlay) => {
                 self.close_overlay();
                 Vec::new()
@@ -164,9 +198,11 @@ impl BoardApp {
     fn activate_palette_item(
         &mut self,
         index: usize,
+        pointer: PointerInput,
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
+        self.begin_overlay_activation(pointer, clock.now());
         if self.search.is_some() {
             self.execute_search_visible_index(index)
         } else if self.transfer.is_some() {
@@ -182,7 +218,8 @@ impl BoardApp {
         &mut self,
         thought_id: ThoughtId,
         pointer: PointerInput,
-        now: Timestamp,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
     ) -> Vec<Effect> {
         if matches!(self.state.mode, InteractionMode::Board)
             && (pointer.extend_selection || self.range_latched())
@@ -191,8 +228,8 @@ impl BoardApp {
             self.extend_range_to(thought_id);
             return Vec::new();
         }
-        let click_count = self.register_text_click(thought_id, pointer, now);
-        self.focus_and_place_cursor(thought_id, pointer, click_count)
+        let click_count = self.register_text_click(thought_id, pointer, clock.now());
+        self.focus_and_place_cursor(thought_id, pointer, click_count, ids, clock)
     }
 
     fn pointer_drag(&mut self, pointer: PointerInput) -> Vec<Effect> {
@@ -234,17 +271,51 @@ impl BoardApp {
         thought_id: crate::domain::ThoughtId,
         pointer: PointerInput,
         click_count: u8,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
     ) -> Vec<Effect> {
-        let cell = self.editor_cell(thought_id, pointer);
-        self.focus(thought_id);
-        self.enter_edit();
-        let Some((row, column)) = cell else {
-            return Vec::new();
-        };
-        if self.select_fold_at_cell(thought_id, row, column) {
+        if matches!(self.state.mode, InteractionMode::Edit { thought_id: active } if active == thought_id)
+        {
+            let cell = self.editor_cell(thought_id, pointer);
+            self.focus(thought_id);
+            self.enter_edit();
+            let Some((row, column)) = cell else {
+                return Vec::new();
+            };
+            if self.select_fold_at_cell(thought_id, row, column) {
+                return Vec::new();
+            }
+            let position = self.projected_position_at_cell(row, column);
+            self.apply_pointer_start(position, pointer, click_count);
             return Vec::new();
         }
-        let position = self.projected_position_at_cell(row, column);
+        let target = self.board_cell_target(thought_id, pointer);
+        self.focus(thought_id);
+        let effects = self.expand_and_enter_edit(ids, clock);
+        let Some(target) = target else {
+            return effects;
+        };
+        if let BoardCellTarget::Fold {
+            canonical_start,
+            canonical_end,
+        } = target
+        {
+            self.set_editor_range(canonical_start, canonical_end);
+            return effects;
+        }
+        let BoardCellTarget::Position(position) = target else {
+            return effects;
+        };
+        self.apply_pointer_start(position, pointer, click_count);
+        effects
+    }
+
+    fn apply_pointer_start(
+        &mut self,
+        position: crate::domain::TextPosition,
+        pointer: PointerInput,
+        click_count: u8,
+    ) {
         let granularity = match click_count {
             2 => SelectionGranularity::Word,
             3 => SelectionGranularity::LogicalLine,
@@ -255,7 +326,27 @@ impl BoardApp {
             granularity,
             extend_selection: pointer.extend_selection,
         });
-        Vec::new()
+    }
+
+    fn board_cell_target(
+        &self,
+        thought_id: crate::domain::ThoughtId,
+        pointer: PointerInput,
+    ) -> Option<BoardCellTarget> {
+        let layout = self.layout.as_ref()?.thought(thought_id)?;
+        let thought = self.state.board.thought(thought_id)?;
+        let presentation = self.presentation_for_render(thought_id)?;
+        let row = layout
+            .content_row_offset
+            .saturating_add(usize::from(pointer.row.saturating_sub(layout.text_area.y)));
+        let column = pointer.column.saturating_sub(layout.text_area.x);
+        crate::ui::projection::board_cell_target(
+            &thought.content,
+            &presentation,
+            layout.text_area.width,
+            row,
+            column,
+        )
     }
 
     fn register_text_click(
@@ -297,71 +388,30 @@ impl BoardApp {
             editor.scroll_by(delta);
             return Vec::new();
         }
-        let maximum = self
-            .layout
-            .as_ref()
-            .map_or(0, |layout| layout.max_first_index);
-        if delta > 0 {
-            let can_scroll_current = self
-                .layout
-                .as_ref()
-                .and_then(|layout| layout.thoughts.first())
-                .is_some_and(|thought| thought.scrollable_hidden);
-            if can_scroll_current {
-                self.first_visible_row += 1;
-            } else if self.first_visible < maximum {
-                self.first_visible += 1;
-                self.first_visible_row = 0;
-            } else {
-                return Vec::new();
-            }
-        } else if self.first_visible_row > 0 {
-            self.first_visible_row -= 1;
-        } else if self.first_visible > 0 {
-            self.first_visible -= 1;
-            self.first_visible_row = if self
-                .state
-                .board
-                .live_thoughts()
-                .get(self.first_visible)
-                .is_some_and(|thought| {
-                    thought.presentation != crate::domain::ThoughtPresentation::Collapsed
-                }) {
-                self.first_thought_row_count().saturating_sub(1)
-            } else {
-                0
-            };
-        } else {
+        if self.layout.is_none() {
             return Vec::new();
         }
-        self.manual_board_scroll = true;
+        let anchor = self.scroll_geometry.and_then(|geometry| {
+            if delta > 0 {
+                geometry.next
+            } else {
+                geometry.previous
+            }
+        });
+        let Some(anchor) = anchor else {
+            return Vec::new();
+        };
+        self.board_viewport = crate::ui::layout::scroll::BoardViewport::Manual(anchor);
+        self.scroll_geometry = None;
         self.layout = None;
         Vec::new()
-    }
-
-    fn first_thought_row_count(&self) -> usize {
-        let Some(thought) = self
-            .state
-            .board
-            .live_thoughts()
-            .get(self.first_visible)
-            .copied()
-        else {
-            return 1;
-        };
-        let content = self
-            .presentation_for_render(thought.id)
-            .map_or_else(|| thought.content.clone(), |view| view.content);
-        crate::ports::text_layout::wrap_rows(&content, usize::from(self.viewport.width.max(1)))
-            .len()
-            .max(1)
     }
 
     fn focus(&mut self, thought_id: crate::domain::ThoughtId) {
         self.clear_range_for_focus_change();
         self.insertion_focus = super::InsertionFocus::Inactive;
-        self.manual_board_scroll = false;
-        self.first_visible_row = 0;
+        self.board_viewport = self.board_viewport.follow_focus();
+        self.scroll_geometry = None;
         let _effects = self.reduce(Action::FocusThought(Some(thought_id)));
     }
 
@@ -403,7 +453,7 @@ impl BoardApp {
         ))
     }
 
-    fn hit(&self, pointer: PointerInput) -> Option<HitTarget> {
+    pub(super) fn hit(&self, pointer: PointerInput) -> Option<HitTarget> {
         self.layout
             .as_ref()
             .and_then(|layout| layout.hit_test(pointer.column, pointer.row))

@@ -22,7 +22,7 @@ pub(super) fn render_help(
     overlay: &OverlayLayout,
     theme: &Theme,
 ) {
-    frame.render_widget(Clear, overlay.area);
+    clear_overlay(frame, overlay.area);
     frame.render_widget(
         Paragraph::new(help_lines(
             app,
@@ -53,7 +53,7 @@ pub(super) fn render_picker(
     picker: PickerView<'_>,
     theme: &Theme,
 ) {
-    frame.render_widget(Clear, overlay.area);
+    clear_overlay(frame, overlay.area);
     frame.render_widget(
         Block::default()
             .title(picker.title)
@@ -94,7 +94,7 @@ pub(super) fn render_update(
     selected: usize,
     theme: &Theme,
 ) {
-    frame.render_widget(Clear, overlay.area);
+    clear_overlay(frame, overlay.area);
     frame.render_widget(
         Block::default()
             .title(Span::styled(
@@ -129,7 +129,7 @@ pub(super) fn render_text_prompt(
     value: &str,
     theme: &Theme,
 ) {
-    frame.render_widget(Clear, overlay.area);
+    clear_overlay(frame, overlay.area);
     frame.render_widget(
         Block::default()
             .title(title)
@@ -149,6 +149,26 @@ pub(super) fn render_text_prompt(
         .saturating_add(u16::try_from(value.width()).unwrap_or(u16::MAX))
         .min(overlay.area.right().saturating_sub(2));
     frame.set_cursor_position((x, overlay.area.y.saturating_add(1)));
+}
+
+fn clear_overlay(frame: &mut Frame<'_>, area: ratatui_core::layout::Rect) {
+    frame.render_widget(Clear, overlay_clear_area(frame.area(), area));
+}
+
+fn overlay_clear_area(
+    viewport: ratatui_core::layout::Rect,
+    area: ratatui_core::layout::Rect,
+) -> ratatui_core::layout::Rect {
+    let left = area.x.saturating_sub(1).max(viewport.x);
+    let right = area.right().saturating_add(1).min(viewport.right());
+    let top = area.y.max(viewport.y);
+    let bottom = area.bottom().min(viewport.bottom());
+    ratatui_core::layout::Rect::new(
+        left,
+        top,
+        right.saturating_sub(left),
+        bottom.saturating_sub(top),
+    )
 }
 
 fn input_area(overlay: &OverlayLayout) -> ratatui_core::layout::Rect {
@@ -288,7 +308,8 @@ fn shortcut_row(
 
 #[cfg(test)]
 mod tests {
-    use super::{PickerRow, picker_row};
+    use super::{PickerRow, overlay_clear_area, picker_row};
+    use ratatui_core::layout::Rect;
     use unicode_width::UnicodeWidthStr as _;
 
     #[test]
@@ -313,5 +334,18 @@ mod tests {
 
         assert_eq!(rendered, "$界…");
         assert!(rendered.width() <= 5);
+    }
+
+    #[test]
+    fn overlay_clear_halo_clamps_to_the_viewport() {
+        let viewport = Rect::new(4, 2, 20, 8);
+        assert_eq!(
+            overlay_clear_area(viewport, Rect::new(8, 3, 10, 4)),
+            Rect::new(7, 3, 12, 4)
+        );
+        assert_eq!(
+            overlay_clear_area(viewport, Rect::new(4, 2, 20, 8)),
+            viewport
+        );
     }
 }

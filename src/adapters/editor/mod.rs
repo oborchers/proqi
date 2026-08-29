@@ -12,7 +12,7 @@ use ropey::Rope;
 use crate::domain::TextPosition;
 use crate::ports::editor::{
     CellRange, CursorMovement, EditCommand, EditOutcome, Editor, EditorFactory, EditorSnapshot,
-    TextChangeSet, TextSelection, TextViewport,
+    FAST_NAVIGATION_ROWS, TextChangeSet, TextSelection, TextViewport,
 };
 use crate::ports::text_layout::{
     WrappedRow, byte_at_cell, byte_for_position, cell_column_at_byte, logical_lines,
@@ -137,27 +137,34 @@ impl RopeEditor {
             CursorMovement::DocumentEnd => content.len(),
             CursorMovement::VisualUp => self.vertical_target(-1),
             CursorMovement::VisualDown => self.vertical_target(1),
+            CursorMovement::VisualJumpUp => {
+                self.vertical_target(-FAST_NAVIGATION_ROWS.cast_signed())
+            }
+            CursorMovement::VisualJumpDown => {
+                self.vertical_target(FAST_NAVIGATION_ROWS.cast_signed())
+            }
         };
         if !matches!(
             movement,
-            CursorMovement::VisualUp | CursorMovement::VisualDown
+            CursorMovement::VisualUp
+                | CursorMovement::VisualDown
+                | CursorMovement::VisualJumpUp
+                | CursorMovement::VisualJumpDown
         ) {
             self.preferred_column = None;
         }
         self.set_cursor_byte(target, extend_selection);
     }
 
-    fn vertical_target(&mut self, direction: i8) -> usize {
+    fn vertical_target(&mut self, rows: isize) -> usize {
         let wrapped = self.wrapped_lines();
         let current_index = wrapped_row_index(&wrapped, self.state.cursor_byte);
         let current = &wrapped[current_index];
         let current_column = cell_column_at_byte(&self.content(), current, self.state.cursor_byte);
         let preferred = *self.preferred_column.get_or_insert(current_column);
-        let target_index = if direction < 0 {
-            current_index.saturating_sub(1)
-        } else {
-            (current_index + 1).min(wrapped.len().saturating_sub(1))
-        };
+        let target_index = current_index
+            .saturating_add_signed(rows)
+            .min(wrapped.len().saturating_sub(1));
         byte_at_cell(&self.content(), &wrapped[target_index], preferred)
     }
 
@@ -200,7 +207,15 @@ impl Editor for RopeEditor {
             EditCommand::InsertNewline => {
                 self.mutate(|editor| editor.replace_selection_or_insert("\n"))
             }
-            EditCommand::InsertSmartNewline => self.mutate(Self::insert_smart_newline),
+            EditCommand::InsertSmartNewline { indent_width } => {
+                self.mutate(|editor| editor.insert_smart_newline(indent_width))
+            }
+            EditCommand::Indent { width, smart_lists } => {
+                self.mutate_many(|editor| editor.indent(width, smart_lists))
+            }
+            EditCommand::Outdent { width, smart_lists } => {
+                self.mutate_many(|editor| editor.outdent(width, smart_lists))
+            }
             EditCommand::DeleteBack => self.mutate(Self::delete_back),
             EditCommand::DeleteForward => self.mutate(Self::delete_forward),
             EditCommand::DeleteLogicalLine => self.mutate(Self::delete_logical_line),
@@ -214,6 +229,7 @@ impl Editor for RopeEditor {
             }
             EditCommand::SelectAll => {
                 self.pointer_selection = None;
+                self.preferred_column = None;
                 self.state.selection_anchor_byte = Some(0);
                 self.state.cursor_byte = self.state.text.len_bytes();
                 self.ensure_cursor_visible();
@@ -221,6 +237,7 @@ impl Editor for RopeEditor {
             }
             EditCommand::ClearSelection => {
                 self.pointer_selection = None;
+                self.preferred_column = None;
                 self.state.selection_anchor_byte = None;
                 TextChangeSet::unchanged(self.state.text.len_bytes())
             }
@@ -229,6 +246,7 @@ impl Editor for RopeEditor {
                 extend_selection,
             } => {
                 self.pointer_selection = None;
+                self.preferred_column = None;
                 let byte = byte_for_position(&self.content(), position);
                 self.set_cursor_byte(byte, extend_selection);
                 TextChangeSet::unchanged(self.state.text.len_bytes())
@@ -238,6 +256,7 @@ impl Editor for RopeEditor {
                 granularity,
                 extend_selection,
             } => {
+                self.preferred_column = None;
                 self.begin_pointer_selection(position, granularity, extend_selection);
                 TextChangeSet::unchanged(self.state.text.len_bytes())
             }

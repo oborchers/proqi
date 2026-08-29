@@ -11,19 +11,19 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crossterm::event::{
-    self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent,
-    MouseEventKind,
-};
+use crossterm::event::{self, Event, KeyEventKind};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 
-use crate::ports::editor::CursorMovement;
-use crate::ui::{PointerButton, PointerInput, PointerKind, UiInput, UiKey};
+use crate::ui::UiInput;
 
 use super::{
     TerminalError,
     supervisor::{ShutdownDeadline, join_before},
 };
+
+use translation::{translate, translate_key};
+
+mod translation;
 
 #[derive(Debug, Eq, PartialEq)]
 pub(super) enum InputFailure {
@@ -333,144 +333,6 @@ fn send_lossless(
         }
     }
     false
-}
-
-fn translate(event: Event) -> Option<UiInput> {
-    match event {
-        Event::Key(key) if matches!(key.kind, KeyEventKind::Press | KeyEventKind::Repeat) => {
-            translate_key(key).map(UiInput::Key)
-        }
-        Event::Paste(content) => Some(
-            super::path_import::annotate_existing_files(&content)
-                .map_or_else(|| UiInput::Paste(content), UiInput::PasteAnnotated),
-        ),
-        Event::Resize(width, height) => Some(UiInput::Resize { width, height }),
-        Event::Mouse(mouse) => translate_mouse(mouse).map(UiInput::Pointer),
-        Event::FocusGained => Some(UiInput::HostFocusGained),
-        Event::FocusLost | Event::Key(_) => None,
-    }
-}
-
-fn translate_mouse(mouse: MouseEvent) -> Option<PointerInput> {
-    let kind = match mouse.kind {
-        MouseEventKind::Down(button) => PointerKind::Down(pointer_button(button)),
-        MouseEventKind::Up(button) => PointerKind::Up(pointer_button(button)),
-        MouseEventKind::Drag(button) => PointerKind::Drag(pointer_button(button)),
-        MouseEventKind::Moved => PointerKind::Move,
-        MouseEventKind::ScrollUp => PointerKind::ScrollUp,
-        MouseEventKind::ScrollDown => PointerKind::ScrollDown,
-        MouseEventKind::ScrollLeft | MouseEventKind::ScrollRight => return None,
-    };
-    Some(PointerInput {
-        column: mouse.column,
-        row: mouse.row,
-        kind,
-        extend_selection: mouse.modifiers.contains(KeyModifiers::SHIFT),
-    })
-}
-
-const fn pointer_button(button: MouseButton) -> PointerButton {
-    match button {
-        MouseButton::Left => PointerButton::Left,
-        MouseButton::Middle => PointerButton::Middle,
-        MouseButton::Right => PointerButton::Right,
-    }
-}
-
-fn translate_key(key: KeyEvent) -> Option<UiKey> {
-    let primary = key
-        .modifiers
-        .intersects(KeyModifiers::CONTROL | KeyModifiers::SUPER | KeyModifiers::META);
-    if primary {
-        let command = match key.code {
-            KeyCode::Char('a') => Some(UiKey::SelectAll),
-            KeyCode::Char('c') => Some(UiKey::Copy),
-            KeyCode::Char('x') => Some(UiKey::Cut),
-            KeyCode::Char('v') => Some(UiKey::PasteClipboard),
-            KeyCode::Char('d') => Some(UiKey::Duplicate),
-            KeyCode::Char('q') => Some(UiKey::Quit),
-            KeyCode::Char('u') => Some(UiKey::DeleteLine),
-            KeyCode::Char('z') if key.modifiers.contains(KeyModifiers::SHIFT) => Some(UiKey::Redo),
-            KeyCode::Char('z') => Some(UiKey::Undo),
-            KeyCode::Char('y') => Some(UiKey::Redo),
-            KeyCode::Char('p') => Some(UiKey::PickerPrevious),
-            KeyCode::Char('n') => Some(UiKey::PickerNext),
-            _ => None,
-        };
-        if command.is_some() {
-            return command;
-        }
-        if let KeyCode::Char(character) = key.code {
-            return Some(UiKey::PrimaryCharacter(character));
-        }
-    }
-    let extend_selection = key.modifiers.contains(KeyModifiers::SHIFT);
-    let word = key
-        .modifiers
-        .intersects(KeyModifiers::ALT | KeyModifiers::CONTROL);
-    let document = key
-        .modifiers
-        .intersects(KeyModifiers::SUPER | KeyModifiers::META);
-    match key.code {
-        KeyCode::Char(character) => Some(UiKey::Character(character)),
-        KeyCode::Enter => Some(UiKey::Enter),
-        KeyCode::Tab | KeyCode::BackTab => Some(UiKey::Tab),
-        KeyCode::Esc => Some(UiKey::Escape),
-        KeyCode::Backspace => Some(UiKey::Backspace),
-        KeyCode::Delete => Some(UiKey::Delete),
-        KeyCode::Up => Some(vertical_key(
-            if document {
-                CursorMovement::DocumentStart
-            } else {
-                CursorMovement::VisualUp
-            },
-            primary,
-            extend_selection,
-        )),
-        KeyCode::Down => Some(vertical_key(
-            if document {
-                CursorMovement::DocumentEnd
-            } else {
-                CursorMovement::VisualDown
-            },
-            primary,
-            extend_selection,
-        )),
-        KeyCode::Left => Some(move_key(
-            if word {
-                CursorMovement::WordBack
-            } else {
-                CursorMovement::GraphemeBack
-            },
-            extend_selection,
-        )),
-        KeyCode::Right => Some(move_key(
-            if word {
-                CursorMovement::WordForward
-            } else {
-                CursorMovement::GraphemeForward
-            },
-            extend_selection,
-        )),
-        KeyCode::Home => Some(move_key(CursorMovement::LineStart, extend_selection)),
-        KeyCode::End => Some(move_key(CursorMovement::LineEnd, extend_selection)),
-        _ => None,
-    }
-}
-
-const fn vertical_key(movement: CursorMovement, primary: bool, extend_selection: bool) -> UiKey {
-    if primary && extend_selection {
-        UiKey::PrimaryShiftMove { movement }
-    } else {
-        move_key(movement, extend_selection)
-    }
-}
-
-const fn move_key(movement: CursorMovement, extend_selection: bool) -> UiKey {
-    UiKey::Move {
-        movement,
-        extend_selection,
-    }
 }
 
 #[cfg(test)]

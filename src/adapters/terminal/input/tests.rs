@@ -131,6 +131,20 @@ fn command_and_meta_shortcuts_share_semantics() {
 }
 
 #[test]
+fn primary_shift_s_remains_an_unassigned_board_chord() {
+    for character in ['s', 'S'] {
+        let event = Event::Key(KeyEvent::new(
+            KeyCode::Char(character),
+            KeyModifiers::SUPER | KeyModifiers::SHIFT,
+        ));
+        assert_eq!(
+            translate(event),
+            Some(UiInput::Key(UiKey::PrimaryCharacter(character)))
+        );
+    }
+}
+
+#[test]
 fn primary_clipboard_shortcuts_do_not_reuse_quit() {
     for (character, expected) in [
         ('c', UiKey::Copy),
@@ -162,6 +176,15 @@ fn invocation_picker_keys_are_normalized_without_literal_editor_input() {
         translate(Event::Key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE))),
         Some(UiInput::Key(UiKey::Tab))
     );
+    for event in [
+        KeyEvent::new(KeyCode::BackTab, KeyModifiers::SHIFT),
+        KeyEvent::new(KeyCode::Tab, KeyModifiers::SHIFT),
+    ] {
+        assert_eq!(
+            translate(Event::Key(event)),
+            Some(UiInput::Key(UiKey::BackTab))
+        );
+    }
 }
 
 #[test]
@@ -265,6 +288,68 @@ fn shift_and_word_navigation_remain_semantic() {
 }
 
 #[test]
+fn unshifted_alt_and_platform_primary_arrows_preserve_both_mode_intentions() {
+    assert_eq!(
+        translate(Event::Key(KeyEvent::new(KeyCode::Up, KeyModifiers::ALT,))),
+        Some(UiInput::Key(UiKey::EditNavigation {
+            editor_movement: CursorMovement::VisualJumpUp,
+            board_movement: CursorMovement::VisualUp,
+        }))
+    );
+    assert_eq!(
+        translate(Event::Key(KeyEvent::new(KeyCode::Down, KeyModifiers::ALT,))),
+        Some(UiInput::Key(UiKey::EditNavigation {
+            editor_movement: CursorMovement::VisualJumpDown,
+            board_movement: CursorMovement::VisualDown,
+        }))
+    );
+
+    let modifier = if cfg!(target_os = "macos") {
+        KeyModifiers::SUPER
+    } else {
+        KeyModifiers::CONTROL
+    };
+    let board_up = if cfg!(target_os = "macos") {
+        CursorMovement::DocumentStart
+    } else {
+        CursorMovement::VisualUp
+    };
+    let board_down = if cfg!(target_os = "macos") {
+        CursorMovement::DocumentEnd
+    } else {
+        CursorMovement::VisualDown
+    };
+    assert_eq!(
+        translate(Event::Key(KeyEvent::new(KeyCode::Up, modifier))),
+        Some(UiInput::Key(UiKey::EditNavigation {
+            editor_movement: CursorMovement::DocumentStart,
+            board_movement: board_up,
+        }))
+    );
+    assert_eq!(
+        translate(Event::Key(KeyEvent::new(KeyCode::Down, modifier))),
+        Some(UiInput::Key(UiKey::EditNavigation {
+            editor_movement: CursorMovement::DocumentEnd,
+            board_movement: board_down,
+        }))
+    );
+}
+
+#[test]
+fn shifted_alt_arrows_keep_the_existing_one_row_selection_intention() {
+    assert_eq!(
+        translate(Event::Key(KeyEvent::new(
+            KeyCode::Down,
+            KeyModifiers::ALT | KeyModifiers::SHIFT,
+        ))),
+        Some(UiInput::Key(UiKey::Move {
+            movement: CursorMovement::VisualDown,
+            extend_selection: true,
+        }))
+    );
+}
+
+#[test]
 fn bracketed_paste_remains_one_exact_input() {
     let content = "Grüße 👩‍💻\n第二行\n".to_owned();
     assert_eq!(
@@ -334,4 +419,28 @@ fn shifted_mouse_input_preserves_selection_extension_intent() {
             extend_selection: true,
         }))
     );
+}
+
+#[test]
+fn each_vertical_wheel_event_remains_one_directional_pointer_intention() {
+    for (mouse, expected) in [
+        (MouseEventKind::ScrollUp, PointerKind::ScrollUp),
+        (MouseEventKind::ScrollDown, PointerKind::ScrollDown),
+    ] {
+        let event = Event::Mouse(MouseEvent {
+            kind: mouse,
+            column: 9,
+            row: 4,
+            modifiers: KeyModifiers::NONE,
+        });
+        assert_eq!(
+            translate(event),
+            Some(UiInput::Pointer(PointerInput {
+                column: 9,
+                row: 4,
+                kind: expected,
+                extend_selection: false,
+            }))
+        );
+    }
 }

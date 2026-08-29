@@ -42,6 +42,17 @@ impl BoardApp {
         true
     }
 
+    pub(super) fn projected_position_at_cell(
+        &self,
+        row: u16,
+        column: u16,
+    ) -> crate::domain::TextPosition {
+        self.editor_presentation()
+            .map_or_else(crate::domain::TextPosition::default, |presentation| {
+                presentation.canonical_position_at_cell(row, column)
+            })
+    }
+
     pub(super) fn select_fold_at_cell(
         &mut self,
         thought_id: ThoughtId,
@@ -59,17 +70,6 @@ impl BoardApp {
         };
         self.set_editor_range(fold.canonical_start, fold.canonical_end);
         true
-    }
-
-    pub(super) fn projected_position_at_cell(
-        &self,
-        row: u16,
-        column: u16,
-    ) -> crate::domain::TextPosition {
-        self.editor_presentation()
-            .map_or_else(crate::domain::TextPosition::default, |presentation| {
-                presentation.canonical_position_at_cell(row, column)
-            })
     }
 
     pub(super) fn normalize_fold_cursor(
@@ -132,18 +132,15 @@ impl BoardApp {
                 !self.expanded_folds.contains(&(thought_id, *index))
                     && range == (annotation.start, annotation.end)
             })
-            .map(|(_, annotation)| {
-                if moves_before(movement) {
-                    boundary_before_fold(&snapshot.content, annotation.start)
-                } else {
-                    annotation.end
-                }
-            });
+            .map(|(_, annotation)| fold_departure_target(&snapshot.content, annotation, movement));
         let Some(target) = target else {
             return false;
         };
         self.set_editor_range(target, target);
-        true
+        !matches!(
+            movement,
+            CursorMovement::VisualJumpUp | CursorMovement::VisualJumpDown
+        )
     }
 
     pub(super) fn delete_adjacent_fold(&mut self, backwards: bool) -> bool {
@@ -185,7 +182,7 @@ impl BoardApp {
         true
     }
 
-    fn set_editor_range(&mut self, start: usize, end: usize) {
+    pub(super) fn set_editor_range(&mut self, start: usize, end: usize) {
         let Some((_, editor)) = &mut self.editor else {
             return;
         };
@@ -221,6 +218,7 @@ fn moves_before(movement: CursorMovement) -> bool {
         CursorMovement::GraphemeBack
             | CursorMovement::WordBack
             | CursorMovement::VisualUp
+            | CursorMovement::VisualJumpUp
             | CursorMovement::LineStart
             | CursorMovement::DocumentStart
     )
@@ -242,9 +240,31 @@ fn moves_after(movement: CursorMovement) -> bool {
         CursorMovement::GraphemeForward
             | CursorMovement::WordForward
             | CursorMovement::VisualDown
+            | CursorMovement::VisualJumpDown
             | CursorMovement::LineEnd
             | CursorMovement::DocumentEnd
     )
+}
+
+fn fold_departure_target(
+    content: &str,
+    annotation: &ContentAnnotation,
+    movement: CursorMovement,
+) -> usize {
+    match movement {
+        CursorMovement::DocumentStart => 0,
+        CursorMovement::DocumentEnd => content.len(),
+        CursorMovement::GraphemeBack
+        | CursorMovement::WordBack
+        | CursorMovement::VisualUp
+        | CursorMovement::VisualJumpUp
+        | CursorMovement::LineStart => boundary_before_fold(content, annotation.start),
+        CursorMovement::GraphemeForward
+        | CursorMovement::WordForward
+        | CursorMovement::VisualDown
+        | CursorMovement::VisualJumpDown
+        | CursorMovement::LineEnd => annotation.end,
+    }
 }
 
 fn adjacent_range(

@@ -1,7 +1,7 @@
 //! Semantic editor coalescing before durable reducer revisions.
 
 use crate::{
-    application::{Action, Effect, reduce},
+    application::{Action, Effect, InteractionMode, reduce},
     domain::{ContentAnnotation, ThoughtId},
     ports::{
         editor::{CursorMovement, EditCommand, EditorSnapshot},
@@ -9,7 +9,7 @@ use crate::{
     },
 };
 
-use super::{BoardApp, UiKey};
+use super::{BoardApp, UiInput, UiKey};
 use crate::ui::annotations;
 
 pub(super) fn command_for_key(key: UiKey, adjacent_fold: bool) -> Option<(EditCommand, bool)> {
@@ -31,6 +31,7 @@ pub(super) fn command_for_key(key: UiKey, adjacent_fold: bool) -> Option<(EditCo
         UiKey::SelectAll => Some((EditCommand::SelectAll, true)),
         UiKey::DeleteLine => Some((EditCommand::DeleteLogicalLine, true)),
         UiKey::Escape
+        | UiKey::EditNavigation { .. }
         | UiKey::PrimaryCharacter(_)
         | UiKey::PrimaryShiftMove { .. }
         | UiKey::Undo
@@ -41,6 +42,7 @@ pub(super) fn command_for_key(key: UiKey, adjacent_fold: bool) -> Option<(EditCo
         | UiKey::PasteClipboard
         | UiKey::Duplicate
         | UiKey::Tab
+        | UiKey::BackTab
         | UiKey::PickerPrevious
         | UiKey::PickerNext => None,
     }
@@ -55,6 +57,34 @@ pub(super) struct PendingEdit {
 }
 
 impl BoardApp {
+    pub(super) fn resolve_edit_navigation(&self, input: UiInput) -> UiInput {
+        let UiInput::Key(UiKey::EditNavigation {
+            editor_movement,
+            board_movement,
+        }) = input
+        else {
+            return input;
+        };
+        let overlay_open = self.help
+            || self.update_prompt.is_some()
+            || self.palette.is_some()
+            || self.invocation_popup.is_some()
+            || self.transfer.is_some()
+            || self.rename.is_some()
+            || self.search.is_some()
+            || self.submission_mode.is_some();
+        let movement =
+            if !overlay_open && matches!(self.interaction_mode(), InteractionMode::Edit { .. }) {
+                editor_movement
+            } else {
+                board_movement
+            };
+        UiInput::Key(UiKey::Move {
+            movement,
+            extend_selection: false,
+        })
+    }
+
     pub(super) fn should_insert_smart_newline(&self) -> bool {
         self.settings.smart_lists
             && self
@@ -70,10 +100,35 @@ impl BoardApp {
     ) -> Vec<Effect> {
         let mut effects = self.flush_pending_edit(ids, clock);
         self.apply_edit(if smart {
-            EditCommand::InsertSmartNewline
+            EditCommand::InsertSmartNewline {
+                indent_width: self.settings.list_indent_width,
+            }
         } else {
             EditCommand::InsertNewline
         });
+        effects.extend(self.flush_pending_edit(ids, clock));
+        effects
+    }
+
+    pub(super) fn apply_indentation(
+        &mut self,
+        outdent: bool,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        let mut effects = self.flush_pending_edit(ids, clock);
+        let command = if outdent {
+            EditCommand::Outdent {
+                width: self.settings.list_indent_width,
+                smart_lists: self.settings.smart_lists,
+            }
+        } else {
+            EditCommand::Indent {
+                width: self.settings.list_indent_width,
+                smart_lists: self.settings.smart_lists,
+            }
+        };
+        self.apply_edit(command);
         effects.extend(self.flush_pending_edit(ids, clock));
         effects
     }
@@ -119,6 +174,7 @@ impl BoardApp {
             return Vec::new();
         }
         let mut effects = self.finish_edit(ids, clock);
+        self.palette_selection_handoff = None;
         if let Some(target) = target {
             self.insertion_focus = super::InsertionFocus::Inactive;
             effects.extend(self.reduce(Action::FocusThought(Some(target))));
@@ -213,7 +269,8 @@ impl BoardApp {
             }
         }
         self.edit_generation = self.edit_generation.wrapping_add(1);
-        self.manual_board_scroll = false;
+        self.board_viewport = self.board_viewport.follow_focus();
+        self.scroll_geometry = None;
         self.layout = None;
     }
 

@@ -59,7 +59,176 @@ fn long_thought_cap_expands_without_changing_content() {
     );
     let expanded = fixture.app.prepare_frame(Rect::new(0, 0, 40, 13));
     assert!(expanded.thoughts[0].area.height > capped_height);
+    assert!(expanded.thoughts[0].overflow.is_none());
+    assert_eq!(expanded.thoughts[0].hidden_rows, 0);
+    assert!(expanded.thoughts[0].viewport_clipped);
+    assert!(expanded.thoughts[0].scrollable_hidden);
+    assert_eq!(
+        fixture.app.state.board.live_thoughts()[0].presentation,
+        proqi::domain::ThoughtPresentation::Expanded
+    );
     assert_eq!(fixture.app.state.board.live_thoughts()[0].content, content);
+}
+
+#[test]
+fn collapsed_keyboard_edit_entry_expands_before_opening_the_full_editor() {
+    for key in [UiKey::Enter, UiKey::Character('e')] {
+        let mut fixture = Fixture::new();
+        let content = (0..10)
+            .map(|index| format!("line {index} wraps with Grüße 界 and enough ordinary words"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        super::navigation::durable_thought(&mut fixture, &content);
+        let area = Rect::new(0, 0, 38, 11);
+        let _automatic = fixture.app.prepare_frame(area);
+        fixture.input(UiInput::Key(UiKey::Character('c')));
+        fixture.input(UiInput::Key(UiKey::Character('c')));
+        let collapsed = fixture.app.prepare_frame(area);
+        assert_eq!(collapsed.thoughts[0].area.height, 2);
+
+        let effects = fixture.effects(UiInput::Key(key));
+        assert!(matches!(
+            effects.as_slice(),
+            [Effect::CommitBoardOperation(operation)]
+                if operation.kind == proqi::domain::BoardOperationKind::Collapse
+        ));
+        assert!(matches!(
+            fixture.app.interaction_mode(),
+            proqi::application::InteractionMode::Edit { .. }
+        ));
+        assert_eq!(
+            fixture.app.state.board.live_thoughts()[0].presentation,
+            proqi::domain::ThoughtPresentation::Expanded
+        );
+        let editing = fixture.app.prepare_frame(area);
+        assert!(editing.thoughts[0].area.height > 2);
+        assert!(editing.thoughts[0].overflow.is_none());
+        assert_eq!(
+            fixture.app.editor_snapshot().expect("editor").content,
+            content
+        );
+    }
+}
+
+#[test]
+fn collapsed_palette_indentation_expands_before_mutating_the_editor() {
+    let mut fixture = Fixture::new();
+    let content = (0..10)
+        .map(|index| format!("- list item {index} with enough words to wrap in a narrow pane"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    super::navigation::durable_thought(&mut fixture, &content);
+    let area = Rect::new(0, 0, 38, 11);
+    let _automatic = fixture.app.prepare_frame(area);
+    fixture.input(UiInput::Key(UiKey::Character('c')));
+    fixture.input(UiInput::Key(UiKey::Character('c')));
+    assert_eq!(fixture.app.prepare_frame(area).thoughts[0].area.height, 2);
+
+    fixture.input(UiInput::Key(UiKey::Character(':')));
+    for character in "indent line".chars() {
+        fixture.input(UiInput::Key(UiKey::Character(character)));
+    }
+    let effects = fixture.effects(UiInput::Key(UiKey::Enter));
+
+    assert!(matches!(
+        effects.as_slice(),
+        [Effect::CommitBoardOperation(operation), Effect::CommitRevision(revision)]
+            if operation.kind == proqi::domain::BoardOperationKind::Collapse
+                && revision.before_content == content
+                && revision.after_content.ends_with("  - list item 9 with enough words to wrap in a narrow pane")
+    ));
+    assert!(matches!(
+        fixture.app.interaction_mode(),
+        proqi::application::InteractionMode::Edit { .. }
+    ));
+    assert_eq!(
+        fixture.app.state.board.live_thoughts()[0].presentation,
+        proqi::domain::ThoughtPresentation::Expanded
+    );
+    let editing = fixture.app.prepare_frame(area);
+    assert!(editing.thoughts[0].area.height > 2);
+    assert!(editing.thoughts[0].overflow.is_none());
+}
+
+#[test]
+fn collapsed_content_click_expands_and_maps_the_visible_wide_cell_before_editing() {
+    let mut fixture = Fixture::new();
+    let content = (0..10)
+        .map(|index| format!("A界B line {index} with enough words to wrap twice"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    super::navigation::durable_thought(&mut fixture, &content);
+    let area = Rect::new(0, 0, 36, 10);
+    let _automatic = fixture.app.prepare_frame(area);
+    fixture.input(UiInput::Key(UiKey::Character('c')));
+    fixture.input(UiInput::Key(UiKey::Character('c')));
+    let collapsed = fixture.app.prepare_frame(area);
+    let text_area = collapsed.thoughts[0].text_area;
+
+    let effects = fixture.effects(UiInput::Pointer(PointerInput {
+        column: text_area.x + 3,
+        row: text_area.y,
+        kind: PointerKind::Down(PointerButton::Left),
+        extend_selection: false,
+    }));
+
+    assert!(matches!(
+        effects.as_slice(),
+        [Effect::CommitBoardOperation(operation)]
+            if operation.kind == proqi::domain::BoardOperationKind::Collapse
+    ));
+    assert_eq!(
+        fixture.app.state.board.live_thoughts()[0].presentation,
+        proqi::domain::ThoughtPresentation::Expanded
+    );
+    assert_eq!(
+        fixture.app.editor_snapshot().expect("editor").cursor,
+        proqi::domain::TextPosition::new(0, 2)
+    );
+    let editing = fixture.app.prepare_frame(area);
+    assert!(editing.thoughts[0].area.height > 2);
+    assert!(editing.thoughts[0].overflow.is_none());
+    assert_eq!(fixture.app.state.board.live_thoughts()[0].content, content);
+}
+
+#[test]
+fn collapsed_gutter_click_expands_without_starting_a_stale_drag() {
+    let mut fixture = Fixture::new();
+    super::navigation::durable_thought(
+        &mut fixture,
+        &(0..10)
+            .map(|line| format!("long gutter line {line} that wraps"))
+            .collect::<Vec<_>>()
+            .join("\n"),
+    );
+    let area = Rect::new(0, 0, 34, 10);
+    let _automatic = fixture.app.prepare_frame(area);
+    fixture.input(UiInput::Key(UiKey::Character('c')));
+    fixture.input(UiInput::Key(UiKey::Character('c')));
+    let collapsed = fixture.app.prepare_frame(area);
+    let gutter = collapsed.thoughts[0].gutter;
+
+    let effects = fixture.effects(UiInput::Pointer(PointerInput {
+        column: gutter.x,
+        row: gutter.y,
+        kind: PointerKind::Down(PointerButton::Left),
+        extend_selection: false,
+    }));
+
+    assert!(matches!(
+        effects.as_slice(),
+        [Effect::CommitBoardOperation(_)]
+    ));
+    assert_eq!(
+        fixture.app.state.board.live_thoughts()[0].presentation,
+        proqi::domain::ThoughtPresentation::Expanded
+    );
+    assert!(fixture.app.dragged_thought().is_none());
+    assert!(
+        fixture.app.prepare_frame(area).thoughts[0]
+            .overflow
+            .is_none()
+    );
 }
 
 #[test]

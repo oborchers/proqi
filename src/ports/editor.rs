@@ -6,6 +6,9 @@ pub use change::{OffsetAffinity, TextChange, TextChangeError, TextChangeSet, Tex
 
 use crate::domain::TextPosition;
 
+/// Fixed wrapped-row distance used by accelerated editor navigation.
+pub const FAST_NAVIGATION_ROWS: usize = 5;
+
 /// A normalized text selection.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct TextSelection {
@@ -56,6 +59,10 @@ pub enum CursorMovement {
     VisualUp,
     /// Next wrapped visual row.
     VisualDown,
+    /// Five wrapped visual rows toward the beginning of the document.
+    VisualJumpUp,
+    /// Five wrapped visual rows toward the end of the document.
+    VisualJumpDown,
     /// Beginning of the current logical line.
     LineStart,
     /// End of the current logical line.
@@ -87,7 +94,24 @@ pub enum EditCommand {
     /// Insert a line feed.
     InsertNewline,
     /// Insert a newline with conservative Markdown list continuation.
-    InsertSmartNewline,
+    InsertSmartNewline {
+        /// Spaces used for every list indentation level.
+        indent_width: u8,
+    },
+    /// Indent the current list item or every selected logical line.
+    Indent {
+        /// Configured space indentation width.
+        width: u8,
+        /// Whether recognized list items receive structure-aware indentation.
+        smart_lists: bool,
+    },
+    /// Outdent the current list item or every selected logical line.
+    Outdent {
+        /// Configured space indentation width.
+        width: u8,
+        /// Whether recognized list items may be outdented.
+        smart_lists: bool,
+    },
     /// Delete the grapheme before the cursor or the selection.
     DeleteBack,
     /// Delete the grapheme after the cursor or the selection.

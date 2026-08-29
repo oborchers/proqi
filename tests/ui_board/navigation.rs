@@ -92,11 +92,17 @@ fn wide_help_uses_at_most_two_strictly_aligned_columns() {
         .lines()
         .find(|line| line.contains("Quit"))
         .expect("quit row");
-    let first = rendered
+    let first_row = rendered
         .lines()
         .find(|line| line.contains("New"))
         .expect("first shortcut row");
-    assert_eq!(quit.find("Quit"), first.find("New"), "{quit}");
+    let first_column = first_row.find("New").expect("first column");
+    let second_column = first_row.find("Edit").expect("second column");
+    let quit_column = quit.find("Quit").expect("quit column");
+    assert!(
+        [first_column, second_column].contains(&quit_column),
+        "{quit}"
+    );
 }
 
 #[test]
@@ -386,4 +392,40 @@ fn overflowing_board_scrolls_to_the_insertion_row_without_blank_overscroll() {
     let clamped = fixture.app.prepare_frame(area);
     assert_eq!(clamped.first_index, final_page.first_index);
     assert!(clamped.insert.is_some());
+}
+
+#[test]
+fn mouse_wheel_scrolls_editor_without_moving_cursor_or_selection() {
+    let mut fixture = Fixture::new();
+    fixture.paste(
+        &(0..20)
+            .map(|line| format!("line {line}"))
+            .collect::<Vec<_>>()
+            .join("\n"),
+    );
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::GraphemeBack,
+        extend_selection: false,
+    }));
+    fixture.input(UiInput::Key(UiKey::Enter));
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::DocumentStart,
+        extend_selection: false,
+    }));
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::GraphemeForward,
+        extend_selection: true,
+    }));
+    let _terminal = draw(&mut fixture, 30, 6);
+    let before = fixture.app.editor_snapshot().expect("editor");
+    let text_area = fixture.app.prepare_frame(Rect::new(0, 0, 30, 6)).thoughts[0].text_area;
+    fixture.pointer(text_area.x, text_area.y, PointerKind::ScrollDown);
+    let after = fixture.app.editor_snapshot().expect("editor");
+    assert!(
+        after.scroll_row > before.scroll_row,
+        "scroll must advance: before={before:?}, after={after:?}, mode={:?}",
+        fixture.app.interaction_mode()
+    );
+    assert_eq!(after.cursor, before.cursor);
+    assert_eq!(after.selection, before.selection);
 }

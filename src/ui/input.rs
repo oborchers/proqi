@@ -56,8 +56,10 @@ pub enum UiKey {
     PrimaryCharacter(char),
     /// Insert a line break or enter the focused thought.
     Enter,
-    /// Accept a focused authoring completion without inserting a literal tab.
+    /// Accept a focused authoring completion or request indentation while editing.
     Tab,
+    /// Request one conservative indentation level outward.
+    BackTab,
     /// Move to the previous bounded picker result.
     PickerPrevious,
     /// Move to the next bounded picker result.
@@ -74,6 +76,17 @@ pub enum UiKey {
         movement: CursorMovement,
         /// Whether to extend the active selection.
         extend_selection: bool,
+    },
+    /// A mode-aware vertical chord with distinct editor and board intentions.
+    ///
+    /// The UI mode translator resolves this before command dispatch. This lets
+    /// Alt and Primary accelerate editing without changing established board
+    /// or overlay navigation.
+    EditNavigation {
+        /// Movement applied while directly editing a thought.
+        editor_movement: CursorMovement,
+        /// Existing movement retained in board mode and overlays.
+        board_movement: CursorMovement,
     },
     /// Vertical movement reported with both Primary and Shift modifiers.
     ///
