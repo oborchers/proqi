@@ -131,6 +131,20 @@ fn command_and_meta_shortcuts_share_semantics() {
 }
 
 #[test]
+fn primary_shift_s_remains_an_unassigned_board_chord() {
+    for character in ['s', 'S'] {
+        let event = Event::Key(KeyEvent::new(
+            KeyCode::Char(character),
+            KeyModifiers::SUPER | KeyModifiers::SHIFT,
+        ));
+        assert_eq!(
+            translate(event),
+            Some(UiInput::Key(UiKey::PrimaryCharacter(character)))
+        );
+    }
+}
+
+#[test]
 fn primary_clipboard_shortcuts_do_not_reuse_quit() {
     for (character, expected) in [
         ('c', UiKey::Copy),
@@ -162,6 +176,15 @@ fn invocation_picker_keys_are_normalized_without_literal_editor_input() {
         translate(Event::Key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE))),
         Some(UiInput::Key(UiKey::Tab))
     );
+    for event in [
+        KeyEvent::new(KeyCode::BackTab, KeyModifiers::SHIFT),
+        KeyEvent::new(KeyCode::Tab, KeyModifiers::SHIFT),
+    ] {
+        assert_eq!(
+            translate(Event::Key(event)),
+            Some(UiInput::Key(UiKey::BackTab))
+        );
+    }
 }
 
 #[test]

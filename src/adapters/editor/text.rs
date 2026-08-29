@@ -78,3 +78,22 @@ pub(super) fn word_forward(content: &str, cursor: usize) -> usize {
         })
         .unwrap_or(content.len())
 }
+
+pub(super) fn preferred_newline(content: &str, cursor: usize) -> &'static str {
+    let cursor = cursor.min(content.len());
+    if content[cursor..].starts_with("\r\n") {
+        "\r\n"
+    } else if content[cursor..].starts_with('\n') {
+        "\n"
+    } else if let Some(newline) = content[..cursor].rfind('\n') {
+        if newline > 0 && content.as_bytes()[newline - 1] == b'\r' {
+            "\r\n"
+        } else {
+            "\n"
+        }
+    } else if content.contains("\r\n") {
+        "\r\n"
+    } else {
+        "\n"
+    }
+}

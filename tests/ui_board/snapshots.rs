@@ -337,6 +337,50 @@ fn command_palette_has_a_complete_searchable_buffer() {
 }
 
 #[test]
+fn command_palette_clears_wide_glyphs_crossing_its_border() {
+    let mut fixture = Fixture::new();
+    let sequence = fixture.paste(
+        &std::iter::repeat_n("abcd👩‍💻 palette overlap", 8)
+            .collect::<Vec<_>>()
+            .join("\n"),
+    );
+    fixture.app.acknowledge_persistence(sequence, true);
+    fixture.input(UiInput::Key(UiKey::Escape));
+    fixture.input(UiInput::Key(UiKey::Character(':')));
+    for character in "dent line".chars() {
+        fixture.input(UiInput::Key(UiKey::Character(character)));
+    }
+    let layout = fixture.app.prepare_frame(Rect::new(0, 0, 72, 12));
+    let overlay = layout.overlay.as_ref().expect("command palette");
+    assert_eq!(overlay.area.x, 7);
+    assert_eq!(layout.thoughts[0].text_area.x, 2);
+    assert!(!matches!(
+        layout.hit_test(overlay.area.x.saturating_sub(1), overlay.area.y),
+        Some(HitTarget::CloseOverlay | HitTarget::PaletteItem(_))
+    ));
+
+    insta::assert_snapshot!(snapshot(&mut fixture, 72, 12, ThemePreference::Dark));
+}
+
+#[test]
+fn submit_all_palette_actions_are_complete_and_direct() {
+    let mut fixture = Fixture::new();
+    fixture.paste("first\nGrüße 👩‍💻");
+    fixture.input(UiInput::Key(UiKey::Escape));
+    fixture
+        .app
+        .complete_agent_discovery(Ok(vec![super::agent::target(
+            proqi::domain::Direction::Right,
+            "w1:p2",
+        )]));
+    fixture.input(UiInput::Key(UiKey::Character(':')));
+    for character in "submit all".chars() {
+        fixture.input(UiInput::Key(UiKey::Character(character)));
+    }
+    insta::assert_snapshot!(snapshot(&mut fixture, 72, 14, ThemePreference::Dark));
+}
+
+#[test]
 fn expanded_debug_session_identity_preserves_footer_band_order() {
     let settings = UiSettings {
         show_session_id: true,
@@ -366,6 +410,19 @@ fn plain_newline_fallback_is_visible_in_the_command_palette() {
     fixture.input(UiInput::Key(UiKey::Escape));
     fixture.input(UiInput::Key(UiKey::Character(':')));
     for character in "plain newline".chars() {
+        fixture.input(UiInput::Key(UiKey::Character(character)));
+    }
+    insta::assert_snapshot!(snapshot(&mut fixture, 72, 14, ThemePreference::Dark));
+}
+
+#[test]
+fn indentation_fallbacks_are_visible_in_the_command_palette() {
+    let mut fixture = Fixture::new();
+    let sequence = fixture.paste("- parent\n  - child");
+    fixture.app.acknowledge_persistence(sequence, true);
+    fixture.input(UiInput::Key(UiKey::Escape));
+    fixture.input(UiInput::Key(UiKey::Character(':')));
+    for character in "dent line".chars() {
         fixture.input(UiInput::Key(UiKey::Character(character)));
     }
     insta::assert_snapshot!(snapshot(&mut fixture, 72, 14, ThemePreference::Dark));

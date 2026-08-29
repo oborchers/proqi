@@ -183,6 +183,7 @@ fallbacks remain available when a terminal cannot report a modifier.
 | `y` or `Primary+C` | Copy the complete thought |
 | `x` or `Primary+X` | Cut only after confirmed clipboard success |
 | `Space` | Add or remove the focused thought from the multi-selection |
+| `a` or `Primary+A` | Select every live thought; repeat safely, `Esc` clears |
 | `Shift+↑` / `Shift+↓`, or `K` / `J` | Extend or shrink one anchored contiguous range |
 | `v`, then arrows, `j` / `k`, or a thought click | Latch modifier-free contiguous range selection |
 | `Primary+D` | Duplicate the focused thought or selection below its source range |
@@ -205,6 +206,8 @@ fallbacks remain available when a terminal cannot report a modifier.
 | `Shift+Primary+Z` | Redo an edit |
 | `Primary+V` | Read the native clipboard |
 | `Enter` | Continue `-`, `*`, `+`, ordered, and task list items; exit an empty top-level item |
+| `Tab` | Nest a list item or indent selected logical lines; insert configured spaces elsewhere |
+| `Shift+Tab` | Outdent one recognized list level without changing ordinary text |
 | `↑` / `↓` twice at a boundary | Return to the board and focus the adjacent thought |
 | Type `$name`, `/name`, or supported `@name` | Open matching local invocation completion |
 | `↑` / `↓` or `Primary+P` / `Primary+N` | Move through invocation results |
@@ -217,10 +220,14 @@ reorder thoughts, click controls, use help, and choose verified Herdr targets.
 Holding the final click while dragging extends by complete words or logical
 lines. Moving onto folded context selects its complete canonical range.
 `Enter` expands the fold, while typing or deletion replaces it atomically.
-Press `Esc`, open `:`, and choose `Insert plain newline` to bypass list
-continuation without relying on a terminal modifier; mouse users can open the
-palette directly while editing. Set `smart_lists = false` to keep every ordinary
-editor `Enter` plain.
+Press `Esc`, open `:`, and choose `Insert plain newline`, `Indent line or
+selection`, or `Outdent line or selection` when the terminal does not forward a
+modifier; mouse users can open the palette directly while editing. An empty
+nested item outdents one level before a later top-level `Enter` exits the list.
+Every nesting level uses exactly `list_indent_width` spaces regardless of bullet
+or ordered-marker width; tab-indented lists retain tabs.
+Set `smart_lists = false` to keep every ordinary editor `Enter` plain and disable
+structure-aware outdent; `Tab` still inserts `list_indent_width` spaces exactly.
 
 Proqi's invocation catalog is an authoring aid, not a skill executor or live
 harness integration. It refreshes bounded project and machine-global roots at
@@ -313,6 +320,13 @@ separated by one blank line:
 - `s Submit` submits immediately and deletes the source thoughts only after an
   accepted matching receipt.
 - `S Submit & keep` submits immediately and retains the source thoughts.
+
+The command palette adds **Select all thoughts**, **Submit all**, and **Submit
+all and keep**. The submit-all actions address every live thought directly,
+without toggling the visible selection or opening a confirmation. **Submit
+all** removes unchanged sources only after matching accepted durable delivery.
+Empty boards send nothing. Several verified destinations still use the ordinary
+directional chooser; one verified destination submits directly.
 
 Both actions work while the receiving agent is working. The receiving harness
 decides whether that input steers the current turn or becomes follow-up input.
@@ -499,6 +513,7 @@ shortcuts remain available:
 check_for_updates = true
 show_session_id = false # opt in to the complete ses_... value in the footer
 smart_lists = true
+list_indent_width = 2 # 1-8 spaces; optimized for narrow adjacent panes
 theme = "auto"
 density = "comfortable" # or "compact"
 
@@ -522,6 +537,7 @@ range_up = "K"
 range_down = "J"
 collapse = "c"
 select = " "
+select_all = "a"
 range_select = "v"
 search = "/"
 commands = ":"

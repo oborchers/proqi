@@ -111,6 +111,46 @@ fn collapsed_keyboard_edit_entry_expands_before_opening_the_full_editor() {
 }
 
 #[test]
+fn collapsed_palette_indentation_expands_before_mutating_the_editor() {
+    let mut fixture = Fixture::new();
+    let content = (0..10)
+        .map(|index| format!("- list item {index} with enough words to wrap in a narrow pane"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    super::navigation::durable_thought(&mut fixture, &content);
+    let area = Rect::new(0, 0, 38, 11);
+    let _automatic = fixture.app.prepare_frame(area);
+    fixture.input(UiInput::Key(UiKey::Character('c')));
+    fixture.input(UiInput::Key(UiKey::Character('c')));
+    assert_eq!(fixture.app.prepare_frame(area).thoughts[0].area.height, 2);
+
+    fixture.input(UiInput::Key(UiKey::Character(':')));
+    for character in "indent line".chars() {
+        fixture.input(UiInput::Key(UiKey::Character(character)));
+    }
+    let effects = fixture.effects(UiInput::Key(UiKey::Enter));
+
+    assert!(matches!(
+        effects.as_slice(),
+        [Effect::CommitBoardOperation(operation), Effect::CommitRevision(revision)]
+            if operation.kind == proqi::domain::BoardOperationKind::Collapse
+                && revision.before_content == content
+                && revision.after_content.ends_with("  - list item 9 with enough words to wrap in a narrow pane")
+    ));
+    assert!(matches!(
+        fixture.app.interaction_mode(),
+        proqi::application::InteractionMode::Edit { .. }
+    ));
+    assert_eq!(
+        fixture.app.state.board.live_thoughts()[0].presentation,
+        proqi::domain::ThoughtPresentation::Expanded
+    );
+    let editing = fixture.app.prepare_frame(area);
+    assert!(editing.thoughts[0].area.height > 2);
+    assert!(editing.thoughts[0].overflow.is_none());
+}
+
+#[test]
 fn collapsed_content_click_expands_and_maps_the_visible_wide_cell_before_editing() {
     let mut fixture = Fixture::new();
     let content = (0..10)

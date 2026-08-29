@@ -26,6 +26,7 @@ impl BoardApp {
             UiKey::Escape if !self.selection_is_empty() || self.range_latched() => {
                 self.clear_board_selection();
             }
+            UiKey::SelectAll => self.select_all_thoughts(),
             UiKey::Character(character) => {
                 return self.handle_board_command(character, ids, clock);
             }
@@ -78,6 +79,14 @@ impl BoardApp {
         clock: &impl Clock,
     ) -> Vec<Effect> {
         match key {
+            UiKey::Escape if !self.selection_is_empty() || self.range_latched() => {
+                self.clear_board_selection();
+                Vec::new()
+            }
+            UiKey::SelectAll => {
+                self.select_all_thoughts();
+                Vec::new()
+            }
             UiKey::Character(character)
                 if self.settings.keybindings.command(character)
                     == Some(BoardCommand::FocusDown) =>
@@ -107,13 +116,13 @@ impl BoardApp {
             }
             | UiKey::Backspace
             | UiKey::Delete
-            | UiKey::SelectAll
             | UiKey::DeleteLine
             | UiKey::Copy
             | UiKey::Cut
             | UiKey::Duplicate
             | UiKey::Quit
             | UiKey::Tab
+            | UiKey::BackTab
             | UiKey::PickerPrevious
             | UiKey::PickerNext
             | UiKey::PrimaryCharacter(_)
@@ -207,6 +216,10 @@ impl BoardApp {
                 self.toggle_selection();
                 Vec::new()
             }
+            Some(BoardCommand::SelectAll) => {
+                self.select_all_thoughts();
+                Vec::new()
+            }
             Some(BoardCommand::RangeSelect) => {
                 self.activate_range_latch();
                 Vec::new()
@@ -250,6 +263,9 @@ impl BoardApp {
         }
         if matches!(key, UiKey::Enter) && self.should_insert_smart_newline() {
             return self.insert_newline(true, ids, clock);
+        }
+        if matches!(key, UiKey::Tab | UiKey::BackTab) {
+            return self.apply_indentation(matches!(key, UiKey::BackTab), ids, clock);
         }
         let adjacent_fold = match key {
             UiKey::Backspace => self.delete_adjacent_fold(true),
@@ -328,6 +344,7 @@ impl BoardApp {
     ) -> Vec<Effect> {
         self.edit_boundary = None;
         let thought_id = self.active_thought_id();
+        self.capture_palette_selection_handoff();
         let effects = self.flush_pending_edit(ids, clock);
         if let Some(thought_id) = thought_id {
             self.clear_expanded_folds(thought_id);

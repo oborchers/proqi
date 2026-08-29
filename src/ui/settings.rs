@@ -25,6 +25,8 @@ pub struct UiSettings {
     pub show_session_id: bool,
     /// Continue recognized Markdown list items when Enter inserts a newline.
     pub smart_lists: bool,
+    /// Spaces inserted for every list indentation level.
+    pub list_indent_width: u8,
     /// Keyboard protocol negotiation.
     pub keyboard_enhancement: KeyboardEnhancement,
     /// Remappable direct board keys.
@@ -39,6 +41,7 @@ impl Default for UiSettings {
             check_for_updates: true,
             show_session_id: false,
             smart_lists: true,
+            list_indent_width: 2,
             keyboard_enhancement: KeyboardEnhancement::default(),
             keybindings: KeyBindings::default(),
             density: BoardDensity::default(),
@@ -71,7 +74,7 @@ pub struct KeyBindings {
     pub copy: char,
     /// Cut focused thought.
     pub cut: char,
-    /// Submit and remove the focused thought after acceptance.
+    /// Submit the focused thought, removing it after acceptance.
     #[serde(alias = "send")]
     pub submit_remove: char,
     /// Submit and preserve the focused thought.
@@ -93,6 +96,8 @@ pub struct KeyBindings {
     pub collapse: char,
     /// Toggle the focused thought in the multi-selection.
     pub select: char,
+    /// Select every live thought in board order.
+    pub select_all: char,
     /// Latch contiguous range selection.
     pub range_select: char,
     /// Search thought content.
@@ -122,6 +127,7 @@ impl Default for KeyBindings {
             range_down: 'J',
             collapse: 'c',
             select: ' ',
+            select_all: 'a',
             range_select: 'v',
             search: '/',
             commands: ':',
@@ -147,6 +153,7 @@ pub(super) enum BoardCommand {
     RangeDown,
     Collapse,
     Select,
+    SelectAll,
     RangeSelect,
     Search,
     Commands,
@@ -171,6 +178,7 @@ impl KeyBindings {
             (self.range_down, BoardCommand::RangeDown),
             (self.collapse, BoardCommand::Collapse),
             (self.select, BoardCommand::Select),
+            (self.select_all, BoardCommand::SelectAll),
             (self.range_select, BoardCommand::RangeSelect),
             (self.search, BoardCommand::Search),
             (self.commands, BoardCommand::Commands),
@@ -206,6 +214,7 @@ impl KeyBindings {
             self.range_down,
             self.collapse,
             self.select,
+            self.select_all,
             self.range_select,
             self.search,
             self.commands,

@@ -18,18 +18,11 @@ mod collapsed_entry;
 #[path = "pty/invocation.rs"]
 mod invocation;
 
+#[path = "pty/smoke.rs"]
+mod smoke;
+
 #[cfg(target_os = "macos")]
 use serde_json::Value;
-
-#[test]
-fn release_entrypoint_can_start_without_workspace_state() {
-    let output = Command::new(env!("CARGO_BIN_EXE_proqi"))
-        .arg("--version")
-        .output()
-        .expect("run proqi binary");
-
-    assert!(output.status.success());
-}
 
 #[cfg(target_os = "macos")]
 #[test]
@@ -492,3 +485,10 @@ fn json_command(binary: &str, state: &std::path::Path, arguments: &[&str]) -> Va
     assert!(output.status.success());
     serde_json::from_slice(&output.stdout).expect("JSON output")
 }
+
+#[path = "pty/select_all.rs"]
+mod select_all;
+
+#[cfg(target_os = "macos")]
+#[path = "pty/smart_lists.rs"]
+mod smart_lists;

@@ -140,6 +140,13 @@ impl BoardApp {
         self.layout = None;
     }
 
+    pub(super) fn select_all_thoughts(&mut self) {
+        let order = self.live_thought_ids();
+        self.selection.replace_arbitrary(order);
+        self.hovered = None;
+        self.layout = None;
+    }
+
     pub(super) fn activate_range_latch(&mut self) {
         let Some(focused) = self.state.focused_thought else {
             return;
