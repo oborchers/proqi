@@ -131,6 +131,61 @@ fn palette_fallbacks_execute_all_four_fast_editor_movements() {
 }
 
 #[test]
+fn repeated_palette_click_does_not_pass_through_to_a_wrapped_thought() {
+    let content = (0..11)
+        .map(|row| format!("row {row}: 0123456789 alpha beta gamma delta epsilon zeta eta"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let mut fixture = Fixture::new();
+    fixture.paste(&content);
+    move_editor_cursor(&mut fixture, CursorMovement::DocumentStart);
+    move_editor_cursor(&mut fixture, CursorMovement::VisualJumpDown);
+    let _board = draw(&mut fixture, 98, 29);
+    let commands = fixture
+        .app
+        .prepare_frame(Rect::new(0, 0, 98, 29))
+        .controls
+        .into_iter()
+        .find_map(|(target, area)| (target == HitTarget::Commands).then_some(area))
+        .expect("commands control");
+    fixture.pointer(
+        commands.x,
+        commands.y,
+        PointerKind::Down(PointerButton::Left),
+    );
+    fixture.pointer(commands.x, commands.y, PointerKind::Up(PointerButton::Left));
+    for character in "jump cursor down".chars() {
+        fixture.input(UiInput::Key(UiKey::Character(character)));
+    }
+    let _palette = draw(&mut fixture, 98, 29);
+    let item = fixture
+        .app
+        .prepare_frame(Rect::new(0, 0, 98, 29))
+        .overlay
+        .expect("command overlay")
+        .items[0];
+
+    fixture.pointer(item.x, item.y, PointerKind::Down(PointerButton::Left));
+    let after_command = fixture.app.editor_snapshot().expect("editor").cursor;
+    for _ in 0..3 {
+        fixture.pointer(item.x, item.y, PointerKind::Up(PointerButton::Left));
+        let _underlying = draw(&mut fixture, 98, 29);
+        fixture.pointer(item.x, item.y, PointerKind::Down(PointerButton::Left));
+        assert_eq!(
+            fixture.app.editor_snapshot().expect("editor").cursor,
+            after_command
+        );
+    }
+}
+
+fn move_editor_cursor(fixture: &mut Fixture, movement: CursorMovement) {
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement,
+        extend_selection: false,
+    }));
+}
+
+#[test]
 fn palette_copies_typed_session_metadata_exactly_and_reports_results() {
     let mut fixture = Fixture::new();
     let session_id = fixture.app.state.board.session.id.to_string();

@@ -98,6 +98,48 @@ fn mouse_selection_collapses_before_a_fast_jump() {
 }
 
 #[test]
+fn mouse_reposition_sets_the_column_for_the_next_fast_jump() {
+    let content = (0..10)
+        .map(|row| format!("row {row}: 0123456789abcdefghijklmnopqrstuvwxyz界e\u{301}🙂"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let mut fixture = Fixture::new();
+    fixture.paste(&content);
+    move_cursor(&mut fixture, CursorMovement::DocumentStart);
+    let _initial = draw(&mut fixture, 80, 16);
+    let area = fixture.app.prepare_frame(Rect::new(0, 0, 80, 16)).thoughts[0].text_area;
+
+    fixture.pointer(
+        area.x.saturating_add(35),
+        area.y,
+        PointerKind::Down(PointerButton::Left),
+    );
+    fixture.pointer(
+        area.x.saturating_add(35),
+        area.y,
+        PointerKind::Up(PointerButton::Left),
+    );
+    move_cursor(&mut fixture, CursorMovement::VisualDown);
+    let _moved = draw(&mut fixture, 80, 16);
+    fixture.pointer(
+        area.x.saturating_add(4),
+        area.y.saturating_add(2),
+        PointerKind::Down(PointerButton::Left),
+    );
+    fixture.pointer(
+        area.x.saturating_add(4),
+        area.y.saturating_add(2),
+        PointerKind::Up(PointerButton::Left),
+    );
+    move_cursor(&mut fixture, CursorMovement::VisualJumpDown);
+
+    assert_eq!(
+        fixture.app.editor_snapshot().expect("editor").cursor,
+        TextPosition::new(7, 4)
+    );
+}
+
+#[test]
 fn mode_aware_alt_navigation_keeps_board_focus_movement_unchanged() {
     let mut fixture = Fixture::new();
     for content in ["first", "second", "third"] {

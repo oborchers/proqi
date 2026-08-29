@@ -221,6 +221,7 @@ impl Editor for RopeEditor {
             }
             EditCommand::SelectAll => {
                 self.pointer_selection = None;
+                self.preferred_column = None;
                 self.state.selection_anchor_byte = Some(0);
                 self.state.cursor_byte = self.state.text.len_bytes();
                 self.ensure_cursor_visible();
@@ -228,6 +229,7 @@ impl Editor for RopeEditor {
             }
             EditCommand::ClearSelection => {
                 self.pointer_selection = None;
+                self.preferred_column = None;
                 self.state.selection_anchor_byte = None;
                 TextChangeSet::unchanged(self.state.text.len_bytes())
             }
@@ -236,6 +238,7 @@ impl Editor for RopeEditor {
                 extend_selection,
             } => {
                 self.pointer_selection = None;
+                self.preferred_column = None;
                 let byte = byte_for_position(&self.content(), position);
                 self.set_cursor_byte(byte, extend_selection);
                 TextChangeSet::unchanged(self.state.text.len_bytes())
@@ -245,6 +248,7 @@ impl Editor for RopeEditor {
                 granularity,
                 extend_selection,
             } => {
+                self.preferred_column = None;
                 self.begin_pointer_selection(position, granularity, extend_selection);
                 TextChangeSet::unchanged(self.state.text.len_bytes())
             }

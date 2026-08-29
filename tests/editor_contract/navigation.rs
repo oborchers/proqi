@@ -112,3 +112,27 @@ fn accelerated_and_boundary_movements_clamp_and_follow_existing_selection_rules(
     move_cursor(&mut editor, CursorMovement::DocumentEnd, false);
     assert_eq!(editor.snapshot().cursor, TextPosition::new(7, 5));
 }
+
+#[test]
+fn pointer_reposition_replaces_a_stale_vertical_preferred_column() {
+    let content = (0..10)
+        .map(|row| format!("row {row}: 0123456789abcdefghijklmnopqrstuvwxyz界e\u{301}🙂"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let mut editor = RopeEditor::new(&content);
+    editor.set_viewport(TextViewport::new(80, 4));
+    let _outcome = editor.apply(EditCommand::SetCursor {
+        position: TextPosition::new(0, 35),
+        extend_selection: false,
+    });
+    move_cursor(&mut editor, CursorMovement::VisualDown, false);
+
+    let _outcome = editor.apply(EditCommand::PointerStart {
+        position: TextPosition::new(2, 4),
+        granularity: proqi::ports::editor::SelectionGranularity::Grapheme,
+        extend_selection: false,
+    });
+    move_cursor(&mut editor, CursorMovement::VisualJumpDown, false);
+
+    assert_eq!(editor.snapshot().cursor, TextPosition::new(7, 4));
+}

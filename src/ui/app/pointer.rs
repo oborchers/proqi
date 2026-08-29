@@ -23,6 +23,13 @@ pub(super) struct PointerClick {
     count: u8,
 }
 
+#[derive(Clone, Copy)]
+pub(super) struct OverlayActivation {
+    column: u16,
+    row: u16,
+    at: Timestamp,
+}
+
 impl BoardApp {
     pub(super) fn reset_pointer_click_for_input(&mut self, input: &crate::ui::UiInput) {
         if !matches!(
@@ -35,6 +42,15 @@ impl BoardApp {
             })
         ) {
             self.pointer_click = None;
+        }
+        if !matches!(
+            input,
+            crate::ui::UiInput::Pointer(PointerInput {
+                kind: PointerKind::Down(_) | PointerKind::Up(_),
+                ..
+            })
+        ) {
+            self.overlay_activation = None;
         }
     }
 
@@ -62,6 +78,11 @@ impl BoardApp {
         clock: &impl Clock,
     ) -> Vec<Effect> {
         self.edit_boundary = None;
+        if matches!(pointer.kind, PointerKind::Down(PointerButton::Left))
+            && self.consume_repeated_overlay_activation(pointer, clock.now())
+        {
+            return Vec::new();
+        }
         let mut effects = match pointer.kind {
             PointerKind::Down(_) | PointerKind::Drag(_) | PointerKind::Up(_) => {
                 self.flush_pending_edit(ids, clock)
@@ -149,7 +170,9 @@ impl BoardApp {
             Some(HitTarget::ExitEdit) => self.finish_edit(ids, clock),
             Some(HitTarget::Retry) => self.retry_persistence(),
             Some(HitTarget::ExportRecovery) => self.export_recovery(ids, clock),
-            Some(HitTarget::PaletteItem(index)) => self.activate_palette_item(index, ids, clock),
+            Some(HitTarget::PaletteItem(index)) => {
+                self.activate_palette_item(index, pointer, ids, clock)
+            }
             Some(HitTarget::CloseOverlay) => {
                 self.close_overlay();
                 Vec::new()
@@ -164,9 +187,15 @@ impl BoardApp {
     fn activate_palette_item(
         &mut self,
         index: usize,
+        pointer: PointerInput,
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
+        self.overlay_activation = Some(OverlayActivation {
+            column: pointer.column,
+            row: pointer.row,
+            at: clock.now(),
+        });
         if self.search.is_some() {
             self.execute_search_visible_index(index)
         } else if self.transfer.is_some() {
@@ -176,6 +205,26 @@ impl BoardApp {
         } else {
             self.execute_palette_visible_index(index, ids, clock)
         }
+    }
+
+    fn consume_repeated_overlay_activation(
+        &mut self,
+        pointer: PointerInput,
+        now: Timestamp,
+    ) -> bool {
+        let Some(previous) = self.overlay_activation else {
+            return false;
+        };
+        let repeated = previous.column.abs_diff(pointer.column) <= 1
+            && previous.row.abs_diff(pointer.row) <= 1
+            && now
+                .as_millis()
+                .checked_sub(previous.at.as_millis())
+                .is_some_and(|elapsed| (0..=MULTI_CLICK_MILLIS).contains(&elapsed));
+        if !repeated {
+            self.overlay_activation = None;
+        }
+        repeated
     }
 
     fn handle_thought_pointer(
