@@ -33,6 +33,14 @@ pub(crate) fn items(app: &BoardApp) -> Vec<Shortcut> {
         (keys.delete.to_string(), "Delete"),
         (primary("D"), "Duplicate"),
         (super::settings::key_label(keys.select), "Select"),
+        (
+            format!(
+                "{}/{}",
+                super::settings::key_label(keys.select_all),
+                primary("A")
+            ),
+            "Select all",
+        ),
         (super::settings::key_label(keys.range_select), "Latch"),
         (keys.undo.to_string(), "Undo"),
         (super::settings::key_label(keys.collapse), "Collapse"),

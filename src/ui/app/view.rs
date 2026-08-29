@@ -206,7 +206,7 @@ impl BoardApp {
     /// Active delivery intention while a direction is being selected.
     #[must_use]
     pub fn submission_mode(&self) -> Option<crate::ports::agent::SubmissionDisposition> {
-        self.submission_mode.map(|mode| mode.disposition)
+        self.submission_mode.as_ref().map(|mode| mode.disposition)
     }
 
     /// Prepare current frame geometry without changing the logical cursor.
@@ -219,39 +219,35 @@ impl BoardApp {
 
     /// Recompute one authoritative frame layout and reflow the active editor.
     pub fn prepare_frame(&mut self, area: Rect) -> LayoutSnapshot {
-        let mut layout_state = self.presentation_state();
-        if self.manual_board_scroll {
-            layout_state.focused_thought = None;
-        }
+        let layout_state = self.presentation_state();
         let first_editor = self.editor_presentation();
         let has_status = self.status.is_some()
             || matches!(self.state.durability, DurabilityState::Failed { .. });
-        let first = crate::ui::layout::compute_with_density(
+        let (first, first_scroll) = crate::ui::layout::compute_for_app(
             &layout_state,
             first_editor.as_ref().map(|view| &view.snapshot),
             area,
-            self.first_visible,
             self.insertion_focused(),
             !self.agent_targets.is_empty(),
             has_status,
             self.settings.density,
-            self.first_visible_row,
             &self.settings.keybindings,
+            self.board_viewport,
         );
         let height = self.focused_height(&first);
         self.prepare_layout(TextViewport::new(first.content_width, height));
         let editor = self.editor_presentation();
-        let mut layout = crate::ui::layout::compute_with_density(
+        let viewport = self.board_viewport.at(first_scroll.current);
+        let (mut layout, scroll) = crate::ui::layout::compute_for_app(
             &layout_state,
             editor.as_ref().map(|view| &view.snapshot),
             area,
-            first.first_index,
             self.insertion_focused(),
             !self.agent_targets.is_empty(),
             has_status,
             self.settings.density,
-            self.first_visible_row,
             &self.settings.keybindings,
+            viewport,
         );
         self.configure_overlay(&mut layout);
         layout.configure_agent_controls_with_keys(
@@ -271,8 +267,8 @@ impl BoardApp {
         );
         let final_height = self.focused_height(&layout);
         self.prepare_layout(TextViewport::new(layout.content_width, final_height));
-        self.first_visible = layout.first_index;
-        self.first_visible_row = layout.first_row_offset;
+        self.board_viewport = self.board_viewport.at(scroll.current);
+        self.scroll_geometry = Some(scroll);
         self.layout = Some(layout.clone());
         layout
     }
@@ -286,7 +282,7 @@ impl BoardApp {
     }
 
     fn configure_overlay(&self, layout: &mut LayoutSnapshot) {
-        let screenshot_items = usize::from(self.screenshot_takeover.is_some()) * 2;
+        let screenshot_items = usize::from(self.screenshot.takeover.is_some()) * 2;
         let update_items = usize::from(self.update_prompt.is_some()) * 3;
         let palette_items = self
             .palette
@@ -295,7 +291,7 @@ impl BoardApp {
         let invocation_items = self.invocation_match_count();
         let search_items = self.search_match_count();
         let transfer_items = self.transfer_match_count();
-        let preferred_rows = if self.screenshot_takeover.is_some() {
+        let preferred_rows = if self.screenshot.takeover.is_some() {
             2
         } else if self.update_prompt.is_some() {
             4

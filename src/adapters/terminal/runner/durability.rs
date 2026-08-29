@@ -196,7 +196,8 @@ fn complete_result(
                 pending.persistence = pending.persistence.saturating_sub(1);
             }
             let application_result = complete_sequence(app, pending, sequence, result);
-            app.acknowledge_persistence_result(sequence, application_result);
+            let effects = app.acknowledge_persistence_result(sequence, application_result);
+            enqueue_effects(app, lanes, effects, pending)?;
         }
         PersistenceResult::RetryFinished => {
             pending.persistence = pending.persistence.saturating_sub(1);

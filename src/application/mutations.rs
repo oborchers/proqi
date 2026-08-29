@@ -3,7 +3,7 @@
 pub(super) mod bulk;
 
 use super::error::{ApplicationError, ApplicationResult, FailureCode};
-use super::mutations::bulk::delete_thoughts;
+use super::{mutations::bulk::delete_thoughts, prompt::MULTI_THOUGHT_SEPARATOR};
 use crate::{
     application::model::{AppState, ClipboardIntent, Effect, InteractionMode, PendingClipboard},
     domain::{
@@ -136,7 +136,7 @@ pub(super) fn request_clipboard(
         .iter()
         .map(|thought| thought.content.as_str())
         .collect::<Vec<_>>()
-        .join("\n\n");
+        .join(MULTI_THOUGHT_SEPARATOR);
     let thought_id = ordered_ids[0];
     state
         .pending_clipboard

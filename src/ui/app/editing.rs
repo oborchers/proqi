@@ -41,6 +41,7 @@ pub(super) fn command_for_key(key: UiKey, adjacent_fold: bool) -> Option<(EditCo
         | UiKey::PasteClipboard
         | UiKey::Duplicate
         | UiKey::Tab
+        | UiKey::BackTab
         | UiKey::PickerPrevious
         | UiKey::PickerNext => None,
     }
@@ -70,10 +71,35 @@ impl BoardApp {
     ) -> Vec<Effect> {
         let mut effects = self.flush_pending_edit(ids, clock);
         self.apply_edit(if smart {
-            EditCommand::InsertSmartNewline
+            EditCommand::InsertSmartNewline {
+                indent_width: self.settings.list_indent_width,
+            }
         } else {
             EditCommand::InsertNewline
         });
+        effects.extend(self.flush_pending_edit(ids, clock));
+        effects
+    }
+
+    pub(super) fn apply_indentation(
+        &mut self,
+        outdent: bool,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        let mut effects = self.flush_pending_edit(ids, clock);
+        let command = if outdent {
+            EditCommand::Outdent {
+                width: self.settings.list_indent_width,
+                smart_lists: self.settings.smart_lists,
+            }
+        } else {
+            EditCommand::Indent {
+                width: self.settings.list_indent_width,
+                smart_lists: self.settings.smart_lists,
+            }
+        };
+        self.apply_edit(command);
         effects.extend(self.flush_pending_edit(ids, clock));
         effects
     }
@@ -119,6 +145,7 @@ impl BoardApp {
             return Vec::new();
         }
         let mut effects = self.finish_edit(ids, clock);
+        self.palette_selection_handoff = None;
         if let Some(target) = target {
             self.insertion_focus = super::InsertionFocus::Inactive;
             effects.extend(self.reduce(Action::FocusThought(Some(target))));
@@ -213,7 +240,8 @@ impl BoardApp {
             }
         }
         self.edit_generation = self.edit_generation.wrapping_add(1);
-        self.manual_board_scroll = false;
+        self.board_viewport = self.board_viewport.follow_focus();
+        self.scroll_geometry = None;
         self.layout = None;
     }
 

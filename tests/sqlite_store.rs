@@ -134,6 +134,8 @@ mod compaction;
 mod concurrency;
 #[path = "sqlite_store/core.rs"]
 mod core;
+#[path = "sqlite_store/editor.rs"]
+mod editor;
 #[path = "sqlite_store/recovery.rs"]
 mod recovery;
 #[path = "sqlite_store/screenshot.rs"]

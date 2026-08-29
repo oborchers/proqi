@@ -140,6 +140,13 @@ impl BoardApp {
         self.layout = None;
     }
 
+    pub(super) fn select_all_thoughts(&mut self) {
+        let order = self.live_thought_ids();
+        self.selection.replace_arbitrary(order);
+        self.hovered = None;
+        self.layout = None;
+    }
+
     pub(super) fn activate_range_latch(&mut self) {
         let Some(focused) = self.state.focused_thought else {
             return;
@@ -189,8 +196,8 @@ impl BoardApp {
         self.selection.set_range(&order, anchor, endpoint);
         if self.selection.is_range() {
             self.insertion_focus = super::InsertionFocus::Inactive;
-            self.manual_board_scroll = false;
-            self.first_visible_row = 0;
+            self.board_viewport = self.board_viewport.follow_focus();
+            self.scroll_geometry = None;
             let _effects = self.reduce(Action::FocusThought(Some(endpoint)));
             self.hovered = None;
             self.layout = None;

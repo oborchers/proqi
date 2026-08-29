@@ -1,7 +1,9 @@
 //! Terminal-independent board interaction state.
 
 mod agent;
+mod agent_delivery;
 mod agent_identity;
+mod agent_preparation;
 mod clipboard;
 mod commands;
 mod control;
@@ -11,6 +13,7 @@ mod folds;
 mod help;
 mod invocation;
 mod palette;
+mod palette_handoff;
 mod pending_types;
 mod pointer;
 mod presentation;
@@ -26,7 +29,7 @@ mod update;
 mod view;
 
 use std::{
-    collections::{BTreeMap, BTreeSet, VecDeque},
+    collections::{BTreeMap, BTreeSet},
     path::PathBuf,
 };
 
@@ -45,10 +48,13 @@ use crate::{
 use super::{
     HitTarget, LayoutSnapshot, PastePayload, UiSettings,
     input::{PointerButton, PointerInput, PointerKind, UiInput, UiKey},
+    layout::scroll::{BoardViewport, ScrollGeometry},
 };
 
 pub(in crate::ui) use invocation::InvocationChoiceView;
-use pending_types::{PendingEditorClipboard, PendingSubmission, SubmissionMode};
+use pending_types::{
+    DeferredSubmissionIntent, PendingEditorClipboard, PendingSubmission, SubmissionMode,
+};
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 enum InsertionFocus {
@@ -80,9 +86,8 @@ pub struct BoardApp {
     /// Transient human-readable status.
     pub(in crate::ui) status: Option<crate::ui::status::UiStatus>,
     viewport: TextViewport,
-    first_visible: usize,
-    first_visible_row: usize,
-    manual_board_scroll: bool,
+    board_viewport: BoardViewport,
+    scroll_geometry: Option<ScrollGeometry>,
     layout: Option<LayoutSnapshot>,
     dragged_thought: Option<ThoughtId>,
     drag_target: Option<usize>,
@@ -91,6 +96,7 @@ pub struct BoardApp {
     insertion_focus: InsertionFocus,
     insertion_confirmation: InsertionConfirmation,
     edit_boundary: Option<CursorMovement>,
+    palette_selection_handoff: Option<palette_handoff::EditorSelectionHandoff>,
     palette: Option<palette::PaletteState>,
     invocation_popup: Option<invocation::InvocationPopup>,
     search: Option<search::SearchState>,
@@ -106,14 +112,9 @@ pub struct BoardApp {
     recovery_exported_for: Option<OperationSequence>,
     agent_targets: Vec<AgentTarget>,
     submission_mode: Option<SubmissionMode>,
+    deferred_submissions: BTreeMap<SubmissionId, DeferredSubmissionIntent>,
     pending_submissions: BTreeMap<SubmissionId, PendingSubmission>,
-    screenshot_state: screenshot::ScreenshotState,
-    screenshot_candidates: VecDeque<crate::ports::screenshot::ScreenshotCandidate>,
-    screenshot_save: Option<screenshot::ScreenshotSave>,
-    screenshot_takeover: Option<crate::ports::runtime::CaptureOwnerInfo>,
-    screenshot_takeover_selected: usize,
-    screenshot_auto_ready: Option<ThoughtId>,
-    screenshot_notice_count: usize,
+    screenshot: screenshot::ScreenshotInbox,
     update_barrier: Option<update::UpdateBarrier>,
     update_restart: Option<crate::domain::StableVersion>,
     update_prompt: Option<update::UpdatePrompt>,
@@ -164,9 +165,8 @@ impl BoardApp {
             help_scroll: 0,
             status: None,
             viewport: TextViewport::default(),
-            first_visible: 0,
-            first_visible_row: 0,
-            manual_board_scroll: false,
+            board_viewport: BoardViewport::default(),
+            scroll_geometry: None,
             layout: None,
             dragged_thought: None,
             drag_target: None,
@@ -175,6 +175,7 @@ impl BoardApp {
             insertion_focus,
             insertion_confirmation: InsertionConfirmation::Idle,
             edit_boundary: None,
+            palette_selection_handoff: None,
             palette: None,
             invocation_popup: None,
             search: None,
@@ -190,14 +191,9 @@ impl BoardApp {
             recovery_exported_for: None,
             agent_targets: Vec::new(),
             submission_mode: None,
+            deferred_submissions: BTreeMap::new(),
             pending_submissions: BTreeMap::new(),
-            screenshot_state: screenshot::ScreenshotState::Off,
-            screenshot_candidates: VecDeque::new(),
-            screenshot_save: None,
-            screenshot_takeover: None,
-            screenshot_takeover_selected: 0,
-            screenshot_auto_ready: None,
-            screenshot_notice_count: 0,
+            screenshot: screenshot::ScreenshotInbox::default(),
             update_barrier: None,
             update_restart: None,
             update_prompt: None,
@@ -217,7 +213,7 @@ impl BoardApp {
     ) -> Vec<Effect> {
         self.reset_pointer_click_for_input(&input);
         if self.help
-            || self.screenshot_takeover.is_some()
+            || self.screenshot.takeover.is_some()
             || self.update_prompt.is_some()
             || self.palette.is_some()
             || self.invocation_popup.is_some()
@@ -231,7 +227,7 @@ impl BoardApp {
         if self.help {
             return self.handle_help_input(&input);
         }
-        if self.screenshot_takeover.is_some() {
+        if self.screenshot.takeover.is_some() {
             return self.handle_screenshot_takeover_input(&input, ids, clock);
         }
         if self.screenshot_save_in_flight() {
@@ -256,7 +252,7 @@ impl BoardApp {
         }
         if !matches!(input, UiInput::Resize { .. } | UiInput::HostFocusGained) {
             self.status = None;
-            self.screenshot_notice_count = 0;
+            self.screenshot.notice_count = 0;
         }
         if !matches!(
             input,
@@ -300,6 +296,7 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
+        self.invalidate_palette_selection_handoff(&input);
         match input {
             UiInput::HostFocusGained => Self::discover_agents(),
             UiInput::Resize { .. } => {
@@ -364,20 +361,25 @@ impl BoardApp {
     }
 
     /// Apply one ordered persistence acknowledgement to the reducer state.
-    pub fn acknowledge_persistence(&mut self, sequence: OperationSequence, succeeded: bool) {
+    pub fn acknowledge_persistence(
+        &mut self,
+        sequence: OperationSequence,
+        succeeded: bool,
+    ) -> Vec<Effect> {
         self.acknowledge_persistence_result(
             sequence,
             succeeded.then_some(()).ok_or(FailureCode::StorageFailed),
-        );
+        )
     }
 
-    /// Apply a typed ordered persistence result to the reducer state.
+    /// Apply a typed ordered persistence result and release durability-gated follow-up work.
     pub fn acknowledge_persistence_result(
         &mut self,
         sequence: OperationSequence,
         result: Result<(), FailureCode>,
-    ) {
+    ) -> Vec<Effect> {
         let succeeded = result.is_ok();
+        let failure = result.as_ref().err().copied();
         if !succeeded {
             self.quit = false;
         } else if self.pending_edit.is_some() {
@@ -392,6 +394,7 @@ impl BoardApp {
             }
         };
         let _effects = self.reduce(action);
+        self.complete_deferred_submission_durability(failure)
     }
 
     pub(super) fn request_quit(&mut self) {
@@ -424,6 +427,26 @@ impl BoardApp {
             at: clock.now(),
         });
         self.sync_editor_from_state();
+        effects
+    }
+
+    fn expand_and_enter_edit(
+        &mut self,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        let Some(thought_id) = self.state.focused_thought else {
+            return Vec::new();
+        };
+        if self.submission_locked(thought_id) {
+            self.set_warning("thought has a submission in progress");
+            return Vec::new();
+        }
+        self.board_viewport = self.board_viewport.follow_focus();
+        self.scroll_geometry = None;
+        self.layout = None;
+        let effects = self.expand_thought(thought_id, ids, clock);
+        self.enter_edit();
         effects
     }
 
