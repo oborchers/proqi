@@ -6,6 +6,7 @@ use crate::{
     ports::{
         agent::{AgentError, SubmissionDisposition, SubmissionReceipt, SubmissionRequest},
         editor::EditorSnapshot,
+        store::SubmissionAttempt,
     },
 };
 
@@ -28,7 +29,13 @@ pub(super) struct PendingSubmissionSource {
     pub(super) source_digest: [u8; 32],
 }
 
-#[derive(Clone, Copy)]
+pub(super) struct DeferredSubmissionIntent {
+    pub(super) attempt: SubmissionAttempt,
+    pub(super) pending: PendingSubmission,
+}
+
+#[derive(Clone)]
 pub(super) struct SubmissionMode {
     pub(super) disposition: SubmissionDisposition,
+    pub(super) thought_ids: Vec<ThoughtId>,
 }

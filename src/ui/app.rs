@@ -1,7 +1,9 @@
 //! Terminal-independent board interaction state.
 
 mod agent;
+mod agent_delivery;
 mod agent_identity;
+mod agent_preparation;
 mod clipboard;
 mod commands;
 mod control;
@@ -47,7 +49,9 @@ use super::{
 };
 
 pub(in crate::ui) use invocation::InvocationChoiceView;
-use pending_types::{PendingEditorClipboard, PendingSubmission, SubmissionMode};
+use pending_types::{
+    DeferredSubmissionIntent, PendingEditorClipboard, PendingSubmission, SubmissionMode,
+};
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 enum InsertionFocus {
@@ -105,6 +109,7 @@ pub struct BoardApp {
     recovery_exported_for: Option<OperationSequence>,
     agent_targets: Vec<AgentTarget>,
     submission_mode: Option<SubmissionMode>,
+    deferred_submissions: BTreeMap<SubmissionId, DeferredSubmissionIntent>,
     pending_submissions: BTreeMap<SubmissionId, PendingSubmission>,
     update_barrier: Option<update::UpdateBarrier>,
     update_restart: Option<crate::domain::StableVersion>,
@@ -182,6 +187,7 @@ impl BoardApp {
             recovery_exported_for: None,
             agent_targets: Vec::new(),
             submission_mode: None,
+            deferred_submissions: BTreeMap::new(),
             pending_submissions: BTreeMap::new(),
             update_barrier: None,
             update_restart: None,
@@ -341,20 +347,25 @@ impl BoardApp {
     }
 
     /// Apply one ordered persistence acknowledgement to the reducer state.
-    pub fn acknowledge_persistence(&mut self, sequence: OperationSequence, succeeded: bool) {
+    pub fn acknowledge_persistence(
+        &mut self,
+        sequence: OperationSequence,
+        succeeded: bool,
+    ) -> Vec<Effect> {
         self.acknowledge_persistence_result(
             sequence,
             succeeded.then_some(()).ok_or(FailureCode::StorageFailed),
-        );
+        )
     }
 
-    /// Apply a typed ordered persistence result to the reducer state.
+    /// Apply a typed ordered persistence result and release durability-gated follow-up work.
     pub fn acknowledge_persistence_result(
         &mut self,
         sequence: OperationSequence,
         result: Result<(), FailureCode>,
-    ) {
+    ) -> Vec<Effect> {
         let succeeded = result.is_ok();
+        let failure = result.as_ref().err().copied();
         if !succeeded {
             self.quit = false;
         } else if self.pending_edit.is_some() {
@@ -369,6 +380,7 @@ impl BoardApp {
             }
         };
         let _effects = self.reduce(action);
+        self.complete_deferred_submission_durability(failure)
     }
 
     pub(super) fn request_quit(&mut self) {

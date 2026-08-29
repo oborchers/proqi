@@ -1,5 +1,25 @@
 use super::*;
 
+impl Fixture {
+    pub(super) fn acknowledge_all_persistence(&mut self) {
+        loop {
+            let next = match self.app.state.durability.clone() {
+                proqi::application::DurabilityState::Durable { .. } => return,
+                proqi::application::DurabilityState::Pending { durable, .. } => {
+                    durable.checked_next().expect("next persistence sequence")
+                }
+                proqi::application::DurabilityState::Failed { .. } => {
+                    panic!("fixture persistence failed");
+                }
+            };
+            assert!(
+                self.app.acknowledge_persistence(next, true).is_empty(),
+                "fixture setup unexpectedly released follow-up work"
+            );
+        }
+    }
+}
+
 #[test]
 fn storage_failure_blocks_new_edits_and_exposes_retry() {
     let mut fixture = Fixture::new();

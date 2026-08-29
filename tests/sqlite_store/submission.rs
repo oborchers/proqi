@@ -107,6 +107,50 @@ fn journal_transitions_are_compare_and_set_and_recovery_is_conservative() {
 }
 
 #[test]
+fn restart_marks_a_multi_source_send_unknown_without_removing_sources() {
+    let fixture = DatabaseFixture::new();
+    let mut store = fixture.open();
+    let mut ids = FakeIdGenerator::new(2_500);
+    let mut state = session_state(&mut ids, &test_path("multi-submission-recovery"));
+    let session_id = state.board.session.id;
+    store
+        .commit(&OperationBatch::CreateSession(state.board.session.clone()))
+        .expect("create session");
+    let first = create_thought(&mut store, &mut state, &mut ids, "Grüße 👩‍💻", 2);
+    let second = create_thought(&mut store, &mut state, &mut ids, "", 3);
+    let mut sending = attempt(&mut ids, &state, first, [12; 32]);
+    sending.sources = vec![
+        SubmissionSource {
+            thought_id: first,
+            source_digest: [12; 32],
+        },
+        SubmissionSource {
+            thought_id: second,
+            source_digest: [13; 32],
+        },
+    ];
+    store.prepare_submission(&sending).expect("prepare all");
+    store
+        .mark_submission_sending(sending.id, Timestamp::from_millis(21))
+        .expect("mark sending");
+
+    drop(store);
+    let mut restarted = fixture.open();
+    restarted
+        .recover_submissions(session_id, Timestamp::from_millis(22))
+        .expect("recover pending delivery");
+
+    let snapshot = restarted
+        .load_session(session_id)
+        .expect("restart snapshot");
+    assert_eq!(snapshot.board.live_thoughts().len(), 2);
+    assert_eq!(snapshot.board.live_thoughts()[0].content, "Grüße 👩‍💻");
+    assert_eq!(snapshot.board.live_thoughts()[1].content, "");
+    let connection = Connection::open(&fixture.config.database_path).expect("journal database");
+    assert_eq!(state_of(&connection, sending.id), "outcome_unknown");
+}
+
+#[test]
 fn accepted_receipt_persists_advisory_state_and_deletion_identity() {
     let fixture = DatabaseFixture::new();
     let mut store = fixture.open();

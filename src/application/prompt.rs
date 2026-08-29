@@ -22,6 +22,8 @@ pub(crate) const SHARED_PROMPT_STARTERS: [SharedPromptStarter; 2] = [
     },
 ];
 
+pub(crate) const MULTI_THOUGHT_SEPARATOR: &str = "\n\n";
+
 pub(crate) fn join_prompt_for_target(
     target: &AgentTarget,
     sources: &[(ThoughtId, String)],
@@ -38,7 +40,7 @@ pub(crate) fn join_prompt_for_target(
             }
         })
         .collect::<Vec<_>>()
-        .join("\n\n")
+        .join(MULTI_THOUGHT_SEPARATOR)
 }
 
 pub(crate) fn supports_shared_starters(agent_kind: &str) -> bool {

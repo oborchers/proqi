@@ -26,6 +26,7 @@ impl BoardApp {
             UiKey::Escape if !self.selection_is_empty() || self.range_latched() => {
                 self.clear_board_selection();
             }
+            UiKey::SelectAll => self.select_all_thoughts(),
             UiKey::Character(character) => {
                 return self.handle_board_command(character, ids, clock);
             }
@@ -78,6 +79,14 @@ impl BoardApp {
         clock: &impl Clock,
     ) -> Vec<Effect> {
         match key {
+            UiKey::Escape if !self.selection_is_empty() || self.range_latched() => {
+                self.clear_board_selection();
+                Vec::new()
+            }
+            UiKey::SelectAll => {
+                self.select_all_thoughts();
+                Vec::new()
+            }
             UiKey::Character(character)
                 if self.settings.keybindings.command(character)
                     == Some(BoardCommand::FocusDown) =>
@@ -107,7 +116,6 @@ impl BoardApp {
             }
             | UiKey::Backspace
             | UiKey::Delete
-            | UiKey::SelectAll
             | UiKey::DeleteLine
             | UiKey::Copy
             | UiKey::Cut
@@ -208,6 +216,10 @@ impl BoardApp {
             Some(BoardCommand::Collapse) => self.collapse(ids, clock),
             Some(BoardCommand::Select) => {
                 self.toggle_selection();
+                Vec::new()
+            }
+            Some(BoardCommand::SelectAll) => {
+                self.select_all_thoughts();
                 Vec::new()
             }
             Some(BoardCommand::RangeSelect) => {
