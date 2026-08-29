@@ -19,6 +19,7 @@ pub(super) struct PendingWork {
     pub(super) sync_controls: VecDeque<ControlEnvelope>,
     pub(super) update_restart: Option<PendingUpdateRestart>,
     pub(super) update: usize,
+    pub(super) screenshot: usize,
 }
 
 impl PendingWork {
@@ -32,6 +33,7 @@ impl PendingWork {
             && self.sync_controls.is_empty()
             && self.update_restart.is_none()
             && self.update == 0
+            && self.screenshot == 0
     }
 }
 

@@ -10,6 +10,8 @@ use crate::domain::{
     TextPosition, Thought, ThoughtId, ThoughtRevision, Timestamp,
 };
 
+use crate::ports::runtime::CaptureOwnerInfo;
+
 pub use effect::Effect;
 
 /// Active interaction context.
@@ -84,6 +86,22 @@ pub enum UpdateIntent {
     Skip(StableVersion),
     /// Show accurate standalone replacement instructions.
     ViewInstructions(StableVersion),
+}
+
+/// Explicit screenshot-inbox runtime decision requested by the UI.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ScreenshotIntent {
+    /// Acquire the installation-wide capture lock and start listening.
+    Enable,
+    /// Reconcile accepted files and stop listening.
+    Disable,
+    /// Ask the verified compatible owner to relinquish capture, then retry.
+    TakeOver {
+        /// Owner metadata verified again by local control transport.
+        owner: CaptureOwnerInfo,
+        /// Idempotent takeover request identity.
+        request_id: RequestId,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -243,6 +261,26 @@ impl AppState {
         self.board_history.push(operation.clone());
         self.board_history_cursor += 1;
         self.track_pending(operation.sequence);
+        self.keep_focus_valid();
+        Ok(())
+    }
+
+    pub(super) fn apply_durable_capture(
+        &mut self,
+        operation: &BoardOperation,
+    ) -> ApplicationResult<()> {
+        if operation.sequence != self.next_sequence()? {
+            return Err(ApplicationError::InvalidState);
+        }
+        let mut board = self.board.clone();
+        board.apply_mutation(&operation.forward, operation.created_at)?;
+        board.session.last_durable_sequence = operation.sequence;
+        self.board = board;
+        self.board_history.truncate(self.board_history_cursor);
+        self.board_history.push(operation.clone());
+        self.board_history_cursor += 1;
+        self.highest_sequence = operation.sequence;
+        self.refresh_durability();
         self.keep_focus_valid();
         Ok(())
     }

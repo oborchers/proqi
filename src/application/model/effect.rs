@@ -14,11 +14,15 @@ use crate::{
     },
 };
 
-use super::{ClipboardIntent, FailureCode, UpdateIntent};
+use super::{ClipboardIntent, FailureCode, ScreenshotIntent, UpdateIntent};
 
 /// One external or durable effect emitted by the reducer and application UI.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Effect {
+    /// Start, stop, or explicitly take over screenshot capture.
+    Screenshot(ScreenshotIntent),
+    /// Atomically commit one screenshot receipt and its exact thought.
+    CommitCapture(crate::ports::store::CaptureCommit),
     /// Execute one explicit installation-wide update decision outside the reducer lane.
     Update(UpdateIntent),
     /// Discover live destination sessions for an explicit transfer picker.

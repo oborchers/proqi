@@ -1,9 +1,11 @@
 //! Process coordination, leases, paths, and local control transport.
 
+mod capture;
 mod control_endpoint;
 mod schema_lock;
 mod system;
 
+pub use capture::FileCaptureLease;
 pub use schema_lock::{FileSchemaLease, SchemaLockPolicy};
 pub use system::{NativePaths, SystemClock, SystemEnvironment, SystemIdGenerator};
 
@@ -102,6 +104,14 @@ impl FileRuntimeCoordinator {
         self.runtime_dir
             .join("instances")
             .join(format!("{}.json", self.instance_id))
+    }
+
+    fn capture_lock_path(&self) -> PathBuf {
+        self.runtime_dir.join("screenshot-capture.lock")
+    }
+
+    fn capture_metadata_path(&self) -> PathBuf {
+        self.runtime_dir.join("screenshot-capture.json")
     }
 
     fn instance_info(&self, session_id: SessionId) -> InstanceInfo {
@@ -338,7 +348,7 @@ impl Drop for FileSessionLease {
     }
 }
 
-fn write_private_json(path: &Path, value: &InstanceInfo) -> Result<(), RuntimeError> {
+fn write_private_json(path: &Path, value: &impl serde::Serialize) -> Result<(), RuntimeError> {
     let bytes = serde_json::to_vec(value)
         .map_err(|error| RuntimeError::MalformedMetadata(error.to_string()))?;
     let mut file = create_new_private_file(path)?;

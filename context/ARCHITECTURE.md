@@ -190,7 +190,7 @@ the database or a subprocess is slow.
 
 ### Execution lanes
 
-The initial process has four logical lanes:
+The process has six logical lanes:
 
 1. The UI lane reduces actions, computes layout, and renders the latest state.
 2. The input lane reads terminal events and sends normalized input messages.
@@ -198,6 +198,9 @@ The initial process has four logical lanes:
    commands.
 4. The external-effects lane handles clipboard and integration calls with
    explicit timeouts.
+5. The update lane owns bounded installation discovery and explicit updates.
+6. The macOS screenshot lane owns bounded directory reconciliation; on Linux it
+   exposes only the typed unsupported result and starts no watcher.
 
 Channels are bounded. Resize events may be coalesced to the newest dimensions.
 Text edits and structural operations may not be dropped or reordered.
@@ -217,6 +220,14 @@ operation, never an operation already presented as durable.
 On a storage error, the in-memory buffer remains available. The interface shows
 that it is not durable and offers retry or export. It never silently changes a
 failed save into a successful one.
+
+Screenshot creation is deliberately commit-first rather than optimistic. The
+storage lane atomically inserts one capture receipt and its exact append
+operation in detection order. The UI applies the operation only after that
+transaction succeeds. The receipt's rename-stable source fingerprint prevents
+duplicate delivery across repeated notifications, reconciliation, retry,
+restart, and ownership handoff. Failure leaves no partial thought and retains
+retryable work while the capture lease remains authoritative.
 
 ## Core facades
 
@@ -315,6 +326,23 @@ POSIX shell-escaped punctuation, multiple paths, and Unicode names. Ordinary
 prompt text remains exact. Dropped files remain external references and are
 never read or copied automatically.
 
+### `ScreenshotWatcher`
+
+The first Screenshot Inbox is a macOS-only, explicitly activated adapter. Its
+injected watcher factory opens one configured directory, starts a `kqueue`
+directory watch before taking the activation baseline, and treats vnode events
+only as reconciliation hints. Identity uses device, inode, and birth time;
+unchanged size and modification time across conservative observations establish
+stability. Reconciliation opens entries relative to the watched directory with
+no-follow semantics and accepts only bounded, magic-validated PNG, JPEG, or TIFF
+regular files. Linux implements the port only as truthful unsupported behavior.
+
+`com.apple.metadata:kMDItemIsScreenCapture` is the strong language-independent
+best-effort signal. User-configured filename patterns are fallbacks, and broad
+new-image capture is an explicit opt-in. The watcher never captures a screen,
+mutates system preferences, uploads an image, or copies or rewrites its source.
+Only the bounded header required to validate type and dimensions is read.
+
 ### `AgentGateway`
 
 ```rust
@@ -336,7 +364,9 @@ before any prompt process is executed.
 ### `RuntimeCoordinator`
 
 This facade owns session exclusion, active-instance metadata, schema exclusion,
-and update compatibility. Its locks are independent from SQLite transactions.
+update compatibility, and a separate current-user installation-wide screenshot
+capture lease. Its locks are independent from SQLite transactions and from one
+another.
 
 ```rust
 trait RuntimeCoordinator {
@@ -350,6 +380,13 @@ trait RuntimeCoordinator {
 The operating-system lock is authoritative. JSON or database metadata exists
 only to explain which process, version, session, and launch directory holds a
 lock. Process exit releases the authoritative lock even after a crash.
+
+Screenshot capture metadata is bounded and content-redacted. Exactly one live
+process may own capture. A compatible contender can request takeover only
+through the verified owner-control endpoint. The owner confirms scheduling,
+stops watcher admission, performs final reconciliation, drains atomic capture
+commits, and then releases the OS lease. Missing, incompatible, or still-live
+owners are never force-unlocked.
 
 ### `TerminalSession`
 

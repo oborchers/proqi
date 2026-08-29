@@ -167,7 +167,10 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        if self.search.is_some() {
+        if self.screenshot_takeover.is_some() {
+            self.screenshot_takeover_selected = index.min(1);
+            self.choose_screenshot_takeover(ids)
+        } else if self.search.is_some() {
             self.execute_search_visible_index(index)
         } else if self.transfer.is_some() {
             self.choose_transfer_visible(index, ids)

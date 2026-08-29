@@ -352,6 +352,41 @@ location; only raw clipboard images are materialized into Proqi-managed storage.
 Splitting one paste into several thoughts is an explicit later action, not an
 automatic heuristic.
 
+### Screenshot Inbox on macOS
+
+The first Screenshot Inbox is explicitly macOS-only. Pressing the remappable
+board key `i`, or choosing `Enable Screenshot Inbox`, watches the current user's
+Desktop by default. The directory is configurable. Existing entries are
+snapshotted and ignored at activation; each subsequently completed accepted
+image becomes one immediate durable thought whose canonical content is the
+exact absolute source path and whose presentation is the ordinary image fold.
+
+Proqi does not take screenshots. It watches files produced by the user's normal
+macOS screenshot tool and never requests Screen Recording or Accessibility,
+changes screenshot preferences, uploads or analyzes content, or copies or
+rewrites the source. macOS Desktop denial is reported as a Files & Folders
+access problem naming the terminal host that needs access. Linux starts no
+watcher and reports `Screenshot Inbox is available on macOS only`.
+
+The language-independent best-effort signal is
+`com.apple.metadata:kMDItemIsScreenCapture`. User-configured filename patterns
+are fallbacks only; Proqi has no hard-coded localization table. Accepting every
+otherwise valid new image requires `capture_all_new_images = true`. Regular,
+non-symlink PNG, JPEG, and TIFF files must be stable and remain within configured
+byte and dimension bounds.
+
+While active, restrained footer chrome says `inbox listening`; accepted batches
+report `1 new capture` or `N new captures` without taking an active editor's
+focus or caret. The palette action becomes `Disable Screenshot Inbox`.
+
+One authoritative current-user installation-wide OS lock is independent from
+session leases, so exactly one process receives screenshots. A compatible
+contender is offered `Cancel` or `Take over`. Takeover uses verified owner
+control: the owner reconciles, drains atomic capture receipts and thoughts,
+stops its watcher, and releases the lock before the requester retries. A live
+or incompatible owner is never force-unlocked, and a crash releases authority
+through the operating system.
+
 ### Creation affordance
 
 Every active insertion area exposes a quiet `+` control. It can remain visually

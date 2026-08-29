@@ -26,6 +26,10 @@ pub(super) fn enqueue_effects(
 ) -> Result<(), TerminalError> {
     for effect in effects {
         match effect {
+            Effect::CommitCapture(capture) => {
+                lanes.persistence.commit_capture(capture)?;
+                pending.persistence = pending.persistence.saturating_add(1);
+            }
             Effect::CommitBoardOperation(_)
             | Effect::CommitRevision(_)
             | Effect::CommitHistoryMove { .. }
@@ -60,6 +64,16 @@ pub(super) fn enqueue_effects(
                 pending.external = pending.external.saturating_add(1);
             }
             Effect::Notify { code } => app.notify(code),
+            Effect::Screenshot(intent) => {
+                match intent {
+                    crate::application::ScreenshotIntent::Enable => lanes.screenshot.enable()?,
+                    crate::application::ScreenshotIntent::Disable => lanes.screenshot.disable()?,
+                    crate::application::ScreenshotIntent::TakeOver { owner, request_id } => {
+                        lanes.screenshot.take_over(owner, request_id)?;
+                    }
+                }
+                pending.screenshot = pending.screenshot.saturating_add(1);
+            }
         }
     }
     Ok(())
@@ -169,6 +183,10 @@ fn complete_result(
     result: PersistenceResult,
 ) -> Result<bool, TerminalError> {
     match result {
+        PersistenceResult::Capture(result) => {
+            pending.persistence = pending.persistence.saturating_sub(1);
+            app.complete_screenshot_capture(result);
+        }
         PersistenceResult::Sequenced {
             sequence,
             result,

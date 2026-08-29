@@ -1,0 +1,248 @@
+use crate::{
+    adapters::{
+        editor::RopeEditorFactory,
+        memory::{FakeClock, FakeIdGenerator},
+    },
+    application::{AppState, Effect, InteractionMode, ScreenshotIntent},
+    domain::{Session, SessionBoard, Thought, ThoughtPosition, Timestamp},
+    ports::{
+        editor::CursorMovement,
+        environment::IdGenerator as _,
+        runtime::CaptureOwnerInfo,
+        screenshot::{ScreenshotCandidate, ScreenshotFingerprint, ScreenshotImageType},
+        store::{
+            CaptureCommit, CaptureCommitOutcome, CaptureReceipt, CommitReceipt, DurableIdentity,
+            StoreError,
+        },
+    },
+    ui::{BoardApp, PointerButton, PointerInput, PointerKind, UiInput, UiKey},
+};
+use ratatui_core::layout::Rect;
+
+#[test]
+fn durable_capture_preserves_an_active_editor_and_exact_path_annotation() {
+    let (mut app, mut ids, clock, original_id) = app_with_thought();
+    app.state.mode = InteractionMode::Edit {
+        thought_id: original_id,
+    };
+    app.sync_editor_from_state();
+    let editor_before = app.editor_snapshot().expect("editor");
+    app.queue_screenshot_candidates([candidate(3)]);
+    let commit = next_commit(&mut app, &mut ids, &clock);
+    let effects = app.handle(UiInput::Key(UiKey::Character('!')), &mut ids, &clock);
+    assert!(effects.is_empty());
+    let editor_during = app.editor_snapshot().expect("live editor during commit");
+    assert_ne!(editor_during, editor_before);
+    app.complete_screenshot_capture(Ok(created(&commit)));
+
+    assert_eq!(app.state.focused_thought, Some(original_id));
+    assert_eq!(app.editor_snapshot(), Some(editor_during));
+    let captured = app.state.board.live_thoughts()[1];
+    assert_eq!(captured.content, candidate(3).path.to_string_lossy());
+    assert_eq!(captured.annotations[0].start, 0);
+    assert_eq!(captured.annotations[0].end, captured.content.len());
+    assert_eq!(app.status_text(), Some("1 new capture"));
+}
+
+#[test]
+fn newest_capture_in_one_detection_burst_is_left_ready_for_annotation() {
+    let (mut app, mut ids, clock, _) = app_with_thought();
+    app.queue_screenshot_candidates([candidate(4), candidate(5)]);
+
+    let first = next_commit(&mut app, &mut ids, &clock);
+    app.complete_screenshot_capture(Ok(created(&first)));
+    let second = next_commit(&mut app, &mut ids, &clock);
+    let newest_id = capture_thought_id(&second);
+    app.complete_screenshot_capture(Ok(created(&second)));
+
+    assert_eq!(app.state.focused_thought, Some(newest_id));
+    assert_eq!(
+        app.state.mode,
+        InteractionMode::Edit {
+            thought_id: newest_id
+        }
+    );
+    assert_eq!(app.status_text(), Some("2 new captures"));
+}
+
+#[test]
+fn separated_capture_feedback_restarts_at_one() {
+    let (mut app, mut ids, clock, _) = app_with_thought();
+    app.queue_screenshot_candidates([candidate(6)]);
+    let first = next_commit(&mut app, &mut ids, &clock);
+    app.complete_screenshot_capture(Ok(created(&first)));
+    app.state.mode = InteractionMode::Board;
+
+    app.queue_screenshot_candidates([candidate(7)]);
+    let second = next_commit(&mut app, &mut ids, &clock);
+    app.complete_screenshot_capture(Ok(created(&second)));
+
+    assert_eq!(app.status_text(), Some("1 new capture"));
+}
+
+#[test]
+fn failed_capture_has_no_partial_thought_and_is_explicitly_retryable() {
+    let (mut app, mut ids, clock, _) = app_with_thought();
+    app.queue_screenshot_candidates([candidate(8)]);
+    let commit = next_commit(&mut app, &mut ids, &clock);
+    app.complete_screenshot_capture(Err(StoreError::Busy));
+    assert_eq!(app.state.board.live_thoughts().len(), 1);
+    let retry_effects = app.toggle_screenshot_inbox();
+    let [Effect::CommitCapture(retry)] = retry_effects.as_slice() else {
+        panic!("retry capture");
+    };
+    assert_eq!(retry, &commit);
+}
+
+#[test]
+fn palette_names_are_exact_in_both_states() {
+    let (mut app, _, _, _) = app_with_thought();
+    app.open_palette();
+    let (_, entries, _) = app.palette_view().expect("palette");
+    assert!(
+        entries
+            .iter()
+            .any(|entry| entry == "Enable Screenshot Inbox")
+    );
+    app.close_overlay();
+
+    app.screenshot_started();
+    app.open_palette();
+    let (_, entries, _) = app.palette_view().expect("palette");
+    assert!(
+        entries
+            .iter()
+            .any(|entry| entry == "Disable Screenshot Inbox")
+    );
+}
+
+#[test]
+fn takeover_keyboard_and_mouse_choices_emit_verified_owner_requests() {
+    let (mut app, mut ids, clock, _) = app_with_thought();
+    let session_id = app.state.board.session.id;
+    let keyboard_owner = owner(&mut ids, session_id);
+    app.screenshot_conflict(keyboard_owner.clone());
+    assert!(
+        app.handle(
+            UiInput::Key(UiKey::Move {
+                movement: CursorMovement::VisualDown,
+                extend_selection: false,
+            }),
+            &mut ids,
+            &clock,
+        )
+        .is_empty()
+    );
+    let effects = app.handle(UiInput::Key(UiKey::Enter), &mut ids, &clock);
+    assert!(matches!(
+        effects.as_slice(),
+        [Effect::Screenshot(ScreenshotIntent::TakeOver { owner: requested, .. })]
+            if requested == &keyboard_owner
+    ));
+
+    app.screenshot_failed(&crate::ports::screenshot::ScreenshotError::TakeoverFailed);
+    let mouse_owner = owner(&mut ids, session_id);
+    app.screenshot_conflict(mouse_owner.clone());
+    let layout = app.prepare_frame(Rect::new(0, 0, 60, 12));
+    let take_over = layout.overlay.expect("takeover overlay").items[1];
+    let effects = app.handle(
+        UiInput::Pointer(PointerInput {
+            column: take_over.x,
+            row: take_over.y,
+            kind: PointerKind::Down(PointerButton::Left),
+            extend_selection: false,
+        }),
+        &mut ids,
+        &clock,
+    );
+    assert!(matches!(
+        effects.as_slice(),
+        [Effect::Screenshot(ScreenshotIntent::TakeOver { owner: requested, .. })]
+            if requested == &mouse_owner
+    ));
+}
+
+fn next_commit(app: &mut BoardApp, ids: &mut FakeIdGenerator, clock: &FakeClock) -> CaptureCommit {
+    let effects = app.advance_screenshot_capture(ids, clock);
+    let [Effect::CommitCapture(commit)] = effects.as_slice() else {
+        panic!("capture commit");
+    };
+    commit.clone()
+}
+
+fn app_with_thought() -> (
+    BoardApp,
+    FakeIdGenerator,
+    FakeClock,
+    crate::domain::ThoughtId,
+) {
+    let mut ids = FakeIdGenerator::new(1_725_260_000_000);
+    let session = Session::new(
+        ids.session_id(),
+        std::env::temp_dir().join("screenshot-ui"),
+        Timestamp::from_millis(1),
+    )
+    .expect("session");
+    let thought_id = ids.thought_id();
+    let thought = Thought::new(
+        thought_id,
+        session.id,
+        "active".to_owned(),
+        ThoughtPosition::new(0),
+        Timestamp::from_millis(1),
+    );
+    let board = SessionBoard::new(session, vec![thought]).expect("board");
+    (
+        BoardApp::new(AppState::new(board), RopeEditorFactory),
+        ids,
+        FakeClock::new(Timestamp::from_millis(2)),
+        thought_id,
+    )
+}
+
+fn candidate(byte: u8) -> ScreenshotCandidate {
+    ScreenshotCandidate {
+        fingerprint: ScreenshotFingerprint([byte; 32]),
+        path: std::env::temp_dir().join(format!("Unicode capture {byte} 🖼️.png")),
+        image_type: ScreenshotImageType::Png,
+    }
+}
+
+fn capture_thought_id(commit: &CaptureCommit) -> crate::domain::ThoughtId {
+    match &commit.operation.forward {
+        crate::domain::BoardMutation::AddThought { thought } => thought.id,
+        _ => panic!("add thought"),
+    }
+}
+
+fn created(commit: &CaptureCommit) -> CaptureCommitOutcome {
+    let thought_id = capture_thought_id(commit);
+    CaptureCommitOutcome::Created {
+        durable: CommitReceipt {
+            session_id: commit.operation.session_id,
+            sequence: commit.operation.sequence,
+            identity: DurableIdentity::Operation(commit.operation.id),
+            idempotent_replay: false,
+        },
+        capture: CaptureReceipt {
+            source: commit.source,
+            session_id: commit.operation.session_id,
+            thought_id,
+            operation_id: commit.operation.id,
+            accepted_at: commit.operation.created_at,
+        },
+    }
+}
+
+fn owner(ids: &mut FakeIdGenerator, session_id: crate::domain::SessionId) -> CaptureOwnerInfo {
+    CaptureOwnerInfo {
+        instance_id: ids.instance_id(),
+        session_id,
+        pid: 42,
+        version: "test".to_owned(),
+        capture_protocol: crate::ports::control::CAPTURE_CONTROL_PROTOCOL_VERSION,
+        control_protocol: crate::ports::control::CONTROL_PROTOCOL_VERSION,
+        control_endpoint: "private-control-endpoint".to_owned(),
+        started_at: Timestamp::from_millis(1),
+    }
+}

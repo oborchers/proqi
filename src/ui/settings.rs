@@ -103,6 +103,8 @@ pub struct KeyBindings {
     pub help: char,
     /// Exit.
     pub quit: char,
+    /// Toggle the macOS screenshot inbox.
+    pub screenshot_inbox: char,
 }
 
 impl Default for KeyBindings {
@@ -127,6 +129,7 @@ impl Default for KeyBindings {
             commands: ':',
             help: '?',
             quit: 'q',
+            screenshot_inbox: 'i',
         }
     }
 }
@@ -152,6 +155,7 @@ pub(super) enum BoardCommand {
     Commands,
     Help,
     Quit,
+    ScreenshotInbox,
 }
 
 impl KeyBindings {
@@ -176,6 +180,7 @@ impl KeyBindings {
             (self.commands, BoardCommand::Commands),
             (self.help, BoardCommand::Help),
             (self.quit, BoardCommand::Quit),
+            (self.screenshot_inbox, BoardCommand::ScreenshotInbox),
         ];
         bindings
             .into_iter()
@@ -211,6 +216,7 @@ impl KeyBindings {
             self.commands,
             self.help,
             self.quit,
+            self.screenshot_inbox,
         ];
         for (index, value) in values.iter().enumerate() {
             if value.is_control() || values[index + 1..].contains(value) {

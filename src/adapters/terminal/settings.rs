@@ -16,6 +16,9 @@ use crate::ui::{
 };
 
 use super::TerminalError;
+use crate::ports::screenshot::{
+    ScreenshotBounds, ScreenshotError, ScreenshotImageType, ScreenshotInboxConfig,
+};
 
 const MAX_CONFIG_BYTES: u64 = 64 * 1024;
 const THEME_SCHEMA_VERSION: u16 = 1;
@@ -26,7 +29,68 @@ pub(crate) struct LoadedSettings {
     pub(crate) ui: UiSettings,
     pub(crate) theme: ThemeRecipe,
     pub(crate) invocation_roots: Vec<AdditionalInvocationRoot>,
+    pub(crate) screenshot: ScreenshotSettings,
     theme_source: ThemeSource,
+}
+
+/// Validated settings whose native Desktop default is resolved only on enable.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct ScreenshotSettings {
+    directory: Option<PathBuf>,
+    filename_patterns: Vec<String>,
+    capture_all_new_images: bool,
+    supported_types: Vec<ScreenshotImageType>,
+    bounds: ScreenshotBounds,
+    debounce_ms: u64,
+}
+
+impl Default for ScreenshotSettings {
+    fn default() -> Self {
+        Self {
+            directory: None,
+            filename_patterns: Vec::new(),
+            capture_all_new_images: false,
+            supported_types: vec![
+                ScreenshotImageType::Png,
+                ScreenshotImageType::Jpeg,
+                ScreenshotImageType::Tiff,
+            ],
+            bounds: ScreenshotBounds::default(),
+            debounce_ms: 350,
+        }
+    }
+}
+
+impl ScreenshotSettings {
+    pub(crate) fn watcher_config(&self) -> Result<ScreenshotInboxConfig, ScreenshotError> {
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = self;
+            Err(ScreenshotError::UnsupportedPlatform)
+        }
+        #[cfg(target_os = "macos")]
+        {
+            let directory = self.directory.clone().or_else(default_screenshot_directory);
+            let config = ScreenshotInboxConfig {
+                directory: directory.ok_or(ScreenshotError::InvalidConfig(
+                    "the current user's Desktop directory is unavailable; configure screenshot_inbox.directory",
+                ))?,
+                filename_patterns: self.filename_patterns.clone(),
+                capture_all_new_images: self.capture_all_new_images,
+                supported_types: self.supported_types.clone(),
+                bounds: self.bounds,
+                debounce: std::time::Duration::from_millis(self.debounce_ms),
+            };
+            config.validate()?;
+            Ok(config)
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn default_screenshot_directory() -> Option<PathBuf> {
+    directories::UserDirs::new()
+        .and_then(|directories| directories.desktop_dir().map(Path::to_path_buf))
 }
 
 impl LoadedSettings {
@@ -57,6 +121,7 @@ struct SettingsDocument {
     keybindings: KeyBindings,
     density: BoardDensity,
     invocation_roots: Vec<InvocationRootDocument>,
+    screenshot_inbox: ScreenshotSettingsDocument,
 }
 
 impl Default for SettingsDocument {
@@ -71,6 +136,38 @@ impl Default for SettingsDocument {
             keybindings: KeyBindings::default(),
             density: BoardDensity::default(),
             invocation_roots: Vec::new(),
+            screenshot_inbox: ScreenshotSettingsDocument::default(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+struct ScreenshotSettingsDocument {
+    directory: Option<String>,
+    filename_patterns: Vec<String>,
+    capture_all_new_images: bool,
+    supported_types: Vec<String>,
+    min_file_bytes: u64,
+    max_file_bytes: u64,
+    max_dimension: u32,
+    max_pixels: u64,
+    debounce_ms: u64,
+}
+
+impl Default for ScreenshotSettingsDocument {
+    fn default() -> Self {
+        let bounds = ScreenshotBounds::default();
+        Self {
+            directory: None,
+            filename_patterns: Vec::new(),
+            capture_all_new_images: false,
+            supported_types: vec!["png".to_owned(), "jpeg".to_owned(), "tiff".to_owned()],
+            min_file_bytes: bounds.min_file_bytes,
+            max_file_bytes: bounds.max_file_bytes,
+            max_dimension: bounds.max_dimension,
+            max_pixels: bounds.max_pixels,
+            debounce_ms: 350,
         }
     }
 }
@@ -130,12 +227,63 @@ fn parse_settings(config_dir: &Path, content: &str) -> Result<LoadedSettings, Te
     };
     let (theme, theme_source) = load_theme(config_dir, &document.theme, document.theme_overrides)?;
     let invocation_roots = validate_invocation_roots(document.invocation_roots)?;
+    let screenshot = validate_screenshot_settings(document.screenshot_inbox)?;
     Ok(LoadedSettings {
         ui,
         theme,
         invocation_roots,
+        screenshot,
         theme_source,
     })
+}
+
+fn validate_screenshot_settings(
+    document: ScreenshotSettingsDocument,
+) -> Result<ScreenshotSettings, TerminalError> {
+    let directory = document.directory.map(PathBuf::from);
+    if directory.as_ref().is_some_and(|path| !path.is_absolute()) {
+        return Err(TerminalError::Config(
+            "screenshot_inbox.directory must be absolute".to_owned(),
+        ));
+    }
+    let supported_types = document
+        .supported_types
+        .iter()
+        .map(|value| ScreenshotImageType::parse(value))
+        .collect::<Option<Vec<_>>>()
+        .ok_or_else(|| {
+            TerminalError::Config(
+                "screenshot_inbox.supported_types accepts png, jpeg, and tiff".to_owned(),
+            )
+        })?;
+    let settings = ScreenshotSettings {
+        directory,
+        filename_patterns: document.filename_patterns,
+        capture_all_new_images: document.capture_all_new_images,
+        supported_types,
+        bounds: ScreenshotBounds {
+            min_file_bytes: document.min_file_bytes,
+            max_file_bytes: document.max_file_bytes,
+            max_dimension: document.max_dimension,
+            max_pixels: document.max_pixels,
+        },
+        debounce_ms: document.debounce_ms,
+    };
+    let validation = ScreenshotInboxConfig {
+        directory: settings
+            .directory
+            .clone()
+            .unwrap_or_else(|| PathBuf::from("/")),
+        filename_patterns: settings.filename_patterns.clone(),
+        capture_all_new_images: settings.capture_all_new_images,
+        supported_types: settings.supported_types.clone(),
+        bounds: settings.bounds,
+        debounce: std::time::Duration::from_millis(settings.debounce_ms),
+    };
+    validation
+        .validate()
+        .map(|()| settings)
+        .map_err(|error| TerminalError::Config(error.to_string()))
 }
 
 fn validate_invocation_roots(

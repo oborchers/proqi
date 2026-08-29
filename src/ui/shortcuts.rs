@@ -38,13 +38,14 @@ pub(crate) fn items(app: &BoardApp) -> Vec<Shortcut> {
         (super::settings::key_label(keys.collapse), "Collapse"),
         (keys.search.to_string(), "Search"),
         (keys.commands.to_string(), "Commands"),
-        (keys.help.to_string(), "Close"),
+        (keys.screenshot_inbox.to_string(), "Inbox"),
     ];
     if app.supports_submission() {
         items.push((keys.submit_remove.to_string(), "Submit"));
         items.push((keys.submit_keep.to_string(), "Submit & keep"));
     }
     items.push((keys.quit.to_string(), "Quit"));
+    items.push((keys.help.to_string(), "Close"));
     items
 }
 

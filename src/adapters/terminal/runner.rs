@@ -1,5 +1,6 @@
 //! Bounded UI and persistence lane composition.
 
+mod composition;
 mod diagnostics;
 mod durability;
 mod external_results;
@@ -9,6 +10,7 @@ mod heartbeat;
 mod owned_lanes;
 mod owner_control;
 mod pending;
+mod screenshot_results;
 mod update_results;
 
 use std::{
@@ -26,13 +28,13 @@ use crate::{
         control::ControlServer,
         editor::RopeEditorFactory,
         runtime::{
-            FileRuntimeCoordinator, FileSchemaLease, FileSessionLease, SystemClock,
-            SystemIdGenerator,
+            FileCaptureLease, FileRuntimeCoordinator, FileSchemaLease, FileSessionLease,
+            SystemClock, SystemIdGenerator,
         },
         sqlite::SqliteStore,
     },
     application::AppState,
-    domain::{InstanceId, SessionId},
+    domain::SessionId,
     ports::{
         environment::Clock as _,
         runtime::InstanceInfo,
@@ -47,6 +49,7 @@ use super::{
     external::ExternalLane,
     input::{InputLane, InputMessage},
     persistence::PersistenceLane,
+    screenshot_lane::ScreenshotLane,
 };
 
 use durability::{drain_persistence, enqueue_effects};
@@ -88,9 +91,19 @@ pub(super) struct WorkerLanes<'a> {
     pub(super) external: &'a ExternalLane,
     pub(super) control: Option<&'a ControlServer>,
     pub(super) update: &'a super::update_lane::UpdateLane,
+    pub(super) screenshot: &'a ScreenshotLane,
     pub(super) termination: &'a TerminationGuard,
     pub(super) instance: &'a InstanceInfo,
     pub(super) cancellation: &'a crate::adapters::process::CancellationFlag,
+}
+
+#[derive(Default)]
+pub(super) struct CaptureRuntime {
+    lease: Option<FileCaptureLease>,
+    release_when_drained: bool,
+    shutdown_requested: bool,
+    takeover_delivery: Option<crate::adapters::control::ControlDeliveryReceipt>,
+    takeover_stopping: bool,
 }
 
 /// Returns a typed setup, render, input, persistence, worker, or restoration failure.
@@ -125,7 +138,8 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
     let presentation_source = format!("proqi-{}", session_lease.info().instance_id);
     let invocation_roots = settings.invocation_roots.clone();
-    let mut owned = spawn_lanes(
+    let screenshot_settings = settings.screenshot.clone();
+    let mut owned = composition::spawn_lanes(
         control,
         store,
         coordinator,
@@ -137,6 +151,8 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
         installation.clone(),
         session_lease.info().instance_id,
         invocation_roots,
+        screenshot_settings,
+        session_lease.info().clone(),
     );
     let mut pane_heartbeat = None;
     let shutdown = super::supervisor::ShutdownCoordinator::default();
@@ -152,6 +168,7 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
         external: &owned.external,
         control: owned.control.as_ref(),
         update: &owned.update,
+        screenshot: &owned.screenshot,
         termination: &termination,
         instance: session_lease.info(),
         cancellation: &owned.cancellation,
@@ -194,51 +211,6 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
         session_id,
         state_root.as_deref(),
     )
-}
-
-#[expect(
-    clippy::too_many_arguments,
-    reason = "composition root owns explicit adapter inputs"
-)]
-fn spawn_lanes(
-    control: Option<ControlServer>,
-    store: SqliteStore,
-    coordinator: FileRuntimeCoordinator,
-    cwd: PathBuf,
-    recovery_directory: PathBuf,
-    attachment_directory: PathBuf,
-    presentation_source: String,
-    cache_directory: PathBuf,
-    installation: Option<crate::domain::Installation>,
-    initiating_instance: InstanceId,
-    invocation_roots: Vec<crate::ports::invocation::AdditionalInvocationRoot>,
-) -> OwnedLanes {
-    let cancellation = crate::adapters::process::CancellationFlag::default();
-    OwnedLanes {
-        control,
-        input: InputLane::spawn(),
-        persistence: PersistenceLane::spawn_with_runtime(
-            store,
-            coordinator.clone(),
-            cwd,
-            cancellation.clone(),
-        ),
-        external: ExternalLane::spawn_with_invocation_roots(
-            recovery_directory,
-            attachment_directory,
-            presentation_source,
-            cancellation.clone(),
-            invocation_roots,
-        ),
-        update: super::update_lane::UpdateLane::spawn(
-            cache_directory,
-            installation,
-            coordinator,
-            initiating_instance,
-            cancellation.clone(),
-        ),
-        cancellation,
-    }
 }
 
 fn resume_after_update(
@@ -348,6 +320,7 @@ fn drive(
     shutdown: &super::supervisor::ShutdownCoordinator,
 ) -> Result<(), TerminalError> {
     let mut pending = PendingWork::default();
+    let mut capture = CaptureRuntime::default();
     let mut edit_generation = app.edit_generation();
     let mut edit_deadline = None;
     let mut agent_deadline = None;
@@ -368,16 +341,35 @@ fn drive(
             let effects = app.handle(UiInput::Key(UiKey::Quit), ids, &clock);
             enqueue_effects(app, lanes, effects, &mut pending)?;
         }
-        let (workers_changed, worker_backlog) =
-            drain_workers(app, lanes, &mut pending, ids, clock, pane_heartbeat)?;
+        let (workers_changed, worker_backlog) = drain_workers(
+            app,
+            lanes,
+            &mut pending,
+            &mut capture,
+            ids,
+            clock,
+            pane_heartbeat,
+        )?;
         redraw |= workers_changed || app.expire_update_barrier(clock.now());
+        let capture_effects = app.advance_screenshot_capture(ids, &clock);
+        if !capture_effects.is_empty() {
+            enqueue_effects(app, lanes, capture_effects, &mut pending)?;
+            redraw = true;
+        }
+        if capture.release_when_drained && !app.screenshot_has_durable_work() {
+            capture.lease = None;
+            capture.release_when_drained = false;
+            capture.takeover_stopping = false;
+        }
         if app.edit_generation() != edit_generation {
             edit_generation = app.edit_generation();
             edit_deadline = app
                 .has_pending_edit()
                 .then(|| Instant::now() + Duration::from_millis(250));
         }
-        if edit_deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+        if edit_deadline.is_some_and(|deadline| Instant::now() >= deadline)
+            && !app.screenshot_commit_pending()
+        {
             let effects = app.flush_pending_edit(ids, &clock);
             enqueue_effects(app, lanes, effects, &mut pending)?;
             edit_deadline = None;
@@ -405,6 +397,11 @@ fn drive(
         }
         if app.quit {
             let deadline = shutdown.request();
+            if !capture.shutdown_requested && capture.lease.is_some() {
+                lanes.screenshot.disable()?;
+                pending.screenshot = pending.screenshot.saturating_add(1);
+                capture.shutdown_requested = true;
+            }
             if app.update_restart().is_none() {
                 lanes.cancellation.cancel();
             }
@@ -461,19 +458,26 @@ fn drain_workers(
     app: &mut BoardApp,
     lanes: &WorkerLanes<'_>,
     pending: &mut PendingWork,
+    capture: &mut CaptureRuntime,
     ids: &mut SystemIdGenerator,
     clock: SystemClock,
     pane_heartbeat: &mut Option<PaneHeartbeat>,
 ) -> Result<(bool, bool), TerminalError> {
     let persistence = drain_persistence(app, lanes, pending, ids, &clock)?;
     let external = external_results::drain(app, lanes, pending, ids, clock, pane_heartbeat)?;
-    let control = owner_control::drain(app, lanes, pending, ids, clock)?;
+    let control = owner_control::drain(app, lanes, pending, capture, ids, clock)?;
     let update = update_results::drain(app, lanes, pending)?;
-    let changed = persistence.changed || external.changed || control.changed || update.changed;
+    let screenshot = screenshot_results::drain(app, lanes, pending, capture)?;
+    let changed = persistence.changed
+        || external.changed
+        || control.changed
+        || update.changed
+        || screenshot.changed;
     let backlog = persistence.budget_exhausted
         || external.budget_exhausted
         || control.budget_exhausted
-        || update.budget_exhausted;
+        || update.budget_exhausted
+        || screenshot.budget_exhausted;
     Ok((changed, backlog))
 }
 

@@ -11,14 +11,53 @@ use crate::domain::{
     UndoScope,
 };
 use crate::ports::agent::{AgentState, SubmissionDisposition};
+use crate::ports::screenshot::ScreenshotFingerprint;
 
 pub use compaction::{CompactedOperationRequest, thought_payload_digest};
 pub use error::{StoreError, StoreFailureCode};
 
 /// Current storage schema understood by this binary.
-pub const SUPPORTED_SCHEMA_VERSION: u32 = 6;
+pub const SUPPORTED_SCHEMA_VERSION: u32 = 7;
 /// Current local storage protocol understood by this binary.
-pub const STORAGE_PROTOCOL_VERSION: u32 = 6;
+pub const STORAGE_PROTOCOL_VERSION: u32 = 7;
+
+/// One atomic screenshot receipt and prospective board operation.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CaptureCommit {
+    /// Rename-stable source identity.
+    pub source: ScreenshotFingerprint,
+    /// Exact append operation, applied only with the receipt.
+    pub operation: BoardOperation,
+}
+
+/// Durable identity of one screenshot already delivered to a session.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CaptureReceipt {
+    /// Rename-stable source identity.
+    pub source: ScreenshotFingerprint,
+    /// Session that received the screenshot.
+    pub session_id: SessionId,
+    /// Thought created for the screenshot.
+    pub thought_id: ThoughtId,
+    /// Structural operation that created the thought.
+    pub operation_id: OperationId,
+    /// Commit timestamp.
+    pub accepted_at: Timestamp,
+}
+
+/// Atomic screenshot commit result.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CaptureCommitOutcome {
+    /// The receipt and thought were created together.
+    Created {
+        /// Ordinary board durability receipt.
+        durable: CommitReceipt,
+        /// Durable capture receipt.
+        capture: CaptureReceipt,
+    },
+    /// This source had already been delivered by an earlier owner or retry.
+    AlreadyCaptured(CaptureReceipt),
+}
 
 /// One ordered, content-redacted source included in a submission.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -349,6 +388,20 @@ pub trait Store {
     ///
     /// Returns a typed conflict, busy, integrity, or I/O failure.
     fn commit(&mut self, batch: &OperationBatch) -> Result<Option<CommitReceipt>, StoreError>;
+
+    /// Atomically create one screenshot thought and its installation-wide receipt.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed conflict, busy, integrity, or I/O failure with no partial thought.
+    fn commit_capture(
+        &mut self,
+        _capture: &CaptureCommit,
+    ) -> Result<CaptureCommitOutcome, StoreError> {
+        Err(StoreError::Integrity(
+            "screenshot capture receipts are unavailable".to_owned(),
+        ))
+    }
 
     /// Durably reserve one thought for an external submission.
     ///

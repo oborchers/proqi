@@ -1,0 +1,17 @@
+---
+source: src/ui/app/screenshot/tests.rs
+assertion_line: 20
+expression: "takeover_snapshot(38, 12)"
+---
+00││
+01│┌ screenshot inbox in use ─────────[x]│
+02││                                    ││
+03││› Cancel                            ││
+04││  Take over                         ││
+05│└────────────────────────────────────┘│
+06││
+07││
+08│  Screenshot Inbox is listening in a│
+09│  screenshot-ui│
+10│  1 thought · board · saved│
+11│  n New   : Commands  ? Shortcuts│

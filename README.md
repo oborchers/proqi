@@ -50,6 +50,7 @@ manual clipboard handoff.
 | Survive interruption | Autosave, exact resume guidance, session search, recovery export, and undo after restart |
 | Work beside any agent | Native copy and non-destructive cut work without an integration or account |
 | Pass local context | Drop files as paths or paste clipboard images into private session storage |
+| Capture macOS screenshots | Explicitly enable the Screenshot Inbox to append new screenshots made with the normal macOS screenshot tool |
 | Correct the wrong board | Send a thought to another named Proqi session, optionally removing it after delivery |
 | Submit directly when verified | Optional Herdr delivery to eligible coding-agent panes in all four directions |
 | Automate safely | Versioned JSON, typed identifiers, idempotent mutations, and an explicit-invocation Proqi skill |
@@ -192,6 +193,7 @@ fallbacks remain available when a terminal cannot report a modifier.
 | `c` | Collapse or expand long context |
 | `/` | Search thought content |
 | `:` | Search commands |
+| `i` | Enable or disable the macOS-only Screenshot Inbox |
 | `?` | Open contextual help |
 
 ### Editor controls
@@ -527,6 +529,46 @@ search = "/"
 commands = ":"
 help = "?"
 quit = "q"
+screenshot_inbox = "i"
+```
+
+### Screenshot Inbox on macOS
+
+Choose **Enable Screenshot Inbox** in the command palette or press `i` in board
+mode. While active, the footer shows `inbox listening`; the same command becomes
+**Disable Screenshot Inbox**. Proqi snapshots the watched directory at
+activation and appends only new, completed screenshots made by the normal macOS
+screenshot tool. It never takes screenshots, changes macOS screenshot settings,
+uploads or analyzes image content, or copies or rewrites the source image.
+
+The default directory is the current user's Desktop. macOS may require **Files
+& Folders** access for the terminal host running Proqi; Proqi reports that host
+by name when access is unavailable. Screen Recording and Accessibility access
+are not used. Linux continues to report **Screenshot Inbox is available on
+macOS only**.
+
+Only one live Proqi process can listen across the current-user installation. If
+another compatible session owns capture, Proqi offers **Cancel** or **Take
+over**. Takeover asks the verified owner to reconcile and durably drain its
+accepted captures before releasing the operating-system lock; a live or
+incompatible owner is never force-unlocked.
+
+The optional settings below show every default. `filename_patterns` contains
+user-defined, language-appropriate filename fallbacks; there is no built-in
+localization table. `capture_all_new_images` must be set explicitly to accept
+all otherwise valid new images.
+
+```toml
+[screenshot_inbox]
+# directory = "/absolute/path/to/an/isolated/inbox" # defaults to macOS Desktop
+filename_patterns = []
+capture_all_new_images = false
+supported_types = ["png", "jpeg", "tiff"]
+min_file_bytes = 64
+max_file_bytes = 67108864
+max_dimension = 16384
+max_pixels = 100000000
+debounce_ms = 350
 ```
 
 Additional local roots are optional and must state their definition kind,

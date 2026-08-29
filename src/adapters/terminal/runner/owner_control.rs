@@ -1,5 +1,6 @@
 //! Fair active-owner control routing through the live reducer.
 
+mod capture;
 mod metadata;
 
 use std::sync::mpsc::TryRecvError;
@@ -22,7 +23,7 @@ use crate::{
 };
 
 use super::{
-    PendingControl, PendingWork, WorkerLanes,
+    CaptureRuntime, PendingControl, PendingWork, WorkerLanes,
     fairness::{DrainOutcome, drain_bounded},
     pending::PendingUpdateRestart,
     storage_error_code,
@@ -34,6 +35,7 @@ pub(super) fn drain(
     app: &mut BoardApp,
     lanes: &WorkerLanes<'_>,
     pending: &mut PendingWork,
+    capture: &mut CaptureRuntime,
     ids: &mut crate::adapters::runtime::SystemIdGenerator,
     clock: SystemClock,
 ) -> Result<DrainOutcome, TerminalError> {
@@ -49,8 +51,9 @@ pub(super) fn drain(
                 Err(TerminalError::Worker("control request lane disconnected"))
             }
         },
-        |envelope| queue_lookup(app, lanes, pending, ids, clock, envelope),
+        |envelope| queue_lookup(app, lanes, pending, capture, ids, clock, envelope),
     )?;
+    outcome.changed |= capture::complete(lanes, pending, capture)?;
     outcome.changed |= complete_update_prepares(app, pending, lanes.instance, clock);
     outcome.changed |= complete_update_restart(app, pending)?;
     Ok(outcome)
@@ -60,6 +63,7 @@ fn queue_lookup(
     app: &mut BoardApp,
     lanes: &WorkerLanes<'_>,
     pending: &mut PendingWork,
+    capture: &mut CaptureRuntime,
     ids: &mut crate::adapters::runtime::SystemIdGenerator,
     clock: SystemClock,
     envelope: ControlEnvelope,
@@ -78,6 +82,12 @@ fn queue_lookup(
             message: "request does not address the active owner session".to_owned(),
         });
         return Ok(false);
+    }
+    if matches!(
+        envelope.request.mutation,
+        ControlMutation::CaptureTakeover { .. }
+    ) {
+        return Ok(capture::queue(lanes, capture, envelope));
     }
     if matches!(
         envelope.request.mutation,
@@ -150,7 +160,8 @@ fn handle_update(
         | ControlMutation::SetCollapsed { .. }
         | ControlMutation::Delete { .. }
         | ControlMutation::Move { .. }
-        | ControlMutation::History { .. } => Ok(false),
+        | ControlMutation::History { .. }
+        | ControlMutation::CaptureTakeover { .. } => Ok(false),
     }
 }
 

@@ -286,6 +286,7 @@ impl BoardApp {
     }
 
     fn configure_overlay(&self, layout: &mut LayoutSnapshot) {
+        let screenshot_items = usize::from(self.screenshot_takeover.is_some()) * 2;
         let update_items = usize::from(self.update_prompt.is_some()) * 3;
         let palette_items = self
             .palette
@@ -294,7 +295,9 @@ impl BoardApp {
         let invocation_items = self.invocation_match_count();
         let search_items = self.search_match_count();
         let transfer_items = self.transfer_match_count();
-        let preferred_rows = if self.update_prompt.is_some() {
+        let preferred_rows = if self.screenshot_takeover.is_some() {
+            2
+        } else if self.update_prompt.is_some() {
             4
         } else if self.help {
             let content_width = layout.board.width.min(58).saturating_sub(2);
@@ -313,7 +316,8 @@ impl BoardApp {
             0
         };
         layout.configure_overlay(
-            palette_items
+            screenshot_items
+                .max(palette_items)
                 .max(search_items)
                 .max(transfer_items)
                 .max(invocation_items)
@@ -331,11 +335,21 @@ impl BoardApp {
             InteractionMode::Edit { .. } => "edit",
         };
         let durability = self.durability_summary();
-        let complete = format!("{count} {noun} · {mode} · {durability}");
+        let inbox = if self.screenshot_listening() {
+            " · inbox listening"
+        } else {
+            ""
+        };
+        let complete = format!("{count} {noun} · {mode} · {durability}{inbox}");
         if complete.width() <= usize::from(available_width) {
             return complete;
         }
-        let compact = format!("{count} · {mode} · {durability}");
+        let compact_inbox = if self.screenshot_listening() {
+            " · inbox"
+        } else {
+            ""
+        };
+        let compact = format!("{count} · {mode} · {durability}{compact_inbox}");
         if compact.width() <= usize::from(available_width) {
             return compact;
         }

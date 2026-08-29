@@ -14,7 +14,9 @@ use super::update::{
 use super::{runtime::InstanceInfo, store::CommitReceipt};
 
 /// Current local owner-control protocol.
-pub const CONTROL_PROTOCOL_VERSION: u32 = 4;
+pub const CONTROL_PROTOCOL_VERSION: u32 = 5;
+/// Current compatible screenshot takeover protocol.
+pub const CAPTURE_CONTROL_PROTOCOL_VERSION: u32 = 1;
 /// Oldest owner-control protocol accepted for plain-text mutations.
 pub const MIN_CONTROL_PROTOCOL_VERSION: u32 = 1;
 /// Maximum encoded request or response, including framing newline.
@@ -47,6 +49,12 @@ pub enum ControlRejectionCode {
     NoDurableMutation,
     /// The durable storage operation failed.
     StorageFailed,
+    /// The takeover request did not name the current capture owner.
+    CaptureOwnerMismatch,
+    /// This process no longer owns the screenshot inbox.
+    CaptureNotOwned,
+    /// Another screenshot takeover is already draining.
+    CaptureTakeoverInProgress,
 }
 
 impl ControlRejectionCode {
@@ -66,6 +74,9 @@ impl ControlRejectionCode {
             Self::IdempotencyConflict => "idempotency_conflict",
             Self::NoDurableMutation => "no_durable_mutation",
             Self::StorageFailed => "storage_failed",
+            Self::CaptureOwnerMismatch => "capture_owner_mismatch",
+            Self::CaptureNotOwned => "capture_not_owned",
+            Self::CaptureTakeoverInProgress => "capture_takeover_in_progress",
         }
     }
 }
@@ -155,6 +166,15 @@ pub enum ControlMutation {
         /// Verified installed version and shared attempt identity.
         request: UpdateRestartRequest,
     },
+    /// Ask the exact live screenshot owner to schedule a verified graceful handoff.
+    CaptureTakeover {
+        /// Owner identity observed with the authoritative lock contention.
+        expected_owner_instance_id: crate::domain::InstanceId,
+        /// Process that will retry the authoritative lock.
+        requester_instance_id: crate::domain::InstanceId,
+        /// Screenshot takeover protocol required by the requester.
+        capture_protocol: u32,
+    },
 }
 
 impl ControlMutation {
@@ -172,7 +192,8 @@ impl ControlMutation {
             | Self::Sync
             | Self::Replace { .. }
             | Self::UpdateRelease { .. }
-            | Self::UpdateRestart { .. } => None,
+            | Self::UpdateRestart { .. }
+            | Self::CaptureTakeover { .. } => None,
         }
     }
 
@@ -203,7 +224,8 @@ impl ControlMutation {
             | Self::Sync
             | Self::UpdatePrepare { .. }
             | Self::UpdateRelease { .. }
-            | Self::UpdateRestart { .. } => None,
+            | Self::UpdateRestart { .. }
+            | Self::CaptureTakeover { .. } => None,
         }
     }
 
@@ -216,7 +238,9 @@ impl ControlMutation {
     /// Oldest control protocol capable of representing this request.
     #[must_use]
     pub fn minimum_protocol(&self) -> u32 {
-        if matches!(
+        if matches!(self, Self::CaptureTakeover { .. }) {
+            5
+        } else if matches!(
             self,
             Self::RenameSession { .. }
                 | Self::Replace { .. }
@@ -280,12 +304,25 @@ pub enum ControlResult {
     Update(ControlUpdateReceipt),
     /// Durable metadata change without an operation sequence.
     Metadata(ControlMetadataReceipt),
+    /// Ephemeral screenshot takeover scheduling result.
+    Capture(ControlCaptureReceipt),
     /// Owner rejected the mutation without reporting it as durable.
     Rejected {
         /// Stable error code.
         code: String,
         /// Human-readable explanation without thought content.
         message: String,
+    },
+}
+
+/// Successful screenshot owner-control result.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "capture")]
+pub enum ControlCaptureReceipt {
+    /// The old owner confirmed the response and will drain and release its lock.
+    TakeoverScheduled {
+        /// Exact owner that accepted relinquishment.
+        owner_instance_id: crate::domain::InstanceId,
     },
 }
 
@@ -363,95 +400,5 @@ pub trait ControlClient {
 }
 
 #[cfg(test)]
-mod tests {
-    use crate::{
-        adapters::memory::FakeIdGenerator,
-        domain::{
-            ContentAnnotation, ContentAnnotationKind, InstallationIdentity, StableVersion,
-            Timestamp,
-        },
-        ports::environment::IdGenerator,
-        ports::update::{UpdatePrepareReply, UpdatePrepareRequest},
-    };
-
-    use super::{
-        CONTROL_PROTOCOL_VERSION, ControlMutation, ControlRequest, ControlResponse, ControlResult,
-        ControlUpdateReceipt,
-    };
-
-    #[test]
-    fn plain_v1_add_stays_wire_compatible_and_annotations_require_v2() {
-        let mut ids = FakeIdGenerator::new(1_725_200_000_000);
-        let plain = ControlRequest {
-            protocol: 1,
-            request_id: ids.request_id(),
-            session_id: ids.session_id(),
-            mutation: ControlMutation::Add {
-                operation_id: ids.operation_id(),
-                thought_id: ids.thought_id(),
-                content: "plain".to_owned(),
-                annotations: Vec::new(),
-                position: None,
-            },
-        };
-        let encoded = serde_json::to_string(&plain).expect("serialize v1 request");
-        assert!(!encoded.contains("annotations"));
-        let decoded: ControlRequest = serde_json::from_str(&encoded).expect("deserialize v1");
-        assert_eq!(decoded, plain);
-        assert!(!decoded.mutation.requires_protocol_two());
-
-        let annotated = ControlMutation::Add {
-            operation_id: ids.operation_id(),
-            thought_id: ids.thought_id(),
-            content: "/tmp/a.png".to_owned(),
-            annotations: vec![ContentAnnotation {
-                start: 0,
-                end: 10,
-                kind: ContentAnnotationKind::Attachment {
-                    image: true,
-                    display_name: "a.png".to_owned(),
-                },
-            }],
-            position: None,
-        };
-        assert!(annotated.requires_protocol_two());
-    }
-
-    #[test]
-    fn update_prepare_request_and_receipt_round_trip_over_json() {
-        let mut ids = FakeIdGenerator::new(1_725_200_000_000);
-        let request = ControlRequest {
-            protocol: CONTROL_PROTOCOL_VERSION,
-            request_id: ids.request_id(),
-            session_id: ids.session_id(),
-            mutation: ControlMutation::UpdatePrepare {
-                request: UpdatePrepareRequest {
-                    operation_id: ids.request_id(),
-                    target_version: StableVersion::parse("1.2.3").expect("version"),
-                    installation_identity: InstallationIdentity::from_digest([7; 32]),
-                    deadline: Timestamp::from_millis(9),
-                },
-            },
-        };
-        let encoded = serde_json::to_vec(&request).expect("serialize request");
-        assert_eq!(
-            serde_json::from_slice::<ControlRequest>(&encoded).expect("deserialize request"),
-            request
-        );
-        let response = ControlResponse {
-            protocol: request.protocol,
-            request_id: request.request_id,
-            result: ControlResult::Update(ControlUpdateReceipt::Prepared(
-                UpdatePrepareReply::Ready {
-                    instance_id: ids.instance_id(),
-                    session_id: request.session_id,
-                },
-            )),
-        };
-        let encoded = serde_json::to_vec(&response).expect("serialize response");
-        assert_eq!(
-            serde_json::from_slice::<ControlResponse>(&encoded).expect("deserialize response"),
-            response
-        );
-    }
-}
+#[path = "control/tests.rs"]
+mod tests;

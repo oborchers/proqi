@@ -6,11 +6,13 @@ use proqi::ports::control::{
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::Value;
 
-const REQUEST: &str = include_str!("fixtures/control/v4/add.request.json");
-const ACCEPTED: &str = include_str!("fixtures/control/v4/add.accepted.json");
-const REJECTED: &str = include_str!("fixtures/control/v4/add.rejected.json");
-const UPDATE_PREPARE: &str = include_str!("fixtures/control/v4/update_prepare.request.json");
-const UPDATE_READY: &str = include_str!("fixtures/control/v4/update_prepare.ready.json");
+const REQUEST: &str = include_str!("fixtures/control/v5/add.request.json");
+const ACCEPTED: &str = include_str!("fixtures/control/v5/add.accepted.json");
+const REJECTED: &str = include_str!("fixtures/control/v5/add.rejected.json");
+const UPDATE_PREPARE: &str = include_str!("fixtures/control/v5/update_prepare.request.json");
+const UPDATE_READY: &str = include_str!("fixtures/control/v5/update_prepare.ready.json");
+const CAPTURE_TAKEOVER: &str = include_str!("fixtures/control/v5/capture_takeover.request.json");
+const CAPTURE_SCHEDULED: &str = include_str!("fixtures/control/v5/capture_takeover.scheduled.json");
 
 #[test]
 fn current_request_success_and_error_fixtures_round_trip_canonically() {
@@ -33,6 +35,20 @@ fn current_update_readiness_fixtures_round_trip_canonically() {
     assert_eq!(request.protocol, CONTROL_PROTOCOL_VERSION);
     assert_eq!(response.protocol, CONTROL_PROTOCOL_VERSION);
     assert!(matches!(response.result, ControlResult::Update(_)));
+}
+
+#[test]
+fn current_capture_takeover_fixtures_round_trip_canonically() {
+    let request: ControlRequest = assert_round_trip(CAPTURE_TAKEOVER);
+    let response: ControlResponse = assert_round_trip(CAPTURE_SCHEDULED);
+
+    assert_eq!(request.protocol, CONTROL_PROTOCOL_VERSION);
+    assert_eq!(response.protocol, CONTROL_PROTOCOL_VERSION);
+    assert!(matches!(
+        request.mutation,
+        proqi::ports::control::ControlMutation::CaptureTakeover { .. }
+    ));
+    assert!(matches!(response.result, ControlResult::Capture(_)));
 }
 
 #[test]

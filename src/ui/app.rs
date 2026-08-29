@@ -17,6 +17,7 @@ mod presentation;
 mod query;
 mod recovery;
 mod reorder;
+mod screenshot;
 mod search;
 mod selection;
 mod session;
@@ -25,7 +26,7 @@ mod update;
 mod view;
 
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, VecDeque},
     path::PathBuf,
 };
 
@@ -106,6 +107,13 @@ pub struct BoardApp {
     agent_targets: Vec<AgentTarget>,
     submission_mode: Option<SubmissionMode>,
     pending_submissions: BTreeMap<SubmissionId, PendingSubmission>,
+    screenshot_state: screenshot::ScreenshotState,
+    screenshot_candidates: VecDeque<crate::ports::screenshot::ScreenshotCandidate>,
+    screenshot_save: Option<screenshot::ScreenshotSave>,
+    screenshot_takeover: Option<crate::ports::runtime::CaptureOwnerInfo>,
+    screenshot_takeover_selected: usize,
+    screenshot_auto_ready: Option<ThoughtId>,
+    screenshot_notice_count: usize,
     update_barrier: Option<update::UpdateBarrier>,
     update_restart: Option<crate::domain::StableVersion>,
     update_prompt: Option<update::UpdatePrompt>,
@@ -183,6 +191,13 @@ impl BoardApp {
             agent_targets: Vec::new(),
             submission_mode: None,
             pending_submissions: BTreeMap::new(),
+            screenshot_state: screenshot::ScreenshotState::Off,
+            screenshot_candidates: VecDeque::new(),
+            screenshot_save: None,
+            screenshot_takeover: None,
+            screenshot_takeover_selected: 0,
+            screenshot_auto_ready: None,
+            screenshot_notice_count: 0,
             update_barrier: None,
             update_restart: None,
             update_prompt: None,
@@ -202,6 +217,7 @@ impl BoardApp {
     ) -> Vec<Effect> {
         self.reset_pointer_click_for_input(&input);
         if self.help
+            || self.screenshot_takeover.is_some()
             || self.update_prompt.is_some()
             || self.palette.is_some()
             || self.invocation_popup.is_some()
@@ -214,6 +230,12 @@ impl BoardApp {
         }
         if self.help {
             return self.handle_help_input(&input);
+        }
+        if self.screenshot_takeover.is_some() {
+            return self.handle_screenshot_takeover_input(&input, ids, clock);
+        }
+        if self.screenshot_save_in_flight() {
+            return self.handle_screenshot_commit_barrier(input);
         }
         if input == UiInput::Key(UiKey::Quit) || self.is_failed_recovery_quit(&input) {
             let effects = if matches!(self.state.durability, DurabilityState::Failed { .. }) {
@@ -234,6 +256,7 @@ impl BoardApp {
         }
         if !matches!(input, UiInput::Resize { .. } | UiInput::HostFocusGained) {
             self.status = None;
+            self.screenshot_notice_count = 0;
         }
         if !matches!(
             input,

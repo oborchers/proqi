@@ -28,6 +28,7 @@ enum Command {
     InsertInvocation,
     RefreshInvocations,
     CheckUpdates,
+    ScreenshotInbox,
     RetryStorage,
     ExportRecovery,
     Undo,
@@ -42,7 +43,7 @@ enum Command {
 }
 
 impl Command {
-    const ALL: [(Self, &'static str); 30] = [
+    const ALL: [(Self, &'static str); 31] = [
         (Self::New, "New thought"),
         (Self::RenameSession, "Rename session"),
         (Self::CopySessionId, "Copy session ID"),
@@ -68,6 +69,7 @@ impl Command {
         (Self::InsertInvocation, "Insert discovered invocation"),
         (Self::RefreshInvocations, "Refresh invocations"),
         (Self::CheckUpdates, "Check for updates"),
+        (Self::ScreenshotInbox, "Enable Screenshot Inbox"),
         (Self::RetryStorage, "Retry failed save"),
         (Self::ExportRecovery, "Export recovery file"),
         (Self::Undo, "Undo board action"),
@@ -88,16 +90,22 @@ pub(super) struct PaletteState {
     scroll: usize,
     submit_supported: bool,
     plain_newline_supported: bool,
+    screenshot_enabled: bool,
 }
 
 impl PaletteState {
-    fn new(submit_supported: bool, plain_newline_supported: bool) -> Self {
+    fn new(
+        submit_supported: bool,
+        plain_newline_supported: bool,
+        screenshot_enabled: bool,
+    ) -> Self {
         Self {
             query: QueryEditor::default(),
             selected: 0,
             scroll: 0,
             submit_supported,
             plain_newline_supported,
+            screenshot_enabled,
         }
     }
 
@@ -126,6 +134,14 @@ impl PaletteState {
         Command::ALL
             .into_iter()
             .filter(|(command, _)| self.available(*command))
+            .map(|(command, label)| {
+                let label = if command == Command::ScreenshotInbox && self.screenshot_enabled {
+                    "Disable Screenshot Inbox"
+                } else {
+                    label
+                };
+                (command, label)
+            })
             .filter(|(_, label)| label.to_lowercase().contains(&query))
             .collect()
     }
@@ -152,10 +168,12 @@ impl BoardApp {
         self.palette = Some(PaletteState::new(
             self.supports_submission(),
             !self.insertion_focused() && self.state.focused_thought.is_some(),
+            self.screenshot_enabled_for_palette(),
         ));
     }
 
     pub(super) fn close_overlay(&mut self) {
+        self.cancel_screenshot_takeover();
         self.palette = None;
         self.search = None;
         self.transfer = None;
@@ -333,6 +351,7 @@ impl BoardApp {
             Command::CheckUpdates => {
                 vec![Effect::Update(crate::application::UpdateIntent::CheckNow)]
             }
+            Command::ScreenshotInbox => self.toggle_screenshot_inbox(),
             Command::RetryStorage => self.retry_persistence(),
             Command::ExportRecovery => self.export_recovery(ids, clock),
             Command::Undo => self.history(ids, clock, true),

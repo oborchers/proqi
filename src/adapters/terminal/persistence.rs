@@ -54,6 +54,10 @@ fn process_request(
     results: &SyncSender<PersistenceResult>,
 ) -> bool {
     let (sequence, batch) = match request {
+        PersistenceRequest::Capture(capture) => {
+            let result = store.commit_capture(&capture);
+            return results.send(PersistenceResult::Capture(result)).is_ok();
+        }
         PersistenceRequest::Commit(batch) => {
             let Some(sequence) = batch.sequence() else {
                 return true;

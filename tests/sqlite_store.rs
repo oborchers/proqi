@@ -136,5 +136,7 @@ mod concurrency;
 mod core;
 #[path = "sqlite_store/recovery.rs"]
 mod recovery;
+#[path = "sqlite_store/screenshot.rs"]
+mod screenshot;
 #[path = "sqlite_store/submission.rs"]
 mod submission;
