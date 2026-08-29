@@ -213,6 +213,7 @@ impl BoardApp {
     ) -> Vec<Effect> {
         let input = self.resolve_edit_navigation(input);
         self.reset_pointer_click_for_input(&input);
+        self.reset_overlay_activation_for_input(&input, clock.now());
         if self.help
             || self.update_prompt.is_some()
             || self.palette.is_some()

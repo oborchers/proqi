@@ -36,7 +36,6 @@ impl BoardApp {
         ) {
             self.pointer_click = None;
         }
-        self.reset_overlay_activation_for_input(input);
     }
 
     pub(super) fn handle_recovery_pointer(

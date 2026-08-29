@@ -446,6 +446,8 @@ mod movement_symmetry;
 mod navigation;
 #[path = "ui_board/palette.rs"]
 mod palette;
+#[path = "ui_board/placeholder_entry.rs"]
+mod placeholder_entry;
 #[path = "ui_board/pointer_selection.rs"]
 mod pointer_selection;
 #[path = "ui_board/scroll_regressions.rs"]

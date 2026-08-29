@@ -219,6 +219,7 @@ impl BoardApp {
 
     /// Recompute one authoritative frame layout and reflow the active editor.
     pub fn prepare_frame(&mut self, area: Rect) -> LayoutSnapshot {
+        self.reset_overlay_activation_for_geometry(area);
         let layout_state = self.presentation_state();
         let first_editor = self.editor_presentation();
         let has_status = self.status.is_some()
