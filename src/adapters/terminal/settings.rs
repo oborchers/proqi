@@ -51,6 +51,7 @@ struct SettingsDocument {
     check_for_updates: bool,
     show_session_id: bool,
     smart_lists: bool,
+    list_indent_width: u8,
     theme: String,
     theme_overrides: ThemeOverrides,
     keyboard_enhancement: KeyboardEnhancement,
@@ -65,6 +66,7 @@ impl Default for SettingsDocument {
             check_for_updates: true,
             show_session_id: false,
             smart_lists: true,
+            list_indent_width: 2,
             theme: "auto".to_owned(),
             theme_overrides: ThemeOverrides::default(),
             keyboard_enhancement: KeyboardEnhancement::default(),
@@ -116,6 +118,11 @@ pub(crate) fn inspect_settings(config_dir: &Path) -> Result<LoadedSettings, Term
 
 fn parse_settings(config_dir: &Path, content: &str) -> Result<LoadedSettings, TerminalError> {
     let document: SettingsDocument = parse_toml(content, "config.toml")?;
+    if !(1..=8).contains(&document.list_indent_width) {
+        return Err(TerminalError::Config(
+            "list_indent_width must be between 1 and 8 spaces".to_owned(),
+        ));
+    }
     document
         .keybindings
         .validate()
@@ -124,6 +131,7 @@ fn parse_settings(config_dir: &Path, content: &str) -> Result<LoadedSettings, Te
         check_for_updates: document.check_for_updates,
         show_session_id: document.show_session_id,
         smart_lists: document.smart_lists,
+        list_indent_width: document.list_indent_width,
         keyboard_enhancement: document.keyboard_enhancement,
         keybindings: document.keybindings,
         density: document.density,

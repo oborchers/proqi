@@ -207,7 +207,15 @@ impl Editor for RopeEditor {
             EditCommand::InsertNewline => {
                 self.mutate(|editor| editor.replace_selection_or_insert("\n"))
             }
-            EditCommand::InsertSmartNewline => self.mutate(Self::insert_smart_newline),
+            EditCommand::InsertSmartNewline { indent_width } => {
+                self.mutate(|editor| editor.insert_smart_newline(indent_width))
+            }
+            EditCommand::Indent { width, smart_lists } => {
+                self.mutate_many(|editor| editor.indent(width, smart_lists))
+            }
+            EditCommand::Outdent { width, smart_lists } => {
+                self.mutate_many(|editor| editor.outdent(width, smart_lists))
+            }
             EditCommand::DeleteBack => self.mutate(Self::delete_back),
             EditCommand::DeleteForward => self.mutate(Self::delete_forward),
             EditCommand::DeleteLogicalLine => self.mutate(Self::delete_logical_line),

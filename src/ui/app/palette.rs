@@ -1,5 +1,7 @@
 //! Searchable command discovery and execution.
 
+mod command;
+
 use crate::{
     application::Effect,
     ports::{
@@ -8,90 +10,11 @@ use crate::{
     },
 };
 
-use super::{BoardApp, UiInput, UiKey, query::QueryEditor};
+use super::{
+    BoardApp, UiInput, UiKey, palette_handoff::EditorSelectionHandoff, query::QueryEditor,
+};
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum Command {
-    New,
-    RenameSession,
-    CopySessionId,
-    CopyResume,
-    SendSession,
-    SendSessionRemove,
-    Edit,
-    PlainNewline,
-    JumpUp,
-    JumpDown,
-    ThoughtStart,
-    ThoughtEnd,
-    Delete,
-    Copy,
-    Cut,
-    Paste,
-    Duplicate,
-    SubmitRemove,
-    SubmitKeep,
-    RefreshAgents,
-    InsertInvocation,
-    RefreshInvocations,
-    CheckUpdates,
-    RetryStorage,
-    ExportRecovery,
-    Undo,
-    Redo,
-    MoveUp,
-    MoveDown,
-    Collapse,
-    Select,
-    RangeSelect,
-    Help,
-    Quit,
-}
-
-impl Command {
-    const ALL: [(Self, &'static str); 34] = [
-        (Self::New, "New thought"),
-        (Self::RenameSession, "Rename session"),
-        (Self::CopySessionId, "Copy session ID"),
-        (Self::CopyResume, "Copy resume command"),
-        (Self::Edit, "Edit thought"),
-        (Self::PlainNewline, "Insert plain newline"),
-        (Self::JumpUp, "Jump cursor up 5 visual rows"),
-        (Self::JumpDown, "Jump cursor down 5 visual rows"),
-        (Self::ThoughtStart, "Move cursor to thought beginning"),
-        (Self::ThoughtEnd, "Move cursor to thought end"),
-        (Self::Delete, "Delete thought"),
-        (Self::Copy, "Copy thought"),
-        (Self::Cut, "Cut thought"),
-        (Self::Paste, "Paste native clipboard"),
-        (Self::Duplicate, "Duplicate thought or selection"),
-        (
-            Self::SubmitRemove,
-            "Submit and remove after acceptance (default)",
-        ),
-        (Self::SubmitKeep, "Submit and keep thought"),
-        (Self::SendSession, "Send to another Proqi session"),
-        (
-            Self::SendSessionRemove,
-            "Send to another Proqi session and remove thought",
-        ),
-        (Self::RefreshAgents, "Refresh adjacent agents"),
-        (Self::InsertInvocation, "Insert discovered invocation"),
-        (Self::RefreshInvocations, "Refresh invocations"),
-        (Self::CheckUpdates, "Check for updates"),
-        (Self::RetryStorage, "Retry failed save"),
-        (Self::ExportRecovery, "Export recovery file"),
-        (Self::Undo, "Undo board action"),
-        (Self::Redo, "Redo board action"),
-        (Self::MoveUp, "Move thought up"),
-        (Self::MoveDown, "Move thought down"),
-        (Self::Collapse, "Expand or collapse thought"),
-        (Self::Select, "Toggle thought selection"),
-        (Self::RangeSelect, "Start contiguous range selection"),
-        (Self::Help, "Open contextual help"),
-        (Self::Quit, "Quit Proqi"),
-    ];
-}
+use command::Command;
 
 pub(super) struct PaletteState {
     query: QueryEditor,
@@ -99,16 +22,22 @@ pub(super) struct PaletteState {
     scroll: usize,
     submit_supported: bool,
     plain_newline_supported: bool,
+    selection_handoff: Option<EditorSelectionHandoff>,
 }
 
 impl PaletteState {
-    fn new(submit_supported: bool, plain_newline_supported: bool) -> Self {
+    fn new(
+        submit_supported: bool,
+        plain_newline_supported: bool,
+        selection_handoff: Option<EditorSelectionHandoff>,
+    ) -> Self {
         Self {
             query: QueryEditor::default(),
             selected: 0,
             scroll: 0,
             submit_supported,
             plain_newline_supported,
+            selection_handoff,
         }
     }
 
@@ -143,12 +72,17 @@ impl PaletteState {
 
     fn available(&self, command: Command) -> bool {
         match command {
-            Command::SubmitRemove | Command::SubmitKeep => self.submit_supported,
+            Command::SubmitRemove
+            | Command::SubmitKeep
+            | Command::SubmitAllRemove
+            | Command::SubmitAllKeep => self.submit_supported,
             Command::PlainNewline
             | Command::JumpUp
             | Command::JumpDown
             | Command::ThoughtStart
-            | Command::ThoughtEnd => self.plain_newline_supported,
+            | Command::ThoughtEnd
+            | Command::Indent
+            | Command::Outdent => self.plain_newline_supported,
             _ => true,
         }
     }
@@ -167,6 +101,7 @@ impl BoardApp {
         self.palette = Some(PaletteState::new(
             self.supports_submission(),
             !self.insertion_focused() && self.state.focused_thought.is_some(),
+            self.palette_selection_handoff.take(),
         ));
     }
 
@@ -189,9 +124,13 @@ impl BoardApp {
             .as_ref()
             .and_then(|palette| palette.matches().get(index).copied())
             .map(|(command, _)| command);
+        let selection_handoff = self
+            .palette
+            .as_mut()
+            .and_then(|palette| palette.selection_handoff.take());
         self.palette = None;
         command.map_or_else(Vec::new, |command| {
-            self.execute_command(command, ids, clock)
+            self.execute_command(command, selection_handoff, ids, clock)
         })
     }
 
@@ -300,9 +239,19 @@ impl BoardApp {
     fn execute_command(
         &mut self,
         command: Command,
+        selection_handoff: Option<EditorSelectionHandoff>,
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
+        if let Some(effects) = self.execute_submission_command(command, ids, clock) {
+            return effects;
+        }
+        if let Some(effects) = self.execute_editor_command(command, selection_handoff, ids, clock) {
+            return effects;
+        }
+        if let Some(effects) = self.execute_entry_command(command, ids, clock) {
+            return effects;
+        }
         match command {
             Command::New => self.create(crate::ui::PastePayload::text(String::new()), ids, clock),
             Command::RenameSession => {
@@ -313,41 +262,37 @@ impl BoardApp {
             Command::CopyResume => self.copy_resume_command(ids),
             Command::SendSession => self.begin_session_transfer(false, ids, clock),
             Command::SendSessionRemove => self.begin_session_transfer(true, ids, clock),
-            Command::Edit => {
-                self.enter_edit();
-                Vec::new()
-            }
-            Command::PlainNewline => {
-                if !matches!(
-                    self.state.mode,
-                    crate::application::InteractionMode::Edit { .. }
-                ) {
-                    self.enter_edit();
-                }
-                self.insert_newline(false, ids, clock)
-            }
-            Command::JumpUp => self.cursor_move(CursorMovement::VisualJumpUp, ids, clock),
-            Command::JumpDown => self.cursor_move(CursorMovement::VisualJumpDown, ids, clock),
-            Command::ThoughtStart => self.cursor_move(CursorMovement::DocumentStart, ids, clock),
-            Command::ThoughtEnd => self.cursor_move(CursorMovement::DocumentEnd, ids, clock),
             Command::Delete => self.delete(ids, clock),
             Command::Copy => self.copy_active(ids),
             Command::Cut => self.cut_active(ids, clock),
             Command::Paste => self.read_clipboard(ids),
             Command::Duplicate => self.duplicate(ids, clock),
-            Command::SubmitRemove => self.begin_delivery(
-                crate::ports::agent::SubmissionDisposition::RemoveAfterSuccess,
-                ids,
-                clock,
-            ),
-            Command::SubmitKeep => {
-                self.begin_delivery(crate::ports::agent::SubmissionDisposition::Keep, ids, clock)
+            Command::SelectAll => {
+                let effects = if matches!(
+                    self.state.mode,
+                    crate::application::InteractionMode::Edit { .. }
+                ) {
+                    self.finish_edit(ids, clock)
+                } else {
+                    Vec::new()
+                };
+                self.select_all_thoughts();
+                effects
             }
+            Command::SubmitRemove
+            | Command::SubmitKeep
+            | Command::SubmitAllRemove
+            | Command::SubmitAllKeep
+            | Command::PlainNewline
+            | Command::JumpUp
+            | Command::JumpDown
+            | Command::ThoughtStart
+            | Command::ThoughtEnd
+            | Command::Indent
+            | Command::Outdent
+            | Command::Edit
+            | Command::InsertInvocation => Vec::new(),
             Command::RefreshAgents => self.refresh_agents(),
-            Command::InsertInvocation => {
-                self.open_invocation_picker();
-                Vec::new()
-            }
             Command::RefreshInvocations => self.refresh_invocations(),
             Command::CheckUpdates => {
                 vec![Effect::Update(crate::application::UpdateIntent::CheckNow)]
@@ -378,25 +323,97 @@ impl BoardApp {
         }
     }
 
-    fn cursor_move(
+    fn execute_entry_command(
         &mut self,
-        movement: CursorMovement,
+        command: Command,
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
-    ) -> Vec<Effect> {
+    ) -> Option<Vec<Effect>> {
+        match command {
+            Command::Edit => Some(self.expand_and_enter_edit(ids, clock)),
+            Command::InsertInvocation => {
+                let effects =
+                    if matches!(self.state.mode, crate::application::InteractionMode::Board) {
+                        self.expand_and_enter_edit(ids, clock)
+                    } else {
+                        Vec::new()
+                    };
+                self.open_invocation_picker();
+                Some(effects)
+            }
+            _ => None,
+        }
+    }
+
+    fn execute_submission_command(
+        &mut self,
+        command: Command,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Option<Vec<Effect>> {
+        use crate::ports::agent::SubmissionDisposition::{Keep, RemoveAfterSuccess};
+        match command {
+            Command::SubmitRemove => Some(self.begin_delivery(RemoveAfterSuccess, ids, clock)),
+            Command::SubmitKeep => Some(self.begin_delivery(Keep, ids, clock)),
+            Command::SubmitAllRemove => {
+                Some(self.begin_delivery_all(RemoveAfterSuccess, ids, clock))
+            }
+            Command::SubmitAllKeep => Some(self.begin_delivery_all(Keep, ids, clock)),
+            _ => None,
+        }
+    }
+
+    fn execute_editor_command(
+        &mut self,
+        command: Command,
+        selection_handoff: Option<EditorSelectionHandoff>,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Option<Vec<Effect>> {
         if !matches!(
+            command,
+            Command::PlainNewline
+                | Command::JumpUp
+                | Command::JumpDown
+                | Command::ThoughtStart
+                | Command::ThoughtEnd
+                | Command::Indent
+                | Command::Outdent
+        ) {
+            return None;
+        }
+        let mut effects = if matches!(
             self.state.mode,
             crate::application::InteractionMode::Edit { .. }
         ) {
-            self.enter_edit();
+            Vec::new()
+        } else {
+            self.expand_and_enter_edit(ids, clock)
+        };
+        if command == Command::PlainNewline {
+            effects.extend(self.insert_newline(false, ids, clock));
+            return Some(effects);
         }
-        self.handle_edit_key(
-            UiKey::Move {
-                movement,
-                extend_selection: false,
-            },
-            ids,
-            clock,
-        )
+        let movement = match command {
+            Command::JumpUp => Some(CursorMovement::VisualJumpUp),
+            Command::JumpDown => Some(CursorMovement::VisualJumpDown),
+            Command::ThoughtStart => Some(CursorMovement::DocumentStart),
+            Command::ThoughtEnd => Some(CursorMovement::DocumentEnd),
+            _ => None,
+        };
+        if let Some(movement) = movement {
+            effects.extend(self.handle_edit_key(
+                UiKey::Move {
+                    movement,
+                    extend_selection: false,
+                },
+                ids,
+                clock,
+            ));
+            return Some(effects);
+        }
+        self.restore_palette_selection_handoff(selection_handoff);
+        effects.extend(self.apply_indentation(command == Command::Outdent, ids, clock));
+        Some(effects)
     }
 }

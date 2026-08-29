@@ -56,8 +56,10 @@ pub enum UiKey {
     PrimaryCharacter(char),
     /// Insert a line break or enter the focused thought.
     Enter,
-    /// Accept a focused authoring completion without inserting a literal tab.
+    /// Accept a focused authoring completion or request indentation while editing.
     Tab,
+    /// Request one conservative indentation level outward.
+    BackTab,
     /// Move to the previous bounded picker result.
     PickerPrevious,
     /// Move to the next bounded picker result.

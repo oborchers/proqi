@@ -53,7 +53,8 @@ impl BoardApp {
         clock: &impl Clock,
         delta: isize,
     ) -> Vec<Effect> {
-        self.manual_board_scroll = false;
+        self.board_viewport = self.board_viewport.follow_focus();
+        self.scroll_geometry = None;
         let Some(thought_id) = self.state.focused_thought else {
             return Vec::new();
         };

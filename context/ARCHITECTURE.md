@@ -711,9 +711,21 @@ the document's local LF or CRLF convention, and reports continuation or marker
 removal as one explicit text-change transaction. The UI flushes that transaction
 as one persistent revision. Selection replacement uses the ordinary newline
 command, bracketed paste remains a distinct exact payload, and the command
-palette exposes the ordinary newline command directly. This boundary can later
-gain explicit indentation commands without making Tab or Shift+Tab part of the
-current behavior.
+palette exposes the ordinary newline command directly. Terminal Tab and BackTab
+normalize to distinct UI intentions. The application supplies the validated
+`list_indent_width` and smart-list policy to explicit editor indent or outdent
+commands, then flushes each command as one persistent revision. The editor
+computes all touched logical-line replacements against the same before document
+and reports one ordered `TextChangeSet`; a selection ending at column zero
+excludes that following line. Recognized list indentation reuses exact existing
+prefix bytes. Each level adds or removes exactly one configured space unit
+regardless of marker width, while an established tab-indented prefix adds or
+removes one tab. No parent-content offset participates in indentation or
+outdent, and later ordered markers are never renumbered. Outside recognized list
+context, Tab is exact space insertion and BackTab is a no-op. Palette commands
+route through the same intentions for modifier-independent keyboard and mouse
+access. An editor selection handed through Escape is transiently available only
+to the next command-palette indent or outdent on the same unchanged thought.
 
 Bracketed paste is one payload and one undoable edit. When no thought is
 selected, paste creates and focuses a new thought. The application never tries
@@ -737,6 +749,13 @@ the insertion row. Pointer extension resolves through the current layout
 snapshot before entering edit mode. Bulk application actions continue to receive
 only ordered thought identities and do not depend on terminal modifiers or this
 UI selection representation.
+
+The remappable `select_all` board command replaces the arbitrary set with every
+live thought identity in current board order. Forwarded `Primary+A` resolves to
+that board command, while edit mode retains the editor's complete-text action.
+Whole-board palette submissions capture the live ordered identities directly;
+direction choice and target revalidation neither reconstruct nor mutate the
+visible selection.
 
 The normalized paste payload carries exact text plus optional typed provenance.
 Attachment annotations retain only presentation-safe metadata and byte ranges;
@@ -790,6 +809,12 @@ post-submit agent state is advisory, including `blocked`, `unknown`, or no
 reported state. The accepted outcome is journaled durably before an unchanged
 thought may be removed. That deletion remains undoable. Every failure preserves
 the thought.
+
+Whole-board keep and remove actions reuse this exact request, journal, receipt,
+and deletion path with every live source identity. Prompt assembly uses the same
+canonical blank-line separator and target-aware shared-starter policy as an
+ordinary multi-selection. Empty boards do not create an attempt, and several
+eligible directions use the existing chooser without a confirmation step.
 
 Submission attempts use a content-redacted SQLite journal. Proqi first reserves
 every source thought in `prepared`, compare-and-sets the attempt to `sending`,

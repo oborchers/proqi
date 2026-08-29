@@ -26,6 +26,7 @@ impl BoardApp {
             UiKey::Escape if !self.selection_is_empty() || self.range_latched() => {
                 self.clear_board_selection();
             }
+            UiKey::SelectAll => self.select_all_thoughts(),
             UiKey::Character(character) => {
                 return self.handle_board_command(character, ids, clock);
             }
@@ -35,7 +36,7 @@ impl BoardApp {
             UiKey::PrimaryShiftMove { movement } => {
                 return self.reorder_from_movement(movement, ids, clock);
             }
-            UiKey::Enter => self.enter_edit(),
+            UiKey::Enter => return self.expand_and_enter_edit(ids, clock),
             UiKey::Move {
                 movement: CursorMovement::VisualUp,
                 extend_selection: true,
@@ -78,6 +79,14 @@ impl BoardApp {
         clock: &impl Clock,
     ) -> Vec<Effect> {
         match key {
+            UiKey::Escape if !self.selection_is_empty() || self.range_latched() => {
+                self.clear_board_selection();
+                Vec::new()
+            }
+            UiKey::SelectAll => {
+                self.select_all_thoughts();
+                Vec::new()
+            }
             UiKey::Character(character)
                 if self.settings.keybindings.command(character)
                     == Some(BoardCommand::FocusDown) =>
@@ -107,13 +116,13 @@ impl BoardApp {
             }
             | UiKey::Backspace
             | UiKey::Delete
-            | UiKey::SelectAll
             | UiKey::DeleteLine
             | UiKey::Copy
             | UiKey::Cut
             | UiKey::Duplicate
             | UiKey::Quit
             | UiKey::Tab
+            | UiKey::BackTab
             | UiKey::PickerPrevious
             | UiKey::PickerNext
             | UiKey::PrimaryCharacter(_)
@@ -174,10 +183,7 @@ impl BoardApp {
         }
         match self.settings.keybindings.command(character) {
             Some(BoardCommand::New) => self.create(PastePayload::text(String::new()), ids, clock),
-            Some(BoardCommand::Edit) => {
-                self.enter_edit();
-                Vec::new()
-            }
+            Some(BoardCommand::Edit) => self.expand_and_enter_edit(ids, clock),
             Some(BoardCommand::Delete) => self.delete(ids, clock),
             Some(BoardCommand::Copy) => self.copy_thought(ids),
             Some(BoardCommand::Cut) => self.cut_thought(ids, clock),
@@ -209,6 +215,10 @@ impl BoardApp {
             Some(BoardCommand::Collapse) => self.collapse(ids, clock),
             Some(BoardCommand::Select) => {
                 self.toggle_selection();
+                Vec::new()
+            }
+            Some(BoardCommand::SelectAll) => {
+                self.select_all_thoughts();
                 Vec::new()
             }
             Some(BoardCommand::RangeSelect) => {
@@ -254,6 +264,9 @@ impl BoardApp {
         }
         if matches!(key, UiKey::Enter) && self.should_insert_smart_newline() {
             return self.insert_newline(true, ids, clock);
+        }
+        if matches!(key, UiKey::Tab | UiKey::BackTab) {
+            return self.apply_indentation(matches!(key, UiKey::BackTab), ids, clock);
         }
         let adjacent_fold = match key {
             UiKey::Backspace => self.delete_adjacent_fold(true),
@@ -332,6 +345,7 @@ impl BoardApp {
     ) -> Vec<Effect> {
         self.edit_boundary = None;
         let thought_id = self.active_thought_id();
+        self.capture_palette_selection_handoff();
         let effects = self.flush_pending_edit(ids, clock);
         if let Some(thought_id) = thought_id {
             self.clear_expanded_folds(thought_id);
@@ -411,7 +425,8 @@ impl BoardApp {
     }
 
     pub(super) fn move_focus(&mut self, delta: isize) {
-        self.manual_board_scroll = false;
+        self.board_viewport = self.board_viewport.follow_focus();
+        self.scroll_geometry = None;
         self.insertion_confirmation = super::InsertionConfirmation::Idle;
         let live = self.state.board.live_thoughts();
         if live.is_empty() {

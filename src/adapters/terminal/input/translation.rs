@@ -88,7 +88,9 @@ pub(super) fn translate_key(key: KeyEvent) -> Option<UiKey> {
     match key.code {
         KeyCode::Char(character) => Some(UiKey::Character(character)),
         KeyCode::Enter => Some(UiKey::Enter),
-        KeyCode::Tab | KeyCode::BackTab => Some(UiKey::Tab),
+        KeyCode::BackTab => Some(UiKey::BackTab),
+        KeyCode::Tab if extend_selection => Some(UiKey::BackTab),
+        KeyCode::Tab => Some(UiKey::Tab),
         KeyCode::Esc => Some(UiKey::Escape),
         KeyCode::Backspace => Some(UiKey::Backspace),
         KeyCode::Delete => Some(UiKey::Delete),
