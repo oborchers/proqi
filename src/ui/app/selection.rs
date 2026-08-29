@@ -189,8 +189,8 @@ impl BoardApp {
         self.selection.set_range(&order, anchor, endpoint);
         if self.selection.is_range() {
             self.insertion_focus = super::InsertionFocus::Inactive;
-            self.manual_board_scroll = false;
-            self.first_visible_row = 0;
+            self.board_viewport = self.board_viewport.follow_focus();
+            self.scroll_geometry = None;
             let _effects = self.reduce(Action::FocusThought(Some(endpoint)));
             self.hovered = None;
             self.layout = None;

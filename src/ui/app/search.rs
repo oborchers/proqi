@@ -138,7 +138,8 @@ impl BoardApp {
             return Vec::new();
         };
         self.clear_range_for_focus_change();
-        self.manual_board_scroll = false;
+        self.board_viewport = self.board_viewport.follow_focus();
+        self.scroll_geometry = None;
         self.reduce(Action::FocusThought(Some(thought_id)))
     }
 

@@ -356,71 +356,30 @@ impl BoardApp {
             editor.scroll_by(delta);
             return Vec::new();
         }
-        let maximum = self
-            .layout
-            .as_ref()
-            .map_or(0, |layout| layout.max_first_index);
-        if delta > 0 {
-            let can_scroll_current = self
-                .layout
-                .as_ref()
-                .and_then(|layout| layout.thoughts.first())
-                .is_some_and(|thought| thought.scrollable_hidden);
-            if can_scroll_current {
-                self.first_visible_row += 1;
-            } else if self.first_visible < maximum {
-                self.first_visible += 1;
-                self.first_visible_row = 0;
-            } else {
-                return Vec::new();
-            }
-        } else if self.first_visible_row > 0 {
-            self.first_visible_row -= 1;
-        } else if self.first_visible > 0 {
-            self.first_visible -= 1;
-            self.first_visible_row = if self
-                .state
-                .board
-                .live_thoughts()
-                .get(self.first_visible)
-                .is_some_and(|thought| {
-                    thought.presentation != crate::domain::ThoughtPresentation::Collapsed
-                }) {
-                self.first_thought_row_count().saturating_sub(1)
-            } else {
-                0
-            };
-        } else {
+        if self.layout.is_none() {
             return Vec::new();
         }
-        self.manual_board_scroll = true;
+        let anchor = self.scroll_geometry.and_then(|geometry| {
+            if delta > 0 {
+                geometry.next
+            } else {
+                geometry.previous
+            }
+        });
+        let Some(anchor) = anchor else {
+            return Vec::new();
+        };
+        self.board_viewport = crate::ui::layout::scroll::BoardViewport::Manual(anchor);
+        self.scroll_geometry = None;
         self.layout = None;
         Vec::new()
-    }
-
-    fn first_thought_row_count(&self) -> usize {
-        let Some(thought) = self
-            .state
-            .board
-            .live_thoughts()
-            .get(self.first_visible)
-            .copied()
-        else {
-            return 1;
-        };
-        let content = self
-            .presentation_for_render(thought.id)
-            .map_or_else(|| thought.content.clone(), |view| view.content);
-        crate::ports::text_layout::wrap_rows(&content, usize::from(self.viewport.width.max(1)))
-            .len()
-            .max(1)
     }
 
     fn focus(&mut self, thought_id: crate::domain::ThoughtId) {
         self.clear_range_for_focus_change();
         self.insertion_focus = super::InsertionFocus::Inactive;
-        self.manual_board_scroll = false;
-        self.first_visible_row = 0;
+        self.board_viewport = self.board_viewport.follow_focus();
+        self.scroll_geometry = None;
         let _effects = self.reduce(Action::FocusThought(Some(thought_id)));
     }
 

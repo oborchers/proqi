@@ -1,12 +1,8 @@
-//! Responsive thought placement and line-level board scrolling.
+//! Responsive thought placement over the canonical visual-row flow.
 
 use ratatui_core::layout::Rect;
 
-use crate::{
-    application::AppState,
-    domain::{Thought, ThoughtPresentation},
-    ports::{editor::EditorSnapshot, text_layout::wrap_rows},
-};
+use crate::{application::AppState, domain::ThoughtPresentation, ports::editor::EditorSnapshot};
 
 use super::{ThoughtLayout, scroll};
 
@@ -14,10 +10,11 @@ pub(super) struct ContentRequest<'a> {
     pub(super) state: &'a AppState,
     pub(super) editor: Option<&'a EditorSnapshot>,
     pub(super) board: Rect,
-    pub(super) requested_first: usize,
     pub(super) content_width: u16,
     pub(super) insertion_focused: bool,
     pub(super) density: crate::ui::settings::BoardDensity,
+    pub(super) viewport: Option<scroll::BoardViewport>,
+    pub(super) requested_first: usize,
     pub(super) requested_row_offset: usize,
 }
 
@@ -27,227 +24,182 @@ pub(super) struct VisibleContent {
     pub(super) first: usize,
     pub(super) first_row_offset: usize,
     pub(super) max_first: usize,
+    pub(super) scroll: scroll::ScrollGeometry,
 }
 
 pub(super) fn visible_content(request: &ContentRequest<'_>) -> VisibleContent {
-    let live = request.state.board.live_thoughts();
-    let focus_index = request
-        .state
-        .focused_thought
-        .and_then(|id| live.iter().position(|thought| thought.id == id));
-    let board_mode = matches!(
-        request.state.mode,
-        crate::application::InteractionMode::Board
-    );
-    let max_first = scroll::maximum_first(
+    let flow = scroll::BoardFlow::measure(
         request.state,
         request.editor,
-        request.board,
         request.content_width,
-        board_mode,
+        request.board.height,
         request.density,
     );
-    let mut first = request.requested_first.min(max_first);
-    if request.insertion_focused {
-        first = max_first;
-    } else if focus_index.is_some_and(|index| index < first) {
-        first = focus_index.unwrap_or(first).min(max_first);
-    }
-    let row_offset = if request.insertion_focused || focus_index.is_some() {
-        0
-    } else {
-        request.requested_row_offset
-    };
-    let mut thoughts = thoughts_from(request, first, max_first, board_mode, row_offset);
-    if focus_index.is_some_and(|index| !thoughts.iter().any(|layout| layout.index == index)) {
-        first = focus_index.unwrap_or(first).min(max_first);
-        thoughts = thoughts_from(request, first, max_first, board_mode, 0);
-    }
-    let used_bottom = thoughts
-        .last()
-        .map_or(request.board.y, |layout| layout.area.bottom());
-    let insert_space = request.board.bottom().saturating_sub(used_bottom);
-    let insert = (board_mode && first == max_first && insert_space > 0).then(|| {
-        let y = used_bottom.saturating_add(u16::from(insert_space >= 2));
-        Rect::new(request.board.x, y, request.board.width, 1)
+    let viewport = request.viewport.unwrap_or_else(|| {
+        scroll::BoardViewport::FollowFocus(
+            flow.legacy_anchor(request.requested_first, request.requested_row_offset),
+        )
     });
-    let first_row_offset = thoughts
-        .first()
-        .map_or(0, |layout| layout.content_row_offset);
+    let resolved = flow.resolve(
+        viewport,
+        request.state.focused_thought,
+        request.insertion_focused,
+        request.board.height,
+    );
+    let board = Rect::new(
+        request.board.x,
+        request.board.y.saturating_add(flow.top_padding),
+        request.board.width,
+        request.board.height.saturating_sub(flow.top_padding),
+    );
+    let thoughts = visible_thoughts(&flow, resolved.offset, board);
+    let insert = flow
+        .insert_row
+        .filter(|row| visible_row(*row, resolved.offset, board.height))
+        .map(|row| {
+            Rect::new(
+                board.x,
+                viewport_y(board, row, resolved.offset),
+                board.width,
+                1,
+            )
+        });
     VisibleContent {
         thoughts,
         insert,
-        first,
-        first_row_offset,
-        max_first,
+        first: resolved.first_index,
+        first_row_offset: resolved.first_row_offset,
+        max_first: resolved.max_first_index,
+        scroll: resolved.geometry,
     }
 }
 
-fn thoughts_from(
-    request: &ContentRequest<'_>,
-    first: usize,
-    max_first: usize,
-    board_mode: bool,
-    row_offset: usize,
-) -> Vec<ThoughtLayout> {
-    let board = scroll::board_for_page(request.board, board_mode && first == max_first);
-    place_thoughts(
-        &ThoughtPlacement {
-            state: request.state,
-            editor: request.editor,
-            board,
-            content_width: request.content_width,
-            density: request.density,
-        },
-        first,
-        row_offset,
-    )
+fn visible_thoughts(flow: &scroll::BoardFlow, offset: usize, board: Rect) -> Vec<ThoughtLayout> {
+    let viewport_end = offset.saturating_add(usize::from(board.height));
+    flow.thoughts
+        .iter()
+        .filter_map(|thought| visible_thought(thought, offset, viewport_end, board))
+        .collect()
 }
 
-pub(super) struct ThoughtPlacement<'a> {
-    pub(super) state: &'a AppState,
-    pub(super) editor: Option<&'a EditorSnapshot>,
-    pub(super) board: Rect,
-    pub(super) content_width: u16,
-    pub(super) density: crate::ui::settings::BoardDensity,
+#[derive(Clone, Copy)]
+struct VisibleRows {
+    separator: bool,
+    content_start: usize,
+    first: usize,
+    last: usize,
+    overflow: bool,
 }
 
-pub(super) fn place_thoughts(
-    context: &ThoughtPlacement<'_>,
-    first: usize,
-    requested_row_offset: usize,
-) -> Vec<ThoughtLayout> {
-    let mut layouts = Vec::new();
-    let live = context.state.board.live_thoughts();
-    let remaining = live.len().saturating_sub(first);
-    let roomy = usize::from(context.board.height)
-        >= remaining.saturating_add(remaining.saturating_sub(1).saturating_mul(3));
-    let top_padding = u16::from(roomy && context.board.height >= 3 && remaining > 0);
-    let mut y = context.board.y.saturating_add(top_padding);
-    for (index, thought) in live.into_iter().enumerate().skip(first) {
-        if y >= context.board.bottom() {
-            break;
-        }
-        let comfortable =
-            roomy && context.density == crate::ui::settings::BoardDensity::Comfortable;
-        let separation = if comfortable { 2 } else { 1 };
-        if !layouts.is_empty() && y.saturating_add(separation) >= context.board.bottom() {
-            break;
-        }
-        let separator_before =
-            separator_before(context.board, &mut y, !layouts.is_empty(), comfortable);
-        let layout = place_thought(
-            context,
-            thought,
-            index,
-            first,
-            y,
-            separator_before,
-            requested_row_offset,
-        );
-        y = layout.area.bottom();
-        layouts.push(layout);
-    }
-    layouts
-}
-
-fn place_thought(
-    context: &ThoughtPlacement<'_>,
-    thought: &Thought,
-    index: usize,
-    first: usize,
-    y: u16,
-    separator_before: Option<Rect>,
-    requested_row_offset: usize,
-) -> ThoughtLayout {
-    let editing = context
-        .editor
-        .is_some_and(|_| context.state.focused_thought == Some(thought.id));
-    let natural = context
-        .editor
-        .filter(|_| context.state.focused_thought == Some(thought.id))
-        .map_or_else(
-            || wrapped_rows(&thought.content, context.content_width),
-            |snapshot| snapshot.visual_lines.len().max(1),
-        );
-    let content_row_offset =
-        if index == first && !editing && thought.presentation != ThoughtPresentation::Collapsed {
-            requested_row_offset.min(natural.saturating_sub(1))
-        } else {
-            0
-        };
-    let explicit_cap = if editing {
-        natural
-    } else {
-        match thought.presentation {
-            ThoughtPresentation::Expanded => natural,
-            ThoughtPresentation::Collapsed => 2,
-            ThoughtPresentation::Automatic => usize::from(responsive_cap(context.board.height)),
-        }
-    };
-    let available = usize::from(context.board.bottom().saturating_sub(y));
-    let remaining_rows = natural.saturating_sub(content_row_offset);
-    let presentation_clipped = remaining_rows > explicit_cap.max(1);
-    let desired = remaining_rows.min(explicit_cap.max(1));
-    let viewport_clipped = desired > available;
-    let height = u16::try_from(desired.min(available).max(1)).unwrap_or(u16::MAX);
-    let area = Rect::new(context.board.x, y, context.board.width, height);
-    let gutter = Rect::new(area.x, area.y, area.width.min(1), area.height);
+fn visible_thought(
+    thought: &scroll::ThoughtRows,
+    offset: usize,
+    viewport_end: usize,
+    board: Rect,
+) -> Option<ThoughtLayout> {
+    let visible = visible_rows(thought, offset, viewport_end)?;
+    let area = Rect::new(
+        board.x,
+        viewport_y(board, visible.first, offset),
+        board.width,
+        u16::try_from(visible.last.saturating_sub(visible.first)).unwrap_or(u16::MAX),
+    );
     let text_area = Rect::new(
         area.x.saturating_add(2).min(area.right()),
         area.y,
         area.width.saturating_sub(2),
         area.height,
     );
-    let hidden_rows = if editing || !presentation_clipped {
-        0
-    } else {
-        remaining_rows.saturating_sub(usize::from(height).saturating_sub(1))
-    };
-    let scrollable_hidden = !editing
-        && remaining_rows > usize::from(height)
-        && thought.presentation != ThoughtPresentation::Collapsed;
-    let overflow = (hidden_rows > 0).then(|| {
-        Rect::new(
-            text_area.x,
-            area.bottom().saturating_sub(1),
-            text_area.width,
-            1,
-        )
-    });
-    ThoughtLayout {
-        thought_id: thought.id,
-        index,
-        separator_before,
+    let overflow = thought
+        .overflow_row
+        .filter(|_| visible.overflow)
+        .map(|row| {
+            Rect::new(
+                text_area.x,
+                viewport_y(board, row, offset),
+                text_area.width,
+                1,
+            )
+        });
+    let viewport_clipped = thought.content_start < offset || thought.end > viewport_end;
+    Some(ThoughtLayout {
+        thought_id: thought.thought_id,
+        index: thought.index,
+        separator_before: visible.separator.then(|| separator(thought, offset, board)),
         area,
         text_area,
-        gutter,
+        gutter: Rect::new(area.x, area.y, area.width.min(1), area.height),
         overflow,
-        hidden_rows,
+        hidden_rows: thought.overflow_row.map_or(0, |_| {
+            thought.natural_rows.saturating_sub(thought.content_rows)
+        }),
         viewport_clipped,
-        scrollable_hidden,
-        content_row_offset,
-    }
-}
-
-fn separator_before(board: Rect, y: &mut u16, preceded: bool, roomy: bool) -> Option<Rect> {
-    preceded.then(|| {
-        let rule_y = *y;
-        let separator = Rect::new(
-            board.x.saturating_add(2).min(board.right()),
-            rule_y,
-            board.width.saturating_sub(2),
-            1,
-        );
-        *y = y.saturating_add(if roomy { 2 } else { 1 });
-        separator
+        scrollable_hidden: viewport_clipped
+            && thought.presentation != ThoughtPresentation::Collapsed,
+        content_row_offset: visible
+            .content_start
+            .saturating_sub(thought.content_start)
+            .min(thought.content_rows),
     })
 }
 
-fn responsive_cap(board_height: u16) -> u16 {
-    board_height.saturating_mul(2).div_ceil(3).max(3)
+fn visible_rows(
+    thought: &scroll::ThoughtRows,
+    offset: usize,
+    viewport_end: usize,
+) -> Option<VisibleRows> {
+    let content_end = thought.content_start.saturating_add(thought.content_rows);
+    let content_start = thought.content_start.max(offset);
+    let content_end = content_end.min(viewport_end);
+    let content = content_start < content_end;
+    let overflow = thought
+        .overflow_row
+        .is_some_and(|row| row >= offset && row < viewport_end);
+    let gap = thought.gap_start < viewport_end && thought.content_start > offset;
+    if !gap && !content && !overflow {
+        return None;
+    }
+    let first = if content {
+        content_start
+    } else {
+        thought
+            .overflow_row
+            .filter(|_| overflow)
+            .unwrap_or(thought.content_start.min(viewport_end))
+    };
+    let last = if overflow {
+        thought.overflow_row.unwrap_or(first).saturating_add(1)
+    } else if content {
+        content_end
+    } else {
+        first
+    };
+    Some(VisibleRows {
+        separator: thought.gap_rows > 0
+            && thought.gap_start >= offset
+            && thought.gap_start < viewport_end,
+        content_start,
+        first,
+        last,
+        overflow,
+    })
 }
 
-fn wrapped_rows(content: &str, width: u16) -> usize {
-    wrap_rows(content, usize::from(width.max(1))).len().max(1)
+fn separator(thought: &scroll::ThoughtRows, offset: usize, board: Rect) -> Rect {
+    Rect::new(
+        board.x.saturating_add(2).min(board.right()),
+        viewport_y(board, thought.gap_start, offset),
+        board.width.saturating_sub(2),
+        1,
+    )
+}
+
+fn visible_row(row: usize, offset: usize, height: u16) -> bool {
+    row >= offset && row < offset.saturating_add(usize::from(height))
+}
+
+fn viewport_y(board: Rect, row: usize, offset: usize) -> u16 {
+    board
+        .y
+        .saturating_add(u16::try_from(row.saturating_sub(offset)).unwrap_or(u16::MAX))
 }

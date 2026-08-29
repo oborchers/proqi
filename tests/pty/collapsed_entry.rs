@@ -71,6 +71,52 @@ const COLLAPSED_ENTRY_WORKFLOW: &str = r#"
     exit [lindex $result 3]
 "#;
 
+const MIXED_LONG_THOUGHT_SCROLL_WORKFLOW: &str = r#"
+    log_user 0
+    set timeout 15
+    spawn $env(PROQI_TEST_BINARY) --state-dir $env(PROQI_TEST_STATE) -r $env(PROQI_TEST_SESSION)
+    expect -exact "\x1b\[?1049h"
+    stty rows 12 columns 36
+    after 300
+    send "j"
+    send "c"
+    send "j"
+    send "j"
+    send "c"
+    send "c"
+    send "j"
+    send "j"
+    send "c"
+    for {set i 0} {$i < 300} {incr i} {
+        send -- "\x1b\[<65;8;6M"
+    }
+    after 300
+    stty rows 8 columns 28
+    after 150
+    for {set i 0} {$i < 300} {incr i} {
+        send -- "\x1b\[<64;8;6M"
+    }
+    after 300
+    stty rows 26 columns 80
+    after 150
+    send "c"
+    send "c"
+    for {set i 0} {$i < 300} {incr i} {
+        send -- "\x1b\[<65;8;6M"
+    }
+    after 300
+    stty rows 10 columns 34
+    after 150
+    for {set i 0} {$i < 300} {incr i} {
+        send -- "\x1b\[<64;8;6M"
+    }
+    after 500
+    send "q"
+    expect eof
+    catch wait result
+    exit [lindex $result 3]
+"#;
+
 #[test]
 fn collapsed_long_thought_mouse_entry_survives_cycles_scroll_and_resize() {
     let state = tempfile::tempdir().expect("temporary state");
@@ -108,6 +154,60 @@ fn collapsed_long_thought_mouse_entry_survives_cycles_scroll_and_resize() {
     assert_eq!(thoughts[0]["content"], "ordinary before");
     assert_eq!(thoughts[1]["content"], format!("{long}!"));
     assert_eq!(thoughts[2]["content"], "ordinary after");
+}
+
+#[test]
+fn mixed_long_thought_presentations_survive_mouse_scroll_boundaries_and_reflow() {
+    let state = tempfile::tempdir().expect("temporary state");
+    let binary = env!("CARGO_BIN_EXE_proqi");
+    let created = json_command(binary, state.path(), &[]);
+    let session = created["data"]["session_id"]
+        .as_str()
+        .expect("session ID")
+        .to_owned();
+    let long = |label: &str| {
+        (0..18)
+            .map(|line| {
+                format!(
+                    "{label} {line:02} · Grüße 界 🧪 · enough ordinary words to wrap after resize"
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    let contents = [
+        "ordinary before".to_owned(),
+        long("alpha"),
+        "ordinary between alpha and beta".to_owned(),
+        long("beta"),
+        "ordinary between beta and gamma".to_owned(),
+        long("gamma"),
+        "ordinary after".to_owned(),
+    ];
+    for content in &contents {
+        add_thought(binary, state.path(), &session, content);
+    }
+
+    let status = expect_command()
+        .args(["-c", MIXED_LONG_THOUGHT_SCROLL_WORKFLOW])
+        .env("PROQI_TEST_BINARY", binary)
+        .env("PROQI_TEST_STATE", state.path())
+        .env("PROQI_TEST_SESSION", &session)
+        .status()
+        .expect("run mixed long-thought PTY scroll workflow");
+    assert!(status.success());
+
+    let thoughts = json_command(binary, state.path(), &["thoughts", "list", &session]);
+    let actual = thoughts["data"]["thoughts"]
+        .as_array()
+        .expect("thoughts")
+        .iter()
+        .map(|thought| thought["content"].as_str().expect("content"))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        actual,
+        contents.iter().map(String::as_str).collect::<Vec<_>>()
+    );
 }
 
 fn add_thought(binary: &str, state: &std::path::Path, session: &str, content: &str) {

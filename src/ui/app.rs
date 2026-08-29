@@ -44,6 +44,7 @@ use crate::{
 use super::{
     HitTarget, LayoutSnapshot, PastePayload, UiSettings,
     input::{PointerButton, PointerInput, PointerKind, UiInput, UiKey},
+    layout::scroll::{BoardViewport, ScrollGeometry},
 };
 
 pub(in crate::ui) use invocation::InvocationChoiceView;
@@ -79,9 +80,8 @@ pub struct BoardApp {
     /// Transient human-readable status.
     pub(in crate::ui) status: Option<crate::ui::status::UiStatus>,
     viewport: TextViewport,
-    first_visible: usize,
-    first_visible_row: usize,
-    manual_board_scroll: bool,
+    board_viewport: BoardViewport,
+    scroll_geometry: Option<ScrollGeometry>,
     layout: Option<LayoutSnapshot>,
     dragged_thought: Option<ThoughtId>,
     drag_target: Option<usize>,
@@ -156,9 +156,8 @@ impl BoardApp {
             help_scroll: 0,
             status: None,
             viewport: TextViewport::default(),
-            first_visible: 0,
-            first_visible_row: 0,
-            manual_board_scroll: false,
+            board_viewport: BoardViewport::default(),
+            scroll_geometry: None,
             layout: None,
             dragged_thought: None,
             drag_target: None,

@@ -335,3 +335,27 @@ fn shifted_mouse_input_preserves_selection_extension_intent() {
         }))
     );
 }
+
+#[test]
+fn each_vertical_wheel_event_remains_one_directional_pointer_intention() {
+    for (mouse, expected) in [
+        (MouseEventKind::ScrollUp, PointerKind::ScrollUp),
+        (MouseEventKind::ScrollDown, PointerKind::ScrollDown),
+    ] {
+        let event = Event::Mouse(MouseEvent {
+            kind: mouse,
+            column: 9,
+            row: 4,
+            modifiers: KeyModifiers::NONE,
+        });
+        assert_eq!(
+            translate(event),
+            Some(UiInput::Pointer(PointerInput {
+                column: 9,
+                row: 4,
+                kind: expected,
+                extend_selection: false,
+            }))
+        );
+    }
+}

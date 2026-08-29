@@ -407,7 +407,8 @@ impl BoardApp {
     }
 
     pub(super) fn move_focus(&mut self, delta: isize) {
-        self.manual_board_scroll = false;
+        self.board_viewport = self.board_viewport.follow_focus();
+        self.scroll_geometry = None;
         self.insertion_confirmation = super::InsertionConfirmation::Idle;
         let live = self.state.board.live_thoughts();
         if live.is_empty() {

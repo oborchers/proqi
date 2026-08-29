@@ -3,7 +3,7 @@
 mod chrome;
 mod content;
 mod controls;
-mod scroll;
+pub(super) mod scroll;
 
 use ratatui_core::layout::Rect;
 
@@ -292,6 +292,69 @@ pub fn compute_with_density(
     requested_row_offset: usize,
     keybindings: &crate::ui::KeyBindings,
 ) -> LayoutSnapshot {
+    compute_frame(
+        state,
+        editor,
+        area,
+        requested_first,
+        insertion_focused,
+        has_agents,
+        has_status,
+        density,
+        requested_row_offset,
+        keybindings,
+        None,
+    )
+    .0
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "layout inputs are independent viewport contracts"
+)]
+pub(super) fn compute_for_app(
+    state: &AppState,
+    editor: Option<&EditorSnapshot>,
+    area: Rect,
+    insertion_focused: bool,
+    has_agents: bool,
+    has_status: bool,
+    density: crate::ui::settings::BoardDensity,
+    keybindings: &crate::ui::KeyBindings,
+    viewport: scroll::BoardViewport,
+) -> (LayoutSnapshot, scroll::ScrollGeometry) {
+    compute_frame(
+        state,
+        editor,
+        area,
+        0,
+        insertion_focused,
+        has_agents,
+        has_status,
+        density,
+        0,
+        keybindings,
+        Some(viewport),
+    )
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "layout inputs are independent viewport contracts"
+)]
+fn compute_frame(
+    state: &AppState,
+    editor: Option<&EditorSnapshot>,
+    area: Rect,
+    requested_first: usize,
+    insertion_focused: bool,
+    has_agents: bool,
+    has_status: bool,
+    density: crate::ui::settings::BoardDensity,
+    requested_row_offset: usize,
+    keybindings: &crate::ui::KeyBindings,
+    viewport: Option<scroll::BoardViewport>,
+) -> (LayoutSnapshot, scroll::ScrollGeometry) {
     let chrome = chrome::compute(area, has_agents, has_status);
     let board = chrome.board;
     let content_width = board.width.saturating_sub(2).max(1);
@@ -299,13 +362,15 @@ pub fn compute_with_density(
         state,
         editor,
         board,
-        requested_first,
         content_width,
         insertion_focused,
         density,
+        viewport,
+        requested_first,
         requested_row_offset,
     });
-    LayoutSnapshot {
+    let scroll = content.scroll;
+    let layout = LayoutSnapshot {
         area,
         board,
         header: chrome.header,
@@ -342,7 +407,8 @@ pub fn compute_with_density(
         ),
         content_width,
         overlay: None,
-    }
+    };
+    (layout, scroll)
 }
 
 #[cfg(test)]

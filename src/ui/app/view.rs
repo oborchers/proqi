@@ -219,39 +219,35 @@ impl BoardApp {
 
     /// Recompute one authoritative frame layout and reflow the active editor.
     pub fn prepare_frame(&mut self, area: Rect) -> LayoutSnapshot {
-        let mut layout_state = self.presentation_state();
-        if self.manual_board_scroll {
-            layout_state.focused_thought = None;
-        }
+        let layout_state = self.presentation_state();
         let first_editor = self.editor_presentation();
         let has_status = self.status.is_some()
             || matches!(self.state.durability, DurabilityState::Failed { .. });
-        let first = crate::ui::layout::compute_with_density(
+        let (first, first_scroll) = crate::ui::layout::compute_for_app(
             &layout_state,
             first_editor.as_ref().map(|view| &view.snapshot),
             area,
-            self.first_visible,
             self.insertion_focused(),
             !self.agent_targets.is_empty(),
             has_status,
             self.settings.density,
-            self.first_visible_row,
             &self.settings.keybindings,
+            self.board_viewport,
         );
         let height = self.focused_height(&first);
         self.prepare_layout(TextViewport::new(first.content_width, height));
         let editor = self.editor_presentation();
-        let mut layout = crate::ui::layout::compute_with_density(
+        let viewport = self.board_viewport.at(first_scroll.current);
+        let (mut layout, scroll) = crate::ui::layout::compute_for_app(
             &layout_state,
             editor.as_ref().map(|view| &view.snapshot),
             area,
-            first.first_index,
             self.insertion_focused(),
             !self.agent_targets.is_empty(),
             has_status,
             self.settings.density,
-            self.first_visible_row,
             &self.settings.keybindings,
+            viewport,
         );
         self.configure_overlay(&mut layout);
         layout.configure_agent_controls_with_keys(
@@ -271,8 +267,8 @@ impl BoardApp {
         );
         let final_height = self.focused_height(&layout);
         self.prepare_layout(TextViewport::new(layout.content_width, final_height));
-        self.first_visible = layout.first_index;
-        self.first_visible_row = layout.first_row_offset;
+        self.board_viewport = self.board_viewport.at(scroll.current);
+        self.scroll_geometry = Some(scroll);
         self.layout = Some(layout.clone());
         layout
     }

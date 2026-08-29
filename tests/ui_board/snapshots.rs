@@ -295,6 +295,35 @@ fn expanded_long_thought_uses_the_viewport_without_a_second_expand_control() {
 }
 
 #[test]
+fn final_scroll_page_keeps_long_tail_and_insertion_row_without_blank_overscroll() {
+    let mut fixture = Fixture::new();
+    let long = (0..10)
+        .map(|line| format!("long {line:02} wraps with Grüße 界 and enough words for the viewport"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    for content in ["before", &long, "after"] {
+        super::navigation::durable_thought(&mut fixture, content);
+    }
+    let long_id = fixture.app.state.board.live_thoughts()[1].id;
+    fixture
+        .app
+        .state
+        .board
+        .thought_mut(long_id)
+        .expect("long thought")
+        .presentation = proqi::domain::ThoughtPresentation::Expanded;
+    fixture.input(super::navigation::visual(CursorMovement::VisualUp, false));
+    let area = Rect::new(0, 0, 52, 16);
+    let _initial = fixture.app.prepare_frame(area);
+    for _ in 0..160 {
+        fixture.pointer(4, 2, PointerKind::ScrollDown);
+        let _frame = fixture.app.prepare_frame(area);
+    }
+
+    insta::assert_snapshot!(snapshot(&mut fixture, 52, 16, ThemePreference::Dark));
+}
+
+#[test]
 fn command_palette_has_a_complete_searchable_buffer() {
     let mut fixture = Fixture::new();
     let sequence = fixture.paste("review release readiness");
