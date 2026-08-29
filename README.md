@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/oborchers/proqi/main/assets/proqi-logo.png" width="172" alt="Proqi logo">
+  <img src="assets/proqi-logo.png" width="172" alt="Proqi logo">
 </p>
 
 <h1 align="center">Proqi</h1>
@@ -41,7 +41,7 @@ multiple coding agents—without interrupting their work.**
 ## Do you hate this editor?
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/oborchers/proqi/main/assets/proqi-problem.svg" width="1000" alt="Illustration of the single active prompt fields in Codex and Claude Code accumulating unfinished follow-up material">
+  <img src="assets/proqi-problem.svg" width="1000" alt="Illustration of the single active prompt fields in Codex and Claude Code accumulating unfinished follow-up material">
 </p>
 
 Not the agent. The input field.
@@ -74,7 +74,7 @@ private, annotatable thoughts without dragging files across panes or accidentall
 dropping them into an agent composer.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/oborchers/proqi/main/assets/proqi-demo.gif" width="1000" alt="Proqi refining independent prompt thoughts, reordering them, and copying an ordered selection">
+  <img src="assets/proqi-demo.gif" width="1000" alt="Proqi refining independent prompt thoughts, reordering them, and copying an ordered selection">
 </p>
 
 The standalone workflow works in any supported terminal: compose, concatenate,
