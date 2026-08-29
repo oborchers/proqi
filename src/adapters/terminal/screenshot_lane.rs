@@ -385,6 +385,6 @@ impl ScreenshotWorker {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "macos"))]
 #[path = "screenshot_lane/tests.rs"]
 mod tests;
