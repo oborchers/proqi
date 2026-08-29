@@ -127,6 +127,7 @@ impl BoardApp {
             | UiKey::PickerNext
             | UiKey::PrimaryCharacter(_)
             | UiKey::PrimaryShiftMove { .. }
+            | UiKey::EditNavigation { .. }
             | UiKey::Move { .. } => Vec::new(),
         }
     }

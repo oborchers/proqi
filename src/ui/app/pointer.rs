@@ -12,7 +12,7 @@ use crate::{
 use super::{BoardApp, PointerButton, PointerInput, PointerKind};
 use crate::ui::{HitTarget, projection::BoardCellTarget};
 
-const MULTI_CLICK_MILLIS: i64 = 500;
+pub(super) const MULTI_CLICK_MILLIS: i64 = 500;
 
 #[derive(Clone, Copy)]
 pub(super) struct PointerClick {
@@ -64,6 +64,11 @@ impl BoardApp {
         self.edit_boundary = None;
         if self.submission_mode.is_some() {
             return self.handle_submission_pointer(pointer, ids, clock);
+        }
+        if matches!(pointer.kind, PointerKind::Down(PointerButton::Left))
+            && self.consume_repeated_overlay_activation(pointer, clock.now())
+        {
+            return Vec::new();
         }
         let mut effects = match pointer.kind {
             PointerKind::Down(_) | PointerKind::Drag(_) | PointerKind::Up(_) => {
@@ -176,7 +181,9 @@ impl BoardApp {
             Some(HitTarget::ExitEdit) => self.finish_edit(ids, clock),
             Some(HitTarget::Retry) => self.retry_persistence(),
             Some(HitTarget::ExportRecovery) => self.export_recovery(ids, clock),
-            Some(HitTarget::PaletteItem(index)) => self.activate_palette_item(index, ids, clock),
+            Some(HitTarget::PaletteItem(index)) => {
+                self.activate_palette_item(index, pointer, ids, clock)
+            }
             Some(HitTarget::CloseOverlay) => {
                 self.close_overlay();
                 Vec::new()
@@ -191,9 +198,11 @@ impl BoardApp {
     fn activate_palette_item(
         &mut self,
         index: usize,
+        pointer: PointerInput,
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
+        self.begin_overlay_activation(pointer, clock.now());
         if self.search.is_some() {
             self.execute_search_visible_index(index)
         } else if self.transfer.is_some() {

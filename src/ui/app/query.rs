@@ -51,7 +51,10 @@ impl QueryEditor {
             }
             CursorMovement::LineStart | CursorMovement::DocumentStart => 0,
             CursorMovement::LineEnd | CursorMovement::DocumentEnd => self.text.len(),
-            CursorMovement::VisualUp | CursorMovement::VisualDown => self.cursor,
+            CursorMovement::VisualUp
+            | CursorMovement::VisualDown
+            | CursorMovement::VisualJumpUp
+            | CursorMovement::VisualJumpDown => self.cursor,
         };
     }
 

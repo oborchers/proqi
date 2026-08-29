@@ -112,6 +112,57 @@ fn large_paste_is_folded_while_editing_and_editor_undo_restores_its_fold() {
 }
 
 #[test]
+fn fast_and_boundary_navigation_keep_a_collapsed_annotation_atomic() {
+    let content = (0..10)
+        .map(|row| format!("folded row {row}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let graphemes =
+        unicode_segmentation::UnicodeSegmentation::graphemes(content.as_str(), true).count();
+    let mut fixture = Fixture::new();
+    fixture.input(UiInput::PasteAnnotated(PastePayload::annotated(
+        content.clone(),
+        vec![ContentAnnotation {
+            start: 0,
+            end: content.len(),
+            kind: ContentAnnotationKind::LargePaste {
+                lines: 10,
+                graphemes,
+            },
+        }],
+    )));
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::DocumentStart,
+        extend_selection: false,
+    }));
+    assert_eq!(
+        fixture.app.editor_snapshot().expect("editor").cursor,
+        proqi::domain::TextPosition::new(0, 0)
+    );
+
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::VisualJumpDown,
+        extend_selection: false,
+    }));
+    let selected = fixture.app.editor_snapshot().expect("fold selection");
+    assert_eq!(
+        selected.selection,
+        Some(proqi::ports::editor::TextSelection {
+            start: proqi::domain::TextPosition::new(0, 0),
+            end: proqi::domain::TextPosition::new(9, "folded row 9".chars().count()),
+        })
+    );
+
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::DocumentEnd,
+        extend_selection: false,
+    }));
+    let end = fixture.app.editor_snapshot().expect("thought end");
+    assert_eq!(end.selection, None);
+    assert_eq!(end.cursor, proqi::domain::TextPosition::new(9, 12));
+}
+
+#[test]
 fn collapsed_folds_are_atomic_for_selection_replacement_and_expansion() {
     let mut fixture = Fixture::new();
     let path = "/tmp/screenshot.png";

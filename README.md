@@ -205,6 +205,8 @@ fallbacks remain available when a terminal cannot report a modifier.
 | `Primary+Z` | Undo an edit |
 | `Shift+Primary+Z` | Redo an edit |
 | `Primary+V` | Read the native clipboard |
+| `Alt+↑` / `Alt+↓` | Jump exactly five wrapped visual rows while preserving the preferred terminal-cell column |
+| `Primary+↑` / `Primary+↓` | Move to the exact beginning or end of the current thought |
 | `Enter` | Continue `-`, `*`, `+`, ordered, and task list items; exit an empty top-level item |
 | `Tab` | Nest a list item or indent selected logical lines; insert configured spaces elsewhere |
 | `Shift+Tab` | Outdent one recognized list level without changing ordinary text |
@@ -222,7 +224,11 @@ lines. Moving onto folded context selects its complete canonical range.
 `Enter` expands the fold, while typing or deletion replaces it atomically.
 Press `Esc`, open `:`, and choose `Insert plain newline`, `Indent line or
 selection`, or `Outdent line or selection` when the terminal does not forward a
-modifier; mouse users can open the palette directly while editing. An empty
+modifier; mouse users can open the palette directly while editing. The palette
+also exposes both five-row jumps and both thought-boundary movements when a
+terminal consumes the preferred chords. Shift-modified arrow chords retain
+their existing selection and board range/reorder behavior; fast selection
+extension is intentionally not assigned in this version. An empty
 nested item outdents one level before a later top-level `Enter` exits the list.
 Every nesting level uses exactly `list_indent_width` spaces regardless of bullet
 or ordered-marker width; tab-indented lists retain tabs.

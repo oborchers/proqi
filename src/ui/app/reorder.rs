@@ -40,6 +40,8 @@ impl BoardApp {
             | CursorMovement::GraphemeForward
             | CursorMovement::WordBack
             | CursorMovement::WordForward
+            | CursorMovement::VisualJumpUp
+            | CursorMovement::VisualJumpDown
             | CursorMovement::LineStart
             | CursorMovement::LineEnd => Vec::new(),
         }

@@ -416,6 +416,33 @@ fn plain_newline_fallback_is_visible_in_the_command_palette() {
 }
 
 #[test]
+fn fast_navigation_fallbacks_are_visible_in_the_command_palette() {
+    let mut fixture = Fixture::new();
+    navigation::durable_thought(&mut fixture, "one\ntwo\nthree\nfour\nfive\nsix");
+    fixture.input(UiInput::Key(UiKey::Character(':')));
+    for character in "cursor".chars() {
+        fixture.input(UiInput::Key(UiKey::Character(character)));
+    }
+    insta::assert_snapshot!(snapshot(&mut fixture, 72, 12, ThemePreference::Dark));
+}
+
+#[test]
+#[cfg(target_os = "macos")]
+fn fast_navigation_shortcuts_are_visible_in_edit_help() {
+    let mut fixture = Fixture::new();
+    fixture.paste("one\ntwo\nthree\nfour\nfive\nsix");
+    let help = fixture
+        .app
+        .prepare_frame(Rect::new(0, 0, 80, 14))
+        .controls
+        .into_iter()
+        .find_map(|(target, area)| (target == HitTarget::Help).then_some(area))
+        .expect("help control");
+    fixture.pointer(help.x, help.y, PointerKind::Down(PointerButton::Left));
+    insta::assert_snapshot!(snapshot(&mut fixture, 80, 14, ThemePreference::Dark));
+}
+
+#[test]
 fn indentation_fallbacks_are_visible_in_the_command_palette() {
     let mut fixture = Fixture::new();
     let sequence = fixture.paste("- parent\n  - child");

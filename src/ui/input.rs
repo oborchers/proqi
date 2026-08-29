@@ -77,6 +77,17 @@ pub enum UiKey {
         /// Whether to extend the active selection.
         extend_selection: bool,
     },
+    /// A mode-aware vertical chord with distinct editor and board intentions.
+    ///
+    /// The UI mode translator resolves this before command dispatch. This lets
+    /// Alt and Primary accelerate editing without changing established board
+    /// or overlay navigation.
+    EditNavigation {
+        /// Movement applied while directly editing a thought.
+        editor_movement: CursorMovement,
+        /// Existing movement retained in board mode and overlays.
+        board_movement: CursorMovement,
+    },
     /// Vertical movement reported with both Primary and Shift modifiers.
     ///
     /// Board mode interprets this as thought reordering. Edit mode preserves

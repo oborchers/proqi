@@ -1,95 +1,20 @@
 //! Searchable command discovery and execution.
 
+mod command;
+
 use crate::{
     application::Effect,
-    ports::environment::{Clock, IdGenerator},
+    ports::{
+        editor::CursorMovement,
+        environment::{Clock, IdGenerator},
+    },
 };
 
 use super::{
     BoardApp, UiInput, UiKey, palette_handoff::EditorSelectionHandoff, query::QueryEditor,
 };
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum Command {
-    New,
-    RenameSession,
-    CopySessionId,
-    CopyResume,
-    SendSession,
-    SendSessionRemove,
-    Edit,
-    PlainNewline,
-    Indent,
-    Outdent,
-    Delete,
-    Copy,
-    Cut,
-    Paste,
-    Duplicate,
-    SelectAll,
-    SubmitRemove,
-    SubmitKeep,
-    SubmitAllRemove,
-    SubmitAllKeep,
-    RefreshAgents,
-    InsertInvocation,
-    RefreshInvocations,
-    CheckUpdates,
-    RetryStorage,
-    ExportRecovery,
-    Undo,
-    Redo,
-    MoveUp,
-    MoveDown,
-    Collapse,
-    Select,
-    RangeSelect,
-    Help,
-    Quit,
-}
-
-impl Command {
-    const ALL: [(Self, &'static str); 35] = [
-        (Self::New, "New thought"),
-        (Self::RenameSession, "Rename session"),
-        (Self::CopySessionId, "Copy session ID"),
-        (Self::CopyResume, "Copy resume command"),
-        (Self::Edit, "Edit thought"),
-        (Self::PlainNewline, "Insert plain newline"),
-        (Self::Indent, "Indent line or selection"),
-        (Self::Outdent, "Outdent line or selection"),
-        (Self::Delete, "Delete thought"),
-        (Self::Copy, "Copy thought"),
-        (Self::Cut, "Cut thought"),
-        (Self::Paste, "Paste native clipboard"),
-        (Self::Duplicate, "Duplicate thought or selection"),
-        (Self::SelectAll, "Select all thoughts"),
-        (Self::SubmitRemove, "Submit"),
-        (Self::SubmitKeep, "Submit and keep"),
-        (Self::SubmitAllRemove, "Submit all"),
-        (Self::SubmitAllKeep, "Submit all and keep"),
-        (Self::SendSession, "Send to another Proqi session"),
-        (
-            Self::SendSessionRemove,
-            "Send to another Proqi session and remove thought",
-        ),
-        (Self::RefreshAgents, "Refresh adjacent agents"),
-        (Self::InsertInvocation, "Insert discovered invocation"),
-        (Self::RefreshInvocations, "Refresh invocations"),
-        (Self::CheckUpdates, "Check for updates"),
-        (Self::RetryStorage, "Retry failed save"),
-        (Self::ExportRecovery, "Export recovery file"),
-        (Self::Undo, "Undo board action"),
-        (Self::Redo, "Redo board action"),
-        (Self::MoveUp, "Move thought up"),
-        (Self::MoveDown, "Move thought down"),
-        (Self::Collapse, "Expand or collapse thought"),
-        (Self::Select, "Toggle thought selection"),
-        (Self::RangeSelect, "Start contiguous range selection"),
-        (Self::Help, "Open contextual help"),
-        (Self::Quit, "Quit Proqi"),
-    ];
-}
+use command::Command;
 
 pub(super) struct PaletteState {
     query: QueryEditor,
@@ -151,9 +76,13 @@ impl PaletteState {
             | Command::SubmitKeep
             | Command::SubmitAllRemove
             | Command::SubmitAllKeep => self.submit_supported,
-            Command::PlainNewline | Command::Indent | Command::Outdent => {
-                self.plain_newline_supported
-            }
+            Command::PlainNewline
+            | Command::JumpUp
+            | Command::JumpDown
+            | Command::ThoughtStart
+            | Command::ThoughtEnd
+            | Command::Indent
+            | Command::Outdent => self.plain_newline_supported,
             _ => true,
         }
     }
@@ -355,6 +284,10 @@ impl BoardApp {
             | Command::SubmitAllRemove
             | Command::SubmitAllKeep
             | Command::PlainNewline
+            | Command::JumpUp
+            | Command::JumpDown
+            | Command::ThoughtStart
+            | Command::ThoughtEnd
             | Command::Indent
             | Command::Outdent
             | Command::Edit
@@ -439,7 +372,13 @@ impl BoardApp {
     ) -> Option<Vec<Effect>> {
         if !matches!(
             command,
-            Command::PlainNewline | Command::Indent | Command::Outdent
+            Command::PlainNewline
+                | Command::JumpUp
+                | Command::JumpDown
+                | Command::ThoughtStart
+                | Command::ThoughtEnd
+                | Command::Indent
+                | Command::Outdent
         ) {
             return None;
         }
@@ -453,6 +392,24 @@ impl BoardApp {
         };
         if command == Command::PlainNewline {
             effects.extend(self.insert_newline(false, ids, clock));
+            return Some(effects);
+        }
+        let movement = match command {
+            Command::JumpUp => Some(CursorMovement::VisualJumpUp),
+            Command::JumpDown => Some(CursorMovement::VisualJumpDown),
+            Command::ThoughtStart => Some(CursorMovement::DocumentStart),
+            Command::ThoughtEnd => Some(CursorMovement::DocumentEnd),
+            _ => None,
+        };
+        if let Some(movement) = movement {
+            effects.extend(self.handle_edit_key(
+                UiKey::Move {
+                    movement,
+                    extend_selection: false,
+                },
+                ids,
+                clock,
+            ));
             return Some(effects);
         }
         self.restore_palette_selection_handoff(selection_handoff);
