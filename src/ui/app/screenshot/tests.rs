@@ -13,6 +13,8 @@ use std::time::Duration;
 
 #[path = "tests/activity.rs"]
 mod activity;
+#[path = "tests/admission.rs"]
+mod admission;
 #[path = "tests/barrier.rs"]
 mod barrier;
 #[path = "tests/behavior.rs"]
@@ -51,6 +53,27 @@ fn listening_indicator_is_present_without_permanent_status_chrome() {
     let snapshot = render_snapshot(&mut app, 72, 10);
     assert!(snapshot.contains("inbox listening"));
     assert!(!snapshot.contains("Screenshot Inbox is listening"));
+}
+
+#[test]
+fn releasing_inbox_has_a_complete_wide_snapshot() {
+    insta::with_settings!({snapshot_path => "../../snapshots"}, {
+        insta::assert_snapshot!("screenshot_releasing_wide", releasing_snapshot(82, 12));
+    });
+}
+
+#[test]
+fn releasing_inbox_has_a_complete_narrow_snapshot() {
+    insta::with_settings!({snapshot_path => "../../snapshots"}, {
+        insta::assert_snapshot!("screenshot_releasing_narrow", releasing_snapshot(38, 10));
+    });
+}
+
+#[test]
+fn releasing_inbox_has_a_complete_shallow_snapshot() {
+    insta::with_settings!({snapshot_path => "../../snapshots"}, {
+        insta::assert_snapshot!("screenshot_releasing_shallow", releasing_snapshot(62, 6));
+    });
 }
 
 #[test]
@@ -96,6 +119,14 @@ fn paused_snapshot(width: u16, height: u16) -> String {
     app.screenshot_started(Duration::ZERO);
     app.advance_screenshot_activity(Duration::from_secs(20 * 60));
     app.screenshot_stopped();
+    render_snapshot(&mut app, width, height)
+}
+
+fn releasing_snapshot(width: u16, height: u16) -> String {
+    let (mut app, _) = app_with_thought();
+    app.screenshot_started(Duration::ZERO);
+    app.screenshot_stopping_completed();
+    app.status = None;
     render_snapshot(&mut app, width, height)
 }
 

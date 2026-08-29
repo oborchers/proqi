@@ -89,7 +89,11 @@ impl MacScreenshotWatcher {
     }
 
     fn check_scan_bound(&self, index: usize) -> Result<(), ScreenshotError> {
-        if self.cancellation.is_cancelled() {
+        if self.cancellation.is_cancelled()
+            || self
+                .final_deadline
+                .is_some_and(|deadline| self.clock.now() >= deadline)
+        {
             Err(ScreenshotError::Cancelled)
         } else if index >= self.entry_limit {
             Err(ScreenshotError::ReconciliationLimit)

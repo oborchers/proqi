@@ -132,6 +132,29 @@ fn idle_poll_does_not_scan_without_a_hint() {
 }
 
 #[test]
+fn maximum_debounce_poll_and_final_reconcile_share_explicit_budgets() {
+    let directory = tempfile::tempdir().expect("watched directory");
+    let mut settings = config(directory.path());
+    settings.debounce = Duration::from_secs(1);
+    let (mut watcher, events, clock, _) =
+        watcher_with_config(settings, 20, Arc::new(TestCancellation::default()));
+    assert!(watcher.poll().expect("bounded idle poll").is_empty());
+    assert_eq!(clock.now(), Duration::from_millis(25));
+
+    let path = directory.path().join("bounded final.png");
+    fs::write(&path, png_bytes(20, 10, 80)).expect("new screenshot");
+    mark_screenshot(&path);
+    events.push(Duration::ZERO, true);
+    assert!(watcher.poll().expect("first observation").is_empty());
+    let started = clock.now();
+    assert_eq!(
+        watcher.final_reconcile(Duration::from_millis(200)),
+        Err(ScreenshotError::Cancelled)
+    );
+    assert!(clock.now().saturating_sub(started) <= Duration::from_millis(200));
+}
+
+#[test]
 fn rapid_equal_observations_and_later_mutation_require_a_full_interval() {
     let directory = tempfile::tempdir().expect("watched directory");
     let (mut watcher, events, clock, _) = watcher(directory.path(), 20);

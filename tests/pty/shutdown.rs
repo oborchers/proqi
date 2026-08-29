@@ -177,27 +177,37 @@ fn acknowledged_paste_survives_forced_process_termination() {
 
 #[test]
 fn keyboard_quit_during_delayed_capture_commit_restores_and_preserves_content() {
-    delayed_capture_shutdown(false, false);
+    delayed_capture_shutdown(false, false, 100, 500);
 }
 
 #[test]
 fn termination_during_delayed_capture_commit_restores_and_preserves_content() {
-    delayed_capture_shutdown(true, false);
+    delayed_capture_shutdown(true, false, 100, 500);
 }
 
 #[test]
 fn termination_during_persistently_failed_capture_restores_and_exits_boundedly() {
-    delayed_capture_shutdown(true, true);
+    delayed_capture_shutdown(true, true, 100, 500);
 }
 
-fn delayed_capture_shutdown(terminate: bool, persistent_failure: bool) {
+#[test]
+fn termination_with_maximum_debounce_shares_one_bounded_capture_shutdown() {
+    delayed_capture_shutdown(true, false, 1_000, 1_300);
+}
+
+fn delayed_capture_shutdown(
+    terminate: bool,
+    persistent_failure: bool,
+    debounce_ms: u64,
+    delivery_wait_ms: u64,
+) {
     let state = tempfile::Builder::new()
         .prefix("pq-cap-")
         .tempdir_in("/private/tmp")
         .expect("short temporary state");
     let watched = tempfile::tempdir().expect("temporary watched directory");
     let staging = tempfile::tempdir().expect("temporary staging directory");
-    configure_capture(state.path(), watched.path());
+    configure_capture(state.path(), watched.path(), debounce_ms);
     let staged = staging.path().join("delayed.png");
     fs::write(&staged, png_bytes()).expect("staged screenshot");
     let target = watched.path().join("delayed.png");
@@ -270,7 +280,7 @@ fn delayed_capture_shutdown(terminate: bool, persistent_failure: bool) {
         expect -re "sqlite>"
         file rename $env(PROQI_TEST_STAGED) $env(PROQI_TEST_TARGET)
         set spawn_id $proqi
-        after 500
+        after {delivery_wait_ms}
         send -- "!"
         {exit_action}
         {finish_action}
@@ -317,15 +327,15 @@ fn delayed_capture_shutdown(terminate: bool, persistent_failure: bool) {
     assert_eq!(contents, expected);
 }
 
-fn configure_capture(state: &Path, watched: &Path) {
+fn configure_capture(state: &Path, watched: &Path, debounce_ms: u64) {
     let config_directory = state.join("config");
     fs::create_dir(&config_directory).expect("config directory");
     let config = config_directory.join("config.toml");
     fs::write(
         &config,
         format!(
-            "check_for_updates = false\nkeyboard_enhancement = 'disabled'\n[screenshot_inbox]\ndirectory = '{}'\ncapture_all_new_images = true\ndebounce_ms = 100\n",
-            watched.display()
+            "check_for_updates = false\nkeyboard_enhancement = 'disabled'\n[screenshot_inbox]\ndirectory = '{}'\ncapture_all_new_images = true\ndebounce_ms = {debounce_ms}\n",
+            watched.display(),
         ),
     )
     .expect("capture config");

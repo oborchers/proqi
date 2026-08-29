@@ -25,7 +25,7 @@ use crate::{
 use super::{
     CaptureRuntime, PendingControl, PendingWork, WorkerLanes, admission,
     fairness::{DrainOutcome, drain_bounded},
-    pending::PendingUpdateRestart,
+    pending::{PendingUpdatePrepare, PendingUpdateRestart, UpdatePreparePhase},
     storage_error_code,
 };
 
@@ -54,7 +54,7 @@ pub(super) fn drain(
         |envelope| queue_lookup(app, lanes, pending, capture, ids, clock, envelope),
     )?;
     outcome.changed |= capture::complete(lanes, pending, capture)?;
-    outcome.changed |= complete_update_prepares(app, pending, lanes.instance, clock);
+    outcome.changed |= complete_update_prepares(app, lanes, pending, ids, clock)?;
     outcome.changed |= complete_update_restart(app, pending)?;
     Ok(outcome)
 }
@@ -87,7 +87,17 @@ fn queue_lookup(
         envelope.request.mutation,
         ControlMutation::CaptureTakeover { .. }
     ) {
-        return Ok(capture::queue(lanes, capture, envelope));
+        return Ok(capture::queue(
+            lanes.instance.instance_id,
+            capture,
+            envelope,
+        ));
+    }
+    if matches!(
+        envelope.request.mutation,
+        ControlMutation::UpdatePrepare { .. }
+    ) {
+        return handle_update(app, lanes, pending, ids, clock, envelope);
     }
     if let Some(rejection) = admission::owner_control_rejection(app, &envelope.request.mutation) {
         envelope.respond(rejection);
@@ -95,9 +105,7 @@ fn queue_lookup(
     }
     if matches!(
         envelope.request.mutation,
-        ControlMutation::UpdatePrepare { .. }
-            | ControlMutation::UpdateRelease { .. }
-            | ControlMutation::UpdateRestart { .. }
+        ControlMutation::UpdateRelease { .. } | ControlMutation::UpdateRestart { .. }
     ) {
         return handle_update(app, lanes, pending, ids, clock, envelope);
     }
@@ -246,70 +254,113 @@ fn queue_update_prepare(
         )));
         return Ok(false);
     }
-    if !app.begin_update_barrier(request.operation_id, request.deadline) {
-        envelope.respond(ControlResult::Update(ControlUpdateReceipt::Prepared(
-            UpdatePrepareReply::Blocked {
-                instance_id: lanes.instance.instance_id,
-                code: ControlRejectionCode::AnotherUpdateIsPreparing
-                    .as_str()
-                    .to_owned(),
-            },
-        )));
-        return Ok(false);
-    }
-    let effects = app.flush_pending_edit(ids, &clock);
-    super::durability::enqueue_effects(app, lanes, effects, pending)?;
-    pending
-        .update_prepares
-        .insert(envelope.request.request_id, envelope);
-    Ok(true)
+    pending.update_prepares.insert(
+        envelope.request.request_id,
+        PendingUpdatePrepare {
+            envelope,
+            phase: UpdatePreparePhase::AwaitingAdmission,
+        },
+    );
+    complete_update_prepares(app, lanes, pending, ids, clock)
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "one typed update-preparation state machine keeps admission and replies atomic"
+)]
 fn complete_update_prepares(
     app: &mut BoardApp,
+    lanes: &WorkerLanes<'_>,
     pending: &mut PendingWork,
-    instance: &crate::ports::runtime::InstanceInfo,
+    ids: &mut crate::adapters::runtime::SystemIdGenerator,
     clock: SystemClock,
-) -> bool {
-    if pending.persistence > 0 || pending.update_prepares.is_empty() {
-        return false;
+) -> Result<bool, TerminalError> {
+    if pending.update_prepares.is_empty() {
+        return Ok(false);
     }
     let request_ids: Vec<_> = pending.update_prepares.keys().copied().collect();
     let mut changed = false;
     for request_id in request_ids {
-        let Some(envelope) = pending.update_prepares.remove(&request_id) else {
+        let Some(mut prepare) = pending.update_prepares.remove(&request_id) else {
             continue;
         };
-        let ControlMutation::UpdatePrepare { request } = &envelope.request.mutation else {
+        let ControlMutation::UpdatePrepare { request } = &prepare.envelope.request.mutation else {
             continue;
         };
-        let blocked = if clock.now() >= request.deadline {
-            Some("deadline_expired")
-        } else if app.update_preflight_failed() {
+        let operation_id = request.operation_id;
+        let deadline = request.deadline;
+        if clock.now() >= deadline {
+            if prepare.phase == UpdatePreparePhase::AwaitingDurability {
+                app.release_update_barrier(operation_id);
+            }
+            prepare
+                .envelope
+                .respond(ControlResult::Update(ControlUpdateReceipt::Prepared(
+                    UpdatePrepareReply::Blocked {
+                        instance_id: lanes.instance.instance_id,
+                        code: "deadline_expired".to_owned(),
+                    },
+                )));
+            changed = true;
+            continue;
+        }
+        if prepare.phase == UpdatePreparePhase::AwaitingAdmission {
+            if app.screenshot_sequence_reserved() || !app.pending_mutation_intents().is_empty() {
+                pending.update_prepares.insert(request_id, prepare);
+                continue;
+            }
+            if !app.begin_update_barrier(operation_id, deadline) {
+                prepare
+                    .envelope
+                    .respond(ControlResult::Update(ControlUpdateReceipt::Prepared(
+                        UpdatePrepareReply::Blocked {
+                            instance_id: lanes.instance.instance_id,
+                            code: ControlRejectionCode::AnotherUpdateIsPreparing
+                                .as_str()
+                                .to_owned(),
+                        },
+                    )));
+                changed = true;
+                continue;
+            }
+            let effects = app.flush_pending_edit(ids, &clock);
+            super::durability::enqueue_effects(app, lanes, effects, pending)?;
+            prepare.phase = UpdatePreparePhase::AwaitingDurability;
+            pending.update_prepares.insert(request_id, prepare);
+            changed = true;
+            continue;
+        }
+        if pending.persistence > 0 {
+            pending.update_prepares.insert(request_id, prepare);
+            continue;
+        }
+        let blocked = if app.update_preflight_failed() {
             Some("save_failed")
         } else if !app.update_preflight_ready() {
-            pending.update_prepares.insert(request_id, envelope);
+            pending.update_prepares.insert(request_id, prepare);
             continue;
         } else {
             None
         };
         let reply = blocked.map_or_else(
             || UpdatePrepareReply::Ready {
-                instance_id: instance.instance_id,
-                session_id: instance.session_id,
+                instance_id: lanes.instance.instance_id,
+                session_id: lanes.instance.session_id,
             },
             |code| UpdatePrepareReply::Blocked {
-                instance_id: instance.instance_id,
+                instance_id: lanes.instance.instance_id,
                 code: code.to_owned(),
             },
         );
         if blocked.is_some() {
-            app.release_update_barrier(request.operation_id);
+            app.release_update_barrier(operation_id);
         }
-        envelope.respond(ControlResult::Update(ControlUpdateReceipt::Prepared(reply)));
+        prepare
+            .envelope
+            .respond(ControlResult::Update(ControlUpdateReceipt::Prepared(reply)));
         changed = true;
     }
-    changed
+    Ok(changed)
 }
 
 fn respond_update_release(

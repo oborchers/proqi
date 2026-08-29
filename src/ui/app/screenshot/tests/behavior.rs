@@ -334,7 +334,7 @@ fn takeover_keyboard_and_mouse_choices_emit_verified_owner_requests() {
             if requested == &keyboard_owner
     ));
 
-    app.screenshot_failed(&crate::ports::screenshot::ScreenshotError::TakeoverFailed);
+    app.screenshot_failed(&crate::ports::screenshot::ScreenshotError::TakeoverTimedOut);
     let mouse_owner = owner(&mut ids, session_id);
     app.screenshot_conflict(mouse_owner.clone());
     let layout = app.prepare_frame(Rect::new(0, 0, 60, 12));

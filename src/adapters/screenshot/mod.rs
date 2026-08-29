@@ -41,8 +41,11 @@ impl ActiveScreenshotWatcher for SystemScreenshotWatcher {
         Self::poll(self)
     }
 
-    fn final_reconcile(&mut self) -> Result<Vec<ScreenshotCandidate>, ScreenshotError> {
-        Self::final_reconcile(self)
+    fn final_reconcile(
+        &mut self,
+        budget: std::time::Duration,
+    ) -> Result<Vec<ScreenshotCandidate>, ScreenshotError> {
+        Self::final_reconcile(self, budget)
     }
 }
 
@@ -96,13 +99,19 @@ impl SystemScreenshotWatcher {
     /// # Errors
     ///
     /// Returns a typed permission or reconciliation failure.
-    pub fn final_reconcile(&mut self) -> Result<Vec<ScreenshotCandidate>, ScreenshotError> {
+    pub fn final_reconcile(
+        &mut self,
+        budget: std::time::Duration,
+    ) -> Result<Vec<ScreenshotCandidate>, ScreenshotError> {
         #[cfg(target_os = "macos")]
         {
-            self.inner.final_reconcile()
+            self.inner.final_reconcile(budget)
         }
         #[cfg(not(target_os = "macos"))]
-        Err(ScreenshotError::UnsupportedPlatform)
+        {
+            let _ = budget;
+            Err(ScreenshotError::UnsupportedPlatform)
+        }
     }
 }
 

@@ -227,7 +227,9 @@ operation in detection order. The UI applies the operation only after that
 transaction succeeds. The receipt's rename-stable source fingerprint prevents
 duplicate delivery across repeated notifications, reconciliation, retry,
 restart, and ownership handoff. Failure leaves no partial thought and retains
-retryable work while the capture lease remains authoritative.
+retryable work in the live session. An ordinary store failure initiates bounded
+watcher stop and operating-system lease release; retained retry work never
+monopolizes installation-wide capture authority.
 
 ## Core facades
 
@@ -362,16 +364,26 @@ Automatic pause reuses the ordinary bounded final reconciliation, durable drain,
 and capture-lock release path. Resume creates a new watcher and baseline rather
 than replaying the paused interval.
 
-The runner owns one canonical mutation-admission rule around the commit-first
-capture. An in-flight capture retryably rejects sequence-producing owner-control
-requests, including sync, and an unresolved durable control lookup prevents a
-capture reservation until that lookup has replayed, failed, or produced and
-completed its ordered mutation. The UI uses the same reservation as a bounded
-ordered replay barrier for local keyboard, paste, pointer, and resize intentions.
+The application exposes one typed accounting model for every asynchronous UI
+intention that may still allocate a session sequence: clipboard cut and paste,
+remove-after-success submission, and remove-after-success transfer. The runner
+combines that model with unresolved control lookup, update preparation,
+persistence, and capture reservation state. An in-flight capture retryably
+rejects sequence-producing owner-control requests, including sync; a capture
+cannot reserve until every earlier asynchronous producer has completed or
+failed. Update preparation waits in its existing owner queue rather than
+aborting installation-wide coordination. The UI uses the same reservation as a
+bounded ordered replay barrier for local keyboard, paste, click, drag, and
+scroll intentions. Capacity applies backpressure at the input-lane boundary;
+pointer motion remains passive and resize alone may coalesce.
 Capture application itself changes only terminal-independent durable state; UI
 composition alone decides whether the new thought may safely receive focus.
 Failed ready candidates do not retain the installation lease, and retry,
 disable, resume, takeover, and quit remain separate explicit lifecycle actions.
+Stopped and releasing are distinct runtime states, so immediate re-enable cannot
+mistake the same process's releasing lease for another owner. Shutdown sends a
+typed remaining budget to watcher teardown, stops new admission, and drains all
+already-emitted plus final-reconcile candidates within the shared deadline.
 
 After the watcher has truthfully stopped, the application may emit one typed
 content-free pause-notification effect. Notification routing is disabled by

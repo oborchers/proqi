@@ -24,6 +24,11 @@ pub(super) struct PointerClick {
 }
 
 impl BoardApp {
+    #[cfg(test)]
+    pub(crate) fn pointer_click_count(&self) -> Option<u8> {
+        self.pointer_click.map(|click| click.count)
+    }
+
     pub(super) fn reset_pointer_click_for_input(&mut self, input: &crate::ui::UiInput) {
         if !matches!(
             input,

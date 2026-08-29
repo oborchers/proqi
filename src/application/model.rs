@@ -278,6 +278,15 @@ impl AppState {
             .map(|pending| pending.intent)
     }
 
+    /// Pending board cuts whose successful clipboard completion can allocate a sequence.
+    #[must_use]
+    pub(crate) fn pending_board_cut_count(&self) -> usize {
+        self.pending_clipboard
+            .values()
+            .filter(|pending| pending.intent == ClipboardIntent::Cut)
+            .count()
+    }
+
     pub(super) fn record_board_operation(
         &mut self,
         operation: &BoardOperation,

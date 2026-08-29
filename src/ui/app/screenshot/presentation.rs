@@ -11,8 +11,11 @@ impl BoardApp {
         match self.screenshot.state {
             ScreenshotState::Off => ScreenshotPaletteAction::Enable,
             ScreenshotState::Paused(_) => ScreenshotPaletteAction::Resume,
-            ScreenshotState::Starting | ScreenshotState::Listening | ScreenshotState::Stopping => {
+            ScreenshotState::Starting | ScreenshotState::Listening => {
                 ScreenshotPaletteAction::Disable
+            }
+            ScreenshotState::Stopping | ScreenshotState::Releasing => {
+                ScreenshotPaletteAction::Unavailable
             }
         }
     }
@@ -33,7 +36,9 @@ impl BoardApp {
             } else {
                 pause_footer(reason)
             }),
-            ScreenshotState::Off | ScreenshotState::Starting | ScreenshotState::Stopping => None,
+            ScreenshotState::Stopping => Some("inbox stopping".to_owned()),
+            ScreenshotState::Releasing => Some("inbox releasing".to_owned()),
+            ScreenshotState::Off | ScreenshotState::Starting => None,
         }
     }
 }

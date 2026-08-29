@@ -3,8 +3,13 @@
 use std::time::Duration;
 
 use crate::{
-    application::ScreenshotPauseReason, ports::screenshot::ScreenshotActivityPolicy, ui::UiInput,
+    application::{Effect, ScreenshotIntent, ScreenshotPauseReason},
+    ports::screenshot::ScreenshotActivityPolicy,
+    ui::UiInput,
 };
+
+use super::{ScreenshotState, presentation::pause_notice};
+use crate::ui::app::BoardApp;
 
 #[derive(Default)]
 pub(super) struct ScreenshotActivity {
@@ -60,6 +65,47 @@ impl ScreenshotActivity {
                 captures: self.policy.max_unattended_captures(),
             },
         )
+    }
+}
+
+impl BoardApp {
+    pub(crate) const fn configure_screenshot_activity(&mut self, policy: ScreenshotActivityPolicy) {
+        self.screenshot.activity.configure(policy);
+    }
+
+    pub(crate) fn note_screenshot_activity(&mut self, input: &UiInput, now: Duration) {
+        if matches!(self.screenshot.state, ScreenshotState::Listening) {
+            self.screenshot.activity.note_input(input, now);
+        }
+    }
+
+    pub(crate) fn advance_screenshot_activity(&mut self, now: Duration) -> Vec<Effect> {
+        if !matches!(self.screenshot.state, ScreenshotState::Listening) {
+            return Vec::new();
+        }
+        self.screenshot
+            .activity
+            .expired(now)
+            .map_or_else(Vec::new, |reason| {
+                self.request_screenshot_auto_pause(reason)
+            })
+    }
+
+    pub(super) fn request_screenshot_auto_pause(
+        &mut self,
+        reason: ScreenshotPauseReason,
+    ) -> Vec<Effect> {
+        self.screenshot.pending_pause = Some(reason);
+        self.screenshot.state = ScreenshotState::Stopping;
+        self.refresh_screenshot_palette_action();
+        vec![Effect::Screenshot(ScreenshotIntent::Disable)]
+    }
+
+    pub(super) fn enter_screenshot_paused(&mut self, reason: ScreenshotPauseReason) {
+        self.screenshot.state = ScreenshotState::Paused(reason);
+        self.refresh_screenshot_palette_action();
+        self.screenshot.pause_notice = Some(pause_notice(reason));
+        self.status = None;
     }
 }
 

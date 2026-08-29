@@ -81,6 +81,7 @@ pub(super) fn spawn_lanes(
     invocation_roots: Vec<crate::ports::invocation::AdditionalInvocationRoot>,
     screenshot_settings: super::super::settings::ScreenshotSettings,
     instance: InstanceInfo,
+    terminal_host: String,
 ) -> OwnedLanes {
     let cancellation = crate::adapters::process::CancellationFlag::default();
     OwnedLanes {
@@ -110,12 +111,8 @@ pub(super) fn spawn_lanes(
             coordinator,
             instance,
             screenshot_settings,
-            terminal_host_label(),
+            terminal_host,
         ),
         cancellation,
     }
-}
-
-fn terminal_host_label() -> String {
-    super::super::host::TerminalHost::detect().label()
 }

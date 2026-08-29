@@ -54,6 +54,8 @@ fn apply_result(
                 ));
             }
             capture.takeover_stopping = false;
+            capture.watcher_stopped = false;
+            capture.release_deadline = None;
             app.screenshot_started(monotonic_now);
             Vec::new()
         }
@@ -71,13 +73,17 @@ fn apply_result(
         }
         ScreenshotResult::Conflict(None) => {
             pending.screenshot = pending.screenshot.saturating_sub(1);
-            app.screenshot_failed(&ScreenshotError::Watcher)
+            app.screenshot_failed(&ScreenshotError::Ownership)
         }
         ScreenshotResult::Stopped(candidates) => {
             pending.screenshot = pending.screenshot.saturating_sub(1);
-            let mut effects = app.queue_screenshot_candidates(candidates);
-            effects.extend(app.screenshot_stopped());
+            let effects = app.queue_screenshot_candidates(candidates);
+            app.screenshot_stopping_completed();
             capture.release_when_drained = true;
+            capture.watcher_stopped = true;
+            capture.release_deadline.get_or_insert_with(|| {
+                std::time::Instant::now() + crate::ports::screenshot::CAPTURE_TEARDOWN_TIMEOUT
+            });
             effects
         }
         ScreenshotResult::Failed {
@@ -89,18 +95,38 @@ fn apply_result(
                 capture.lease = None;
             }
             capture.release_when_drained = release_when_drained;
-            app.screenshot_failed(&error)
+            capture.watcher_stopped = release_when_drained;
+            if release_when_drained {
+                capture.release_deadline.get_or_insert_with(|| {
+                    std::time::Instant::now() + crate::ports::screenshot::CAPTURE_TEARDOWN_TIMEOUT
+                });
+                app.screenshot_release_failed(&error);
+                Vec::new()
+            } else {
+                app.screenshot_failed(&error)
+            }
         }
     };
     Ok(effects)
 }
 
-pub(super) fn release_if_drained(app: &BoardApp, capture: &mut CaptureRuntime) {
-    if capture.release_when_drained && !app.screenshot_blocks_capture_release() {
+pub(super) fn release_if_drained(
+    app: &mut BoardApp,
+    capture: &mut CaptureRuntime,
+) -> Vec<crate::application::Effect> {
+    let deadline_expired = capture
+        .release_deadline
+        .is_some_and(|deadline| std::time::Instant::now() >= deadline);
+    if capture.release_when_drained
+        && (!app.screenshot_blocks_capture_release() || deadline_expired)
+    {
         capture.lease = None;
         capture.release_when_drained = false;
         capture.takeover_stopping = false;
+        capture.release_deadline = None;
+        return app.screenshot_authority_released();
     }
+    Vec::new()
 }
 
 #[cfg(test)]
@@ -110,7 +136,7 @@ mod tests {
         adapters::{
             editor::RopeEditorFactory, memory::FakeIdGenerator, runtime::FileRuntimeCoordinator,
         },
-        application::{AppState, Effect, ScreenshotPauseReason},
+        application::{AppState, DurabilityState, Effect, FailureCode, ScreenshotPauseReason},
         domain::{Session, SessionBoard, Timestamp},
         ports::{
             environment::IdGenerator as _,
@@ -124,6 +150,43 @@ mod tests {
     };
 
     #[test]
+    fn missing_conflict_metadata_is_reported_as_ownership_failure() {
+        let mut ids = FakeIdGenerator::new(1_725_269_000_000);
+        let session = Session::new(
+            ids.session_id(),
+            std::env::temp_dir(),
+            Timestamp::from_millis(1),
+        )
+        .expect("session");
+        let mut app = BoardApp::new(
+            AppState::new(SessionBoard::new(session, Vec::new()).expect("board")),
+            RopeEditorFactory,
+        );
+        let mut pending = PendingWork {
+            screenshot: 1,
+            ..PendingWork::default()
+        };
+        let mut capture = CaptureRuntime::default();
+        let effects = apply_result(
+            &mut app,
+            &mut pending,
+            &mut capture,
+            Duration::ZERO,
+            ScreenshotResult::Conflict(None),
+        )
+        .expect("conflict result");
+        assert!(effects.is_empty());
+        assert!(
+            app.status_text()
+                .is_some_and(|text| text.contains("ownership is unavailable"))
+        );
+    }
+
+    #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "real installation-lock regression keeps both owners and release assertions visible"
+    )]
     fn final_reconcile_failure_releases_idle_capture_for_another_owner() {
         let temporary = tempfile::tempdir().expect("temporary directory");
         let runtime = temporary.path().join("runtime");
@@ -194,14 +257,15 @@ mod tests {
             },
         )
         .expect("apply failure");
+        assert!(effects.is_empty());
+        assert!(capture.lease.is_some());
+        let effects = release_if_drained(&mut app, &mut capture);
         assert_eq!(
             effects,
             vec![Effect::NotifyScreenshotPause(
                 ScreenshotPauseReason::Inactivity { minutes: 1 }
             )]
         );
-        assert!(capture.lease.is_some());
-        release_if_drained(&app, &mut capture);
         assert!(capture.lease.is_none());
         second
             .acquire_capture(second_session.info())
@@ -209,6 +273,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "end-to-end failure regression keeps real lock, queued work, and retry state visible"
+    )]
     fn failed_ready_capture_releases_real_lock_but_retains_explicit_retry() {
         let temporary = tempfile::tempdir().expect("temporary directory");
         let runtime = temporary.path().join("runtime");
@@ -249,11 +317,18 @@ mod tests {
             RopeEditorFactory,
         );
         app.screenshot_started(Duration::ZERO);
-        app.queue_screenshot_candidates([ScreenshotCandidate {
-            fingerprint: ScreenshotFingerprint([9; 32]),
-            path: temporary.path().join("capture.png"),
-            image_type: ScreenshotImageType::Png,
-        }]);
+        app.queue_screenshot_candidates([
+            ScreenshotCandidate {
+                fingerprint: ScreenshotFingerprint([9; 32]),
+                path: temporary.path().join("capture.png"),
+                image_type: ScreenshotImageType::Png,
+            },
+            ScreenshotCandidate {
+                fingerprint: ScreenshotFingerprint([10; 32]),
+                path: temporary.path().join("queued.png"),
+                image_type: ScreenshotImageType::Png,
+            },
+        ]);
         assert!(matches!(
             app.advance_screenshot_capture(
                 &mut ids,
@@ -264,21 +339,46 @@ mod tests {
         ));
         let mut capture = CaptureRuntime {
             lease: Some(lease),
-            release_when_drained: true,
             ..CaptureRuntime::default()
         };
-        release_if_drained(&app, &mut capture);
+        let _effects = release_if_drained(&mut app, &mut capture);
         assert!(
             capture.lease.is_some(),
             "in-flight commit retains authority"
         );
 
-        app.complete_screenshot_capture(
+        let effects = app.complete_screenshot_capture(
             Err(StoreError::Busy),
             &mut ids,
             &crate::adapters::memory::FakeClock::new(Timestamp::from_millis(3)),
         );
-        release_if_drained(&app, &mut capture);
+        assert_eq!(
+            effects,
+            vec![Effect::Screenshot(
+                crate::application::ScreenshotIntent::Disable
+            )]
+        );
+        assert!(!capture.release_when_drained);
+        let mut pending = PendingWork {
+            screenshot: 1,
+            ..PendingWork::default()
+        };
+        let effects = apply_result(
+            &mut app,
+            &mut pending,
+            &mut capture,
+            Duration::ZERO,
+            ScreenshotResult::Stopped(Vec::new()),
+        )
+        .expect("watcher stopped");
+        assert!(effects.is_empty());
+        assert!(capture.release_when_drained);
+        app.state.durability = DurabilityState::Failed {
+            durable: crate::domain::OperationSequence::default(),
+            failed: crate::domain::OperationSequence::new(1),
+            code: FailureCode::StorageFailed,
+        };
+        let _effects = release_if_drained(&mut app, &mut capture);
         assert!(capture.lease.is_none());
         assert!(app.screenshot_retry_ready());
         second

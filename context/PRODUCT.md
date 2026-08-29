@@ -381,15 +381,20 @@ focus or caret. Help, command palette, search, rename, transfer, update,
 invocation completion, and live board selection also remain in place while the
 capture appends quietly. The palette action becomes `Disable Screenshot Inbox`.
 
-The atomic capture save is the admission barrier for every sequence-producing
-interaction, including owner-control mutation and sync. Keyboard, paste, mouse,
-and resize intentions received during that save replay in order from a bounded
-queue; overflow is reported explicitly and never silently discarded. A failed
+The atomic capture save participates in one admission rule for every pending
+sequence-producing intention, including clipboard cut or paste, removal-capable
+submission and transfer, owner-control mutation and sync, update preparation,
+and persistence completion. Keyboard, paste, click, drag, and scroll intentions
+received during that save replay in order from a bounded queue; its input lane
+applies backpressure at capacity. Passive pointer motion continues and resize
+may coalesce. Accepted deliberate input is never silently discarded. A failed
 save creates no partial thought and remains available through the distinct
 `Retry Screenshot Capture` command. Disable, pause, takeover, and shutdown do
 not turn into implicit retry actions and release capture authority within their
 teardown bound. Ordinary quit requires explicit confirmation before abandoning
-a retained failed candidate.
+a retained failed candidate. Once quit begins, watcher admission stops and
+every candidate already emitted or returned by final reconciliation drains
+within the shared shutdown bound before terminal restoration.
 
 Every listening period has two mandatory configurable safety bounds, defaulting
 to 20 minutes without deliberate Proqi interaction and 10 unattended admitted

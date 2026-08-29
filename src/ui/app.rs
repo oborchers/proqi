@@ -1,5 +1,6 @@
 //! Terminal-independent board interaction state.
 
+mod admission;
 mod agent;
 mod agent_delivery;
 mod agent_identity;
@@ -38,7 +39,7 @@ use crate::{
     application::{
         Action, AppState, DurabilityState, Effect, FailureCode, InteractionMode, reduce,
     },
-    domain::{OperationSequence, RequestId, SubmissionId, ThoughtId},
+    domain::{OperationId, OperationSequence, RequestId, SubmissionId, ThoughtId},
     ports::{
         agent::AgentTarget,
         editor::{CursorMovement, EditCommand, Editor, EditorFactory, TextViewport},
@@ -116,6 +117,7 @@ pub struct BoardApp {
     submission_mode: Option<SubmissionMode>,
     deferred_submissions: BTreeMap<SubmissionId, DeferredSubmissionIntent>,
     pending_submissions: BTreeMap<SubmissionId, PendingSubmission>,
+    pending_transfer_removals: BTreeSet<OperationId>,
     screenshot: screenshot::ScreenshotInbox,
     update_barrier: Option<update::UpdateBarrier>,
     update_restart: Option<crate::domain::StableVersion>,
@@ -196,6 +198,7 @@ impl BoardApp {
             submission_mode: None,
             deferred_submissions: BTreeMap::new(),
             pending_submissions: BTreeMap::new(),
+            pending_transfer_removals: BTreeSet::new(),
             screenshot: screenshot::ScreenshotInbox::default(),
             update_barrier: None,
             update_restart: None,
@@ -237,7 +240,7 @@ impl BoardApp {
             return self.handle_screenshot_takeover_input(&input, ids, clock);
         }
         if self.screenshot_save_in_flight() {
-            return self.handle_screenshot_commit_barrier(input);
+            return self.handle_screenshot_commit_barrier(input, ids, clock);
         }
         if let Some(effects) = self.handle_quit_input(&input, ids, clock) {
             return effects;

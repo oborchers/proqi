@@ -7,7 +7,7 @@ use std::{
     fs::File,
     path::PathBuf,
     sync::Arc,
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use kqueue::{EventFilter, FilterFlag, Watcher};
@@ -22,6 +22,7 @@ use crate::ports::{
 };
 
 const FINAL_EVENT_LIMIT: usize = 32;
+const REQUEST_POLL_INTERVAL: Duration = Duration::from_millis(25);
 
 trait DirectoryEvents: Send {
     fn wait(&mut self, timeout: Duration) -> Result<bool, ScreenshotError>;
@@ -32,14 +33,6 @@ struct KqueueEvents(Watcher);
 impl DirectoryEvents for KqueueEvents {
     fn wait(&mut self, timeout: Duration) -> Result<bool, ScreenshotError> {
         Ok(self.0.poll(Some(timeout)).is_some())
-    }
-}
-
-struct SystemMonotonicClock(Instant);
-
-impl MonotonicClock for SystemMonotonicClock {
-    fn now(&self) -> Duration {
-        self.0.elapsed()
     }
 }
 
@@ -79,6 +72,7 @@ pub(super) struct MacScreenshotWatcher {
     delivered: HashSet<FileIdentity>,
     pending: HashMap<FileIdentity, PendingCandidate>,
     next_observation: u64,
+    final_deadline: Option<Duration>,
     #[cfg(test)]
     eligibility_checks: usize,
 }
@@ -120,7 +114,7 @@ impl MacScreenshotWatcher {
             terminal_host,
             directory,
             Box::new(KqueueEvents(watcher)),
-            Arc::new(SystemMonotonicClock(Instant::now())),
+            Arc::new(crate::adapters::runtime::SystemMonotonicClock::default()),
             cancellation,
             MAX_RECONCILIATION_ENTRIES,
             activation,
@@ -153,6 +147,7 @@ impl MacScreenshotWatcher {
             delivered: HashSet::new(),
             pending: HashMap::new(),
             next_observation: 0,
+            final_deadline: None,
             #[cfg(test)]
             eligibility_checks: 0,
         };
@@ -173,7 +168,7 @@ impl MacScreenshotWatcher {
         if self.ready_at(now) {
             return self.reconcile(now);
         }
-        let wait = self.wait_duration(now);
+        let wait = self.wait_duration(now).min(REQUEST_POLL_INTERVAL);
         let hinted = self.events.wait(wait)?;
         let observed_at = self.clock.now();
         if hinted || self.ready_at(observed_at) {
@@ -183,9 +178,26 @@ impl MacScreenshotWatcher {
         }
     }
 
-    pub(super) fn final_reconcile(&mut self) -> Result<Vec<ScreenshotCandidate>, ScreenshotError> {
+    pub(super) fn final_reconcile(
+        &mut self,
+        budget: Duration,
+    ) -> Result<Vec<ScreenshotCandidate>, ScreenshotError> {
         let started = self.clock.now();
-        let deadline = started.saturating_add(self.config.debounce);
+        let deadline = started.saturating_add(self.config.debounce.min(budget));
+        self.final_deadline = Some(deadline);
+        let result = self.final_reconcile_until(started, deadline);
+        self.final_deadline = None;
+        result
+    }
+
+    fn final_reconcile_until(
+        &mut self,
+        started: Duration,
+        deadline: Duration,
+    ) -> Result<Vec<ScreenshotCandidate>, ScreenshotError> {
+        if started >= deadline {
+            return Err(ScreenshotError::Cancelled);
+        }
         let mut ready = self.reconcile(started)?;
         for _ in 0..FINAL_EVENT_LIMIT {
             if self.pending.is_empty() {

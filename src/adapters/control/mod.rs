@@ -11,6 +11,8 @@ mod transport;
 
 pub(crate) use client::CancellableLocalControlClient;
 pub use client::{LocalControlClient, LocalUpdateControlClient};
+#[cfg(test)]
+pub(crate) use response::pending as pending_for_test;
 pub(crate) use response::{ControlDelivery, ControlDeliveryReceipt, ControlEnvelope};
 
 use std::{

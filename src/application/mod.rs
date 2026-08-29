@@ -1,6 +1,7 @@
 //! Application state, normalized actions, effects, errors, and reducer.
 
 mod action;
+mod admission;
 mod capture;
 mod control;
 mod error;
@@ -18,6 +19,7 @@ mod update;
 mod update_coordination;
 
 pub use action::Action;
+pub use admission::{PendingMutationIntent, PendingMutationIntents};
 pub use capture::{apply_capture, prepare_capture};
 pub(crate) use control::{ControlReplay, match_control_replay};
 pub use error::{ApplicationError, ApplicationResult, FailureCode};

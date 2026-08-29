@@ -18,7 +18,8 @@ use crate::{
         control::{ControlError, ControlRejectionCode},
         runtime::{CaptureCoordinator, CaptureLockError, InstanceInfo},
         screenshot::{
-            ActiveScreenshotWatcher, ScreenshotCandidate, ScreenshotError, ScreenshotWatcherFactory,
+            ActiveScreenshotWatcher, CAPTURE_TAKEOVER_WAIT, CAPTURE_TEARDOWN_TIMEOUT,
+            ScreenshotCandidate, ScreenshotError, ScreenshotWatcherFactory,
         },
     },
 };
@@ -41,7 +42,12 @@ pub(super) enum ScreenshotResult {
 
 enum ScreenshotRequest {
     Enable,
-    Disable,
+    Disable {
+        budget: Duration,
+    },
+    Shutdown {
+        budget: Duration,
+    },
     TakeOver {
         owner: crate::ports::runtime::CaptureOwnerInfo,
         request_id: crate::domain::RequestId,
@@ -123,7 +129,15 @@ impl ScreenshotLane {
     }
 
     pub(super) fn disable(&self) -> Result<(), TerminalError> {
-        self.send(ScreenshotRequest::Disable)
+        self.send(ScreenshotRequest::Disable {
+            budget: CAPTURE_TEARDOWN_TIMEOUT,
+        })
+    }
+
+    pub(super) fn shutdown(&self, deadline: ShutdownDeadline) -> Result<(), TerminalError> {
+        self.send(ScreenshotRequest::Shutdown {
+            budget: deadline.remaining(),
+        })
     }
 
     pub(super) fn take_over(
@@ -237,7 +251,9 @@ impl ScreenshotWorker {
         match request {
             ScreenshotRequest::Enable if self.watcher.is_none() => self.enable(results),
             ScreenshotRequest::Enable => true,
-            ScreenshotRequest::Disable => self.disable(results),
+            ScreenshotRequest::Disable { budget } | ScreenshotRequest::Shutdown { budget } => {
+                self.disable(results, budget)
+            }
             ScreenshotRequest::TakeOver { owner, request_id } => {
                 self.take_over(results, &owner, request_id)
             }
@@ -262,8 +278,8 @@ impl ScreenshotWorker {
         self.start_owned(results, config, lease)
     }
 
-    fn disable(&mut self, results: &SyncSender<ScreenshotResult>) -> bool {
-        match self.reconcile() {
+    fn disable(&mut self, results: &SyncSender<ScreenshotResult>, budget: Duration) -> bool {
+        match self.reconcile(budget) {
             Ok(candidates) => self.send_result(results, ScreenshotResult::Stopped(candidates)),
             Err(error) => self.fail(results, error, true),
         }
@@ -294,7 +310,7 @@ impl ScreenshotWorker {
     }
 
     fn await_released_capture(&self) -> Result<FileCaptureLease, ScreenshotError> {
-        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        let deadline = std::time::Instant::now() + CAPTURE_TAKEOVER_WAIT;
         while std::time::Instant::now() < deadline && !self.cancellation.is_cancelled() {
             match self.coordinator.acquire_capture(&self.instance) {
                 Ok(lease) => return Ok(lease),
@@ -342,18 +358,18 @@ impl ScreenshotWorker {
         )
     }
 
-    fn reconcile(&mut self) -> Result<Vec<ScreenshotCandidate>, ScreenshotError> {
+    fn reconcile(&mut self, budget: Duration) -> Result<Vec<ScreenshotCandidate>, ScreenshotError> {
         let candidates = self
             .watcher
             .as_mut()
-            .map_or(Ok(Vec::new()), |watcher| watcher.final_reconcile());
+            .map_or(Ok(Vec::new()), |watcher| watcher.final_reconcile(budget));
         self.watcher = None;
         candidates
     }
 
     fn finish(&mut self, results: &SyncSender<ScreenshotResult>) {
         if self.watcher.is_some() {
-            let result = match self.reconcile() {
+            let result = match self.reconcile(CAPTURE_TEARDOWN_TIMEOUT) {
                 Ok(candidates) => ScreenshotResult::Stopped(candidates),
                 Err(error) => ScreenshotResult::Failed {
                     error,
@@ -393,8 +409,8 @@ fn takeover_control_error(error: ControlError) -> ScreenshotError {
         {
             ScreenshotError::TakeoverInProgress
         }
-        ControlError::Timeout => ScreenshotError::TakeoverTimedOut,
-        ControlError::Unsupported
+        ControlError::Timeout
+        | ControlError::Unsupported
         | ControlError::InvalidPeer
         | ControlError::MessageTooLarge
         | ControlError::Protocol(_)

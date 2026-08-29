@@ -9,12 +9,16 @@ use super::PendingWork;
 pub(super) enum MutationBlocker {
     CaptureCommit,
     ControlLookup,
+    AsyncIntention,
+    UpdatePrepare,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct MutationAdmission {
     capture_reserved: bool,
     unresolved_control_lookups: usize,
+    asynchronous_intentions: usize,
+    update_prepares: usize,
 }
 
 impl MutationAdmission {
@@ -30,7 +34,13 @@ impl MutationAdmission {
         if self.capture_reserved {
             Err(MutationBlocker::CaptureCommit)
         } else if self.unresolved_control_lookups == 0 {
-            Ok(())
+            if self.asynchronous_intentions > 0 {
+                Err(MutationBlocker::AsyncIntention)
+            } else if self.update_prepares > 0 {
+                Err(MutationBlocker::UpdatePrepare)
+            } else {
+                Ok(())
+            }
         } else {
             Err(MutationBlocker::ControlLookup)
         }
@@ -41,6 +51,8 @@ pub(super) fn owner_control(app: &BoardApp) -> Result<(), MutationBlocker> {
     MutationAdmission {
         capture_reserved: app.screenshot_sequence_reserved(),
         unresolved_control_lookups: 0,
+        asynchronous_intentions: 0,
+        update_prepares: 0,
     }
     .owner_control()
 }
@@ -49,12 +61,12 @@ pub(super) fn owner_control_rejection(
     app: &BoardApp,
     mutation: &ControlMutation,
 ) -> Option<ControlResult> {
-    (control_may_produce_sequence(mutation) && owner_control(app).is_err()).then(|| {
-        ControlResult::Rejected {
-            code: ControlRejectionCode::OwnerBusy.as_str().to_owned(),
-            message: "active owner is committing a screenshot; retry the control request"
-                .to_owned(),
-        }
+    (control_may_produce_sequence(mutation)
+        && !matches!(mutation, ControlMutation::UpdatePrepare { .. })
+        && owner_control(app).is_err())
+    .then(|| ControlResult::Rejected {
+        code: ControlRejectionCode::OwnerBusy.as_str().to_owned(),
+        message: "active owner is committing a screenshot; retry the control request".to_owned(),
     })
 }
 
@@ -71,6 +83,8 @@ pub(super) fn capture(app: &BoardApp, pending: &PendingWork) -> Result<(), Mutat
     MutationAdmission {
         capture_reserved: app.screenshot_sequence_reserved(),
         unresolved_control_lookups: pending.control_lookups.len(),
+        asynchronous_intentions: app.pending_mutation_intents().total(),
+        update_prepares: pending.update_prepares.len(),
     }
     .capture()
 }
@@ -81,13 +95,16 @@ mod tests {
     use crate::{
         adapters::{editor::RopeEditorFactory, memory::FakeIdGenerator},
         application::{AppState, DurabilityState, Effect, InteractionMode},
-        domain::{Session, SessionBoard, Timestamp, UndoScope},
+        domain::{
+            InstallationIdentity, Session, SessionBoard, StableVersion, Timestamp, UndoScope,
+        },
         ports::{
             environment::IdGenerator as _,
             screenshot::{ScreenshotCandidate, ScreenshotFingerprint, ScreenshotImageType},
             store::{
                 CaptureCommit, CaptureCommitOutcome, CaptureReceipt, CommitReceipt, DurableIdentity,
             },
+            update::UpdatePrepareRequest,
         },
         ui::{BoardApp, UiInput, UiKey},
     };
@@ -115,6 +132,8 @@ mod tests {
             MutationAdmission {
                 capture_reserved: false,
                 unresolved_control_lookups: 1,
+                asynchronous_intentions: 0,
+                update_prepares: 0,
             }
             .capture(),
             Err(MutationBlocker::ControlLookup)
@@ -157,6 +176,25 @@ mod tests {
                 })
             );
         }
+        let update_prepare = ControlMutation::UpdatePrepare {
+            request: UpdatePrepareRequest {
+                operation_id: ids.request_id(),
+                target_version: StableVersion::parse("1.2.3").expect("version"),
+                installation_identity: InstallationIdentity::from_digest([3; 32]),
+                deadline: Timestamp::from_millis(100),
+            },
+        };
+        assert_eq!(owner_control_rejection(&app, &update_prepare), None);
+        assert_eq!(
+            MutationAdmission {
+                capture_reserved: false,
+                unresolved_control_lookups: 0,
+                asynchronous_intentions: 0,
+                update_prepares: 1,
+            }
+            .capture(),
+            Err(MutationBlocker::UpdatePrepare)
+        );
         app.complete_screenshot_capture(Ok(created(&capture)), &mut ids, &clock);
         assert_eq!(app.state.board.live_thoughts().len(), 1);
         assert!(matches!(
@@ -173,6 +211,8 @@ mod tests {
             MutationAdmission {
                 capture_reserved: false,
                 unresolved_control_lookups: 1,
+                asynchronous_intentions: 0,
+                update_prepares: 0,
             }
             .capture(),
             Err(MutationBlocker::ControlLookup)

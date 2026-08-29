@@ -79,6 +79,7 @@ impl PaletteState {
                         ScreenshotPaletteAction::Enable => label,
                         ScreenshotPaletteAction::Disable => "Disable Screenshot Inbox",
                         ScreenshotPaletteAction::Resume => "Resume Screenshot Inbox",
+                        ScreenshotPaletteAction::Unavailable => "Screenshot Inbox unavailable",
                     }
                 } else {
                     label
@@ -103,6 +104,9 @@ impl PaletteState {
             | Command::Indent
             | Command::Outdent => self.plain_newline_supported,
             Command::RetryScreenshotCapture => self.screenshot_retry,
+            Command::ScreenshotInbox => {
+                self.screenshot_action != ScreenshotPaletteAction::Unavailable
+            }
             _ => true,
         }
     }
@@ -114,6 +118,14 @@ impl PaletteState {
 }
 
 impl BoardApp {
+    pub(super) fn refresh_screenshot_palette_action(&mut self) {
+        let action = self.screenshot_palette_action();
+        if let Some(palette) = &mut self.palette {
+            palette.screenshot_action = action;
+            palette.clamp();
+        }
+    }
+
     pub(super) fn open_palette(&mut self) {
         self.deactivate_range_latch();
         self.help = false;

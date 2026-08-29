@@ -592,9 +592,11 @@ files accumulated while paused are not imported retrospectively. Both safety
 bounds are configurable but cannot be disabled.
 
 While an atomic capture commit is in flight, Proqi preserves keyboard, paste,
-mouse, and resize input in a bounded ordered queue. A full queue reports that
-the newest input was not accepted so it can be retried; input is never silently
-dropped. Captures append quietly while help, search, the command palette,
+click, drag, and scroll input in a bounded ordered queue. When that queue is
+full, the terminal input lane applies backpressure until space is available;
+passive pointer movement proceeds and resize may coalesce to the newest size.
+Accepted deliberate input is never silently dropped. Captures append quietly
+while help, search, the command palette,
 rename, transfer, update, invocation completion, or a board selection is active.
 
 An optional best-effort notification can accompany automatic pause. It is off

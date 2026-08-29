@@ -8,9 +8,11 @@ mod external_results;
 mod fairness;
 pub(super) mod finish;
 mod heartbeat;
+mod input_admission;
 mod owned_lanes;
 mod owner_control;
 mod pending;
+mod restart;
 mod screenshot_results;
 mod update_results;
 
@@ -101,12 +103,18 @@ pub(super) struct WorkerLanes<'a> {
 }
 
 #[derive(Default)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "orthogonal watcher, requester, takeover, and release facts have independent transitions"
+)]
 pub(super) struct CaptureRuntime {
     lease: Option<FileCaptureLease>,
     release_when_drained: bool,
     shutdown_requested: bool,
     takeover_delivery: Option<crate::adapters::control::ControlDeliveryReceipt>,
     takeover_stopping: bool,
+    watcher_stopped: bool,
+    release_deadline: Option<Instant>,
 }
 
 /// Returns a typed setup, render, input, persistence, worker, or restoration failure.
@@ -145,6 +153,7 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
     let screenshot_settings = settings.screenshot.clone();
     let screenshot_activity = settings.screenshot.activity_policy();
     let terminal_host = super::host::TerminalHost::detect();
+    let terminal_host_label = terminal_host.label();
     let notification = super::notification::PauseNotificationRouter::new(
         settings.screenshot.notify_terminal_on_auto_pause(),
         crate::adapters::herdr::HerdrEnvironment::detect(),
@@ -164,6 +173,7 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
         invocation_roots,
         screenshot_settings,
         session_lease.info().clone(),
+        terminal_host_label,
     );
     let mut pane_heartbeat = None;
     let shutdown = super::supervisor::ShutdownCoordinator::default();
@@ -220,62 +230,12 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
         ]),
         shutdown_deadline.elapsed(),
     )?;
-    resume_after_update(
+    restart::resume_after_update(
         installation.as_ref(),
         requested_restart.as_ref(),
         session_id,
         state_root.as_deref(),
     )
-}
-
-fn resume_after_update(
-    installation: Option<&crate::domain::Installation>,
-    requested: Option<&crate::domain::StableVersion>,
-    session_id: SessionId,
-    state_root: Option<&std::path::Path>,
-) -> Result<SessionId, TerminalError> {
-    requested.map_or(Ok(session_id), |version| {
-        replace_after_cleanup(installation, version, session_id, state_root)
-    })
-}
-
-fn replace_after_cleanup(
-    installation: Option<&crate::domain::Installation>,
-    expected: &crate::domain::StableVersion,
-    session_id: SessionId,
-    state_root: Option<&std::path::Path>,
-) -> Result<SessionId, TerminalError> {
-    use crate::ports::update::{InstallDetector as _, ProcessReplacer as _};
-
-    let installation = installation.ok_or_else(|| {
-        TerminalError::Io("update restart lacks a verified installation context".to_owned())
-    })?;
-    if installation.kind != crate::domain::InstallationKind::HomebrewFormula {
-        return Err(TerminalError::Io(
-            "automatic restart is available only for verified Homebrew installations".to_owned(),
-        ));
-    }
-    let active = installation
-        .restart_executable
-        .as_ref()
-        .ok_or_else(|| TerminalError::Io("Homebrew active executable is unavailable".to_owned()))?;
-    let detected = crate::adapters::update::SystemInstallDetector::for_executable(active.clone())
-        .detect()
-        .map_err(|error| TerminalError::Io(error.to_string()))?;
-    if detected.kind != crate::domain::InstallationKind::HomebrewFormula
-        || detected.identity != installation.identity
-    {
-        return Err(TerminalError::Io(
-            "updated executable does not belong to this Homebrew installation".to_owned(),
-        ));
-    }
-    let mut runner = crate::adapters::process::SystemProcessRunner::default();
-    crate::adapters::update::verify_installed_version(&mut runner, &detected.executable, expected)
-        .map_err(|error| TerminalError::Io(error.to_string()))?;
-    crate::adapters::process::SystemProcessReplacer
-        .replace(&detected.executable, session_id, state_root)
-        .map_err(|error| TerminalError::Io(error.to_string()))?;
-    Ok(session_id)
 }
 
 #[expect(
@@ -300,6 +260,7 @@ fn drive(
     let mut agent_deadline = None;
     let mut invocation_deadline = None;
     let mut termination_seen = false;
+    let mut held_input = None;
     enqueue_effects(app, lanes, BoardApp::discover_agents(), &mut pending)?;
     let invocation_effects = app.refresh_invocations();
     enqueue_effects(app, lanes, invocation_effects, &mut pending)?;
@@ -332,6 +293,10 @@ fn drive(
             pane_heartbeat,
         )?;
         redraw |= workers_changed || app.expire_update_barrier(clock.now());
+        if app.quit && app.screenshot_retry_ready() && !termination_seen {
+            app.retain_failed_capture_after_quit();
+            redraw = true;
+        }
         if termination_seen && !app.quit && app.screenshot_retry_ready() {
             let mut effects = app.handle(UiInput::Key(UiKey::Quit), ids, &clock);
             if !app.quit && app.screenshot_retry_ready() {
@@ -340,7 +305,14 @@ fn drive(
             enqueue_effects(app, lanes, effects, &mut pending)?;
             redraw = true;
         }
-        let capture_effects = if admission::capture(app, &pending).is_ok() && !app.quit {
+        let release_effects = screenshot_results::release_if_drained(app, &mut capture);
+        if !release_effects.is_empty() {
+            enqueue_effects(app, lanes, release_effects, &mut pending)?;
+            redraw = true;
+        }
+        let capture_effects = if admission::capture(app, &pending).is_ok()
+            && (!app.quit || capture.shutdown_requested)
+        {
             app.advance_screenshot_capture(ids, &clock)
         } else {
             Vec::new()
@@ -349,7 +321,6 @@ fn drive(
             enqueue_effects(app, lanes, capture_effects, &mut pending)?;
             redraw = true;
         }
-        screenshot_results::release_if_drained(app, &mut capture);
         if app.edit_generation() != edit_generation {
             edit_generation = app.edit_generation();
             edit_deadline = app
@@ -384,12 +355,31 @@ fn drive(
             app.arm_update_prompt();
             redraw = false;
         }
+        if let Some((sequence, event)) = held_input.take() {
+            if app.screenshot_barrier_accepts(&event) {
+                input_admission::apply(
+                    app,
+                    lanes,
+                    ids,
+                    clock,
+                    &mut pending,
+                    &mut agent_deadline,
+                    &mut invocation_deadline,
+                    sequence,
+                    event,
+                )?;
+                redraw = true;
+            } else {
+                held_input = Some((sequence, event));
+            }
+        }
         if app.quit {
             let deadline = shutdown.request();
             if !capture.shutdown_requested && capture.lease.is_some() {
-                lanes.screenshot.disable()?;
+                lanes.screenshot.shutdown(deadline)?;
                 pending.screenshot = pending.screenshot.saturating_add(1);
                 capture.shutdown_requested = true;
+                capture.release_deadline = Some(deadline.instant());
             }
             if app.update_restart().is_none() {
                 lanes.cancellation.cancel();
@@ -398,7 +388,10 @@ fn drive(
                 control.request_stop();
             }
             let control_quiescent = lanes.control.is_none_or(ControlServer::is_quiescent);
-            if pending.is_empty() && control_quiescent {
+            let screenshot_quiescent = capture.lease.is_none()
+                && (!capture.shutdown_requested || capture.watcher_stopped)
+                && app.screenshot_shutdown_drained();
+            if pending.is_empty() && control_quiescent && screenshot_quiescent {
                 return Ok(());
             }
             if deadline.expired() {
@@ -406,6 +399,10 @@ fn drive(
                     "runtime shutdown exceeded its shared deadline",
                 ));
             }
+            thread::sleep(Duration::from_millis(5));
+            continue;
+        }
+        if held_input.is_some() {
             thread::sleep(Duration::from_millis(5));
             continue;
         }
@@ -419,18 +416,21 @@ fn drive(
                 sequence,
                 input: event,
             }) => {
-                if !app.accept_update_input(sequence) {
+                if !app.screenshot_barrier_accepts(&event) {
+                    held_input = Some((sequence, event));
                     continue;
                 }
-                if matches!(event, UiInput::Resize { .. }) {
-                    agent_deadline = Some(Instant::now() + Duration::from_millis(250));
-                }
-                if matches!(event, UiInput::HostFocusGained) {
-                    invocation_deadline = Some(Instant::now() + Duration::from_millis(180));
-                }
-                app.note_screenshot_activity(&event, lanes.monotonic.now());
-                let effects = app.handle(event, ids, &clock);
-                enqueue_effects(app, lanes, effects, &mut pending)?;
+                input_admission::apply(
+                    app,
+                    lanes,
+                    ids,
+                    clock,
+                    &mut pending,
+                    &mut agent_deadline,
+                    &mut invocation_deadline,
+                    sequence,
+                    event,
+                )?;
                 redraw = true;
             }
             Ok(InputMessage::Failed(failure)) => {

@@ -18,6 +18,10 @@ pub const DEFAULT_MAX_UNATTENDED_CAPTURES: u16 = 10;
 pub const MAX_INACTIVITY_TIMEOUT_MINUTES: u16 = 1_440;
 /// Largest configurable unattended capture safety bound.
 pub const MAX_UNATTENDED_CAPTURES: u16 = 100;
+/// Maximum owner-side watcher teardown budget advertised to verified takeover requesters.
+pub const CAPTURE_TEARDOWN_TIMEOUT: Duration = Duration::from_millis(1_500);
+/// Requester wait includes bounded transport and scheduling margin after owner acknowledgement.
+pub const CAPTURE_TAKEOVER_WAIT: Duration = Duration::from_millis(2_500);
 
 /// Validated safety policy for one explicitly enabled capture lease.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -233,7 +237,10 @@ pub trait ActiveScreenshotWatcher: Send {
     /// # Errors
     ///
     /// Returns a typed permission or reconciliation failure.
-    fn final_reconcile(&mut self) -> Result<Vec<ScreenshotCandidate>, ScreenshotError>;
+    fn final_reconcile(
+        &mut self,
+        budget: Duration,
+    ) -> Result<Vec<ScreenshotCandidate>, ScreenshotError>;
 }
 
 /// Idempotent cancellation observed inside bounded directory work.
@@ -300,9 +307,6 @@ pub enum ScreenshotError {
         "Screenshot Inbox is owned by an incompatible live Proqi process; close that process to continue"
     )]
     IncompatibleOwner,
-    /// Verified takeover was rejected or did not complete before its bound.
-    #[error("Screenshot Inbox takeover did not complete; the current owner is still listening")]
-    TakeoverFailed,
     /// The live owner is already honoring another verified takeover request.
     #[error("Screenshot Inbox takeover is already draining in the current owner")]
     TakeoverInProgress,
