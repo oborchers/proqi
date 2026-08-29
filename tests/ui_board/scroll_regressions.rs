@@ -48,6 +48,127 @@ fn reverse_scroll_into_a_collapsed_thought_starts_at_its_preview() {
 }
 
 #[test]
+fn keyboard_edit_entry_reveals_a_collapsed_thought_after_manual_scroll() {
+    assert_manual_scroll_edit_entry(false);
+}
+
+#[test]
+fn palette_edit_entry_reveals_a_collapsed_thought_after_manual_scroll() {
+    assert_manual_scroll_edit_entry(true);
+}
+
+fn assert_manual_scroll_edit_entry(through_palette: bool) {
+    let mut fixture = Fixture::new();
+    let target_content = board_long_content("target");
+    let lower_content = board_long_content("lower");
+    let tail_content = board_long_content("tail");
+    for content in [
+        target_content.as_str(),
+        lower_content.as_str(),
+        tail_content.as_str(),
+    ] {
+        super::navigation::durable_thought(&mut fixture, content);
+    }
+    let target = fixture.app.state.board.live_thoughts()[0].id;
+    fixture.app.state.focused_thought = Some(target);
+    fixture
+        .app
+        .state
+        .board
+        .thought_mut(target)
+        .expect("target thought")
+        .presentation = ThoughtPresentation::Collapsed;
+    let area = Rect::new(0, 0, 34, 10);
+    let _focused = fixture.app.prepare_frame(area);
+    let mut scrolled = fixture.app.prepare_frame(area);
+    for _ in 0..256 {
+        if scrolled.thought(target).is_none() {
+            break;
+        }
+        fixture.pointer(4, 2, PointerKind::ScrollDown);
+        scrolled = fixture.app.prepare_frame(area);
+    }
+    assert!(scrolled.thought(target).is_none(), "{scrolled:#?}");
+
+    if through_palette {
+        fixture.input(UiInput::Key(UiKey::Character(':')));
+        for character in "edit thought".chars() {
+            fixture.input(UiInput::Key(UiKey::Character(character)));
+        }
+        fixture.input(UiInput::Key(UiKey::Enter));
+    } else {
+        fixture.input(UiInput::Key(UiKey::Enter));
+    }
+
+    let editing = fixture.app.prepare_frame(area);
+    assert!(matches!(
+        fixture.app.interaction_mode(),
+        proqi::application::InteractionMode::Edit { thought_id } if thought_id == target
+    ));
+    let active = editing.thought(target).expect("active editor is visible");
+    assert!(active.overflow.is_none());
+    assert_eq!(
+        fixture.app.editor_snapshot().expect("editor").content,
+        target_content
+    );
+}
+
+#[test]
+fn deleting_the_manual_anchor_owner_reconciles_to_the_adjacent_focus() {
+    let mut fixture = Fixture::new();
+    let owner_content = board_long_content("anchor owner");
+    let adjacent_content = board_long_content("adjacent");
+    let tail_content = board_long_content("tail");
+    for content in [
+        "ordinary top",
+        owner_content.as_str(),
+        adjacent_content.as_str(),
+        tail_content.as_str(),
+    ] {
+        super::navigation::durable_thought(&mut fixture, content);
+    }
+    let (owner, adjacent, tail) = {
+        let live = fixture.app.state.board.live_thoughts();
+        (live[1].id, live[2].id, live[3].id)
+    };
+    fixture.app.state.focused_thought = Some(owner);
+    for thought_id in [owner, adjacent, tail] {
+        fixture
+            .app
+            .state
+            .board
+            .thought_mut(thought_id)
+            .expect("long thought")
+            .presentation = ThoughtPresentation::Expanded;
+    }
+    let area = Rect::new(0, 0, 36, 10);
+    let _focused = fixture.app.prepare_frame(area);
+    let mut anchored = fixture.app.prepare_frame(area);
+    for _ in 0..256 {
+        if anchored.first_index == 1 && anchored.first_row_offset > 0 {
+            break;
+        }
+        fixture.pointer(4, 2, PointerKind::ScrollDown);
+        anchored = fixture.app.prepare_frame(area);
+    }
+    assert_eq!(anchored.first_index, 1, "{anchored:#?}");
+    assert!(anchored.first_row_offset > 0, "{anchored:#?}");
+
+    fixture.input(UiInput::Key(UiKey::Character('d')));
+    assert_eq!(fixture.app.active_thought_id(), Some(adjacent));
+    let reconciled = fixture.app.prepare_frame(area);
+
+    assert_eq!(reconciled.first_index, 1, "{reconciled:#?}");
+    assert_eq!(reconciled.first_row_offset, 0, "{reconciled:#?}");
+    assert!(reconciled.thought(adjacent).is_some(), "{reconciled:#?}");
+    assert!(reconciled.thought(owner).is_none());
+    assert_eq!(
+        fixture.app.state.board.live_thoughts()[1].content,
+        adjacent_content
+    );
+}
+
+#[test]
 fn repeated_long_thought_cycles_resize_and_scroll_to_both_board_boundaries() {
     let mut fixture = Fixture::new();
     let long_a = (0..10)

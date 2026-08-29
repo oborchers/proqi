@@ -431,6 +431,9 @@ impl BoardApp {
             self.set_warning("thought has a submission in progress");
             return Vec::new();
         }
+        self.board_viewport = self.board_viewport.follow_focus();
+        self.scroll_geometry = None;
+        self.layout = None;
         let effects = self.expand_thought(thought_id, ids, clock);
         self.enter_edit();
         effects

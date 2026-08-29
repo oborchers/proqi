@@ -313,3 +313,42 @@ fn unicode_content_anchor_survives_width_reflow_by_projected_byte() {
             .is_none_or(|next| *next > byte)
     );
 }
+
+#[test]
+fn missing_thought_anchor_reconciles_to_the_focused_live_thought() {
+    let long = long_content("long");
+    let state = state(&[
+        ("ordinary top", ThoughtPresentation::Automatic),
+        (&long, ThoughtPresentation::Expanded),
+        (&long, ThoughtPresentation::Expanded),
+    ]);
+    let focused = state.board.live_thoughts()[1].id;
+    let missing = ThoughtId::from_uuid(uuid_v7(99)).expect("missing thought ID");
+    let flow = BoardFlow::measure(
+        &state,
+        None,
+        24,
+        7,
+        crate::ui::settings::BoardDensity::Compact,
+    );
+
+    let resolved = flow.resolve(
+        BoardViewport::Manual(ScrollAnchor::Content {
+            thought_id: missing,
+            byte: 40,
+        }),
+        Some(focused),
+        false,
+        7,
+    );
+
+    assert!(matches!(
+        resolved.geometry.current,
+        ScrollAnchor::Content {
+            thought_id,
+            byte: 0
+        } if thought_id == focused
+    ));
+    assert_eq!(resolved.first_index, 1);
+    assert_eq!(resolved.first_row_offset, 0);
+}

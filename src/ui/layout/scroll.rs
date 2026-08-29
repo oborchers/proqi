@@ -159,7 +159,21 @@ impl BoardFlow {
     ) -> ResolvedScroll {
         let viewport_height = board_height.saturating_sub(self.top_padding).max(1);
         let maximum = self.total_rows.saturating_sub(usize::from(viewport_height));
-        let mut offset = self.ordinal(viewport.anchor()).min(maximum);
+        let mut offset = self
+            .ordinal(viewport.anchor())
+            .or_else(|| {
+                insertion_focused
+                    .then_some(self.insert_row.or(self.insert_gap))
+                    .flatten()
+            })
+            .or_else(|| {
+                focused.and_then(|thought_id| {
+                    self.thought(thought_id)
+                        .map(|thought| thought.content_start)
+                })
+            })
+            .unwrap_or(0)
+            .min(maximum);
         if matches!(viewport, BoardViewport::FollowFocus(_)) {
             offset = self.follow_focus_offset(
                 offset,
@@ -200,29 +214,30 @@ impl BoardFlow {
         }
     }
 
-    fn ordinal(&self, anchor: ScrollAnchor) -> usize {
+    fn ordinal(&self, anchor: ScrollAnchor) -> Option<usize> {
         match anchor {
-            ScrollAnchor::Start => 0,
+            ScrollAnchor::Start => Some(0),
             ScrollAnchor::GapBefore { thought_id, row } => self
                 .thought(thought_id)
-                .map_or(0, |thought| thought.gap_start + row.min(thought.gap_rows)),
-            ScrollAnchor::Content { thought_id, byte } => {
-                self.thought(thought_id).map_or(0, |thought| {
-                    let row = thought
-                        .row_starts
-                        .iter()
-                        .take(thought.content_rows)
-                        .rposition(|start| *start <= byte)
-                        .unwrap_or(0);
-                    thought.content_start + row
+                .map(|thought| thought.gap_start + row.min(thought.gap_rows)),
+            ScrollAnchor::Content { thought_id, byte } => self.thought(thought_id).map(|thought| {
+                let row = thought
+                    .row_starts
+                    .iter()
+                    .take(thought.content_rows)
+                    .rposition(|start| *start <= byte)
+                    .unwrap_or(0);
+                thought.content_start + row
+            }),
+            ScrollAnchor::Overflow(thought_id) => self.thought(thought_id).map(|thought| {
+                thought.overflow_row.unwrap_or_else(|| {
+                    thought
+                        .content_start
+                        .saturating_add(thought.content_rows.saturating_sub(1))
                 })
-            }
-            ScrollAnchor::Overflow(thought_id) => self
-                .thought(thought_id)
-                .and_then(|thought| thought.overflow_row)
-                .unwrap_or(0),
-            ScrollAnchor::InsertGap => self.insert_gap.unwrap_or(0),
-            ScrollAnchor::Insert => self.insert_row.unwrap_or(0),
+            }),
+            ScrollAnchor::InsertGap => self.insert_gap,
+            ScrollAnchor::Insert => self.insert_row,
         }
     }
 
