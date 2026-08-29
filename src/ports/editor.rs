@@ -6,6 +6,9 @@ pub use change::{OffsetAffinity, TextChange, TextChangeError, TextChangeSet, Tex
 
 use crate::domain::TextPosition;
 
+/// Fixed wrapped-row distance used by accelerated editor navigation.
+pub const FAST_NAVIGATION_ROWS: usize = 5;
+
 /// A normalized text selection.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct TextSelection {
@@ -56,6 +59,10 @@ pub enum CursorMovement {
     VisualUp,
     /// Next wrapped visual row.
     VisualDown,
+    /// Five wrapped visual rows toward the beginning of the document.
+    VisualJumpUp,
+    /// Five wrapped visual rows toward the end of the document.
+    VisualJumpDown,
     /// Beginning of the current logical line.
     LineStart,
     /// End of the current logical line.

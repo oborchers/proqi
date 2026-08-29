@@ -16,6 +16,7 @@ mod palette;
 mod palette_handoff;
 mod pending_types;
 mod pointer;
+mod pointer_activation;
 mod presentation;
 mod query;
 mod recovery;
@@ -92,6 +93,7 @@ pub struct BoardApp {
     dragged_thought: Option<ThoughtId>,
     drag_target: Option<usize>,
     pointer_click: Option<pointer::PointerClick>,
+    overlay_activation: Option<pointer_activation::OverlayActivation>,
     hovered: Option<HitTarget>,
     insertion_focus: InsertionFocus,
     insertion_confirmation: InsertionConfirmation,
@@ -171,6 +173,7 @@ impl BoardApp {
             dragged_thought: None,
             drag_target: None,
             pointer_click: None,
+            overlay_activation: None,
             hovered: None,
             insertion_focus,
             insertion_confirmation: InsertionConfirmation::Idle,
@@ -211,8 +214,10 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
+        let input = self.resolve_edit_navigation(input);
         self.reset_pointer_click_for_input(&input);
         self.note_screenshot_interaction(&input);
+        self.reset_overlay_activation_for_input(&input, clock.now());
         if self.help
             || self.screenshot.takeover.is_some()
             || self.update_prompt.is_some()

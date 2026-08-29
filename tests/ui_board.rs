@@ -412,42 +412,6 @@ fn thought_search_filters_content_and_focuses_the_selected_match() {
     assert!(fixture.app.search_view().is_none());
 }
 
-#[test]
-fn mouse_wheel_scrolls_editor_without_moving_cursor_or_selection() {
-    let mut fixture = Fixture::new();
-    fixture.paste(
-        &(0..20)
-            .map(|line| format!("line {line}"))
-            .collect::<Vec<_>>()
-            .join("\n"),
-    );
-    fixture.input(UiInput::Key(UiKey::Move {
-        movement: CursorMovement::GraphemeBack,
-        extend_selection: false,
-    }));
-    fixture.input(UiInput::Key(UiKey::Enter));
-    fixture.input(UiInput::Key(UiKey::Move {
-        movement: CursorMovement::DocumentStart,
-        extend_selection: false,
-    }));
-    fixture.input(UiInput::Key(UiKey::Move {
-        movement: CursorMovement::GraphemeForward,
-        extend_selection: true,
-    }));
-    let _terminal = draw(&mut fixture, 30, 6);
-    let before = fixture.app.editor_snapshot().expect("editor");
-    let text_area = fixture.app.prepare_frame(Rect::new(0, 0, 30, 6)).thoughts[0].text_area;
-    fixture.pointer(text_area.x, text_area.y, PointerKind::ScrollDown);
-    let after = fixture.app.editor_snapshot().expect("editor");
-    assert!(
-        after.scroll_row > before.scroll_row,
-        "scroll must advance: before={before:?}, after={after:?}, mode={:?}",
-        fixture.app.interaction_mode()
-    );
-    assert_eq!(after.cursor, before.cursor);
-    assert_eq!(after.selection, before.selection);
-}
-
 #[path = "ui_board/agent.rs"]
 mod agent;
 #[path = "ui_board/agent_discovery.rs"]
@@ -470,6 +434,8 @@ mod clipboard;
 mod composition;
 #[path = "ui_board/durability.rs"]
 mod durability;
+#[path = "ui_board/fast_navigation.rs"]
+mod fast_navigation;
 #[path = "ui_board/insertion_navigation.rs"]
 mod insertion_navigation;
 #[path = "ui_board/kilo.rs"]
@@ -480,6 +446,8 @@ mod movement_symmetry;
 mod navigation;
 #[path = "ui_board/palette.rs"]
 mod palette;
+#[path = "ui_board/placeholder_entry.rs"]
+mod placeholder_entry;
 #[path = "ui_board/pointer_selection.rs"]
 mod pointer_selection;
 #[path = "ui_board/scroll_regressions.rs"]

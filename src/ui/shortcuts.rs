@@ -15,6 +15,8 @@ pub(crate) fn items(app: &BoardApp) -> Vec<Shortcut> {
             (primary("U"), "Delete line"),
             (primary("Z"), "Undo"),
             (primary("Shift+Z"), "Redo"),
+            ("Alt+↑/↓".to_owned(), "Jump 5 rows"),
+            (format!("{}/{}", primary("↑"), primary("↓")), "Start/end"),
             (keys.commands.to_string(), "Commands"),
             (keys.help.to_string(), "Close"),
         ];
