@@ -5,8 +5,12 @@
 <h1 align="center">Proqi</h1>
 
 <p align="center">
-  <strong>The terminal-native power-user prompt composer.</strong><br>
-  Draft, refine, combine, and deliver exact prompts while your coding agents keep working.
+  <code>pro · qu · ie</code>
+</p>
+
+<p align="center">
+  <strong>Stop drafting serious prompts in a send box.</strong><br>
+  Compose what comes next without interrupting what is happening now.
 </p>
 
 <p align="center">
@@ -18,11 +22,8 @@
   <img alt="macOS and Linux" src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux-30363d">
 </p>
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/oborchers/proqi/main/assets/proqi-demo.gif" width="1000" alt="Proqi refining independent prompt thoughts, reordering them, and copying an ordered selection">
-</p>
-
-[Why Proqi](#compose-before-you-interrupt) ·
+[Why Proqi](#do-you-hate-this-editor) ·
+[Solution](#proqi-is-the-solution) ·
 [Workflow](#one-board-from-rough-context-to-exact-prompt) ·
 [Install](#install) ·
 [Controls](#board-controls) ·
@@ -33,38 +34,54 @@
 [Configuration](#configuration) ·
 [Compatibility](#best-with-herdr)
 
-Proqi is a terminal-native power-user prompt composer for developers coordinating
-multiple coding agents. It gives each session a durable, editable board for rough
-thoughts, alternatives, screenshots, and exact context, then turns the board into
-one ordered prompt when you are ready.
+**Proqi is a terminal-native power-user prompt composer that turns scattered
+thoughts, screenshots, and local context into exact, recoverable prompts for
+multiple coding agents—without interrupting their work.**
 
-## Compose before you interrupt
+## Do you hate this editor?
 
-Codex, Claude Code, and similar CLI harnesses are built around one active
-conversational stream. That is the right surface for working with the agent in
-front of you. It is less comfortable for drafting a later prompt, preserving two
-alternatives, combining several thoughts, managing multiple screenshots, or
-steering a different agent while the current one is still working. Rough material
-often ends up copied between the active composer and temporary documents.
+<p align="center">
+  <img src="https://raw.githubusercontent.com/oborchers/proqi/main/assets/proqi-problem.svg" width="1000" alt="Illustration of the single active prompt fields in Codex and Claude Code accumulating unfinished follow-up material">
+</p>
 
-Proqi keeps that preparation in a quiet local board beside the conversation.
-Capture independent thoughts as they occur, edit their exact text, recover edits
-and board operations after a restart, reorder or range-select them, and concatenate
-the whole board for one deliberate handoff. Local skill, command, and agent
-discovery helps you author supported invocation tokens without executing them.
-On macOS, one board can also act as a screenshot inbox: captures become
-annotatable thoughts without dragging files across panes or risking a drop into
-the agent composer.
+Not the agent. The input field.
+
+Codex, Claude Code, and similar CLI harnesses are excellent active conversation
+surfaces. But each composer belongs to one live stream. Drafting the next prompt,
+preserving alternatives, combining several thoughts, collecting multiple
+screenshots, or preparing work for another agent means interrupting that stream—or
+copying half-finished material into a temporary document.
+
+That friction compounds for power users running several agents. The prompt box is
+where text gets sent. It should not also be your scratchpad, screenshot tray,
+outline, recovery system, and cross-agent staging area.
+
+## Proqi is the solution
+
+**Agent-ready. Local-first. Built for power users.** Proqi is the prompt
+editor on steroids that separates composition from conversation: capture first,
+refine precisely, order deliberately, and send only when the prompt is ready.
+
+Each agent session gets a quiet, durable board of independent thoughts. Edit exact
+Unicode text, use smart lists and fast navigation, preserve alternatives, undo or
+redo editing and board operations after restart, select ranges, reorder thoughts,
+and concatenate the complete board into one intentional prompt. Local skill,
+command, and agent discovery completes supported invocation tokens without
+executing them.
+
+On macOS, the same board can become a Screenshot Inbox. New captures arrive as
+private, annotatable thoughts without dragging files across panes or accidentally
+dropping them into an agent composer.
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/oborchers/proqi/main/assets/proqi-demo.gif" width="1000" alt="Proqi refining independent prompt thoughts, reordering them, and copying an ordered selection">
+</p>
 
 The standalone workflow works in any supported terminal: compose, concatenate,
-and move prompts through the native clipboard. Native adjacent-agent submission is
+and transfer through the native clipboard. Native adjacent-agent submission is
 available only through a verified [Herdr](https://github.com/herdrdev/herdr)
 integration. Proqi does not claim native delivery to arbitrary terminals, agents,
 or multiplexers.
-
-<p align="center">
-  <img src="https://raw.githubusercontent.com/oborchers/proqi/main/assets/proqi-problem.svg" width="1000" alt="Proqi keeps prompt composition separate from the active agent conversation, with optional verified delivery through Herdr">
-</p>
 
 ## One board, from rough context to exact prompt
 
@@ -85,11 +102,11 @@ or multiplexers.
 | --- | --- |
 | Capture thoughts independently | Paste text or create a thought without committing it to a conversation |
 | Collect macOS screenshots | Turn captures into annotatable thoughts in one board instead of dragging them across panes |
-| Refine exact prompt text | Multiline Unicode editing, selection, logical-line deletion, and persistent editor undo |
-| Preserve alternatives | Duplicate, revise, reorder, or remove thoughts with durable board undo and recovery |
+| Refine exact prompt text | Multiline Unicode editing, smart lists, nested indentation, selection, fast navigation, and persistent editor undo/redo |
+| Preserve alternatives | Duplicate, revise, reorder, or remove thoughts with durable board undo/redo and recovery |
 | Compose the final prompt | Use range selection or the whole board, concatenated in visible order with one blank line between thoughts |
 | Reuse local agent tooling | Complete discovered skills, commands, and invokable agents while authoring without executing them |
-| Survive interruption | Autosave, exact resume guidance, session search, recovery export, and undo after restart |
+| Survive interruption | Autosave, durable blank thoughts, exact resume guidance, session search, recovery export, and undo/redo after restart |
 | Work with any destination | Native copy and non-destructive cut work without an integration or account |
 | Correct the wrong board | Send a thought to another named Proqi session, optionally removing it after delivery |
 | Submit directly when verified | Optional Herdr delivery to eligible adjacent coding-agent panes in all four directions |
@@ -217,24 +234,30 @@ fallbacks remain available when a terminal cannot report a modifier.
 
 | Input | Action |
 | --- | --- |
-| Paste or click `+ New thought` | Create and focus a thought |
+| `n`, `Enter` on `+ New thought`, paste, or click the insertion row | Create and focus a durable thought |
+| `Primary+V` with no thought selected | Create a thought from the native clipboard |
 | `j` / `k` or arrows | Focus the next or previous thought, including `+ New thought` |
 | `Enter` or `e` | Edit the focused thought |
-| `Meta+J` / `Meta+K`, `Meta+Shift+↓` / `Meta+Shift+↑`, or drag | Reorder the focused thought |
+| `Primary+J` / `Primary+K`, `Primary+Shift+↓` / `Primary+Shift+↑`, or drag | Reorder the focused thought |
 | `y` or `Primary+C` | Copy the complete thought |
 | `x` or `Primary+X` | Cut only after confirmed clipboard success |
+| `d` | Delete without changing the clipboard |
 | `Space` | Add or remove the focused thought from the multi-selection |
 | `a` or `Primary+A` | Select every live thought; repeat safely, `Esc` clears |
 | `Shift+↑` / `Shift+↓`, or `K` / `J` | Extend or shrink one anchored contiguous range |
 | `v`, then arrows, `j` / `k`, or a thought click | Latch modifier-free contiguous range selection |
 | `Primary+D` | Duplicate the focused thought or selection below its source range |
-| `s`, then direction when needed | Submit selected thoughts and remove only after acceptance |
-| `S`, then direction when needed | Submit selected thoughts and keep them |
-| `u` | Undo the latest board operation |
+| `s`, then arrows or `h` / `j` / `k` / `l` when needed | Submit selected thoughts and remove only after acceptance |
+| `S`, then arrows or `h` / `j` / `k` / `l` when needed | Submit selected thoughts and keep them |
+| `u` or `Primary+Z` | Undo the latest board operation |
+| `Primary+Shift+Z` or `Primary+Y` | Redo the latest board operation |
 | `c` | Collapse or expand long context |
 | `/` | Search thought content |
 | `:` | Search commands |
+| `i` | Enable, disable, or resume the macOS-only Screenshot Inbox |
 | `?` | Open contextual help |
+| `Esc` | Clear the current board selection or range latch |
+| `q` or `Primary+Q` | Exit after durable work is flushed |
 
 ### Editor controls
 
@@ -244,8 +267,11 @@ fallbacks remain available when a terminal cannot report a modifier.
 | `Primary+A` | Select all text |
 | `Primary+U` | Delete one logical line |
 | `Primary+Z` | Undo an edit |
-| `Shift+Primary+Z` | Redo an edit |
-| `Primary+V` | Read the native clipboard |
+| `Primary+Shift+Z` or `Primary+Y` | Redo an edit |
+| `Primary+C` / `Primary+X` / `Primary+V` | Copy, cut, or paste through the native clipboard |
+| `Alt+←` / `Alt+→`, or `Ctrl+←` / `Ctrl+→` | Move by Unicode word |
+| `Home` / `End` | Move to the current logical line boundary |
+| `Shift` plus a movement key | Extend the text selection |
 | `Alt+↑` / `Alt+↓` | Jump exactly five wrapped visual rows while preserving the preferred terminal-cell column |
 | `Primary+↑` / `Primary+↓` | Move to the exact beginning or end of the current thought |
 | `Enter` | Continue `-`, `*`, `+`, ordered, and task list items; exit an empty top-level item |
@@ -596,6 +622,45 @@ search = "/"
 commands = ":"
 help = "?"
 quit = "q"
+screenshot_inbox = "i"
+```
+
+### Screenshot Inbox on macOS
+
+Choose **Enable Screenshot Inbox** in the command palette or press `i` in board
+mode. While active, the footer shows `inbox listening`; the same command becomes
+**Disable Screenshot Inbox**. Proqi snapshots the watched directory at activation
+and appends only new, completed screenshots made by the normal macOS screenshot
+tool. It never takes screenshots, changes macOS screenshot settings, uploads or
+analyzes image content, or copies or rewrites the source image.
+
+The default directory is the current user's Desktop. macOS may require **Files &
+Folders** access for the terminal host running Proqi; Proqi reports that host by
+name when access is unavailable. Screen Recording and Accessibility access are not
+used. Linux reports **Screenshot Inbox is available on macOS only**.
+
+Only one live Proqi process can listen across the current-user installation. If
+another compatible session owns capture, Proqi offers **Cancel** or **Take over**.
+Takeover asks the verified owner to reconcile and durably drain accepted captures
+before releasing the operating-system lock; a live or incompatible owner is never
+force-unlocked.
+
+The optional settings below show every default. `filename_patterns` contains
+user-defined, language-appropriate filename fallbacks; there is no built-in
+localization table. `capture_all_new_images` must be set explicitly to accept all
+otherwise valid new images.
+
+```toml
+[screenshot_inbox]
+# directory = "/absolute/path/to/an/isolated/inbox" # defaults to macOS Desktop
+filename_patterns = []
+capture_all_new_images = false
+supported_types = ["png", "jpeg", "tiff"]
+min_file_bytes = 64
+max_file_bytes = 67108864
+max_dimension = 16384
+max_pixels = 100000000
+debounce_ms = 350
 ```
 
 Additional local roots are optional and must state their definition kind,
