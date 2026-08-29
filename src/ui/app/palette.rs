@@ -5,7 +5,9 @@ use crate::{
     ports::environment::{Clock, IdGenerator},
 };
 
-use super::{BoardApp, UiInput, UiKey, query::QueryEditor};
+use super::{
+    BoardApp, UiInput, UiKey, palette_handoff::EditorSelectionHandoff, query::QueryEditor,
+};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Command {
@@ -17,6 +19,8 @@ enum Command {
     SendSessionRemove,
     Edit,
     PlainNewline,
+    Indent,
+    Outdent,
     Delete,
     Copy,
     Cut,
@@ -45,13 +49,15 @@ enum Command {
 }
 
 impl Command {
-    const ALL: [(Self, &'static str); 33] = [
+    const ALL: [(Self, &'static str); 35] = [
         (Self::New, "New thought"),
         (Self::RenameSession, "Rename session"),
         (Self::CopySessionId, "Copy session ID"),
         (Self::CopyResume, "Copy resume command"),
         (Self::Edit, "Edit thought"),
         (Self::PlainNewline, "Insert plain newline"),
+        (Self::Indent, "Indent line or selection"),
+        (Self::Outdent, "Outdent line or selection"),
         (Self::Delete, "Delete thought"),
         (Self::Copy, "Copy thought"),
         (Self::Cut, "Cut thought"),
@@ -91,16 +97,22 @@ pub(super) struct PaletteState {
     scroll: usize,
     submit_supported: bool,
     plain_newline_supported: bool,
+    selection_handoff: Option<EditorSelectionHandoff>,
 }
 
 impl PaletteState {
-    fn new(submit_supported: bool, plain_newline_supported: bool) -> Self {
+    fn new(
+        submit_supported: bool,
+        plain_newline_supported: bool,
+        selection_handoff: Option<EditorSelectionHandoff>,
+    ) -> Self {
         Self {
             query: QueryEditor::default(),
             selected: 0,
             scroll: 0,
             submit_supported,
             plain_newline_supported,
+            selection_handoff,
         }
     }
 
@@ -139,7 +151,9 @@ impl PaletteState {
             | Command::SubmitKeep
             | Command::SubmitAllRemove
             | Command::SubmitAllKeep => self.submit_supported,
-            Command::PlainNewline => self.plain_newline_supported,
+            Command::PlainNewline | Command::Indent | Command::Outdent => {
+                self.plain_newline_supported
+            }
             _ => true,
         }
     }
@@ -158,6 +172,7 @@ impl BoardApp {
         self.palette = Some(PaletteState::new(
             self.supports_submission(),
             !self.insertion_focused() && self.state.focused_thought.is_some(),
+            self.palette_selection_handoff.take(),
         ));
     }
 
@@ -180,9 +195,13 @@ impl BoardApp {
             .as_ref()
             .and_then(|palette| palette.matches().get(index).copied())
             .map(|(command, _)| command);
+        let selection_handoff = self
+            .palette
+            .as_mut()
+            .and_then(|palette| palette.selection_handoff.take());
         self.palette = None;
         command.map_or_else(Vec::new, |command| {
-            self.execute_command(command, ids, clock)
+            self.execute_command(command, selection_handoff, ids, clock)
         })
     }
 
@@ -291,10 +310,14 @@ impl BoardApp {
     fn execute_command(
         &mut self,
         command: Command,
+        selection_handoff: Option<EditorSelectionHandoff>,
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
         if let Some(effects) = self.execute_submission_command(command, ids, clock) {
+            return effects;
+        }
+        if let Some(effects) = self.execute_editor_command(command, selection_handoff, ids, clock) {
             return effects;
         }
         match command {
@@ -310,15 +333,6 @@ impl BoardApp {
             Command::Edit => {
                 self.enter_edit();
                 Vec::new()
-            }
-            Command::PlainNewline => {
-                if !matches!(
-                    self.state.mode,
-                    crate::application::InteractionMode::Edit { .. }
-                ) {
-                    self.enter_edit();
-                }
-                self.insert_newline(false, ids, clock)
             }
             Command::Delete => self.delete(ids, clock),
             Command::Copy => self.copy_active(ids),
@@ -340,7 +354,10 @@ impl BoardApp {
             Command::SubmitRemove
             | Command::SubmitKeep
             | Command::SubmitAllRemove
-            | Command::SubmitAllKeep => Vec::new(),
+            | Command::SubmitAllKeep
+            | Command::PlainNewline
+            | Command::Indent
+            | Command::Outdent => Vec::new(),
             Command::RefreshAgents => self.refresh_agents(),
             Command::InsertInvocation => {
                 self.open_invocation_picker();
@@ -392,5 +409,31 @@ impl BoardApp {
             Command::SubmitAllKeep => Some(self.begin_delivery_all(Keep, ids, clock)),
             _ => None,
         }
+    }
+
+    fn execute_editor_command(
+        &mut self,
+        command: Command,
+        selection_handoff: Option<EditorSelectionHandoff>,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Option<Vec<Effect>> {
+        if !matches!(
+            command,
+            Command::PlainNewline | Command::Indent | Command::Outdent
+        ) {
+            return None;
+        }
+        if !matches!(
+            self.state.mode,
+            crate::application::InteractionMode::Edit { .. }
+        ) {
+            self.enter_edit();
+        }
+        if command == Command::PlainNewline {
+            return Some(self.insert_newline(false, ids, clock));
+        }
+        self.restore_palette_selection_handoff(selection_handoff);
+        Some(self.apply_indentation(command == Command::Outdent, ids, clock))
     }
 }

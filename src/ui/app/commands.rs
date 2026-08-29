@@ -122,6 +122,7 @@ impl BoardApp {
             | UiKey::Duplicate
             | UiKey::Quit
             | UiKey::Tab
+            | UiKey::BackTab
             | UiKey::PickerPrevious
             | UiKey::PickerNext
             | UiKey::PrimaryCharacter(_)
@@ -266,6 +267,9 @@ impl BoardApp {
         if matches!(key, UiKey::Enter) && self.should_insert_smart_newline() {
             return self.insert_newline(true, ids, clock);
         }
+        if matches!(key, UiKey::Tab | UiKey::BackTab) {
+            return self.apply_indentation(matches!(key, UiKey::BackTab), ids, clock);
+        }
         let adjacent_fold = match key {
             UiKey::Backspace => self.delete_adjacent_fold(true),
             UiKey::Delete => self.delete_adjacent_fold(false),
@@ -343,6 +347,7 @@ impl BoardApp {
     ) -> Vec<Effect> {
         self.edit_boundary = None;
         let thought_id = self.active_thought_id();
+        self.capture_palette_selection_handoff();
         let effects = self.flush_pending_edit(ids, clock);
         if let Some(thought_id) = thought_id {
             self.clear_expanded_folds(thought_id);

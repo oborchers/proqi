@@ -87,7 +87,24 @@ pub enum EditCommand {
     /// Insert a line feed.
     InsertNewline,
     /// Insert a newline with conservative Markdown list continuation.
-    InsertSmartNewline,
+    InsertSmartNewline {
+        /// Spaces used for every list indentation level.
+        indent_width: u8,
+    },
+    /// Indent the current list item or every selected logical line.
+    Indent {
+        /// Configured space indentation width.
+        width: u8,
+        /// Whether recognized list items receive structure-aware indentation.
+        smart_lists: bool,
+    },
+    /// Outdent the current list item or every selected logical line.
+    Outdent {
+        /// Configured space indentation width.
+        width: u8,
+        /// Whether recognized list items may be outdented.
+        smart_lists: bool,
+    },
     /// Delete the grapheme before the cursor or the selection.
     DeleteBack,
     /// Delete the grapheme after the cursor or the selection.

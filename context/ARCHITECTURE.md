@@ -711,9 +711,21 @@ the document's local LF or CRLF convention, and reports continuation or marker
 removal as one explicit text-change transaction. The UI flushes that transaction
 as one persistent revision. Selection replacement uses the ordinary newline
 command, bracketed paste remains a distinct exact payload, and the command
-palette exposes the ordinary newline command directly. This boundary can later
-gain explicit indentation commands without making Tab or Shift+Tab part of the
-current behavior.
+palette exposes the ordinary newline command directly. Terminal Tab and BackTab
+normalize to distinct UI intentions. The application supplies the validated
+`list_indent_width` and smart-list policy to explicit editor indent or outdent
+commands, then flushes each command as one persistent revision. The editor
+computes all touched logical-line replacements against the same before document
+and reports one ordered `TextChangeSet`; a selection ending at column zero
+excludes that following line. Recognized list indentation reuses exact existing
+prefix bytes. Each level adds or removes exactly one configured space unit
+regardless of marker width, while an established tab-indented prefix adds or
+removes one tab. No parent-content offset participates in indentation or
+outdent, and later ordered markers are never renumbered. Outside recognized list
+context, Tab is exact space insertion and BackTab is a no-op. Palette commands
+route through the same intentions for modifier-independent keyboard and mouse
+access. An editor selection handed through Escape is transiently available only
+to the next command-palette indent or outdent on the same unchanged thought.
 
 Bracketed paste is one payload and one undoable edit. When no thought is
 selected, paste creates and focuses a new thought. The application never tries

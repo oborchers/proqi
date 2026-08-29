@@ -10,7 +10,7 @@ use crate::{
 use super::{ThemeSource, load_settings};
 
 #[test]
-fn missing_config_uses_the_adaptive_default() {
+fn missing_config_uses_the_narrow_pane_default() {
     let directory = tempfile::tempdir().expect("config directory");
     let settings = load_settings(directory.path()).expect("defaults");
     assert_eq!(settings.ui.keybindings.new, 'n');
@@ -20,6 +20,7 @@ fn missing_config_uses_the_adaptive_default() {
     assert_eq!(settings.ui.keybindings.select_all, 'a');
     assert!(!settings.ui.show_session_id);
     assert!(settings.ui.smart_lists);
+    assert_eq!(settings.ui.list_indent_width, 2);
     assert_eq!(settings.theme.base, ThemePreference::Auto);
     assert_eq!(settings.theme_source, ThemeSource::BuiltIn);
 }
@@ -76,6 +77,7 @@ fn existing_settings_remain_compatible() {
     assert!(!settings.ui.check_for_updates);
     assert!(!settings.ui.show_session_id);
     assert!(settings.ui.smart_lists);
+    assert_eq!(settings.ui.list_indent_width, 2);
     assert_eq!(settings.ui.density, BoardDensity::Compact);
     assert_eq!(settings.theme.base, ThemePreference::Dark);
 }
@@ -144,6 +146,27 @@ fn smart_lists_can_be_disabled_without_changing_existing_config_defaults() {
     .expect("write config");
     let settings = load_settings(directory.path()).expect("settings");
     assert!(!settings.ui.smart_lists);
+}
+
+#[test]
+fn list_indentation_width_is_configurable_and_bounded() {
+    let directory = tempfile::tempdir().expect("config directory");
+    fs::write(
+        directory.path().join("config.toml"),
+        "list_indent_width = 3\n",
+    )
+    .expect("write config");
+    let settings = load_settings(directory.path()).expect("settings");
+    assert_eq!(settings.ui.list_indent_width, 3);
+
+    for invalid in [0, 9] {
+        fs::write(
+            directory.path().join("config.toml"),
+            format!("list_indent_width = {invalid}\n"),
+        )
+        .expect("write invalid config");
+        assert!(load_settings(directory.path()).is_err());
+    }
 }
 
 #[test]

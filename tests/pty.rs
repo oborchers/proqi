@@ -491,3 +491,7 @@ fn json_command(binary: &str, state: &std::path::Path, arguments: &[&str]) -> Va
 
 #[path = "pty/select_all.rs"]
 mod select_all;
+
+#[cfg(target_os = "macos")]
+#[path = "pty/smart_lists.rs"]
+mod smart_lists;

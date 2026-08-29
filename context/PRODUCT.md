@@ -647,7 +647,21 @@ one persistent editor revision. Selection replacement and paste stay exact and
 never invoke list continuation. Escaped markers, thematic breaks, fenced code,
 and conservatively detected indented code remain plain text. The command
 palette provides an explicit plain-newline action without requiring a terminal
-modifier. Nested Tab and Shift+Tab indentation remain a later feature.
+modifier. `Tab` nests a recognized item, and `Shift+Tab` or terminal BackTab
+outdents it one level. An empty nested item outdents one level without inserting
+a newline; a later `Enter` at top level exits the list. Multi-line indentation
+addresses every selected logical line except a following line touched only by a
+column-zero endpoint. Each intention is one editor undo step and one persistent
+revision. Every nesting level uses the configurable `list_indent_width`, which
+defaults to two spaces for narrow panes, regardless of a list marker's display
+width. Existing tab-indented lists add and remove one tab per level without
+rewriting their prefix bytes. Ordered markers elsewhere are never
+cascade-renumbered. Outside supported
+list context, `Tab` inserts the configured spaces exactly and `Shift+Tab` leaves
+ordinary text unchanged. The palette exposes indent and outdent actions for
+keyboard and mouse use without modifier forwarding. With `smart_lists = false`,
+list-aware Enter and outdent stay disabled while ordinary Tab insertion remains
+available.
 
 Leaving edit mode returns to the same board position and keeps the edited
 thought selected.
