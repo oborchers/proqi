@@ -206,7 +206,7 @@ impl BoardApp {
     /// Active delivery intention while a direction is being selected.
     #[must_use]
     pub fn submission_mode(&self) -> Option<crate::ports::agent::SubmissionDisposition> {
-        self.submission_mode.map(|mode| mode.disposition)
+        self.submission_mode.as_ref().map(|mode| mode.disposition)
     }
 
     /// Prepare current frame geometry without changing the logical cursor.

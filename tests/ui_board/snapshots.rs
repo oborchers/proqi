@@ -315,6 +315,24 @@ fn command_palette_clears_wide_glyphs_crossing_its_border() {
 }
 
 #[test]
+fn submit_all_palette_actions_are_complete_and_direct() {
+    let mut fixture = Fixture::new();
+    fixture.paste("first\nGrüße 👩‍💻");
+    fixture.input(UiInput::Key(UiKey::Escape));
+    fixture
+        .app
+        .complete_agent_discovery(Ok(vec![super::agent::target(
+            proqi::domain::Direction::Right,
+            "w1:p2",
+        )]));
+    fixture.input(UiInput::Key(UiKey::Character(':')));
+    for character in "submit all".chars() {
+        fixture.input(UiInput::Key(UiKey::Character(character)));
+    }
+    insta::assert_snapshot!(snapshot(&mut fixture, 72, 14, ThemePreference::Dark));
+}
+
+#[test]
 fn expanded_debug_session_identity_preserves_footer_band_order() {
     let settings = UiSettings {
         show_session_id: true,

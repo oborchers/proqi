@@ -64,9 +64,9 @@ The brief must contain:
   and useful upstream or open-source implementations;
 - permission to use read-only research subagents when valuable, while keeping a
   single implementation owner and avoiding overlapping edits;
-- focused and canonical test expectations, snapshot review, real Herdr/API/PTY
-  or visual verification when relevant, and the prohibition against weakening
-  gates;
+- focused and canonical test expectations, snapshot review, and the mandatory
+  live Herdr stress checkpoint below, including real API, PTY, or visual paths
+  that the feature exposes, plus the prohibition against weakening gates;
 - permission boundaries for credentials and external actions: use only supplied
   credentials, never copy secrets into prompts, files, logs, commits, PRs, or
   comments, and use the user's configured Git/GitHub identity;
@@ -118,6 +118,29 @@ blocked transition, keep the goal active and still report immediately.
 - When the feature integrates with Herdr or a harness, exercise the real
   structured API and relevant UI/PTY behavior in the worker's Herdr workspace.
   A mock-only result is insufficient when live qualification is feasible.
+- Before handoff, run the implemented feature from the exact topic-branch build
+  in a disposable live pane inside the assigned Herdr workspace and actively try
+  to break it. This is a completion gate, not an optional walkthrough or a
+  substitute for automated tests.
+- Derive an adversarial matrix from the feature's actual risks. At minimum,
+  exercise applicable boundary and empty inputs, unusually large content or
+  collections, overflow and narrow/shallow layouts, Unicode and control-heavy
+  text, rapid or repeated input, repeated activation/deactivation, cancellation,
+  resize/reflow, and restart or recovery. Repeat idempotent actions enough to
+  prove that they converge on the same result without duplicate durable writes,
+  deliveries, receipts, or resources. For a nonvisual feature, drive the real
+  command, API, persistence, or integration path from that live pane rather than
+  inventing a cosmetic TUI scenario.
+- Exercise meaningful combinations with neighboring state such as editing,
+  selection, collapse, scrolling, pending persistence, failure, retry, and undo
+  when the ticket can interact with them. Use both keyboard and mouse paths when
+  the behavior has both. Do not use private user content or perform an
+  irreversible external action merely to manufacture stress evidence.
+- Treat every failure found during the stress pass as implementation work:
+  reproduce it with a focused automated regression where practical, fix it, and
+  rerun the relevant stress case and canonical gate. An unresolved defect means
+  the lane is blocked or incomplete and must be reported; it cannot be hidden as
+  a residual risk while declaring the goal complete.
 - Record every temporary test tab and pane as it is created. Close those
   disposable resources before handoff, remove only test state created by the
   worker, and report the live scenarios exercised plus any resource that could
@@ -148,7 +171,9 @@ pane containing:
 
 - pull-request URL, branch, base and head SHAs, and worktree/workspace IDs;
 - implementation summary and important design decisions;
-- focused, canonical, live, and manual verification performed;
+- focused and canonical verification plus a concrete stress-test matrix listing
+  the live inputs, repetitions, boundary conditions, state combinations, and
+  observed results; never summarize this only as "manual testing passed";
 - CI status and any residual risks or intentionally deferred work;
 - exact cleanup identifiers.
 

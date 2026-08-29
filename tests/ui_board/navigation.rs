@@ -92,11 +92,17 @@ fn wide_help_uses_at_most_two_strictly_aligned_columns() {
         .lines()
         .find(|line| line.contains("Quit"))
         .expect("quit row");
-    let first = rendered
+    let first_row = rendered
         .lines()
         .find(|line| line.contains("New"))
         .expect("first shortcut row");
-    assert_eq!(quit.find("Quit"), first.find("New"), "{quit}");
+    let first_column = first_row.find("New").expect("first column");
+    let second_column = first_row.find("Edit").expect("second column");
+    let quit_column = quit.find("Quit").expect("quit column");
+    assert!(
+        [first_column, second_column].contains(&quit_column),
+        "{quit}"
+    );
 }
 
 #[test]

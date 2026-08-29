@@ -488,3 +488,6 @@ fn json_command(binary: &str, state: &std::path::Path, arguments: &[&str]) -> Va
     assert!(output.status.success());
     serde_json::from_slice(&output.stdout).expect("JSON output")
 }
+
+#[path = "pty/select_all.rs"]
+mod select_all;

@@ -17,6 +17,7 @@ fn missing_config_uses_the_narrow_pane_default() {
     assert_eq!(settings.ui.keybindings.range_up, 'K');
     assert_eq!(settings.ui.keybindings.range_down, 'J');
     assert_eq!(settings.ui.keybindings.range_select, 'v');
+    assert_eq!(settings.ui.keybindings.select_all, 'a');
     assert!(!settings.ui.show_session_id);
     assert!(settings.ui.smart_lists);
     assert_eq!(settings.ui.list_indent_width, 2);
@@ -50,6 +51,18 @@ fn range_selection_latch_binding_is_remappable() {
 }
 
 #[test]
+fn whole_board_selection_binding_is_remappable() {
+    let directory = tempfile::tempdir().expect("config directory");
+    fs::write(
+        directory.path().join("config.toml"),
+        "[keybindings]\nselect_all = 'z'\n",
+    )
+    .expect("write config");
+    let settings = load_settings(directory.path()).expect("settings");
+    assert_eq!(settings.ui.keybindings.select_all, 'z');
+}
+
+#[test]
 fn existing_settings_remain_compatible() {
     let directory = tempfile::tempdir().expect("config directory");
     fs::write(
@@ -60,6 +73,7 @@ fn existing_settings_remain_compatible() {
     let settings = load_settings(directory.path()).expect("settings");
     assert_eq!(settings.ui.keybindings.new, 't');
     assert_eq!(settings.ui.keybindings.range_select, 'v');
+    assert_eq!(settings.ui.keybindings.select_all, 'a');
     assert!(!settings.ui.check_for_updates);
     assert!(!settings.ui.show_session_id);
     assert!(settings.ui.smart_lists);

@@ -750,6 +750,13 @@ snapshot before entering edit mode. Bulk application actions continue to receive
 only ordered thought identities and do not depend on terminal modifiers or this
 UI selection representation.
 
+The remappable `select_all` board command replaces the arbitrary set with every
+live thought identity in current board order. Forwarded `Primary+A` resolves to
+that board command, while edit mode retains the editor's complete-text action.
+Whole-board palette submissions capture the live ordered identities directly;
+direction choice and target revalidation neither reconstruct nor mutate the
+visible selection.
+
 The normalized paste payload carries exact text plus optional typed provenance.
 Attachment annotations retain only presentation-safe metadata and byte ranges;
 the absolute path remains the canonical text. Large-paste annotations retain
@@ -802,6 +809,12 @@ post-submit agent state is advisory, including `blocked`, `unknown`, or no
 reported state. The accepted outcome is journaled durably before an unchanged
 thought may be removed. That deletion remains undoable. Every failure preserves
 the thought.
+
+Whole-board keep and remove actions reuse this exact request, journal, receipt,
+and deletion path with every live source identity. Prompt assembly uses the same
+canonical blank-line separator and target-aware shared-starter policy as an
+ordinary multi-selection. Empty boards do not create an attempt, and several
+eligible directions use the existing chooser without a confirmation step.
 
 Submission attempts use a content-redacted SQLite journal. Proqi first reserves
 every source thought in `prepared`, compare-and-sets the attempt to `sending`,
