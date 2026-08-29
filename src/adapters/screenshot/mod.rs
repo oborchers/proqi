@@ -7,9 +7,11 @@ mod macos;
 #[cfg(target_os = "macos")]
 mod pattern;
 
+use std::sync::Arc;
+
 use crate::ports::screenshot::{
-    ActiveScreenshotWatcher, ScreenshotCandidate, ScreenshotError, ScreenshotInboxConfig,
-    ScreenshotWatcherFactory,
+    ActiveScreenshotWatcher, ScreenshotCancellation, ScreenshotCandidate, ScreenshotError,
+    ScreenshotInboxConfig, ScreenshotWatcherFactory,
 };
 
 /// Injected system factory for the platform-specific watcher.
@@ -21,8 +23,9 @@ impl ScreenshotWatcherFactory for SystemScreenshotWatcherFactory {
         &self,
         config: ScreenshotInboxConfig,
         terminal_host: &str,
+        cancellation: Arc<dyn ScreenshotCancellation>,
     ) -> Result<Box<dyn ActiveScreenshotWatcher>, ScreenshotError> {
-        SystemScreenshotWatcher::start(config, terminal_host)
+        SystemScreenshotWatcher::start_cancellable(config, terminal_host, cancellation)
             .map(|watcher| Box::new(watcher) as Box<dyn ActiveScreenshotWatcher>)
     }
 }
@@ -53,14 +56,23 @@ impl SystemScreenshotWatcher {
         config: ScreenshotInboxConfig,
         terminal_host: &str,
     ) -> Result<Self, ScreenshotError> {
+        Self::start_cancellable(config, terminal_host, Arc::new(NeverCancelled))
+    }
+
+    fn start_cancellable(
+        config: ScreenshotInboxConfig,
+        terminal_host: &str,
+        cancellation: Arc<dyn ScreenshotCancellation>,
+    ) -> Result<Self, ScreenshotError> {
         config.validate()?;
         #[cfg(target_os = "macos")]
         {
-            macos::MacScreenshotWatcher::start(config, terminal_host).map(|inner| Self { inner })
+            macos::MacScreenshotWatcher::start(config, terminal_host, cancellation)
+                .map(|inner| Self { inner })
         }
         #[cfg(not(target_os = "macos"))]
         {
-            let _ = (config, terminal_host);
+            let _ = (config, terminal_host, cancellation);
             Err(ScreenshotError::UnsupportedPlatform)
         }
     }
@@ -91,5 +103,13 @@ impl SystemScreenshotWatcher {
         }
         #[cfg(not(target_os = "macos"))]
         Err(ScreenshotError::UnsupportedPlatform)
+    }
+}
+
+struct NeverCancelled;
+
+impl ScreenshotCancellation for NeverCancelled {
+    fn is_cancelled(&self) -> bool {
+        false
     }
 }

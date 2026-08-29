@@ -356,11 +356,7 @@ fn drive(
             enqueue_effects(app, lanes, capture_effects, &mut pending)?;
             redraw = true;
         }
-        if capture.release_when_drained && !app.screenshot_has_durable_work() {
-            capture.lease = None;
-            capture.release_when_drained = false;
-            capture.takeover_stopping = false;
-        }
+        screenshot_results::release_if_drained(app, &mut capture);
         if app.edit_generation() != edit_generation {
             edit_generation = app.edit_generation();
             edit_deadline = app

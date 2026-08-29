@@ -6,7 +6,8 @@ use std::{
     fs::{self, File},
     os::{macos::fs::MetadataExt as _, unix::fs::MetadataExt as _},
     path::PathBuf,
-    time::{SystemTime, UNIX_EPOCH},
+    sync::Arc,
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use kqueue::{EventFilter, FilterFlag, Watcher};
@@ -16,9 +17,35 @@ use xattr::FileExt as _;
 
 use super::pattern::wildcard_match;
 use crate::ports::screenshot::{
-    ScreenshotCandidate, ScreenshotError, ScreenshotFingerprint, ScreenshotImageType,
-    ScreenshotInboxConfig,
+    MAX_RECONCILIATION_ENTRIES, ScreenshotCancellation, ScreenshotCandidate, ScreenshotError,
+    ScreenshotFingerprint, ScreenshotImageType, ScreenshotInboxConfig,
 };
+
+const FINAL_EVENT_LIMIT: usize = 32;
+
+trait DirectoryEvents: Send {
+    fn wait(&mut self, timeout: Duration) -> Result<bool, ScreenshotError>;
+}
+
+trait MonotonicClock: Send + Sync {
+    fn now(&self) -> Duration;
+}
+
+struct KqueueEvents(Watcher);
+
+impl DirectoryEvents for KqueueEvents {
+    fn wait(&mut self, timeout: Duration) -> Result<bool, ScreenshotError> {
+        Ok(self.0.poll(Some(timeout)).is_some())
+    }
+}
+
+struct SystemMonotonicClock(Instant);
+
+impl MonotonicClock for SystemMonotonicClock {
+    fn now(&self) -> Duration {
+        self.0.elapsed()
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 struct FileIdentity {
@@ -41,14 +68,17 @@ struct PendingCandidate {
     path: PathBuf,
     image_type: ScreenshotImageType,
     first_observed: u64,
-    stable_observations: u8,
+    stable_since: Duration,
 }
 
 pub(super) struct MacScreenshotWatcher {
     config: ScreenshotInboxConfig,
     terminal_host: String,
     directory: File,
-    watcher: Watcher,
+    events: Box<dyn DirectoryEvents>,
+    clock: Arc<dyn MonotonicClock>,
+    cancellation: Arc<dyn ScreenshotCancellation>,
+    entry_limit: usize,
     baseline: HashSet<FileIdentity>,
     delivered: HashSet<FileIdentity>,
     pending: HashMap<FileIdentity, PendingCandidate>,
@@ -59,7 +89,9 @@ impl MacScreenshotWatcher {
     pub(super) fn start(
         config: ScreenshotInboxConfig,
         terminal_host: &str,
+        cancellation: Arc<dyn ScreenshotCancellation>,
     ) -> Result<Self, ScreenshotError> {
+        config.validate()?;
         let directory = File::open(&config.directory)
             .map_err(|error| start_access_error(&error, terminal_host))?;
         let metadata = directory
@@ -85,11 +117,40 @@ impl MacScreenshotWatcher {
             .and_then(|()| watcher.watch())
             .map_err(|_| ScreenshotError::Watcher)?;
         let activation = system_nanos();
+        Self::initialize(
+            config,
+            terminal_host,
+            directory,
+            Box::new(KqueueEvents(watcher)),
+            Arc::new(SystemMonotonicClock(Instant::now())),
+            cancellation,
+            MAX_RECONCILIATION_ENTRIES,
+            activation,
+        )
+    }
+
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "watcher dependencies stay explicit"
+    )]
+    fn initialize(
+        config: ScreenshotInboxConfig,
+        terminal_host: &str,
+        directory: File,
+        events: Box<dyn DirectoryEvents>,
+        clock: Arc<dyn MonotonicClock>,
+        cancellation: Arc<dyn ScreenshotCancellation>,
+        entry_limit: usize,
+        activation: u128,
+    ) -> Result<Self, ScreenshotError> {
         let mut state = Self {
             config,
             terminal_host: terminal_host_label(terminal_host),
             directory,
-            watcher,
+            events,
+            clock,
+            cancellation,
+            entry_limit,
             baseline: HashSet::new(),
             delivered: HashSet::new(),
             pending: HashMap::new(),
@@ -100,25 +161,71 @@ impl MacScreenshotWatcher {
                 state.baseline.insert(identity);
             }
         }
+        let now = state.clock.now();
         for file in state.scan()? {
-            state.observe(file);
+            state.observe(file, now);
         }
         Ok(state)
     }
 
     pub(super) fn poll(&mut self) -> Result<Vec<ScreenshotCandidate>, ScreenshotError> {
-        let _hint = self.watcher.poll(Some(self.config.debounce));
-        self.reconcile()
+        let now = self.clock.now();
+        if self.ready_at(now) {
+            return self.reconcile(now);
+        }
+        let wait = self.wait_duration(now);
+        let hinted = self.events.wait(wait)?;
+        let observed_at = self.clock.now();
+        if hinted || self.ready_at(observed_at) {
+            self.reconcile(observed_at)
+        } else {
+            Ok(Vec::new())
+        }
     }
 
     pub(super) fn final_reconcile(&mut self) -> Result<Vec<ScreenshotCandidate>, ScreenshotError> {
-        let mut ready = self.reconcile()?;
-        let _hint = self.watcher.poll(Some(self.config.debounce));
-        ready.extend(self.reconcile()?);
+        let started = self.clock.now();
+        let deadline = started.saturating_add(self.config.debounce);
+        let mut ready = self.reconcile(started)?;
+        for _ in 0..FINAL_EVENT_LIMIT {
+            if self.pending.is_empty() {
+                break;
+            }
+            let now = self.clock.now();
+            if now >= deadline {
+                break;
+            }
+            let wait = self.wait_duration(now).min(deadline.saturating_sub(now));
+            let hinted = self.events.wait(wait)?;
+            let observed_at = self.clock.now();
+            if hinted || self.ready_at(observed_at) || observed_at >= deadline {
+                ready.extend(self.reconcile(observed_at)?);
+            }
+        }
         Ok(ready)
     }
 
-    fn reconcile(&mut self) -> Result<Vec<ScreenshotCandidate>, ScreenshotError> {
+    fn wait_duration(&self, now: Duration) -> Duration {
+        self.pending
+            .values()
+            .map(|candidate| {
+                candidate
+                    .stable_since
+                    .saturating_add(self.config.debounce)
+                    .saturating_sub(now)
+            })
+            .min()
+            .unwrap_or(self.config.debounce)
+            .min(self.config.debounce)
+    }
+
+    fn ready_at(&self, now: Duration) -> bool {
+        self.pending
+            .values()
+            .any(|candidate| now.saturating_sub(candidate.stable_since) >= self.config.debounce)
+    }
+
+    fn reconcile(&mut self, now: Duration) -> Result<Vec<ScreenshotCandidate>, ScreenshotError> {
         let seen = self.scan()?;
         let identities = seen
             .iter()
@@ -127,13 +234,13 @@ impl MacScreenshotWatcher {
         self.pending
             .retain(|identity, _| identities.contains(identity));
         for file in seen {
-            self.observe(file);
+            self.observe(file, now);
         }
         let mut ready = self
             .pending
             .iter()
             .filter_map(|(identity, candidate)| {
-                (candidate.stable_observations >= 2)
+                (now.saturating_sub(candidate.stable_since) >= self.config.debounce)
                     .then_some((*identity, candidate.first_observed))
             })
             .collect::<Vec<_>>();
@@ -144,18 +251,16 @@ impl MacScreenshotWatcher {
             .collect())
     }
 
-    fn observe(&mut self, file: ScannedFile) {
+    fn observe(&mut self, file: ScannedFile, now: Duration) {
         let identity = file.observation.identity;
         if self.baseline.contains(&identity) || self.delivered.contains(&identity) {
             return;
         }
         if let Some(pending) = self.pending.get_mut(&identity) {
-            if pending.observation == file.observation && pending.image_type == file.image_type {
-                pending.stable_observations = pending.stable_observations.saturating_add(1);
-            } else {
+            if pending.observation != file.observation || pending.image_type != file.image_type {
                 pending.observation = file.observation;
                 pending.image_type = file.image_type;
-                pending.stable_observations = 1;
+                pending.stable_since = now;
             }
             pending.path = file.path;
             return;
@@ -168,7 +273,7 @@ impl MacScreenshotWatcher {
                 path: file.path,
                 image_type: file.image_type,
                 first_observed: self.next_observation,
-                stable_observations: 1,
+                stable_since: now,
             },
         );
     }
@@ -187,7 +292,8 @@ impl MacScreenshotWatcher {
         let entries = fs::read_dir(&self.config.directory)
             .map_err(|error| access_error(&error, &self.terminal_host))?;
         let mut files = Vec::new();
-        for entry in entries {
+        for (index, entry) in entries.enumerate() {
+            self.check_scan_bound(index)?;
             let entry = entry.map_err(|_| ScreenshotError::Reconciliation)?;
             if let Some(file) = self.inspect(entry.file_name())? {
                 files.push(file);
@@ -204,13 +310,24 @@ impl MacScreenshotWatcher {
         let entries = fs::read_dir(&self.config.directory)
             .map_err(|error| access_error(&error, &self.terminal_host))?;
         let mut identities = Vec::new();
-        for entry in entries {
+        for (index, entry) in entries.enumerate() {
+            self.check_scan_bound(index)?;
             let entry = entry.map_err(|_| ScreenshotError::Reconciliation)?;
             if let Some(identity) = self.inspect_identity(&entry.file_name())? {
                 identities.push(identity);
             }
         }
         Ok(identities)
+    }
+
+    fn check_scan_bound(&self, index: usize) -> Result<(), ScreenshotError> {
+        if self.cancellation.is_cancelled() {
+            Err(ScreenshotError::Cancelled)
+        } else if index >= self.entry_limit {
+            Err(ScreenshotError::ReconciliationLimit)
+        } else {
+            Ok(())
+        }
     }
 
     fn inspect_identity(&self, name: &OsString) -> Result<Option<FileIdentity>, ScreenshotError> {
@@ -373,116 +490,5 @@ fn terminal_host_label(value: &str) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use std::{fs, os::unix::fs::symlink, time::Duration};
-
-    use super::MacScreenshotWatcher;
-    use crate::adapters::screenshot::pattern::wildcard_match;
-    use crate::ports::screenshot::{ScreenshotBounds, ScreenshotImageType, ScreenshotInboxConfig};
-
-    #[test]
-    fn fallback_patterns_support_localized_unicode_names() {
-        assert!(wildcard_match(
-            "Bildschirmfoto *.png",
-            "Bildschirmfoto 你好.png"
-        ));
-        assert!(wildcard_match("capture-??.jpg", "CAPTURE-01.JPG"));
-        assert!(!wildcard_match("Screenshot *.png", "ordinary.png"));
-    }
-
-    #[test]
-    fn activation_ignores_every_existing_identity_and_delivers_new_unicode_file_once() {
-        let directory = tempfile::tempdir().expect("temporary watched directory");
-        let existing = directory.path().join("existing-partial.png");
-        fs::write(&existing, b"partial").expect("existing partial");
-        let mut watcher = MacScreenshotWatcher::start(config(directory.path()), "Test Terminal")
-            .expect("watcher");
-        fs::write(&existing, png_bytes(20, 10, 80)).expect("complete existing");
-        mark_screenshot(&existing);
-        let created = directory.path().join("Unicode capture 你好 🖼️.png");
-        fs::write(&created, png_bytes(20, 10, 80)).expect("new screenshot");
-        mark_screenshot(&created);
-
-        assert!(watcher.poll().expect("first observation").is_empty());
-        let accepted = watcher.poll().expect("stable observation");
-        assert_eq!(accepted.len(), 1);
-        assert_eq!(accepted[0].path, created);
-        fs::write(&created, png_bytes(20, 10, 96)).expect("repeat modify hint");
-        assert!(watcher.poll().expect("deduplicated modify").is_empty());
-    }
-
-    #[test]
-    fn partial_write_and_rename_completion_require_stability() {
-        let directory = tempfile::tempdir().expect("temporary watched directory");
-        let staging = tempfile::tempdir().expect("temporary staging directory");
-        let mut watcher = MacScreenshotWatcher::start(config(directory.path()), "Test Terminal")
-            .expect("watcher");
-        let partial = directory.path().join("partial.png");
-        fs::write(&partial, b"short").expect("partial write");
-        assert!(watcher.poll().expect("partial scan").is_empty());
-        fs::write(&partial, png_bytes(30, 20, 80)).expect("complete write");
-        mark_screenshot(&partial);
-        assert!(watcher.poll().expect("first complete scan").is_empty());
-        assert_eq!(watcher.poll().expect("stable complete scan").len(), 1);
-
-        let staged = staging.path().join("renamed.png");
-        fs::write(&staged, png_bytes(40, 20, 80)).expect("staged image");
-        mark_screenshot(&staged);
-        let renamed = directory.path().join("renamed.png");
-        fs::rename(staged, &renamed).expect("rename completion");
-        assert!(watcher.poll().expect("first rename scan").is_empty());
-        let accepted = watcher.poll().expect("stable rename scan");
-        assert_eq!(accepted.len(), 1);
-        assert_eq!(accepted[0].path, renamed);
-    }
-
-    #[test]
-    fn symlink_oversize_and_unmarked_images_are_ignored() {
-        let directory = tempfile::tempdir().expect("temporary watched directory");
-        let outside = tempfile::tempdir().expect("temporary outside directory");
-        let mut config = config(directory.path());
-        config.bounds.max_file_bytes = 100;
-        let mut watcher = MacScreenshotWatcher::start(config, "Test Terminal").expect("watcher");
-        let target = outside.path().join("target.png");
-        fs::write(&target, png_bytes(10, 10, 80)).expect("target");
-        mark_screenshot(&target);
-        symlink(&target, directory.path().join("link.png")).expect("symlink");
-        let oversized = directory.path().join("oversized.png");
-        fs::write(&oversized, png_bytes(10, 10, 120)).expect("oversized");
-        mark_screenshot(&oversized);
-        fs::write(directory.path().join("ordinary.png"), png_bytes(10, 10, 80))
-            .expect("ordinary image");
-
-        assert!(watcher.poll().expect("first scan").is_empty());
-        assert!(watcher.poll().expect("second scan").is_empty());
-    }
-
-    fn config(directory: &std::path::Path) -> ScreenshotInboxConfig {
-        ScreenshotInboxConfig {
-            directory: directory.to_path_buf(),
-            filename_patterns: Vec::new(),
-            capture_all_new_images: false,
-            supported_types: vec![ScreenshotImageType::Png],
-            bounds: ScreenshotBounds::default(),
-            debounce: Duration::from_millis(100),
-        }
-    }
-
-    fn png_bytes(width: u32, height: u32, len: usize) -> Vec<u8> {
-        let mut bytes = vec![0; len.max(24)];
-        bytes[..8].copy_from_slice(b"\x89PNG\r\n\x1a\n");
-        bytes[12..16].copy_from_slice(b"IHDR");
-        bytes[16..20].copy_from_slice(&width.to_be_bytes());
-        bytes[20..24].copy_from_slice(&height.to_be_bytes());
-        bytes
-    }
-
-    fn mark_screenshot(path: &std::path::Path) {
-        xattr::set(
-            path,
-            "com.apple.metadata:kMDItemIsScreenCapture",
-            b"bplist00\x09",
-        )
-        .expect("screenshot metadata");
-    }
-}
+#[path = "macos/tests.rs"]
+mod tests;

@@ -212,6 +212,7 @@ impl BoardApp {
         clock: &impl Clock,
     ) -> Vec<Effect> {
         self.reset_pointer_click_for_input(&input);
+        self.note_screenshot_interaction(&input);
         if self.help
             || self.screenshot.takeover.is_some()
             || self.update_prompt.is_some()

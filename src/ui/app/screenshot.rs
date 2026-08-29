@@ -25,8 +25,11 @@ pub(super) enum ScreenshotState {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) enum ScreenshotSave {
-    Ready(crate::ports::store::CaptureCommit),
-    InFlight(crate::ports::store::CaptureCommit),
+    Ready(ScreenshotCandidate),
+    InFlight {
+        candidate: ScreenshotCandidate,
+        commit: Box<crate::ports::store::CaptureCommit>,
+    },
 }
 
 #[derive(Default)]
@@ -38,6 +41,8 @@ pub(super) struct ScreenshotInbox {
     pub(super) takeover_selected: usize,
     auto_ready: Option<crate::domain::ThoughtId>,
     pub(super) notice_count: usize,
+    deferred_quit: bool,
+    deferred_retry_attempted: bool,
 }
 
 impl BoardApp {
@@ -50,6 +55,12 @@ impl BoardApp {
             ui::input::{UiInput, UiKey},
         };
         match input {
+            UiInput::Key(UiKey::Quit) => {
+                if !self.screenshot.deferred_quit {
+                    self.screenshot.deferred_retry_attempted = false;
+                }
+                self.screenshot.deferred_quit = true;
+            }
             UiInput::Key(UiKey::PrimaryShiftMove { movement })
                 if matches!(
                     self.state.mode,
@@ -104,15 +115,17 @@ impl BoardApp {
         Vec::new()
     }
 
-    pub(super) fn toggle_screenshot_inbox(&mut self) -> Vec<Effect> {
+    pub(super) fn toggle_screenshot_inbox(
+        &mut self,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        if let Some(ScreenshotSave::Ready(candidate)) = self.screenshot.save.clone() {
+            return self.prepare_screenshot_save(candidate, ids, clock, true);
+        }
         if !self.screenshot.candidates.is_empty() {
             self.set_info("Screenshot Inbox is finishing captured files");
             return Vec::new();
-        }
-        if let Some(ScreenshotSave::Ready(commit)) = self.screenshot.save.clone() {
-            self.screenshot.save = Some(ScreenshotSave::InFlight(commit.clone()));
-            self.set_info("Retrying Screenshot Inbox save");
-            return vec![Effect::CommitCapture(commit)];
         }
         match self.screenshot.state {
             ScreenshotState::Off => {
@@ -176,6 +189,16 @@ impl BoardApp {
         let Some(candidate) = self.screenshot.candidates.pop_front() else {
             return Vec::new();
         };
+        self.prepare_screenshot_save(candidate, ids, clock, false)
+    }
+
+    fn prepare_screenshot_save(
+        &mut self,
+        candidate: ScreenshotCandidate,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+        retry: bool,
+    ) -> Vec<Effect> {
         match prepare_capture(
             &self.state,
             &candidate,
@@ -184,10 +207,17 @@ impl BoardApp {
             clock.now(),
         ) {
             Ok(commit) => {
-                self.screenshot.save = Some(ScreenshotSave::InFlight(commit.clone()));
+                self.screenshot.save = Some(ScreenshotSave::InFlight {
+                    candidate,
+                    commit: Box::new(commit.clone()),
+                });
+                if retry {
+                    self.set_info("Retrying Screenshot Inbox save");
+                }
                 vec![Effect::CommitCapture(commit)]
             }
             Err(error) => {
+                self.screenshot.save = Some(ScreenshotSave::Ready(candidate));
                 self.set_error(error.to_string());
                 Vec::new()
             }
@@ -197,10 +227,13 @@ impl BoardApp {
     pub(crate) fn complete_screenshot_capture(
         &mut self,
         result: Result<CaptureCommitOutcome, StoreError>,
-    ) {
-        let Some(ScreenshotSave::InFlight(commit)) = self.screenshot.save.take() else {
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        let Some(ScreenshotSave::InFlight { candidate, commit }) = self.screenshot.save.take()
+        else {
             self.set_error("Screenshot Inbox received an unexpected durable result");
-            return;
+            return Vec::new();
         };
         let was_editing = matches!(
             self.state.mode,
@@ -211,41 +244,108 @@ impl BoardApp {
                 && self.state.mode == crate::application::InteractionMode::Edit { thought_id }
         });
         match result {
-            Ok(outcome) => match apply_capture(&mut self.state, &commit, &outcome) {
-                Ok(Some(thought_id)) => {
-                    let make_ready = !was_editing || advance_auto_ready;
-                    if advance_auto_ready {
-                        self.state.focused_thought = Some(thought_id);
-                        self.state.mode = crate::application::InteractionMode::Edit { thought_id };
-                    }
-                    self.screenshot.auto_ready = (make_ready
-                        && !self.screenshot.candidates.is_empty())
-                    .then_some(thought_id);
-                    self.sync_editor_from_state();
-                    self.screenshot.notice_count = self.screenshot.notice_count.saturating_add(1);
-                    let count = self.screenshot.notice_count;
-                    self.set_success(if count == 1 {
-                        "1 new capture".to_owned()
-                    } else {
-                        format!("{count} new captures")
-                    });
-                }
-                Ok(None) => {
-                    if self.screenshot.candidates.is_empty() {
-                        self.screenshot.auto_ready = None;
-                    }
-                }
-                Err(error) => {
-                    self.screenshot.auto_ready = None;
-                    self.set_error(error.to_string());
-                }
-            },
-            Err(error) => {
-                self.screenshot.save = Some(ScreenshotSave::Ready(commit));
-                self.set_error(format!(
-                    "Screenshot Inbox could not save the capture: {error}; it remains retryable"
-                ));
+            Ok(outcome) => {
+                self.screenshot.deferred_retry_attempted = false;
+                self.apply_completed_capture(&commit, &outcome, was_editing, advance_auto_ready);
             }
+            Err(error) => {
+                return self.capture_save_failed(candidate, *commit, &error, ids, clock);
+            }
+        }
+        if self.screenshot.deferred_quit && !self.screenshot_has_durable_work() {
+            self.screenshot.deferred_quit = false;
+            let effects = self.flush_pending_edit(ids, clock);
+            self.request_quit();
+            return effects;
+        }
+        Vec::new()
+    }
+
+    fn apply_completed_capture(
+        &mut self,
+        commit: &crate::ports::store::CaptureCommit,
+        outcome: &CaptureCommitOutcome,
+        was_editing: bool,
+        advance_auto_ready: bool,
+    ) {
+        match apply_capture(&mut self.state, commit, outcome) {
+            Ok(Some(thought_id)) => {
+                self.show_created_capture(thought_id, was_editing, advance_auto_ready);
+            }
+            Ok(None) if self.screenshot.candidates.is_empty() => {
+                self.screenshot.auto_ready = None;
+            }
+            Ok(None) => {}
+            Err(error) => {
+                self.screenshot.auto_ready = None;
+                self.set_error(error.to_string());
+            }
+        }
+    }
+
+    fn show_created_capture(
+        &mut self,
+        thought_id: crate::domain::ThoughtId,
+        was_editing: bool,
+        advance_auto_ready: bool,
+    ) {
+        let make_ready = !was_editing || advance_auto_ready;
+        if advance_auto_ready {
+            self.state.focused_thought = Some(thought_id);
+            self.state.mode = crate::application::InteractionMode::Edit { thought_id };
+        }
+        self.screenshot.auto_ready =
+            (make_ready && !self.screenshot.candidates.is_empty()).then_some(thought_id);
+        self.sync_editor_from_state();
+        self.screenshot.notice_count = self.screenshot.notice_count.saturating_add(1);
+        let count = self.screenshot.notice_count;
+        let message = if count == 1 {
+            "1 new capture".to_owned()
+        } else {
+            format!("{count} new captures")
+        };
+        self.set_success(message);
+    }
+
+    fn capture_save_failed(
+        &mut self,
+        candidate: ScreenshotCandidate,
+        commit: crate::ports::store::CaptureCommit,
+        error: &StoreError,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        self.set_error(format!(
+            "Screenshot Inbox could not save the capture: {error}; it remains retryable"
+        ));
+        if self.screenshot.deferred_quit && !self.screenshot.deferred_retry_attempted {
+            self.screenshot.deferred_retry_attempted = true;
+            self.screenshot.save = Some(ScreenshotSave::InFlight {
+                candidate,
+                commit: Box::new(commit.clone()),
+            });
+            return vec![Effect::CommitCapture(commit)];
+        }
+        self.screenshot.save = Some(ScreenshotSave::Ready(candidate));
+        if !self.screenshot.deferred_quit {
+            return Vec::new();
+        }
+        self.set_error(
+            "Screenshot Inbox could not save the capture before shutdown; no screenshot thought was created",
+        );
+        self.screenshot.deferred_quit = false;
+        self.screenshot.deferred_retry_attempted = false;
+        let effects = self.flush_pending_edit(ids, clock);
+        self.request_quit();
+        effects
+    }
+
+    pub(super) fn note_screenshot_interaction(&mut self, input: &crate::ui::input::UiInput) {
+        if !matches!(
+            input,
+            crate::ui::input::UiInput::Resize { .. } | crate::ui::input::UiInput::HostFocusGained
+        ) {
+            self.screenshot.auto_ready = None;
         }
     }
 
@@ -268,7 +368,7 @@ impl BoardApp {
 
     #[must_use]
     pub(super) const fn screenshot_save_in_flight(&self) -> bool {
-        matches!(self.screenshot.save, Some(ScreenshotSave::InFlight(_)))
+        matches!(self.screenshot.save, Some(ScreenshotSave::InFlight { .. }))
     }
 
     #[must_use]

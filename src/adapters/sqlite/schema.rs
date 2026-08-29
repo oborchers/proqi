@@ -116,9 +116,9 @@ CREATE TABLE submission_attempt_items (
 
 CREATE TABLE screenshot_capture_receipts (
     source_fingerprint BLOB PRIMARY KEY CHECK (length(source_fingerprint) = 32),
-    session_id BLOB NOT NULL REFERENCES sessions(id) ON DELETE RESTRICT,
-    thought_id BLOB NOT NULL REFERENCES thoughts(id) ON DELETE RESTRICT,
-    operation_id BLOB NOT NULL REFERENCES board_operations(id) ON DELETE RESTRICT,
+    session_id BLOB NOT NULL CHECK (length(session_id) = 16),
+    thought_id BLOB NOT NULL CHECK (length(thought_id) = 16),
+    operation_id BLOB NOT NULL CHECK (length(operation_id) = 16),
     accepted_at INTEGER NOT NULL,
     UNIQUE(operation_id)
 ) STRICT;
@@ -136,7 +136,7 @@ CREATE VIRTUAL TABLE session_search USING fts5(
 );
 
 INSERT INTO schema_meta(singleton, schema_version, storage_protocol, migrated_at)
-VALUES (1, 7, 7, 0);
+VALUES (1, 8, 8, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (1, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (2, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (3, 0);
@@ -144,6 +144,7 @@ INSERT INTO migration_history(version, applied_at) VALUES (4, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (5, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (6, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (7, 0);
+INSERT INTO migration_history(version, applied_at) VALUES (8, 0);
 ";
 
 pub(super) const MIGRATION_2: &str = r"
@@ -217,12 +218,32 @@ INSERT INTO migration_history(version, applied_at) VALUES (6, 0);
 pub(super) const MIGRATION_7: &str = r"
 CREATE TABLE screenshot_capture_receipts (
     source_fingerprint BLOB PRIMARY KEY CHECK (length(source_fingerprint) = 32),
-    session_id BLOB NOT NULL REFERENCES sessions(id) ON DELETE RESTRICT,
-    thought_id BLOB NOT NULL REFERENCES thoughts(id) ON DELETE RESTRICT,
-    operation_id BLOB NOT NULL REFERENCES board_operations(id) ON DELETE RESTRICT,
+    session_id BLOB NOT NULL CHECK (length(session_id) = 16),
+    thought_id BLOB NOT NULL CHECK (length(thought_id) = 16),
+    operation_id BLOB NOT NULL CHECK (length(operation_id) = 16),
     accepted_at INTEGER NOT NULL,
     UNIQUE(operation_id)
 ) STRICT;
 UPDATE schema_meta SET schema_version = 7, storage_protocol = 7;
 INSERT INTO migration_history(version, applied_at) VALUES (7, 0);
+";
+
+pub(super) const MIGRATION_8: &str = r"
+ALTER TABLE screenshot_capture_receipts RENAME TO screenshot_capture_receipts_v7;
+CREATE TABLE screenshot_capture_receipts (
+    source_fingerprint BLOB PRIMARY KEY CHECK (length(source_fingerprint) = 32),
+    session_id BLOB NOT NULL CHECK (length(session_id) = 16),
+    thought_id BLOB NOT NULL CHECK (length(thought_id) = 16),
+    operation_id BLOB NOT NULL CHECK (length(operation_id) = 16),
+    accepted_at INTEGER NOT NULL,
+    UNIQUE(operation_id)
+) STRICT;
+INSERT INTO screenshot_capture_receipts(
+    source_fingerprint, session_id, thought_id, operation_id, accepted_at
+)
+SELECT source_fingerprint, session_id, thought_id, operation_id, accepted_at
+FROM screenshot_capture_receipts_v7;
+DROP TABLE screenshot_capture_receipts_v7;
+UPDATE schema_meta SET schema_version = 8, storage_protocol = 8;
+INSERT INTO migration_history(version, applied_at) VALUES (8, 0);
 ";

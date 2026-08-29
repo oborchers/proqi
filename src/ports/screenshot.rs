@@ -1,6 +1,6 @@
 //! Terminal-independent screenshot inbox capability and validation values.
 
-use std::{fmt, path::PathBuf, time::Duration};
+use std::{fmt, path::PathBuf, sync::Arc, time::Duration};
 
 use thiserror::Error;
 
@@ -8,6 +8,8 @@ use thiserror::Error;
 pub const MAX_FILENAME_PATTERNS: usize = 32;
 /// Maximum length of one fallback pattern in Unicode scalar values.
 pub const MAX_FILENAME_PATTERN_CHARS: usize = 160;
+/// Maximum entries inspected by one bounded non-recursive reconciliation.
+pub const MAX_RECONCILIATION_ENTRIES: usize = 10_000;
 
 /// Image types accepted by the first screenshot inbox.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -170,6 +172,12 @@ pub trait ActiveScreenshotWatcher: Send {
     fn final_reconcile(&mut self) -> Result<Vec<ScreenshotCandidate>, ScreenshotError>;
 }
 
+/// Idempotent cancellation observed inside bounded directory work.
+pub trait ScreenshotCancellation: Send + Sync {
+    /// Whether shutdown or ownership release has cancelled further work.
+    fn is_cancelled(&self) -> bool;
+}
+
 /// Injected platform capability that starts a watcher before taking its baseline.
 pub trait ScreenshotWatcherFactory: Send + Sync {
     /// Start the platform watcher.
@@ -181,6 +189,7 @@ pub trait ScreenshotWatcherFactory: Send + Sync {
         &self,
         config: ScreenshotInboxConfig,
         terminal_host: &str,
+        cancellation: Arc<dyn ScreenshotCancellation>,
     ) -> Result<Box<dyn ActiveScreenshotWatcher>, ScreenshotError>;
 }
 
@@ -216,6 +225,12 @@ pub enum ScreenshotError {
     /// Directory reconciliation failed after activation.
     #[error("screenshot inbox reconciliation failed")]
     Reconciliation,
+    /// A directory exceeded the explicit per-reconciliation work cap.
+    #[error("screenshot inbox directory exceeds the bounded reconciliation entry limit")]
+    ReconciliationLimit,
+    /// Shutdown cancelled directory work before its bounded limit.
+    #[error("screenshot inbox reconciliation was cancelled")]
+    Cancelled,
     /// A live owner is too old or otherwise incompatible with verified takeover.
     #[error(
         "Screenshot Inbox is owned by an incompatible live Proqi process; close that process to continue"

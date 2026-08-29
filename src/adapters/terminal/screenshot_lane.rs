@@ -34,7 +34,7 @@ pub(super) enum ScreenshotResult {
     Stopped(Vec<ScreenshotCandidate>),
     Failed {
         error: ScreenshotError,
-        retain_lock: bool,
+        release_when_drained: bool,
     },
 }
 
@@ -221,7 +221,7 @@ impl ScreenshotWorker {
                     results,
                     ScreenshotResult::Failed {
                         error,
-                        retain_lock: false,
+                        release_when_drained: false,
                     },
                 )
             }
@@ -310,7 +310,11 @@ impl ScreenshotWorker {
         config: crate::ports::screenshot::ScreenshotInboxConfig,
         lease: FileCaptureLease,
     ) -> bool {
-        match self.factory.start(config, &self.terminal_host) {
+        match self.factory.start(
+            config,
+            &self.terminal_host,
+            Arc::new(self.cancellation.clone()),
+        ) {
             Ok(watcher) => {
                 self.watcher = Some(watcher);
                 self.send_result(results, ScreenshotResult::Started(lease))
@@ -326,9 +330,15 @@ impl ScreenshotWorker {
         &self,
         results: &SyncSender<ScreenshotResult>,
         error: ScreenshotError,
-        retain_lock: bool,
+        release_when_drained: bool,
     ) -> bool {
-        self.send_result(results, ScreenshotResult::Failed { error, retain_lock })
+        self.send_result(
+            results,
+            ScreenshotResult::Failed {
+                error,
+                release_when_drained,
+            },
+        )
     }
 
     fn reconcile(&mut self) -> Result<Vec<ScreenshotCandidate>, ScreenshotError> {
@@ -346,7 +356,7 @@ impl ScreenshotWorker {
                 Ok(candidates) => ScreenshotResult::Stopped(candidates),
                 Err(error) => ScreenshotResult::Failed {
                     error,
-                    retain_lock: true,
+                    release_when_drained: true,
                 },
             };
             let _sent = self.send_result(results, result);
@@ -374,3 +384,7 @@ impl ScreenshotWorker {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "screenshot_lane/tests.rs"]
+mod tests;

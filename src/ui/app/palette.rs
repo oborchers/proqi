@@ -379,7 +379,7 @@ impl BoardApp {
             Command::CheckUpdates => {
                 vec![Effect::Update(crate::application::UpdateIntent::CheckNow)]
             }
-            Command::ScreenshotInbox => self.toggle_screenshot_inbox(),
+            Command::ScreenshotInbox => self.toggle_screenshot_inbox(ids, clock),
             Command::RetryStorage => self.retry_persistence(),
             Command::ExportRecovery => self.export_recovery(ids, clock),
             Command::Undo => self.history(ids, clock, true),

@@ -184,8 +184,7 @@ fn complete_result(
 ) -> Result<bool, TerminalError> {
     match result {
         PersistenceResult::Capture(result) => {
-            pending.persistence = pending.persistence.saturating_sub(1);
-            app.complete_screenshot_capture(result);
+            complete_capture(app, lanes, pending, ids, clock, result)?;
         }
         PersistenceResult::Sequenced {
             sequence,
@@ -262,6 +261,19 @@ fn complete_result(
     }
     owner_control::complete_sync(pending);
     Ok(true)
+}
+
+fn complete_capture(
+    app: &mut BoardApp,
+    lanes: &WorkerLanes<'_>,
+    pending: &mut PendingWork,
+    ids: &mut impl crate::ports::environment::IdGenerator,
+    clock: &impl crate::ports::environment::Clock,
+    result: Result<crate::ports::store::CaptureCommitOutcome, crate::ports::store::StoreError>,
+) -> Result<(), TerminalError> {
+    pending.persistence = pending.persistence.saturating_sub(1);
+    let effects = app.complete_screenshot_capture(result, ids, clock);
+    enqueue_effects(app, lanes, effects, pending)
 }
 
 fn record_submission_result(

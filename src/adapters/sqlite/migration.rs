@@ -17,6 +17,7 @@ use super::{
     StoreConfig,
     schema::{
         MIGRATION_1, MIGRATION_2, MIGRATION_3, MIGRATION_4, MIGRATION_5, MIGRATION_6, MIGRATION_7,
+        MIGRATION_8,
     },
     support::{
         create_private_dir, map_sql_error, set_private_file_permissions, set_private_open_mode,
@@ -79,26 +80,34 @@ pub(super) fn migrate(
             .and_then(|()| transaction.execute_batch(MIGRATION_4))
             .and_then(|()| transaction.execute_batch(MIGRATION_5))
             .and_then(|()| transaction.execute_batch(MIGRATION_6))
-            .and_then(|()| transaction.execute_batch(MIGRATION_7)),
+            .and_then(|()| transaction.execute_batch(MIGRATION_7))
+            .and_then(|()| transaction.execute_batch(MIGRATION_8)),
         2 => transaction
             .execute_batch(MIGRATION_3)
             .and_then(|()| transaction.execute_batch(MIGRATION_4))
             .and_then(|()| transaction.execute_batch(MIGRATION_5))
             .and_then(|()| transaction.execute_batch(MIGRATION_6))
-            .and_then(|()| transaction.execute_batch(MIGRATION_7)),
+            .and_then(|()| transaction.execute_batch(MIGRATION_7))
+            .and_then(|()| transaction.execute_batch(MIGRATION_8)),
         3 => transaction
             .execute_batch(MIGRATION_4)
             .and_then(|()| transaction.execute_batch(MIGRATION_5))
             .and_then(|()| transaction.execute_batch(MIGRATION_6))
-            .and_then(|()| transaction.execute_batch(MIGRATION_7)),
+            .and_then(|()| transaction.execute_batch(MIGRATION_7))
+            .and_then(|()| transaction.execute_batch(MIGRATION_8)),
         4 => transaction
             .execute_batch(MIGRATION_5)
             .and_then(|()| transaction.execute_batch(MIGRATION_6))
-            .and_then(|()| transaction.execute_batch(MIGRATION_7)),
+            .and_then(|()| transaction.execute_batch(MIGRATION_7))
+            .and_then(|()| transaction.execute_batch(MIGRATION_8)),
         5 => transaction
             .execute_batch(MIGRATION_6)
-            .and_then(|()| transaction.execute_batch(MIGRATION_7)),
-        6 => transaction.execute_batch(MIGRATION_7),
+            .and_then(|()| transaction.execute_batch(MIGRATION_7))
+            .and_then(|()| transaction.execute_batch(MIGRATION_8)),
+        6 => transaction
+            .execute_batch(MIGRATION_7)
+            .and_then(|()| transaction.execute_batch(MIGRATION_8)),
+        7 => transaction.execute_batch(MIGRATION_8),
         _ => Ok(()),
     }
     .map_err(map_sql_error)?;
