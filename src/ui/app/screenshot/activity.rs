@@ -3,9 +3,7 @@
 use std::time::Duration;
 
 use crate::{
-    application::ScreenshotPauseReason,
-    ports::screenshot::ScreenshotActivityPolicy,
-    ui::{PointerKind, UiInput},
+    application::ScreenshotPauseReason, ports::screenshot::ScreenshotActivityPolicy, ui::UiInput,
 };
 
 #[derive(Default)]
@@ -31,7 +29,7 @@ impl ScreenshotActivity {
     }
 
     pub(super) fn note_input(&mut self, input: &UiInput, now: Duration) {
-        if self.last_interaction.is_some() && deliberate(input) {
+        if self.last_interaction.is_some() && input.is_deliberate_interaction() {
             self.last_interaction = Some(now);
             self.admitted = 0;
         }
@@ -65,24 +63,10 @@ impl ScreenshotActivity {
     }
 }
 
-const fn deliberate(input: &UiInput) -> bool {
-    match input {
-        UiInput::Key(_) | UiInput::Paste(_) | UiInput::PasteAnnotated(_) => true,
-        UiInput::Pointer(pointer) => matches!(
-            pointer.kind,
-            PointerKind::Down(_)
-                | PointerKind::Drag(_)
-                | PointerKind::ScrollUp
-                | PointerKind::ScrollDown
-        ),
-        UiInput::Resize { .. } | UiInput::HostFocusGained => false,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ui::{PointerButton, PointerInput, UiKey};
+    use crate::ui::{PointerButton, PointerInput, PointerKind, UiKey};
 
     #[test]
     fn only_deliberate_input_renews_the_lease() {

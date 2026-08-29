@@ -13,7 +13,7 @@ use crate::{
     },
 };
 
-use super::{AppState, ApplicationError, ApplicationResult, InteractionMode};
+use super::{AppState, ApplicationError, ApplicationResult};
 
 /// Build one exact image-path thought without exposing it before durable acceptance.
 ///
@@ -70,7 +70,7 @@ pub fn prepare_capture(
     })
 }
 
-/// Apply one already-durable capture without disturbing an active editor.
+/// Apply one already-durable capture without choosing terminal interaction state.
 ///
 /// # Errors
 ///
@@ -95,13 +95,8 @@ pub fn apply_capture(
         BoardMutation::AddThought { thought } => thought.id,
         _ => return Err(ApplicationError::InvalidState),
     };
-    let preserve_edit = matches!(state.mode, InteractionMode::Edit { .. });
     state.apply_durable_capture(operation)?;
     state.insertion_index = state.board.live_thoughts().len();
-    if !preserve_edit {
-        state.focused_thought = Some(thought_id);
-        state.mode = InteractionMode::Edit { thought_id };
-    }
     Ok(Some(thought_id))
 }
 

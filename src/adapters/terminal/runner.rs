@@ -1,5 +1,6 @@
 //! Bounded UI and persistence lane composition.
 
+mod admission;
 mod composition;
 mod diagnostics;
 mod durability;
@@ -311,7 +312,10 @@ fn drive(
             if let Some(control) = lanes.control {
                 control.request_stop();
             }
-            let effects = app.handle(UiInput::Key(UiKey::Quit), ids, &clock);
+            let mut effects = app.handle(UiInput::Key(UiKey::Quit), ids, &clock);
+            if !app.quit && app.screenshot_retry_ready() {
+                effects.extend(app.handle(UiInput::Key(UiKey::Quit), ids, &clock));
+            }
             enqueue_effects(app, lanes, effects, &mut pending)?;
         }
         if !termination_seen {
@@ -328,7 +332,19 @@ fn drive(
             pane_heartbeat,
         )?;
         redraw |= workers_changed || app.expire_update_barrier(clock.now());
-        let capture_effects = app.advance_screenshot_capture(ids, &clock);
+        if termination_seen && !app.quit && app.screenshot_retry_ready() {
+            let mut effects = app.handle(UiInput::Key(UiKey::Quit), ids, &clock);
+            if !app.quit && app.screenshot_retry_ready() {
+                effects.extend(app.handle(UiInput::Key(UiKey::Quit), ids, &clock));
+            }
+            enqueue_effects(app, lanes, effects, &mut pending)?;
+            redraw = true;
+        }
+        let capture_effects = if admission::capture(app, &pending).is_ok() && !app.quit {
+            app.advance_screenshot_capture(ids, &clock)
+        } else {
+            Vec::new()
+        };
         if !capture_effects.is_empty() {
             enqueue_effects(app, lanes, capture_effects, &mut pending)?;
             redraw = true;

@@ -1,0 +1,182 @@
+use ratatui_core::layout::Rect;
+
+use super::behavior::{app_with_thought, candidate, created, next_commit};
+use crate::{
+    application::{Effect, InteractionMode},
+    ui::{PastePayload, PointerButton, PointerInput, PointerKind, UiInput, UiKey},
+};
+
+#[test]
+fn commit_barrier_replays_keyboard_plain_and_annotated_paste_in_order() {
+    let (mut app, mut ids, clock, original_id) = app_with_thought();
+    app.screenshot_started(std::time::Duration::ZERO);
+    app.state.mode = InteractionMode::Edit {
+        thought_id: original_id,
+    };
+    app.sync_editor_from_state();
+    app.queue_screenshot_candidates([candidate(31)]);
+    let capture = next_commit(&mut app, &mut ids, &clock);
+
+    for input in [
+        UiInput::Key(UiKey::Character('1')),
+        UiInput::Paste("two".to_owned()),
+        UiInput::PasteAnnotated(PastePayload::text("三".to_owned())),
+    ] {
+        assert!(app.handle(input, &mut ids, &clock).is_empty());
+    }
+    assert_eq!(
+        app.editor_snapshot().expect("blocked editor").content,
+        "active"
+    );
+
+    let effects = app.complete_screenshot_capture(Ok(created(&capture)), &mut ids, &clock);
+    let sequences = effects
+        .iter()
+        .map(|effect| match effect {
+            Effect::CommitRevision(revision) => revision.sequence,
+            other => panic!("unexpected replay effect: {other:?}"),
+        })
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(sequences.len(), 3);
+    assert!(
+        sequences
+            .iter()
+            .all(|sequence| *sequence > capture.operation.sequence)
+    );
+    assert_eq!(
+        app.editor_snapshot().expect("replayed editor").content,
+        "active1two三"
+    );
+    assert_eq!(app.state.board.live_thoughts().len(), 2);
+}
+
+#[test]
+fn commit_barrier_replays_pointer_and_preserves_resize_and_focus_signals() {
+    let (mut app, mut ids, clock, original_id) = app_with_thought();
+    let layout = app.prepare_frame(Rect::new(0, 0, 60, 12));
+    let original = layout.thoughts[0].text_area;
+    app.screenshot_started(std::time::Duration::ZERO);
+    app.queue_screenshot_candidates([candidate(32)]);
+    let capture = next_commit(&mut app, &mut ids, &clock);
+
+    assert!(
+        app.handle(
+            UiInput::Pointer(PointerInput {
+                column: original.x,
+                row: original.y,
+                kind: PointerKind::Down(PointerButton::Left),
+                extend_selection: false,
+            }),
+            &mut ids,
+            &clock,
+        )
+        .is_empty()
+    );
+    assert!(
+        app.handle(
+            UiInput::Resize {
+                width: 30,
+                height: 6,
+            },
+            &mut ids,
+            &clock,
+        )
+        .is_empty()
+    );
+    assert!(app.layout.is_some());
+    assert_eq!(
+        app.handle(UiInput::HostFocusGained, &mut ids, &clock),
+        vec![Effect::DiscoverAgents]
+    );
+
+    app.complete_screenshot_capture(Ok(created(&capture)), &mut ids, &clock);
+    assert_ne!(app.state.focused_thought, capture_thought_id(&capture));
+    assert_eq!(
+        app.state.mode,
+        InteractionMode::Edit {
+            thought_id: original_id
+        }
+    );
+}
+
+#[test]
+fn commit_barrier_overflow_is_bounded_and_explicit() {
+    let (mut app, mut ids, clock, _) = app_with_thought();
+    app.screenshot_started(std::time::Duration::ZERO);
+    app.queue_screenshot_candidates([candidate(33)]);
+    next_commit(&mut app, &mut ids, &clock);
+    let movement = UiInput::Pointer(PointerInput {
+        column: 0,
+        row: 0,
+        kind: PointerKind::Move,
+        extend_selection: false,
+    });
+    for _ in 0..super::super::DEFERRED_INPUT_LIMIT {
+        app.handle(movement.clone(), &mut ids, &clock);
+    }
+    app.handle(UiInput::Paste("not accepted".to_owned()), &mut ids, &clock);
+    assert_eq!(
+        app.screenshot.deferred_inputs.len(),
+        super::super::DEFERRED_INPUT_LIMIT
+    );
+    assert!(
+        app.status_text()
+            .is_some_and(|status| status.contains("input queue is full"))
+    );
+}
+
+#[test]
+fn board_key_and_board_pastes_replay_without_capture_mode_stealing() {
+    let (mut app, mut ids, clock, _) = app_with_thought();
+    app.screenshot_started(std::time::Duration::ZERO);
+    app.queue_screenshot_candidates([candidate(34)]);
+    let capture = next_commit(&mut app, &mut ids, &clock);
+    app.handle(UiInput::Key(UiKey::Duplicate), &mut ids, &clock);
+    let effects = app.complete_screenshot_capture(Ok(created(&capture)), &mut ids, &clock);
+    assert!(matches!(
+        effects.as_slice(),
+        [Effect::CommitBoardOperation(_)]
+    ));
+    assert_eq!(app.state.mode, InteractionMode::Board);
+    assert_ne!(app.state.focused_thought, capture_thought_id(&capture));
+    assert_eq!(app.state.board.live_thoughts().len(), 3);
+
+    for (byte, input, expected) in [
+        (35, UiInput::Paste("plain paste".to_owned()), "plain paste"),
+        (
+            36,
+            UiInput::PasteAnnotated(PastePayload::text("annotated paste".to_owned())),
+            "annotated paste",
+        ),
+    ] {
+        let (mut app, mut ids, clock, _) = app_with_thought();
+        app.screenshot_started(std::time::Duration::ZERO);
+        app.queue_screenshot_candidates([candidate(byte)]);
+        let capture = next_commit(&mut app, &mut ids, &clock);
+        app.handle(input, &mut ids, &clock);
+        let effects = app.complete_screenshot_capture(Ok(created(&capture)), &mut ids, &clock);
+        assert!(matches!(
+            effects.as_slice(),
+            [Effect::CommitBoardOperation(_)]
+        ));
+        assert_ne!(app.state.focused_thought, capture_thought_id(&capture));
+        assert!(matches!(app.state.mode, InteractionMode::Edit { .. }));
+        assert_eq!(app.state.board.live_thoughts().len(), 3);
+        assert!(
+            app.state
+                .board
+                .live_thoughts()
+                .iter()
+                .any(|thought| thought.content == expected)
+        );
+    }
+}
+
+fn capture_thought_id(
+    capture: &crate::ports::store::CaptureCommit,
+) -> Option<crate::domain::ThoughtId> {
+    match &capture.operation.forward {
+        crate::domain::BoardMutation::AddThought { thought } => Some(thought.id),
+        _ => None,
+    }
+}

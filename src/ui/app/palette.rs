@@ -24,6 +24,7 @@ pub(super) struct PaletteState {
     submit_supported: bool,
     plain_newline_supported: bool,
     screenshot_action: ScreenshotPaletteAction,
+    screenshot_retry: bool,
     selection_handoff: Option<EditorSelectionHandoff>,
 }
 
@@ -32,6 +33,7 @@ impl PaletteState {
         submit_supported: bool,
         plain_newline_supported: bool,
         screenshot_action: ScreenshotPaletteAction,
+        screenshot_retry: bool,
         selection_handoff: Option<EditorSelectionHandoff>,
     ) -> Self {
         Self {
@@ -41,6 +43,7 @@ impl PaletteState {
             submit_supported,
             plain_newline_supported,
             screenshot_action,
+            screenshot_retry,
             selection_handoff,
         }
     }
@@ -99,6 +102,7 @@ impl PaletteState {
             | Command::ThoughtEnd
             | Command::Indent
             | Command::Outdent => self.plain_newline_supported,
+            Command::RetryScreenshotCapture => self.screenshot_retry,
             _ => true,
         }
     }
@@ -118,6 +122,7 @@ impl BoardApp {
             self.supports_submission(),
             !self.insertion_focused() && self.state.focused_thought.is_some(),
             self.screenshot_palette_action(),
+            self.screenshot_retry_ready(),
             self.palette_selection_handoff.take(),
         ));
     }
@@ -316,6 +321,7 @@ impl BoardApp {
                 vec![Effect::Update(crate::application::UpdateIntent::CheckNow)]
             }
             Command::ScreenshotInbox => self.toggle_screenshot_inbox(ids, clock),
+            Command::RetryScreenshotCapture => self.retry_screenshot_capture(ids, clock),
             Command::RetryStorage => self.retry_persistence(),
             Command::ExportRecovery => self.export_recovery(ids, clock),
             Command::Undo => self.history(ids, clock, true),

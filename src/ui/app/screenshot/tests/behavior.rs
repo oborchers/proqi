@@ -34,16 +34,19 @@ fn durable_capture_preserves_an_active_editor_and_exact_path_annotation() {
     let effects = app.handle(UiInput::Key(UiKey::Character('!')), &mut ids, &clock);
     assert!(effects.is_empty());
     let editor_during = app.editor_snapshot().expect("live editor during commit");
-    assert_ne!(editor_during, editor_before);
+    assert_eq!(editor_during, editor_before);
     app.complete_screenshot_capture(Ok(created(&commit)), &mut ids, &clock);
 
     assert_eq!(app.state.focused_thought, Some(original_id));
-    assert_eq!(app.editor_snapshot(), Some(editor_during));
+    assert_eq!(
+        app.editor_snapshot().expect("replayed editor").content,
+        "active!"
+    );
     let captured = app.state.board.live_thoughts()[1];
     assert_eq!(captured.content, candidate(3).path.to_string_lossy());
     assert_eq!(captured.annotations[0].start, 0);
     assert_eq!(captured.annotations[0].end, captured.content.len());
-    assert_eq!(app.status_text(), Some("1 new capture"));
+    assert_eq!(app.status_text(), None);
 }
 
 #[test]
@@ -92,7 +95,7 @@ fn failed_capture_has_no_partial_thought_and_is_explicitly_retryable() {
     let commit = next_commit(&mut app, &mut ids, &clock);
     app.complete_screenshot_capture(Err(StoreError::Busy), &mut ids, &clock);
     assert_eq!(app.state.board.live_thoughts().len(), 1);
-    let retry_effects = app.toggle_screenshot_inbox(&mut ids, &clock);
+    let retry_effects = app.retry_screenshot_capture(&mut ids, &clock);
     let [Effect::CommitCapture(retry)] = retry_effects.as_slice() else {
         panic!("retry capture");
     };
@@ -119,7 +122,7 @@ fn retry_rebuilds_after_an_intervening_durable_editor_change() {
     };
     app.acknowledge_persistence_result(revision.sequence, Ok(()));
 
-    let retry_effects = app.toggle_screenshot_inbox(&mut ids, &clock);
+    let retry_effects = app.retry_screenshot_capture(&mut ids, &clock);
     let [Effect::CommitCapture(retry)] = retry_effects.as_slice() else {
         panic!("fresh retry capture");
     };
@@ -138,7 +141,7 @@ fn failed_first_capture_in_a_burst_retries_then_drains_in_order() {
     let first = next_commit(&mut app, &mut ids, &clock);
     app.complete_screenshot_capture(Err(StoreError::Busy), &mut ids, &clock);
 
-    let retry_effects = app.toggle_screenshot_inbox(&mut ids, &clock);
+    let retry_effects = app.retry_screenshot_capture(&mut ids, &clock);
     let [Effect::CommitCapture(retry)] = retry_effects.as_slice() else {
         panic!("retry first capture");
     };
@@ -180,23 +183,23 @@ fn quit_during_capture_is_deferred_and_flushes_the_live_editor() {
 }
 
 #[test]
-fn deferred_quit_retries_one_transient_capture_failure_before_finishing() {
+fn capture_failure_replays_quit_as_truthful_ready_confirmation() {
     let (mut app, mut ids, clock, _) = app_with_thought();
     app.screenshot_started(Duration::ZERO);
     app.queue_screenshot_candidates([candidate(18)]);
-    let capture = next_commit(&mut app, &mut ids, &clock);
+    next_commit(&mut app, &mut ids, &clock);
     app.handle(UiInput::Key(UiKey::Quit), &mut ids, &clock);
 
-    let retry = app.complete_screenshot_capture(Err(StoreError::Busy), &mut ids, &clock);
-    assert!(matches!(
-        retry.as_slice(),
-        [Effect::CommitCapture(commit)] if commit == &capture
-    ));
+    let effects = app.complete_screenshot_capture(Err(StoreError::Busy), &mut ids, &clock);
+    assert_eq!(effects, vec![Effect::Screenshot(ScreenshotIntent::Disable)]);
     assert!(!app.quit);
-    assert!(
-        app.complete_screenshot_capture(Ok(created(&capture)), &mut ids, &clock)
-            .is_empty()
-    );
+    assert!(app.screenshot_retry_ready());
+    let retry = app.retry_screenshot_capture(&mut ids, &clock);
+    let [Effect::CommitCapture(retry)] = retry.as_slice() else {
+        panic!("explicit retry");
+    };
+    app.complete_screenshot_capture(Ok(created(retry)), &mut ids, &clock);
+    app.handle(UiInput::Key(UiKey::Quit), &mut ids, &clock);
     assert!(app.quit);
     assert_eq!(app.state.board.live_thoughts().len(), 2);
 }
@@ -244,6 +247,45 @@ fn explicit_editor_interaction_prevents_burst_auto_advance() {
         format!("{}x", candidate(16).path.to_string_lossy())
     );
     assert_eq!(app.state.board.live_thoughts().len(), 3);
+}
+
+#[test]
+fn passive_pointer_focus_and_resize_keep_auto_ready_but_a_click_invalidates_it() {
+    let (mut app, mut ids, clock, _) = app_with_thought();
+    app.screenshot_started(Duration::ZERO);
+    app.queue_screenshot_candidates([candidate(20), candidate(21)]);
+    let first = next_commit(&mut app, &mut ids, &clock);
+    app.complete_screenshot_capture(Ok(created(&first)), &mut ids, &clock);
+    assert!(app.screenshot.auto_ready.is_some());
+
+    for input in [
+        UiInput::Pointer(PointerInput {
+            column: 0,
+            row: 0,
+            kind: PointerKind::Move,
+            extend_selection: false,
+        }),
+        UiInput::HostFocusGained,
+        UiInput::Resize {
+            width: 40,
+            height: 8,
+        },
+    ] {
+        app.handle(input, &mut ids, &clock);
+        assert!(app.screenshot.auto_ready.is_some());
+    }
+
+    app.handle(
+        UiInput::Pointer(PointerInput {
+            column: 0,
+            row: 0,
+            kind: PointerKind::Down(PointerButton::Left),
+            extend_selection: false,
+        }),
+        &mut ids,
+        &clock,
+    );
+    assert!(app.screenshot.auto_ready.is_none());
 }
 
 #[test]
@@ -314,7 +356,11 @@ fn takeover_keyboard_and_mouse_choices_emit_verified_owner_requests() {
     ));
 }
 
-fn next_commit(app: &mut BoardApp, ids: &mut FakeIdGenerator, clock: &FakeClock) -> CaptureCommit {
+pub(super) fn next_commit(
+    app: &mut BoardApp,
+    ids: &mut FakeIdGenerator,
+    clock: &FakeClock,
+) -> CaptureCommit {
     let effects = app.advance_screenshot_capture(ids, clock);
     let [Effect::CommitCapture(commit)] = effects.as_slice() else {
         panic!("capture commit");
@@ -322,7 +368,7 @@ fn next_commit(app: &mut BoardApp, ids: &mut FakeIdGenerator, clock: &FakeClock)
     commit.clone()
 }
 
-fn app_with_thought() -> (
+pub(super) fn app_with_thought() -> (
     BoardApp,
     FakeIdGenerator,
     FakeClock,
@@ -352,7 +398,7 @@ fn app_with_thought() -> (
     )
 }
 
-fn candidate(byte: u8) -> ScreenshotCandidate {
+pub(super) fn candidate(byte: u8) -> ScreenshotCandidate {
     ScreenshotCandidate {
         fingerprint: ScreenshotFingerprint([byte; 32]),
         path: std::env::temp_dir().join(format!("Unicode capture {byte} 🖼️.png")),
@@ -367,7 +413,7 @@ fn capture_thought_id(commit: &CaptureCommit) -> crate::domain::ThoughtId {
     }
 }
 
-fn created(commit: &CaptureCommit) -> CaptureCommitOutcome {
+pub(super) fn created(commit: &CaptureCommit) -> CaptureCommitOutcome {
     let thought_id = capture_thought_id(commit);
     CaptureCommitOutcome::Created {
         durable: CommitReceipt {

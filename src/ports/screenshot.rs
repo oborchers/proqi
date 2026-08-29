@@ -303,6 +303,15 @@ pub enum ScreenshotError {
     /// Verified takeover was rejected or did not complete before its bound.
     #[error("Screenshot Inbox takeover did not complete; the current owner is still listening")]
     TakeoverFailed,
+    /// The live owner is already honoring another verified takeover request.
+    #[error("Screenshot Inbox takeover is already draining in the current owner")]
+    TakeoverInProgress,
+    /// Verified owner control or the ownership runtime could not be reached.
+    #[error("Screenshot Inbox takeover is unavailable because verified owner control failed")]
+    TakeoverUnavailable,
+    /// The verified owner acknowledged takeover but retained the lock past the bound.
+    #[error("Screenshot Inbox takeover timed out; the capture lock is still held")]
+    TakeoverTimedOut,
     /// Safe installation-wide ownership requires the verified local owner endpoint.
     #[error("Screenshot Inbox cannot start because verified local owner control is unavailable")]
     ControlUnavailable,

@@ -575,6 +575,14 @@ over**. Takeover asks the verified owner to reconcile and durably drain its
 accepted captures before releasing the operating-system lock; a live or
 incompatible owner is never force-unlocked.
 
+If SQLite cannot commit a capture, Proqi keeps that candidate without creating
+a partial thought and exposes **Retry Screenshot Capture** as a separate
+command. **Disable Screenshot Inbox** and **Resume Screenshot Inbox** always do
+what their labels name; they never implicitly retry a failed save. Disable,
+automatic pause, takeover, and shutdown release capture authority within their
+bounded teardown even while a failed candidate remains available to retry in
+the live session. Quit asks for explicit confirmation before abandoning it.
+
 Listening is always bounded. Proqi pauses after 20 minutes without deliberate
 keyboard, paste, or pointer interaction, or after 10 unattended captures,
 whichever happens first. The persistent footer changes to
@@ -582,6 +590,12 @@ whichever happens first. The persistent footer changes to
 palette offers **Resume Screenshot Inbox**. Resuming takes a fresh snapshot, so
 files accumulated while paused are not imported retrospectively. Both safety
 bounds are configurable but cannot be disabled.
+
+While an atomic capture commit is in flight, Proqi preserves keyboard, paste,
+mouse, and resize input in a bounded ordered queue. A full queue reports that
+the newest input was not accepted so it can be retried; input is never silently
+dropped. Captures append quietly while help, search, the command palette,
+rename, transfer, update, invocation completion, or a board selection is active.
 
 An optional best-effort notification can accompany automatic pause. It is off
 by default. Inside a managed Herdr pane, Proqi uses Herdr's notification hook so

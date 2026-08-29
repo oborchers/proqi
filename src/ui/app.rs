@@ -239,13 +239,7 @@ impl BoardApp {
         if self.screenshot_save_in_flight() {
             return self.handle_screenshot_commit_barrier(input);
         }
-        if input == UiInput::Key(UiKey::Quit) || self.is_failed_recovery_quit(&input) {
-            let effects = if matches!(self.state.durability, DurabilityState::Failed { .. }) {
-                Vec::new()
-            } else {
-                self.flush_pending_edit(ids, clock)
-            };
-            self.request_quit();
+        if let Some(effects) = self.handle_quit_input(&input, ids, clock) {
             return effects;
         }
         if self.update_prompt.is_some() {

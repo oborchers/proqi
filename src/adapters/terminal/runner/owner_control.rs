@@ -23,7 +23,7 @@ use crate::{
 };
 
 use super::{
-    CaptureRuntime, PendingControl, PendingWork, WorkerLanes,
+    CaptureRuntime, PendingControl, PendingWork, WorkerLanes, admission,
     fairness::{DrainOutcome, drain_bounded},
     pending::PendingUpdateRestart,
     storage_error_code,
@@ -88,6 +88,10 @@ fn queue_lookup(
         ControlMutation::CaptureTakeover { .. }
     ) {
         return Ok(capture::queue(lanes, capture, envelope));
+    }
+    if let Some(rejection) = admission::owner_control_rejection(app, &envelope.request.mutation) {
+        envelope.respond(rejection);
+        return Ok(false);
     }
     if matches!(
         envelope.request.mutation,

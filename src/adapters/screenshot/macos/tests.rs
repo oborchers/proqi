@@ -141,8 +141,10 @@ fn rapid_equal_observations_and_later_mutation_require_a_full_interval() {
 
     events.push(Duration::ZERO, true);
     assert!(watcher.poll().expect("first observation").is_empty());
+    assert_eq!(watcher.eligibility_checks, 1);
     events.push(Duration::ZERO, true);
     assert!(watcher.poll().expect("rapid equal observation").is_empty());
+    assert_eq!(watcher.eligibility_checks, 1, "stable signal is cached");
     clock.advance(Duration::from_millis(90));
     fs::write(&path, png_bytes(20, 10, 96)).expect("later mutation");
     events.push(Duration::ZERO, true);
@@ -157,12 +159,90 @@ fn rapid_equal_observations_and_later_mutation_require_a_full_interval() {
 }
 
 #[test]
+fn hidden_staging_rename_restarts_stability_and_delivers_only_the_final_path() {
+    let directory = tempfile::tempdir().expect("watched directory");
+    let (mut watcher, events, clock, _) = watcher(directory.path(), 20);
+    let staging = directory.path().join(".capture-in-progress.png");
+    fs::write(&staging, png_bytes(20, 10, 80)).expect("staged screenshot");
+    mark_screenshot(&staging);
+    events.push(Duration::ZERO, true);
+    assert!(watcher.poll().expect("hidden staging hint").is_empty());
+    assert!(watcher.pending.is_empty());
+
+    let final_path = directory.path().join("Unicode final 你好 🖼️.png");
+    fs::rename(&staging, &final_path).expect("same-identity rename");
+    events.push(Duration::ZERO, true);
+    assert!(watcher.poll().expect("final-name observation").is_empty());
+    events.push(Duration::ZERO, true);
+    assert!(
+        watcher
+            .poll()
+            .expect("rapid final-name observation")
+            .is_empty()
+    );
+    clock.advance(Duration::from_millis(100));
+    let accepted = watcher.poll().expect("stable final name");
+    assert_eq!(accepted.len(), 1);
+    assert_eq!(accepted[0].path, final_path);
+    assert!(accepted[0].path.exists());
+    events.push(Duration::ZERO, true);
+    assert!(watcher.poll().expect("delivered identity hint").is_empty());
+}
+
+#[test]
+fn same_identity_path_change_requires_a_new_full_stability_interval() {
+    let directory = tempfile::tempdir().expect("watched directory");
+    let (mut watcher, events, clock, _) = watcher(directory.path(), 20);
+    let temporary = directory.path().join("capture-temporary.png");
+    fs::write(&temporary, png_bytes(20, 10, 80)).expect("temporary screenshot");
+    mark_screenshot(&temporary);
+    events.push(Duration::ZERO, true);
+    assert!(watcher.poll().expect("temporary observation").is_empty());
+    clock.advance(Duration::from_millis(75));
+
+    let final_path = directory.path().join("capture-final.png");
+    fs::rename(&temporary, &final_path).expect("same-inode rename");
+    events.push(Duration::ZERO, true);
+    assert!(watcher.poll().expect("rename observation").is_empty());
+    clock.advance(Duration::from_millis(25));
+    events.push(Duration::ZERO, true);
+    assert!(watcher.poll().expect("old stability deadline").is_empty());
+    clock.advance(Duration::from_millis(75));
+    let accepted = watcher.poll().expect("new stability deadline");
+    assert_eq!(accepted.len(), 1);
+    assert_eq!(accepted[0].path, final_path);
+}
+
+#[test]
+fn large_mixed_activation_baseline_performs_no_expensive_image_reads() {
+    let directory = tempfile::tempdir().expect("watched directory");
+    for index in 0..80 {
+        let path = directory.path().join(format!("existing-{index}.png"));
+        if index % 3 == 0 {
+            fs::write(&path, png_bytes(10, 10, 80)).expect("existing image");
+            mark_screenshot(&path);
+        } else if index % 3 == 1 {
+            fs::write(&path, b"partial").expect("existing partial");
+        } else {
+            fs::write(&path, vec![b'x'; 80]).expect("existing ordinary file");
+        }
+    }
+    let (mut watcher, events, _, _) = watcher(directory.path(), 100);
+    assert_eq!(watcher.baseline.len(), 80);
+    assert_eq!(watcher.eligibility_checks, 0);
+    events.push(Duration::ZERO, true);
+    assert!(watcher.poll().expect("known baseline hint").is_empty());
+    assert_eq!(watcher.eligibility_checks, 0);
+}
+
+#[test]
 fn activation_ignores_existing_files_and_rename_completion_is_stable() {
     let directory = tempfile::tempdir().expect("watched directory");
     let staging = tempfile::tempdir().expect("staging directory");
     let existing = directory.path().join("existing.png");
     fs::write(&existing, b"partial").expect("existing partial");
-    let (mut watcher, events, _, _) = watcher(directory.path(), 20);
+    let (mut watcher, events, clock, _) = watcher(directory.path(), 20);
+    assert_eq!(watcher.baseline.len(), 1, "activation baseline");
     fs::write(&existing, png_bytes(20, 10, 80)).expect("existing completed");
     mark_screenshot(&existing);
     let staged = staging.path().join("staged.png");
@@ -173,9 +253,15 @@ fn activation_ignores_existing_files_and_rename_completion_is_stable() {
 
     events.push(Duration::ZERO, true);
     assert!(watcher.poll().expect("rename observation").is_empty());
+    clock.advance(Duration::from_millis(100));
     let accepted = watcher.poll().expect("stable rename");
-    assert_eq!(accepted.len(), 1);
-    assert_eq!(accepted[0].path, renamed);
+    assert_eq!(
+        accepted
+            .iter()
+            .map(|candidate| candidate.path.clone())
+            .collect::<Vec<_>>(),
+        vec![renamed]
+    );
 }
 
 #[test]

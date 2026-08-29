@@ -23,6 +23,8 @@ use super::BoardApp;
 use activity::ScreenshotActivity;
 use presentation::pause_notice;
 
+const DEFERRED_INPUT_LIMIT: usize = 64;
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(super) enum ScreenshotState {
     #[default]
@@ -58,11 +60,11 @@ pub(super) struct ScreenshotInbox {
     pub(super) takeover_selected: usize,
     auto_ready: Option<crate::domain::ThoughtId>,
     pub(super) notice_count: usize,
-    deferred_quit: bool,
-    deferred_retry_attempted: bool,
     activity: ScreenshotActivity,
     pending_pause: Option<ScreenshotPauseReason>,
     pause_notice: Option<String>,
+    deferred_inputs: VecDeque<crate::ui::UiInput>,
+    ready_quit_armed: bool,
 }
 
 impl BoardApp {
@@ -92,83 +94,46 @@ impl BoardApp {
         &mut self,
         input: crate::ui::input::UiInput,
     ) -> Vec<Effect> {
-        use crate::{
-            ports::editor::EditCommand,
-            ui::input::{UiInput, UiKey},
-        };
+        use crate::ui::input::UiInput;
         match input {
-            UiInput::Key(UiKey::Quit) => {
-                if !self.screenshot.deferred_quit {
-                    self.screenshot.deferred_retry_attempted = false;
-                }
-                self.screenshot.deferred_quit = true;
+            UiInput::HostFocusGained => return Self::discover_agents(),
+            deferred if self.screenshot.deferred_inputs.len() < DEFERRED_INPUT_LIMIT => {
+                self.screenshot.deferred_inputs.push_back(deferred);
             }
-            UiInput::Key(UiKey::PrimaryShiftMove { movement })
-                if matches!(
-                    self.state.mode,
-                    crate::application::InteractionMode::Edit { .. }
-                ) =>
-            {
-                self.apply_edit(EditCommand::Move {
-                    movement,
-                    extend_selection: true,
-                });
-            }
-            UiInput::Key(key)
-                if matches!(
-                    self.state.mode,
-                    crate::application::InteractionMode::Edit { .. }
-                ) =>
-            {
-                if let Some((command, _)) = super::editing::command_for_key(key, false) {
-                    self.apply_edit(command);
-                }
-            }
-            UiInput::Paste(content)
-                if matches!(
-                    self.state.mode,
-                    crate::application::InteractionMode::Edit { .. }
-                ) =>
-            {
-                self.apply_edit(EditCommand::Paste(content));
-            }
-            UiInput::PasteAnnotated(payload)
-                if matches!(
-                    self.state.mode,
-                    crate::application::InteractionMode::Edit { .. }
-                ) =>
-            {
-                self.apply_annotated_edit(
-                    EditCommand::Paste(payload.content),
-                    &payload.annotations,
-                );
-            }
-            UiInput::Resize { .. } => {
-                self.layout = None;
-                self.hovered = None;
-                self.edit_boundary = None;
-            }
-            UiInput::HostFocusGained
-            | UiInput::Pointer(_)
+            UiInput::Pointer(_)
             | UiInput::Paste(_)
             | UiInput::PasteAnnotated(_)
-            | UiInput::Key(_) => {}
+            | UiInput::Key(_)
+            | UiInput::Resize { .. } => {
+                self.set_error(
+                    "Screenshot Inbox input queue is full; that input was not accepted—wait for the save result and retry",
+                );
+            }
         }
         Vec::new()
     }
 
-    pub(super) fn toggle_screenshot_inbox(
+    fn replay_screenshot_inputs(
         &mut self,
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        if let Some(ScreenshotSave::Ready(candidate)) = self.screenshot.save.clone() {
-            return self.prepare_screenshot_save(candidate, ids, clock, true);
+        let queued = std::mem::take(&mut self.screenshot.deferred_inputs);
+        let mut effects = Vec::new();
+        for input in queued {
+            effects.extend(self.handle(input, ids, clock));
+            if self.quit {
+                break;
+            }
         }
-        if !self.screenshot.candidates.is_empty() {
-            self.set_info("Screenshot Inbox is finishing captured files");
-            return Vec::new();
-        }
+        effects
+    }
+
+    pub(super) fn toggle_screenshot_inbox(
+        &mut self,
+        _ids: &mut impl IdGenerator,
+        _clock: &impl Clock,
+    ) -> Vec<Effect> {
         match self.screenshot.state {
             ScreenshotState::Off | ScreenshotState::Paused(_) => {
                 self.screenshot.pending_pause = None;
@@ -181,6 +146,49 @@ impl BoardApp {
                 vec![Effect::Screenshot(ScreenshotIntent::Disable)]
             }
             ScreenshotState::Stopping => Vec::new(),
+        }
+    }
+
+    pub(super) fn retry_screenshot_capture(
+        &mut self,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        let Some(ScreenshotSave::Ready(candidate)) = self.screenshot.save.clone() else {
+            self.set_warning("Screenshot Inbox has no failed capture to retry");
+            return Vec::new();
+        };
+        self.prepare_screenshot_save(candidate, ids, clock, true)
+    }
+
+    pub(super) fn handle_ready_capture_quit(
+        &mut self,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        if !self.screenshot_retry_ready() {
+            return Vec::new();
+        }
+        if self.screenshot.ready_quit_armed {
+            self.screenshot.save = None;
+            self.screenshot.candidates.clear();
+            self.screenshot.ready_quit_armed = false;
+            let effects = self.flush_pending_edit(ids, clock);
+            self.request_quit();
+            return effects;
+        }
+        self.screenshot.ready_quit_armed = true;
+        self.set_error(
+            "Screenshot capture is not durable; choose Retry Screenshot Capture, or quit again to abandon the retained capture",
+        );
+        match self.screenshot.state {
+            ScreenshotState::Starting | ScreenshotState::Listening => {
+                self.screenshot.state = ScreenshotState::Stopping;
+                vec![Effect::Screenshot(ScreenshotIntent::Disable)]
+            }
+            ScreenshotState::Off | ScreenshotState::Stopping | ScreenshotState::Paused(_) => {
+                Vec::new()
+            }
         }
     }
 
@@ -201,10 +209,21 @@ impl BoardApp {
         self.screenshot.activity.stop();
         let Some(reason) = self.screenshot.pending_pause.take() else {
             self.screenshot.state = ScreenshotState::Off;
-            self.set_info("Screenshot Inbox is disabled");
+            if self.screenshot_retry_ready() {
+                self.set_error(
+                    "Screenshot Inbox is disabled and capture authority was released; choose Retry Screenshot Capture",
+                );
+            } else {
+                self.set_info("Screenshot Inbox is disabled");
+            }
             return Vec::new();
         };
         self.enter_screenshot_paused(reason);
+        if self.screenshot_retry_ready() {
+            self.set_error(
+                "Screenshot Inbox paused and released capture authority; choose Retry Screenshot Capture",
+            );
+        }
         vec![Effect::NotifyScreenshotPause(reason)]
     }
 
@@ -239,10 +258,12 @@ impl BoardApp {
         &mut self,
         candidates: impl IntoIterator<Item = ScreenshotCandidate>,
     ) -> Vec<Effect> {
-        if !matches!(
-            self.screenshot.state,
-            ScreenshotState::Listening | ScreenshotState::Stopping
-        ) {
+        if self.quit
+            || !matches!(
+                self.screenshot.state,
+                ScreenshotState::Listening | ScreenshotState::Stopping
+            )
+        {
             return Vec::new();
         }
         if self.screenshot.save.is_none() && self.screenshot.candidates.is_empty() {
@@ -343,20 +364,13 @@ impl BoardApp {
         });
         match result {
             Ok(outcome) => {
-                self.screenshot.deferred_retry_attempted = false;
                 self.apply_completed_capture(&commit, &outcome, was_editing, advance_auto_ready);
             }
             Err(error) => {
-                return self.capture_save_failed(candidate, *commit, &error, ids, clock);
+                self.capture_save_failed(candidate, &error);
             }
         }
-        if self.screenshot.deferred_quit && !self.screenshot_has_durable_work() {
-            self.screenshot.deferred_quit = false;
-            let effects = self.flush_pending_edit(ids, clock);
-            self.request_quit();
-            return effects;
-        }
-        Vec::new()
+        self.replay_screenshot_inputs(ids, clock)
     }
 
     fn apply_completed_capture(
@@ -387,8 +401,8 @@ impl BoardApp {
         was_editing: bool,
         advance_auto_ready: bool,
     ) {
-        let make_ready = !was_editing || advance_auto_ready;
-        if advance_auto_ready {
+        let make_ready = self.capture_auto_focus_is_safe(was_editing, advance_auto_ready);
+        if make_ready {
             self.state.focused_thought = Some(thought_id);
             self.state.mode = crate::application::InteractionMode::Edit { thought_id };
         }
@@ -405,44 +419,37 @@ impl BoardApp {
         self.set_success(message);
     }
 
-    fn capture_save_failed(
-        &mut self,
-        candidate: ScreenshotCandidate,
-        commit: crate::ports::store::CaptureCommit,
-        error: &StoreError,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-    ) -> Vec<Effect> {
+    fn capture_auto_focus_is_safe(&self, was_editing: bool, advance_auto_ready: bool) -> bool {
+        let interaction_clear = !self.help
+            && self.palette.is_none()
+            && self.invocation_popup.is_none()
+            && self.search.is_none()
+            && self.rename.is_none()
+            && self.transfer.is_none()
+            && self.update_prompt.is_none()
+            && self.screenshot.takeover.is_none()
+            && self.submission_mode.is_none()
+            && self.selection.is_empty()
+            && !self
+                .screenshot
+                .deferred_inputs
+                .iter()
+                .any(crate::ui::UiInput::is_deliberate_interaction);
+        (advance_auto_ready || !was_editing) && interaction_clear
+    }
+
+    fn capture_save_failed(&mut self, candidate: ScreenshotCandidate, error: &StoreError) {
         self.set_error(format!(
-            "Screenshot Inbox could not save the capture: {error}; it remains retryable"
+            "Screenshot Inbox could not save the capture: {error}; choose Retry Screenshot Capture"
         ));
-        if self.screenshot.deferred_quit && !self.screenshot.deferred_retry_attempted {
-            self.screenshot.deferred_retry_attempted = true;
-            self.screenshot.save = Some(ScreenshotSave::InFlight {
-                candidate,
-                commit: Box::new(commit.clone()),
-            });
-            return vec![Effect::CommitCapture(commit)];
-        }
         self.screenshot.save = Some(ScreenshotSave::Ready(candidate));
-        if !self.screenshot.deferred_quit {
-            return Vec::new();
-        }
-        self.set_error(
-            "Screenshot Inbox could not save the capture before shutdown; no screenshot thought was created",
-        );
-        self.screenshot.deferred_quit = false;
-        self.screenshot.deferred_retry_attempted = false;
-        let effects = self.flush_pending_edit(ids, clock);
-        self.request_quit();
-        effects
     }
 
     pub(super) fn note_screenshot_interaction(&mut self, input: &crate::ui::input::UiInput) {
-        if !matches!(
-            input,
-            crate::ui::input::UiInput::Resize { .. } | crate::ui::input::UiInput::HostFocusGained
-        ) {
+        if !matches!(input, crate::ui::UiInput::Key(crate::ui::UiKey::Quit)) {
+            self.screenshot.ready_quit_armed = false;
+        }
+        if input.is_deliberate_interaction() {
             self.screenshot.auto_ready = None;
         }
     }
@@ -456,17 +463,31 @@ impl BoardApp {
     #[must_use]
     /// Whether one commit-first capture is retained or in flight.
     pub const fn screenshot_commit_pending(&self) -> bool {
-        self.screenshot.save.is_some()
+        self.screenshot_sequence_reserved()
     }
 
     #[must_use]
-    pub(crate) fn screenshot_has_durable_work(&self) -> bool {
-        self.screenshot.save.is_some() || !self.screenshot.candidates.is_empty()
+    pub(crate) const fn screenshot_retry_ready(&self) -> bool {
+        matches!(self.screenshot.save, Some(ScreenshotSave::Ready(_)))
+    }
+
+    #[must_use]
+    pub(crate) fn screenshot_blocks_capture_release(&self) -> bool {
+        match &self.screenshot.save {
+            Some(ScreenshotSave::InFlight { .. }) => true,
+            Some(ScreenshotSave::Ready(_)) => false,
+            None => !self.screenshot.candidates.is_empty(),
+        }
     }
 
     #[must_use]
     pub(super) const fn screenshot_save_in_flight(&self) -> bool {
         matches!(self.screenshot.save, Some(ScreenshotSave::InFlight { .. }))
+    }
+
+    #[must_use]
+    pub(crate) const fn screenshot_sequence_reserved(&self) -> bool {
+        self.screenshot_save_in_flight()
     }
 }
 

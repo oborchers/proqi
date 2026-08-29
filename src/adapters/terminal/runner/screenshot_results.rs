@@ -96,7 +96,7 @@ fn apply_result(
 }
 
 pub(super) fn release_if_drained(app: &BoardApp, capture: &mut CaptureRuntime) {
-    if capture.release_when_drained && !app.screenshot_has_durable_work() {
+    if capture.release_when_drained && !app.screenshot_blocks_capture_release() {
         capture.lease = None;
         capture.release_when_drained = false;
         capture.takeover_stopping = false;
@@ -115,7 +115,11 @@ mod tests {
         ports::{
             environment::IdGenerator as _,
             runtime::{CaptureCoordinator as _, RuntimeCoordinator as _},
-            screenshot::ScreenshotActivityPolicy,
+            screenshot::{
+                ScreenshotActivityPolicy, ScreenshotCandidate, ScreenshotFingerprint,
+                ScreenshotImageType,
+            },
+            store::StoreError,
         },
     };
 
@@ -202,5 +206,83 @@ mod tests {
         second
             .acquire_capture(second_session.info())
             .expect("second owner acquires released capture");
+    }
+
+    #[test]
+    fn failed_ready_capture_releases_real_lock_but_retains_explicit_retry() {
+        let temporary = tempfile::tempdir().expect("temporary directory");
+        let runtime = temporary.path().join("runtime");
+        let launch = temporary.path().join("launch");
+        std::fs::create_dir(&launch).expect("launch directory");
+        let mut ids = FakeIdGenerator::new(1_725_271_000_000);
+        let first = FileRuntimeCoordinator::new(
+            runtime.clone(),
+            ids.instance_id(),
+            launch.clone(),
+            Timestamp::from_millis(1),
+            "test",
+        )
+        .expect("first coordinator");
+        let second = FileRuntimeCoordinator::new(
+            runtime,
+            ids.instance_id(),
+            launch.clone(),
+            Timestamp::from_millis(2),
+            "test",
+        )
+        .expect("second coordinator");
+        let mut first_session = first
+            .acquire_session(ids.session_id())
+            .expect("first session");
+        first_session.publish_control().expect("first control");
+        let mut second_session = second
+            .acquire_session(ids.session_id())
+            .expect("second session");
+        second_session.publish_control().expect("second control");
+        let lease = first
+            .acquire_capture(first_session.info())
+            .expect("first capture");
+        let session =
+            Session::new(ids.session_id(), launch, Timestamp::from_millis(1)).expect("app session");
+        let mut app = BoardApp::new(
+            AppState::new(SessionBoard::new(session, Vec::new()).expect("board")),
+            RopeEditorFactory,
+        );
+        app.screenshot_started(Duration::ZERO);
+        app.queue_screenshot_candidates([ScreenshotCandidate {
+            fingerprint: ScreenshotFingerprint([9; 32]),
+            path: temporary.path().join("capture.png"),
+            image_type: ScreenshotImageType::Png,
+        }]);
+        assert!(matches!(
+            app.advance_screenshot_capture(
+                &mut ids,
+                &crate::adapters::memory::FakeClock::new(Timestamp::from_millis(3))
+            )
+            .as_slice(),
+            [Effect::CommitCapture(_)]
+        ));
+        let mut capture = CaptureRuntime {
+            lease: Some(lease),
+            release_when_drained: true,
+            ..CaptureRuntime::default()
+        };
+        release_if_drained(&app, &mut capture);
+        assert!(
+            capture.lease.is_some(),
+            "in-flight commit retains authority"
+        );
+
+        app.complete_screenshot_capture(
+            Err(StoreError::Busy),
+            &mut ids,
+            &crate::adapters::memory::FakeClock::new(Timestamp::from_millis(3)),
+        );
+        release_if_drained(&app, &mut capture);
+        assert!(capture.lease.is_none());
+        assert!(app.screenshot_retry_ready());
+        second
+            .acquire_capture(second_session.info())
+            .expect("second owner acquires despite retained retry");
     }
 }

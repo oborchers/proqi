@@ -1,12 +1,13 @@
 use std::{fs, os::unix::fs::PermissionsExt as _, sync::Arc, time::Duration};
 
-use super::{ScreenshotLane, ScreenshotResult};
+use super::{ScreenshotLane, ScreenshotResult, takeover_control_error};
 use crate::{
     adapters::{
         memory::FakeIdGenerator, runtime::FileRuntimeCoordinator, terminal::settings::load_settings,
     },
     domain::Timestamp,
     ports::{
+        control::{ControlError, ControlRejectionCode},
         environment::IdGenerator as _,
         runtime::RuntimeCoordinator as _,
         screenshot::{
@@ -15,6 +16,27 @@ use crate::{
         },
     },
 };
+
+#[test]
+fn takeover_failures_preserve_in_progress_unavailable_and_timeout_truth() {
+    assert_eq!(
+        takeover_control_error(ControlError::Rejected {
+            code: ControlRejectionCode::CaptureTakeoverInProgress
+                .as_str()
+                .to_owned(),
+            message: "bounded".to_owned(),
+        }),
+        ScreenshotError::TakeoverInProgress
+    );
+    assert_eq!(
+        takeover_control_error(ControlError::Io("redacted".to_owned())),
+        ScreenshotError::TakeoverUnavailable
+    );
+    assert_eq!(
+        takeover_control_error(ControlError::Timeout),
+        ScreenshotError::TakeoverTimedOut
+    );
+}
 
 struct FailingFinalFactory;
 

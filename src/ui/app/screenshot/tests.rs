@@ -13,8 +13,14 @@ use std::time::Duration;
 
 #[path = "tests/activity.rs"]
 mod activity;
+#[path = "tests/barrier.rs"]
+mod barrier;
 #[path = "tests/behavior.rs"]
 mod behavior;
+#[path = "tests/focus.rs"]
+mod focus;
+#[path = "tests/lifecycle.rs"]
+mod lifecycle;
 
 #[test]
 fn takeover_overlay_has_a_complete_wide_snapshot() {

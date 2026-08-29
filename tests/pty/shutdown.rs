@@ -177,15 +177,20 @@ fn acknowledged_paste_survives_forced_process_termination() {
 
 #[test]
 fn keyboard_quit_during_delayed_capture_commit_restores_and_preserves_content() {
-    delayed_capture_shutdown(false);
+    delayed_capture_shutdown(false, false);
 }
 
 #[test]
 fn termination_during_delayed_capture_commit_restores_and_preserves_content() {
-    delayed_capture_shutdown(true);
+    delayed_capture_shutdown(true, false);
 }
 
-fn delayed_capture_shutdown(terminate: bool) {
+#[test]
+fn termination_during_persistently_failed_capture_restores_and_exits_boundedly() {
+    delayed_capture_shutdown(true, true);
+}
+
+fn delayed_capture_shutdown(terminate: bool, persistent_failure: bool) {
     let state = tempfile::Builder::new()
         .prefix("pq-cap-")
         .tempdir_in("/private/tmp")
@@ -201,6 +206,31 @@ fn delayed_capture_shutdown(terminate: bool) {
         "system /bin/kill -TERM $child"
     } else {
         "send -- \"\\x11\""
+    };
+    let finish_action = if persistent_failure {
+        r#"
+        set spawn_id $proqi
+        expect -exact "\x1b\[0 q"
+        expect eof
+        catch wait result
+        set proqi_status [lindex $result 3]
+        set spawn_id $sqlite
+        send -- "ROLLBACK;\r.quit\r"
+        expect eof
+        exit $proqi_status
+        "#
+    } else {
+        r#"
+        after 150
+        set spawn_id $sqlite
+        send -- "COMMIT;\r.quit\r"
+        expect eof
+        set spawn_id $proqi
+        expect -exact "\x1b\[0 q"
+        expect eof
+        catch wait result
+        exit [lindex $result 3]
+        "#
     };
     let workflow = format!(
         r#"
@@ -243,15 +273,7 @@ fn delayed_capture_shutdown(terminate: bool) {
         after 500
         send -- "!"
         {exit_action}
-        after 150
-        set spawn_id $sqlite
-        send -- "COMMIT;\r.quit\r"
-        expect eof
-        set spawn_id $proqi
-        expect -exact "\x1b\[0 q"
-        expect eof
-        catch wait result
-        exit [lindex $result 3]
+        {finish_action}
         "#
     );
     let status = expect_command()
@@ -266,7 +288,15 @@ fn delayed_capture_shutdown(terminate: bool) {
         .env("PROQI_TEST_TARGET", &target)
         .status()
         .expect("run delayed capture shutdown");
-    assert!(status.success(), "delayed capture shutdown exited {status}");
+    if persistent_failure {
+        assert_eq!(
+            status.code(),
+            Some(1),
+            "persistent failure must be truthful"
+        );
+    } else {
+        assert!(status.success(), "delayed capture shutdown exited {status}");
+    }
 
     let sessions = json_command(binary, state.path(), &["sessions", "list"]);
     let session = sessions["data"]["sessions"][0]["id"]
@@ -279,10 +309,12 @@ fn delayed_capture_shutdown(terminate: bool) {
         .iter()
         .map(|thought| thought["content"].as_str().expect("content"))
         .collect::<Vec<_>>();
-    assert_eq!(
-        contents,
-        ["durable editor!", target.to_str().expect("target")]
-    );
+    let expected = if persistent_failure {
+        vec!["durable editor"]
+    } else {
+        vec!["durable editor!", target.to_str().expect("target")]
+    };
+    assert_eq!(contents, expected);
 }
 
 fn configure_capture(state: &Path, watched: &Path) {

@@ -15,6 +15,7 @@ use crate::{
         screenshot::SystemScreenshotWatcherFactory,
     },
     ports::{
+        control::{ControlError, ControlRejectionCode},
         runtime::{CaptureCoordinator, CaptureLockError, InstanceInfo},
         screenshot::{
             ActiveScreenshotWatcher, ScreenshotCandidate, ScreenshotError, ScreenshotWatcherFactory,
@@ -280,28 +281,28 @@ impl ScreenshotWorker {
         };
         let client =
             crate::adapters::control::CancellableLocalControlClient::new(self.cancellation.clone());
-        if client
-            .request_capture_takeover(owner, self.instance.instance_id, request_id)
-            .is_err()
+        if let Err(error) =
+            client.request_capture_takeover(owner, self.instance.instance_id, request_id)
         {
-            return self.fail(results, ScreenshotError::TakeoverFailed, false);
+            return self.fail(results, takeover_control_error(error), false);
         }
-        let Some(lease) = self.await_released_capture() else {
-            return self.fail(results, ScreenshotError::TakeoverFailed, false);
+        let lease = match self.await_released_capture() {
+            Ok(lease) => lease,
+            Err(error) => return self.fail(results, error, false),
         };
         self.start_owned(results, config, lease)
     }
 
-    fn await_released_capture(&self) -> Option<FileCaptureLease> {
+    fn await_released_capture(&self) -> Result<FileCaptureLease, ScreenshotError> {
         let deadline = std::time::Instant::now() + Duration::from_secs(2);
         while std::time::Instant::now() < deadline && !self.cancellation.is_cancelled() {
             match self.coordinator.acquire_capture(&self.instance) {
-                Ok(lease) => return Some(lease),
+                Ok(lease) => return Ok(lease),
                 Err(CaptureLockError::Busy { .. }) => thread::sleep(Duration::from_millis(25)),
-                Err(_) => return None,
+                Err(_) => return Err(ScreenshotError::TakeoverUnavailable),
             }
         }
-        None
+        Err(ScreenshotError::TakeoverTimedOut)
     }
 
     fn start_owned(
@@ -382,6 +383,23 @@ impl ScreenshotWorker {
                 }
             }
         }
+    }
+}
+
+fn takeover_control_error(error: ControlError) -> ScreenshotError {
+    match error {
+        ControlError::Rejected { code, .. }
+            if code == ControlRejectionCode::CaptureTakeoverInProgress.as_str() =>
+        {
+            ScreenshotError::TakeoverInProgress
+        }
+        ControlError::Timeout => ScreenshotError::TakeoverTimedOut,
+        ControlError::Unsupported
+        | ControlError::InvalidPeer
+        | ControlError::MessageTooLarge
+        | ControlError::Protocol(_)
+        | ControlError::Io(_)
+        | ControlError::Rejected { .. } => ScreenshotError::TakeoverUnavailable,
     }
 }
 

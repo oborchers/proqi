@@ -337,6 +337,15 @@ stability. Reconciliation opens entries relative to the watched directory with
 no-follow semantics and accepts only bounded, magic-validated PNG, JPEG, or TIFF
 regular files. Linux implements the port only as truthful unsupported behavior.
 
+Reconciliation has a cheap identity phase and an expensive eligibility phase.
+The activation baseline and already-delivered identities are rejected before
+xattr or bounded image-header reads. Stable eligibility is cached until path,
+size, modification time, or identity changes. A rename is part of the stable
+observation and restarts the full monotonic debounce interval; dot-prefixed and
+macOS-hidden staging entries are ignored. Directory enumeration, cancellation,
+and follow-up work remain explicitly bounded, while an idle kqueue timeout with
+no pending candidate does not rescan the directory.
+
 `com.apple.metadata:kMDItemIsScreenCapture` is the strong language-independent
 best-effort signal. User-configured filename patterns are fallbacks, and broad
 new-image capture is an explicit opt-in. The watcher never captures a screen,
@@ -352,6 +361,17 @@ retries cannot reopen capacity and one watcher batch cannot cross the hard cap.
 Automatic pause reuses the ordinary bounded final reconciliation, durable drain,
 and capture-lock release path. Resume creates a new watcher and baseline rather
 than replaying the paused interval.
+
+The runner owns one canonical mutation-admission rule around the commit-first
+capture. An in-flight capture retryably rejects sequence-producing owner-control
+requests, including sync, and an unresolved durable control lookup prevents a
+capture reservation until that lookup has replayed, failed, or produced and
+completed its ordered mutation. The UI uses the same reservation as a bounded
+ordered replay barrier for local keyboard, paste, pointer, and resize intentions.
+Capture application itself changes only terminal-independent durable state; UI
+composition alone decides whether the new thought may safely receive focus.
+Failed ready candidates do not retain the installation lease, and retry,
+disable, resume, takeover, and quit remain separate explicit lifecycle actions.
 
 After the watcher has truthfully stopped, the application may emit one typed
 content-free pause-notification effect. Notification routing is disabled by

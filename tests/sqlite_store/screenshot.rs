@@ -130,6 +130,56 @@ fn invalid_capture_operation_leaves_neither_receipt_nor_partial_thought() {
 }
 
 #[test]
+fn persistent_contention_leaves_no_partial_capture_and_exact_retry_succeeds() {
+    let fixture = DatabaseFixture::new();
+    let mut setup = fixture.open();
+    let mut ids = FakeIdGenerator::new(1_725_241_500_000);
+    let state = session_state(&mut ids, &test_path("screenshot-busy-retry"));
+    setup
+        .commit(&OperationBatch::CreateSession(state.board.session.clone()))
+        .expect("create session");
+    drop(setup);
+    let mut config = fixture.config.clone();
+    config.retry = RetryPolicy {
+        busy_timeout: Duration::from_millis(1),
+        max_attempts: 2,
+        base_delay: Duration::ZERO,
+        jitter_seed: 1,
+    };
+    let mut store = SqliteStore::open(&config).expect("store");
+    let capture = prepared_capture(&state, &mut ids, 13, 2);
+    let raw = Connection::open(&config.database_path).expect("contending connection");
+    raw.execute_batch("BEGIN IMMEDIATE").expect("writer lock");
+
+    assert_eq!(store.commit_capture(&capture), Err(StoreError::Busy));
+    assert!(
+        store
+            .load_session(state.board.session.id)
+            .expect("unchanged session")
+            .board
+            .thoughts()
+            .is_empty()
+    );
+    raw.execute_batch("ROLLBACK").expect("release writer");
+
+    let outcome = store.commit_capture(&capture).expect("retry capture");
+    assert!(matches!(outcome, CaptureCommitOutcome::Created { .. }));
+    assert_eq!(
+        store
+            .load_session(state.board.session.id)
+            .expect("durable retry")
+            .board
+            .live_thoughts()
+            .len(),
+        1
+    );
+    assert!(matches!(
+        store.commit_capture(&capture).expect("dedupe replay"),
+        CaptureCommitOutcome::AlreadyCaptured(_)
+    ));
+}
+
+#[test]
 fn capture_receipt_survives_undo_then_branching_history() {
     let fixture = DatabaseFixture::new();
     let mut store = fixture.open();

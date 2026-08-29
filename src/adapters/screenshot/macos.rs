@@ -1,21 +1,18 @@
 //! macOS kqueue watcher with identity-based stable-file reconciliation.
 
+mod scan;
+
 use std::{
     collections::{HashMap, HashSet},
-    ffi::OsString,
-    fs::{self, File},
-    os::{macos::fs::MetadataExt as _, unix::fs::MetadataExt as _},
+    fs::File,
     path::PathBuf,
     sync::Arc,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use kqueue::{EventFilter, FilterFlag, Watcher};
-use rustix::fs::{Mode, OFlags, openat};
 use sha2::{Digest as _, Sha256};
-use xattr::FileExt as _;
 
-use super::pattern::wildcard_match;
 use crate::ports::{
     environment::MonotonicClock,
     screenshot::{
@@ -82,6 +79,8 @@ pub(super) struct MacScreenshotWatcher {
     delivered: HashSet<FileIdentity>,
     pending: HashMap<FileIdentity, PendingCandidate>,
     next_observation: u64,
+    #[cfg(test)]
+    eligibility_checks: usize,
 }
 
 impl MacScreenshotWatcher {
@@ -154,15 +153,17 @@ impl MacScreenshotWatcher {
             delivered: HashSet::new(),
             pending: HashMap::new(),
             next_observation: 0,
+            #[cfg(test)]
+            eligibility_checks: 0,
         };
-        for identity in state.scan_identities()? {
+        let now = state.clock.now();
+        for file in state.scan_cheap()? {
+            let identity = file.observation.identity;
             if birth_nanos(identity) <= activation {
                 state.baseline.insert(identity);
+            } else if let Some(eligible) = state.inspect_eligibility(file)? {
+                state.observe(eligible, now);
             }
-        }
-        let now = state.clock.now();
-        for file in state.scan()? {
-            state.observe(file, now);
         }
         Ok(state)
     }
@@ -225,7 +226,7 @@ impl MacScreenshotWatcher {
     }
 
     fn reconcile(&mut self, now: Duration) -> Result<Vec<ScreenshotCandidate>, ScreenshotError> {
-        let seen = self.scan()?;
+        let seen = self.scan_cheap()?;
         let identities = seen
             .iter()
             .map(|file| file.observation.identity)
@@ -233,7 +234,22 @@ impl MacScreenshotWatcher {
         self.pending
             .retain(|identity, _| identities.contains(identity));
         for file in seen {
-            self.observe(file, now);
+            let identity = file.observation.identity;
+            if self.baseline.contains(&identity) || self.delivered.contains(&identity) {
+                continue;
+            }
+            let unchanged = self.pending.get(&identity).is_some_and(|pending| {
+                pending.observation == file.observation && pending.path == file.path
+            });
+            if unchanged {
+                continue;
+            }
+            match self.inspect_eligibility(file)? {
+                Some(eligible) => self.observe(eligible, now),
+                None => {
+                    self.pending.remove(&identity);
+                }
+            }
         }
         let mut ready = self
             .pending
@@ -256,7 +272,10 @@ impl MacScreenshotWatcher {
             return;
         }
         if let Some(pending) = self.pending.get_mut(&identity) {
-            if pending.observation != file.observation || pending.image_type != file.image_type {
+            if pending.observation != file.observation
+                || pending.image_type != file.image_type
+                || pending.path != file.path
+            {
                 pending.observation = file.observation;
                 pending.image_type = file.image_type;
                 pending.stable_since = now;
@@ -286,147 +305,9 @@ impl MacScreenshotWatcher {
             image_type: pending.image_type,
         })
     }
-
-    fn scan(&self) -> Result<Vec<ScannedFile>, ScreenshotError> {
-        let entries = fs::read_dir(&self.config.directory)
-            .map_err(|error| access_error(&error, &self.terminal_host))?;
-        let mut files = Vec::new();
-        for (index, entry) in entries.enumerate() {
-            self.check_scan_bound(index)?;
-            let entry = entry.map_err(|_| ScreenshotError::Reconciliation)?;
-            if let Some(file) = self.inspect(entry.file_name())? {
-                files.push(file);
-            }
-        }
-        files.sort_by_key(|file| {
-            let identity = file.observation.identity;
-            (identity.birth_seconds, identity.birth_nanos, identity.inode)
-        });
-        Ok(files)
-    }
-
-    fn scan_identities(&self) -> Result<Vec<FileIdentity>, ScreenshotError> {
-        let entries = fs::read_dir(&self.config.directory)
-            .map_err(|error| access_error(&error, &self.terminal_host))?;
-        let mut identities = Vec::new();
-        for (index, entry) in entries.enumerate() {
-            self.check_scan_bound(index)?;
-            let entry = entry.map_err(|_| ScreenshotError::Reconciliation)?;
-            if let Some(identity) = self.inspect_identity(&entry.file_name())? {
-                identities.push(identity);
-            }
-        }
-        Ok(identities)
-    }
-
-    fn check_scan_bound(&self, index: usize) -> Result<(), ScreenshotError> {
-        if self.cancellation.is_cancelled() {
-            Err(ScreenshotError::Cancelled)
-        } else if index >= self.entry_limit {
-            Err(ScreenshotError::ReconciliationLimit)
-        } else {
-            Ok(())
-        }
-    }
-
-    fn inspect_identity(&self, name: &OsString) -> Result<Option<FileIdentity>, ScreenshotError> {
-        let descriptor = match openat(
-            &self.directory,
-            name,
-            OFlags::RDONLY | OFlags::CLOEXEC | OFlags::NOFOLLOW,
-            Mode::empty(),
-        ) {
-            Ok(descriptor) => descriptor,
-            Err(rustix::io::Errno::LOOP | rustix::io::Errno::NOENT) => return Ok(None),
-            Err(error)
-                if error == rustix::io::Errno::ACCESS || error == rustix::io::Errno::PERM =>
-            {
-                return Err(permission_error(&self.terminal_host));
-            }
-            Err(_) => return Ok(None),
-        };
-        let file = File::from(descriptor);
-        let metadata = file
-            .metadata()
-            .map_err(|_| ScreenshotError::Reconciliation)?;
-        if !metadata.is_file() {
-            return Ok(None);
-        }
-        Ok(Some(FileIdentity {
-            device: metadata.dev(),
-            inode: metadata.ino(),
-            birth_seconds: metadata.st_birthtime(),
-            birth_nanos: metadata.st_birthtime_nsec(),
-        }))
-    }
-
-    fn inspect(&self, name: OsString) -> Result<Option<ScannedFile>, ScreenshotError> {
-        let Some(name_text) = name.to_str() else {
-            return Ok(None);
-        };
-        let descriptor = match openat(
-            &self.directory,
-            &name,
-            OFlags::RDONLY | OFlags::CLOEXEC | OFlags::NOFOLLOW,
-            Mode::empty(),
-        ) {
-            Ok(descriptor) => descriptor,
-            Err(rustix::io::Errno::LOOP | rustix::io::Errno::NOENT) => return Ok(None),
-            Err(error)
-                if error == rustix::io::Errno::ACCESS || error == rustix::io::Errno::PERM =>
-            {
-                return Err(permission_error(&self.terminal_host));
-            }
-            Err(_) => return Ok(None),
-        };
-        let file = File::from(descriptor);
-        let metadata = file
-            .metadata()
-            .map_err(|_| ScreenshotError::Reconciliation)?;
-        if !metadata.is_file()
-            || metadata.len() < self.config.bounds.min_file_bytes
-            || metadata.len() > self.config.bounds.max_file_bytes
-            || !self.accepted_signal(&file, name_text)
-        {
-            return Ok(None);
-        }
-        let Some((image_type, _, _)) = super::image::inspect(&file, self.config.bounds) else {
-            return Ok(None);
-        };
-        if !self.config.supported_types.contains(&image_type) {
-            return Ok(None);
-        }
-        let identity = FileIdentity {
-            device: metadata.dev(),
-            inode: metadata.ino(),
-            birth_seconds: metadata.st_birthtime(),
-            birth_nanos: metadata.st_birthtime_nsec(),
-        };
-        Ok(Some(ScannedFile {
-            observation: Observation {
-                identity,
-                bytes: metadata.len(),
-                modified_seconds: metadata.mtime(),
-                modified_nanos: metadata.mtime_nsec(),
-            },
-            path: self.config.directory.join(name),
-            image_type,
-        }))
-    }
-
-    fn accepted_signal(&self, file: &File, name: &str) -> bool {
-        file.get_xattr("com.apple.metadata:kMDItemIsScreenCapture")
-            .is_ok_and(|value| value.is_some_and(|bytes| !bytes.is_empty()))
-            || self
-                .config
-                .filename_patterns
-                .iter()
-                .any(|pattern| wildcard_match(pattern, name))
-            || self.config.capture_all_new_images
-    }
 }
 
-struct ScannedFile {
+pub(super) struct ScannedFile {
     observation: Observation,
     path: PathBuf,
     image_type: ScreenshotImageType,

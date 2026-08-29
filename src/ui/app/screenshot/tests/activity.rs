@@ -132,7 +132,7 @@ fn cap_failure_retains_ordered_retry_without_admitting_excess_work() {
 
     let first = next_commit(&mut app, &mut ids, &clock);
     app.complete_screenshot_capture(Err(StoreError::Busy), &mut ids, &clock);
-    let retry_effects = app.toggle_screenshot_inbox(&mut ids, &clock);
+    let retry_effects = app.retry_screenshot_capture(&mut ids, &clock);
     let [Effect::CommitCapture(retry)] = retry_effects.as_slice() else {
         panic!("retained retry");
     };

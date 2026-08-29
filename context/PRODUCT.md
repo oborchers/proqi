@@ -377,7 +377,19 @@ byte and dimension bounds.
 
 While active, restrained footer chrome says `inbox listening`; accepted batches
 report `1 new capture` or `N new captures` without taking an active editor's
-focus or caret. The palette action becomes `Disable Screenshot Inbox`.
+focus or caret. Help, command palette, search, rename, transfer, update,
+invocation completion, and live board selection also remain in place while the
+capture appends quietly. The palette action becomes `Disable Screenshot Inbox`.
+
+The atomic capture save is the admission barrier for every sequence-producing
+interaction, including owner-control mutation and sync. Keyboard, paste, mouse,
+and resize intentions received during that save replay in order from a bounded
+queue; overflow is reported explicitly and never silently discarded. A failed
+save creates no partial thought and remains available through the distinct
+`Retry Screenshot Capture` command. Disable, pause, takeover, and shutdown do
+not turn into implicit retry actions and release capture authority within their
+teardown bound. Ordinary quit requires explicit confirmation before abandoning
+a retained failed candidate.
 
 Every listening period has two mandatory configurable safety bounds, defaulting
 to 20 minutes without deliberate Proqi interaction and 10 unattended admitted
@@ -412,7 +424,9 @@ contender is offered `Cancel` or `Take over`. Takeover uses verified owner
 control: the owner reconciles, drains atomic capture receipts and thoughts,
 stops its watcher, and releases the lock before the requester retries. A live
 or incompatible owner is never force-unlocked, and a crash releases authority
-through the operating system.
+through the operating system. Takeover distinguishes an owner already draining,
+unavailable verified control or runtime I/O, and a still-held lock after the
+bounded timeout.
 
 ### Creation affordance
 
