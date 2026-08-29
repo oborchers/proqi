@@ -58,6 +58,7 @@ fn selected_thoughts_submit_once_in_board_order_and_remove_as_one_undo_step() {
     super::agent::prepare_thought(&mut fixture);
     fixture.paste("second thought");
     fixture.input(UiInput::Key(UiKey::Escape));
+    fixture.acknowledge_all_persistence();
     fixture.input(UiInput::Key(UiKey::Character(' ')));
     fixture.input(UiInput::Key(UiKey::Character('k')));
     fixture.input(UiInput::Key(UiKey::Character(' ')));
@@ -107,6 +108,7 @@ fn merged_prompt_keeps_only_the_first_shared_starter() {
                 "{starter} second task keeps internal {starter} prose"
             ));
             fixture.input(UiInput::Key(UiKey::Escape));
+            fixture.acknowledge_all_persistence();
             fixture.input(UiInput::Key(UiKey::Character(' ')));
             fixture.input(UiInput::Key(UiKey::Character('k')));
             fixture.input(UiInput::Key(UiKey::Character(' ')));
@@ -136,6 +138,7 @@ fn merged_prompt_keeps_only_the_first_shared_starter() {
             without_first_starter.input(UiInput::Key(UiKey::Escape));
             without_first_starter.paste(&format!("{starter} later task"));
             without_first_starter.input(UiInput::Key(UiKey::Escape));
+            without_first_starter.acknowledge_all_persistence();
             without_first_starter.input(UiInput::Key(UiKey::Character(' ')));
             without_first_starter.input(UiInput::Key(UiKey::Character('k')));
             without_first_starter.input(UiInput::Key(UiKey::Character(' ')));

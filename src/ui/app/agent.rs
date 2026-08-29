@@ -4,20 +4,13 @@ use crate::{
     application::{Action, Effect, reduce},
     domain::{BoardOperationKind, SubmissionId},
     ports::{
-        agent::{
-            AgentError, AgentTarget, SubmissionDisposition, SubmissionReceipt, SubmissionRequest,
-        },
-        environment::{Clock, IdGenerator},
-        store::{StoreError, SubmissionAttempt, SubmissionAttemptState, SubmissionOutcome},
+        agent::{AgentError, AgentTarget, SubmissionDisposition, SubmissionReceipt},
+        store::{StoreError, SubmissionAttemptState, SubmissionOutcome},
     },
 };
 use sha2::{Digest, Sha256};
 
-use super::{
-    BoardApp,
-    agent_identity::target_fingerprint,
-    pending_types::{PendingSubmission, PendingSubmissionSource},
-};
+use super::{BoardApp, pending_types::PendingSubmission};
 
 impl BoardApp {
     /// Initial optional-integration discovery effect.
@@ -168,93 +161,10 @@ impl BoardApp {
         }
     }
 
-    pub(super) fn queue_submission(
+    pub(super) fn release_submission_sources(
         &mut self,
-        target: &AgentTarget,
-        disposition: SubmissionDisposition,
-        thought_ids: &[crate::domain::ThoughtId],
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-    ) -> Vec<Effect> {
-        let source_contents = thought_ids
-            .iter()
-            .filter_map(|id| self.state.board.thought(*id))
-            .filter(|thought| thought.is_live())
-            .map(|thought| (thought.id, thought.content.clone()))
-            .collect::<Vec<_>>();
-        if source_contents.len() != thought_ids.len() {
-            self.set_warning("board changed before submission; thoughts kept");
-            return Vec::new();
-        }
-        let content = crate::application::join_prompt_for_target(target, &source_contents);
-        let submission_id = ids.submission_id();
-        let payload_digest = digest(content.as_bytes());
-        let at = clock.now();
-        let request = SubmissionRequest {
-            submission_id,
-            target: target.clone(),
-            content,
-        };
-        let sources = source_contents
-            .iter()
-            .map(|(thought_id, content)| PendingSubmissionSource {
-                thought_id: *thought_id,
-                source_digest: digest(content.as_bytes()),
-            })
-            .collect::<Vec<_>>();
-        let deletion_operation_id = ids.operation_id();
-        let multiple = sources.len() > 1;
-        let source_ids = sources
-            .iter()
-            .map(|source| source.thought_id)
-            .collect::<Vec<_>>();
-        if let Err(error) = reduce(
-            &mut self.state,
-            Action::BeginSubmission {
-                thought_ids: source_ids,
-            },
-        ) {
-            self.set_error(error.to_string());
-            return Vec::new();
-        }
-        self.pending_submissions.insert(
-            submission_id,
-            PendingSubmission {
-                request: request.clone(),
-                sources,
-                at,
-                disposition,
-                deletion_operation_id,
-                completion: None,
-            },
-        );
-        self.set_info(submission_progress(disposition, multiple));
-        let attempt = SubmissionAttempt {
-            id: submission_id,
-            session_id: self.state.board.session.id,
-            sources: source_contents
-                .into_iter()
-                .map(
-                    |(thought_id, content)| crate::ports::store::SubmissionSource {
-                        thought_id,
-                        source_digest: digest(content.as_bytes()),
-                    },
-                )
-                .collect(),
-            payload_digest,
-            source_sequence: self.state.board.session.last_durable_sequence,
-            disposition,
-            direction: target.direction,
-            provider: target.provider.clone(),
-            protocol: target.protocol,
-            target_fingerprint: target_fingerprint(target),
-            pre_state: target.readiness,
-            prepared_at: at,
-        };
-        vec![Effect::PrepareSubmission(attempt)]
-    }
-
-    fn release_submission_sources(&mut self, thought_ids: Vec<crate::domain::ThoughtId>) {
+        thought_ids: Vec<crate::domain::ThoughtId>,
+    ) {
         if let Err(error) = reduce(&mut self.state, Action::EndSubmission { thought_ids }) {
             self.set_error(error.to_string());
         }
@@ -333,7 +243,7 @@ impl BoardApp {
     }
 }
 
-fn pending_source_ids(pending: &PendingSubmission) -> Vec<crate::domain::ThoughtId> {
+pub(super) fn pending_source_ids(pending: &PendingSubmission) -> Vec<crate::domain::ThoughtId> {
     pending
         .sources
         .iter()
@@ -341,24 +251,11 @@ fn pending_source_ids(pending: &PendingSubmission) -> Vec<crate::domain::Thought
         .collect()
 }
 
-fn kept_sentence(source_count: usize) -> &'static str {
+pub(super) fn kept_sentence(source_count: usize) -> &'static str {
     if source_count == 1 {
         "Thought kept"
     } else {
         "Thoughts kept"
-    }
-}
-
-fn submission_progress(disposition: SubmissionDisposition, multiple: bool) -> &'static str {
-    match (disposition, multiple) {
-        (SubmissionDisposition::Keep, false) => "submitting now, thought will be kept",
-        (SubmissionDisposition::Keep, true) => "submitting now, thoughts will be kept",
-        (SubmissionDisposition::RemoveAfterSuccess, false) => {
-            "submitting now, thought will be removed after acceptance"
-        }
-        (SubmissionDisposition::RemoveAfterSuccess, true) => {
-            "submitting now, thoughts will be removed after acceptance"
-        }
     }
 }
 
@@ -389,7 +286,7 @@ fn agent_error_code(error: &AgentError) -> &'static str {
     error.stable_code().as_str()
 }
 
-fn digest(bytes: &[u8]) -> [u8; 32] {
+pub(super) fn digest(bytes: &[u8]) -> [u8; 32] {
     Sha256::digest(bytes).into()
 }
 

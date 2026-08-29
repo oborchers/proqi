@@ -20,7 +20,13 @@ impl BoardApp {
         clock: &impl Clock,
     ) -> Vec<Effect> {
         self.deactivate_range_latch();
-        self.begin_delivery_for(disposition, self.action_thought_ids(), ids, clock)
+        let mut effects = if matches!(self.state.mode, InteractionMode::Edit { .. }) {
+            self.finish_edit(ids, clock)
+        } else {
+            self.flush_pending_edit(ids, clock)
+        };
+        effects.extend(self.begin_delivery_for(disposition, self.action_thought_ids(), ids, clock));
+        effects
     }
 
     pub(super) fn begin_delivery_all(

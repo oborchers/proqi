@@ -12,6 +12,7 @@ fn populate_exact_board(fixture: &mut Fixture) {
     fixture.input(UiInput::Key(UiKey::Escape));
     fixture.paste("/plan Grüße 👩‍💻\r\n第二行");
     fixture.input(UiInput::Key(UiKey::Escape));
+    fixture.acknowledge_all_persistence();
 }
 
 fn execute_palette(fixture: &mut Fixture, query: &str) -> Vec<Effect> {
@@ -37,6 +38,36 @@ fn click_palette(fixture: &mut Fixture, query: &str) -> Vec<Effect> {
     }))
 }
 
+fn execute_palette_from_edit(fixture: &mut Fixture, query: &str) -> (Vec<Effect>, Vec<Effect>) {
+    let layout = fixture.app.prepare_frame(Rect::new(0, 0, 80, 12));
+    let commands = layout
+        .controls
+        .iter()
+        .find_map(|(target, area)| (*target == proqi::ui::HitTarget::Commands).then_some(*area))
+        .expect("command palette control");
+    let save = fixture.effects(UiInput::Pointer(PointerInput {
+        column: commands.x,
+        row: commands.y,
+        kind: PointerKind::Down(PointerButton::Left),
+        extend_selection: false,
+    }));
+    for character in query.chars() {
+        fixture.input(UiInput::Key(UiKey::Character(character)));
+    }
+    let submission = fixture.effects(UiInput::Key(UiKey::Enter));
+    (save, submission)
+}
+
+fn editable_durable_board(fixture: &mut Fixture) {
+    for content in ["first", "second"] {
+        fixture.paste(content);
+        fixture.input(UiInput::Key(UiKey::Escape));
+    }
+    fixture.acknowledge_all_persistence();
+    fixture.input(UiInput::Key(UiKey::Character('e')));
+    fixture.input(UiInput::Key(UiKey::Character('!')));
+}
+
 #[test]
 fn palette_submission_labels_use_one_concise_vocabulary() {
     let mut fixture = Fixture::new();
@@ -59,6 +90,81 @@ fn palette_submission_labels_use_one_concise_vocabulary() {
         ]
     );
     assert_eq!(selected, 0);
+}
+
+#[test]
+fn edit_mode_submission_waits_for_durable_latest_content() {
+    for (query, expected) in [
+        ("submit and keep", "second!"),
+        ("submit all and keep", "first\n\nsecond!"),
+    ] {
+        let mut fixture = Fixture::new();
+        editable_durable_board(&mut fixture);
+        fixture
+            .app
+            .complete_agent_discovery(Ok(vec![super::agent::target(Direction::Left, "w1:p2")]));
+
+        let (commit, submission) = execute_palette_from_edit(&mut fixture, query);
+        let [Effect::CommitRevision(revision)] = commit.as_slice() else {
+            panic!("submission must wait on exactly one revision commit: {commit:?}");
+        };
+        assert!(submission.is_empty());
+        assert_eq!(revision.after_content, "second!");
+
+        let preparation = fixture.app.acknowledge_persistence(revision.sequence, true);
+        let [Effect::PrepareSubmission(attempt)] = preparation.as_slice() else {
+            panic!("durable revision must release one submission: {preparation:?}");
+        };
+        assert_eq!(attempt.source_sequence, revision.sequence);
+        let request = super::agent::start_submission(&mut fixture, &preparation);
+        assert_eq!(request.content, expected);
+    }
+}
+
+#[test]
+fn failed_edit_commit_cancels_ordinary_and_whole_board_submission() {
+    for query in ["submit", "submit all"] {
+        let mut fixture = Fixture::new();
+        editable_durable_board(&mut fixture);
+        fixture
+            .app
+            .complete_agent_discovery(Ok(vec![super::agent::target(Direction::Left, "w1:p2")]));
+
+        let (commit, submission) = execute_palette_from_edit(&mut fixture, query);
+        let [Effect::CommitRevision(revision)] = commit.as_slice() else {
+            panic!("submission must emit only its revision commit: {commit:?}");
+        };
+        assert!(submission.is_empty());
+        assert!(
+            fixture
+                .app
+                .acknowledge_persistence(revision.sequence, false)
+                .is_empty()
+        );
+        assert_eq!(
+            fixture
+                .app
+                .state
+                .board
+                .live_thoughts()
+                .iter()
+                .map(|thought| thought.content.as_str())
+                .collect::<Vec<_>>(),
+            ["first", "second!"]
+        );
+        assert!(
+            fixture
+                .app
+                .state
+                .board
+                .live_thoughts()
+                .iter()
+                .all(|thought| !fixture.app.state.thought_locked(thought.id))
+        );
+        assert!(fixture.app.status_text().is_some_and(|status| {
+            status.starts_with("Submission not started because changes were not saved.")
+        }));
+    }
 }
 
 #[test]
@@ -131,6 +237,7 @@ fn select_all_then_each_submit_key_addresses_the_complete_board() {
             fixture.paste(content);
             fixture.input(UiInput::Key(UiKey::Escape));
         }
+        fixture.acknowledge_all_persistence();
         fixture
             .app
             .complete_agent_discovery(Ok(vec![super::agent::target(Direction::Right, "w1:p2")]));
@@ -154,6 +261,7 @@ fn ambiguous_direction_keeps_selection_stable_through_pointer_and_resize() {
         fixture.paste(content);
         fixture.input(UiInput::Key(UiKey::Escape));
     }
+    fixture.acknowledge_all_persistence();
     fixture.input(UiInput::Key(UiKey::Character(' ')));
     let selected = fixture.app.state.focused_thought.expect("selected thought");
     let left = super::agent::target(Direction::Left, "w1:p2");
@@ -225,6 +333,7 @@ fn all_submit_failures_and_empty_boards_are_non_destructive() {
         fixture.paste(content);
         fixture.input(UiInput::Key(UiKey::Escape));
     }
+    fixture.acknowledge_all_persistence();
     fixture
         .app
         .complete_agent_discovery(Ok(vec![super::agent::target(Direction::Left, "w1:p2")]));
@@ -252,6 +361,7 @@ fn target_change_during_direction_choice_sends_nothing_and_preserves_selection()
         fixture.paste(content);
         fixture.input(UiInput::Key(UiKey::Escape));
     }
+    fixture.acknowledge_all_persistence();
     fixture.input(UiInput::Key(UiKey::Character(' ')));
     let selected = fixture.app.state.focused_thought.expect("selected thought");
     fixture.app.complete_agent_discovery(Ok(vec![
