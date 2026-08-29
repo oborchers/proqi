@@ -10,7 +10,7 @@ TEXT
 01│⋮ first│
 02│  Grüße┌ commands ────────────────────────────────────────────[x]│
 03│       │:submit all                                             ││
-04│       │Submit all and remove after acceptance                  ││
+04│       │Submit all                                              ││
 05│       │Submit all and keep                                     ││
 06│       └────────────────────────────────────────────────────────┘│
 07││

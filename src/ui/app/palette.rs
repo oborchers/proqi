@@ -58,15 +58,9 @@ impl Command {
         (Self::Paste, "Paste native clipboard"),
         (Self::Duplicate, "Duplicate thought or selection"),
         (Self::SelectAll, "Select all thoughts"),
-        (
-            Self::SubmitRemove,
-            "Submit and remove after acceptance (default)",
-        ),
-        (Self::SubmitKeep, "Submit and keep thought"),
-        (
-            Self::SubmitAllRemove,
-            "Submit all and remove after acceptance",
-        ),
+        (Self::SubmitRemove, "Submit"),
+        (Self::SubmitKeep, "Submit and keep"),
+        (Self::SubmitAllRemove, "Submit all"),
         (Self::SubmitAllKeep, "Submit all and keep"),
         (Self::SendSession, "Send to another Proqi session"),
         (

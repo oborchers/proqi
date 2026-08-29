@@ -441,12 +441,13 @@ matching accepted receipt is durably journaled. Every source thought is locked
 against TUI and CLI mutation from submission intent until the attempt reaches a
 terminal journaled state.
 
-The command palette also exposes `Select all thoughts`,
-`Submit all and remove after acceptance`, and `Submit all and keep`. The two
-submit-all actions address the complete live board directly, without changing
-the visible selection or requiring a confirmation. An empty board produces no
-submission. When several verified destinations make direction ambiguous, the
-ordinary directional chooser remains the only extra step.
+The command palette also exposes `Select all thoughts`, `Submit all`, and
+`Submit all and keep`. The two submit-all actions address the complete live
+board directly, without changing the visible selection or requiring a
+confirmation. `Submit all` removes unchanged sources only after matching
+accepted durable delivery. An empty board produces no submission. When several
+verified destinations make direction ambiguous, the ordinary directional
+chooser remains the only extra step.
 
 ### Submit to an adjacent agent
 
@@ -517,9 +518,9 @@ with a short lease and clears it on normal exit. This helps users distinguish
 the scratchpad beside several named agent panes. It never claims an agent
 identity, and stale display metadata expires after a crash.
 
-Submit and keep always preserves the thought. Submit and remove deletes it only
-after the integration returns an accepted receipt for the exact request, and
-that deletion remains undoable. A failed, timed-out, ambiguous, unsupported, or
+`Submit and keep` always preserves the thought. `Submit` deletes it only after
+the integration returns an accepted receipt for the exact request, and that
+deletion remains undoable. A failed, timed-out, ambiguous, unsupported, or
 mismatched submission leaves the thought unchanged and reports that it was kept.
 
 Submission does not wait for the agent's response and does not import or inspect
@@ -556,8 +557,8 @@ bindings are:
 | Select or deselect thought | `Space` | Click the thought, then use the selection control |
 | Select all thoughts | `a` or `Primary+A` | Command palette |
 | Select contiguous range | `Shift+↑` / `Shift+↓`, `K` / `J`, or `v` then arrows or `j` / `k` | Shift-click a thought, or use `v` then click it |
-| Submit and remove after acceptance | `s`, when supported, then direction when needed | Click verified Submit control |
-| Submit and keep thought | `S`, when supported, then direction when needed | Click verified Submit & keep control |
+| Submit | `s`, when supported, then direction when needed | Click verified Submit control |
+| Submit and keep | `S`, when supported, then direction when needed | Click verified Submit & keep control |
 | Undo board action | `u` | Click undo control when visible |
 | Move thought | `Meta+Shift+↑` / `Meta+Shift+↓`, or `Meta+K` / `Meta+J` | Drag thought handle |
 | Expand or collapse | `c` | Click overflow indicator |
@@ -708,7 +709,7 @@ The following actions must not open a confirmation dialog:
 - Copy thought.
 - Cut or delete a thought when undo remains available.
 - Submit to the only eligible adjacent agent.
-- Submit and remove when deletion remains undoable.
+- Submit when deletion remains undoable.
 - Reorder thought.
 - Collapse or expand thought.
 - Exit after successful autosave.

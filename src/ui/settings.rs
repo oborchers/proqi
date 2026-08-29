@@ -71,7 +71,7 @@ pub struct KeyBindings {
     pub copy: char,
     /// Cut focused thought.
     pub cut: char,
-    /// Submit and remove the focused thought after acceptance.
+    /// Submit the focused thought, removing it after acceptance.
     #[serde(alias = "send")]
     pub submit_remove: char,
     /// Submit and preserve the focused thought.

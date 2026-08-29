@@ -38,6 +38,30 @@ fn click_palette(fixture: &mut Fixture, query: &str) -> Vec<Effect> {
 }
 
 #[test]
+fn palette_submission_labels_use_one_concise_vocabulary() {
+    let mut fixture = Fixture::new();
+    fixture
+        .app
+        .complete_agent_discovery(Ok(vec![super::agent::target(Direction::Left, "w1:p2")]));
+    fixture.input(UiInput::Key(UiKey::Character(':')));
+    for character in "submit".chars() {
+        fixture.input(UiInput::Key(UiKey::Character(character)));
+    }
+
+    let (_, entries, selected) = fixture.app.palette_view().expect("palette");
+    assert_eq!(
+        entries,
+        vec![
+            "Submit",
+            "Submit and keep",
+            "Submit all",
+            "Submit all and keep",
+        ]
+    );
+    assert_eq!(selected, 0);
+}
+
+#[test]
 fn palette_submit_all_keep_and_remove_share_one_exact_ordered_request() {
     let mut fixture = Fixture::new();
     populate_exact_board(&mut fixture);
@@ -73,7 +97,7 @@ fn palette_submit_all_keep_and_remove_share_one_exact_ordered_request() {
     assert_eq!(fixture.app.state.board.live_thoughts().len(), 3);
     assert!(fixture.app.thought_selected(selected));
 
-    let removing = click_palette(&mut fixture, "submit all and remove after acceptance");
+    let removing = click_palette(&mut fixture, "submit all");
     let request = super::agent::start_submission(&mut fixture, &removing);
     assert_eq!(request.content, "/goal first\n\n\n\nGrüße 👩‍💻\r\n第二行");
     let removed = super::agent::finish_submission(
@@ -213,7 +237,7 @@ fn all_submit_failures_and_empty_boards_are_non_destructive() {
         AgentError::Process("transport closed".to_owned()),
     ];
     for failure in failures {
-        let effects = execute_palette(&mut fixture, "submit all and remove after acceptance");
+        let effects = execute_palette(&mut fixture, "submit all");
         let request = super::agent::start_submission(&mut fixture, &effects);
         let completion = super::agent::finish_submission(&mut fixture, &request, Err(failure));
         assert!(completion.is_empty());

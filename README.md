@@ -315,11 +315,12 @@ separated by one blank line:
   accepted matching receipt.
 - `S Submit & keep` submits immediately and retains the source thoughts.
 
-The command palette adds **Select all thoughts**, **Submit all and remove after
-acceptance**, and **Submit all and keep**. The submit-all actions address every
-live thought directly, without toggling the visible selection or opening a
-confirmation. Empty boards send nothing. Several verified destinations still
-use the ordinary directional chooser; one verified destination submits directly.
+The command palette adds **Select all thoughts**, **Submit all**, and **Submit
+all and keep**. The submit-all actions address every live thought directly,
+without toggling the visible selection or opening a confirmation. **Submit
+all** removes unchanged sources only after matching accepted durable delivery.
+Empty boards send nothing. Several verified destinations still use the ordinary
+directional chooser; one verified destination submits directly.
 
 Both actions work while the receiving agent is working. The receiving harness
 decides whether that input steers the current turn or becomes follow-up input.
