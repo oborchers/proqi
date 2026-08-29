@@ -73,7 +73,11 @@ fn create_private_directory(path: &Path) -> Result<(), RuntimeError> {
     use std::os::unix::fs::DirBuilderExt as _;
     let mut builder = fs::DirBuilder::new();
     builder.mode(0o700);
-    builder.create(path).map_err(io_error)
+    match builder.create(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => Ok(()),
+        Err(error) => Err(io_error(error)),
+    }
 }
 
 fn validate_owned_directory(path: &Path, owner_uid: u32) -> Result<(), RuntimeError> {
@@ -94,7 +98,11 @@ fn validate_owned_directory(path: &Path, owner_uid: u32) -> Result<(), RuntimeEr
 
 #[cfg(test)]
 mod tests {
-    use std::os::unix::fs::symlink;
+    use std::{
+        os::unix::fs::symlink,
+        sync::{Arc, Barrier},
+        thread,
+    };
 
     use super::{owner_uid, prepare_owned_directory};
     use tempfile::tempdir;
@@ -123,5 +131,32 @@ mod tests {
                 .permissions(),
             victim_permissions
         );
+    }
+
+    #[test]
+    fn concurrent_endpoint_parent_creation_is_idempotent() {
+        let temporary = tempdir().expect("temporary directory");
+        let runtime = temporary.path().join("runtime");
+        std::fs::create_dir(&runtime).expect("runtime directory");
+        let endpoint_parent = runtime.join("control");
+        let owner = owner_uid(&runtime).expect("owner");
+        let barrier = Arc::new(Barrier::new(16));
+        let workers: Vec<_> = (0..16)
+            .map(|_| {
+                let endpoint_parent = endpoint_parent.clone();
+                let barrier = Arc::clone(&barrier);
+                thread::spawn(move || {
+                    barrier.wait();
+                    prepare_owned_directory(&endpoint_parent, owner)
+                })
+            })
+            .collect();
+
+        for worker in workers {
+            worker
+                .join()
+                .expect("endpoint worker")
+                .expect("private endpoint directory");
+        }
     }
 }
