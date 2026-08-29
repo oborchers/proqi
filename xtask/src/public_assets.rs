@@ -9,6 +9,7 @@ const PREVIEW_LIMIT: u64 = 2 * 1024 * 1024;
 const REQUIRED_ASSETS: &[&str] = &[
     "assets/proqi-demo.gif",
     "assets/proqi-demo-storyboard.md",
+    "assets/codex-composer.png",
     "assets/proqi-logo.png",
     "assets/proqi-problem.svg",
     "assets/proqi-social-preview.png",
@@ -80,7 +81,7 @@ fn check_readme_links(root: &Path) -> Result<(), String> {
     for required in [
         "assets/proqi-logo.png",
         "assets/proqi-demo.gif",
-        "assets/proqi-problem.svg",
+        "assets/codex-composer.png",
     ] {
         if !readme.contains(required) {
             return Err(format!("README does not link required asset: {required}"));
@@ -165,6 +166,9 @@ fn check_demo_contract(root: &Path) -> Result<(), String> {
 }
 
 fn check_dimensions_and_sizes(root: &Path) -> Result<(), String> {
+    let composer = root.join("assets/codex-composer.png");
+    require_dimensions(&composer, image_dimensions(&composer)?, (752, 353))?;
+
     let gif = root.join("assets/proqi-demo.gif");
     require_dimensions(&gif, image_dimensions(&gif)?, (1132, 775))?;
     require_max_size(&gif, GIF_LIMIT)?;
