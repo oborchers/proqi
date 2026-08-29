@@ -1,5 +1,6 @@
 //! Real process and pseudo-terminal smoke tests.
 
+#[cfg(target_os = "macos")]
 use std::process::Command;
 
 #[cfg(target_os = "macos")]
