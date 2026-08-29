@@ -47,6 +47,7 @@ use crate::{
 use super::{
     HitTarget, LayoutSnapshot, PastePayload, UiSettings,
     input::{PointerButton, PointerInput, PointerKind, UiInput, UiKey},
+    layout::scroll::{BoardViewport, ScrollGeometry},
 };
 
 pub(in crate::ui) use invocation::InvocationChoiceView;
@@ -84,9 +85,8 @@ pub struct BoardApp {
     /// Transient human-readable status.
     pub(in crate::ui) status: Option<crate::ui::status::UiStatus>,
     viewport: TextViewport,
-    first_visible: usize,
-    first_visible_row: usize,
-    manual_board_scroll: bool,
+    board_viewport: BoardViewport,
+    scroll_geometry: Option<ScrollGeometry>,
     layout: Option<LayoutSnapshot>,
     dragged_thought: Option<ThoughtId>,
     drag_target: Option<usize>,
@@ -163,9 +163,8 @@ impl BoardApp {
             help_scroll: 0,
             status: None,
             viewport: TextViewport::default(),
-            first_visible: 0,
-            first_visible_row: 0,
-            manual_board_scroll: false,
+            board_viewport: BoardViewport::default(),
+            scroll_geometry: None,
             layout: None,
             dragged_thought: None,
             drag_target: None,
@@ -417,6 +416,26 @@ impl BoardApp {
             at: clock.now(),
         });
         self.sync_editor_from_state();
+        effects
+    }
+
+    fn expand_and_enter_edit(
+        &mut self,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        let Some(thought_id) = self.state.focused_thought else {
+            return Vec::new();
+        };
+        if self.submission_locked(thought_id) {
+            self.set_warning("thought has a submission in progress");
+            return Vec::new();
+        }
+        self.board_viewport = self.board_viewport.follow_focus();
+        self.scroll_geometry = None;
+        self.layout = None;
+        let effects = self.expand_thought(thought_id, ids, clock);
+        self.enter_edit();
         effects
     }
 

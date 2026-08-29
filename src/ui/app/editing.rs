@@ -240,7 +240,8 @@ impl BoardApp {
             }
         }
         self.edit_generation = self.edit_generation.wrapping_add(1);
-        self.manual_board_scroll = false;
+        self.board_viewport = self.board_viewport.follow_focus();
+        self.scroll_geometry = None;
         self.layout = None;
     }
 

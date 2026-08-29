@@ -35,7 +35,8 @@ impl BoardApp {
             return effects;
         }
         self.replace_board_selection(duplicate_ids.iter().copied());
-        self.manual_board_scroll = false;
+        self.board_viewport = self.board_viewport.follow_focus();
+        self.scroll_geometry = None;
         effects
     }
 }

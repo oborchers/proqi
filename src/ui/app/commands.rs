@@ -36,7 +36,7 @@ impl BoardApp {
             UiKey::PrimaryShiftMove { movement } => {
                 return self.reorder_from_movement(movement, ids, clock);
             }
-            UiKey::Enter => self.enter_edit(),
+            UiKey::Enter => return self.expand_and_enter_edit(ids, clock),
             UiKey::Move {
                 movement: CursorMovement::VisualUp,
                 extend_selection: true,
@@ -182,10 +182,7 @@ impl BoardApp {
         }
         match self.settings.keybindings.command(character) {
             Some(BoardCommand::New) => self.create(PastePayload::text(String::new()), ids, clock),
-            Some(BoardCommand::Edit) => {
-                self.enter_edit();
-                Vec::new()
-            }
+            Some(BoardCommand::Edit) => self.expand_and_enter_edit(ids, clock),
             Some(BoardCommand::Delete) => self.delete(ids, clock),
             Some(BoardCommand::Copy) => self.copy_thought(ids),
             Some(BoardCommand::Cut) => self.cut_thought(ids, clock),
@@ -427,7 +424,8 @@ impl BoardApp {
     }
 
     pub(super) fn move_focus(&mut self, delta: isize) {
-        self.manual_board_scroll = false;
+        self.board_viewport = self.board_viewport.follow_focus();
+        self.scroll_geometry = None;
         self.insertion_confirmation = super::InsertionConfirmation::Idle;
         let live = self.state.board.live_thoughts();
         if live.is_empty() {

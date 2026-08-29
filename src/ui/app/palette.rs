@@ -320,6 +320,9 @@ impl BoardApp {
         if let Some(effects) = self.execute_editor_command(command, selection_handoff, ids, clock) {
             return effects;
         }
+        if let Some(effects) = self.execute_entry_command(command, ids, clock) {
+            return effects;
+        }
         match command {
             Command::New => self.create(crate::ui::PastePayload::text(String::new()), ids, clock),
             Command::RenameSession => {
@@ -330,10 +333,6 @@ impl BoardApp {
             Command::CopyResume => self.copy_resume_command(ids),
             Command::SendSession => self.begin_session_transfer(false, ids, clock),
             Command::SendSessionRemove => self.begin_session_transfer(true, ids, clock),
-            Command::Edit => {
-                self.enter_edit();
-                Vec::new()
-            }
             Command::Delete => self.delete(ids, clock),
             Command::Copy => self.copy_active(ids),
             Command::Cut => self.cut_active(ids, clock),
@@ -357,12 +356,10 @@ impl BoardApp {
             | Command::SubmitAllKeep
             | Command::PlainNewline
             | Command::Indent
-            | Command::Outdent => Vec::new(),
+            | Command::Outdent
+            | Command::Edit
+            | Command::InsertInvocation => Vec::new(),
             Command::RefreshAgents => self.refresh_agents(),
-            Command::InsertInvocation => {
-                self.open_invocation_picker();
-                Vec::new()
-            }
             Command::RefreshInvocations => self.refresh_invocations(),
             Command::CheckUpdates => {
                 vec![Effect::Update(crate::application::UpdateIntent::CheckNow)]
@@ -390,6 +387,28 @@ impl BoardApp {
                 self.request_quit();
                 Vec::new()
             }
+        }
+    }
+
+    fn execute_entry_command(
+        &mut self,
+        command: Command,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Option<Vec<Effect>> {
+        match command {
+            Command::Edit => Some(self.expand_and_enter_edit(ids, clock)),
+            Command::InsertInvocation => {
+                let effects =
+                    if matches!(self.state.mode, crate::application::InteractionMode::Board) {
+                        self.expand_and_enter_edit(ids, clock)
+                    } else {
+                        Vec::new()
+                    };
+                self.open_invocation_picker();
+                Some(effects)
+            }
+            _ => None,
         }
     }
 
@@ -424,16 +443,20 @@ impl BoardApp {
         ) {
             return None;
         }
-        if !matches!(
+        let mut effects = if matches!(
             self.state.mode,
             crate::application::InteractionMode::Edit { .. }
         ) {
-            self.enter_edit();
-        }
+            Vec::new()
+        } else {
+            self.expand_and_enter_edit(ids, clock)
+        };
         if command == Command::PlainNewline {
-            return Some(self.insert_newline(false, ids, clock));
+            effects.extend(self.insert_newline(false, ids, clock));
+            return Some(effects);
         }
         self.restore_palette_selection_handoff(selection_handoff);
-        Some(self.apply_indentation(command == Command::Outdent, ids, clock))
+        effects.extend(self.apply_indentation(command == Command::Outdent, ids, clock));
+        Some(effects)
     }
 }
