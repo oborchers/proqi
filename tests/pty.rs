@@ -252,6 +252,8 @@ fn shifted_arrow_range_selection_deletes_one_real_pty_block() {
         after 100
         send "d"
         after 500
+        send "\x1b"
+        after 50
         send "q"
         expect eof
         catch wait result

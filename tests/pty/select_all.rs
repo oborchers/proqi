@@ -26,6 +26,8 @@ fn board_key_and_forwarded_primary_a_select_every_thought_in_a_real_pty() {
                 send -- "{selection_input}"
                 send "d"
                 after 500
+                send "\x1b"
+                after 50
                 send "q"
                 expect eof
                 catch wait result

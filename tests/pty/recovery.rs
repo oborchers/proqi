@@ -131,6 +131,8 @@ fn create_empty_session(binary: &str, state: &std::path::Path) {
         set timeout 10
         spawn $env(PROQI_TEST_BINARY) --state-dir $env(PROQI_TEST_STATE)
         expect -exact "\x1b\[?1049h"
+        send "\x1b"
+        after 50
         send "q"
         expect eof
         catch wait result
