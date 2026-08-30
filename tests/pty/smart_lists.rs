@@ -1,4 +1,6 @@
-use super::{expect_command, json_command};
+//! Smart-list editing, exact indentation, and restart-safe history in a PTY.
+
+use super::support::{expect_command, json_command};
 
 #[test]
 fn tab_and_terminal_backtab_persist_with_restart_safe_history() {

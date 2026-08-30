@@ -1,5 +1,7 @@
+//! Whole-board and contiguous-range selection through real terminal input.
+
 #[cfg(target_os = "macos")]
-use super::{expect_command, json_command};
+use super::support::{expect_command, json_command};
 
 #[cfg(target_os = "macos")]
 #[test]

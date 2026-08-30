@@ -1,3 +1,5 @@
+//! Recovery-mode export, failure truth, and explicit Board-mode shutdown.
+
 use std::{
     fs,
     os::unix::fs::PermissionsExt as _,
@@ -8,7 +10,7 @@ use std::{
 
 use proqi::ports::recovery::RecoveryDocument;
 
-use super::{expect_command, json_command};
+use super::support::{expect_command, json_command};
 
 #[test]
 fn exported_save_failure_accepts_the_raw_board_quit_key() {

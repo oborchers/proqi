@@ -1,6 +1,6 @@
 //! Real terminal coverage for the keypress diagnostic.
 
-use super::expect_command;
+use super::support::expect_command;
 
 fn inspect_sequence(sequence: &str, raw_code: &str, action: &str) {
     let script = format!(

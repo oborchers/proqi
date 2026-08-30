@@ -2,7 +2,7 @@
 
 use proqi::{adapters::runtime::SystemIdGenerator, ports::environment::IdGenerator as _};
 
-use super::{expect_command, json_command, raw_input_command, wait_for_path};
+use super::support::{expect_command, json_command, raw_input_command, wait_for_path};
 
 #[derive(Clone, Copy)]
 enum ExitScenario {

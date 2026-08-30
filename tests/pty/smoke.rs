@@ -1,3 +1,5 @@
+//! Cross-platform release-entrypoint startup without workspace state.
+
 use std::process::Command;
 
 #[test]

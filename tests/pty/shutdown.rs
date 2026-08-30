@@ -2,7 +2,10 @@
 
 use std::{fs, os::unix::fs::PermissionsExt as _, path::Path, time::Duration};
 
-use super::{expect_command, json_command, watchdog};
+use super::{
+    support::{expect_command, json_command},
+    watchdog,
+};
 
 #[test]
 fn termination_signal_restores_and_releases_the_session() {
@@ -298,6 +301,8 @@ fn capture_shutdown_workflow(
     exit_action: &str,
     finish_action: &str,
 ) -> String {
+    // This workflow intentionally exposes terminal output to the watchdog. It
+    // proves that output-reader settlement shares the absolute shutdown bound.
     format!(
         r#"
         log_user 1
