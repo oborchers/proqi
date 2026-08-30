@@ -6,6 +6,9 @@ use crate::{
     application::{AppState, Effect, InteractionMode, ScreenshotIntent},
     domain::{Session, SessionBoard, Thought, ThoughtPosition, Timestamp},
     ports::{
+        attachment_accessibility::{
+            AttachmentAccessFailure, AttachmentCheckBatchResult, AttachmentCheckResult,
+        },
         editor::CursorMovement,
         environment::IdGenerator as _,
         runtime::CaptureOwnerInfo,
@@ -47,6 +50,38 @@ fn durable_capture_preserves_an_active_editor_and_exact_path_annotation() {
     assert_eq!(captured.annotations[0].start, 0);
     assert_eq!(captured.annotations[0].end, captured.content.len());
     assert_eq!(app.status_text(), None);
+}
+
+#[test]
+fn durable_capture_uses_admission_proof_before_its_immediate_recheck() {
+    let (mut app, mut ids, clock, _) = app_with_thought();
+    app.screenshot_started(Duration::ZERO);
+    app.queue_screenshot_candidates([candidate(4)]);
+    let commit = next_commit(&mut app, &mut ids, &clock);
+    let thought_id = capture_thought_id(&commit);
+    let effects = app.complete_screenshot_capture(Ok(created(&commit)), &mut ids, &clock);
+    let Some(Effect::CheckAttachments(batch)) = effects
+        .iter()
+        .find(|effect| matches!(effect, Effect::CheckAttachments(_)))
+    else {
+        panic!("immediate accessibility check");
+    };
+    assert!(!app.attachment_inaccessible(thought_id, 0));
+
+    app.complete_attachment_checks(AttachmentCheckBatchResult {
+        id: batch.id,
+        purpose: batch.purpose,
+        results: batch
+            .checks
+            .iter()
+            .cloned()
+            .map(|key| AttachmentCheckResult {
+                key,
+                result: Err(AttachmentAccessFailure::Missing),
+            })
+            .collect(),
+    });
+    assert!(app.attachment_inaccessible(thought_id, 0));
 }
 
 #[test]

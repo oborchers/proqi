@@ -75,6 +75,21 @@ impl AttachmentAccessFailure {
             Self::Cancelled => "cancelled",
         }
     }
+
+    /// Parse one stable internal worker-protocol spelling.
+    #[must_use]
+    pub(crate) fn from_diagnostic_code(code: &str) -> Option<Self> {
+        match code {
+            "missing" => Some(Self::Missing),
+            "permission_denied" => Some(Self::PermissionDenied),
+            "unmounted" => Some(Self::Unmounted),
+            "unreadable" => Some(Self::Unreadable),
+            "io" => Some(Self::Io),
+            "timed_out" => Some(Self::TimedOut),
+            "cancelled" => Some(Self::Cancelled),
+            _ => None,
+        }
+    }
 }
 
 /// Scheduling purpose retained across the bounded worker lane.

@@ -80,6 +80,7 @@ pub(crate) struct TerminalResources {
     pub(crate) installation: Option<crate::domain::Installation>,
     pub(crate) cache_directory: PathBuf,
     pub(crate) state_root: Option<PathBuf>,
+    pub(crate) executable: PathBuf,
 }
 
 pub(crate) fn require_interactive() -> Result<(), TerminalError> {
@@ -144,6 +145,7 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
         installation,
         cache_directory,
         state_root,
+        executable,
     } = resources;
     let session_id = state.board.session.id;
     store.recover_submissions(session_id, clock.now())?;
@@ -179,6 +181,7 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
         screenshot_settings,
         session_lease.info().clone(),
         terminal_host_label,
+        executable,
     );
     let mut pane_heartbeat = None;
     let shutdown = super::supervisor::ShutdownCoordinator::default();

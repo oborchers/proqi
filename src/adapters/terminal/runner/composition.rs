@@ -83,10 +83,11 @@ pub(super) fn spawn_lanes(
     screenshot_settings: super::super::settings::ScreenshotSettings,
     instance: InstanceInfo,
     terminal_host: String,
+    executable: PathBuf,
 ) -> OwnedLanes {
     let cancellation = crate::adapters::process::CancellationFlag::default();
     OwnedLanes {
-        accessibility: AccessibilityLane::spawn(cancellation.clone()),
+        accessibility: AccessibilityLane::spawn(executable, cancellation.clone()),
         control,
         input: InputLane::spawn(),
         persistence: PersistenceLane::spawn_with_runtime(

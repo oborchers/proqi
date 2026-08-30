@@ -16,6 +16,7 @@ pub struct PastePayload {
     pub content: String,
     /// Presentation metadata over UTF-8 byte ranges in `content`.
     pub annotations: Vec<ContentAnnotation>,
+    verified_paths: Vec<String>,
 }
 
 impl PastePayload {
@@ -38,6 +39,7 @@ impl PastePayload {
         Self {
             content,
             annotations,
+            verified_paths: Vec::new(),
         }
     }
 
@@ -47,7 +49,28 @@ impl PastePayload {
         Self {
             content,
             annotations,
+            verified_paths: Vec::new(),
         }
+    }
+
+    /// Retain transient accessibility evidence established by the producing adapter.
+    #[must_use]
+    pub(crate) fn with_verified_attachments(mut self) -> Self {
+        self.verified_paths = self
+            .annotations
+            .iter()
+            .filter_map(|annotation| {
+                matches!(annotation.kind, ContentAnnotationKind::Attachment { .. })
+                    .then(|| self.content.get(annotation.start..annotation.end))
+                    .flatten()
+                    .map(ToOwned::to_owned)
+            })
+            .collect();
+        self
+    }
+
+    pub(in crate::ui) fn into_parts(self) -> (String, Vec<ContentAnnotation>, Vec<String>) {
+        (self.content, self.annotations, self.verified_paths)
     }
 }
 

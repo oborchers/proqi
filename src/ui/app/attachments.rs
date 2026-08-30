@@ -14,6 +14,31 @@ use crate::{
 use super::{BoardApp, agent::pending_source_ids, pending_types::DeferredSubmissionIntent};
 
 impl BoardApp {
+    pub(super) fn may_change_attachments(action: &crate::application::Action) -> bool {
+        matches!(
+            action,
+            crate::application::Action::CreateThought { .. }
+                | crate::application::Action::PasteAsThought { .. }
+                | crate::application::Action::EditThought { .. }
+                | crate::application::Action::DeleteThought { .. }
+                | crate::application::Action::DeleteThoughts { .. }
+                | crate::application::Action::DuplicateThoughts { .. }
+                | crate::application::Action::Undo { .. }
+                | crate::application::Action::Redo { .. }
+        )
+    }
+
+    pub(super) fn finish_attachment_mutation(&mut self, may_change: bool) {
+        if !may_change {
+            return;
+        }
+        if self.state.attachments.manual_refresh_active() {
+            self.set_attachment_info("refreshing attachments");
+        } else {
+            self.clear_attachment_status();
+        }
+    }
+
     /// Start focused-first transient checks without delaying restored board use.
     pub fn start_attachment_checks(&mut self, now: Duration) -> Vec<Effect> {
         self.state
@@ -23,8 +48,13 @@ impl BoardApp {
 
     /// Refresh all current keys for a manual command or debounced host-focus event.
     pub fn refresh_attachments(&mut self, manual: bool) -> Vec<Effect> {
+        if !manual && self.state.attachments.manual_refresh_active() {
+            return Vec::new();
+        }
         if manual {
-            self.set_info("refreshing attachments");
+            self.set_attachment_info("refreshing attachments");
+        } else {
+            self.clear_attachment_status();
         }
         let cause = if manual {
             AttachmentRefreshCause::Manual
@@ -44,11 +74,15 @@ impl BoardApp {
 
     /// Trigger the documented fallback once after a bounded inactive interval.
     pub fn note_attachment_interaction(&mut self, now: Duration) -> Vec<Effect> {
-        self.state.attachments.note_deliberate_interaction(
+        let (effects, refreshed) = self.state.attachments.note_deliberate_interaction(
             &self.state.board,
             self.state.focused_thought,
             now,
-        )
+        );
+        if refreshed {
+            self.clear_attachment_status();
+        }
+        effects
     }
 
     /// Apply one bounded worker result and continue background or preflight work.
@@ -137,11 +171,11 @@ impl BoardApp {
 
     fn finish_attachment_refresh(&mut self, outcome: AttachmentRefreshOutcome) {
         if outcome.total == 0 {
-            self.set_info("no attachments to refresh");
+            self.set_attachment_info("no attachments to refresh");
         } else if outcome.inaccessible == 0 {
-            self.set_success("all attachments are accessible");
+            self.set_attachment_success("all attachments are accessible");
         } else {
-            self.set_warning(inaccessible_message(outcome.inaccessible));
+            self.set_attachment_warning(inaccessible_message(outcome.inaccessible));
         }
     }
 }

@@ -30,19 +30,8 @@ const INACTIVE_REFRESH_AFTER: Duration = Duration::from_secs(5 * 60);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum AttachmentHealth {
-    Unverified,
-    Checking(Option<AttachmentAccessFailure>),
     Accessible,
     Inaccessible(AttachmentAccessFailure),
-}
-
-impl From<Result<(), AttachmentAccessFailure>> for AttachmentHealth {
-    fn from(result: Result<(), AttachmentAccessFailure>) -> Self {
-        match result {
-            Ok(()) => Self::Accessible,
-            Err(failure) => Self::Inaccessible(failure),
-        }
-    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -59,12 +48,10 @@ struct SubmissionPreflight {
     inaccessible: usize,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 struct ManualRefresh {
     epoch: u64,
-    total: usize,
-    completed: usize,
-    inaccessible: usize,
+    pending: BTreeSet<AttachmentCheckKey>,
 }
 
 /// Completed mandatory preflight returned to the submission policy owner.
@@ -103,6 +90,7 @@ pub struct AttachmentAccessibilityState {
     queued: BTreeSet<AttachmentCheckKey>,
     preflights: BTreeMap<SubmissionId, SubmissionPreflight>,
     in_flight: Option<InFlight>,
+    in_flight_replacements: BTreeMap<AttachmentCheckKey, AttachmentCheckKey>,
     next_batch_id: u64,
     background_epoch: u64,
     manual_refresh: Option<ManualRefresh>,
@@ -119,6 +107,7 @@ impl Default for AttachmentAccessibilityState {
             queued: BTreeSet::new(),
             preflights: BTreeMap::new(),
             in_flight: None,
+            in_flight_replacements: BTreeMap::new(),
             next_batch_id: 1,
             background_epoch: 0,
             manual_refresh: None,
@@ -138,7 +127,6 @@ impl AttachmentAccessibilityState {
     ) -> Vec<Effect> {
         self.last_deliberate = Some(now);
         self.known = attachment_keys_by_thought(board);
-        self.seed_unverified();
         self.enqueue_board(board, focused, false);
         self.schedule()
     }
@@ -158,15 +146,16 @@ impl AttachmentAccessibilityState {
         if changed.is_empty() {
             return Vec::new();
         }
-        self.health
-            .retain(|key, _| !changed.contains(&key.thought_id));
-        self.background
-            .retain(|key| !changed.contains(&key.thought_id));
-        self.queued.retain(|key| !changed.contains(&key.thought_id));
+        let (replacements, identities_stable) = self.migrate_health(&current, &changed);
         self.known = current;
-        self.seed_unverified();
-        for thought_id in changed.into_iter().rev() {
-            self.enqueue_thought_front(thought_id, false);
+        self.remap_scheduled_keys(&replacements);
+        let restart_manual = self.manual_refresh.is_some();
+        if restart_manual && !identities_stable {
+            self.restart_manual_refresh(board, changed.iter().next().copied());
+        } else if !identities_stable {
+            for thought_id in changed.into_iter().rev() {
+                self.enqueue_thought_front(thought_id, false);
+            }
         }
         self.schedule()
     }
@@ -191,15 +180,13 @@ impl AttachmentAccessibilityState {
         self.background.clear();
         self.queued.clear();
         self.known = attachment_keys_by_thought(board);
-        self.demote_for_refresh();
+        self.retain_current_health();
         self.refreshed_since_last_deliberate = true;
-        let total = self.known.values().map(Vec::len).sum();
+        let total: usize = self.known.values().map(Vec::len).sum();
         if cause == AttachmentRefreshCause::Manual {
             self.manual_refresh = Some(ManualRefresh {
                 epoch: self.background_epoch,
-                total,
-                completed: 0,
-                inaccessible: 0,
+                pending: self.known.values().flatten().cloned().collect(),
             });
         }
         self.enqueue_board(board, focused, true);
@@ -219,7 +206,7 @@ impl AttachmentAccessibilityState {
         board: &SessionBoard,
         focused: Option<ThoughtId>,
         now: Duration,
-    ) -> Vec<Effect> {
+    ) -> (Vec<Effect>, bool) {
         let should_refresh = self.last_deliberate.is_some_and(|previous| {
             now.saturating_sub(previous) >= INACTIVE_REFRESH_AFTER
                 && !self.refreshed_since_last_deliberate
@@ -227,10 +214,14 @@ impl AttachmentAccessibilityState {
         self.last_deliberate = Some(now);
         self.refreshed_since_last_deliberate = false;
         if should_refresh {
-            self.refresh_all(board, focused, AttachmentRefreshCause::Quiet)
-                .0
+            let coalesced = self.manual_refresh.is_some();
+            (
+                self.refresh_all(board, focused, AttachmentRefreshCause::Quiet)
+                    .0,
+                !coalesced,
+            )
         } else {
-            Vec::new()
+            (Vec::new(), false)
         }
     }
 
@@ -283,12 +274,15 @@ impl AttachmentAccessibilityState {
         let failures = self.apply_results(&in_flight, &results);
         let (preflight, refresh) = match in_flight.purpose {
             AttachmentCheckPurpose::Background => {
-                (None, self.finish_manual_refresh_batch(&in_flight, failures))
+                (None, self.finish_manual_refresh_batch(&in_flight))
             }
             AttachmentCheckPurpose::SubmissionPreflight(submission_id) => {
                 (self.finish_preflight_batch(submission_id, failures), None)
             }
         };
+        for key in &in_flight.keys {
+            self.in_flight_replacements.remove(key);
+        }
         let effects = self.schedule();
         (effects, preflight, refresh)
     }
@@ -330,14 +324,13 @@ impl AttachmentAccessibilityState {
             if result.is_err() {
                 failures += 1;
             }
-            let current = self
-                .known
-                .get(&key.thought_id)
-                .is_some_and(|keys| keys.contains(key));
+            let target = self.current_result_key(key);
             let fresh_background = in_flight.purpose != AttachmentCheckPurpose::Background
                 || in_flight.background_epoch == self.background_epoch;
-            if current && fresh_background {
-                self.health.insert(key.clone(), result.into());
+            if let Some(target) = target
+                && fresh_background
+            {
+                self.health.insert(target, result.into());
             }
         }
         failures
@@ -346,20 +339,29 @@ impl AttachmentAccessibilityState {
     fn finish_manual_refresh_batch(
         &mut self,
         in_flight: &InFlight,
-        failures: usize,
     ) -> Option<AttachmentRefreshOutcome> {
         let refresh = self.manual_refresh.as_mut()?;
-        if refresh.epoch != in_flight.background_epoch {
+        if refresh.epoch == in_flight.background_epoch {
+            for key in &in_flight.keys {
+                let current = self.in_flight_replacements.get(key).unwrap_or(key);
+                refresh.pending.remove(current);
+            }
+        } else if !refresh.pending.is_empty() {
             return None;
         }
-        refresh.completed = refresh.completed.saturating_add(in_flight.keys.len());
-        refresh.inaccessible = refresh.inaccessible.saturating_add(failures);
-        if refresh.completed < refresh.total {
+        if !refresh.pending.is_empty() {
             return None;
         }
+        let total = self.known.values().map(Vec::len).sum();
+        let inaccessible = self
+            .known
+            .values()
+            .flatten()
+            .filter(|key| !matches!(self.health.get(*key), Some(AttachmentHealth::Accessible)))
+            .count();
         let outcome = AttachmentRefreshOutcome {
-            total: refresh.total,
-            inaccessible: refresh.inaccessible,
+            total,
+            inaccessible,
         };
         self.manual_refresh = None;
         Some(outcome)
@@ -420,17 +422,6 @@ impl AttachmentAccessibilityState {
             keys: keys.clone(),
             background_epoch: self.background_epoch,
         });
-        for key in &keys {
-            let previous = match self.health.get(key) {
-                Some(
-                    AttachmentHealth::Inaccessible(failure)
-                    | AttachmentHealth::Checking(Some(failure)),
-                ) => Some(*failure),
-                _ => None,
-            };
-            self.health
-                .insert(key.clone(), AttachmentHealth::Checking(previous));
-        }
         vec![Effect::CheckAttachments(AttachmentCheckBatch {
             id,
             purpose,
@@ -453,12 +444,7 @@ impl AttachmentAccessibilityState {
     fn enqueue_thought_front(&mut self, thought_id: ThoughtId, force: bool) {
         let keys = self.known.get(&thought_id).cloned().unwrap_or_default();
         for key in keys.into_iter().rev() {
-            let current_in_flight = self.in_flight.as_ref().is_some_and(|batch| {
-                batch.keys.contains(&key)
-                    && (batch.purpose != AttachmentCheckPurpose::Background
-                        || batch.background_epoch == self.background_epoch)
-            });
-            if current_in_flight || (!force && self.has_result(&key)) {
+            if self.key_in_current_in_flight(&key) || (!force && self.has_result(&key)) {
                 continue;
             }
             self.background.retain(|queued| queued != &key);
@@ -478,12 +464,20 @@ impl AttachmentAccessibilityState {
     }
 
     fn should_enqueue(&self, key: &AttachmentCheckKey, force: bool) -> bool {
-        let in_flight = self.in_flight.as_ref().is_some_and(|batch| {
-            batch.keys.contains(key)
-                && (batch.purpose != AttachmentCheckPurpose::Background
-                    || batch.background_epoch == self.background_epoch)
+        !self.queued.contains(key)
+            && !self.key_in_current_in_flight(key)
+            && (force || !self.has_result(key))
+    }
+
+    fn restart_manual_refresh(&mut self, board: &SessionBoard, focused: Option<ThoughtId>) {
+        self.background_epoch = self.background_epoch.wrapping_add(1);
+        self.background.clear();
+        self.queued.clear();
+        self.manual_refresh = Some(ManualRefresh {
+            epoch: self.background_epoch,
+            pending: self.known.values().flatten().cloned().collect(),
         });
-        !self.queued.contains(key) && !in_flight && (force || !self.has_result(key))
+        self.enqueue_board(board, focused, true);
     }
 }
 

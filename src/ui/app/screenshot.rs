@@ -347,7 +347,12 @@ impl BoardApp {
         match apply_capture(&mut self.state, commit, outcome) {
             Ok(Some(thought_id)) => {
                 self.show_created_capture(thought_id, was_editing, advance_auto_ready);
-                self.state.attachments.reconcile(&self.state.board)
+                let effects = self.state.attachments.reconcile(&self.state.board);
+                self.state.attachments.mark_thought_accessible(thought_id);
+                if self.state.attachments.manual_refresh_active() {
+                    self.set_attachment_info("refreshing attachments");
+                }
+                effects
             }
             Ok(None) if self.screenshot.candidates.is_empty() => {
                 self.screenshot.auto_ready = None;

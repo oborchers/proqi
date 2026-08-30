@@ -18,6 +18,8 @@ use crate::{
 use super::{AttachmentAccessibilityState, AttachmentRefreshCause};
 use crate::application::test_support::TestIds;
 
+mod reconciliation;
+
 #[test]
 fn startup_prioritizes_focus_and_bounds_large_board_batches() {
     let (board, ids) = board_with_attachments(40);
@@ -44,7 +46,13 @@ fn stale_mutation_result_is_ignored_and_only_changed_thought_is_invalidated() {
     let first = one_batch(state.start(&board, Some(ids[0]), Duration::ZERO));
 
     let changed = board.thought_mut(ids[0]).expect("first thought");
-    changed.content.push_str(" changed");
+    changed.content = "/tmp/relinked-during-startup.png".to_owned();
+    changed.annotations[0].end = changed.content.len();
+    let ContentAnnotationKind::Attachment { display_name, .. } = &mut changed.annotations[0].kind
+    else {
+        panic!("attachment annotation");
+    };
+    *display_name = "relinked-during-startup.png".to_owned();
     let mutation_effects = state.reconcile(&board);
     assert!(
         mutation_effects.is_empty(),
@@ -75,7 +83,7 @@ fn inaccessible_health_is_binary_and_manual_refresh_recovers_it() {
 }
 
 #[test]
-fn startup_and_refresh_never_present_unverified_health_as_accessible() {
+fn startup_is_fail_closed_and_rechecks_preserve_the_last_resolved_health() {
     let (board, ids) = board_with_attachments(2);
     let mut state = AttachmentAccessibilityState::default();
     assert!(state.inaccessible(ids[0], 0));
@@ -92,12 +100,140 @@ fn startup_and_refresh_never_present_unverified_health_as_accessible() {
             .refresh_all(&board, Some(ids[0]), AttachmentRefreshCause::Manual)
             .0,
     );
-    assert!(state.inaccessible(ids[0], 0));
-    assert!(state.inaccessible(ids[1], 0));
+    assert!(!state.inaccessible(ids[0], 0));
+    assert!(!state.inaccessible(ids[1], 0));
     let (_, _, outcome) = state.complete(accessible(refresh));
     assert_eq!(outcome.expect("manual completion").inaccessible, 0);
     assert!(!state.inaccessible(ids[0], 0));
     assert!(!state.inaccessible(ids[1], 0));
+}
+
+#[test]
+fn prose_edit_migrates_exact_health_without_repeating_filesystem_work() {
+    let (mut board, ids) = board_with_attachments(1);
+    let mut state = AttachmentAccessibilityState::default();
+    let startup = one_batch(state.start(&board, Some(ids[0]), Duration::ZERO));
+    assert!(state.complete(accessible(startup)).0.is_empty());
+    let old_key = state.keys_for(&ids).expect("old exact key")[0].clone();
+
+    board
+        .thought_mut(ids[0])
+        .expect("thought")
+        .content
+        .push_str(" unrelated prose");
+    assert!(state.reconcile(&board).is_empty());
+    let new_key = state.keys_for(&ids).expect("new exact key")[0].clone();
+    assert_ne!(old_key, new_key);
+    assert!(!state.inaccessible(ids[0], 0));
+}
+
+#[test]
+fn exact_duplicate_match_is_reserved_before_shifted_semantic_migration() {
+    let (mut board, ids) = board_with_attachments(1);
+    let thought = board.thought_mut(ids[0]).expect("thought");
+    let path = thought.content.clone();
+    thought.content = format!("{path}\n{path}");
+    thought
+        .set_annotations(vec![
+            ContentAnnotation {
+                start: 0,
+                end: path.len(),
+                kind: ContentAnnotationKind::Attachment {
+                    image: true,
+                    display_name: "duplicate.png".to_owned(),
+                },
+            },
+            ContentAnnotation {
+                start: path.len(),
+                end: path.len() + 1,
+                kind: ContentAnnotationKind::LargePaste {
+                    lines: 1,
+                    graphemes: 1,
+                },
+            },
+            ContentAnnotation {
+                start: path.len() + 1,
+                end: path.len() * 2 + 1,
+                kind: ContentAnnotationKind::Attachment {
+                    image: true,
+                    display_name: "duplicate.png".to_owned(),
+                },
+            },
+        ])
+        .expect("duplicate annotations");
+
+    let mut state = AttachmentAccessibilityState::default();
+    let startup = one_batch(state.start(&board, Some(ids[0]), Duration::ZERO));
+    let mixed = completion(startup, |key| {
+        (key.annotation_index != 0)
+            .then_some(())
+            .ok_or(AttachmentAccessFailure::Missing)
+    });
+    assert!(state.complete(mixed).0.is_empty());
+    assert!(state.inaccessible(ids[0], 0));
+    assert!(!state.inaccessible(ids[0], 2));
+
+    board
+        .thought_mut(ids[0])
+        .expect("thought")
+        .annotations
+        .remove(1);
+    assert!(state.reconcile(&board).is_empty());
+    assert!(state.inaccessible(ids[0], 0));
+    assert!(!state.inaccessible(ids[0], 1));
+}
+
+#[test]
+fn source_mutation_restarts_manual_refresh_and_rejects_the_old_generation() {
+    let (mut board, ids) = board_with_attachments(1);
+    let mut state = AttachmentAccessibilityState::default();
+    let startup = one_batch(state.start(&board, Some(ids[0]), Duration::ZERO));
+    assert!(state.complete(accessible(startup)).0.is_empty());
+
+    let previous_batch = one_batch(
+        state
+            .refresh_all(&board, Some(ids[0]), AttachmentRefreshCause::Manual)
+            .0,
+    );
+    let thought = board.thought_mut(ids[0]).expect("thought");
+    thought.content = "/tmp/relinked.png".to_owned();
+    thought.annotations[0].end = thought.content.len();
+    let ContentAnnotationKind::Attachment { display_name, .. } = &mut thought.annotations[0].kind
+    else {
+        panic!("attachment annotation");
+    };
+    *display_name = "relinked.png".to_owned();
+    assert!(state.reconcile(&board).is_empty());
+
+    let (effects, _, stale_outcome) = state.complete(accessible(previous_batch));
+    assert_eq!(stale_outcome, None);
+    let current = one_batch(effects);
+    assert_eq!(current.checks[0].canonical_path, "/tmp/relinked.png");
+    let (_, _, outcome) = state.complete(failed(current, AttachmentAccessFailure::Missing));
+    assert_eq!(outcome.expect("current generation").inaccessible, 1);
+}
+
+#[test]
+fn removing_the_last_attachment_completes_a_superseded_manual_refresh() {
+    let (mut board, ids) = board_with_attachments(1);
+    let mut state = AttachmentAccessibilityState::default();
+    let startup = one_batch(state.start(&board, Some(ids[0]), Duration::ZERO));
+    assert!(state.complete(accessible(startup)).0.is_empty());
+    let previous_batch = one_batch(
+        state
+            .refresh_all(&board, Some(ids[0]), AttachmentRefreshCause::Manual)
+            .0,
+    );
+    board
+        .thought_mut(ids[0])
+        .expect("thought")
+        .annotations
+        .clear();
+    assert!(state.reconcile(&board).is_empty());
+    let (effects, _, outcome) = state.complete(accessible(previous_batch));
+    assert!(effects.is_empty());
+    assert_eq!(outcome.expect("empty current generation").total, 0);
+    assert!(!state.manual_refresh_active());
 }
 
 #[test]
@@ -207,16 +343,31 @@ fn inactivity_fallback_fires_once_and_repeated_focus_does_no_work_when_fresh() {
     assert!(
         state
             .note_deliberate_interaction(&board, Some(ids[0]), Duration::from_secs(299))
+            .0
             .is_empty()
     );
-    let refresh =
+    let (refresh, refreshed) =
         state.note_deliberate_interaction(&board, Some(ids[0]), Duration::from_secs(10 * 60));
+    assert!(refreshed);
     assert!(matches!(refresh.as_slice(), [Effect::CheckAttachments(_)]));
+    let refresh = one_batch(refresh);
     assert!(
         state
             .note_deliberate_interaction(&board, Some(ids[0]), Duration::from_secs(10 * 60 + 1),)
+            .0
             .is_empty()
     );
+    assert!(state.complete(accessible(refresh)).0.is_empty());
+
+    let manual = one_batch(
+        state
+            .refresh_all(&board, Some(ids[0]), AttachmentRefreshCause::Manual)
+            .0,
+    );
+    let (_, coalesced) =
+        state.note_deliberate_interaction(&board, Some(ids[0]), Duration::from_secs(20 * 60));
+    assert!(!coalesced);
+    let _completion = state.complete(accessible(manual));
 }
 
 #[test]

@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn startup_manual_and_quiet_refreshes_never_render_unverified_as_accessible() {
+fn startup_is_fail_closed_and_rechecks_do_not_flicker_or_leave_stale_status() {
     let path = "/private/TemporaryItems/missing.png";
     let mut source = Fixture::new();
     source.input(UiInput::PasteAnnotated(attachment_payload(path, true)));
@@ -30,9 +30,7 @@ fn startup_manual_and_quiet_refreshes_never_render_unverified_as_accessible() {
     let manual = fixture.app.refresh_attachments(true);
     let manual = attachment_batch(&manual);
     assert_eq!(fixture.app.status_text(), Some("refreshing attachments"));
-    assert!(
-        text(draw(&mut fixture, 60, 8).backend().buffer()).contains("[Image 1 · inaccessible]")
-    );
+    assert!(text(draw(&mut fixture, 60, 8).backend().buffer()).contains("[Image 1]"));
     fixture
         .app
         .complete_attachment_checks(complete(manual, Ok(())));
@@ -46,15 +44,25 @@ fn startup_manual_and_quiet_refreshes_never_render_unverified_as_accessible() {
     let quiet = attachment_batch(&quiet);
     assert_eq!(
         fixture.app.status_text(),
-        Some("all attachments are accessible"),
-        "host-focus refresh stays quiet"
+        None,
+        "quiet refresh clears its stale claim"
     );
+    assert!(text(draw(&mut fixture, 60, 8).backend().buffer()).contains("[Image 1]"));
+    fixture
+        .app
+        .complete_attachment_checks(complete(quiet, Err(AttachmentAccessFailure::Missing)));
+    assert_eq!(fixture.app.status_text(), None);
+    assert!(
+        text(draw(&mut fixture, 60, 8).backend().buffer()).contains("[Image 1 · inaccessible]")
+    );
+
+    let recovery = attachment_batch(&fixture.app.refresh_attachments(false));
     assert!(
         text(draw(&mut fixture, 60, 8).backend().buffer()).contains("[Image 1 · inaccessible]")
     );
     fixture
         .app
-        .complete_attachment_checks(complete(quiet, Ok(())));
+        .complete_attachment_checks(complete(recovery, Ok(())));
     assert!(text(draw(&mut fixture, 60, 8).backend().buffer()).contains("[Image 1]"));
 }
 
@@ -91,6 +99,121 @@ fn manual_refresh_reports_failure_empty_board_and_only_the_latest_cycle() {
     let mut empty = Fixture::new();
     assert!(empty.app.refresh_attachments(true).is_empty());
     assert_eq!(empty.app.status_text(), Some("no attachments to refresh"));
+}
+
+#[test]
+fn manual_refresh_waits_for_the_latest_relinked_source_generation() {
+    let mut fixture = Fixture::new();
+    let insertion = fixture.effects(UiInput::PasteAnnotated(attachment_payload(
+        "/tmp/old.txt",
+        false,
+    )));
+    let insertion = attachment_batch(&insertion);
+    fixture
+        .app
+        .complete_attachment_checks(complete(insertion, Ok(())));
+
+    let stale = attachment_batch(&fixture.app.refresh_attachments(true));
+    fixture.input(UiInput::Key(UiKey::SelectAll));
+    let mutation = fixture.effects(UiInput::PasteAnnotated(attachment_payload(
+        "/tmp/relinked.txt",
+        false,
+    )));
+    assert!(
+        mutation
+            .iter()
+            .all(|effect| !matches!(effect, Effect::CheckAttachments(_)))
+    );
+    assert_eq!(fixture.app.status_text(), Some("refreshing attachments"));
+
+    let current = fixture
+        .app
+        .complete_attachment_checks(complete(stale, Ok(())));
+    assert_eq!(fixture.app.status_text(), Some("refreshing attachments"));
+    let current = attachment_batch(&current);
+    assert_eq!(current.checks[0].canonical_path, "/tmp/relinked.txt");
+    fixture
+        .app
+        .complete_attachment_checks(complete(current, Err(AttachmentAccessFailure::Missing)));
+    assert_eq!(
+        fixture.app.status_text(),
+        Some("Proqi cannot access 1 attachment")
+    );
+}
+
+#[test]
+fn accessible_prose_and_fold_edits_do_not_recheck_or_flicker() {
+    let mut fixture = Fixture::new();
+    let insertion = fixture.effects(UiInput::PasteAnnotated(attachment_payload(
+        "/tmp/stable.png",
+        true,
+    )));
+    fixture
+        .app
+        .complete_attachment_checks(complete(attachment_batch(&insertion), Ok(())));
+    assert!(text(draw(&mut fixture, 60, 8).backend().buffer()).contains("[Image 1]"));
+
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: proqi::ports::editor::CursorMovement::GraphemeBack,
+        extend_selection: false,
+    }));
+    let expanded = fixture.effects(UiInput::Key(UiKey::Enter));
+    assert!(
+        expanded
+            .iter()
+            .all(|effect| !matches!(effect, Effect::CheckAttachments(_)))
+    );
+    assert!(text(draw(&mut fixture, 60, 8).backend().buffer()).contains("/tmp/stable.png"));
+    fixture.input(UiInput::Key(UiKey::Character('!')));
+    let collapsed = fixture.effects(UiInput::Key(UiKey::Escape));
+    assert!(
+        collapsed
+            .iter()
+            .all(|effect| !matches!(effect, Effect::CheckAttachments(_)))
+    );
+    let rendered = text(draw(&mut fixture, 60, 8).backend().buffer());
+    assert!(rendered.contains("[Image 1]"));
+    assert!(!rendered.contains("inaccessible"));
+}
+
+#[test]
+fn prose_during_manual_refresh_reuses_the_check_and_finishes_with_current_truth() {
+    let mut fixture = Fixture::new();
+    let insertion = fixture.effects(UiInput::PasteAnnotated(attachment_payload(
+        "/tmp/stable.png",
+        true,
+    )));
+    fixture
+        .app
+        .complete_attachment_checks(complete(attachment_batch(&insertion), Ok(())));
+    let refresh = attachment_batch(&fixture.app.refresh_attachments(true));
+
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: proqi::ports::editor::CursorMovement::GraphemeBack,
+        extend_selection: false,
+    }));
+    fixture.input(UiInput::Key(UiKey::Enter));
+    fixture.input(UiInput::Key(UiKey::Character('!')));
+    fixture.input(UiInput::Key(UiKey::Character('?')));
+    let effects = fixture.effects(UiInput::Key(UiKey::Escape));
+    assert!(
+        effects
+            .iter()
+            .all(|effect| !matches!(effect, Effect::CheckAttachments(_)))
+    );
+    assert_eq!(fixture.app.status_text(), Some("refreshing attachments"));
+
+    let effects = fixture
+        .app
+        .complete_attachment_checks(complete(refresh, Err(AttachmentAccessFailure::Missing)));
+    assert!(effects.is_empty());
+    assert_eq!(
+        fixture.app.status_text(),
+        Some("Proqi cannot access 1 attachment")
+    );
+    assert!(
+        text(draw(&mut fixture, 60, 8).backend().buffer()).contains("[Image 1 · inaccessible]")
+    );
 }
 
 #[test]

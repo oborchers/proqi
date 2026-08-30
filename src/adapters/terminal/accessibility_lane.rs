@@ -1,18 +1,22 @@
 //! Dedicated bounded lane for read-only attachment accessibility checks.
 
 use std::{
+    ffi::OsString,
     path::PathBuf,
     sync::mpsc::{Receiver, RecvTimeoutError, SyncSender, TrySendError, sync_channel},
     thread::{self, JoinHandle},
-    time::{Duration, Instant},
 };
 
 use crate::{
-    adapters::{attachment::FileAttachmentAccessibility, process::CancellationFlag},
-    ports::attachment_accessibility::{
-        AttachmentAccessFailure, AttachmentAccessibility, AttachmentCheckBatch,
-        AttachmentCheckBatchResult, AttachmentCheckResult,
+    adapters::{
+        attachment::worker::{decode_response, encode_request},
+        process::{CancellationFlag, SystemProcessRunner},
     },
+    ports::attachment_accessibility::{
+        AttachmentAccessFailure, AttachmentCheckBatch, AttachmentCheckBatchResult,
+        AttachmentCheckResult,
+    },
+    ports::environment::{ProcessError, ProcessRequest, ProcessRunner},
 };
 
 use super::{
@@ -20,17 +24,13 @@ use super::{
     supervisor::{ShutdownDeadline, WorkerLifecycle, WorkerRole, join_before},
 };
 
-const CHECK_CANCELLATION_INTERVAL: Duration = Duration::from_millis(25);
-const CHECKER_JOIN_GRACE: Duration = Duration::from_millis(50);
-
-struct CheckRequest {
-    id: u64,
-    path: PathBuf,
+trait BatchExecutor: Send {
+    fn execute(&mut self, batch: &AttachmentCheckBatch) -> Vec<AttachmentCheckResult>;
 }
 
-struct CheckResponse {
-    id: u64,
-    result: Result<(), AttachmentAccessFailure>,
+struct ProcessBatchExecutor {
+    executable: PathBuf,
+    runner: SystemProcessRunner,
 }
 
 /// Bounded request/result worker that never owns application policy or cache state.
@@ -42,21 +42,21 @@ pub(super) struct AccessibilityLane {
 }
 
 impl AccessibilityLane {
-    pub(super) fn spawn(cancellation: CancellationFlag) -> Self {
-        Self::spawn_with(Box::<FileAttachmentAccessibility>::default(), cancellation)
+    pub(super) fn spawn(executable: PathBuf, cancellation: CancellationFlag) -> Self {
+        Self::spawn_with(Box::new(ProcessBatchExecutor {
+            executable,
+            runner: SystemProcessRunner::cancellable(cancellation),
+        }))
     }
 
-    fn spawn_with(
-        checker: Box<dyn AttachmentAccessibility>,
-        cancellation: CancellationFlag,
-    ) -> Self {
+    fn spawn_with(executor: Box<dyn BatchExecutor>) -> Self {
         let (request_sender, request_receiver) = sync_channel(4);
         let (result_sender, result_receiver) = sync_channel(4);
         let lifecycle = WorkerLifecycle::default();
         let worker_lifecycle = lifecycle.clone();
         let handle = thread::spawn(move || {
             worker_lifecycle.run(WorkerRole::Accessibility, || {
-                accessibility_loop(&request_receiver, &result_sender, checker, &cancellation);
+                accessibility_loop(&request_receiver, &result_sender, executor);
             });
         });
         Self {
@@ -114,41 +114,11 @@ impl Drop for AccessibilityLane {
 fn accessibility_loop(
     requests: &Receiver<AttachmentCheckBatch>,
     results: &SyncSender<AttachmentCheckBatchResult>,
-    checker: Box<dyn AttachmentAccessibility>,
-    cancellation: &CancellationFlag,
+    mut executor: Box<dyn BatchExecutor>,
 ) {
-    let (check_sender, check_receiver) = sync_channel(1);
-    let (response_sender, response_receiver) = sync_channel(2);
-    let checker_handle = thread::spawn(move || {
-        checker_loop(&check_receiver, &response_sender, checker);
-    });
-    let mut next_check_id = 1_u64;
     while let Ok(batch) = requests.recv() {
-        let deadline = Instant::now() + batch.timeout;
-        let check_results = batch
-            .checks
-            .iter()
-            .cloned()
-            .map(|key| {
-                let result = check_one(
-                    &check_sender,
-                    &response_receiver,
-                    &key,
-                    next_check_id,
-                    deadline,
-                    cancellation,
-                );
-                next_check_id = next_check_id.wrapping_add(1).max(1);
-                if let Err(reason) = result {
-                    crate::adapters::diagnostics::record(
-                        crate::adapters::diagnostics::SafeEvent::AttachmentInaccessible {
-                            reason: reason.diagnostic_code(),
-                        },
-                    );
-                }
-                AttachmentCheckResult { key, result }
-            })
-            .collect();
+        let check_results = executor.execute(&batch);
+        record_failures(&check_results);
         let completion = AttachmentCheckBatchResult {
             id: batch.id,
             purpose: batch.purpose,
@@ -158,66 +128,65 @@ fn accessibility_loop(
             return;
         }
     }
-    drop(check_sender);
-    let _joined = join_before(
-        Some(checker_handle),
-        ShutdownDeadline::after(CHECKER_JOIN_GRACE),
-        "attachment checker panicked",
-        "attachment checker did not stop",
-    );
 }
 
-fn check_one(
-    requests: &SyncSender<CheckRequest>,
-    responses: &Receiver<CheckResponse>,
-    key: &crate::ports::attachment_accessibility::AttachmentCheckKey,
-    id: u64,
-    deadline: Instant,
-    cancellation: &CancellationFlag,
-) -> Result<(), AttachmentAccessFailure> {
-    if cancellation.is_cancelled() {
-        return Err(AttachmentAccessFailure::Cancelled);
-    }
-    if Instant::now() >= deadline {
-        return Err(AttachmentAccessFailure::TimedOut);
-    }
-    requests
-        .try_send(CheckRequest {
-            id,
-            path: key.path().to_path_buf(),
-        })
-        .map_err(|error| match error {
-            TrySendError::Full(_) => AttachmentAccessFailure::TimedOut,
-            TrySendError::Disconnected(_) => AttachmentAccessFailure::Io,
-        })?;
-    loop {
-        if cancellation.is_cancelled() {
-            return Err(AttachmentAccessFailure::Cancelled);
-        }
-        let remaining = deadline.saturating_duration_since(Instant::now());
-        if remaining.is_zero() {
-            return Err(AttachmentAccessFailure::TimedOut);
-        }
-        match responses.recv_timeout(remaining.min(CHECK_CANCELLATION_INTERVAL)) {
-            Ok(response) if response.id == id => return response.result,
-            Ok(_) | Err(RecvTimeoutError::Timeout) => {}
-            Err(RecvTimeoutError::Disconnected) => return Err(AttachmentAccessFailure::Io),
-        }
-    }
-}
-
-fn checker_loop(
-    requests: &Receiver<CheckRequest>,
-    responses: &SyncSender<CheckResponse>,
-    mut checker: Box<dyn AttachmentAccessibility>,
-) {
-    while let Ok(request) = requests.recv() {
-        let response = CheckResponse {
-            id: request.id,
-            result: checker.check(&request.path),
+impl BatchExecutor for ProcessBatchExecutor {
+    fn execute(&mut self, batch: &AttachmentCheckBatch) -> Vec<AttachmentCheckResult> {
+        let paths = batch
+            .checks
+            .iter()
+            .map(|key| key.canonical_path.clone())
+            .collect();
+        let results = encode_request(paths)
+            .map_err(|_| ProcessError::Io("attachment request serialization failed".to_owned()))
+            .and_then(|stdin| {
+                self.runner.run(ProcessRequest {
+                    program: self.executable.clone().into_os_string(),
+                    args: vec![OsString::from("__attachment-check")],
+                    stdin: Some(stdin),
+                    timeout: batch.timeout,
+                })
+            })
+            .and_then(|output| {
+                if output.exit_code != Some(0) {
+                    return Err(ProcessError::Io(
+                        "attachment worker exited unsuccessfully".to_owned(),
+                    ));
+                }
+                decode_response(&output.stdout, batch.checks.len()).map_err(|()| {
+                    ProcessError::Io("attachment worker returned an invalid response".to_owned())
+                })
+            });
+        let results = match results {
+            Ok(results) => results,
+            Err(error) => vec![Err(process_failure(&error)); batch.checks.len()],
         };
-        if responses.send(response).is_err() {
-            return;
+        batch
+            .checks
+            .iter()
+            .cloned()
+            .zip(results)
+            .map(|(key, result)| AttachmentCheckResult { key, result })
+            .collect()
+    }
+}
+
+fn process_failure(error: &ProcessError) -> AttachmentAccessFailure {
+    match error {
+        ProcessError::TimedOut => AttachmentAccessFailure::TimedOut,
+        ProcessError::Cancelled => AttachmentAccessFailure::Cancelled,
+        ProcessError::Io(_) | ProcessError::OutputLimit => AttachmentAccessFailure::Io,
+    }
+}
+
+fn record_failures(results: &[AttachmentCheckResult]) {
+    for result in results {
+        if let Err(reason) = result.result {
+            crate::adapters::diagnostics::record(
+                crate::adapters::diagnostics::SafeEvent::AttachmentInaccessible {
+                    reason: reason.diagnostic_code(),
+                },
+            );
         }
     }
 }
@@ -231,47 +200,45 @@ fn map_send_error(error: &TrySendError<AttachmentCheckBatch>) -> TerminalError {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        path::Path,
-        sync::mpsc::{Receiver, Sender, channel},
-        time::Duration,
-    };
+    use std::{collections::VecDeque, time::Duration};
 
     use crate::{
-        adapters::process::CancellationFlag,
         adapters::terminal::supervisor::ShutdownDeadline,
         ports::attachment_accessibility::{
-            AttachmentAccessFailure, AttachmentAccessibility, AttachmentCheckBatch,
-            AttachmentCheckKey, AttachmentCheckPurpose,
+            AttachmentAccessFailure, AttachmentCheckBatch, AttachmentCheckKey,
+            AttachmentCheckPurpose, AttachmentCheckResult,
         },
     };
 
-    use super::AccessibilityLane;
+    use super::{AccessibilityLane, BatchExecutor};
 
-    struct Blocking {
-        started: Sender<()>,
-        release: Receiver<()>,
+    struct SequenceExecutor {
+        outcomes: VecDeque<AttachmentAccessFailure>,
     }
 
-    impl AttachmentAccessibility for Blocking {
-        fn check(&mut self, _path: &Path) -> Result<(), AttachmentAccessFailure> {
-            self.started
-                .send(())
-                .map_err(|_| AttachmentAccessFailure::Io)?;
-            self.release.recv().map_err(|_| AttachmentAccessFailure::Io)
+    impl BatchExecutor for SequenceExecutor {
+        fn execute(&mut self, batch: &AttachmentCheckBatch) -> Vec<AttachmentCheckResult> {
+            let result = self.outcomes.pop_front().map_or(Ok(()), Err);
+            batch
+                .checks
+                .iter()
+                .cloned()
+                .map(|key| AttachmentCheckResult { key, result })
+                .collect()
         }
     }
 
     #[test]
-    fn deadline_and_cancellation_fail_closed() {
-        let cancellation = CancellationFlag::default();
-        let (checker, started, release) = blocking();
-        let lane = AccessibilityLane::spawn_with(Box::new(checker), cancellation.clone());
+    fn timeout_does_not_poison_the_next_bounded_batch() {
+        let executor = SequenceExecutor {
+            outcomes: VecDeque::from([
+                AttachmentAccessFailure::TimedOut,
+                AttachmentAccessFailure::Missing,
+            ]),
+        };
+        let lane = AccessibilityLane::spawn_with(Box::new(executor));
         lane.send(batch(1, Duration::from_millis(5)))
             .expect("deadline batch");
-        started
-            .recv_timeout(Duration::from_secs(1))
-            .expect("checker started");
         let timed_out = lane
             .receiver
             .recv_timeout(Duration::from_secs(1))
@@ -280,44 +247,18 @@ mod tests {
             timed_out.results[0].result,
             Err(AttachmentAccessFailure::TimedOut)
         );
-        release.send(()).expect("release timed out checker");
-
-        lane.stop(ShutdownDeadline::after(Duration::from_millis(150)))
-            .expect("deadline lane stops within its bound");
-
-        let cancellation = CancellationFlag::default();
-        let (checker, started, release) = blocking();
-        let lane = AccessibilityLane::spawn_with(Box::new(checker), cancellation.clone());
         lane.send(batch(2, Duration::from_secs(1)))
-            .expect("cancelled batch");
-        started
-            .recv_timeout(Duration::from_secs(1))
-            .expect("checker started");
-        cancellation.cancel();
-        let cancelled = lane
+            .expect("recovery batch");
+        let recovered = lane
             .receiver
             .recv_timeout(Duration::from_secs(1))
-            .expect("cancelled result");
+            .expect("recovery result");
         assert_eq!(
-            cancelled.results[0].result,
-            Err(AttachmentAccessFailure::Cancelled)
+            recovered.results[0].result,
+            Err(AttachmentAccessFailure::Missing)
         );
-        release.send(()).expect("release cancelled checker");
         lane.stop(ShutdownDeadline::after(Duration::from_millis(150)))
-            .expect("cancelled lane stops within its bound");
-    }
-
-    fn blocking() -> (Blocking, Receiver<()>, Sender<()>) {
-        let (started_sender, started_receiver) = channel();
-        let (release_sender, release_receiver) = channel();
-        (
-            Blocking {
-                started: started_sender,
-                release: release_receiver,
-            },
-            started_receiver,
-            release_sender,
-        )
+            .expect("recovered lane stops within its bound");
     }
 
     fn batch(id: u64, timeout: Duration) -> AttachmentCheckBatch {

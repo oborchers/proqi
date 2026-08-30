@@ -139,8 +139,8 @@ fn every_submit_variant_fails_before_journaling_delivery_or_removal() {
         let preflight = attachment_batch(&effects);
         assert_eq!(fixture.app.status_text(), Some("checking attachments"));
         assert!(
-            text(draw(&mut fixture, 80, 12).backend().buffer()).contains("inaccessible"),
-            "fresh preflight cannot render a prior success as current proof: {query}"
+            text(draw(&mut fixture, 80, 12).backend().buffer()).contains("[Image 1]"),
+            "fresh preflight preserves the last presentation verdict: {query}"
         );
         let effects = fixture.app.complete_attachment_checks(complete(
             preflight,
