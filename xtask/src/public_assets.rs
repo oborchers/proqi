@@ -154,6 +154,7 @@ fn check_demo_contract(root: &Path) -> Result<(), String> {
         "agg --quiet --theme github-dark",
         "record-inbox",
         "theme = \"auto\"",
+        "require_cast_success",
         "unset NO_COLOR",
         "--window-size 92x30",
         "fc-match",
@@ -179,10 +180,15 @@ fn check_demo_contract(root: &Path) -> Result<(), String> {
         }
     }
     for marker in [
-        "1\\. Keep this board open",
+        "create_thought \"Open any board",
+        "create_thought \"Press i to start",
+        "create_thought \"Take a normal macOS screenshot",
+        "create_thought \"It arrives on this board",
         "listening",
-        "Image",
+        "5 thoughts",
         "Add a note before submitting.",
+        "Only one Proqi board captures",
+        "10 unattended captures or 20 inactive minutes",
     ] {
         if !inbox_recorder.contains(marker) {
             return Err(format!(

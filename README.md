@@ -170,8 +170,8 @@ into compact annotations while their content stays intact. See
 Press `i`: new Desktop screenshots become annotatable image thoughts. Proqi
 never takes, uploads, analyzes, copies, or configures them.
 
-One process listens. It pauses after 20 inactive minutes or 10 captures. Resume
-ignores the gap; failed imports require explicit retry.
+One process listens. It pauses after 10 unattended captures or 20 inactive
+minutes. Resume ignores the gap; failed imports require explicit retry.
 
 macOS may request terminal **Files & Folders** access—not Screen Recording or
 Accessibility. Linux reports macOS-only availability.
