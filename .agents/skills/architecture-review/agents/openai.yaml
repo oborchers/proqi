@@ -1,0 +1,6 @@
+interface:
+  display_name: "Architecture Review"
+  short_description: "Pair a native reviewer with the other harness CLI"
+  default_prompt: "Use $architecture-review to pair a native reviewer with the other harness through CLI, refactor main, push it, and return with green CI."
+policy:
+  allow_implicit_invocation: false
