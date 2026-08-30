@@ -36,7 +36,7 @@ fn bracketed_paste_autosaves_and_resumes_in_a_real_pty() {
         set binary $env(PROQI_TEST_BINARY)
         set state $env(PROQI_TEST_STATE)
         spawn $binary --state-dir $state
-        after 500
+        expect -exact "\x1b\[?1049h"
         send -- "\x1b\[200~Grüße 界\nsecond\x1b\[201~"
         after 700
         send "\x1b"
@@ -74,7 +74,7 @@ fn bracketed_paste_autosaves_and_resumes_in_a_real_pty() {
         set state $env(PROQI_TEST_STATE)
         set session $env(PROQI_TEST_SESSION)
         spawn $binary --state-dir $state -r $session
-        after 500
+        expect -exact "\x1b\[?1049h"
         send "\r"
         after 100
         send "!"
@@ -159,7 +159,7 @@ fn assert_persistent_editor_undo(
         set state $env(PROQI_TEST_STATE)
         set session $env(PROQI_TEST_SESSION)
         spawn $binary --state-dir $state -r $session
-        after 500
+        expect -exact "\x1b\[?1049h"
         send "\r"
         after 100
         send "\x1a"
@@ -311,11 +311,11 @@ fn session_browser_searches_and_resumes_in_a_real_pty() {
         set state $env(PROQI_TEST_STATE)
         spawn $binary --state-dir $state -r
         stty rows 24 columns 100
-        after 500
+        expect -exact "\x1b\[?1049h"
         send -- "Needle"
-        after 200
+        expect -re "Needle"
         send "\r"
-        after 500
+        expect -exact "\x1b\[?1049l"; expect -exact "\x1b\[?1049h"
         send -- "\x11"
         expect {
             eof {}
@@ -365,6 +365,10 @@ mod fairness;
 #[cfg(target_os = "macos")]
 #[path = "pty/shutdown.rs"]
 mod shutdown;
+
+#[cfg(target_os = "macos")]
+#[path = "pty/watchdog.rs"]
+mod watchdog;
 
 #[cfg(target_os = "macos")]
 #[path = "pty/update_control.rs"]
