@@ -2,6 +2,8 @@
 
 use std::path::PathBuf;
 
+use super::agent::{AgentFailureCode, AgentState, HarnessKind};
+
 /// Conceptual definition layer represented by a catalog entry.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -135,6 +137,151 @@ pub struct InvocationDiscovery {
     pub global: Vec<InvocationEntry>,
     /// Entries associated with this cwd's ancestor chain.
     pub project: Vec<InvocationEntry>,
+    /// Recognized collaborators currently present on the local terminal server.
+    pub live: Vec<LiveAgentReference>,
+}
+
+/// Integration that supplied one ephemeral collaborator reference.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum InvocationReferenceProvider {
+    /// The current local Herdr server.
+    Herdr,
+}
+
+impl InvocationReferenceProvider {
+    /// Compact group label used in the invocation picker.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Herdr => "Live in Herdr",
+        }
+    }
+}
+
+/// One bounded, display-only live collaborator location.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LiveAgentReference {
+    provider: InvocationReferenceProvider,
+    agent_name: String,
+    harness: HarnessKind,
+    workspace_id: String,
+    workspace_label: Option<String>,
+    tab_id: String,
+    tab_label: Option<String>,
+    pane_id: String,
+    state: AgentState,
+}
+
+impl LiveAgentReference {
+    /// Construct a reference whose exact location remains safe and useful to insert.
+    #[must_use]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "the live reference value validates independent identity and display fields"
+    )]
+    pub fn new(
+        provider: InvocationReferenceProvider,
+        agent_name: String,
+        harness: HarnessKind,
+        workspace_id: String,
+        workspace_label: Option<String>,
+        tab_id: String,
+        tab_label: Option<String>,
+        pane_id: String,
+        state: AgentState,
+    ) -> Option<Self> {
+        if !bounded_label(&agent_name, 32)
+            || !bounded_identity(harness.as_str(), 32)
+            || !bounded_identity(&workspace_id, 64)
+            || workspace_label
+                .as_deref()
+                .is_some_and(|label| !bounded_label(label, 48))
+            || !bounded_identity(&tab_id, 64)
+            || tab_label
+                .as_deref()
+                .is_some_and(|label| !bounded_label(label, 48))
+            || !bounded_identity(&pane_id, 64)
+        {
+            return None;
+        }
+        Some(Self {
+            provider,
+            agent_name,
+            harness,
+            workspace_id,
+            workspace_label,
+            tab_id,
+            tab_label,
+            pane_id,
+            state,
+        })
+    }
+
+    /// Supplying integration.
+    #[must_use]
+    pub const fn provider(&self) -> InvocationReferenceProvider {
+        self.provider
+    }
+
+    /// Bounded collaborator name.
+    #[must_use]
+    pub fn agent_name(&self) -> &str {
+        &self.agent_name
+    }
+
+    /// Recognized coding-agent harness.
+    #[must_use]
+    pub const fn harness(&self) -> &HarnessKind {
+        &self.harness
+    }
+
+    /// Opaque workspace identity on the current server.
+    #[must_use]
+    pub fn workspace_id(&self) -> &str {
+        &self.workspace_id
+    }
+
+    /// Optional bounded user-facing workspace label from the same snapshot.
+    #[must_use]
+    pub fn workspace_label(&self) -> Option<&str> {
+        self.workspace_label.as_deref()
+    }
+
+    /// Opaque tab identity within the workspace.
+    #[must_use]
+    pub fn tab_id(&self) -> &str {
+        &self.tab_id
+    }
+
+    /// Optional bounded user-facing tab label from the same snapshot.
+    #[must_use]
+    pub fn tab_label(&self) -> Option<&str> {
+        self.tab_label.as_deref()
+    }
+
+    /// Opaque pane identity currently hosting the collaborator.
+    #[must_use]
+    pub fn pane_id(&self) -> &str {
+        &self.pane_id
+    }
+
+    /// Ephemeral readiness rendered only in the live picker row.
+    #[must_use]
+    pub const fn state(&self) -> AgentState {
+        self.state
+    }
+}
+
+fn bounded_label(value: &str, maximum: usize) -> bool {
+    let trimmed = value.trim();
+    !trimmed.is_empty()
+        && trimmed == value
+        && trimmed.chars().count() <= maximum
+        && !trimmed.chars().any(char::is_control)
+}
+
+fn bounded_identity(value: &str, maximum: usize) -> bool {
+    bounded_label(value, maximum) && !value.chars().any(char::is_whitespace)
 }
 
 /// Explicit additional compatibility root from user configuration.
@@ -169,4 +316,14 @@ pub trait InvocationCatalog: Send {
         &mut self,
         request: InvocationDiscoveryRequest,
     ) -> Result<InvocationDiscovery, InvocationCatalogError>;
+}
+
+/// Blocking ephemeral reference discovery composed into the invocation refresh.
+pub trait InvocationReferenceCatalog: Send {
+    /// Discover recognized coding agents without reading pane content or arbitrary shells.
+    ///
+    /// # Errors
+    ///
+    /// Returns a content-free provider classification. Callers may degrade to no live group.
+    fn discover_live_references(&mut self) -> Result<Vec<LiveAgentReference>, AgentFailureCode>;
 }

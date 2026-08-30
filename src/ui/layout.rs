@@ -226,6 +226,16 @@ impl LayoutSnapshot {
         });
     }
 
+    /// Attach invocation geometry whose live group headings share each choice hit target.
+    pub fn configure_grouped_overlay(&mut self, item_heights: &[u16], preferred_rows: usize) {
+        self.overlay = (preferred_rows > 0).then(|| {
+            let required = controls::overlay_height(preferred_rows);
+            let covers_chrome = self.board.height < required;
+            let bounds = if covers_chrome { self.area } else { self.board };
+            controls::grouped_overlay_layout(bounds, item_heights, preferred_rows, covers_chrome)
+        });
+    }
+
     /// Add only currently verified agent controls where footer width permits.
     pub fn configure_agent_controls(
         &mut self,

@@ -1,0 +1,17 @@
+---
+source: src/ui/app/invocation/reference_tests.rs
+assertion_line: 316
+expression: "live_snapshot(72, 12)"
+---
+00│       ┌ invocations and references ──────────────────────────[x]│
+01│⋮ Coor │›                                                       ││
+02│       │Live in Herdr · w2/w2:t4 · Product/Review               ││
+03│       │reviewer                             codex w2:p9 working││
+04│       │Live in Herdr · w3/w3:t2 · Implementation/Build         ││
+05│       │builder                                 codex w3:p7 idle││
+06│       └────────────────────────────────────────────────────────┘│
+07││
+08││
+09│  fixture│
+10│  1 thought · edit · saved│
+11│  Esc Board  y Copy  x Cut  u Undo  : Commands  ? Shortcuts│

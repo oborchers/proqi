@@ -164,6 +164,7 @@ fn documented_precedence_orders_global_claude_skills_before_project_skills() {
         cwd: cwd.path().to_owned(),
         global: vec![global],
         project: vec![project],
+        live: Vec::new(),
     }));
     app.refresh_invocation_popup();
 

@@ -704,6 +704,23 @@ harness precedence. Startup, explicit command-palette refresh, and debounced
 host focus replace generation-tagged results; an older in-flight project scan
 cannot leak into a newer cwd.
 
+In a managed Herdr pane, the same invocation picker also presents a distinct
+`Live in Herdr` group. It refreshes on each picker open and lists only coding
+agents recognized by the current Herdr server, grouped by the workspace and tab
+identities from one protocol 19 snapshot. User-facing workspace and tab labels
+come only from that snapshot, with exact stable IDs as the fallback when labels
+are unavailable. Proqi never derives labels from directories or terminal
+titles, and it never includes ordinary shell panes.
+
+Each live row shows a bounded agent name, harness, workspace, tab, pane, and
+observed state. Selecting it inserts one concise plain-text collaborator
+location as an ordinary undoable editor paste. The inserted location excludes
+readiness because readiness is only a current display observation. Selection
+does not submit, reserve, focus, or otherwise mutate the target. A malformed,
+timed out, contradictory, duplicate, or disappearing live result contributes
+no live rows and never removes usable filesystem invocations. Outside Herdr,
+the existing invocation behavior is unchanged.
+
 A small data-driven built-in table sits beside filesystem results: `/plan` and
 `/goal` are offered as shared Commands only at byte zero when a verified
 adjacent Codex or Claude Code target exists. Exact discovered invocations and

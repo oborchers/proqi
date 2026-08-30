@@ -4,7 +4,7 @@ assertion_line: 440
 expression: plan_completion_snapshot()
 ---
 00││
-01│┌ discovered invocations ────────────────────[x]│
+01│┌ invocations and references ────────────────[x]│
 02││›/pl                                          ││
 03││/plan                           Shared Command││
 04││                                              ││

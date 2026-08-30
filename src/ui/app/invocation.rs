@@ -24,9 +24,12 @@ pub(in crate::ui::app) mod builtins;
 mod compatibility;
 #[path = "invocation/highlight.rs"]
 mod highlight;
+#[path = "invocation/reference.rs"]
+mod reference;
 #[path = "invocation/view.rs"]
 mod view;
 
+use view::Choice;
 pub(in crate::ui) use view::InvocationChoiceView;
 
 const MAX_RESULTS: usize = 20;
@@ -37,12 +40,6 @@ pub(super) struct InvocationPopup {
     manual: bool,
     selected: usize,
     scroll: usize,
-}
-
-#[derive(Clone)]
-struct Choice {
-    token: String,
-    qualifier: String,
 }
 
 impl BoardApp {
@@ -71,6 +68,7 @@ impl BoardApp {
         }
         self.invocation_global = discovery.global;
         self.invocation_project = discovery.project;
+        self.invocation_live = discovery.live;
         self.refresh_invocation_popup();
     }
 
@@ -130,14 +128,23 @@ impl BoardApp {
     pub(super) fn invocation_view(&self) -> Option<(String, Vec<InvocationChoiceView>, usize)> {
         let popup = self.invocation_popup.as_ref()?;
         let choices = self.invocation_choices(popup);
+        let mut previous_group = None;
         Some((
             popup.query.clone(),
             choices
                 .into_iter()
                 .skip(popup.scroll)
-                .map(|choice| InvocationChoiceView {
-                    token: choice.token,
-                    qualifier: choice.qualifier,
+                .map(|choice| {
+                    let group = choice.group.and_then(|group| {
+                        let begins_group = previous_group.as_deref() != Some(group.as_str());
+                        previous_group = Some(group.clone());
+                        begins_group.then_some(group)
+                    });
+                    InvocationChoiceView {
+                        token: choice.token,
+                        qualifier: choice.qualifier,
+                        group,
+                    }
                 })
                 .collect(),
             popup.selected.saturating_sub(popup.scroll),
@@ -265,25 +272,30 @@ impl BoardApp {
             .invocation_popup
             .as_ref()
             .and_then(|popup| self.invocation_choices(popup).get(index).cloned());
-        let range = self
-            .invocation_popup
-            .as_ref()
-            .and_then(|popup| popup.range.clone())
-            .or_else(|| {
-                self.editor_snapshot().map(|snapshot| {
-                    let byte = byte_for_position(&snapshot.content, snapshot.cursor);
-                    byte..byte
-                })
-            });
-        let (Some(choice), Some(mut range)) = (selected, range) else {
+        let Some(choice) = selected else {
             return;
         };
         let Some(snapshot) = self.editor_snapshot() else {
             return;
         };
+        let mut range = self
+            .invocation_popup
+            .as_ref()
+            .and_then(|popup| popup.range.clone())
+            .or_else(|| {
+                snapshot.selection.map(|selection| {
+                    byte_for_position(&snapshot.content, selection.start)
+                        ..byte_for_position(&snapshot.content, selection.end)
+                })
+            })
+            .unwrap_or_else(|| {
+                let byte = byte_for_position(&snapshot.content, snapshot.cursor);
+                byte..byte
+            });
         if snapshot.content.get(range.clone()).is_none() {
             return;
         }
+        let insertion = reference::insertion_text(&choice, &snapshot.content, &range);
         if snapshot.content.as_bytes().get(range.end) == Some(&b' ') {
             range.end = range.end.saturating_add(1);
         }
@@ -295,7 +307,7 @@ impl BoardApp {
             position: position_for_byte(&snapshot.content, range.end),
             extend_selection: true,
         });
-        self.apply_edit(EditCommand::Paste(format!("{} ", choice.token)));
+        self.apply_edit(EditCommand::Paste(insertion));
         self.invocation_popup = None;
     }
 
@@ -364,6 +376,7 @@ impl BoardApp {
         let query = popup.query.to_lowercase();
         let built_ins = builtins::choices(self, popup);
         let starts_prompt = builtins::starts_prompt(self, popup);
+        let live = reference::choices(self, popup, &query);
         let mut candidates = self
             .invocation_project
             .iter()
@@ -387,7 +400,11 @@ impl BoardApp {
                 .then_with(|| left_entry.source.cmp(&right_entry.source))
                 .then_with(|| left_entry.canonical_path.cmp(&right_entry.canonical_path))
         });
-        candidates.truncate(MAX_RESULTS.saturating_sub(built_ins.len()));
+        candidates.truncate(
+            MAX_RESULTS
+                .saturating_sub(built_ins.len())
+                .saturating_sub(live.len()),
+        );
         let visible = candidates.clone();
         built_ins
             .into_iter()
@@ -399,9 +416,13 @@ impl BoardApp {
                     > 1;
                 Choice {
                     token: form.token.clone(),
+                    insertion: form.token.clone(),
+                    separate_from_prefix: false,
                     qualifier: choice_qualifier(entry, form, duplicate_token),
+                    group: None,
                 }
             }))
+            .chain(live)
             .collect()
     }
 }

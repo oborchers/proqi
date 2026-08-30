@@ -70,6 +70,26 @@ pub(super) fn render_picker(
     );
     frame.set_cursor_position((input.x.saturating_add(1).saturating_add(cursor), input.y));
     for (index, (entry, area)) in picker.entries.iter().zip(&overlay.items).enumerate() {
+        let entry_area = if let Some(group) = entry.group {
+            let heading = ratatui_core::layout::Rect::new(area.x, area.y, area.width, 1);
+            frame.render_widget(
+                Paragraph::new(ellipsize(group, usize::from(heading.width))).style(
+                    theme
+                        .base_style()
+                        .fg(theme.accent)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                heading,
+            );
+            ratatui_core::layout::Rect::new(
+                area.x,
+                area.y.saturating_add(1),
+                area.width,
+                area.height.saturating_sub(1),
+            )
+        } else {
+            *area
+        };
         let style = if index == picker.selected {
             theme
                 .focused_style()
@@ -79,8 +99,8 @@ pub(super) fn render_picker(
             theme.base_style()
         };
         frame.render_widget(
-            Paragraph::new(picker_row(*entry, area.width)).style(style),
-            *area,
+            Paragraph::new(picker_row(*entry, entry_area.width)).style(style),
+            entry_area,
         );
     }
     render_close(frame, overlay, theme);
@@ -194,6 +214,7 @@ pub(super) struct PickerView<'a> {
 pub(super) struct PickerRow<'a> {
     primary: &'a str,
     secondary: Option<&'a str>,
+    group: Option<&'a str>,
 }
 
 impl<'a> PickerRow<'a> {
@@ -201,13 +222,28 @@ impl<'a> PickerRow<'a> {
         Self {
             primary,
             secondary: None,
+            group: None,
         }
     }
 
+    #[cfg(test)]
     pub(super) const fn fields(primary: &'a str, secondary: &'a str) -> Self {
         Self {
             primary,
             secondary: Some(secondary),
+            group: None,
+        }
+    }
+
+    pub(super) const fn grouped(
+        primary: &'a str,
+        secondary: &'a str,
+        group: Option<&'a str>,
+    ) -> Self {
+        Self {
+            primary,
+            secondary: Some(secondary),
+            group,
         }
     }
 }
@@ -217,8 +253,9 @@ fn picker_row(entry: PickerRow<'_>, width: u16) -> String {
     let primary_width = entry.primary.width();
     if let Some(secondary) = entry.secondary {
         let secondary_width = secondary.width();
+        let minimum_gap = usize::from(entry.group.is_none()) + 1;
         if primary_width
-            .saturating_add(2)
+            .saturating_add(minimum_gap)
             .saturating_add(secondary_width)
             <= width
         {

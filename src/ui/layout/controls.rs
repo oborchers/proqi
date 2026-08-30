@@ -13,19 +13,8 @@ pub(super) fn overlay_layout(
     preferred_rows: usize,
     cover_width: bool,
 ) -> OverlayLayout {
-    let requested_height = overlay_height(preferred_rows);
-    let height = area.height.clamp(1, requested_height.max(5));
-    let width = if cover_width || height == area.height {
-        area.width
-    } else {
-        area.width.clamp(1, 58)
-    };
-    let modal = Rect::new(
-        area.x + area.width.saturating_sub(width) / 2,
-        area.y + area.height.saturating_sub(height) / 2,
-        width,
-        height,
-    );
+    let modal = modal_area(area, preferred_rows, cover_width);
+    let height = modal.height;
     let items = (0..item_count.min(usize::from(height.saturating_sub(3))))
         .map(|index| {
             Rect::new(
@@ -44,6 +33,51 @@ pub(super) fn overlay_layout(
         items,
         close: Rect::new(modal.right().saturating_sub(3), modal.y, 3, 1),
     }
+}
+
+pub(super) fn grouped_overlay_layout(
+    area: Rect,
+    item_heights: &[u16],
+    preferred_rows: usize,
+    cover_width: bool,
+) -> OverlayLayout {
+    let modal = modal_area(area, preferred_rows, cover_width);
+    let mut item_y = modal.y.saturating_add(2);
+    let bottom = modal.bottom().saturating_sub(1);
+    let mut items = Vec::new();
+    for item_height in item_heights.iter().copied() {
+        if item_height == 0 || item_y.saturating_add(item_height) > bottom {
+            break;
+        }
+        items.push(Rect::new(
+            modal.x.saturating_add(1),
+            item_y,
+            modal.width.saturating_sub(2),
+            item_height,
+        ));
+        item_y = item_y.saturating_add(item_height);
+    }
+    OverlayLayout {
+        area: modal,
+        items,
+        close: Rect::new(modal.right().saturating_sub(3), modal.y, 3, 1),
+    }
+}
+
+fn modal_area(area: Rect, preferred_rows: usize, cover_width: bool) -> Rect {
+    let requested_height = overlay_height(preferred_rows);
+    let height = area.height.clamp(1, requested_height.max(5));
+    let width = if cover_width || height == area.height {
+        area.width
+    } else {
+        area.width.clamp(1, 58)
+    };
+    Rect::new(
+        area.x + area.width.saturating_sub(width) / 2,
+        area.y + area.height.saturating_sub(height) / 2,
+        width,
+        height,
+    )
 }
 
 pub(super) fn overlay_height(preferred_rows: usize) -> u16 {

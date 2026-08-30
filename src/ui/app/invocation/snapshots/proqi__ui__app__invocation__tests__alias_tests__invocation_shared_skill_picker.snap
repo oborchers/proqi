@@ -3,7 +3,7 @@ source: src/ui/app/invocation/alias_tests.rs
 assertion_line: 250
 expression: snapshot
 ---
-00│┌ discovered invocations ────────────────────[x]│
+00│┌ invocations and references ────────────────[x]│
 01││›                                             ││
 02││/shared                           Global Skill││
 03││$shared                           Global Skill││

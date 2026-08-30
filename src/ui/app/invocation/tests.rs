@@ -91,6 +91,7 @@ mod contract {
             cwd: cwd.to_owned(),
             global: Vec::new(),
             project: entries,
+            live: Vec::new(),
         }));
     }
 
@@ -327,6 +328,7 @@ mod contract {
                 InvocationKind::Skill,
                 InvocationScope::Project,
             )],
+            live: Vec::new(),
         }));
         app.complete_invocation_discovery(Ok(InvocationDiscovery {
             generation,
@@ -337,6 +339,7 @@ mod contract {
                 InvocationKind::Skill,
                 InvocationScope::Project,
             )],
+            live: Vec::new(),
         }));
         app.refresh_invocation_popup();
         assert!(app.invocation_view().is_none());
@@ -453,3 +456,5 @@ mod contract {
 
 #[path = "alias_tests.rs"]
 mod alias_tests;
+#[path = "reference_tests.rs"]
+mod reference_tests;

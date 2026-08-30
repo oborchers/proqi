@@ -9,7 +9,7 @@ use proqi::{
         },
         invocation::{
             InvocationDiscovery, InvocationEntry, InvocationForm, InvocationHarness,
-            InvocationKind, InvocationScope,
+            InvocationKind, InvocationReferenceProvider, InvocationScope, LiveAgentReference,
         },
     },
 };
@@ -114,10 +114,50 @@ fn discovered_invocations_use_the_annotation_visual_role() {
                 precedence: 20,
             }],
             project: Vec::new(),
+            live: Vec::new(),
         }));
     fixture.input(UiInput::Paste("/plan ask $review ".to_owned()));
 
     insta::assert_snapshot!(snapshot(&mut fixture, 58, 8, ThemePreference::Dark));
+}
+
+#[test]
+fn existing_invocation_command_opens_terminal_independent_live_reference_picker() {
+    let mut fixture = Fixture::new();
+    fixture.paste("Coordinate with another agent");
+    fixture.input(UiInput::Key(UiKey::Escape));
+    let effects = fixture.app.refresh_invocations();
+    let [Effect::DiscoverInvocations(request)] = effects.as_slice() else {
+        panic!("invocation refresh effect");
+    };
+    let reference = LiveAgentReference::new(
+        InvocationReferenceProvider::Herdr,
+        "reviewer".to_owned(),
+        HarnessKind::new(CODEX_AGENT_KIND).expect("fixture harness"),
+        "w2".to_owned(),
+        Some("Product".to_owned()),
+        "w2:t4".to_owned(),
+        Some("Review".to_owned()),
+        "w2:p9".to_owned(),
+        AgentState::Working,
+    )
+    .expect("live reference");
+    fixture
+        .app
+        .complete_invocation_discovery(Ok(InvocationDiscovery {
+            generation: request.generation,
+            cwd: request.cwd.clone(),
+            global: Vec::new(),
+            project: Vec::new(),
+            live: vec![reference],
+        }));
+    fixture.input(UiInput::Key(UiKey::Character(':')));
+    for character in "Insert invocation or Herdr reference".chars() {
+        fixture.input(UiInput::Key(UiKey::Character(character)));
+    }
+    fixture.input(UiInput::Key(UiKey::Enter));
+
+    insta::assert_snapshot!(snapshot(&mut fixture, 72, 12, ThemePreference::Dark));
 }
 
 #[test]

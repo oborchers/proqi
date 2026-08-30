@@ -27,7 +27,7 @@ use crate::{
         clipboard::{Clipboard, ClipboardContent, ClipboardError, ClipboardWrite},
         invocation::{
             AdditionalInvocationRoot, InvocationCatalog, InvocationCatalogError,
-            InvocationDiscovery, InvocationDiscoveryRequest,
+            InvocationDiscovery, InvocationDiscoveryRequest, InvocationReferenceCatalog,
         },
         recovery::{RecoveryDocument, RecoveryError, RecoveryExporter},
     },
@@ -278,7 +278,7 @@ fn external_loop(
         let outcome = match request {
             ExternalRequest::DiscoverAgents => discover_agents(&mut agents),
             ExternalRequest::DiscoverInvocations(request) => {
-                ExternalResult::InvocationsDiscovered(invocations.discover(request))
+                discover_invocations(&mut invocations, &mut agents, request)
             }
             ExternalRequest::SubmitAgent(request) => {
                 let submission_id = request.submission_id;
@@ -328,6 +328,18 @@ fn external_loop(
             return;
         }
     }
+}
+
+fn discover_invocations(
+    invocations: &mut impl InvocationCatalog,
+    references: &mut impl InvocationReferenceCatalog,
+    request: InvocationDiscoveryRequest,
+) -> ExternalResult {
+    let result = invocations.discover(request).map(|mut discovery| {
+        discovery.live = references.discover_live_references().unwrap_or_default();
+        discovery
+    });
+    ExternalResult::InvocationsDiscovered(result)
 }
 
 fn discover_agents(agents: &mut impl AgentGateway) -> ExternalResult {

@@ -90,13 +90,15 @@ pub(super) fn render_invocation_picker(
     } = picker;
     let rows = entries
         .iter()
-        .map(|entry| overlays::PickerRow::fields(&entry.token, &entry.qualifier))
+        .map(|entry| {
+            overlays::PickerRow::grouped(&entry.token, &entry.qualifier, entry.group.as_deref())
+        })
         .collect::<Vec<_>>();
     overlays::render_picker(
         frame,
         overlay,
         overlays::PickerView {
-            title: " discovered invocations ",
+            title: " invocations and references ",
             prompt: '›',
             query: &query,
             cursor: app.overlay_query_cursor().unwrap_or(query.len()),

@@ -472,6 +472,24 @@ for deduplication, and never crawls the home directory. Compatibility roots are
 checked in; extra roots enter through validated configuration with explicit
 kind, harness, and scope. Project and global vectors remain separate.
 
+`InvocationReferenceCatalog` extends this discovery boundary with typed,
+ephemeral collaborator locations. The Herdr adapter implements it from one
+bounded protocol 19 snapshot and projects only agent name, harness, correlated
+workspace and tab identity, pane identity, and observed state. Raw snapshot
+JSON, directories, terminal titles, prompt text, and other privacy-sensitive
+fields remain adapter-local. Workspace and tab labels are accepted only from
+matching topology records in the same snapshot. Missing label collections use
+exact IDs, while contradictory or duplicate identities fail closed.
+
+The external invocation lane combines filesystem and live results under the
+same UI-assigned generation and cwd. The filesystem catalog remains usable when
+live discovery is absent, malformed, timed out, or unavailable. The UI stores
+only the typed projection, bounds the live subset, groups rows by exact
+workspace and tab identity, and performs the existing one-paste editor
+replacement. Observed state is rendered but deliberately omitted from inserted
+text. No reference selection reaches the Herdr submission, focus, reservation,
+or mutation ports.
+
 The UI owner assigns a generation and cwd to each refresh. Results update state
 only when both still match, so stale external work cannot leak an older project
 catalog. Completion derives a byte range from the exact editor snapshot, moves
@@ -881,6 +899,9 @@ The adapter:
   integration. It never interpolates prompt text into shell syntax.
 - Applies bounded timeouts and maps JSON responses into typed results.
 - Never falls back to raw key injection.
+- Projects recognized coding agents from one bounded snapshot for inert
+  invocation-picker references, without exposing raw topology or terminal
+  metadata above the adapter.
 
 The receiving harness decides whether a prompt sent to a working agent is
 queued, treated as steering, or rejected. The gateway reports that state and

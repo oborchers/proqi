@@ -376,6 +376,10 @@ impl BoardApp {
                         Vec::new()
                     };
                 self.open_invocation_picker();
+                let mut effects = effects;
+                if self.invocation_popup.is_some() {
+                    effects.extend(self.refresh_invocations());
+                }
                 Some(effects)
             }
             _ => None,

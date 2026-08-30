@@ -75,8 +75,14 @@ impl Command {
             "Send to another Proqi session and remove thought",
         ),
         (Self::RefreshAgents, "Refresh adjacent agents"),
-        (Self::InsertInvocation, "Insert discovered invocation"),
-        (Self::RefreshInvocations, "Refresh invocations"),
+        (
+            Self::InsertInvocation,
+            "Insert invocation or Herdr reference",
+        ),
+        (
+            Self::RefreshInvocations,
+            "Refresh invocations and Herdr references",
+        ),
         (Self::CheckUpdates, "Check for updates"),
         (Self::ScreenshotInbox, "Enable Screenshot Inbox"),
         (Self::RetryScreenshotCapture, "Retry Screenshot Capture"),

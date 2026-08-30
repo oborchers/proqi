@@ -126,6 +126,7 @@ pub struct BoardApp {
     invocation_generation: u64,
     invocation_global: Vec<crate::ports::invocation::InvocationEntry>,
     invocation_project: Vec<crate::ports::invocation::InvocationEntry>,
+    invocation_live: Vec<crate::ports::invocation::LiveAgentReference>,
 }
 
 impl BoardApp {
@@ -207,6 +208,7 @@ impl BoardApp {
             invocation_generation: 0,
             invocation_global: Vec::new(),
             invocation_project: Vec::new(),
+            invocation_live: Vec::new(),
         }
     }
 
@@ -311,20 +313,17 @@ impl BoardApp {
             UiInput::Pointer(pointer) => self.handle_pointer(pointer, ids, clock),
             UiInput::Paste(content) => {
                 let effects = self.paste_payload(PastePayload::text(content), ids, clock);
-                self.refresh_invocation_popup();
-                effects
+                self.refresh_invocation_popup_after_input(effects)
             }
             UiInput::PasteAnnotated(payload) => {
                 let effects = self.paste_payload(payload, ids, clock);
-                self.refresh_invocation_popup();
-                effects
+                self.refresh_invocation_popup_after_input(effects)
             }
             UiInput::Key(key) => match self.interaction_mode() {
                 InteractionMode::Board => self.handle_board_key(key, ids, clock),
                 InteractionMode::Edit { .. } => {
                     let effects = self.handle_edit_key(key, ids, clock);
-                    self.refresh_invocation_popup();
-                    effects
+                    self.refresh_invocation_popup_after_input(effects)
                 }
             },
         }

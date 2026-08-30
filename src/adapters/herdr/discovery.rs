@@ -1,4 +1,6 @@
-//! Capability negotiation and independently verified directional lookup.
+//! Capability negotiation, live references, and verified directional lookup.
+
+use std::collections::BTreeMap;
 
 use crate::{
     domain::Direction,
@@ -8,8 +10,12 @@ use crate::{
             PaneContext, PaneRect,
         },
         environment::ProcessRunner,
+        invocation::{InvocationReferenceProvider, LiveAgentReference},
     },
 };
+
+const MAX_AGENT_ROWS: usize = 128;
+const MAX_LIVE_REFERENCES: usize = 64;
 
 use super::{
     DISCOVERY_TIMEOUT, HerdrGateway, SUPPORTED_PROTOCOL, SUPPORTED_SCHEMA,
@@ -77,6 +83,176 @@ pub(super) fn adjacent_targets<R: ProcessRunner>(
         }
     }
     Ok(targets)
+}
+
+pub(super) fn live_references<R: ProcessRunner>(
+    gateway: &mut HerdrGateway<R>,
+) -> Result<Vec<LiveAgentReference>, AgentError> {
+    if !gateway.managed {
+        return Err(AgentError::Unavailable(
+            "HERDR_ENV is not set for this pane".to_owned(),
+        ));
+    }
+    let body: Envelope<SnapshotBody> = gateway.json(&["api", "snapshot"], DISCOVERY_TIMEOUT)?;
+    let snapshot = body.result.snapshot;
+    if snapshot.protocol != SUPPORTED_PROTOCOL || snapshot.version.trim().is_empty() {
+        return Err(AgentError::Unsupported(
+            "live references require Herdr protocol 19".to_owned(),
+        ));
+    }
+    let workspaces = workspace_labels(snapshot.workspaces)?;
+    let tabs = tab_labels(snapshot.tabs)?;
+    let mut references = BTreeMap::new();
+    for pane in snapshot.agents.into_iter().take(MAX_AGENT_ROWS) {
+        let Some(reference) = live_reference(&pane, &workspaces, &tabs)? else {
+            continue;
+        };
+        let key = (
+            reference.workspace_id().to_owned(),
+            reference.tab_id().to_owned(),
+            reference.pane_id().to_owned(),
+        );
+        if references.insert(key, reference).is_some() {
+            return Err(AgentError::Ambiguous(
+                "multiple recognized agents claim one workspace, tab, and pane identity".to_owned(),
+            ));
+        }
+    }
+    Ok(references.into_values().take(MAX_LIVE_REFERENCES).collect())
+}
+
+fn live_reference(
+    pane: &PaneInfo,
+    workspaces: &BTreeMap<String, Option<String>>,
+    tabs: &BTreeMap<String, (String, Option<String>)>,
+) -> Result<Option<LiveAgentReference>, AgentError> {
+    let harness = pane.agent.clone().and_then(|value| {
+        super::harness::kind(value).ok().filter(|kind| {
+            kind.as_str().chars().count() <= 32 && !kind.as_str().chars().any(char::is_whitespace)
+        })
+    });
+    let Some(harness) = harness else {
+        return Ok(None);
+    };
+    let workspace_label = correlated_workspace_label(workspaces, &pane.workspace_id)?;
+    let tab_label = correlated_tab_label(tabs, &pane.workspace_id, &pane.tab_id)?;
+    let agent_name = pane
+        .name
+        .as_deref()
+        .map(sanitize_agent_name)
+        .filter(|name| !name.is_empty())
+        .unwrap_or_else(|| harness.as_str().to_owned());
+    Ok(LiveAgentReference::new(
+        InvocationReferenceProvider::Herdr,
+        agent_name,
+        harness,
+        pane.workspace_id.clone(),
+        workspace_label,
+        pane.tab_id.clone(),
+        tab_label,
+        pane.pane_id.clone(),
+        observed_state(pane.agent_status),
+    ))
+}
+
+fn workspace_labels(
+    values: Vec<super::contract::WorkspaceInfo>,
+) -> Result<BTreeMap<String, Option<String>>, AgentError> {
+    let mut labels = BTreeMap::new();
+    for value in values.into_iter().take(MAX_AGENT_ROWS) {
+        if labels
+            .insert(value.workspace_id, bounded_topology_label(value.label))
+            .is_some()
+        {
+            return Err(AgentError::Ambiguous(
+                "duplicate workspace identity in Herdr snapshot".to_owned(),
+            ));
+        }
+    }
+    Ok(labels)
+}
+
+fn tab_labels(
+    values: Vec<super::contract::TabInfo>,
+) -> Result<BTreeMap<String, (String, Option<String>)>, AgentError> {
+    let mut labels = BTreeMap::new();
+    for value in values.into_iter().take(MAX_AGENT_ROWS) {
+        if labels
+            .insert(
+                value.tab_id,
+                (value.workspace_id, bounded_topology_label(value.label)),
+            )
+            .is_some()
+        {
+            return Err(AgentError::Ambiguous(
+                "duplicate tab identity in Herdr snapshot".to_owned(),
+            ));
+        }
+    }
+    Ok(labels)
+}
+
+fn correlated_workspace_label(
+    workspaces: &BTreeMap<String, Option<String>>,
+    workspace_id: &str,
+) -> Result<Option<String>, AgentError> {
+    if workspaces.is_empty() {
+        return Ok(None);
+    }
+    workspaces.get(workspace_id).cloned().ok_or_else(|| {
+        AgentError::Malformed("recognized agent has no matching workspace identity".to_owned())
+    })
+}
+
+fn correlated_tab_label(
+    tabs: &BTreeMap<String, (String, Option<String>)>,
+    workspace_id: &str,
+    tab_id: &str,
+) -> Result<Option<String>, AgentError> {
+    if tabs.is_empty() {
+        return Ok(None);
+    }
+    let (tab_workspace, label) = tabs.get(tab_id).ok_or_else(|| {
+        AgentError::Malformed("recognized agent has no matching tab identity".to_owned())
+    })?;
+    if tab_workspace != workspace_id {
+        return Err(AgentError::Malformed(
+            "recognized agent and tab belong to different workspaces".to_owned(),
+        ));
+    }
+    Ok(label.clone())
+}
+
+fn bounded_topology_label(value: Option<String>) -> Option<String> {
+    let value = value?;
+    let sanitized = value
+        .chars()
+        .filter(|character| !character.is_control())
+        .take(48)
+        .collect::<String>()
+        .trim()
+        .to_owned();
+    (!sanitized.is_empty()).then_some(sanitized)
+}
+
+fn sanitize_agent_name(value: &str) -> String {
+    value
+        .chars()
+        .filter(|character| !character.is_control())
+        .take(32)
+        .collect::<String>()
+        .trim()
+        .to_owned()
+}
+
+const fn observed_state(value: Option<RawReadiness>) -> AgentState {
+    match value {
+        Some(RawReadiness::Idle) => AgentState::Idle,
+        Some(RawReadiness::Working) => AgentState::Working,
+        Some(RawReadiness::Blocked) => AgentState::Blocked,
+        Some(RawReadiness::Done) => AgentState::Done,
+        Some(RawReadiness::Unknown) | None => AgentState::Unknown,
+    }
 }
 
 fn verify_protocol(
