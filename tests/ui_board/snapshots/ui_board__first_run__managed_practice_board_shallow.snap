@@ -1,12 +1,12 @@
 ---
 source: tests/ui_board/first_run.rs
-assertion_line: 29
+assertion_line: 26
 expression: "snapshot(FirstRunEnvironment::HerdrManaged, 80, 6, 5,)"
 ---
 SIZE 80x6
 
 TEXT
-00│⋮ Press A and D in board mode to delete this entire practice board.│
+00│⋮ Press a and d in board mode to delete this entire practice board.│
 01││
 02│                                  + New thought│
 03│  proqi-ui-first-run│

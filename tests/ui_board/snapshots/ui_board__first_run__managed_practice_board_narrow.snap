@@ -1,6 +1,6 @@
 ---
 source: tests/ui_board/first_run.rs
-assertion_line: 25
+assertion_line: 22
 expression: "snapshot(FirstRunEnvironment::HerdrManaged, 34, 12, 4,)"
 ---
 SIZE 34x12
@@ -12,7 +12,7 @@ TEXT
 03│  a compatible adjacent agent.│
 04│  Learn more at https://herdr.dev│
 05│  ────────────────────────────────│
-06│  Press A and D in board mode to│
+06│  Press a and d in board mode to│
 07│  delete this entire practice│
 08││
 09│  proqi-ui-first-run│

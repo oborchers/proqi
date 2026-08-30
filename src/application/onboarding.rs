@@ -9,17 +9,16 @@ use crate::{
 };
 
 const WELCOME: &str = "Welcome to Proqi, a prompt composer designed to replace common agent input methods. Capture, refine, organize, and submit prompts here.";
-const EDITING: &str =
-    "Press Enter to edit the focused thought. Press Escape to return to board mode.";
+const EDITING: &str = "Press Enter to edit the focused thought. Press Esc to return to board mode.";
 const CREATION: &str =
     "Press n to create a new thought, or paste in board mode to create one from the pasted text.";
-const NAVIGATION: &str = "Use j or Down to move to the next thought, and k or Up to move to the previous one. Press d to delete the focused thought and u to undo.";
+const NAVIGATION: &str = "Use j or ↓ to move to the next thought, and k or ↑ to move to the previous one. Press d to delete the focused thought and u to undo.";
 const HERDR_MANAGED: &str = "Herdr is detected. It organizes agent panes and lets Proqi submit with s when it verifies a compatible adjacent agent. Learn more at https://herdr.dev";
 const STANDALONE: &str = "Proqi works on its own. Herdr adds a power-user workflow for organized agent panes and verified adjacent submission when a compatible agent is available. Learn more at https://herdr.dev";
 
 /// Exact final practice thought required by the first-run contract.
 pub const PRACTICE_BOARD_DELETION: &str =
-    "Press A and D in board mode to delete this entire practice board.";
+    "Press a and d in board mode to delete this entire practice board.";
 
 /// Cheap, truthful local environment distinction used only to select practice copy.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -84,7 +83,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn variants_are_distinct_bounded_and_keep_the_canonical_url_and_final_thought() {
+    fn variants_are_distinct_bounded_and_use_canonical_copy_and_keys() {
         let managed = FirstRunEnvironment::HerdrManaged.thought_contents();
         let standalone = FirstRunEnvironment::Standalone.thought_contents();
         assert_eq!(managed.len(), 6);
@@ -94,6 +93,14 @@ mod tests {
         assert!(standalone[4].contains("Proqi works on its own"));
         assert!(managed[4].contains("https://herdr.dev"));
         assert!(standalone[4].contains("https://herdr.dev"));
+        assert!(managed[1].contains("Press Enter"));
+        assert!(managed[1].contains("Press Esc"));
+        assert!(managed[2].contains("Press n"));
+        assert!(managed[3].contains("j or ↓"));
+        assert!(managed[3].contains("k or ↑"));
+        assert!(managed[3].contains("Press d"));
+        assert!(managed[3].contains("u to undo"));
+        assert!(managed[4].contains("submit with s"));
         assert_eq!(managed[5], PRACTICE_BOARD_DELETION);
         assert_eq!(standalone[5], PRACTICE_BOARD_DELETION);
     }

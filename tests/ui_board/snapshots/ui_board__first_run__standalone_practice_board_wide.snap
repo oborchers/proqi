@@ -1,6 +1,6 @@
 ---
 source: tests/ui_board/first_run.rs
-assertion_line: 41
+assertion_line: 38
 expression: "snapshot(FirstRunEnvironment::Standalone, 120, 30, 5,)"
 ---
 SIZE 120x30
@@ -11,21 +11,21 @@ TEXT
 02│  submit prompts here.│
 03│  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│
 04││
-05│  Press Enter to edit the focused thought. Press Escape to return to board mode.│
+05│  Press Enter to edit the focused thought. Press Esc to return to board mode.│
 06│  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│
 07││
 08│  Press n to create a new thought, or paste in board mode to create one from the pasted text.│
 09│  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│
 10││
-11│  Use j or Down to move to the next thought, and k or Up to move to the previous one. Press d to delete the focused│
-12│  thought and u to undo.│
+11│  Use j or ↓ to move to the next thought, and k or ↑ to move to the previous one. Press d to delete the focused thought│
+12│  and u to undo.│
 13│  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│
 14││
 15│  Proqi works on its own. Herdr adds a power-user workflow for organized agent panes and verified adjacent submission│
 16│  when a compatible agent is available. Learn more at https://herdr.dev│
 17│  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│
 18││
-19│⋮ Press A and D in board mode to delete this entire practice board.│
+19│⋮ Press a and d in board mode to delete this entire practice board.│
 20││
 21│                                                      + New thought│
 22││

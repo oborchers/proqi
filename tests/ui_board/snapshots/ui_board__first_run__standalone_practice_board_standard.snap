@@ -1,6 +1,6 @@
 ---
 source: tests/ui_board/first_run.rs
-assertion_line: 37
+assertion_line: 34
 expression: "snapshot(FirstRunEnvironment::Standalone, 72, 18, 4,)"
 ---
 SIZE 72x18
@@ -9,13 +9,13 @@ TEXT
 00│  Welcome to Proqi, a prompt composer designed to replace common agent│
 01│  input methods. Capture, refine, organize, and submit prompts here.│
 02│  ──────────────────────────────────────────────────────────────────────│
-03│  Press Enter to edit the focused thought. Press Escape to return to│
-04│  board mode.│
+03│  Press Enter to edit the focused thought. Press Esc to return to board│
+04│  mode.│
 05│  ──────────────────────────────────────────────────────────────────────│
 06│  Press n to create a new thought, or paste in board mode to create one│
 07│  from the pasted text.│
 08│  ──────────────────────────────────────────────────────────────────────│
-09│  Use j or Down to move to the next thought, and k or Up to move to the│
+09│  Use j or ↓ to move to the next thought, and k or ↑ to move to the│
 10│  previous one. Press d to delete the focused thought and u to undo.│
 11│  ──────────────────────────────────────────────────────────────────────│
 12│⋮ Proqi works on its own. Herdr adds a power-user workflow for│
