@@ -336,9 +336,10 @@ never read or copied automatically.
 External attachment health crosses a terminal-independent read-only port. The
 filesystem adapter opens the exact absolute path without rewriting it, proves
 that it is a readable regular file, and returns typed missing, permission,
-unmounted, unreadable, I/O, timeout, or cancellation failures. Those reasons
-are content-free diagnostics only. Application and UI consumers reduce every
-failure to binary inaccessible health.
+unmounted, unreadable, or I/O failures. The bounded lane adds timeout and
+cancellation failures without waiting for a blocked filesystem call to return.
+Those reasons are content-free diagnostics only. Application and UI consumers
+reduce every failure to binary inaccessible health.
 
 Application state owns the transient exact-key cache and scheduling policy.
 Keys include the thought, annotation index and range, presentation metadata,
