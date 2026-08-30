@@ -38,8 +38,8 @@ undo remain non-negotiable.
 - [ ] **High-return editing:** make destructive unit deletion safe, then add
   exact replace-all and logical-line duplicate/move.
 - [ ] **Attachment integrity:** preserve file, image, and folded annotation
-  metadata across Proqi-to-Proqi copy/cut/paste while keeping the system
-  clipboard useful as exact plain text.
+  metadata across Proqi-to-Proqi copy/cut/paste, and prevent submission when an
+  annotated asset can no longer be accessed.
 - [ ] **Board flow:** search-driven selection and selected-block reordering.
 - [ ] **Standalone agent connectivity:** finish the architecture spike and any
   behavior-neutral prerequisite, then add non-Herdr connection only through a
@@ -63,7 +63,8 @@ Editor
 └─ Shared logical-line ranges ──> Logical-line duplicate/move/join
 
 Clipboard and attachments
-└─ Typed annotated clipboard payload ──> Lossless Proqi round trips
+├─ Typed annotated clipboard payload ──> Lossless Proqi round trips
+└─ Attachment accessibility checks ──> Submit/Submit-all preflight
 
 Board
 ├─ Select all search matches
@@ -257,6 +258,12 @@ User story: when the Commands overlay contains many interactions, I can scan
 stable sections such as editing, board organization, submission, session tools,
 and help instead of reading one undifferentiated list.
 
+The motivating example is the empty-query Commands view in which one tall flat
+list runs from **New thought** through editing, clipboard, submission, session,
+recovery, board, help, and **Quit Proqi** actions. This is the searchable global
+Commands overlay opened with `:`, not a pointer-local context menu; use that
+terminology consistently in product text, documentation, and implementation.
+
 - [ ] Model headings explicitly as display-only rows, separate from executable
   command entries. A heading has no command identifier, accelerator, enabled
   state, or execution path.
@@ -272,13 +279,44 @@ and help instead of reading one undifferentiated list.
 - [ ] Keep categories stable and user-facing rather than mirroring Rust modules.
   Review the complete command inventory before naming or ordering the groups,
   and keep frequently used commands easy to reach.
+- [ ] Keep the primary overlay flat and searchable. Do not introduce category
+  submenus: section headings provide enough visual hierarchy without hiding
+  commands or adding mode-management overhead.
+- [ ] Permit at most one purpose-built second disclosure layer after command
+  activation, and only when the action inherently needs another choice or
+  confirmation, such as a destination session, delivery target, takeover, or
+  destructive confirmation. Never nest a third layer, and never use the second
+  layer merely to browse command categories.
 - [ ] Render headings as quiet structural labels consistent with Proqi's current
   overlay language. Their non-interactive state must remain understandable in
   automatic, light, dark, and limited-color themes without relying on color
   alone.
+- [ ] Preserve the existing keyboard scroll contract: Up/Down and key repeat
+  keep the selected executable command visible through the complete inventory.
+  Add Page Up/Page Down or equivalent semantic paging only if it materially
+  improves the long-list workflow; headings never count as selectable stops.
+- [ ] Make mouse-wheel input over an open Commands overlay scroll its command
+  rows and never the obscured board or editor underneath. Keep clicked and
+  hovered hit geometry aligned with the newly visible rows after every scroll.
+- [ ] Show quiet, non-interactive overflow cues when commands exist above or
+  below the visible slice so a mouse-only user can discover that the list
+  continues. Do not spend a permanent row on a traditional scrollbar when the
+  pane is already shallow.
+- [ ] Preserve responsive behavior: constrain the overlay to the viewport,
+  ellipsize labels on terminal-cell and grapheme boundaries, and keep the query,
+  selected command, close target, and overflow state truthful after resize. At
+  the currently covered `30×5` shallow size, keyboard and mouse must reach every
+  command. Below the minimum actionable height, render one explicit too-small
+  state rather than invisible selectable rows or hit targets.
+- [ ] In shallow layouts, selection visibility takes priority over keeping a
+  section heading onscreen. When at least two result rows fit, include the
+  selected command's immediately preceding heading where practical; never let
+  headings consume the only actionable row.
 - [ ] Cover empty and single-section results, filtering across sections,
   forward/reverse navigation, first/last wrapping, mouse hit-testing, scrolling,
-  resize, narrow/shallow layouts, and reviewed representative snapshots.
+  wheel isolation from underlying content, resize while scrolled, narrow/shallow
+  layouts including `30×5`, the explicit too-small state, and reviewed
+  representative snapshots.
 
 ## Smart text editing
 
@@ -482,6 +520,77 @@ contains ordinary prose.
   separators, copy and cut failure, external clipboard replacement, stale or
   malformed typed metadata, missing files, restart/process boundaries, and one-
   step persistent undo after a cut.
+
+### Attachment accessibility guardrails — P0, S/M (3–6 days)
+
+User story: when a thought refers to an image or file that disappeared after a
+restart or became unreadable, Proqi marks the attachment plainly and prevents
+me from unknowingly submitting an unusable path—including through Submit all.
+
+- [ ] Keep the user-facing model binary. An attachment is either **accessible**
+  or **inaccessible**. Accessible attachments keep the existing `[Image N]` or
+  `[File N]` projection without extra chrome; inaccessible attachments render
+  as `[Image N · inaccessible]` or `[File N · inaccessible]`.
+- [ ] Do not expose separate temporary, volatile, missing, permission-denied,
+  unmounted-volume, or I/O states in routine UI. Preserve typed internal failure
+  reasons only for truthful diagnostics and troubleshooting; every such failure
+  has the same submission consequence.
+- [ ] Do not use strike-through, which suggests intentional deletion and is not
+  reliably available in every terminal. Reinforce the explicit
+  `inaccessible` text with the warning visual role, while keeping the state
+  understandable without color.
+- [ ] Validate an attachment immediately when it is inserted or explicitly
+  relinked. Invalidate only the affected cached result when canonical content or
+  annotation ranges change.
+- [ ] On session open or resume, check the focused thought first and then the
+  rest of the board through a bounded background lane. Never delay restoring or
+  editing the board while the complete scan runs.
+- [ ] On a real thought-focus transition, prioritize that thought's attachments
+  when their result is unknown or stale. Repeated cursor movement, typing, or
+  pointer movement inside the same thought must not repeat filesystem work.
+- [ ] On debounced host/pane focus regain, refresh referenced attachments in the
+  background. Where the terminal cannot report pane focus reliably, the first
+  deliberate interaction after a bounded inactive interval may trigger the
+  same refresh once; subsequent input does not.
+- [ ] Add an explicit **Refresh attachments** Commands action as a deterministic
+  manual fallback. Do not add periodic polling, per-render checks, arbitrary
+  directory watchers, or checks on resize, autosave, cursor movement, passive
+  pointer movement, or every keystroke.
+- [ ] Before Submit, Submit and keep, Submit all, or Submit all and keep, perform
+  a fresh mandatory check of every attachment in the exact captured source set.
+  This check runs after pending edits are durable and before the submission
+  journal enters a sending state. Cached presentation state alone never
+  authorizes submission.
+- [ ] Keep source thoughts stable while the asynchronous preflight is active.
+  If any attachment is inaccessible or cannot be verified within the bounded
+  check, start no delivery, create no sending attempt, remove nothing, and show
+  one aggregate result such as `Proqi cannot access 2 attachments`.
+- [ ] In v1, do not offer **Submit anyway** for an annotated inaccessible asset;
+  the binary contract remains trustworthy. A user who intentionally wants to
+  submit an ordinary path as text must explicitly remove or dissolve its
+  attachment annotation first.
+- [ ] Treat `checking` as a short-lived operation, not a third attachment state.
+  Normal background checks remain quiet; a submission waiting on its preflight
+  may show `checking attachments` until it can proceed or report the aggregate
+  inaccessible result.
+- [ ] Keep health results transient and keyed to the exact thought, annotation,
+  canonical path, and content revision. Do not persist a status that can become
+  false across restart, and never mutate canonical prompt content in response
+  to a failed check.
+- [ ] Use an injected terminal-independent accessibility port. Filesystem
+  metadata and readability checks belong in an adapter; application owns the
+  trigger, bounded preflight, cache invalidation, and submission policy; UI only
+  renders the resulting state.
+- [ ] Document the unavoidable external-file race: a linked file can disappear
+  after the final check but before an agent opens it. A later explicit
+  **Import into Proqi** workflow may provide stronger ownership, but this ticket
+  neither silently copies source files nor changes attachment paths.
+- [ ] Cover session restart with an expired macOS `TemporaryItems` path, startup
+  scan ordering, focus changes, host-focus debounce, inactivity refresh,
+  mutation invalidation, manual refresh, permission and I/O failures, recovery
+  when a file returns, large boards, repeated events, resize, Unicode paths,
+  single submission, Submit all without visiting the affected thought, and
+  proof that inaccessible preflight sends nothing and removes nothing.
 
 ## Standalone coding-agent connectivity (without Herdr)
 
