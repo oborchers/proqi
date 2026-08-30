@@ -43,6 +43,7 @@ fn missing_config_uses_the_narrow_pane_default() {
     assert!(!settings.ui.show_session_id);
     assert!(settings.ui.smart_lists);
     assert_eq!(settings.ui.list_indent_width, 2);
+    assert_eq!(settings.ui.merge_separator, "\n\n");
     assert_eq!(settings.theme.base, ThemePreference::Auto);
     assert_eq!(settings.theme_source, ThemeSource::BuiltIn);
 }
@@ -268,6 +269,25 @@ fn list_indentation_width_is_configurable_and_bounded() {
         .expect("write invalid config");
         assert!(load_settings(directory.path()).is_err());
     }
+}
+
+#[test]
+fn merge_separator_is_exactly_configurable_and_bounded() {
+    let directory = tempfile::tempdir().expect("config directory");
+    fs::write(
+        directory.path().join("config.toml"),
+        "merge_separator = \"\\r\\n---\\r\\n\"\n",
+    )
+    .expect("write config");
+    let settings = load_settings(directory.path()).expect("settings");
+    assert_eq!(settings.ui.merge_separator, "\r\n---\r\n");
+
+    fs::write(
+        directory.path().join("config.toml"),
+        "merge_separator = ''\n",
+    )
+    .expect("write empty separator");
+    assert!(load_settings(directory.path()).is_err());
 }
 
 #[test]

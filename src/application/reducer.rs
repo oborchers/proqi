@@ -10,6 +10,7 @@ use crate::application::model::{
 };
 
 use super::mutations::bulk::{delete_thoughts, duplicate_thoughts, set_presentation_many};
+use super::mutations::transform::{ExactSource, extract_thought, merge_thoughts, split_thought};
 use super::mutations::{
     create_thought, delete_thought, edit_thought, finish_clipboard, history_move, move_thought,
     request_clipboard, set_presentation,
@@ -34,6 +35,9 @@ pub fn reduce(state: &mut AppState, action: Action) -> ApplicationResult<Vec<Eff
         Action::CreateThought { .. }
         | Action::PasteAsThought { .. }
         | Action::EditThought { .. } => reduce_content(state, action),
+        Action::SplitThought { .. } | Action::ExtractThought { .. } => {
+            reduce_content_transform(state, action)
+        }
         Action::CopyThoughts { .. }
         | Action::CutThoughts { .. }
         | Action::ClipboardResult { .. } => reduce_clipboard(state, &action),
@@ -45,7 +49,8 @@ pub fn reduce(state: &mut AppState, action: Action) -> ApplicationResult<Vec<Eff
         | Action::MoveThought { .. }
         | Action::SetPresentation { .. }
         | Action::SetPresentationMany { .. }
-        | Action::DuplicateThoughts { .. } => reduce_board(state, &action),
+        | Action::DuplicateThoughts { .. }
+        | Action::MergeThoughts { .. } => reduce_board(state, &action),
         Action::Undo { .. } | Action::Redo { .. } => reduce_history(state, &action),
         Action::PersistenceCommitted(_)
         | Action::PersistenceFailed { .. }
@@ -60,6 +65,9 @@ const fn mutates_durable_state(action: &Action) -> bool {
             | Action::RenameSession { .. }
             | Action::PasteAsThought { .. }
             | Action::EditThought { .. }
+            | Action::SplitThought { .. }
+            | Action::ExtractThought { .. }
+            | Action::MergeThoughts { .. }
             | Action::CutThoughts { .. }
             | Action::DeleteThought { .. }
             | Action::DeleteThoughts { .. }
@@ -165,6 +173,55 @@ fn reduce_content(state: &mut AppState, action: Action) -> ApplicationResult<Vec
     }
 }
 
+fn reduce_content_transform(
+    state: &mut AppState,
+    action: Action,
+) -> ApplicationResult<Vec<Effect>> {
+    match action {
+        Action::SplitThought {
+            thought_id,
+            new_thought_id,
+            operation_id,
+            expected_content,
+            expected_annotations,
+            at_byte,
+            at,
+        } => split_thought(
+            state,
+            operation_id,
+            new_thought_id,
+            &ExactSource {
+                thought_id,
+                content: expected_content,
+                annotations: expected_annotations,
+            },
+            at_byte,
+            at,
+        ),
+        Action::ExtractThought {
+            thought_id,
+            new_thought_id,
+            operation_id,
+            expected_content,
+            expected_annotations,
+            range,
+            at,
+        } => extract_thought(
+            state,
+            operation_id,
+            new_thought_id,
+            &ExactSource {
+                thought_id,
+                content: expected_content,
+                annotations: expected_annotations,
+            },
+            range,
+            at,
+        ),
+        _ => Err(ApplicationError::InvalidState),
+    }
+}
+
 fn reduce_clipboard(state: &mut AppState, action: &Action) -> ApplicationResult<Vec<Effect>> {
     match action {
         Action::CopyThoughts {
@@ -242,6 +299,20 @@ fn reduce_board(state: &mut AppState, action: &Action) -> ApplicationResult<Vec<
             duplicate_ids,
             at,
         } => duplicate_thoughts(state, *operation_id, thought_ids, duplicate_ids, *at),
+        Action::MergeThoughts {
+            operation_id,
+            thought_ids,
+            expected_sources,
+            separator,
+            at,
+        } => merge_thoughts(
+            state,
+            *operation_id,
+            thought_ids,
+            expected_sources,
+            separator,
+            *at,
+        ),
         _ => Err(ApplicationError::InvalidState),
     }
 }

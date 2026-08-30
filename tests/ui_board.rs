@@ -466,3 +466,5 @@ mod snapshots;
 mod submission_locks;
 #[path = "ui_board/submit_all.rs"]
 mod submit_all;
+#[path = "ui_board/transformations.rs"]
+mod transformations;

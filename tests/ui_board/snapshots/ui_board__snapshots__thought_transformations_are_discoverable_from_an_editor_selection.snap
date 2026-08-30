@@ -1,0 +1,42 @@
+---
+source: tests/ui_board/snapshots.rs
+assertion_line: 353
+expression: "snapshot(&mut fixture, 72, 16, ThemePreference::Dark)"
+---
+SIZE 72x16
+
+TEXT
+00│┌ commands ──────────────────────────────────────────────────────────[x]│
+01││:thought                                                              ││
+02││New thought                                                           ││
+03││Edit thought                                                          ││
+04││Move cursor to thought beginning                                      ││
+05││Move cursor to thought end                                            ││
+06││Split thought at cursor                                               ││
+07││Extract selection as new thought                                      ││
+08││Delete thought                                                        ││
+09││Copy thought                                                          ││
+10││Cut thought                                                           ││
+11││Duplicate thought or selection                                        ││
+12││Select all thoughts                                                   ││
+13││Send to another Proqi session and remove thought                      ││
+14││Move thought up                                                       ││
+15│└──────────────────────────────────────────────────────────────────────┘│
+
+STYLE RUNS
+0: 0-68 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 69-71 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE
+1: 0-0 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 1-70 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 71-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+2: 0-0 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 1-70 fg=Rgb(112, 214, 155) bg=Rgb(39, 40, 48) mod=BOLD | 71-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+3: 0-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+4: 0-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+5: 0-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+6: 0-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+7: 0-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+8: 0-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+9: 0-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+10: 0-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+11: 0-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+12: 0-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+13: 0-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+14: 0-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+15: 0-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE

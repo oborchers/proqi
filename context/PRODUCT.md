@@ -530,6 +530,38 @@ accepted durable delivery. An empty board produces no submission. When several
 verified destinations make direction ambiguous, the ordinary directional
 chooser remains the only extra step.
 
+### Thought transformations
+
+The command palette exposes three exact, explicit transformations without
+claiming a new default shortcut. `Split thought at cursor` uses the logical
+editor cursor captured when commands open. The original thought keeps its
+identity and exact left content. The untrimmed right content becomes a new
+thought immediately below, receives focus in edit mode, and places its cursor
+at the beginning. Empty left or right halves are valid deliberate results.
+
+`Extract selection as new thought` uses the normalized exact editor selection
+captured with the command palette. It closes only that byte range in the source
+and creates the untrimmed selection immediately below. The new thought receives
+focus in edit mode with its cursor at the end. An empty or stale selection is
+rejected without mutation.
+
+`Merge selected thoughts` requires at least two thoughts that are contiguous in
+board order. It keeps the first identity, concatenates exact content with
+`merge_separator` from `config.toml`, default `"\n\n"`, and recoverably deletes
+the remaining sources. The survivor receives board focus and the selection is
+cleared. A locked, stale, or discontiguous source set produces actionable
+feedback and no partial result.
+
+All three actions partition, close, and shift durable annotations through one
+canonical range owner. Crossing annotations retain their provenance on every
+resulting fragment, while adjacent independent annotations remain distinct.
+Each transformation is one board-history operation containing its exact text,
+annotation, insertion, and recoverable-deletion mutations. Its transaction
+also truncates affected editor redo branches and rebuilds search. One undo or
+redo restores the complete transformation after restart. When a split or
+extract has just focused its new editor and no later editor revision exists,
+the ordinary undo intention addresses that transformation as one unit.
+
 ### Submit to an adjacent agent
 
 When Proqi runs beside one or more agent panes in a supported terminal
@@ -1050,7 +1082,7 @@ There are two explicit undo contexts:
 
 - Editor undo restores coalesced text edits in the active thought.
 - Board undo restores structural operations such as create, cut, delete,
-  duplicate, and reorder.
+  duplicate, reorder, split, extract, and merge.
 
 Undo history is persisted with the session. Restarting the process does not
 turn a reversible deletion into permanent data loss.
@@ -1271,7 +1303,7 @@ The current direction is grounded in these public primary sources:
 
 These remain compatible with the vision but are not initial requirements:
 
-- Merge and split thought operations.
+- A previewed bulk split-by-blank-lines transformation.
 - External editor handoff through `$VISUAL` or `$EDITOR`.
 - Import and export as plain text, Markdown, or JSON.
 - Configurable retention and recoverable pruning.

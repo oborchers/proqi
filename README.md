@@ -251,6 +251,7 @@ Optional platform-native `config.toml`:
 check_for_updates = true
 theme = "auto" # auto, light, dark, limited, or a bounded local theme file
 density = "comfortable" # or compact
+merge_separator = "\n\n" # one blank line between merged thoughts
 
 [keybindings]
 new = "n"

@@ -346,8 +346,8 @@ impl BoardApp {
     ) -> Vec<Effect> {
         self.edit_boundary = None;
         let thought_id = self.active_thought_id();
-        self.capture_palette_selection_handoff();
         let effects = self.flush_pending_edit(ids, clock);
+        self.capture_palette_selection_handoff();
         if let Some(thought_id) = thought_id {
             self.clear_expanded_folds(thought_id);
         }
@@ -402,9 +402,13 @@ impl BoardApp {
         undo: bool,
     ) -> Vec<Effect> {
         let mut effects = self.flush_pending_edit(ids, clock);
-        let scope = match self.state.mode {
-            InteractionMode::Board => UndoScope::Board,
-            InteractionMode::Edit { thought_id } => UndoScope::Editor { thought_id },
+        let scope = if undo {
+            self.state.preferred_undo_scope(self.state.mode)
+        } else {
+            match self.state.mode {
+                InteractionMode::Board => UndoScope::Board,
+                InteractionMode::Edit { thought_id } => UndoScope::Editor { thought_id },
+            }
         };
         let action = if undo {
             Action::Undo {

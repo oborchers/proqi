@@ -89,3 +89,5 @@ mod clipboard;
 mod history;
 #[path = "domain_reducer/locks.rs"]
 mod locks;
+#[path = "domain_reducer/transformations.rs"]
+mod transformations;

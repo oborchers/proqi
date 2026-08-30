@@ -1,7 +1,7 @@
 //! Closed command-palette vocabulary and canonical visible labels.
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) enum Command {
+pub(in crate::ui::app) enum Command {
     New,
     RenameSession,
     CopySessionId,
@@ -16,6 +16,9 @@ pub(super) enum Command {
     ThoughtEnd,
     Indent,
     Outdent,
+    SplitThought,
+    ExtractSelection,
+    MergeThoughts,
     Delete,
     Copy,
     Cut,
@@ -46,7 +49,7 @@ pub(super) enum Command {
 }
 
 impl Command {
-    pub(super) const ALL: [(Self, &'static str); 41] = [
+    pub(super) const ALL: [(Self, &'static str); 44] = [
         (Self::New, "New thought"),
         (Self::RenameSession, "Rename session"),
         (Self::CopySessionId, "Copy session ID"),
@@ -59,6 +62,9 @@ impl Command {
         (Self::ThoughtEnd, "Move cursor to thought end"),
         (Self::Indent, "Indent line or selection"),
         (Self::Outdent, "Outdent line or selection"),
+        (Self::SplitThought, "Split thought at cursor"),
+        (Self::ExtractSelection, "Extract selection as new thought"),
+        (Self::MergeThoughts, "Merge selected thoughts"),
         (Self::Delete, "Delete thought"),
         (Self::Copy, "Copy thought"),
         (Self::Cut, "Cut thought"),

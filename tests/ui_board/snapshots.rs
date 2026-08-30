@@ -337,6 +337,23 @@ fn command_palette_has_a_complete_searchable_buffer() {
 }
 
 #[test]
+fn thought_transformations_are_discoverable_from_an_editor_selection() {
+    let mut fixture = Fixture::new();
+    let sequence = fixture.paste("keep this exact\r\nselection");
+    fixture.app.acknowledge_persistence(sequence, true);
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::DocumentStart,
+        extend_selection: true,
+    }));
+    fixture.input(UiInput::Key(UiKey::Escape));
+    fixture.input(UiInput::Key(UiKey::Character(':')));
+    for character in "thought".chars() {
+        fixture.input(UiInput::Key(UiKey::Character(character)));
+    }
+    insta::assert_snapshot!(snapshot(&mut fixture, 72, 16, ThemePreference::Dark));
+}
+
+#[test]
 fn command_palette_clears_wide_glyphs_crossing_its_border() {
     let mut fixture = Fixture::new();
     let sequence = fixture.paste(

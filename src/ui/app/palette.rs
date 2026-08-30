@@ -1,6 +1,7 @@
 //! Searchable command discovery and execution.
 
-mod command;
+pub(super) mod command;
+mod global;
 
 use crate::{
     application::Effect,
@@ -26,6 +27,7 @@ pub(super) struct PaletteState {
     screenshot_action: ScreenshotPaletteAction,
     screenshot_retry: bool,
     selection_handoff: Option<EditorSelectionHandoff>,
+    merge_handoff: Option<Vec<crate::domain::Thought>>,
 }
 
 impl PaletteState {
@@ -35,6 +37,7 @@ impl PaletteState {
         screenshot_action: ScreenshotPaletteAction,
         screenshot_retry: bool,
         selection_handoff: Option<EditorSelectionHandoff>,
+        merge_handoff: Option<Vec<crate::domain::Thought>>,
     ) -> Self {
         Self {
             query: QueryEditor::default(),
@@ -45,6 +48,7 @@ impl PaletteState {
             screenshot_action,
             screenshot_retry,
             selection_handoff,
+            merge_handoff,
         }
     }
 
@@ -104,6 +108,12 @@ impl PaletteState {
             | Command::Indent
             | Command::Outdent => self.plain_newline_supported,
             Command::RetryScreenshotCapture => self.screenshot_retry,
+            Command::SplitThought => self.selection_handoff.is_some(),
+            Command::ExtractSelection => self
+                .selection_handoff
+                .as_ref()
+                .is_some_and(EditorSelectionHandoff::has_selection),
+            Command::MergeThoughts => self.merge_handoff.is_some(),
             Command::ScreenshotInbox => {
                 self.screenshot_action != ScreenshotPaletteAction::Unavailable
             }
@@ -130,12 +140,19 @@ impl BoardApp {
         self.deactivate_range_latch();
         self.help = false;
         self.search = None;
+        let merge_handoff = (self.selection_len() >= 2).then(|| {
+            self.action_thought_ids()
+                .into_iter()
+                .filter_map(|id| self.state.board.thought(id).cloned())
+                .collect()
+        });
         self.palette = Some(PaletteState::new(
             self.supports_submission(),
             !self.insertion_focused() && self.state.focused_thought.is_some(),
             self.screenshot_palette_action(),
             self.screenshot_retry_ready(),
             self.palette_selection_handoff.take(),
+            merge_handoff,
         ));
     }
 
@@ -163,9 +180,19 @@ impl BoardApp {
             .palette
             .as_mut()
             .and_then(|palette| palette.selection_handoff.take());
+        let merge_handoff = self
+            .palette
+            .as_mut()
+            .and_then(|palette| palette.merge_handoff.take());
         self.palette = None;
         command.map_or_else(Vec::new, |command| {
-            self.execute_command(command, selection_handoff, ids, clock)
+            self.execute_command(
+                command,
+                selection_handoff,
+                merge_handoff.as_deref(),
+                ids,
+                clock,
+            )
         })
     }
 
@@ -275,9 +302,19 @@ impl BoardApp {
         &mut self,
         command: Command,
         selection_handoff: Option<EditorSelectionHandoff>,
+        merge_handoff: Option<&[crate::domain::Thought]>,
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
+        if let Some(effects) = self.execute_transformation_command(
+            command,
+            selection_handoff.as_ref(),
+            merge_handoff,
+            ids,
+            clock,
+        ) {
+            return effects;
+        }
         if let Some(effects) = self.execute_submission_command(command, ids, clock) {
             return effects;
         }
@@ -287,77 +324,7 @@ impl BoardApp {
         if let Some(effects) = self.execute_entry_command(command, ids, clock) {
             return effects;
         }
-        match command {
-            Command::New => self.create(crate::ui::PastePayload::text(String::new()), ids, clock),
-            Command::RenameSession => {
-                self.begin_session_rename();
-                Vec::new()
-            }
-            Command::CopySessionId => self.copy_session_id(ids),
-            Command::CopyResume => self.copy_resume_command(ids),
-            Command::SendSession => self.begin_session_transfer(false, ids, clock),
-            Command::SendSessionRemove => self.begin_session_transfer(true, ids, clock),
-            Command::Delete => self.delete(ids, clock),
-            Command::Copy => self.copy_active(ids),
-            Command::Cut => self.cut_active(ids, clock),
-            Command::Paste => self.read_clipboard(ids),
-            Command::Duplicate => self.duplicate(ids, clock),
-            Command::SelectAll => {
-                let effects = if matches!(
-                    self.state.mode,
-                    crate::application::InteractionMode::Edit { .. }
-                ) {
-                    self.finish_edit(ids, clock)
-                } else {
-                    Vec::new()
-                };
-                self.select_all_thoughts();
-                effects
-            }
-            Command::SubmitRemove
-            | Command::SubmitKeep
-            | Command::SubmitAllRemove
-            | Command::SubmitAllKeep
-            | Command::PlainNewline
-            | Command::JumpUp
-            | Command::JumpDown
-            | Command::ThoughtStart
-            | Command::ThoughtEnd
-            | Command::Indent
-            | Command::Outdent
-            | Command::Edit
-            | Command::InsertInvocation => Vec::new(),
-            Command::RefreshAgents => self.refresh_agents(),
-            Command::RefreshInvocations => self.refresh_invocations(),
-            Command::CheckUpdates => {
-                vec![Effect::Update(crate::application::UpdateIntent::CheckNow)]
-            }
-            Command::ScreenshotInbox => self.toggle_screenshot_inbox(ids, clock),
-            Command::RetryScreenshotCapture => self.retry_screenshot_capture(ids, clock),
-            Command::RetryStorage => self.retry_persistence(),
-            Command::ExportRecovery => self.export_recovery(ids, clock),
-            Command::Undo => self.history(ids, clock, true),
-            Command::Redo => self.history(ids, clock, false),
-            Command::MoveUp => self.reorder(ids, clock, -1),
-            Command::MoveDown => self.reorder(ids, clock, 1),
-            Command::Collapse => self.collapse(ids, clock),
-            Command::Select => {
-                self.toggle_selection();
-                Vec::new()
-            }
-            Command::RangeSelect => {
-                self.activate_range_latch();
-                Vec::new()
-            }
-            Command::Help => {
-                self.help = true;
-                Vec::new()
-            }
-            Command::Quit => {
-                self.request_quit();
-                Vec::new()
-            }
-        }
+        self.execute_global_command(command, ids, clock)
     }
 
     fn execute_entry_command(

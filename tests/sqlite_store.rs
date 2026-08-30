@@ -142,3 +142,5 @@ mod recovery;
 mod screenshot;
 #[path = "sqlite_store/submission.rs"]
 mod submission;
+#[path = "sqlite_store/transformations.rs"]
+mod transformations;

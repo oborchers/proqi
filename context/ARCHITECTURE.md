@@ -548,11 +548,20 @@ ordinary tables.
   atomically.
 - A multi-thought mutation is stored as one ordered batch with one inverse, so
   delete, duplicate, collapse, cut, and submit-and-remove remain one undo step.
+- Split, extract, and merge are board-history operations whose ordered batch
+  combines exact content and annotation replacement with neighboring creation
+  or recoverable deletion. The SQLite adapter applies the batch, truncates redo
+  revisions for content-replaced thoughts, advances one sequence, moves one
+  board cursor, and rebuilds FTS inside one transaction. Undo and redo apply the
+  complete inverse or forward batch after restart.
 - Soft deletion remains recoverable until explicit pruning.
 - Only the holder of the session lease may mutate that session.
 - All timestamps are stored as UTC integers and rendered in local time.
 - Presentation annotations are sorted, non-overlapping UTF-8 byte ranges within
   canonical thought content. They never replace or truncate that content.
+- Annotation validation, partition, extraction closure, concatenation shift,
+  and editor-change rebasing share the domain annotation-range owner. Adjacent
+  annotations are never coalesced merely because their provenance values match.
 
 ### Migrations and recovery
 

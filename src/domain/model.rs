@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::{RevisionId, SessionId, TextPosition, ThoughtId};
+use super::{RevisionId, SessionId, TextPosition, ThoughtId, validate_annotations};
 
 /// UTC milliseconds since the Unix epoch.
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
@@ -460,31 +460,18 @@ pub enum DomainError {
     /// Content presentation metadata does not address valid canonical text.
     #[error("content annotation range is invalid")]
     InvalidContentAnnotation,
-}
-
-/// Validate sorted non-overlapping annotation ranges against canonical content.
-///
-/// # Errors
-///
-/// Returns [`DomainError::InvalidContentAnnotation`] when any range is empty,
-/// overlaps its predecessor, exceeds content, or splits a UTF-8 scalar value.
-pub fn validate_annotations(
-    content: &str,
-    annotations: &[ContentAnnotation],
-) -> Result<(), DomainError> {
-    let mut previous_end = 0;
-    for annotation in annotations {
-        if annotation.start >= annotation.end
-            || annotation.end > content.len()
-            || !content.is_char_boundary(annotation.start)
-            || !content.is_char_boundary(annotation.end)
-            || annotation.start < previous_end
-        {
-            return Err(DomainError::InvalidContentAnnotation);
-        }
-        previous_end = annotation.end;
-    }
-    Ok(())
+    /// A requested content range is reversed, outside content, or splits UTF-8.
+    #[error("content range is invalid")]
+    InvalidContentRange,
+    /// An operation requires a non-empty exact content range.
+    #[error("content range cannot be empty")]
+    EmptyContentRange,
+    /// Exact concatenated content cannot be represented on this platform.
+    #[error("content length overflow")]
+    ContentLengthOverflow,
+    /// A reversible replacement no longer matches current thought content.
+    #[error("thought content changed before transformation: {0}")]
+    ThoughtContentConflict(ThoughtId),
 }
 
 fn validate_absolute_path(path: &Path) -> Result<(), DomainError> {

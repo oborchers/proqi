@@ -27,6 +27,8 @@ pub struct UiSettings {
     pub smart_lists: bool,
     /// Spaces inserted for every list indentation level.
     pub list_indent_width: u8,
+    /// Exact text inserted between thoughts by the merge transformation.
+    pub merge_separator: String,
     /// Keyboard protocol negotiation.
     pub keyboard_enhancement: KeyboardEnhancement,
     /// Remappable direct board keys.
@@ -42,6 +44,7 @@ impl Default for UiSettings {
             show_session_id: false,
             smart_lists: true,
             list_indent_width: 2,
+            merge_separator: "\n\n".to_owned(),
             keyboard_enhancement: KeyboardEnhancement::default(),
             keybindings: KeyBindings::default(),
             density: BoardDensity::default(),

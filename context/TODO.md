@@ -466,17 +466,17 @@ This captures most of the proposed multi-cursor value with much less new state.
 
 ### Split, extract, and merge thoughts — P1, M (5–9 days)
 
-- [ ] Split at the logical cursor with an exact boundary: left keeps its identity,
+- [x] Split at the logical cursor with an exact boundary: left keeps its identity,
   right becomes a new thought immediately below, and neither side is trimmed.
-- [ ] Extract the exact active selection into a new thought and close the gap in
+- [x] Extract the exact active selection into a new thought and close the gap in
   the source.
-- [ ] Merge contiguous selected thoughts with exactly one configured separator
+- [x] Merge contiguous selected thoughts with exactly one configured separator
   (default one blank line), keep the first identity, and recoverably delete the
   sources.
-- [ ] Partition, shift, or merge annotations without losing attachment/fold
+- [x] Partition, shift, or merge annotations without losing attachment/fold
   identity.
-- [ ] Reject locked or noncontiguous inputs with actionable feedback.
-- [ ] Implement one atomic composite durable operation across editor and board
+- [x] Reject locked or noncontiguous inputs with actionable feedback.
+- [x] Implement one atomic composite durable operation across editor and board
   history; undo must survive restart and FTS must remain consistent.
 - [ ] Offer “split by blank lines” only as an explicit previewed bulk action, not
   an automatic transformation.

@@ -53,6 +53,12 @@ pub enum BoardOperationKind {
     Duplicate,
     /// Deleted after an accepted adjacent-agent submission.
     SubmitAndRemove,
+    /// Split one thought at an exact logical cursor.
+    Split,
+    /// Extract one exact editor selection into a neighboring thought.
+    Extract,
+    /// Merge a contiguous board selection into its first thought.
+    Merge,
 }
 
 /// One reversible change to current board state.
@@ -86,6 +92,19 @@ pub enum BoardMutation {
         from: ThoughtPosition,
         /// Desired position.
         to: ThoughtPosition,
+    },
+    /// Replace exact thought content and all attached annotation ranges.
+    ReplaceContent {
+        /// Affected thought.
+        thought_id: ThoughtId,
+        /// Required current content.
+        before_content: String,
+        /// Required current annotations.
+        before_annotations: Vec<super::ContentAnnotation>,
+        /// Replacement content.
+        after_content: String,
+        /// Replacement annotations.
+        after_annotations: Vec<super::ContentAnnotation>,
     },
     /// Set the durable presentation preference.
     SetPresentation {
@@ -212,6 +231,20 @@ impl SessionBoard {
                 from,
                 to,
             } => self.move_thought(*thought_id, *from, *to, at)?,
+            BoardMutation::ReplaceContent {
+                thought_id,
+                before_content,
+                before_annotations,
+                after_content,
+                after_annotations,
+            } => self.replace_content(
+                *thought_id,
+                before_content,
+                before_annotations,
+                after_content,
+                after_annotations,
+                at,
+            )?,
             BoardMutation::SetPresentation {
                 thought_id,
                 presentation,
@@ -382,6 +415,29 @@ impl SessionBoard {
             .thought_mut(thought_id)
             .ok_or(DomainError::ThoughtNotFound(thought_id))?;
         thought.position = ThoughtPosition::new(to_u32(to)?);
+        thought.updated_at = at;
+        Ok(())
+    }
+
+    fn replace_content(
+        &mut self,
+        thought_id: ThoughtId,
+        before_content: &str,
+        before_annotations: &[super::ContentAnnotation],
+        after_content: &str,
+        after_annotations: &[super::ContentAnnotation],
+        at: Timestamp,
+    ) -> Result<(), DomainError> {
+        validate_annotations(after_content, after_annotations)?;
+        let thought = self
+            .thought_mut(thought_id)
+            .filter(|thought| thought.is_live())
+            .ok_or(DomainError::ThoughtNotFound(thought_id))?;
+        if thought.content != before_content || thought.annotations != before_annotations {
+            return Err(DomainError::ThoughtContentConflict(thought_id));
+        }
+        after_content.clone_into(&mut thought.content);
+        after_annotations.clone_into(&mut thought.annotations);
         thought.updated_at = at;
         Ok(())
     }

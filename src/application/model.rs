@@ -6,8 +6,9 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use super::error::{ApplicationError, ApplicationResult, FailureCode};
 use crate::domain::{
-    BoardOperation, OperationId, OperationSequence, RequestId, SessionBoard, StableVersion,
-    TextPosition, Thought, ThoughtId, ThoughtRevision, Timestamp,
+    BoardMutation, BoardOperation, BoardOperationKind, OperationId, OperationSequence, RequestId,
+    SessionBoard, StableVersion, TextPosition, Thought, ThoughtId, ThoughtRevision, Timestamp,
+    UndoScope,
 };
 
 use crate::ports::runtime::CaptureOwnerInfo;
@@ -228,6 +229,44 @@ impl AppState {
         }
     }
 
+    /// Choose a transformation as the next undo unit when it is newer than the
+    /// active thought's latest editor revision and directly owns that thought.
+    #[must_use]
+    pub fn preferred_undo_scope(&self, mode: InteractionMode) -> UndoScope {
+        let InteractionMode::Edit { thought_id } = mode else {
+            return UndoScope::Board;
+        };
+        let editor_sequence = self
+            .editor_histories
+            .get(&thought_id)
+            .and_then(|history| {
+                history
+                    .cursor
+                    .checked_sub(1)
+                    .and_then(|index| history.revisions.get(index))
+            })
+            .map(|revision| revision.sequence);
+        let transformation = self
+            .board_history_cursor
+            .checked_sub(1)
+            .and_then(|index| self.board_history.get(index))
+            .filter(|operation| {
+                matches!(
+                    operation.kind,
+                    BoardOperationKind::Split
+                        | BoardOperationKind::Extract
+                        | BoardOperationKind::Merge
+                ) && mutation_addresses(&operation.forward, thought_id)
+            });
+        if transformation.is_some_and(|operation| {
+            editor_sequence.is_none_or(|sequence| operation.sequence > sequence)
+        }) {
+            UndoScope::Board
+        } else {
+            UndoScope::Editor { thought_id }
+        }
+    }
+
     pub(super) fn next_sequence(&self) -> ApplicationResult<OperationSequence> {
         self.highest_sequence
             .checked_next()
@@ -334,5 +373,34 @@ impl AppState {
         if matches!(self.mode, InteractionMode::Edit { .. }) {
             self.mode = InteractionMode::Board;
         }
+    }
+}
+
+fn mutation_addresses(mutation: &BoardMutation, thought_id: ThoughtId) -> bool {
+    match mutation {
+        BoardMutation::Batch { mutations } => mutations
+            .iter()
+            .any(|mutation| mutation_addresses(mutation, thought_id)),
+        BoardMutation::AddThought { thought } => thought.id == thought_id,
+        BoardMutation::SetDeletion {
+            thought_id: affected,
+            ..
+        }
+        | BoardMutation::MoveThought {
+            thought_id: affected,
+            ..
+        }
+        | BoardMutation::ReplaceContent {
+            thought_id: affected,
+            ..
+        }
+        | BoardMutation::SetPresentation {
+            thought_id: affected,
+            ..
+        }
+        | BoardMutation::LegacySetCollapsed {
+            thought_id: affected,
+            ..
+        } => *affected == thought_id,
     }
 }

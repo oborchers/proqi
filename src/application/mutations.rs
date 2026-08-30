@@ -1,6 +1,7 @@
 //! Focused domain mutations used by the reducer router.
 
 pub(super) mod bulk;
+pub(super) mod transform;
 
 use super::error::{ApplicationError, ApplicationResult, FailureCode};
 use super::{mutations::bulk::delete_thoughts, prompt::MULTI_THOUGHT_SEPARATOR};

@@ -143,6 +143,7 @@ pub(super) fn commit_board(
             ],
         )
         .map_err(map_sql_error)?;
+    truncate_editor_redo(transaction, &operation.forward)?;
     persist_board(transaction, &board)?;
     transaction
         .execute(
@@ -193,11 +194,41 @@ pub(super) fn commit_board(
 pub(super) fn mutation_changes_search(mutation: &BoardMutation) -> bool {
     match mutation {
         BoardMutation::Batch { mutations } => mutations.iter().any(mutation_changes_search),
-        BoardMutation::AddThought { .. } | BoardMutation::SetDeletion { .. } => true,
+        BoardMutation::AddThought { .. }
+        | BoardMutation::SetDeletion { .. }
+        | BoardMutation::ReplaceContent { .. } => true,
         BoardMutation::MoveThought { .. }
         | BoardMutation::SetPresentation { .. }
         | BoardMutation::LegacySetCollapsed { .. } => false,
     }
+}
+
+fn truncate_editor_redo(
+    transaction: &Transaction<'_>,
+    mutation: &BoardMutation,
+) -> Result<(), StoreError> {
+    match mutation {
+        BoardMutation::Batch { mutations } => {
+            for mutation in mutations {
+                truncate_editor_redo(transaction, mutation)?;
+            }
+        }
+        BoardMutation::ReplaceContent { thought_id, .. } => {
+            transaction
+                .execute(
+                    "DELETE FROM thought_revisions WHERE thought_id = ?1 AND history_index >=
+                     (SELECT editor_history_cursor FROM thoughts WHERE id = ?1)",
+                    [thought_id.database_bytes().as_slice()],
+                )
+                .map_err(map_sql_error)?;
+        }
+        BoardMutation::AddThought { .. }
+        | BoardMutation::SetDeletion { .. }
+        | BoardMutation::MoveThought { .. }
+        | BoardMutation::SetPresentation { .. }
+        | BoardMutation::LegacySetCollapsed { .. } => {}
+    }
+    Ok(())
 }
 
 fn commit_revision(

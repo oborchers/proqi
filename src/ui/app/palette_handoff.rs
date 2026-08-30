@@ -2,27 +2,38 @@
 
 use crate::{
     application::InteractionMode,
-    domain::{TextPosition, ThoughtId},
+    domain::{ContentAnnotation, TextPosition, ThoughtId},
     ports::editor::{EditCommand, TextSelection},
     ui::{HitTarget, PointerButton, PointerKind, UiInput, UiKey},
 };
 
 use super::BoardApp;
 
+#[derive(Clone)]
 pub(super) struct EditorSelectionHandoff {
-    thought_id: ThoughtId,
-    content: String,
-    selection: TextSelection,
-    cursor: TextPosition,
+    pub(super) thought_id: ThoughtId,
+    pub(super) content: String,
+    pub(super) annotations: Vec<ContentAnnotation>,
+    pub(super) selection: Option<TextSelection>,
+    pub(super) cursor: TextPosition,
+}
+
+impl EditorSelectionHandoff {
+    pub(super) const fn has_selection(&self) -> bool {
+        self.selection.is_some()
+    }
 }
 
 impl BoardApp {
     pub(super) fn capture_palette_selection_handoff(&mut self) {
         self.palette_selection_handoff = self.editor_snapshot().and_then(|snapshot| {
+            let thought_id = self.active_thought_id()?;
+            let annotations = self.state.board.thought(thought_id)?.annotations.clone();
             Some(EditorSelectionHandoff {
-                thought_id: self.active_thought_id()?,
+                thought_id,
                 content: snapshot.content,
-                selection: snapshot.selection?,
+                annotations,
+                selection: snapshot.selection,
                 cursor: snapshot.cursor,
             })
         });
@@ -69,10 +80,17 @@ impl BoardApp {
         if !valid {
             return;
         }
-        let anchor = if handoff.cursor == handoff.selection.start {
-            handoff.selection.end
-        } else if handoff.cursor == handoff.selection.end {
-            handoff.selection.start
+        let Some(selection) = handoff.selection else {
+            self.apply_edit(EditCommand::SetCursor {
+                position: handoff.cursor,
+                extend_selection: false,
+            });
+            return;
+        };
+        let anchor = if handoff.cursor == selection.start {
+            selection.end
+        } else if handoff.cursor == selection.end {
+            selection.start
         } else {
             return;
         };
