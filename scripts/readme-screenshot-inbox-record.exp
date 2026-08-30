@@ -1,0 +1,109 @@
+#!/usr/bin/expect -f
+
+set timeout 20
+set binary [lindex $argv 0]
+set state [lindex $argv 1]
+set inbox [file join $state inbox]
+set source [file join $state capture-source.png]
+set capture [file join $inbox "Screenshot demo.png"]
+
+proc pause {milliseconds} {
+    set ::pause_complete 0
+    after $milliseconds {set ::pause_complete 1}
+    vwait ::pause_complete
+}
+
+proc type_text {text delay} {
+    foreach character [split $text ""] {
+        send -- $character
+        pause $delay
+    }
+}
+
+proc create_thought {text} {
+    send -- "n"
+    pause 350
+    type_text $text 34
+    pause 450
+    # Use the unambiguous CSI-u encoding so the next live character cannot be
+    # combined with a lone Escape byte by the nested PTY.
+    send -- "\033\[27u"
+    pause 1200
+}
+
+if {$binary eq "" || $state eq ""} {
+    puts stderr "usage: readme-screenshot-inbox-record.exp <binary> <state-directory>"
+    exit 2
+}
+
+# The cast renderer supports true color. Declare that capability explicitly in
+# the spawned terminal so Proqi can resolve its automatic palette.
+set env(TERM) xterm-256color
+set env(COLORTERM) truecolor
+catch {unset env(NO_COLOR)}
+spawn -noecho $binary --state-dir $state -c
+set terminal_channel [exp_open -leaveopen]
+exec stty rows 30 columns 92 <@ $terminal_channel
+
+# Match the primary GIF's automatic-theme handshake exactly. Respond to the
+# same bounded palette probes, then wait for the empty named board.
+set board_ready 0
+while {!$board_ready} {
+    expect {
+        -exact "\033]10;?" {
+            send -- "\033]10;rgb:c9c9/cdcd/e0e0\007"
+        }
+        -exact "\033]11;?" {
+            send -- "\033]11;rgb:1818/1919/2222\007"
+        }
+        -exact "\033\[c" {
+            send -- "\033\[?1;2c"
+        }
+        -re {0 thoughts} {
+            set board_ready 1
+        }
+        timeout {
+            puts stderr "timed out waiting for the Screenshot Inbox demo board"
+            exit 1
+        }
+    }
+}
+pause 1000
+
+# Keep draining the child PTY while each character is typed so asciinema
+# records the same live editor frames as the primary README demo.
+expect_background -re {.+} {}
+
+create_thought "Open any board."
+create_thought "Press i to start Screenshot Inbox."
+create_thought "Take a normal macOS screenshot anywhere."
+create_thought "It arrives on this board when macOS saves it to your Desktop."
+
+# Pause continuous draining while exact state markers synchronize the import.
+expect_background
+send -- "i"
+expect -re {listening}
+pause 1600
+
+exec cp -- $source $capture
+expect -re {5 thoughts}
+expect_background -re {.+} {}
+pause 1600
+
+send -- "\033\[F"
+pause 350
+type_text " No more dragging screenshot files between panes." 28
+pause 900
+send -- "\033\[27u"
+pause 1400
+
+create_thought "Only one Proqi board captures screenshots at a time."
+create_thought "Screenshot Inbox pauses after 10 unattended captures or 20 inactive minutes."
+pause 2000
+
+expect_background
+send -- "q"
+expect -re {Resume later:}
+expect eof
+wait
+exit 0

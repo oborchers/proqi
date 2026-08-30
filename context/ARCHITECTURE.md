@@ -1199,6 +1199,15 @@ Pull requests and pushes to the protected default branch run these jobs:
 - `check` is an aggregate job that succeeds only when every required job has
   succeeded or has been explicitly marked inapplicable.
 
+A preflight job classifies the complete pull-request or push diff before the
+matrix starts. When every changed path ends in `.md`, CI runs one lightweight
+documentation gate for whitespace and repository-owned public-asset contracts;
+the Rust test, coverage, audit, PTY, package, and platform jobs are explicitly
+skipped. Any non-Markdown path runs the complete matrix. The aggregate `check`
+job verifies the exact expected success-and-skip topology in both cases, so a
+path optimization cannot leave the protected required check pending or turn an
+unexpectedly skipped product job into success.
+
 The aggregate `check` job is the stable branch-protection contract. Individual
 jobs may evolve without repeatedly changing repository settings. Superseded
 pull-request runs are cancelled, release runs are never cancelled, workflow
