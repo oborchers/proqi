@@ -18,6 +18,10 @@ pub enum Action {
     FocusThought(Option<ThoughtId>),
     /// Enter the multiline editor for one live thought.
     EnterEdit(ThoughtId),
+    /// Enter the transient insertion editor without creating durable state.
+    EnterCompose,
+    /// Return from transient composition to the empty board.
+    ExitCompose,
     /// Return from edit mode to the board.
     ExitEdit,
     /// Create a blank or pre-populated thought as one operation.

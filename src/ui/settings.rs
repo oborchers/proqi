@@ -245,6 +245,14 @@ pub(crate) fn key_label(key: char) -> String {
     }
 }
 
+pub(crate) fn primary_key_label(suffix: &str) -> String {
+    if cfg!(target_os = "macos") {
+        format!("⌘{suffix}")
+    } else {
+        format!("Ctrl+{suffix}")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::KeyBindings;

@@ -166,7 +166,7 @@ fn spawn_owner(fixture: OwnerFixture<'_>, exit: ExitScenario) -> std::process::C
         expect -exact "\x1b\[?1049h"
         close [open $env(PROQI_TEST_READY) w]
         while {![file exists $env(PROQI_TEST_START)]} { after 10 }
-        send -- "nlocal input survives"
+        send -- "local input survives"
         stty rows 6 columns 24
         stty rows 28 columns 100
         send -- "\x1b"

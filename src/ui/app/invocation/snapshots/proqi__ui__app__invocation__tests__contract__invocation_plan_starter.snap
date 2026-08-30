@@ -10,4 +10,4 @@ expression: plan_completion_snapshot()
 04││                                              ││
 05│└──────────────────────────────────────────────┘│
 06│  Esc Board  : Commands  ? Shortcuts│
-07│  → Codex   s Submit    S Submit & keep│
+07│  → Codex   ⌘Enter Submit│

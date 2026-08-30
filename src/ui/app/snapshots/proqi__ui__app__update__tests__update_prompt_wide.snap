@@ -1,10 +1,10 @@
 ---
-source: src/ui/app/update.rs
-assertion_line: 479
+source: src/ui/app/update/tests.rs
+assertion_line: 168
 expression: "update_snapshot(100, 18)"
 ---
-00││
-01│                                            + New thought│
+00│⋮│
+01││
 02││
 03│                     ┌ update available · 1.2.3 ────────────────────────────[x]│
 04│                     │                                                        ││
@@ -19,5 +19,5 @@ expression: "update_snapshot(100, 18)"
 13││
 14││
 15│  fixture│
-16│  0 thoughts · board · saved│
-17│  n New   : Commands  ? Shortcuts│
+16│  0 thoughts · compose · saved│
+17│  Esc Board  : Commands  ? Shortcuts│

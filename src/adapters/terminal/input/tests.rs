@@ -375,6 +375,27 @@ fn enter_is_normalized_independently_from_exact_bracketed_paste() {
 }
 
 #[test]
+fn primary_enter_chords_are_distinct_from_plain_multiline_enter() {
+    for modifier in [
+        KeyModifiers::CONTROL,
+        KeyModifiers::SUPER,
+        KeyModifiers::META,
+    ] {
+        assert_eq!(
+            translate(Event::Key(KeyEvent::new(KeyCode::Enter, modifier))),
+            Some(UiInput::Key(UiKey::Submit))
+        );
+        assert_eq!(
+            translate(Event::Key(KeyEvent::new(
+                KeyCode::Enter,
+                modifier | KeyModifiers::SHIFT,
+            ))),
+            Some(UiInput::Key(UiKey::SubmitKeep))
+        );
+    }
+}
+
+#[test]
 fn host_focus_is_a_semantic_refresh_signal() {
     assert_eq!(
         translate(Event::FocusGained),

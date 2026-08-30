@@ -74,3 +74,22 @@ fn platform_primary_arrow_is_forwarded_through_the_real_pty_and_restores() {
         );
     }
 }
+
+#[test]
+fn primary_enter_variants_are_distinct_in_the_real_pty() {
+    let (submit, keep, modifier) = if cfg!(target_os = "macos") {
+        (r"\x1b\[13;9u", r"\x1b\[13;10u", "SUPER")
+    } else {
+        (r"\x1b\[13;5u", r"\x1b\[13;6u", "CONTROL")
+    };
+    inspect_sequence(
+        submit,
+        &format!("Enter, modifiers: KeyModifiers({modifier})"),
+        "Submit",
+    );
+    inspect_sequence(
+        keep,
+        &format!("Enter, modifiers: KeyModifiers(SHIFT | {modifier})"),
+        "SubmitKeep",
+    );
+}

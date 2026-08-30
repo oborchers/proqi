@@ -19,11 +19,22 @@ pub use effect::Effect;
 pub enum InteractionMode {
     /// Navigate and operate on whole thoughts.
     Board,
+    /// Edit one transient insertion buffer before its first semantic content intention.
+    Compose,
     /// Edit the focused thought.
     Edit {
         /// Thought being edited.
         thought_id: ThoughtId,
     },
+}
+
+/// Canonical policy for a completed mutation that leaves no durable thoughts.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum EmptyBoardTransition {
+    /// Preserve the current interaction decision for passive or external work.
+    Preserve,
+    /// Enter prompt composition after a deliberate local workflow removed the final thought.
+    ComposeAfterLocalRemoval,
 }
 
 /// Durability state shown truthfully by the interface.
@@ -175,9 +186,14 @@ impl AppState {
         let focused_thought = board.live_thoughts().first().map(|thought| thought.id);
         let insertion_index = board.live_thoughts().len();
         let sequence = board.session.last_durable_sequence;
+        let mode = if focused_thought.is_some() {
+            InteractionMode::Board
+        } else {
+            InteractionMode::Compose
+        };
         Self {
             board,
-            mode: InteractionMode::Board,
+            mode,
             focused_thought,
             insertion_index,
             durability: DurabilityState::Durable { sequence },
@@ -333,6 +349,17 @@ impl AppState {
         self.focused_thought = self.board.live_thoughts().first().map(|thought| thought.id);
         if matches!(self.mode, InteractionMode::Edit { .. }) {
             self.mode = InteractionMode::Board;
+        }
+    }
+
+    /// Apply one typed empty-board interaction policy after a completed mutation.
+    pub fn reconcile_empty_board(&mut self, transition: EmptyBoardTransition) {
+        if transition == EmptyBoardTransition::ComposeAfterLocalRemoval
+            && self.board.live_thoughts().is_empty()
+        {
+            self.mode = InteractionMode::Compose;
+            self.focused_thought = None;
+            self.insertion_index = 0;
         }
     }
 }

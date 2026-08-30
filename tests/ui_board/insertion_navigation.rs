@@ -3,7 +3,7 @@ use super::*;
 use proqi::application::InteractionMode;
 
 #[test]
-fn two_down_movements_create_the_first_thought_and_enter_edit_mode() {
+fn compose_cursor_movement_never_creates_the_first_thought() {
     let mut fixture = Fixture::new();
 
     assert!(
@@ -14,12 +14,9 @@ fn two_down_movements_create_the_first_thought_and_enter_edit_mode() {
     assert!(fixture.app.state.board.live_thoughts().is_empty());
     let effects = fixture.effects(super::navigation::visual(CursorMovement::VisualDown, false));
 
-    assert_eq!(effects.len(), 1);
-    assert_eq!(fixture.app.state.board.live_thoughts().len(), 1);
-    assert!(matches!(
-        fixture.app.interaction_mode(),
-        InteractionMode::Edit { .. }
-    ));
+    assert!(effects.is_empty());
+    assert!(fixture.app.state.board.live_thoughts().is_empty());
+    assert_eq!(fixture.app.interaction_mode(), InteractionMode::Compose);
     assert_eq!(
         fixture.app.editor_snapshot().expect("blank editor").content,
         ""
@@ -49,6 +46,7 @@ fn configured_next_and_arrow_down_share_the_insertion_confirmation() {
 #[test]
 fn unrelated_input_resets_insertion_confirmation() {
     let mut fixture = Fixture::new();
+    fixture.input(UiInput::Key(UiKey::Escape));
     fixture.input(super::navigation::visual(CursorMovement::VisualDown, false));
     fixture.input(UiInput::Key(UiKey::Character('?')));
     fixture.input(UiInput::Key(UiKey::Escape));
@@ -56,12 +54,14 @@ fn unrelated_input_resets_insertion_confirmation() {
     fixture.input(super::navigation::visual(CursorMovement::VisualDown, false));
     assert!(fixture.app.state.board.live_thoughts().is_empty());
     fixture.input(super::navigation::visual(CursorMovement::VisualDown, false));
-    assert_eq!(fixture.app.state.board.live_thoughts().len(), 1);
+    assert!(fixture.app.state.board.live_thoughts().is_empty());
+    assert_eq!(fixture.app.interaction_mode(), InteractionMode::Compose);
 }
 
 #[test]
 fn shifted_down_does_not_arm_insertion_creation() {
     let mut fixture = Fixture::new();
+    fixture.input(UiInput::Key(UiKey::Escape));
     fixture.input(super::navigation::visual(CursorMovement::VisualDown, true));
     fixture.input(super::navigation::visual(CursorMovement::VisualDown, false));
 

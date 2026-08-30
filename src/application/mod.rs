@@ -24,8 +24,8 @@ pub use capture::{apply_capture, prepare_capture};
 pub(crate) use control::{ControlReplay, match_control_replay};
 pub use error::{ApplicationError, ApplicationResult, FailureCode};
 pub use model::{
-    AppState, ClipboardIntent, DurabilityState, Effect, InteractionMode, ScreenshotIntent,
-    ScreenshotPauseReason, UpdateIntent,
+    AppState, ClipboardIntent, DurabilityState, Effect, EmptyBoardTransition, InteractionMode,
+    ScreenshotIntent, ScreenshotPauseReason, UpdateIntent,
 };
 pub(crate) use prompt::{
     SHARED_PROMPT_STARTERS, SharedPromptStarter, join_prompt_for_target, supports_shared_starters,

@@ -123,14 +123,12 @@ fn discovered_invocations_use_the_annotation_visual_role() {
 #[test]
 fn durable_blank_and_editing_surface() {
     let mut fixture = Fixture::new();
-    fixture.input(super::navigation::visual(
-        proqi::ports::editor::CursorMovement::VisualDown,
-        false,
-    ));
-    fixture.input(super::navigation::visual(
-        proqi::ports::editor::CursorMovement::VisualDown,
-        false,
-    ));
+    super::navigation::durable_thought(&mut fixture, "temporary anchor");
+    fixture.input(UiInput::Key(UiKey::Character('n')));
+    fixture.input(UiInput::Key(UiKey::Escape));
+    fixture.input(UiInput::Key(UiKey::Character('k')));
+    fixture.input(UiInput::Key(UiKey::Character('d')));
+    fixture.input(UiInput::Key(UiKey::Enter));
     insta::assert_snapshot!(snapshot(&mut fixture, 50, 9, ThemePreference::Light));
 }
 
@@ -158,6 +156,7 @@ fn failed_save_replaces_the_summary_without_changing_footer_height() {
 #[test]
 fn help_overlay_remains_composed_in_a_shallow_viewport() {
     let mut fixture = Fixture::new();
+    fixture.input(UiInput::Key(UiKey::Escape));
     let _initial = draw(&mut fixture, 42, 8);
     let layout = fixture.app.prepare_frame(Rect::new(0, 0, 42, 8));
     let help = layout

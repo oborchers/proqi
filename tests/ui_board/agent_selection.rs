@@ -91,6 +91,7 @@ fn selected_thoughts_submit_once_in_board_order_and_remove_as_one_undo_step() {
     ));
     assert!(fixture.app.state.board.live_thoughts().is_empty());
 
+    fixture.input(UiInput::Key(UiKey::Escape));
     fixture.input(UiInput::Key(UiKey::Undo));
     assert_eq!(fixture.app.state.board.live_thoughts().len(), 2);
 }

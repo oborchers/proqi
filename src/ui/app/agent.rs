@@ -192,16 +192,19 @@ impl BoardApp {
         });
         if pending.disposition == SubmissionDisposition::RemoveAfterSuccess && unchanged {
             effects.extend(
-                self.reduce(Action::DeleteThoughts {
-                    operation_id: pending.deletion_operation_id,
-                    thought_ids: pending
-                        .sources
-                        .iter()
-                        .map(|source| source.thought_id)
-                        .collect(),
-                    kind: BoardOperationKind::SubmitAndRemove,
-                    at: pending.at,
-                }),
+                self.reduce_with_empty_transition(
+                    Action::DeleteThoughts {
+                        operation_id: pending.deletion_operation_id,
+                        thought_ids: pending
+                            .sources
+                            .iter()
+                            .map(|source| source.thought_id)
+                            .collect(),
+                        kind: BoardOperationKind::SubmitAndRemove,
+                        at: pending.at,
+                    },
+                    crate::application::EmptyBoardTransition::ComposeAfterLocalRemoval,
+                ),
             );
             self.clear_board_selection();
         }

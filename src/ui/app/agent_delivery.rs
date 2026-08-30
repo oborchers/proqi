@@ -13,6 +13,20 @@ use crate::{
 use super::{BoardApp, UiInput, UiKey, pending_types::SubmissionMode};
 
 impl BoardApp {
+    pub(super) fn begin_edit_delivery(
+        &mut self,
+        disposition: SubmissionDisposition,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        let Some(thought_id) = self.active_thought_id() else {
+            return Vec::new();
+        };
+        let mut effects = self.flush_pending_edit(ids, clock);
+        effects.extend(self.begin_delivery_for(disposition, vec![thought_id], ids, clock));
+        effects
+    }
+
     pub(super) fn begin_delivery(
         &mut self,
         disposition: SubmissionDisposition,
@@ -20,11 +34,10 @@ impl BoardApp {
         clock: &impl Clock,
     ) -> Vec<Effect> {
         self.deactivate_range_latch();
-        let mut effects = if matches!(self.state.mode, InteractionMode::Edit { .. }) {
-            self.finish_edit(ids, clock)
-        } else {
-            self.flush_pending_edit(ids, clock)
-        };
+        if matches!(self.state.mode, InteractionMode::Edit { .. }) {
+            return self.begin_edit_delivery(disposition, ids, clock);
+        }
+        let mut effects = self.flush_pending_edit(ids, clock);
         effects.extend(self.begin_delivery_for(disposition, self.action_thought_ids(), ids, clock));
         effects
     }

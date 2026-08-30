@@ -1,6 +1,7 @@
 //! Canonical visible labels and terminal-cell widths for clickable controls.
 
 use crate::{
+    application::InteractionMode,
     domain::Direction,
     ports::agent::{AgentTarget, SubmissionDisposition},
 };
@@ -22,7 +23,12 @@ impl ControlLabel {
     }
 }
 
-pub(crate) fn action(target: HitTarget, compact: bool, keys: &KeyBindings) -> Option<ControlLabel> {
+pub(crate) fn action(
+    target: HitTarget,
+    compact: bool,
+    mode: InteractionMode,
+    keys: &KeyBindings,
+) -> Option<ControlLabel> {
     let (key, text) = match target {
         HitTarget::Insert => (super::settings::key_label(keys.new), " New"),
         HitTarget::Copy => (super::settings::key_label(keys.copy), " Copy"),
@@ -44,7 +50,7 @@ pub(crate) fn action(target: HitTarget, compact: bool, keys: &KeyBindings) -> Op
         HitTarget::Retry => ("r".to_owned(), " Retry"),
         HitTarget::ExportRecovery => ("w".to_owned(), " Export"),
         HitTarget::BeginDelivery(disposition) | HitTarget::Deliver(_, disposition) => {
-            return Some(submission(disposition, keys));
+            return Some(submission(disposition, mode, keys));
         }
         HitTarget::Agent(_)
         | HitTarget::Thought(_)
@@ -61,8 +67,13 @@ pub(crate) fn action(target: HitTarget, compact: bool, keys: &KeyBindings) -> Op
     })
 }
 
-pub(crate) fn action_width(target: HitTarget, compact: bool, keys: &KeyBindings) -> Option<u16> {
-    action(target, compact, keys).map(|label| {
+pub(crate) fn action_width(
+    target: HitTarget,
+    compact: bool,
+    mode: InteractionMode,
+    keys: &KeyBindings,
+) -> Option<u16> {
+    action(target, compact, mode, keys).map(|label| {
         let minimum = match target {
             HitTarget::Insert | HitTarget::Copy | HitTarget::Undo => 7,
             HitTarget::Cut => 6,
@@ -97,12 +108,24 @@ pub(crate) fn agent(target: &AgentTarget) -> ControlLabel {
     }
 }
 
-pub(crate) fn submission(disposition: SubmissionDisposition, keys: &KeyBindings) -> ControlLabel {
-    let (key, text) = match disposition {
-        SubmissionDisposition::RemoveAfterSuccess => {
+pub(crate) fn submission(
+    disposition: SubmissionDisposition,
+    mode: InteractionMode,
+    keys: &KeyBindings,
+) -> ControlLabel {
+    let editing = matches!(mode, InteractionMode::Edit { .. });
+    let (key, text) = match (disposition, editing) {
+        (SubmissionDisposition::RemoveAfterSuccess, true) => {
+            (super::settings::primary_key_label("Enter"), " Submit")
+        }
+        (SubmissionDisposition::Keep, true) => (
+            super::settings::primary_key_label("Shift+Enter"),
+            " Submit & keep",
+        ),
+        (SubmissionDisposition::RemoveAfterSuccess, false) => {
             (super::settings::key_label(keys.submit_remove), " Submit")
         }
-        SubmissionDisposition::Keep => (
+        (SubmissionDisposition::Keep, false) => (
             super::settings::key_label(keys.submit_keep),
             " Submit & keep",
         ),
@@ -113,12 +136,16 @@ pub(crate) fn submission(disposition: SubmissionDisposition, keys: &KeyBindings)
     }
 }
 
-pub(crate) fn submission_width(disposition: SubmissionDisposition, keys: &KeyBindings) -> u16 {
+pub(crate) fn submission_width(
+    disposition: SubmissionDisposition,
+    mode: InteractionMode,
+    keys: &KeyBindings,
+) -> u16 {
     let minimum = match disposition {
         SubmissionDisposition::RemoveAfterSuccess => 9,
         SubmissionDisposition::Keep => 16,
     };
-    submission(disposition, keys).width().max(minimum)
+    submission(disposition, mode, keys).width().max(minimum)
 }
 
 fn compact_agent_name(kind: &str) -> String {

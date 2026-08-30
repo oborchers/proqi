@@ -122,10 +122,11 @@ fn text(buffer: &Buffer) -> String {
 #[test]
 fn empty_board_and_help_have_reviewable_complete_buffers() {
     let mut fixture = Fixture::new();
-    let terminal = draw(&mut fixture, 40, 8);
+    let mut terminal = draw(&mut fixture, 40, 8);
     let rendered = text(terminal.backend().buffer());
-    assert!(rendered.contains("+ New thought"));
-    assert!(rendered.contains("board · saved"));
+    assert!(rendered.contains("compose · saved"));
+    assert!(rendered.contains("Esc Board"));
+    assert!(terminal.backend_mut().get_cursor_position().is_ok());
 
     let layout = fixture.app.prepare_frame(Rect::new(0, 0, 40, 8));
     let help = layout
@@ -137,8 +138,7 @@ fn empty_board_and_help_have_reviewable_complete_buffers() {
     let terminal = draw(&mut fixture, 40, 8);
     let rendered = text(terminal.backend().buffer());
     assert!(rendered.contains("proqi shortcuts"));
-    assert!(rendered.contains("J/K"));
-    assert!(rendered.contains("Reorder"));
+    assert!(rendered.contains("Select all"));
 }
 
 #[test]
@@ -281,16 +281,20 @@ fn pending_and_failed_durability_are_visibly_distinct() {
 fn mouse_can_create_focus_place_cursor_and_open_help() {
     let mut fixture = Fixture::new();
     let _empty = draw(&mut fixture, 40, 8);
-    let insert = fixture
+    let compose = fixture
         .app
         .prepare_frame(Rect::new(0, 0, 40, 8))
-        .insert
-        .expect("insert row");
-    fixture.pointer(insert.x, insert.y, PointerKind::Down(PointerButton::Left));
-    assert!(matches!(
+        .compose
+        .expect("compose editor");
+    fixture.pointer(
+        compose.text_area.x,
+        compose.text_area.y,
+        PointerKind::Down(PointerButton::Left),
+    );
+    assert_eq!(
         fixture.app.interaction_mode(),
-        proqi::application::InteractionMode::Edit { .. }
-    ));
+        proqi::application::InteractionMode::Compose
+    );
     fixture.input(UiInput::Paste("A界B".to_owned()));
     fixture.input(UiInput::Key(UiKey::Escape));
 
@@ -414,6 +418,8 @@ fn thought_search_filters_content_and_focuses_the_selected_match() {
 
 #[path = "ui_board/agent.rs"]
 mod agent;
+#[path = "ui_board/agent_direct.rs"]
+mod agent_direct;
 #[path = "ui_board/agent_discovery.rs"]
 mod agent_discovery;
 #[path = "ui_board/agent_hermes.rs"]
@@ -430,6 +436,8 @@ mod annotations;
 mod blank;
 #[path = "ui_board/clipboard.rs"]
 mod clipboard;
+#[path = "ui_board/compose.rs"]
+mod compose;
 #[path = "ui_board/composition.rs"]
 mod composition;
 #[path = "ui_board/durability.rs"]

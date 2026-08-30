@@ -133,6 +133,7 @@ fn failed_submission_preserves_thought_and_accepted_remove_is_undoable() {
     ));
     assert!(fixture.app.state.board.live_thoughts().is_empty());
 
+    fixture.input(UiInput::Key(UiKey::Escape));
     fixture.input(UiInput::Key(UiKey::Undo));
     assert_eq!(fixture.app.state.board.live_thoughts().len(), 1);
 }

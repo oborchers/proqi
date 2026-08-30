@@ -1,0 +1,167 @@
+//! Canonical bridge between UI ownership and reducer-owned application state.
+
+use crate::{
+    application::{Action, DurabilityState, Effect, EmptyBoardTransition, FailureCode, reduce},
+    domain::OperationSequence,
+    ports::environment::{Clock, IdGenerator},
+    ui::PastePayload,
+};
+
+use super::{BoardApp, InsertionConfirmation, InsertionFocus};
+
+impl BoardApp {
+    /// Apply one ordered persistence acknowledgement to the reducer state.
+    pub fn acknowledge_persistence(
+        &mut self,
+        sequence: OperationSequence,
+        succeeded: bool,
+    ) -> Vec<Effect> {
+        self.acknowledge_persistence_result(
+            sequence,
+            succeeded.then_some(()).ok_or(FailureCode::StorageFailed),
+        )
+    }
+
+    /// Apply a typed ordered persistence result and release durability-gated follow-up work.
+    pub fn acknowledge_persistence_result(
+        &mut self,
+        sequence: OperationSequence,
+        result: Result<(), FailureCode>,
+    ) -> Vec<Effect> {
+        let succeeded = result.is_ok();
+        let failure = result.as_ref().err().copied();
+        if !succeeded {
+            self.quit = false;
+        } else if self.pending_edit.is_some() {
+            self.edit_generation = self.edit_generation.wrapping_add(1);
+        }
+        let action = if succeeded {
+            Action::PersistenceCommitted(sequence)
+        } else {
+            Action::PersistenceFailed {
+                sequence,
+                code: result.err().unwrap_or(FailureCode::StorageFailed),
+            }
+        };
+        let _effects = self.reduce(action);
+        self.complete_deferred_submission_durability(failure)
+    }
+
+    pub(super) fn request_quit(&mut self) {
+        if matches!(
+            self.state.durability,
+            DurabilityState::Failed { failed, .. }
+                if self.recovery_exported_for != Some(failed)
+        ) {
+            self.set_error("retry the save or export recovery before quitting");
+        } else {
+            self.quit = true;
+        }
+    }
+
+    pub(super) fn create(
+        &mut self,
+        payload: PastePayload,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        self.clear_board_selection();
+        self.insertion_focus = InsertionFocus::Inactive;
+        self.insertion_confirmation = InsertionConfirmation::Idle;
+        let effects = self.reduce(Action::CreateThought {
+            thought_id: ids.thought_id(),
+            operation_id: ids.operation_id(),
+            content: payload.content,
+            annotations: payload.annotations,
+            insertion_index: None,
+            at: clock.now(),
+        });
+        self.sync_editor_from_state();
+        effects
+    }
+
+    pub(super) fn begin_insertion(
+        &mut self,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        if self.state.board.live_thoughts().is_empty() {
+            let effects = self.reduce(Action::EnterCompose);
+            self.sync_editor_from_state();
+            self.layout = None;
+            effects
+        } else {
+            self.create(PastePayload::text(String::new()), ids, clock)
+        }
+    }
+
+    pub(super) fn expand_and_enter_edit(
+        &mut self,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        let Some(thought_id) = self.state.focused_thought else {
+            return Vec::new();
+        };
+        if self.submission_locked(thought_id) {
+            self.set_warning("thought has a submission in progress");
+            return Vec::new();
+        }
+        self.board_viewport = self.board_viewport.follow_focus();
+        self.scroll_geometry = None;
+        self.layout = None;
+        let effects = self.expand_thought(thought_id, ids, clock);
+        self.enter_edit();
+        effects
+    }
+
+    pub(super) fn enter_edit(&mut self) {
+        self.insertion_focus = InsertionFocus::Inactive;
+        self.edit_boundary = None;
+        if let Some(thought_id) = self.state.focused_thought {
+            if self.submission_locked(thought_id) {
+                self.set_warning("thought has a submission in progress");
+                return;
+            }
+            self.clear_board_selection();
+            let _effects = self.reduce(Action::EnterEdit(thought_id));
+            self.sync_editor_from_state();
+        }
+    }
+
+    pub(super) fn reload_editor(&mut self) {
+        self.editor = None;
+        self.sync_editor_from_state();
+    }
+
+    pub(super) fn reduce(&mut self, action: Action) -> Vec<Effect> {
+        match reduce(&mut self.state, action) {
+            Ok(effects) => {
+                let order = self
+                    .state
+                    .board
+                    .live_thoughts()
+                    .into_iter()
+                    .map(|thought| thought.id)
+                    .collect::<Vec<_>>();
+                self.selection.reconcile(&order);
+                effects
+            }
+            Err(error) => {
+                self.set_error(error.to_string());
+                Vec::new()
+            }
+        }
+    }
+
+    pub(super) fn reduce_with_empty_transition(
+        &mut self,
+        action: Action,
+        transition: EmptyBoardTransition,
+    ) -> Vec<Effect> {
+        let effects = self.reduce(action);
+        self.state.reconcile_empty_board(transition);
+        self.sync_editor_from_state();
+        effects
+    }
+}

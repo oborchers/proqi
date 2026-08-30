@@ -28,9 +28,11 @@ pub fn reduce(state: &mut AppState, action: Action) -> ApplicationResult<Vec<Eff
     }
     match action {
         Action::RenameSession { name } => reduce_session_name(state, name),
-        Action::FocusThought(_) | Action::EnterEdit(_) | Action::ExitEdit => {
-            reduce_navigation(state, &action)
-        }
+        Action::FocusThought(_)
+        | Action::EnterEdit(_)
+        | Action::EnterCompose
+        | Action::ExitCompose
+        | Action::ExitEdit => reduce_navigation(state, &action),
         Action::CreateThought { .. }
         | Action::PasteAsThought { .. }
         | Action::EditThought { .. } => reduce_content(state, action),
@@ -100,7 +102,8 @@ fn reduce_navigation(state: &mut AppState, action: &Action) -> ApplicationResult
                 thought_id: *thought_id,
             };
         }
-        Action::ExitEdit => state.mode = InteractionMode::Board,
+        Action::EnterCompose => state.mode = InteractionMode::Compose,
+        Action::ExitCompose | Action::ExitEdit => state.mode = InteractionMode::Board,
         _ => return Err(ApplicationError::InvalidState),
     }
     Ok(Vec::new())

@@ -55,28 +55,8 @@ pub(super) fn translate_key(key: KeyEvent) -> Option<UiKey> {
     let primary = key
         .modifiers
         .intersects(KeyModifiers::CONTROL | KeyModifiers::SUPER | KeyModifiers::META);
-    if primary {
-        let command = match key.code {
-            KeyCode::Char('a') => Some(UiKey::SelectAll),
-            KeyCode::Char('c') => Some(UiKey::Copy),
-            KeyCode::Char('x') => Some(UiKey::Cut),
-            KeyCode::Char('v') => Some(UiKey::PasteClipboard),
-            KeyCode::Char('d') => Some(UiKey::Duplicate),
-            KeyCode::Char('q') => Some(UiKey::Quit),
-            KeyCode::Char('u') => Some(UiKey::DeleteLine),
-            KeyCode::Char('z') if key.modifiers.contains(KeyModifiers::SHIFT) => Some(UiKey::Redo),
-            KeyCode::Char('z') => Some(UiKey::Undo),
-            KeyCode::Char('y') => Some(UiKey::Redo),
-            KeyCode::Char('p') => Some(UiKey::PickerPrevious),
-            KeyCode::Char('n') => Some(UiKey::PickerNext),
-            _ => None,
-        };
-        if command.is_some() {
-            return command;
-        }
-        if let KeyCode::Char(character) = key.code {
-            return Some(UiKey::PrimaryCharacter(character));
-        }
+    if primary && let Some(command) = primary_key(&key) {
+        return Some(command);
     }
     let extend_selection = key.modifiers.contains(KeyModifiers::SHIFT);
     let word = key
@@ -130,6 +110,27 @@ pub(super) fn translate_key(key: KeyEvent) -> Option<UiKey> {
         )),
         KeyCode::Home => Some(move_key(CursorMovement::LineStart, extend_selection)),
         KeyCode::End => Some(move_key(CursorMovement::LineEnd, extend_selection)),
+        _ => None,
+    }
+}
+
+fn primary_key(key: &KeyEvent) -> Option<UiKey> {
+    match key.code {
+        KeyCode::Enter if key.modifiers.contains(KeyModifiers::SHIFT) => Some(UiKey::SubmitKeep),
+        KeyCode::Enter => Some(UiKey::Submit),
+        KeyCode::Char('a') => Some(UiKey::SelectAll),
+        KeyCode::Char('c') => Some(UiKey::Copy),
+        KeyCode::Char('x') => Some(UiKey::Cut),
+        KeyCode::Char('v') => Some(UiKey::PasteClipboard),
+        KeyCode::Char('d') => Some(UiKey::Duplicate),
+        KeyCode::Char('q') => Some(UiKey::Quit),
+        KeyCode::Char('u') => Some(UiKey::DeleteLine),
+        KeyCode::Char('z') if key.modifiers.contains(KeyModifiers::SHIFT) => Some(UiKey::Redo),
+        KeyCode::Char('z') => Some(UiKey::Undo),
+        KeyCode::Char('y') => Some(UiKey::Redo),
+        KeyCode::Char('p') => Some(UiKey::PickerPrevious),
+        KeyCode::Char('n') => Some(UiKey::PickerNext),
+        KeyCode::Char(character) => Some(UiKey::PrimaryCharacter(character)),
         _ => None,
     }
 }

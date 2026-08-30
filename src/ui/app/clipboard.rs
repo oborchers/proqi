@@ -145,7 +145,10 @@ impl BoardApp {
         }
         let intent = self.state.pending_clipboard_intent(request_id);
         let success = result.is_ok();
-        let effects = self.reduce(Action::ClipboardResult { request_id, result });
+        let effects = self.reduce_with_empty_transition(
+            Action::ClipboardResult { request_id, result },
+            crate::application::EmptyBoardTransition::ComposeAfterLocalRemoval,
+        );
         if success && intent == Some(ClipboardIntent::Copy) {
             self.set_success("copied selected thoughts");
         }
@@ -216,7 +219,7 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         intent: ClipboardIntent,
     ) -> Vec<Effect> {
-        let Some((thought_id, editor)) = &self.editor else {
+        let Some((super::EditorOwner::Thought(thought_id), editor)) = &self.editor else {
             return Vec::new();
         };
         let Some(content) = editor.selected_text() else {

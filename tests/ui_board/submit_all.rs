@@ -71,6 +71,7 @@ fn editable_durable_board(fixture: &mut Fixture) {
 #[test]
 fn palette_submission_labels_use_one_concise_vocabulary() {
     let mut fixture = Fixture::new();
+    fixture.input(UiInput::Key(UiKey::Escape));
     fixture
         .app
         .complete_agent_discovery(Ok(vec![super::agent::target(Direction::Left, "w1:p2")]));
@@ -222,6 +223,7 @@ fn palette_submit_all_keep_and_remove_share_one_exact_ordered_request() {
     ));
     assert!(fixture.app.state.board.live_thoughts().is_empty());
 
+    fixture.input(UiInput::Key(UiKey::Escape));
     fixture.input(UiInput::Key(UiKey::Undo));
     assert_eq!(fixture.app.state.board.live_thoughts().len(), 3);
 }
@@ -319,6 +321,7 @@ fn ambiguous_direction_keeps_selection_stable_through_pointer_and_resize() {
 #[test]
 fn all_submit_failures_and_empty_boards_are_non_destructive() {
     let mut empty = Fixture::new();
+    empty.input(UiInput::Key(UiKey::Escape));
     empty
         .app
         .complete_agent_discovery(Ok(vec![super::agent::target(Direction::Left, "w1:p2")]));

@@ -21,13 +21,18 @@ impl BoardApp {
     pub(in crate::ui) fn editor_presentation(
         &self,
     ) -> Option<crate::ui::projection::EditorPresentation> {
-        let thought_id = self.active_thought_id()?;
         let snapshot = self.editor_snapshot()?;
-        let annotations = self.current_annotations(thought_id);
+        let (annotations, expanded) = match self.editor.as_ref()?.0 {
+            super::EditorOwner::Compose => (Vec::new(), Vec::new()),
+            super::EditorOwner::Thought(thought_id) => (
+                self.current_annotations(thought_id),
+                self.expanded_fold_indices(thought_id),
+            ),
+        };
         Some(crate::ui::projection::editor_presentation(
             &snapshot,
             &annotations,
-            &self.expanded_fold_indices(thought_id),
+            &expanded,
         ))
     }
 
@@ -57,7 +62,7 @@ impl BoardApp {
     /// Focused durable thought identity.
     #[must_use]
     pub fn active_thought_id(&self) -> Option<ThoughtId> {
-        if self.insertion_focused() {
+        if self.insertion_focused() || matches!(self.state.mode, InteractionMode::Compose) {
             return None;
         }
         self.state.focused_thought
@@ -102,6 +107,12 @@ impl BoardApp {
         matches!(self.state.mode, InteractionMode::Board)
             && (matches!(self.insertion_focus, super::InsertionFocus::Active)
                 || self.state.board.live_thoughts().is_empty())
+    }
+
+    /// Whether the transient insertion editor owns input and cursor focus.
+    #[must_use]
+    pub fn compose_active(&self) -> bool {
+        matches!(self.state.mode, InteractionMode::Compose)
     }
 
     /// Monotonic counter used by the runtime to detect new unflushed editor work.
@@ -254,6 +265,7 @@ impl BoardApp {
         layout.configure_agent_controls_with_keys(
             &self.agent_targets,
             self.submission_mode(),
+            self.interaction_mode(),
             &self.settings.keybindings,
         );
         let summary = self.footer_summary(layout.footer_context.width.saturating_sub(4));
@@ -329,6 +341,7 @@ impl BoardApp {
         let mode = match self.interaction_mode() {
             InteractionMode::Board if self.range_latched() => "range",
             InteractionMode::Board => "board",
+            InteractionMode::Compose => "compose",
             InteractionMode::Edit { .. } => "edit",
         };
         let durability = self.durability_summary();

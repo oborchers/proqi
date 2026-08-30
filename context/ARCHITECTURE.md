@@ -271,7 +271,12 @@ conditions into explicit storage errors.
 
 ### `Editor`
 
-One editor instance owns the transient editing state for one focused thought.
+One editor instance owns transient editing state under a typed UI owner. The
+owner is either `Compose` or one durable `ThoughtId`. `Compose` contains only an
+editor buffer and presentation state. It never owns a domain entity, operation,
+or persistence identity. Promoting it replaces the owner in place after the
+canonical populated create succeeds, which retains the exact cursor, selection,
+annotations, viewport, and first input.
 
 ```rust
 trait Editor {
@@ -291,9 +296,11 @@ cursor model from leaking into the application.
 
 ### `LayoutEngine`
 
-Layout is a pure function of board state, editor state, terminal capabilities,
-and viewport dimensions. It returns a `LayoutSnapshot` containing rectangles,
-wrapped visual lines, scroll bounds, focus geometry, and mouse hit targets.
+Layout is a pure function of board state, typed editor-owner state, terminal
+capabilities, and viewport dimensions. It returns a `LayoutSnapshot` containing
+rectangles, wrapped visual lines, scroll bounds, focus geometry, and mouse hit
+targets. A Compose projection uses the same editor measurement and rendering
+path at the insertion row without synthesizing a durable thought.
 
 The renderer consumes this snapshot. Mouse handling consults the same snapshot.
 This prevents visual geometry and clickable geometry from drifting apart after
@@ -784,6 +791,20 @@ Command on macOS and Control on Linux. Enhanced keyboard protocols
 are enabled when supported so Super and Meta events can be distinguished, but
 every action retains a terminal-safe fallback and a configurable binding.
 
+The application interaction state is the exhaustive terminal-independent set
+`Board`, `Compose`, and `Edit { thought_id }`. The UI dispatcher selects one of
+these modes before interpreting a normalized key. Board alone resolves printable
+shortcuts. Compose and Edit resolve text through editor commands. Host focus is
+only a refresh signal and never changes the interaction mode. `AppState`
+initializes an empty durable snapshot as Compose, while a nonempty snapshot keeps
+the existing Board focus contract.
+
+`Primary+Enter` and `Primary+Shift+Enter` normalize to distinct Submit and
+SubmitKeep intentions before plain Enter handling. Plain Enter therefore remains
+an editor newline or smart-list command. Crossterm unit contracts and real PTY
+diagnostics verify the platform Primary event encodings. The command palette
+remains the modifier-independent fallback.
+
 Vertical board input uses one semantic modifier ladder for both arrow and
 configured character spellings: plain input moves focus, Shift extends an
 anchored range, and Primary+Shift reorders one thought. Input normalization
@@ -823,6 +844,15 @@ Bracketed paste is one payload and one undoable edit. When no thought is
 selected, paste creates and focuses a new thought. The application never tries
 to split a paste heuristically.
 
+Compose sends every character, paste, annotated paste, clipboard result,
+movement, selection, and supported composition intention through the existing
+editor. A content-changing outcome is snapshotted once and passed to the
+canonical `CreateThought` action with exact content and annotations. That action
+allocates the first durable identity and sequence, records one board history
+entry, and produces the existing persistence batch. Content-free editor events
+produce no action. This avoids a create-then-revise gap and makes crash, retry,
+restart, undo, and redo use the existing atomic operation contract.
+
 Board-mode printable keys always pass through the configured command map, even
 when the insertion row or a durable blank has focus. The second blocked
 downward movement at the end of a non-empty final edited thought creates a
@@ -831,6 +861,15 @@ empty cannot create additional thoughts. On the insertion row, two consecutive
 semantic downward navigation commands perform the same durable create-and-edit
 transition; unrelated or reorder input clears the confirmation. Other edit
 boundaries use the same navigation state machine.
+
+Empty-board aftermath is reconciled by one typed policy owned beside
+`InteractionMode`. Deliberate local removals request Compose after the mutation;
+passive and external mutations request Preserve. Owner-control additions retain
+an active Compose editor and its insertion order. Owner-control deletion of the
+last durable thought resolves invalid durable focus to Board but never invents
+Compose. Startup is the only automatic snapshot-derived entry, so discovery,
+update checks, attachment scans, focus reports, and background completion cannot
+steal input state.
 
 Board multi-selection is transient UI state with two explicit, non-overlapping
 forms: an arbitrary identity set and an anchored contiguous range. A range
@@ -901,6 +940,16 @@ post-submit agent state is advisory, including `blocked`, `unknown`, or no
 reported state. The accepted outcome is journaled durably before an unchanged
 thought may be removed. That deletion remains undoable. Every failure preserves
 the thought.
+
+Direct Edit submission first flushes the active editor revision and then enters
+the existing durability-gated submission state machine for that one thought.
+It uses the same attachment preflight, target discovery and revalidation,
+redacted attempt reservation, sending compare-and-set, semantic adapter call,
+receipt matching, terminal journal transition, and conditional removal. Keep
+returns to the same Edit owner. Remove enters Compose only after the accepted
+journal transition releases the canonical delete operation. Empty Compose never
+creates an attempt, and missing or ambiguous targets retain the complete editor
+draft while using the existing refresh or chooser.
 
 Whole-board keep and remove actions reuse this exact request, journal, receipt,
 and deletion path with every live source identity. Prompt assembly uses the same

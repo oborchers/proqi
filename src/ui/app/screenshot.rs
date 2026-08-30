@@ -400,7 +400,8 @@ impl BoardApp {
                 .deferred_inputs
                 .iter()
                 .any(|deferred| deferred.input.is_deliberate_interaction());
-        (advance_auto_ready || !was_editing) && interaction_clear
+        let board_available = matches!(self.state.mode, crate::application::InteractionMode::Board);
+        (advance_auto_ready || (!was_editing && board_available)) && interaction_clear
     }
 
     fn capture_save_failed(

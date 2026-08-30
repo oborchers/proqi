@@ -56,6 +56,10 @@ pub enum UiKey {
     PrimaryCharacter(char),
     /// Insert a line break or enter the focused thought.
     Enter,
+    /// Submit the active durable thought and remove it after acceptance.
+    Submit,
+    /// Submit the active durable thought and keep it.
+    SubmitKeep,
     /// Accept a focused authoring completion or request indentation while editing.
     Tab,
     /// Request one conservative indentation level outward.

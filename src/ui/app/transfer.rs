@@ -91,12 +91,15 @@ impl BoardApp {
             }
             Ok(_) => {
                 self.set_info("thought sent; removing the source");
-                self.reduce(Action::DeleteThought {
-                    operation_id: ids.operation_id(),
-                    thought_id: request.source_thought_id,
-                    kind: BoardOperationKind::Delete,
-                    at: clock.now(),
-                })
+                self.reduce_with_empty_transition(
+                    Action::DeleteThought {
+                        operation_id: ids.operation_id(),
+                        thought_id: request.source_thought_id,
+                        kind: BoardOperationKind::Delete,
+                        at: clock.now(),
+                    },
+                    crate::application::EmptyBoardTransition::ComposeAfterLocalRemoval,
+                )
             }
         }
     }

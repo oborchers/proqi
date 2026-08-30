@@ -5,12 +5,13 @@ fn remapped_board_binding_changes_behavior_and_visible_hint() {
     let mut settings = UiSettings::default();
     settings.keybindings.new = 't';
     let mut fixture = Fixture::with_settings(settings);
+    super::navigation::durable_thought(&mut fixture, "existing");
     fixture.input(UiInput::Key(UiKey::Character('n')));
-    assert!(fixture.app.state.board.live_thoughts().is_empty());
-    fixture.input(UiInput::Key(UiKey::Character('t')));
     assert_eq!(fixture.app.state.board.live_thoughts().len(), 1);
+    fixture.input(UiInput::Key(UiKey::Character('t')));
+    assert_eq!(fixture.app.state.board.live_thoughts().len(), 2);
     assert!(
-        fixture.app.state.board.live_thoughts()[0]
+        fixture.app.state.board.live_thoughts()[1]
             .content
             .is_empty()
     );
@@ -366,6 +367,6 @@ fn narrow_empty_board_has_a_complete_explicit_buffer_snapshot() {
     let mut fixture = Fixture::new();
     assert_eq!(
         text(draw(&mut fixture, 12, 3).backend().buffer()),
-        "+ New though\n  0 saved   \n  n New     "
+        "⋮           \n  0 saved   \n            "
     );
 }

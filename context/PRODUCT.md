@@ -435,32 +435,45 @@ bounded timeout.
 
 ### Creation affordance
 
-Every active insertion area exposes a quiet `+` control. It can remain visually
-subtle until the area is focused or hovered, but it must always have a keyboard
-equivalent and a stable mouse hit target.
+Every genuinely empty fresh or resumed session starts in transient Compose as
+soon as its board is interactive. Compose is the ordinary multiline editor at
+the insertion row, with the same cursor, focus gutter, wrapping, selection,
+paste, invocation, Unicode, mouse, scroll, and responsive layout behavior as a
+durable editor. It does not create a thought, operation, history entry, or
+durable sequence merely because the session opens, renders, resizes, gains host
+focus, or receives another passive event.
 
-Clicking `+`, clicking the insertion area, or pressing the create-thought key
-creates one durable blank thought, enters edit mode immediately, and places the
-cursor in it. The blank remains part of the session after `Esc`, exit, crash,
-and resume. Creating it is an ordinary undoable board operation. The complete
-insertion row is clickable and reads
-`+ New thought` while focused or hovered instead of relying on an unexplained
-symbol. The user never needs a second action before typing.
+The first editor intention that produces nonempty canonical content creates one
+populated thought through the ordinary create operation and promotes the same
+editor to durable Edit without changing its cursor, selection, annotations, or
+content. The first event is retained exactly. Character input, punctuation,
+newline, Unicode, bracketed and annotated paste, file paths, attachments, smart
+lists, selection, and movement are interpreted by editor semantics in Compose.
+No printable byte is inspected as a board shortcut or mode bootstrap.
 
-The insertion row is part of keyboard focus order. Moving down from the last
-thought focuses `+ New thought`. `Enter` or `n` creates a durable blank. Moving
-up or pressing `Esc` leaves the insertion row without creating anything. Two
-consecutive downward navigation commands while the insertion row remains
-focused create the blank and enter its editor, including on an empty board.
-When an editor is already at the final thought, the second consecutive blocked
-downward movement creates the blank and enters its editor directly.
+`Esc` leaves untouched Compose for an explicit empty Board state without
+creating anything. That choice remains Board through resize and host focus.
+`Enter`, the configured new-thought action, a confirmed downward insertion
+movement, or a click in the insertion surface deliberately returns to Compose.
+Board shortcuts therefore remain available after one explicit `Esc`, while the
+primary empty-session path accepts prompt text immediately.
 
-When the board contains no thoughts, the insertion row owns keyboard focus by
-default. Printable keys remain board commands on the insertion row and on a
-focused durable blank. Typing content always requires the explicit create or
-edit transition first. This keeps delete, command discovery, navigation, help,
-submission, and every configurable board shortcut reachable in those states.
-Bracketed board paste remains the deliberate one-action create-and-paste path.
+On a nonempty board, every active insertion area retains its quiet `+` control,
+stable mouse hit target, and complete `+ New thought` label while focused or
+hovered. Clicking it, pressing `Enter` or the configured new-thought action, or
+confirming the second downward movement creates one durable blank and enters
+Edit. That explicit blank remains after `Esc`, exit, crash, and resume as an
+ordinary undoable board operation. The same nonempty behavior applies when an
+editor reaches the insertion row after the final thought.
+
+A deliberate local delete, cut, undo, redo, tutorial removal, or accepted
+submit-and-remove that leaves the board empty enters Compose when it preserves
+the active focus workflow. Accepted submission does so only after the matching
+receipt is durably journaled and source deletion is acknowledged. Background
+capture, owner-control mutation, recovery, discovery, and unrelated asynchronous
+completion never force Compose or steal an active editor. An external addition
+while Compose is active remains ordered beside the untouched transient editor,
+and subsequent typing materializes normally.
 
 ### Copy, cut, and delete
 
@@ -587,8 +600,10 @@ during the narrow interval between revalidation and delivery is therefore not
 detectable by Proqi.
 
 Each verified adjacent target appears once in the integration row, without its
-readiness label. `s Submit` and `S Submit & keep` are shown only when
-semantic submission is available. If exactly one eligible target supports an
+readiness label. Board mode shows `s Submit` and `S Submit & keep`. Edit mode
+shows `Primary+Enter Submit` and `Primary+Shift+Enter Submit & keep` when width
+allows. Plain `Enter` remains newline or smart-list continuation. The command
+palette is the portable fallback. If exactly one eligible target supports an
 action, that action is direct. If several support it, delivery enters a
 directional targeting state.
 Arrow keys and `h`, `j`, `k`, and `l` choose among the enabled directions. Mouse
@@ -603,6 +618,11 @@ identity, and stale display metadata expires after a crash.
 the integration returns an accepted receipt for the exact request, and that
 deletion remains undoable. A failed, timed-out, ambiguous, unsupported, or
 mismatched submission leaves the thought unchanged and reports that it was kept.
+The direct Edit chords address only the active durable thought, flush its exact
+editor revision, wait for durability, and reuse the same attachment preflight,
+target revalidation, redacted attempt journal, receipt matching, and conditional
+removal path as board and command-palette submission. An empty Compose chord
+creates no thought or journal attempt.
 
 Submission does not wait for the agent's response and does not import or inspect
 the agent conversation. The receiving harness decides whether a prompt sent
@@ -620,6 +640,15 @@ down places it first, and moving the first thought up places it last. Mouse drag
 remains positional and does not wrap.
 
 ## Interaction model
+
+### Compose mode
+
+Compose is a transient editor owner, not a durable entity and not a second text
+field. It is entered automatically only for an initially empty session and by
+typed deliberate local workflows that intentionally leave the board empty.
+`Esc` selects Board. Ordinary editor input stays editor input, including the
+characters used by Board shortcuts. The first content-producing intention
+atomically creates and enters the ordinary durable Edit state.
 
 ### Board mode
 
@@ -663,6 +692,8 @@ Initial editing shortcuts include:
 |---|---|---|
 | Select all text in the focused thought | `Meta+A` | `Ctrl+A` or command palette |
 | Delete the current logical line | `Meta+U` | `Ctrl+U` or command palette |
+| Submit active thought | `Meta+Enter` | Command palette |
+| Submit active thought and keep | `Meta+Shift+Enter` | Command palette |
 
 Select all is scoped to the current thought in edit mode and to every live
 thought in board mode. Delete line removes one newline-delimited logical line,
