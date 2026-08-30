@@ -15,6 +15,7 @@ mod owner_control;
 mod pending;
 mod restart;
 mod screenshot_results;
+mod termination;
 mod update_results;
 
 use std::{
@@ -62,6 +63,7 @@ use finish::CleanupStage::{Control, TerminalRestoration};
 use heartbeat::PaneHeartbeat;
 use owned_lanes::OwnedLanes;
 use pending::{PendingControl, PendingWork};
+use termination::{TerminationAdmission, admit_requested};
 
 pub(crate) struct TerminalResources {
     pub(crate) state: AppState,
@@ -262,7 +264,7 @@ fn drive(
     let mut edit_generation = app.edit_generation();
     let mut edit_deadline = None;
     let mut refresh_deadlines = input_admission::RefreshDeadlines::default();
-    let mut termination_seen = false;
+    let mut termination = TerminationAdmission::default();
     let mut held_input = None;
     enqueue_effects(app, lanes, BoardApp::discover_agents(), &mut pending)?;
     accessibility_results::start(app, lanes, &mut pending)?;
@@ -270,20 +272,16 @@ fn drive(
     enqueue_effects(app, lanes, invocation_effects, &mut pending)?;
     let mut redraw = true;
     loop {
-        if lanes.termination.requested() && !termination_seen {
-            termination_seen = true;
-            let _deadline = shutdown.request();
-            lanes.cancellation.cancel();
-            if let Some(control) = lanes.control {
-                control.request_stop();
-            }
-            let mut effects = app.handle(UiInput::Key(UiKey::Quit), ids, &clock);
-            if !app.quit && app.screenshot_retry_ready() {
-                effects.extend(app.handle(UiInput::Key(UiKey::Quit), ids, &clock));
-            }
-            enqueue_effects(app, lanes, effects, &mut pending)?;
-        }
-        if !termination_seen {
+        admit_requested(
+            &mut termination,
+            app,
+            lanes,
+            ids,
+            clock,
+            shutdown,
+            &mut pending,
+        )?;
+        if !termination.is_admitted() {
             let effects = app.advance_screenshot_activity(lanes.monotonic.now());
             enqueue_effects(app, lanes, effects, &mut pending)?;
         }
@@ -297,17 +295,25 @@ fn drive(
             pane_heartbeat,
         )?;
         redraw |= workers_changed || app.expire_update_barrier(clock.now());
-        if app.quit && app.screenshot_retry_ready() && !termination_seen {
+        if app.quit && app.screenshot_retry_ready() && !termination.is_admitted() {
             app.retain_failed_capture_after_quit();
             redraw = true;
         }
-        if termination_seen && !app.quit && app.screenshot_retry_ready() {
+        if termination.is_admitted() && app.screenshot_retry_ready() {
             let mut effects = app.handle(UiInput::Key(UiKey::Quit), ids, &clock);
             if !app.quit && app.screenshot_retry_ready() {
                 effects.extend(app.handle(UiInput::Key(UiKey::Quit), ids, &clock));
             }
             enqueue_effects(app, lanes, effects, &mut pending)?;
             redraw = true;
+        }
+        if termination.is_admitted() && !app.screenshot_commit_pending() {
+            let effects = app.flush_pending_edit(ids, &clock);
+            if !effects.is_empty() {
+                enqueue_effects(app, lanes, effects, &mut pending)?;
+                edit_deadline = None;
+                redraw = true;
+            }
         }
         let release_effects = screenshot_results::release_if_drained(app, &mut capture);
         if !release_effects.is_empty() {
@@ -368,7 +374,7 @@ fn drive(
                 held_input = Some((sequence, event));
             }
         }
-        if app.quit {
+        if termination.shutdown_requested(app.quit) {
             let deadline = shutdown.request();
             if !capture.shutdown_requested && capture.lease.is_some() {
                 lanes.screenshot.shutdown(deadline)?;
@@ -387,7 +393,7 @@ fn drive(
                 && (!capture.shutdown_requested || capture.watcher_stopped)
                 && app.screenshot_shutdown_drained();
             if pending.is_empty() && control_quiescent && screenshot_quiescent {
-                return Ok(());
+                return termination.outcome(&app.state.durability);
             }
             if deadline.expired() {
                 return Err(TerminalError::Worker(

@@ -19,7 +19,7 @@ fn escaped_unicode_file_drop_becomes_one_durable_absolute_path() {
         set state $env(PROQI_TEST_STATE)
         set dropped $env(PROQI_TEST_DROP)
         spawn $binary --state-dir $state
-        after 500
+        expect -exact "\x1b\[?1049h"
         send -- "\x1b\[200~$dropped\x1b\[201~"
         after 700
         send "\x1b"

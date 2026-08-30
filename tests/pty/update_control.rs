@@ -180,6 +180,11 @@ fn spawn_owner(binary: &str, state: &Path, session: &str, ready: &Path, done: &P
         set deadline [expr {[clock milliseconds] + 15000}]
         while {![file exists $env(PROQI_TEST_DONE)]} {
             if {[clock milliseconds] >= $deadline} { exit 91 }
+            expect -timeout 0 {
+                -re ".+" { exp_continue }
+                timeout {}
+                eof { exit 93 }
+            }
             after 20
         }
         send -- "\x11"
@@ -231,6 +236,11 @@ fn spawn_restarting_owner(
         set deadline [expr {[clock milliseconds] + 15000}]
         while {![file exists $env(PROQI_TEST_DONE)]} {
             if {[clock milliseconds] >= $deadline} { exit 92 }
+            expect -timeout 0 {
+                -re ".+" { exp_continue }
+                timeout {}
+                eof { exit 93 }
+            }
             after 20
         }
         send -- "\x11"

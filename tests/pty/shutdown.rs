@@ -1,8 +1,8 @@
 //! Terminal shutdown, restoration, and accepted-work durability.
 
-use std::{fs, os::unix::fs::PermissionsExt as _, path::Path};
+use std::{fs, os::unix::fs::PermissionsExt as _, path::Path, time::Duration};
 
-use super::{expect_command, json_command};
+use super::{expect_command, json_command, watchdog};
 
 #[test]
 fn termination_signal_restores_and_releases_the_session() {
@@ -147,7 +147,9 @@ fn acknowledged_paste_survives_forced_process_termination() {
         set timeout 10
         spawn $env(PROQI_TEST_BINARY) --state-dir $env(PROQI_TEST_STATE)
         set child [exp_pid]
-        after 500
+        expect -exact "\x1b\[?1049h"
+        expect -exact "\x1b\[1 q"
+        after 100
         send -- "\x1b\[200~committed before crash 界\x1b\[201~"
         after 800
         system /bin/kill -KILL $child
@@ -211,11 +213,21 @@ fn delayed_capture_shutdown(
     let staged = staging.path().join("delayed.png");
     fs::write(&staged, png_bytes()).expect("staged screenshot");
     let target = watched.path().join("delayed.png");
+    let watchdog_pids = state.path().join("watchdog-pids");
     let binary = env!("CARGO_BIN_EXE_proqi");
-    let exit_action = if terminate {
-        "system /bin/kill -TERM $child"
+    let exit_action = capture_exit_action(terminate);
+    let capture_barrier = if persistent_failure {
+        r#"
+        after 2000
+        send -- ":"
+        after 100
+        send -- "Retry Screenshot Capture"
+        send -- "\r"
+        after 100
+        "#
+        .to_owned()
     } else {
-        "send -- \"\\x11\""
+        format!("after {delivery_wait_ms}")
     };
     let finish_action = if persistent_failure {
         r#"
@@ -224,9 +236,11 @@ fn delayed_capture_shutdown(
         expect eof
         catch wait result
         set proqi_status [lindex $result 3]
+        set shutdown_elapsed [expr {[clock milliseconds] - $shutdown_started}]
         set spawn_id $sqlite
         send -- "ROLLBACK;\r.quit\r"
         expect eof
+        if {$shutdown_elapsed > 2300} { exit 96 }
         exit $proqi_status
         "#
     } else {
@@ -239,26 +253,70 @@ fn delayed_capture_shutdown(
         expect -exact "\x1b\[0 q"
         expect eof
         catch wait result
+        set shutdown_elapsed [expr {[clock milliseconds] - $shutdown_started}]
+        if {$shutdown_elapsed > 2300} { exit 96 }
         exit [lindex $result 3]
         "#
     };
-    let workflow = format!(
+    let workflow = capture_shutdown_workflow(&capture_barrier, exit_action, finish_action);
+    let mut command = expect_command();
+    command
+        .args(["-c", &workflow])
+        .env("PROQI_TEST_BINARY", binary)
+        .env("PROQI_TEST_STATE", state.path())
+        .env(
+            "PROQI_TEST_DATABASE",
+            state.path().join("data/proqi.sqlite3"),
+        )
+        .env("PROQI_TEST_STAGED", &staged)
+        .env("PROQI_TEST_TARGET", &target);
+    let status = watchdog::status_before(
+        &mut command,
+        Duration::from_secs(12),
+        &watchdog_pids,
+        "delayed capture shutdown PTY workflow",
+    );
+    assert_capture_shutdown_result(status, state.path(), binary, &target, persistent_failure);
+}
+
+fn capture_exit_action(terminate: bool) -> &'static str {
+    if terminate {
+        r"
+        system /bin/kill -TERM $child
+        system /bin/kill -TERM $child
+        system /bin/kill -TERM $child
+        "
+    } else {
+        "send -- \"\\x11\""
+    }
+}
+
+fn capture_shutdown_workflow(
+    capture_barrier: &str,
+    exit_action: &str,
+    finish_action: &str,
+) -> String {
+    format!(
         r#"
-        log_user 0
+        log_user 1
         set timeout 15
+        proc register_watchdog_pid {{pid}} {{
+            global env
+            set owned [open "$env(PROQI_TEST_STATE)/watchdog-pids" a]
+            puts $owned $pid
+            close $owned
+        }}
         spawn $env(PROQI_TEST_BINARY) --state-dir $env(PROQI_TEST_STATE)
         stty rows 24 columns 80
         set proqi $spawn_id
         set child [exp_pid]
+        register_watchdog_pid $child
         expect -exact "\x1b\[?1049h"
         expect -exact "\x1b\[1 q"
-        after 300
-        send -- ":"
-        after 100
-        send -- "Screenshot Inbox"
-        send -- "\r"
+        after 1000
+        send -- "i"
         set capture_lock "$env(PROQI_TEST_STATE)/runtime/screenshot-capture.json"
-        for {{set attempt 0}} {{$attempt < 40 && ![file exists $capture_lock]}} {{incr attempt}} {{
+        for {{set attempt 0}} {{$attempt < 100 && ![file exists $capture_lock]}} {{incr attempt}} {{
             after 50
         }}
         if {{![file exists $capture_lock]}} {{
@@ -275,29 +333,28 @@ fn delayed_capture_shutdown(
         after 700
         spawn /usr/bin/sqlite3 $env(PROQI_TEST_DATABASE)
         set sqlite $spawn_id
+        register_watchdog_pid [exp_pid]
         expect -re "sqlite>"
         send -- "BEGIN IMMEDIATE;\r"
         expect -re "sqlite>"
         file rename $env(PROQI_TEST_STAGED) $env(PROQI_TEST_TARGET)
         set spawn_id $proqi
-        after {delivery_wait_ms}
+        {capture_barrier}
         send -- "!"
+        set shutdown_started [clock milliseconds]
         {exit_action}
         {finish_action}
         "#
-    );
-    let status = expect_command()
-        .args(["-c", &workflow])
-        .env("PROQI_TEST_BINARY", binary)
-        .env("PROQI_TEST_STATE", state.path())
-        .env(
-            "PROQI_TEST_DATABASE",
-            state.path().join("data/proqi.sqlite3"),
-        )
-        .env("PROQI_TEST_STAGED", &staged)
-        .env("PROQI_TEST_TARGET", &target)
-        .status()
-        .expect("run delayed capture shutdown");
+    )
+}
+
+fn assert_capture_shutdown_result(
+    status: std::process::ExitStatus,
+    state: &Path,
+    binary: &str,
+    target: &Path,
+    persistent_failure: bool,
+) {
     if persistent_failure {
         assert_eq!(
             status.code(),
@@ -307,12 +364,13 @@ fn delayed_capture_shutdown(
     } else {
         assert!(status.success(), "delayed capture shutdown exited {status}");
     }
+    assert_runtime_authority_released(state);
 
-    let sessions = json_command(binary, state.path(), &["sessions", "list"]);
+    let sessions = json_command(binary, state, &["sessions", "list"]);
     let session = sessions["data"]["sessions"][0]["id"]
         .as_str()
         .expect("session ID");
-    let thoughts = json_command(binary, state.path(), &["thoughts", "list", session]);
+    let thoughts = json_command(binary, state, &["thoughts", "list", session]);
     let contents = thoughts["data"]["thoughts"]
         .as_array()
         .expect("thoughts")
@@ -325,6 +383,26 @@ fn delayed_capture_shutdown(
         vec!["durable editor!", target.to_str().expect("target")]
     };
     assert_eq!(contents, expected);
+    let resumed = json_command(binary, state, &["-r", session]);
+    assert_eq!(resumed["data"]["session_id"], session);
+}
+
+fn assert_runtime_authority_released(state: &Path) {
+    assert!(
+        !state.join("runtime/screenshot-capture.json").exists(),
+        "Screenshot Inbox capture authority survived process exit"
+    );
+    let instances = state.join("runtime/instances");
+    if !instances.exists() {
+        return;
+    }
+    assert!(
+        fs::read_dir(instances)
+            .expect("runtime instances")
+            .next()
+            .is_none(),
+        "runtime instance lease survived process exit"
+    );
 }
 
 fn configure_capture(state: &Path, watched: &Path, debounce_ms: u64) {
