@@ -12,6 +12,7 @@ use crate::{
 
 use super::{
     BoardApp, UiInput, UiKey, palette_handoff::EditorSelectionHandoff, query::QueryEditor,
+    screenshot::ScreenshotPaletteAction,
 };
 
 use command::Command;
@@ -22,6 +23,8 @@ pub(super) struct PaletteState {
     scroll: usize,
     submit_supported: bool,
     plain_newline_supported: bool,
+    screenshot_action: ScreenshotPaletteAction,
+    screenshot_retry: bool,
     selection_handoff: Option<EditorSelectionHandoff>,
 }
 
@@ -29,6 +32,8 @@ impl PaletteState {
     fn new(
         submit_supported: bool,
         plain_newline_supported: bool,
+        screenshot_action: ScreenshotPaletteAction,
+        screenshot_retry: bool,
         selection_handoff: Option<EditorSelectionHandoff>,
     ) -> Self {
         Self {
@@ -37,6 +42,8 @@ impl PaletteState {
             scroll: 0,
             submit_supported,
             plain_newline_supported,
+            screenshot_action,
+            screenshot_retry,
             selection_handoff,
         }
     }
@@ -66,6 +73,19 @@ impl PaletteState {
         Command::ALL
             .into_iter()
             .filter(|(command, _)| self.available(*command))
+            .map(|(command, label)| {
+                let label = if command == Command::ScreenshotInbox {
+                    match self.screenshot_action {
+                        ScreenshotPaletteAction::Enable => label,
+                        ScreenshotPaletteAction::Disable => "Disable Screenshot Inbox",
+                        ScreenshotPaletteAction::Resume => "Resume Screenshot Inbox",
+                        ScreenshotPaletteAction::Unavailable => "Screenshot Inbox unavailable",
+                    }
+                } else {
+                    label
+                };
+                (command, label)
+            })
             .filter(|(_, label)| label.to_lowercase().contains(&query))
             .collect()
     }
@@ -83,6 +103,10 @@ impl PaletteState {
             | Command::ThoughtEnd
             | Command::Indent
             | Command::Outdent => self.plain_newline_supported,
+            Command::RetryScreenshotCapture => self.screenshot_retry,
+            Command::ScreenshotInbox => {
+                self.screenshot_action != ScreenshotPaletteAction::Unavailable
+            }
             _ => true,
         }
     }
@@ -94,6 +118,14 @@ impl PaletteState {
 }
 
 impl BoardApp {
+    pub(super) fn refresh_screenshot_palette_action(&mut self) {
+        let action = self.screenshot_palette_action();
+        if let Some(palette) = &mut self.palette {
+            palette.screenshot_action = action;
+            palette.clamp();
+        }
+    }
+
     pub(super) fn open_palette(&mut self) {
         self.deactivate_range_latch();
         self.help = false;
@@ -101,11 +133,14 @@ impl BoardApp {
         self.palette = Some(PaletteState::new(
             self.supports_submission(),
             !self.insertion_focused() && self.state.focused_thought.is_some(),
+            self.screenshot_palette_action(),
+            self.screenshot_retry_ready(),
             self.palette_selection_handoff.take(),
         ));
     }
 
     pub(super) fn close_overlay(&mut self) {
+        self.cancel_screenshot_takeover();
         self.palette = None;
         self.search = None;
         self.transfer = None;
@@ -297,6 +332,8 @@ impl BoardApp {
             Command::CheckUpdates => {
                 vec![Effect::Update(crate::application::UpdateIntent::CheckNow)]
             }
+            Command::ScreenshotInbox => self.toggle_screenshot_inbox(ids, clock),
+            Command::RetryScreenshotCapture => self.retry_screenshot_capture(ids, clock),
             Command::RetryStorage => self.retry_persistence(),
             Command::ExportRecovery => self.export_recovery(ids, clock),
             Command::Undo => self.history(ids, clock, true),

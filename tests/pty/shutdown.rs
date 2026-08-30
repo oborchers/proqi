@@ -1,5 +1,7 @@
 //! Terminal shutdown, restoration, and accepted-work durability.
 
+use std::{fs, os::unix::fs::PermissionsExt as _, path::Path};
+
 use super::{expect_command, json_command};
 
 #[test]
@@ -171,4 +173,180 @@ fn acknowledged_paste_survives_forced_process_termination() {
         thoughts["data"]["thoughts"][0]["content"],
         "committed before crash 界"
     );
+}
+
+#[test]
+fn keyboard_quit_during_delayed_capture_commit_restores_and_preserves_content() {
+    delayed_capture_shutdown(false, false, 100, 500);
+}
+
+#[test]
+fn termination_during_delayed_capture_commit_restores_and_preserves_content() {
+    delayed_capture_shutdown(true, false, 100, 500);
+}
+
+#[test]
+fn termination_during_persistently_failed_capture_restores_and_exits_boundedly() {
+    delayed_capture_shutdown(true, true, 100, 500);
+}
+
+#[test]
+fn termination_with_maximum_debounce_shares_one_bounded_capture_shutdown() {
+    delayed_capture_shutdown(true, false, 1_000, 1_300);
+}
+
+fn delayed_capture_shutdown(
+    terminate: bool,
+    persistent_failure: bool,
+    debounce_ms: u64,
+    delivery_wait_ms: u64,
+) {
+    let state = tempfile::Builder::new()
+        .prefix("pq-cap-")
+        .tempdir_in("/private/tmp")
+        .expect("short temporary state");
+    let watched = tempfile::tempdir().expect("temporary watched directory");
+    let staging = tempfile::tempdir().expect("temporary staging directory");
+    configure_capture(state.path(), watched.path(), debounce_ms);
+    let staged = staging.path().join("delayed.png");
+    fs::write(&staged, png_bytes()).expect("staged screenshot");
+    let target = watched.path().join("delayed.png");
+    let binary = env!("CARGO_BIN_EXE_proqi");
+    let exit_action = if terminate {
+        "system /bin/kill -TERM $child"
+    } else {
+        "send -- \"\\x11\""
+    };
+    let finish_action = if persistent_failure {
+        r#"
+        set spawn_id $proqi
+        expect -exact "\x1b\[0 q"
+        expect eof
+        catch wait result
+        set proqi_status [lindex $result 3]
+        set spawn_id $sqlite
+        send -- "ROLLBACK;\r.quit\r"
+        expect eof
+        exit $proqi_status
+        "#
+    } else {
+        r#"
+        after 150
+        set spawn_id $sqlite
+        send -- "COMMIT;\r.quit\r"
+        expect eof
+        set spawn_id $proqi
+        expect -exact "\x1b\[0 q"
+        expect eof
+        catch wait result
+        exit [lindex $result 3]
+        "#
+    };
+    let workflow = format!(
+        r#"
+        log_user 0
+        set timeout 15
+        spawn $env(PROQI_TEST_BINARY) --state-dir $env(PROQI_TEST_STATE)
+        stty rows 24 columns 80
+        set proqi $spawn_id
+        set child [exp_pid]
+        expect -exact "\x1b\[?1049h"
+        expect -exact "\x1b\[1 q"
+        after 300
+        send -- ":"
+        after 100
+        send -- "Screenshot Inbox"
+        send -- "\r"
+        set capture_lock "$env(PROQI_TEST_STATE)/runtime/screenshot-capture.json"
+        for {{set attempt 0}} {{$attempt < 40 && ![file exists $capture_lock]}} {{incr attempt}} {{
+            after 50
+        }}
+        if {{![file exists $capture_lock]}} {{
+            set instances [glob -nocomplain "$env(PROQI_TEST_STATE)/runtime/instances/*.json"]
+            if {{[llength $instances] == 1}} {{
+                set handle [open [lindex $instances 0] r]
+                set metadata [read $handle]
+                close $handle
+                if {{[string first "\"control_protocol\":null" $metadata] < 0}} {{ exit 94 }}
+            }}
+            exit 93
+        }}
+        send -- "\x1b\[200~durable editor\x1b\[201~"
+        after 700
+        spawn /usr/bin/sqlite3 $env(PROQI_TEST_DATABASE)
+        set sqlite $spawn_id
+        expect -re "sqlite>"
+        send -- "BEGIN IMMEDIATE;\r"
+        expect -re "sqlite>"
+        file rename $env(PROQI_TEST_STAGED) $env(PROQI_TEST_TARGET)
+        set spawn_id $proqi
+        after {delivery_wait_ms}
+        send -- "!"
+        {exit_action}
+        {finish_action}
+        "#
+    );
+    let status = expect_command()
+        .args(["-c", &workflow])
+        .env("PROQI_TEST_BINARY", binary)
+        .env("PROQI_TEST_STATE", state.path())
+        .env(
+            "PROQI_TEST_DATABASE",
+            state.path().join("data/proqi.sqlite3"),
+        )
+        .env("PROQI_TEST_STAGED", &staged)
+        .env("PROQI_TEST_TARGET", &target)
+        .status()
+        .expect("run delayed capture shutdown");
+    if persistent_failure {
+        assert_eq!(
+            status.code(),
+            Some(1),
+            "persistent failure must be truthful"
+        );
+    } else {
+        assert!(status.success(), "delayed capture shutdown exited {status}");
+    }
+
+    let sessions = json_command(binary, state.path(), &["sessions", "list"]);
+    let session = sessions["data"]["sessions"][0]["id"]
+        .as_str()
+        .expect("session ID");
+    let thoughts = json_command(binary, state.path(), &["thoughts", "list", session]);
+    let contents = thoughts["data"]["thoughts"]
+        .as_array()
+        .expect("thoughts")
+        .iter()
+        .map(|thought| thought["content"].as_str().expect("content"))
+        .collect::<Vec<_>>();
+    let expected = if persistent_failure {
+        vec!["durable editor"]
+    } else {
+        vec!["durable editor!", target.to_str().expect("target")]
+    };
+    assert_eq!(contents, expected);
+}
+
+fn configure_capture(state: &Path, watched: &Path, debounce_ms: u64) {
+    let config_directory = state.join("config");
+    fs::create_dir(&config_directory).expect("config directory");
+    let config = config_directory.join("config.toml");
+    fs::write(
+        &config,
+        format!(
+            "check_for_updates = false\nkeyboard_enhancement = 'disabled'\n[screenshot_inbox]\ndirectory = '{}'\ncapture_all_new_images = true\ndebounce_ms = {debounce_ms}\n",
+            watched.display(),
+        ),
+    )
+    .expect("capture config");
+    fs::set_permissions(&config, fs::Permissions::from_mode(0o600)).expect("private config");
+}
+
+fn png_bytes() -> Vec<u8> {
+    let mut bytes = vec![0; 80];
+    bytes[..8].copy_from_slice(b"\x89PNG\r\n\x1a\n");
+    bytes[12..16].copy_from_slice(b"IHDR");
+    bytes[16..20].copy_from_slice(&20_u32.to_be_bytes());
+    bytes[20..24].copy_from_slice(&10_u32.to_be_bytes());
+    bytes
 }

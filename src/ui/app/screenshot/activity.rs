@@ -1,0 +1,139 @@
+//! Deterministic unattended-capture lease accounting.
+
+use std::time::Duration;
+
+use crate::{
+    application::{Effect, ScreenshotIntent, ScreenshotPauseReason},
+    ports::screenshot::ScreenshotActivityPolicy,
+    ui::UiInput,
+};
+
+use super::{ScreenshotState, presentation::pause_notice};
+use crate::ui::app::BoardApp;
+
+#[derive(Default)]
+pub(super) struct ScreenshotActivity {
+    policy: ScreenshotActivityPolicy,
+    last_interaction: Option<Duration>,
+    admitted: u16,
+}
+
+impl ScreenshotActivity {
+    pub(super) const fn configure(&mut self, policy: ScreenshotActivityPolicy) {
+        self.policy = policy;
+    }
+
+    pub(super) const fn start(&mut self, now: Duration) {
+        self.last_interaction = Some(now);
+        self.admitted = 0;
+    }
+
+    pub(super) const fn stop(&mut self) {
+        self.last_interaction = None;
+        self.admitted = 0;
+    }
+
+    pub(super) fn note_input(&mut self, input: &UiInput, now: Duration) {
+        if self.last_interaction.is_some() && input.is_deliberate_interaction() {
+            self.last_interaction = Some(now);
+            self.admitted = 0;
+        }
+    }
+
+    pub(super) fn expired(&self, now: Duration) -> Option<ScreenshotPauseReason> {
+        let last = self.last_interaction?;
+        (now.saturating_sub(last) >= self.policy.inactivity_timeout()).then_some(
+            ScreenshotPauseReason::Inactivity {
+                minutes: self.policy.inactivity_timeout_minutes(),
+            },
+        )
+    }
+
+    pub(super) fn remaining(&self) -> usize {
+        usize::from(
+            self.policy
+                .max_unattended_captures()
+                .saturating_sub(self.admitted),
+        )
+    }
+
+    pub(super) fn admit(&mut self, count: usize) -> Option<ScreenshotPauseReason> {
+        let bounded = u16::try_from(count).unwrap_or(u16::MAX);
+        self.admitted = self.admitted.saturating_add(bounded);
+        (self.admitted >= self.policy.max_unattended_captures()).then_some(
+            ScreenshotPauseReason::CaptureLimit {
+                captures: self.policy.max_unattended_captures(),
+            },
+        )
+    }
+}
+
+impl BoardApp {
+    pub(crate) const fn configure_screenshot_activity(&mut self, policy: ScreenshotActivityPolicy) {
+        self.screenshot.activity.configure(policy);
+    }
+
+    pub(crate) fn note_screenshot_activity(&mut self, input: &UiInput, now: Duration) {
+        if matches!(self.screenshot.state, ScreenshotState::Listening) {
+            self.screenshot.activity.note_input(input, now);
+        }
+    }
+
+    pub(crate) fn advance_screenshot_activity(&mut self, now: Duration) -> Vec<Effect> {
+        if !matches!(self.screenshot.state, ScreenshotState::Listening) {
+            return Vec::new();
+        }
+        self.screenshot
+            .activity
+            .expired(now)
+            .map_or_else(Vec::new, |reason| {
+                self.request_screenshot_auto_pause(reason)
+            })
+    }
+
+    pub(super) fn request_screenshot_auto_pause(
+        &mut self,
+        reason: ScreenshotPauseReason,
+    ) -> Vec<Effect> {
+        self.screenshot.pending_pause = Some(reason);
+        self.screenshot.state = ScreenshotState::Stopping;
+        self.refresh_screenshot_palette_action();
+        vec![Effect::Screenshot(ScreenshotIntent::Disable)]
+    }
+
+    pub(super) fn enter_screenshot_paused(&mut self, reason: ScreenshotPauseReason) {
+        self.screenshot.state = ScreenshotState::Paused(reason);
+        self.refresh_screenshot_palette_action();
+        self.screenshot.pause_notice = Some(pause_notice(reason));
+        self.status = None;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ui::{PointerButton, PointerInput, PointerKind, UiKey};
+
+    #[test]
+    fn only_deliberate_input_renews_the_lease() {
+        let mut lease = ScreenshotActivity::default();
+        lease.start(Duration::ZERO);
+        let almost = Duration::from_secs(20 * 60 - 1);
+        lease.note_input(&UiInput::HostFocusGained, almost);
+        assert!(lease.expired(Duration::from_secs(20 * 60)).is_some());
+
+        lease.start(Duration::ZERO);
+        lease.note_input(&UiInput::Key(UiKey::Character('x')), almost);
+        assert!(lease.expired(Duration::from_secs(20 * 60)).is_none());
+        lease.note_input(
+            &UiInput::Pointer(PointerInput {
+                column: 1,
+                row: 1,
+                kind: PointerKind::Down(PointerButton::Left),
+                extend_selection: false,
+            }),
+            Duration::from_secs(20 * 60),
+        );
+        assert!(lease.expired(Duration::from_secs(30 * 60)).is_none());
+    }
+}

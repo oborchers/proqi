@@ -1,6 +1,7 @@
 //! SQLite persistence adapter.
 
 mod board_commit;
+mod capture;
 mod compaction;
 mod doctor;
 mod history_commit;
@@ -25,9 +26,10 @@ use rusqlite::{
 use crate::{
     domain::{SessionId, Timestamp},
     ports::store::{
-        CommitReceipt, MigrationMode, OperationBatch, STORAGE_PROTOCOL_VERSION,
-        SUPPORTED_SCHEMA_VERSION, SessionHit, SessionQuery, SessionSnapshot, Store, StoreError,
-        StoredOperationRequest, SubmissionAttempt, SubmissionOutcome,
+        CaptureCommit, CaptureCommitOutcome, CommitReceipt, MigrationMode, OperationBatch,
+        STORAGE_PROTOCOL_VERSION, SUPPORTED_SCHEMA_VERSION, SessionHit, SessionQuery,
+        SessionSnapshot, Store, StoreError, StoredOperationRequest, SubmissionAttempt,
+        SubmissionOutcome,
     },
 };
 
@@ -378,6 +380,13 @@ impl Store for SqliteStore {
 
     fn commit(&mut self, batch: &OperationBatch) -> Result<Option<CommitReceipt>, StoreError> {
         self.with_write_retry(|transaction| commit_batch(transaction, batch))
+    }
+
+    fn commit_capture(
+        &mut self,
+        capture: &CaptureCommit,
+    ) -> Result<CaptureCommitOutcome, StoreError> {
+        self.with_write_retry(|transaction| capture::commit(transaction, capture))
     }
 
     fn prepare_submission(&mut self, attempt: &SubmissionAttempt) -> Result<(), StoreError> {

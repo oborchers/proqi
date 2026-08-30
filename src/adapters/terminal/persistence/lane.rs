@@ -13,6 +13,13 @@ use std::sync::mpsc::{RecvTimeoutError, TrySendError};
 use crate::adapters::terminal::supervisor::{ShutdownDeadline, WorkerLifecycle, join_before};
 
 impl PersistenceLane {
+    pub(in crate::adapters::terminal) fn commit_capture(
+        &self,
+        capture: crate::ports::store::CaptureCommit,
+    ) -> Result<(), TerminalError> {
+        self.send(PersistenceRequest::Capture(Box::new(capture)))
+    }
+
     #[cfg(test)]
     pub(in crate::adapters::terminal) fn spawn(store: SqliteStore) -> Self {
         let (request_sender, request_receiver) = sync_channel(64);

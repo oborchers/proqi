@@ -326,6 +326,6 @@ mod tests {
         );
         assert_eq!(sync_protocol(Some(3)).expect("protocol three owner"), None);
         assert_eq!(sync_protocol(Some(4)).expect("current owner"), Some(4));
-        assert!(sync_protocol(Some(5)).is_err());
+        assert!(sync_protocol(Some(6)).is_err());
     }
 }

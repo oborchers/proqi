@@ -238,6 +238,7 @@ impl BoardApp {
                 self.request_quit();
                 Vec::new()
             }
+            Some(BoardCommand::ScreenshotInbox) => self.toggle_screenshot_inbox(ids, clock),
             None => Vec::new(),
         }
     }

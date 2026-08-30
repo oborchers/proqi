@@ -9,6 +9,7 @@ pub mod environment;
 pub mod invocation;
 pub mod recovery;
 pub mod runtime;
+pub mod screenshot;
 pub mod store;
 pub(crate) mod text_layout;
 pub(crate) mod transfer;

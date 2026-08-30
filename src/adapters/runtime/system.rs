@@ -2,7 +2,7 @@
 
 use std::{
     path::{Path, PathBuf},
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use directories::ProjectDirs;
@@ -13,7 +13,9 @@ use crate::{
         InstanceId, OperationId, RequestId, RevisionId, SessionId, SubmissionId, ThoughtId,
         Timestamp,
     },
-    ports::environment::{AppPaths, Clock, Environment, IdGenerator, PathError, Paths},
+    ports::environment::{
+        AppPaths, Clock, Environment, IdGenerator, MonotonicClock, PathError, Paths,
+    },
 };
 
 /// Operating-system UTC clock.
@@ -26,6 +28,22 @@ impl Clock for SystemClock {
             .duration_since(UNIX_EPOCH)
             .map_or(0, |duration| duration.as_millis());
         Timestamp::from_millis(i64::try_from(millis).unwrap_or(i64::MAX))
+    }
+}
+
+/// Operating-system monotonic process-relative clock.
+#[derive(Clone, Debug)]
+pub struct SystemMonotonicClock(Instant);
+
+impl Default for SystemMonotonicClock {
+    fn default() -> Self {
+        Self(Instant::now())
+    }
+}
+
+impl MonotonicClock for SystemMonotonicClock {
+    fn now(&self) -> Duration {
+        self.0.elapsed()
     }
 }
 

@@ -31,7 +31,7 @@ rusqlite = { version = "0.40.2", features = ["backup", "bundled"] }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.143"
 signal-hook = "0.4.4"
-rustix = { version = "1.1.2", features = ["process"] }
+rustix = { version = "1.1.2", features = ["fs", "process"] }
 thiserror = "2.0.16"
 terminal-colorsaurus = "=1.0.3"
 toml = "1.1.4"
@@ -41,6 +41,13 @@ unicode-segmentation = "1.12.0"
 unicode-width = "=0.2.2"
 ureq = { version = "=3.4.0", default-features = false, features = ["rustls"] }
 uuid = { version = "1.18.1", features = ["serde", "v7"] }
+
+[workspace.dependencies.kqueue]
+version = "=1.2.0"
+
+[workspace.dependencies.xattr]
+version = "=1.6.1"
+default-features = false
 
 [workspace.lints.rust]
 missing_docs = "warn"
@@ -122,6 +129,10 @@ unicode-segmentation.workspace = true
 unicode-width.workspace = true
 ureq.workspace = true
 uuid.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+kqueue.workspace = true
+xattr.workspace = true
 
 [dev-dependencies]
 insta = "1.43.2"

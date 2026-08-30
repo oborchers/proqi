@@ -5,7 +5,7 @@ Status: v0.1.0 architecture contract
 Project: Proqi
 
 Command: `proqi`
-Last updated: 2026-08-27
+Last updated: 2026-08-29
 
 ## Purpose
 
@@ -190,7 +190,7 @@ the database or a subprocess is slow.
 
 ### Execution lanes
 
-The initial process has four logical lanes:
+The process has six logical lanes:
 
 1. The UI lane reduces actions, computes layout, and renders the latest state.
 2. The input lane reads terminal events and sends normalized input messages.
@@ -198,6 +198,9 @@ The initial process has four logical lanes:
    commands.
 4. The external-effects lane handles clipboard and integration calls with
    explicit timeouts.
+5. The update lane owns bounded installation discovery and explicit updates.
+6. The macOS screenshot lane owns bounded directory reconciliation; on Linux it
+   exposes only the typed unsupported result and starts no watcher.
 
 Channels are bounded. Resize events may be coalesced to the newest dimensions.
 Text edits and structural operations may not be dropped or reordered.
@@ -217,6 +220,16 @@ operation, never an operation already presented as durable.
 On a storage error, the in-memory buffer remains available. The interface shows
 that it is not durable and offers retry or export. It never silently changes a
 failed save into a successful one.
+
+Screenshot creation is deliberately commit-first rather than optimistic. The
+storage lane atomically inserts one capture receipt and its exact append
+operation in detection order. The UI applies the operation only after that
+transaction succeeds. The receipt's rename-stable source fingerprint prevents
+duplicate delivery across repeated notifications, reconciliation, retry,
+restart, and ownership handoff. Failure leaves no partial thought and retains
+retryable work in the live session. An ordinary store failure initiates bounded
+watcher stop and operating-system lease release; retained retry work never
+monopolizes installation-wide capture authority.
 
 ## Core facades
 
@@ -315,6 +328,76 @@ POSIX shell-escaped punctuation, multiple paths, and Unicode names. Ordinary
 prompt text remains exact. Dropped files remain external references and are
 never read or copied automatically.
 
+### `ScreenshotWatcher`
+
+The first Screenshot Inbox is a macOS-only, explicitly activated adapter. Its
+injected watcher factory opens one configured directory, starts a `kqueue`
+directory watch before taking the activation baseline, and treats vnode events
+only as reconciliation hints. Identity uses device, inode, and birth time;
+unchanged size and modification time across conservative observations establish
+stability. Reconciliation opens entries relative to the watched directory with
+no-follow semantics and accepts only bounded, magic-validated PNG, JPEG, or TIFF
+regular files. Linux implements the port only as truthful unsupported behavior.
+
+Reconciliation has a cheap identity phase and an expensive eligibility phase.
+The activation baseline and already-delivered identities are rejected before
+xattr or bounded image-header reads. Stable eligibility is cached until path,
+size, modification time, or identity changes. A rename is part of the stable
+observation and restarts the full monotonic debounce interval; dot-prefixed and
+macOS-hidden staging entries are ignored. Directory enumeration, cancellation,
+and follow-up work remain explicitly bounded, while an idle kqueue timeout with
+no pending candidate does not rescan the directory.
+
+`com.apple.metadata:kMDItemIsScreenCapture` is the strong language-independent
+best-effort signal. User-configured filename patterns are fallbacks, and broad
+new-image capture is an explicit opt-in. The watcher never captures a screen,
+mutates system preferences, uploads an image, or copies or rewrites its source.
+Only the bounded header required to validate type and dimensions is read.
+
+A terminal-independent activity policy always bounds a listening lease by a
+positive inactivity interval and positive unattended-admission count. The UI
+owner observes an injected process-relative monotonic clock. Deliberate input
+renews both bounds; passive terminal and watcher events do not. Candidate
+allowance is reserved on ordered admission rather than durable success, so
+retries cannot reopen capacity and one watcher batch cannot cross the hard cap.
+Automatic pause reuses the ordinary bounded final reconciliation, durable drain,
+and capture-lock release path. Resume creates a new watcher and baseline rather
+than replaying the paused interval.
+
+The application exposes one typed accounting model for every asynchronous UI
+intention that may still allocate a session sequence: clipboard cut and paste,
+remove-after-success submission, and remove-after-success transfer. The runner
+combines that model with unresolved control lookup, update preparation,
+persistence, and capture reservation state. An in-flight capture retryably
+rejects sequence-producing owner-control requests, including sync; a capture
+cannot reserve until every earlier asynchronous producer has completed or
+failed. Update preparation waits in its existing owner queue rather than
+aborting installation-wide coordination. The UI uses the same reservation as a
+bounded ordered replay barrier for local keyboard, paste, click, drag, and
+scroll intentions. Capacity applies backpressure at the input-lane boundary;
+pointer motion remains passive and resize alone may coalesce.
+Capture application itself changes only terminal-independent durable state; UI
+composition alone decides whether the new thought may safely receive focus.
+Failed ready candidates do not retain the installation lease, and retry,
+disable, resume, takeover, and quit remain separate explicit lifecycle actions.
+Stopped and releasing are distinct runtime states, so immediate re-enable cannot
+mistake the same process's releasing lease for another owner. Shutdown sends a
+typed remaining budget to watcher teardown, stops new admission, and drains all
+already-emitted plus final-reconcile candidates within the shared deadline.
+
+After the watcher has truthfully stopped, the application may emit one typed
+content-free pause-notification effect. Notification routing is disabled by
+default and selected only at runtime composition. A managed Herdr pane queues a
+direct, shell-free `herdr notification show` request on the bounded cancellable
+external lane; Herdr command construction remains owned by the Herdr adapter.
+Outside Herdr, the terminal adapter writes bounded OSC 9 only for recognized
+standalone Ghostty or iTerm2 hosts outside known tmux transport. A managed pane
+with Herdr integration disabled uses neither route, and a failed Herdr request
+never falls back to OSC. Output contains fixed product text plus the typed
+numeric threshold. Queue, process, timeout, cancellation, rejection, and write
+failure are non-fatal because persistent TUI state, not external presentation,
+is the safety boundary.
+
 ### `AgentGateway`
 
 ```rust
@@ -336,7 +419,9 @@ before any prompt process is executed.
 ### `RuntimeCoordinator`
 
 This facade owns session exclusion, active-instance metadata, schema exclusion,
-and update compatibility. Its locks are independent from SQLite transactions.
+update compatibility, and a separate current-user installation-wide screenshot
+capture lease. Its locks are independent from SQLite transactions and from one
+another.
 
 ```rust
 trait RuntimeCoordinator {
@@ -351,6 +436,13 @@ The operating-system lock is authoritative. JSON or database metadata exists
 only to explain which process, version, session, and launch directory holds a
 lock. Process exit releases the authoritative lock even after a crash.
 
+Screenshot capture metadata is bounded and content-redacted. Exactly one live
+process may own capture. A compatible contender can request takeover only
+through the verified owner-control endpoint. The owner confirms scheduling,
+stops watcher admission, performs final reconciliation, drains atomic capture
+commits, and then releases the OS lease. Missing, incompatible, or still-live
+owners are never force-unlocked.
+
 ### `TerminalSession`
 
 This facade enters and restores terminal modes through an RAII guard. Setup and
@@ -360,7 +452,7 @@ error return, panic, and termination signals supported by the platform.
 
 ### Small deterministic ports
 
-`Clock`, `IdGenerator`, `Paths`, and `ProcessRunner` are injected wherever
+`Clock`, `MonotonicClock`, `IdGenerator`, `Paths`, and `ProcessRunner` are injected wherever
 wall-clock time, identifiers, platform directories, or subprocess execution
 would otherwise make tests nondeterministic.
 

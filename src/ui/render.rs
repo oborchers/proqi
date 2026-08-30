@@ -1,6 +1,7 @@
 //! Deterministic one-column board renderer.
 
 mod chrome;
+mod overlay_composition;
 mod overlays;
 
 use linkify::{LinkFinder, LinkKind};
@@ -25,92 +26,18 @@ pub fn render(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, th
     frame.render_widget(Block::default().style(theme.base_style()), layout.area);
     render_board(frame, app, layout, theme);
     chrome::render_footer(frame, app, layout, theme);
-    if let Some((title, entries, selected)) = app.update_prompt_view() {
-        if let Some(overlay) = &layout.overlay {
-            overlays::render_update(frame, overlay, &title, &entries, selected, theme);
-        }
-    } else if let Some((query, entries, selected)) = app.search_view() {
-        if let Some(overlay) = &layout.overlay {
-            render_plain_picker(
-                frame,
-                overlay,
-                app,
-                PlainPickerView {
-                    title: " thoughts ",
-                    prompt: '/',
-                    query,
-                    entries,
-                    selected,
-                },
-                theme,
-            );
-        }
-    } else if let Some((query, entries, selected)) = app.session_transfer_view() {
-        if let Some(overlay) = &layout.overlay {
-            render_plain_picker(
-                frame,
-                overlay,
-                app,
-                PlainPickerView {
-                    title: " send to Proqi session ",
-                    prompt: '/',
-                    query,
-                    entries,
-                    selected,
-                },
-                theme,
-            );
-        }
-    } else if let Some((query, entries, selected)) = app.discovered_invocation_view() {
-        if let Some(overlay) = &layout.overlay {
-            render_invocation_picker(
-                frame,
-                overlay,
-                app,
-                InvocationPickerView {
-                    query,
-                    entries,
-                    selected,
-                },
-                theme,
-            );
-        }
-    } else if let Some((query, entries, selected)) = app.palette_view() {
-        if let Some(overlay) = &layout.overlay {
-            render_plain_picker(
-                frame,
-                overlay,
-                app,
-                PlainPickerView {
-                    title: " commands ",
-                    prompt: ':',
-                    query,
-                    entries,
-                    selected,
-                },
-                theme,
-            );
-        }
-    } else if let Some(value) = app.session_rename_view() {
-        if let Some(overlay) = &layout.overlay {
-            overlays::render_text_prompt(frame, overlay, " rename session ", value, theme);
-        }
-    } else if app.help
-        && let Some(overlay) = &layout.overlay
-    {
-        overlays::render_help(frame, app, overlay, theme);
-    }
+    overlay_composition::render(frame, app, layout, theme);
 }
 
-struct PlainPickerView {
-    title: &'static str,
-    prompt: char,
-    query: String,
-    entries: Vec<String>,
-    selected: usize,
+pub(super) struct PlainPickerView {
+    pub(super) title: &'static str,
+    pub(super) prompt: char,
+    pub(super) query: String,
+    pub(super) entries: Vec<String>,
+    pub(super) selected: usize,
 }
 
-fn render_plain_picker(
+pub(super) fn render_plain_picker(
     frame: &mut Frame<'_>,
     overlay: &OverlayLayout,
     app: &BoardApp,
@@ -143,13 +70,13 @@ fn render_plain_picker(
     );
 }
 
-struct InvocationPickerView {
-    query: String,
-    entries: Vec<InvocationChoiceView>,
-    selected: usize,
+pub(super) struct InvocationPickerView {
+    pub(super) query: String,
+    pub(super) entries: Vec<InvocationChoiceView>,
+    pub(super) selected: usize,
 }
 
-fn render_invocation_picker(
+pub(super) fn render_invocation_picker(
     frame: &mut Frame<'_>,
     overlay: &OverlayLayout,
     app: &BoardApp,

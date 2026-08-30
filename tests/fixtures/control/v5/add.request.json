@@ -1,0 +1,12 @@
+{
+  "protocol": 5,
+  "request_id": "req_06g30t8fudrq55fdkjqr6mpe44",
+  "session_id": "ses_06g30t7dv5qv55n1ppn3clis3k",
+  "mutation": {
+    "mutation": "add",
+    "operation_id": "op_06g30t8fudrq55fdkjqr6mpe44",
+    "thought_id": "tht_06g30t8fudrq55fdkk348i7388",
+    "content": "Review Unicode wrapping.\n",
+    "position": null
+  }
+}

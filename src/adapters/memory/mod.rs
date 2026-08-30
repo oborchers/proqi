@@ -1,6 +1,6 @@
 //! Deterministic in-memory adapters used by fast contract tests.
 
-use std::{collections::VecDeque, path::PathBuf};
+use std::{collections::VecDeque, path::PathBuf, time::Duration};
 
 use uuid::Uuid;
 
@@ -10,8 +10,8 @@ use crate::{
         Timestamp,
     },
     ports::environment::{
-        AppPaths, Clock, Environment, IdGenerator, PathError, Paths, ProcessError, ProcessOutput,
-        ProcessRequest, ProcessRunner,
+        AppPaths, Clock, Environment, IdGenerator, MonotonicClock, PathError, Paths, ProcessError,
+        ProcessOutput, ProcessRequest, ProcessRunner,
     },
 };
 
@@ -36,6 +36,25 @@ impl FakeClock {
 
 impl Clock for FakeClock {
     fn now(&self) -> Timestamp {
+        self.now
+    }
+}
+
+/// Manually controlled process-relative monotonic clock.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct FakeMonotonicClock {
+    now: Duration,
+}
+
+impl FakeMonotonicClock {
+    /// Advance without consulting wall-clock time.
+    pub fn advance(&mut self, duration: Duration) {
+        self.now = self.now.saturating_add(duration);
+    }
+}
+
+impl MonotonicClock for FakeMonotonicClock {
+    fn now(&self) -> Duration {
         self.now
     }
 }

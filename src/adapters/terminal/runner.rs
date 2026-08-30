@@ -1,14 +1,19 @@
 //! Bounded UI and persistence lane composition.
 
+mod admission;
+mod composition;
 mod diagnostics;
 mod durability;
 mod external_results;
 mod fairness;
 pub(super) mod finish;
 mod heartbeat;
+mod input_admission;
 mod owned_lanes;
 mod owner_control;
 mod pending;
+mod restart;
+mod screenshot_results;
 mod update_results;
 
 use std::{
@@ -26,15 +31,15 @@ use crate::{
         control::ControlServer,
         editor::RopeEditorFactory,
         runtime::{
-            FileRuntimeCoordinator, FileSchemaLease, FileSessionLease, SystemClock,
-            SystemIdGenerator,
+            FileCaptureLease, FileRuntimeCoordinator, FileSchemaLease, FileSessionLease,
+            SystemClock, SystemIdGenerator, SystemMonotonicClock,
         },
         sqlite::SqliteStore,
     },
     application::AppState,
-    domain::{InstanceId, SessionId},
+    domain::SessionId,
     ports::{
-        environment::Clock as _,
+        environment::{Clock as _, MonotonicClock},
         runtime::InstanceInfo,
         store::{Store as _, StoreError},
     },
@@ -43,10 +48,11 @@ use crate::{
 
 use super::{
     TerminalError,
-    control::{CrosstermControl, PanicHookGuard, TerminalGuard, TerminationGuard},
+    control::{PanicHookGuard, TerminationGuard},
     external::ExternalLane,
     input::{InputLane, InputMessage},
     persistence::PersistenceLane,
+    screenshot_lane::ScreenshotLane,
 };
 
 use durability::{drain_persistence, enqueue_effects};
@@ -88,9 +94,27 @@ pub(super) struct WorkerLanes<'a> {
     pub(super) external: &'a ExternalLane,
     pub(super) control: Option<&'a ControlServer>,
     pub(super) update: &'a super::update_lane::UpdateLane,
+    pub(super) screenshot: &'a ScreenshotLane,
+    pub(super) notification: &'a super::notification::PauseNotificationRouter,
+    pub(super) monotonic: &'a dyn MonotonicClock,
     pub(super) termination: &'a TerminationGuard,
     pub(super) instance: &'a InstanceInfo,
     pub(super) cancellation: &'a crate::adapters::process::CancellationFlag,
+}
+
+#[derive(Default)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "orthogonal watcher, requester, takeover, and release facts have independent transitions"
+)]
+pub(super) struct CaptureRuntime {
+    lease: Option<FileCaptureLease>,
+    release_when_drained: bool,
+    shutdown_requested: bool,
+    takeover_delivery: Option<crate::adapters::control::ControlDeliveryReceipt>,
+    takeover_stopping: bool,
+    watcher_stopped: bool,
+    release_deadline: Option<Instant>,
 }
 
 /// Returns a typed setup, render, input, persistence, worker, or restoration failure.
@@ -118,14 +142,24 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
     } = resources;
     let session_id = state.board.session.id;
     store.recover_submissions(session_id, clock.now())?;
-    let (control, control_warning) = start_optional_control(&mut session_lease);
-    let (theme, guard) = enter_terminal(&settings.theme, settings.ui.keyboard_enhancement)?;
+    let (control, control_warning) = composition::start_optional_control(&mut session_lease);
+    let (theme, guard) =
+        composition::enter_terminal(&settings.theme, settings.ui.keyboard_enhancement)?;
     let panic_hook = PanicHookGuard::install();
     let termination = TerminationGuard::register()?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
     let presentation_source = format!("proqi-{}", session_lease.info().instance_id);
     let invocation_roots = settings.invocation_roots.clone();
-    let mut owned = spawn_lanes(
+    let screenshot_settings = settings.screenshot.clone();
+    let screenshot_activity = settings.screenshot.activity_policy();
+    let terminal_host = super::host::TerminalHost::detect();
+    let terminal_host_label = terminal_host.label();
+    let notification = super::notification::PauseNotificationRouter::new(
+        settings.screenshot.notify_terminal_on_auto_pause(),
+        crate::adapters::herdr::HerdrEnvironment::detect(),
+        &terminal_host,
+    );
+    let mut owned = composition::spawn_lanes(
         control,
         store,
         coordinator,
@@ -137,21 +171,29 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
         installation.clone(),
         session_lease.info().instance_id,
         invocation_roots,
+        screenshot_settings,
+        session_lease.info().clone(),
+        terminal_host_label,
     );
     let mut pane_heartbeat = None;
     let shutdown = super::supervisor::ShutdownCoordinator::default();
     let check_for_updates = settings.ui.check_for_updates;
     let mut app =
         BoardApp::with_settings_and_cwd(state, settings.ui, cwd.clone(), RopeEditorFactory);
+    app.configure_screenshot_activity(screenshot_activity);
     if let Some(warning) = control_warning {
         app.set_warning(warning);
     }
+    let monotonic = SystemMonotonicClock::default();
     let lanes = WorkerLanes {
         input: &owned.input,
         persistence: &owned.persistence,
         external: &owned.external,
         control: owned.control.as_ref(),
         update: &owned.update,
+        screenshot: &owned.screenshot,
+        notification: &notification,
+        monotonic: &monotonic,
         termination: &termination,
         instance: session_lease.info(),
         cancellation: &owned.cancellation,
@@ -188,148 +230,12 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
         ]),
         shutdown_deadline.elapsed(),
     )?;
-    resume_after_update(
+    restart::resume_after_update(
         installation.as_ref(),
         requested_restart.as_ref(),
         session_id,
         state_root.as_deref(),
     )
-}
-
-#[expect(
-    clippy::too_many_arguments,
-    reason = "composition root owns explicit adapter inputs"
-)]
-fn spawn_lanes(
-    control: Option<ControlServer>,
-    store: SqliteStore,
-    coordinator: FileRuntimeCoordinator,
-    cwd: PathBuf,
-    recovery_directory: PathBuf,
-    attachment_directory: PathBuf,
-    presentation_source: String,
-    cache_directory: PathBuf,
-    installation: Option<crate::domain::Installation>,
-    initiating_instance: InstanceId,
-    invocation_roots: Vec<crate::ports::invocation::AdditionalInvocationRoot>,
-) -> OwnedLanes {
-    let cancellation = crate::adapters::process::CancellationFlag::default();
-    OwnedLanes {
-        control,
-        input: InputLane::spawn(),
-        persistence: PersistenceLane::spawn_with_runtime(
-            store,
-            coordinator.clone(),
-            cwd,
-            cancellation.clone(),
-        ),
-        external: ExternalLane::spawn_with_invocation_roots(
-            recovery_directory,
-            attachment_directory,
-            presentation_source,
-            cancellation.clone(),
-            invocation_roots,
-        ),
-        update: super::update_lane::UpdateLane::spawn(
-            cache_directory,
-            installation,
-            coordinator,
-            initiating_instance,
-            cancellation.clone(),
-        ),
-        cancellation,
-    }
-}
-
-fn resume_after_update(
-    installation: Option<&crate::domain::Installation>,
-    requested: Option<&crate::domain::StableVersion>,
-    session_id: SessionId,
-    state_root: Option<&std::path::Path>,
-) -> Result<SessionId, TerminalError> {
-    requested.map_or(Ok(session_id), |version| {
-        replace_after_cleanup(installation, version, session_id, state_root)
-    })
-}
-
-fn replace_after_cleanup(
-    installation: Option<&crate::domain::Installation>,
-    expected: &crate::domain::StableVersion,
-    session_id: SessionId,
-    state_root: Option<&std::path::Path>,
-) -> Result<SessionId, TerminalError> {
-    use crate::ports::update::{InstallDetector as _, ProcessReplacer as _};
-
-    let installation = installation.ok_or_else(|| {
-        TerminalError::Io("update restart lacks a verified installation context".to_owned())
-    })?;
-    if installation.kind != crate::domain::InstallationKind::HomebrewFormula {
-        return Err(TerminalError::Io(
-            "automatic restart is available only for verified Homebrew installations".to_owned(),
-        ));
-    }
-    let active = installation
-        .restart_executable
-        .as_ref()
-        .ok_or_else(|| TerminalError::Io("Homebrew active executable is unavailable".to_owned()))?;
-    let detected = crate::adapters::update::SystemInstallDetector::for_executable(active.clone())
-        .detect()
-        .map_err(|error| TerminalError::Io(error.to_string()))?;
-    if detected.kind != crate::domain::InstallationKind::HomebrewFormula
-        || detected.identity != installation.identity
-    {
-        return Err(TerminalError::Io(
-            "updated executable does not belong to this Homebrew installation".to_owned(),
-        ));
-    }
-    let mut runner = crate::adapters::process::SystemProcessRunner::default();
-    crate::adapters::update::verify_installed_version(&mut runner, &detected.executable, expected)
-        .map_err(|error| TerminalError::Io(error.to_string()))?;
-    crate::adapters::process::SystemProcessReplacer
-        .replace(&detected.executable, session_id, state_root)
-        .map_err(|error| TerminalError::Io(error.to_string()))?;
-    Ok(session_id)
-}
-
-fn start_optional_control(
-    session_lease: &mut FileSessionLease,
-) -> (Option<ControlServer>, Option<String>) {
-    let Some(endpoint) = session_lease.control_endpoint() else {
-        return (
-            None,
-            Some("active-session CLI forwarding is unavailable on this platform".to_owned()),
-        );
-    };
-    let server = match ControlServer::spawn(endpoint) {
-        Ok(server) => server,
-        Err(error) => {
-            return (
-                None,
-                Some(format!(
-                    "active-session CLI forwarding unavailable: {error}"
-                )),
-            );
-        }
-    };
-    if let Err(error) = session_lease.publish_control() {
-        let _stopped = server.stop();
-        return (
-            None,
-            Some(format!(
-                "active-session CLI forwarding unavailable: {error}"
-            )),
-        );
-    }
-    (Some(server), None)
-}
-
-fn enter_terminal(
-    recipe: &crate::ui::ThemeRecipe,
-    keyboard: crate::ui::KeyboardEnhancement,
-) -> Result<(Theme, TerminalGuard<CrosstermControl>), TerminalError> {
-    let theme = super::palette::resolve(recipe, supports_true_color())?;
-    let guard = TerminalGuard::enter(CrosstermControl::new(keyboard))?;
-    Ok((theme, guard))
 }
 
 #[expect(
@@ -348,11 +254,13 @@ fn drive(
     shutdown: &super::supervisor::ShutdownCoordinator,
 ) -> Result<(), TerminalError> {
     let mut pending = PendingWork::default();
+    let mut capture = CaptureRuntime::default();
     let mut edit_generation = app.edit_generation();
     let mut edit_deadline = None;
     let mut agent_deadline = None;
     let mut invocation_deadline = None;
     let mut termination_seen = false;
+    let mut held_input = None;
     enqueue_effects(app, lanes, BoardApp::discover_agents(), &mut pending)?;
     let invocation_effects = app.refresh_invocations();
     enqueue_effects(app, lanes, invocation_effects, &mut pending)?;
@@ -365,19 +273,63 @@ fn drive(
             if let Some(control) = lanes.control {
                 control.request_stop();
             }
-            let effects = app.handle(UiInput::Key(UiKey::Quit), ids, &clock);
+            let mut effects = app.handle(UiInput::Key(UiKey::Quit), ids, &clock);
+            if !app.quit && app.screenshot_retry_ready() {
+                effects.extend(app.handle(UiInput::Key(UiKey::Quit), ids, &clock));
+            }
             enqueue_effects(app, lanes, effects, &mut pending)?;
         }
-        let (workers_changed, worker_backlog) =
-            drain_workers(app, lanes, &mut pending, ids, clock, pane_heartbeat)?;
+        if !termination_seen {
+            let effects = app.advance_screenshot_activity(lanes.monotonic.now());
+            enqueue_effects(app, lanes, effects, &mut pending)?;
+        }
+        let (workers_changed, worker_backlog) = drain_workers(
+            app,
+            lanes,
+            &mut pending,
+            &mut capture,
+            ids,
+            clock,
+            pane_heartbeat,
+        )?;
         redraw |= workers_changed || app.expire_update_barrier(clock.now());
+        if app.quit && app.screenshot_retry_ready() && !termination_seen {
+            app.retain_failed_capture_after_quit();
+            redraw = true;
+        }
+        if termination_seen && !app.quit && app.screenshot_retry_ready() {
+            let mut effects = app.handle(UiInput::Key(UiKey::Quit), ids, &clock);
+            if !app.quit && app.screenshot_retry_ready() {
+                effects.extend(app.handle(UiInput::Key(UiKey::Quit), ids, &clock));
+            }
+            enqueue_effects(app, lanes, effects, &mut pending)?;
+            redraw = true;
+        }
+        let release_effects = screenshot_results::release_if_drained(app, &mut capture);
+        if !release_effects.is_empty() {
+            enqueue_effects(app, lanes, release_effects, &mut pending)?;
+            redraw = true;
+        }
+        let capture_effects = if admission::capture(app, &pending).is_ok()
+            && (!app.quit || capture.shutdown_requested)
+        {
+            app.advance_screenshot_capture(ids, &clock)
+        } else {
+            Vec::new()
+        };
+        if !capture_effects.is_empty() {
+            enqueue_effects(app, lanes, capture_effects, &mut pending)?;
+            redraw = true;
+        }
         if app.edit_generation() != edit_generation {
             edit_generation = app.edit_generation();
             edit_deadline = app
                 .has_pending_edit()
                 .then(|| Instant::now() + Duration::from_millis(250));
         }
-        if edit_deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+        if edit_deadline.is_some_and(|deadline| Instant::now() >= deadline)
+            && !app.screenshot_commit_pending()
+        {
             let effects = app.flush_pending_edit(ids, &clock);
             enqueue_effects(app, lanes, effects, &mut pending)?;
             edit_deadline = None;
@@ -403,8 +355,32 @@ fn drive(
             app.arm_update_prompt();
             redraw = false;
         }
+        if let Some((sequence, event)) = held_input.take() {
+            if app.screenshot_barrier_accepts(&event) {
+                input_admission::apply(
+                    app,
+                    lanes,
+                    ids,
+                    clock,
+                    &mut pending,
+                    &mut agent_deadline,
+                    &mut invocation_deadline,
+                    sequence,
+                    event,
+                )?;
+                redraw = true;
+            } else {
+                held_input = Some((sequence, event));
+            }
+        }
         if app.quit {
             let deadline = shutdown.request();
+            if !capture.shutdown_requested && capture.lease.is_some() {
+                lanes.screenshot.shutdown(deadline)?;
+                pending.screenshot = pending.screenshot.saturating_add(1);
+                capture.shutdown_requested = true;
+                capture.release_deadline = Some(deadline.instant());
+            }
             if app.update_restart().is_none() {
                 lanes.cancellation.cancel();
             }
@@ -412,7 +388,10 @@ fn drive(
                 control.request_stop();
             }
             let control_quiescent = lanes.control.is_none_or(ControlServer::is_quiescent);
-            if pending.is_empty() && control_quiescent {
+            let screenshot_quiescent = capture.lease.is_none()
+                && (!capture.shutdown_requested || capture.watcher_stopped)
+                && app.screenshot_shutdown_drained();
+            if pending.is_empty() && control_quiescent && screenshot_quiescent {
                 return Ok(());
             }
             if deadline.expired() {
@@ -420,6 +399,10 @@ fn drive(
                     "runtime shutdown exceeded its shared deadline",
                 ));
             }
+            thread::sleep(Duration::from_millis(5));
+            continue;
+        }
+        if held_input.is_some() {
             thread::sleep(Duration::from_millis(5));
             continue;
         }
@@ -433,17 +416,21 @@ fn drive(
                 sequence,
                 input: event,
             }) => {
-                if !app.accept_update_input(sequence) {
+                if !app.screenshot_barrier_accepts(&event) {
+                    held_input = Some((sequence, event));
                     continue;
                 }
-                if matches!(event, UiInput::Resize { .. }) {
-                    agent_deadline = Some(Instant::now() + Duration::from_millis(250));
-                }
-                if matches!(event, UiInput::HostFocusGained) {
-                    invocation_deadline = Some(Instant::now() + Duration::from_millis(180));
-                }
-                let effects = app.handle(event, ids, &clock);
-                enqueue_effects(app, lanes, effects, &mut pending)?;
+                input_admission::apply(
+                    app,
+                    lanes,
+                    ids,
+                    clock,
+                    &mut pending,
+                    &mut agent_deadline,
+                    &mut invocation_deadline,
+                    sequence,
+                    event,
+                )?;
                 redraw = true;
             }
             Ok(InputMessage::Failed(failure)) => {
@@ -461,19 +448,27 @@ fn drain_workers(
     app: &mut BoardApp,
     lanes: &WorkerLanes<'_>,
     pending: &mut PendingWork,
+    capture: &mut CaptureRuntime,
     ids: &mut SystemIdGenerator,
     clock: SystemClock,
     pane_heartbeat: &mut Option<PaneHeartbeat>,
 ) -> Result<(bool, bool), TerminalError> {
     let persistence = drain_persistence(app, lanes, pending, ids, &clock)?;
     let external = external_results::drain(app, lanes, pending, ids, clock, pane_heartbeat)?;
-    let control = owner_control::drain(app, lanes, pending, ids, clock)?;
+    let control = owner_control::drain(app, lanes, pending, capture, ids, clock)?;
     let update = update_results::drain(app, lanes, pending)?;
-    let changed = persistence.changed || external.changed || control.changed || update.changed;
+    let screenshot =
+        screenshot_results::drain(app, lanes, pending, capture, lanes.monotonic.now())?;
+    let changed = persistence.changed
+        || external.changed
+        || control.changed
+        || update.changed
+        || screenshot.changed;
     let backlog = persistence.budget_exhausted
         || external.budget_exhausted
         || control.budget_exhausted
-        || update.budget_exhausted;
+        || update.budget_exhausted
+        || screenshot.budget_exhausted;
     Ok((changed, backlog))
 }
 

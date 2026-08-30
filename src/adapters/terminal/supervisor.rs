@@ -24,6 +24,7 @@ pub(super) enum WorkerRole {
     Persistence,
     External,
     Update,
+    Screenshot,
 }
 
 impl WorkerRole {
@@ -32,6 +33,7 @@ impl WorkerRole {
             Self::Persistence => "persistence",
             Self::External => "external",
             Self::Update => "update",
+            Self::Screenshot => "screenshot",
         }
     }
 
@@ -40,6 +42,7 @@ impl WorkerRole {
             Self::Persistence => "persistence lane panicked",
             Self::External => "external lane panicked",
             Self::Update => "update lane panicked",
+            Self::Screenshot => "screenshot lane panicked",
         }
     }
 
@@ -48,6 +51,7 @@ impl WorkerRole {
             Self::Persistence => "persistence lane exited unexpectedly",
             Self::External => "external lane exited unexpectedly",
             Self::Update => "update lane exited unexpectedly",
+            Self::Screenshot => "screenshot lane exited unexpectedly",
         }
     }
 }

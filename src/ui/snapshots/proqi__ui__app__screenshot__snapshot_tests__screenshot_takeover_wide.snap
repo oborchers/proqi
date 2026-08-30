@@ -1,0 +1,21 @@
+---
+source: src/ui/app/screenshot/tests.rs
+assertion_line: 13
+expression: "takeover_snapshot(82, 16)"
+---
+00││
+01│⋮ active│
+02││
+03│            ┌ screenshot inbox in use ─────────────────────────────[x]│
+04│            │                                                        ││
+05│            │› Cancel                                                ││
+06│            │  Take over                                             ││
+07│            └────────────────────────────────────────────────────────┘│
+08││
+09││
+10││
+11││
+12│  Screenshot Inbox is listening in another Proqi session│
+13│  screenshot-ui│
+14│  1 thought · board · saved│
+15│  n New   y Copy  x Cut  d Delete  Space Select u Undo  / Search  : Commands│

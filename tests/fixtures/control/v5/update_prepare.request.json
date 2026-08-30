@@ -1,0 +1,14 @@
+{
+  "protocol": 5,
+  "request_id": "req_06g30t8fudrq55fdkjqr6mpe44",
+  "session_id": "ses_06g30t7dv5qv55n1ppn3clis3k",
+  "mutation": {
+    "mutation": "update_prepare",
+    "request": {
+      "operation_id": "req_06g30t8fudrq55fdkjqr6mpe44",
+      "target_version": "1.2.3",
+      "installation_identity": "0707070707070707070707070707070707070707070707070707070707070707",
+      "deadline": 9
+    }
+  }
+}

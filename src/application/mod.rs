@@ -1,6 +1,8 @@
 //! Application state, normalized actions, effects, errors, and reducer.
 
 mod action;
+mod admission;
+mod capture;
 mod control;
 mod error;
 mod locks;
@@ -17,10 +19,13 @@ mod update;
 mod update_coordination;
 
 pub use action::Action;
+pub use admission::{PendingMutationIntent, PendingMutationIntents};
+pub use capture::{apply_capture, prepare_capture};
 pub(crate) use control::{ControlReplay, match_control_replay};
 pub use error::{ApplicationError, ApplicationResult, FailureCode};
 pub use model::{
-    AppState, ClipboardIntent, DurabilityState, Effect, InteractionMode, UpdateIntent,
+    AppState, ClipboardIntent, DurabilityState, Effect, InteractionMode, ScreenshotIntent,
+    ScreenshotPauseReason, UpdateIntent,
 };
 pub(crate) use prompt::{
     SHARED_PROMPT_STARTERS, SharedPromptStarter, join_prompt_for_target, supports_shared_starters,

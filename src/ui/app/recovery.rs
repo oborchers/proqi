@@ -11,6 +11,27 @@ use crate::{
 use super::{BoardApp, UiInput, UiKey};
 
 impl BoardApp {
+    pub(super) fn handle_quit_input(
+        &mut self,
+        input: &UiInput,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Option<Vec<Effect>> {
+        if matches!(input, UiInput::Key(UiKey::Quit)) && self.screenshot_retry_ready() {
+            return Some(self.handle_ready_capture_quit(ids, clock));
+        }
+        if !matches!(input, UiInput::Key(UiKey::Quit)) && !self.is_failed_recovery_quit(input) {
+            return None;
+        }
+        let effects = if matches!(self.state.durability, DurabilityState::Failed { .. }) {
+            Vec::new()
+        } else {
+            self.flush_pending_edit(ids, clock)
+        };
+        self.request_quit();
+        Some(effects)
+    }
+
     pub(super) fn is_failed_recovery_quit(&self, input: &UiInput) -> bool {
         matches!(self.state.durability, DurabilityState::Failed { .. })
             && matches!(

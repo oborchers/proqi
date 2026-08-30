@@ -24,6 +24,11 @@ pub(super) struct PointerClick {
 }
 
 impl BoardApp {
+    #[cfg(test)]
+    pub(crate) fn pointer_click_count(&self) -> Option<u8> {
+        self.pointer_click.map(|click| click.count)
+    }
+
     pub(super) fn reset_pointer_click_for_input(&mut self, input: &crate::ui::UiInput) {
         if !matches!(
             input,
@@ -203,7 +208,10 @@ impl BoardApp {
         clock: &impl Clock,
     ) -> Vec<Effect> {
         self.begin_overlay_activation(pointer, clock.now());
-        if self.search.is_some() {
+        if self.screenshot.takeover.is_some() {
+            self.screenshot.takeover_selected = index.min(1);
+            self.choose_screenshot_takeover(ids)
+        } else if self.search.is_some() {
             self.execute_search_visible_index(index)
         } else if self.transfer.is_some() {
             self.choose_transfer_visible(index, ids)
