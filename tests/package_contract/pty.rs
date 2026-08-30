@@ -94,13 +94,39 @@ fn assert_drop_guard_releases_owner(product: &InstalledProduct) {
     let resumed = product.json(&["-r", session]);
     assert_eq!(resumed["data"]["session_id"], session);
     let instances = product.state.join("runtime/instances");
-    assert_eq!(
-        fs::read_dir(instances)
-            .expect("read cleaned runtime metadata")
-            .count(),
-        0,
-        "dropped owner metadata survived recovery"
+    let survivors = runtime_instance_summaries(&instances);
+    assert!(
+        survivors.is_empty(),
+        "dropped owner {session} pid {process_id} metadata survived recovery: {survivors:?}"
     );
+}
+
+fn runtime_instance_summaries(
+    instances: &std::path::Path,
+) -> Vec<(String, String, String, u64, u64)> {
+    fs::read_dir(instances)
+        .expect("read cleaned runtime metadata")
+        .map(|entry| {
+            let entry = entry.expect("runtime metadata entry");
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let bytes = fs::read(entry.path()).expect("read runtime metadata entry");
+            let metadata = serde_json::from_slice::<serde_json::Value>(&bytes)
+                .unwrap_or(serde_json::Value::Null);
+            (
+                name,
+                metadata["instance_id"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .to_owned(),
+                metadata["session_id"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .to_owned(),
+                metadata["pid"].as_u64().unwrap_or_default(),
+                metadata["control_protocol"].as_u64().unwrap_or_default(),
+            )
+        })
+        .collect()
 }
 
 struct FakeSource {
