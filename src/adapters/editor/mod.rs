@@ -2,6 +2,7 @@
 
 mod mutation;
 mod pointer;
+mod sentence;
 mod smart_lists;
 mod text;
 
@@ -219,6 +220,7 @@ impl Editor for RopeEditor {
             EditCommand::DeleteBack => self.mutate(Self::delete_back),
             EditCommand::DeleteForward => self.mutate(Self::delete_forward),
             EditCommand::DeleteLogicalLine => self.mutate(Self::delete_logical_line),
+            EditCommand::DeleteSentence => self.mutate_many(Self::delete_sentence),
             EditCommand::Move {
                 movement,
                 extend_selection,

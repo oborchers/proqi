@@ -21,6 +21,7 @@ fn missing_config_uses_the_narrow_pane_default() {
     assert_eq!(settings.ui.keybindings.range_down, 'J');
     assert_eq!(settings.ui.keybindings.range_select, 'v');
     assert_eq!(settings.ui.keybindings.screenshot_inbox, 'i');
+    assert_eq!(settings.ui.keybindings.delete_sentence, 'U');
     assert!(settings.screenshot.directory.is_none());
     assert!(settings.screenshot.filename_patterns.is_empty());
     assert!(!settings.screenshot.capture_all_new_images);
@@ -161,6 +162,18 @@ fn whole_board_selection_binding_is_remappable() {
     .expect("write config");
     let settings = load_settings(directory.path()).expect("settings");
     assert_eq!(settings.ui.keybindings.select_all, 'z');
+}
+
+#[test]
+fn experimental_sentence_deletion_chord_is_remappable() {
+    let directory = tempfile::tempdir().expect("config directory");
+    fs::write(
+        directory.path().join("config.toml"),
+        "[keybindings]\ndelete_sentence = 'G'\n",
+    )
+    .expect("write config");
+    let settings = load_settings(directory.path()).expect("settings");
+    assert_eq!(settings.ui.keybindings.delete_sentence, 'G');
 }
 
 #[test]

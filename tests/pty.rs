@@ -12,6 +12,10 @@ mod recovery;
 mod reorder;
 
 #[cfg(target_os = "macos")]
+#[path = "pty/sentence_deletion.rs"]
+mod sentence_deletion;
+
+#[cfg(target_os = "macos")]
 #[path = "pty/collapsed_entry.rs"]
 mod collapsed_entry;
 

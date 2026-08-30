@@ -116,7 +116,8 @@ impl BoardApp {
             }
             | UiKey::Backspace
             | UiKey::Delete
-            | UiKey::DeleteLine
+            | UiKey::DeleteLogicalLine
+            | UiKey::DeleteSentence
             | UiKey::Copy
             | UiKey::Cut
             | UiKey::Duplicate
@@ -249,7 +250,7 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        let Some(key) = normalize_edit_key(key) else {
+        let Some(key) = self.normalize_edit_key(key) else {
             return Vec::new();
         };
         if let Some(effects) = self.handle_edit_effect(key, ids, clock) {
@@ -301,7 +302,7 @@ impl BoardApp {
                 clock,
             ));
         }
-        if matches!(key, UiKey::DeleteLine) {
+        if matches!(key, UiKey::DeleteLogicalLine | UiKey::DeleteSentence) {
             effects.extend(self.flush_pending_edit(ids, clock));
         }
         effects
@@ -466,13 +467,20 @@ impl BoardApp {
     }
 }
 
-fn normalize_edit_key(key: UiKey) -> Option<UiKey> {
-    match key {
-        UiKey::PrimaryShiftMove { movement } => Some(UiKey::Move {
-            movement,
-            extend_selection: true,
-        }),
-        UiKey::PrimaryCharacter(_) => None,
-        key => Some(key),
+impl BoardApp {
+    fn normalize_edit_key(&self, key: UiKey) -> Option<UiKey> {
+        match key {
+            UiKey::PrimaryShiftMove { movement } => Some(UiKey::Move {
+                movement,
+                extend_selection: true,
+            }),
+            UiKey::PrimaryCharacter(character)
+                if character.eq_ignore_ascii_case(&self.settings.keybindings.delete_sentence) =>
+            {
+                Some(UiKey::DeleteSentence)
+            }
+            UiKey::PrimaryCharacter(_) => None,
+            key => Some(key),
+        }
     }
 }

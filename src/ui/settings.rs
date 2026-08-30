@@ -110,6 +110,8 @@ pub struct KeyBindings {
     pub quit: char,
     /// Toggle the macOS screenshot inbox.
     pub screenshot_inbox: char,
+    /// Shifted Primary chord suffix for experimental sentence deletion.
+    pub delete_sentence: char,
 }
 
 impl Default for KeyBindings {
@@ -136,6 +138,7 @@ impl Default for KeyBindings {
             help: '?',
             quit: 'q',
             screenshot_inbox: 'i',
+            delete_sentence: 'U',
         }
     }
 }
@@ -226,6 +229,7 @@ impl KeyBindings {
             self.help,
             self.quit,
             self.screenshot_inbox,
+            self.delete_sentence,
         ];
         for (index, value) in values.iter().enumerate() {
             if value.is_control() || values[index + 1..].contains(value) {

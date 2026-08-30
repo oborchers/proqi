@@ -147,6 +147,7 @@ and run in parallel; one lease prevents concurrent editing.
 | --- | --- |
 | `Esc` | Return to the board |
 | `Primary+A`; `Primary+U` | Select all; delete logical line |
+| `Primary+Shift+U` | Delete containing sentence (experimental) |
 | `Primary+Z`; `Primary+Shift+Z` / `Primary+Y` | Undo; redo |
 | `Primary+C` / `X` / `V` | Native copy / safe cut / paste |
 | `Alt` or `Ctrl` + `←` / `→`; `Home` / `End` | Move by word; line boundary |
@@ -261,10 +262,13 @@ undo = "u"
 focus_up = "k"
 focus_down = "j"
 screenshot_inbox = "i"
+delete_sentence = "U" # Primary+Shift+U, use another uppercase suffix to remap
 ```
 
 Unsafe theme contrast is rejected. See the
 [theme example](docs/themes/proqi-dark.toml). Invocation roots stay local.
+Sentence deletion uses a documented Unicode profile with unavoidable ambiguity.
+See [experimental sentence deletion](docs/EXPERIMENTAL_SENTENCE_DELETION.md).
 
 ## Compatibility and contributing
 

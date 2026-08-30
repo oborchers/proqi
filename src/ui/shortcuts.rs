@@ -12,7 +12,11 @@ pub(crate) fn items(app: &BoardApp) -> Vec<Shortcut> {
         return vec![
             ("Esc".to_owned(), "Board"),
             (primary("A"), "Select all"),
-            (primary("U"), "Delete line"),
+            (primary("U"), "Delete logical line"),
+            (
+                primary(&format!("Shift+{}", keys.delete_sentence)),
+                "Delete sentence (experimental)",
+            ),
             (primary("Z"), "Undo"),
             (primary("Shift+Z"), "Redo"),
             ("Alt+↑/↓".to_owned(), "Jump 5 rows"),

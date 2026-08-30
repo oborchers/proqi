@@ -98,8 +98,10 @@ pub enum UiKey {
     },
     /// Select the complete thought.
     SelectAll,
-    /// Delete the current logical line.
-    DeleteLine,
+    /// Delete the current newline-delimited logical line.
+    DeleteLogicalLine,
+    /// Delete every Unicode sentence touched by the cursor or selection.
+    DeleteSentence,
     /// Undo in the active history scope.
     Undo,
     /// Redo in the active history scope.

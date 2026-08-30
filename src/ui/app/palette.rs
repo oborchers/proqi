@@ -97,6 +97,8 @@ impl PaletteState {
             | Command::SubmitAllRemove
             | Command::SubmitAllKeep => self.submit_supported,
             Command::PlainNewline
+            | Command::DeleteLogicalLine
+            | Command::DeleteSentence
             | Command::JumpUp
             | Command::JumpDown
             | Command::ThoughtStart
@@ -302,23 +304,14 @@ impl BoardApp {
             Command::Cut => self.cut_active(ids, clock),
             Command::Paste => self.read_clipboard(ids),
             Command::Duplicate => self.duplicate(ids, clock),
-            Command::SelectAll => {
-                let effects = if matches!(
-                    self.state.mode,
-                    crate::application::InteractionMode::Edit { .. }
-                ) {
-                    self.finish_edit(ids, clock)
-                } else {
-                    Vec::new()
-                };
-                self.select_all_thoughts();
-                effects
-            }
+            Command::SelectAll => self.select_all_from_palette(ids, clock),
             Command::SubmitRemove
             | Command::SubmitKeep
             | Command::SubmitAllRemove
             | Command::SubmitAllKeep
             | Command::PlainNewline
+            | Command::DeleteLogicalLine
+            | Command::DeleteSentence
             | Command::JumpUp
             | Command::JumpDown
             | Command::ThoughtStart
@@ -358,6 +351,23 @@ impl BoardApp {
                 Vec::new()
             }
         }
+    }
+
+    fn select_all_from_palette(
+        &mut self,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        let effects = if matches!(
+            self.state.mode,
+            crate::application::InteractionMode::Edit { .. }
+        ) {
+            self.finish_edit(ids, clock)
+        } else {
+            Vec::new()
+        };
+        self.select_all_thoughts();
+        effects
     }
 
     fn execute_entry_command(
@@ -410,6 +420,8 @@ impl BoardApp {
         if !matches!(
             command,
             Command::PlainNewline
+                | Command::DeleteLogicalLine
+                | Command::DeleteSentence
                 | Command::JumpUp
                 | Command::JumpDown
                 | Command::ThoughtStart
@@ -429,6 +441,19 @@ impl BoardApp {
         };
         if command == Command::PlainNewline {
             effects.extend(self.insert_newline(false, ids, clock));
+            return Some(effects);
+        }
+        if matches!(
+            command,
+            Command::DeleteLogicalLine | Command::DeleteSentence
+        ) {
+            self.restore_palette_selection_handoff(selection_handoff);
+            let key = if command == Command::DeleteLogicalLine {
+                UiKey::DeleteLogicalLine
+            } else {
+                UiKey::DeleteSentence
+            };
+            effects.extend(self.handle_edit_key(key, ids, clock));
             return Some(effects);
         }
         let movement = match command {

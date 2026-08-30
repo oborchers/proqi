@@ -145,6 +145,37 @@ fn primary_shift_s_remains_an_unassigned_board_chord() {
 }
 
 #[test]
+fn logical_line_and_sentence_deletion_keep_distinct_primary_chords() {
+    for modifier in [
+        KeyModifiers::CONTROL,
+        KeyModifiers::SUPER,
+        KeyModifiers::META,
+    ] {
+        assert_eq!(
+            translate(Event::Key(KeyEvent::new(KeyCode::Char('u'), modifier))),
+            Some(UiInput::Key(UiKey::DeleteLogicalLine))
+        );
+        for character in ['u', 'U'] {
+            assert_eq!(
+                translate(Event::Key(KeyEvent::new(
+                    KeyCode::Char(character),
+                    modifier | KeyModifiers::SHIFT,
+                ))),
+                Some(UiInput::Key(UiKey::PrimaryCharacter(character)))
+            );
+        }
+    }
+
+    assert_eq!(
+        translate(Event::Key(KeyEvent::new(
+            KeyCode::Char('u'),
+            KeyModifiers::ALT,
+        ))),
+        Some(UiInput::Key(UiKey::Character('u')))
+    );
+}
+
+#[test]
 fn primary_clipboard_shortcuts_do_not_reuse_quit() {
     for (character, expected) in [
         ('c', UiKey::Copy),

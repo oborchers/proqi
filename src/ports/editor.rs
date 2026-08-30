@@ -118,6 +118,8 @@ pub enum EditCommand {
     DeleteForward,
     /// Delete the current newline-delimited logical line.
     DeleteLogicalLine,
+    /// Delete every Unicode sentence touched by the cursor or selection.
+    DeleteSentence,
     /// Move the cursor, optionally extending the selection.
     Move {
         /// Movement to apply.

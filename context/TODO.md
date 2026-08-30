@@ -35,8 +35,8 @@ undo remain non-negotiable.
   section headings that keyboard and mouse selection always skip.
 - [ ] **Deterministic TUI fixtures:** add an `xtask` scenario/session seeder for
   repeatable live walkthroughs, regression reproduction, and stress testing.
-- [ ] **High-return editing:** make destructive unit deletion safe, then add
-  exact replace-all and logical-line duplicate/move.
+- [ ] **High-return editing:** evaluate the experimental sentence command, then
+  add exact replace-all and logical-line duplicate/move.
 - [ ] **Attachment integrity:** preserve file, image, and folded annotation
   metadata across Proqi-to-Proqi copy/cut/paste, and prevent submission when an
   annotated asset can no longer be accessed.
@@ -59,7 +59,8 @@ undo remain non-negotiable.
 ```text
 Editor
 ├─ Exact replace-all ──> Occurrence-only multi-selection
-├─ Safe visual-row/logical-line deletion ──> Sentence/paragraph deletion
+├─ Experimental sentence deletion
+├─ Paragraph deletion
 └─ Shared logical-line ranges ──> Logical-line duplicate/move/join
 
 Clipboard and attachments
@@ -320,75 +321,37 @@ terminology consistently in product text, documentation, and implementation.
 
 ## Smart text editing
 
-### Safe visual-row and logical-line deletion — P0, S (2–4 days)
+### Experimental whole-sentence deletion: P0, S/M (3 to 6 days)
 
-User story: pressing the ordinary delete-line shortcut removes only the current
-rendered row instead of unexpectedly deleting an entire long wrapped paragraph,
-while an explicit separate command remains available for deleting one complete
-newline-delimited logical line.
+User story: while editing prose, one explicit command deletes the grammatical
+sentence containing the cursor without requiring a directional selection.
 
-- [ ] Change `Primary+U` to **Delete visual row**. Resolve the current wrapped
-  row from the latest canonical editor layout and delete its exact canonical
-  byte range without splitting a grapheme, wide character, combining sequence,
-  emoji sequence, tab, or control representation.
-- [ ] Preserve **Delete logical line** as a separate explicit action, preferably
-  `Primary+Shift+U`, with a command-palette fallback. It removes one complete
-  LF/CRLF-delimited logical line and its newline using deterministic first,
-  middle, last, empty, and missing-final-newline behavior.
-- [ ] Use the precise labels **visual row** and **logical line** in help,
-  commands, documentation, and tests. Never expose an ambiguous destructive
-  action merely as **Delete line**.
-- [ ] When a selection exists, apply the chosen unit to every touched visual row
-  or logical line, merge overlapping ranges, and commit one atomic transaction,
-  persistent revision, and undo step.
-- [ ] Keep list behavior explicit: logical-line deletion removes the complete
-  list item including indentation and marker; visual-row deletion removes only
-  the displayed slice, including a marker only when that marker is actually in
-  the targeted row. Never silently renumber later ordered items.
-- [ ] If a targeted visual row intersects collapsed folded content, expand the
-  fold without deleting on the first invocation. Never let a small visible
-  placeholder erase a large hidden attachment, pasted block, or canonical
-  range.
-- [ ] Emit exact `TextChangeSet` ranges so file/image/paste annotations,
-  invocation highlighting, cursor, selection, and persistent undo rebase through
-  the existing single source of truth.
-- [ ] Reflow before resolving the command after resize. Cover narrow/wide and
-  shallow/tall panes, first/middle/final wrapped rows, rapid repetition, boundary
-  no-ops, restart, and repeated undo/redo.
-- [ ] Keep modifier normalization truthful. Product text calls this `Primary+U`
-  (Command on macOS, Control on Linux); add terminal-input coverage proving that
-  Alt/Option+U is not accidentally normalized as Primary when the protocol
-  reports them distinctly, especially on layouts where Option+U is a dead key.
-- [ ] Add a regression for the reported case: a long newline-free paragraph
-  wraps across several rows, the caret is in one row, and `Primary+U` removes
-  only that row while preserving all other canonical text exactly.
+- [x] Keep `Primary+U` as **Delete logical line**. Visual-row deletion is not
+  planned and must not be introduced as an implicit width-dependent behavior.
+- [x] Add experimental **Delete sentence** on `Primary+Shift+U`, with Commands
+  overlay and configurable-binding discovery.
+- [x] Use the maintained `unicode-segmentation` UAX 29 implementation through a
+  declared UAX29-C3-2 profile. Single LF and CRLF sequences remain prose
+  content. Blank-line paragraph separators remain hard structural boundaries.
+- [x] Define cursor, terminator, closing punctuation, whitespace, end-of-text,
+  selection, and deletion ownership precisely in
+  [`docs/EXPERIMENTAL_SENTENCE_DELETION.md`](../docs/EXPERIMENTAL_SENTENCE_DELETION.md).
+- [x] Merge every touched sentence range into one editor transaction. Preserve
+  exact unrelated bytes, annotations, folds, graphemes, cursor validity,
+  resize independence, and restart-safe persistent undo and redo.
+- [x] Cover Latin, CJK, Unicode terminators, combining marks, emoji, LF, CRLF,
+  blank paragraphs, missing terminators, repeated deletion, large input, URLs,
+  decimals, versions, abbreviations, quotations, ellipses, and code punctuation.
+- [x] Keep the action explicitly experimental. Document unavoidable ambiguity
+  and do not imply locale-aware or semantic sentence understanding.
 
-### Sentence and paragraph deletion — P1, S/M (3–6 days after safe deletion)
+### Paragraph deletion: P1, S (2 to 5 days)
 
-- [ ] Add **Delete sentence** using a reviewed Unicode sentence-boundary
-  implementation rather than a hand-maintained punctuation or language table.
-  Cover Latin and non-Latin terminators while documenting unavoidable ambiguity
-  around abbreviations, URLs, version numbers, decimals, and source code.
 - [ ] Add **Delete paragraph** using blank-line-delimited blocks. Keep it
-  distinct from a newline-delimited logical line and from a width-dependent
-  visual row; deleting the only paragraph may intentionally empty the thought.
-- [ ] Define separator ownership exactly. Remove the chosen sentence or
-  paragraph plus one deterministic adjacent separator without trimming or
-  normalizing any unrelated bytes.
-- [ ] Start both actions in the command palette with configurable bindings. Do
-  not assign a fragile Alt/Option chord or another prominent destructive default
-  until real use demonstrates that the segmentation is predictable.
-- [ ] A selection addresses every touched sentence or paragraph as one atomic
-  transaction; overlapping ranges collapse before application. This range model
-  must remain compatible with later occurrence-only multi-selection.
-- [ ] Sentence deletion inside a list item preserves its indentation and marker.
-  Paragraph deletion removes list structure only when the explicit paragraph
-  range contains it. Neither action silently renumbers later items.
-- [ ] Expand or refuse folded ranges before destructive unit deletion; never
-  delete hidden canonical content merely because its placeholder intersects a
-  visible sentence or paragraph.
-- [ ] Preserve annotations, exact Unicode, LF/CRLF, cursor, selection, restart-
-  safe undo/redo, resize behavior, and bounded performance on very large prose.
+  distinct from a newline-delimited logical line. Deleting the only paragraph
+  may intentionally empty the thought.
+- [ ] Define separator ownership and selection behavior before implementation.
+  Preserve exact LF, CRLF, Unicode, annotations, folds, and persistent history.
 
 ### Logical-line duplicate and move — P1, M (4–7 days)
 

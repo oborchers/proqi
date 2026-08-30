@@ -5,7 +5,7 @@ Status: v0.1.0 product contract
 Product name: Proqi
 
 Command: `proqi`
-Last updated: 2026-08-29
+Last updated: 2026-08-30
 
 ## Vision
 
@@ -663,10 +663,20 @@ Initial editing shortcuts include:
 |---|---|---|
 | Select all text in the focused thought | `Meta+A` | `Ctrl+A` or command palette |
 | Delete the current logical line | `Meta+U` | `Ctrl+U` or command palette |
+| Delete the containing sentence (experimental) | `Meta+Shift+U` | Command palette or configured binding |
 
 Select all is scoped to the current thought in edit mode and to every live
-thought in board mode. Delete line removes one newline-delimited logical line,
+thought in board mode. Delete logical line removes one newline-delimited logical line,
 not only the currently wrapped visual row, and is one undoable edit.
+
+Experimental sentence deletion removes the complete Unicode sentence containing
+the cursor, independent of cursor direction. A selection removes every touched
+sentence as one edit. Single LF and CRLF sequences remain sentence content, and
+blank-line paragraph separators are hard boundaries. Exact terminator,
+whitespace, selection, and separator ownership follows the reviewed
+[experimental sentence deletion contract](../docs/EXPERIMENTAL_SENTENCE_DELETION.md).
+The action deliberately documents ambiguity rather than claiming linguistic
+certainty. It does not replace logical-line deletion.
 
 Many terminals consume Command shortcuts before a TUI can receive them. Proqi
 therefore supports enhanced keyboard protocols where available, configurable

@@ -456,6 +456,8 @@ mod scroll_regressions;
 mod select_all;
 #[path = "ui_board/selection.rs"]
 mod selection;
+#[path = "ui_board/sentence_deletion.rs"]
+mod sentence_deletion;
 #[path = "ui_board/session_navigation.rs"]
 mod session_navigation;
 #[path = "ui_board/smart_lists.rs"]

@@ -29,7 +29,8 @@ pub(super) fn command_for_key(key: UiKey, adjacent_fold: bool) -> Option<(EditCo
             true,
         )),
         UiKey::SelectAll => Some((EditCommand::SelectAll, true)),
-        UiKey::DeleteLine => Some((EditCommand::DeleteLogicalLine, true)),
+        UiKey::DeleteLogicalLine => Some((EditCommand::DeleteLogicalLine, true)),
+        UiKey::DeleteSentence => Some((EditCommand::DeleteSentence, true)),
         UiKey::Escape
         | UiKey::EditNavigation { .. }
         | UiKey::PrimaryCharacter(_)
