@@ -14,8 +14,73 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  changes:
+    name: Classify changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      base_sha: ${{ steps.classify.outputs.base_sha }}
+      docs_only: ${{ steps.classify.outputs.docs_only }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Classify changed paths
+        id: classify
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_SHA: ${{ github.sha }}
+          PULL_REQUEST_BASE: ${{ github.event.pull_request.base.sha }}
+          PUSH_BASE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            base_sha="$PULL_REQUEST_BASE"
+          else
+            base_sha="$PUSH_BASE"
+          fi
+
+          docs_only=true
+          changed_count=0
+          while IFS= read -r path; do
+            [[ -z "$path" ]] && continue
+            changed_count=$((changed_count + 1))
+            if [[ "$path" != *.md ]]; then
+              docs_only=false
+            fi
+          done < <(git diff --name-only --diff-filter=ACDMRTUXB "$base_sha" "$HEAD_SHA")
+
+          if [[ "$changed_count" -eq 0 ]]; then
+            docs_only=false
+          fi
+          echo "base_sha=$base_sha" >> "$GITHUB_OUTPUT"
+          echo "docs_only=$docs_only" >> "$GITHUB_OUTPUT"
+
+  docs:
+    name: Documentation gate
+    needs: changes
+    if: needs.changes.outputs.docs_only == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check changed Markdown whitespace
+        env:
+          BASE_SHA: ${{ needs.changes.outputs.base_sha }}
+        run: git diff --check "$BASE_SHA" "$GITHUB_SHA"
+      - name: Check public documentation assets
+        run: cargo xtask assets
+      - run: cargo xtask clean-worktree
+
   quality:
     name: Quality gate
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -33,6 +98,8 @@ jobs:
 
   test:
     name: Tests (${{ matrix.os }})
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -54,6 +121,8 @@ jobs:
 
   msrv:
     name: Minimum supported Rust
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
@@ -70,6 +139,8 @@ jobs:
 
   security:
     name: Dependency security and policy
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -84,6 +155,8 @@ jobs:
 
   pty:
     name: PTY smoke tests (macOS)
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
     runs-on: macos-15
     timeout-minutes: 15
     steps:
@@ -98,6 +171,8 @@ jobs:
 
   coverage:
     name: Coverage floor
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
@@ -115,6 +190,8 @@ jobs:
 
   package:
     name: Package contract (${{ matrix.os }})
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -145,7 +222,8 @@ jobs:
 
   debian:
     name: Debian package contract
-    needs: package
+    needs: [changes, package]
+    if: needs.changes.outputs.docs_only != 'true' && needs.package.result == 'success'
     runs-on: ubuntu-22.04
     timeout-minutes: 25
     steps:
@@ -173,12 +251,29 @@ jobs:
   check:
     name: Required CI result
     if: always()
-    needs: [quality, test, msrv, security, pty, coverage, package, debian]
+    needs: [changes, docs, quality, test, msrv, security, pty, coverage, package, debian]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - name: Require every quality job
+      - name: Require the documentation-only gate
+        if: needs.changes.outputs.docs_only == 'true'
         env:
           NEEDS: ${{ toJSON(needs) }}
         run: |
-          test "$(jq -r '[.[].result] | all(. == "success")' <<<"$NEEDS")" = true
+          test "$(jq -r '
+            .changes.result == "success" and
+            .docs.result == "success" and
+            ([.quality, .test, .msrv, .security, .pty, .coverage, .package, .debian]
+              | all(.result == "skipped"))
+          ' <<<"$NEEDS")" = true
+      - name: Require every product quality job
+        if: needs.changes.outputs.docs_only != 'true'
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          test "$(jq -r '
+            .changes.result == "success" and
+            .docs.result == "skipped" and
+            ([.quality, .test, .msrv, .security, .pty, .coverage, .package, .debian]
+              | all(.result == "success"))
+          ' <<<"$NEEDS")" = true
