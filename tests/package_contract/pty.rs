@@ -2,15 +2,13 @@
 
 use std::{
     fs,
-    io::{Read, Write},
     os::unix::fs::symlink,
-    process::Command,
-    sync::{Arc, Mutex},
+    process::{Command, Stdio},
+    sync::Arc,
     thread,
     time::{Duration, Instant},
 };
 
-use portable_pty::{Child, CommandBuilder, PtySize, native_pty_system};
 use proqi::{
     adapters::{
         control::LocalUpdateControlClient,
@@ -30,23 +28,20 @@ use proqi::{
         },
     },
 };
-use serde_json::Value;
 
 use super::{InstalledProduct, package_version};
 
-struct PtyChild {
-    child: Box<dyn Child + Send + Sync>,
-    input: Box<dyn Write + Send>,
-    output: Arc<Mutex<Vec<u8>>>,
-    reader: thread::JoinHandle<()>,
-}
+#[path = "pty/process.rs"]
+mod process;
+
+use process::{PtyChild, assert_terminal_restored};
 
 pub(super) fn assert_active_owner_and_terminal_restoration(
     product: &InstalledProduct,
     session: &str,
 ) {
-    let mut owner = spawn(product, session);
-    wait_for_owner(product, session, &mut owner);
+    let mut owner = PtyChild::spawn(product, session);
+    owner.wait_for_owner(product, session);
     let forwarded = product.json_input(
         &["thoughts", "add", session],
         "forwarded through the installed owner Grüße 界",
@@ -56,28 +51,56 @@ pub(super) fn assert_active_owner_and_terminal_restoration(
             .as_str()
             .is_some_and(|id| id.starts_with("tht_"))
     );
-    owner.input.write_all(b"q").expect("quit owner");
-    owner.input.flush().expect("flush quit");
-    let output = finish(owner, Duration::from_secs(10));
+    owner.input().write_all(b"q").expect("quit owner");
+    owner.input().flush().expect("flush quit");
+    let output = owner.finish(Duration::from_secs(10));
     assert_terminal_restored(&output);
 
     let created = product.json(&[]);
     let terminated_session = created["data"]["session_id"]
         .as_str()
         .expect("termination session");
-    let mut owner = spawn(product, terminated_session);
-    wait_for_owner(product, terminated_session, &mut owner);
-    let process_id = owner.child.process_id().expect("PTY process ID");
+    let mut owner = PtyChild::spawn(product, terminated_session);
+    owner.wait_for_owner(product, terminated_session);
+    let process_id = owner.process_id();
     let termination = Command::new("/bin/kill")
         .args(["-TERM", &process_id.to_string()])
         .status()
         .expect("signal PTY owner");
     assert!(termination.success());
-    let output = finish(owner, Duration::from_secs(10));
+    let output = owner.finish(Duration::from_secs(10));
     assert_terminal_restored(&output);
     let resumed = product.json(&["-r", terminated_session]);
     assert_eq!(resumed["data"]["session_id"], terminated_session);
+    assert_drop_guard_releases_owner(product);
     assert_update_contract(product);
+}
+
+fn assert_drop_guard_releases_owner(product: &InstalledProduct) {
+    let created = product.json(&[]);
+    let session = created["data"]["session_id"]
+        .as_str()
+        .expect("drop-guard session");
+    let mut owner = PtyChild::spawn(product, session);
+    owner.wait_for_owner(product, session);
+    let process_id = owner.process_id();
+    drop(owner);
+    let probe = Command::new("/bin/kill")
+        .args(["-0", &process_id.to_string()])
+        .stderr(Stdio::null())
+        .status()
+        .expect("probe dropped PTY owner");
+    assert!(!probe.success(), "dropped PTY owner remained alive");
+    let resumed = product.json(&["-r", session]);
+    assert_eq!(resumed["data"]["session_id"], session);
+    let instances = product.state.join("runtime/instances");
+    assert_eq!(
+        fs::read_dir(instances)
+            .expect("read cleaned runtime metadata")
+            .count(),
+        0,
+        "dropped owner metadata survived recovery"
+    );
 }
 
 struct FakeSource {
@@ -120,8 +143,8 @@ fn assert_update_contract(product: &InstalledProduct) {
     let session = created["data"]["session_id"]
         .as_str()
         .expect("update session");
-    let mut owner = spawn(&homebrew, session);
-    wait_for_owner(&homebrew, session, &mut owner);
+    let mut owner = PtyChild::spawn(&homebrew, session);
+    owner.wait_for_owner(&homebrew, session);
     let installation = SystemInstallDetector::for_executable(homebrew.binary.clone())
         .detect()
         .expect("fake Homebrew installation");
@@ -159,9 +182,9 @@ fn assert_update_contract(product: &InstalledProduct) {
     );
     let after = wait_for_replacement(&registry, session, before.instance_id);
     assert_eq!(after.pid, before.pid);
-    owner.input.write_all(b"q").expect("quit replaced owner");
-    owner.input.flush().expect("flush replaced quit");
-    assert_terminal_restored(&finish(owner, Duration::from_secs(10)));
+    owner.input().write_all(b"q").expect("quit replaced owner");
+    owner.input().flush().expect("flush replaced quit");
+    assert_terminal_restored(&owner.finish(Duration::from_secs(10)));
     assert_failed_exec_is_recoverable(product);
 }
 
@@ -234,8 +257,8 @@ fn assert_failed_exec_is_recoverable(product: &InstalledProduct) {
     let session = created["data"]["session_id"]
         .as_str()
         .expect("failed-exec session");
-    let mut owner = spawn(&homebrew, session);
-    wait_for_owner(&homebrew, session, &mut owner);
+    let mut owner = PtyChild::spawn(&homebrew, session);
+    owner.wait_for_owner(&homebrew, session);
     let installation = SystemInstallDetector::for_executable(homebrew.binary.clone())
         .detect()
         .expect("failed-exec installation");
@@ -286,7 +309,7 @@ fn assert_failed_exec_is_recoverable(product: &InstalledProduct) {
             .expect("accept failed replacement")
             .accepted
     );
-    let (success, output) = finish_with_status(owner, Duration::from_secs(10));
+    let (success, output) = owner.finish_with_status(Duration::from_secs(10));
     assert!(
         !success,
         "injected Unix exec failure unexpectedly succeeded"
@@ -321,6 +344,7 @@ fn fake_homebrew_product(product: &InstalledProduct, name: &str) -> InstalledPro
         archive: product.archive.clone(),
         state,
         working: product.working.clone(),
+        sandbox: Arc::clone(&product.sandbox),
     }
 }
 
@@ -362,138 +386,5 @@ fn wait_for_replacement(
         }
         assert!(Instant::now() < deadline, "installed owner did not exec");
         thread::sleep(Duration::from_millis(20));
-    }
-}
-
-fn spawn(product: &InstalledProduct, session: &str) -> PtyChild {
-    let pair = native_pty_system()
-        .openpty(PtySize {
-            rows: 24,
-            cols: 100,
-            pixel_width: 0,
-            pixel_height: 0,
-        })
-        .expect("open package PTY");
-    let reader = pair.master.try_clone_reader().expect("clone PTY reader");
-    let input = pair.master.take_writer().expect("take PTY writer");
-    let output = Arc::new(Mutex::new(Vec::new()));
-    let reader_output = Arc::clone(&output);
-    let reader = thread::spawn(move || read_pty(reader, &reader_output));
-    let mut command = CommandBuilder::new(&product.binary);
-    command.arg("--state-dir");
-    command.arg(&product.state);
-    command.args(["-r", session]);
-    command.cwd(&product.working);
-    command.env("PROQI_DISABLE_HERDR", "1");
-    command.env("NO_PROXY", "*");
-    command.env("HTTP_PROXY", "http://127.0.0.1:1");
-    command.env("HTTPS_PROXY", "http://127.0.0.1:1");
-    command.env("TERM", "xterm-256color");
-    let child = pair
-        .slave
-        .spawn_command(command)
-        .expect("spawn installed PTY owner");
-    drop(pair.slave);
-    PtyChild {
-        child,
-        input,
-        output,
-        reader,
-    }
-}
-
-fn read_pty(mut reader: Box<dyn Read + Send>, output: &Mutex<Vec<u8>>) {
-    let mut buffer = [0_u8; 8 * 1024];
-    loop {
-        match reader.read(&mut buffer) {
-            Ok(0) | Err(_) => return,
-            Ok(read) => output
-                .lock()
-                .expect("PTY output lock")
-                .extend_from_slice(&buffer[..read]),
-        }
-    }
-}
-
-fn finish(owner: PtyChild, timeout: Duration) -> Vec<u8> {
-    let (success, output) = finish_with_status(owner, timeout);
-    assert!(
-        success,
-        "PTY owner exited unsuccessfully: {}",
-        String::from_utf8_lossy(&output)
-    );
-    output
-}
-
-fn finish_with_status(mut owner: PtyChild, timeout: Duration) -> (bool, Vec<u8>) {
-    let deadline = Instant::now() + timeout;
-    loop {
-        match owner.child.try_wait().expect("poll PTY child") {
-            Some(status) => {
-                let success = status.success();
-                drop(owner.input);
-                owner.reader.join().expect("join PTY reader");
-                let output = owner.output.lock().expect("PTY output lock").clone();
-                return (success, output);
-            }
-            None if Instant::now() < deadline => thread::sleep(Duration::from_millis(20)),
-            None => {
-                owner.child.kill().expect("kill timed-out PTY owner");
-                panic!("PTY owner did not exit within {timeout:?}");
-            }
-        }
-    }
-}
-
-fn wait_for_owner(product: &InstalledProduct, session: &str, owner: &mut PtyChild) {
-    let deadline = Instant::now() + Duration::from_secs(8);
-    loop {
-        if owner_is_ready(product, session) {
-            return;
-        }
-        if let Some(status) = owner.child.try_wait().expect("poll starting owner") {
-            panic!(
-                "installed owner exited with {status}: {}",
-                String::from_utf8_lossy(&owner.output.lock().expect("PTY output lock"))
-            );
-        }
-        assert!(
-            Instant::now() < deadline,
-            "installed owner did not start: {}",
-            String::from_utf8_lossy(&owner.output.lock().expect("PTY output lock"))
-        );
-        thread::sleep(Duration::from_millis(20));
-    }
-}
-
-fn owner_is_ready(product: &InstalledProduct, session: &str) -> bool {
-    let directory = product.state.join("runtime/instances");
-    let Ok(entries) = fs::read_dir(directory) else {
-        return false;
-    };
-    entries.filter_map(Result::ok).any(|entry| {
-        fs::read(entry.path())
-            .ok()
-            .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
-            .is_some_and(|metadata| {
-                metadata["session_id"] == session
-                    && metadata["control_protocol"].as_u64()
-                        == Some(u64::from(proqi::ports::control::CONTROL_PROTOCOL_VERSION))
-                    && metadata["control_endpoint"]
-                        .as_str()
-                        .is_some_and(|endpoint| std::path::Path::new(endpoint).exists())
-            })
-    })
-}
-
-fn assert_terminal_restored(output: &[u8]) {
-    for sequence in [b"\x1b[?1049h".as_slice(), b"\x1b[?1049l".as_slice()] {
-        assert!(
-            output
-                .windows(sequence.len())
-                .any(|window| window == sequence),
-            "terminal output omitted restoration sequence {sequence:?}: {}",
-            String::from_utf8_lossy(output)
-        );
     }
 }
