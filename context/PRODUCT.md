@@ -999,6 +999,7 @@ texture would add noise and render inconsistently across terminals.
 | Focused surface | `#ECECF0` | `#34343F` |
 | Quiet border | `#E0D9CF` | `#2A2520` |
 | Muted text | `#4F463E` | `#B0A9A0` |
+| Warning | `#945F0E` | `#CCA03A` |
 
 The terminal may inherit its existing background where exact background color
 control would make integration feel less native. Accent and focus treatment
@@ -1012,7 +1013,8 @@ surface. Muted text and borders establish hierarchy without introducing more
 hues.
 
 Semantic error, warning, and information colors appear only when those states
-actually exist. They are not decorative note colors.
+actually exist. Warning uses the brand-derived amber role, independently of the
+routine forest-green accent. They are not decorative note colors.
 
 ### Brand expression in the terminal
 

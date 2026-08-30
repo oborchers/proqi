@@ -7,6 +7,7 @@ use crate::ports::editor::{OffsetAffinity, TextChange, TextChangeSet};
 
 const LARGE_PASTE_LINES: usize = 12;
 const LARGE_PASTE_GRAPHEMES: usize = 1_200;
+const INACCESSIBLE_SUFFIX: &str = " [inaccessible]";
 
 /// Exact inserted text with optional durable presentation provenance.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -56,6 +57,7 @@ pub(super) struct PresentedFold {
     pub(super) annotation_index: usize,
     pub(super) start: usize,
     pub(super) end: usize,
+    pub(super) content_end: usize,
     pub(super) canonical_start: usize,
     pub(super) canonical_end: usize,
     pub(super) collapsed: bool,
@@ -109,10 +111,15 @@ pub(super) fn project_with_health(
                 return plain(content);
             };
             output.push_str(exact);
+            let content_end = output.len();
+            if inaccessible {
+                output.push_str(INACCESSIBLE_SUFFIX);
+            }
             folds.push(fold(
                 annotation_index,
                 start,
                 output.len(),
+                content_end,
                 annotation,
                 false,
                 inaccessible,
@@ -130,6 +137,7 @@ pub(super) fn project_with_health(
         folds.push(fold(
             annotation_index,
             start,
+            output.len(),
             output.len(),
             annotation,
             true,
@@ -186,6 +194,7 @@ fn fold(
     annotation_index: usize,
     start: usize,
     end: usize,
+    content_end: usize,
     annotation: &ContentAnnotation,
     collapsed: bool,
     inaccessible: bool,
@@ -194,6 +203,7 @@ fn fold(
         annotation_index,
         start,
         end,
+        content_end,
         canonical_start: annotation.start,
         canonical_end: annotation.end,
         collapsed,

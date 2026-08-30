@@ -9,6 +9,9 @@ use proqi::{
 };
 use ratatui_core::style::Modifier;
 
+#[path = "attachment_accessibility/review.rs"]
+mod review;
+
 #[test]
 fn inaccessible_image_and_file_use_exact_plain_labels_and_warning_semantics_after_resize() {
     for (image, label) in [
@@ -135,6 +138,10 @@ fn every_submit_variant_fails_before_journaling_delivery_or_removal() {
         let effects = execute_palette(&mut fixture, query);
         let preflight = attachment_batch(&effects);
         assert_eq!(fixture.app.status_text(), Some("checking attachments"));
+        assert!(
+            text(draw(&mut fixture, 80, 12).backend().buffer()).contains("inaccessible"),
+            "fresh preflight cannot render a prior success as current proof: {query}"
+        );
         let effects = fixture.app.complete_attachment_checks(complete(
             preflight,
             Err(AttachmentAccessFailure::TimedOut),

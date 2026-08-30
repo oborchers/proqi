@@ -15,7 +15,7 @@ use crate::{
     },
 };
 
-use super::AttachmentAccessibilityState;
+use super::{AttachmentAccessibilityState, AttachmentRefreshCause};
 use crate::application::test_support::TestIds;
 
 #[test]
@@ -65,9 +65,104 @@ fn inaccessible_health_is_binary_and_manual_refresh_recovers_it() {
     assert!(state.complete(missing).0.is_empty());
     assert!(state.inaccessible(ids[0], 0));
 
-    let refresh = one_batch(state.refresh_all(&board, Some(ids[0])));
+    let refresh = one_batch(
+        state
+            .refresh_all(&board, Some(ids[0]), AttachmentRefreshCause::Manual)
+            .0,
+    );
     assert!(state.complete(accessible(refresh)).0.is_empty());
     assert!(!state.inaccessible(ids[0], 0));
+}
+
+#[test]
+fn startup_and_refresh_never_present_unverified_health_as_accessible() {
+    let (board, ids) = board_with_attachments(2);
+    let mut state = AttachmentAccessibilityState::default();
+    assert!(state.inaccessible(ids[0], 0));
+
+    let startup = one_batch(state.start(&board, Some(ids[0]), Duration::ZERO));
+    assert!(state.inaccessible(ids[0], 0));
+    assert!(state.inaccessible(ids[1], 0));
+    assert!(state.complete(accessible(startup)).0.is_empty());
+    assert!(!state.inaccessible(ids[0], 0));
+    assert!(!state.inaccessible(ids[1], 0));
+
+    let refresh = one_batch(
+        state
+            .refresh_all(&board, Some(ids[0]), AttachmentRefreshCause::Manual)
+            .0,
+    );
+    assert!(state.inaccessible(ids[0], 0));
+    assert!(state.inaccessible(ids[1], 0));
+    let (_, _, outcome) = state.complete(accessible(refresh));
+    assert_eq!(outcome.expect("manual completion").inaccessible, 0);
+    assert!(!state.inaccessible(ids[0], 0));
+    assert!(!state.inaccessible(ids[1], 0));
+}
+
+#[test]
+fn refresh_preserves_inaccessible_health_until_successful_recovery() {
+    let (board, ids) = board_with_attachments(1);
+    let mut state = AttachmentAccessibilityState::default();
+    let startup = one_batch(state.start(&board, Some(ids[0]), Duration::ZERO));
+    assert!(
+        state
+            .complete(failed(startup, AttachmentAccessFailure::Missing))
+            .0
+            .is_empty()
+    );
+    assert!(state.inaccessible(ids[0], 0));
+
+    let refresh = one_batch(
+        state
+            .refresh_all(&board, Some(ids[0]), AttachmentRefreshCause::Manual)
+            .0,
+    );
+    assert!(state.inaccessible(ids[0], 0));
+    let (_, _, outcome) = state.complete(accessible(refresh));
+    assert_eq!(outcome.expect("recovery").inaccessible, 0);
+    assert!(!state.inaccessible(ids[0], 0));
+}
+
+#[test]
+fn latest_manual_refresh_owns_completion_and_quiet_triggers_coalesce() {
+    let (board, ids) = board_with_attachments(1);
+    let mut state = AttachmentAccessibilityState::default();
+    let startup = one_batch(state.start(&board, Some(ids[0]), Duration::ZERO));
+    assert!(state.complete(accessible(startup)).0.is_empty());
+
+    let first = one_batch(
+        state
+            .refresh_all(&board, Some(ids[0]), AttachmentRefreshCause::Manual)
+            .0,
+    );
+    assert!(
+        state
+            .refresh_all(&board, Some(ids[0]), AttachmentRefreshCause::Quiet)
+            .0
+            .is_empty()
+    );
+    assert!(
+        state
+            .refresh_all(&board, Some(ids[0]), AttachmentRefreshCause::Manual)
+            .0
+            .is_empty(),
+        "the first bounded batch remains in flight"
+    );
+    let (effects, _, refresh_outcome) = state.complete(accessible(first));
+    assert_eq!(refresh_outcome, None);
+    let latest = one_batch(effects);
+    let (_, _, completed) = state.complete(failed(latest, AttachmentAccessFailure::Io));
+    assert_eq!(completed.expect("latest refresh").inaccessible, 1);
+}
+
+#[test]
+fn empty_manual_refresh_completes_immediately() {
+    let (board, _) = board_with_attachments(0);
+    let mut state = AttachmentAccessibilityState::default();
+    let (effects, outcome) = state.refresh_all(&board, None, AttachmentRefreshCause::Manual);
+    assert!(effects.is_empty());
+    assert_eq!(outcome.expect("empty completion").total, 0);
 }
 
 #[test]
@@ -93,8 +188,9 @@ fn preflight_is_fresh_aggregate_and_outranks_background_continuation() {
             .complete(failed(preflight, AttachmentAccessFailure::PermissionDenied))
             .0,
     );
-    let (effects, outcome) = state.complete(accessible(second));
+    let (effects, outcome, refresh) = state.complete(accessible(second));
     assert_eq!(outcome.expect("aggregate").inaccessible, 32);
+    assert_eq!(refresh, None);
     assert!(matches!(
         effects.as_slice(),
         [Effect::CheckAttachments(batch)] if batch.purpose == AttachmentCheckPurpose::Background
@@ -136,8 +232,9 @@ fn focus_transition_reprioritizes_unknown_work_once() {
     let next = one_batch(state.complete(accessible(focused)).0);
     let mut remaining = next;
     loop {
-        let (effects, outcome) = state.complete(accessible(remaining));
+        let (effects, outcome, refresh) = state.complete(accessible(remaining));
         assert_eq!(outcome, None);
+        assert_eq!(refresh, None);
         let Some(Effect::CheckAttachments(batch)) = effects.first() else {
             break;
         };

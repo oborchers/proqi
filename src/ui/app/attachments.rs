@@ -3,7 +3,10 @@
 use std::time::Duration;
 
 use crate::{
-    application::{AttachmentPreflightOutcome, Effect, attachment_keys},
+    application::{
+        AttachmentPreflightOutcome, AttachmentRefreshCause, AttachmentRefreshOutcome, Effect,
+        attachment_keys,
+    },
     domain::ThoughtId,
     ports::attachment_accessibility::AttachmentCheckBatchResult,
 };
@@ -23,9 +26,20 @@ impl BoardApp {
         if manual {
             self.set_info("refreshing attachments");
         }
-        self.state
-            .attachments
-            .refresh_all(&self.state.board, self.state.focused_thought)
+        let cause = if manual {
+            AttachmentRefreshCause::Manual
+        } else {
+            AttachmentRefreshCause::Quiet
+        };
+        let (effects, outcome) = self.state.attachments.refresh_all(
+            &self.state.board,
+            self.state.focused_thought,
+            cause,
+        );
+        if let Some(outcome) = outcome {
+            self.finish_attachment_refresh(outcome);
+        }
+        effects
     }
 
     /// Trigger the documented fallback once after a bounded inactive interval.
@@ -42,9 +56,12 @@ impl BoardApp {
         &mut self,
         completion: AttachmentCheckBatchResult,
     ) -> Vec<Effect> {
-        let (mut effects, outcome) = self.state.attachments.complete(completion);
-        if let Some(outcome) = outcome {
+        let (mut effects, preflight, refresh) = self.state.attachments.complete(completion);
+        if let Some(outcome) = preflight {
             effects.extend(self.complete_attachment_preflight(outcome));
+        }
+        if let Some(outcome) = refresh {
+            self.finish_attachment_refresh(outcome);
         }
         effects
     }
@@ -116,6 +133,16 @@ impl BoardApp {
             .insert(submission_id, intent.pending);
         self.set_info(progress);
         vec![Effect::PrepareSubmission(intent.attempt)]
+    }
+
+    fn finish_attachment_refresh(&mut self, outcome: AttachmentRefreshOutcome) {
+        if outcome.total == 0 {
+            self.set_info("no attachments to refresh");
+        } else if outcome.inaccessible == 0 {
+            self.set_success("all attachments are accessible");
+        } else {
+            self.set_warning(inaccessible_message(outcome.inaccessible));
+        }
     }
 }
 

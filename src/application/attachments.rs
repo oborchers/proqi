@@ -1,5 +1,6 @@
 //! Transient attachment health, bounded scheduling, and submission preflight policy.
 
+mod keys;
 #[cfg(test)]
 mod tests;
 
@@ -8,10 +9,8 @@ use std::{
     time::Duration,
 };
 
-use sha2::{Digest as _, Sha256};
-
 use crate::{
-    domain::{ContentAnnotationKind, SessionBoard, SubmissionId, Thought, ThoughtId},
+    domain::{SessionBoard, SubmissionId, ThoughtId},
     ports::attachment_accessibility::{
         AttachmentAccessFailure, AttachmentCheckBatch, AttachmentCheckBatchResult,
         AttachmentCheckKey, AttachmentCheckPurpose, AttachmentCheckResult,
@@ -19,6 +18,9 @@ use crate::{
 };
 
 use super::Effect;
+
+pub use keys::attachment_keys;
+use keys::attachment_keys_by_thought;
 
 const BACKGROUND_BATCH_SIZE: usize = 16;
 const PREFLIGHT_BATCH_SIZE: usize = 32;
@@ -28,6 +30,8 @@ const INACTIVE_REFRESH_AFTER: Duration = Duration::from_secs(5 * 60);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum AttachmentHealth {
+    Unverified,
+    Checking(Option<AttachmentAccessFailure>),
     Accessible,
     Inaccessible(AttachmentAccessFailure),
 }
@@ -55,12 +59,38 @@ struct SubmissionPreflight {
     inaccessible: usize,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ManualRefresh {
+    epoch: u64,
+    total: usize,
+    completed: usize,
+    inaccessible: usize,
+}
+
 /// Completed mandatory preflight returned to the submission policy owner.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct AttachmentPreflightOutcome {
     /// Submission whose exact captured sources were checked.
     pub submission_id: SubmissionId,
     /// Number of inaccessible or unverifiable annotations.
+    pub inaccessible: usize,
+}
+
+/// Why a complete board refresh was requested.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AttachmentRefreshCause {
+    /// Quiet startup, focus, or inactivity refresh.
+    Quiet,
+    /// Explicit Commands action with user-visible completion.
+    Manual,
+}
+
+/// Completed manual refresh for the latest exact board generation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AttachmentRefreshOutcome {
+    /// Number of exact current attachment annotations checked.
+    pub total: usize,
+    /// Number that could not be verified.
     pub inaccessible: usize,
 }
 
@@ -75,6 +105,7 @@ pub struct AttachmentAccessibilityState {
     in_flight: Option<InFlight>,
     next_batch_id: u64,
     background_epoch: u64,
+    manual_refresh: Option<ManualRefresh>,
     last_deliberate: Option<Duration>,
     refreshed_since_last_deliberate: bool,
 }
@@ -90,6 +121,7 @@ impl Default for AttachmentAccessibilityState {
             in_flight: None,
             next_batch_id: 1,
             background_epoch: 0,
+            manual_refresh: None,
             last_deliberate: None,
             refreshed_since_last_deliberate: false,
         }
@@ -106,6 +138,7 @@ impl AttachmentAccessibilityState {
     ) -> Vec<Effect> {
         self.last_deliberate = Some(now);
         self.known = attachment_keys_by_thought(board);
+        self.seed_unverified();
         self.enqueue_board(board, focused, false);
         self.schedule()
     }
@@ -131,6 +164,7 @@ impl AttachmentAccessibilityState {
             .retain(|key| !changed.contains(&key.thought_id));
         self.queued.retain(|key| !changed.contains(&key.thought_id));
         self.known = current;
+        self.seed_unverified();
         for thought_id in changed.into_iter().rev() {
             self.enqueue_thought_front(thought_id, false);
         }
@@ -144,15 +178,39 @@ impl AttachmentAccessibilityState {
     }
 
     /// Invalidate and refresh every current attachment without polling.
-    pub fn refresh_all(&mut self, board: &SessionBoard, focused: Option<ThoughtId>) -> Vec<Effect> {
+    pub fn refresh_all(
+        &mut self,
+        board: &SessionBoard,
+        focused: Option<ThoughtId>,
+        cause: AttachmentRefreshCause,
+    ) -> (Vec<Effect>, Option<AttachmentRefreshOutcome>) {
+        if cause == AttachmentRefreshCause::Quiet && self.manual_refresh.is_some() {
+            return (Vec::new(), None);
+        }
         self.background_epoch = self.background_epoch.wrapping_add(1);
-        self.health.clear();
         self.background.clear();
         self.queued.clear();
         self.known = attachment_keys_by_thought(board);
+        self.demote_for_refresh();
         self.refreshed_since_last_deliberate = true;
+        let total = self.known.values().map(Vec::len).sum();
+        if cause == AttachmentRefreshCause::Manual {
+            self.manual_refresh = Some(ManualRefresh {
+                epoch: self.background_epoch,
+                total,
+                completed: 0,
+                inaccessible: 0,
+            });
+        }
         self.enqueue_board(board, focused, true);
-        self.schedule()
+        let immediate = (cause == AttachmentRefreshCause::Manual && total == 0).then(|| {
+            self.manual_refresh = None;
+            AttachmentRefreshOutcome {
+                total: 0,
+                inaccessible: 0,
+            }
+        });
+        (self.schedule(), immediate)
     }
 
     /// Apply the documented first-interaction fallback after bounded inactivity.
@@ -169,7 +227,8 @@ impl AttachmentAccessibilityState {
         self.last_deliberate = Some(now);
         self.refreshed_since_last_deliberate = false;
         if should_refresh {
-            self.refresh_all(board, focused)
+            self.refresh_all(board, focused, AttachmentRefreshCause::Quiet)
+                .0
         } else {
             Vec::new()
         }
@@ -204,28 +263,34 @@ impl AttachmentAccessibilityState {
     pub fn complete(
         &mut self,
         completion: AttachmentCheckBatchResult,
-    ) -> (Vec<Effect>, Option<AttachmentPreflightOutcome>) {
+    ) -> (
+        Vec<Effect>,
+        Option<AttachmentPreflightOutcome>,
+        Option<AttachmentRefreshOutcome>,
+    ) {
         let AttachmentCheckBatchResult {
             id,
             purpose,
             results,
         } = completion;
         let Some(in_flight) = self.in_flight.take() else {
-            return (Vec::new(), None);
+            return (Vec::new(), None, None);
         };
         if id != in_flight.id || purpose != in_flight.purpose {
             self.in_flight = Some(in_flight);
-            return (Vec::new(), None);
+            return (Vec::new(), None, None);
         }
         let failures = self.apply_results(&in_flight, &results);
-        let outcome = match in_flight.purpose {
-            AttachmentCheckPurpose::Background => None,
+        let (preflight, refresh) = match in_flight.purpose {
+            AttachmentCheckPurpose::Background => {
+                (None, self.finish_manual_refresh_batch(&in_flight, failures))
+            }
             AttachmentCheckPurpose::SubmissionPreflight(submission_id) => {
-                self.finish_preflight_batch(submission_id, failures)
+                (self.finish_preflight_batch(submission_id, failures), None)
             }
         };
         let effects = self.schedule();
-        (effects, outcome)
+        (effects, preflight, refresh)
     }
 
     /// Binary user-visible health for one current attachment annotation.
@@ -238,7 +303,7 @@ impl AttachmentAccessibilityState {
                     .find(|key| key.annotation_index == annotation_index)
             })
             .and_then(|key| self.health.get(key))
-            .is_some_and(|health| matches!(health, AttachmentHealth::Inaccessible(_)))
+            .is_none_or(|health| !matches!(health, AttachmentHealth::Accessible))
     }
 
     /// Exact current keys for source capture and fresh preflight.
@@ -276,6 +341,28 @@ impl AttachmentAccessibilityState {
             }
         }
         failures
+    }
+
+    fn finish_manual_refresh_batch(
+        &mut self,
+        in_flight: &InFlight,
+        failures: usize,
+    ) -> Option<AttachmentRefreshOutcome> {
+        let refresh = self.manual_refresh.as_mut()?;
+        if refresh.epoch != in_flight.background_epoch {
+            return None;
+        }
+        refresh.completed = refresh.completed.saturating_add(in_flight.keys.len());
+        refresh.inaccessible = refresh.inaccessible.saturating_add(failures);
+        if refresh.completed < refresh.total {
+            return None;
+        }
+        let outcome = AttachmentRefreshOutcome {
+            total: refresh.total,
+            inaccessible: refresh.inaccessible,
+        };
+        self.manual_refresh = None;
+        Some(outcome)
     }
 
     fn finish_preflight_batch(
@@ -333,6 +420,17 @@ impl AttachmentAccessibilityState {
             keys: keys.clone(),
             background_epoch: self.background_epoch,
         });
+        for key in &keys {
+            let previous = match self.health.get(key) {
+                Some(
+                    AttachmentHealth::Inaccessible(failure)
+                    | AttachmentHealth::Checking(Some(failure)),
+                ) => Some(*failure),
+                _ => None,
+            };
+            self.health
+                .insert(key.clone(), AttachmentHealth::Checking(previous));
+        }
         vec![Effect::CheckAttachments(AttachmentCheckBatch {
             id,
             purpose,
@@ -360,7 +458,7 @@ impl AttachmentAccessibilityState {
                     && (batch.purpose != AttachmentCheckPurpose::Background
                         || batch.background_epoch == self.background_epoch)
             });
-            if current_in_flight || (!force && self.health.contains_key(&key)) {
+            if current_in_flight || (!force && self.has_result(&key)) {
                 continue;
             }
             self.background.retain(|queued| queued != &key);
@@ -385,51 +483,10 @@ impl AttachmentAccessibilityState {
                 && (batch.purpose != AttachmentCheckPurpose::Background
                     || batch.background_epoch == self.background_epoch)
         });
-        !self.queued.contains(key) && !in_flight && (force || !self.health.contains_key(key))
+        !self.queued.contains(key) && !in_flight && (force || !self.has_result(key))
     }
 }
 
 fn take_front(queue: &mut VecDeque<AttachmentCheckKey>, limit: usize) -> Vec<AttachmentCheckKey> {
     (0..limit).filter_map(|_| queue.pop_front()).collect()
-}
-
-/// Extract exact transient cache keys from one source thought.
-#[must_use]
-pub fn attachment_keys(thought: &Thought) -> Vec<AttachmentCheckKey> {
-    let revision: [u8; 32] = Sha256::digest(thought.content.as_bytes()).into();
-    thought
-        .annotations
-        .iter()
-        .enumerate()
-        .filter_map(|(annotation_index, annotation)| {
-            let ContentAnnotationKind::Attachment {
-                image,
-                display_name,
-            } = &annotation.kind
-            else {
-                return None;
-            };
-            let canonical_path = thought.content.get(annotation.start..annotation.end)?;
-            Some(AttachmentCheckKey {
-                thought_id: thought.id,
-                annotation_index,
-                annotation_start: annotation.start,
-                annotation_end: annotation.end,
-                image: *image,
-                display_name: display_name.clone(),
-                canonical_path: canonical_path.to_owned(),
-                content_revision: revision,
-            })
-        })
-        .collect()
-}
-
-fn attachment_keys_by_thought(
-    board: &SessionBoard,
-) -> BTreeMap<ThoughtId, Vec<AttachmentCheckKey>> {
-    board
-        .live_thoughts()
-        .into_iter()
-        .map(|thought| (thought.id, attachment_keys(thought)))
-        .collect()
 }

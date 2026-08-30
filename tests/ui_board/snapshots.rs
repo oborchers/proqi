@@ -21,10 +21,11 @@ use proqi::{
 mod snapshot_support;
 
 use snapshot_support::snapshot_buffer;
+#[path = "snapshots/attachment_accessibility.rs"]
+mod attachment_accessibility_snapshots;
 
 fn snapshot(fixture: &mut Fixture, width: u16, height: u16, theme: ThemePreference) -> String {
-    let terminal = draw_theme(fixture, width, height, theme);
-    snapshot_buffer(terminal.backend().buffer())
+    snapshot_buffer(draw_theme(fixture, width, height, theme).backend().buffer())
 }
 
 fn adjacent_target(direction: Direction, pane_id: &str, readiness: AgentState) -> AgentTarget {
