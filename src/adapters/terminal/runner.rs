@@ -1,5 +1,6 @@
 //! Bounded UI and persistence lane composition.
 
+mod accessibility_results;
 mod admission;
 mod composition;
 mod diagnostics;
@@ -48,6 +49,7 @@ use crate::{
 
 use super::{
     TerminalError,
+    accessibility_lane::AccessibilityLane,
     control::{PanicHookGuard, TerminationGuard},
     external::ExternalLane,
     input::{InputLane, InputMessage},
@@ -89,6 +91,7 @@ pub(crate) fn require_interactive() -> Result<(), TerminalError> {
 }
 
 pub(super) struct WorkerLanes<'a> {
+    pub(super) accessibility: &'a AccessibilityLane,
     pub(super) input: &'a InputLane,
     pub(super) persistence: &'a PersistenceLane,
     pub(super) external: &'a ExternalLane,
@@ -186,6 +189,7 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
     }
     let monotonic = SystemMonotonicClock::default();
     let lanes = WorkerLanes {
+        accessibility: &owned.accessibility,
         input: &owned.input,
         persistence: &owned.persistence,
         external: &owned.external,
@@ -259,9 +263,11 @@ fn drive(
     let mut edit_deadline = None;
     let mut agent_deadline = None;
     let mut invocation_deadline = None;
+    let mut attachment_deadline = None;
     let mut termination_seen = false;
     let mut held_input = None;
     enqueue_effects(app, lanes, BoardApp::discover_agents(), &mut pending)?;
+    accessibility_results::start(app, lanes, &mut pending)?;
     let invocation_effects = app.refresh_invocations();
     enqueue_effects(app, lanes, invocation_effects, &mut pending)?;
     let mut redraw = true;
@@ -344,6 +350,7 @@ fn drive(
             enqueue_effects(app, lanes, effects, &mut pending)?;
             invocation_deadline = None;
         }
+        accessibility_results::refresh_if_due(app, lanes, &mut pending, &mut attachment_deadline)?;
         if let Some(heartbeat) = pane_heartbeat.as_mut() {
             let _refreshed = heartbeat.refresh_if_due(lanes.external);
         }
@@ -365,6 +372,7 @@ fn drive(
                     &mut pending,
                     &mut agent_deadline,
                     &mut invocation_deadline,
+                    &mut attachment_deadline,
                     sequence,
                     event,
                 )?;
@@ -428,6 +436,7 @@ fn drive(
                     &mut pending,
                     &mut agent_deadline,
                     &mut invocation_deadline,
+                    &mut attachment_deadline,
                     sequence,
                     event,
                 )?;
@@ -454,17 +463,20 @@ fn drain_workers(
     pane_heartbeat: &mut Option<PaneHeartbeat>,
 ) -> Result<(bool, bool), TerminalError> {
     let persistence = drain_persistence(app, lanes, pending, ids, &clock)?;
+    let accessibility = accessibility_results::drain(app, lanes, pending)?;
     let external = external_results::drain(app, lanes, pending, ids, clock, pane_heartbeat)?;
     let control = owner_control::drain(app, lanes, pending, capture, ids, clock)?;
     let update = update_results::drain(app, lanes, pending)?;
     let screenshot =
         screenshot_results::drain(app, lanes, pending, capture, lanes.monotonic.now())?;
     let changed = persistence.changed
+        || accessibility.changed
         || external.changed
         || control.changed
         || update.changed
         || screenshot.changed;
     let backlog = persistence.budget_exhausted
+        || accessibility.budget_exhausted
         || external.budget_exhausted
         || control.budget_exhausted
         || update.budget_exhausted

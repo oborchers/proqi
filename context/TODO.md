@@ -527,65 +527,65 @@ User story: when a thought refers to an image or file that disappeared after a
 restart or became unreadable, Proqi marks the attachment plainly and prevents
 me from unknowingly submitting an unusable path—including through Submit all.
 
-- [ ] Keep the user-facing model binary. An attachment is either **accessible**
+- [x] Keep the user-facing model binary. An attachment is either **accessible**
   or **inaccessible**. Accessible attachments keep the existing `[Image N]` or
   `[File N]` projection without extra chrome; inaccessible attachments render
   as `[Image N · inaccessible]` or `[File N · inaccessible]`.
-- [ ] Do not expose separate temporary, volatile, missing, permission-denied,
+- [x] Do not expose separate temporary, volatile, missing, permission-denied,
   unmounted-volume, or I/O states in routine UI. Preserve typed internal failure
   reasons only for truthful diagnostics and troubleshooting; every such failure
   has the same submission consequence.
-- [ ] Do not use strike-through, which suggests intentional deletion and is not
+- [x] Do not use strike-through, which suggests intentional deletion and is not
   reliably available in every terminal. Reinforce the explicit
   `inaccessible` text with the warning visual role, while keeping the state
   understandable without color.
-- [ ] Validate an attachment immediately when it is inserted or explicitly
+- [x] Validate an attachment immediately when it is inserted or explicitly
   relinked. Invalidate only the affected cached result when canonical content or
   annotation ranges change.
-- [ ] On session open or resume, check the focused thought first and then the
+- [x] On session open or resume, check the focused thought first and then the
   rest of the board through a bounded background lane. Never delay restoring or
   editing the board while the complete scan runs.
-- [ ] On a real thought-focus transition, prioritize that thought's attachments
+- [x] On a real thought-focus transition, prioritize that thought's attachments
   when their result is unknown or stale. Repeated cursor movement, typing, or
   pointer movement inside the same thought must not repeat filesystem work.
-- [ ] On debounced host/pane focus regain, refresh referenced attachments in the
+- [x] On debounced host/pane focus regain, refresh referenced attachments in the
   background. Where the terminal cannot report pane focus reliably, the first
   deliberate interaction after a bounded inactive interval may trigger the
   same refresh once; subsequent input does not.
-- [ ] Add an explicit **Refresh attachments** Commands action as a deterministic
+- [x] Add an explicit **Refresh attachments** Commands action as a deterministic
   manual fallback. Do not add periodic polling, per-render checks, arbitrary
   directory watchers, or checks on resize, autosave, cursor movement, passive
   pointer movement, or every keystroke.
-- [ ] Before Submit, Submit and keep, Submit all, or Submit all and keep, perform
+- [x] Before Submit, Submit and keep, Submit all, or Submit all and keep, perform
   a fresh mandatory check of every attachment in the exact captured source set.
   This check runs after pending edits are durable and before the submission
   journal enters a sending state. Cached presentation state alone never
   authorizes submission.
-- [ ] Keep source thoughts stable while the asynchronous preflight is active.
+- [x] Keep source thoughts stable while the asynchronous preflight is active.
   If any attachment is inaccessible or cannot be verified within the bounded
   check, start no delivery, create no sending attempt, remove nothing, and show
   one aggregate result such as `Proqi cannot access 2 attachments`.
-- [ ] In v1, do not offer **Submit anyway** for an annotated inaccessible asset;
+- [x] In v1, do not offer **Submit anyway** for an annotated inaccessible asset;
   the binary contract remains trustworthy. A user who intentionally wants to
   submit an ordinary path as text must explicitly remove or dissolve its
   attachment annotation first.
-- [ ] Treat `checking` as a short-lived operation, not a third attachment state.
+- [x] Treat `checking` as a short-lived operation, not a third attachment state.
   Normal background checks remain quiet; a submission waiting on its preflight
   may show `checking attachments` until it can proceed or report the aggregate
   inaccessible result.
-- [ ] Keep health results transient and keyed to the exact thought, annotation,
+- [x] Keep health results transient and keyed to the exact thought, annotation,
   canonical path, and content revision. Do not persist a status that can become
   false across restart, and never mutate canonical prompt content in response
   to a failed check.
-- [ ] Use an injected terminal-independent accessibility port. Filesystem
+- [x] Use an injected terminal-independent accessibility port. Filesystem
   metadata and readability checks belong in an adapter; application owns the
   trigger, bounded preflight, cache invalidation, and submission policy; UI only
   renders the resulting state.
-- [ ] Document the unavoidable external-file race: a linked file can disappear
+- [x] Document the unavoidable external-file race: a linked file can disappear
   after the final check but before an agent opens it. A later explicit
   **Import into Proqi** workflow may provide stronger ownership, but this ticket
   neither silently copies source files nor changes attachment paths.
-- [ ] Cover session restart with an expired macOS `TemporaryItems` path, startup
+- [x] Cover session restart with an expired macOS `TemporaryItems` path, startup
   scan ordering, focus changes, host-focus debounce, inactivity refresh,
   mutation invalidation, manual refresh, permission and I/O failures, recovery
   when a file returns, large boards, repeated events, resize, Unicode paths,

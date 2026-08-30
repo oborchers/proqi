@@ -28,6 +28,7 @@ impl BoardApp {
             &snapshot,
             &annotations,
             &self.expanded_fold_indices(thought_id),
+            |annotation_index| self.attachment_inaccessible(thought_id, annotation_index),
         ))
     }
 
@@ -41,10 +42,11 @@ impl BoardApp {
             .thought(thought_id)
             .map(|thought| thought.content.clone())?;
         let annotations = self.current_annotations(thought_id);
-        Some(crate::ui::annotations::project(
+        Some(crate::ui::annotations::project_with_health(
             &content,
             &annotations,
             &self.expanded_fold_indices(thought_id),
+            |annotation_index| self.attachment_inaccessible(thought_id, annotation_index),
         ))
     }
 

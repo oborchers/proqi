@@ -59,6 +59,7 @@ pub(super) struct PresentedFold {
     pub(super) canonical_start: usize,
     pub(super) canonical_end: usize,
     pub(super) collapsed: bool,
+    pub(super) inaccessible: bool,
 }
 
 /// Display-only projection that never replaces canonical content.
@@ -73,6 +74,15 @@ pub(super) fn project(
     annotations: &[ContentAnnotation],
     expanded: &[usize],
 ) -> Presentation {
+    project_with_health(content, annotations, expanded, |_| false)
+}
+
+pub(super) fn project_with_health(
+    content: &str,
+    annotations: &[ContentAnnotation],
+    expanded: &[usize],
+    mut inaccessible: impl FnMut(usize) -> bool,
+) -> Presentation {
     let mut output = String::new();
     let mut folds = Vec::new();
     let mut cursor = 0;
@@ -84,6 +94,8 @@ pub(super) fn project(
         };
         output.push_str(prefix);
         let start = output.len();
+        let inaccessible = matches!(annotation.kind, ContentAnnotationKind::Attachment { .. })
+            && inaccessible(annotation_index);
         if expanded.contains(&annotation_index) {
             if let ContentAnnotationKind::Attachment { image: true, .. } = &annotation.kind {
                 image += 1;
@@ -103,41 +115,25 @@ pub(super) fn project(
                 output.len(),
                 annotation,
                 false,
+                inaccessible,
             ));
             cursor = annotation.end;
             continue;
         }
-        match &annotation.kind {
-            ContentAnnotationKind::Attachment {
-                image: is_image, ..
-            } => {
-                let (kind, number) = if *is_image {
-                    image += 1;
-                    ("Image", image)
-                } else {
-                    file += 1;
-                    ("File", file)
-                };
-                output.push('[');
-                output.push_str(kind);
-                output.push(' ');
-                output.push_str(&number.to_string());
-                output.push(']');
-            }
-            ContentAnnotationKind::LargePaste { lines, graphemes } => {
-                output.push_str("[Pasted text · ");
-                output.push_str(&lines.to_string());
-                output.push_str(" lines · ");
-                output.push_str(&grouped(*graphemes));
-                output.push_str(" characters]");
-            }
-        }
+        push_collapsed_label(
+            &mut output,
+            &annotation.kind,
+            &mut image,
+            &mut file,
+            inaccessible,
+        );
         folds.push(fold(
             annotation_index,
             start,
             output.len(),
             annotation,
             true,
+            inaccessible,
         ));
         cursor = annotation.end;
     }
@@ -151,12 +147,48 @@ pub(super) fn project(
     }
 }
 
+fn push_collapsed_label(
+    output: &mut String,
+    kind: &ContentAnnotationKind,
+    image_count: &mut usize,
+    file_count: &mut usize,
+    inaccessible: bool,
+) {
+    match kind {
+        ContentAnnotationKind::Attachment { image, .. } => {
+            let (label, number) = if *image {
+                *image_count += 1;
+                ("Image", *image_count)
+            } else {
+                *file_count += 1;
+                ("File", *file_count)
+            };
+            output.push('[');
+            output.push_str(label);
+            output.push(' ');
+            output.push_str(&number.to_string());
+            if inaccessible {
+                output.push_str(" · inaccessible");
+            }
+            output.push(']');
+        }
+        ContentAnnotationKind::LargePaste { lines, graphemes } => {
+            output.push_str("[Pasted text · ");
+            output.push_str(&lines.to_string());
+            output.push_str(" lines · ");
+            output.push_str(&grouped(*graphemes));
+            output.push_str(" characters]");
+        }
+    }
+}
+
 fn fold(
     annotation_index: usize,
     start: usize,
     end: usize,
     annotation: &ContentAnnotation,
     collapsed: bool,
+    inaccessible: bool,
 ) -> PresentedFold {
     PresentedFold {
         annotation_index,
@@ -165,6 +197,7 @@ fn fold(
         canonical_start: annotation.start,
         canonical_end: annotation.end,
         collapsed,
+        inaccessible,
     }
 }
 

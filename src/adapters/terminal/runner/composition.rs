@@ -9,6 +9,7 @@ use crate::{
         sqlite::SqliteStore,
         terminal::{
             TerminalError,
+            accessibility_lane::AccessibilityLane,
             control::{CrosstermControl, TerminalGuard},
             external::ExternalLane,
             input::InputLane,
@@ -85,6 +86,7 @@ pub(super) fn spawn_lanes(
 ) -> OwnedLanes {
     let cancellation = crate::adapters::process::CancellationFlag::default();
     OwnedLanes {
+        accessibility: AccessibilityLane::spawn(cancellation.clone()),
         control,
         input: InputLane::spawn(),
         persistence: PersistenceLane::spawn_with_runtime(

@@ -26,6 +26,12 @@ pub(super) fn enqueue_effects(
 ) -> Result<(), TerminalError> {
     for effect in effects {
         match effect {
+            Effect::CheckAttachments(request) => {
+                if !app.quit {
+                    lanes.accessibility.send(request)?;
+                    pending.accessibility = pending.accessibility.saturating_add(1);
+                }
+            }
             Effect::CommitCapture(capture) => {
                 lanes.persistence.commit_capture(capture)?;
                 pending.persistence = pending.persistence.saturating_add(1);

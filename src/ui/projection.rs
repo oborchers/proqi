@@ -1,6 +1,6 @@
 //! Canonical-to-visible mapping for folded editor ranges.
 
-use super::annotations::{Presentation, PresentedFold, project};
+use super::annotations::{Presentation, PresentedFold};
 use crate::{
     domain::{ContentAnnotation, TextPosition},
     ports::{
@@ -99,8 +99,14 @@ pub(super) fn editor_presentation(
     canonical: &EditorSnapshot,
     annotations: &[ContentAnnotation],
     expanded: &[usize],
+    inaccessible: impl FnMut(usize) -> bool,
 ) -> EditorPresentation {
-    let presentation = project(&canonical.content, annotations, expanded);
+    let presentation = super::annotations::project_with_health(
+        &canonical.content,
+        annotations,
+        expanded,
+        inaccessible,
+    );
     let cursor_display_byte = project_byte(
         byte_for_position(&canonical.content, canonical.cursor),
         &presentation.folds,

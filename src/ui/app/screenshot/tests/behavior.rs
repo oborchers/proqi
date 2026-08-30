@@ -176,9 +176,17 @@ fn quit_during_capture_is_deferred_and_flushes_the_live_editor() {
 
     let effects = app.complete_screenshot_capture(Ok(created(&capture)), &mut ids, &clock);
     assert!(app.quit);
-    let [Effect::CommitRevision(revision)] = effects.as_slice() else {
+    let Some(Effect::CommitRevision(revision)) = effects
+        .iter()
+        .find(|effect| matches!(effect, Effect::CommitRevision(_)))
+    else {
         panic!("deferred editor revision");
     };
+    assert!(
+        effects
+            .iter()
+            .any(|effect| matches!(effect, Effect::CheckAttachments(_)))
+    );
     assert_eq!(revision.after_content, "active!");
 }
 

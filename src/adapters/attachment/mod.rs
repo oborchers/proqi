@@ -1,5 +1,9 @@
 //! Atomic private PNG materialization for clipboard images.
 
+mod accessibility;
+
+pub use accessibility::FileAttachmentAccessibility;
+
 use std::{
     fs::{self, File, OpenOptions},
     io::BufWriter,
