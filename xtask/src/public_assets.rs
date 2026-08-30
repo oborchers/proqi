@@ -167,6 +167,8 @@ fn check_demo_contract(root: &Path) -> Result<(), String> {
     for marker in [
         "foreground #c9cde0",
         "background #181922",
+        "set env(TERM) xterm-256color",
+        "set env(COLORTERM) truecolor",
         "send -- \"y\"",
         "send -- \"\\033\\[100;9u\"",
     ] {
@@ -186,9 +188,12 @@ fn check_demo_contract(root: &Path) -> Result<(), String> {
         "create_thought \"It arrives on this board",
         "listening",
         "5 thoughts",
-        "Add a note before submitting.",
+        "No more dragging screenshot files between panes.",
         "Only one Proqi board captures",
         "10 unattended captures or 20 inactive minutes",
+        "set env(TERM) xterm-256color",
+        "set env(COLORTERM) truecolor",
+        "expect_background -re {.+} {}",
     ] {
         if !inbox_recorder.contains(marker) {
             return Err(format!(

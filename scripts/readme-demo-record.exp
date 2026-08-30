@@ -22,6 +22,11 @@ if {$binary eq "" || $state eq ""} {
     exit 2
 }
 
+# The cast renderer supports true color. Declare that capability explicitly in
+# the spawned terminal so Proqi can resolve its automatic palette.
+set env(TERM) xterm-256color
+set env(COLORTERM) truecolor
+catch {unset env(NO_COLOR)}
 spawn -noecho $binary --state-dir $state -c
 set terminal_channel [exp_open -leaveopen]
 exec stty rows 30 columns 92 <@ $terminal_channel
@@ -33,10 +38,10 @@ exec stty rows 30 columns 92 <@ $terminal_channel
 set board_ready 0
 while {!$board_ready} {
     expect {
-        -exact "\033]10;?\007" {
+        -exact "\033]10;?" {
             send -- "\033]10;rgb:c9c9/cdcd/e0e0\007"
         }
-        -exact "\033]11;?\007" {
+        -exact "\033]11;?" {
             send -- "\033]11;rgb:1818/1919/2222\007"
         }
         -exact "\033\[c" {

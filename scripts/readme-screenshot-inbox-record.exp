@@ -36,6 +36,11 @@ if {$binary eq "" || $state eq ""} {
     exit 2
 }
 
+# The cast renderer supports true color. Declare that capability explicitly in
+# the spawned terminal so Proqi can resolve its automatic palette.
+set env(TERM) xterm-256color
+set env(COLORTERM) truecolor
+catch {unset env(NO_COLOR)}
 spawn -noecho $binary --state-dir $state -c
 set terminal_channel [exp_open -leaveopen]
 exec stty rows 30 columns 92 <@ $terminal_channel
@@ -45,10 +50,10 @@ exec stty rows 30 columns 92 <@ $terminal_channel
 set board_ready 0
 while {!$board_ready} {
     expect {
-        -exact "\033]10;?\007" {
+        -exact "\033]10;?" {
             send -- "\033]10;rgb:c9c9/cdcd/e0e0\007"
         }
-        -exact "\033]11;?\007" {
+        -exact "\033]11;?" {
             send -- "\033]11;rgb:1818/1919/2222\007"
         }
         -exact "\033\[c" {
@@ -65,11 +70,17 @@ while {!$board_ready} {
 }
 pause 1000
 
+# Keep draining the child PTY while each character is typed so asciinema
+# records the same live editor frames as the primary README demo.
+expect_background -re {.+} {}
+
 create_thought "Open any board."
 create_thought "Press i to start Screenshot Inbox."
 create_thought "Take a normal macOS screenshot anywhere."
 create_thought "It arrives on this board when macOS saves it to your Desktop."
 
+# Pause continuous draining while exact state markers synchronize the import.
+expect_background
 send -- "i"
 expect -re {listening}
 pause 1600
@@ -81,7 +92,7 @@ pause 1600
 
 send -- "\033\[F"
 pause 350
-type_text " Add a note before submitting." 28
+type_text " No more dragging screenshot files between panes." 28
 pause 900
 send -- "\033\[27u"
 pause 1400

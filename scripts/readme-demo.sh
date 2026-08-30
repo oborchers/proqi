@@ -72,10 +72,11 @@ seed() {
 render_gif() {
     cast=$1
     output=$2
+    selection=${3:-0.2..90%}
     agg --quiet --theme github-dark \
         --font-family "$demo_font" --font-size 20 \
         --line-height 1.25 --fps-cap 30 --last-frame-duration 2 \
-        --select '0.2..90%' \
+        --select "$selection" \
         "$cast" "$output"
 }
 
@@ -133,7 +134,8 @@ record_inbox() {
         --command "expect scripts/readme-screenshot-inbox-record.exp $binary $inbox_demo_state" \
         target/proqi-screenshot-inbox.cast
     require_cast_success target/proqi-screenshot-inbox.cast
-    render_gif target/proqi-screenshot-inbox.cast assets/proqi-screenshot-inbox.gif
+    render_gif target/proqi-screenshot-inbox.cast assets/proqi-screenshot-inbox.gif \
+        '0.2..98%'
 }
 
 case "${1:-}" in
