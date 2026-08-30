@@ -10,19 +10,30 @@ const REQUIRED_ASSETS: &[&str] = &[
     "assets/proqi-demo.gif",
     "assets/proqi-demo-storyboard.md",
     "assets/codex-composer.png",
+    "assets/proqi-herdr-workflow.png",
     "assets/proqi-logo.png",
     "assets/proqi-problem.svg",
+    "assets/proqi-screenshot-inbox.gif",
+    "assets/proqi-screenshot-inbox-storyboard.md",
     "assets/proqi-social-preview.png",
     "assets/proqi-social-preview.svg",
+    ".agents/skills/proqi-screenshot/SKILL.md",
+    ".agents/skills/proqi-screenshot/agents/openai.yaml",
+    ".claude/skills/proqi-screenshot/SKILL.md",
+    "scripts/readme-screenshot-inbox-record.exp",
     "scripts/readme-demo-seed.exp",
 ];
 const PUBLIC_TEXT: &[&str] = &[
     "README.md",
+    ".agents/skills/proqi-screenshot/SKILL.md",
+    ".agents/skills/proqi-screenshot/agents/openai.yaml",
     "assets/proqi-demo-storyboard.md",
     "assets/proqi-problem.svg",
+    "assets/proqi-screenshot-inbox-storyboard.md",
     "assets/proqi-social-preview.svg",
     "scripts/readme-demo-record.exp",
     "scripts/readme-demo-seed.exp",
+    "scripts/readme-screenshot-inbox-record.exp",
     "scripts/readme-demo.sh",
     "scripts/social-preview.sh",
 ];
@@ -82,6 +93,8 @@ fn check_readme_links(root: &Path) -> Result<(), String> {
         "assets/proqi-logo.png",
         "assets/proqi-demo.gif",
         "assets/codex-composer.png",
+        "assets/proqi-herdr-workflow.png",
+        "assets/proqi-screenshot-inbox.gif",
     ] {
         if !readme.contains(required) {
             return Err(format!("README does not link required asset: {required}"));
@@ -134,10 +147,13 @@ fn check_problem_flow(root: &Path) -> Result<(), String> {
 fn check_demo_contract(root: &Path) -> Result<(), String> {
     let wrapper = read_text(root, "scripts/readme-demo.sh")?;
     let recorder = read_text(root, "scripts/readme-demo-record.exp")?;
+    let inbox_recorder = read_text(root, "scripts/readme-screenshot-inbox-record.exp")?;
     let seed = read_text(root, "scripts/readme-demo-seed.exp")?;
     for marker in [
         "asciinema record",
         "agg --quiet --theme github-dark",
+        "record-inbox",
+        "theme = \"auto\"",
         "unset NO_COLOR",
         "--window-size 92x30",
         "fc-match",
@@ -162,16 +178,35 @@ fn check_demo_contract(root: &Path) -> Result<(), String> {
             return Err(format!("README demo lost seed contract: {marker}"));
         }
     }
+    for marker in [
+        "1\\. Keep this board open",
+        "listening",
+        "Image",
+        "Add a note before submitting.",
+    ] {
+        if !inbox_recorder.contains(marker) {
+            return Err(format!(
+                "Screenshot Inbox demo lost recorder contract: {marker}"
+            ));
+        }
+    }
     Ok(())
 }
 
 fn check_dimensions_and_sizes(root: &Path) -> Result<(), String> {
     let composer = root.join("assets/codex-composer.png");
-    require_dimensions(&composer, image_dimensions(&composer)?, (752, 353))?;
+    require_dimensions(&composer, image_dimensions(&composer)?, (1132, 550))?;
+
+    let herdr = root.join("assets/proqi-herdr-workflow.png");
+    require_dimensions(&herdr, image_dimensions(&herdr)?, (1132, 775))?;
 
     let gif = root.join("assets/proqi-demo.gif");
     require_dimensions(&gif, image_dimensions(&gif)?, (1132, 775))?;
     require_max_size(&gif, GIF_LIMIT)?;
+
+    let inbox_gif = root.join("assets/proqi-screenshot-inbox.gif");
+    require_dimensions(&inbox_gif, image_dimensions(&inbox_gif)?, (1132, 775))?;
+    require_max_size(&inbox_gif, GIF_LIMIT)?;
 
     let preview = root.join("assets/proqi-social-preview.png");
     require_dimensions(&preview, image_dimensions(&preview)?, (1280, 640))?;

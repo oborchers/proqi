@@ -1,8 +1,11 @@
 #!/usr/bin/expect -f
 
-set timeout 15
+set timeout 20
 set binary [lindex $argv 0]
 set state [lindex $argv 1]
+set inbox [file join $state inbox]
+set source [file join $state capture-source.png]
+set capture [file join $inbox "Screenshot demo.png"]
 
 proc pause {milliseconds} {
     set ::pause_complete 0
@@ -18,7 +21,7 @@ proc type_text {text delay} {
 }
 
 if {$binary eq "" || $state eq ""} {
-    puts stderr "usage: readme-demo-record.exp <binary> <state-directory>"
+    puts stderr "usage: readme-screenshot-inbox-record.exp <binary> <state-directory>"
     exit 2
 }
 
@@ -26,10 +29,8 @@ spawn -noecho $binary --state-dir $state -c
 set terminal_channel [exp_open -leaveopen]
 exec stty rows 30 columns 92 <@ $terminal_channel
 
-# The recorder uses automatic theme detection. Answer a bounded palette probe
-# when Proqi requests one; some nested PTYs provide enough color information
-# without it. The reference colors are foreground #c9cde0 and background #181922,
-# matching the visual contract snapshots.
+# Automatic theme detection may query the nested PTY. Respond only when asked;
+# otherwise wait directly for the seeded board.
 set board_ready 0
 while {!$board_ready} {
     expect {
@@ -42,62 +43,36 @@ while {!$board_ready} {
         -exact "\033\[c" {
             send -- "\033\[?1;2c"
         }
-        -re {release} {
+        -re {1\. Keep this board open} {
             set board_ready 1
         }
         timeout {
-            puts stderr "timed out waiting for the README demo board"
+            puts stderr "timed out waiting for the Screenshot Inbox demo board"
             exit 1
         }
     }
 }
+pause 1000
+
+send -- "i"
+expect -re {listening}
+pause 1300
+
+exec cp -- $source $capture
+expect -re {Image}
 expect_background -re {.+} {}
-pause 800
+pause 1800
 
 send -- "\033\[B"
 pause 700
-send -- "\033\[B"
-pause 700
-send -- "\033\[B"
-pause 700
-send -- "\033\[B"
-pause 700
-
-send -- "d"
-pause 800
-send -- "n"
-pause 300
-type_text "Ask the agent to verify the release archive." 24
-pause 700
-send -- "\033"
-pause 700
-
 send -- "\r"
 pause 500
-type_text " before publishing." 24
-pause 700
+send -- "\033\[F"
+pause 350
+type_text "  Add a note before submitting." 28
+pause 1100
 send -- "\033"
-pause 700
-
-send -- "K"
-pause 700
-send -- "K"
-pause 700
-send -- " "
-pause 500
-send -- "k"
-pause 500
-send -- " "
-pause 700
-send -- "y"
-pause 900
-
-# Duplicate the selected pair with Command-D, then delete the duplicates as
-# one board operation. Kitty keyboard protocol encodes Super as modifier 9.
-send -- "\033\[100;9u"
-pause 1000
-send -- "d"
-pause 1600
+pause 1300
 
 expect_background
 send -- "q"

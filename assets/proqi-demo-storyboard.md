@@ -20,6 +20,6 @@ too small at the rendered README width.
 
 The fixture creates annotations through the real paste path, then uses the real
 release binary and deterministic state below the system temporary directory.
-It never impersonates a named agent integration. The recording answers the
-same bounded OSC palette probe as the reference dark terminal, then captures
-Proqi's actual 24-bit ANSI output with Asciinema and renders it with `agg`.
+It never impersonates a named agent integration. Proqi uses automatic theme
+detection; the recorder answers a bounded palette probe only when requested,
+then captures the actual ANSI output with Asciinema and renders it with `agg`.

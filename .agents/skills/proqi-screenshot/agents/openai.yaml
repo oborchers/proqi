@@ -1,0 +1,4 @@
+interface:
+  display_name: "Proqi Screenshot"
+  short_description: "Capture privacy-safe Codex and Proqi visuals"
+  default_prompt: "Use $proqi-screenshot to capture or regenerate a public Proqi README screenshot from real Codex and Herdr interfaces."

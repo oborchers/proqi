@@ -2,27 +2,34 @@
 set -eu
 
 demo_state="${TMPDIR:-/tmp}/proqi-readme-demo-v1"
+inbox_demo_state="${TMPDIR:-/tmp}/proqi-readme-inbox-demo-v1"
 binary="./target/release/proqi"
 demo_font='Meslo LG M DZ for Powerline'
 
-clean_state() {
-    if [ -L "$demo_state" ]; then
+clean_directory() {
+    directory=$1
+    if [ -L "$directory" ]; then
         echo "refusing symlinked demo state" >&2
         exit 1
     fi
-    if [ -d "$demo_state" ]; then
-        find "$demo_state" -depth -delete
-    elif [ -e "$demo_state" ]; then
+    if [ -d "$directory" ]; then
+        find "$directory" -depth -delete
+    elif [ -e "$directory" ]; then
         echo "refusing non-directory demo state" >&2
         exit 1
     fi
+}
+
+clean_state() {
+    clean_directory "$demo_state"
+    clean_directory "$inbox_demo_state"
 }
 
 prepare() {
     clean_state
     umask 077
     mkdir -p "$demo_state/config"
-    printf '%s\n' 'check_for_updates = false' 'theme = "dark"' \
+    printf '%s\n' 'check_for_updates = false' 'theme = "auto"' \
         > "$demo_state/config/config.toml"
     cp assets/proqi-logo.png "$demo_state/demo-image.png"
     session=$("$binary" --state-dir "$demo_state" --json \
@@ -36,6 +43,31 @@ prepare() {
         '1. Verify checksums and attestations.' \
         '2. Test the archive on a clean machine.' \
         | "$binary" --state-dir "$demo_state" thoughts add "$session" >/dev/null
+}
+
+prepare_inbox() {
+    clean_directory "$inbox_demo_state"
+    umask 077
+    mkdir -p "$inbox_demo_state/config" "$inbox_demo_state/inbox"
+    printf '%s\n' \
+        'check_for_updates = false' \
+        'theme = "auto"' \
+        '' \
+        '[screenshot_inbox]' \
+        "directory = \"$inbox_demo_state/inbox\"" \
+        'capture_all_new_images = true' \
+        > "$inbox_demo_state/config/config.toml"
+    cp assets/proqi-logo.png "$inbox_demo_state/capture-source.png"
+    session=$("$binary" --state-dir "$inbox_demo_state" --json \
+        | sed -n 's/.*"session_id":"\([^"]*\)".*/\1/p')
+    test -n "$session"
+    "$binary" --state-dir "$inbox_demo_state" --json sessions rename \
+        "$session" "screenshot review" >/dev/null
+    printf '%s\n' \
+        '1. Keep this board open beside the agent.' \
+        '2. Press i to start Screenshot Inbox.' \
+        '3. Take a normal macOS screenshot. It arrives as an annotatable thought.' \
+        | "$binary" --state-dir "$inbox_demo_state" thoughts add "$session" >/dev/null
 }
 
 seed() {
@@ -57,8 +89,6 @@ record() {
     esac
     prepare
     seed >/dev/null
-    printf '%s\n' 'check_for_updates = false' 'theme = "auto"' \
-        > "$demo_state/config/config.toml"
     export COLORTERM=truecolor
     unset NO_COLOR
     asciinema record --headless --overwrite --quiet --return \
@@ -72,6 +102,33 @@ record() {
         target/proqi-demo.cast assets/proqi-demo.gif
 }
 
+record_inbox() {
+    command -v asciinema >/dev/null
+    command -v agg >/dev/null
+    command -v expect >/dev/null
+    command -v fc-match >/dev/null
+    matched_font=$(fc-match -f '%{family}' "$demo_font")
+    case "$matched_font" in
+        "$demo_font"*) ;;
+        *)
+            echo "README demo requires the Ghostty font: $demo_font" >&2
+            exit 1
+            ;;
+    esac
+    prepare_inbox
+    export COLORTERM=truecolor
+    unset NO_COLOR
+    asciinema record --headless --overwrite --quiet --return \
+        --idle-time-limit 2 --window-size 92x30 \
+        --command "expect scripts/readme-screenshot-inbox-record.exp $binary $inbox_demo_state" \
+        target/proqi-screenshot-inbox.cast
+    agg --quiet --theme github-dark \
+        --font-family "$demo_font" --font-size 20 \
+        --line-height 1.25 --fps-cap 30 --last-frame-duration 2 \
+        --select '0.2..90%' \
+        target/proqi-screenshot-inbox.cast assets/proqi-screenshot-inbox.gif
+}
+
 case "${1:-}" in
     prepare)
         prepare
@@ -82,6 +139,9 @@ case "${1:-}" in
     record)
         record
         ;;
+    record-inbox)
+        record_inbox
+        ;;
     open)
         exec "$binary" --state-dir "$demo_state" -c
         ;;
@@ -89,7 +149,7 @@ case "${1:-}" in
         clean_state
         ;;
     *)
-        echo "usage: $0 prepare|seed|record|open|clean" >&2
+        echo "usage: $0 prepare|seed|record|record-inbox|open|clean" >&2
         exit 2
         ;;
 esac
