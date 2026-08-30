@@ -14,6 +14,7 @@ const INSTALL_MARKER: &[u8] =
     br#"{"schema_version":1,"product":"proqi","kind":"standalone_archive"}"#;
 
 pub(super) fn run(root: &Path, notices: Option<&Path>) -> Result<(), String> {
+    super::release_highlights::validate(root, None)?;
     prepare_notices(root, notices)?;
     super::run(
         root,

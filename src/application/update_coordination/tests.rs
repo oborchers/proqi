@@ -5,12 +5,14 @@ use std::{
         Arc,
         atomic::{AtomicBool, Ordering},
     },
+    time::Duration,
 };
 
 use crate::{
     application::test_support::TestIds,
     domain::{
-        InstallationIdentity, InstanceId, RequestId, StableVersion, Timestamp, UpdateCacheState,
+        InstallationIdentity, InstanceId, ReleaseHighlightAnnouncement, RequestId, StableVersion,
+        Timestamp, UpdateCacheState,
     },
     ports::{
         control::CONTROL_PROTOCOL_VERSION,
@@ -18,15 +20,18 @@ use crate::{
         runtime::{InstanceInfo, UpdateInstanceContext},
         store::STORAGE_PROTOCOL_VERSION,
         update::{
-            HomebrewInstaller, ReleaseObservation, UPDATE_CONTROL_PROTOCOL_VERSION, UpdateError,
-            UpdateInstanceRegistry, UpdateLease, UpdateLockKind, UpdateParticipantGateway,
-            UpdatePrepareReply, UpdatePrepareRequest, UpdateRestartReply, UpdateRestartRequest,
+            HomebrewInstaller, ReleaseObservation, UPDATE_CONTROL_PROTOCOL_VERSION,
+            UpdateCancellation, UpdateError, UpdateInstanceRegistry, UpdateLease, UpdateLockKind,
+            UpdateParticipantGateway, UpdatePrepareReply, UpdatePrepareRequest,
+            UpdateReplacementExpectation, UpdateRestartReply, UpdateRestartRequest,
             UpdateStateStore,
         },
     },
 };
 
 use super::{UpdateExecutionStatus, UpdateRestartCoordinator};
+
+mod additional;
 
 struct Lease(Option<Arc<AtomicBool>>);
 impl UpdateLease for Lease {}
@@ -116,10 +121,36 @@ impl UpdateStateStore for State {
         cache.restart_needed = restart_needed;
         Ok(cache.clone())
     }
+
+    fn record_release_highlights(
+        &self,
+        _: InstallationIdentity,
+        announcement: ReleaseHighlightAnnouncement,
+    ) -> Result<UpdateCacheState, UpdateError> {
+        self.cache.borrow_mut().release_highlights = Some(announcement);
+        Ok(self.cache.borrow().clone())
+    }
+
+    fn acknowledge_release_highlights(
+        &self,
+        _: InstallationIdentity,
+        announcement: &ReleaseHighlightAnnouncement,
+    ) -> Result<bool, UpdateError> {
+        let mut cache = self.cache.borrow_mut();
+        let Some(current) = cache.release_highlights.as_mut() else {
+            return Ok(false);
+        };
+        if current.acknowledged() || !current.same_upgrade(announcement) {
+            return Ok(false);
+        }
+        current.acknowledge();
+        Ok(true)
+    }
 }
 
 struct Registry {
     scans: RefCell<VecDeque<Vec<InstanceInfo>>>,
+    replacement_failures: RefCell<Vec<InstanceId>>,
 }
 
 impl UpdateInstanceRegistry for Registry {
@@ -128,6 +159,17 @@ impl UpdateInstanceRegistry for Registry {
             .borrow_mut()
             .pop_front()
             .ok_or_else(|| UpdateError::Coordination("no fake scan queued".to_owned()))
+    }
+
+    fn wait_for_replacements(
+        &self,
+        _: InstallationIdentity,
+        _: &StableVersion,
+        _: &[UpdateReplacementExpectation],
+        _: Duration,
+        _: &dyn UpdateCancellation,
+    ) -> Result<Vec<InstanceId>, UpdateError> {
+        Ok(self.replacement_failures.borrow().clone())
     }
 }
 
@@ -216,6 +258,7 @@ fn one_ten_and_fifteen_participants_install_and_restart_once() {
                 identity,
                 &version("0.2.0"),
                 Timestamp::from_millis(1_800_000_030_000),
+                &(),
             )
             .expect("coordinate");
         assert_eq!(result.prepared_participants, count);
@@ -237,6 +280,7 @@ fn blocked_preflight_releases_ready_peers_before_installation() {
     let initiating = participants[0].instance_id;
     let registry = Registry {
         scans: RefCell::new(VecDeque::from([participants])),
+        replacement_failures: RefCell::new(Vec::new()),
     };
     let state = State::default();
     let mut gateway = Gateway {
@@ -251,6 +295,7 @@ fn blocked_preflight_releases_ready_peers_before_installation() {
             identity,
             &version("0.2.0"),
             Timestamp::from_millis(1_800_000_030_000),
+            &(),
         )
         .expect("abort");
     assert!(matches!(
@@ -284,6 +329,7 @@ fn post_install_rescan_includes_new_sessions_and_records_partial_restart() {
             identity,
             &version("0.2.0"),
             Timestamp::from_millis(1_800_000_030_000),
+            &(),
         )
         .expect("partial restart");
     assert_eq!(result.prepared_participants, 2);
@@ -311,6 +357,7 @@ fn already_current_preflight_participants_are_released_after_installation() {
             identity,
             &version("0.2.0"),
             Timestamp::from_millis(1_800_000_030_000),
+            &(),
         )
         .expect("coordinate current participant");
 
@@ -327,6 +374,7 @@ fn unavailable_participant_aborts_and_releases_ready_peers() {
     let initiating = participants[0].instance_id;
     let registry = Registry {
         scans: RefCell::new(VecDeque::from([participants])),
+        replacement_failures: RefCell::new(Vec::new()),
     };
     let state = State::default();
     let mut gateway = Gateway {
@@ -342,6 +390,7 @@ fn unavailable_participant_aborts_and_releases_ready_peers() {
             identity,
             &version("0.2.0"),
             Timestamp::from_millis(1_800_000_030_000),
+            &(),
         )
         .expect("abort unavailable participant");
 
@@ -353,96 +402,10 @@ fn unavailable_participant_aborts_and_releases_ready_peers() {
     assert_eq!(installer.calls, 0);
 }
 
-#[test]
-fn installer_failure_releases_every_ready_participant() {
-    let mut ids = TestIds::new(1_800_000_000_000);
-    let identity = InstallationIdentity::from_digest([36; 32]);
-    let participants = participants(&mut ids, identity, 3);
-    let initiating = participants[0].instance_id;
-    let registry = Registry {
-        scans: RefCell::new(VecDeque::from([participants])),
-    };
-    let state = State::default();
-    let mut gateway = Gateway::default();
-    let mut installer = Installer {
-        calls: 0,
-        result: Err(UpdateError::InstallerFailed),
-    };
-
-    let result = UpdateRestartCoordinator::new(&state, &registry, &mut gateway, &mut installer)
-        .execute(
-            ids.request_id(),
-            initiating,
-            identity,
-            &version("0.2.0"),
-            Timestamp::from_millis(1_800_000_030_000),
-        );
-
-    assert_eq!(result, Err(UpdateError::InstallerFailed));
-    assert_eq!(gateway.released.len(), 3);
-    assert!(gateway.restarted.is_empty());
-}
-
-#[test]
-fn unregistered_coordinator_aborts_before_installation() {
-    let mut ids = TestIds::new(1_800_000_000_000);
-    let identity = InstallationIdentity::from_digest([37; 32]);
-    let participants = participants(&mut ids, identity, 2);
-    let registry = Registry {
-        scans: RefCell::new(VecDeque::from([participants])),
-    };
-    let state = State::default();
-    let mut gateway = Gateway::default();
-    let mut installer = successful_installer();
-    let missing = ids.instance_id();
-
-    let result = UpdateRestartCoordinator::new(&state, &registry, &mut gateway, &mut installer)
-        .execute(
-            ids.request_id(),
-            missing,
-            identity,
-            &version("0.2.0"),
-            Timestamp::from_millis(1_800_000_030_000),
-        )
-        .expect("abort unregistered coordinator");
-
-    assert!(matches!(
-        result.status,
-        UpdateExecutionStatus::Aborted { blocker, ref code }
-            if blocker == Some(missing) && code == "coordinator_not_registered"
-    ));
-    assert_eq!(installer.calls, 0);
-}
-
-#[test]
-fn coordinator_missing_after_installation_is_a_restart_failure() {
-    let mut ids = TestIds::new(1_800_000_000_000);
-    let identity = InstallationIdentity::from_digest([38; 32]);
-    let before = participants(&mut ids, identity, 1);
-    let initiating = before[0].instance_id;
-    let registry = registry(before, Vec::new());
-    let state = State::default();
-    let mut gateway = Gateway::default();
-    let mut installer = successful_installer();
-
-    let result = UpdateRestartCoordinator::new(&state, &registry, &mut gateway, &mut installer)
-        .execute(
-            ids.request_id(),
-            initiating,
-            identity,
-            &version("0.2.0"),
-            Timestamp::from_millis(1_800_000_030_000),
-        )
-        .expect("record missing coordinator");
-
-    assert_eq!(result.restart_requests, 1);
-    assert_eq!(result.restart_failed, vec![initiating]);
-    assert!(state.cache.borrow().restart_needed);
-}
-
 fn registry(before: Vec<InstanceInfo>, after: Vec<InstanceInfo>) -> Registry {
     Registry {
         scans: RefCell::new(VecDeque::from([before, after])),
+        replacement_failures: RefCell::new(Vec::new()),
     }
 }
 

@@ -1,11 +1,13 @@
 //! Installation-aware stable release update boundaries.
 
+use std::time::Duration;
+
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::domain::{
-    Installation, InstallationIdentity, InstallationKind, InstanceId, RequestId, SessionId,
-    StableVersion, Timestamp, UpdateCacheState,
+    Installation, InstallationIdentity, InstallationKind, InstanceId, ReleaseHighlightAnnouncement,
+    RequestId, SessionId, StableVersion, Timestamp, UpdateCacheState,
 };
 
 use super::runtime::InstanceInfo;
@@ -146,6 +148,30 @@ pub trait UpdateStateStore {
         installed: StableVersion,
         restart_needed: bool,
     ) -> Result<UpdateCacheState, UpdateError>;
+
+    /// Durably target one verified in-app upgrade announcement.
+    ///
+    /// # Errors
+    ///
+    /// Returns a private atomic cache-write failure.
+    fn record_release_highlights(
+        &self,
+        installation: InstallationIdentity,
+        announcement: ReleaseHighlightAnnouncement,
+    ) -> Result<UpdateCacheState, UpdateError>;
+
+    /// Durably acknowledge one exact matching announcement.
+    ///
+    /// Returns false when no unacknowledged matching record remains.
+    ///
+    /// # Errors
+    ///
+    /// Returns a private atomic cache-write failure.
+    fn acknowledge_release_highlights(
+        &self,
+        installation: InstallationIdentity,
+        announcement: &ReleaseHighlightAnnouncement,
+    ) -> Result<bool, UpdateError>;
 }
 
 /// Bounded readiness request sent to one verified live participant.
@@ -199,6 +225,27 @@ pub struct UpdateRestartReply {
     pub accepted: bool,
 }
 
+/// One in-memory peer replacement the coordinator must observe before announcing an upgrade.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct UpdateReplacementExpectation {
+    /// Session that must be restored under the target executable.
+    pub session_id: SessionId,
+    /// Old process identity that must be replaced rather than rediscovered.
+    pub previous_instance_id: InstanceId,
+}
+
+/// Read-only cancellation observed by bounded update coordination waits.
+pub trait UpdateCancellation: Send + Sync {
+    /// Whether the owning update lane is shutting down.
+    fn is_cancelled(&self) -> bool;
+}
+
+impl UpdateCancellation for () {
+    fn is_cancelled(&self) -> bool {
+        false
+    }
+}
+
 /// Verified current-user live-instance source for update coordination.
 pub trait UpdateInstanceRegistry {
     /// Return one complete verified scan.
@@ -207,6 +254,23 @@ pub trait UpdateInstanceRegistry {
     ///
     /// Returns a typed registry or process-verification failure.
     fn active_instances(&self) -> Result<Vec<InstanceInfo>, UpdateError>;
+
+    /// Wait a bounded interval for every peer session to reappear under the exact target.
+    ///
+    /// Returns the previous instance identities that did not converge. Expectations are
+    /// ephemeral coordinator memory and are never persisted.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed registry or process-verification failure.
+    fn wait_for_replacements(
+        &self,
+        installation: InstallationIdentity,
+        target: &StableVersion,
+        expected: &[UpdateReplacementExpectation],
+        timeout: Duration,
+        cancellation: &dyn UpdateCancellation,
+    ) -> Result<Vec<InstanceId>, UpdateError>;
 }
 
 /// Typed update coordination over the existing owner-control endpoint.

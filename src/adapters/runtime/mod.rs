@@ -4,6 +4,7 @@ mod capture;
 mod control_endpoint;
 mod schema_lock;
 mod system;
+mod update;
 
 pub use capture::FileCaptureLease;
 pub use schema_lock::{FileSchemaLease, SchemaLockPolicy};
@@ -255,13 +256,6 @@ impl RuntimeCoordinator for FileRuntimeCoordinator {
             active,
             recovered: recovered.into_iter().collect(),
         })
-    }
-}
-
-impl crate::ports::update::UpdateInstanceRegistry for FileRuntimeCoordinator {
-    fn active_instances(&self) -> Result<Vec<InstanceInfo>, crate::ports::update::UpdateError> {
-        RuntimeCoordinator::active_instances(self)
-            .map_err(|error| crate::ports::update::UpdateError::Coordination(error.to_string()))
     }
 }
 

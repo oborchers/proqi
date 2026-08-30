@@ -24,6 +24,7 @@ mod package;
 mod policy;
 mod public_assets;
 mod release;
+mod release_highlights;
 mod release_policy;
 mod release_targets;
 mod snapshots;
@@ -217,6 +218,7 @@ fn quality(root: &Path) -> Result<(), String> {
     check_whitespace(root)?;
     source_limits::check(root)?;
     snapshots::check(root)?;
+    release_highlights::validate(root, None)?;
     public_assets::check(root)?;
     policy::check(root)?;
     run(

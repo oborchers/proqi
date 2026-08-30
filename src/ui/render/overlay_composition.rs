@@ -112,6 +112,12 @@ fn render_decision(
     } else if let Some((title, entries, selected)) = app.update_prompt_view() {
         overlays::render_update(frame, overlay, &title, &entries, selected, theme);
         true
+    } else if app
+        .release_highlights_view(overlay.area.width.saturating_sub(2), 0)
+        .is_some()
+    {
+        overlays::render_release_highlights(frame, app, overlay, theme);
+        true
     } else {
         false
     }

@@ -51,6 +51,12 @@ impl crate::ports::screenshot::ScreenshotCancellation for CancellationFlag {
     }
 }
 
+impl crate::ports::update::UpdateCancellation for CancellationFlag {
+    fn is_cancelled(&self) -> bool {
+        Self::is_cancelled(self)
+    }
+}
+
 impl SystemProcessRunner {
     pub(crate) fn cancellable(cancellation: CancellationFlag) -> Self {
         Self { cancellation }

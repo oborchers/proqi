@@ -9,11 +9,11 @@ use std::{
 use crate::{
     application::{UpdateCheckMode, UpdateRefresh, UpdateService},
     domain::{
-        Installation, InstallationIdentity, InstallationKind, StableVersion, Timestamp,
-        UpdateCacheState,
+        Installation, InstallationIdentity, InstallationKind, ReleaseHighlightAnnouncement,
+        StableVersion, Timestamp, UpdateCacheState,
     },
     ports::{
-        environment::Clock,
+        environment::{Clock, IdGenerator as _},
         update::{
             InstallDetector, ReleaseObservation, ReleaseSource, UpdateError, UpdateLockKind,
             UpdateStateStore as _,
@@ -25,6 +25,16 @@ use super::FileUpdateStateStore;
 
 fn identity() -> InstallationIdentity {
     InstallationIdentity::from_digest([19; 32])
+}
+
+fn announcement() -> ReleaseHighlightAnnouncement {
+    let mut ids = crate::adapters::memory::FakeIdGenerator::new(1_800_000_000_000);
+    ReleaseHighlightAnnouncement::pending(
+        ids.session_id(),
+        StableVersion::parse("0.3.0").expect("previous"),
+        StableVersion::parse("0.4.0").expect("target"),
+    )
+    .expect("announcement")
 }
 
 struct Detector;
@@ -81,6 +91,18 @@ fn corrupt_and_oversized_state_are_safe_cache_misses() {
     fs::write(&state, b"not json").expect("corrupt state");
     assert_eq!(store.load(identity()), Ok(UpdateCacheState::default()));
     fs::write(&state, vec![b'x'; 16 * 1024 + 1]).expect("oversized state");
+    assert_eq!(store.load(identity()), Ok(UpdateCacheState::default()));
+    let mut invalid = serde_json::to_value(UpdateCacheState {
+        release_highlights: Some(announcement()),
+        ..UpdateCacheState::default()
+    })
+    .expect("serialize state");
+    invalid["release_highlights"]["previous_version"] = serde_json::json!("0.4.0");
+    fs::write(
+        &state,
+        serde_json::to_vec(&invalid).expect("serialize invalid state"),
+    )
+    .expect("invalid announcement state");
     assert_eq!(store.load(identity()), Ok(UpdateCacheState::default()));
 }
 
@@ -253,6 +275,58 @@ fn successful_refresh_merges_global_dismissal_and_skip_state() {
     assert_eq!(state.dismissed_version, None);
     assert_eq!(state.skipped_version, None);
     assert_eq!(state.observed_installed_version, Some(installed));
+}
+
+#[test]
+fn exact_release_highlight_acknowledgement_is_atomic_and_idempotent() {
+    let temporary = tempfile::tempdir().expect("cache root");
+    let store = FileUpdateStateStore::new(temporary.path()).expect("store");
+    let expected = announcement();
+    store
+        .record_release_highlights(identity(), expected.clone())
+        .expect("record announcement");
+    assert!(
+        store
+            .acknowledge_release_highlights(identity(), &expected)
+            .expect("acknowledge")
+    );
+    assert!(
+        !store
+            .acknowledge_release_highlights(identity(), &expected)
+            .expect("idempotent acknowledgement")
+    );
+    let stored = store.load(identity()).expect("stored state");
+    assert!(
+        stored
+            .release_highlights
+            .is_some_and(|announcement| announcement.acknowledged())
+    );
+}
+
+#[test]
+fn mismatched_release_highlight_acknowledgement_changes_nothing() {
+    let temporary = tempfile::tempdir().expect("cache root");
+    let store = FileUpdateStateStore::new(temporary.path()).expect("store");
+    let expected = announcement();
+    store
+        .record_release_highlights(identity(), expected.clone())
+        .expect("record announcement");
+    let mut ids = crate::adapters::memory::FakeIdGenerator::new(1_800_000_000_100);
+    let mismatched = ReleaseHighlightAnnouncement::pending(
+        ids.session_id(),
+        expected.previous_version().clone(),
+        expected.target_version().clone(),
+    )
+    .expect("mismatch");
+    assert!(
+        !store
+            .acknowledge_release_highlights(identity(), &mismatched)
+            .expect("mismatched acknowledgement")
+    );
+    assert_eq!(
+        store.load(identity()).expect("stored").release_highlights,
+        Some(expected)
+    );
 }
 
 #[cfg(unix)]

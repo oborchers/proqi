@@ -12,6 +12,7 @@ mod prompt;
 mod recovery;
 mod reducer;
 mod rehydrate;
+mod release_highlights;
 mod service;
 #[cfg(test)]
 mod test_support;
@@ -32,6 +33,7 @@ pub(crate) use prompt::{
 };
 pub use recovery::capture_recovery;
 pub use reducer::reduce;
+pub use release_highlights::{ReleaseHighlightPresentation, ReleaseHighlightSelection};
 pub use service::{LeasedSession, SessionService, SessionServiceError, ThoughtMutation};
 pub use update::{
     UpdateAvailability, UpdateCheckMode, UpdateCheckResult, UpdateRefresh, UpdateService,

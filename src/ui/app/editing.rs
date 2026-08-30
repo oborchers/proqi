@@ -67,6 +67,7 @@ impl BoardApp {
         };
         let overlay_open = self.help
             || self.update_prompt.is_some()
+            || self.release_highlights.is_some()
             || self.palette.is_some()
             || self.invocation_popup.is_some()
             || self.transfer.is_some()

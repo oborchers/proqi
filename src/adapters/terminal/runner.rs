@@ -12,6 +12,7 @@ mod input_admission;
 mod owned_lanes;
 mod owner_control;
 mod pending;
+mod release_highlights;
 mod restart;
 mod screenshot_results;
 mod update_results;
@@ -142,6 +143,8 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
     } = resources;
     let session_id = state.board.session.id;
     store.recover_submissions(session_id, clock.now())?;
+    let release_highlight_selection =
+        release_highlights::load(&cache_directory, installation.as_ref(), session_id);
     let (control, control_warning) = composition::start_optional_control(&mut session_lease);
     let (theme, guard) =
         composition::enter_terminal(&settings.theme, settings.ui.keyboard_enhancement)?;
@@ -180,6 +183,11 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
     let check_for_updates = settings.ui.check_for_updates;
     let mut app =
         BoardApp::with_settings_and_cwd(state, settings.ui, cwd.clone(), RopeEditorFactory);
+    app.install_release_highlights(
+        release_highlight_selection.installed,
+        release_highlight_selection.automatic,
+        owned.input.latest_sequence(),
+    );
     app.configure_screenshot_activity(screenshot_activity);
     if let Some(warning) = control_warning {
         app.set_warning(warning);
@@ -353,6 +361,7 @@ fn drive(
                 render(frame, app, &layout, &theme);
             })?;
             app.arm_update_prompt();
+            app.arm_release_highlights();
             redraw = false;
         }
         if let Some((sequence, event)) = held_input.take() {

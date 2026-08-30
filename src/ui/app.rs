@@ -12,6 +12,8 @@ mod duplicate;
 mod editing;
 mod folds;
 mod help;
+pub(in crate::ui) mod highlights;
+mod input_dispatch;
 mod invocation;
 mod palette;
 mod palette_handoff;
@@ -122,6 +124,8 @@ pub struct BoardApp {
     update_barrier: Option<update::UpdateBarrier>,
     update_restart: Option<crate::domain::StableVersion>,
     update_prompt: Option<update::UpdatePrompt>,
+    release_highlights: Option<highlights::ReleaseHighlightsOverlay>,
+    installed_highlights: Option<crate::domain::ReleaseHighlightGroup>,
     invocation_cwd: PathBuf,
     invocation_generation: u64,
     invocation_global: Vec<crate::ports::invocation::InvocationEntry>,
@@ -203,6 +207,8 @@ impl BoardApp {
             update_barrier: None,
             update_restart: None,
             update_prompt: None,
+            release_highlights: None,
+            installed_highlights: None,
             invocation_cwd,
             invocation_generation: 0,
             invocation_global: Vec::new(),
@@ -224,6 +230,7 @@ impl BoardApp {
         if self.help
             || self.screenshot.takeover.is_some()
             || self.update_prompt.is_some()
+            || self.release_highlights.is_some()
             || self.palette.is_some()
             || self.invocation_popup.is_some()
             || self.transfer.is_some()
@@ -247,6 +254,9 @@ impl BoardApp {
         }
         if self.update_prompt.is_some() {
             return self.handle_update_prompt_input(&input);
+        }
+        if self.release_highlights.is_some() {
+            return self.handle_release_highlights_input(&input);
         }
         if self.update_barrier.is_some()
             && !matches!(input, UiInput::Resize { .. } | UiInput::HostFocusGained)
@@ -291,43 +301,6 @@ impl BoardApp {
             return effects;
         }
         self.handle_primary_input(input, ids, clock)
-    }
-
-    fn handle_primary_input(
-        &mut self,
-        input: UiInput,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-    ) -> Vec<Effect> {
-        self.invalidate_palette_selection_handoff(&input);
-        match input {
-            UiInput::HostFocusGained => Self::discover_agents(),
-            UiInput::Resize { .. } => {
-                self.layout = None;
-                self.hovered = None;
-                self.edit_boundary = None;
-                Vec::new()
-            }
-            UiInput::Pointer(pointer) => self.handle_pointer(pointer, ids, clock),
-            UiInput::Paste(content) => {
-                let effects = self.paste_payload(PastePayload::text(content), ids, clock);
-                self.refresh_invocation_popup();
-                effects
-            }
-            UiInput::PasteAnnotated(payload) => {
-                let effects = self.paste_payload(payload, ids, clock);
-                self.refresh_invocation_popup();
-                effects
-            }
-            UiInput::Key(key) => match self.interaction_mode() {
-                InteractionMode::Board => self.handle_board_key(key, ids, clock),
-                InteractionMode::Edit { .. } => {
-                    let effects = self.handle_edit_key(key, ids, clock);
-                    self.refresh_invocation_popup();
-                    effects
-                }
-            },
-        }
     }
 
     /// Rebuild the editor adapter when reducer state changes externally.

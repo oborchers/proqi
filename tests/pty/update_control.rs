@@ -11,14 +11,14 @@ use proqi::{
         update::{FileUpdateStateStore, SystemInstallDetector},
     },
     application::UpdateRestartCoordinator,
-    domain::{StableVersion, Timestamp},
+    domain::{InstallationIdentity, StableVersion, Timestamp},
     ports::{
         environment::{Clock as _, IdGenerator as _},
         runtime::InstanceInfo,
         update::{
             HomebrewInstaller, InstallDetector as _, UPDATE_CONTROL_PROTOCOL_VERSION, UpdateError,
             UpdateParticipantGateway as _, UpdatePrepareReply, UpdatePrepareRequest,
-            UpdateRestartRequest,
+            UpdateRestartRequest, UpdateStateStore as _,
         },
     },
 };
@@ -78,6 +78,7 @@ fn real_owner_preflights_and_returns_to_use_after_one_fake_installation() {
                 installation.identity,
                 &target,
                 deadline,
+                &(),
             )
             .expect("coordinate update");
 
@@ -159,6 +160,109 @@ fn homebrew_owner_restores_and_replaces_itself_in_the_same_pty() {
     assert!(status.success(), "restarted owner PTY exited with {status}");
 }
 
+#[test]
+fn in_app_restart_reopens_until_dismissed_then_remains_manual() {
+    let state = tempfile::tempdir().expect("temporary state");
+    let binary = fake_homebrew_binary(state.path());
+    let original = env!("CARGO_BIN_EXE_proqi");
+    let created = json_command(original, state.path(), &[]);
+    let session = created["data"]["session_id"].as_str().expect("session ID");
+    let ready = state.path().join("highlight-owner-ready");
+    let mut owner = spawn_highlight_crash_owner(&binary, state.path(), session, &ready);
+    wait_for_path(&ready);
+    wait_for_control_owner(state.path(), session);
+    rewrite_participant_version(state.path(), session, "0.3.0");
+
+    let before = active_participant(state.path(), session);
+    let (update_state, installation, target) =
+        coordinate_highlight_restart(&binary, state.path(), &before);
+    let status = owner.wait().expect("wait for crash fixture");
+    assert!(status.success(), "crash fixture exited with {status}");
+    let pending = update_state
+        .load(installation)
+        .expect("pending state")
+        .release_highlights
+        .expect("pending announcement");
+    assert!(!pending.acknowledged());
+
+    let status = run_highlight_dismissal(&binary, state.path(), session);
+    assert!(status.success(), "dismissal fixture exited with {status}");
+    let acknowledged = update_state
+        .load(installation)
+        .expect("acknowledged state")
+        .release_highlights
+        .expect("acknowledged announcement");
+    assert!(acknowledged.acknowledged());
+
+    let status = run_quiet_highlight_resume(&binary, state.path(), session);
+    assert!(
+        status.success(),
+        "quiet resume fixture exited with {status}"
+    );
+    let status = run_manual_highlight_reopen(&binary, state.path(), session);
+    assert!(
+        status.success(),
+        "manual reopen fixture exited with {status}"
+    );
+    assert_eq!(target.to_string(), env!("CARGO_PKG_VERSION"));
+}
+
+fn coordinate_highlight_restart(
+    binary: &Path,
+    state: &Path,
+    before: &InstanceInfo,
+) -> (FileUpdateStateStore, InstallationIdentity, StableVersion) {
+    let installation = SystemInstallDetector::for_executable(binary.to_path_buf())
+        .detect()
+        .expect("Homebrew installation");
+    let mut ids = SystemIdGenerator;
+    let registry = FileRuntimeCoordinator::new(
+        state.join("runtime"),
+        ids.instance_id(),
+        std::env::current_dir().expect("current directory"),
+        SystemClock.now(),
+        env!("CARGO_PKG_VERSION"),
+    )
+    .expect("registry")
+    .with_update_context(installation.identity, UPDATE_CONTROL_PROTOCOL_VERSION);
+    let update_state = FileUpdateStateStore::new(&state.join("cache")).expect("state");
+    let mut gateway = LocalUpdateControlClient::new(SystemIdGenerator);
+    let mut installer = FakeInstaller { calls: 0 };
+    let target = StableVersion::parse(env!("CARGO_PKG_VERSION")).expect("target");
+    let deadline = Timestamp::from_millis(SystemClock.now().as_millis().saturating_add(10_000));
+
+    let result =
+        UpdateRestartCoordinator::new(&update_state, &registry, &mut gateway, &mut installer)
+            .execute(
+                ids.request_id(),
+                before.instance_id,
+                installation.identity,
+                &target,
+                deadline,
+                &(),
+            )
+            .expect("coordinate restart");
+    assert_eq!(result.restart_requests, 1);
+    assert!(result.restart_failed.is_empty());
+    let recorded = update_state
+        .load(installation.identity)
+        .expect("recorded state")
+        .release_highlights
+        .expect("recorded announcement");
+    assert_eq!(recorded.session_id(), before.session_id);
+    let manifest = proqi::adapters::update::packaged_release_highlights().expect("manifest");
+    let selected = proqi::application::ReleaseHighlightSelection::select(
+        &manifest,
+        &update_state
+            .load(installation.identity)
+            .expect("selection state"),
+        before.session_id,
+        &target,
+    );
+    assert!(selected.automatic.is_some());
+    (update_state, installation.identity, target)
+}
+
 fn active_participant(state: &Path, session: &str) -> InstanceInfo {
     let directory = state.join("runtime/instances");
     fs::read_dir(directory)
@@ -168,6 +272,26 @@ fn active_participant(state: &Path, session: &str) -> InstanceInfo {
         .filter_map(|bytes| serde_json::from_slice::<InstanceInfo>(&bytes).ok())
         .find(|info| info.session_id.to_string() == session)
         .expect("active participant")
+}
+
+fn rewrite_participant_version(state: &Path, session: &str, version: &str) {
+    let directory = state.join("runtime/instances");
+    let entry = fs::read_dir(directory)
+        .expect("instance directory")
+        .filter_map(Result::ok)
+        .find_map(|entry| {
+            let bytes = fs::read(entry.path()).ok()?;
+            let info = serde_json::from_slice::<InstanceInfo>(&bytes).ok()?;
+            (info.session_id.to_string() == session).then_some((entry.path(), info))
+        })
+        .expect("participant metadata");
+    let (path, mut info) = entry;
+    version.clone_into(&mut info.version);
+    fs::write(
+        path,
+        serde_json::to_vec(&info).expect("serialize participant"),
+    )
+    .expect("rewrite participant version");
 }
 
 fn spawn_owner(binary: &str, state: &Path, session: &str, ready: &Path, done: &Path) -> Child {
@@ -249,4 +373,118 @@ fn spawn_restarting_owner(
         .env("PROQI_TEST_DONE", done)
         .spawn()
         .expect("spawn restarting owner")
+}
+
+fn spawn_highlight_crash_owner(binary: &Path, state: &Path, session: &str, ready: &Path) -> Child {
+    let script = r#"
+        log_user 0
+        set timeout 20
+        spawn $env(PROQI_TEST_BINARY) --state-dir $env(PROQI_TEST_STATE) -r $env(PROQI_TEST_SESSION)
+        expect -exact "\x1b\[?1049h"
+        stty rows 18 columns 84
+        close [open $env(PROQI_TEST_READY) w]
+        expect -exact "\x1b\[?1049l"
+        expect -exact "\x1b\[?1049h"
+        stty rows 19 columns 85
+        after 500
+        exec kill -KILL [exp_pid]
+        expect eof
+        catch wait result
+        exit 0
+    "#;
+    expect_command()
+        .args(["-c", script])
+        .env("PROQI_TEST_BINARY", binary)
+        .env("PROQI_TEST_STATE", state)
+        .env("PROQI_TEST_SESSION", session)
+        .env("PROQI_TEST_READY", ready)
+        .spawn()
+        .expect("spawn highlight crash owner")
+}
+
+fn run_highlight_dismissal(binary: &Path, state: &Path, session: &str) -> std::process::ExitStatus {
+    let script = r#"
+        log_user 0
+        set timeout 20
+        spawn $env(PROQI_TEST_BINARY) --state-dir $env(PROQI_TEST_STATE) -r $env(PROQI_TEST_SESSION)
+        expect -exact "\x1b\[?1049h"
+        stty rows 18 columns 84
+        after 300
+        send -- "\x1b"
+        after 500
+        send -- "\x11"
+        expect eof
+        catch wait result
+        exit [lindex $result 3]
+    "#;
+    expect_command()
+        .args(["-c", script])
+        .env("PROQI_TEST_BINARY", binary)
+        .env("PROQI_TEST_STATE", state)
+        .env("PROQI_TEST_SESSION", session)
+        .status()
+        .expect("run highlight dismissal")
+}
+
+fn run_quiet_highlight_resume(
+    binary: &Path,
+    state: &Path,
+    session: &str,
+) -> std::process::ExitStatus {
+    let script = r#"
+        log_user 0
+        set timeout 20
+        spawn $env(PROQI_TEST_BINARY) --state-dir $env(PROQI_TEST_STATE) -r $env(PROQI_TEST_SESSION)
+        expect -exact "\x1b\[?1049h"
+        stty rows 18 columns 84
+        after 300
+        send -- "q"
+        expect eof
+        catch wait result
+        exit [lindex $result 3]
+    "#;
+    expect_command()
+        .args(["-c", script])
+        .env("PROQI_TEST_BINARY", binary)
+        .env("PROQI_TEST_STATE", state)
+        .env("PROQI_TEST_SESSION", session)
+        .status()
+        .expect("run quiet highlight resume")
+}
+
+fn run_manual_highlight_reopen(
+    binary: &Path,
+    state: &Path,
+    session: &str,
+) -> std::process::ExitStatus {
+    let script = r#"
+        log_user 0
+        set timeout 20
+        spawn $env(PROQI_TEST_BINARY) --state-dir $env(PROQI_TEST_STATE) -r $env(PROQI_TEST_SESSION)
+        expect -exact "\x1b\[?1049h"
+        stty rows 18 columns 84
+        after 300
+        send -- ":What's new\r"
+        after 300
+        send -- "q"
+        set timeout 1
+        expect {
+            eof { exit 94 }
+            timeout {}
+        }
+        set timeout 20
+        send -- "\x1b"
+        after 200
+        send -- "\x11"
+        expect eof
+        catch wait result
+        exit [lindex $result 3]
+    "#;
+    expect_command()
+        .args(["-c", script])
+        .env("PROQI_TEST_BINARY", binary)
+        .env("PROQI_TEST_STATE", state)
+        .env("PROQI_TEST_SESSION", session)
+        .status()
+        .expect("run manual highlight reopen")
 }

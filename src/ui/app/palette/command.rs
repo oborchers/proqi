@@ -30,6 +30,7 @@ pub(super) enum Command {
     InsertInvocation,
     RefreshInvocations,
     CheckUpdates,
+    WhatsNew,
     ScreenshotInbox,
     RetryScreenshotCapture,
     RetryStorage,
@@ -46,7 +47,7 @@ pub(super) enum Command {
 }
 
 impl Command {
-    pub(super) const ALL: [(Self, &'static str); 41] = [
+    pub(super) const ALL: [(Self, &'static str); 42] = [
         (Self::New, "New thought"),
         (Self::RenameSession, "Rename session"),
         (Self::CopySessionId, "Copy session ID"),
@@ -78,6 +79,7 @@ impl Command {
         (Self::InsertInvocation, "Insert discovered invocation"),
         (Self::RefreshInvocations, "Refresh invocations"),
         (Self::CheckUpdates, "Check for updates"),
+        (Self::WhatsNew, "What's new"),
         (Self::ScreenshotInbox, "Enable Screenshot Inbox"),
         (Self::RetryScreenshotCapture, "Retry Screenshot Capture"),
         (Self::RetryStorage, "Retry failed save"),

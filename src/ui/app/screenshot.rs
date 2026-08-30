@@ -392,6 +392,7 @@ impl BoardApp {
             && self.rename.is_none()
             && self.transfer.is_none()
             && self.update_prompt.is_none()
+            && self.release_highlights.is_none()
             && self.screenshot.takeover.is_none()
             && self.submission_mode.is_none()
             && self.selection.is_empty()

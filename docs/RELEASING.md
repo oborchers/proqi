@@ -7,6 +7,9 @@ authority by itself.
 
 - `Cargo.toml` is the only version source.
 - Stable tags use exact `vX.Y.Z` syntax and must equal the Cargo version.
+- Every `.github/release-notes/vX.Y.Z.md` has one exact matching version in
+  `release-highlights.json`, with three to six jointly reviewed user-facing
+  highlights. Release planning and package assembly fail when they diverge.
 - Release artifacts exist only for Apple silicon macOS, Intel macOS, and
   x86-64 GNU Linux.
 - The crates.io package is an installable binary package, is restricted to the
@@ -130,8 +133,9 @@ Manual and API-managed settings must also:
 
 After the readiness audit:
 
-1. Prepare and review the Cargo version and
-   `.github/release-notes/vX.Y.Z.md`, then push `main`.
+1. Prepare and jointly review the Cargo version,
+   `.github/release-notes/vX.Y.Z.md`, and the matching
+   `release-highlights.json` entry, then push `main`.
 2. Wait for `Required CI result` to pass on the exact release commit.
 3. Create the exact annotated stable tag at that commit and push it. The tag is
    the single authorization to publish the crate, GitHub Release, and Homebrew

@@ -2,13 +2,18 @@
 
 use std::{
     fs,
-    io::{Read, Write},
+    io::Write,
     os::unix::fs::symlink,
     process::Command,
     sync::{Arc, Mutex},
     thread,
     time::{Duration, Instant},
 };
+
+#[path = "pty/process.rs"]
+mod process;
+
+use process::{assert_terminal_restored, finish, finish_with_status, read_pty};
 
 use portable_pty::{Child, CommandBuilder, PtySize, native_pty_system};
 use proqi::{
@@ -202,6 +207,7 @@ fn assert_fake_update_services(
             installation,
             &version,
             deadline,
+            &(),
         );
     assert!(matches!(failure, Err(UpdateError::InstallerFailed)));
     assert_eq!(failing.calls, 1);
@@ -221,6 +227,7 @@ fn assert_fake_update_services(
             installation,
             &version,
             deadline,
+            &(),
         )
         .expect("coordinate one fake installation");
     assert_eq!(succeeding.calls, 1);
@@ -402,49 +409,6 @@ fn spawn(product: &InstalledProduct, session: &str) -> PtyChild {
     }
 }
 
-fn read_pty(mut reader: Box<dyn Read + Send>, output: &Mutex<Vec<u8>>) {
-    let mut buffer = [0_u8; 8 * 1024];
-    loop {
-        match reader.read(&mut buffer) {
-            Ok(0) | Err(_) => return,
-            Ok(read) => output
-                .lock()
-                .expect("PTY output lock")
-                .extend_from_slice(&buffer[..read]),
-        }
-    }
-}
-
-fn finish(owner: PtyChild, timeout: Duration) -> Vec<u8> {
-    let (success, output) = finish_with_status(owner, timeout);
-    assert!(
-        success,
-        "PTY owner exited unsuccessfully: {}",
-        String::from_utf8_lossy(&output)
-    );
-    output
-}
-
-fn finish_with_status(mut owner: PtyChild, timeout: Duration) -> (bool, Vec<u8>) {
-    let deadline = Instant::now() + timeout;
-    loop {
-        match owner.child.try_wait().expect("poll PTY child") {
-            Some(status) => {
-                let success = status.success();
-                drop(owner.input);
-                owner.reader.join().expect("join PTY reader");
-                let output = owner.output.lock().expect("PTY output lock").clone();
-                return (success, output);
-            }
-            None if Instant::now() < deadline => thread::sleep(Duration::from_millis(20)),
-            None => {
-                owner.child.kill().expect("kill timed-out PTY owner");
-                panic!("PTY owner did not exit within {timeout:?}");
-            }
-        }
-    }
-}
-
 fn wait_for_owner(product: &InstalledProduct, session: &str, owner: &mut PtyChild) {
     let deadline = Instant::now() + Duration::from_secs(8);
     loop {
@@ -484,16 +448,4 @@ fn owner_is_ready(product: &InstalledProduct, session: &str) -> bool {
                         .is_some_and(|endpoint| std::path::Path::new(endpoint).exists())
             })
     })
-}
-
-fn assert_terminal_restored(output: &[u8]) {
-    for sequence in [b"\x1b[?1049h".as_slice(), b"\x1b[?1049l".as_slice()] {
-        assert!(
-            output
-                .windows(sequence.len())
-                .any(|window| window == sequence),
-            "terminal output omitted restoration sequence {sequence:?}: {}",
-            String::from_utf8_lossy(output)
-        );
-    }
 }

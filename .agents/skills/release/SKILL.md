@@ -30,9 +30,10 @@ Never advertise, install, or publish this skill as an end-user Proqi skill.
    patch increase for compatible fixes and operational hardening. The user owns
    the final version choice.
 3. Update the workspace version in `Cargo.toml`, refresh `Cargo.lock` through
-   normal Cargo tooling, and create
-   `.github/release-notes/vX.Y.Z.md`. Do not maintain another version source or
-   changelog.
+   normal Cargo tooling, create `.github/release-notes/vX.Y.Z.md`, and add one
+   exact matching entry with three to six concise user-facing items to
+   `release-highlights.json`. GitHub notes remain the only changelog. The
+   manifest is the bounded in-product projection of those reviewed notes.
 4. Run focused checks while editing, then the complete release gate documented
    in `docs/RELEASING.md`. At minimum, require the canonical quality gate,
    dependency audit, package checks, release plan, release rehearsal, workflow
@@ -40,9 +41,11 @@ Never advertise, install, or publish this skill as an end-user Proqi skill.
 5. Review generated or changed release artifacts explicitly. Never weaken a
    gate, accept snapshots automatically, or claim an unavailable platform check
    passed.
-6. Show the exact notes, version diff, gate results, and any limitations before
-   committing or pushing release preparation unless the current instruction
-   already authorizes those exact local and remote changes.
+6. Review the exact GitHub notes and matching packaged highlights together.
+   Never draft highlights from commit titles alone. Show both texts, the version
+   diff, gate results, and any limitations before committing or pushing release
+   preparation unless the current instruction already authorizes those exact
+   local and remote changes.
 
 ## Pre-publication checks
 

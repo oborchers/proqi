@@ -287,6 +287,15 @@ impl BoardApp {
         if let Some(effects) = self.execute_entry_command(command, ids, clock) {
             return effects;
         }
+        self.execute_board_command(command, ids, clock)
+    }
+
+    fn execute_board_command(
+        &mut self,
+        command: Command,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
         match command {
             Command::New => self.create(crate::ui::PastePayload::text(String::new()), ids, clock),
             Command::RenameSession => {
@@ -332,6 +341,7 @@ impl BoardApp {
             Command::CheckUpdates => {
                 vec![Effect::Update(crate::application::UpdateIntent::CheckNow)]
             }
+            Command::WhatsNew => self.open_installed_release_highlights(),
             Command::ScreenshotInbox => self.toggle_screenshot_inbox(ids, clock),
             Command::RetryScreenshotCapture => self.retry_screenshot_capture(ids, clock),
             Command::RetryStorage => self.retry_persistence(),

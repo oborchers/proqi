@@ -1,19 +1,27 @@
 //! Convergent all-session Homebrew readiness and restart coordination.
 
+use std::time::Duration;
+
 use serde::Serialize;
 
+mod restart;
+
 use crate::{
-    domain::{InstallationIdentity, InstanceId, RequestId, StableVersion, Timestamp},
+    domain::{InstallationIdentity, InstanceId, RequestId, SessionId, StableVersion, Timestamp},
     ports::{
         runtime::InstanceInfo,
         store::STORAGE_PROTOCOL_VERSION,
         update::{
-            HomebrewInstaller, UPDATE_CONTROL_PROTOCOL_VERSION, UpdateError,
+            HomebrewInstaller, UPDATE_CONTROL_PROTOCOL_VERSION, UpdateCancellation, UpdateError,
             UpdateInstanceRegistry, UpdateLockKind, UpdateParticipantGateway, UpdatePrepareReply,
-            UpdatePrepareRequest, UpdateRestartRequest, UpdateStateStore,
+            UpdatePrepareRequest, UpdateStateStore,
         },
     },
 };
+
+use restart::{initiating_upgrade, record_pending_highlights, restart_initiating, restart_peers};
+
+const REPLACEMENT_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// Whether one active process can participate in the current all-session update protocol.
 #[must_use]
@@ -75,6 +83,22 @@ pub struct UpdateRestartCoordinator<'a, S, R, G, I> {
     installer: &'a mut I,
 }
 
+struct UpdateRequest {
+    operation_id: RequestId,
+    initiating_instance: InstanceId,
+    installation: InstallationIdentity,
+    target: StableVersion,
+    deadline: Timestamp,
+}
+
+struct PreparedUpgrade {
+    request: UpdateRequest,
+    ready: Vec<InstanceInfo>,
+    initiating_session: SessionId,
+    previous: StableVersion,
+    installed: StableVersion,
+}
+
 impl<'a, S, R, G, I> UpdateRestartCoordinator<'a, S, R, G, I>
 where
     S: UpdateStateStore,
@@ -111,6 +135,7 @@ where
         installation: InstallationIdentity,
         target: &StableVersion,
         deadline: Timestamp,
+        cancellation: &dyn UpdateCancellation,
     ) -> Result<UpdateExecution, UpdateError> {
         let Some(_installer_lease) = self
             .state
@@ -121,10 +146,27 @@ where
                 UpdateExecutionStatus::AlreadyInProgress,
             ));
         };
-        let participants = matching(self.registry.active_instances()?, installation);
+        self.execute_locked(
+            UpdateRequest {
+                operation_id,
+                initiating_instance,
+                installation,
+                target: target.clone(),
+                deadline,
+            },
+            cancellation,
+        )
+    }
+
+    fn execute_locked(
+        &mut self,
+        request: UpdateRequest,
+        cancellation: &dyn UpdateCancellation,
+    ) -> Result<UpdateExecution, UpdateError> {
+        let participants = matching(self.registry.active_instances()?, request.installation);
         if participants.is_empty() {
             return Ok(aborted_execution(
-                operation_id,
+                request.operation_id,
                 0,
                 None,
                 "no_compatible_participants",
@@ -132,63 +174,139 @@ where
         }
         if !participants
             .iter()
-            .any(|participant| participant.instance_id == initiating_instance)
+            .any(|participant| participant.instance_id == request.initiating_instance)
         {
             return Ok(aborted_execution(
-                operation_id,
+                request.operation_id,
                 0,
-                Some(initiating_instance),
+                Some(request.initiating_instance),
                 "coordinator_not_registered",
             ));
         }
-        let request = UpdatePrepareRequest {
-            operation_id,
-            target_version: target.clone(),
-            installation_identity: installation,
-            deadline,
+        let prepare = UpdatePrepareRequest {
+            operation_id: request.operation_id,
+            target_version: request.target.clone(),
+            installation_identity: request.installation,
+            deadline: request.deadline,
         };
-        let ready = match preflight(self.gateway, &participants, &request) {
+        let ready = match preflight(self.gateway, &participants, &prepare) {
             Ok(ready) => ready,
             Err(failure) => {
-                release_all(self.gateway, &failure.ready, operation_id);
+                release_all(self.gateway, &failure.ready, request.operation_id);
                 return Ok(aborted_execution(
-                    operation_id,
+                    request.operation_id,
                     failure.ready.len(),
                     failure.blocker,
                     &failure.code,
                 ));
             }
         };
-        let installed = match self.installer.upgrade(target) {
+        let Some((initiating_session, previous)) =
+            initiating_upgrade(&ready, request.initiating_instance)
+        else {
+            release_all(self.gateway, &ready, request.operation_id);
+            return Ok(aborted_execution(
+                request.operation_id,
+                ready.len(),
+                Some(request.initiating_instance),
+                "invalid_coordinator_version",
+            ));
+        };
+        let installed = match self.installer.upgrade(&request.target) {
             Ok(installed) => installed,
             Err(error) => {
-                release_all(self.gateway, &ready, operation_id);
+                release_all(self.gateway, &ready, request.operation_id);
                 return Err(error);
             }
         };
+        if installed != request.target {
+            release_all(self.gateway, &ready, request.operation_id);
+            return Err(UpdateError::InstallerFailed);
+        }
+        self.restart_installed(
+            PreparedUpgrade {
+                request,
+                ready,
+                initiating_session,
+                previous,
+                installed,
+            },
+            cancellation,
+        )
+    }
+
+    fn restart_installed(
+        &mut self,
+        upgrade: PreparedUpgrade,
+        cancellation: &dyn UpdateCancellation,
+    ) -> Result<UpdateExecution, UpdateError> {
+        let PreparedUpgrade {
+            request,
+            ready,
+            initiating_session,
+            previous,
+            installed,
+        } = upgrade;
         let state_recorded = self
             .state
-            .record_restart_state(installation, installed.clone(), true)
+            .record_restart_state(request.installation, installed.clone(), true)
             .is_ok();
-        let current = matching(self.registry.active_instances()?, installation);
-        let (requested, failed) = restart_all(
+        let current = matching(self.registry.active_instances()?, request.installation);
+        let mut progress = restart_peers(
             self.gateway,
             current,
             &ready,
-            operation_id,
-            initiating_instance,
+            request.operation_id,
+            request.initiating_instance,
             &installed,
+        );
+        if progress.failed.is_empty() {
+            progress.failed = self.registry.wait_for_replacements(
+                request.installation,
+                &installed,
+                &progress.replacements,
+                REPLACEMENT_TIMEOUT,
+                cancellation,
+            )?;
+        }
+        let pending_recorded = if progress.failed.is_empty() && !cancellation.is_cancelled() {
+            record_pending_highlights(
+                self.state,
+                request.installation,
+                Some(initiating_session),
+                &previous,
+                &installed,
+            )
+        } else {
+            None
+        };
+        restart_initiating(
+            self.gateway,
+            progress.initiating.as_ref(),
+            &ready,
+            request.operation_id,
+            request.initiating_instance,
+            &installed,
+            pending_recorded,
+            &mut progress.requested,
+            &mut progress.failed,
         );
         let final_state = self
             .state
-            .record_restart_state(installation, installed.clone(), !failed.is_empty())
+            .record_restart_state(
+                request.installation,
+                installed.clone(),
+                !progress.failed.is_empty(),
+            )
             .is_ok();
         Ok(UpdateExecution {
-            operation_id,
+            operation_id: request.operation_id,
             prepared_participants: ready.len(),
-            restart_requests: requested,
-            restart_failed: failed,
-            convergence_state_recorded: state_recorded && final_state,
+            restart_requests: progress.requested,
+            restart_failed: progress.failed,
+            convergence_state_recorded: state_recorded
+                && final_state
+                && pending_recorded.unwrap_or(true),
             status: UpdateExecutionStatus::Installed { version: installed },
         })
     }
@@ -225,86 +343,6 @@ fn preflight<G: UpdateParticipantGateway>(
         ready.push(participant.clone());
     }
     Ok(ready)
-}
-
-fn restart_all<G: UpdateParticipantGateway>(
-    gateway: &mut G,
-    mut participants: Vec<InstanceInfo>,
-    prepared: &[InstanceInfo],
-    operation_id: RequestId,
-    initiating_instance: InstanceId,
-    installed: &StableVersion,
-) -> (usize, Vec<InstanceId>) {
-    let restart = UpdateRestartRequest {
-        operation_id,
-        installed_version: installed.clone(),
-    };
-    let mut requested = 0_usize;
-    let mut failed = Vec::new();
-    let initiating = participants
-        .iter()
-        .position(|participant| participant.instance_id == initiating_instance)
-        .map(|index| participants.remove(index));
-    for participant in &participants {
-        restart_participant(
-            gateway,
-            participant,
-            prepared,
-            operation_id,
-            installed,
-            &restart,
-            &mut requested,
-            &mut failed,
-        );
-    }
-    if let Some(participant) = initiating.as_ref() {
-        restart_participant(
-            gateway,
-            participant,
-            prepared,
-            operation_id,
-            installed,
-            &restart,
-            &mut requested,
-            &mut failed,
-        );
-    } else if prepared
-        .iter()
-        .any(|participant| participant.instance_id == initiating_instance)
-    {
-        requested = requested.saturating_add(1);
-        failed.push(initiating_instance);
-    }
-    (requested, failed)
-}
-
-#[expect(
-    clippy::too_many_arguments,
-    reason = "restart accounting stays explicit at the coordination boundary"
-)]
-fn restart_participant<G: UpdateParticipantGateway>(
-    gateway: &mut G,
-    participant: &InstanceInfo,
-    prepared: &[InstanceInfo],
-    operation_id: RequestId,
-    installed: &StableVersion,
-    restart: &UpdateRestartRequest,
-    requested: &mut usize,
-    failed: &mut Vec<InstanceId>,
-) {
-    if participant.version == installed.to_string() {
-        if prepared
-            .iter()
-            .any(|ready| ready.instance_id == participant.instance_id)
-        {
-            let _released = gateway.release(participant, operation_id);
-        }
-        return;
-    }
-    *requested = (*requested).saturating_add(1);
-    if !restart_accepted(gateway, participant, restart) {
-        failed.push(participant.instance_id);
-    }
 }
 
 fn aborted_execution(
@@ -369,16 +407,6 @@ fn release_all<G: UpdateParticipantGateway>(
     for participant in participants {
         let _released = gateway.release(participant, operation_id);
     }
-}
-
-fn restart_accepted<G: UpdateParticipantGateway>(
-    gateway: &mut G,
-    participant: &InstanceInfo,
-    request: &UpdateRestartRequest,
-) -> bool {
-    gateway
-        .restart(participant, request)
-        .is_ok_and(|reply| reply.instance_id == participant.instance_id && reply.accepted)
 }
 
 fn execution(operation_id: RequestId, status: UpdateExecutionStatus) -> UpdateExecution {

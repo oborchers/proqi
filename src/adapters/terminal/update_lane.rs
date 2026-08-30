@@ -50,6 +50,7 @@ pub(super) enum UpdateActionResult {
     Skipped,
     Instructions(StableVersion),
     Executed(crate::application::UpdateExecution),
+    HighlightsAcknowledged(bool),
 }
 
 pub(super) enum ManualCheckResult {
@@ -357,6 +358,12 @@ fn act(
             Ok(UpdateActionResult::Skipped)
         }
         UpdateIntent::ViewInstructions(version) => Ok(UpdateActionResult::Instructions(version)),
+        UpdateIntent::AcknowledgeReleaseHighlights(announcement) => {
+            let succeeded = state
+                .acknowledge_release_highlights(installation.identity, &announcement)
+                .unwrap_or_default();
+            Ok(UpdateActionResult::HighlightsAcknowledged(succeeded))
+        }
         UpdateIntent::Install(version) => install(
             state,
             installation,
@@ -387,7 +394,8 @@ fn install(
         .ok_or_else(|| UpdateError::Installation("active Homebrew path is absent".to_owned()))?;
     let cancellation = process.cancellation();
     let mut installer = HomebrewFormulaInstaller::new(process, active);
-    let mut gateway = LocalUpdateControlClient::cancellable(SystemIdGenerator, cancellation);
+    let mut gateway =
+        LocalUpdateControlClient::cancellable(SystemIdGenerator, cancellation.clone());
     let now = SystemClock.now();
     let deadline = Timestamp::from_millis(now.as_millis().saturating_add(UPDATE_DEADLINE_MILLIS));
     let mut ids = SystemIdGenerator;
@@ -398,6 +406,7 @@ fn install(
             installation.identity,
             version,
             deadline,
+            &cancellation,
         )?;
     Ok(UpdateActionResult::Executed(execution))
 }
