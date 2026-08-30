@@ -14,6 +14,32 @@ use super::{PendingWork, WorkerLanes, durability::enqueue_effects};
 
 const ATTACHMENT_FOCUS_DEBOUNCE: Duration = Duration::from_millis(180);
 
+#[derive(Default)]
+pub(super) struct RefreshDeadlines {
+    pub(super) agent: Option<Instant>,
+    pub(super) invocation: Option<Instant>,
+    pub(super) attachment: Option<Instant>,
+}
+
+pub(super) fn refresh_if_due(
+    app: &mut BoardApp,
+    lanes: &WorkerLanes<'_>,
+    pending: &mut PendingWork,
+    deadlines: &mut RefreshDeadlines,
+) -> Result<(), TerminalError> {
+    let now = Instant::now();
+    if deadlines.agent.is_some_and(|deadline| now >= deadline) {
+        enqueue_effects(app, lanes, BoardApp::discover_agents(), pending)?;
+        deadlines.agent = None;
+    }
+    if deadlines.invocation.is_some_and(|deadline| now >= deadline) {
+        let effects = app.refresh_invocations();
+        enqueue_effects(app, lanes, effects, pending)?;
+        deadlines.invocation = None;
+    }
+    super::accessibility_results::refresh_if_due(app, lanes, pending, &mut deadlines.attachment)
+}
+
 #[expect(
     clippy::too_many_arguments,
     reason = "one input admission helper keeps the lossless held-input path identical"
@@ -24,9 +50,7 @@ pub(super) fn apply(
     ids: &mut SystemIdGenerator,
     clock: SystemClock,
     pending: &mut PendingWork,
-    agent_deadline: &mut Option<Instant>,
-    invocation_deadline: &mut Option<Instant>,
-    attachment_deadline: &mut Option<Instant>,
+    deadlines: &mut RefreshDeadlines,
     sequence: u64,
     event: UiInput,
 ) -> Result<(), TerminalError> {
@@ -34,12 +58,12 @@ pub(super) fn apply(
         return Ok(());
     }
     if matches!(event, UiInput::Resize { .. }) {
-        *agent_deadline = Some(Instant::now() + Duration::from_millis(250));
+        deadlines.agent = Some(Instant::now() + Duration::from_millis(250));
     }
     if matches!(event, UiInput::HostFocusGained) {
-        *invocation_deadline = Some(Instant::now() + Duration::from_millis(180));
+        deadlines.invocation = Some(Instant::now() + Duration::from_millis(180));
     }
-    schedule_attachment_focus_refresh(&event, Instant::now(), attachment_deadline);
+    schedule_attachment_focus_refresh(&event, Instant::now(), &mut deadlines.attachment);
     app.note_screenshot_activity(&event, lanes.monotonic.now());
     if event.is_deliberate_interaction() {
         let effects = app.note_attachment_interaction(lanes.monotonic.now());

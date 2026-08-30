@@ -261,9 +261,7 @@ fn drive(
     let mut capture = CaptureRuntime::default();
     let mut edit_generation = app.edit_generation();
     let mut edit_deadline = None;
-    let mut agent_deadline = None;
-    let mut invocation_deadline = None;
-    let mut attachment_deadline = None;
+    let mut refresh_deadlines = input_admission::RefreshDeadlines::default();
     let mut termination_seen = false;
     let mut held_input = None;
     enqueue_effects(app, lanes, BoardApp::discover_agents(), &mut pending)?;
@@ -341,16 +339,7 @@ fn drive(
             edit_deadline = None;
             redraw = true;
         }
-        if agent_deadline.is_some_and(|deadline| Instant::now() >= deadline) {
-            enqueue_effects(app, lanes, BoardApp::discover_agents(), &mut pending)?;
-            agent_deadline = None;
-        }
-        if invocation_deadline.is_some_and(|deadline| Instant::now() >= deadline) {
-            let effects = app.refresh_invocations();
-            enqueue_effects(app, lanes, effects, &mut pending)?;
-            invocation_deadline = None;
-        }
-        accessibility_results::refresh_if_due(app, lanes, &mut pending, &mut attachment_deadline)?;
+        input_admission::refresh_if_due(app, lanes, &mut pending, &mut refresh_deadlines)?;
         if let Some(heartbeat) = pane_heartbeat.as_mut() {
             let _refreshed = heartbeat.refresh_if_due(lanes.external);
         }
@@ -370,9 +359,7 @@ fn drive(
                     ids,
                     clock,
                     &mut pending,
-                    &mut agent_deadline,
-                    &mut invocation_deadline,
-                    &mut attachment_deadline,
+                    &mut refresh_deadlines,
                     sequence,
                     event,
                 )?;
@@ -434,9 +421,7 @@ fn drive(
                     ids,
                     clock,
                     &mut pending,
-                    &mut agent_deadline,
-                    &mut invocation_deadline,
-                    &mut attachment_deadline,
+                    &mut refresh_deadlines,
                     sequence,
                     event,
                 )?;
