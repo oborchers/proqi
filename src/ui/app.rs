@@ -1,5 +1,6 @@
 //! Terminal-independent board interaction state.
 
+mod admission;
 mod agent;
 mod agent_delivery;
 mod agent_identity;
@@ -21,6 +22,7 @@ mod presentation;
 mod query;
 mod recovery;
 mod reorder;
+mod screenshot;
 mod search;
 mod selection;
 mod session;
@@ -37,7 +39,7 @@ use crate::{
     application::{
         Action, AppState, DurabilityState, Effect, FailureCode, InteractionMode, reduce,
     },
-    domain::{OperationSequence, RequestId, SubmissionId, ThoughtId},
+    domain::{OperationId, OperationSequence, RequestId, SubmissionId, ThoughtId},
     ports::{
         agent::AgentTarget,
         editor::{CursorMovement, EditCommand, Editor, EditorFactory, TextViewport},
@@ -115,6 +117,8 @@ pub struct BoardApp {
     submission_mode: Option<SubmissionMode>,
     deferred_submissions: BTreeMap<SubmissionId, DeferredSubmissionIntent>,
     pending_submissions: BTreeMap<SubmissionId, PendingSubmission>,
+    pending_transfer_removals: BTreeSet<OperationId>,
+    screenshot: screenshot::ScreenshotInbox,
     update_barrier: Option<update::UpdateBarrier>,
     update_restart: Option<crate::domain::StableVersion>,
     update_prompt: Option<update::UpdatePrompt>,
@@ -194,6 +198,8 @@ impl BoardApp {
             submission_mode: None,
             deferred_submissions: BTreeMap::new(),
             pending_submissions: BTreeMap::new(),
+            pending_transfer_removals: BTreeSet::new(),
+            screenshot: screenshot::ScreenshotInbox::default(),
             update_barrier: None,
             update_restart: None,
             update_prompt: None,
@@ -213,8 +219,10 @@ impl BoardApp {
     ) -> Vec<Effect> {
         let input = self.resolve_edit_navigation(input);
         self.reset_pointer_click_for_input(&input);
+        self.note_screenshot_interaction(&input);
         self.reset_overlay_activation_for_input(&input, clock.now());
         if self.help
+            || self.screenshot.takeover.is_some()
             || self.update_prompt.is_some()
             || self.palette.is_some()
             || self.invocation_popup.is_some()
@@ -228,13 +236,13 @@ impl BoardApp {
         if self.help {
             return self.handle_help_input(&input);
         }
-        if input == UiInput::Key(UiKey::Quit) || self.is_failed_recovery_quit(&input) {
-            let effects = if matches!(self.state.durability, DurabilityState::Failed { .. }) {
-                Vec::new()
-            } else {
-                self.flush_pending_edit(ids, clock)
-            };
-            self.request_quit();
+        if self.screenshot.takeover.is_some() {
+            return self.handle_screenshot_takeover_input(&input, ids, clock);
+        }
+        if self.screenshot_save_in_flight() {
+            return self.handle_screenshot_commit_barrier(input, ids, clock);
+        }
+        if let Some(effects) = self.handle_quit_input(&input, ids, clock) {
             return effects;
         }
         if self.update_prompt.is_some() {
@@ -247,6 +255,7 @@ impl BoardApp {
         }
         if !matches!(input, UiInput::Resize { .. } | UiInput::HostFocusGained) {
             self.status = None;
+            self.screenshot.notice_count = 0;
         }
         if !matches!(
             input,

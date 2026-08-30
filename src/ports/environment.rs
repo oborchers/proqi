@@ -14,6 +14,12 @@ pub trait Clock {
     fn now(&self) -> Timestamp;
 }
 
+/// Source of monotonic process-relative elapsed time.
+pub trait MonotonicClock: Send + Sync {
+    /// Elapsed time since this clock was constructed.
+    fn now(&self) -> Duration;
+}
+
 /// Source of strongly typed `UUIDv7` identities.
 pub trait IdGenerator {
     /// Generate a session identity.

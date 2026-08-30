@@ -106,7 +106,7 @@ fn create_session(transaction: &Transaction<'_>, session: &Session) -> Result<()
     rebuild_session_search(transaction, session.id)
 }
 
-fn commit_board(
+pub(super) fn commit_board(
     transaction: &Transaction<'_>,
     operation: &BoardOperation,
 ) -> Result<CommitReceipt, StoreError> {

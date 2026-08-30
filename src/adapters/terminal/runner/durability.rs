@@ -26,6 +26,10 @@ pub(super) fn enqueue_effects(
 ) -> Result<(), TerminalError> {
     for effect in effects {
         match effect {
+            Effect::CommitCapture(capture) => {
+                lanes.persistence.commit_capture(capture)?;
+                pending.persistence = pending.persistence.saturating_add(1);
+            }
             Effect::CommitBoardOperation(_)
             | Effect::CommitRevision(_)
             | Effect::CommitHistoryMove { .. }
@@ -60,6 +64,21 @@ pub(super) fn enqueue_effects(
                 pending.external = pending.external.saturating_add(1);
             }
             Effect::Notify { code } => app.notify(code),
+            Effect::NotifyScreenshotPause(reason) => {
+                lanes
+                    .notification
+                    .notify_screenshot_pause(reason, lanes.external);
+            }
+            Effect::Screenshot(intent) => {
+                match intent {
+                    crate::application::ScreenshotIntent::Enable => lanes.screenshot.enable()?,
+                    crate::application::ScreenshotIntent::Disable => lanes.screenshot.disable()?,
+                    crate::application::ScreenshotIntent::TakeOver { owner, request_id } => {
+                        lanes.screenshot.take_over(owner, request_id)?;
+                    }
+                }
+                pending.screenshot = pending.screenshot.saturating_add(1);
+            }
         }
     }
     Ok(())
@@ -169,6 +188,9 @@ fn complete_result(
     result: PersistenceResult,
 ) -> Result<bool, TerminalError> {
     match result {
+        PersistenceResult::Capture(result) => {
+            complete_capture(app, lanes, pending, ids, clock, result)?;
+        }
         PersistenceResult::Sequenced {
             sequence,
             result,
@@ -244,6 +266,19 @@ fn complete_result(
     }
     owner_control::complete_sync(pending);
     Ok(true)
+}
+
+fn complete_capture(
+    app: &mut BoardApp,
+    lanes: &WorkerLanes<'_>,
+    pending: &mut PendingWork,
+    ids: &mut impl crate::ports::environment::IdGenerator,
+    clock: &impl crate::ports::environment::Clock,
+    result: Result<crate::ports::store::CaptureCommitOutcome, crate::ports::store::StoreError>,
+) -> Result<(), TerminalError> {
+    pending.persistence = pending.persistence.saturating_sub(1);
+    let effects = app.complete_screenshot_capture(result, ids, clock);
+    enqueue_effects(app, lanes, effects, pending)
 }
 
 fn record_submission_result(

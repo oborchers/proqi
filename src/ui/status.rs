@@ -49,10 +49,16 @@ impl BoardApp {
     /// Current transient status text for accessibility and contract tests.
     #[must_use]
     pub fn status_text(&self) -> Option<&str> {
-        self.status.as_ref().map(|status| status.message.as_str())
+        self.status
+            .as_ref()
+            .map(|status| status.message.as_str())
+            .or_else(|| self.screenshot_pause_notice())
     }
 
     pub(in crate::ui) fn status_view(&self) -> Option<(&str, StatusSeverity)> {
-        self.status.as_ref().map(UiStatus::view)
+        self.status.as_ref().map(UiStatus::view).or_else(|| {
+            self.screenshot_pause_notice()
+                .map(|notice| (notice, StatusSeverity::Warning))
+        })
     }
 }

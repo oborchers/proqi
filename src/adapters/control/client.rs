@@ -42,6 +42,9 @@ impl ControlClient for LocalControlClient {
             ControlResult::Metadata(_) => Err(ControlError::Protocol(
                 "owner returned a metadata receipt for a durable mutation".to_owned(),
             )),
+            ControlResult::Capture(_) => Err(ControlError::Protocol(
+                "owner returned a capture receipt for a durable mutation".to_owned(),
+            )),
         }
     }
 }
@@ -54,6 +57,20 @@ pub(crate) struct CancellableLocalControlClient {
 impl CancellableLocalControlClient {
     pub(crate) const fn new(cancellation: CancellationFlag) -> Self {
         Self { cancellation }
+    }
+
+    pub(crate) fn request_capture_takeover(
+        &self,
+        owner: &crate::ports::runtime::CaptureOwnerInfo,
+        requester_instance_id: crate::domain::InstanceId,
+        request_id: crate::domain::RequestId,
+    ) -> Result<(), ControlError> {
+        let (instance, request) =
+            capture_takeover_request(owner, requester_instance_id, request_id);
+        capture_takeover_result(
+            owner,
+            exchange_until(&instance, &request, &self.cancellation)?,
+        )
     }
 }
 
@@ -73,6 +90,9 @@ impl ControlClient for CancellableLocalControlClient {
             )),
             ControlResult::Metadata(_) => Err(ControlError::Protocol(
                 "owner returned a metadata receipt for a durable mutation".to_owned(),
+            )),
+            ControlResult::Capture(_) => Err(ControlError::Protocol(
+                "owner returned a capture receipt for a durable mutation".to_owned(),
             )),
         }
     }
@@ -112,10 +132,57 @@ impl LocalControlClient {
             ControlResult::Rejected { code, message } => {
                 Err(ControlError::Rejected { code, message })
             }
-            ControlResult::Accepted(_) | ControlResult::Update(_) => Err(ControlError::Protocol(
-                "owner returned the wrong receipt for a metadata mutation".to_owned(),
-            )),
+            ControlResult::Accepted(_) | ControlResult::Update(_) | ControlResult::Capture(_) => {
+                Err(ControlError::Protocol(
+                    "owner returned the wrong receipt for a metadata mutation".to_owned(),
+                ))
+            }
         }
+    }
+}
+
+fn capture_takeover_request(
+    owner: &crate::ports::runtime::CaptureOwnerInfo,
+    requester_instance_id: crate::domain::InstanceId,
+    request_id: crate::domain::RequestId,
+) -> (InstanceInfo, ControlRequest) {
+    let instance = InstanceInfo {
+        instance_id: owner.instance_id,
+        session_id: owner.session_id,
+        pid: owner.pid,
+        version: owner.version.clone(),
+        storage_protocol: 0,
+        control_protocol: Some(owner.control_protocol),
+        control_endpoint: Some(owner.control_endpoint.clone()),
+        update: None,
+        launch_directory: String::new(),
+        started_at: owner.started_at,
+    };
+    let request = ControlRequest {
+        protocol: CONTROL_PROTOCOL_VERSION,
+        request_id,
+        session_id: owner.session_id,
+        mutation: ControlMutation::CaptureTakeover {
+            expected_owner_instance_id: owner.instance_id,
+            requester_instance_id,
+            capture_protocol: crate::ports::control::CAPTURE_CONTROL_PROTOCOL_VERSION,
+        },
+    };
+    (instance, request)
+}
+
+fn capture_takeover_result(
+    owner: &crate::ports::runtime::CaptureOwnerInfo,
+    result: ControlResult,
+) -> Result<(), ControlError> {
+    match result {
+        ControlResult::Capture(
+            crate::ports::control::ControlCaptureReceipt::TakeoverScheduled { owner_instance_id },
+        ) if owner_instance_id == owner.instance_id => Ok(()),
+        ControlResult::Rejected { code, message } => Err(ControlError::Rejected { code, message }),
+        _ => Err(ControlError::Protocol(
+            "owner returned the wrong screenshot takeover receipt".to_owned(),
+        )),
     }
 }
 
@@ -202,6 +269,9 @@ impl<I: IdGenerator> LocalUpdateControlClient<I> {
             )),
             ControlResult::Metadata(_) => {
                 Err(coordination_error("owner returned a metadata receipt"))
+            }
+            ControlResult::Capture(_) => {
+                Err(coordination_error("owner returned a capture receipt"))
             }
         }
     }

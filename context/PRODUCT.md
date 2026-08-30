@@ -5,7 +5,7 @@ Status: v0.1.0 product contract
 Product name: Proqi
 
 Command: `proqi`
-Last updated: 2026-08-27
+Last updated: 2026-08-29
 
 ## Vision
 
@@ -351,6 +351,87 @@ location; only raw clipboard images are materialized into Proqi-managed storage.
 
 Splitting one paste into several thoughts is an explicit later action, not an
 automatic heuristic.
+
+### Screenshot Inbox on macOS
+
+The first Screenshot Inbox is explicitly macOS-only. Pressing the remappable
+board key `i`, or choosing `Enable Screenshot Inbox`, watches the current user's
+Desktop by default. The directory is configurable. Existing entries are
+snapshotted and ignored at activation; each subsequently completed accepted
+image becomes one immediate durable thought whose canonical content is the
+exact absolute source path and whose presentation is the ordinary image fold.
+
+Proqi does not take screenshots. It watches files produced by the user's normal
+macOS screenshot tool and never requests Screen Recording or Accessibility,
+changes screenshot preferences, uploads or analyzes content, or copies or
+rewrites the source. macOS Desktop denial is reported as a Files & Folders
+access problem naming the terminal host that needs access. Linux starts no
+watcher and reports `Screenshot Inbox is available on macOS only`.
+
+The language-independent best-effort signal is
+`com.apple.metadata:kMDItemIsScreenCapture`. User-configured filename patterns
+are fallbacks only; Proqi has no hard-coded localization table. Accepting every
+otherwise valid new image requires `capture_all_new_images = true`. Regular,
+non-symlink PNG, JPEG, and TIFF files must be stable and remain within configured
+byte and dimension bounds.
+
+While active, restrained footer chrome says `inbox listening`; accepted batches
+report `1 new capture` or `N new captures` without taking an active editor's
+focus or caret. Help, command palette, search, rename, transfer, update,
+invocation completion, and live board selection also remain in place while the
+capture appends quietly. The palette action becomes `Disable Screenshot Inbox`.
+
+The atomic capture save participates in one admission rule for every pending
+sequence-producing intention, including clipboard cut or paste, removal-capable
+submission and transfer, owner-control mutation and sync, update preparation,
+and persistence completion. Keyboard, paste, click, drag, and scroll intentions
+received during that save replay in order from a bounded queue; its input lane
+applies backpressure at capacity. Passive pointer motion continues and resize
+may coalesce. Accepted deliberate input is never silently discarded. A failed
+save creates no partial thought and remains available through the distinct
+`Retry Screenshot Capture` command. Disable, pause, takeover, and shutdown do
+not turn into implicit retry actions and release capture authority within their
+teardown bound. Ordinary quit requires explicit confirmation before abandoning
+a retained failed candidate. Once quit begins, watcher admission stops and
+every candidate already emitted or returned by final reconciliation drains
+within the shared shutdown bound before terminal restoration.
+
+Every listening period has two mandatory configurable safety bounds, defaulting
+to 20 minutes without deliberate Proqi interaction and 10 unattended admitted
+captures. Keyboard input, paste, pointer click or drag, and scrolling renew both
+bounds; resize, host-focus, bare pointer motion, and watcher activity do not.
+The first bound reached reconciles and stops capture, drains already admitted
+durable outcomes, and releases capture authority. A burst admits only the
+remaining ordered prefix and can never cross the capture bound. Files observed
+after the bound remain untouched.
+
+Automatic pause is persistent in the live TUI as `inbox paused · inactive` or
+`inbox paused · N captures`, with a longer content-free explanation in the
+status row. The palette action becomes `Resume Screenshot Inbox`. Resume starts
+a fresh bounded lease and activation baseline, so files accumulated while
+paused are never imported retrospectively. Restart begins with capture off.
+
+Users may opt into one best-effort pause notification. A managed Herdr pane uses
+Herdr's notification hook to cross its embedded terminal boundary. Outside
+Herdr, a verified standalone Ghostty or iTerm2 host receives OSC 9. Proqi never
+attempts both routes, and explicitly disabled Herdr integration does not fall
+back to OSC inside a managed pane. Herdr, the terminal, and macOS own permission
+and presentation; a delivered notification may remain only in Notification
+Center depending on alert style, Focus mode, and host settings. There is no
+reliable presentation acknowledgement. The persistent TUI state is the safety
+boundary. Notification text contains only the configured threshold, never
+paths, filenames, image content, or other user-controlled bytes. A native macOS
+notification companion is outside this version.
+
+One authoritative current-user installation-wide OS lock is independent from
+session leases, so exactly one process receives screenshots. A compatible
+contender is offered `Cancel` or `Take over`. Takeover uses verified owner
+control: the owner reconciles, drains atomic capture receipts and thoughts,
+stops its watcher, and releases the lock before the requester retries. A live
+or incompatible owner is never force-unlocked, and a crash releases authority
+through the operating system. Takeover distinguishes an owner already draining,
+unavailable verified control or runtime I/O, and a still-held lock after the
+bounded timeout.
 
 ### Creation affordance
 

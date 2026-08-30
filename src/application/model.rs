@@ -10,6 +10,8 @@ use crate::domain::{
     TextPosition, Thought, ThoughtId, ThoughtRevision, Timestamp,
 };
 
+use crate::ports::runtime::CaptureOwnerInfo;
+
 pub use effect::Effect;
 
 /// Active interaction context.
@@ -84,6 +86,50 @@ pub enum UpdateIntent {
     Skip(StableVersion),
     /// Show accurate standalone replacement instructions.
     ViewInstructions(StableVersion),
+}
+
+/// Explicit screenshot-inbox runtime decision requested by the UI.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ScreenshotIntent {
+    /// Acquire the installation-wide capture lock and start listening.
+    Enable,
+    /// Reconcile accepted files and stop listening.
+    Disable,
+    /// Ask the verified compatible owner to relinquish capture, then retry.
+    TakeOver {
+        /// Owner metadata verified again by local control transport.
+        owner: CaptureOwnerInfo,
+        /// Idempotent takeover request identity.
+        request_id: RequestId,
+    },
+}
+
+/// Safety threshold that automatically stopped one screenshot listening lease.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ScreenshotPauseReason {
+    /// No deliberate Proqi interaction occurred for the configured interval.
+    Inactivity {
+        /// Configured whole-minute interval.
+        minutes: u16,
+    },
+    /// The configured number of candidates was admitted without interaction.
+    CaptureLimit {
+        /// Configured unattended capture limit.
+        captures: u16,
+    },
+}
+
+impl ScreenshotPauseReason {
+    /// Content-free threshold description shared by user-facing adapters.
+    #[must_use]
+    pub fn description(self) -> String {
+        match self {
+            Self::Inactivity { minutes: 1 } => "1 minute without activity".to_owned(),
+            Self::Inactivity { minutes } => format!("{minutes} minutes without activity"),
+            Self::CaptureLimit { captures: 1 } => "1 unattended capture".to_owned(),
+            Self::CaptureLimit { captures } => format!("{captures} unattended captures"),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -232,6 +278,15 @@ impl AppState {
             .map(|pending| pending.intent)
     }
 
+    /// Pending board cuts whose successful clipboard completion can allocate a sequence.
+    #[must_use]
+    pub(crate) fn pending_board_cut_count(&self) -> usize {
+        self.pending_clipboard
+            .values()
+            .filter(|pending| pending.intent == ClipboardIntent::Cut)
+            .count()
+    }
+
     pub(super) fn record_board_operation(
         &mut self,
         operation: &BoardOperation,
@@ -243,6 +298,26 @@ impl AppState {
         self.board_history.push(operation.clone());
         self.board_history_cursor += 1;
         self.track_pending(operation.sequence);
+        self.keep_focus_valid();
+        Ok(())
+    }
+
+    pub(super) fn apply_durable_capture(
+        &mut self,
+        operation: &BoardOperation,
+    ) -> ApplicationResult<()> {
+        if operation.sequence != self.next_sequence()? {
+            return Err(ApplicationError::InvalidState);
+        }
+        let mut board = self.board.clone();
+        board.apply_mutation(&operation.forward, operation.created_at)?;
+        board.session.last_durable_sequence = operation.sequence;
+        self.board = board;
+        self.board_history.truncate(self.board_history_cursor);
+        self.board_history.push(operation.clone());
+        self.board_history_cursor += 1;
+        self.highest_sequence = operation.sequence;
+        self.refresh_durability();
         self.keep_focus_valid();
         Ok(())
     }

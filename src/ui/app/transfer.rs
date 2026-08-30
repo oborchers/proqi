@@ -77,6 +77,9 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
+        if request.remove_source {
+            self.pending_transfer_removals.remove(&request.operation_id);
+        }
         match result {
             Err(error) => {
                 self.set_error(format!("thought was not sent: {error}"));
@@ -195,7 +198,12 @@ impl BoardApp {
             })
         });
         self.transfer = None;
-        request.map_or_else(Vec::new, |request| vec![Effect::TransferThought(request)])
+        request.map_or_else(Vec::new, |request| {
+            if request.remove_source {
+                self.pending_transfer_removals.insert(request.operation_id);
+            }
+            vec![Effect::TransferThought(request)]
+        })
     }
 
     fn update_transfer_query(&mut self, update: impl FnOnce(&mut QueryEditor)) -> Vec<Effect> {

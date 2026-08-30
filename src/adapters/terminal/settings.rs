@@ -1,5 +1,7 @@
 //! Bounded, platform-path-backed terminal configuration loading.
 
+mod screenshot;
+
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -16,6 +18,8 @@ use crate::ui::{
 };
 
 use super::TerminalError;
+pub(crate) use screenshot::ScreenshotSettings;
+use screenshot::ScreenshotSettingsDocument;
 
 const MAX_CONFIG_BYTES: u64 = 64 * 1024;
 const THEME_SCHEMA_VERSION: u16 = 1;
@@ -26,6 +30,7 @@ pub(crate) struct LoadedSettings {
     pub(crate) ui: UiSettings,
     pub(crate) theme: ThemeRecipe,
     pub(crate) invocation_roots: Vec<AdditionalInvocationRoot>,
+    pub(crate) screenshot: ScreenshotSettings,
     theme_source: ThemeSource,
 }
 
@@ -58,6 +63,7 @@ struct SettingsDocument {
     keybindings: KeyBindings,
     density: BoardDensity,
     invocation_roots: Vec<InvocationRootDocument>,
+    screenshot_inbox: ScreenshotSettingsDocument,
 }
 
 impl Default for SettingsDocument {
@@ -73,6 +79,7 @@ impl Default for SettingsDocument {
             keybindings: KeyBindings::default(),
             density: BoardDensity::default(),
             invocation_roots: Vec::new(),
+            screenshot_inbox: ScreenshotSettingsDocument::default(),
         }
     }
 }
@@ -138,10 +145,12 @@ fn parse_settings(config_dir: &Path, content: &str) -> Result<LoadedSettings, Te
     };
     let (theme, theme_source) = load_theme(config_dir, &document.theme, document.theme_overrides)?;
     let invocation_roots = validate_invocation_roots(document.invocation_roots)?;
+    let screenshot = screenshot::validate(document.screenshot_inbox)?;
     Ok(LoadedSettings {
         ui,
         theme,
         invocation_roots,
+        screenshot,
         theme_source,
     })
 }

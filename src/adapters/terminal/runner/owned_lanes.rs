@@ -4,6 +4,7 @@ use crate::adapters::{control::ControlServer, process::CancellationFlag};
 
 use super::{ExternalLane, InputLane, PersistenceLane, TerminalError};
 use crate::adapters::terminal::runner::finish::CleanupStage;
+use crate::adapters::terminal::screenshot_lane::ScreenshotLane;
 
 pub(super) struct OwnedLanes {
     pub(super) control: Option<ControlServer>,
@@ -11,6 +12,7 @@ pub(super) struct OwnedLanes {
     pub(super) persistence: PersistenceLane,
     pub(super) external: ExternalLane,
     pub(super) update: crate::adapters::terminal::update_lane::UpdateLane,
+    pub(super) screenshot: ScreenshotLane,
     pub(super) cancellation: CancellationFlag,
 }
 
@@ -24,6 +26,7 @@ impl OwnedLanes {
         self.persistence.request_stop();
         self.external.request_stop();
         self.update.request_stop();
+        self.screenshot.request_stop();
     }
 
     pub(super) fn stop_control(
@@ -38,13 +41,14 @@ impl OwnedLanes {
     pub(super) fn stop_workers(
         mut self,
         deadline: crate::adapters::terminal::supervisor::ShutdownDeadline,
-    ) -> [(CleanupStage, Result<(), TerminalError>); 4] {
+    ) -> [(CleanupStage, Result<(), TerminalError>); 5] {
         self.request_stop();
         [
             (CleanupStage::Input, self.input.stop(deadline)),
             (CleanupStage::Persistence, self.persistence.stop(deadline)),
             (CleanupStage::External, self.external.stop(deadline)),
             (CleanupStage::Update, self.update.stop(deadline)),
+            (CleanupStage::Screenshot, self.screenshot.stop(deadline)),
         ]
     }
 }

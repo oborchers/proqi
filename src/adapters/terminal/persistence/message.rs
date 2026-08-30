@@ -5,14 +5,15 @@ use crate::{
     domain::{OperationSequence, RequestId, SessionId, SubmissionId, Timestamp},
     ports::{
         store::{
-            CommitReceipt, OperationBatch, SessionHit, StoreError, StoredOperationRequest,
-            SubmissionAttempt, SubmissionOutcome,
+            CaptureCommit, CaptureCommitOutcome, CommitReceipt, OperationBatch, SessionHit,
+            StoreError, StoredOperationRequest, SubmissionAttempt, SubmissionOutcome,
         },
         transfer::SessionTransferRequest,
     },
 };
 
 pub(in crate::adapters::terminal) enum PersistenceResult {
+    Capture(Result<CaptureCommitOutcome, StoreError>),
     Sequenced {
         sequence: OperationSequence,
         result: Result<CommitReceipt, StoreError>,
@@ -51,6 +52,7 @@ pub(in crate::adapters::terminal) enum PersistenceResult {
 }
 
 pub(super) enum PersistenceRequest {
+    Capture(Box<CaptureCommit>),
     Commit(Box<OperationBatch>),
     Metadata(Box<OperationBatch>),
     RenameSession {

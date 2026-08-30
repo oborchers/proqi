@@ -135,3 +135,25 @@ pub enum UiInput {
     /// One normalized mouse or trackpad event.
     Pointer(PointerInput),
 }
+
+impl UiInput {
+    /// Whether this input represents deliberate user interaction with Proqi.
+    ///
+    /// Host focus, resize, bare pointer motion, and button release are passive
+    /// transport events. They must not renew activity leases or invalidate an
+    /// untouched capture editor.
+    #[must_use]
+    pub const fn is_deliberate_interaction(&self) -> bool {
+        match self {
+            Self::Key(_) | Self::Paste(_) | Self::PasteAnnotated(_) => true,
+            Self::Pointer(pointer) => matches!(
+                pointer.kind,
+                PointerKind::Down(_)
+                    | PointerKind::Drag(_)
+                    | PointerKind::ScrollUp
+                    | PointerKind::ScrollDown
+            ),
+            Self::Resize { .. } | Self::HostFocusGained => false,
+        }
+    }
+}

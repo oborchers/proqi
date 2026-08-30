@@ -3,12 +3,15 @@
 mod browser;
 mod control;
 mod external;
+mod host;
 mod input;
 mod integration;
+mod notification;
 mod palette;
 mod path_import;
 mod persistence;
 mod runner;
+mod screenshot_lane;
 mod settings;
 mod supervisor;
 mod update_lane;

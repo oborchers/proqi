@@ -7,6 +7,9 @@ use crate::{
     ui::{BoardDensity, Theme, ThemePreference},
 };
 
+#[cfg(not(target_os = "macos"))]
+use crate::ports::screenshot::ScreenshotError;
+
 use super::{ThemeSource, load_settings};
 
 #[test]
@@ -17,12 +20,110 @@ fn missing_config_uses_the_narrow_pane_default() {
     assert_eq!(settings.ui.keybindings.range_up, 'K');
     assert_eq!(settings.ui.keybindings.range_down, 'J');
     assert_eq!(settings.ui.keybindings.range_select, 'v');
+    assert_eq!(settings.ui.keybindings.screenshot_inbox, 'i');
+    assert!(settings.screenshot.directory.is_none());
+    assert!(settings.screenshot.filename_patterns.is_empty());
+    assert!(!settings.screenshot.capture_all_new_images);
+    assert_eq!(
+        settings
+            .screenshot
+            .activity_policy()
+            .inactivity_timeout_minutes(),
+        20
+    );
+    assert_eq!(
+        settings
+            .screenshot
+            .activity_policy()
+            .max_unattended_captures(),
+        10
+    );
+    assert!(!settings.screenshot.notify_terminal_on_auto_pause());
     assert_eq!(settings.ui.keybindings.select_all, 'a');
     assert!(!settings.ui.show_session_id);
     assert!(settings.ui.smart_lists);
     assert_eq!(settings.ui.list_indent_width, 2);
     assert_eq!(settings.theme.base, ThemePreference::Auto);
     assert_eq!(settings.theme_source, ThemeSource::BuiltIn);
+}
+
+#[cfg(not(target_os = "macos"))]
+#[test]
+fn screenshot_inbox_reports_truthful_platform_unsupported() {
+    let directory = tempfile::tempdir().expect("config directory");
+    let settings = load_settings(directory.path()).expect("defaults");
+
+    assert_eq!(
+        settings.screenshot.watcher_config(),
+        Err(ScreenshotError::UnsupportedPlatform)
+    );
+}
+
+#[test]
+fn screenshot_inbox_settings_are_typed_bounded_and_remappable() {
+    let directory = tempfile::tempdir().expect("config directory");
+    let watched = directory.path().join("isolated screenshots");
+    fs::create_dir(&watched).expect("watched directory");
+    fs::write(
+        directory.path().join("config.toml"),
+        format!(
+            "[keybindings]\nscreenshot_inbox = 'z'\n\
+             [screenshot_inbox]\ndirectory = {:?}\n\
+             filename_patterns = ['Bildschirmfoto *.png', 'Capture-??.jpg']\n\
+             capture_all_new_images = true\n\
+             supported_types = ['png', 'jpeg']\n\
+             min_file_bytes = 128\nmax_file_bytes = 4096\n\
+             max_dimension = 2048\nmax_pixels = 2000000\ndebounce_ms = 500\n\
+             inactivity_timeout_minutes = 45\nmax_unattended_captures = 12\n\
+             notify_terminal_on_auto_pause = true\n",
+            watched.to_string_lossy(),
+        ),
+    )
+    .expect("write config");
+    let settings = load_settings(directory.path()).expect("settings");
+    assert_eq!(settings.ui.keybindings.screenshot_inbox, 'z');
+    assert_eq!(
+        settings.screenshot.directory.as_deref(),
+        Some(watched.as_path())
+    );
+    assert_eq!(settings.screenshot.filename_patterns.len(), 2);
+    assert!(settings.screenshot.capture_all_new_images);
+    assert_eq!(settings.screenshot.bounds.max_file_bytes, 4096);
+    assert_eq!(settings.screenshot.debounce_ms, 500);
+    assert_eq!(
+        settings
+            .screenshot
+            .activity_policy()
+            .inactivity_timeout_minutes(),
+        45
+    );
+    assert_eq!(
+        settings
+            .screenshot
+            .activity_policy()
+            .max_unattended_captures(),
+        12
+    );
+    assert!(settings.screenshot.notify_terminal_on_auto_pause());
+}
+
+#[test]
+fn screenshot_inbox_rejects_relative_unknown_and_conflicting_configuration() {
+    for config in [
+        "[screenshot_inbox]\ndirectory = 'relative'\n",
+        "[screenshot_inbox]\nsupported_types = ['webp']\n",
+        "[screenshot_inbox]\nmax_file_bytes = 0\n",
+        "[screenshot_inbox]\nunknown = true\n",
+        "[screenshot_inbox]\ninactivity_timeout_minutes = 0\n",
+        "[screenshot_inbox]\ninactivity_timeout_minutes = 1441\n",
+        "[screenshot_inbox]\nmax_unattended_captures = 0\n",
+        "[screenshot_inbox]\nmax_unattended_captures = 101\n",
+        "[keybindings]\nscreenshot_inbox = 'n'\n",
+    ] {
+        let directory = tempfile::tempdir().expect("config directory");
+        fs::write(directory.path().join("config.toml"), config).expect("config");
+        assert!(load_settings(directory.path()).is_err(), "{config}");
+    }
 }
 
 #[test]

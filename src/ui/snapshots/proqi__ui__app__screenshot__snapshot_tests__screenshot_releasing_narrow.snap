@@ -1,0 +1,15 @@
+---
+source: src/ui/app/screenshot/tests.rs
+assertion_line: 68
+expression: "releasing_snapshot(38, 10)"
+---
+00││
+01│⋮ active│
+02││
+03│             + New thought│
+04││
+05││
+06││
+07│  screenshot-ui│
+08│  inbox releasing│
+09│  n New   : Commands  ? Shortcuts│

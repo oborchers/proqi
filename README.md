@@ -50,6 +50,7 @@ manual clipboard handoff.
 | Survive interruption | Autosave, exact resume guidance, session search, recovery export, and undo after restart |
 | Work beside any agent | Native copy and non-destructive cut work without an integration or account |
 | Pass local context | Drop files as paths or paste clipboard images into private session storage |
+| Capture macOS screenshots | Explicitly enable the Screenshot Inbox to append new screenshots made with the normal macOS screenshot tool |
 | Correct the wrong board | Send a thought to another named Proqi session, optionally removing it after delivery |
 | Submit directly when verified | Optional Herdr delivery to eligible coding-agent panes in all four directions |
 | Automate safely | Versioned JSON, typed identifiers, idempotent mutations, and an explicit-invocation Proqi skill |
@@ -193,6 +194,7 @@ fallbacks remain available when a terminal cannot report a modifier.
 | `c` | Collapse or expand long context |
 | `/` | Search thought content |
 | `:` | Search commands |
+| `i` | Enable, disable, or resume the macOS-only Screenshot Inbox |
 | `?` | Open contextual help |
 
 ### Editor controls
@@ -549,6 +551,88 @@ search = "/"
 commands = ":"
 help = "?"
 quit = "q"
+screenshot_inbox = "i"
+```
+
+### Screenshot Inbox on macOS
+
+Choose **Enable Screenshot Inbox** in the command palette or press `i` in board
+mode. While active, the footer shows `inbox listening`; the same command becomes
+**Disable Screenshot Inbox**. Proqi snapshots the watched directory at
+activation and appends only new, completed screenshots made by the normal macOS
+screenshot tool. It never takes screenshots, changes macOS screenshot settings,
+uploads or analyzes image content, or copies or rewrites the source image.
+
+The default directory is the current user's Desktop. macOS may require **Files
+& Folders** access for the terminal host running Proqi; Proqi reports that host
+by name when access is unavailable. Screen Recording and Accessibility access
+are not used. Linux continues to report **Screenshot Inbox is available on
+macOS only**.
+
+Only one live Proqi process can listen across the current-user installation. If
+another compatible session owns capture, Proqi offers **Cancel** or **Take
+over**. Takeover asks the verified owner to reconcile and durably drain its
+accepted captures before releasing the operating-system lock; a live or
+incompatible owner is never force-unlocked.
+
+If SQLite cannot commit a capture, Proqi keeps that candidate without creating
+a partial thought and exposes **Retry Screenshot Capture** as a separate
+command. **Disable Screenshot Inbox** and **Resume Screenshot Inbox** always do
+what their labels name; they never implicitly retry a failed save. Disable,
+automatic pause, takeover, and shutdown release capture authority within their
+bounded teardown even while a failed candidate remains available to retry in
+the live session. Quit asks for explicit confirmation before abandoning it.
+
+Listening is always bounded. Proqi pauses after 20 minutes without deliberate
+keyboard, paste, or pointer interaction, or after 10 unattended captures,
+whichever happens first. The persistent footer changes to
+`inbox paused · inactive` or `inbox paused · 10 captures`, and the command
+palette offers **Resume Screenshot Inbox**. Resuming takes a fresh snapshot, so
+files accumulated while paused are not imported retrospectively. Both safety
+bounds are configurable but cannot be disabled.
+
+While an atomic capture commit is in flight, Proqi preserves keyboard, paste,
+click, drag, and scroll input in a bounded ordered queue. When that queue is
+full, the terminal input lane applies backpressure until space is available;
+passive pointer movement proceeds and resize may coalesce to the newest size.
+Accepted deliberate input is never silently dropped. Captures append quietly
+while help, search, the command palette,
+rename, transfer, update, invocation completion, or a board selection is active.
+
+An optional best-effort notification can accompany automatic pause. It is off
+by default. Inside a managed Herdr pane, Proqi uses Herdr's notification hook so
+the message can cross the embedded terminal boundary. Outside Herdr, verified
+standalone Ghostty and iTerm2 sessions receive OSC 9. Proqi never attempts both
+routes. A managed pane with Herdr integration explicitly disabled receives no
+external notification because OSC would be consumed inside the embedded
+terminal.
+
+The terminal host, Herdr, and macOS own notification permission and
+presentation. A delivered notification may appear only in Notification Center
+instead of as a desktop banner depending on alert style, Focus mode, and host
+settings, and Proqi receives no reliable presentation acknowledgement. The
+persistent in-app paused state remains authoritative and contains no screenshot
+filename or content.
+
+The optional settings below show every default. `filename_patterns` contains
+user-defined, language-appropriate filename fallbacks; there is no built-in
+localization table. `capture_all_new_images` must be set explicitly to accept
+all otherwise valid new images.
+
+```toml
+[screenshot_inbox]
+# directory = "/absolute/path/to/an/isolated/inbox" # defaults to macOS Desktop
+filename_patterns = []
+capture_all_new_images = false
+supported_types = ["png", "jpeg", "tiff"]
+min_file_bytes = 64
+max_file_bytes = 67108864
+max_dimension = 16384
+max_pixels = 100000000
+debounce_ms = 350
+inactivity_timeout_minutes = 20 # 1..=1440; cannot be disabled
+max_unattended_captures = 10 # 1..=100; cannot be disabled
+notify_terminal_on_auto_pause = false # Herdr hook, or standalone Ghostty/iTerm2 OSC 9
 ```
 
 Additional local roots are optional and must state their definition kind,

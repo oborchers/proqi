@@ -2,6 +2,7 @@ use std::{path::PathBuf, sync::mpsc::sync_channel, time::Duration};
 
 use crate::{
     adapters::memory::FakeIdGenerator,
+    application::ScreenshotPauseReason,
     domain::RequestId,
     ports::{
         attachment::{AttachmentError, AttachmentStore, RasterImage},
@@ -98,9 +99,17 @@ fn full_and_disconnected_request_lanes_fail_without_blocking() {
         lane.send(&crate::application::Effect::DiscoverAgents),
         Err(super::TerminalError::Worker("external lane is full"))
     ));
+    assert!(matches!(
+        lane.notify_screenshot_pause(ScreenshotPauseReason::CaptureLimit { captures: 10 }),
+        Err(super::TerminalError::Worker("external lane is full"))
+    ));
     drop(request_receiver);
     assert!(matches!(
         lane.send(&crate::application::Effect::DiscoverAgents),
+        Err(super::TerminalError::Worker("external lane disconnected"))
+    ));
+    assert!(matches!(
+        lane.notify_screenshot_pause(ScreenshotPauseReason::Inactivity { minutes: 20 }),
         Err(super::TerminalError::Worker("external lane disconnected"))
     ));
     lane.stop(super::super::supervisor::ShutdownDeadline::after(

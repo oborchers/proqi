@@ -51,6 +51,47 @@ pub struct RuntimeScan {
     pub recovered: Vec<SessionId>,
 }
 
+/// Bounded descriptive metadata for the installation-wide screenshot owner.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct CaptureOwnerInfo {
+    /// Running process identity.
+    pub instance_id: InstanceId,
+    /// Session receiving new screenshots.
+    pub session_id: SessionId,
+    /// Operating-system process identifier.
+    pub pid: u32,
+    /// Proqi application version.
+    pub version: String,
+    /// Supported screenshot takeover protocol.
+    pub capture_protocol: u32,
+    /// Verified owner-control protocol.
+    pub control_protocol: u32,
+    /// User-only local control endpoint.
+    pub control_endpoint: String,
+    /// Process start time used to reject stale PID reuse.
+    pub started_at: Timestamp,
+}
+
+/// Installation-wide screenshot ownership failure.
+#[derive(Clone, Debug, Eq, Error, PartialEq)]
+pub enum CaptureLockError {
+    /// Another live compatible or incompatible process owns screenshot delivery.
+    #[error("screenshot inbox is owned by another Proqi process")]
+    Busy {
+        /// Best-effort bounded owner metadata, never authoritative by itself.
+        owner: Option<Box<CaptureOwnerInfo>>,
+    },
+    /// The session owner has no verified control endpoint for safe takeover.
+    #[error("screenshot inbox requires verified owner control")]
+    ControlUnavailable,
+    /// Runtime filesystem operation failed.
+    #[error("screenshot ownership I/O failed: {0}")]
+    Io(String),
+    /// Descriptive metadata was malformed.
+    #[error("screenshot ownership metadata is malformed")]
+    MalformedMetadata,
+}
+
 /// Runtime coordination failure.
 #[derive(Clone, Debug, Eq, Error, PartialEq)]
 pub enum RuntimeError {
@@ -78,6 +119,28 @@ pub enum RuntimeError {
 
 /// Marker implemented by RAII leases.
 pub trait Lease {}
+
+/// Authoritative screenshot capture lease released on drop or process exit.
+pub trait CaptureLease: Lease {
+    /// Bounded owner metadata corresponding to the held lock.
+    fn owner(&self) -> &CaptureOwnerInfo;
+}
+
+/// Separate installation-wide screenshot exclusion capability.
+pub trait CaptureCoordinator {
+    /// Concrete authoritative screenshot lease.
+    type CaptureLease: CaptureLease;
+
+    /// Attempt screenshot ownership for a verified interactive session owner.
+    ///
+    /// # Errors
+    ///
+    /// Returns busy owner metadata or a typed runtime failure. It never waits or force-unlocks.
+    fn acquire_capture(
+        &self,
+        instance: &InstanceInfo,
+    ) -> Result<Self::CaptureLease, CaptureLockError>;
+}
 
 /// Runtime ownership operations.
 pub trait RuntimeCoordinator {

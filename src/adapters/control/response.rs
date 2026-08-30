@@ -45,8 +45,8 @@ impl ControlEnvelope {
     }
 }
 
-pub(super) struct PendingResponse {
-    pub(super) response: ControlResponse,
+pub(crate) struct PendingResponse {
+    pub(crate) response: ControlResponse,
     delivery: Option<SyncSender<ControlDelivery>>,
 }
 
@@ -55,11 +55,11 @@ impl PendingResponse {
         Self { response, delivery }
     }
 
-    pub(super) const fn is_confirmed(&self) -> bool {
+    pub(crate) const fn is_confirmed(&self) -> bool {
         self.delivery.is_some()
     }
 
-    pub(super) fn complete(self, delivered: bool) {
+    pub(crate) fn complete(self, delivered: bool) {
         if let Some(sender) = self.delivery {
             let outcome = if delivered {
                 ControlDelivery::Delivered
@@ -71,7 +71,7 @@ impl PendingResponse {
     }
 }
 
-pub(super) fn pending(request: ControlRequest) -> (ControlEnvelope, Receiver<PendingResponse>) {
+pub(crate) fn pending(request: ControlRequest) -> (ControlEnvelope, Receiver<PendingResponse>) {
     let (sender, receiver) = sync_channel(1);
     (
         ControlEnvelope {

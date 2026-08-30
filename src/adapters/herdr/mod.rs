@@ -3,6 +3,7 @@
 mod contract;
 mod discovery;
 mod harness;
+mod notification;
 mod submission;
 #[cfg(test)]
 mod tests;
@@ -20,6 +21,8 @@ use crate::ports::{
 };
 
 use contract::ErrorEnvelope;
+
+pub(crate) use notification::{HerdrEnvironment, HerdrPauseNotifier};
 
 const DISCOVERY_TIMEOUT: Duration = Duration::from_secs(3);
 const SUBMISSION_TIMEOUT: Duration = Duration::from_secs(5);
@@ -68,8 +71,7 @@ impl HerdrGateway<crate::adapters::process::SystemProcessRunner> {
         presentation_source: String,
         runner: crate::adapters::process::SystemProcessRunner,
     ) -> Self {
-        let managed = std::env::var_os("HERDR_ENV").is_some_and(|value| value == "1")
-            && std::env::var_os("PROQI_DISABLE_HERDR").is_none();
+        let managed = HerdrEnvironment::detect().integration_enabled();
         Self::new(OsString::from("herdr"), runner, managed)
             .with_presentation_source(presentation_source)
     }

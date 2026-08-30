@@ -13,6 +13,7 @@ pub mod memory;
 pub mod process;
 pub mod recovery;
 pub mod runtime;
+pub mod screenshot;
 pub mod sqlite;
 pub mod terminal;
 pub mod update;

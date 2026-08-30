@@ -14,11 +14,12 @@ pub(super) struct PendingWork {
     pub(super) external: usize,
     pub(super) controls: BTreeMap<OperationSequence, PendingControl>,
     pub(super) control_lookups: BTreeMap<RequestId, ControlEnvelope>,
-    pub(super) update_prepares: BTreeMap<RequestId, ControlEnvelope>,
+    pub(super) update_prepares: BTreeMap<RequestId, PendingUpdatePrepare>,
     pub(super) metadata_controls: BTreeMap<RequestId, ControlEnvelope>,
     pub(super) sync_controls: VecDeque<ControlEnvelope>,
     pub(super) update_restart: Option<PendingUpdateRestart>,
     pub(super) update: usize,
+    pub(super) screenshot: usize,
 }
 
 impl PendingWork {
@@ -32,6 +33,7 @@ impl PendingWork {
             && self.sync_controls.is_empty()
             && self.update_restart.is_none()
             && self.update == 0
+            && self.screenshot == 0
     }
 }
 
@@ -43,4 +45,15 @@ pub(super) struct PendingControl {
 pub(super) struct PendingUpdateRestart {
     pub(super) operation_id: RequestId,
     pub(super) delivery: ControlDeliveryReceipt,
+}
+
+pub(super) struct PendingUpdatePrepare {
+    pub(super) envelope: ControlEnvelope,
+    pub(super) phase: UpdatePreparePhase,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum UpdatePreparePhase {
+    AwaitingAdmission,
+    AwaitingDurability,
 }
