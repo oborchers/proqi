@@ -13,6 +13,11 @@ CREATE TABLE migration_history (
     applied_at INTEGER NOT NULL
 ) STRICT;
 
+CREATE TABLE onboarding_state (
+    singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+    completed_version INTEGER NOT NULL CHECK (completed_version >= 0)
+) STRICT;
+
 CREATE TABLE sessions (
     id BLOB PRIMARY KEY CHECK (length(id) = 16),
     name TEXT,
@@ -136,7 +141,8 @@ CREATE VIRTUAL TABLE session_search USING fts5(
 );
 
 INSERT INTO schema_meta(singleton, schema_version, storage_protocol, migrated_at)
-VALUES (1, 8, 8, 0);
+VALUES (1, 9, 9, 0);
+INSERT INTO onboarding_state(singleton, completed_version) VALUES (1, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (1, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (2, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (3, 0);
@@ -145,6 +151,7 @@ INSERT INTO migration_history(version, applied_at) VALUES (5, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (6, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (7, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (8, 0);
+INSERT INTO migration_history(version, applied_at) VALUES (9, 0);
 ";
 
 pub(super) const MIGRATION_2: &str = r"
@@ -246,4 +253,14 @@ FROM screenshot_capture_receipts_v7;
 DROP TABLE screenshot_capture_receipts_v7;
 UPDATE schema_meta SET schema_version = 8, storage_protocol = 8;
 INSERT INTO migration_history(version, applied_at) VALUES (8, 0);
+";
+
+pub(super) const MIGRATION_9: &str = r"
+CREATE TABLE onboarding_state (
+    singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+    completed_version INTEGER NOT NULL CHECK (completed_version >= 0)
+) STRICT;
+INSERT INTO onboarding_state(singleton, completed_version) VALUES (1, 1);
+UPDATE schema_meta SET schema_version = 9, storage_protocol = 9;
+INSERT INTO migration_history(version, applied_at) VALUES (9, 0);
 ";

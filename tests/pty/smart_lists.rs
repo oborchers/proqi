@@ -1,9 +1,10 @@
-use super::{expect_command, json_command};
+use super::{consume_first_run, expect_command, json_command};
 
 #[test]
 fn tab_and_terminal_backtab_persist_with_restart_safe_history() {
     let state = tempfile::tempdir().expect("temporary state");
     let binary = env!("CARGO_BIN_EXE_proqi");
+    consume_first_run(binary, state.path());
     run_tab_session(binary, state.path());
 
     let sessions = json_command(binary, state.path(), &["sessions", "list"]);

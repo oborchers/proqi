@@ -12,6 +12,7 @@ fn discovered_invocation_completes_and_shuts_down_in_a_real_pty() {
     )
     .expect("skill fixture");
     let binary = env!("CARGO_BIN_EXE_proqi");
+    consume_first_run(binary, state.path());
     let interact = r#"
         log_user 0
         set timeout 10

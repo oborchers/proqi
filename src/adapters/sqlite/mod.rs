@@ -7,6 +7,7 @@ mod doctor;
 mod history_commit;
 mod load;
 mod migration;
+mod onboarding;
 mod operation_lookup;
 mod receipt_compaction;
 mod schema;
@@ -26,10 +27,10 @@ use rusqlite::{
 use crate::{
     domain::{SessionId, Timestamp},
     ports::store::{
-        CaptureCommit, CaptureCommitOutcome, CommitReceipt, MigrationMode, OperationBatch,
-        STORAGE_PROTOCOL_VERSION, SUPPORTED_SCHEMA_VERSION, SessionHit, SessionQuery,
-        SessionSnapshot, Store, StoreError, StoredOperationRequest, SubmissionAttempt,
-        SubmissionOutcome,
+        CaptureCommit, CaptureCommitOutcome, CommitReceipt, FirstRunBoard, FirstRunOutcome,
+        MigrationMode, OperationBatch, STORAGE_PROTOCOL_VERSION, SUPPORTED_SCHEMA_VERSION,
+        SessionHit, SessionQuery, SessionSnapshot, Store, StoreError, StoredOperationRequest,
+        SubmissionAttempt, SubmissionOutcome,
     },
 };
 
@@ -376,6 +377,13 @@ impl Store for SqliteStore {
         id: crate::domain::RevisionId,
     ) -> Result<Option<StoredOperationRequest>, StoreError> {
         operation_lookup::revision_request(&self.connection, id)
+    }
+
+    fn create_first_run_session(
+        &mut self,
+        board: &FirstRunBoard,
+    ) -> Result<FirstRunOutcome, StoreError> {
+        self.with_write_retry(|transaction| onboarding::create(transaction, board))
     }
 
     fn commit(&mut self, batch: &OperationBatch) -> Result<Option<CommitReceipt>, StoreError> {

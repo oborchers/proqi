@@ -4,6 +4,7 @@ use super::*;
 fn primary_shift_arrow_reorders_one_thought_in_a_real_pty() {
     let state = tempfile::tempdir().expect("temporary state");
     let binary = env!("CARGO_BIN_EXE_proqi");
+    consume_first_run(binary, state.path());
     let interact = r#"
         log_user 0
         set timeout 10

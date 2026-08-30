@@ -3,7 +3,7 @@
 use std::str::FromStr;
 
 use crate::{
-    application::AppState,
+    application::{AppState, FirstRunEnvironment, first_run_board},
     domain::{Session, SessionId},
     ports::{
         environment::{Clock, IdGenerator},
@@ -33,6 +33,23 @@ where
         let lease = self.runtime.acquire_session(id)?;
         let session = Session::new(id, self.cwd.clone(), self.clock.now())?;
         let _receipt = self.store.commit(&OperationBatch::CreateSession(session))?;
+        self.load_after_lease(id, lease, false)
+    }
+
+    /// Create the first eligible interactive session, with ordinary practice thoughts once.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed identity, domain, lease, storage, or rehydration failure.
+    pub fn create_first_run_session(
+        &mut self,
+        environment: FirstRunEnvironment,
+    ) -> Result<LeasedSession<R::SessionLease>, SessionServiceError> {
+        let id = self.ids.session_id();
+        let lease = self.runtime.acquire_session(id)?;
+        let session = Session::new(id, self.cwd.clone(), self.clock.now())?;
+        let board = first_run_board(session, self.ids, environment)?;
+        let _outcome = self.store.create_first_run_session(&board)?;
         self.load_after_lease(id, lease, false)
     }
 

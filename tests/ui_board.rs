@@ -2,7 +2,9 @@
 
 use proqi::{
     adapters::memory::{FakeClock, FakeIdGenerator},
-    application::{AppState, ClipboardIntent, Effect, FailureCode},
+    application::{
+        AppState, ClipboardIntent, Effect, FailureCode, FirstRunEnvironment, first_run_board,
+    },
     domain::{
         ContentAnnotation, ContentAnnotationKind, OperationSequence, Session, SessionBoard,
         Timestamp,
@@ -19,6 +21,9 @@ use ratatui_core::{
     layout::Rect,
     terminal::Terminal,
 };
+
+#[path = "support/snapshots.rs"]
+mod snapshot_support;
 
 struct Fixture {
     app: BoardApp,
@@ -44,6 +49,26 @@ impl Fixture {
             app: BoardApp::with_settings(
                 AppState::new(board),
                 settings,
+                proqi::adapters::editor::RopeEditorFactory,
+            ),
+            ids,
+            clock: FakeClock::new(Timestamp::from_millis(20)),
+        }
+    }
+
+    fn first_run(environment: FirstRunEnvironment) -> Self {
+        let mut ids = FakeIdGenerator::new(1_725_000_000_000);
+        let session = Session::new(
+            ids.session_id(),
+            std::env::temp_dir().join("proqi-ui-first-run"),
+            Timestamp::from_millis(10),
+        )
+        .expect("session");
+        let board = first_run_board(session, &mut ids, environment).expect("practice board");
+        Self {
+            app: BoardApp::with_settings(
+                AppState::new(board.board().clone()),
+                UiSettings::default(),
                 proqi::adapters::editor::RopeEditorFactory,
             ),
             ids,
@@ -436,6 +461,8 @@ mod composition;
 mod durability;
 #[path = "ui_board/fast_navigation.rs"]
 mod fast_navigation;
+#[path = "ui_board/first_run.rs"]
+mod first_run;
 #[path = "ui_board/insertion_navigation.rs"]
 mod insertion_navigation;
 #[path = "ui_board/kilo.rs"]

@@ -526,6 +526,9 @@ event-sourced system.
   persistent undo and redo.
 - `integration_context`: optional last-known terminal and verified agent
   metadata. Pane IDs are hints, never durable identity.
+- `onboarding_state`: one versioned installation-local completion marker. A
+  pristine schema starts eligible for version 1, while migration from every
+  prior schema initializes version 1 as completed.
 - `submission_attempts`: one content-redacted semantic delivery and its
   aggregate payload digest, target fingerprint, disposition, and state.
 - `submission_attempt_items`: ordered source thought identities and per-source
@@ -537,6 +540,15 @@ event-sourced system.
 Full-text search indexes session names, paths, and current thought content.
 Search indexes are derived and rebuildable. User content remains canonical in
 ordinary tables.
+
+The application owns the exact first-run copy and its typed managed-Herdr or
+standalone variant. Only a fresh interactive launch supplies that candidate to
+the store. SQLite begins one immediate write transaction, reads and conditionally
+advances the marker, creates the session, inserts all six ordinary thoughts,
+and rebuilds its derived search row before commit. A completed marker creates
+the requested session empty. Any failure rolls back the marker, session,
+thoughts, and derived data together. JSON and other noninteractive paths use
+ordinary session creation and neither seed nor advance the marker.
 
 ### Invariants
 

@@ -14,10 +14,7 @@ use proqi::{
     },
 };
 
-#[path = "../support/snapshots.rs"]
-mod snapshot_support;
-
-use snapshot_support::snapshot_buffer;
+use super::snapshot_support::snapshot_buffer;
 
 fn snapshot(fixture: &mut Fixture, width: u16, height: u16, theme: ThemePreference) -> String {
     let terminal = draw_theme(fixture, width, height, theme);

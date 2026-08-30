@@ -1,0 +1,22 @@
+---
+source: tests/ui_board/first_run.rs
+assertion_line: 29
+expression: "snapshot(FirstRunEnvironment::HerdrManaged, 80, 6, 5,)"
+---
+SIZE 80x6
+
+TEXT
+00│⋮ Press A and D in board mode to delete this entire practice board.│
+01││
+02│                                  + New thought│
+03│  proqi-ui-first-run│
+04│  6 thoughts · board · saved│
+05│  n New   y Copy  x Cut  d Delete  Space Select u Undo  / Search  : Commands│
+
+STYLE RUNS
+0: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-79 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
+1: 0-79 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+2: 0-33 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 34-34 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 35-79 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+3: 0-79 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+4: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-77 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE | 78-79 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+5: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-2 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 3-9 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 10-10 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 11-17 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 18-18 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 19-24 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 25-25 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 26-34 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 35-39 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 40-47 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 48-48 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 49-55 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 56-56 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 57-65 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 66-66 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 67-79 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE

@@ -15,7 +15,7 @@ use proqi::{
         memory::FakeIdGenerator,
         sqlite::{RetryPolicy, SqliteStore, StoreConfig},
     },
-    application::{Action, AppState, Effect, reduce},
+    application::{Action, AppState, Effect, FirstRunEnvironment, first_run_board, reduce},
     domain::{
         BoardMutation, BoardOperation, BoardOperationKind, ContentAnnotation,
         ContentAnnotationKind, Direction, IntegrationContext, OperationSequence, Session,
@@ -26,9 +26,9 @@ use proqi::{
         agent::{AgentState, SubmissionDisposition},
         environment::IdGenerator,
         store::{
-            DurableIdentity, MigrationMode, OperationBatch, STORAGE_PROTOCOL_VERSION,
-            SUPPORTED_SCHEMA_VERSION, SessionQuery, Store, StoreError, SubmissionAttempt,
-            SubmissionAttemptState, SubmissionOutcome, SubmissionSource,
+            DurableIdentity, FirstRunBoard, FirstRunOutcome, MigrationMode, OperationBatch,
+            STORAGE_PROTOCOL_VERSION, SUPPORTED_SCHEMA_VERSION, SessionQuery, Store, StoreError,
+            SubmissionAttempt, SubmissionAttemptState, SubmissionOutcome, SubmissionSource,
         },
     },
 };
@@ -136,6 +136,10 @@ mod concurrency;
 mod core;
 #[path = "sqlite_store/editor.rs"]
 mod editor;
+#[path = "sqlite_store/onboarding.rs"]
+mod onboarding;
+#[path = "sqlite_store/onboarding_migration.rs"]
+mod onboarding_migration;
 #[path = "sqlite_store/recovery.rs"]
 mod recovery;
 #[path = "sqlite_store/screenshot.rs"]

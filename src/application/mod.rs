@@ -8,6 +8,7 @@ mod error;
 mod locks;
 mod model;
 mod mutations;
+mod onboarding;
 mod prompt;
 mod recovery;
 mod reducer;
@@ -27,6 +28,7 @@ pub use model::{
     AppState, ClipboardIntent, DurabilityState, Effect, InteractionMode, ScreenshotIntent,
     ScreenshotPauseReason, UpdateIntent,
 };
+pub use onboarding::{FirstRunEnvironment, PRACTICE_BOARD_DELETION, first_run_board};
 pub(crate) use prompt::{
     SHARED_PROMPT_STARTERS, SharedPromptStarter, join_prompt_for_target, supports_shared_starters,
 };

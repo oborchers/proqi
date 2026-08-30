@@ -2,7 +2,7 @@
 
 use std::{fs, os::unix::fs::PermissionsExt as _, path::Path, time::Duration};
 
-use super::{expect_command, json_command, watchdog};
+use super::{consume_first_run, expect_command, json_command, watchdog};
 
 #[test]
 fn termination_signal_restores_and_releases_the_session() {
@@ -107,6 +107,7 @@ fn one_hundred_terminal_cycles_restore_and_leave_no_processes() {
 fn queued_quit_waits_for_the_preceding_paste_to_become_durable() {
     let state = tempfile::tempdir().expect("temporary state");
     let binary = env!("CARGO_BIN_EXE_proqi");
+    consume_first_run(binary, state.path());
     let quit = r#"
         log_user 0
         set timeout 10
@@ -142,6 +143,7 @@ fn queued_quit_waits_for_the_preceding_paste_to_become_durable() {
 fn acknowledged_paste_survives_forced_process_termination() {
     let state = tempfile::tempdir().expect("temporary state");
     let binary = env!("CARGO_BIN_EXE_proqi");
+    consume_first_run(binary, state.path());
     let crash = r#"
         log_user 0
         set timeout 10
@@ -215,6 +217,7 @@ fn delayed_capture_shutdown(
     let target = watched.path().join("delayed.png");
     let watchdog_pids = state.path().join("watchdog-pids");
     let binary = env!("CARGO_BIN_EXE_proqi");
+    consume_first_run(binary, state.path());
     let exit_action = capture_exit_action(terminate);
     let capture_barrier = if persistent_failure {
         r#"

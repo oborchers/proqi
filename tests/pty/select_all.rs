@@ -1,5 +1,5 @@
 #[cfg(target_os = "macos")]
-use super::{expect_command, json_command};
+use super::{consume_first_run, expect_command, json_command};
 
 #[cfg(target_os = "macos")]
 #[test]
@@ -7,6 +7,7 @@ fn board_key_and_forwarded_primary_a_select_every_thought_in_a_real_pty() {
     for selection_input in ["a", "\x01"] {
         let state = tempfile::tempdir().expect("temporary state");
         let binary = env!("CARGO_BIN_EXE_proqi");
+        consume_first_run(binary, state.path());
         let interact = format!(
             r#"
                 log_user 0

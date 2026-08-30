@@ -1,4 +1,4 @@
-use super::{expect_command, json_command};
+use super::{consume_first_run, expect_command, json_command};
 
 #[test]
 fn escaped_unicode_file_drop_becomes_one_durable_absolute_path() {
@@ -12,6 +12,7 @@ fn escaped_unicode_file_drop_becomes_one_durable_absolute_path() {
         .replace('(', "\\(")
         .replace(')', "\\)");
     let binary = env!("CARGO_BIN_EXE_proqi");
+    consume_first_run(binary, state.path());
     let create = r#"
         log_user 0
         set timeout 10

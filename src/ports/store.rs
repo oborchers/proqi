@@ -2,6 +2,7 @@
 
 mod compaction;
 mod error;
+mod onboarding;
 
 use serde::{Deserialize, Serialize};
 
@@ -15,11 +16,12 @@ use crate::ports::screenshot::ScreenshotFingerprint;
 
 pub use compaction::{CompactedOperationRequest, thought_payload_digest};
 pub use error::{StoreError, StoreFailureCode};
+pub use onboarding::{FirstRunBoard, FirstRunOutcome, OnboardingVersion};
 
 /// Current storage schema understood by this binary.
-pub const SUPPORTED_SCHEMA_VERSION: u32 = 8;
+pub const SUPPORTED_SCHEMA_VERSION: u32 = 9;
 /// Current local storage protocol understood by this binary.
-pub const STORAGE_PROTOCOL_VERSION: u32 = 8;
+pub const STORAGE_PROTOCOL_VERSION: u32 = 9;
 
 /// One atomic screenshot receipt and prospective board operation.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -381,6 +383,16 @@ pub trait Store {
         &mut self,
         id: RevisionId,
     ) -> Result<Option<StoredOperationRequest>, StoreError>;
+
+    /// Atomically create a fresh session and claim the current onboarding version when eligible.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed conflict, corruption, busy, integrity, or persistence failure.
+    fn create_first_run_session(
+        &mut self,
+        board: &FirstRunBoard,
+    ) -> Result<FirstRunOutcome, StoreError>;
 
     /// Atomically apply one operation batch.
     ///
