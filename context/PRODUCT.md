@@ -784,6 +784,36 @@ harness precedence. Startup, explicit command-palette refresh, and debounced
 host focus replace generation-tagged results; an older in-flight project scan
 cannot leak into a newer cwd.
 
+In a managed Herdr pane, the same invocation picker also presents a distinct
+`Live in Herdr` group. It refreshes on each picker open and lists only coding
+agents recognized by the current Herdr server from one protocol 19 snapshot.
+User-facing workspace and tab labels come only from that snapshot, with exact
+stable IDs as the fallback when labels are unavailable. Proqi never derives
+labels from directories or terminal titles, and it never includes ordinary
+shell panes.
+
+The group heading appears once. Each live result reuses the picker's existing
+two-field row. Its primary field prefers the explicit session name, then a
+meaningful tab label, then the harness. Its quiet secondary field composes the
+workspace, a differing meaningful tab label, pane, nonduplicate harness, and
+observed state. Numeric-only worktree tab labels are omitted. Narrow rows remove
+state and harness before location, while shallow panes retain one physical row
+per result. State is a point-in-time observation from picker open and does not
+update while the picker remains open.
+
+Selecting a live result inserts one concise, self-contained plain-text
+collaborator location as an ordinary undoable editor paste. A durable
+presentation annotation displays that exact range as an unbracketed inline
+mention such as `@coaching-philipp · claude`; duplicate display labels gain the
+smallest stable location qualifier. Selecting the mention and pressing Enter
+reveals the canonical location. Copy, search, export, recovery, and submission
+always use the canonical text and never resolve the mention against later live
+state. Readiness is excluded because it is only a current display observation.
+Selection does not submit, reserve, focus, or otherwise mutate the target. A
+malformed, timed out, contradictory, duplicate, or disappearing live result
+contributes no live rows and never removes usable filesystem invocations.
+Outside Herdr, the existing invocation behavior is unchanged.
+
 A small data-driven built-in table sits beside filesystem results: `/plan` and
 `/goal` are offered as shared Commands only at byte zero when a verified
 adjacent Codex or Claude Code target exists. Exact discovered invocations and

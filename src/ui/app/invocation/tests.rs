@@ -460,3 +460,5 @@ mod contract {
 
 #[path = "alias_tests.rs"]
 mod alias_tests;
+#[path = "reference_tests.rs"]
+mod reference_tests;

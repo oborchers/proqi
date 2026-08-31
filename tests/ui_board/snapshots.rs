@@ -19,24 +19,16 @@ mod snapshot_support;
 
 use snapshot_support::snapshot_buffer;
 
-macro_rules! assert_platform_snapshot {
-    ($value:expr) => {{
-        let platform = if cfg!(target_os = "macos") {
-            "macos"
-        } else {
-            "portable"
-        };
-        insta::with_settings!({ snapshot_suffix => platform }, {
-            insta::assert_snapshot!($value);
-        });
-    }};
-}
-
 #[path = "snapshots/attachment_accessibility.rs"]
 mod attachment_accessibility_snapshots;
+#[path = "snapshots/herdr.rs"]
+mod herdr_snapshots;
+#[path = "snapshots/platform.rs"]
+mod platform;
 #[path = "snapshots/support.rs"]
 mod support;
 
+use platform::assert_platform_snapshot;
 use support::adjacent_target;
 
 fn snapshot(fixture: &mut Fixture, width: u16, height: u16, theme: ThemePreference) -> String {

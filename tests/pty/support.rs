@@ -57,7 +57,7 @@ fn control_metadata_is_ready(path: &std::path::Path, session: &str) -> bool {
         return false;
     };
     value["session_id"] == session
-        && value["control_protocol"].as_u64() == Some(5)
+        && value["control_protocol"].as_u64() == Some(6)
         && value["control_endpoint"]
             .as_str()
             .is_some_and(|endpoint| std::path::Path::new(endpoint).exists())

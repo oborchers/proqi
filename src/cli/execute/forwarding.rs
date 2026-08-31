@@ -325,7 +325,11 @@ mod tests {
             None
         );
         assert_eq!(sync_protocol(Some(3)).expect("protocol three owner"), None);
-        assert_eq!(sync_protocol(Some(4)).expect("current owner"), Some(4));
-        assert!(sync_protocol(Some(6)).is_err());
+        assert_eq!(
+            sync_protocol(Some(4)).expect("protocol four owner"),
+            Some(4)
+        );
+        assert_eq!(sync_protocol(Some(6)).expect("current owner"), Some(6));
+        assert!(sync_protocol(Some(7)).is_err());
     }
 }

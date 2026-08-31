@@ -168,6 +168,11 @@ Mouse input covers the same core workflow. Images, files, and large pastes fold
 into compact annotations while their content stays intact. See
 [invocation compatibility](docs/INVOCATIONS.md).
 
+Inside Herdr, opening the same invocation picker also discovers recognized live
+coding agents across the server. Selecting one inserts an inert collaborator
+location and displays it as a compact inline mention. It never focuses or
+submits to that agent.
+
 ## Screenshot Inbox on macOS
 
 <p align="center">

@@ -61,6 +61,22 @@ as folded image and large-paste placeholders. The styling is render-only: it
 does not create durable annotations or change editor text, wrapping, cursor
 positions, persistence, or undo.
 
+## Live Herdr references
+
+In a Herdr-managed pane, the existing picker refreshes one bounded protocol 19
+snapshot when it opens. Its `Live in Herdr` group contains only recognized
+coding agents. Each row prefers an explicit agent name and composes the
+workspace label, a distinct tab label, pane, nonduplicate harness, and observed
+state into the existing quiet secondary field. Exact IDs replace unavailable
+workspace or tab labels. Directories and terminal titles never supply labels.
+
+Selection inserts plain text with the agent name plus exact workspace, tab, and
+pane identities. Proqi displays that canonical range as an unbracketed inline
+mention and preserves it through undo, redo, persistence, transfer, recovery,
+copy, and submission. The observed state remains display-only and refreshes only
+when the picker reopens. Selecting a reference never submits, focuses, reserves,
+or otherwise mutates the target.
+
 ## Evidence and licenses
 
 - [Claude Code skills and slash commands](https://code.claude.com/docs/en/slash-commands), [subagents](https://code.claude.com/docs/en/sub-agents), and [plugin manifests](https://code.claude.com/docs/en/plugins-reference) are vendor documentation.

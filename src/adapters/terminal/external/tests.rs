@@ -8,14 +8,23 @@ use crate::{
     application::{AppState, Effect, ScreenshotPauseReason},
     domain::{RequestId, Session, SessionBoard, Timestamp},
     ports::{
+        agent::{AgentFailureCode, AgentState, HarnessKind},
         attachment::{AttachmentError, AttachmentStore, RasterImage},
         clipboard::{Clipboard, ClipboardContent, ClipboardError, ClipboardWrite},
         environment::IdGenerator as _,
+        invocation::{
+            InvocationCatalog, InvocationCatalogError, InvocationDiscovery,
+            InvocationDiscoveryRequest, InvocationReferenceCatalog,
+            InvocationReferenceDiscoveryRequest, InvocationReferenceProvider, LiveAgentReference,
+        },
     },
     ui::{BoardApp, UiInput, UiKey},
 };
 
-use super::{ExternalLane, ExternalReadError, ExternalRequest, read_clipboard};
+use super::{
+    ExternalLane, ExternalReadError, ExternalRequest, ExternalResult,
+    discover_invocation_references, discover_invocations, read_clipboard,
+};
 
 struct FakeClipboard(Result<ClipboardContent, ClipboardError>);
 
@@ -159,4 +168,82 @@ fn full_and_disconnected_request_lanes_fail_without_blocking() {
         Duration::from_secs(1),
     ))
     .expect("stop detached lane");
+}
+
+struct FakeInvocations;
+
+impl InvocationCatalog for FakeInvocations {
+    fn discover(
+        &mut self,
+        request: InvocationDiscoveryRequest,
+    ) -> Result<InvocationDiscovery, InvocationCatalogError> {
+        Ok(InvocationDiscovery {
+            generation: request.generation,
+            cwd: request.cwd,
+            global: Vec::new(),
+            project: Vec::new(),
+        })
+    }
+}
+
+struct FakeReferences(Result<Vec<LiveAgentReference>, AgentFailureCode>);
+
+impl InvocationReferenceCatalog for FakeReferences {
+    fn discover_live_references(&mut self) -> Result<Vec<LiveAgentReference>, AgentFailureCode> {
+        self.0.clone()
+    }
+}
+
+fn reference() -> LiveAgentReference {
+    LiveAgentReference::new(
+        InvocationReferenceProvider::Herdr,
+        Some("reviewer".to_owned()),
+        HarnessKind::new("codex").expect("harness"),
+        "w1".to_owned(),
+        Some("Workspace".to_owned()),
+        "w1:t1".to_owned(),
+        Some("Tab".to_owned()),
+        "w1:p2".to_owned(),
+        AgentState::Idle,
+    )
+    .expect("reference")
+}
+
+#[test]
+fn live_reference_failure_never_breaks_filesystem_invocation_refresh() {
+    let request = InvocationDiscoveryRequest {
+        generation: 7,
+        cwd: PathBuf::from("/fixture"),
+    };
+    let mut invocations = FakeInvocations;
+    let mut references = FakeReferences(Err(AgentFailureCode::TimedOut));
+
+    let ExternalResult::InvocationsDiscovered(Ok(discovery)) =
+        discover_invocations(&mut invocations, request)
+    else {
+        panic!("invocation discovery result");
+    };
+    assert_eq!(discovery.generation, 7);
+    let ExternalResult::InvocationReferencesDiscovered(completion) = discover_invocation_references(
+        &mut references,
+        InvocationReferenceDiscoveryRequest { generation: 8 },
+    ) else {
+        panic!("reference discovery result");
+    };
+    assert_eq!(completion.generation, 8);
+    assert_eq!(completion.references, Err(AgentFailureCode::TimedOut));
+}
+
+#[test]
+fn live_references_keep_their_independent_generation_tag() {
+    let mut references = FakeReferences(Ok(vec![reference()]));
+
+    let ExternalResult::InvocationReferencesDiscovered(completion) = discover_invocation_references(
+        &mut references,
+        InvocationReferenceDiscoveryRequest { generation: 9 },
+    ) else {
+        panic!("reference discovery result");
+    };
+    assert_eq!(completion.generation, 9);
+    assert_eq!(completion.references, Ok(vec![reference()]));
 }

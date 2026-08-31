@@ -159,6 +159,8 @@ pub struct OverlayLayout {
     pub area: Rect,
     /// Visible command rows.
     pub items: Vec<Rect>,
+    /// Optional passive heading row immediately above each visible item.
+    pub item_headings: Vec<Option<Rect>>,
     /// Stable close target in the upper-right corner.
     pub close: Rect,
 }
@@ -243,6 +245,16 @@ impl LayoutSnapshot {
             let covers_chrome = self.board.height < required;
             let bounds = if covers_chrome { self.area } else { self.board };
             controls::overlay_layout(bounds, item_count, preferred_rows, covers_chrome)
+        });
+    }
+
+    /// Attach invocation geometry with passive headings separate from item hit targets.
+    pub fn configure_grouped_overlay(&mut self, item_groups: &[bool], preferred_rows: usize) {
+        self.overlay = (preferred_rows > 0).then(|| {
+            let required = controls::overlay_height(preferred_rows);
+            let covers_chrome = self.board.height < required;
+            let bounds = if covers_chrome { self.area } else { self.board };
+            controls::grouped_overlay_layout(bounds, item_groups, preferred_rows, covers_chrome)
         });
     }
 

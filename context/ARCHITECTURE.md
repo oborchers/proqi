@@ -513,10 +513,39 @@ for deduplication, and never crawls the home directory. Compatibility roots are
 checked in; extra roots enter through validated configuration with explicit
 kind, harness, and scope. Project and global vectors remain separate.
 
-The UI owner assigns a generation and cwd to each refresh. Results update state
-only when both still match, so stale external work cannot leak an older project
-catalog. Completion derives a byte range from the exact editor snapshot, moves
-the existing editor selection to that range, and performs one semantic paste.
+`InvocationReferenceCatalog` extends this discovery boundary with typed,
+ephemeral collaborator locations. The Herdr adapter implements it from one
+bounded protocol 19 snapshot and projects only agent name, harness, correlated
+workspace and tab identity, pane identity, and observed state. Raw snapshot
+JSON, directories, terminal titles, prompt text, and other privacy-sensitive
+fields remain adapter-local. Workspace and tab labels are accepted only from
+matching topology records in the same snapshot. Missing label collections use
+exact IDs, while contradictory or duplicate identities fail closed.
+
+Filesystem and live discovery share the bounded external worker lane but use
+independent requests and completions. Filesystem refreshes retain their own
+UI-assigned generation and cwd. Each manual or automatic picker open allocates
+a separate live generation, clears the preceding live projection, and accepts
+only the matching newest completion. A timeout or malformed completion carries
+that same generation, so an old failure cannot erase newer references. Closing
+the picker invalidates pending live work. There is no continuous refresh while
+the picker remains open, and live failure never replaces usable filesystem
+entries.
+
+The UI stores only the typed live projection, bounds the subset, and renders one
+`Live in Herdr` section through the picker's existing two-field row. The primary
+and secondary projections deduplicate session name, topology labels, harness,
+pane, and observed state, with responsive secondary fallbacks that retain
+location first. Numeric-only tab labels are not presented as user-facing
+worktree names. The exact workspace, tab, and pane identities remain in the
+insertion text. Observed state is rendered from the picker-open snapshot but
+deliberately omitted from inserted text. No reference selection reaches the
+Herdr submission, focus, reservation, or mutation ports.
+
+Filesystem results update state only when generation and cwd still match, so
+stale external work cannot leak an older project catalog. Completion derives a
+byte range from the exact editor snapshot, moves the existing editor selection
+to that range, and performs one semantic paste.
 The resulting `TextChangeSet` continues through annotation rebasing and editor
 undo without a parallel text-mutation contract.
 
@@ -609,6 +638,12 @@ then returns the stable `schema_busy` error instead of waiting indefinitely.
 The application refuses to open a database schema newer than it understands.
 It does not attempt a best-effort downgrade. Export and explicit recovery tools
 remain available without modifying the source database.
+
+Schema and storage protocol version 9 register invocation-reference annotations
+as durable thought and revision metadata. The migration from version 8 is a
+transactional protocol stamp because the annotation column and JSON envelope
+already exist. The version still prevents an older writer from interpreting a
+new annotation variant as compatible state.
 
 ## Multiple running versions during an update
 
@@ -944,14 +979,16 @@ visible selection.
 The normalized paste payload carries exact text plus optional typed provenance.
 Attachment annotations retain only presentation-safe metadata and byte ranges;
 the absolute path remains the canonical text. Large-paste annotations retain
-derived line and grapheme counts. A UI-owned projection substitutes folded
-labels for both board rendering and editor snapshots, while the editor model,
-clipboard, recovery, CLI, search, and integration boundaries continue to
-consume canonical content. The projection owns lossless canonical-to-visible
-cursor and selection mapping. Collapsed ranges are atomic for pointer, cursor,
-selection, and deletion commands. Edits rebase unaffected ranges and dissolve
-overlapping ranges. Revisions persist both sides of the annotation change so
-undo and redo remain restart-safe.
+derived line and grapheme counts. Invocation-reference annotations retain only
+a bounded display label over the canonical, self-contained collaborator
+location. A UI-owned projection substitutes folded labels for board rendering
+and editor snapshots, while the editor model, clipboard, recovery, CLI, search,
+and integration boundaries continue to consume canonical content. Invocation
+mentions are never resolved again at submission time. The projection owns
+lossless canonical-to-visible cursor and selection mapping. Collapsed ranges
+are atomic for pointer, cursor, selection, and deletion commands. Edits rebase
+unaffected ranges and dissolve overlapping ranges. Revisions persist both sides
+of the annotation change so undo and redo remain restart-safe.
 
 URL recognition is a render-only pass over canonical content. Only explicit
 HTTP and HTTPS ranges receive accent and underline styling. URL recognition does
@@ -973,6 +1010,9 @@ The adapter:
   integration. It never interpolates prompt text into shell syntax.
 - Applies bounded timeouts and maps JSON responses into typed results.
 - Never falls back to raw key injection.
+- Projects recognized coding agents from one bounded snapshot for inert
+  invocation-picker references, without exposing raw topology or terminal
+  metadata above the adapter.
 
 The receiving harness decides whether a prompt sent to a working agent is
 queued, treated as steering, or rejected. The gateway reports that state and
@@ -1116,9 +1156,12 @@ bounded messages, protocol negotiation, idempotency keys, and timeouts are
 mandatory. If forwarding is unsupported or the owner cannot be verified, the
 CLI returns `session_busy`.
 
-Control protocol version 4 supports durable presentation annotations, session
-rename, owner synchronization, exact editor replacement, and durable collapse
-state. Exact replacement carries a typed `rev_` idempotency identity plus either
+Control protocol version 6 is current. Version 2 introduced legacy durable
+presentation annotations. Version 4 added session rename, owner synchronization,
+exact editor replacement, and durable collapse state. An add mutation carrying
+an invocation-reference annotation requires version 6, so an older active owner
+cannot silently persist content while dropping mention metadata. Exact
+replacement carries a typed `rev_` idempotency identity plus either
 the caller's expected SHA-256 content digest or an explicit force intention and
 enters the ordinary editor revision history. The owner rejects every mutation of a source thought while its
 submission is in flight. Cross-session delivery inspects the source, commits an

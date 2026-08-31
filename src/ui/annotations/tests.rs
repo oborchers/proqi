@@ -181,3 +181,24 @@ fn inserted_annotations_are_anchored_to_the_single_resulting_change_range() {
         [annotation(3, 3 + inserted_text.len())]
     );
 }
+
+#[test]
+fn invocation_reference_projects_without_placeholder_brackets() {
+    let canonical = "Herdr collaborator: coaching-philipp (claude) at workspace Consulting (w4), tab coaching-philipp (w4:t2), pane w4:p2";
+    let display = "@coaching-philipp · claude";
+    let projected = super::project(
+        canonical,
+        &[ContentAnnotation {
+            start: 0,
+            end: canonical.len(),
+            kind: ContentAnnotationKind::InvocationReference {
+                display_name: display.to_owned(),
+            },
+        }],
+        &[],
+    );
+
+    assert_eq!(projected.content, display);
+    assert_eq!(projected.folds.len(), 1);
+    assert_eq!(projected.folds[0].canonical_end, canonical.len());
+}

@@ -144,7 +144,7 @@ impl BoardApp {
         self.palette = None;
         self.search = None;
         self.transfer = None;
-        self.invocation_popup = None;
+        self.close_invocation_picker();
         self.help = false;
     }
 
@@ -418,7 +418,8 @@ impl BoardApp {
                     } else {
                         Vec::new()
                     };
-                self.open_invocation_picker();
+                let mut effects = effects;
+                effects.extend(self.open_invocation_picker());
                 Some(effects)
             }
             _ => None,

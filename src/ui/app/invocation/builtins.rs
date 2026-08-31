@@ -20,7 +20,12 @@ pub(super) fn choices(app: &BoardApp, popup: &InvocationPopup) -> Vec<Choice> {
         .filter(|starter| matches_query(*starter, popup))
         .map(|starter| Choice {
             token: starter.token.to_owned(),
+            insertion: starter.token.to_owned(),
+            annotation_display: None,
+            separate_from_prefix: false,
             qualifier: "Shared Command".to_owned(),
+            qualifier_fallbacks: Vec::new(),
+            group: None,
         })
         .collect()
 }

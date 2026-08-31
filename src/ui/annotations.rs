@@ -210,6 +210,9 @@ fn push_collapsed_label(
             output.push_str(&grouped(*graphemes));
             output.push_str(" characters]");
         }
+        ContentAnnotationKind::InvocationReference { display_name } => {
+            output.push_str(display_name);
+        }
     }
 }
 

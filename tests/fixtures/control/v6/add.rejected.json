@@ -1,0 +1,9 @@
+{
+  "protocol": 6,
+  "request_id": "req_06g30t8fudrq55fdkjqr6mpe44",
+  "result": {
+    "status": "rejected",
+    "code": "idempotency_conflict",
+    "message": "operation identity was already used for another request"
+  }
+}
