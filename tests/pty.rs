@@ -67,6 +67,10 @@ mod shutdown;
 #[path = "pty/smart_lists.rs"]
 mod smart_lists;
 
+#[cfg(target_os = "macos")]
+#[path = "pty/top_boundary.rs"]
+mod top_boundary;
+
 #[path = "pty/smoke.rs"]
 mod smoke;
 

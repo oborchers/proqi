@@ -134,7 +134,7 @@ Board choice.
 | --- | --- |
 | `n`, `Enter` on `+ New thought`, paste, or click | Create a thought |
 | `Primary+V` with no selection | Create from the clipboard |
-| `j` / `k` or arrows | Focus next / previous |
+| `j` / `k` or arrows | Focus next / previous; twice at a blocked bottom / top edge creates there |
 | `Enter` or `e` | Edit |
 | `Primary+J` / `Primary+K`, `Primary+Shift+↓` / `↑`, or drag | Reorder |
 | `y` / `Primary+C`; `x` / `Primary+X` | Copy; safe cut |
@@ -160,7 +160,7 @@ Board choice.
 | `Shift` + movement | Extend text selection |
 | `Alt+↑` / `↓`; `Primary+↑` / `↓` | Jump five rows; thought start / end |
 | `Enter`; `Tab`; `Shift+Tab` | Continue lists; nest; outdent |
-| `↑` / `↓` twice at a boundary | Focus the adjacent thought |
+| `↑` / `↓` twice at a boundary | Focus the adjacent thought, or create at the top / bottom board edge |
 | `Primary+Enter`; `Primary+Shift+Enter` | Submit and remove after acceptance; submit and keep |
 | Type `$name`, `/name`, or supported `@name` | Complete a local invocation |
 | `↑` / `↓` or `Primary+P` / `Primary+N`; `Enter` / `Tab`; `Esc` | Navigate, insert, or close invocation results |

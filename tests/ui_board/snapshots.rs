@@ -14,10 +14,7 @@ use proqi::{
     },
 };
 
-#[path = "../support/snapshots.rs"]
-mod snapshot_support;
-
-use snapshot_support::snapshot_buffer;
+use super::snapshot_support::snapshot_buffer;
 
 #[path = "snapshots/attachment_accessibility.rs"]
 mod attachment_accessibility_snapshots;

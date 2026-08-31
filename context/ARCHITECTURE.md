@@ -946,12 +946,17 @@ discarded before paste dispatch, so completion cannot reinterpret an old editor
 request under a newer interaction mode.
 
 Board-mode printable keys always pass through the configured command map, even
-when the insertion row or a durable blank has focus. The second blocked
-downward movement at the end of a non-empty final edited thought creates a
-durable blank and enters its editor. Repeated movement while that blank remains
-empty cannot create additional thoughts. On the insertion row, two consecutive
-semantic downward navigation commands perform the same durable create-and-edit
-transition; unrelated or reorder input clears the confirmation. Other edit
+when the insertion row or a durable blank has focus. One typed boundary
+insertion policy owns both outer positions. The second blocked upward movement
+at the first nonempty thought inserts at position zero, while the second blocked
+downward movement at the end of a nonempty final thought appends. Both create a
+durable blank and enter its editor through the canonical create action. Arrow
+and configured previous or next spellings normalize to the same semantic
+confirmation outside text modes and may be mixed. Repeated movement while the
+new blank remains empty cannot create additional thoughts. On the insertion
+row, two consecutive semantic downward navigation commands perform the same
+durable create-and-edit transition; unrelated or modified input, reorder,
+selection, pointer input, and mode changes clear confirmation. Other edit
 boundaries use the same navigation state machine.
 
 Empty-board aftermath is reconciled by one typed policy owned beside
