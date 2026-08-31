@@ -30,7 +30,7 @@ fn recorded_fake_executable_proves_direct_semantic_cli_contract() {
     let [reference] = references.as_slice() else {
         panic!("expected one live reference");
     };
-    assert_eq!(reference.agent_name(), "fixture");
+    assert_eq!(reference.agent_name(), Some("fixture"));
     assert_eq!(reference.workspace_id(), "w1");
     assert_eq!(reference.workspace_label(), Some("Fixture workspace"));
     assert_eq!(reference.tab_id(), "w1:t1");

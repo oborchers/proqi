@@ -59,7 +59,7 @@ fn one_snapshot_correlates_labels_and_ignores_privacy_sensitive_fields() {
     assert_eq!(references[0].tab_id(), "w1:t2");
     assert_eq!(references[0].tab_label(), Some("Build tab"));
     assert_eq!(references[0].pane_id(), "w1:p8");
-    assert_eq!(references[0].agent_name(), "reviewer");
+    assert_eq!(references[0].agent_name(), Some("reviewer"));
     assert_eq!(references[0].state(), AgentState::Working);
     let request = &runner.requests.borrow()[0];
     assert_eq!(request.args, ["api", "snapshot"]);
@@ -67,7 +67,7 @@ fn one_snapshot_correlates_labels_and_ignores_privacy_sensitive_fields() {
 }
 
 #[test]
-fn absent_topology_labels_fall_back_to_exact_ids_and_missing_names_use_harness() {
+fn absent_topology_labels_preserve_exact_ids_and_missing_names() {
     let response = live_snapshot(
         &[live_agent(None, "w1", "w1:t1", "w1:p1")],
         &json!([]),
@@ -78,7 +78,7 @@ fn absent_topology_labels_fall_back_to_exact_ids_and_missing_names_use_harness()
     let references =
         super::super::discovery::live_references(&mut labeled_gateway).expect("references");
 
-    assert_eq!(references[0].agent_name(), CODEX_AGENT_KIND);
+    assert_eq!(references[0].agent_name(), None);
     assert_eq!(references[0].workspace_label(), None);
     assert_eq!(references[0].tab_label(), None);
 
@@ -146,7 +146,7 @@ fn malformed_timeout_and_oversized_results_degrade_with_fixed_bounds() {
         super::super::discovery::live_references(&mut bounded).expect("bounded references");
     assert_eq!(references.len(), 64);
     assert!(references.iter().all(|reference| {
-        reference.agent_name() == "duplicate-label" && reference.workspace_id() == "w1"
+        reference.agent_name() == Some("duplicate-label") && reference.workspace_id() == "w1"
     }));
 }
 
@@ -160,7 +160,7 @@ fn topology_labels_are_sanitized_and_bounded_without_using_titles() {
     let (mut gateway, _) = gateway(vec![response]);
     let references = super::super::discovery::live_references(&mut gateway).expect("references");
 
-    assert_eq!(references[0].agent_name(), "agentname");
+    assert_eq!(references[0].agent_name(), Some("agentname"));
     assert_eq!(
         references[0]
             .workspace_label()

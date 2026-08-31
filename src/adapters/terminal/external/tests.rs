@@ -198,7 +198,7 @@ impl InvocationReferenceCatalog for FakeReferences {
 fn reference() -> LiveAgentReference {
     LiveAgentReference::new(
         InvocationReferenceProvider::Herdr,
-        "reviewer".to_owned(),
+        Some("reviewer".to_owned()),
         HarnessKind::new("codex").expect("harness"),
         "w1".to_owned(),
         Some("Workspace".to_owned()),

@@ -91,7 +91,12 @@ pub(super) fn render_invocation_picker(
     let rows = entries
         .iter()
         .map(|entry| {
-            overlays::PickerRow::grouped(&entry.token, &entry.qualifier, entry.group.as_deref())
+            overlays::PickerRow::grouped(
+                &entry.token,
+                &entry.qualifier,
+                &entry.qualifier_fallbacks,
+                entry.group.as_deref(),
+            )
         })
         .collect::<Vec<_>>();
     overlays::render_picker(

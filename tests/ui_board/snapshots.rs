@@ -3,16 +3,13 @@ use super::*;
 use proqi::{
     domain::Direction,
     ports::{
-        agent::{
-            AgentSessionBinding, AgentState, AgentTarget, CODEX_AGENT_KIND, HarnessKind,
-            PaneContext, PaneRect,
-        },
+        agent::{AgentState, HarnessKind},
         attachment_accessibility::{
             AttachmentAccessFailure, AttachmentCheckBatchResult, AttachmentCheckResult,
         },
         invocation::{
             InvocationDiscovery, InvocationEntry, InvocationForm, InvocationHarness,
-            InvocationKind, InvocationReferenceProvider, InvocationScope, LiveAgentReference,
+            InvocationKind, InvocationScope,
         },
     },
 };
@@ -23,39 +20,13 @@ mod snapshot_support;
 use snapshot_support::snapshot_buffer;
 #[path = "snapshots/attachment_accessibility.rs"]
 mod attachment_accessibility_snapshots;
+#[path = "snapshots/herdr.rs"]
+mod herdr_fixtures;
+
+use herdr_fixtures::{adjacent_target, install_live_reference};
 
 fn snapshot(fixture: &mut Fixture, width: u16, height: u16, theme: ThemePreference) -> String {
     snapshot_buffer(draw_theme(fixture, width, height, theme).backend().buffer())
-}
-
-fn adjacent_target(direction: Direction, pane_id: &str, readiness: AgentState) -> AgentTarget {
-    let source = PaneContext {
-        workspace_id: "w1".to_owned(),
-        tab_id: "w1:t1".to_owned(),
-        pane_id: "w1:p1".to_owned(),
-        rect: PaneRect {
-            x: 40,
-            y: 20,
-            width: 40,
-            height: 20,
-        },
-    };
-    AgentTarget {
-        provider: "herdr".to_owned(),
-        protocol: 19,
-        direction,
-        pane_id: pane_id.to_owned(),
-        workspace_id: source.workspace_id.clone(),
-        tab_id: source.tab_id.clone(),
-        agent_kind: HarnessKind::new(CODEX_AGENT_KIND).expect("fixture harness"),
-        agent_name: format!("Codex {pane_id}"),
-        agent_session: AgentSessionBinding::established(format!("session-{pane_id}"))
-            .expect("fixture session"),
-        readiness,
-        delivery: proqi::ports::agent::AgentDeliveryCapabilities::SUBMIT_ONLY,
-        rect: source.rect,
-        source,
-    }
 }
 
 #[test]
@@ -170,31 +141,7 @@ fn existing_invocation_command_opens_terminal_independent_live_reference_picker(
     let mut fixture = Fixture::new();
     fixture.paste("Coordinate with another agent");
     fixture.input(UiInput::Key(UiKey::Escape));
-    let effects = fixture.app.refresh_invocations();
-    let [Effect::DiscoverInvocations(request)] = effects.as_slice() else {
-        panic!("invocation refresh effect");
-    };
-    let reference = LiveAgentReference::new(
-        InvocationReferenceProvider::Herdr,
-        "reviewer".to_owned(),
-        HarnessKind::new(CODEX_AGENT_KIND).expect("fixture harness"),
-        "w2".to_owned(),
-        Some("Product".to_owned()),
-        "w2:t4".to_owned(),
-        Some("Review".to_owned()),
-        "w2:p9".to_owned(),
-        AgentState::Working,
-    )
-    .expect("live reference");
-    fixture
-        .app
-        .complete_invocation_discovery(Ok(InvocationDiscovery {
-            generation: request.generation,
-            cwd: request.cwd.clone(),
-            global: Vec::new(),
-            project: Vec::new(),
-            live: vec![reference],
-        }));
+    install_live_reference(&mut fixture);
     fixture.input(UiInput::Key(UiKey::Character(':')));
     for character in "Insert invocation or Herdr reference".chars() {
         fixture.input(UiInput::Key(UiKey::Character(character)));
@@ -202,6 +149,11 @@ fn existing_invocation_command_opens_terminal_independent_live_reference_picker(
     fixture.input(UiInput::Key(UiKey::Enter));
 
     insta::assert_snapshot!(snapshot(&mut fixture, 72, 12, ThemePreference::Dark));
+    fixture.input(UiInput::Key(UiKey::Enter));
+    insta::assert_snapshot!(
+        "inline_herdr_reference",
+        snapshot(&mut fixture, 72, 8, ThemePreference::Dark)
+    );
 }
 
 #[test]

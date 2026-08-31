@@ -158,11 +158,11 @@ impl InvocationReferenceProvider {
     }
 }
 
-/// One bounded, display-only live collaborator location.
+/// One bounded ephemeral collaborator location safe for display and inert insertion.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct LiveAgentReference {
     provider: InvocationReferenceProvider,
-    agent_name: String,
+    agent_name: Option<String>,
     harness: HarnessKind,
     workspace_id: String,
     workspace_label: Option<String>,
@@ -181,7 +181,7 @@ impl LiveAgentReference {
     )]
     pub fn new(
         provider: InvocationReferenceProvider,
-        agent_name: String,
+        agent_name: Option<String>,
         harness: HarnessKind,
         workspace_id: String,
         workspace_label: Option<String>,
@@ -190,7 +190,9 @@ impl LiveAgentReference {
         pane_id: String,
         state: AgentState,
     ) -> Option<Self> {
-        if !bounded_label(&agent_name, 32)
+        if agent_name
+            .as_deref()
+            .is_some_and(|name| !bounded_label(name, 32))
             || !bounded_identity(harness.as_str(), 32)
             || !bounded_identity(&workspace_id, 64)
             || workspace_label
@@ -223,10 +225,10 @@ impl LiveAgentReference {
         self.provider
     }
 
-    /// Bounded collaborator name.
+    /// Optional bounded collaborator session name supplied by the harness.
     #[must_use]
-    pub fn agent_name(&self) -> &str {
-        &self.agent_name
+    pub fn agent_name(&self) -> Option<&str> {
+        self.agent_name.as_deref()
     }
 
     /// Recognized coding-agent harness.

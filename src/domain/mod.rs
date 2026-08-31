@@ -1,18 +1,19 @@
 //! Entities, value objects, identifiers, and invariants.
 
+mod annotation;
 mod identifiers;
 mod model;
 mod operations;
 mod text;
 mod update;
 
+pub use annotation::{ContentAnnotation, ContentAnnotationKind, validate_annotations};
 pub use identifiers::{
     InstanceId, OperationId, RequestId, RevisionId, SessionId, SubmissionId, ThoughtId,
 };
 pub use model::{
-    ContentAnnotation, ContentAnnotationKind, Direction, DomainError, IntegrationContext,
-    OperationSequence, Session, Thought, ThoughtPosition, ThoughtPresentation, ThoughtRevision,
-    Timestamp, validate_annotations,
+    Direction, DomainError, IntegrationContext, OperationSequence, Session, Thought,
+    ThoughtPosition, ThoughtPresentation, ThoughtRevision, Timestamp,
 };
 pub use operations::{
     BoardMutation, BoardOperation, BoardOperationKind, OperationRecord, SessionBoard, UndoScope,

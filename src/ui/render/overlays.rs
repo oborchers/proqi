@@ -76,7 +76,7 @@ pub(super) fn render_picker(
                 Paragraph::new(ellipsize(group, usize::from(heading.width))).style(
                     theme
                         .base_style()
-                        .fg(theme.accent)
+                        .fg(theme.muted)
                         .add_modifier(Modifier::BOLD),
                 ),
                 heading,
@@ -90,16 +90,13 @@ pub(super) fn render_picker(
         } else {
             *area
         };
-        let style = if index == picker.selected {
-            theme
-                .focused_style()
-                .fg(theme.accent)
-                .add_modifier(Modifier::BOLD)
-        } else {
-            theme.base_style()
-        };
         frame.render_widget(
-            Paragraph::new(picker_row(*entry, entry_area.width)).style(style),
+            Paragraph::new(picker_line(
+                *entry,
+                entry_area.width,
+                index == picker.selected,
+                theme,
+            )),
             entry_area,
         );
     }
@@ -214,6 +211,7 @@ pub(super) struct PickerView<'a> {
 pub(super) struct PickerRow<'a> {
     primary: &'a str,
     secondary: Option<&'a str>,
+    secondary_fallbacks: &'a [String],
     group: Option<&'a str>,
 }
 
@@ -222,6 +220,7 @@ impl<'a> PickerRow<'a> {
         Self {
             primary,
             secondary: None,
+            secondary_fallbacks: &[],
             group: None,
         }
     }
@@ -231,6 +230,7 @@ impl<'a> PickerRow<'a> {
         Self {
             primary,
             secondary: Some(secondary),
+            secondary_fallbacks: &[],
             group: None,
         }
     }
@@ -238,11 +238,13 @@ impl<'a> PickerRow<'a> {
     pub(super) const fn grouped(
         primary: &'a str,
         secondary: &'a str,
+        secondary_fallbacks: &'a [String],
         group: Option<&'a str>,
     ) -> Self {
         Self {
             primary,
             secondary: Some(secondary),
+            secondary_fallbacks,
             group,
         }
     }
@@ -251,19 +253,64 @@ impl<'a> PickerRow<'a> {
 fn picker_row(entry: PickerRow<'_>, width: u16) -> String {
     let width = usize::from(width);
     let primary_width = entry.primary.width();
-    if let Some(secondary) = entry.secondary {
-        let secondary_width = secondary.width();
-        let minimum_gap = usize::from(entry.group.is_none()) + 1;
-        if primary_width
-            .saturating_add(minimum_gap)
-            .saturating_add(secondary_width)
-            <= width
-        {
-            let gap = width.saturating_sub(primary_width + secondary_width);
-            return format!("{}{}{secondary}", entry.primary, " ".repeat(gap));
-        }
+    if let Some(secondary) = fitting_secondary(entry, width) {
+        let gap = width.saturating_sub(primary_width + secondary.width());
+        return format!("{}{}{secondary}", entry.primary, " ".repeat(gap));
     }
     ellipsize(entry.primary, width)
+}
+
+fn picker_line(entry: PickerRow<'_>, width: u16, selected: bool, theme: &Theme) -> Line<'static> {
+    if entry.secondary_fallbacks.is_empty() {
+        let style = if selected {
+            theme
+                .focused_style()
+                .fg(theme.accent)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            theme.base_style()
+        };
+        let mut content = picker_row(entry, width);
+        content.push_str(&" ".repeat(usize::from(width).saturating_sub(content.width())));
+        return Line::from(Span::styled(content, style));
+    }
+    let width = usize::from(width);
+    let primary = ellipsize(entry.primary, width);
+    let base = if selected {
+        theme.focused_style()
+    } else {
+        theme.base_style()
+    };
+    let primary_style = if selected {
+        base.fg(theme.accent).add_modifier(Modifier::BOLD)
+    } else {
+        base.fg(theme.foreground)
+    };
+    let Some(secondary) = fitting_secondary(entry, width) else {
+        return Line::from(Span::styled(primary, primary_style));
+    };
+    let gap = width.saturating_sub(entry.primary.width() + secondary.width());
+    Line::from(vec![
+        Span::styled(entry.primary.to_owned(), primary_style),
+        Span::styled(" ".repeat(gap), base),
+        Span::styled(secondary.to_owned(), base.fg(theme.muted)),
+    ])
+}
+
+fn fitting_secondary(entry: PickerRow<'_>, width: usize) -> Option<&str> {
+    let minimum_gap = usize::from(entry.group.is_none()) + 1;
+    entry
+        .secondary
+        .into_iter()
+        .chain(entry.secondary_fallbacks.iter().map(String::as_str))
+        .find(|secondary| {
+            entry
+                .primary
+                .width()
+                .saturating_add(minimum_gap)
+                .saturating_add(secondary.width())
+                <= width
+        })
 }
 
 fn ellipsize(value: &str, width: usize) -> String {
@@ -363,6 +410,20 @@ mod tests {
             picker_row(PickerRow::fields("$long-skill", "Global Skill"), 11),
             "$long-skill"
         );
+    }
+
+    #[test]
+    fn responsive_row_keeps_location_fallbacks_in_priority_order() {
+        let fallbacks = vec!["Workspace · p1".to_owned(), "p1".to_owned()];
+        let row = PickerRow::grouped(
+            "reviewer",
+            "Workspace / tab · p1 · codex · idle",
+            &fallbacks,
+            Some("Live in Herdr"),
+        );
+
+        assert_eq!(picker_row(row, 24), "reviewer  Workspace · p1");
+        assert_eq!(picker_row(row, 12), "reviewer  p1");
     }
 
     #[test]

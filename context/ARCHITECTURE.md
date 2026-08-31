@@ -514,11 +514,15 @@ exact IDs, while contradictory or duplicate identities fail closed.
 The external invocation lane combines filesystem and live results under the
 same UI-assigned generation and cwd. The filesystem catalog remains usable when
 live discovery is absent, malformed, timed out, or unavailable. The UI stores
-only the typed projection, bounds the live subset, groups rows by exact
-workspace and tab identity, and performs the existing one-paste editor
-replacement. Observed state is rendered but deliberately omitted from inserted
-text. No reference selection reaches the Herdr submission, focus, reservation,
-or mutation ports.
+only the typed projection, bounds the live subset, and renders one `Live in
+Herdr` section through the picker's existing two-field row. The primary and
+secondary projections deduplicate session name, topology labels, harness, pane,
+and observed state, with responsive secondary fallbacks that retain location
+first. Numeric-only tab labels are not presented as user-facing worktree names.
+The exact workspace, tab, and pane identities remain in the insertion text.
+Observed state is rendered from the picker-open snapshot but deliberately
+omitted from inserted text. No reference selection reaches the Herdr
+submission, focus, reservation, or mutation ports.
 
 The UI owner assigns a generation and cwd to each refresh. Results update state
 only when both still match, so stale external work cannot leak an older project
@@ -900,14 +904,16 @@ visible selection.
 The normalized paste payload carries exact text plus optional typed provenance.
 Attachment annotations retain only presentation-safe metadata and byte ranges;
 the absolute path remains the canonical text. Large-paste annotations retain
-derived line and grapheme counts. A UI-owned projection substitutes folded
-labels for both board rendering and editor snapshots, while the editor model,
-clipboard, recovery, CLI, search, and integration boundaries continue to
-consume canonical content. The projection owns lossless canonical-to-visible
-cursor and selection mapping. Collapsed ranges are atomic for pointer, cursor,
-selection, and deletion commands. Edits rebase unaffected ranges and dissolve
-overlapping ranges. Revisions persist both sides of the annotation change so
-undo and redo remain restart-safe.
+derived line and grapheme counts. Invocation-reference annotations retain only
+a bounded display label over the canonical, self-contained collaborator
+location. A UI-owned projection substitutes folded labels for board rendering
+and editor snapshots, while the editor model, clipboard, recovery, CLI, search,
+and integration boundaries continue to consume canonical content. Invocation
+mentions are never resolved again at submission time. The projection owns
+lossless canonical-to-visible cursor and selection mapping. Collapsed ranges
+are atomic for pointer, cursor, selection, and deletion commands. Edits rebase
+unaffected ranges and dissolve overlapping ranges. Revisions persist both sides
+of the annotation change so undo and redo remain restart-safe.
 
 URL recognition is a render-only pass over canonical content. Only explicit
 HTTP and HTTPS ranges receive accent and underline styling. URL recognition does

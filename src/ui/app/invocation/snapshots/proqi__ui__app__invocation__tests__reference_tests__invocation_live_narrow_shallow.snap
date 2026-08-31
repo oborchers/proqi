@@ -1,11 +1,11 @@
 ---
 source: src/ui/app/invocation/reference_tests.rs
-assertion_line: 321
+assertion_line: 465
 expression: "live_snapshot(30, 6)"
 ---
 00│┌ invocations and reference[x]│
 01││›                           ││
-02││Live in Herdr · w2/w2:t4 · …││
-03││reviewer codex w2:p9 working││
-04││                            ││
+02││Live in Herdr               ││
+03││reviewer        Product · p9││
+04││builder  Implementation · p7││
 05│└────────────────────────────┘│

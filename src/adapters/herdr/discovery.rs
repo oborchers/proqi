@@ -140,8 +140,7 @@ fn live_reference(
         .name
         .as_deref()
         .map(sanitize_agent_name)
-        .filter(|name| !name.is_empty())
-        .unwrap_or_else(|| harness.as_str().to_owned());
+        .filter(|name| !name.is_empty());
     Ok(LiveAgentReference::new(
         InvocationReferenceProvider::Herdr,
         agent_name,

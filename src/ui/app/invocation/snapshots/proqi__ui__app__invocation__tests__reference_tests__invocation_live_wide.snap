@@ -1,14 +1,14 @@
 ---
 source: src/ui/app/invocation/reference_tests.rs
-assertion_line: 316
+assertion_line: 460
 expression: "live_snapshot(72, 12)"
 ---
-00│       ┌ invocations and references ──────────────────────────[x]│
-01│⋮ Coor │›                                                       ││
-02│       │Live in Herdr · w2/w2:t4 · Product/Review               ││
-03│       │reviewer                             codex w2:p9 working││
-04│       │Live in Herdr · w3/w3:t2 · Implementation/Build         ││
-05│       │builder                                 codex w3:p7 idle││
+00││
+01│⋮ Coor ┌ invocations and references ──────────────────────────[x]│
+02│       │›                                                       ││
+03│       │Live in Herdr                                           ││
+04│       │reviewer         Product / Review · p9 · codex · working││
+05│       │builder       Implementation / Build · p7 · codex · idle││
 06│       └────────────────────────────────────────────────────────┘│
 07││
 08││

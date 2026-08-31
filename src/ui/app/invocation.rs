@@ -143,6 +143,7 @@ impl BoardApp {
                     InvocationChoiceView {
                         token: choice.token,
                         qualifier: choice.qualifier,
+                        qualifier_fallbacks: choice.qualifier_fallbacks,
                         group,
                     }
                 })
@@ -295,7 +296,7 @@ impl BoardApp {
         if snapshot.content.get(range.clone()).is_none() {
             return;
         }
-        let insertion = reference::insertion_text(&choice, &snapshot.content, &range);
+        let insertion = reference::insertion_payload(&choice, &snapshot.content, &range);
         if snapshot.content.as_bytes().get(range.end) == Some(&b' ') {
             range.end = range.end.saturating_add(1);
         }
@@ -307,7 +308,8 @@ impl BoardApp {
             position: position_for_byte(&snapshot.content, range.end),
             extend_selection: true,
         });
-        self.apply_edit(EditCommand::Paste(insertion));
+        let (content, annotations, _) = insertion.into_parts();
+        self.apply_annotated_edit(EditCommand::Paste(content), &annotations);
         self.invocation_popup = None;
     }
 
@@ -417,8 +419,10 @@ impl BoardApp {
                 Choice {
                     token: form.token.clone(),
                     insertion: form.token.clone(),
+                    annotation_display: None,
                     separate_from_prefix: false,
                     qualifier: choice_qualifier(entry, form, duplicate_token),
+                    qualifier_fallbacks: Vec::new(),
                     group: None,
                 }
             }))

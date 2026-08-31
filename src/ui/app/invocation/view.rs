@@ -4,8 +4,10 @@
 pub(super) struct Choice {
     pub(super) token: String,
     pub(super) insertion: String,
+    pub(super) annotation_display: Option<String>,
     pub(super) separate_from_prefix: bool,
     pub(super) qualifier: String,
+    pub(super) qualifier_fallbacks: Vec<String>,
     pub(super) group: Option<String>,
 }
 
@@ -14,8 +16,10 @@ pub(super) struct Choice {
 pub(in crate::ui) struct InvocationChoiceView {
     /// Bounded primary text shown for the result.
     pub(in crate::ui) token: String,
-    /// Scope, kind, and collision-specific harness provenance.
+    /// Scope or compact live topology and harness context.
     pub(in crate::ui) qualifier: String,
-    /// Live topology group rendered immediately above this choice.
+    /// Progressively quieter descriptions used when the full qualifier does not fit.
+    pub(in crate::ui) qualifier_fallbacks: Vec<String>,
+    /// Structural group rendered immediately above the first visible matching choice.
     pub(in crate::ui) group: Option<String>,
 }
