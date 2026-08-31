@@ -1,6 +1,5 @@
 ---
 source: src/ui/app/invocation/tests.rs
-assertion_line: 440
 expression: plan_completion_snapshot()
 ---
 00││
@@ -10,4 +9,4 @@ expression: plan_completion_snapshot()
 04││                                              ││
 05│└──────────────────────────────────────────────┘│
 06│  Esc Board│
-07│  → Codex   ⌘Enter Submit│
+07│  → Codex   Ctrl+Enter Submit│
