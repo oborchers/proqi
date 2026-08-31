@@ -187,6 +187,7 @@ mod tests {
     use super::{CONTEXT, IMAGE, bind_mount, build_arguments, run_arguments, validate_image};
 
     const DOCKERFILE: &str = include_str!("../../tools/ci-linux/Dockerfile");
+    const IMAGE_WORKFLOW: &str = include_str!("../../.github/workflows/ci-linux-image.yml");
     const HOST_RUNNER_SCRIPT: &str = include_str!("../../tools/ci-linux/host-run.sh");
     const RUNNER: &str = include_str!("../../tools/ci-linux/run.sh");
 
@@ -222,6 +223,19 @@ mod tests {
             "NFPM_ARM64_SHA256=1c0f5f2999b9a974bfb04fdb0cc3306096de530a",
         ] {
             assert!(DOCKERFILE.contains(contract), "missing {contract}");
+        }
+        for contract in [
+            "cargo-nextest 0.9.143",
+            "cargo-llvm-cov 0.9.0",
+            "cargo-audit 0.22.2",
+            "cargo-shear 1.11.2",
+            "cargo-about 0.9.2",
+            "2.47.0",
+        ] {
+            assert!(
+                IMAGE_WORKFLOW.contains(contract),
+                "image workflow does not verify {contract}"
+            );
         }
         for command in [
             "cargo xtask quality",
