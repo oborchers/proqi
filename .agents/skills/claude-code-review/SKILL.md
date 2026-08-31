@@ -73,6 +73,16 @@ the CLI tool allowlist itself does not make Bash read-only.
 
 ## Dispatch through the managed process runner
 
+When this skill is running inside Codex, launch the Claude CLI outside the
+Codex filesystem/process sandbox from the first attempt. Use the process
+runner's explicit unsandboxed or escalated execution mode. Claude Code's local
+authentication state is unavailable inside the sandbox, which can produce a
+false `Not logged in` result and an unnecessary request for credentials. Do not
+ask the user to log in unless the same invocation also fails outside the
+sandbox. Unsandboxed execution grants access to the existing local Claude
+session only; it does not relax the read-only prompt, tool allowlist, or review
+scope.
+
 Use the proven invocation shape, substituting the requested model, prompt, and
 recorded result path:
 
