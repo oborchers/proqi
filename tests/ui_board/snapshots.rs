@@ -25,7 +25,7 @@ mod platform;
 mod support;
 
 use platform::assert_platform_snapshot;
-use support::{adjacent_target, install_inline_invocation_fixture};
+use support::{adjacent_target, assert_invocation_styles, install_inline_invocation_fixture};
 fn snapshot(fixture: &mut Fixture, width: u16, height: u16, theme: ThemePreference) -> String {
     snapshot_buffer(draw_theme(fixture, width, height, theme).backend().buffer())
 }
@@ -122,24 +122,11 @@ fn discovered_invocations_use_the_annotation_visual_role() {
     let area = fixture.app.prepare_frame(Rect::new(0, 0, 58, 8)).thoughts[0].text_area;
     let theme = Theme::resolve(ThemePreference::Dark, true);
     let editor = draw_theme(&mut fixture, 58, 8, ThemePreference::Dark);
-    let inline = &editor.backend().buffer()[(area.x + 4, area.y + 1)];
-    assert_eq!(inline.symbol(), "/");
-    assert_eq!(inline.fg, theme.annotation);
-    assert!(
-        inline
-            .modifier
-            .contains(ratatui_core::style::Modifier::BOLD)
-    );
+    assert_invocation_styles(&editor, area, theme.annotation);
 
     fixture.input(UiInput::Key(UiKey::Escape));
     let board = draw_theme(&mut fixture, 58, 8, ThemePreference::Dark);
-    let inline = &board.backend().buffer()[(area.x + 4, area.y + 1)];
-    assert_eq!(inline.fg, theme.annotation);
-    assert!(
-        inline
-            .modifier
-            .contains(ratatui_core::style::Modifier::BOLD)
-    );
+    assert_invocation_styles(&board, area, theme.annotation);
     assert_eq!(fixture.app.state.board.live_thoughts()[0].content, content);
 
     assert_platform_snapshot!(snapshot(&mut fixture, 58, 8, ThemePreference::Dark));

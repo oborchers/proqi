@@ -15,15 +15,22 @@ impl BoardApp {
     }
 
     fn highlight_tokens(&self) -> HighlightTokens {
-        let anywhere = self
+        let mut anywhere = BTreeSet::new();
+        let mut document_start: BTreeSet<String> =
+            builtins::tokens(self).map(str::to_owned).collect();
+        for form in self
             .invocation_project
             .iter()
             .chain(&self.invocation_global)
             .flat_map(|entry| &entry.forms)
             .filter(|form| compatibility::supports_form(self, form))
-            .map(|form| form.token.clone())
-            .collect();
-        let document_start = builtins::tokens(self).map(str::to_owned).collect();
+        {
+            if builtins::is_shared_starter(&form.token) {
+                document_start.insert(form.token.clone());
+            } else {
+                anywhere.insert(form.token.clone());
+            }
+        }
         HighlightTokens {
             anywhere,
             document_start,
