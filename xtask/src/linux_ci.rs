@@ -225,11 +225,13 @@ mod tests {
             assert!(DOCKERFILE.contains(contract), "missing {contract}");
         }
         for contract in [
-            "cargo-nextest 0.9.143",
-            "cargo-llvm-cov 0.9.0",
-            "cargo-audit 0.22.2",
-            "cargo-shear 1.11.2",
-            "cargo-about 0.9.2",
+            "cargo install --list",
+            "cargo-nextest v0.9.143:",
+            "cargo-llvm-cov v0.9.0:",
+            "cargo-deny v0.20.2:",
+            "cargo-audit v0.22.2:",
+            "cargo-shear v1.11.2:",
+            "cargo-about v0.9.2:",
             "2.47.0",
         ] {
             assert!(
