@@ -7,10 +7,14 @@ use crate::{
         terminal::supervisor::ShutdownDeadline,
     },
     application::{Action, AppState, Effect, reduce},
-    domain::{OperationSequence, Session, SessionBoard, Timestamp},
+    domain::{Direction, OperationSequence, Session, SessionBoard, Timestamp},
     ports::{
+        agent::{AgentState, SubmissionDisposition},
         environment::IdGenerator,
-        store::{CommitReceipt, MigrationMode, OperationBatch, Store, StoreError},
+        store::{
+            CommitReceipt, MigrationMode, OperationBatch, Store, StoreError, SubmissionAttempt,
+            SubmissionAttemptState, SubmissionOutcome, SubmissionSource,
+        },
     },
 };
 
@@ -179,6 +183,231 @@ fn retry_replays_every_retained_batch_in_sequence_order() {
         .load_session(state.board.session.id)
         .expect("snapshot");
     assert_eq!(snapshot.board.live_thoughts().len(), 2);
+}
+
+struct AtomicRemovalRetryFixture {
+    _directory: tempfile::TempDir,
+    setup: crate::adapters::sqlite::SqliteStore,
+    lane: PersistenceLane,
+    session_id: crate::domain::SessionId,
+    submission_id: crate::domain::SubmissionId,
+    outcome: SubmissionOutcome,
+    removal: crate::domain::BoardOperation,
+}
+
+fn atomic_removal_retry_fixture() -> AtomicRemovalRetryFixture {
+    let directory = tempfile::tempdir().expect("temporary directory");
+    let config = retry_store_config(&directory);
+    let mut ids = FakeIdGenerator::new(1_725_300_000_000);
+    let session = Session::new(
+        ids.session_id(),
+        std::env::temp_dir().join("proqi-submission-removal-retry"),
+        Timestamp::from_millis(2),
+    )
+    .expect("session");
+    let session_id = session.id;
+    let mut setup = crate::adapters::sqlite::SqliteStore::open(&config).expect("store");
+    let (mut state, thought_id, source_sequence) =
+        persisted_submission_source(&mut setup, &mut ids, session);
+    let (submission_id, outcome, removal) = staged_submission_removal(
+        &mut setup,
+        &mut state,
+        &mut ids,
+        thought_id,
+        source_sequence,
+    );
+    let lane_store = crate::adapters::sqlite::SqliteStore::open(&config).expect("lane store");
+    AtomicRemovalRetryFixture {
+        _directory: directory,
+        setup,
+        lane: PersistenceLane::spawn(lane_store),
+        session_id,
+        submission_id,
+        outcome,
+        removal,
+    }
+}
+
+fn retry_store_config(directory: &tempfile::TempDir) -> StoreConfig {
+    let mut config = StoreConfig::new(
+        directory.path().join("proqi.sqlite3"),
+        directory.path().join("backups"),
+        MigrationMode::Allow,
+        Timestamp::from_millis(1),
+    );
+    config.retry = RetryPolicy {
+        busy_timeout: Duration::from_millis(1),
+        max_attempts: 1,
+        base_delay: Duration::ZERO,
+        jitter_seed: 1,
+    };
+    config
+}
+
+fn persisted_submission_source(
+    setup: &mut crate::adapters::sqlite::SqliteStore,
+    ids: &mut FakeIdGenerator,
+    session: Session,
+) -> (AppState, crate::domain::ThoughtId, OperationSequence) {
+    setup
+        .commit(&OperationBatch::CreateSession(session.clone()))
+        .expect("create session");
+    let mut state = AppState::new(SessionBoard::new(session, Vec::new()).expect("board"));
+    let thought_id = ids.thought_id();
+    let create = reduce(
+        &mut state,
+        Action::CreateThought {
+            thought_id,
+            operation_id: ids.operation_id(),
+            content: "retry atomically".to_owned(),
+            annotations: Vec::new(),
+            insertion_index: None,
+            at: Timestamp::from_millis(3),
+        },
+    )
+    .expect("create thought");
+    let [Effect::CommitBoardOperation(create)] = create.as_slice() else {
+        panic!("expected create operation");
+    };
+    setup
+        .commit(&OperationBatch::Board(create.clone()))
+        .expect("persist thought");
+    reduce(&mut state, Action::PersistenceCommitted(create.sequence)).expect("acknowledge thought");
+    (state, thought_id, create.sequence)
+}
+
+fn staged_submission_removal(
+    setup: &mut crate::adapters::sqlite::SqliteStore,
+    state: &mut AppState,
+    ids: &mut FakeIdGenerator,
+    thought_id: crate::domain::ThoughtId,
+    source_sequence: OperationSequence,
+) -> (
+    crate::domain::SubmissionId,
+    SubmissionOutcome,
+    crate::domain::BoardOperation,
+) {
+    let submission_id = ids.submission_id();
+    let attempt = SubmissionAttempt {
+        id: submission_id,
+        session_id: state.board.session.id,
+        sources: vec![SubmissionSource {
+            thought_id,
+            source_digest: [17; 32],
+        }],
+        payload_digest: [17; 32],
+        source_sequence,
+        disposition: SubmissionDisposition::RemoveAfterSuccess,
+        direction: Direction::Right,
+        provider: "herdr".to_owned(),
+        protocol: 19,
+        target_fingerprint: [18; 32],
+        pre_state: AgentState::Idle,
+        prepared_at: Timestamp::from_millis(4),
+    };
+    setup.prepare_submission(&attempt).expect("prepare");
+    setup
+        .mark_submission_sending(submission_id, Timestamp::from_millis(5))
+        .expect("sending");
+    reduce(
+        state,
+        Action::BeginSubmission {
+            thought_ids: vec![thought_id],
+        },
+    )
+    .expect("lock source");
+    let removal = reduce(
+        state,
+        Action::StageSubmissionRemoval {
+            operation_id: ids.operation_id(),
+            thought_ids: vec![thought_id],
+            at: Timestamp::from_millis(6),
+        },
+    )
+    .expect("stage removal");
+    let [Effect::CommitBoardOperation(removal)] = removal.as_slice() else {
+        panic!("expected removal operation");
+    };
+    let outcome = SubmissionOutcome {
+        state: SubmissionAttemptState::Accepted,
+        post_state: Some(AgentState::Working),
+        error_code: None,
+        deletion_operation_id: Some(removal.id),
+        at: Timestamp::from_millis(6),
+    };
+    (submission_id, outcome, removal.clone())
+}
+
+#[test]
+fn accepted_submission_removal_is_retained_and_retried_as_one_atomic_commit() {
+    let mut fixture = atomic_removal_retry_fixture();
+    let lock = fixture
+        .setup
+        .acquire_test_write_lock()
+        .expect("acquire writer");
+    fixture
+        .lane
+        .finish_submission(
+            fixture.submission_id,
+            fixture.outcome.clone(),
+            Some(fixture.removal.clone()),
+        )
+        .expect("queue atomic finish");
+    let failed = fixture
+        .lane
+        .receiver
+        .recv_timeout(Duration::from_secs(2))
+        .expect("failure result");
+    assert!(matches!(
+        failed,
+        PersistenceResult::SubmissionFinished {
+            sequence: Some(sequence),
+            result: Err(_),
+            retried: false,
+            ..
+        } if sequence == fixture.removal.sequence
+    ));
+    lock.release().expect("release writer");
+
+    fixture
+        .lane
+        .retry(fixture.removal.sequence)
+        .expect("queue retry");
+    let retried = fixture
+        .lane
+        .receiver
+        .recv_timeout(Duration::from_secs(2))
+        .expect("retry result");
+    assert!(matches!(
+        retried,
+        PersistenceResult::SubmissionFinished {
+            sequence: Some(sequence),
+            result: Ok(Some(receipt)),
+            retried: true,
+            ..
+        } if sequence == fixture.removal.sequence && receipt.sequence == fixture.removal.sequence
+    ));
+    assert!(matches!(
+        fixture
+            .lane
+            .receiver
+            .recv_timeout(Duration::from_secs(2))
+            .expect("retry completion"),
+        PersistenceResult::RetryFinished
+    ));
+    fixture
+        .lane
+        .stop(ShutdownDeadline::after(Duration::from_secs(1)))
+        .expect("stop lane");
+    assert!(
+        fixture
+            .setup
+            .load_session(fixture.session_id)
+            .expect("snapshot")
+            .board
+            .live_thoughts()
+            .is_empty()
+    );
 }
 
 #[test]

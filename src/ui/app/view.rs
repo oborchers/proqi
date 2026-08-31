@@ -3,7 +3,10 @@
 use crate::{
     application::{DurabilityState, InteractionMode},
     domain::ThoughtId,
-    ports::{agent::AgentTarget, editor::EditorSnapshot, editor::TextViewport},
+    ports::{
+        agent::AgentTarget,
+        editor::{EditCommand, EditorSnapshot, TextViewport},
+    },
     ui::{HitTarget, KeyBindings, LayoutSnapshot},
 };
 use ratatui_core::layout::Rect;
@@ -103,6 +106,30 @@ impl BoardApp {
 
     pub(super) fn submission_locked(&self, thought_id: ThoughtId) -> bool {
         self.state.thought_locked(thought_id)
+    }
+
+    pub(super) fn edit_content_mutation_blocked(&self, thought_id: ThoughtId) -> bool {
+        self.submission_locked(thought_id) || self.state.deferred_board_operation_pending()
+    }
+
+    pub(super) fn edit_command_blocked(&mut self, command: &EditCommand) -> bool {
+        if matches!(
+            command,
+            EditCommand::Move { .. }
+                | EditCommand::SelectAll
+                | EditCommand::ClearSelection
+                | EditCommand::SetCursor { .. }
+                | EditCommand::PointerStart { .. }
+                | EditCommand::PointerDrag { .. }
+                | EditCommand::PointerEnd
+        ) {
+            return false;
+        }
+        let blocked = matches!(self.editor.as_ref(), Some((super::EditorOwner::Thought(id), _)) if self.edit_content_mutation_blocked(*id));
+        if blocked {
+            self.set_warning("thought has a submission in progress");
+        }
+        blocked
     }
 
     /// Number of currently visible durable thoughts.

@@ -568,8 +568,9 @@ first thought's starter remains, and either starter is omitted from later
 thought starts in the outbound payload. In-body text and every stored thought
 remain exact. A multi-thought Herdr
 submission is one semantic prompt request, not several deliveries. For submit
-and remove, all unchanged source thoughts are removed together only after the
-matching accepted receipt is durably journaled. Every source thought is locked
+and remove, the matching accepted receipt and one unchanged-source deletion
+operation commit atomically. The visible board applies that removal only after
+the matching durable receipt. Every source thought is locked
 against TUI and CLI mutation from submission intent until the attempt reaches a
 terminal journaled state.
 
@@ -653,8 +654,9 @@ the scratchpad beside several named agent panes. It never claims an agent
 identity, and stale display metadata expires after a crash.
 
 `Submit and keep` always preserves the thought. `Submit` deletes it only after
-the integration returns an accepted receipt for the exact request, and that
-deletion remains undoable. A failed, timed-out, ambiguous, unsupported, or
+the integration returns an accepted receipt for the exact request and storage
+atomically commits its terminal journal row with the deletion. The deletion
+remains undoable. A failed, timed-out, ambiguous, unsupported, or
 mismatched submission leaves the thought unchanged and reports that it was kept.
 The direct Edit chords address only the active durable thought, flush its exact
 editor revision, wait for durability, and reuse the same attachment preflight,

@@ -2,7 +2,7 @@
 
 use crate::{
     application::{Action, Effect, reduce},
-    domain::{BoardOperationKind, SubmissionId},
+    domain::SubmissionId,
     ports::{
         agent::{AgentError, AgentTarget, SubmissionDisposition, SubmissionReceipt},
         store::{StoreError, SubmissionAttemptState, SubmissionOutcome},
@@ -21,6 +21,7 @@ impl BoardApp {
 
     /// Request explicit rediscovery and make its result visible to the user.
     pub(super) fn refresh_agents(&mut self) -> Vec<Effect> {
+        self.agent_refresh_in_flight = true;
         self.set_info("checking adjacent agents");
         Self::discover_agents()
     }
@@ -28,7 +29,7 @@ impl BoardApp {
     /// Replace targets only after complete verified discovery.
     pub fn complete_agent_discovery(&mut self, result: Result<Vec<AgentTarget>, AgentError>) {
         self.submission_mode = None;
-        let was_refreshing = self.status_text() == Some("checking adjacent agents");
+        let was_refreshing = std::mem::take(&mut self.agent_refresh_in_flight);
         match result {
             Ok(targets) => {
                 if was_refreshing {
@@ -100,30 +101,87 @@ impl BoardApp {
         submission_id: SubmissionId,
         result: Result<SubmissionReceipt, AgentError>,
     ) -> Vec<Effect> {
+        let (completion, disposition, deletion_operation_id, at, sources) = {
+            let Some(pending) = self.pending_submissions.get(&submission_id) else {
+                return Vec::new();
+            };
+            let completion = match result {
+                Ok(receipt)
+                    if receipt.submission_id == submission_id
+                        && pending.request.target.accepts_receipt(&receipt.target) =>
+                {
+                    Ok(receipt)
+                }
+                Ok(_) => Err(AgentError::Malformed(
+                    "prompt receipt did not match the request".to_owned(),
+                )),
+                Err(error) => Err(error),
+            };
+            let sources = pending
+                .sources
+                .iter()
+                .map(|source| (source.thought_id, source.source_digest))
+                .collect::<Vec<_>>();
+            (
+                completion,
+                pending.disposition,
+                pending.deletion_operation_id,
+                pending.at,
+                sources,
+            )
+        };
+        let should_remove = completion.is_ok()
+            && disposition == SubmissionDisposition::RemoveAfterSuccess
+            && sources.iter().all(|(thought_id, source_digest)| {
+                self.current_thought_digest(*thought_id) == Some(*source_digest)
+            });
+        let removal = should_remove
+            .then(|| {
+                self.reduce(Action::StageSubmissionRemoval {
+                    operation_id: deletion_operation_id,
+                    thought_ids: sources.iter().map(|(thought_id, _)| *thought_id).collect(),
+                    at,
+                })
+            })
+            .and_then(|effects| {
+                effects.into_iter().find_map(|effect| match effect {
+                    Effect::CommitBoardOperation(operation) => Some(operation),
+                    _ => None,
+                })
+            });
+        let deletion_operation_id = removal.as_ref().map(|operation| operation.id);
+        let removal_sequence = removal.as_ref().map(|operation| operation.sequence);
+        let outcome = submission_outcome(&completion, deletion_operation_id, at);
         let Some(pending) = self.pending_submissions.get_mut(&submission_id) else {
             return Vec::new();
         };
-        let completion = match result {
-            Ok(receipt)
-                if receipt.submission_id == submission_id
-                    && pending.request.target.accepts_receipt(&receipt.target) =>
-            {
-                Ok(receipt)
-            }
-            Ok(_) => Err(AgentError::Malformed(
-                "prompt receipt did not match the request".to_owned(),
-            )),
-            Err(error) => Err(error),
-        };
-        let deletion_operation_id = (completion.is_ok()
-            && pending.disposition == SubmissionDisposition::RemoveAfterSuccess)
-            .then_some(pending.deletion_operation_id);
-        let outcome = submission_outcome(&completion, deletion_operation_id, pending.at);
         pending.completion = Some(completion);
+        pending.removal_sequence = removal_sequence;
         vec![Effect::FinishSubmission {
             submission_id,
             outcome,
+            removal,
         }]
+    }
+
+    /// Keep an accepted draft and its lock while its atomic journal/removal commit is retryable.
+    pub fn submission_persistence_failed(
+        &mut self,
+        submission_id: SubmissionId,
+        error: &StoreError,
+    ) {
+        let Some(pending) = self.pending_submissions.get(&submission_id) else {
+            return;
+        };
+        let kept = kept_sentence(pending.sources.len());
+        let recovery = if *error == StoreError::RecoveryCapacity {
+            "press w to export recovery"
+        } else {
+            "press r to retry or w to export recovery"
+        };
+        self.set_error(format!(
+            "Submission accepted, but its outcome and removal were not saved. {kept}; {recovery}. {error}"
+        ));
     }
 
     /// Apply user-visible completion only after the journal terminal state is durable.
@@ -187,29 +245,22 @@ impl BoardApp {
             target: receipt.target.clone(),
             verified_at: pending.at,
         }];
-        let unchanged = pending.sources.iter().all(|source| {
-            self.current_thought_digest(source.thought_id) == Some(source.source_digest)
-        });
-        if pending.disposition == SubmissionDisposition::RemoveAfterSuccess && unchanged {
-            effects.extend(
-                self.reduce_with_empty_transition(
-                    Action::DeleteThoughts {
-                        operation_id: pending.deletion_operation_id,
-                        thought_ids: pending
-                            .sources
-                            .iter()
-                            .map(|source| source.thought_id)
-                            .collect(),
-                        kind: BoardOperationKind::SubmitAndRemove,
-                        at: pending.at,
-                    },
-                    crate::application::EmptyBoardTransition::ComposeAfterLocalRemoval,
-                ),
+        let removed = pending.removal_sequence.is_some();
+        if removed {
+            self.state.reconcile_empty_board(
+                crate::application::EmptyBoardTransition::ComposeAfterLocalRemoval,
             );
+            if matches!(
+                self.state.mode,
+                crate::application::InteractionMode::Compose
+            ) {
+                self.compose_presentation = super::ComposePresentation::Prompt;
+            }
+            self.sync_editor_from_state();
             self.clear_board_selection();
         }
         let multiple = pending.sources.len() > 1;
-        let outcome = match (pending.disposition, unchanged, multiple) {
+        let outcome = match (pending.disposition, removed, multiple) {
             (SubmissionDisposition::Keep, _, false) => "thought kept",
             (SubmissionDisposition::Keep, _, true) => "thoughts kept",
             (SubmissionDisposition::RemoveAfterSuccess, true, false) => "thought removed",

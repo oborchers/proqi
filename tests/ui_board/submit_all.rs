@@ -219,8 +219,7 @@ fn palette_submit_all_keep_and_remove_share_one_exact_ordered_request() {
     );
     assert!(matches!(
         removed.as_slice(),
-        [Effect::StoreIntegrationContext { .. }, Effect::CommitBoardOperation(operation)]
-            if operation.kind == proqi::domain::BoardOperationKind::SubmitAndRemove
+        [Effect::StoreIntegrationContext { .. }]
     ));
     assert!(fixture.app.state.board.live_thoughts().is_empty());
 

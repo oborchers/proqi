@@ -189,10 +189,33 @@ impl BoardApp {
             InteractionMode::Compose => ClipboardReadOwner::Compose {
                 generation: self.compose_generation,
             },
-            InteractionMode::Edit { thought_id } => ClipboardReadOwner::Thought(thought_id),
+            InteractionMode::Edit { thought_id } => ClipboardReadOwner::Thought {
+                thought_id,
+                generation: self.edit_owner_generation,
+            },
         };
         self.pending_clipboard_reads.insert(request_id, owner);
         vec![Effect::ReadClipboard { request_id }]
+    }
+
+    pub(super) fn rebind_compose_clipboard_reads(
+        &mut self,
+        generation: u64,
+        thought_id: crate::domain::ThoughtId,
+    ) {
+        for owner in self.pending_clipboard_reads.values_mut() {
+            if matches!(
+                owner,
+                ClipboardReadOwner::Compose {
+                    generation: owner_generation
+                } if *owner_generation == generation
+            ) {
+                *owner = ClipboardReadOwner::Thought {
+                    thought_id,
+                    generation: self.edit_owner_generation,
+                };
+            }
+        }
     }
 
     /// Complete one external clipboard write on the reducer-owning UI lane.
@@ -286,14 +309,19 @@ impl BoardApp {
                     && matches!(self.state.mode, InteractionMode::Compose)
                     && matches!(self.editor.as_ref(), Some((EditorOwner::Compose, _)))
             }
-            ClipboardReadOwner::Thought(expected) => {
+            ClipboardReadOwner::Thought {
+                thought_id: expected,
+                generation,
+            } => {
                 matches!(
                     self.state.mode,
                     InteractionMode::Edit { thought_id } if thought_id == expected
-                ) && matches!(
-                    self.editor.as_ref(),
-                    Some((EditorOwner::Thought(actual), _)) if *actual == expected
-                )
+                ) && generation == self.edit_owner_generation
+                    && matches!(
+                        self.editor.as_ref(),
+                        Some((EditorOwner::Thought(actual), _)) if *actual == expected
+                    )
+                    && !self.edit_content_mutation_blocked(expected)
             }
         }
     }

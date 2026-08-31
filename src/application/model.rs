@@ -178,6 +178,7 @@ pub struct AppState {
     pub(super) pending_clipboard: BTreeMap<RequestId, PendingClipboard>,
     pub(super) locked_thoughts: BTreeSet<ThoughtId>,
     pub(super) pending_sequences: BTreeSet<OperationSequence>,
+    pub(super) deferred_board_operations: BTreeMap<OperationSequence, BoardOperation>,
     pub(super) highest_sequence: OperationSequence,
 }
 
@@ -206,6 +207,7 @@ impl AppState {
             pending_clipboard: BTreeMap::new(),
             locked_thoughts: BTreeSet::new(),
             pending_sequences: BTreeSet::new(),
+            deferred_board_operations: BTreeMap::new(),
             highest_sequence: sequence,
         }
     }
@@ -248,6 +250,9 @@ impl AppState {
     }
 
     pub(super) fn next_sequence(&self) -> ApplicationResult<OperationSequence> {
+        if !self.deferred_board_operations.is_empty() {
+            return Err(ApplicationError::InvalidState);
+        }
         self.highest_sequence
             .checked_next()
             .ok_or(ApplicationError::SequenceExhausted)
@@ -289,6 +294,12 @@ impl AppState {
         self.locked_thoughts.contains(&id)
     }
 
+    /// Whether an ordered board operation is waiting for its atomic durable receipt.
+    #[must_use]
+    pub fn deferred_board_operation_pending(&self) -> bool {
+        !self.deferred_board_operations.is_empty()
+    }
+
     /// Pending board clipboard purpose for UI-only success feedback.
     #[must_use]
     pub fn pending_clipboard_intent(&self, request_id: RequestId) -> Option<ClipboardIntent> {
@@ -317,6 +328,37 @@ impl AppState {
         self.board_history.push(operation.clone());
         self.board_history_cursor += 1;
         self.track_pending(operation.sequence);
+        self.keep_focus_valid();
+        Ok(())
+    }
+
+    pub(super) fn stage_board_operation(
+        &mut self,
+        operation: &BoardOperation,
+    ) -> ApplicationResult<()> {
+        if operation.sequence != self.next_sequence()? {
+            return Err(ApplicationError::InvalidState);
+        }
+        self.track_pending(operation.sequence);
+        self.deferred_board_operations
+            .insert(operation.sequence, operation.clone());
+        Ok(())
+    }
+
+    pub(super) fn commit_deferred_board_operation(
+        &mut self,
+        sequence: OperationSequence,
+    ) -> ApplicationResult<()> {
+        let Some(operation) = self.deferred_board_operations.get(&sequence).cloned() else {
+            return Ok(());
+        };
+        let mut board = self.board.clone();
+        board.apply_mutation(&operation.forward, operation.created_at)?;
+        self.board = board;
+        self.board_history.truncate(self.board_history_cursor);
+        self.board_history.push(operation);
+        self.board_history_cursor += 1;
+        self.deferred_board_operations.remove(&sequence);
         self.keep_focus_valid();
         Ok(())
     }

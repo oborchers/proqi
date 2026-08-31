@@ -1,8 +1,8 @@
 //! Internal state for asynchronous board operations.
 
 use crate::{
-    application::ClipboardIntent,
-    domain::{OperationId, ThoughtId, Timestamp},
+    application::{ClipboardIntent, Effect},
+    domain::{OperationId, OperationSequence, ThoughtId, Timestamp},
     ports::{
         agent::{AgentError, SubmissionDisposition, SubmissionReceipt, SubmissionRequest},
         attachment_accessibility::AttachmentCheckKey,
@@ -11,11 +11,21 @@ use crate::{
     },
 };
 
+pub(super) enum EditFlush {
+    Complete(Vec<Effect>),
+    Blocked(Vec<Effect>),
+}
+
 #[derive(Clone, Copy)]
 pub(super) enum ClipboardReadOwner {
     Board,
-    Compose { generation: u64 },
-    Thought(ThoughtId),
+    Compose {
+        generation: u64,
+    },
+    Thought {
+        thought_id: ThoughtId,
+        generation: u64,
+    },
 }
 
 pub(super) struct PendingEditorClipboard {
@@ -30,6 +40,7 @@ pub(super) struct PendingSubmission {
     pub(super) disposition: SubmissionDisposition,
     pub(super) deletion_operation_id: OperationId,
     pub(super) completion: Option<Result<SubmissionReceipt, AgentError>>,
+    pub(super) removal_sequence: Option<OperationSequence>,
 }
 
 pub(super) struct PendingSubmissionSource {

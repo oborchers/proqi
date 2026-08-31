@@ -409,6 +409,17 @@ impl Store for SqliteStore {
         self.with_write_retry(|transaction| submission::finish(transaction, id, outcome))
     }
 
+    fn finish_submission_with_removal(
+        &mut self,
+        id: crate::domain::SubmissionId,
+        outcome: &SubmissionOutcome,
+        removal: &crate::domain::BoardOperation,
+    ) -> Result<CommitReceipt, StoreError> {
+        self.with_write_retry(|transaction| {
+            submission::finish_with_removal(transaction, id, outcome, removal)
+        })
+    }
+
     fn recover_submissions(
         &mut self,
         session_id: SessionId,

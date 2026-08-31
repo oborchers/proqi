@@ -95,6 +95,7 @@ impl BoardApp {
             disposition,
             deletion_operation_id: ids.operation_id(),
             completion: None,
+            removal_sequence: None,
         };
         let attempt = SubmissionAttempt {
             id: submission_id,

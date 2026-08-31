@@ -7,9 +7,36 @@ use crate::{
     ui::PastePayload,
 };
 
-use super::{BoardApp, ComposePresentation, InsertionFocus};
+use super::{BoardApp, ComposePresentation, InsertionFocus, pending_types::EditFlush};
 
 impl BoardApp {
+    pub(super) fn flush_edit_boundary(
+        &mut self,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> EditFlush {
+        let effects = self.flush_pending_edit(ids, clock);
+        if self.pending_edit.is_some() {
+            EditFlush::Blocked(effects)
+        } else {
+            EditFlush::Complete(effects)
+        }
+    }
+
+    pub(super) fn request_quit_after_edit_flush(
+        &mut self,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        match self.flush_edit_boundary(ids, clock) {
+            EditFlush::Complete(effects) => {
+                self.request_quit();
+                effects
+            }
+            EditFlush::Blocked(effects) => effects,
+        }
+    }
+
     /// Apply one ordered persistence acknowledgement to the reducer state.
     pub fn acknowledge_persistence(
         &mut self,
@@ -115,6 +142,10 @@ impl BoardApp {
     }
 
     pub(super) fn reduce(&mut self, action: Action) -> Vec<Effect> {
+        self.try_reduce(action).unwrap_or_default()
+    }
+
+    fn try_reduce(&mut self, action: Action) -> Option<Vec<Effect>> {
         let may_change_attachments = Self::may_change_attachments(&action);
         match reduce(&mut self.state, action) {
             Ok(effects) => {
@@ -127,11 +158,11 @@ impl BoardApp {
                     .map(|thought| thought.id)
                     .collect::<Vec<_>>();
                 self.selection.reconcile(&order);
-                effects
+                Some(effects)
             }
             Err(error) => {
                 self.set_error(error.to_string());
-                Vec::new()
+                None
             }
         }
     }
@@ -141,17 +172,22 @@ impl BoardApp {
         action: Action,
         transition: EmptyBoardTransition,
     ) -> Vec<Effect> {
-        let effects = self.reduce(action);
-        self.state.reconcile_empty_board(transition);
-        if transition == EmptyBoardTransition::ComposeAfterLocalRemoval
-            && matches!(
-                self.state.mode,
-                crate::application::InteractionMode::Compose
-            )
-        {
-            self.compose_presentation = ComposePresentation::Prompt;
+        let was_nonempty = !self.state.board.live_thoughts().is_empty();
+        let Some(effects) = self.try_reduce(action) else {
+            return Vec::new();
+        };
+        if was_nonempty && self.state.board.live_thoughts().is_empty() {
+            self.state.reconcile_empty_board(transition);
+            if transition == EmptyBoardTransition::ComposeAfterLocalRemoval
+                && matches!(
+                    self.state.mode,
+                    crate::application::InteractionMode::Compose
+                )
+            {
+                self.compose_presentation = ComposePresentation::Prompt;
+            }
+            self.sync_editor_from_state();
         }
-        self.sync_editor_from_state();
         effects
     }
 }

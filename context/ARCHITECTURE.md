@@ -990,17 +990,27 @@ receipt already contains the new session or precedes the session hook.
 Established sessions still require exact identity.
 The matching `agent_prompted` receipt establishes acceptance. Any
 post-submit agent state is advisory, including `blocked`, `unknown`, or no
-reported state. The accepted outcome is journaled durably before an unchanged
-thought may be removed. That deletion remains undoable. Every failure preserves
-the thought.
+reported state. For remove-after-success, SQLite commits the accepted terminal
+journal row and the unchanged-source `BoardOperation` in one transaction. The
+reducer stages that operation without changing the visible board and applies it
+to state and undo history only after the matching ordered commit receipt. A
+failed commit is retained on the bounded persistence lane for the ordinary
+retry path, while the source lock, Edit owner, exact editor content, and cursor
+remain unchanged. An ambiguous SQLite retry succeeds only when both the stored
+terminal outcome and durable operation receipt exactly match the original
+compound request. While the staged operation owns the next sequence, a typed UI
+flush barrier prevents owner, submission, history, transfer, pointer, and quit
+transitions from crossing an unflushed editor revision. That deletion remains
+one undoable operation. Every failure preserves the thought.
 
 Direct Edit submission first flushes the active editor revision and then enters
 the existing durability-gated submission state machine for that one thought.
 It uses the same attachment preflight, target discovery and revalidation,
 redacted attempt reservation, sending compare-and-set, semantic adapter call,
-receipt matching, terminal journal transition, and conditional removal. Keep
-returns to the same Edit owner. Remove enters Compose only after the accepted
-journal transition releases the canonical delete operation. Empty Compose never
+receipt matching, atomic terminal journal and removal commit, and conditional
+removal. Keep returns to the same Edit owner. Remove enters Compose only after
+the matching ordered receipt applies the staged canonical delete operation.
+Empty Compose never
 creates an attempt, and missing or ambiguous targets retain the complete editor
 draft while using the existing refresh or chooser.
 

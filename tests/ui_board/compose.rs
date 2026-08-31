@@ -260,6 +260,19 @@ fn escape_is_a_sticky_board_choice_and_explicit_insertion_returns_to_compose() {
 }
 
 #[test]
+fn failed_empty_history_moves_do_not_override_the_sticky_board_choice() {
+    let mut fixture = Fixture::new();
+    fixture.input(UiInput::Key(UiKey::Escape));
+
+    for key in [UiKey::Undo, UiKey::Redo] {
+        assert!(fixture.effects(UiInput::Key(key)).is_empty());
+        assert_eq!(fixture.app.interaction_mode(), InteractionMode::Board);
+        assert!(fixture.app.state.board.live_thoughts().is_empty());
+        assert!(fixture.app.state.board_history().is_empty());
+    }
+}
+
+#[test]
 fn escape_exposes_screenshot_listening_before_any_prompt_exists() {
     let mut fixture = Fixture::new();
     fixture.input(UiInput::Key(UiKey::Escape));

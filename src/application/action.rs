@@ -130,6 +130,15 @@ pub enum Action {
         /// Event time.
         at: Timestamp,
     },
+    /// Reserve a submission removal without changing the visible board before durability.
+    StageSubmissionRemoval {
+        /// Durable operation identity recorded with the accepted submission.
+        operation_id: OperationId,
+        /// Submission sources to remove atomically in board order.
+        thought_ids: Vec<ThoughtId>,
+        /// Event time.
+        at: Timestamp,
+    },
     /// Reorder one live thought.
     MoveThought {
         /// Durable operation identity.

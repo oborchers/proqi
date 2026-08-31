@@ -114,7 +114,10 @@ impl BoardApp {
             self.screenshot.save = None;
             self.screenshot.candidates.clear();
             self.screenshot.ready_quit_armed = false;
-            let effects = self.flush_pending_edit(ids, clock);
+            let effects = match self.flush_edit_boundary(ids, clock) {
+                super::pending_types::EditFlush::Complete(effects) => effects,
+                super::pending_types::EditFlush::Blocked(effects) => return effects,
+            };
             self.request_quit();
             return effects;
         }

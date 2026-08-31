@@ -64,6 +64,8 @@ pub enum Effect {
         submission_id: crate::domain::SubmissionId,
         /// Content-redacted terminal outcome.
         outcome: SubmissionOutcome,
+        /// Accepted source removal committed atomically with the terminal journal row.
+        removal: Option<BoardOperation>,
     },
     /// Persist recognition-only context after an accepted submission.
     StoreIntegrationContext {

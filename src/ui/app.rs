@@ -96,6 +96,7 @@ pub struct BoardApp {
     compose_presentation: ComposePresentation,
     pending_edit: Option<editing::PendingEdit>,
     edit_generation: u64,
+    edit_owner_generation: u64,
     compose_generation: u64,
     /// Whether the user requested a clean exit.
     pub quit: bool,
@@ -131,6 +132,7 @@ pub struct BoardApp {
     pending_recovery_exports: BTreeSet<RequestId>,
     recovery_exported_for: Option<OperationSequence>,
     agent_targets: Vec<AgentTarget>,
+    agent_refresh_in_flight: bool,
     submission_mode: Option<SubmissionMode>,
     deferred_submissions: BTreeMap<SubmissionId, DeferredSubmissionIntent>,
     preflight_submissions: BTreeMap<SubmissionId, DeferredSubmissionIntent>,
@@ -185,6 +187,7 @@ impl BoardApp {
             compose_presentation: ComposePresentation::Prompt,
             pending_edit: None,
             edit_generation: 0,
+            edit_owner_generation: 0,
             compose_generation: 0,
             quit: false,
             help: false,
@@ -217,6 +220,7 @@ impl BoardApp {
             pending_recovery_exports: BTreeSet::new(),
             recovery_exported_for: None,
             agent_targets: Vec::new(),
+            agent_refresh_in_flight: false,
             submission_mode: None,
             deferred_submissions: BTreeMap::new(),
             preflight_submissions: BTreeMap::new(),
@@ -402,6 +406,7 @@ impl BoardApp {
                 let _outcome = editor.replace_content(content, restored_cursor.unwrap_or_default());
             }
         } else {
+            self.edit_owner_generation = self.edit_owner_generation.wrapping_add(1);
             let mut editor = self.editor_factory.create(&content);
             editor.set_viewport(self.viewport);
             if let Some(cursor) = restored_cursor {

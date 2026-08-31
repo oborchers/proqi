@@ -84,10 +84,7 @@ fn selected_thoughts_submit_once_in_board_order_and_remove_as_one_undo_step() {
     );
     assert!(matches!(
         completion.as_slice(),
-        [
-            Effect::StoreIntegrationContext { .. },
-            Effect::CommitBoardOperation(_)
-        ]
+        [Effect::StoreIntegrationContext { .. }]
     ));
     assert!(fixture.app.state.board.live_thoughts().is_empty());
 

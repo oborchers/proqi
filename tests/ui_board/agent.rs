@@ -78,13 +78,19 @@ pub(super) fn finish_submission(
     request: &proqi::ports::agent::SubmissionRequest,
     result: Result<SubmissionReceipt, AgentError>,
 ) -> Vec<Effect> {
+    let live_before = fixture.app.state.board.live_thoughts().len();
     let journal = fixture
         .app
         .complete_submission(request.submission_id, result);
-    assert!(matches!(
-        journal.as_slice(),
-        [Effect::FinishSubmission { .. }]
-    ));
+    let [Effect::FinishSubmission { removal, .. }] = journal.as_slice() else {
+        panic!("expected one terminal submission journal effect");
+    };
+    if let Some(operation) = removal {
+        assert_eq!(fixture.app.state.board.live_thoughts().len(), live_before);
+        fixture
+            .app
+            .acknowledge_persistence(operation.sequence, true);
+    }
     fixture
         .app
         .complete_submission_journaled(request.submission_id, Ok(()))
@@ -125,11 +131,7 @@ fn failed_submission_preserves_thought_and_accepted_remove_is_undoable() {
     );
     assert!(matches!(
         completion.as_slice(),
-        [
-            Effect::StoreIntegrationContext { target: stored, .. },
-            Effect::CommitBoardOperation(operation)
-        ] if stored == &target
-            && operation.kind == proqi::domain::BoardOperationKind::SubmitAndRemove
+        [Effect::StoreIntegrationContext { target: stored, .. }] if stored == &target
     ));
     assert!(fixture.app.state.board.live_thoughts().is_empty());
 
@@ -165,10 +167,7 @@ fn accepted_receipt_ignores_volatile_target_metadata() {
     );
     assert!(matches!(
         completion.as_slice(),
-        [
-            Effect::StoreIntegrationContext { .. },
-            Effect::CommitBoardOperation(_)
-        ]
+        [Effect::StoreIntegrationContext { .. }]
     ));
     assert!(fixture.app.state.board.live_thoughts().is_empty());
 }
@@ -406,7 +405,7 @@ fn duplicate_submission_is_suppressed_while_the_first_attempt_is_active() {
 }
 
 #[test]
-fn accepted_submission_is_kept_when_the_journal_cannot_record_the_outcome() {
+fn accepted_submission_removal_failure_keeps_the_exact_locked_source_for_retry() {
     let mut fixture = Fixture::new();
     prepare_thought(&mut fixture);
     let target = target(Direction::Left, "w1:p2");
@@ -423,19 +422,31 @@ fn accepted_submission_is_kept_when_the_journal_cannot_record_the_outcome() {
             post_state: Some(AgentState::Unknown),
         }),
     );
-    assert!(matches!(
-        journal.as_slice(),
-        [Effect::FinishSubmission { .. }]
-    ));
-
-    let completion = fixture.app.complete_submission_journaled(
+    let [
+        Effect::FinishSubmission {
+            removal: Some(operation),
+            ..
+        },
+    ] = journal.as_slice()
+    else {
+        panic!("accepted removal must be atomic with its journal outcome");
+    };
+    fixture
+        .app
+        .acknowledge_persistence(operation.sequence, false);
+    fixture.app.submission_persistence_failed(
         request.submission_id,
-        Err(proqi::ports::store::StoreError::DiskFull),
+        &proqi::ports::store::StoreError::DiskFull,
     );
-    assert!(completion.is_empty());
     assert_eq!(fixture.app.state.board.live_thoughts().len(), 1);
+    assert!(
+        fixture
+            .app
+            .state
+            .thought_locked(fixture.app.state.board.live_thoughts()[0].id)
+    );
     assert!(fixture.app.status_text().is_some_and(|status| {
-        status.starts_with("Submission accepted, but its outcome was not saved")
+        status.starts_with("Submission accepted, but its outcome and removal were not saved")
     }));
 }
 
@@ -476,10 +487,7 @@ fn in_flight_submission_locks_editing_until_the_receipt_is_journaled() {
 
     assert!(matches!(
         completion.as_slice(),
-        [
-            Effect::StoreIntegrationContext { .. },
-            Effect::CommitBoardOperation(_)
-        ]
+        [Effect::StoreIntegrationContext { .. }]
     ));
     assert!(fixture.app.state.board.live_thoughts().is_empty());
 }

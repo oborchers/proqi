@@ -344,10 +344,7 @@ impl BoardApp {
                 self.help = true;
                 Vec::new()
             }
-            Command::Quit => {
-                self.request_quit();
-                Vec::new()
-            }
+            Command::Quit => self.request_quit_after_edit_flush(ids, clock),
         }
     }
 
@@ -367,6 +364,9 @@ impl BoardApp {
                 } else {
                     Vec::new()
                 };
+                if self.pending_edit.is_some() {
+                    return Some(effects);
+                }
                 self.select_all_thoughts();
                 Some(effects)
             }

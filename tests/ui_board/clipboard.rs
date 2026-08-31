@@ -260,6 +260,78 @@ fn delayed_clipboard_result_cannot_follow_a_new_compose_generation() {
 }
 
 #[test]
+fn compose_clipboard_read_follows_the_same_editor_through_materialization() {
+    let mut fixture = Fixture::new();
+    let read = fixture.effects(UiInput::Key(UiKey::PasteClipboard));
+    let [Effect::ReadClipboard { request_id }] = read.as_slice() else {
+        panic!("expected clipboard read");
+    };
+    assert!(matches!(
+        fixture
+            .effects(UiInput::Key(UiKey::Character('n')))
+            .as_slice(),
+        [Effect::CommitBoardOperation(_)]
+    ));
+
+    let effects = fixture.app.complete_clipboard_read(
+        *request_id,
+        Ok("qs:?jk 第二".to_owned()),
+        &mut fixture.ids,
+        &fixture.clock,
+    );
+
+    assert!(matches!(effects.as_slice(), [Effect::CommitRevision(_)]));
+    assert_eq!(
+        fixture
+            .app
+            .editor_snapshot()
+            .expect("materialized editor")
+            .content,
+        "nqs:?jk 第二"
+    );
+    assert!(matches!(
+        fixture.app.interaction_mode(),
+        InteractionMode::Edit { .. }
+    ));
+}
+
+#[test]
+fn compose_clipboard_failure_remains_visible_after_materialization() {
+    let mut fixture = Fixture::new();
+    let read = fixture.effects(UiInput::Key(UiKey::PasteClipboard));
+    let [Effect::ReadClipboard { request_id }] = read.as_slice() else {
+        panic!("expected clipboard read");
+    };
+    fixture.input(UiInput::Key(UiKey::Character('n')));
+
+    assert!(
+        fixture
+            .app
+            .complete_clipboard_read(
+                *request_id,
+                Err(FailureCode::ClipboardFailed),
+                &mut fixture.ids,
+                &fixture.clock,
+            )
+            .is_empty()
+    );
+    assert_eq!(
+        fixture
+            .app
+            .editor_snapshot()
+            .expect("materialized editor")
+            .content,
+        "n"
+    );
+    assert!(
+        fixture
+            .app
+            .status_text()
+            .is_some_and(|status| { status.contains("clipboard unavailable") })
+    );
+}
+
+#[test]
 fn delayed_durable_editor_clipboard_result_cannot_cross_into_board() {
     let mut fixture = Fixture::new();
     fixture.paste("existing draft");
@@ -281,6 +353,35 @@ fn delayed_durable_editor_clipboard_result_cannot_cross_into_board() {
     let thoughts = fixture.app.state.board.live_thoughts();
     assert_eq!(thoughts.len(), 1);
     assert_eq!(thoughts[0].content, "existing draft");
+}
+
+#[test]
+fn materialized_compose_clipboard_read_cannot_cross_edit_exit_and_reentry() {
+    let mut fixture = Fixture::new();
+    let read = fixture.effects(UiInput::Key(UiKey::PasteClipboard));
+    let [Effect::ReadClipboard { request_id }] = read.as_slice() else {
+        panic!("expected clipboard read");
+    };
+    fixture.input(UiInput::Key(UiKey::Character('n')));
+    fixture.input(UiInput::Key(UiKey::Escape));
+    fixture.input(UiInput::Key(UiKey::Enter));
+
+    let effects = fixture.app.complete_clipboard_read(
+        *request_id,
+        Ok("stale paste".to_owned()),
+        &mut fixture.ids,
+        &fixture.clock,
+    );
+
+    assert!(effects.is_empty());
+    assert_eq!(
+        fixture
+            .app
+            .editor_snapshot()
+            .expect("re-entered editor")
+            .content,
+        "n"
+    );
 }
 
 #[test]

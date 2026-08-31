@@ -9,7 +9,7 @@ use crate::{
     },
 };
 
-use super::{BoardApp, UiKey, editing};
+use super::{BoardApp, UiKey, editing, pending_types::EditFlush};
 use crate::ui::settings::BoardCommand;
 
 impl BoardApp {
@@ -359,7 +359,10 @@ impl BoardApp {
         self.edit_boundary = None;
         let thought_id = self.active_thought_id();
         self.capture_palette_selection_handoff();
-        let effects = self.flush_pending_edit(ids, clock);
+        let effects = match self.flush_edit_boundary(ids, clock) {
+            EditFlush::Complete(effects) => effects,
+            EditFlush::Blocked(effects) => return effects,
+        };
         if let Some(thought_id) = thought_id {
             self.clear_expanded_folds(thought_id);
         }
@@ -397,7 +400,10 @@ impl BoardApp {
         clock: &impl Clock,
         undo: bool,
     ) -> Vec<Effect> {
-        let mut effects = self.flush_pending_edit(ids, clock);
+        let mut effects = match self.flush_edit_boundary(ids, clock) {
+            EditFlush::Complete(effects) => effects,
+            EditFlush::Blocked(effects) => return effects,
+        };
         let scope = match self.state.mode {
             InteractionMode::Board => UndoScope::Board,
             InteractionMode::Compose => return effects,

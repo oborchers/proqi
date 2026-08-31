@@ -9,7 +9,7 @@ use crate::{
     },
 };
 
-use super::{BoardApp, PointerButton, PointerInput, PointerKind};
+use super::{BoardApp, PointerButton, PointerInput, PointerKind, pending_types::EditFlush};
 use crate::ui::{HitTarget, projection::BoardCellTarget};
 
 pub(super) const MULTI_CLICK_MILLIS: i64 = 500;
@@ -75,11 +75,17 @@ impl BoardApp {
         {
             return Vec::new();
         }
-        let mut effects = match pointer.kind {
+        let flush = match pointer.kind {
             PointerKind::Down(_) | PointerKind::Drag(_) | PointerKind::Up(_) => {
-                self.flush_pending_edit(ids, clock)
+                self.flush_edit_boundary(ids, clock)
             }
-            PointerKind::Move | PointerKind::ScrollUp | PointerKind::ScrollDown => Vec::new(),
+            PointerKind::Move | PointerKind::ScrollUp | PointerKind::ScrollDown => {
+                EditFlush::Complete(Vec::new())
+            }
+        };
+        let mut effects = match flush {
+            EditFlush::Complete(effects) => effects,
+            EditFlush::Blocked(effects) => return effects,
         };
         effects.extend(match pointer.kind {
             PointerKind::Move => {

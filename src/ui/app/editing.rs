@@ -221,7 +221,9 @@ impl BoardApp {
         if self.state.board.thought(thought_id).is_some()
             && let Some((owner, _)) = &mut self.editor
         {
+            self.edit_owner_generation = self.edit_owner_generation.wrapping_add(1);
             *owner = EditorOwner::Thought(thought_id);
+            self.rebind_compose_clipboard_reads(self.compose_generation, thought_id);
             self.compose_generation = self.compose_generation.wrapping_add(1);
             self.compose_presentation = super::ComposePresentation::Prompt;
             self.insertion_focus = super::InsertionFocus::Inactive;
@@ -346,6 +348,9 @@ impl BoardApp {
             return Vec::new();
         }
         let mut effects = self.finish_edit(ids, clock);
+        if self.pending_edit.is_some() {
+            return effects;
+        }
         self.palette_selection_handoff = None;
         if let Some(target) = target {
             self.insertion_focus = super::InsertionFocus::Inactive;
@@ -391,6 +396,9 @@ impl BoardApp {
         command: EditCommand,
         inserted_annotations: &[ContentAnnotation],
     ) {
+        if self.edit_command_blocked(&command) {
+            return;
+        }
         let edit = self.editor.as_mut().and_then(|(owner, editor)| {
             let EditorOwner::Thought(thought_id) = owner else {
                 return None;

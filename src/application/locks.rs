@@ -27,6 +27,7 @@ pub(super) fn ensure_action_unlocked(state: &AppState, action: &Action) -> Appli
         | Action::ClipboardResult { .. }
         | Action::BeginSubmission { .. }
         | Action::EndSubmission { .. }
+        | Action::StageSubmissionRemoval { .. }
         | Action::PersistenceCommitted(_)
         | Action::PersistenceFailed { .. }
         | Action::RetryPersistence(_) => None,

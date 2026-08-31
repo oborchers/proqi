@@ -10,7 +10,10 @@ use crate::{
     },
 };
 
-use super::{BoardApp, UiInput, UiKey, pending_types::SubmissionMode};
+use super::{
+    BoardApp, UiInput, UiKey,
+    pending_types::{EditFlush, SubmissionMode},
+};
 
 impl BoardApp {
     pub(super) fn begin_edit_delivery(
@@ -22,7 +25,10 @@ impl BoardApp {
         let Some(thought_id) = self.active_thought_id() else {
             return Vec::new();
         };
-        let mut effects = self.flush_pending_edit(ids, clock);
+        let mut effects = match self.flush_edit_boundary(ids, clock) {
+            EditFlush::Complete(effects) => effects,
+            EditFlush::Blocked(effects) => return effects,
+        };
         effects.extend(self.begin_delivery_for(disposition, vec![thought_id], ids, clock));
         effects
     }
@@ -37,7 +43,10 @@ impl BoardApp {
         if matches!(self.state.mode, InteractionMode::Edit { .. }) {
             return self.begin_edit_delivery(disposition, ids, clock);
         }
-        let mut effects = self.flush_pending_edit(ids, clock);
+        let mut effects = match self.flush_edit_boundary(ids, clock) {
+            EditFlush::Complete(effects) => effects,
+            EditFlush::Blocked(effects) => return effects,
+        };
         effects.extend(self.begin_delivery_for(disposition, self.action_thought_ids(), ids, clock));
         effects
     }
@@ -53,6 +62,9 @@ impl BoardApp {
         } else {
             self.flush_pending_edit(ids, clock)
         };
+        if self.pending_edit.is_some() {
+            return effects;
+        }
         let thought_ids = self
             .state
             .board
