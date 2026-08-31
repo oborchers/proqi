@@ -33,7 +33,10 @@ pub(crate) fn items(app: &BoardApp) -> Vec<Shortcut> {
     let mut items = vec![
         (keys.new.to_string(), "New"),
         (format!("Enter/{}", keys.edit), "Edit"),
-        (format!("{}/{}", keys.focus_down, keys.focus_up), "Move"),
+        (
+            format!("{}/↓ {}/↑", keys.focus_down, keys.focus_up),
+            "Move/new×2",
+        ),
         (format!("{}/{}", keys.range_down, keys.range_up), "Range"),
         (
             primary(&format!("{}/{}", keys.range_down, keys.range_up)),
@@ -63,10 +66,6 @@ pub(crate) fn items(app: &BoardApp) -> Vec<Shortcut> {
         items.push((keys.submit_remove.to_string(), "Submit"));
         items.push((keys.submit_keep.to_string(), "Submit & keep"));
     }
-    items.push((
-        format!("{}/{}×2", keys.focus_up, keys.focus_down),
-        "New at edge",
-    ));
     items.push((keys.quit.to_string(), "Quit"));
     items.push((keys.help.to_string(), "Close"));
     items

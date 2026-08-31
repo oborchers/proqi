@@ -71,7 +71,6 @@ fn shallow_two_column_help_scrolls_to_every_shortcut() {
     fixture.input(visual(CursorMovement::VisualDown, false));
     fixture.input(visual(CursorMovement::VisualDown, false));
     fixture.input(visual(CursorMovement::VisualDown, false));
-    fixture.input(visual(CursorMovement::VisualDown, false));
     let terminal = draw(&mut fixture, 42, 8);
     assert!(text(terminal.backend().buffer()).contains("Quit"));
 
