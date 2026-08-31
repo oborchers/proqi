@@ -12,7 +12,7 @@ pub(super) fn print_classification(root: &Path, source_sha: Option<&str>) -> Res
         || git_text(root, ["rev-parse", "HEAD"]),
         |sha| Ok(sha.to_owned()),
     )?;
-    let reasons = readiness_findings(root, &tag, &source_sha, TagState::Absent)?;
+    let reasons = readiness_findings(root, &tag, &source_sha, ReleasePhase::Preparation)?;
     println!(
         "{}",
         json!({
@@ -33,7 +33,7 @@ pub(super) fn validate_preparation(root: &Path, tag: &str) -> Result<(), String>
         root,
         tag,
         &source_sha,
-        TagState::Absent,
+        ReleasePhase::Preparation,
     )?)?;
     println!("release inputs are ready: {tag} at {source_sha}");
     Ok(())
@@ -45,7 +45,7 @@ pub(super) fn validate_promotion(root: &Path, tag: &str) -> Result<(), String> {
         root,
         tag,
         &source_sha,
-        TagState::ExactCommit,
+        ReleasePhase::Promotion,
     )?)?;
     println!("release tag is promotion-ready: {tag} at {source_sha}");
     Ok(())
@@ -59,16 +59,16 @@ pub(super) fn validate_release_content(root: &Path, tag: &str) -> Result<(), Str
 }
 
 #[derive(Clone, Copy)]
-enum TagState {
-    Absent,
-    ExactCommit,
+enum ReleasePhase {
+    Preparation,
+    Promotion,
 }
 
 fn readiness_findings(
     root: &Path,
     tag: &str,
     source_sha: &str,
-    tag_state: TagState,
+    phase: ReleasePhase,
 ) -> Result<Vec<String>, String> {
     let mut findings = Vec::new();
     let version = super::release::workspace_version(root)?;
@@ -76,10 +76,12 @@ fn readiness_findings(
     collect(validate_note(root, tag, &version), &mut findings);
     collect(validate_highlights(root, &version), &mut findings);
     collect(validate_source_sha(root, source_sha), &mut findings);
-    collect(validate_main_identity(root, source_sha), &mut findings);
+    if matches!(phase, ReleasePhase::Preparation) {
+        collect(validate_main_identity(root, source_sha), &mut findings);
+    }
     collect(validate_clean_worktree(root), &mut findings);
     collect(
-        validate_tag_state(root, tag, source_sha, tag_state),
+        validate_tag_state(root, tag, source_sha, phase),
         &mut findings,
     );
     Ok(findings)
@@ -225,20 +227,20 @@ fn validate_tag_state(
     root: &Path,
     tag: &str,
     source_sha: &str,
-    state: TagState,
+    phase: ReleasePhase,
 ) -> Result<(), String> {
     let reference = format!("refs/tags/{tag}^{{commit}}");
     let existing = optional_git_text(root, ["rev-parse", "--verify", &reference])?;
-    match (state, existing) {
-        (TagState::Absent, None) => Ok(()),
-        (TagState::Absent, Some(sha)) => Err(format!(
+    match (phase, existing) {
+        (ReleasePhase::Preparation, None) => Ok(()),
+        (ReleasePhase::Preparation, Some(sha)) => Err(format!(
             "release tag `{tag}` already exists at {sha}; the version is unchanged"
         )),
-        (TagState::ExactCommit, Some(sha)) if sha == source_sha => Ok(()),
-        (TagState::ExactCommit, Some(sha)) => Err(format!(
+        (ReleasePhase::Promotion, Some(sha)) if sha == source_sha => Ok(()),
+        (ReleasePhase::Promotion, Some(sha)) => Err(format!(
             "release tag `{tag}` points to {sha}, expected {source_sha}"
         )),
-        (TagState::ExactCommit, None) => Err(format!("release tag `{tag}` does not exist")),
+        (ReleasePhase::Promotion, None) => Err(format!("release tag `{tag}` does not exist")),
     }
 }
 
@@ -287,7 +289,7 @@ where
 mod tests {
     use std::{fs, path::Path, process::Command};
 
-    use super::{TagState, readiness_findings};
+    use super::{ReleasePhase, readiness_findings};
 
     fn fixture() -> tempfile::TempDir {
         let root = tempfile::tempdir().expect("fixture");
@@ -337,25 +339,30 @@ mod tests {
         let root = fixture();
         let sha = git(root.path(), &["rev-parse", "HEAD"]);
         assert!(
-            readiness_findings(root.path(), "v1.2.3", &sha, TagState::Absent)
+            readiness_findings(root.path(), "v1.2.3", &sha, ReleasePhase::Preparation)
                 .expect("findings")
                 .is_empty()
         );
         assert!(
-            readiness_findings(root.path(), "v1.2.3", &sha, TagState::Absent)
+            readiness_findings(root.path(), "v1.2.3", &sha, ReleasePhase::Preparation)
                 .expect("repeated findings")
                 .is_empty()
         );
         git(root.path(), &["tag", "v1.2.3"]);
-        let unchanged =
-            readiness_findings(root.path(), "v1.2.3", &sha, TagState::Absent).expect("findings");
+        let unchanged = readiness_findings(root.path(), "v1.2.3", &sha, ReleasePhase::Preparation)
+            .expect("findings");
         assert!(
             unchanged
                 .iter()
                 .any(|finding| finding.contains("unchanged"))
         );
-        let wrong = readiness_findings(root.path(), "v1.2.3", &"f".repeat(40), TagState::Absent)
-            .expect("findings");
+        let wrong = readiness_findings(
+            root.path(),
+            "v1.2.3",
+            &"f".repeat(40),
+            ReleasePhase::Preparation,
+        )
+        .expect("findings");
         assert!(wrong.iter().any(|finding| finding.contains("source SHA")));
     }
 
@@ -364,8 +371,8 @@ mod tests {
         let root = fixture();
         let sha = git(root.path(), &["rev-parse", "HEAD"]);
         fs::remove_file(root.path().join(".github/release-notes/v1.2.3.md")).expect("remove notes");
-        let missing =
-            readiness_findings(root.path(), "v1.2.3", &sha, TagState::Absent).expect("findings");
+        let missing = readiness_findings(root.path(), "v1.2.3", &sha, ReleasePhase::Preparation)
+            .expect("findings");
         assert!(
             missing
                 .iter()
@@ -375,8 +382,8 @@ mod tests {
         let root = fixture();
         let sha = git(root.path(), &["rev-parse", "HEAD"]);
         fs::write(root.path().join("release-highlights.json"), "not json").expect("tamper");
-        let findings =
-            readiness_findings(root.path(), "v1.2.3", &sha, TagState::Absent).expect("findings");
+        let findings = readiness_findings(root.path(), "v1.2.3", &sha, ReleasePhase::Preparation)
+            .expect("findings");
         assert!(
             findings
                 .iter()
@@ -387,5 +394,21 @@ mod tests {
                 .iter()
                 .any(|finding| finding.contains("clean Git worktree"))
         );
+    }
+
+    #[test]
+    fn promotion_remains_valid_after_main_advances() {
+        let root = fixture();
+        let release_sha = git(root.path(), &["rev-parse", "HEAD"]);
+        git(root.path(), &["tag", "v1.2.3"]);
+        fs::write(root.path().join("later.txt"), "main advanced\n").expect("later change");
+        git(root.path(), &["add", "later.txt"]);
+        git(root.path(), &["commit", "-qm", "later main change"]);
+        git(root.path(), &["checkout", "-q", "--detach", &release_sha]);
+
+        let findings =
+            readiness_findings(root.path(), "v1.2.3", &release_sha, ReleasePhase::Promotion)
+                .expect("promotion findings");
+        assert!(findings.is_empty(), "{findings:#?}");
     }
 }

@@ -31,13 +31,13 @@ jobs:
         with:
           persist-credentials: false
       - id: image
-        name: Derive the content tag from owned inputs
+        name: Derive the immutable publication tag from owned inputs
         run: |
           repository="$(jq -er 'select(.schema_version == 1) | .repository | select(type == "string")' tools/ci-linux/image.json)"
           digest="$(find tools/ci-linux -type f -print0 | sort -z | xargs -0 shasum -a 256 | shasum -a 256 | cut -c1-20)"
           {
             echo "repository=$repository"
-            echo "tag=qa-$digest"
+            echo "tag=qa-$digest-run-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           } >> "$GITHUB_OUTPUT"
 
   validate:
@@ -125,6 +125,24 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ github.token }}
+      - name: Reject an existing architecture tag
+        env:
+          ARCH: ${{ matrix.arch }}
+          REPOSITORY: ${{ needs.plan.outputs.repository }}
+          TAG: ${{ needs.plan.outputs.tag }}
+        run: |
+          image="$REPOSITORY:$TAG-$ARCH"
+          result="$RUNNER_TEMP/tag-inspect.txt"
+          if docker buildx imagetools inspect "$image" > "$result" 2>&1; then
+            cat "$result"
+            echo "Refusing to overwrite existing immutable tag $image" >&2
+            exit 1
+          fi
+          if ! grep -Eiq 'manifest unknown|name unknown|not found' "$result"; then
+            cat "$result" >&2
+            echo "Could not prove immutable tag $image is absent" >&2
+            exit 1
+          fi
       - id: build
         name: Publish immutable architecture image
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
@@ -170,6 +188,23 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ github.token }}
+      - name: Reject an existing multi-architecture tag
+        env:
+          REPOSITORY: ${{ needs.plan.outputs.repository }}
+          TAG: ${{ needs.plan.outputs.tag }}
+        run: |
+          image="$REPOSITORY:$TAG"
+          result="$RUNNER_TEMP/tag-inspect.txt"
+          if docker buildx imagetools inspect "$image" > "$result" 2>&1; then
+            cat "$result"
+            echo "Refusing to overwrite existing immutable tag $image" >&2
+            exit 1
+          fi
+          if ! grep -Eiq 'manifest unknown|name unknown|not found' "$result"; then
+            cat "$result" >&2
+            echo "Could not prove immutable tag $image is absent" >&2
+            exit 1
+          fi
       - id: manifest
         name: Create immutable multi-architecture manifest
         env:

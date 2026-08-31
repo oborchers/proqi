@@ -156,27 +156,42 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
-          cd target/release-assets
-          mapfile -t assets < <(jq -r '.release_files[].name' candidate-manifest.json | sort)
+          candidate="$GITHUB_WORKSPACE/target/release-assets"
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            existing="$RUNNER_TEMP/existing-release"
-            mkdir -p "$existing"
-            gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir "$existing"
-            for asset in "${assets[@]}"; do
-              test -f "$existing/$asset"
-              cmp "$asset" "$existing/$asset"
-            done
-            test "$(find "$existing" -maxdepth 1 -type f | wc -l | tr -d ' ')" = "${#assets[@]}"
-            draft="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)"
-            if [[ "$draft" = "false" ]]; then
-              echo "Release $TAG already contains the exact candidate bytes."
-            fi
+            echo "Reconciling the existing release for $TAG."
           else
             gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft \
               --notes-file "$GITHUB_WORKSPACE/.github/release-notes/${TAG}.md" \
-              --title "Proqi $TAG" --verify-tag "${assets[@]}"
-            draft=true
+              --title "Proqi $TAG" --verify-tag
           fi
+
+          reconcile() {
+            local directory="$1"
+            local state="$2"
+            local plan="$3"
+            mkdir -p "$directory"
+            gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,assets \
+              --jq '{schema_version: 1, is_draft: .isDraft, assets: [.assets[].name]}' > "$state"
+            if [[ "$(jq '.assets | length' "$state")" -gt 0 ]]; then
+              gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir "$directory"
+            fi
+            cargo xtask release-assets plan "$candidate" "$directory" "$state" > "$plan"
+          }
+
+          existing="$RUNNER_TEMP/existing-release"
+          state="$RUNNER_TEMP/existing-release.json"
+          plan="$RUNNER_TEMP/release-upload-plan.json"
+          reconcile "$existing" "$state" "$plan"
+          while IFS= read -r asset; do
+            gh release upload "$TAG" "$candidate/$asset" --repo "$GITHUB_REPOSITORY"
+          done < <(jq -r '.missing[]' "$plan")
+
+          verified="$RUNNER_TEMP/verified-release"
+          verified_state="$RUNNER_TEMP/verified-release.json"
+          verified_plan="$RUNNER_TEMP/verified-release-plan.json"
+          reconcile "$verified" "$verified_state" "$verified_plan"
+          test "$(jq '.missing | length' "$verified_plan")" -eq 0
+          draft="$(jq -r .is_draft "$verified_plan")"
           echo "is_draft=$draft" >> "$GITHUB_OUTPUT"
       - id: registry
         name: Verify the registry candidate and publication state

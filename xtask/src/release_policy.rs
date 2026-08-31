@@ -2,7 +2,7 @@
 
 use std::{fs, path::Path};
 
-const RELEASE_REQUIRED: [&str; 14] = [
+const RELEASE_REQUIRED: [&str; 15] = [
     "environment: release",
     "cargo xtask release-promotion-plan",
     "cargo xtask candidate-select",
@@ -13,7 +13,8 @@ const RELEASE_REQUIRED: [&str; 14] = [
     "cargo publish --locked",
     "cargo install proqi --version \"=$VERSION\" --locked",
     "if gh release view \"$TAG\"",
-    "cmp \"$asset\" \"$existing/$asset\"",
+    "cargo xtask release-assets plan",
+    "gh release upload",
     "name: Verify every public release byte",
     "name: Wake Homebrew tap synchronization",
     "source-ref \"$SOURCE_REF\"",
@@ -33,7 +34,7 @@ const CANDIDATE_REQUIRED: [&str; 11] = [
     "id-token: write",
 ];
 
-const IMAGE_REQUIRED: [&str; 12] = [
+const IMAGE_REQUIRED: [&str; 15] = [
     "ubuntu-24.04-arm",
     "packages: write",
     "github.event_name == 'pull_request'",
@@ -46,6 +47,9 @@ const IMAGE_REQUIRED: [&str; 12] = [
     "push-to-registry: true",
     "docker logout ghcr.io",
     "workflow_dispatch:",
+    "${GITHUB_RUN_ID}",
+    "${GITHUB_RUN_ATTEMPT}",
+    "Could not prove immutable tag",
 ];
 
 pub(crate) fn check(root: &Path) -> Result<Vec<String>, String> {
@@ -109,6 +113,7 @@ fn findings(release: &str, candidate: &str, ci: &str, image: &str) -> Vec<String
         }
     }
     for required in [
+        "cargo xtask ci-change-class",
         "name: Registry package contract",
         "cargo xtask crate-package",
         "cargo +1.88.0 xtask msrv-full",
@@ -258,12 +263,26 @@ mod tests {
     #[test]
     fn docker_trigger_and_publication_idempotency_contracts_are_required() {
         let (release, candidate, ci, image) = sources();
-        let release = release.replace("if gh release view \"$TAG\"", "if false");
+        let release = release.replace("cargo xtask release-assets plan", "false");
         let image = image.replace("tools/ci-linux/**", "tools/elsewhere/**");
         let found = findings(&release, candidate, ci, &image);
-        assert!(found.iter().any(|item| item.contains("gh release view")));
+        assert!(
+            found
+                .iter()
+                .any(|item| item.contains("release-assets plan"))
+        );
         assert!(found.iter().any(|item| item.contains("tools/ci-linux/**")));
         assert!(contains_schedule("on:\n  schedule:\n    - cron: daily"));
         assert!(!contains_schedule("on:\n  workflow_dispatch:"));
+    }
+
+    #[test]
+    fn product_classifier_and_immutable_image_tags_are_required() {
+        let (release, candidate, ci, image) = sources();
+        let ci = ci.replace("cargo xtask ci-change-class", "echo");
+        let image = image.replace("${GITHUB_RUN_ATTEMPT}", "attempt");
+        let found = findings(release, candidate, &ci, &image);
+        assert!(found.iter().any(|item| item.contains("ci-change-class")));
+        assert!(found.iter().any(|item| item.contains("GITHUB_RUN_ATTEMPT")));
     }
 }

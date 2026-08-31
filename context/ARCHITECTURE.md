@@ -1371,9 +1371,11 @@ Pull requests and pushes to the protected default branch run these jobs:
 - `check` is an aggregate job that succeeds only when every required job has
   succeeded or has been explicitly marked inapplicable.
 
-A preflight job classifies the complete pull-request or push diff before the
-matrix starts. When every changed path ends in `.md`, CI runs one lightweight
-documentation gate for whitespace and repository-owned public-asset contracts;
+A preflight job uses the xtask-owned classifier on the complete pull-request or
+push diff before the matrix starts. When every changed path is ordinary
+Markdown, CI runs one lightweight documentation gate for whitespace and
+repository-owned public-asset contracts. Reviewed files under
+`.github/release-notes/` are product inputs even though they are Markdown;
 the Rust test, coverage, audit, PTY, package, and platform jobs are explicitly
 skipped. Any non-Markdown path runs the distinct product boundaries. Coverage
 runs only for relevant code changes, and the full MSRV suite runs only for its
@@ -1470,14 +1472,19 @@ unexpired candidate for the same version and SHA. It downloads by exact run and
 artifact identity, verifies the REST artifact digest before extraction, then
 verifies every internal hash and candidate attestation. Missing, expired,
 duplicate, mismatched, conflicting, or unattested candidates fail closed.
+Promotion checks the immutable tag commit, not the moving main tip. A later
+main commit therefore does not invalidate an authorized prepared candidate.
 Promotion adds tag-bound attestations and publishes the same bytes. It never
 rebuilds a successful native candidate. A manual candidate dispatch provides a
 non-publishing recovery path at main or at the exact protected tag.
-Release creation is idempotent for absent releases,
-matching drafts, and already published identical assets. Conflicting assets
-fail closed. GitHub Release notes are the only changelog. The protected release
-environment has no manual approval gate. Release runs are never cancelled and
-existing assets for a version are immutable.
+Release creation is idempotent for absent releases, empty or partially uploaded
+matching drafts, complete drafts, and already published identical assets. The
+workflow creates an empty verified draft, reconciles exact candidate bytes,
+uploads only missing assets, then downloads and verifies the complete set before
+registry publication. Duplicate, unexpected, conflicting, or incomplete public
+assets fail closed. GitHub Release notes are the only changelog. The protected
+release environment has no manual approval gate. Release runs are never
+cancelled and existing assets for a version are immutable.
 
 The same protected promotion job publishes the verified crate through
 crates.io trusted publishing. The crate trusts only the Proqi repository,
@@ -1510,9 +1517,10 @@ Pinned Linux QA tools are published separately from release artifacts. The
 single repository identity is owned by `tools/ci-linux/image.json`. A dedicated
 workflow builds amd64 and arm64 variants on matching native GitHub-hosted
 runners, validates pull requests without pushing, and publishes only from
-trusted main activity using the short-lived repository token. Content-derived
-tags, digest-only consumption, registry provenance, and SBOMs make the input
-explicit. Its registry-backed BuildKit cache is regenerable and untrusted.
+trusted main activity using the short-lived repository token. Content-derived,
+run-qualified tags are checked for absence before publication and are never
+overwritten. Digest-only consumption, registry provenance, and SBOMs make the
+input explicit. Its registry-backed BuildKit cache is regenerable and untrusted.
 Neither Proqi source nor release artifacts enter the tools image. Native smoke
 and explicit amd64 parity are xtask diagnostics, not routine release preparation.
 

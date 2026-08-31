@@ -97,8 +97,10 @@ bookworm containers.
 `Linux QA tools image` workflow builds amd64 and arm64 on native hosted runners.
 Pull requests build without pushing. Trusted main runs use only `GITHUB_TOKEN`
 with `contents: read` and job-scoped `packages: write`, publish content-derived
-tags, attach BuildKit provenance and SBOMs, and create the multi-architecture
-manifest. Registry cache tags are disposable acceleration, never evidence.
+and run-qualified tags, attach BuildKit provenance and SBOMs, and create the
+multi-architecture manifest. A publication attempt proves every intended tag
+is absent before pushing and never overwrites it. Registry cache tags are
+disposable acceleration, never evidence.
 
 Consumers copy the published manifest digest from the successful workflow and
 pass the full `repository@sha256:digest` reference to `ci-linux-smoke` or
@@ -175,11 +177,13 @@ After the readiness audit:
 5. The tag-triggered `Release` workflow requires the tag commit to be the exact
    prepared main SHA and finds exactly one successful, unexpired candidate for
    the same version and SHA. Missing, expired, duplicate, failed, or mismatched
-   candidates fail closed. It downloads by REST artifact ID and checks the
-   artifact archive digest before extraction.
+   candidates fail closed. Later main commits do not invalidate the protected
+   tag because the successful main CI and candidate records bind the prepared
+   SHA. It downloads by REST artifact ID and checks the artifact archive digest
+   before extraction.
 6. The promotion job consumes those already-built bytes. It verifies every
-   byte and attestation, creates a GitHub Release draft, publishes the exact
-   crate through crates.io trusted publishing, installs and tests the registry
+   byte and attestation, creates or resumes a GitHub Release draft, publishes
+   the exact crate through crates.io trusted publishing, installs and tests the registry
    version, makes the Release public, downloads every public asset again, and
    requires byte identity with the candidate.
 7. Only after public-byte verification does the workflow send the scoped

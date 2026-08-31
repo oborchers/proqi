@@ -12,6 +12,7 @@
     )
 )]
 
+mod ci_changes;
 mod crate_package;
 mod debian;
 mod debian_container;
@@ -26,6 +27,7 @@ mod public_assets;
 mod release;
 mod release_candidate;
 mod release_policy;
+mod release_publication;
 mod release_readiness;
 mod release_targets;
 mod snapshots;
@@ -97,6 +99,10 @@ fn execute() -> Result<(), String> {
         }
         "crate-package" => crate_package::run(&root),
         "crate-evidence" => crate_package::evidence(&root),
+        "ci-change-class" => required_argument("ci-change-class", 2, "base SHA").and_then(|base| {
+            let head = required_argument("ci-change-class", 3, "head SHA")?;
+            ci_changes::print(&root, &base, &head)
+        }),
         "debian-package" => {
             let archive = required_path_argument("debian-package", 2, "Linux archive")?;
             let output = required_path_argument("debian-package", 3, "output directory")?;
@@ -136,6 +142,17 @@ fn release_command(root: &Path, command: &str) -> Option<Result<(), String>> {
         }),
         "candidate-manifest" => required_argument("candidate-manifest", 2, "create or verify")
             .and_then(|operation| release_candidate::manifest_command(root, &operation)),
+        "release-assets" => required_argument("release-assets", 2, "plan operation").and_then(
+            |operation| {
+                if operation != "plan" {
+                    return Err("release-assets expects `plan <candidate-dir> <existing-dir> <release-state.json>`".to_owned());
+                }
+                let candidate = required_path_argument("release-assets plan", 3, "candidate directory")?;
+                let existing = required_path_argument("release-assets plan", 4, "existing assets directory")?;
+                let state = required_path_argument("release-assets plan", 5, "release state JSON")?;
+                release_publication::plan(root, &candidate, &existing, &state)
+            },
+        ),
         "release-rehearsal" => release::rehearse(root),
         "release-checksum" => required_path_argument("release-checksum", 2, "archive path")
             .and_then(|path| release::print_checksum(root, &path)),
@@ -189,6 +206,7 @@ fn print_help() {
          \n  cargo xtask package\
          \n  cargo xtask crate-package\
          \n  cargo xtask crate-evidence\
+         \n  cargo xtask ci-change-class <base-sha> <head-sha>\
          \n  cargo xtask debian-package <linux-archive> <output-dir>\
          \n  cargo xtask verify-debian <linux-archive> <deb>\
          \n  cargo xtask release-plan [vX.Y.Z]\
@@ -196,6 +214,7 @@ fn print_help() {
          \n  cargo xtask release-promotion-plan <vX.Y.Z>\
          \n  cargo xtask candidate-select <vX.Y.Z> <source-sha> <index.json>\
          \n  cargo xtask candidate-manifest <create|verify> ...\
+         \n  cargo xtask release-assets plan <candidate-dir> <existing-dir> <release-state.json>\
          \n  cargo xtask release-rehearsal\
          \n  cargo xtask release-checksum <archive>\
          \n  cargo xtask verify-linux-archive <archive>\

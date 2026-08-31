@@ -44,32 +44,12 @@ jobs:
             base_sha="$PUSH_BASE"
           fi
 
-          docs_only=true
-          coverage=false
-          full_msrv=false
-          changed_count=0
-          while IFS= read -r path; do
-            [[ -z "$path" ]] && continue
-            changed_count=$((changed_count + 1))
-            if [[ "$path" != *.md ]]; then
-              docs_only=false
-            fi
-            case "$path" in
-              *.rs|Cargo.toml|Cargo.lock|rust-toolchain.toml|rust-toolchain) coverage=true ;;
-            esac
-            case "$path" in
-              Cargo.toml|*/Cargo.toml|Cargo.lock|rust-toolchain.toml|rust-toolchain|.cargo/*|xtask/src/package.rs|xtask/src/crate_package.rs|xtask/src/debian*.rs|xtask/src/release*.rs|.github/workflows/*|.github/actions/*|tools/ci-linux/*) full_msrv=true ;;
-            esac
-          done < <(git diff --name-only --diff-filter=ACDMRTUXB "$base_sha" "$HEAD_SHA")
-
-          if [[ "$changed_count" -eq 0 ]]; then
-            docs_only=false
-          fi
+          classification="$(cargo xtask ci-change-class "$base_sha" "$HEAD_SHA")"
           {
             echo "base_sha=$base_sha"
-            echo "coverage=$coverage"
-            echo "docs_only=$docs_only"
-            echo "full_msrv=$full_msrv"
+            echo "coverage=$(jq -r .coverage <<<"$classification")"
+            echo "docs_only=$(jq -r .docs_only <<<"$classification")"
+            echo "full_msrv=$(jq -r .full_msrv <<<"$classification")"
           } >> "$GITHUB_OUTPUT"
 
   docs:
