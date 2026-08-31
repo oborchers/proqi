@@ -314,7 +314,7 @@ impl SessionBrowser {
         match input {
             UiInput::Key(UiKey::Quit | UiKey::Escape) => BrowserAction::Cancel,
             UiInput::Key(UiKey::Enter) => self.activate(),
-            UiInput::Key(UiKey::Backspace | UiKey::Delete) => {
+            UiInput::Key(UiKey::Backspace | UiKey::Delete | UiKey::ModifiedDelete) => {
                 if let Some((index, _)) = self.query.grapheme_indices(true).next_back() {
                     self.query.truncate(index);
                 }

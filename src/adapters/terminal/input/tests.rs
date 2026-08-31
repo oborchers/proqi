@@ -201,6 +201,26 @@ fn physical_delete_and_backspace_remain_distinct_terminal_keys() {
 }
 
 #[test]
+fn every_modified_physical_delete_remains_distinct_from_board_delete() {
+    for modifiers in [
+        KeyModifiers::SHIFT,
+        KeyModifiers::ALT,
+        KeyModifiers::CONTROL,
+        KeyModifiers::SUPER,
+        KeyModifiers::META,
+        KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+        KeyModifiers::SUPER | KeyModifiers::SHIFT,
+        KeyModifiers::ALT | KeyModifiers::SHIFT,
+    ] {
+        assert_eq!(
+            translate(Event::Key(KeyEvent::new(KeyCode::Delete, modifiers))),
+            Some(UiInput::Key(UiKey::ModifiedDelete)),
+            "modifiers: {modifiers:?}"
+        );
+    }
+}
+
+#[test]
 fn release_is_ignored_and_repeat_preserves_auto_repeat() {
     let release = Event::Key(KeyEvent::new_with_kind(
         KeyCode::Char('n'),

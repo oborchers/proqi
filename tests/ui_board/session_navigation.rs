@@ -72,6 +72,7 @@ fn session_rename_keeps_vim_letters_literal_and_delete_out_of_board_dispatch() {
         fixture.input(UiInput::Key(UiKey::Character(character)));
     }
     fixture.input(UiInput::Key(UiKey::Delete));
+    fixture.input(UiInput::Key(UiKey::ModifiedDelete));
 
     assert_eq!(fixture.app.session_rename_view(), Some("hjklx"));
     assert_eq!(fixture.app.state.board.live_thoughts().len(), 1);

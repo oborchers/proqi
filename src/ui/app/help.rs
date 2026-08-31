@@ -17,11 +17,6 @@ impl BoardApp {
     pub(super) fn handle_help_input(&mut self, input: &UiInput) -> Vec<Effect> {
         match input {
             UiInput::Key(UiKey::Escape) => self.close_help(),
-            UiInput::Key(UiKey::Character(character))
-                if *character == self.settings.keybindings.help =>
-            {
-                self.close_help();
-            }
             UiInput::Key(key) if key.list_navigation() == Some(ListNavigation::Previous) => {
                 self.help_scroll = self.help_scroll.saturating_sub(1);
             }
@@ -30,6 +25,11 @@ impl BoardApp {
                     .help_scroll
                     .saturating_add(1)
                     .min(self.help_max_scroll());
+            }
+            UiInput::Key(UiKey::Character(character))
+                if *character == self.settings.keybindings.help =>
+            {
+                self.close_help();
             }
             UiInput::Resize { .. } => {
                 self.layout = None;

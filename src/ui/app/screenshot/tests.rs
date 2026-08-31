@@ -49,11 +49,16 @@ fn takeover_overlay_has_a_complete_shallow_snapshot() {
 fn takeover_list_uses_identical_arrow_and_jk_navigation() {
     for (arrow, vim) in [
         (
-            crate::ports::editor::CursorMovement::VisualDown,
-            crate::ui::UiKey::Character('j'),
+            crate::ui::UiKey::Move {
+                movement: crate::ports::editor::CursorMovement::VisualDown,
+                extend_selection: true,
+            },
+            crate::ui::UiKey::PrimaryCharacter('J'),
         ),
         (
-            crate::ports::editor::CursorMovement::VisualUp,
+            crate::ui::UiKey::PrimaryShiftMove {
+                movement: crate::ports::editor::CursorMovement::DocumentStart,
+            },
             crate::ui::UiKey::Character('k'),
         ),
     ] {
@@ -73,14 +78,7 @@ fn takeover_list_uses_identical_arrow_and_jk_navigation() {
         arrow_app.screenshot_conflict(owner.clone());
         vim_app.screenshot_conflict(owner);
         let clock = crate::adapters::memory::FakeClock::new(Timestamp::from_millis(2));
-        arrow_app.handle(
-            crate::ui::UiInput::Key(crate::ui::UiKey::Move {
-                movement: arrow,
-                extend_selection: false,
-            }),
-            &mut arrow_ids,
-            &clock,
-        );
+        arrow_app.handle(crate::ui::UiInput::Key(arrow), &mut arrow_ids, &clock);
         vim_app.handle(crate::ui::UiInput::Key(vim), &mut vim_ids, &clock);
         assert_eq!(
             arrow_app.screenshot_takeover_view(),

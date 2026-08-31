@@ -733,15 +733,23 @@ bindings are:
 Final bindings remain configurable. The product must not depend on terminals
 forwarding `Cmd+C`, `Cmd+V`, or Meta keys consistently.
 
-Physical `Del` is an invariant second spelling of the configured Board delete
-command. Remapping the character binding does not remap or disable that physical
-alias. `Backspace` is not a Board delete alias. In Compose, Edit, search,
-rename, invocation, command, transfer, and other text-entry surfaces, `Del`
-remains owned by that text surface according to its existing editing behavior,
-never deletes a thought, and `h`, `j`, `k`, and `l` remain content. List-only
-overlays use `j` and `k` as exact Down and Up aliases. Four-way non-text
-direction choice uses `h`, `j`, `k`, and `l` as Left, Down, Up, and Right
-aliases.
+Unmodified physical `Del` is an invariant second spelling of the configured
+Board delete command. Remapping the character binding does not remap or disable
+that physical alias. Modified `Del` and `Backspace` are not Board delete aliases.
+In Compose, Edit, search, rename, invocation, command, transfer, and other
+text-entry surfaces, every physical `Del` remains owned by that text surface
+according to its existing editing behavior, never deletes a thought, and `h`,
+`j`, `k`, and `l` remain content.
+
+Board vertical navigation has one spelling-independent modifier ladder: plain
+moves focus, Shift extends a range, and Primary+Shift reorders one thought.
+Other modifiers keep the base focus intention. At the insertion row, range and
+reorder are thought-only no-ops, while base focus retains the ordinary boundary
+behavior. List-only overlays use `j` and `k` as exact Down and Up aliases, and
+four-way non-text direction choice uses `h`, `j`, `k`, and `l` as Left, Down,
+Up, and Right aliases. These non-text owners ignore irrelevant modifiers for
+both spellings. While Help owns input, its navigation wins over a configured
+Board binding collision and Escape always closes it.
 
 ### Meta and primary shortcuts
 

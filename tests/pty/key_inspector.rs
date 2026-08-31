@@ -97,5 +97,10 @@ fn primary_enter_variants_are_distinct_in_the_real_pty() {
 #[test]
 fn delete_and_backspace_are_distinct_in_the_real_pty() {
     inspect_sequence(r"\x1b\[3~", "Delete", "Delete");
+    inspect_sequence(
+        r"\x1b\[3;2~",
+        "Delete, modifiers: KeyModifiers(SHIFT)",
+        "ModifiedDelete",
+    );
     inspect_sequence(r"\x7f", "Backspace", "Backspace");
 }

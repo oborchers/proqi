@@ -2,51 +2,12 @@
 
 use crate::{
     application::{Action, Effect},
-    ports::{
-        editor::CursorMovement,
-        environment::{Clock, IdGenerator},
-    },
+    ports::environment::{Clock, IdGenerator},
 };
 
 use super::BoardApp;
-use crate::ui::settings::BoardCommand;
 
 impl BoardApp {
-    pub(super) fn reorder_from_character(
-        &mut self,
-        character: char,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-    ) -> Vec<Effect> {
-        match self.settings.keybindings.command(character) {
-            Some(BoardCommand::RangeUp) => self.reorder(ids, clock, -1),
-            Some(BoardCommand::RangeDown) => self.reorder(ids, clock, 1),
-            _ => Vec::new(),
-        }
-    }
-
-    pub(super) fn reorder_from_movement(
-        &mut self,
-        movement: CursorMovement,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-    ) -> Vec<Effect> {
-        match movement {
-            CursorMovement::VisualUp | CursorMovement::DocumentStart => {
-                self.reorder(ids, clock, -1)
-            }
-            CursorMovement::VisualDown | CursorMovement::DocumentEnd => self.reorder(ids, clock, 1),
-            CursorMovement::GraphemeBack
-            | CursorMovement::GraphemeForward
-            | CursorMovement::WordBack
-            | CursorMovement::WordForward
-            | CursorMovement::VisualJumpUp
-            | CursorMovement::VisualJumpDown
-            | CursorMovement::LineStart
-            | CursorMovement::LineEnd => Vec::new(),
-        }
-    }
-
     pub(super) fn reorder(
         &mut self,
         ids: &mut impl IdGenerator,

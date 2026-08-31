@@ -452,6 +452,8 @@ mod compose;
 mod composition;
 #[path = "ui_board/delete_alias.rs"]
 mod delete_alias;
+#[path = "ui_board/direction_modifier_parity.rs"]
+mod direction_modifier_parity;
 #[path = "ui_board/durability.rs"]
 mod durability;
 #[path = "ui_board/fast_navigation.rs"]
@@ -460,6 +462,8 @@ mod fast_navigation;
 mod insertion_navigation;
 #[path = "ui_board/kilo.rs"]
 mod kilo;
+#[path = "ui_board/modifier_parity.rs"]
+mod modifier_parity;
 #[path = "ui_board/movement_symmetry.rs"]
 mod movement_symmetry;
 #[path = "ui_board/navigation.rs"]

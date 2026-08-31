@@ -66,20 +66,22 @@ fn palette_query_accepts_normalized_paste_and_grapheme_cursor_edits() {
 
 #[test]
 fn palette_query_keeps_vim_letters_literal_and_delete_edits_the_query() {
-    let mut fixture = Fixture::new();
-    fixture.input(UiInput::Key(UiKey::Escape));
-    fixture.input(UiInput::Key(UiKey::Character(':')));
-    for character in "hjklx".chars() {
-        fixture.input(UiInput::Key(UiKey::Character(character)));
-    }
-    fixture.input(UiInput::Key(UiKey::Move {
-        movement: CursorMovement::GraphemeBack,
-        extend_selection: false,
-    }));
-    fixture.input(UiInput::Key(UiKey::Delete));
+    for delete in [UiKey::Delete, UiKey::ModifiedDelete] {
+        let mut fixture = Fixture::new();
+        fixture.input(UiInput::Key(UiKey::Escape));
+        fixture.input(UiInput::Key(UiKey::Character(':')));
+        for character in "hjklx".chars() {
+            fixture.input(UiInput::Key(UiKey::Character(character)));
+        }
+        fixture.input(UiInput::Key(UiKey::Move {
+            movement: CursorMovement::GraphemeBack,
+            extend_selection: false,
+        }));
+        fixture.input(UiInput::Key(delete));
 
-    let (query, _, _) = fixture.app.palette_view().expect("palette");
-    assert_eq!(query, "hjkl");
+        let (query, _, _) = fixture.app.palette_view().expect("palette");
+        assert_eq!(query, "hjkl");
+    }
 }
 
 #[test]

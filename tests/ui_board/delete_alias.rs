@@ -101,6 +101,29 @@ fn physical_delete_is_invariant_while_the_character_binding_remains_remappable()
 }
 
 #[test]
+fn modified_physical_delete_is_never_a_board_thought_command() {
+    let mut fixture = deletion_fixture(&["keep this thought"]);
+    assert!(
+        fixture
+            .effects(UiInput::Key(UiKey::ModifiedDelete))
+            .is_empty()
+    );
+    assert_eq!(fixture.app.state.board.live_thoughts().len(), 1);
+
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::VisualDown,
+        extend_selection: false,
+    }));
+    assert!(fixture.app.insertion_focused());
+    assert!(
+        fixture
+            .effects(UiInput::Key(UiKey::ModifiedDelete))
+            .is_empty()
+    );
+    assert_eq!(fixture.app.state.board.live_thoughts().len(), 1);
+}
+
+#[test]
 fn delete_and_backspace_are_noops_on_explicit_empty_board_and_insertion_row() {
     let mut empty = Fixture::new();
     empty.input(UiInput::Key(UiKey::Escape));
@@ -133,38 +156,61 @@ fn delete_and_backspace_are_noops_on_explicit_empty_board_and_insertion_row() {
 
 #[test]
 fn delete_remains_forward_text_deletion_and_vim_letters_remain_content() {
-    let mut fixture = Fixture::new();
-    for character in "hjklab".chars() {
-        fixture.input(UiInput::Key(UiKey::Character(character)));
+    for delete in [UiKey::Delete, UiKey::ModifiedDelete] {
+        let mut fixture = Fixture::new();
+        for character in "hjklab".chars() {
+            fixture.input(UiInput::Key(UiKey::Character(character)));
+        }
+        fixture.input(UiInput::Key(UiKey::Move {
+            movement: CursorMovement::GraphemeBack,
+            extend_selection: false,
+        }));
+        assert!(fixture.effects(UiInput::Key(delete)).is_empty());
+        assert_eq!(
+            fixture.app.editor_snapshot().expect("editor").content,
+            "hjkla"
+        );
+        assert_eq!(fixture.app.state.board.live_thoughts().len(), 1);
     }
-    fixture.input(UiInput::Key(UiKey::Move {
-        movement: CursorMovement::GraphemeBack,
-        extend_selection: false,
-    }));
-    assert!(fixture.effects(UiInput::Key(UiKey::Delete)).is_empty());
-    assert_eq!(
-        fixture.app.editor_snapshot().expect("editor").content,
-        "hjkla"
-    );
-    assert_eq!(fixture.app.state.board.live_thoughts().len(), 1);
 }
 
 #[test]
 fn query_letters_and_delete_never_escape_into_board_commands() {
-    let mut fixture = deletion_fixture(&["hjkl target", "other"]);
-    fixture.input(UiInput::Key(UiKey::Character('/')));
-    for character in "hjklx".chars() {
-        fixture.input(UiInput::Key(UiKey::Character(character)));
-    }
-    fixture.input(UiInput::Key(UiKey::Move {
-        movement: CursorMovement::GraphemeBack,
-        extend_selection: false,
-    }));
-    fixture.input(UiInput::Key(UiKey::Delete));
+    for delete in [UiKey::Delete, UiKey::ModifiedDelete] {
+        let mut fixture = deletion_fixture(&["hjkl target", "other"]);
+        fixture.input(UiInput::Key(UiKey::Character('/')));
+        for character in "hjklx".chars() {
+            fixture.input(UiInput::Key(UiKey::Character(character)));
+        }
+        fixture.input(UiInput::Key(UiKey::Move {
+            movement: CursorMovement::GraphemeBack,
+            extend_selection: false,
+        }));
+        fixture.input(UiInput::Key(delete));
 
-    let (query, _, _) = fixture.app.search_view().expect("search query");
-    assert_eq!(query, "hjkl");
-    assert_eq!(fixture.app.state.board.live_thoughts().len(), 2);
+        let (query, _, _) = fixture.app.search_view().expect("search query");
+        assert_eq!(query, "hjkl");
+        assert_eq!(fixture.app.state.board.live_thoughts().len(), 2);
+    }
+}
+
+#[test]
+fn modified_delete_on_empty_compose_never_materializes_or_deletes_a_thought() {
+    let mut fixture = Fixture::new();
+    assert!(
+        fixture
+            .effects(UiInput::Key(UiKey::ModifiedDelete))
+            .is_empty()
+    );
+    assert!(fixture.app.state.board.live_thoughts().is_empty());
+    assert_eq!(
+        fixture
+            .app
+            .editor_snapshot()
+            .expect("compose editor")
+            .content,
+        ""
+    );
 }
 
 #[test]
@@ -208,7 +254,9 @@ fn mixed_delete_spellings_do_not_create_a_second_operation_after_the_board_empti
 fn public_shortcut_documentation_records_the_alias_and_text_entry_boundary() {
     let readme = include_str!("../../README.md");
     assert!(readme.contains("`d` or `Del` (`Entf` on German keyboards)"));
-    assert!(readme.contains("Physical `Del` is an invariant Board alias"));
+    assert!(readme.contains("Unmodified physical `Del` is an invariant Board alias"));
+    assert!(readme.contains("Modified `Del` is not a Board"));
     assert!(readme.contains("`h`, `j`, `k`, and"));
-    assert!(readme.contains("`l` remain literal text"));
+    assert!(readme.contains("`l` remain"));
+    assert!(readme.contains("literal text. List-only"));
 }

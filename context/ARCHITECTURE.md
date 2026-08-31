@@ -878,22 +878,27 @@ remains the modifier-independent fallback.
 
 Vertical board input uses one semantic modifier ladder for both arrow and
 configured character spellings: plain input moves focus, Shift extends an
-anchored range, and Primary+Shift reorders one thought. Input normalization
+anchored range, and Primary+Shift reorders one thought. Other modifiers resolve
+to the base focus intention. At the insertion row, range and reorder are
+thought-only no-ops while focus retains the boundary policy. Input normalization
 preserves otherwise unknown Primary character chords until the board keymap
 can resolve the configured shifted range key, including when enhanced keyboard
 reporting encodes the shifted character without a separate Shift flag. It must
 not let arrow and `j`/`k`-style bindings acquire different intentions.
 
-The normalized physical `Delete` key is an invariant Board spelling of the
-configured delete command and therefore reaches the same typed action, locks,
-operation, persistence, and undo path. The configured character remains
-remappable independently. `Backspace` has no Board delete meaning. Compose and
-Edit continue to interpret `Delete` as forward text deletion, while query
-owners retain their existing local text-editing behavior.
+The normalized unmodified physical `Delete` key is an invariant Board spelling
+of the configured delete command and therefore reaches the same typed action,
+locks, operation, persistence, and undo path. Modified physical Delete retains
+a distinct normalized value and has no Board command meaning. The configured
+character remains remappable independently. `Backspace` has no Board delete
+meaning. Compose and Edit interpret both Delete values as forward text deletion,
+while query owners retain their existing local text-editing behavior.
 One typed non-text navigation decoder maps Up and Down to `k` and `j` in
 list-only surfaces and maps Left, Down, Up, and Right to `h`, `j`, `k`, and `l`
-in direction choosers. Text-entry dispatch runs outside those decoders, so the
-four letters remain content there.
+in direction choosers. It ignores irrelevant modifiers symmetrically across
+both spellings. Text-entry dispatch runs outside those decoders, so the four
+letters remain content there. Modal navigation resolves before a configured
+Board shortcut, with Escape retained as the unconditional Help close action.
 
 `Primary+A` selects the entire current thought only in edit mode. `Primary+U`
 deletes one newline-delimited logical line as a single undoable edit. Logical
@@ -954,10 +959,11 @@ durable blank and enter its editor through the canonical create action. Arrow
 and configured previous or next spellings normalize to the same semantic
 confirmation outside text modes and may be mixed. Repeated movement while the
 new blank remains empty cannot create additional thoughts. On the insertion
-row, two consecutive semantic downward navigation commands perform the same
-durable create-and-edit transition; unrelated or modified input, reorder,
-selection, pointer input, and mode changes clear confirmation. Other edit
-boundaries use the same navigation state machine.
+row, two consecutive semantic base downward navigation commands perform the
+same durable create-and-edit transition. Range, reorder, unrelated input,
+pointer input, and mode changes clear confirmation. Unsupported modifiers that
+normalize to base focus retain the same confirmation. Other edit boundaries use
+the same navigation state machine.
 
 Empty-board aftermath is reconciled by one typed policy owned beside
 `InteractionMode`. Deliberate local removals request Compose after the mutation;

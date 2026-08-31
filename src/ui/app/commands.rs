@@ -4,13 +4,16 @@ use crate::{
     application::{Action, Effect, InteractionMode},
     domain::{BoardOperationKind, UndoScope},
     ports::{
-        editor::{CursorMovement, EditCommand},
+        editor::EditCommand,
         environment::{Clock, IdGenerator},
     },
 };
 
 use super::{BoardApp, BoundaryInsertion, UiKey, editing, pending_types::EditFlush};
-use crate::ui::settings::BoardCommand;
+use crate::ui::{
+    ListNavigation,
+    settings::{BoardCommand, BoardNavigation},
+};
 
 impl BoardApp {
     pub(super) fn handle_board_key(
@@ -22,6 +25,9 @@ impl BoardApp {
         if self.insertion_focused() {
             return self.handle_insertion_key(key, ids, clock);
         }
+        if let Some(navigation) = self.settings.keybindings.navigation(key) {
+            return self.handle_board_navigation(navigation, ids, clock);
+        }
         match key {
             UiKey::Escape if !self.selection_is_empty() || self.range_latched() => {
                 self.clear_board_selection();
@@ -30,43 +36,7 @@ impl BoardApp {
             UiKey::Character(_) | UiKey::Delete => {
                 return self.handle_board_key_command(key, ids, clock);
             }
-            UiKey::PrimaryCharacter(character) => {
-                return self.reorder_from_character(character, ids, clock);
-            }
-            UiKey::PrimaryShiftMove { movement } => {
-                return self.reorder_from_movement(movement, ids, clock);
-            }
             UiKey::Enter => return self.expand_and_enter_edit(ids, clock),
-            UiKey::Move {
-                movement: CursorMovement::VisualUp,
-                extend_selection: true,
-            } => self.extend_range_by(-1),
-            UiKey::Move {
-                movement: CursorMovement::VisualDown,
-                extend_selection: true,
-            } => self.extend_range_by(1),
-            UiKey::Move {
-                movement: CursorMovement::VisualUp,
-                extend_selection: false,
-            } if self.range_latched() => self.extend_range_by(-1),
-            UiKey::Move {
-                movement: CursorMovement::VisualDown,
-                extend_selection: false,
-            } if self.range_latched() => self.extend_range_by(1),
-            UiKey::Move {
-                movement: CursorMovement::VisualUp,
-                extend_selection: false,
-            } if self.at_first_thought() => {
-                return self.confirm_boundary_creation(BoundaryInsertion::BeforeFirst, ids, clock);
-            }
-            UiKey::Move {
-                movement: CursorMovement::VisualUp,
-                extend_selection: false,
-            } => self.move_focus_outside_range(-1),
-            UiKey::Move {
-                movement: CursorMovement::VisualDown,
-                extend_selection: false,
-            } => self.move_focus_outside_range(1),
             UiKey::Undo => return self.history(ids, clock, true),
             UiKey::Redo => return self.history(ids, clock, false),
             UiKey::Copy => return self.copy_thought(ids),
@@ -84,6 +54,18 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
+        if let Some(navigation) = self.settings.keybindings.navigation(key) {
+            return match navigation {
+                BoardNavigation::Focus(ListNavigation::Previous) => {
+                    self.move_focus(-1);
+                    Vec::new()
+                }
+                BoardNavigation::Focus(ListNavigation::Next) => {
+                    self.confirm_boundary_creation(BoundaryInsertion::AfterLast, ids, clock)
+                }
+                BoardNavigation::Extend(_) | BoardNavigation::Reorder(_) => Vec::new(),
+            };
+        }
         match key {
             UiKey::Escape if !self.selection_is_empty() || self.range_latched() => {
                 self.clear_board_selection();
@@ -93,35 +75,18 @@ impl BoardApp {
                 self.select_all_thoughts();
                 Vec::new()
             }
-            UiKey::Character(character)
-                if self.settings.keybindings.command(character)
-                    == Some(BoardCommand::FocusDown) =>
-            {
-                self.confirm_boundary_creation(BoundaryInsertion::AfterLast, ids, clock)
-            }
             UiKey::Character(_) | UiKey::Delete => self.handle_board_key_command(key, ids, clock),
             UiKey::Enter => self.begin_insertion(ids, clock),
-            UiKey::Escape
-            | UiKey::Move {
-                movement: CursorMovement::VisualUp,
-                ..
-            } => {
+            UiKey::Escape => {
                 self.move_focus(-1);
                 Vec::new()
             }
             UiKey::PasteClipboard => self.read_clipboard(ids),
             UiKey::Undo => self.history(ids, clock, true),
             UiKey::Redo => self.history(ids, clock, false),
-            UiKey::Move {
-                movement: CursorMovement::VisualDown,
-                extend_selection: false,
-            } => self.confirm_boundary_creation(BoundaryInsertion::AfterLast, ids, clock),
-            UiKey::Move {
-                movement: CursorMovement::VisualDown,
-                extend_selection: true,
-            }
-            | UiKey::Backspace
+            UiKey::Backspace
             | UiKey::DeleteLine
+            | UiKey::ModifiedDelete
             | UiKey::Copy
             | UiKey::Cut
             | UiKey::Duplicate
@@ -139,25 +104,38 @@ impl BoardApp {
         }
     }
 
+    fn handle_board_navigation(
+        &mut self,
+        navigation: BoardNavigation,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        let delta = match navigation {
+            BoardNavigation::Focus(ListNavigation::Previous)
+            | BoardNavigation::Extend(ListNavigation::Previous)
+            | BoardNavigation::Reorder(ListNavigation::Previous) => -1,
+            BoardNavigation::Focus(ListNavigation::Next)
+            | BoardNavigation::Extend(ListNavigation::Next)
+            | BoardNavigation::Reorder(ListNavigation::Next) => 1,
+        };
+        match navigation {
+            BoardNavigation::Focus(_) if self.range_latched() => self.extend_range_by(delta),
+            BoardNavigation::Focus(ListNavigation::Previous) if self.at_first_thought() => {
+                return self.confirm_boundary_creation(BoundaryInsertion::BeforeFirst, ids, clock);
+            }
+            BoardNavigation::Focus(_) => self.move_focus_outside_range(delta),
+            BoardNavigation::Extend(_) => self.extend_range_by(delta),
+            BoardNavigation::Reorder(_) => return self.reorder(ids, clock, delta),
+        }
+        Vec::new()
+    }
+
     fn handle_board_key_command(
         &mut self,
         key: UiKey,
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        if self.range_latched() {
-            match self.settings.keybindings.command_for_key(key) {
-                Some(BoardCommand::FocusUp) => {
-                    self.extend_range_by(-1);
-                    return Vec::new();
-                }
-                Some(BoardCommand::FocusDown) => {
-                    self.extend_range_by(1);
-                    return Vec::new();
-                }
-                _ => {}
-            }
-        }
         match self.settings.keybindings.command_for_key(key) {
             Some(BoardCommand::New) => self.begin_insertion(ids, clock),
             Some(BoardCommand::Edit) => self.expand_and_enter_edit(ids, clock),
@@ -173,29 +151,13 @@ impl BoardApp {
                 self.begin_delivery(crate::ports::agent::SubmissionDisposition::Keep, ids, clock)
             }
             Some(BoardCommand::Undo) => self.history(ids, clock, true),
-            Some(BoardCommand::FocusUp) => {
-                if self.at_first_thought() {
-                    return self.confirm_boundary_creation(
-                        BoundaryInsertion::BeforeFirst,
-                        ids,
-                        clock,
-                    );
-                }
-                self.move_focus_outside_range(-1);
-                Vec::new()
-            }
-            Some(BoardCommand::FocusDown) => {
-                self.move_focus_outside_range(1);
-                Vec::new()
-            }
-            Some(BoardCommand::RangeUp) => {
-                self.extend_range_by(-1);
-                Vec::new()
-            }
-            Some(BoardCommand::RangeDown) => {
-                self.extend_range_by(1);
-                Vec::new()
-            }
+            Some(
+                BoardCommand::FocusUp
+                | BoardCommand::FocusDown
+                | BoardCommand::RangeUp
+                | BoardCommand::RangeDown,
+            )
+            | None => Vec::new(),
             Some(BoardCommand::Collapse) => self.collapse(ids, clock),
             Some(BoardCommand::Select) => {
                 self.toggle_selection();
@@ -223,7 +185,6 @@ impl BoardApp {
                 Vec::new()
             }
             Some(BoardCommand::ScreenshotInbox) => self.toggle_screenshot_inbox(ids, clock),
-            None => Vec::new(),
         }
     }
 
@@ -255,7 +216,7 @@ impl BoardApp {
         }
         let adjacent_fold = match key {
             UiKey::Backspace => self.delete_adjacent_fold(true),
-            UiKey::Delete => self.delete_adjacent_fold(false),
+            UiKey::Delete | UiKey::ModifiedDelete => self.delete_adjacent_fold(false),
             _ => false,
         };
         let Some((command, boundary)) = editing::command_for_key(key, adjacent_fold) else {

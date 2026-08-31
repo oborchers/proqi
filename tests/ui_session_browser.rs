@@ -215,28 +215,30 @@ fn active_and_trashed_results_are_visible_but_cannot_open() {
 
 #[test]
 fn searchable_browser_keeps_vim_letters_literal_and_delete_edits_the_query() {
-    let mut ids = FakeIdGenerator::new(1_725_000_000_000);
-    let entry = item(
-        &mut ids,
-        Some("hjkl"),
-        test_path("query-boundary"),
-        "literal query",
-        10,
-        resumable,
-    );
-    let mut browser = SessionBrowser::new(vec![entry], Timestamp::from_millis(20));
-    for character in "hjklx".chars() {
+    for delete in [UiKey::Delete, UiKey::ModifiedDelete] {
+        let mut ids = FakeIdGenerator::new(1_725_000_000_000);
+        let entry = item(
+            &mut ids,
+            Some("hjkl"),
+            test_path("query-boundary"),
+            "literal query",
+            10,
+            resumable,
+        );
+        let mut browser = SessionBrowser::new(vec![entry], Timestamp::from_millis(20));
+        for character in "hjklx".chars() {
+            assert_eq!(
+                browser.handle(UiInput::Key(UiKey::Character(character))),
+                BrowserAction::Continue
+            );
+        }
+        assert_eq!(browser.query(), "hjklx");
         assert_eq!(
-            browser.handle(UiInput::Key(UiKey::Character(character))),
+            browser.handle(UiInput::Key(delete)),
             BrowserAction::Continue
         );
+        assert_eq!(browser.query(), "hjkl");
     }
-    assert_eq!(browser.query(), "hjklx");
-    assert_eq!(
-        browser.handle(UiInput::Key(UiKey::Delete)),
-        BrowserAction::Continue
-    );
-    assert_eq!(browser.query(), "hjkl");
 }
 
 #[test]

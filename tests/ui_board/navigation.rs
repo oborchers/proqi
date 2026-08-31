@@ -104,6 +104,31 @@ fn help_list_uses_identical_arrow_and_jk_navigation() {
 }
 
 #[test]
+fn modal_navigation_wins_when_help_is_remapped_to_j() {
+    let mut settings = UiSettings::default();
+    settings.keybindings.focus_down = 'g';
+    settings.keybindings.help = 'j';
+    settings.keybindings.validate().expect("valid remap");
+    let mut arrow = Fixture::with_settings(settings.clone());
+    let mut vim = Fixture::with_settings(settings);
+    for fixture in [&mut arrow, &mut vim] {
+        fixture.input(UiInput::Key(UiKey::Escape));
+        fixture.input(UiInput::Key(UiKey::Character('j')));
+        let _layout = draw(fixture, 42, 8);
+    }
+
+    arrow.input(visual(CursorMovement::VisualDown, true));
+    vim.input(UiInput::Key(UiKey::PrimaryCharacter('J')));
+    assert!(arrow.app.help && vim.app.help);
+    assert_eq!(
+        text(draw(&mut arrow, 42, 8).backend().buffer()),
+        text(draw(&mut vim, 42, 8).backend().buffer())
+    );
+    vim.input(UiInput::Key(UiKey::Escape));
+    assert!(!vim.app.help);
+}
+
+#[test]
 fn wide_help_uses_at_most_two_strictly_aligned_columns() {
     let mut fixture = Fixture::new();
     fixture.input(UiInput::Key(UiKey::Escape));

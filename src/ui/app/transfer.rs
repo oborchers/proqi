@@ -165,7 +165,7 @@ impl BoardApp {
             UiKey::Move { movement, .. } => {
                 self.update_transfer_query(|query| query.move_cursor(movement));
             }
-            UiKey::Delete => {
+            UiKey::Delete | UiKey::ModifiedDelete => {
                 self.update_transfer_query(QueryEditor::delete);
             }
             UiKey::Character(character) if !character.is_control() => {
@@ -303,6 +303,7 @@ mod tests {
             Thought, ThoughtPosition, Timestamp,
         },
         ports::{
+            editor::CursorMovement,
             environment::IdGenerator,
             store::{CommitReceipt, DurableIdentity, SessionHit},
         },
@@ -346,6 +347,7 @@ mod tests {
         );
         assert_loading_input_is_ignored(&mut app, &mut ids, &clock);
         app.complete_transfer_discovery(Ok(vec![session_hit(destination)]));
+        assert_modified_delete_edits_query(&mut app, &mut ids, &clock);
         let effects = app.handle_transfer_input(&UiInput::Key(UiKey::Enter), &mut ids, &clock);
         let [Effect::TransferThought(request)] = effects.as_slice() else {
             panic!("expected transfer request");
@@ -382,6 +384,27 @@ mod tests {
             [Effect::CommitBoardOperation(_)]
         ));
         assert!(app.state.board.live_thoughts().is_empty());
+    }
+
+    fn assert_modified_delete_edits_query(
+        app: &mut BoardApp,
+        ids: &mut FakeIdGenerator,
+        clock: &FakeClock,
+    ) {
+        for character in "hx".chars() {
+            app.handle_transfer_input(&UiInput::Key(UiKey::Character(character)), ids, clock);
+        }
+        app.handle_transfer_input(
+            &UiInput::Key(UiKey::Move {
+                movement: CursorMovement::GraphemeBack,
+                extend_selection: false,
+            }),
+            ids,
+            clock,
+        );
+        app.handle_transfer_input(&UiInput::Key(UiKey::ModifiedDelete), ids, clock);
+        assert_eq!(app.transfer_view().expect("transfer").0, "h");
+        app.handle_transfer_input(&UiInput::Key(UiKey::Backspace), ids, clock);
     }
 
     fn assert_loading_input_is_ignored(

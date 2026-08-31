@@ -165,11 +165,12 @@ Board choice.
 | Type `$name`, `/name`, or supported `@name` | Complete a local invocation |
 | `↑` / `↓` or `Primary+P` / `Primary+N`; `Enter` / `Tab`; `Esc` | Navigate, insert, or close invocation results |
 
-Physical `Del` is an invariant Board alias. Remapping the `delete` character
-changes `d`, not the physical key. In text editors and searchable query fields,
-`Del` remains a text-editing key, never a thought delete, and `h`, `j`, `k`, and
-`l` remain literal text. List-only menus use `j` and `k` as aliases for Down and
-Up.
+Unmodified physical `Del` is an invariant Board alias. Remapping the `delete`
+character changes `d`, not the physical key. Modified `Del` is not a Board
+command. In text editors and searchable query fields, `Del` remains a
+text-editing key, never a thought delete, and `h`, `j`, `k`, and `l` remain
+literal text. List-only menus and four-way choosers ignore irrelevant modifiers
+equally for arrows and their Vim-style aliases.
 
 Mouse input covers the same core workflow. Images, files, and large pastes fold
 into compact annotations while their content stays intact. See

@@ -7,7 +7,7 @@ use crate::{
         editor::{CursorMovement, EditorSnapshot},
         environment::{Clock, IdGenerator},
     },
-    ui::{PastePayload, UiInput, UiKey, settings::BoardCommand},
+    ui::{PastePayload, UiInput},
 };
 
 use super::{BoardApp, BoundaryInsertion, InsertionConfirmation, InsertionFocus};
@@ -15,13 +15,12 @@ use super::{BoardApp, BoundaryInsertion, InsertionConfirmation, InsertionFocus};
 impl BoardApp {
     pub(super) fn reset_insertion_confirmation(&mut self, input: &UiInput) {
         let boundary = match input {
-            UiInput::Key(UiKey::Move {
-                movement,
-                extend_selection: false,
-            }) => BoundaryInsertion::for_movement(*movement),
-            UiInput::Key(UiKey::Character(character)) => {
-                BoundaryInsertion::for_command(self.settings.keybindings.command(*character))
-            }
+            UiInput::Key(key) => match self.settings.keybindings.navigation(*key) {
+                Some(crate::ui::settings::BoardNavigation::Focus(direction)) => {
+                    Some(BoundaryInsertion::for_direction(direction))
+                }
+                _ => None,
+            },
             _ => None,
         };
         let continues = boundary.is_some_and(|boundary| self.at_boundary(boundary));
@@ -149,19 +148,10 @@ impl BoardApp {
 }
 
 impl BoundaryInsertion {
-    const fn for_movement(movement: CursorMovement) -> Option<Self> {
-        match movement {
-            CursorMovement::VisualUp => Some(Self::BeforeFirst),
-            CursorMovement::VisualDown => Some(Self::AfterLast),
-            _ => None,
-        }
-    }
-
-    const fn for_command(command: Option<BoardCommand>) -> Option<Self> {
-        match command {
-            Some(BoardCommand::FocusUp) => Some(Self::BeforeFirst),
-            Some(BoardCommand::FocusDown) => Some(Self::AfterLast),
-            _ => None,
+    const fn for_direction(direction: crate::ui::ListNavigation) -> Self {
+        match direction {
+            crate::ui::ListNavigation::Previous => Self::BeforeFirst,
+            crate::ui::ListNavigation::Next => Self::AfterLast,
         }
     }
 }

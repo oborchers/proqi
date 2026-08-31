@@ -162,3 +162,53 @@ fn physical_delete_removes_one_multi_selection_and_undo_restores_it() {
         .collect::<Vec<_>>();
     assert_eq!(contents, ["first", "second", "third"]);
 }
+
+#[test]
+fn modified_delete_is_not_a_board_alias_but_still_deletes_forward_in_edit() {
+    let state = tempfile::tempdir().expect("temporary state");
+    let binary = env!("CARGO_BIN_EXE_proqi");
+    let script = r#"
+        log_user 0
+        set timeout 10
+        set binary $env(PROQI_TEST_BINARY)
+        set state $env(PROQI_TEST_STATE)
+        spawn $binary --state-dir $state
+        expect -exact "\x1b\[?1049h"
+        after 300
+        send -- "\x1b\[200~ab\x1b\[201~"
+        after 150
+        send "\x1b"
+        after 100
+        send -- "\x1b\[3;2~"
+        after 150
+        send "e"
+        after 100
+        send -- "\x1b\[D"
+        send -- "\x1b\[3;2~"
+        after 300
+        send "\x1b"
+        after 100
+        send "q"
+        expect eof
+        catch wait result
+        exit [lindex $result 3]
+    "#;
+    let status = expect_command()
+        .args(["-c", script])
+        .env("PROQI_TEST_BINARY", binary)
+        .env("PROQI_TEST_STATE", state.path())
+        .status()
+        .expect("run modified Delete PTY workflow");
+    assert!(status.success(), "modified Delete PTY exited with {status}");
+
+    let sessions = json_command(binary, state.path(), &["sessions", "list"]);
+    let session = sessions["data"]["sessions"][0]["id"]
+        .as_str()
+        .expect("session ID");
+    let thoughts = json_command(binary, state.path(), &["thoughts", "list", session]);
+    assert_eq!(thoughts["data"]["thoughts"][0]["content"], "a");
+    assert_eq!(
+        thoughts["data"]["thoughts"].as_array().map(Vec::len),
+        Some(1)
+    );
+}
