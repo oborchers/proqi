@@ -7,6 +7,7 @@ use crate::{
     },
     ports::{
         agent::{AgentTarget, SubmissionRequest},
+        attachment_accessibility::AttachmentCheckBatch,
         invocation::InvocationDiscoveryRequest,
         recovery::RecoveryDocument,
         store::{OperationBatch, SubmissionAttempt, SubmissionOutcome},
@@ -19,6 +20,8 @@ use super::{ClipboardIntent, FailureCode, ScreenshotIntent, ScreenshotPauseReaso
 /// One external or durable effect emitted by the reducer and application UI.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Effect {
+    /// Verify exact transient attachment revisions on the bounded accessibility lane.
+    CheckAttachments(AttachmentCheckBatch),
     /// Start, stop, or explicitly take over screenshot capture.
     Screenshot(ScreenshotIntent),
     /// Present one best-effort terminal-host notification after truthful automatic pause.

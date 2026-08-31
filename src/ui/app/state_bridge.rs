@@ -7,7 +7,7 @@ use crate::{
     ui::PastePayload,
 };
 
-use super::{BoardApp, ComposePresentation, InsertionConfirmation, InsertionFocus};
+use super::{BoardApp, ComposePresentation, InsertionFocus};
 
 impl BoardApp {
     /// Apply one ordered persistence acknowledgement to the reducer state.
@@ -57,28 +57,6 @@ impl BoardApp {
         } else {
             self.quit = true;
         }
-    }
-
-    pub(super) fn create(
-        &mut self,
-        payload: PastePayload,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-    ) -> Vec<Effect> {
-        self.clear_board_selection();
-        self.compose_presentation = ComposePresentation::Prompt;
-        self.insertion_focus = InsertionFocus::Inactive;
-        self.insertion_confirmation = InsertionConfirmation::Idle;
-        let effects = self.reduce(Action::CreateThought {
-            thought_id: ids.thought_id(),
-            operation_id: ids.operation_id(),
-            content: payload.content,
-            annotations: payload.annotations,
-            insertion_index: None,
-            at: clock.now(),
-        });
-        self.sync_editor_from_state();
-        effects
     }
 
     pub(super) fn begin_insertion(
@@ -137,8 +115,10 @@ impl BoardApp {
     }
 
     pub(super) fn reduce(&mut self, action: Action) -> Vec<Effect> {
+        let may_change_attachments = Self::may_change_attachments(&action);
         match reduce(&mut self.state, action) {
             Ok(effects) => {
+                self.finish_attachment_mutation(may_change_attachments);
                 let order = self
                     .state
                     .board

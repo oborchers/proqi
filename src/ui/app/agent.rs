@@ -232,7 +232,10 @@ impl BoardApp {
         effects
     }
 
-    fn current_thought_digest(&self, thought_id: crate::domain::ThoughtId) -> Option<[u8; 32]> {
+    pub(super) fn current_thought_digest(
+        &self,
+        thought_id: crate::domain::ThoughtId,
+    ) -> Option<[u8; 32]> {
         if let Some((pending_id, snapshot)) = self.pending_edit_snapshot()
             && pending_id == thought_id
         {

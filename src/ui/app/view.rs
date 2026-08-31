@@ -25,17 +25,23 @@ impl BoardApp {
             return None;
         }
         let snapshot = self.editor_snapshot()?;
-        let (annotations, expanded) = match self.editor.as_ref()?.0 {
-            super::EditorOwner::Compose => (Vec::new(), Vec::new()),
+        let (annotations, expanded, thought_id) = match self.editor.as_ref()?.0 {
+            super::EditorOwner::Compose => (Vec::new(), Vec::new(), None),
             super::EditorOwner::Thought(thought_id) => (
                 self.current_annotations(thought_id),
                 self.expanded_fold_indices(thought_id),
+                Some(thought_id),
             ),
         };
         Some(crate::ui::projection::editor_presentation(
             &snapshot,
             &annotations,
             &expanded,
+            |annotation_index| {
+                thought_id.is_some_and(|thought_id| {
+                    self.attachment_inaccessible(thought_id, annotation_index)
+                })
+            },
         ))
     }
 
@@ -49,10 +55,11 @@ impl BoardApp {
             .thought(thought_id)
             .map(|thought| thought.content.clone())?;
         let annotations = self.current_annotations(thought_id);
-        Some(crate::ui::annotations::project(
+        Some(crate::ui::annotations::project_with_health(
             &content,
             &annotations,
             &self.expanded_fold_indices(thought_id),
+            |annotation_index| self.attachment_inaccessible(thought_id, annotation_index),
         ))
     }
 

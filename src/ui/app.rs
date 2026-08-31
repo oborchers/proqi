@@ -5,6 +5,7 @@ mod agent;
 mod agent_delivery;
 mod agent_identity;
 mod agent_preparation;
+mod attachments;
 mod clipboard;
 mod commands;
 mod control;
@@ -130,6 +131,7 @@ pub struct BoardApp {
     agent_targets: Vec<AgentTarget>,
     submission_mode: Option<SubmissionMode>,
     deferred_submissions: BTreeMap<SubmissionId, DeferredSubmissionIntent>,
+    preflight_submissions: BTreeMap<SubmissionId, DeferredSubmissionIntent>,
     pending_submissions: BTreeMap<SubmissionId, PendingSubmission>,
     pending_transfer_removals: BTreeSet<OperationId>,
     screenshot: screenshot::ScreenshotInbox,
@@ -214,6 +216,7 @@ impl BoardApp {
             agent_targets: Vec::new(),
             submission_mode: None,
             deferred_submissions: BTreeMap::new(),
+            preflight_submissions: BTreeMap::new(),
             pending_submissions: BTreeMap::new(),
             pending_transfer_removals: BTreeSet::new(),
             screenshot: screenshot::ScreenshotInbox::default(),
@@ -271,7 +274,7 @@ impl BoardApp {
             input,
             UiInput::Resize { .. } | UiInput::HostFocusGained | UiInput::HostFocusLost
         ) {
-            self.status = None;
+            self.clear_status_for_interaction();
             self.screenshot.notice_count = 0;
         }
         if !matches!(

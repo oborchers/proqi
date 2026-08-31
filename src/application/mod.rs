@@ -2,6 +2,7 @@
 
 mod action;
 mod admission;
+mod attachments;
 mod capture;
 mod control;
 mod error;
@@ -20,6 +21,10 @@ mod update_coordination;
 
 pub use action::Action;
 pub use admission::{PendingMutationIntent, PendingMutationIntents};
+pub use attachments::{
+    AttachmentAccessibilityState, AttachmentPreflightOutcome, AttachmentRefreshCause,
+    AttachmentRefreshOutcome, attachment_keys,
+};
 pub use capture::{apply_capture, prepare_capture};
 pub(crate) use control::{ControlReplay, match_control_replay};
 pub use error::{ApplicationError, ApplicationResult, FailureCode};

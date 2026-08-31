@@ -22,9 +22,19 @@ const MAX_CAPTURE_BYTES: u64 = 1024 * 1024;
 const TERMINATION_GRACE: Duration = Duration::from_millis(250);
 
 /// Operating-system process runner with bounded output and a hard deadline.
-#[derive(Clone, Debug, Default)]
+#[derive(Debug, Default)]
 pub struct SystemProcessRunner {
     cancellation: CancellationFlag,
+    cleanup_incomplete: bool,
+}
+
+impl Clone for SystemProcessRunner {
+    fn clone(&self) -> Self {
+        Self {
+            cancellation: self.cancellation.clone(),
+            cleanup_incomplete: self.cleanup_incomplete,
+        }
+    }
 }
 
 /// Shared, idempotent cancellation for adapter-owned process work.
@@ -53,7 +63,10 @@ impl crate::ports::screenshot::ScreenshotCancellation for CancellationFlag {
 
 impl SystemProcessRunner {
     pub(crate) fn cancellable(cancellation: CancellationFlag) -> Self {
-        Self { cancellation }
+        Self {
+            cancellation,
+            cleanup_incomplete: false,
+        }
     }
 
     pub(crate) fn cancellation(&self) -> CancellationFlag {
@@ -99,6 +112,11 @@ fn resume_args(
 
 impl ProcessRunner for SystemProcessRunner {
     fn run(&mut self, request: ProcessRequest) -> Result<ProcessOutput, ProcessError> {
+        if self.cleanup_incomplete {
+            return Err(ProcessError::Io(
+                "previous child-process cleanup did not settle".to_owned(),
+            ));
+        }
         if self.cancellation.is_cancelled() {
             return Err(ProcessError::Cancelled);
         }
@@ -133,14 +151,16 @@ impl ProcessRunner for SystemProcessRunner {
         let stderr_reader = read_in_background(stderr);
         let stdin_writer = write_in_background(stdin, request.stdin);
         let deadline = Deadline::new(request.timeout);
-        let execution = collect_execution(
+        let settlement = collect_execution(
             &mut child,
             deadline,
             &self.cancellation,
             stdin_writer,
             stdout_reader,
             stderr_reader,
-        )?;
+        );
+        self.cleanup_incomplete = !settlement.settled;
+        let execution = settlement.result?;
         child.disarm();
         let exit_code = execution.exit_code;
         let stdout = execution.stdout;
@@ -254,6 +274,11 @@ struct ExecutionOutput {
     stderr: BoundedRead,
 }
 
+struct ExecutionSettlement {
+    result: Result<ExecutionOutput, ProcessError>,
+    settled: bool,
+}
+
 fn collect_execution(
     child: &mut OwnedChild,
     deadline: Deadline,
@@ -261,33 +286,35 @@ fn collect_execution(
     mut stdin: Worker<()>,
     mut stdout: Worker<BoundedRead>,
     mut stderr: Worker<BoundedRead>,
-) -> Result<ExecutionOutput, ProcessError> {
+) -> ExecutionSettlement {
     let result = wait_for_exit(child.child_mut(), deadline, cancellation).and_then(|exit_code| {
         receive_worker(&mut stdin, deadline, "child input writer")?;
         let output = receive_worker(&mut stdout, deadline, "child output reader")?;
         let errors = receive_worker(&mut stderr, deadline, "child error reader")?;
         Ok((exit_code, output, errors))
     });
-    if result.is_err() {
-        child.terminate();
-    }
+    let child_settled = result.is_ok() || child.terminate();
     let cleanup = Deadline::new(TERMINATION_GRACE);
     let joins = [
         finish_worker(&mut stdin, cleanup),
         finish_worker(&mut stdout, cleanup),
         finish_worker(&mut stderr, cleanup),
     ];
-    if result.is_ok() {
+    let workers_settled = joins.iter().all(Result::is_ok);
+    let result = result.and_then(|(exit_code, stdout, stderr)| {
         for joined in joins {
             joined?;
         }
+        Ok(ExecutionOutput {
+            exit_code,
+            stdout,
+            stderr,
+        })
+    });
+    ExecutionSettlement {
+        result,
+        settled: child_settled && workers_settled,
     }
-    let (exit_code, stdout, stderr) = result?;
-    Ok(ExecutionOutput {
-        exit_code,
-        stdout,
-        stderr,
-    })
 }
 
 fn receive_worker<T>(
@@ -381,6 +408,15 @@ mod tests {
             timeout: Duration::from_millis(10),
         });
         assert_eq!(result, Err(ProcessError::TimedOut));
+        let recovery = runner
+            .run(ProcessRequest {
+                program: OsString::from("/bin/cat"),
+                args: Vec::new(),
+                stdin: Some(b"recovered".to_vec()),
+                timeout: Duration::from_secs(1),
+            })
+            .expect("later process remains usable");
+        assert_eq!(recovery.stdout, b"recovered");
     }
 
     #[cfg(unix)]

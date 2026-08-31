@@ -151,11 +151,17 @@ impl Paths for FakePaths {
 pub struct FakeEnvironment {
     /// Current-directory result returned by every call.
     pub current_directory: Result<PathBuf, PathError>,
+    /// Current-executable result returned by every call.
+    pub current_executable: Result<PathBuf, PathError>,
 }
 
 impl Environment for FakeEnvironment {
     fn current_directory(&self) -> Result<PathBuf, PathError> {
         self.current_directory.clone()
+    }
+
+    fn current_executable(&self) -> Result<PathBuf, PathError> {
+        self.current_executable.clone()
     }
 }
 

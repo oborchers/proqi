@@ -259,6 +259,9 @@ mod tests {
             normalize_existing_files("file://remote-host/path.png"),
             None
         );
+        assert_eq!(normalize_existing_files("s3://bucket/context.png"), None);
+        assert_eq!(normalize_existing_files("ftp://host/context.txt"), None);
+        assert_eq!(normalize_existing_files("https://host/context.txt"), None);
         assert_eq!(
             normalize_existing_files("/definitely/not/a/real/Bild\\ \\(18\\).png"),
             None

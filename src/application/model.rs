@@ -170,6 +170,8 @@ pub struct AppState {
     pub insertion_index: usize,
     /// Current durability status.
     pub durability: DurabilityState,
+    /// Transient attachment health and application-owned scheduling policy.
+    pub attachments: super::AttachmentAccessibilityState,
     pub(super) board_history: Vec<BoardOperation>,
     pub(super) board_history_cursor: usize,
     pub(super) editor_histories: HashMap<ThoughtId, EditorHistory>,
@@ -197,6 +199,7 @@ impl AppState {
             focused_thought,
             insertion_index,
             durability: DurabilityState::Durable { sequence },
+            attachments: super::AttachmentAccessibilityState::default(),
             board_history: Vec::new(),
             board_history_cursor: 0,
             editor_histories: HashMap::new(),

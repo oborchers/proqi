@@ -9,7 +9,7 @@ use crate::{
     },
 };
 
-use super::{BoardApp, PastePayload, UiKey, editing};
+use super::{BoardApp, UiKey, editing};
 use crate::ui::settings::BoardCommand;
 
 impl BoardApp {
@@ -366,31 +366,6 @@ impl BoardApp {
         let _effects = self.reduce(Action::ExitEdit);
         self.editor = None;
         effects
-    }
-
-    pub(super) fn paste_payload(
-        &mut self,
-        payload: PastePayload,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-    ) -> Vec<Effect> {
-        if matches!(self.state.mode, InteractionMode::Board) {
-            if payload.content.is_empty() {
-                return Vec::new();
-            }
-            self.create(payload, ids, clock)
-        } else if matches!(self.state.mode, InteractionMode::Compose) {
-            if payload.content.is_empty() {
-                Vec::new()
-            } else {
-                self.apply_compose_paste(payload.content, &payload.annotations, ids, clock)
-            }
-        } else {
-            let mut effects = self.flush_pending_edit(ids, clock);
-            self.apply_annotated_edit(EditCommand::Paste(payload.content), &payload.annotations);
-            effects.extend(self.flush_pending_edit(ids, clock));
-            effects
-        }
     }
 
     pub(super) fn delete(&mut self, ids: &mut impl IdGenerator, clock: &impl Clock) -> Vec<Effect> {

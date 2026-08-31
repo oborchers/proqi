@@ -26,7 +26,8 @@ pub fn reduce(state: &mut AppState, action: Action) -> ApplicationResult<Vec<Eff
     {
         return Err(ApplicationError::InvalidState);
     }
-    match action {
+    let previous_focus = state.focused_thought;
+    let mut effects = match action {
         Action::RenameSession { name } => reduce_session_name(state, name),
         Action::FocusThought(_)
         | Action::EnterEdit(_)
@@ -52,7 +53,14 @@ pub fn reduce(state: &mut AppState, action: Action) -> ApplicationResult<Vec<Eff
         Action::PersistenceCommitted(_)
         | Action::PersistenceFailed { .. }
         | Action::RetryPersistence(_) => reduce_persistence(state, &action),
+    }?;
+    effects.extend(state.attachments.reconcile(&state.board));
+    if state.focused_thought != previous_focus
+        && let Some(thought_id) = state.focused_thought
+    {
+        effects.extend(state.attachments.prioritize_focus(thought_id));
     }
+    Ok(effects)
 }
 
 const fn mutates_durable_state(action: &Action) -> bool {

@@ -33,11 +33,19 @@ fn commit_barrier_replays_keyboard_plain_and_annotated_paste_in_order() {
     let effects = app.complete_screenshot_capture(Ok(created(&capture)), &mut ids, &clock);
     let sequences = effects
         .iter()
-        .map(|effect| match effect {
-            Effect::CommitRevision(revision) => revision.sequence,
+        .filter_map(|effect| match effect {
+            Effect::CommitRevision(revision) => Some(revision.sequence),
+            Effect::CheckAttachments(_) => None,
             other => panic!("unexpected replay effect: {other:?}"),
         })
         .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(
+        effects
+            .iter()
+            .filter(|effect| matches!(effect, Effect::CheckAttachments(_)))
+            .count(),
+        1
+    );
     assert_eq!(sequences.len(), 3);
     assert!(
         sequences
@@ -291,10 +299,18 @@ fn board_key_and_board_pastes_replay_without_capture_mode_stealing() {
     let capture = next_commit(&mut app, &mut ids, &clock);
     app.handle(UiInput::Key(UiKey::Duplicate), &mut ids, &clock);
     let effects = app.complete_screenshot_capture(Ok(created(&capture)), &mut ids, &clock);
-    assert!(matches!(
-        effects.as_slice(),
-        [Effect::CommitBoardOperation(_)]
-    ));
+    assert_eq!(
+        effects
+            .iter()
+            .filter(|effect| matches!(effect, Effect::CommitBoardOperation(_)))
+            .count(),
+        1
+    );
+    assert!(
+        effects
+            .iter()
+            .any(|effect| matches!(effect, Effect::CheckAttachments(_)))
+    );
     assert_eq!(app.state.mode, InteractionMode::Board);
     assert_ne!(app.state.focused_thought, capture_thought_id(&capture));
     assert_eq!(app.state.board.live_thoughts().len(), 3);
@@ -313,10 +329,18 @@ fn board_key_and_board_pastes_replay_without_capture_mode_stealing() {
         let capture = next_commit(&mut app, &mut ids, &clock);
         app.handle(input, &mut ids, &clock);
         let effects = app.complete_screenshot_capture(Ok(created(&capture)), &mut ids, &clock);
-        assert!(matches!(
-            effects.as_slice(),
-            [Effect::CommitBoardOperation(_)]
-        ));
+        assert_eq!(
+            effects
+                .iter()
+                .filter(|effect| matches!(effect, Effect::CommitBoardOperation(_)))
+                .count(),
+            1
+        );
+        assert!(
+            effects
+                .iter()
+                .any(|effect| matches!(effect, Effect::CheckAttachments(_)))
+        );
         assert_ne!(app.state.focused_thought, capture_thought_id(&capture));
         assert!(matches!(app.state.mode, InteractionMode::Edit { .. }));
         assert_eq!(app.state.board.live_thoughts().len(), 3);

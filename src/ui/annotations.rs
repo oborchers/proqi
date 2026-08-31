@@ -7,6 +7,7 @@ use crate::ports::editor::{OffsetAffinity, TextChange, TextChangeSet};
 
 const LARGE_PASTE_LINES: usize = 12;
 const LARGE_PASTE_GRAPHEMES: usize = 1_200;
+const INACCESSIBLE_SUFFIX: &str = " [inaccessible]";
 
 /// Exact inserted text with optional durable presentation provenance.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -15,6 +16,7 @@ pub struct PastePayload {
     pub content: String,
     /// Presentation metadata over UTF-8 byte ranges in `content`.
     pub annotations: Vec<ContentAnnotation>,
+    verified_paths: Vec<String>,
 }
 
 impl PastePayload {
@@ -37,6 +39,7 @@ impl PastePayload {
         Self {
             content,
             annotations,
+            verified_paths: Vec::new(),
         }
     }
 
@@ -46,7 +49,28 @@ impl PastePayload {
         Self {
             content,
             annotations,
+            verified_paths: Vec::new(),
         }
+    }
+
+    /// Retain transient accessibility evidence established by the producing adapter.
+    #[must_use]
+    pub(crate) fn with_verified_attachments(mut self) -> Self {
+        self.verified_paths = self
+            .annotations
+            .iter()
+            .filter_map(|annotation| {
+                matches!(annotation.kind, ContentAnnotationKind::Attachment { .. })
+                    .then(|| self.content.get(annotation.start..annotation.end))
+                    .flatten()
+                    .map(ToOwned::to_owned)
+            })
+            .collect();
+        self
+    }
+
+    pub(in crate::ui) fn into_parts(self) -> (String, Vec<ContentAnnotation>, Vec<String>) {
+        (self.content, self.annotations, self.verified_paths)
     }
 }
 
@@ -56,9 +80,11 @@ pub(super) struct PresentedFold {
     pub(super) annotation_index: usize,
     pub(super) start: usize,
     pub(super) end: usize,
+    pub(super) content_end: usize,
     pub(super) canonical_start: usize,
     pub(super) canonical_end: usize,
     pub(super) collapsed: bool,
+    pub(super) inaccessible: bool,
 }
 
 /// Display-only projection that never replaces canonical content.
@@ -73,6 +99,15 @@ pub(super) fn project(
     annotations: &[ContentAnnotation],
     expanded: &[usize],
 ) -> Presentation {
+    project_with_health(content, annotations, expanded, |_| false)
+}
+
+pub(super) fn project_with_health(
+    content: &str,
+    annotations: &[ContentAnnotation],
+    expanded: &[usize],
+    mut inaccessible: impl FnMut(usize) -> bool,
+) -> Presentation {
     let mut output = String::new();
     let mut folds = Vec::new();
     let mut cursor = 0;
@@ -84,6 +119,8 @@ pub(super) fn project(
         };
         output.push_str(prefix);
         let start = output.len();
+        let inaccessible = matches!(annotation.kind, ContentAnnotationKind::Attachment { .. })
+            && inaccessible(annotation_index);
         if expanded.contains(&annotation_index) {
             if let ContentAnnotationKind::Attachment { image: true, .. } = &annotation.kind {
                 image += 1;
@@ -97,47 +134,37 @@ pub(super) fn project(
                 return plain(content);
             };
             output.push_str(exact);
+            let content_end = output.len();
+            if inaccessible {
+                output.push_str(INACCESSIBLE_SUFFIX);
+            }
             folds.push(fold(
                 annotation_index,
                 start,
                 output.len(),
+                content_end,
                 annotation,
                 false,
+                inaccessible,
             ));
             cursor = annotation.end;
             continue;
         }
-        match &annotation.kind {
-            ContentAnnotationKind::Attachment {
-                image: is_image, ..
-            } => {
-                let (kind, number) = if *is_image {
-                    image += 1;
-                    ("Image", image)
-                } else {
-                    file += 1;
-                    ("File", file)
-                };
-                output.push('[');
-                output.push_str(kind);
-                output.push(' ');
-                output.push_str(&number.to_string());
-                output.push(']');
-            }
-            ContentAnnotationKind::LargePaste { lines, graphemes } => {
-                output.push_str("[Pasted text · ");
-                output.push_str(&lines.to_string());
-                output.push_str(" lines · ");
-                output.push_str(&grouped(*graphemes));
-                output.push_str(" characters]");
-            }
-        }
+        push_collapsed_label(
+            &mut output,
+            &annotation.kind,
+            &mut image,
+            &mut file,
+            inaccessible,
+        );
         folds.push(fold(
             annotation_index,
             start,
             output.len(),
+            output.len(),
             annotation,
             true,
+            inaccessible,
         ));
         cursor = annotation.end;
     }
@@ -151,20 +178,59 @@ pub(super) fn project(
     }
 }
 
+fn push_collapsed_label(
+    output: &mut String,
+    kind: &ContentAnnotationKind,
+    image_count: &mut usize,
+    file_count: &mut usize,
+    inaccessible: bool,
+) {
+    match kind {
+        ContentAnnotationKind::Attachment { image, .. } => {
+            let (label, number) = if *image {
+                *image_count += 1;
+                ("Image", *image_count)
+            } else {
+                *file_count += 1;
+                ("File", *file_count)
+            };
+            output.push('[');
+            output.push_str(label);
+            output.push(' ');
+            output.push_str(&number.to_string());
+            if inaccessible {
+                output.push_str(" · inaccessible");
+            }
+            output.push(']');
+        }
+        ContentAnnotationKind::LargePaste { lines, graphemes } => {
+            output.push_str("[Pasted text · ");
+            output.push_str(&lines.to_string());
+            output.push_str(" lines · ");
+            output.push_str(&grouped(*graphemes));
+            output.push_str(" characters]");
+        }
+    }
+}
+
 fn fold(
     annotation_index: usize,
     start: usize,
     end: usize,
+    content_end: usize,
     annotation: &ContentAnnotation,
     collapsed: bool,
+    inaccessible: bool,
 ) -> PresentedFold {
     PresentedFold {
         annotation_index,
         start,
         end,
+        content_end,
         canonical_start: annotation.start,
         canonical_end: annotation.end,
         collapsed,
+        inaccessible,
     }
 }
 

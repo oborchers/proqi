@@ -1,6 +1,6 @@
 ---
 source: tests/ui_board/snapshots.rs
-assertion_line: 70
+assertion_line: 84
 expression: "snapshot(&mut fixture, 60, 12, ThemePreference::Dark)"
 ---
 SIZE 60x12
@@ -10,7 +10,7 @@ TEXT
 01│  first prompt│
 02│  ──────────────────────────────────────────────────────────│
 03││
-04│⋮ [Image 1]│
+04│⋮ [Image 1 · inaccessible]│
 05││
 06│                        + New thought│
 07││
@@ -24,7 +24,7 @@ STYLE RUNS
 1: 0-0 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 1-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 2: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-59 fg=Rgb(42, 37, 32) bg=Rgb(15, 13, 10) mod=NONE
 3: 0-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-4: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-1 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 2-10 fg=Rgb(112, 214, 155) bg=Rgb(39, 40, 48) mod=BOLD | 11-59 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
+4: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-1 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 2-25 fg=Rgb(204, 160, 58) bg=Rgb(39, 40, 48) mod=BOLD | 26-59 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
 5: 0-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 6: 0-23 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 24-24 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 25-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 7: 0-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE

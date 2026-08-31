@@ -31,6 +31,9 @@ pub fn run(arguments: impl IntoIterator<Item = OsString>) -> ExitCode {
             return ExitCode::from(u8::try_from(code).unwrap_or(2));
         }
     };
+    if matches!(cli.command, Some(args::Command::AttachmentCheckWorker)) {
+        return crate::adapters::attachment::worker::run_stdio();
+    }
     execute::execute(cli)
 }
 

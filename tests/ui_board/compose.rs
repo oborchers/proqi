@@ -140,10 +140,18 @@ fn exact_and_annotated_paste_materialize_through_the_canonical_create() {
         path.to_owned(),
         vec![annotation.clone()],
     )));
-    assert!(matches!(
-        effects.as_slice(),
-        [Effect::CommitBoardOperation(_)]
-    ));
+    assert_eq!(
+        effects
+            .iter()
+            .filter(|effect| matches!(effect, Effect::CommitBoardOperation(_)))
+            .count(),
+        1
+    );
+    assert!(
+        effects
+            .iter()
+            .any(|effect| matches!(effect, Effect::CheckAttachments(_)))
+    );
     let thought = &annotated.app.state.board.live_thoughts()[0];
     assert_eq!(thought.content, path);
     assert_eq!(thought.annotations, vec![annotation]);

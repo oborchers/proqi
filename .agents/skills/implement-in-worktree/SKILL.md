@@ -17,8 +17,13 @@ ownership of scope, review, or merge authorization.
    testable outcome. Ask the user only for product choices that cannot be
    discovered or safely inferred.
 3. Treat the user's invocation as permission to create a worktree, worker,
-   branch, commits, and a pull request for that ticket. It is not permission to
-   merge, publish a release, change repository settings, or broaden scope unless
+   branch, commits, and exactly one draft pull request for that ticket. The
+   worker may choose and update its evidence-based title and body, apply
+   relevant existing labels, monitor and repair CI, and mark the pull request
+   ready once it is green, mergeable, and has no known defect. None of those
+   actions require another approval. This is not permission to comment, review,
+   merge, publish a release or package, change repository settings, create or
+   change labels or rules, create another pull request, or broaden scope unless
    the user says so explicitly.
 4. Read every applicable `AGENTS.md`. Read repository product or architecture
    context when those instructions require it.
@@ -69,7 +74,9 @@ The brief must contain:
   that the feature exposes, plus the prohibition against weakening gates;
 - permission boundaries for credentials and external actions: use only supplied
   credentials, never copy secrets into prompts, files, logs, commits, PRs, or
-  comments, and use the user's configured Git/GitHub identity;
+  comments, use the user's configured Git/GitHub identity, and state that this
+  invocation authorizes one draft pull request plus its later ready transition
+  without another text or action approval;
 - the pull-request and structured-handoff requirements below.
 
 Submit the brief through `herdr agent prompt ...` without `--wait`. Dispatching
@@ -173,9 +180,12 @@ blocked transition, keep the goal active and still report immediately.
   review.
 - Inspect the final diff, status, new files, generated artifacts, and commit
   identity. Commit coherent changes without secrets or machine-specific paths.
-- Push only the topic branch. Open a pull request against `main` with a concise
-  title and a body covering summary, acceptance criteria, tests, live/manual
-  verification, risks, limitations, and follow-ups.
+- Push only the topic branch. Open exactly one draft pull request against `main`
+  with a concise evidence-based title and a body covering summary, acceptance
+  criteria, tests, live/manual verification, risks, limitations, and follow-ups.
+  Keep that body accurate as branch evidence changes. The invocation is already
+  approval for the title, body, creation, and updates, so do not stop to request
+  another outbound-text approval.
 - Inspect the repository's existing labels and apply only relevant existing
   labels. Common Proqi choices are `enhancement`, `bug`, `documentation`,
   `rust`, and `accessibility`. Never create labels or repository rules unless
@@ -187,12 +197,17 @@ based retry is reasonable for an infrastructure flake; repeated unexplained
 failure is a blocker, not permission for indefinite retries. Never weaken a
 gate, threshold, test, or snapshot to obtain green status.
 
+When the complete pull request is green and mergeable and no known defect or
+review issue remains, mark it ready for review without requesting another
+approval. Do not post comments or reviews while doing so. A ready pull request
+is still only a review artifact; the worker never merges it.
+
 ## Finish and hand back
 
-The worker is done only when the pull request is green and mergeable, the full
-acceptance criteria are met, and no known defect or review issue remains. It must
-then mark its goal complete and send a structured Herdr handoff to the invoking
-pane containing:
+The worker is done only when the pull request is green, mergeable, and ready for
+review, the full acceptance criteria are met, and no known defect or review
+issue remains. It must then mark its goal complete and send a structured Herdr
+handoff to the invoking pane containing:
 
 - pull-request URL, branch, base and head SHAs, and worktree/workspace IDs;
 - implementation summary and important design decisions;

@@ -8,9 +8,78 @@ use crate::{
     },
 };
 
-use super::{BoardApp, pending_types::PendingEditorClipboard};
+use super::{
+    BoardApp, ComposePresentation, InsertionConfirmation, InsertionFocus,
+    pending_types::PendingEditorClipboard,
+};
+use crate::ui::PastePayload;
 
 impl BoardApp {
+    pub(super) fn paste_payload(
+        &mut self,
+        payload: PastePayload,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        if matches!(self.state.mode, InteractionMode::Board) {
+            if payload.content.is_empty() {
+                return Vec::new();
+            }
+            self.create(payload, ids, clock)
+        } else if matches!(self.state.mode, InteractionMode::Compose) {
+            let (content, annotations, verified_paths) = payload.into_parts();
+            if content.is_empty() {
+                return Vec::new();
+            }
+            let effects = self.apply_compose_paste(content, &annotations, ids, clock);
+            if let InteractionMode::Edit { thought_id } = self.state.mode {
+                self.state
+                    .attachments
+                    .mark_paths_accessible(thought_id, &verified_paths);
+            }
+            effects
+        } else {
+            let thought_id = self.active_thought_id();
+            let (content, annotations, verified_paths) = payload.into_parts();
+            let mut effects = self.flush_pending_edit(ids, clock);
+            self.apply_annotated_edit(EditCommand::Paste(content), &annotations);
+            effects.extend(self.flush_pending_edit(ids, clock));
+            if let Some(thought_id) = thought_id {
+                self.state
+                    .attachments
+                    .mark_paths_accessible(thought_id, &verified_paths);
+            }
+            effects
+        }
+    }
+
+    pub(super) fn create(
+        &mut self,
+        payload: PastePayload,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        self.clear_board_selection();
+        self.compose_presentation = ComposePresentation::Prompt;
+        self.insertion_focus = InsertionFocus::Inactive;
+        self.insertion_confirmation = InsertionConfirmation::Idle;
+        let thought_id = ids.thought_id();
+        let (content, annotations, verified_paths) = payload.into_parts();
+        let effects = self.reduce(Action::CreateThought {
+            thought_id,
+            operation_id: ids.operation_id(),
+            content,
+            annotations,
+            insertion_index: None,
+            at: clock.now(),
+        });
+        self.state
+            .attachments
+            .mark_paths_accessible(thought_id, &verified_paths);
+        self.sync_editor_from_state();
+        effects
+    }
+
     pub(super) fn copy_active(&mut self, ids: &mut impl IdGenerator) -> Vec<Effect> {
         if matches!(self.state.mode, InteractionMode::Edit { .. }) {
             self.copy_selection(ids)

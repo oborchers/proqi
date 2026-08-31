@@ -359,7 +359,9 @@ fn read_clipboard(
             .map_err(|_| ExternalReadError::Attachment)?
             .into_os_string()
             .into_string()
-            .map(|path| super::path_import::attachment_payload(path, true))
+            .map(|path| {
+                super::path_import::attachment_payload(path, true).with_verified_attachments()
+            })
             .map_err(|_| ExternalReadError::NonUnicodePath),
     }
 }
