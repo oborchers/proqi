@@ -426,6 +426,8 @@ mod agent_selection;
 mod agent_session;
 #[path = "ui_board/annotations.rs"]
 mod annotations;
+#[path = "ui_board/attachment_accessibility.rs"]
+mod attachment_accessibility;
 #[path = "ui_board/blank.rs"]
 mod blank;
 #[path = "ui_board/clipboard.rs"]

@@ -7,6 +7,9 @@ use proqi::{
             AgentSessionBinding, AgentState, AgentTarget, CODEX_AGENT_KIND, HarnessKind,
             PaneContext, PaneRect,
         },
+        attachment_accessibility::{
+            AttachmentAccessFailure, AttachmentCheckBatchResult, AttachmentCheckResult,
+        },
         invocation::{
             InvocationDiscovery, InvocationEntry, InvocationForm, InvocationHarness,
             InvocationKind, InvocationScope,
@@ -18,10 +21,11 @@ use proqi::{
 mod snapshot_support;
 
 use snapshot_support::snapshot_buffer;
+#[path = "snapshots/attachment_accessibility.rs"]
+mod attachment_accessibility_snapshots;
 
 fn snapshot(fixture: &mut Fixture, width: u16, height: u16, theme: ThemePreference) -> String {
-    let terminal = draw_theme(fixture, width, height, theme);
-    snapshot_buffer(terminal.backend().buffer())
+    snapshot_buffer(draw_theme(fixture, width, height, theme).backend().buffer())
 }
 
 fn adjacent_target(direction: Direction, pane_id: &str, readiness: AgentState) -> AgentTarget {
@@ -78,6 +82,46 @@ fn populated_board_with_folded_attachment() {
     )));
     fixture.input(UiInput::Key(UiKey::Escape));
     insta::assert_snapshot!(snapshot(&mut fixture, 60, 12, ThemePreference::Dark));
+}
+
+#[test]
+fn inaccessible_attachment_has_a_plain_warning_snapshot() {
+    let mut fixture = Fixture::new();
+    let path = "/private/var/folders/TemporaryItems/Grüße 第一.png";
+    let effects = fixture.effects(UiInput::PasteAnnotated(PastePayload::annotated(
+        path.to_owned(),
+        vec![ContentAnnotation {
+            start: 0,
+            end: path.len(),
+            kind: ContentAnnotationKind::Attachment {
+                image: true,
+                display_name: "Grüße 第一.png".to_owned(),
+            },
+        }],
+    )));
+    let batch = effects
+        .iter()
+        .find_map(|effect| match effect {
+            Effect::CheckAttachments(batch) => Some(batch.clone()),
+            _ => None,
+        })
+        .expect("insertion check");
+    fixture
+        .app
+        .complete_attachment_checks(AttachmentCheckBatchResult {
+            id: batch.id,
+            purpose: batch.purpose,
+            results: batch
+                .checks
+                .into_iter()
+                .map(|key| AttachmentCheckResult {
+                    key,
+                    result: Err(AttachmentAccessFailure::Missing),
+                })
+                .collect(),
+        });
+
+    insta::assert_snapshot!(snapshot(&mut fixture, 60, 8, ThemePreference::Dark));
 }
 
 #[test]

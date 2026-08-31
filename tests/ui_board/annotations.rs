@@ -1,6 +1,11 @@
 use super::*;
 use proptest::prelude::*;
 
+#[path = "annotations/support.rs"]
+mod support;
+
+use support::insert_accessible;
+
 fn image_payload(path: &str) -> PastePayload {
     attachment_payload(path, true)
 }
@@ -23,7 +28,7 @@ fn attachment_payload(path: &str, image: bool) -> PastePayload {
 fn image_path_folds_immediately_but_every_exact_content_path_is_preserved() {
     let mut fixture = Fixture::new();
     let path = "/private/temporary/location/screenshot.png";
-    fixture.input(UiInput::PasteAnnotated(image_payload(path)));
+    insert_accessible(&mut fixture, image_payload(path));
     assert_eq!(fixture.app.state.board.live_thoughts()[0].content, path);
     assert_eq!(
         fixture.app.state.board.live_thoughts()[0].annotations.len(),
@@ -60,7 +65,7 @@ fn image_path_folds_immediately_but_every_exact_content_path_is_preserved() {
 fn files_use_the_minimal_accent_placeholder_without_exposing_the_path() {
     let mut fixture = Fixture::new();
     let path = "/private/temporary/location/context.pdf";
-    fixture.input(UiInput::PasteAnnotated(attachment_payload(path, false)));
+    insert_accessible(&mut fixture, attachment_payload(path, false));
     let terminal = draw_theme(&mut fixture, 60, 8, ThemePreference::Dark);
     let rendered = text(terminal.backend().buffer());
     assert!(rendered.contains("[File 1]"));
@@ -166,7 +171,7 @@ fn fast_and_boundary_navigation_keep_a_collapsed_annotation_atomic() {
 fn collapsed_folds_are_atomic_for_selection_replacement_and_expansion() {
     let mut fixture = Fixture::new();
     let path = "/tmp/screenshot.png";
-    fixture.input(UiInput::PasteAnnotated(image_payload(path)));
+    insert_accessible(&mut fixture, image_payload(path));
     fixture.input(UiInput::Key(UiKey::Move {
         movement: CursorMovement::GraphemeBack,
         extend_selection: false,
@@ -212,7 +217,7 @@ fn collapsed_folds_are_atomic_for_selection_replacement_and_expansion() {
     assert_eq!(fixture.app.editor_snapshot().expect("editor").content, "x");
 
     let mut fixture = Fixture::new();
-    fixture.input(UiInput::PasteAnnotated(image_payload(path)));
+    insert_accessible(&mut fixture, image_payload(path));
     let _rendered = draw(&mut fixture, 40, 8);
     let area = fixture.app.prepare_frame(Rect::new(0, 0, 40, 8)).thoughts[0].text_area;
     fixture.pointer(
@@ -247,9 +252,7 @@ fn collapsed_folds_are_atomic_for_selection_replacement_and_expansion() {
 #[test]
 fn folded_editor_keeps_a_visible_terminal_cursor_at_the_token_boundary() {
     let mut fixture = Fixture::new();
-    fixture.input(UiInput::PasteAnnotated(image_payload(
-        "/tmp/screenshot.png",
-    )));
+    insert_accessible(&mut fixture, image_payload("/tmp/screenshot.png"));
     let mut terminal = draw(&mut fixture, 40, 8);
     let cursor = terminal
         .backend_mut()
@@ -262,9 +265,7 @@ fn folded_editor_keeps_a_visible_terminal_cursor_at_the_token_boundary() {
 #[test]
 fn folded_cursor_projects_before_selected_and_after_without_extra_steps() {
     let mut fixture = Fixture::new();
-    fixture.input(UiInput::PasteAnnotated(image_payload(
-        "/tmp/screenshot.png",
-    )));
+    insert_accessible(&mut fixture, image_payload("/tmp/screenshot.png"));
     fixture.input(UiInput::Key(UiKey::Move {
         movement: CursorMovement::GraphemeBack,
         extend_selection: false,
@@ -447,7 +448,7 @@ proptest! {
     ) {
         let path = "/tmp/atomic-hidden-image.png";
         let mut fixture = Fixture::new();
-        fixture.input(UiInput::PasteAnnotated(image_payload(path)));
+        insert_accessible(&mut fixture, image_payload(path));
         for forward in forwards {
             fixture.input(UiInput::Key(UiKey::Move {
                 movement: if forward {
@@ -480,9 +481,7 @@ proptest! {
 #[test]
 fn folded_tokens_use_the_annotation_role_and_bold_non_color_cue() {
     let mut fixture = Fixture::new();
-    fixture.input(UiInput::PasteAnnotated(image_payload(
-        "/tmp/screenshot.png",
-    )));
+    insert_accessible(&mut fixture, image_payload("/tmp/screenshot.png"));
     let terminal = draw_theme(&mut fixture, 40, 8, ThemePreference::Dark);
     let layout = fixture.app.prepare_frame(Rect::new(0, 0, 40, 8));
     let text = layout.thoughts[0].text_area;

@@ -127,4 +127,8 @@ impl Environment for SystemEnvironment {
     fn current_directory(&self) -> Result<PathBuf, PathError> {
         std::env::current_dir().map_err(|_| PathError::Unavailable("current working directory"))
     }
+
+    fn current_executable(&self) -> Result<PathBuf, PathError> {
+        std::env::current_exe().map_err(|_| PathError::Unavailable("current executable"))
+    }
 }

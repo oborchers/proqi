@@ -1,6 +1,6 @@
 //! Canonical-to-visible mapping for folded editor ranges.
 
-use super::annotations::{Presentation, PresentedFold, project};
+use super::annotations::{Presentation, PresentedFold};
 use crate::{
     domain::{ContentAnnotation, TextPosition},
     ports::{
@@ -99,8 +99,14 @@ pub(super) fn editor_presentation(
     canonical: &EditorSnapshot,
     annotations: &[ContentAnnotation],
     expanded: &[usize],
+    inaccessible: impl FnMut(usize) -> bool,
 ) -> EditorPresentation {
-    let presentation = project(&canonical.content, annotations, expanded);
+    let presentation = super::annotations::project_with_health(
+        &canonical.content,
+        annotations,
+        expanded,
+        inaccessible,
+    );
     let cursor_display_byte = project_byte(
         byte_for_position(&canonical.content, canonical.cursor),
         &presentation.folds,
@@ -152,7 +158,8 @@ fn project_byte(byte: usize, folds: &[PresentedFold]) -> usize {
         }
         if byte <= fold.canonical_end {
             if !fold.collapsed {
-                return fold.start + byte.saturating_sub(fold.canonical_start);
+                return (fold.start + byte.saturating_sub(fold.canonical_start))
+                    .min(fold.content_end);
             }
             return if byte == fold.canonical_start {
                 fold.start
@@ -174,7 +181,7 @@ fn unproject_byte(byte: usize, folds: &[PresentedFold]) -> usize {
             return canonical_cursor + byte.saturating_sub(display_cursor);
         }
         if byte <= fold.end {
-            return if fold.collapsed {
+            return if fold.collapsed || byte >= fold.content_end {
                 fold.canonical_end
             } else {
                 fold.canonical_start + byte.saturating_sub(fold.start)

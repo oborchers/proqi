@@ -1,5 +1,6 @@
 //! Crossterm terminal session and event adapter.
 
+mod accessibility_lane;
 mod browser;
 mod control;
 mod external;

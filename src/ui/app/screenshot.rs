@@ -329,8 +329,7 @@ impl BoardApp {
         });
         let mut effects = match result {
             Ok(outcome) => {
-                self.apply_completed_capture(&commit, &outcome, was_editing, advance_auto_ready);
-                Vec::new()
+                self.apply_completed_capture(&commit, &outcome, was_editing, advance_auto_ready)
             }
             Err(error) => self.capture_save_failed(candidate, &error),
         };
@@ -344,18 +343,26 @@ impl BoardApp {
         outcome: &CaptureCommitOutcome,
         was_editing: bool,
         advance_auto_ready: bool,
-    ) {
+    ) -> Vec<Effect> {
         match apply_capture(&mut self.state, commit, outcome) {
             Ok(Some(thought_id)) => {
                 self.show_created_capture(thought_id, was_editing, advance_auto_ready);
+                let effects = self.state.attachments.reconcile(&self.state.board);
+                self.state.attachments.mark_thought_accessible(thought_id);
+                if self.state.attachments.manual_refresh_active() {
+                    self.set_attachment_info("refreshing attachments");
+                }
+                effects
             }
             Ok(None) if self.screenshot.candidates.is_empty() => {
                 self.screenshot.auto_ready = None;
+                Vec::new()
             }
-            Ok(None) => {}
+            Ok(None) => Vec::new(),
             Err(error) => {
                 self.screenshot.auto_ready = None;
                 self.set_error(error.to_string());
+                Vec::new()
             }
         }
     }

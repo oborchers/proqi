@@ -126,6 +126,8 @@ fn create_thought(
     thought_id
 }
 
+#[path = "sqlite_store/annotations.rs"]
+mod annotations;
 #[path = "sqlite_store/bulk.rs"]
 mod bulk;
 #[path = "sqlite_store/compaction.rs"]

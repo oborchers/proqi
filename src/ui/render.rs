@@ -340,17 +340,22 @@ fn styled_line(
             let folded = folds
                 .iter()
                 .any(|fold| fold.collapsed && byte >= fold.start && byte < fold.end);
+            let inaccessible = folds
+                .iter()
+                .any(|fold| fold.inaccessible && byte >= fold.start && byte < fold.end);
             let linked = links.iter().any(|range| range.contains(&byte));
             let invocation = invocations.iter().any(|range| range.contains(&byte));
             column = column.saturating_add(width);
-            let mut style = Style::default().fg(if folded || invocation {
+            let mut style = Style::default().fg(if inaccessible {
+                theme.warning
+            } else if folded || invocation {
                 theme.annotation
             } else if linked {
                 theme.link
             } else {
                 theme.foreground
             });
-            if folded || invocation {
+            if folded || inaccessible || invocation {
                 style = style.add_modifier(Modifier::BOLD);
             }
             if linked {

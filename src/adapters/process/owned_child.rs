@@ -34,18 +34,21 @@ impl OwnedChild {
         self.armed = false;
     }
 
-    pub(super) fn terminate(&mut self) {
+    pub(super) fn terminate(&mut self) -> bool {
         if !self.armed {
-            return;
+            return true;
         }
         self.signal_tree(false);
         if self.reap_before(Deadline::new(super::TERMINATION_GRACE)) {
             self.armed = false;
-            return;
+            return true;
         }
         self.signal_tree(true);
-        let _reaped = self.reap_before(Deadline::new(super::TERMINATION_GRACE));
-        self.armed = false;
+        let reaped = self.reap_before(Deadline::new(super::TERMINATION_GRACE));
+        if reaped {
+            self.armed = false;
+        }
+        reaped
     }
 
     fn signal_tree(&mut self, force: bool) {
@@ -85,6 +88,6 @@ impl OwnedChild {
 
 impl Drop for OwnedChild {
     fn drop(&mut self) {
-        self.terminate();
+        let _reaped = self.terminate();
     }
 }
