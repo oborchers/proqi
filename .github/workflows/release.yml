@@ -13,21 +13,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  candidate:
-    name: Build and verify release candidate
-    uses: ./.github/workflows/release-candidate.yml
-    with:
-      tag: ${{ github.ref_name }}
-    permissions:
-      actions: read # Inspect the successful main CI run and exchange artifacts.
-      artifact-metadata: write # Register immutable candidate artifacts.
-      attestations: write # Publish candidate provenance and SBOM attestations.
-      contents: read
-      id-token: write # Sign candidate attestations with GitHub OIDC.
-
   promote:
     name: Promote verified candidate
-    needs: candidate
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     environment: release
@@ -40,24 +27,83 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
-      - uses: taiki-e/install-action@6cd13508893c0e7eab5f273c2575d3859bd7229a # v2.86.6
-        with:
-          tool: cargo-dist@0.32.0
       - name: Validate immutable tag
-        run: cargo xtask release-plan "$GITHUB_REF_NAME"
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: release-candidate-${{ github.ref_name }}
-          path: target/release-assets
-      - name: Verify manifest and every candidate byte
+        run: cargo xtask release-promotion-plan "$GITHUB_REF_NAME"
+      - id: candidate
+        name: Select the exact successful main candidate
         env:
+          GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
+          mkdir -p "$RUNNER_TEMP/candidate-index"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?branch=main&event=push&status=completed&per_page=100" \
+            > "$RUNNER_TEMP/candidate-index/ci-runs.json"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/release-candidate.yml/runs?status=completed&per_page=100" \
+            > "$RUNNER_TEMP/candidate-index/candidate-runs.json"
+          : > "$RUNNER_TEMP/candidate-index/candidates.jsonl"
+          while IFS= read -r run; do
+            run_id="$(jq -r .id <<<"$run")"
+            gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/artifacts?per_page=100" \
+              > "$RUNNER_TEMP/candidate-index/artifacts-${run_id}.json"
+            jq -c --argjson run "$run" '
+              .artifacts[] | {
+                run_id: $run.id,
+                run_attempt: $run.run_attempt,
+                workflow_path: ".github/workflows/release-candidate.yml",
+                event: $run.event,
+                head_sha: $run.head_sha,
+                source_ref: (if $run.head_branch == "main" then "refs/heads/main" else "refs/tags/\($run.head_branch)" end),
+                conclusion: $run.conclusion,
+                artifact: {id, name, digest, expired}
+              }' "$RUNNER_TEMP/candidate-index/artifacts-${run_id}.json" \
+              >> "$RUNNER_TEMP/candidate-index/candidates.jsonl"
+          done < <(jq -c '.workflow_runs[]' "$RUNNER_TEMP/candidate-index/candidate-runs.json")
+          jq -s '.' "$RUNNER_TEMP/candidate-index/candidates.jsonl" \
+            > "$RUNNER_TEMP/candidate-index/candidates.json"
+          jq -n \
+            --slurpfile ci "$RUNNER_TEMP/candidate-index/ci-runs.json" \
+            --slurpfile candidates "$RUNNER_TEMP/candidate-index/candidates.json" '
+              {
+                schema_version: 1,
+                required_ci: [$ci[0].workflow_runs[] | {
+                  workflow_path: ".github/workflows/ci.yml",
+                  event, head_branch, head_sha, conclusion
+                }],
+                candidates: $candidates[0]
+              }' > "$RUNNER_TEMP/candidate-index/index.json"
+          cargo xtask candidate-select "$TAG" "$GITHUB_SHA" \
+            "$RUNNER_TEMP/candidate-index/index.json" > "$RUNNER_TEMP/candidate-selection.json"
+          jq -e . "$RUNNER_TEMP/candidate-selection.json"
+          {
+            echo "artifact_id=$(jq -r .artifact_id "$RUNNER_TEMP/candidate-selection.json")"
+            echo "artifact_digest=$(jq -r .artifact_digest "$RUNNER_TEMP/candidate-selection.json")"
+            echo "run_id=$(jq -r .run_id "$RUNNER_TEMP/candidate-selection.json")"
+            echo "run_attempt=$(jq -r .run_attempt "$RUNNER_TEMP/candidate-selection.json")"
+            echo "source_ref=$(jq -r .source_ref "$RUNNER_TEMP/candidate-selection.json")"
+          } >> "$GITHUB_OUTPUT"
+      - name: Download and verify the exact cross-run artifact
+        env:
+          ARTIFACT_DIGEST: ${{ steps.candidate.outputs.artifact_digest }}
+          ARTIFACT_ID: ${{ steps.candidate.outputs.artifact_id }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p target/release-assets
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}/zip" \
+            > "$RUNNER_TEMP/release-candidate.zip"
+          expected="${ARTIFACT_DIGEST#sha256:}"
+          actual="$(shasum -a 256 "$RUNNER_TEMP/release-candidate.zip" | cut -d ' ' -f 1)"
+          test "$actual" = "$expected"
+          unzip -q "$RUNNER_TEMP/release-candidate.zip" -d target/release-assets
+      - name: Verify manifest and every candidate byte
+        env:
+          CANDIDATE_RUN_ID: ${{ steps.candidate.outputs.run_id }}
+          CANDIDATE_RUN_ATTEMPT: ${{ steps.candidate.outputs.run_attempt }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          cargo xtask candidate-manifest verify target/release-assets "$TAG" "$GITHUB_SHA" "$CANDIDATE_RUN_ID" "$CANDIDATE_RUN_ATTEMPT"
           cd target/release-assets
-          jq -e --arg tag "$TAG" --arg ref "$GITHUB_REF" --arg sha "$GITHUB_SHA" --arg run_id "$GITHUB_RUN_ID" \
-            '.schema_version == 3 and .tag == $tag and .source_ref == $ref and .source_sha == $sha and .build_run_id == ($run_id | tonumber) and .workflow == "release-candidate.yml" and .targets == ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu"] and (.release_files | length == 14) and (.evidence_files | length == 4)' \
-            candidate-manifest.json
           jq -r '.release_files[].name, .evidence_files[].name, "candidate-manifest.json"' candidate-manifest.json | sort > "$RUNNER_TEMP/expected-candidate-files"
           find . -type f -printf '%P\n' | sort > "$RUNNER_TEMP/actual-candidate-files"
           diff -u "$RUNNER_TEMP/expected-candidate-files" "$RUNNER_TEMP/actual-candidate-files"
@@ -67,14 +113,15 @@ jobs:
       - name: Verify candidate attestations against the source commit
         env:
           GH_TOKEN: ${{ github.token }}
+          SOURCE_REF: ${{ steps.candidate.outputs.source_ref }}
         run: |
           for artifact in target/release-assets/*.tar.gz target/release-assets/proqi_amd64.deb; do
             gh attestation verify "$artifact" --repo "$GITHUB_REPOSITORY" \
               --signer-workflow "github.com/${GITHUB_REPOSITORY}/.github/workflows/release-candidate.yml" \
-              --source-ref "$GITHUB_REF" --source-digest "$GITHUB_SHA"
+              --source-ref "$SOURCE_REF" --source-digest "$GITHUB_SHA"
             gh attestation verify "$artifact" --repo "$GITHUB_REPOSITORY" \
               --signer-workflow "github.com/${GITHUB_REPOSITORY}/.github/workflows/release-candidate.yml" \
-              --source-ref "$GITHUB_REF" --source-digest "$GITHUB_SHA" \
+              --source-ref "$SOURCE_REF" --source-digest "$GITHUB_SHA" \
               --predicate-type https://spdx.dev/Document/v2.3
           done
       - name: Bind provenance to the protected release tag

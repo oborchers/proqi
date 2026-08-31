@@ -1,0 +1,190 @@
+name: Linux QA tools image
+
+on:
+  pull_request:
+    paths:
+      - tools/ci-linux/**
+      - .github/workflows/ci-linux-image.yml
+  push:
+    branches: [main]
+    paths:
+      - tools/ci-linux/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-linux-image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  plan:
+    name: Resolve immutable image identity
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      repository: ${{ steps.image.outputs.repository }}
+      tag: ${{ steps.image.outputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: image
+        name: Derive the content tag from owned inputs
+        run: |
+          repository="$(jq -er 'select(.schema_version == 1) | .repository | select(type == "string")' tools/ci-linux/image.json)"
+          digest="$(find tools/ci-linux -type f -print0 | sort -z | xargs -0 shasum -a 256 | shasum -a 256 | cut -c1-20)"
+          {
+            echo "repository=$repository"
+            echo "tag=qa-$digest"
+          } >> "$GITHUB_OUTPUT"
+
+  validate:
+    name: Validate ${{ matrix.arch }} image on native runner
+    if: github.event_name == 'pull_request'
+    needs: plan
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+            machine: x86_64
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            machine: aarch64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Require the native hosted architecture
+        env:
+          EXPECTED_MACHINE: ${{ matrix.machine }}
+        run: test "$(uname -m)" = "$EXPECTED_MACHINE"
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+      - name: Build without publishing
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: tools/ci-linux
+          load: true
+          push: false
+          tags: proqi-ci-linux:validation
+      - name: Verify pinned tools
+        run: |
+          docker run --rm --entrypoint sh proqi-ci-linux:validation -c '
+            rustc --version | grep "rustc 1.98.0" &&
+            rustc +1.88.0 --version | grep "rustc 1.88.0" &&
+            cargo nextest --version | grep "cargo-nextest 0.9.130" &&
+            cargo llvm-cov --version | grep "cargo-llvm-cov 0.8.4" &&
+            cargo audit --version | grep "cargo-audit 0.22.2" &&
+            cargo shear --version | grep "cargo-shear 1.11.2" &&
+            cargo about --version | grep "cargo-about 0.9.2" &&
+            nfpm --version | grep "2.47.0"'
+
+  publish:
+    name: Publish ${{ matrix.arch }} image on native runner
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: plan
+    permissions:
+      contents: read
+      packages: write # Push the trusted architecture image and BuildKit cache.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+            machine: x86_64
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            machine: aarch64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Require the native hosted architecture
+        env:
+          EXPECTED_MACHINE: ${{ matrix.machine }}
+        run: test "$(uname -m)" = "$EXPECTED_MACHINE"
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - id: build
+        name: Publish immutable architecture image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: tools/ci-linux
+          push: true
+          provenance: mode=max
+          sbom: true
+          tags: ${{ needs.plan.outputs.repository }}:${{ needs.plan.outputs.tag }}-${{ matrix.arch }}
+          cache-from: type=registry,ref=${{ needs.plan.outputs.repository }}:buildcache-${{ matrix.arch }}
+          cache-to: type=registry,ref=${{ needs.plan.outputs.repository }}:buildcache-${{ matrix.arch }},mode=max
+      - name: Record architecture digest
+        env:
+          ARCH: ${{ matrix.arch }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: printf '%s\n' "$DIGEST" > "digest-$ARCH"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ci-linux-digest-${{ matrix.arch }}
+          path: digest-${{ matrix.arch }}
+          retention-days: 1
+          if-no-files-found: error
+
+  publish-manifest:
+    name: Publish and attest multi-architecture image
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: [plan, publish]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      attestations: write # Register the manifest provenance attestation.
+      contents: read
+      id-token: write # Sign the provenance statement through GitHub OIDC.
+      packages: write # Create the multi-architecture GHCR manifest.
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: ci-linux-digest-*
+          merge-multiple: true
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - id: manifest
+        name: Create immutable multi-architecture manifest
+        env:
+          REPOSITORY: ${{ needs.plan.outputs.repository }}
+          TAG: ${{ needs.plan.outputs.tag }}
+        run: |
+          amd64="$(cat digest-amd64)"
+          arm64="$(cat digest-arm64)"
+          docker buildx imagetools create --tag "$REPOSITORY:$TAG" \
+            "$REPOSITORY@$amd64" "$REPOSITORY@$arm64"
+          docker buildx imagetools inspect --raw "$REPOSITORY:$TAG" > manifest.json
+          digest="sha256:$(shasum -a 256 manifest.json | cut -d ' ' -f 1)"
+          docker buildx imagetools inspect "$REPOSITORY@$digest"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ needs.plan.outputs.repository }}
+          subject-digest: ${{ steps.manifest.outputs.digest }}
+          push-to-registry: true
+      - name: Require anonymous public digest access
+        env:
+          DIGEST: ${{ steps.manifest.outputs.digest }}
+          REPOSITORY: ${{ needs.plan.outputs.repository }}
+        run: |
+          docker logout ghcr.io
+          docker buildx imagetools inspect "$REPOSITORY@$DIGEST"

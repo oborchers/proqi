@@ -98,6 +98,19 @@ cargo xtask audit
 cargo xtask package
 ```
 
+Linux QA has two explicit container paths. Use the content-addressed public
+tools image for a quick native-host smoke, or request exact amd64 parity when
+diagnosing Linux behavior:
+
+```shell
+cargo xtask ci-linux-smoke <repository@sha256:digest>
+cargo xtask ci-linux-amd64 <repository@sha256:digest>
+```
+
+The canonical image repository is checked in at `tools/ci-linux/image.json`.
+Mutable image tags are rejected. Neither container path is part of routine
+release-input preparation.
+
 ## Code guardrails
 
 - Format Rust with the checked-in rustfmt configuration.

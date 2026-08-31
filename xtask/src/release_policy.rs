@@ -1,64 +1,200 @@
-//! Executable release-workflow policy.
+//! Executable CI, candidate, publication, and QA-image policy.
 
 use std::{fs, path::Path};
 
-const RELEASE_REQUIRED: [&str; 13] = [
-    "uses: ./.github/workflows/release-candidate.yml",
-    "needs: candidate",
+const RELEASE_REQUIRED: [&str; 14] = [
     "environment: release",
-    "id-token: write",
-    "name: release-candidate-${{ github.ref_name }}",
-    ".schema_version == 3",
+    "cargo xtask release-promotion-plan",
+    "cargo xtask candidate-select",
+    "actions/artifacts/${ARTIFACT_ID}/zip",
+    "cargo xtask candidate-manifest verify",
     "rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5",
     "CARGO_REGISTRY_TOKEN: ${{ steps.crates_auth.outputs.token }}",
     "cargo publish --locked",
     "cargo install proqi --version \"=$VERSION\" --locked",
-    "https://crates.io/api/v1/crates/proqi/${VERSION}/download",
+    "if gh release view \"$TAG\"",
+    "cmp \"$asset\" \"$existing/$asset\"",
     "name: Verify every public release byte",
     "name: Wake Homebrew tap synchronization",
+    "source-ref \"$SOURCE_REF\"",
 ];
 
-const CANDIDATE_REQUIRED: [&str; 5] = [
-    "workflow_call:",
+const CANDIDATE_REQUIRED: [&str; 11] = [
+    "branches: [main]",
     "workflow_dispatch:",
-    "source-ref=$GITHUB_REF",
-    "schema_version: 3",
-    "source_ref: $source_ref",
+    "cargo xtask release-ready",
+    "cargo xtask release-promotion-plan",
+    "cargo xtask candidate-manifest create",
+    "cargo xtask crate-evidence",
+    "release-candidate-${{ needs.plan.outputs.tag }}-${{ needs.plan.outputs.source-sha }}",
+    "retention-days: 30",
+    "artifact-metadata: write",
+    "attestations: write",
+    "id-token: write",
+];
+
+const IMAGE_REQUIRED: [&str; 12] = [
+    "ubuntu-24.04-arm",
+    "packages: write",
+    "github.event_name == 'pull_request'",
+    "github.event_name != 'pull_request' && github.ref == 'refs/heads/main'",
+    "tools/ci-linux/image.json",
+    "tools/ci-linux/**",
+    "type=registry,ref=${{ needs.plan.outputs.repository }}:buildcache-",
+    "provenance: mode=max",
+    "sbom: true",
+    "push-to-registry: true",
+    "docker logout ghcr.io",
+    "workflow_dispatch:",
 ];
 
 pub(crate) fn check(root: &Path) -> Result<Vec<String>, String> {
-    let release_path = root.join(".github/workflows/release.yml");
-    let release = fs::read_to_string(&release_path)
-        .map_err(|error| format!("read {}: {error}", release_path.display()))?;
-    let candidate_path = root.join(".github/workflows/release-candidate.yml");
-    let candidate = fs::read_to_string(&candidate_path)
-        .map_err(|error| format!("read {}: {error}", candidate_path.display()))?;
-    Ok(findings(&release, &candidate))
+    let release = read(root, ".github/workflows/release.yml")?;
+    let candidate = read(root, ".github/workflows/release-candidate.yml")?;
+    let ci = read(root, ".github/workflows/ci.yml")?;
+    let image = read(root, ".github/workflows/ci-linux-image.yml")?;
+    let mut found = findings(&release, &candidate, &ci, &image);
+    found.extend(image_repository_findings(root)?);
+    found.extend(scheduled_workflow_findings(root)?);
+    Ok(found)
 }
 
-fn findings(release: &str, candidate: &str) -> Vec<String> {
-    let mut findings = RELEASE_REQUIRED
-        .iter()
-        .filter(|marker| !release.contains(**marker))
-        .map(|marker| format!(".github/workflows/release.yml: missing `{marker}`"))
-        .collect::<Vec<_>>();
-    findings.extend(
-        CANDIDATE_REQUIRED
-            .iter()
-            .filter(|marker| !candidate.contains(**marker))
-            .map(|marker| format!(".github/workflows/release-candidate.yml: missing `{marker}`")),
-    );
-    if release.contains("CARGO_REGISTRY_TOKEN: ${{ secrets.") {
-        findings.push(
-            ".github/workflows/release.yml: long-lived registry secret is forbidden".to_owned(),
-        );
+fn read(root: &Path, relative: &str) -> Result<String, String> {
+    let path = root.join(relative);
+    fs::read_to_string(&path).map_err(|error| format!("read {}: {error}", path.display()))
+}
+
+fn findings(release: &str, candidate: &str, ci: &str, image: &str) -> Vec<String> {
+    let mut found = missing(".github/workflows/release.yml", release, &RELEASE_REQUIRED);
+    found.extend(missing(
+        ".github/workflows/release-candidate.yml",
+        candidate,
+        &CANDIDATE_REQUIRED,
+    ));
+    found.extend(missing(
+        ".github/workflows/ci-linux-image.yml",
+        image,
+        &IMAGE_REQUIRED,
+    ));
+    for forbidden in [
+        "CARGO_REGISTRY_TOKEN: ${{ secrets.",
+        "uses: ./.github/workflows/release-candidate.yml",
+        "cargo dist build",
+    ] {
+        if release.contains(forbidden) {
+            found.push(format!(
+                ".github/workflows/release.yml: forbidden `{forbidden}`"
+            ));
+        }
     }
-    enforce_order(release, &mut findings);
-    findings
+    for forbidden in [
+        "contents: write",
+        "packages: write",
+        "environment: release",
+        "cargo publish",
+        "gh release create",
+        "cargo xtask crate-package",
+    ] {
+        if candidate.contains(forbidden) {
+            found.push(format!(
+                ".github/workflows/release-candidate.yml: publication capability `{forbidden}` is forbidden"
+            ));
+        }
+    }
+    for forbidden in ["setup-qemu", ":latest"] {
+        if image.contains(forbidden) {
+            found.push(format!(
+                ".github/workflows/ci-linux-image.yml: forbidden `{forbidden}`"
+            ));
+        }
+    }
+    for required in [
+        "name: Registry package contract",
+        "cargo xtask crate-package",
+        "cargo +1.88.0 xtask msrv-full",
+        ".coverage.result == \"skipped\"",
+        "name: Required CI result",
+    ] {
+        if !ci.contains(required) {
+            found.push(format!(".github/workflows/ci.yml: missing `{required}`"));
+        }
+    }
+    enforce_order(release, &mut found);
+    found
 }
 
-fn enforce_order(source: &str, findings: &mut Vec<String>) {
-    const ORDERED: [&str; 6] = [
+fn missing(path: &str, source: &str, markers: &[&str]) -> Vec<String> {
+    markers
+        .iter()
+        .filter(|marker| !source.contains(**marker))
+        .map(|marker| format!("{path}: missing `{marker}`"))
+        .collect()
+}
+
+fn image_repository_findings(root: &Path) -> Result<Vec<String>, String> {
+    let repository = ["ghcr.io/oborchers/", "proqi-ci-linux"].concat();
+    let mut locations = Vec::new();
+    for entry in ignore::WalkBuilder::new(root)
+        .standard_filters(true)
+        .build()
+    {
+        let entry = entry.map_err(|error| format!("walk repository: {error}"))?;
+        if !entry.file_type().is_some_and(|kind| kind.is_file()) {
+            continue;
+        }
+        let relative = entry
+            .path()
+            .strip_prefix(root)
+            .map_err(|error| error.to_string())?;
+        let contents = fs::read_to_string(entry.path()).unwrap_or_default();
+        if contents.contains(&repository) {
+            locations.push(relative.to_string_lossy().replace('\\', "/"));
+        }
+    }
+    if locations == ["tools/ci-linux/image.json"] {
+        Ok(Vec::new())
+    } else {
+        Ok(vec![format!(
+            "tools/ci-linux/image.json must exclusively own the public image repository; found {locations:?}"
+        )])
+    }
+}
+
+fn scheduled_workflow_findings(root: &Path) -> Result<Vec<String>, String> {
+    let directory = root.join(".github/workflows");
+    let mut found = Vec::new();
+    for entry in fs::read_dir(&directory)
+        .map_err(|error| format!("read {}: {error}", directory.display()))?
+    {
+        let path = entry
+            .map_err(|error| format!("read workflow entry: {error}"))?
+            .path();
+        if !matches!(
+            path.extension().and_then(|value| value.to_str()),
+            Some("yml" | "yaml")
+        ) {
+            continue;
+        }
+        let source = fs::read_to_string(&path)
+            .map_err(|error| format!("read {}: {error}", path.display()))?;
+        if contains_schedule(&source) {
+            found.push(format!(
+                "{}: scheduled workflows are forbidden",
+                path.display()
+            ));
+        }
+    }
+    Ok(found)
+}
+
+fn contains_schedule(source: &str) -> bool {
+    source.lines().any(|line| line.trim() == "schedule:")
+}
+
+fn enforce_order(source: &str, found: &mut Vec<String>) {
+    const ORDERED: [&str; 8] = [
+        "name: Select the exact successful main candidate",
+        "name: Verify manifest and every candidate byte",
         "name: Create or verify the immutable release draft",
         "name: Create short-lived crates.io publishing token",
         "name: Publish the verified crate",
@@ -71,7 +207,7 @@ fn enforce_order(source: &str, findings: &mut Vec<String>) {
         .filter_map(|marker| source.find(marker))
         .collect::<Vec<_>>();
     if positions.len() == ORDERED.len() && !positions.windows(2).all(|pair| pair[0] < pair[1]) {
-        findings.push(
+        found.push(
             ".github/workflows/release.yml: publication steps violate release ordering".to_owned(),
         );
     }
@@ -79,78 +215,55 @@ fn enforce_order(source: &str, findings: &mut Vec<String>) {
 
 #[cfg(test)]
 mod tests {
-    use super::findings;
+    use super::{contains_schedule, findings};
 
-    #[test]
-    fn trusted_registry_workflow_is_accepted() {
-        let release = include_str!("../../.github/workflows/release.yml");
-        let candidate = include_str!("../../.github/workflows/release-candidate.yml");
-        assert!(findings(release, candidate).is_empty());
+    fn sources() -> (&'static str, &'static str, &'static str, &'static str) {
+        (
+            include_str!("../../.github/workflows/release.yml"),
+            include_str!("../../.github/workflows/release-candidate.yml"),
+            include_str!("../../.github/workflows/ci.yml"),
+            include_str!("../../.github/workflows/ci-linux-image.yml"),
+        )
     }
 
     #[test]
-    fn registry_secret_and_inverted_release_order_are_rejected() {
-        let release = include_str!("../../.github/workflows/release.yml")
-            .replace(
-                "CARGO_REGISTRY_TOKEN: ${{ steps.crates_auth.outputs.token }}",
-                "CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}",
-            )
-            .replace(
-                "name: Publish the verified GitHub Release",
-                "name: Publish the verified GitHub Release early",
-            )
-            .replace(
-                "name: Create or verify the immutable release draft",
-                "name: Publish the verified GitHub Release",
-            )
-            .replace(
-                "name: Publish the verified GitHub Release early",
-                "name: Create or verify the immutable release draft",
-            );
-        let candidate = include_str!("../../.github/workflows/release-candidate.yml");
-        let findings = findings(&release, candidate);
-        assert!(findings.iter().any(|finding| finding.contains("secret")));
-        assert!(findings.iter().any(|finding| finding.contains("ordering")));
+    fn complete_pipeline_policy_is_accepted() {
+        let (release, candidate, ci, image) = sources();
+        let found = findings(release, candidate, ci, image);
+        assert!(found.is_empty(), "{found:#?}");
     }
 
     #[test]
-    fn detached_manual_candidate_contract_is_rejected() {
-        let release = include_str!("../../.github/workflows/release.yml").replace(
-            "uses: ./.github/workflows/release-candidate.yml",
-            "uses: missing.yml",
-        );
-        let candidate = include_str!("../../.github/workflows/release-candidate.yml")
-            .replace("workflow_call:", "workflow_call_removed:");
-        let findings = findings(&release, &candidate);
+    fn candidate_publication_credentials_are_rejected() {
+        let (release, candidate, ci, image) = sources();
+        let candidate = format!("{candidate}\ncontents: write\ncargo publish --locked");
+        let found = findings(release, &candidate, ci, image);
         assert!(
-            findings
+            found
                 .iter()
-                .any(|finding| finding.contains("release.yml"))
-        );
-        assert!(
-            findings
-                .iter()
-                .any(|finding| finding.contains("release-candidate.yml"))
+                .any(|item| item.contains("publication capability"))
         );
     }
 
     #[test]
-    fn homebrew_cannot_run_before_public_bytes_are_verified() {
-        let release = include_str!("../../.github/workflows/release.yml")
-            .replace(
-                "name: Verify every public release byte",
-                "name: Tap wake early",
-            )
-            .replace(
-                "name: Wake Homebrew tap synchronization",
-                "name: Verify every public release byte",
-            )
-            .replace(
-                "name: Tap wake early",
-                "name: Wake Homebrew tap synchronization",
-            );
-        let candidate = include_str!("../../.github/workflows/release-candidate.yml");
-        let findings = findings(&release, candidate);
-        assert!(findings.iter().any(|finding| finding.contains("ordering")));
+    fn rebuild_and_emulation_paths_are_rejected() {
+        let (release, candidate, ci, image) = sources();
+        let release = format!("{release}\ncargo dist build");
+        let image = format!("{image}\nuses: docker/setup-qemu-action@pin");
+        let found = findings(&release, candidate, ci, &image);
+        assert!(found.iter().any(|item| item.contains("cargo dist build")));
+        assert!(found.iter().any(|item| item.contains("setup-qemu")));
+    }
+
+    #[test]
+    fn docker_trigger_and_publication_idempotency_contracts_are_required() {
+        let (release, candidate, ci, image) = sources();
+        let release = release.replace("if gh release view \"$TAG\"", "if false");
+        let image = image.replace("tools/ci-linux/**", "tools/elsewhere/**");
+        let found = findings(&release, candidate, ci, &image);
+        assert!(found.iter().any(|item| item.contains("gh release view")));
+        assert!(found.iter().any(|item| item.contains("tools/ci-linux/**")));
+        assert!(contains_schedule("on:\n  schedule:\n    - cron: daily"));
+        assert!(!contains_schedule("on:\n  workflow_dispatch:"));
     }
 }
