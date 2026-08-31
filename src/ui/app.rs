@@ -78,12 +78,20 @@ enum EditorOwner {
     Thought(ThoughtId),
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+enum ComposePresentation {
+    #[default]
+    Prompt,
+    Editor,
+}
+
 /// Mutable UI state around the pure application reducer.
 pub struct BoardApp {
     /// Reducer-owned application state rendered by the board.
     pub state: AppState,
     editor: Option<(EditorOwner, Box<dyn Editor>)>,
     editor_factory: Box<dyn EditorFactory>,
+    compose_presentation: ComposePresentation,
     pending_edit: Option<editing::PendingEdit>,
     edit_generation: u64,
     /// Whether the user requested a clean exit.
@@ -170,6 +178,7 @@ impl BoardApp {
             state,
             editor,
             editor_factory,
+            compose_presentation: ComposePresentation::Prompt,
             pending_edit: None,
             edit_generation: 0,
             quit: false,
@@ -229,16 +238,10 @@ impl BoardApp {
         self.reset_pointer_click_for_input(&input);
         self.note_screenshot_interaction(&input);
         self.reset_overlay_activation_for_input(&input, clock.now());
-        if self.help
-            || self.screenshot.takeover.is_some()
-            || self.update_prompt.is_some()
-            || self.palette.is_some()
-            || self.invocation_popup.is_some()
-            || self.transfer.is_some()
-            || self.rename.is_some()
-            || self.search.is_some()
-            || self.submission_mode.is_some()
-        {
+        if matches!(input, UiInput::HostFocusLost) {
+            self.collapse_empty_compose();
+        }
+        if self.modal_owns_pointer() {
             self.pointer_click = None;
         }
         if self.help {
@@ -257,11 +260,17 @@ impl BoardApp {
             return self.handle_update_prompt_input(&input);
         }
         if self.update_barrier.is_some()
-            && !matches!(input, UiInput::Resize { .. } | UiInput::HostFocusGained)
+            && !matches!(
+                input,
+                UiInput::Resize { .. } | UiInput::HostFocusGained | UiInput::HostFocusLost
+            )
         {
             return Vec::new();
         }
-        if !matches!(input, UiInput::Resize { .. } | UiInput::HostFocusGained) {
+        if !matches!(
+            input,
+            UiInput::Resize { .. } | UiInput::HostFocusGained | UiInput::HostFocusLost
+        ) {
             self.status = None;
             self.screenshot.notice_count = 0;
         }
@@ -301,6 +310,18 @@ impl BoardApp {
         self.handle_primary_input(input, ids, clock)
     }
 
+    fn modal_owns_pointer(&self) -> bool {
+        self.help
+            || self.screenshot.takeover.is_some()
+            || self.update_prompt.is_some()
+            || self.palette.is_some()
+            || self.invocation_popup.is_some()
+            || self.transfer.is_some()
+            || self.rename.is_some()
+            || self.search.is_some()
+            || self.submission_mode.is_some()
+    }
+
     fn handle_primary_input(
         &mut self,
         input: UiInput,
@@ -310,6 +331,7 @@ impl BoardApp {
         self.invalidate_palette_selection_handoff(&input);
         match input {
             UiInput::HostFocusGained => Self::discover_agents(),
+            UiInput::HostFocusLost => Vec::new(),
             UiInput::Resize { .. } => {
                 self.layout = None;
                 self.hovered = None;
@@ -355,6 +377,7 @@ impl BoardApp {
                     let mut editor = self.editor_factory.create("");
                     editor.set_viewport(self.viewport);
                     self.editor = Some((EditorOwner::Compose, editor));
+                    self.compose_presentation = ComposePresentation::Prompt;
                 }
                 return;
             }

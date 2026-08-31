@@ -163,11 +163,18 @@ fn render_board(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, 
     }
     if let Some(insert) = layout.insert {
         let hovered = app.hovered() == Some(HitTarget::Insert);
+        let prompt = app.compose_prompt_visible();
         let label = Line::from(vec![
             Span::styled("+", Style::default().fg(theme.accent)),
-            Span::styled(" New thought", Style::default().fg(theme.foreground)),
+            Span::styled(
+                crate::ui::control_labels::insertion_text(
+                    app.interaction_mode(),
+                    insert.width < 14,
+                ),
+                Style::default().fg(theme.foreground),
+            ),
         ]);
-        let style = if hovered || app.insertion_focused() {
+        let style = if !prompt && (hovered || app.insertion_focused()) {
             theme.focused_style()
         } else {
             theme.base_style()

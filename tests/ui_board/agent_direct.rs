@@ -72,6 +72,7 @@ fn direct_edit_chords_submit_only_the_active_thought_and_preserve_mode_on_failur
         fixture.app.interaction_mode(),
         proqi::application::InteractionMode::Compose
     );
+    assert!(fixture.app.compose_prompt_visible());
 
     let next = fixture.effects(UiInput::Key(UiKey::Character('n')));
     assert!(matches!(next.as_slice(), [Effect::CommitBoardOperation(_)]));
@@ -94,4 +95,41 @@ fn direct_edit_submission_without_a_verified_target_keeps_the_complete_draft() {
         proqi::application::InteractionMode::Edit { .. }
     ));
     assert_eq!(fixture.app.state.board.live_thoughts().len(), 1);
+}
+
+#[test]
+fn direct_submission_controls_follow_editor_controls_in_the_footer() {
+    let mut fixture = Fixture::new();
+    super::agent::prepare_thought(&mut fixture);
+    fixture.input(UiInput::Key(UiKey::Enter));
+    fixture
+        .app
+        .complete_agent_discovery(Ok(vec![super::agent::target(Direction::Right, "w1:p2")]));
+
+    let layout = fixture
+        .app
+        .prepare_frame(ratatui_core::layout::Rect::new(0, 0, 120, 12));
+    let editor_row = layout
+        .controls
+        .iter()
+        .find_map(|(target, area)| (*target == proqi::ui::HitTarget::Copy).then_some(area.y))
+        .expect("editor controls");
+    let submission_row = layout
+        .controls
+        .iter()
+        .find_map(|(target, area)| {
+            matches!(target, proqi::ui::HitTarget::Deliver(_, _)).then_some(area.y)
+        })
+        .expect("submission controls");
+    assert!(submission_row > editor_row);
+
+    let terminal = draw(&mut fixture, 120, 12);
+    let rendered = text(terminal.backend().buffer());
+    let primary = if cfg!(target_os = "macos") {
+        "⌘"
+    } else {
+        "Ctrl+"
+    };
+    assert!(rendered.contains(&format!("{primary}Enter Submit")));
+    assert!(rendered.contains(&format!("{primary}Shift+Enter Submit & keep")));
 }

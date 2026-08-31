@@ -21,6 +21,9 @@ impl BoardApp {
     pub(in crate::ui) fn editor_presentation(
         &self,
     ) -> Option<crate::ui::projection::EditorPresentation> {
+        if self.compose_prompt_visible() {
+            return None;
+        }
         let snapshot = self.editor_snapshot()?;
         let (annotations, expanded) = match self.editor.as_ref()?.0 {
             super::EditorOwner::Compose => (Vec::new(), Vec::new()),
@@ -113,6 +116,26 @@ impl BoardApp {
     #[must_use]
     pub fn compose_active(&self) -> bool {
         matches!(self.state.mode, InteractionMode::Compose)
+    }
+
+    /// Whether empty Compose uses the passive prompt projection.
+    #[must_use]
+    pub fn compose_prompt_visible(&self) -> bool {
+        self.compose_active()
+            && matches!(
+                self.compose_presentation,
+                super::ComposePresentation::Prompt
+            )
+    }
+
+    /// Whether empty Compose exposes its ordinary editor projection.
+    #[must_use]
+    pub fn compose_editor_visible(&self) -> bool {
+        self.compose_active()
+            && matches!(
+                self.compose_presentation,
+                super::ComposePresentation::Editor
+            )
     }
 
     /// Monotonic counter used by the runtime to detect new unflushed editor work.
@@ -233,13 +256,14 @@ impl BoardApp {
         self.reset_overlay_activation_for_geometry(area);
         let layout_state = self.presentation_state();
         let first_editor = self.editor_presentation();
+        let follow_insertion = self.insertion_focused() || self.compose_prompt_visible();
         let has_status = self.status_view().is_some()
             || matches!(self.state.durability, DurabilityState::Failed { .. });
         let (first, first_scroll) = crate::ui::layout::compute_for_app(
             &layout_state,
             first_editor.as_ref().map(|view| &view.snapshot),
             area,
-            self.insertion_focused(),
+            follow_insertion,
             !self.agent_targets.is_empty(),
             has_status,
             self.settings.density,
@@ -254,7 +278,7 @@ impl BoardApp {
             &layout_state,
             editor.as_ref().map(|view| &view.snapshot),
             area,
-            self.insertion_focused(),
+            follow_insertion,
             !self.agent_targets.is_empty(),
             has_status,
             self.settings.density,
@@ -338,24 +362,30 @@ impl BoardApp {
     fn footer_summary(&self, available_width: u16) -> String {
         let count = self.visible_thought_count();
         let noun = if count == 1 { "thought" } else { "thoughts" };
-        let mode = match self.interaction_mode() {
-            InteractionMode::Board if self.range_latched() => "range",
-            InteractionMode::Board => "board",
-            InteractionMode::Compose => "compose",
-            InteractionMode::Edit { .. } => "edit",
-        };
         let durability = self.durability_summary();
         let inbox = self
             .screenshot_footer_state(false)
             .map_or_else(String::new, |label| format!(" · {label}"));
-        let complete = format!("{count} {noun} · {mode} · {durability}{inbox}");
+        let mode = match self.interaction_mode() {
+            InteractionMode::Board if self.range_latched() => Some("range"),
+            InteractionMode::Board => Some("board"),
+            InteractionMode::Compose => None,
+            InteractionMode::Edit { .. } => Some("edit"),
+        };
+        let complete = mode.map_or_else(
+            || format!("{count} {noun} · {durability}{inbox}"),
+            |mode| format!("{count} {noun} · {mode} · {durability}{inbox}"),
+        );
         if complete.width() <= usize::from(available_width) {
             return complete;
         }
         let compact_inbox = self
             .screenshot_footer_state(true)
             .map_or_else(String::new, |label| format!(" · {label}"));
-        let compact = format!("{count} · {mode} · {durability}{compact_inbox}");
+        let compact = mode.map_or_else(
+            || format!("{count} · {durability}{compact_inbox}"),
+            |mode| format!("{count} · {mode} · {durability}{compact_inbox}"),
+        );
         if compact.width() <= usize::from(available_width) {
             return compact;
         }

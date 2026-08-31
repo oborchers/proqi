@@ -39,13 +39,14 @@ fn click_palette(fixture: &mut Fixture, query: &str) -> Vec<Effect> {
 }
 
 fn execute_palette_from_edit(fixture: &mut Fixture, query: &str) -> (Vec<Effect>, Vec<Effect>) {
+    let save = fixture.effects(UiInput::Key(UiKey::Escape));
     let layout = fixture.app.prepare_frame(Rect::new(0, 0, 80, 12));
     let commands = layout
         .controls
         .iter()
         .find_map(|(target, area)| (*target == proqi::ui::HitTarget::Commands).then_some(*area))
         .expect("command palette control");
-    let save = fixture.effects(UiInput::Pointer(PointerInput {
+    let _open = fixture.effects(UiInput::Pointer(PointerInput {
         column: commands.x,
         row: commands.y,
         kind: PointerKind::Down(PointerButton::Left),

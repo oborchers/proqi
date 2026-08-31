@@ -396,12 +396,12 @@ fn primary_enter_chords_are_distinct_from_plain_multiline_enter() {
 }
 
 #[test]
-fn host_focus_is_a_semantic_refresh_signal() {
+fn host_focus_events_are_distinct_normalized_passive_signals() {
     assert_eq!(
         translate(Event::FocusGained),
         Some(UiInput::HostFocusGained)
     );
-    assert_eq!(translate(Event::FocusLost), None);
+    assert_eq!(translate(Event::FocusLost), Some(UiInput::HostFocusLost));
 }
 
 #[test]

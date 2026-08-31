@@ -21,7 +21,8 @@ pub(super) fn translate(event: Event) -> Option<UiInput> {
         Event::Resize(width, height) => Some(UiInput::Resize { width, height }),
         Event::Mouse(mouse) => translate_mouse(mouse).map(UiInput::Pointer),
         Event::FocusGained => Some(UiInput::HostFocusGained),
-        Event::FocusLost | Event::Key(_) => None,
+        Event::FocusLost => Some(UiInput::HostFocusLost),
+        Event::Key(_) => None,
     }
 }
 

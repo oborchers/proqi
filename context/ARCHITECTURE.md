@@ -273,10 +273,12 @@ conditions into explicit storage errors.
 
 One editor instance owns transient editing state under a typed UI owner. The
 owner is either `Compose` or one durable `ThoughtId`. `Compose` contains only an
-editor buffer and presentation state. It never owns a domain entity, operation,
-or persistence identity. Promoting it replaces the owner in place after the
-canonical populated create succeeds, which retains the exact cursor, selection,
-annotations, viewport, and first input.
+editor buffer and a typed UI-only `Prompt | Editor` presentation. `Prompt`
+suppresses the editor projection while retaining the empty Compose owner;
+`Editor` exposes the ordinary editor surface. Neither presentation owns a
+domain entity, operation, or persistence identity. Promoting Compose replaces
+the owner in place after the canonical populated create succeeds, which retains
+the exact cursor, selection, annotations, viewport, and first input.
 
 ```rust
 trait Editor {
@@ -299,8 +301,10 @@ cursor model from leaking into the application.
 Layout is a pure function of board state, typed editor-owner state, terminal
 capabilities, and viewport dimensions. It returns a `LayoutSnapshot` containing
 rectangles, wrapped visual lines, scroll bounds, focus geometry, and mouse hit
-targets. A Compose projection uses the same editor measurement and rendering
-path at the insertion row without synthesizing a durable thought.
+targets. Engaged Compose uses the same editor measurement and rendering path at
+the insertion row without synthesizing a durable thought. Passive Compose omits
+that editor projection and instead uses the canonical insertion-row geometry for
+the centered `+ Start typing` prompt and its whole-row hit target.
 
 The renderer consumes this snapshot. Mouse handling consults the same snapshot.
 This prevents visual geometry and clickable geometry from drifting apart after
@@ -795,7 +799,9 @@ The application interaction state is the exhaustive terminal-independent set
 `Board`, `Compose`, and `Edit { thought_id }`. The UI dispatcher selects one of
 these modes before interpreting a normalized key. Board alone resolves printable
 shortcuts. Compose and Edit resolve text through editor commands. Host focus is
-only a refresh signal and never changes the interaction mode. `AppState`
+never an application mode switch. Focus gain remains an integration refresh
+signal. Focus loss may collapse only the UI-only, untouched Compose presentation
+from `Editor` to `Prompt`; it does not reduce an application action. `AppState`
 initializes an empty durable snapshot as Compose, while a nonempty snapshot keeps
 the existing Board focus contract.
 
@@ -837,8 +843,10 @@ removes one tab. No parent-content offset participates in indentation or
 outdent, and later ordered markers are never renumbered. Outside recognized list
 context, Tab is exact space insertion and BackTab is a no-op. Palette commands
 route through the same intentions for modifier-independent keyboard and mouse
-access. An editor selection handed through Escape is transiently available only
-to the next command-palette indent or outdent on the same unchanged thought.
+access. An editor cursor and optional selection handed through Escape are
+transiently available only to the next command-palette editor action on the
+same unchanged thought. This preserves the editor position across the explicit
+Edit-to-Board boundary required to reach the portable command fallback.
 
 Bracketed paste is one payload and one undoable edit. When no thought is
 selected, paste creates and focuses a new thought. The application never tries
@@ -870,6 +878,13 @@ last durable thought resolves invalid durable focus to Board but never invents
 Compose. Startup is the only automatic snapshot-derived entry, so discovery,
 update checks, attachment scans, focus reports, and background completion cannot
 steal input state.
+
+Entering Compose after a deliberate local removal resets its UI presentation to
+`Prompt`. In particular, accepted submit-and-remove shows `+ Start typing` only
+after the matching receipt journal transition and canonical deletion are both
+durable. It never allocates a replacement blank thought. Clicking the prompt or
+an explicit Board insertion action changes only the presentation to `Editor`;
+typing or paste may materialize directly from either presentation.
 
 Board multi-selection is transient UI state with two explicit, non-overlapping
 forms: an arbitrary identity set and an anchored contiguous range. A range

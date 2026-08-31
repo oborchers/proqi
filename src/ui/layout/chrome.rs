@@ -92,35 +92,19 @@ fn control_candidates(
     has_focus: bool,
     keys: &KeyBindings,
 ) -> Vec<(HitTarget, u16)> {
-    let editor_mode = matches!(
-        mode,
-        InteractionMode::Compose | InteractionMode::Edit { .. }
-    );
+    let compose_mode = matches!(mode, InteractionMode::Compose);
+    let edit_mode = matches!(mode, InteractionMode::Edit { .. });
     if let Some(failure) = failure_candidates(persistence_failed, retry_available, mode, keys) {
         return failure;
     }
     if let Some(unfocused) = unfocused_candidates(width, mode, has_focus, keys) {
         return unfocused;
     }
-    if width < 24 && editor_mode {
-        candidates(
-            &[(HitTarget::ExitEdit, false), (HitTarget::Help, true)],
-            mode,
-            keys,
-        )
+    if compose_mode || (width < 60 && edit_mode) {
+        candidates(&[(HitTarget::ExitEdit, width < 16)], mode, keys)
     } else if width < 24 {
         candidates(
             &[(HitTarget::Commands, true), (HitTarget::Help, true)],
-            mode,
-            keys,
-        )
-    } else if (width < 60 && editor_mode) || matches!(mode, InteractionMode::Compose) {
-        candidates(
-            &[
-                (HitTarget::ExitEdit, false),
-                (HitTarget::Commands, false),
-                (HitTarget::Help, false),
-            ],
             mode,
             keys,
         )
@@ -134,15 +118,13 @@ fn control_candidates(
             mode,
             keys,
         )
-    } else if editor_mode {
+    } else if edit_mode {
         candidates(
             &[
                 (HitTarget::ExitEdit, false),
                 (HitTarget::Copy, false),
                 (HitTarget::Cut, false),
                 (HitTarget::Undo, false),
-                (HitTarget::Commands, false),
-                (HitTarget::Help, false),
             ],
             mode,
             keys,

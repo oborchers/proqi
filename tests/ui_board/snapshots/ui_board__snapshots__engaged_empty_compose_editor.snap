@@ -1,23 +1,23 @@
 ---
 source: tests/ui_board/snapshots.rs
-assertion_line: 228
+assertion_line: 76
 expression: "snapshot(&mut fixture, 48, 8, ThemePreference::Dark)"
 ---
 SIZE 48x8
 
 TEXT
-00││
-01│⋮ select precise wording│
+00│⋮│
+01││
 02││
 03││
 04││
 05│  proqi-ui-contract│
-06│  1 thought · edit · saving│
+06│  0 thoughts · saved│
 07│  Esc Board│
 
 STYLE RUNS
-0: 0-47 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-1: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-8 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 9-15 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=REVERSED | 16-47 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
+0: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-47 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
+1: 0-47 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 2: 0-47 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 3: 0-47 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 4: 0-47 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE

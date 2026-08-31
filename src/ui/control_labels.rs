@@ -13,6 +13,15 @@ pub(crate) struct ControlLabel {
     pub(crate) text: String,
 }
 
+pub(crate) const fn insertion_text(mode: InteractionMode, compact: bool) -> &'static str {
+    match (mode, compact) {
+        (InteractionMode::Compose, true) => " Type",
+        (InteractionMode::Compose, false) => " Start typing",
+        (_, true) => " New",
+        (_, false) => " New thought",
+    }
+}
+
 impl ControlLabel {
     pub(crate) fn width(&self) -> u16 {
         u16::try_from(
@@ -29,13 +38,17 @@ pub(crate) fn action(
     mode: InteractionMode,
     keys: &KeyBindings,
 ) -> Option<ControlLabel> {
+    let editor_mode = matches!(
+        mode,
+        InteractionMode::Compose | InteractionMode::Edit { .. }
+    );
     let (key, text) = match target {
         HitTarget::Insert => (super::settings::key_label(keys.new), " New"),
-        HitTarget::Copy => (super::settings::key_label(keys.copy), " Copy"),
-        HitTarget::Cut => (super::settings::key_label(keys.cut), " Cut"),
+        HitTarget::Copy => (mode_key(editor_mode, "C", keys.copy), " Copy"),
+        HitTarget::Cut => (mode_key(editor_mode, "X", keys.cut), " Cut"),
         HitTarget::Delete => (super::settings::key_label(keys.delete), " Delete"),
         HitTarget::Select => (super::settings::key_label(keys.select), " Select"),
-        HitTarget::Undo => (super::settings::key_label(keys.undo), " Undo"),
+        HitTarget::Undo => (mode_key(editor_mode, "Z", keys.undo), " Undo"),
         HitTarget::Search => (super::settings::key_label(keys.search), " Search"),
         HitTarget::Commands => (
             super::settings::key_label(keys.commands),
@@ -46,7 +59,7 @@ pub(crate) fn action(
             if compact { " Help" } else { " Shortcuts" },
         ),
         HitTarget::Quit => (super::settings::key_label(keys.quit), " Quit"),
-        HitTarget::ExitEdit => ("Esc".to_owned(), " Board"),
+        HitTarget::ExitEdit => ("Esc".to_owned(), if compact { "" } else { " Board" }),
         HitTarget::Retry => ("r".to_owned(), " Retry"),
         HitTarget::ExportRecovery => ("w".to_owned(), " Export"),
         HitTarget::BeginDelivery(disposition) | HitTarget::Deliver(_, disposition) => {
@@ -65,6 +78,14 @@ pub(crate) fn action(
         key,
         text: text.to_owned(),
     })
+}
+
+fn mode_key(editor_mode: bool, editor_suffix: &str, board_key: char) -> String {
+    if editor_mode {
+        super::settings::primary_key_label(editor_suffix)
+    } else {
+        super::settings::key_label(board_key)
+    }
 }
 
 pub(crate) fn action_width(
@@ -93,7 +114,14 @@ pub(crate) fn action_width(
                     12
                 }
             }
-            HitTarget::ExitEdit | HitTarget::ExportRecovery => 10,
+            HitTarget::ExitEdit => {
+                if compact {
+                    3
+                } else {
+                    10
+                }
+            }
+            HitTarget::ExportRecovery => 10,
             HitTarget::Retry => 8,
             _ => 0,
         };

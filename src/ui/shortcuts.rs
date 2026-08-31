@@ -14,14 +14,14 @@ pub(crate) fn items(app: &BoardApp) -> Vec<Shortcut> {
     ) {
         let mut items = vec![
             ("Esc".to_owned(), "Board"),
+            (primary("C"), "Copy"),
+            (primary("X"), "Cut"),
             (primary("A"), "Select all"),
             (primary("U"), "Delete line"),
             (primary("Z"), "Undo"),
             (primary("Shift+Z"), "Redo"),
             ("Alt+↑/↓".to_owned(), "Jump 5 rows"),
             (format!("{}/{}", primary("↑"), primary("↓")), "Start/end"),
-            (keys.commands.to_string(), "Commands"),
-            (keys.help.to_string(), "Close"),
         ];
         if app.supports_submission() {
             items.insert(1, (primary("Enter"), "Submit"));

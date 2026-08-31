@@ -7,7 +7,7 @@ use crate::{
     ui::PastePayload,
 };
 
-use super::{BoardApp, InsertionConfirmation, InsertionFocus};
+use super::{BoardApp, ComposePresentation, InsertionConfirmation, InsertionFocus};
 
 impl BoardApp {
     /// Apply one ordered persistence acknowledgement to the reducer state.
@@ -66,6 +66,7 @@ impl BoardApp {
         clock: &impl Clock,
     ) -> Vec<Effect> {
         self.clear_board_selection();
+        self.compose_presentation = ComposePresentation::Prompt;
         self.insertion_focus = InsertionFocus::Inactive;
         self.insertion_confirmation = InsertionConfirmation::Idle;
         let effects = self.reduce(Action::CreateThought {
@@ -88,6 +89,7 @@ impl BoardApp {
         if self.state.board.live_thoughts().is_empty() {
             let effects = self.reduce(Action::EnterCompose);
             self.sync_editor_from_state();
+            self.compose_presentation = ComposePresentation::Editor;
             self.layout = None;
             effects
         } else {
@@ -161,6 +163,14 @@ impl BoardApp {
     ) -> Vec<Effect> {
         let effects = self.reduce(action);
         self.state.reconcile_empty_board(transition);
+        if transition == EmptyBoardTransition::ComposeAfterLocalRemoval
+            && matches!(
+                self.state.mode,
+                crate::application::InteractionMode::Compose
+            )
+        {
+            self.compose_presentation = ComposePresentation::Prompt;
+        }
         self.sync_editor_from_state();
         effects
     }

@@ -33,6 +33,7 @@ impl BoardApp {
             UiInput::Pointer(pointer) => return self.handle_pointer(*pointer, ids, clock),
             UiInput::Resize { .. }
             | UiInput::HostFocusGained
+            | UiInput::HostFocusLost
             | UiInput::Paste(_)
             | UiInput::PasteAnnotated(_)
             | UiInput::Key(_) => {}

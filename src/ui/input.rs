@@ -136,6 +136,8 @@ pub enum UiInput {
     },
     /// Terminal host focus returned to this pane.
     HostFocusGained,
+    /// Terminal host focus left this pane.
+    HostFocusLost,
     /// One normalized mouse or trackpad event.
     Pointer(PointerInput),
 }
@@ -157,7 +159,7 @@ impl UiInput {
                     | PointerKind::ScrollUp
                     | PointerKind::ScrollDown
             ),
-            Self::Resize { .. } | Self::HostFocusGained => false,
+            Self::Resize { .. } | Self::HostFocusGained | Self::HostFocusLost => false,
         }
     }
 }

@@ -122,12 +122,14 @@ fn text(buffer: &Buffer) -> String {
 #[test]
 fn empty_board_and_help_have_reviewable_complete_buffers() {
     let mut fixture = Fixture::new();
-    let mut terminal = draw(&mut fixture, 40, 8);
+    let terminal = draw(&mut fixture, 40, 8);
     let rendered = text(terminal.backend().buffer());
-    assert!(rendered.contains("compose · saved"));
+    assert!(rendered.contains("+ Start typing"));
+    assert!(rendered.contains("0 thoughts · saved"));
+    assert!(!rendered.contains("compose"));
     assert!(rendered.contains("Esc Board"));
-    assert!(terminal.backend_mut().get_cursor_position().is_ok());
 
+    fixture.input(UiInput::Key(UiKey::Escape));
     let layout = fixture.app.prepare_frame(Rect::new(0, 0, 40, 8));
     let help = layout
         .controls
@@ -281,20 +283,23 @@ fn pending_and_failed_durability_are_visibly_distinct() {
 fn mouse_can_create_focus_place_cursor_and_open_help() {
     let mut fixture = Fixture::new();
     let _empty = draw(&mut fixture, 40, 8);
-    let compose = fixture
+    let prompt = fixture
         .app
         .prepare_frame(Rect::new(0, 0, 40, 8))
-        .compose
-        .expect("compose editor");
+        .insert
+        .expect("compose prompt");
     fixture.pointer(
-        compose.text_area.x,
-        compose.text_area.y,
+        prompt.x.saturating_add(prompt.width / 2),
+        prompt.y,
         PointerKind::Down(PointerButton::Left),
     );
     assert_eq!(
         fixture.app.interaction_mode(),
         proqi::application::InteractionMode::Compose
     );
+    assert!(fixture.app.compose_editor_visible());
+    let mut engaged = draw(&mut fixture, 40, 8);
+    assert!(engaged.backend_mut().get_cursor_position().is_ok());
     fixture.input(UiInput::Paste("A界B".to_owned()));
     fixture.input(UiInput::Key(UiKey::Escape));
 

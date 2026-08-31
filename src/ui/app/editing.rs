@@ -70,6 +70,30 @@ pub(super) struct PendingEdit {
 }
 
 impl BoardApp {
+    pub(super) fn engage_compose(&mut self) {
+        if !matches!(self.state.mode, InteractionMode::Compose) {
+            return;
+        }
+        self.compose_presentation = super::ComposePresentation::Editor;
+        self.board_viewport = self.board_viewport.follow_focus();
+        self.scroll_geometry = None;
+        self.layout = None;
+    }
+
+    pub(super) fn collapse_empty_compose(&mut self) {
+        if !matches!(self.state.mode, InteractionMode::Compose)
+            || self
+                .editor_snapshot()
+                .is_some_and(|snapshot| !snapshot.content.is_empty())
+        {
+            return;
+        }
+        self.compose_presentation = super::ComposePresentation::Prompt;
+        self.scroll_geometry = None;
+        self.layout = None;
+        self.hovered = None;
+    }
+
     pub(super) fn handle_compose_key(
         &mut self,
         key: UiKey,
@@ -83,6 +107,7 @@ impl BoardApp {
             UiKey::Escape => {
                 let effects = self.reduce(Action::ExitCompose);
                 self.editor = None;
+                self.compose_presentation = super::ComposePresentation::Prompt;
                 self.insertion_focus = super::InsertionFocus::Active;
                 self.layout = None;
                 return effects;
@@ -196,6 +221,7 @@ impl BoardApp {
             && let Some((owner, _)) = &mut self.editor
         {
             *owner = EditorOwner::Thought(thought_id);
+            self.compose_presentation = super::ComposePresentation::Prompt;
             self.insertion_focus = super::InsertionFocus::Inactive;
         }
         effects

@@ -436,12 +436,20 @@ bounded timeout.
 ### Creation affordance
 
 Every genuinely empty fresh or resumed session starts in transient Compose as
-soon as its board is interactive. Compose is the ordinary multiline editor at
-the insertion row, with the same cursor, focus gutter, wrapping, selection,
-paste, invocation, Unicode, mouse, scroll, and responsive layout behavior as a
-durable editor. It does not create a thought, operation, history entry, or
-durable sequence merely because the session opens, renders, resizes, gains host
-focus, or receives another passive event.
+soon as its board is interactive. Its initial projection is the ordinary empty
+board with a centered `+ Start typing` insertion prompt, no focus gutter or
+cursor, and no visible mode token. This prompt is passive presentation, not a
+button or second text field. Typing or pasting still routes immediately through
+Compose. Clicking its insertion row, or deliberately entering Compose from
+Board, reveals the ordinary empty multiline editor with its cursor and focus
+gutter without creating durable state.
+
+The engaged Compose editor uses the same wrapping, selection, paste,
+invocation, Unicode, mouse, scroll, and responsive layout behavior as a durable
+editor. Host focus loss collapses an untouched engaged editor back to the
+passive prompt. Host focus gain, rendering, resize, discovery, and other passive
+events neither engage Compose nor change its interaction mode. None of these
+presentations creates a thought, operation, history entry, or durable sequence.
 
 The first editor intention that produces nonempty canonical content creates one
 populated thought through the ordinary create operation and promotes the same
@@ -469,7 +477,9 @@ editor reaches the insertion row after the final thought.
 A deliberate local delete, cut, undo, redo, tutorial removal, or accepted
 submit-and-remove that leaves the board empty enters Compose when it preserves
 the active focus workflow. Accepted submission does so only after the matching
-receipt is durably journaled and source deletion is acknowledged. Background
+receipt is durably journaled and source deletion is acknowledged, then shows
+the passive `+ Start typing` prompt rather than a replacement empty thought or
+engaged editor. Background
 capture, owner-control mutation, recovery, discovery, and unrelated asynchronous
 completion never force Compose or steal an active editor. An external addition
 while Compose is active remains ordered beside the untouched transient editor,
@@ -646,9 +656,12 @@ remains positional and does not wrap.
 Compose is a transient editor owner, not a durable entity and not a second text
 field. It is entered automatically only for an initially empty session and by
 typed deliberate local workflows that intentionally leave the board empty.
-`Esc` selects Board. Ordinary editor input stays editor input, including the
-characters used by Board shortcuts. The first content-producing intention
-atomically creates and enters the ordinary durable Edit state.
+Its passive projection is `+ Start typing`; a deliberate insertion action may
+engage its empty editor without materializing it, and host focus loss collapses
+that untouched editor again. `Esc` selects Board. Ordinary editor input stays
+editor input, including the characters used by Board shortcuts. The first
+content-producing intention atomically creates and enters the ordinary durable
+Edit state.
 
 ### Board mode
 

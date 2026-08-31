@@ -105,6 +105,7 @@ fn palette_fallbacks_execute_all_four_fast_editor_movements() {
             },
             extend_selection: false,
         }));
+        fixture.input(UiInput::Key(UiKey::Escape));
         let commands = fixture
             .app
             .prepare_frame(Rect::new(0, 0, 80, 8))
@@ -279,6 +280,7 @@ fn activate_jump_down_palette() -> (Fixture, Rect) {
     fixture.input(UiInput::Key(UiKey::Enter));
     move_editor_cursor(&mut fixture, CursorMovement::DocumentStart);
     move_editor_cursor(&mut fixture, CursorMovement::VisualJumpDown);
+    fixture.input(UiInput::Key(UiKey::Escape));
     let _board = draw(
         &mut fixture,
         PALETTE_VIEWPORT.width,

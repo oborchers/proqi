@@ -58,7 +58,7 @@ impl BoardApp {
                 Some(self.export_recovery(ids, clock))
             }
             UiInput::Pointer(pointer) => Some(self.handle_recovery_pointer(*pointer, ids, clock)),
-            UiInput::Resize { .. } | UiInput::HostFocusGained => None,
+            UiInput::Resize { .. } | UiInput::HostFocusGained | UiInput::HostFocusLost => None,
             UiInput::Key(_) | UiInput::Paste(_) | UiInput::PasteAnnotated(_) => Some(Vec::new()),
         }
     }

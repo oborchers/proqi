@@ -3,8 +3,8 @@ source: src/ui/app/update/tests.rs
 assertion_line: 175
 expression: "update_snapshot(44, 16)"
 ---
-00│⋮│
-01││
+00││
+01│               + Start typing│
 02│┌ update available · 1.2.3 ──────────────[x]│
 03││                                          ││
 04││  Update and restart all 12 sessions      ││
@@ -17,5 +17,5 @@ expression: "update_snapshot(44, 16)"
 11││
 12││
 13│  fixture│
-14│  0 thoughts · compose · saved│
-15│  Esc Board  : Commands  ? Shortcuts│
+14│  0 thoughts · saved│
+15│  Esc Board│

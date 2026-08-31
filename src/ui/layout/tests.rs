@@ -59,7 +59,19 @@ fn long_state(presentation: ThoughtPresentation) -> (AppState, ThoughtId, String
 }
 
 #[test]
-fn empty_layout_exposes_shared_footer_and_compose_targets() {
+fn empty_layout_distinguishes_passive_prompt_from_engaged_compose() {
+    let prompt = compute(
+        &empty_state(),
+        None,
+        Rect::new(0, 0, 20, 5),
+        0,
+        false,
+        false,
+    );
+    assert!(prompt.compose.is_none());
+    let insert = prompt.insert.expect("passive insertion prompt");
+    assert_eq!(prompt.hit_test(insert.x, insert.y), Some(HitTarget::Insert));
+
     let snapshot = EditorSnapshot {
         content: String::new(),
         cursor: crate::domain::TextPosition::default(),
@@ -71,7 +83,7 @@ fn empty_layout_exposes_shared_footer_and_compose_targets() {
             .map(|row| row.visual)
             .collect(),
     };
-    let layout = compute(
+    let engaged = compute(
         &empty_state(),
         Some(&snapshot),
         Rect::new(0, 0, 20, 5),
@@ -79,17 +91,23 @@ fn empty_layout_exposes_shared_footer_and_compose_targets() {
         true,
         false,
     );
-    assert_eq!(layout.header, Rect::new(0, 0, 20, 0));
-    let compose = layout.compose.as_ref().expect("visible compose editor");
+    assert_eq!(engaged.header, Rect::new(0, 0, 20, 0));
+    let compose = engaged.compose.as_ref().expect("visible compose editor");
     assert_eq!(
-        layout.hit_test(compose.text_area.x, compose.text_area.y),
+        engaged.hit_test(compose.text_area.x, compose.text_area.y),
         Some(HitTarget::Insert)
     );
     assert!(
-        layout
+        engaged
             .controls
             .iter()
-            .any(|(target, _)| { matches!(target, HitTarget::ExitEdit | HitTarget::Help) })
+            .any(|(target, _)| *target == HitTarget::ExitEdit)
+    );
+    assert!(
+        !engaged
+            .controls
+            .iter()
+            .any(|(target, _)| { matches!(target, HitTarget::Commands | HitTarget::Help) })
     );
 }
 

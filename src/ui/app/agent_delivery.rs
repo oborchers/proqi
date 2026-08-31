@@ -142,7 +142,10 @@ impl BoardApp {
                     ..
                 },
             ) => Direction::Down,
-            UiInput::Resize { .. } | UiInput::HostFocusGained | UiInput::Pointer(_) => return None,
+            UiInput::Resize { .. }
+            | UiInput::HostFocusGained
+            | UiInput::HostFocusLost
+            | UiInput::Pointer(_) => return None,
             _ => return Some(Vec::new()),
         };
         Some(self.deliver_to(direction, disposition, ids, clock))

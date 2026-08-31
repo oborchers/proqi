@@ -171,11 +171,12 @@ impl BoardFlow {
         if let Some(compose) = &compose {
             cursor = compose.end;
         }
-        let board_mode = matches!(state.mode, InteractionMode::Board);
-        let insert_gap = board_mode.then_some(cursor);
-        cursor = cursor.saturating_add(usize::from(board_mode));
-        let insert_row = board_mode.then_some(cursor);
-        cursor = cursor.saturating_add(usize::from(board_mode));
+        let insertion_prompt = matches!(state.mode, InteractionMode::Board)
+            || (matches!(state.mode, InteractionMode::Compose) && editor.is_none());
+        let insert_gap = insertion_prompt.then_some(cursor);
+        cursor = cursor.saturating_add(usize::from(insertion_prompt));
+        let insert_row = insertion_prompt.then_some(cursor);
+        cursor = cursor.saturating_add(usize::from(insertion_prompt));
         Self {
             thoughts,
             top_padding,

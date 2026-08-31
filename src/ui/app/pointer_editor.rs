@@ -17,6 +17,10 @@ impl BoardApp {
         clock: &impl Clock,
     ) -> Vec<Effect> {
         if matches!(self.state.mode, InteractionMode::Compose) {
+            if self.compose_prompt_visible() {
+                self.engage_compose();
+                return Vec::new();
+            }
             self.place_compose_cursor(pointer);
             Vec::new()
         } else {

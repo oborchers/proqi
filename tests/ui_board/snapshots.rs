@@ -61,6 +61,18 @@ fn empty_and_narrow_board() {
 }
 
 #[test]
+fn engaged_empty_compose_editor() {
+    let mut fixture = Fixture::new();
+    let insert = fixture
+        .app
+        .prepare_frame(Rect::new(0, 0, 48, 8))
+        .insert
+        .expect("passive Compose prompt");
+    fixture.pointer(insert.x, insert.y, PointerKind::Down(PointerButton::Left));
+    insta::assert_snapshot!(snapshot(&mut fixture, 48, 8, ThemePreference::Dark));
+}
+
+#[test]
 fn populated_board_with_folded_attachment() {
     let mut fixture = Fixture::new();
     fixture.input(UiInput::Paste("first prompt".to_owned()));
@@ -429,7 +441,8 @@ fn fast_navigation_fallbacks_are_visible_in_the_command_palette() {
 #[cfg(target_os = "macos")]
 fn fast_navigation_shortcuts_are_visible_in_edit_help() {
     let mut fixture = Fixture::new();
-    fixture.paste("one\ntwo\nthree\nfour\nfive\nsix");
+    let sequence = fixture.paste("one\ntwo\nthree\nfour\nfive\nsix");
+    let _effects = fixture.app.acknowledge_persistence(sequence, false);
     let help = fixture
         .app
         .prepare_frame(Rect::new(0, 0, 80, 14))
