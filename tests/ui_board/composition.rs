@@ -38,6 +38,84 @@ fn explicit_web_urls_use_link_role_and_underline_without_changing_content() {
 }
 
 #[test]
+fn shortcut_emphasis_is_exact_bold_and_geometry_neutral_in_board_and_editor() {
+    let content = "Press Enter, then https://example.test";
+    let shortcut: ContentAnnotation = serde_json::from_value(serde_json::json!({
+        "start": 6,
+        "end": 11,
+        "kind": { "kind": "shortcut_emphasis" }
+    }))
+    .expect("structurally valid durable fixture");
+    let overlapping_url: ContentAnnotation = serde_json::from_value(serde_json::json!({
+        "start": 18,
+        "end": 38,
+        "kind": { "kind": "shortcut_emphasis" }
+    }))
+    .expect("structurally valid URL overlap fixture");
+    let mut fixture = Fixture::with_annotated_thought(content, vec![shortcut, overlapping_url]);
+    let area = fixture.app.prepare_frame(Rect::new(0, 0, 60, 8)).thoughts[0].text_area;
+    let theme = Theme::resolve(ThemePreference::Dark, true);
+
+    let board = draw_theme(&mut fixture, 60, 8, ThemePreference::Dark);
+    let emphasized = &board.backend().buffer()[(area.x + 6, area.y)];
+    assert_eq!(emphasized.symbol(), "E");
+    assert_eq!(emphasized.fg, theme.annotation);
+    assert!(
+        emphasized
+            .modifier
+            .contains(ratatui_core::style::Modifier::BOLD)
+    );
+    let link = &board.backend().buffer()[(area.x + 18, area.y)];
+    assert_eq!(link.fg, theme.annotation);
+    assert!(
+        link.modifier
+            .contains(ratatui_core::style::Modifier::UNDERLINED)
+    );
+    assert!(link.modifier.contains(ratatui_core::style::Modifier::BOLD));
+
+    let copied = fixture.effects(UiInput::Key(UiKey::Copy));
+    assert!(matches!(
+        copied.as_slice(),
+        [Effect::WriteClipboard { content: copied, .. }] if copied == content
+    ));
+
+    fixture.input(UiInput::Key(UiKey::Enter));
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::DocumentStart,
+        extend_selection: false,
+    }));
+    for _ in 0..6 {
+        fixture.input(UiInput::Key(UiKey::Move {
+            movement: CursorMovement::GraphemeForward,
+            extend_selection: false,
+        }));
+    }
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::GraphemeForward,
+        extend_selection: true,
+    }));
+    let editor = draw_theme(&mut fixture, 60, 8, ThemePreference::Limited);
+    let emphasized = &editor.backend().buffer()[(area.x + 6, area.y)];
+    assert_eq!(emphasized.symbol(), "E");
+    assert_eq!(emphasized.fg, ratatui_core::style::Color::Green);
+    assert!(
+        emphasized
+            .modifier
+            .contains(ratatui_core::style::Modifier::BOLD)
+    );
+    assert!(
+        emphasized
+            .modifier
+            .contains(ratatui_core::style::Modifier::REVERSED)
+    );
+    assert_eq!(
+        fixture.app.editor_snapshot().expect("editor").content,
+        content
+    );
+    assert_eq!(fixture.app.state.board.live_thoughts()[0].content, content);
+}
+
+#[test]
 fn long_thought_cap_expands_without_changing_content() {
     let mut fixture = Fixture::new();
     let content = (0..8)

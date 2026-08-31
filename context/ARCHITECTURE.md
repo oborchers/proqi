@@ -639,11 +639,12 @@ The application refuses to open a database schema newer than it understands.
 It does not attempt a best-effort downgrade. Export and explicit recovery tools
 remain available without modifying the source database.
 
-Schema and storage protocol version 9 register invocation-reference annotations
-as durable thought and revision metadata. The migration from version 8 is a
-transactional protocol stamp because the annotation column and JSON envelope
-already exist. The version still prevents an older writer from interpreting a
-new annotation variant as compatible state.
+Schema and storage protocol version 10 register shortcut-emphasis annotations
+as durable thought and revision metadata. Version 9 introduced invocation
+references. Both migrations are transactional protocol stamps because the
+annotation column and JSON envelope already exist. The current version prevents
+an older writer from interpreting an unknown annotation variant as compatible
+state.
 
 ## Multiple running versions during an update
 
@@ -981,14 +982,16 @@ Attachment annotations retain only presentation-safe metadata and byte ranges;
 the absolute path remains the canonical text. Large-paste annotations retain
 derived line and grapheme counts. Invocation-reference annotations retain only
 a bounded display label over the canonical, self-contained collaborator
-location. A UI-owned projection substitutes folded labels for board rendering
-and editor snapshots, while the editor model, clipboard, recovery, CLI, search,
-and integration boundaries continue to consume canonical content. Invocation
-mentions are never resolved again at submission time. The projection owns
-lossless canonical-to-visible cursor and selection mapping. Collapsed ranges
-are atomic for pointer, cursor, selection, and deletion commands. Edits rebase
-unaffected ranges and dissolve overlapping ranges. Revisions persist both sides
-of the annotation change so undo and redo remain restart-safe.
+location. Shortcut emphasis retains only its closed semantic kind and exact
+UTF-8 range. Each durable kind exhaustively selects substitution or inline-style
+behavior in one UI-owned projection. Substitutions own lossless
+canonical-to-visible mapping and atomic folded interaction. Inline styles copy
+every canonical byte and contribute only semantic visible ranges. Board and
+editor rendering, measurement, wrapping, cursor and selection mapping, and hit
+testing consume that same projection. Clipboard, recovery, CLI, search,
+submission, and integration boundaries continue to consume canonical content.
+Edits rebase unaffected ranges and dissolve intersected ranges. Revisions
+persist both sides of the annotation change so undo and redo remain restart-safe.
 
 URL recognition is a render-only pass over canonical content. Only explicit
 HTTP and HTTPS ranges receive accent and underline styling. URL recognition does
@@ -1156,7 +1159,7 @@ bounded messages, protocol negotiation, idempotency keys, and timeouts are
 mandatory. If forwarding is unsupported or the owner cannot be verified, the
 CLI returns `session_busy`.
 
-Control protocol version 6 is current. Version 2 introduced legacy durable
+Control protocol version 7 is current. Version 2 introduced legacy durable
 presentation annotations. Version 4 added session rename, owner synchronization,
 exact editor replacement, and durable collapse state. An add mutation carrying
 an invocation-reference annotation requires version 6, so an older active owner
@@ -1165,7 +1168,8 @@ replacement carries a typed `rev_` idempotency identity plus either
 the caller's expected SHA-256 content digest or an explicit force intention and
 enters the ordinary editor revision history. The owner rejects every mutation of a source thought while its
 submission is in flight. Cross-session delivery inspects the source, commits an
-idempotent destination creation through the verified owner or an acquired
+idempotent destination creation through the version 7 purpose-specific
+preservation request or an acquired
 inactive-session lease, and only then requests an ordinary source deletion. No
 direct database write bypasses an active destination owner.
 
@@ -1200,6 +1204,13 @@ There is no security boundary between the application and other processes
 running as the same operating-system user. The design prevents accidental
 cross-session writes and unsafe command construction, not a malicious local
 administrator.
+
+Shortcut-emphasis authority follows that boundary. Supported application, UI,
+CLI, JSON, control, import, transfer, and agent-facing APIs cannot originate an
+arbitrary semantic range. The serialized kind carries no `system_owned` claim,
+signature, or key. A structurally valid range inserted directly into SQLite by
+the same user may therefore load; unknown kinds, malformed ranges, and
+unsupported storage protocols still fail closed.
 
 ## Test architecture
 

@@ -364,6 +364,18 @@ pub struct ThoughtRevision {
     pub created_at: Timestamp,
 }
 
+impl ThoughtRevision {
+    /// Validate both durable annotation snapshots against their exact content.
+    ///
+    /// # Errors
+    ///
+    /// Returns an annotation error when either history side is malformed.
+    pub fn validate_annotations(&self) -> Result<(), DomainError> {
+        validate_annotations(&self.before_content, &self.before_annotations)?;
+        validate_annotations(&self.after_content, &self.after_annotations)
+    }
+}
+
 /// Last verified integration context used for recognition only.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct IntegrationContext {

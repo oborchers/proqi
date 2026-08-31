@@ -12,6 +12,19 @@ use crate::{
 };
 
 impl BoardApp {
+    pub(super) fn current_content(&self, thought_id: ThoughtId) -> Option<String> {
+        self.pending_edit
+            .as_ref()
+            .filter(|pending| pending.thought_id == thought_id)
+            .map(|pending| pending.after.content.clone())
+            .or_else(|| {
+                self.state
+                    .board
+                    .thought(thought_id)
+                    .map(|thought| thought.content.clone())
+            })
+    }
+
     /// Return the active editor snapshot, if edit mode is active.
     #[must_use]
     pub fn editor_snapshot(&self) -> Option<EditorSnapshot> {
@@ -33,7 +46,7 @@ impl BoardApp {
                 Some(thought_id),
             ),
         };
-        Some(crate::ui::projection::editor_presentation(
+        crate::ui::projection::editor_presentation(
             &snapshot,
             &annotations,
             &expanded,
@@ -42,25 +55,23 @@ impl BoardApp {
                     self.attachment_inaccessible(thought_id, annotation_index)
                 })
             },
-        ))
+        )
+        .ok()
     }
 
     pub(in crate::ui) fn presentation_for_render(
         &self,
         thought_id: ThoughtId,
     ) -> Option<crate::ui::annotations::Presentation> {
-        let content = self
-            .state
-            .board
-            .thought(thought_id)
-            .map(|thought| thought.content.clone())?;
+        let content = self.current_content(thought_id)?;
         let annotations = self.current_annotations(thought_id);
-        Some(crate::ui::annotations::project_with_health(
+        crate::ui::annotations::project_with_health(
             &content,
             &annotations,
             &self.expanded_fold_indices(thought_id),
             |annotation_index| self.attachment_inaccessible(thought_id, annotation_index),
-        ))
+        )
+        .ok()
     }
 
     /// Effective interaction mode.

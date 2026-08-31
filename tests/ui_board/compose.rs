@@ -136,10 +136,10 @@ fn exact_and_annotated_paste_materialize_through_the_canonical_create() {
             display_name: "context file.txt".to_owned(),
         },
     };
-    let effects = annotated.effects(UiInput::PasteAnnotated(PastePayload::annotated(
-        path.to_owned(),
-        vec![annotation.clone()],
-    )));
+    let effects = annotated.effects(UiInput::PasteAnnotated(
+        PastePayload::annotated(path.to_owned(), vec![annotation.clone()])
+            .expect("valid attachment payload"),
+    ));
     assert_eq!(
         effects
             .iter()

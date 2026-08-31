@@ -1,7 +1,7 @@
 //! Pure reducer and mutation helpers.
 
 use super::{
-    Action,
+    Action, OwnedThoughtCreation, OwnedThoughtEdit,
     error::{ApplicationError, ApplicationResult},
     locks,
 };
@@ -37,8 +37,10 @@ pub fn reduce(state: &mut AppState, action: Action) -> ApplicationResult<Vec<Eff
         | Action::ExitCompose
         | Action::ExitEdit => reduce_navigation(state, &action),
         Action::CreateThought { .. }
+        | Action::CreateOwnedThought(_)
         | Action::PasteAsThought { .. }
-        | Action::EditThought { .. } => reduce_content(state, action),
+        | Action::EditThought { .. }
+        | Action::EditOwnedThought(_) => reduce_content(state, action),
         Action::CopyThoughts { .. }
         | Action::CutThoughts { .. }
         | Action::ClipboardResult { .. } => reduce_clipboard(state, &action),
@@ -70,9 +72,11 @@ const fn mutates_durable_state(action: &Action) -> bool {
     matches!(
         action,
         Action::CreateThought { .. }
+            | Action::CreateOwnedThought(_)
             | Action::RenameSession { .. }
             | Action::PasteAsThought { .. }
             | Action::EditThought { .. }
+            | Action::EditOwnedThought(_)
             | Action::CutThoughts { .. }
             | Action::DeleteThought { .. }
             | Action::DeleteThoughts { .. }
@@ -130,30 +134,37 @@ fn reduce_content(state: &mut AppState, action: Action) -> ApplicationResult<Vec
             annotations,
             insertion_index,
             at,
-        } => create_thought(
-            state,
-            thought_id,
-            operation_id,
-            content,
-            annotations,
-            insertion_index.unwrap_or(state.insertion_index),
-            at,
-        ),
+        } => {
+            reject_new_shortcut_annotations(&annotations)?;
+            create_thought(
+                state,
+                thought_id,
+                operation_id,
+                content,
+                annotations,
+                insertion_index.unwrap_or(state.insertion_index),
+                at,
+            )
+        }
+        Action::CreateOwnedThought(creation) => create_owned_thought(state, creation),
         Action::PasteAsThought {
             thought_id,
             operation_id,
             content,
             annotations,
             at,
-        } => create_thought(
-            state,
-            thought_id,
-            operation_id,
-            content,
-            annotations,
-            state.insertion_index,
-            at,
-        ),
+        } => {
+            reject_new_shortcut_annotations(&annotations)?;
+            create_thought(
+                state,
+                thought_id,
+                operation_id,
+                content,
+                annotations,
+                state.insertion_index,
+                at,
+            )
+        }
         Action::EditThought {
             thought_id,
             revision_id,
@@ -164,19 +175,69 @@ fn reduce_content(state: &mut AppState, action: Action) -> ApplicationResult<Vec
             before_cursor,
             after_cursor,
             at,
-        } => edit_thought(
-            state,
-            thought_id,
-            revision_id,
-            before_content,
-            after_content,
-            before_annotations,
-            after_annotations,
-            before_cursor,
-            after_cursor,
-            at,
-        ),
+        } => {
+            reject_new_shortcut_annotations(&after_annotations)?;
+            edit_thought(
+                state,
+                thought_id,
+                revision_id,
+                before_content,
+                after_content,
+                before_annotations,
+                after_annotations,
+                before_cursor,
+                after_cursor,
+                at,
+            )
+        }
+        Action::EditOwnedThought(edit) => edit_owned_thought(state, edit),
         _ => Err(ApplicationError::InvalidState),
+    }
+}
+
+fn create_owned_thought(
+    state: &mut AppState,
+    creation: OwnedThoughtCreation,
+) -> ApplicationResult<Vec<Effect>> {
+    create_thought(
+        state,
+        creation.thought_id,
+        creation.operation_id,
+        creation.content,
+        creation.annotations,
+        creation.insertion_index.unwrap_or(state.insertion_index),
+        creation.at,
+    )
+}
+
+fn edit_owned_thought(
+    state: &mut AppState,
+    edit: OwnedThoughtEdit,
+) -> ApplicationResult<Vec<Effect>> {
+    edit_thought(
+        state,
+        edit.thought_id,
+        edit.revision_id,
+        edit.before_content,
+        edit.after_content,
+        edit.before_annotations,
+        edit.after_annotations,
+        edit.before_cursor,
+        edit.after_cursor,
+        edit.at,
+    )
+}
+
+fn reject_new_shortcut_annotations(
+    annotations: &[crate::domain::ContentAnnotation],
+) -> ApplicationResult<()> {
+    if annotations
+        .iter()
+        .any(crate::domain::ContentAnnotation::is_shortcut_emphasis)
+    {
+        Err(ApplicationError::InvalidState)
+    } else {
+        Ok(())
     }
 }
 

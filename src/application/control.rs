@@ -37,7 +37,10 @@ pub(crate) fn match_control_replay(
         return ControlReplay::Conflict;
     }
     let thought_id = match mutation {
-        ControlMutation::Add { thought_id, .. } if matches_add(existing, session_id, mutation) => {
+        ControlMutation::Add { thought_id, .. }
+        | ControlMutation::PreserveAdd { thought_id, .. }
+            if matches_add(existing, session_id, mutation) =>
+        {
             Some(*thought_id)
         }
         ControlMutation::Delete { thought_id, .. }
@@ -108,6 +111,9 @@ fn matches_add(
     session_id: SessionId,
     mutation: &ControlMutation,
 ) -> bool {
+    let Some((thought_id, content, annotations, position)) = add_parts(mutation) else {
+        return false;
+    };
     if let StoredOperationRequest::Compacted { replay, .. } = existing {
         let crate::ports::store::CompactedOperationRequest::Add {
             session_id: stored_session,
@@ -115,16 +121,6 @@ fn matches_add(
             payload_digest,
             position: stored_position,
         } = replay
-        else {
-            return false;
-        };
-        let ControlMutation::Add {
-            thought_id,
-            content,
-            annotations,
-            position,
-            ..
-        } = mutation
         else {
             return false;
         };
@@ -137,17 +133,7 @@ fn matches_add(
             },
         );
     }
-    let (
-        StoredOperationRequest::Board { operation, .. },
-        ControlMutation::Add {
-            thought_id,
-            content,
-            annotations,
-            position,
-            ..
-        },
-    ) = (existing, mutation)
-    else {
+    let (StoredOperationRequest::Board { operation, .. }, _) = (existing, mutation) else {
         return false;
     };
     operation.session_id == session_id
@@ -162,6 +148,33 @@ fn matches_add(
                         u32::try_from(value).ok() == Some(thought.position.get())
                     })
         )
+}
+
+fn add_parts(
+    mutation: &ControlMutation,
+) -> Option<(
+    &crate::domain::ThoughtId,
+    &str,
+    &[crate::domain::ContentAnnotation],
+    &Option<usize>,
+)> {
+    match mutation {
+        ControlMutation::Add {
+            thought_id,
+            content,
+            annotations,
+            position,
+            ..
+        }
+        | ControlMutation::PreserveAdd {
+            thought_id,
+            content,
+            annotations,
+            position,
+            ..
+        } => Some((thought_id, content, annotations, position)),
+        _ => None,
+    }
 }
 
 fn matches_delete(

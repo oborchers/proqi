@@ -451,6 +451,8 @@ mod composition;
 mod durability;
 #[path = "ui_board/fast_navigation.rs"]
 mod fast_navigation;
+#[path = "ui_board/fixture.rs"]
+mod fixture;
 #[path = "ui_board/insertion_navigation.rs"]
 mod insertion_navigation;
 #[path = "ui_board/kilo.rs"]

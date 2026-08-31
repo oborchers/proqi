@@ -68,17 +68,30 @@ fn server_negotiates_protocol_and_bounds_encoded_messages() {
         ControlResult::Rejected { code, .. } if code == "protocol_mismatch"
     ));
 
-    request.protocol = CONTROL_PROTOCOL_VERSION;
-    let ControlMutation::Add {
-        content,
-        annotations,
-        ..
-    } = &mut request.mutation
-    else {
-        panic!("add request fixture");
+    request.protocol = 6;
+    request.mutation = ControlMutation::PreserveAdd {
+        operation_id: ids.operation_id(),
+        thought_id: ids.thought_id(),
+        content: "body".to_owned(),
+        annotations: vec![ContentAnnotation::shortcut(0, 4)],
+        position: None,
     };
-    annotations.clear();
-    *content = "x".repeat(MAX_CONTROL_MESSAGE_BYTES);
+    let stream = connect(&endpoint, owner.pid).expect("protocol six stream");
+    write_request(&stream, &request).expect("protocol six request");
+    let response = read_response(&stream).expect("protocol six response");
+    assert!(matches!(
+        response.result,
+        ControlResult::Rejected { code, .. } if code == "protocol_mismatch"
+    ));
+
+    request.protocol = CONTROL_PROTOCOL_VERSION;
+    request.mutation = ControlMutation::Add {
+        operation_id: ids.operation_id(),
+        thought_id: ids.thought_id(),
+        content: "x".repeat(MAX_CONTROL_MESSAGE_BYTES),
+        annotations: Vec::new(),
+        position: None,
+    };
     assert!(matches!(
         LocalControlClient.send(&owner, &request),
         Err(ControlError::MessageTooLarge)

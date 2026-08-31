@@ -363,14 +363,14 @@ impl BoardApp {
         pointer: PointerInput,
     ) -> Option<BoardCellTarget> {
         let layout = self.layout.as_ref()?.thought(thought_id)?;
-        let thought = self.state.board.thought(thought_id)?;
+        let content = self.current_content(thought_id)?;
         let presentation = self.presentation_for_render(thought_id)?;
         let row = layout
             .content_row_offset
             .saturating_add(usize::from(pointer.row.saturating_sub(layout.text_area.y)));
         let column = pointer.column.saturating_sub(layout.text_area.x);
         crate::ui::projection::board_cell_target(
-            &thought.content,
+            &content,
             &presentation,
             layout.text_area.width,
             row,

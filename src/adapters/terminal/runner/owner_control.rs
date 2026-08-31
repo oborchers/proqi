@@ -166,6 +166,7 @@ fn handle_update(
             Ok(queue_update_restart(app, lanes, pending, envelope, request))
         }
         ControlMutation::Add { .. }
+        | ControlMutation::PreserveAdd { .. }
         | ControlMutation::RenameSession { .. }
         | ControlMutation::Sync
         | ControlMutation::Replace { .. }

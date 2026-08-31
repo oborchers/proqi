@@ -61,6 +61,12 @@ as folded image and large-paste placeholders. The styling is render-only: it
 does not create durable annotations or change editor text, wrapping, cursor
 positions, persistence, or undo.
 
+The byte-zero rule applies only to the shared `/plan` and `/goal` starters.
+Discovered compatible slash forms, including project and local skills or
+commands, highlight at exact token boundaries after whitespace and on later
+logical lines. Partial names, embedded paths, URLs, fenced code, unsupported
+target forms, and non-boundary occurrences remain plain.
+
 ## Live Herdr references
 
 In a Herdr-managed pane, the existing picker refreshes one bounded protocol 19

@@ -4,17 +4,20 @@ use super::*;
 fn expanded_inaccessible_attachment_keeps_a_plain_warning_snapshot() {
     let mut fixture = Fixture::new();
     let path = "/private/TemporaryItems/missing.png";
-    let effects = fixture.effects(UiInput::PasteAnnotated(PastePayload::annotated(
-        path.to_owned(),
-        vec![ContentAnnotation {
-            start: 0,
-            end: path.len(),
-            kind: ContentAnnotationKind::Attachment {
-                image: true,
-                display_name: "missing.png".to_owned(),
-            },
-        }],
-    )));
+    let effects = fixture.effects(UiInput::PasteAnnotated(
+        PastePayload::annotated(
+            path.to_owned(),
+            vec![ContentAnnotation {
+                start: 0,
+                end: path.len(),
+                kind: ContentAnnotationKind::Attachment {
+                    image: true,
+                    display_name: "missing.png".to_owned(),
+                },
+            }],
+        )
+        .expect("valid attachment payload"),
+    ));
     let batch = effects
         .iter()
         .find_map(|effect| match effect {

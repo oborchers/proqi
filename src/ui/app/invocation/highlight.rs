@@ -14,19 +14,30 @@ impl BoardApp {
         scan_content(content, &tokens)
     }
 
-    fn highlight_tokens(&self) -> BTreeSet<String> {
-        self.invocation_project
+    fn highlight_tokens(&self) -> HighlightTokens {
+        let anywhere = self
+            .invocation_project
             .iter()
             .chain(&self.invocation_global)
             .flat_map(|entry| &entry.forms)
             .filter(|form| compatibility::supports_form(self, form))
             .map(|form| form.token.clone())
-            .chain(builtins::tokens(self).map(str::to_owned))
-            .collect()
+            .collect();
+        let document_start = builtins::tokens(self).map(str::to_owned).collect();
+        HighlightTokens {
+            anywhere,
+            document_start,
+        }
     }
 }
 
-fn scan_content(content: &str, tokens: &BTreeSet<String>) -> Vec<Range<usize>> {
+#[derive(Default)]
+struct HighlightTokens {
+    anywhere: BTreeSet<String>,
+    document_start: BTreeSet<String>,
+}
+
+fn scan_content(content: &str, tokens: &HighlightTokens) -> Vec<Range<usize>> {
     let mut ranges = Vec::new();
     let mut line_start = 0;
     let mut in_fence = false;
@@ -47,7 +58,7 @@ fn scan_content(content: &str, tokens: &BTreeSet<String>) -> Vec<Range<usize>> {
 fn scan_line(
     line: &str,
     line_start: usize,
-    tokens: &BTreeSet<String>,
+    tokens: &HighlightTokens,
     ranges: &mut Vec<Range<usize>>,
 ) {
     for (start, character) in line.char_indices() {
@@ -55,10 +66,7 @@ fn scan_line(
             continue;
         }
         let absolute_start = line_start.saturating_add(start);
-        if character == '/' && absolute_start != 0 {
-            continue;
-        }
-        if character != '/' && !has_token_boundary(line, start) {
+        if !has_token_boundary(line, start) {
             continue;
         }
         let body_start = start.saturating_add(character.len_utf8());
@@ -72,7 +80,9 @@ fn scan_line(
         let Some(token) = line.get(start..end) else {
             continue;
         };
-        if plausible(token) && tokens.contains(token) {
+        let supported = tokens.anywhere.contains(token)
+            || (absolute_start == 0 && tokens.document_start.contains(token));
+        if plausible(token) && supported {
             ranges.push(absolute_start..line_start.saturating_add(end));
         }
     }

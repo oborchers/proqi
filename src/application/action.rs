@@ -39,6 +39,9 @@ pub enum Action {
         /// Event time.
         at: Timestamp,
     },
+    /// Create content whose existing metadata was produced by a Proqi-owned policy.
+    #[doc(hidden)]
+    CreateOwnedThought(OwnedThoughtCreation),
     /// Board-mode paste, intentionally equivalent to one create operation.
     PasteAsThought {
         /// New thought identity.
@@ -73,6 +76,9 @@ pub enum Action {
         /// Event time.
         at: Timestamp,
     },
+    /// Edit through Proqi's canonical annotation rebasing path.
+    #[doc(hidden)]
+    EditOwnedThought(OwnedThoughtEdit),
     /// Request exact-content copy of thoughts in board order.
     CopyThoughts {
         /// Idempotent external request identity.
@@ -212,4 +218,82 @@ pub enum Action {
     },
     /// Ask the storage lane to retry one retained failed operation.
     RetryPersistence(OperationSequence),
+}
+
+/// Sealed creation payload for application-owned origination and preservation.
+///
+/// The type is public only so it can appear in [`Action`]. Its module and fields
+/// remain private, so supported external callers cannot construct this variant.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct OwnedThoughtCreation {
+    pub(crate) thought_id: ThoughtId,
+    pub(crate) operation_id: OperationId,
+    pub(crate) content: String,
+    pub(crate) annotations: Vec<ContentAnnotation>,
+    pub(crate) insertion_index: Option<usize>,
+    pub(crate) at: Timestamp,
+}
+
+impl OwnedThoughtCreation {
+    pub(crate) fn preserved(
+        thought_id: ThoughtId,
+        operation_id: OperationId,
+        content: String,
+        annotations: Vec<ContentAnnotation>,
+        insertion_index: Option<usize>,
+        at: Timestamp,
+    ) -> Self {
+        Self {
+            thought_id,
+            operation_id,
+            content,
+            annotations,
+            insertion_index,
+            at,
+        }
+    }
+}
+
+/// Sealed edit payload for metadata that Proqi has rebased itself.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct OwnedThoughtEdit {
+    pub(crate) thought_id: ThoughtId,
+    pub(crate) revision_id: RevisionId,
+    pub(crate) before_content: String,
+    pub(crate) after_content: String,
+    pub(crate) before_annotations: Vec<ContentAnnotation>,
+    pub(crate) after_annotations: Vec<ContentAnnotation>,
+    pub(crate) before_cursor: TextPosition,
+    pub(crate) after_cursor: TextPosition,
+    pub(crate) at: Timestamp,
+}
+
+impl OwnedThoughtEdit {
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "the sealed revision retains exact before and after state"
+    )]
+    pub(crate) fn rebased(
+        thought_id: ThoughtId,
+        revision_id: RevisionId,
+        before_content: String,
+        after_content: String,
+        before_annotations: Vec<ContentAnnotation>,
+        after_annotations: Vec<ContentAnnotation>,
+        before_cursor: TextPosition,
+        after_cursor: TextPosition,
+        at: Timestamp,
+    ) -> Self {
+        Self {
+            thought_id,
+            revision_id,
+            before_content,
+            after_content,
+            before_annotations,
+            after_annotations,
+            before_cursor,
+            after_cursor,
+            at,
+        }
+    }
 }

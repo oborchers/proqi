@@ -6,8 +6,43 @@ use super::model::DomainError;
 
 const MAX_INVOCATION_REFERENCE_LABEL_CHARS: usize = 256;
 
+/// Closed rendering behavior owned by one durable annotation kind.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AnnotationBehavior {
+    /// Replace the canonical range with a presentation-only label.
+    Substitution,
+    /// Preserve every character and apply one semantic inline role.
+    InlineStyle(InlineStyleKind),
+}
+
+/// Closed semantic inline roles understood by Proqi.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum InlineStyleKind {
+    /// Application-authored instructional shortcut text.
+    ShortcutEmphasis,
+}
+
+/// Construction marker for application-authored shortcut emphasis.
+///
+/// Its empty durable representation stores no color, style name, display value,
+/// or provenance claim. Supported mutation surfaces enforce creation authority;
+/// direct same-user database tampering is outside that guarantee.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ShortcutEmphasis {
+    #[serde(skip)]
+    private: (),
+}
+
+impl ShortcutEmphasis {
+    pub(crate) const fn application_owned() -> Self {
+        Self { private: () }
+    }
+}
+
 /// Durable presentation metadata for one exact content range.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ContentAnnotation {
     /// Inclusive UTF-8 byte offset in the canonical thought content.
     pub start: usize,
@@ -19,7 +54,7 @@ pub struct ContentAnnotation {
 
 /// Provenance used to fold context without rewriting canonical content.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case", tag = "kind")]
+#[serde(deny_unknown_fields, rename_all = "snake_case", tag = "kind")]
 pub enum ContentAnnotationKind {
     /// One absolute local file path.
     Attachment {
@@ -40,6 +75,39 @@ pub enum ContentAnnotationKind {
         /// Bounded display label beginning with the visible `@` cue.
         display_name: String,
     },
+    /// Exact application-authored instructional shortcut text.
+    ShortcutEmphasis(ShortcutEmphasis),
+}
+
+impl ContentAnnotationKind {
+    /// Return the exhaustive projection behavior for this durable kind.
+    #[must_use]
+    pub const fn behavior(&self) -> AnnotationBehavior {
+        match self {
+            Self::Attachment { .. }
+            | Self::LargePaste { .. }
+            | Self::InvocationReference { .. } => AnnotationBehavior::Substitution,
+            Self::ShortcutEmphasis(_) => {
+                AnnotationBehavior::InlineStyle(InlineStyleKind::ShortcutEmphasis)
+            }
+        }
+    }
+}
+
+impl ContentAnnotation {
+    pub(crate) fn shortcut(start: usize, end: usize) -> Self {
+        Self {
+            start,
+            end,
+            kind: ContentAnnotationKind::ShortcutEmphasis(ShortcutEmphasis::application_owned()),
+        }
+    }
+
+    /// Whether this range is application-authored semantic shortcut emphasis.
+    #[must_use]
+    pub const fn is_shortcut_emphasis(&self) -> bool {
+        matches!(self.kind, ContentAnnotationKind::ShortcutEmphasis(_))
+    }
 }
 
 /// Validate sorted non-overlapping annotation ranges against canonical content.
@@ -118,5 +186,29 @@ mod tests {
             validate_annotations("x", &[invocation(&oversized)]),
             Err(DomainError::InvalidContentAnnotation)
         );
+    }
+
+    #[test]
+    fn shortcut_serialization_contains_only_closed_semantics_and_range() {
+        let encoded = serde_json::to_value(ContentAnnotation::shortcut(2, 5))
+            .expect("serialize shortcut emphasis");
+        assert_eq!(
+            encoded,
+            serde_json::json!({
+                "start": 2,
+                "end": 5,
+                "kind": { "kind": "shortcut_emphasis" }
+            })
+        );
+    }
+
+    #[test]
+    fn unknown_or_payload_bearing_shortcut_kinds_fail_closed() {
+        for encoded in [
+            r#"{"start":0,"end":1,"kind":{"kind":"future_style"}}"#,
+            r#"{"start":0,"end":1,"kind":{"kind":"shortcut_emphasis","color":"red"}}"#,
+        ] {
+            assert!(serde_json::from_str::<ContentAnnotation>(encoded).is_err());
+        }
     }
 }

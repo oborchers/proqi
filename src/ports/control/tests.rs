@@ -74,6 +74,21 @@ fn invocation_reference_annotations_require_protocol_six() {
 }
 
 #[test]
+fn preservation_of_semantic_inline_metadata_requires_protocol_seven() {
+    let mut ids = FakeIdGenerator::new(1_725_200_000_000);
+    let mutation = ControlMutation::PreserveAdd {
+        operation_id: ids.operation_id(),
+        thought_id: ids.thought_id(),
+        content: "Press Enter".to_owned(),
+        annotations: vec![ContentAnnotation::shortcut(6, 11)],
+        position: None,
+    };
+
+    assert!(mutation.requires_protocol_seven());
+    assert_eq!(mutation.minimum_protocol(), 7);
+}
+
+#[test]
 fn update_prepare_request_and_receipt_round_trip_over_json() {
     let mut ids = FakeIdGenerator::new(1_725_200_000_000);
     let request = ControlRequest {
