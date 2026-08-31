@@ -278,6 +278,46 @@ fn top_creation_preserves_collapse_and_clears_contiguous_selection() {
 }
 
 #[test]
+fn top_creation_restores_follow_focus_after_manual_board_scroll() {
+    let mut fixture = Fixture::new();
+    for index in 0..12 {
+        durable_thought(&mut fixture, &format!("thought {index}"));
+    }
+    for _ in 1..12 {
+        fixture.input(UiInput::Key(UiKey::Character('k')));
+    }
+    let former_first = fixture.app.state.focused_thought.expect("first thought");
+    let area = Rect::new(0, 0, 42, 9);
+    for _ in 0..20 {
+        fixture.app.prepare_frame(area);
+        fixture.pointer(1, 1, PointerKind::ScrollDown);
+    }
+    let scrolled = fixture.app.prepare_frame(area);
+    assert_eq!(fixture.app.state.focused_thought, Some(former_first));
+    assert!(
+        scrolled
+            .thoughts
+            .iter()
+            .all(|thought| thought.thought_id != former_first)
+    );
+
+    fixture.input(visual(CursorMovement::VisualUp, false));
+    fixture.input(UiInput::Key(UiKey::Character('k')));
+
+    let new_first = fixture.app.state.board.live_thoughts()[0].id;
+    let mut terminal = draw(&mut fixture, area.width, area.height);
+    let cursor = terminal
+        .backend_mut()
+        .get_cursor_position()
+        .expect("new editor cursor");
+    let layout = fixture.app.prepare_frame(area);
+    let thought = layout
+        .thought(new_first)
+        .expect("new first thought visible");
+    assert!(thought.text_area.contains(cursor));
+}
+
+#[test]
 fn failed_persistence_rejects_top_creation_without_partial_state() {
     let mut fixture = Fixture::new();
     let sequence = fixture.paste("first");

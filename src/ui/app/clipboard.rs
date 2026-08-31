@@ -93,6 +93,16 @@ impl BoardApp {
             insertion_index,
             at: clock.now(),
         });
+        if matches!(
+            self.state.mode,
+            InteractionMode::Edit {
+                thought_id: active
+            } if active == thought_id
+        ) {
+            self.board_viewport = self.board_viewport.follow_focus();
+            self.scroll_geometry = None;
+            self.layout = None;
+        }
         self.state
             .attachments
             .mark_paths_accessible(thought_id, &verified_paths);
