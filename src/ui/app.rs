@@ -56,7 +56,8 @@ use super::{
 
 pub(in crate::ui) use invocation::InvocationChoiceView;
 use pending_types::{
-    DeferredSubmissionIntent, PendingEditorClipboard, PendingSubmission, SubmissionMode,
+    ClipboardReadOwner, DeferredSubmissionIntent, PendingEditorClipboard, PendingSubmission,
+    SubmissionMode,
 };
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -95,6 +96,7 @@ pub struct BoardApp {
     compose_presentation: ComposePresentation,
     pending_edit: Option<editing::PendingEdit>,
     edit_generation: u64,
+    compose_generation: u64,
     /// Whether the user requested a clean exit.
     pub quit: bool,
     /// Whether contextual help is visible.
@@ -125,7 +127,7 @@ pub struct BoardApp {
     expanded_folds: BTreeSet<(ThoughtId, usize)>,
     pending_editor_clipboard: BTreeMap<RequestId, PendingEditorClipboard>,
     pending_session_clipboard: BTreeMap<RequestId, crate::application::ClipboardIntent>,
-    pending_clipboard_reads: BTreeSet<RequestId>,
+    pending_clipboard_reads: BTreeMap<RequestId, ClipboardReadOwner>,
     pending_recovery_exports: BTreeSet<RequestId>,
     recovery_exported_for: Option<OperationSequence>,
     agent_targets: Vec<AgentTarget>,
@@ -183,6 +185,7 @@ impl BoardApp {
             compose_presentation: ComposePresentation::Prompt,
             pending_edit: None,
             edit_generation: 0,
+            compose_generation: 0,
             quit: false,
             help: false,
             help_scroll: 0,
@@ -210,7 +213,7 @@ impl BoardApp {
             expanded_folds: BTreeSet::new(),
             pending_editor_clipboard: BTreeMap::new(),
             pending_session_clipboard: BTreeMap::new(),
-            pending_clipboard_reads: BTreeSet::new(),
+            pending_clipboard_reads: BTreeMap::new(),
             pending_recovery_exports: BTreeSet::new(),
             recovery_exported_for: None,
             agent_targets: Vec::new(),

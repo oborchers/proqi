@@ -691,6 +691,12 @@ editor input, including the characters used by Board shortcuts. The first
 content-producing intention atomically creates and enters the ordinary durable
 Edit state.
 
+A native clipboard read belongs to the Board or editor owner that initiated it.
+Its result is accepted only while that same owner and Compose lifecycle remain
+active. A result arriving after `Esc`, owner replacement, or a later Compose
+lifecycle is discarded, whether it succeeded or failed; it cannot cross the
+explicit mode boundary, create a thought, or surface a stale failure.
+
 ### Board mode
 
 Board mode optimizes browsing and whole-thought actions. Suggested default

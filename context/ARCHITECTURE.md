@@ -891,6 +891,14 @@ entry, and produces the existing persistence batch. Content-free editor events
 produce no action. This avoids a create-then-revise gap and makes crash, retry,
 restart, undo, and redo use the existing atomic operation contract.
 
+Native clipboard reads are asynchronous UI intentions stored with a typed
+initiating owner. Board results remain Board-owned, durable editor results must
+still match the same `ThoughtId`, and Compose results must match both the
+Compose owner and its lifecycle generation. Exiting or materializing Compose
+advances that generation. Late success and failure results are removed and
+discarded before paste dispatch, so completion cannot reinterpret an old editor
+request under a newer interaction mode.
+
 Board-mode printable keys always pass through the configured command map, even
 when the insertion row or a durable blank has focus. The second blocked
 downward movement at the end of a non-empty final edited thought creates a

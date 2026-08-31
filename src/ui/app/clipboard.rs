@@ -9,8 +9,8 @@ use crate::{
 };
 
 use super::{
-    BoardApp, ComposePresentation, InsertionConfirmation, InsertionFocus,
-    pending_types::PendingEditorClipboard,
+    BoardApp, ComposePresentation, EditorOwner, InsertionConfirmation, InsertionFocus,
+    pending_types::{ClipboardReadOwner, PendingEditorClipboard},
 };
 use crate::ui::PastePayload;
 
@@ -184,7 +184,14 @@ impl BoardApp {
 
     pub(super) fn read_clipboard(&mut self, ids: &mut impl IdGenerator) -> Vec<Effect> {
         let request_id = ids.request_id();
-        self.pending_clipboard_reads.insert(request_id);
+        let owner = match self.state.mode {
+            InteractionMode::Board => ClipboardReadOwner::Board,
+            InteractionMode::Compose => ClipboardReadOwner::Compose {
+                generation: self.compose_generation,
+            },
+            InteractionMode::Edit { thought_id } => ClipboardReadOwner::Thought(thought_id),
+        };
+        self.pending_clipboard_reads.insert(request_id, owner);
         vec![Effect::ReadClipboard { request_id }]
     }
 
@@ -252,7 +259,10 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        if !self.pending_clipboard_reads.remove(&request_id) {
+        let Some(owner) = self.pending_clipboard_reads.remove(&request_id) else {
+            return Vec::new();
+        };
+        if !self.clipboard_read_owner_is_current(owner) {
             return Vec::new();
         }
         match result {
@@ -264,6 +274,26 @@ impl BoardApp {
             Err(code) => {
                 self.notify(code);
                 Vec::new()
+            }
+        }
+    }
+
+    fn clipboard_read_owner_is_current(&self, owner: ClipboardReadOwner) -> bool {
+        match owner {
+            ClipboardReadOwner::Board => matches!(self.state.mode, InteractionMode::Board),
+            ClipboardReadOwner::Compose { generation } => {
+                generation == self.compose_generation
+                    && matches!(self.state.mode, InteractionMode::Compose)
+                    && matches!(self.editor.as_ref(), Some((EditorOwner::Compose, _)))
+            }
+            ClipboardReadOwner::Thought(expected) => {
+                matches!(
+                    self.state.mode,
+                    InteractionMode::Edit { thought_id } if thought_id == expected
+                ) && matches!(
+                    self.editor.as_ref(),
+                    Some((EditorOwner::Thought(actual), _)) if *actual == expected
+                )
             }
         }
     }

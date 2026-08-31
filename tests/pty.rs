@@ -24,6 +24,10 @@ mod editor_persistence;
 mod fairness;
 
 #[cfg(target_os = "macos")]
+#[path = "pty/edit_submission.rs"]
+mod edit_submission;
+
+#[cfg(target_os = "macos")]
 #[path = "pty/invocation.rs"]
 mod invocation;
 

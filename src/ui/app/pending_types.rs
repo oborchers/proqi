@@ -11,6 +11,13 @@ use crate::{
     },
 };
 
+#[derive(Clone, Copy)]
+pub(super) enum ClipboardReadOwner {
+    Board,
+    Compose { generation: u64 },
+    Thought(ThoughtId),
+}
+
 pub(super) struct PendingEditorClipboard {
     pub(super) intent: ClipboardIntent,
     pub(super) before: EditorSnapshot,

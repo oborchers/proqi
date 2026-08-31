@@ -200,7 +200,11 @@ notify_terminal_on_auto_pause = false
 In Herdr, Proqi finds verified adjacent agents. `s` submits in visible order and
 removes after acceptance; `S` keeps. While editing, `Primary+Enter` submits the
 active thought and `Primary+Shift+Enter` submits it while keeping it. The palette
-submits the whole board.
+submits the whole board. With several verified adjacent agents, either edit
+chord opens the temporary direction chooser; press an arrow or `h`, `j`, `k`,
+or `l` next to choose the target. Those keys select a direction instead of
+moving or inserting text while the chooser is open. `Esc` cancels the chooser
+and returns to the unchanged editor.
 
 When an accepted submission removes the final thought, Proqi returns to the
 passive `+ Start typing` board. It does not create a replacement blank thought;

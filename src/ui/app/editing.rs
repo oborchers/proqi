@@ -106,6 +106,7 @@ impl BoardApp {
         match key {
             UiKey::Escape => {
                 let effects = self.reduce(Action::ExitCompose);
+                self.compose_generation = self.compose_generation.wrapping_add(1);
                 self.editor = None;
                 self.compose_presentation = super::ComposePresentation::Prompt;
                 self.insertion_focus = super::InsertionFocus::Active;
@@ -221,6 +222,7 @@ impl BoardApp {
             && let Some((owner, _)) = &mut self.editor
         {
             *owner = EditorOwner::Thought(thought_id);
+            self.compose_generation = self.compose_generation.wrapping_add(1);
             self.compose_presentation = super::ComposePresentation::Prompt;
             self.insertion_focus = super::InsertionFocus::Inactive;
         }
