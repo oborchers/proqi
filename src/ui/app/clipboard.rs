@@ -59,6 +59,26 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
+        self.create_with_insertion_index(payload, None, ids, clock)
+    }
+
+    pub(super) fn create_at(
+        &mut self,
+        payload: PastePayload,
+        insertion_index: usize,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        self.create_with_insertion_index(payload, Some(insertion_index), ids, clock)
+    }
+
+    fn create_with_insertion_index(
+        &mut self,
+        payload: PastePayload,
+        insertion_index: Option<usize>,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
         self.clear_board_selection();
         self.compose_presentation = ComposePresentation::Prompt;
         self.insertion_focus = InsertionFocus::Inactive;
@@ -70,7 +90,7 @@ impl BoardApp {
             operation_id: ids.operation_id(),
             content,
             annotations,
-            insertion_index: None,
+            insertion_index,
             at: clock.now(),
         });
         self.state

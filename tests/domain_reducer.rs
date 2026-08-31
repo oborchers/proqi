@@ -89,6 +89,8 @@ mod clipboard;
 mod history;
 #[path = "domain_reducer/locks.rs"]
 mod locks;
+#[path = "domain_reducer/top_boundary.rs"]
+mod top_boundary;
 
 #[test]
 fn interaction_mode_is_explicit_and_empty_board_policy_is_typed() {

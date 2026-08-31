@@ -22,6 +22,7 @@ pub(crate) fn items(app: &BoardApp) -> Vec<Shortcut> {
             (primary("Shift+Z"), "Redo"),
             ("Alt+↑/↓".to_owned(), "Jump 5 rows"),
             (format!("{}/{}", primary("↑"), primary("↓")), "Start/end"),
+            ("↑/↓×2".to_owned(), "Neighbor/new"),
         ];
         if app.supports_submission() {
             items.insert(1, (primary("Enter"), "Submit"));
@@ -62,6 +63,10 @@ pub(crate) fn items(app: &BoardApp) -> Vec<Shortcut> {
         items.push((keys.submit_remove.to_string(), "Submit"));
         items.push((keys.submit_keep.to_string(), "Submit & keep"));
     }
+    items.push((
+        format!("{}/{}×2", keys.focus_up, keys.focus_down),
+        "New at edge",
+    ));
     items.push((keys.quit.to_string(), "Quit"));
     items.push((keys.help.to_string(), "Close"));
     items

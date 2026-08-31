@@ -470,9 +470,13 @@ On a nonempty board, every active insertion area retains its quiet `+` control,
 stable mouse hit target, and complete `+ New thought` label while focused or
 hovered. Clicking it, pressing `Enter` or the configured new-thought action, or
 confirming the second downward movement creates one durable blank and enters
-Edit. That explicit blank remains after `Esc`, exit, crash, and resume as an
-ordinary undoable board operation. The same nonempty behavior applies when an
-editor reaches the insertion row after the final thought.
+Edit. At the first live thought, two consecutive blocked plain upward movements
+create the same ordinary blank immediately before it. Up and the configured
+previous-thought key, or Down and the configured next-thought key, are
+equivalent outside text modes and may be mixed within one confirmation. That
+explicit blank remains after `Esc`, exit, crash, and resume as an ordinary
+undoable board operation. The same nonempty behavior applies when an editor
+reaches either outer board boundary.
 
 A deliberate local delete, cut, undo, redo, tutorial removal, or accepted
 submit-and-remove that leaves the board empty enters Compose when it preserves
@@ -859,7 +863,9 @@ thought selected.
 
 At the first or last visual line, the first blocked vertical arrow confirms the
 boundary. Repeating the same blocked movement leaves edit mode and focuses the
-adjacent thought. Any other input resets the confirmation. This behavior has no
+adjacent thought. At an outer board boundary, the repetition instead creates an
+ordinary blank before the first or after the last nonempty thought and enters
+its editor. Any other input resets the confirmation. This behavior has no
 timer, and plain `j` and `k` remain editable characters in text contexts.
 
 ### Mouse interaction

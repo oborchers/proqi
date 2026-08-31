@@ -9,7 +9,7 @@ use crate::{
     },
 };
 
-use super::{BoardApp, UiKey, editing, pending_types::EditFlush};
+use super::{BoardApp, BoundaryInsertion, UiKey, editing, pending_types::EditFlush};
 use crate::ui::settings::BoardCommand;
 
 impl BoardApp {
@@ -56,6 +56,12 @@ impl BoardApp {
             UiKey::Move {
                 movement: CursorMovement::VisualUp,
                 extend_selection: false,
+            } if self.at_first_thought() => {
+                return self.confirm_boundary_creation(BoundaryInsertion::BeforeFirst, ids, clock);
+            }
+            UiKey::Move {
+                movement: CursorMovement::VisualUp,
+                extend_selection: false,
             } => self.move_focus_outside_range(-1),
             UiKey::Move {
                 movement: CursorMovement::VisualDown,
@@ -91,7 +97,7 @@ impl BoardApp {
                 if self.settings.keybindings.command(character)
                     == Some(BoardCommand::FocusDown) =>
             {
-                self.confirm_insertion_creation(ids, clock)
+                self.confirm_boundary_creation(BoundaryInsertion::AfterLast, ids, clock)
             }
             UiKey::Character(character) => self.handle_board_command(character, ids, clock),
             UiKey::Enter => self.begin_insertion(ids, clock),
@@ -109,7 +115,7 @@ impl BoardApp {
             UiKey::Move {
                 movement: CursorMovement::VisualDown,
                 extend_selection: false,
-            } => self.confirm_insertion_creation(ids, clock),
+            } => self.confirm_boundary_creation(BoundaryInsertion::AfterLast, ids, clock),
             UiKey::Move {
                 movement: CursorMovement::VisualDown,
                 extend_selection: true,
@@ -131,36 +137,6 @@ impl BoardApp {
             | UiKey::Submit
             | UiKey::SubmitKeep
             | UiKey::Move { .. } => Vec::new(),
-        }
-    }
-
-    pub(super) fn reset_insertion_confirmation(&mut self, input: &crate::ui::UiInput) {
-        let continues = self.insertion_focused()
-            && match input {
-                crate::ui::UiInput::Key(UiKey::Move {
-                    movement: CursorMovement::VisualDown,
-                    extend_selection: false,
-                }) => true,
-                crate::ui::UiInput::Key(UiKey::Character(character)) => {
-                    self.settings.keybindings.command(*character) == Some(BoardCommand::FocusDown)
-                }
-                _ => false,
-            };
-        if !continues {
-            self.insertion_confirmation = super::InsertionConfirmation::Idle;
-        }
-    }
-
-    fn confirm_insertion_creation(
-        &mut self,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-    ) -> Vec<Effect> {
-        if self.insertion_confirmation == super::InsertionConfirmation::Armed {
-            self.begin_insertion(ids, clock)
-        } else {
-            self.insertion_confirmation = super::InsertionConfirmation::Armed;
-            Vec::new()
         }
     }
 
@@ -199,6 +175,13 @@ impl BoardApp {
             }
             Some(BoardCommand::Undo) => self.history(ids, clock, true),
             Some(BoardCommand::FocusUp) => {
+                if self.at_first_thought() {
+                    return self.confirm_boundary_creation(
+                        BoundaryInsertion::BeforeFirst,
+                        ids,
+                        clock,
+                    );
+                }
                 self.move_focus_outside_range(-1);
                 Vec::new()
             }
