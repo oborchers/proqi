@@ -262,11 +262,16 @@ submittable as ordinary plain text.
   Do not rediscover single-character shortcuts through substring searches,
   regular expressions, capitalization heuristics, or renderer knowledge of the
   tutorial's prose.
-- [ ] Restrict creation of shortcut emphasis to reviewed application policies.
-  Ordinary TUI editing, public JSON commands, the Proqi skill, active-session
-  control, clipboard input, and agent-authored text cannot originate semantic
-  styles. Cross-session transfer and thought duplication may preserve existing
-  Proqi-owned metadata without giving the caller a color or formatting API.
+- [ ] Restrict creation of shortcut emphasis to the application-private literal
+  builder used by reviewed application policies. Ordinary TUI editing and
+  Compose, paste and clipboard input, public JSON and CLI commands, generic
+  owner-control Add, imports, the Proqi skill, and agent-authored text cannot
+  originate semantic styles. Cross-session transfer and thought duplication
+  may preserve already-valid metadata through purpose-specific paths without
+  exposing range or style selection. This is a supported-API invariant, not a
+  cryptographic provenance claim. Structurally valid bytes inserted directly
+  into SQLite by the same operating-system user may load because that tampering
+  is outside the documented threat model.
 - [ ] Preserve the existing edit contract. An edit outside a shortcut range
   rebases that range through the canonical `TextChangeSet`. An edit intersecting
   the range dissolves its emphasis rather than guessing new semantic ownership.
@@ -281,11 +286,11 @@ submittable as ordinary plain text.
   bold. Custom themes may change that role globally but cannot change which
   ranges receive it. Limited-color terminals retain the same bold non-color cue.
   Add exact contrast checks if a distinct shortcut theme role proves necessary.
-- [ ] Introduce the durable enum variant within the first-run onboarding storage
-  protocol change when possible. If onboarding has already shipped, treat the
-  new serialized variant as a storage-protocol change and add the required
-  forward migration and mixed-version refusal. Never let an older process
-  encounter an unknown annotation payload as ordinary compatible state.
+- [ ] Register the durable enum variant in schema and storage protocol 10, with
+  a forward protocol-stamp migration and mixed-version refusal. Register the
+  purpose-specific preservation request in control protocol 7. Never let an
+  older process encounter an unknown annotation payload as ordinary compatible
+  state.
 - [ ] Scope the first release to application-authored instructional shortcuts.
   Do not add general rich-text editing, arbitrary emphasis commands, syntax
   highlighting, user-authored colors, per-thought palettes, or automatic

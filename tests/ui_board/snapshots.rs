@@ -7,10 +7,6 @@ use proqi::{
         attachment_accessibility::{
             AttachmentAccessFailure, AttachmentCheckBatchResult, AttachmentCheckResult,
         },
-        invocation::{
-            InvocationDiscovery, InvocationEntry, InvocationForm, InvocationHarness,
-            InvocationKind, InvocationScope,
-        },
     },
 };
 
@@ -26,8 +22,7 @@ mod platform;
 mod support;
 
 use platform::assert_platform_snapshot;
-use support::adjacent_target;
-
+use support::{adjacent_target, assert_invocation_styles, install_inline_invocation_fixture};
 fn snapshot(fixture: &mut Fixture, width: u16, height: u16, theme: ThemePreference) -> String {
     snapshot_buffer(draw_theme(fixture, width, height, theme).backend().buffer())
 }
@@ -55,17 +50,20 @@ fn populated_board_with_folded_attachment() {
     let mut fixture = Fixture::new();
     fixture.input(UiInput::Paste("first prompt".to_owned()));
     fixture.input(UiInput::Key(UiKey::Escape));
-    fixture.input(UiInput::PasteAnnotated(PastePayload::annotated(
-        "/private/tmp/Bild (18).png".to_owned(),
-        vec![ContentAnnotation {
-            start: 0,
-            end: "/private/tmp/Bild (18).png".len(),
-            kind: ContentAnnotationKind::Attachment {
-                image: true,
-                display_name: "Bild (18).png".to_owned(),
-            },
-        }],
-    )));
+    fixture.input(UiInput::PasteAnnotated(
+        PastePayload::annotated(
+            "/private/tmp/Bild (18).png".to_owned(),
+            vec![ContentAnnotation {
+                start: 0,
+                end: "/private/tmp/Bild (18).png".len(),
+                kind: ContentAnnotationKind::Attachment {
+                    image: true,
+                    display_name: "Bild (18).png".to_owned(),
+                },
+            }],
+        )
+        .expect("valid attachment payload"),
+    ));
     fixture.input(UiInput::Key(UiKey::Escape));
     insta::assert_snapshot!(snapshot(&mut fixture, 60, 12, ThemePreference::Dark));
 }
@@ -74,17 +72,20 @@ fn populated_board_with_folded_attachment() {
 fn inaccessible_attachment_has_a_plain_warning_snapshot() {
     let mut fixture = Fixture::new();
     let path = "/private/var/folders/TemporaryItems/Grüße 第一.png";
-    let effects = fixture.effects(UiInput::PasteAnnotated(PastePayload::annotated(
-        path.to_owned(),
-        vec![ContentAnnotation {
-            start: 0,
-            end: path.len(),
-            kind: ContentAnnotationKind::Attachment {
-                image: true,
-                display_name: "Grüße 第一.png".to_owned(),
-            },
-        }],
-    )));
+    let effects = fixture.effects(UiInput::PasteAnnotated(
+        PastePayload::annotated(
+            path.to_owned(),
+            vec![ContentAnnotation {
+                start: 0,
+                end: path.len(),
+                kind: ContentAnnotationKind::Attachment {
+                    image: true,
+                    display_name: "Grüße 第一.png".to_owned(),
+                },
+            }],
+        )
+        .expect("valid attachment payload"),
+    ));
     let batch = effects
         .iter()
         .find_map(|effect| match effect {
@@ -113,41 +114,38 @@ fn inaccessible_attachment_has_a_plain_warning_snapshot() {
 #[test]
 fn discovered_invocations_use_the_annotation_visual_role() {
     let mut fixture = Fixture::new();
-    fixture
-        .app
-        .complete_agent_discovery(Ok(vec![adjacent_target(
-            Direction::Right,
-            "w1:p2",
-            AgentState::Idle,
-        )]));
-    let effects = fixture.app.refresh_invocations();
-    let [Effect::DiscoverInvocations(request)] = effects.as_slice() else {
-        panic!("invocation refresh effect");
-    };
-    fixture
-        .app
-        .complete_invocation_discovery(Ok(InvocationDiscovery {
-            generation: request.generation,
-            cwd: request.cwd.clone(),
-            global: vec![InvocationEntry {
-                name: "review".to_owned(),
-                description: Some("Review the change".to_owned()),
-                kind: InvocationKind::Skill,
-                scope: InvocationScope::Global,
-                source: InvocationHarness::AgentSkills,
-                forms: vec![InvocationForm {
-                    harness: InvocationHarness::Codex,
-                    token: "$review".to_owned(),
-                    precedence: 20,
-                }],
-                canonical_path: std::path::PathBuf::from("/fixture/review/SKILL.md"),
-                precedence: 20,
-            }],
-            project: Vec::new(),
-        }));
-    fixture.input(UiInput::Paste("/plan ask $review ".to_owned()));
+    let content = install_inline_invocation_fixture(&mut fixture);
+
+    let area = fixture.app.prepare_frame(Rect::new(0, 0, 58, 8)).thoughts[0].text_area;
+    let theme = Theme::resolve(ThemePreference::Dark, true);
+    let editor = draw_theme(&mut fixture, 58, 8, ThemePreference::Dark);
+    assert_invocation_styles(&editor, area, theme.annotation);
+
+    fixture.input(UiInput::Key(UiKey::Escape));
+    let board = draw_theme(&mut fixture, 58, 8, ThemePreference::Dark);
+    assert_invocation_styles(&board, area, theme.annotation);
+    assert_eq!(fixture.app.state.board.live_thoughts()[0].content, content);
 
     assert_platform_snapshot!(snapshot(&mut fixture, 58, 8, ThemePreference::Dark));
+}
+
+#[test]
+fn application_owned_shortcuts_use_semantic_inline_emphasis() {
+    let annotations = [(6, 11), (18, 21)]
+        .into_iter()
+        .map(|(start, end)| {
+            serde_json::from_value(serde_json::json!({
+                "start": start,
+                "end": end,
+                "kind": { "kind": "shortcut_emphasis" }
+            }))
+            .expect("structurally valid durable fixture")
+        })
+        .collect();
+    let mut fixture =
+        Fixture::with_annotated_thought("Press Enter, then Esc to return.", annotations);
+
+    insta::assert_snapshot!(snapshot(&mut fixture, 48, 8, ThemePreference::Dark));
 }
 
 #[test]

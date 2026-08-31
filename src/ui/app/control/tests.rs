@@ -1,12 +1,63 @@
 use crate::{
     adapters::memory::{FakeClock, FakeIdGenerator},
-    application::{AppState, InteractionMode},
-    domain::{Session, SessionBoard, Thought, ThoughtPosition, Timestamp},
+    application::{AppState, ApplicationError, InteractionMode},
+    domain::{ContentAnnotation, Session, SessionBoard, Thought, ThoughtPosition, Timestamp},
     ports::{control::ControlMutation, editor::EditCommand, environment::IdGenerator},
     ui::UiInput,
 };
 
 use super::BoardApp;
+
+#[test]
+fn generic_control_add_cannot_author_shortcut_emphasis_but_preservation_can_retain_it() {
+    let mut ids = FakeIdGenerator::new(1_725_190_000_000);
+    let session = Session::new(
+        ids.session_id(),
+        std::env::temp_dir().join("proqi-control-shortcut-authority"),
+        Timestamp::from_millis(1),
+    )
+    .expect("session");
+    let mut app = BoardApp::new(
+        AppState::new(SessionBoard::new(session, Vec::new()).expect("board")),
+        crate::adapters::editor::RopeEditorFactory,
+    );
+    let annotation = ContentAnnotation::shortcut(6, 11);
+    let thought_id = ids.thought_id();
+    let add = ControlMutation::Add {
+        operation_id: ids.operation_id(),
+        thought_id,
+        content: "Press Enter".to_owned(),
+        annotations: vec![annotation.clone()],
+        position: None,
+    };
+
+    assert_eq!(
+        app.handle_control(&add, &FakeClock::new(Timestamp::from_millis(2))),
+        Err(ApplicationError::InvalidState)
+    );
+    assert!(app.state.board.thought(thought_id).is_none());
+
+    let preserved_id = ids.thought_id();
+    app.handle_control(
+        &ControlMutation::PreserveAdd {
+            operation_id: ids.operation_id(),
+            thought_id: preserved_id,
+            content: "Press Enter".to_owned(),
+            annotations: vec![annotation.clone()],
+            position: None,
+        },
+        &FakeClock::new(Timestamp::from_millis(3)),
+    )
+    .expect("purpose-specific preservation");
+    assert_eq!(
+        app.state
+            .board
+            .thought(preserved_id)
+            .expect("preserved thought")
+            .annotations,
+        [annotation]
+    );
+}
 
 #[test]
 fn active_add_preserves_the_users_live_editor_and_focus() {

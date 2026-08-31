@@ -216,15 +216,18 @@ impl BoardApp {
             .map(|thought| thought.id)
             .collect::<Vec<_>>();
         for id in ids {
-            if let Some(thought) = state.board.thought_mut(id) {
-                thought.content = crate::ui::annotations::project(
-                    &thought.content,
-                    &thought.annotations,
-                    &self.expanded_fold_indices(id),
-                )
-                .content;
-                thought.annotations.clear();
-            }
+            let Some(thought) = state.board.thought_mut(id) else {
+                continue;
+            };
+            let Ok(presentation) = crate::ui::annotations::project(
+                &thought.content,
+                &thought.annotations,
+                &self.expanded_fold_indices(id),
+            ) else {
+                continue;
+            };
+            thought.content = presentation.content;
+            thought.annotations.clear();
         }
         state
     }

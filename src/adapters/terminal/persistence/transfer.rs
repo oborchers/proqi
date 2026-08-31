@@ -84,7 +84,7 @@ pub(super) fn deliver(
     )
     .map_err(|error| error.to_string())?;
     service
-        .add_thought_annotated(
+        .preserve_thought(
             request.destination_session_id,
             request.content.clone(),
             request.annotations.clone(),
@@ -104,7 +104,7 @@ fn forward(
         .ok_or_else(|| "destination owner does not advertise control forwarding".to_owned())?;
     let thought_id = ThoughtId::from_database_bytes(request.operation_id.database_bytes())
         .map_err(|error| error.to_string())?;
-    let mutation = ControlMutation::Add {
+    let mutation = ControlMutation::PreserveAdd {
         operation_id: request.operation_id,
         thought_id,
         content: request.content.clone(),

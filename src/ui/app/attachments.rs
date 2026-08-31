@@ -18,8 +18,10 @@ impl BoardApp {
         matches!(
             action,
             crate::application::Action::CreateThought { .. }
+                | crate::application::Action::CreateOwnedThought(_)
                 | crate::application::Action::PasteAsThought { .. }
                 | crate::application::Action::EditThought { .. }
+                | crate::application::Action::EditOwnedThought(_)
                 | crate::application::Action::DeleteThought { .. }
                 | crate::application::Action::DeleteThoughts { .. }
                 | crate::application::Action::DuplicateThoughts { .. }

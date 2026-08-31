@@ -4,7 +4,6 @@ use std::ops::Range;
 
 use crate::{
     application::Effect,
-    domain::{ContentAnnotation, ContentAnnotationKind},
     ports::invocation::{
         InvocationReferenceDiscovery, InvocationReferenceDiscoveryRequest, LiveAgentReference,
         MAX_INVOCATION_REFERENCES,
@@ -290,19 +289,12 @@ pub(super) fn insertion_payload(
     let start = prefix.len();
     let end = start.saturating_add(choice.insertion.len());
     let content = format!("{prefix}{} ", choice.insertion);
-    let annotations = choice
-        .annotation_display
-        .as_ref()
-        .map_or_else(Vec::new, |display_name| {
-            vec![ContentAnnotation {
-                start,
-                end,
-                kind: ContentAnnotationKind::InvocationReference {
-                    display_name: display_name.clone(),
-                },
-            }]
-        });
-    PastePayload::annotated(content, annotations)
+    match &choice.annotation_display {
+        Some(display_name) => {
+            PastePayload::invocation_reference(content, start..end, display_name.clone())
+        }
+        None => PastePayload::text(content),
+    }
 }
 
 fn labeled_identity(label: Option<&str>, identity: &str) -> String {

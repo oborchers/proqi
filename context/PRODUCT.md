@@ -822,8 +822,25 @@ A small data-driven built-in table sits beside filesystem results: `/plan` and
 `/goal` are offered as shared Commands only at byte zero when a verified
 adjacent Codex or Claude Code target exists. Exact discovered invocations and
 these shared starters use the annotation color and bold non-color cue already
-used for folded image and large-paste placeholders. Leading whitespace, another
-line, partial tokens, and in-body starter prose remain ordinary text.
+used for folded image and large-paste placeholders. For shared starters, leading
+whitespace, another line, partial tokens, and in-body starter prose remain
+ordinary text.
+
+The byte-zero restriction belongs only to those two shared starters. An exact
+compatible discovered slash form may receive the same render-only treatment at
+a token boundary after whitespace or on a later logical line. Partial names,
+embedded paths, URLs, fenced code, unsupported forms, and non-boundary matches
+remain plain. Discovery, picker entries, and canonical text are unchanged.
+
+Durable shortcut emphasis is a separate closed presentation kind for exact
+application-authored instructional ranges. It uses the global annotation role
+plus bold and never changes text or geometry. Only Proqi's private literal
+builder originates it through supported APIs. Generic editing, Compose, paste,
+JSON, CLI, control Add, imports, and agent-authored input cannot select a range
+or style. Duplication and purpose-specific cross-session transfer may preserve
+already-valid metadata. This is not a provenance claim: direct SQLite mutation
+by another process running as the same operating-system user remains outside
+the threat model.
 
 When a verified adjacent target maps to a documented catalog harness,
 completion and highlighting include only compatible forms; several known

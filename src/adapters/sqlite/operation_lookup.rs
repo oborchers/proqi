@@ -91,6 +91,9 @@ pub(super) fn revision_request(
             "revision receipt does not match its request".to_owned(),
         ));
     }
+    revision
+        .validate_annotations()
+        .map_err(|error| StoreError::Corrupt(error.to_string()))?;
     Ok(Some(StoredOperationRequest::Revision {
         revision: Box::new(revision),
         receipt: CommitReceipt {
@@ -113,5 +116,8 @@ fn validate_board_record(
             "operation receipt does not match its board request".to_owned(),
         ));
     }
+    operation
+        .validate_annotations()
+        .map_err(|error| StoreError::Corrupt(error.to_string()))?;
     Ok(())
 }

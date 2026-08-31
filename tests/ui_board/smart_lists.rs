@@ -152,10 +152,10 @@ fn selected_line_indentation_excludes_a_column_zero_endpoint_and_preserves_annot
         },
     };
     let mut fixture = Fixture::new();
-    fixture.input(UiInput::PasteAnnotated(PastePayload::annotated(
-        content.clone(),
-        vec![annotation.clone()],
-    )));
+    fixture.input(UiInput::PasteAnnotated(
+        PastePayload::annotated(content.clone(), vec![annotation.clone()])
+            .expect("valid attachment payload"),
+    ));
     fixture.input(UiInput::Key(UiKey::Move {
         movement: CursorMovement::DocumentStart,
         extend_selection: false,
@@ -253,10 +253,10 @@ fn paste_is_exact_and_smart_newlines_preserve_annotations_through_resize() {
         },
     };
     let mut annotated = Fixture::new();
-    annotated.input(UiInput::PasteAnnotated(PastePayload::annotated(
-        content,
-        vec![annotation.clone()],
-    )));
+    annotated.input(UiInput::PasteAnnotated(
+        PastePayload::annotated(content, vec![annotation.clone()])
+            .expect("valid attachment payload"),
+    ));
     let effects = annotated.effects(UiInput::Key(UiKey::Enter));
     assert_eq!(revision(&effects).after_annotations, vec![annotation]);
     let cursor = annotated.app.editor_snapshot().expect("editor").cursor;
