@@ -43,6 +43,6 @@ fn expanded_inaccessible_attachment_keeps_a_plain_warning_snapshot() {
     fixture.input(UiInput::Key(UiKey::Enter));
 
     insta::with_settings!({ snapshot_path => "." }, {
-        insta::assert_snapshot!(snapshot(&mut fixture, 60, 8, ThemePreference::Dark));
+        assert_platform_snapshot!(snapshot(&mut fixture, 60, 8, ThemePreference::Dark));
     });
 }

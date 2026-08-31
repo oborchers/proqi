@@ -440,7 +440,7 @@ mod contract {
         let platform = if cfg!(target_os = "macos") {
             "macos"
         } else {
-            "other"
+            "portable"
         };
         insta::with_settings!({snapshot_suffix => platform}, {
             insta::assert_snapshot!("invocation_plan_starter", plan_completion_snapshot());

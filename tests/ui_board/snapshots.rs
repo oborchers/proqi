@@ -18,6 +18,20 @@ use proqi::{
 mod snapshot_support;
 
 use snapshot_support::snapshot_buffer;
+
+macro_rules! assert_platform_snapshot {
+    ($value:expr) => {{
+        let platform = if cfg!(target_os = "macos") {
+            "macos"
+        } else {
+            "portable"
+        };
+        insta::with_settings!({ snapshot_suffix => platform }, {
+            insta::assert_snapshot!($value);
+        });
+    }};
+}
+
 #[path = "snapshots/attachment_accessibility.rs"]
 mod attachment_accessibility_snapshots;
 #[path = "snapshots/support.rs"]
@@ -104,7 +118,7 @@ fn inaccessible_attachment_has_a_plain_warning_snapshot() {
                 .collect(),
         });
 
-    insta::assert_snapshot!(snapshot(&mut fixture, 60, 8, ThemePreference::Dark));
+    assert_platform_snapshot!(snapshot(&mut fixture, 60, 8, ThemePreference::Dark));
 }
 
 #[test]
@@ -144,7 +158,7 @@ fn discovered_invocations_use_the_annotation_visual_role() {
         }));
     fixture.input(UiInput::Paste("/plan ask $review ".to_owned()));
 
-    insta::assert_snapshot!(snapshot(&mut fixture, 58, 8, ThemePreference::Dark));
+    assert_platform_snapshot!(snapshot(&mut fixture, 58, 8, ThemePreference::Dark));
 }
 
 #[test]
@@ -298,7 +312,7 @@ fn long_paste_stays_folded_and_accented_in_edit_mode() {
         .collect::<Vec<_>>()
         .join("\n");
     fixture.input(UiInput::Paste(content));
-    insta::assert_snapshot!(snapshot(&mut fixture, 72, 9, ThemePreference::Dark));
+    assert_platform_snapshot!(snapshot(&mut fixture, 72, 9, ThemePreference::Dark));
 }
 
 #[test]
@@ -425,7 +439,7 @@ fn expanded_debug_session_identity_preserves_footer_band_order() {
     fixture.input(UiInput::Key(UiKey::Escape));
     let second = fixture.paste("second thought");
     fixture.app.acknowledge_persistence(second, true);
-    insta::assert_snapshot!(snapshot(&mut fixture, 80, 11, ThemePreference::Dark));
+    assert_platform_snapshot!(snapshot(&mut fixture, 80, 11, ThemePreference::Dark));
 }
 
 #[test]
