@@ -244,6 +244,7 @@ impl<'a> PickerRow<'a> {
     }
 }
 
+#[cfg(test)]
 fn picker_row(entry: PickerRow<'_>, width: u16) -> String {
     let width = usize::from(width);
     let primary_width = entry.primary.width();
@@ -255,19 +256,6 @@ fn picker_row(entry: PickerRow<'_>, width: u16) -> String {
 }
 
 fn picker_line(entry: PickerRow<'_>, width: u16, selected: bool, theme: &Theme) -> Line<'static> {
-    if entry.secondary_fallbacks.is_empty() {
-        let style = if selected {
-            theme
-                .focused_style()
-                .fg(theme.accent)
-                .add_modifier(Modifier::BOLD)
-        } else {
-            theme.base_style()
-        };
-        let mut content = picker_row(entry, width);
-        content.push_str(&" ".repeat(usize::from(width).saturating_sub(content.width())));
-        return Line::from(Span::styled(content, style));
-    }
     let width = usize::from(width);
     let primary = ellipsize(entry.primary, width);
     let base = if selected {
@@ -390,8 +378,9 @@ fn shortcut_row(
 
 #[cfg(test)]
 mod tests {
-    use super::{PickerRow, overlay_clear_area, picker_row};
-    use ratatui_core::layout::Rect;
+    use super::{PickerRow, overlay_clear_area, picker_line, picker_row};
+    use crate::ui::{Theme, ThemePreference};
+    use ratatui_core::{layout::Rect, style::Modifier};
     use unicode_width::UnicodeWidthStr as _;
 
     #[test]
@@ -422,6 +411,30 @@ mod tests {
 
         assert_eq!(picker_row(row, 24), "reviewer  Workspace · p1");
         assert_eq!(picker_row(row, 12), "reviewer  p1");
+    }
+
+    #[test]
+    fn every_picker_secondary_uses_the_same_quiet_metadata_style() {
+        let theme = Theme::resolve(ThemePreference::Dark, true);
+        let row = PickerRow::fields("$skill", "Project Skill");
+
+        let ordinary = picker_line(row, 24, false, &theme);
+        assert_eq!(ordinary.spans.len(), 3);
+        assert_eq!(ordinary.spans[0].style.fg, Some(theme.foreground));
+        assert_eq!(ordinary.spans[2].style.fg, Some(theme.muted));
+
+        let selected = picker_line(row, 24, true, &theme);
+        assert_eq!(selected.spans.len(), 3);
+        assert_eq!(selected.spans[0].style.fg, Some(theme.accent));
+        assert!(
+            selected.spans[0]
+                .style
+                .add_modifier
+                .contains(Modifier::BOLD)
+        );
+        assert_eq!(selected.spans[2].style.fg, Some(theme.muted));
+        assert_eq!(selected.spans[2].style.bg, theme.focused_surface);
+        insta::assert_debug_snapshot!("picker_metadata_styles", (ordinary, selected));
     }
 
     #[test]
