@@ -1,0 +1,25 @@
+name: Full MSRV diagnostic
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: msrv-diagnostic-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  full-msrv:
+    name: Complete Rust 1.88 compatibility suite
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install MSRV toolchain
+        run: rustup toolchain install 1.88.0 --profile minimal
+      - name: Run complete compatibility tests
+        run: cargo +1.88.0 xtask msrv-full
