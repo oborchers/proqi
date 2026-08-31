@@ -219,7 +219,7 @@ mod tests {
             "cargo-shear --version 1.11.2",
             "cargo-about --version 0.9.2",
             "NFPM_AMD64_SHA256=0660ca602b2d2d2ae4781a06c692b3eeb9d437ff",
-            "NFPM_ARM64_SHA256=1c0f5f143e4df95dfca9be489384819483c82523",
+            "NFPM_ARM64_SHA256=1c0f5f2999b9a974bfb04fdb0cc3306096de530a",
         ] {
             assert!(DOCKERFILE.contains(contract), "missing {contract}");
         }
