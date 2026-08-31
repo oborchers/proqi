@@ -4,7 +4,7 @@ use crate::{
     application::{Action, Effect, InteractionMode, reduce},
     domain::{ContentAnnotation, ThoughtId},
     ports::{
-        editor::{CursorMovement, EditCommand, EditorSnapshot},
+        editor::{EditCommand, EditorSnapshot},
         environment::{Clock, IdGenerator},
     },
 };
@@ -305,72 +305,6 @@ impl BoardApp {
         self.apply_edit(command);
         effects.extend(self.flush_pending_edit(ids, clock));
         effects
-    }
-
-    pub(super) fn finish_boundary_navigation(
-        &mut self,
-        movement: CursorMovement,
-        extend_selection: bool,
-        before: Option<&EditorSnapshot>,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-    ) -> Vec<Effect> {
-        if extend_selection
-            || !matches!(
-                movement,
-                CursorMovement::VisualUp | CursorMovement::VisualDown
-            )
-        {
-            self.edit_boundary = None;
-            return Vec::new();
-        }
-        let Some(before) = before else {
-            return Vec::new();
-        };
-        let Some(after) = self.editor_snapshot() else {
-            return Vec::new();
-        };
-        if before.cursor != after.cursor || before.selection != after.selection {
-            self.edit_boundary = None;
-            return Vec::new();
-        }
-        let armed = self.edit_boundary == Some(movement);
-        self.edit_boundary = Some(movement);
-        if !armed {
-            return Vec::new();
-        }
-        let target = self.edit_neighbor(movement);
-        if target.is_none() && movement != CursorMovement::VisualDown {
-            return Vec::new();
-        }
-        if target.is_none() && after.content.is_empty() {
-            self.edit_boundary = None;
-            return Vec::new();
-        }
-        let mut effects = self.finish_edit(ids, clock);
-        if self.pending_edit.is_some() {
-            return effects;
-        }
-        self.palette_selection_handoff = None;
-        if let Some(target) = target {
-            self.insertion_focus = super::InsertionFocus::Inactive;
-            effects.extend(self.reduce(Action::FocusThought(Some(target))));
-        } else {
-            effects.extend(self.create(crate::ui::PastePayload::text(String::new()), ids, clock));
-        }
-        effects
-    }
-
-    fn edit_neighbor(&self, movement: CursorMovement) -> Option<ThoughtId> {
-        let live = self.state.board.live_thoughts();
-        let active = self.active_thought_id()?;
-        let current = live.iter().position(|thought| thought.id == active)?;
-        let target = match movement {
-            CursorMovement::VisualUp => current.checked_sub(1)?,
-            CursorMovement::VisualDown => current.saturating_add(1),
-            _ => return None,
-        };
-        live.get(target).map(|thought| thought.id)
     }
 
     pub(super) fn current_annotations(&self, thought_id: ThoughtId) -> Vec<ContentAnnotation> {

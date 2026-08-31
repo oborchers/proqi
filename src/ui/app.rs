@@ -6,6 +6,7 @@ mod agent_delivery;
 mod agent_identity;
 mod agent_preparation;
 mod attachments;
+mod boundary_insertion;
 mod clipboard;
 mod commands;
 mod control;
@@ -72,7 +73,13 @@ enum InsertionFocus {
 enum InsertionConfirmation {
     #[default]
     Idle,
-    Armed,
+    Armed(BoundaryInsertion),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum BoundaryInsertion {
+    BeforeFirst,
+    AfterLast,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
