@@ -20,6 +20,9 @@ use ratatui_core::{
     terminal::Terminal,
 };
 
+#[path = "support/snapshots.rs"]
+mod snapshot_support;
+
 struct Fixture {
     app: BoardApp,
     ids: FakeIdGenerator,
@@ -481,3 +484,5 @@ mod snapshots;
 mod submission_locks;
 #[path = "ui_board/submit_all.rs"]
 mod submit_all;
+#[path = "ui_board/top_boundary_snapshots.rs"]
+mod top_boundary_snapshots;

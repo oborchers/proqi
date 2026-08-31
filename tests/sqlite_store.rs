@@ -146,3 +146,5 @@ mod recovery;
 mod screenshot;
 #[path = "sqlite_store/submission.rs"]
 mod submission;
+#[path = "sqlite_store/top_boundary.rs"]
+mod top_boundary;
