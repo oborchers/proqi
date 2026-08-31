@@ -20,7 +20,9 @@ jobs:
     timeout-minutes: 5
     outputs:
       base_sha: ${{ steps.classify.outputs.base_sha }}
+      coverage: ${{ steps.classify.outputs.coverage }}
       docs_only: ${{ steps.classify.outputs.docs_only }}
+      full_msrv: ${{ steps.classify.outputs.full_msrv }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -42,21 +44,13 @@ jobs:
             base_sha="$PUSH_BASE"
           fi
 
-          docs_only=true
-          changed_count=0
-          while IFS= read -r path; do
-            [[ -z "$path" ]] && continue
-            changed_count=$((changed_count + 1))
-            if [[ "$path" != *.md ]]; then
-              docs_only=false
-            fi
-          done < <(git diff --name-only --diff-filter=ACDMRTUXB "$base_sha" "$HEAD_SHA")
-
-          if [[ "$changed_count" -eq 0 ]]; then
-            docs_only=false
-          fi
-          echo "base_sha=$base_sha" >> "$GITHUB_OUTPUT"
-          echo "docs_only=$docs_only" >> "$GITHUB_OUTPUT"
+          classification="$(cargo xtask ci-change-class "$base_sha" "$HEAD_SHA")"
+          {
+            echo "base_sha=$base_sha"
+            echo "coverage=$(jq -r .coverage <<<"$classification")"
+            echo "docs_only=$(jq -r .docs_only <<<"$classification")"
+            echo "full_msrv=$(jq -r .full_msrv <<<"$classification")"
+          } >> "$GITHUB_OUTPUT"
 
   docs:
     name: Documentation gate
@@ -130,11 +124,29 @@ jobs:
         with:
           persist-credentials: false
       - run: rustup toolchain install 1.88.0 --profile minimal
-      - run: cargo +1.88.0 xtask msrv
-      - name: Verify packaged source with the minimum Rust toolchain
-        env:
-          RUSTUP_TOOLCHAIN: 1.88.0
-        run: cargo xtask crate-package
+      - name: Check minimum-Rust compatibility
+        if: needs.changes.outputs.full_msrv != 'true'
+        run: cargo +1.88.0 xtask msrv
+      - name: Run full minimum-Rust diagnostic suite
+        if: needs.changes.outputs.full_msrv == 'true'
+        run: cargo +1.88.0 xtask msrv-full
+      - run: cargo xtask clean-worktree
+
+  crate:
+    name: Registry package contract
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          cache-targets: false # Packaged nested manifests are evidence, not cache workspaces.
+          key: ubuntu-22.04-crate
+      - run: cargo xtask crate-package
       - run: cargo xtask clean-worktree
 
   security:
@@ -172,7 +184,7 @@ jobs:
   coverage:
     name: Coverage floor
     needs: changes
-    if: needs.changes.outputs.docs_only != 'true'
+    if: needs.changes.outputs.docs_only != 'true' && needs.changes.outputs.coverage == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
@@ -204,12 +216,12 @@ jobs:
           persist-credentials: false
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
+          cache-targets: false # Package output contains nested manifests that are not cache roots.
           key: ${{ matrix.os }}
       - uses: taiki-e/install-action@6cd13508893c0e7eab5f273c2575d3859bd7229a # v2.86.6
         with:
           tool: cargo-about@0.9.2
       - run: cargo xtask package
-      - run: cargo xtask crate-package
       - name: Preserve verified Linux archive for Debian packaging
         if: runner.os == 'Linux'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -251,7 +263,7 @@ jobs:
   check:
     name: Required CI result
     if: always()
-    needs: [changes, docs, quality, test, msrv, security, pty, coverage, package, debian]
+    needs: [changes, docs, quality, test, msrv, crate, security, pty, coverage, package, debian]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -263,7 +275,7 @@ jobs:
           test "$(jq -r '
             .changes.result == "success" and
             .docs.result == "success" and
-            ([.quality, .test, .msrv, .security, .pty, .coverage, .package, .debian]
+            ([.quality, .test, .msrv, .crate, .security, .pty, .coverage, .package, .debian]
               | all(.result == "skipped"))
           ' <<<"$NEEDS")" = true
       - name: Require every product quality job
@@ -274,6 +286,11 @@ jobs:
           test "$(jq -r '
             .changes.result == "success" and
             .docs.result == "skipped" and
-            ([.quality, .test, .msrv, .security, .pty, .coverage, .package, .debian]
-              | all(.result == "success"))
+            ([.quality, .test, .msrv, .crate, .security, .pty, .package, .debian]
+              | all(.result == "success")) and
+            (if .changes.outputs.coverage == "true" then
+              .coverage.result == "success"
+            else
+              .coverage.result == "skipped"
+            end)
           ' <<<"$NEEDS")" = true

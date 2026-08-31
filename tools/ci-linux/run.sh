@@ -1,6 +1,12 @@
 #!/bin/sh
 set -eux
 
+mode="${1:-parity}"
+case "$mode" in
+  smoke|parity) ;;
+  *) echo "usage: proqi-ci-linux [smoke|parity]" >&2; exit 2 ;;
+esac
+
 export CARGO_HOME=/cache/cargo
 export CARGO_INCREMENTAL=0
 export CARGO_TARGET_DIR=/work/repository/target
@@ -26,13 +32,19 @@ use_target() {
 
 use_target stable
 
+if [ "$mode" = smoke ]; then
+  cargo xtask quality
+  cargo xtask test
+  cargo xtask clean-worktree
+  exit 0
+fi
+
 cargo xtask quality
 cargo xtask clean-worktree
 cargo xtask test
 cargo xtask clean-worktree
 use_target msrv
-cargo +1.88.0 xtask msrv
-RUSTUP_TOOLCHAIN=1.88.0 cargo xtask crate-package
+cargo +1.88.0 xtask msrv-full
 cargo xtask clean-worktree
 cargo xtask audit
 cargo xtask clean-worktree
