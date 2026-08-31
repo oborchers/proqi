@@ -5,6 +5,7 @@ use crate::{
     domain::{OperationId, ThoughtId, Timestamp},
     ports::{
         agent::{AgentError, SubmissionDisposition, SubmissionReceipt, SubmissionRequest},
+        attachment_accessibility::AttachmentCheckKey,
         editor::EditorSnapshot,
         store::SubmissionAttempt,
     },
@@ -32,6 +33,7 @@ pub(super) struct PendingSubmissionSource {
 pub(super) struct DeferredSubmissionIntent {
     pub(super) attempt: SubmissionAttempt,
     pub(super) pending: PendingSubmission,
+    pub(super) attachment_keys: Vec<AttachmentCheckKey>,
 }
 
 #[derive(Clone)]

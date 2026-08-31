@@ -1,9 +1,12 @@
 use std::{path::PathBuf, sync::mpsc::sync_channel, time::Duration};
 
 use crate::{
-    adapters::memory::FakeIdGenerator,
-    application::ScreenshotPauseReason,
-    domain::RequestId,
+    adapters::{
+        editor::RopeEditorFactory,
+        memory::{FakeClock, FakeIdGenerator},
+    },
+    application::{AppState, Effect, ScreenshotPauseReason},
+    domain::{RequestId, Session, SessionBoard, Timestamp},
     ports::{
         agent::{AgentFailureCode, AgentState, HarnessKind},
         attachment::{AttachmentError, AttachmentStore, RasterImage},
@@ -15,6 +18,7 @@ use crate::{
             LiveAgentReference,
         },
     },
+    ui::{BoardApp, UiInput, UiKey},
 };
 
 use super::{
@@ -70,9 +74,48 @@ fn image_read_materializes_exact_pixels_before_returning_a_path() {
         Ok(super::super::path_import::attachment_payload(
             path.to_string_lossy().into_owned(),
             true,
-        ))
+        )
+        .with_verified_attachments())
     );
     assert_eq!(attachments.saved, Some((request, image)));
+}
+
+#[test]
+fn materialized_clipboard_image_is_accessible_before_its_immediate_recheck() {
+    let mut ids = FakeIdGenerator::new(1_725_000_000_000);
+    let clock = FakeClock::new(Timestamp::from_millis(2));
+    let session = Session::new(
+        ids.session_id(),
+        std::env::temp_dir().join("clipboard-proof"),
+        Timestamp::from_millis(1),
+    )
+    .expect("session");
+    let board = SessionBoard::new(session, Vec::new()).expect("board");
+    let mut app = BoardApp::new(AppState::new(board), RopeEditorFactory);
+    let read = app.handle(UiInput::Key(UiKey::PasteClipboard), &mut ids, &clock);
+    let request_id = read
+        .iter()
+        .find_map(|effect| match effect {
+            Effect::ReadClipboard { request_id } => Some(*request_id),
+            _ => None,
+        })
+        .expect("clipboard read request");
+    let image = RasterImage::new(1, 1, vec![1, 2, 3, 255]).expect("image");
+    let mut clipboard = FakeClipboard(Ok(ClipboardContent::Image(image)));
+    let mut attachments = FakeAttachments {
+        saved: None,
+        result: Some(Ok(PathBuf::from("/private/proqi/clipboard-proof.png"))),
+    };
+    let payload = read_clipboard(&mut clipboard, &mut attachments, request_id)
+        .expect("materialized image payload");
+    let effects = app.complete_clipboard_read_payload(request_id, Ok(payload), &mut ids, &clock);
+    let thought_id = app.state.focused_thought.expect("created thought");
+    assert!(!app.state.attachments.inaccessible(thought_id, 0));
+    assert!(
+        effects
+            .iter()
+            .any(|effect| matches!(effect, Effect::CheckAttachments(_)))
+    );
 }
 
 #[test]

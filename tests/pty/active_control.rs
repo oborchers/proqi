@@ -194,6 +194,11 @@ fn spawn_owner(
         set deadline [expr {[clock milliseconds] + 12000}]
         while {![file exists $env(PROQI_TEST_DONE)]} {
             if {[clock milliseconds] >= $deadline} { exit 91 }
+            expect -timeout 0 {
+                -re ".+" { exp_continue }
+                timeout {}
+                eof { exit 92 }
+            }
             after 20
         }
         system /bin/kill -KILL [exp_pid]

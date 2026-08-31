@@ -1,5 +1,6 @@
 //! Bounded UI and persistence lane composition.
 
+mod accessibility_results;
 mod admission;
 mod composition;
 mod diagnostics;
@@ -14,6 +15,7 @@ mod owner_control;
 mod pending;
 mod restart;
 mod screenshot_results;
+mod termination;
 mod update_results;
 
 use std::{
@@ -48,6 +50,7 @@ use crate::{
 
 use super::{
     TerminalError,
+    accessibility_lane::AccessibilityLane,
     control::{PanicHookGuard, TerminationGuard},
     external::ExternalLane,
     input::{InputLane, InputMessage},
@@ -60,6 +63,7 @@ use finish::CleanupStage::{Control, TerminalRestoration};
 use heartbeat::PaneHeartbeat;
 use owned_lanes::OwnedLanes;
 use pending::{PendingControl, PendingWork};
+use termination::{TerminationAdmission, admit_requested};
 
 pub(crate) struct TerminalResources {
     pub(crate) state: AppState,
@@ -76,6 +80,7 @@ pub(crate) struct TerminalResources {
     pub(crate) installation: Option<crate::domain::Installation>,
     pub(crate) cache_directory: PathBuf,
     pub(crate) state_root: Option<PathBuf>,
+    pub(crate) executable: PathBuf,
 }
 
 pub(crate) fn require_interactive() -> Result<(), TerminalError> {
@@ -89,6 +94,7 @@ pub(crate) fn require_interactive() -> Result<(), TerminalError> {
 }
 
 pub(super) struct WorkerLanes<'a> {
+    pub(super) accessibility: &'a AccessibilityLane,
     pub(super) input: &'a InputLane,
     pub(super) persistence: &'a PersistenceLane,
     pub(super) external: &'a ExternalLane,
@@ -139,6 +145,7 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
         installation,
         cache_directory,
         state_root,
+        executable,
     } = resources;
     let session_id = state.board.session.id;
     store.recover_submissions(session_id, clock.now())?;
@@ -174,6 +181,7 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
         screenshot_settings,
         session_lease.info().clone(),
         terminal_host_label,
+        executable,
     );
     let mut pane_heartbeat = None;
     let shutdown = super::supervisor::ShutdownCoordinator::default();
@@ -186,6 +194,7 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
     }
     let monotonic = SystemMonotonicClock::default();
     let lanes = WorkerLanes {
+        accessibility: &owned.accessibility,
         input: &owned.input,
         persistence: &owned.persistence,
         external: &owned.external,
@@ -257,29 +266,25 @@ fn drive(
     let mut capture = CaptureRuntime::default();
     let mut edit_generation = app.edit_generation();
     let mut edit_deadline = None;
-    let mut agent_deadline = None;
-    let mut invocation_deadline = None;
-    let mut termination_seen = false;
+    let mut refresh_deadlines = input_admission::RefreshDeadlines::default();
+    let mut termination = TerminationAdmission::default();
     let mut held_input = None;
     enqueue_effects(app, lanes, BoardApp::discover_agents(), &mut pending)?;
+    accessibility_results::start(app, lanes, &mut pending)?;
     let invocation_effects = app.refresh_invocations();
     enqueue_effects(app, lanes, invocation_effects, &mut pending)?;
     let mut redraw = true;
     loop {
-        if lanes.termination.requested() && !termination_seen {
-            termination_seen = true;
-            let _deadline = shutdown.request();
-            lanes.cancellation.cancel();
-            if let Some(control) = lanes.control {
-                control.request_stop();
-            }
-            let mut effects = app.handle(UiInput::Key(UiKey::Quit), ids, &clock);
-            if !app.quit && app.screenshot_retry_ready() {
-                effects.extend(app.handle(UiInput::Key(UiKey::Quit), ids, &clock));
-            }
-            enqueue_effects(app, lanes, effects, &mut pending)?;
-        }
-        if !termination_seen {
+        admit_requested(
+            &mut termination,
+            app,
+            lanes,
+            ids,
+            clock,
+            shutdown,
+            &mut pending,
+        )?;
+        if !termination.is_admitted() {
             let effects = app.advance_screenshot_activity(lanes.monotonic.now());
             enqueue_effects(app, lanes, effects, &mut pending)?;
         }
@@ -293,17 +298,25 @@ fn drive(
             pane_heartbeat,
         )?;
         redraw |= workers_changed || app.expire_update_barrier(clock.now());
-        if app.quit && app.screenshot_retry_ready() && !termination_seen {
+        if app.quit && app.screenshot_retry_ready() && !termination.is_admitted() {
             app.retain_failed_capture_after_quit();
             redraw = true;
         }
-        if termination_seen && !app.quit && app.screenshot_retry_ready() {
+        if termination.is_admitted() && app.screenshot_retry_ready() {
             let mut effects = app.handle(UiInput::Key(UiKey::Quit), ids, &clock);
             if !app.quit && app.screenshot_retry_ready() {
                 effects.extend(app.handle(UiInput::Key(UiKey::Quit), ids, &clock));
             }
             enqueue_effects(app, lanes, effects, &mut pending)?;
             redraw = true;
+        }
+        if termination.is_admitted() && !app.screenshot_commit_pending() {
+            let effects = app.flush_pending_edit(ids, &clock);
+            if !effects.is_empty() {
+                enqueue_effects(app, lanes, effects, &mut pending)?;
+                edit_deadline = None;
+                redraw = true;
+            }
         }
         let release_effects = screenshot_results::release_if_drained(app, &mut capture);
         if !release_effects.is_empty() {
@@ -335,15 +348,7 @@ fn drive(
             edit_deadline = None;
             redraw = true;
         }
-        if agent_deadline.is_some_and(|deadline| Instant::now() >= deadline) {
-            enqueue_effects(app, lanes, BoardApp::discover_agents(), &mut pending)?;
-            agent_deadline = None;
-        }
-        if invocation_deadline.is_some_and(|deadline| Instant::now() >= deadline) {
-            let effects = app.refresh_invocations();
-            enqueue_effects(app, lanes, effects, &mut pending)?;
-            invocation_deadline = None;
-        }
+        input_admission::refresh_if_due(app, lanes, &mut pending, &mut refresh_deadlines)?;
         if let Some(heartbeat) = pane_heartbeat.as_mut() {
             let _refreshed = heartbeat.refresh_if_due(lanes.external);
         }
@@ -363,8 +368,7 @@ fn drive(
                     ids,
                     clock,
                     &mut pending,
-                    &mut agent_deadline,
-                    &mut invocation_deadline,
+                    &mut refresh_deadlines,
                     sequence,
                     event,
                 )?;
@@ -373,7 +377,7 @@ fn drive(
                 held_input = Some((sequence, event));
             }
         }
-        if app.quit {
+        if termination.shutdown_requested(app.quit) {
             let deadline = shutdown.request();
             if !capture.shutdown_requested && capture.lease.is_some() {
                 lanes.screenshot.shutdown(deadline)?;
@@ -392,7 +396,7 @@ fn drive(
                 && (!capture.shutdown_requested || capture.watcher_stopped)
                 && app.screenshot_shutdown_drained();
             if pending.is_empty() && control_quiescent && screenshot_quiescent {
-                return Ok(());
+                return termination.outcome(&app.state.durability);
             }
             if deadline.expired() {
                 return Err(TerminalError::Worker(
@@ -426,8 +430,7 @@ fn drive(
                     ids,
                     clock,
                     &mut pending,
-                    &mut agent_deadline,
-                    &mut invocation_deadline,
+                    &mut refresh_deadlines,
                     sequence,
                     event,
                 )?;
@@ -454,17 +457,20 @@ fn drain_workers(
     pane_heartbeat: &mut Option<PaneHeartbeat>,
 ) -> Result<(bool, bool), TerminalError> {
     let persistence = drain_persistence(app, lanes, pending, ids, &clock)?;
+    let accessibility = accessibility_results::drain(app, lanes, pending)?;
     let external = external_results::drain(app, lanes, pending, ids, clock, pane_heartbeat)?;
     let control = owner_control::drain(app, lanes, pending, capture, ids, clock)?;
     let update = update_results::drain(app, lanes, pending)?;
     let screenshot =
         screenshot_results::drain(app, lanes, pending, capture, lanes.monotonic.now())?;
     let changed = persistence.changed
+        || accessibility.changed
         || external.changed
         || control.changed
         || update.changed
         || screenshot.changed;
     let backlog = persistence.budget_exhausted
+        || accessibility.budget_exhausted
         || external.budget_exhausted
         || control.budget_exhausted
         || update.budget_exhausted

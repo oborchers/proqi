@@ -356,25 +356,6 @@ impl BoardApp {
         effects
     }
 
-    pub(super) fn paste_payload(
-        &mut self,
-        payload: PastePayload,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-    ) -> Vec<Effect> {
-        if matches!(self.state.mode, InteractionMode::Board) {
-            if payload.content.is_empty() {
-                return Vec::new();
-            }
-            self.create(payload, ids, clock)
-        } else {
-            let mut effects = self.flush_pending_edit(ids, clock);
-            self.apply_annotated_edit(EditCommand::Paste(payload.content), &payload.annotations);
-            effects.extend(self.flush_pending_edit(ids, clock));
-            effects
-        }
-    }
-
     pub(super) fn delete(&mut self, ids: &mut impl IdGenerator, clock: &impl Clock) -> Vec<Effect> {
         let thought_ids = self.action_thought_ids();
         if thought_ids.is_empty() {

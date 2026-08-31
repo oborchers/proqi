@@ -9,6 +9,9 @@ pub use config::ThemePreference;
 pub(crate) use config::{SurfaceColor, ThemeColor, ThemeOverrides, ThemeRecipe};
 pub(crate) use validation::ThemeError;
 
+const LIGHT_WARNING: (u8, u8, u8) = (148, 95, 14);
+const DARK_WARNING: (u8, u8, u8) = (204, 160, 58);
+
 /// Terminal colors discovered before the full-screen interface starts.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TerminalPalette {
@@ -82,7 +85,7 @@ impl Theme {
                 link: Color::Rgb(45, 106, 79),
                 annotation: Color::Rgb(45, 106, 79),
                 success: Color::Rgb(45, 106, 79),
-                warning: Color::Rgb(45, 106, 79),
+                warning: Color::Rgb(LIGHT_WARNING.0, LIGHT_WARNING.1, LIGHT_WARNING.2),
             },
             ThemePreference::Dark => Self {
                 foreground: Color::Rgb(232, 228, 223),
@@ -97,7 +100,7 @@ impl Theme {
                 link: Color::Rgb(112, 214, 155),
                 annotation: Color::Rgb(112, 214, 155),
                 success: Color::Rgb(112, 214, 155),
-                warning: Color::Rgb(112, 214, 155),
+                warning: Color::Rgb(DARK_WARNING.0, DARK_WARNING.1, DARK_WARNING.2),
             },
             ThemePreference::Auto => match palette {
                 Some(palette) => Self::automatic(palette),
@@ -156,7 +159,7 @@ impl Theme {
             link: Color::Green,
             annotation: Color::Green,
             success: Color::Green,
-            warning: Color::Green,
+            warning: Color::Yellow,
         }
     }
 
@@ -191,7 +194,9 @@ impl Theme {
         theme.link = theme.accent;
         theme.annotation = theme.accent;
         theme.success = theme.accent;
-        theme.warning = theme.accent;
+        let focused = theme.focused_surface.and_then(rgb_tuple);
+        let warning = accessible_warning(palette.background, focused, palette.dark);
+        theme.warning = Color::Rgb(warning.0, warning.1, warning.2);
         theme
     }
 
@@ -237,6 +242,29 @@ fn accessible_accent(background: (u8, u8, u8), dark: bool) -> (u8, u8, u8) {
         .into_iter()
         .find(|candidate| contrast(*candidate, background) >= 4.5)
         .unwrap_or_else(|| accessible_monochrome(background))
+}
+
+fn accessible_warning(
+    background: (u8, u8, u8),
+    focused_surface: Option<(u8, u8, u8)>,
+    dark: bool,
+) -> (u8, u8, u8) {
+    let preferred = if dark { DARK_WARNING } else { LIGHT_WARNING };
+    let alternate = if dark { LIGHT_WARNING } else { DARK_WARNING };
+    [preferred, alternate, accessible_monochrome(background)]
+        .into_iter()
+        .find(|candidate| {
+            contrast(*candidate, background) >= 4.5
+                && focused_surface.is_none_or(|surface| contrast(*candidate, surface) >= 4.5)
+        })
+        .unwrap_or_else(|| accessible_monochrome(background))
+}
+
+fn rgb_tuple(color: Color) -> Option<(u8, u8, u8)> {
+    match color {
+        Color::Rgb(red, green, blue) => Some((red, green, blue)),
+        _ => None,
+    }
 }
 
 fn accessible_monochrome(color: (u8, u8, u8)) -> (u8, u8, u8) {

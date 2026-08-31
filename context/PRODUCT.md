@@ -474,6 +474,34 @@ error.
 Deleting removes a thought without changing the clipboard. Both cut and delete
 can be undone after restarting the application.
 
+### Attachment accessibility
+
+Attachment annotations keep an external absolute path as canonical prompt
+content. Proqi presents a readable attachment as `[Image N]` or `[File N]`.
+When the current process cannot prove that the referenced regular file is
+readable, the same annotation becomes `[Image N · inaccessible]` or
+`[File N · inaccessible]` and uses the warning visual role. Missing files,
+permissions, unavailable volumes, filesystem failures, and bounded check
+timeouts remain diagnostic details rather than additional user-visible states.
+
+Health is transient and never changes prompt content. Proqi checks new
+annotations immediately, checks a restored board with the focused thought
+first, reprioritizes unknown work when thought focus really changes, and
+refreshes after debounced host focus or the first deliberate interaction after
+bounded inactivity. `Refresh attachments` provides the deterministic manual
+fallback. Proqi does not poll or watch external attachment directories.
+
+Every adjacent-agent submission freshly verifies every attachment in the exact
+captured source set after edits are durable. The sources remain locked during
+that bounded preflight. If any check fails or times out, Proqi creates no
+submission attempt, sends nothing, removes nothing, and reports one aggregate
+error. There is no bypass action for an annotated inaccessible asset.
+
+The path remains an external reference. A file can still disappear after the
+last successful check and before the receiving agent opens it. Proqi neither
+copies that file nor rewrites its path. A future explicit import workflow may
+offer stronger ownership.
+
 ### Multi-selection
 
 `Space` toggles the focused thought in a visible board selection. Selected
@@ -988,6 +1016,7 @@ texture would add noise and render inconsistently across terminals.
 | Focused surface | `#ECECF0` | `#34343F` |
 | Quiet border | `#E0D9CF` | `#2A2520` |
 | Muted text | `#4F463E` | `#B0A9A0` |
+| Warning | `#945F0E` | `#CCA03A` |
 
 The terminal may inherit its existing background where exact background color
 control would make integration feel less native. Accent and focus treatment
@@ -1001,7 +1030,8 @@ surface. Muted text and borders establish hierarchy without introducing more
 hues.
 
 Semantic error, warning, and information colors appear only when those states
-actually exist. They are not decorative note colors.
+actually exist. Warning uses the brand-derived amber role, independently of the
+routine forest-green accent. They are not decorative note colors.
 
 ### Brand expression in the terminal
 

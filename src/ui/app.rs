@@ -5,6 +5,7 @@ mod agent;
 mod agent_delivery;
 mod agent_identity;
 mod agent_preparation;
+mod attachments;
 mod clipboard;
 mod commands;
 mod control;
@@ -116,6 +117,7 @@ pub struct BoardApp {
     agent_targets: Vec<AgentTarget>,
     submission_mode: Option<SubmissionMode>,
     deferred_submissions: BTreeMap<SubmissionId, DeferredSubmissionIntent>,
+    preflight_submissions: BTreeMap<SubmissionId, DeferredSubmissionIntent>,
     pending_submissions: BTreeMap<SubmissionId, PendingSubmission>,
     pending_transfer_removals: BTreeSet<OperationId>,
     screenshot: screenshot::ScreenshotInbox,
@@ -198,6 +200,7 @@ impl BoardApp {
             agent_targets: Vec::new(),
             submission_mode: None,
             deferred_submissions: BTreeMap::new(),
+            preflight_submissions: BTreeMap::new(),
             pending_submissions: BTreeMap::new(),
             pending_transfer_removals: BTreeSet::new(),
             screenshot: screenshot::ScreenshotInbox::default(),
@@ -256,7 +259,7 @@ impl BoardApp {
             return Vec::new();
         }
         if !matches!(input, UiInput::Resize { .. } | UiInput::HostFocusGained) {
-            self.status = None;
+            self.clear_status_for_interaction();
             self.screenshot.notice_count = 0;
         }
         if !matches!(
@@ -411,27 +414,6 @@ impl BoardApp {
         }
     }
 
-    fn create(
-        &mut self,
-        payload: PastePayload,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-    ) -> Vec<Effect> {
-        self.clear_board_selection();
-        self.insertion_focus = InsertionFocus::Inactive;
-        self.insertion_confirmation = InsertionConfirmation::Idle;
-        let effects = self.reduce(Action::CreateThought {
-            thought_id: ids.thought_id(),
-            operation_id: ids.operation_id(),
-            content: payload.content,
-            annotations: payload.annotations,
-            insertion_index: None,
-            at: clock.now(),
-        });
-        self.sync_editor_from_state();
-        effects
-    }
-
     fn expand_and_enter_edit(
         &mut self,
         ids: &mut impl IdGenerator,
@@ -472,8 +454,10 @@ impl BoardApp {
     }
 
     fn reduce(&mut self, action: Action) -> Vec<Effect> {
+        let may_change_attachments = Self::may_change_attachments(&action);
         match reduce(&mut self.state, action) {
             Ok(effects) => {
+                self.finish_attachment_mutation(may_change_attachments);
                 let order = self
                     .state
                     .board

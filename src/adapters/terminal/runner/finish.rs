@@ -4,6 +4,7 @@ use crate::adapters::terminal::TerminalError;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(in crate::adapters::terminal) enum CleanupStage {
+    Accessibility,
     Input,
     Persistence,
     External,
@@ -17,6 +18,7 @@ pub(in crate::adapters::terminal) enum CleanupStage {
 impl CleanupStage {
     const fn as_str(self) -> &'static str {
         match self {
+            Self::Accessibility => "accessibility",
             Self::Input => "input",
             Self::Persistence => "persistence",
             Self::External => "external",

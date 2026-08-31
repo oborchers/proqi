@@ -41,7 +41,10 @@ fn cut_and_capture_use_distinct_sequences_in_both_completion_orderings() {
             .is_empty()
     );
     let replay = app.complete_screenshot_capture(Ok(created(&capture)), &mut ids, &clock);
-    let [Effect::WriteClipboard { request_id, .. }] = replay.as_slice() else {
+    let Some(Effect::WriteClipboard { request_id, .. }) = replay
+        .iter()
+        .find(|effect| matches!(effect, Effect::WriteClipboard { .. }))
+    else {
         panic!("replayed cut");
     };
     let cut_effects = app.complete_clipboard_write(*request_id, Ok(()), &mut ids, &clock);
@@ -86,7 +89,10 @@ fn submit_remove_and_capture_use_distinct_sequences_in_both_orderings() {
     let capture = next_commit(&mut app, &mut ids, &clock);
     app.handle(UiInput::Key(UiKey::Character('s')), &mut ids, &clock);
     let replay = app.complete_screenshot_capture(Ok(created(&capture)), &mut ids, &clock);
-    let [Effect::PrepareSubmission(attempt)] = replay.as_slice() else {
+    let Some(Effect::PrepareSubmission(attempt)) = replay
+        .iter()
+        .find(|effect| matches!(effect, Effect::PrepareSubmission(_)))
+    else {
         panic!("replayed submission");
     };
     let submit_sequence = finish_submission(&mut app, &target, attempt.id);
@@ -122,7 +128,10 @@ fn transfer_remove_and_capture_use_distinct_sequences_in_both_orderings() {
     let capture = next_commit(&mut app, &mut ids, &clock);
     app.handle(UiInput::Key(UiKey::Enter), &mut ids, &clock);
     let replay = app.complete_screenshot_capture(Ok(created(&capture)), &mut ids, &clock);
-    let [Effect::TransferThought(request)] = replay.as_slice() else {
+    let Some(Effect::TransferThought(request)) = replay
+        .iter()
+        .find(|effect| matches!(effect, Effect::TransferThought(_)))
+    else {
         panic!("replayed transfer");
     };
     let transfer_sequence = finish_transfer(&mut app, &mut ids, &clock, request, destination);

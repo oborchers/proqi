@@ -190,7 +190,7 @@ the database or a subprocess is slow.
 
 ### Execution lanes
 
-The process has six logical lanes:
+The process has seven logical lanes:
 
 1. The UI lane reduces actions, computes layout, and renders the latest state.
 2. The input lane reads terminal events and sends normalized input messages.
@@ -201,6 +201,9 @@ The process has six logical lanes:
 5. The update lane owns bounded installation discovery and explicit updates.
 6. The macOS screenshot lane owns bounded directory reconciliation; on Linux it
    exposes only the typed unsupported result and starts no watcher.
+7. The attachment-accessibility lane executes ordered, bounded readability
+   checks through the injected filesystem adapter. It owns no cache, trigger,
+   presentation, or submission policy.
 
 Channels are bounded. Resize events may be coalesced to the newest dimensions.
 Text edits and structural operations may not be dropped or reordered.
@@ -327,6 +330,33 @@ absolute files. It supports local file URLs, quoted paths, escaped whitespace,
 POSIX shell-escaped punctuation, multiple paths, and Unicode names. Ordinary
 prompt text remains exact. Dropped files remain external references and are
 never read or copied automatically.
+
+### `AttachmentAccessibility`
+
+External attachment health crosses a terminal-independent read-only port. The
+filesystem adapter opens the exact absolute path without rewriting it, proves
+that it is a readable regular file, and returns typed missing, permission,
+unmounted, unreadable, or I/O failures. The bounded lane adds timeout and
+cancellation failures without waiting for a blocked filesystem call to return.
+Those reasons are content-free diagnostics only. Application and UI consumers
+reduce every failure to binary inaccessible health.
+
+Application state owns the transient exact-key cache and scheduling policy.
+Keys include the thought, annotation index and range, presentation metadata,
+canonical path, and digest of the canonical content revision. Insertion and
+relink mutations invalidate affected work. Restoration schedules the focused
+thought first, then bounded board batches. Real thought-focus transitions move
+unknown queued work forward. Debounced host focus, the bounded inactivity
+fallback, and the explicit `Refresh attachments` action invalidate and rescan
+without polling, directory watchers, or render-time filesystem access.
+
+Submission captures exact source thoughts and attachment keys before waiting
+for durability. Once pending edits are durable, a fresh bounded preflight owns
+the accessibility lane ahead of background continuation. The locked sources
+must still match both their content digests and attachment keys when the check
+completes. Any inaccessible, timed-out, cancelled, incomplete, or stale result
+releases the source locks without preparing a journal attempt or invoking an
+agent gateway.
 
 ### `ScreenshotWatcher`
 
@@ -939,6 +969,12 @@ identities, their SHA-256 digests, one aggregate payload digest, and a target
 identity fingerprint, never prompt content or raw pane and agent session
 identifiers.
 
+Attachment preflight precedes creation of this journal attempt. Successful
+preflight preserves the same direct Herdr request and journal transitions.
+External files remain caller-owned paths, so a file can disappear after the
+final successful check and before the receiving agent opens it. Proqi does not
+silently copy external files or rewrite canonical paths.
+
 `v0.1.0` implements this boundary against Herdr's structured schema
 and protocol discovery commands. Capability discovery verifies both the
 `agent.prompt` request and `agent_prompted` receipt shapes. Explicit
@@ -1353,7 +1389,7 @@ src/
   lib.rs
   domain/          entities, values, invariants, operations
   application/     AppState, reducer, effects, SessionService
-  ports/           Store, Editor, Clipboard, AttachmentStore, AgentGateway, runtime traits
+  ports/           Store, Editor, Clipboard, attachment ports, AgentGateway, runtime traits
   adapters/
     sqlite/
     terminal/
