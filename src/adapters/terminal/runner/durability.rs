@@ -153,9 +153,10 @@ fn enqueue_persistence_effect(
         Effect::FinishSubmission {
             submission_id,
             outcome,
+            removal,
         } => lanes
             .persistence
-            .finish_submission(submission_id, outcome)?,
+            .finish_submission(submission_id, outcome, removal)?,
         _ => return Err(TerminalError::Worker("effect routed to the wrong lane")),
     }
     Ok(())
@@ -261,18 +262,58 @@ fn complete_result(
             let effects = app.complete_submission_sending(submission_id, result);
             enqueue_effects(app, lanes, effects, pending)?;
         }
-        PersistenceResult::SubmissionFinished {
-            submission_id,
-            result,
-        } => {
-            pending.persistence = pending.persistence.saturating_sub(1);
-            record_submission_result(submission_id, "journaled", &result);
-            let effects = app.complete_submission_journaled(submission_id, result);
-            enqueue_effects(app, lanes, effects, pending)?;
+        result @ PersistenceResult::SubmissionFinished { .. } => {
+            complete_submission_finished(app, lanes, pending, result)?;
         }
     }
     owner_control::complete_sync(pending);
     Ok(true)
+}
+
+fn complete_submission_finished(
+    app: &mut BoardApp,
+    lanes: &WorkerLanes<'_>,
+    pending: &mut PendingWork,
+    completion: PersistenceResult,
+) -> Result<(), TerminalError> {
+    let PersistenceResult::SubmissionFinished {
+        submission_id,
+        sequence,
+        result,
+        retried,
+    } = completion
+    else {
+        return Err(TerminalError::Worker(
+            "non-submission result reached submission completion",
+        ));
+    };
+    if !retried {
+        pending.persistence = pending.persistence.saturating_sub(1);
+    }
+    record_submission_result(submission_id, "journaled", &result);
+    let effects = match (sequence, result) {
+        (Some(sequence), Ok(Some(receipt))) => {
+            let application_result = complete_sequence(app, pending, sequence, Ok(receipt));
+            let mut effects = app.acknowledge_persistence_result(sequence, application_result);
+            effects.extend(app.complete_submission_journaled(submission_id, Ok(())));
+            effects
+        }
+        (Some(sequence), Err(error)) => {
+            let application_result = complete_sequence(app, pending, sequence, Err(error.clone()));
+            let effects = app.acknowledge_persistence_result(sequence, application_result);
+            app.submission_persistence_failed(submission_id, &error);
+            effects
+        }
+        (None, Ok(None)) => app.complete_submission_journaled(submission_id, Ok(())),
+        (None, Err(error)) => app.complete_submission_journaled(submission_id, Err(error)),
+        _ => app.complete_submission_journaled(
+            submission_id,
+            Err(crate::ports::store::StoreError::Integrity(
+                "submission completion returned a mismatched removal receipt".to_owned(),
+            )),
+        ),
+    };
+    enqueue_effects(app, lanes, effects, pending)
 }
 
 fn complete_capture(
@@ -288,10 +329,10 @@ fn complete_capture(
     enqueue_effects(app, lanes, effects, pending)
 }
 
-fn record_submission_result(
+fn record_submission_result<T>(
     submission_id: crate::domain::SubmissionId,
     state: &'static str,
-    result: &Result<(), crate::ports::store::StoreError>,
+    result: &Result<T, crate::ports::store::StoreError>,
 ) {
     crate::adapters::diagnostics::record(
         crate::adapters::diagnostics::SafeEvent::SubmissionState {

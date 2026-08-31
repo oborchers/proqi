@@ -71,6 +71,58 @@ fn active_add_preserves_the_users_live_editor_and_focus() {
 }
 
 #[test]
+fn active_add_preserves_compose_editor_and_queued_typeahead() {
+    let mut ids = FakeIdGenerator::new(1_725_210_000_000);
+    let session = Session::new(
+        ids.session_id(),
+        std::env::temp_dir().join("proqi-control-compose"),
+        Timestamp::from_millis(1),
+    )
+    .expect("session");
+    let board = SessionBoard::new(session, Vec::new()).expect("board");
+    let mut app = BoardApp::new(
+        AppState::new(board),
+        crate::adapters::editor::RopeEditorFactory,
+    );
+    let added_id = ids.thought_id();
+
+    let effects = app
+        .handle_control(
+            &ControlMutation::Add {
+                operation_id: ids.operation_id(),
+                thought_id: added_id,
+                content: "external".to_owned(),
+                annotations: Vec::new(),
+                position: None,
+            },
+            &FakeClock::new(Timestamp::from_millis(2)),
+        )
+        .expect("control add");
+
+    assert_eq!(effects.len(), 1);
+    assert_eq!(app.state.mode, InteractionMode::Compose);
+    assert_eq!(app.editor_snapshot().expect("compose editor").content, "");
+    let typing = app.handle(
+        UiInput::Key(crate::ui::UiKey::Character('n')),
+        &mut ids,
+        &FakeClock::new(Timestamp::from_millis(3)),
+    );
+    assert!(matches!(
+        typing.as_slice(),
+        [crate::application::Effect::CommitBoardOperation(_)]
+    ));
+    assert_eq!(
+        app.state
+            .board
+            .live_thoughts()
+            .iter()
+            .map(|thought| thought.content.as_str())
+            .collect::<Vec<_>>(),
+        ["external", "n"]
+    );
+}
+
+#[test]
 fn ui_paste_and_forwarded_add_produce_the_same_state_and_durable_effect() {
     let mut session_ids = FakeIdGenerator::new(1_725_200_000_000);
     let session = Session::new(
@@ -107,7 +159,10 @@ fn ui_paste_and_forwarded_add_produce_the_same_state_and_durable_effect() {
         )
         .expect("forwarded add");
 
-    assert_eq!(forwarded.state, ui.state);
+    assert_eq!(forwarded.state.board, ui.state.board);
+    assert_eq!(forwarded.state.durability, ui.state.durability);
+    assert_eq!(forwarded.state.mode, InteractionMode::Compose);
+    assert!(matches!(ui.state.mode, InteractionMode::Edit { .. }));
     assert_eq!(forwarded_effects, ui_effects);
     assert_eq!(forwarded_effects.len(), 1);
     assert!(forwarded_effects[0].persistence_batch().is_some());
@@ -153,6 +208,43 @@ fn external_editor_undo_refreshes_content_and_restores_cursor() {
     let snapshot = app.editor_snapshot().expect("editor");
     assert_eq!(snapshot.content, "base");
     assert_eq!(snapshot.cursor, TextPosition::new(0, 4));
+}
+
+#[test]
+fn external_final_deletion_does_not_force_compose() {
+    let mut ids = FakeIdGenerator::new(1_725_220_000_000);
+    let session = Session::new(
+        ids.session_id(),
+        std::env::temp_dir().join("proqi-control-empty"),
+        Timestamp::from_millis(1),
+    )
+    .expect("session");
+    let thought_id = ids.thought_id();
+    let thought = Thought::new(
+        thought_id,
+        session.id,
+        "remote source".to_owned(),
+        ThoughtPosition::new(0),
+        Timestamp::from_millis(1),
+    );
+    let board = SessionBoard::new(session, vec![thought]).expect("board");
+    let mut app = BoardApp::new(
+        AppState::new(board),
+        crate::adapters::editor::RopeEditorFactory,
+    );
+
+    app.handle_control(
+        &ControlMutation::Delete {
+            operation_id: ids.operation_id(),
+            thought_id,
+        },
+        &FakeClock::new(Timestamp::from_millis(2)),
+    )
+    .expect("control delete");
+
+    assert!(app.state.board.live_thoughts().is_empty());
+    assert_eq!(app.state.mode, InteractionMode::Board);
+    assert!(app.editor_snapshot().is_none());
 }
 
 #[test]

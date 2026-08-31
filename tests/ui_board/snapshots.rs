@@ -18,12 +18,18 @@ use proqi::{
 mod snapshot_support;
 
 use snapshot_support::snapshot_buffer;
+
 #[path = "snapshots/attachment_accessibility.rs"]
 mod attachment_accessibility_snapshots;
 #[path = "snapshots/herdr.rs"]
-mod herdr_fixtures;
+mod herdr_snapshots;
+#[path = "snapshots/platform.rs"]
+mod platform;
+#[path = "snapshots/support.rs"]
+mod support;
 
-use herdr_fixtures::{adjacent_target, complete_live_reference};
+use platform::assert_platform_snapshot;
+use support::adjacent_target;
 
 fn snapshot(fixture: &mut Fixture, width: u16, height: u16, theme: ThemePreference) -> String {
     snapshot_buffer(draw_theme(fixture, width, height, theme).backend().buffer())
@@ -33,6 +39,18 @@ fn snapshot(fixture: &mut Fixture, width: u16, height: u16, theme: ThemePreferen
 fn empty_and_narrow_board() {
     let mut fixture = Fixture::new();
     insta::assert_snapshot!(snapshot(&mut fixture, 24, 6, ThemePreference::Dark));
+}
+
+#[test]
+fn engaged_empty_compose_editor() {
+    let mut fixture = Fixture::new();
+    let insert = fixture
+        .app
+        .prepare_frame(Rect::new(0, 0, 48, 8))
+        .insert
+        .expect("passive Compose prompt");
+    fixture.pointer(insert.x, insert.y, PointerKind::Down(PointerButton::Left));
+    insta::assert_snapshot!(snapshot(&mut fixture, 48, 8, ThemePreference::Dark));
 }
 
 #[test]
@@ -92,7 +110,7 @@ fn inaccessible_attachment_has_a_plain_warning_snapshot() {
                 .collect(),
         });
 
-    insta::assert_snapshot!(snapshot(&mut fixture, 60, 8, ThemePreference::Dark));
+    assert_platform_snapshot!(snapshot(&mut fixture, 60, 8, ThemePreference::Dark));
 }
 
 #[test]
@@ -132,40 +150,18 @@ fn discovered_invocations_use_the_annotation_visual_role() {
         }));
     fixture.input(UiInput::Paste("/plan ask $review ".to_owned()));
 
-    insta::assert_snapshot!(snapshot(&mut fixture, 58, 8, ThemePreference::Dark));
-}
-
-#[test]
-fn existing_invocation_command_opens_terminal_independent_live_reference_picker() {
-    let mut fixture = Fixture::new();
-    fixture.paste("Coordinate with another agent");
-    fixture.input(UiInput::Key(UiKey::Escape));
-    fixture.input(UiInput::Key(UiKey::Character(':')));
-    for character in "Insert discovered invocation".chars() {
-        fixture.input(UiInput::Key(UiKey::Character(character)));
-    }
-    let effects = fixture.effects(UiInput::Key(UiKey::Enter));
-    complete_live_reference(&mut fixture, &effects);
-
-    insta::assert_snapshot!(snapshot(&mut fixture, 72, 12, ThemePreference::Dark));
-    fixture.input(UiInput::Key(UiKey::Enter));
-    insta::assert_snapshot!(
-        "inline_herdr_reference",
-        snapshot(&mut fixture, 72, 8, ThemePreference::Dark)
-    );
+    assert_platform_snapshot!(snapshot(&mut fixture, 58, 8, ThemePreference::Dark));
 }
 
 #[test]
 fn durable_blank_and_editing_surface() {
     let mut fixture = Fixture::new();
-    fixture.input(super::navigation::visual(
-        proqi::ports::editor::CursorMovement::VisualDown,
-        false,
-    ));
-    fixture.input(super::navigation::visual(
-        proqi::ports::editor::CursorMovement::VisualDown,
-        false,
-    ));
+    super::navigation::durable_thought(&mut fixture, "temporary anchor");
+    fixture.input(UiInput::Key(UiKey::Character('n')));
+    fixture.input(UiInput::Key(UiKey::Escape));
+    fixture.input(UiInput::Key(UiKey::Character('k')));
+    fixture.input(UiInput::Key(UiKey::Character('d')));
+    fixture.input(UiInput::Key(UiKey::Enter));
     insta::assert_snapshot!(snapshot(&mut fixture, 50, 9, ThemePreference::Light));
 }
 
@@ -193,6 +189,7 @@ fn failed_save_replaces_the_summary_without_changing_footer_height() {
 #[test]
 fn help_overlay_remains_composed_in_a_shallow_viewport() {
     let mut fixture = Fixture::new();
+    fixture.input(UiInput::Key(UiKey::Escape));
     let _initial = draw(&mut fixture, 42, 8);
     let layout = fixture.app.prepare_frame(Rect::new(0, 0, 42, 8));
     let help = layout
@@ -307,7 +304,7 @@ fn long_paste_stays_folded_and_accented_in_edit_mode() {
         .collect::<Vec<_>>()
         .join("\n");
     fixture.input(UiInput::Paste(content));
-    insta::assert_snapshot!(snapshot(&mut fixture, 72, 9, ThemePreference::Dark));
+    assert_platform_snapshot!(snapshot(&mut fixture, 72, 9, ThemePreference::Dark));
 }
 
 #[test]
@@ -434,7 +431,7 @@ fn expanded_debug_session_identity_preserves_footer_band_order() {
     fixture.input(UiInput::Key(UiKey::Escape));
     let second = fixture.paste("second thought");
     fixture.app.acknowledge_persistence(second, true);
-    insta::assert_snapshot!(snapshot(&mut fixture, 80, 11, ThemePreference::Dark));
+    assert_platform_snapshot!(snapshot(&mut fixture, 80, 11, ThemePreference::Dark));
 }
 
 #[test]
@@ -465,7 +462,8 @@ fn fast_navigation_fallbacks_are_visible_in_the_command_palette() {
 #[cfg(target_os = "macos")]
 fn fast_navigation_shortcuts_are_visible_in_edit_help() {
     let mut fixture = Fixture::new();
-    fixture.paste("one\ntwo\nthree\nfour\nfive\nsix");
+    let sequence = fixture.paste("one\ntwo\nthree\nfour\nfive\nsix");
+    let _effects = fixture.app.acknowledge_persistence(sequence, false);
     let help = fixture
         .app
         .prepare_frame(Rect::new(0, 0, 80, 14))

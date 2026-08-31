@@ -8,18 +8,26 @@ pub(crate) type Shortcut = (String, &'static str);
 
 pub(crate) fn items(app: &BoardApp) -> Vec<Shortcut> {
     let keys = app.keybindings();
-    if matches!(app.interaction_mode(), InteractionMode::Edit { .. }) {
-        return vec![
+    if matches!(
+        app.interaction_mode(),
+        InteractionMode::Compose | InteractionMode::Edit { .. }
+    ) {
+        let mut items = vec![
             ("Esc".to_owned(), "Board"),
+            (primary("C"), "Copy"),
+            (primary("X"), "Cut"),
             (primary("A"), "Select all"),
             (primary("U"), "Delete line"),
             (primary("Z"), "Undo"),
             (primary("Shift+Z"), "Redo"),
             ("Alt+↑/↓".to_owned(), "Jump 5 rows"),
             (format!("{}/{}", primary("↑"), primary("↓")), "Start/end"),
-            (keys.commands.to_string(), "Commands"),
-            (keys.help.to_string(), "Close"),
         ];
+        if app.supports_submission() {
+            items.insert(1, (primary("Enter"), "Submit"));
+            items.insert(2, (primary("Shift+Enter"), "Submit & keep"));
+        }
+        return items;
     }
     let mut items = vec![
         (keys.new.to_string(), "New"),
@@ -85,9 +93,5 @@ pub(crate) fn row_count(app: &BoardApp, width: u16) -> usize {
 }
 
 fn primary(suffix: &str) -> String {
-    if cfg!(target_os = "macos") {
-        format!("⌘{suffix}")
-    } else {
-        format!("Ctrl+{suffix}")
-    }
+    super::settings::primary_key_label(suffix)
 }

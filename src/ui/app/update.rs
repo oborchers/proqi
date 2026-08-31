@@ -131,6 +131,7 @@ impl BoardApp {
                 Vec::new()
             }
             UiInput::HostFocusGained
+            | UiInput::HostFocusLost
             | UiInput::Key(_)
             | UiInput::Pointer(_)
             | UiInput::Paste(_)

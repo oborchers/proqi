@@ -283,6 +283,7 @@ fn command_palette_inserts_a_plain_newline_without_a_modifier_by_keyboard_and_mo
 
     let mut mouse = Fixture::new();
     mouse.paste("9) item");
+    mouse.input(UiInput::Key(UiKey::Escape));
     let commands = mouse
         .app
         .prepare_frame(Rect::new(0, 0, 80, 8))
@@ -325,6 +326,7 @@ fn command_palette_indents_by_keyboard_and_outdents_by_mouse() {
     let indent = fixture.effects(UiInput::Key(UiKey::Enter));
     assert_eq!(revision(&indent).after_content, "- parent\n  - child");
 
+    fixture.input(UiInput::Key(UiKey::Escape));
     let commands = fixture
         .app
         .prepare_frame(Rect::new(0, 0, 80, 8))

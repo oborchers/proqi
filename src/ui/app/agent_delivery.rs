@@ -10,9 +10,29 @@ use crate::{
     },
 };
 
-use super::{BoardApp, UiInput, UiKey, pending_types::SubmissionMode};
+use super::{
+    BoardApp, UiInput, UiKey,
+    pending_types::{EditFlush, SubmissionMode},
+};
 
 impl BoardApp {
+    pub(super) fn begin_edit_delivery(
+        &mut self,
+        disposition: SubmissionDisposition,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        let Some(thought_id) = self.active_thought_id() else {
+            return Vec::new();
+        };
+        let mut effects = match self.flush_edit_boundary(ids, clock) {
+            EditFlush::Complete(effects) => effects,
+            EditFlush::Blocked(effects) => return effects,
+        };
+        effects.extend(self.begin_delivery_for(disposition, vec![thought_id], ids, clock));
+        effects
+    }
+
     pub(super) fn begin_delivery(
         &mut self,
         disposition: SubmissionDisposition,
@@ -20,10 +40,12 @@ impl BoardApp {
         clock: &impl Clock,
     ) -> Vec<Effect> {
         self.deactivate_range_latch();
-        let mut effects = if matches!(self.state.mode, InteractionMode::Edit { .. }) {
-            self.finish_edit(ids, clock)
-        } else {
-            self.flush_pending_edit(ids, clock)
+        if matches!(self.state.mode, InteractionMode::Edit { .. }) {
+            return self.begin_edit_delivery(disposition, ids, clock);
+        }
+        let mut effects = match self.flush_edit_boundary(ids, clock) {
+            EditFlush::Complete(effects) => effects,
+            EditFlush::Blocked(effects) => return effects,
         };
         effects.extend(self.begin_delivery_for(disposition, self.action_thought_ids(), ids, clock));
         effects
@@ -40,6 +62,9 @@ impl BoardApp {
         } else {
             self.flush_pending_edit(ids, clock)
         };
+        if self.pending_edit.is_some() {
+            return effects;
+        }
         let thought_ids = self
             .state
             .board
@@ -129,7 +154,10 @@ impl BoardApp {
                     ..
                 },
             ) => Direction::Down,
-            UiInput::Resize { .. } | UiInput::HostFocusGained | UiInput::Pointer(_) => return None,
+            UiInput::Resize { .. }
+            | UiInput::HostFocusGained
+            | UiInput::HostFocusLost
+            | UiInput::Pointer(_) => return None,
             _ => return Some(Vec::new()),
         };
         Some(self.deliver_to(direction, disposition, ids, clock))

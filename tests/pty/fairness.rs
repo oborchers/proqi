@@ -2,7 +2,7 @@
 
 use proqi::{adapters::runtime::SystemIdGenerator, ports::environment::IdGenerator as _};
 
-use super::{expect_command, json_command, raw_input_command, wait_for_path};
+use super::support::{expect_command, json_command, raw_input_command, wait_for_path};
 
 #[derive(Clone, Copy)]
 enum ExitScenario {
@@ -173,7 +173,7 @@ fn spawn_owner(fixture: OwnerFixture<'_>, exit: ExitScenario) -> std::process::C
             }
             after 10
         }
-        send -- "nlocal input survives"
+        send -- "local input survives"
         stty rows 6 columns 24
         stty rows 28 columns 100
         send -- "\x1b"

@@ -1,6 +1,6 @@
 ---
 source: tests/ui_board/snapshots.rs
-assertion_line: 119
+assertion_line: 136
 expression: "snapshot(&mut fixture, 58, 8, ThemePreference::Dark)"
 ---
 SIZE 58x8
@@ -12,8 +12,8 @@ TEXT
 03││
 04│  proqi-ui-contract│
 05│  1 thought · edit · saving│
-06│  Esc Board  : Commands  ? Shortcuts│
-07│  → Codex   s Submit    S Submit & keep│
+06│  Esc Board│
+07│  → Codex   ⌘Enter Submit   ⌘Shift+Enter Submit & keep│
 
 STYLE RUNS
 0: 0-57 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
@@ -22,5 +22,5 @@ STYLE RUNS
 3: 0-57 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 4: 0-57 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 5: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-55 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE | 56-57 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-6: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-4 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 5-12 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 13-13 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 14-24 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 25-25 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 26-57 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-7: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-2 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 3-11 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 12-12 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 13-23 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 24-24 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 25-57 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+6: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-4 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 5-57 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+7: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-2 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 3-11 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 12-17 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 18-27 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 28-39 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 40-57 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE

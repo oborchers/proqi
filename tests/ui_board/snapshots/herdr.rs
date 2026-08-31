@@ -1,51 +1,39 @@
+//! Herdr invocation-reference snapshot scenarios and fixtures.
+
 use proqi::{
     application::Effect,
-    domain::Direction,
     ports::{
-        agent::{
-            AgentDeliveryCapabilities, AgentSessionBinding, AgentState, AgentTarget,
-            CODEX_AGENT_KIND, HarnessKind, PaneContext, PaneRect,
-        },
+        agent::{AgentState, CODEX_AGENT_KIND, HarnessKind},
         invocation::{
             InvocationReferenceDiscovery, InvocationReferenceProvider, LiveAgentReference,
         },
     },
+    ui::{ThemePreference, UiInput, UiKey},
 };
 
-use super::Fixture;
+use super::{Fixture, assert_platform_snapshot, snapshot};
 
-pub(super) fn adjacent_target(
-    direction: Direction,
-    pane_id: &str,
-    readiness: AgentState,
-) -> AgentTarget {
-    let source = PaneContext {
-        workspace_id: "w1".to_owned(),
-        tab_id: "w1:t1".to_owned(),
-        pane_id: "w1:p1".to_owned(),
-        rect: PaneRect {
-            x: 40,
-            y: 20,
-            width: 40,
-            height: 20,
-        },
-    };
-    AgentTarget {
-        provider: "herdr".to_owned(),
-        protocol: 19,
-        direction,
-        pane_id: pane_id.to_owned(),
-        workspace_id: source.workspace_id.clone(),
-        tab_id: source.tab_id.clone(),
-        agent_kind: HarnessKind::new(CODEX_AGENT_KIND).expect("fixture harness"),
-        agent_name: format!("Codex {pane_id}"),
-        agent_session: AgentSessionBinding::established(format!("session-{pane_id}"))
-            .expect("fixture session"),
-        readiness,
-        delivery: AgentDeliveryCapabilities::SUBMIT_ONLY,
-        rect: source.rect,
-        source,
+#[test]
+fn existing_invocation_command_opens_terminal_independent_live_reference_picker() {
+    let mut fixture = Fixture::new();
+    fixture.paste("Coordinate with another agent");
+    fixture.input(UiInput::Key(UiKey::Escape));
+    fixture.input(UiInput::Key(UiKey::Character(':')));
+    for character in "Insert discovered invocation".chars() {
+        fixture.input(UiInput::Key(UiKey::Character(character)));
     }
+    let effects = fixture.effects(UiInput::Key(UiKey::Enter));
+    complete_live_reference(&mut fixture, &effects);
+
+    assert_platform_snapshot!(
+        "existing_invocation_command_opens_terminal_independent_live_reference_picker",
+        snapshot(&mut fixture, 72, 12, ThemePreference::Dark)
+    );
+    fixture.input(UiInput::Key(UiKey::Enter));
+    assert_platform_snapshot!(
+        "inline_herdr_reference",
+        snapshot(&mut fixture, 72, 8, ThemePreference::Dark)
+    );
 }
 
 pub(super) fn complete_live_reference(fixture: &mut Fixture, effects: &[Effect]) {

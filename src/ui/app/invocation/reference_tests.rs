@@ -403,7 +403,14 @@ mod snapshots;
 
 #[test]
 fn live_group_snapshot_covers_wide_layout() {
-    insta::assert_snapshot!("invocation_live_wide", snapshots::live_snapshot(72, 12));
+    let platform = if cfg!(target_os = "macos") {
+        "macos"
+    } else {
+        "portable"
+    };
+    insta::with_settings!({ snapshot_suffix => platform }, {
+        insta::assert_snapshot!("invocation_live_wide", snapshots::live_snapshot(72, 12));
+    });
 }
 
 #[test]

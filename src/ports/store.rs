@@ -444,6 +444,22 @@ pub trait Store {
         ))
     }
 
+    /// Atomically record an accepted outcome and its source-removal operation.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed error with neither change committed.
+    fn finish_submission_with_removal(
+        &mut self,
+        _id: SubmissionId,
+        _outcome: &SubmissionOutcome,
+        _removal: &crate::domain::BoardOperation,
+    ) -> Result<CommitReceipt, StoreError> {
+        Err(StoreError::Integrity(
+            "atomic submission removal is unavailable".to_owned(),
+        ))
+    }
+
     /// Recover incomplete attempts only after acquiring their session lease.
     ///
     /// # Errors

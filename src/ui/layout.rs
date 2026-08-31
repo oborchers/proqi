@@ -94,6 +94,17 @@ pub struct ThoughtLayout {
     pub content_row_offset: usize,
 }
 
+/// Geometry for the transient insertion editor.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ComposeLayout {
+    /// Complete visible allocation.
+    pub area: Rect,
+    /// Editor cells excluding the focus gutter.
+    pub text_area: Rect,
+    /// Stable one-cell focus gutter.
+    pub gutter: Rect,
+}
+
 /// Complete geometry used by both rendering and mouse resolution.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct LayoutSnapshot {
@@ -117,6 +128,8 @@ pub struct LayoutSnapshot {
     pub footer_agents: Rect,
     /// Visible thought allocations.
     pub thoughts: Vec<ThoughtLayout>,
+    /// Transient insertion editor geometry when Compose is active.
+    pub compose: Option<ComposeLayout>,
     /// Clickable insertion control when visible.
     pub insert: Option<Rect>,
     /// First visible live thought.
@@ -190,6 +203,13 @@ impl LayoutSnapshot {
             }
         }
         if self
+            .compose
+            .as_ref()
+            .is_some_and(|compose| crate::ui::geometry::contains(compose.area, column, row))
+        {
+            return Some(HitTarget::Insert);
+        }
+        if self
             .insert
             .is_some_and(|area| crate::ui::geometry::contains(area, column, row))
         {
@@ -248,6 +268,7 @@ impl LayoutSnapshot {
             self,
             targets,
             selection,
+            crate::application::InteractionMode::Board,
             &crate::ui::KeyBindings::default(),
         );
     }
@@ -256,9 +277,10 @@ impl LayoutSnapshot {
         &mut self,
         targets: &[AgentTarget],
         selection: Option<SubmissionDisposition>,
+        mode: crate::application::InteractionMode,
         keybindings: &crate::ui::KeyBindings,
     ) {
-        controls::configure_agent_controls(self, targets, selection, keybindings);
+        controls::configure_agent_controls(self, targets, selection, mode, keybindings);
     }
 }
 
@@ -393,6 +415,7 @@ fn compute_frame(
         footer_actions: chrome.actions,
         footer_agents: chrome.agents,
         thoughts: content.thoughts,
+        compose: content.compose,
         insert: content.insert,
         first_index: content.first,
         first_row_offset: content.first_row_offset,

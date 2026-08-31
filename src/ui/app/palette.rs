@@ -195,7 +195,10 @@ impl BoardApp {
                 UiInput::PasteAnnotated(payload) => {
                     self.update_palette_query(|query| query.paste(&payload.content))
                 }
-                UiInput::Resize { .. } | UiInput::HostFocusGained | UiInput::Key(_) => Vec::new(),
+                UiInput::Resize { .. }
+                | UiInput::HostFocusGained
+                | UiInput::HostFocusLost
+                | UiInput::Key(_) => Vec::new(),
             };
         };
         match *key {
@@ -341,10 +344,7 @@ impl BoardApp {
                 self.help = true;
                 Vec::new()
             }
-            Command::Quit => {
-                self.request_quit();
-                Vec::new()
-            }
+            Command::Quit => self.request_quit_after_edit_flush(ids, clock),
         }
     }
 
@@ -364,6 +364,9 @@ impl BoardApp {
                 } else {
                     Vec::new()
                 };
+                if self.pending_edit.is_some() {
+                    return Some(effects);
+                }
                 self.select_all_thoughts();
                 Some(effects)
             }
@@ -468,6 +471,7 @@ impl BoardApp {
         } else {
             self.expand_and_enter_edit(ids, clock)
         };
+        self.restore_palette_selection_handoff(selection_handoff);
         if command == Command::PlainNewline {
             effects.extend(self.insert_newline(false, ids, clock));
             return Some(effects);
@@ -490,7 +494,6 @@ impl BoardApp {
             ));
             return Some(effects);
         }
-        self.restore_palette_selection_handoff(selection_handoff);
         effects.extend(self.apply_indentation(command == Command::Outdent, ids, clock));
         Some(effects)
     }

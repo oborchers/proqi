@@ -437,7 +437,14 @@ mod contract {
 
     #[test]
     fn shared_starter_popup_snapshot_is_visually_an_ordinary_command() {
-        insta::assert_snapshot!("invocation_plan_starter", plan_completion_snapshot());
+        let platform = if cfg!(target_os = "macos") {
+            "macos"
+        } else {
+            "portable"
+        };
+        insta::with_settings!({snapshot_suffix => platform}, {
+            insta::assert_snapshot!("invocation_plan_starter", plan_completion_snapshot());
+        });
     }
 
     #[test]

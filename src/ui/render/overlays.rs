@@ -256,6 +256,19 @@ fn picker_row(entry: PickerRow<'_>, width: u16) -> String {
 }
 
 fn picker_line(entry: PickerRow<'_>, width: u16, selected: bool, theme: &Theme) -> Line<'static> {
+    if entry.secondary.is_none() {
+        let style = if selected {
+            theme
+                .focused_style()
+                .fg(theme.accent)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            theme.base_style()
+        };
+        let mut content = ellipsize(entry.primary, usize::from(width));
+        content.push_str(&" ".repeat(usize::from(width).saturating_sub(content.width())));
+        return Line::from(Span::styled(content, style));
+    }
     let width = usize::from(width);
     let primary = ellipsize(entry.primary, width);
     let base = if selected {

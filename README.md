@@ -120,6 +120,12 @@ prompt files or unsaved Sublime scratch document.
 Changes autosave; exit prints the resume command. Boards rename, trash, restore,
 and run in parallel; one lease prevents concurrent editing.
 
+A genuinely empty board opens with `+ Start typing`. Type or paste immediately
+to create the first thought, or click the insertion row to reveal the ordinary
+empty editor first. Nothing is saved until content is produced. Press `Esc` to
+use Board controls instead. Returning focus to the pane does not override that
+Board choice.
+
 `Primary` means `Command` on macOS and `Ctrl` on Linux.
 
 ### Board controls
@@ -154,6 +160,7 @@ and run in parallel; one lease prevents concurrent editing.
 | `Alt+↑` / `↓`; `Primary+↑` / `↓` | Jump five rows; thought start / end |
 | `Enter`; `Tab`; `Shift+Tab` | Continue lists; nest; outdent |
 | `↑` / `↓` twice at a boundary | Focus the adjacent thought |
+| `Primary+Enter`; `Primary+Shift+Enter` | Submit and remove after acceptance; submit and keep |
 | Type `$name`, `/name`, or supported `@name` | Complete a local invocation |
 | `↑` / `↓` or `Primary+P` / `Primary+N`; `Enter` / `Tab`; `Esc` | Navigate, insert, or close invocation results |
 
@@ -172,7 +179,8 @@ submits to that agent.
   <img src="assets/proqi-screenshot-inbox.gif" width="1000" alt="Proqi enabling Screenshot Inbox, receiving a new macOS screenshot, and turning it into an annotatable thought">
 </p>
 
-Press `i`: new Desktop screenshots become annotatable image thoughts. Proqi
+From `+ Start typing`, press `Esc`, then `i`: new Desktop screenshots become
+annotatable image thoughts. From an ordinary Board, press `i` directly. Proqi
 never takes, uploads, analyzes, copies, or configures them.
 
 One process listens. It pauses after 10 unattended captures or 20 inactive
@@ -195,7 +203,17 @@ notify_terminal_on_auto_pause = false
 </p>
 
 In Herdr, Proqi finds verified adjacent agents. `s` submits in visible order and
-removes after acceptance; `S` keeps. The palette submits the whole board.
+removes after acceptance; `S` keeps. While editing, `Primary+Enter` submits the
+active thought and `Primary+Shift+Enter` submits it while keeping it. The palette
+submits the whole board. With several verified adjacent agents, either edit
+chord opens the temporary direction chooser; press an arrow or `h`, `j`, `k`,
+or `l` next to choose the target. Those keys select a direction instead of
+moving or inserting text while the chooser is open. `Esc` cancels the chooser
+and returns to the unchanged editor.
+
+When an accepted submission removes the final thought, Proqi returns to the
+passive `+ Start typing` board. It does not create a replacement blank thought;
+the next typed or pasted content creates the next thought directly.
 
 Busy receivers decide whether input steers or queues. Any failed verification
 leaves the board unchanged.

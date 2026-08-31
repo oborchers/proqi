@@ -1,4 +1,6 @@
-use super::*;
+//! Invocation discovery and completion through a real PTY.
+
+use super::support::{expect_command, json_command};
 
 #[test]
 fn discovered_invocation_completes_and_shuts_down_in_a_real_pty() {

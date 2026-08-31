@@ -1,0 +1,6 @@
+interface:
+  display_name: "Claude Code Review"
+  short_description: "Run a durable read-only Claude implementation review"
+  default_prompt: "Use $claude-code-review to run a read-only Claude Code review with Fable and preserve its complete output."
+policy:
+  allow_implicit_invocation: true

@@ -152,6 +152,7 @@ pub(super) fn configure_agent_controls(
     layout: &mut LayoutSnapshot,
     targets: &[AgentTarget],
     selection: Option<SubmissionDisposition>,
+    mode: crate::application::InteractionMode,
     keybindings: &crate::ui::KeyBindings,
 ) {
     let area = crate::ui::geometry::inset_horizontal(layout.footer_agents, 2);
@@ -170,6 +171,9 @@ pub(super) fn configure_agent_controls(
                 label_width,
             );
         }
+        return;
+    }
+    if matches!(mode, crate::application::InteractionMode::Compose) {
         return;
     }
     for target in targets {
@@ -195,7 +199,8 @@ pub(super) fn configure_agent_controls(
             [only] => HitTarget::Deliver(only.direction, disposition),
             _ => HitTarget::BeginDelivery(disposition),
         };
-        let label_width = crate::ui::control_labels::submission_width(disposition, keybindings);
+        let label_width =
+            crate::ui::control_labels::submission_width(disposition, mode, keybindings);
         push(layout, &mut x, area, target, label_width);
     }
 }

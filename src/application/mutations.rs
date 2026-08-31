@@ -192,13 +192,6 @@ pub(super) fn delete_thought(
     kind: BoardOperationKind,
     at: Timestamp,
 ) -> ApplicationResult<Vec<Effect>> {
-    if !matches!(
-        kind,
-        BoardOperationKind::Delete | BoardOperationKind::Cut | BoardOperationKind::SubmitAndRemove
-    ) {
-        return Err(ApplicationError::InvalidState);
-    }
-    let thought = state.live_thought(thought_id)?.clone();
     let deleted_index = state
         .board
         .live_thoughts()
@@ -206,8 +199,38 @@ pub(super) fn delete_thought(
         .position(|candidate| candidate.id == thought_id)
         .ok_or(ApplicationError::InvalidState)?;
     let was_focused = state.focused_thought == Some(thought_id);
+    let operation = build_delete_thought_operation(state, operation_id, thought_id, kind, at)?;
+    state.record_board_operation(&operation)?;
+    if was_focused {
+        let live = state.board.live_thoughts();
+        state.focused_thought = live
+            .get(deleted_index)
+            .or_else(|| {
+                deleted_index
+                    .checked_sub(1)
+                    .and_then(|previous| live.get(previous))
+            })
+            .map(|thought| thought.id);
+    }
+    Ok(vec![Effect::CommitBoardOperation(operation)])
+}
+
+pub(super) fn build_delete_thought_operation(
+    state: &AppState,
+    operation_id: OperationId,
+    thought_id: ThoughtId,
+    kind: BoardOperationKind,
+    at: Timestamp,
+) -> ApplicationResult<BoardOperation> {
+    if !matches!(
+        kind,
+        BoardOperationKind::Delete | BoardOperationKind::Cut | BoardOperationKind::SubmitAndRemove
+    ) {
+        return Err(ApplicationError::InvalidState);
+    }
+    let thought = state.live_thought(thought_id)?.clone();
     let sequence = state.next_sequence()?;
-    let operation = BoardOperation {
+    Ok(BoardOperation {
         id: operation_id,
         session_id: state.board.session.id,
         sequence,
@@ -223,20 +246,7 @@ pub(super) fn delete_thought(
             position: thought.position,
         },
         created_at: at,
-    };
-    state.record_board_operation(&operation)?;
-    if was_focused {
-        let live = state.board.live_thoughts();
-        state.focused_thought = live
-            .get(deleted_index)
-            .or_else(|| {
-                deleted_index
-                    .checked_sub(1)
-                    .and_then(|previous| live.get(previous))
-            })
-            .map(|thought| thought.id);
-    }
-    Ok(vec![Effect::CommitBoardOperation(operation)])
+    })
 }
 
 pub(super) fn move_thought(

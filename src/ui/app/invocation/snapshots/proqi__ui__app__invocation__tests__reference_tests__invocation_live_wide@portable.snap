@@ -1,6 +1,5 @@
 ---
 source: src/ui/app/invocation/reference_tests.rs
-assertion_line: 490
 expression: "snapshots::live_snapshot(72, 12)"
 ---
 00││

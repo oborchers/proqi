@@ -205,3 +205,172 @@ fn accepted_receipt_persists_advisory_state_and_deletion_identity() {
     assert_eq!(fields.1, "unknown");
     assert_eq!(fields.2, deletion_id.database_bytes());
 }
+
+#[test]
+fn accepted_outcome_and_source_removal_commit_atomically() {
+    let fixture = DatabaseFixture::new();
+    let mut store = fixture.open();
+    let mut ids = FakeIdGenerator::new(4_000);
+    let mut state = session_state(&mut ids, &test_path("submission-atomic-removal"));
+    let session_id = state.board.session.id;
+    store
+        .commit(&OperationBatch::CreateSession(state.board.session.clone()))
+        .expect("create session");
+    let thought_id = create_thought(&mut store, &mut state, &mut ids, "accepted", 2);
+    let record = attempt(&mut ids, &state, thought_id, [14; 32]);
+    store.prepare_submission(&record).expect("prepare");
+    store
+        .mark_submission_sending(record.id, Timestamp::from_millis(21))
+        .expect("sending");
+    reduce(
+        &mut state,
+        Action::BeginSubmission {
+            thought_ids: vec![thought_id],
+        },
+    )
+    .expect("lock source");
+    let removal = one_effect(
+        &mut state,
+        Action::StageSubmissionRemoval {
+            operation_id: ids.operation_id(),
+            thought_ids: vec![thought_id],
+            at: Timestamp::from_millis(22),
+        },
+    );
+    let Effect::CommitBoardOperation(removal) = removal else {
+        panic!("expected staged removal");
+    };
+    let outcome = SubmissionOutcome {
+        state: SubmissionAttemptState::Accepted,
+        post_state: Some(AgentState::Working),
+        error_code: None,
+        deletion_operation_id: Some(removal.id),
+        at: Timestamp::from_millis(22),
+    };
+
+    let receipt = store
+        .finish_submission_with_removal(record.id, &outcome, &removal)
+        .expect("atomic finish");
+    assert_eq!(receipt.sequence, removal.sequence);
+    let replay = store
+        .finish_submission_with_removal(record.id, &outcome, &removal)
+        .expect("exact ambiguous retry");
+    assert_eq!(replay.sequence, receipt.sequence);
+    assert!(replay.idempotent_replay);
+    let snapshot = store.load_session(session_id).expect("reload");
+    assert!(snapshot.board.live_thoughts().is_empty());
+    let connection = Connection::open(&fixture.config.database_path).expect("journal database");
+    assert_eq!(state_of(&connection, record.id), "accepted");
+}
+
+#[test]
+fn accepted_removal_replay_rejects_mismatched_outcome_or_operation() {
+    let fixture = DatabaseFixture::new();
+    let mut store = fixture.open();
+    let mut ids = FakeIdGenerator::new(4_500);
+    let mut state = session_state(&mut ids, &test_path("submission-removal-replay"));
+    store
+        .commit(&OperationBatch::CreateSession(state.board.session.clone()))
+        .expect("create session");
+    let thought_id = create_thought(&mut store, &mut state, &mut ids, "accepted", 2);
+    let record = attempt(&mut ids, &state, thought_id, [16; 32]);
+    store.prepare_submission(&record).expect("prepare");
+    store
+        .mark_submission_sending(record.id, Timestamp::from_millis(21))
+        .expect("sending");
+    reduce(
+        &mut state,
+        Action::BeginSubmission {
+            thought_ids: vec![thought_id],
+        },
+    )
+    .expect("lock source");
+    let removal = one_effect(
+        &mut state,
+        Action::StageSubmissionRemoval {
+            operation_id: ids.operation_id(),
+            thought_ids: vec![thought_id],
+            at: Timestamp::from_millis(22),
+        },
+    );
+    let Effect::CommitBoardOperation(removal) = removal else {
+        panic!("expected staged removal");
+    };
+    let outcome = SubmissionOutcome {
+        state: SubmissionAttemptState::Accepted,
+        post_state: Some(AgentState::Working),
+        error_code: None,
+        deletion_operation_id: Some(removal.id),
+        at: Timestamp::from_millis(22),
+    };
+    store
+        .finish_submission_with_removal(record.id, &outcome, &removal)
+        .expect("first finish");
+
+    let mut mismatched_outcome = outcome.clone();
+    mismatched_outcome.post_state = Some(AgentState::Unknown);
+    assert!(matches!(
+        store.finish_submission_with_removal(record.id, &mismatched_outcome, &removal),
+        Err(StoreError::Conflict(_))
+    ));
+    let mut mismatched_removal = removal.clone();
+    mismatched_removal.created_at = Timestamp::from_millis(23);
+    assert!(matches!(
+        store.finish_submission_with_removal(record.id, &outcome, &mismatched_removal),
+        Err(StoreError::Conflict(_))
+    ));
+}
+
+#[test]
+fn failed_source_removal_rolls_back_the_accepted_outcome() {
+    let fixture = DatabaseFixture::new();
+    let mut store = fixture.open();
+    let mut ids = FakeIdGenerator::new(5_000);
+    let mut state = session_state(&mut ids, &test_path("submission-atomic-rollback"));
+    let session_id = state.board.session.id;
+    store
+        .commit(&OperationBatch::CreateSession(state.board.session.clone()))
+        .expect("create session");
+    let thought_id = create_thought(&mut store, &mut state, &mut ids, "retained", 2);
+    let record = attempt(&mut ids, &state, thought_id, [15; 32]);
+    store.prepare_submission(&record).expect("prepare");
+    store
+        .mark_submission_sending(record.id, Timestamp::from_millis(21))
+        .expect("sending");
+    reduce(
+        &mut state,
+        Action::BeginSubmission {
+            thought_ids: vec![thought_id],
+        },
+    )
+    .expect("lock source");
+    let removal = one_effect(
+        &mut state,
+        Action::StageSubmissionRemoval {
+            operation_id: ids.operation_id(),
+            thought_ids: vec![thought_id],
+            at: Timestamp::from_millis(22),
+        },
+    );
+    let Effect::CommitBoardOperation(mut removal) = removal else {
+        panic!("expected staged removal");
+    };
+    removal.sequence = removal.sequence.checked_next().expect("sequence");
+    let outcome = SubmissionOutcome {
+        state: SubmissionAttemptState::Accepted,
+        post_state: Some(AgentState::Working),
+        error_code: None,
+        deletion_operation_id: Some(removal.id),
+        at: Timestamp::from_millis(22),
+    };
+
+    assert!(
+        store
+            .finish_submission_with_removal(record.id, &outcome, &removal)
+            .is_err()
+    );
+    let snapshot = store.load_session(session_id).expect("reload");
+    assert_eq!(snapshot.board.live_thoughts()[0].content, "retained");
+    let connection = Connection::open(&fixture.config.database_path).expect("journal database");
+    assert_eq!(state_of(&connection, record.id), "sending");
+}

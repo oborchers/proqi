@@ -11,7 +11,7 @@ use crate::{
     },
 };
 
-use super::{BoardApp, UiInput, UiKey, query::QueryEditor};
+use super::{BoardApp, UiInput, UiKey, pending_types::EditFlush, query::QueryEditor};
 
 pub(super) struct TransferState {
     query: QueryEditor,
@@ -35,7 +35,10 @@ impl BoardApp {
             self.set_warning("select a thought before sending it to another session");
             return Vec::new();
         };
-        let mut effects = self.flush_pending_edit(ids, clock);
+        let mut effects = match self.flush_edit_boundary(ids, clock) {
+            EditFlush::Complete(effects) => effects,
+            EditFlush::Blocked(effects) => return effects,
+        };
         self.transfer = Some(TransferState {
             query: QueryEditor::default(),
             sessions: Vec::new(),
@@ -91,12 +94,15 @@ impl BoardApp {
             }
             Ok(_) => {
                 self.set_info("thought sent; removing the source");
-                self.reduce(Action::DeleteThought {
-                    operation_id: ids.operation_id(),
-                    thought_id: request.source_thought_id,
-                    kind: BoardOperationKind::Delete,
-                    at: clock.now(),
-                })
+                self.reduce_with_empty_transition(
+                    Action::DeleteThought {
+                        operation_id: ids.operation_id(),
+                        thought_id: request.source_thought_id,
+                        kind: BoardOperationKind::Delete,
+                        at: clock.now(),
+                    },
+                    crate::application::EmptyBoardTransition::ComposeAfterLocalRemoval,
+                )
             }
         }
     }

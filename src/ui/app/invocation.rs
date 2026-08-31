@@ -199,6 +199,7 @@ impl BoardApp {
             UiInput::PasteAnnotated(payload) => self.extend_manual_query(&payload.content),
             UiInput::Resize { .. }
             | UiInput::HostFocusGained
+            | UiInput::HostFocusLost
             | UiInput::Key(_)
             | UiInput::Pointer(_) => {}
         }
@@ -217,7 +218,10 @@ impl BoardApp {
                 self.paste_payload(crate::ui::PastePayload::text(value.clone()), ids, clock)
             }
             UiInput::PasteAnnotated(payload) => self.paste_payload(payload.clone(), ids, clock),
-            UiInput::Resize { .. } | UiInput::HostFocusGained | UiInput::Pointer(_) => Vec::new(),
+            UiInput::Resize { .. }
+            | UiInput::HostFocusGained
+            | UiInput::HostFocusLost
+            | UiInput::Pointer(_) => Vec::new(),
         };
         self.refresh_invocation_popup();
         effects

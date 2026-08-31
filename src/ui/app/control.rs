@@ -146,19 +146,20 @@ impl BoardApp {
         previous_mode: InteractionMode,
         previous_focus: Option<ThoughtId>,
     ) {
-        let Some(focus) = previous_focus.filter(|id| {
+        let live_focus = previous_focus.filter(|id| {
             self.state
                 .board
                 .thought(*id)
                 .is_some_and(crate::domain::Thought::is_live)
-        }) else {
-            return;
-        };
-        self.state.focused_thought = Some(focus);
+        });
         self.state.mode = match previous_mode {
-            InteractionMode::Edit { thought_id } if thought_id == focus => previous_mode,
-            _ => InteractionMode::Board,
+            InteractionMode::Compose => InteractionMode::Compose,
+            InteractionMode::Edit { thought_id } if live_focus == Some(thought_id) => {
+                InteractionMode::Edit { thought_id }
+            }
+            InteractionMode::Board | InteractionMode::Edit { .. } => InteractionMode::Board,
         };
+        self.state.focused_thought = live_focus;
     }
 }
 

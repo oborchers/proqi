@@ -375,12 +375,33 @@ fn enter_is_normalized_independently_from_exact_bracketed_paste() {
 }
 
 #[test]
-fn host_focus_is_a_semantic_refresh_signal() {
+fn primary_enter_chords_are_distinct_from_plain_multiline_enter() {
+    for modifier in [
+        KeyModifiers::CONTROL,
+        KeyModifiers::SUPER,
+        KeyModifiers::META,
+    ] {
+        assert_eq!(
+            translate(Event::Key(KeyEvent::new(KeyCode::Enter, modifier))),
+            Some(UiInput::Key(UiKey::Submit))
+        );
+        assert_eq!(
+            translate(Event::Key(KeyEvent::new(
+                KeyCode::Enter,
+                modifier | KeyModifiers::SHIFT,
+            ))),
+            Some(UiInput::Key(UiKey::SubmitKeep))
+        );
+    }
+}
+
+#[test]
+fn host_focus_events_are_distinct_normalized_passive_signals() {
     assert_eq!(
         translate(Event::FocusGained),
         Some(UiInput::HostFocusGained)
     );
-    assert_eq!(translate(Event::FocusLost), None);
+    assert_eq!(translate(Event::FocusLost), Some(UiInput::HostFocusLost));
 }
 
 #[test]

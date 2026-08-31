@@ -18,6 +18,8 @@ pub(super) fn ensure_action_unlocked(state: &AppState, action: &Action) -> Appli
         Action::Redo { scope, .. } => locked_history(state, *scope, false),
         Action::RenameSession { .. }
         | Action::FocusThought(_)
+        | Action::EnterCompose
+        | Action::ExitCompose
         | Action::ExitEdit
         | Action::CreateThought { .. }
         | Action::PasteAsThought { .. }
@@ -25,6 +27,7 @@ pub(super) fn ensure_action_unlocked(state: &AppState, action: &Action) -> Appli
         | Action::ClipboardResult { .. }
         | Action::BeginSubmission { .. }
         | Action::EndSubmission { .. }
+        | Action::StageSubmissionRemoval { .. }
         | Action::PersistenceCommitted(_)
         | Action::PersistenceFailed { .. }
         | Action::RetryPersistence(_) => None,
