@@ -7,7 +7,10 @@ mod operations;
 mod text;
 mod update;
 
-pub use annotation::{ContentAnnotation, ContentAnnotationKind, validate_annotations};
+pub use annotation::{
+    AnnotationBehavior, ContentAnnotation, ContentAnnotationKind, InlineStyleKind,
+    ShortcutEmphasis, validate_annotations,
+};
 pub use identifiers::{
     InstanceId, OperationId, RequestId, RevisionId, SessionId, SubmissionId, ThoughtId,
 };

@@ -62,9 +62,9 @@ pub(super) fn normalize_edit_key(key: UiKey) -> Option<UiKey> {
 }
 
 pub(super) struct PendingEdit {
-    thought_id: ThoughtId,
+    pub(super) thought_id: ThoughtId,
     before: EditorSnapshot,
-    after: EditorSnapshot,
+    pub(super) after: EditorSnapshot,
     before_annotations: Vec<ContentAnnotation>,
     after_annotations: Vec<ContentAnnotation>,
 }
@@ -400,17 +400,17 @@ impl BoardApp {
         let Some(pending) = self.pending_edit.as_ref() else {
             return Vec::new();
         };
-        let action = Action::EditThought {
-            thought_id: pending.thought_id,
-            revision_id: ids.revision_id(),
-            before_content: pending.before.content.clone(),
-            after_content: pending.after.content.clone(),
-            before_annotations: pending.before_annotations.clone(),
-            after_annotations: pending.after_annotations.clone(),
-            before_cursor: pending.before.cursor,
-            after_cursor: pending.after.cursor,
-            at: clock.now(),
-        };
+        let action = Action::EditOwnedThought(crate::application::OwnedThoughtEdit::rebased(
+            pending.thought_id,
+            ids.revision_id(),
+            pending.before.content.clone(),
+            pending.after.content.clone(),
+            pending.before_annotations.clone(),
+            pending.after_annotations.clone(),
+            pending.before.cursor,
+            pending.after.cursor,
+            clock.now(),
+        ));
         match reduce(&mut self.state, action) {
             Ok(effects) => {
                 self.pending_edit = None;

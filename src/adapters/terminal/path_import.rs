@@ -2,10 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::{
-    domain::{ContentAnnotation, ContentAnnotationKind},
-    ui::PastePayload,
-};
+use crate::ui::PastePayload;
 
 pub(super) fn normalize_existing_files(content: &str) -> Option<String> {
     let trimmed = content.trim();
@@ -42,27 +39,22 @@ pub(super) fn normalize_existing_files(content: &str) -> Option<String> {
 pub(super) fn annotate_existing_files(content: &str) -> Option<PastePayload> {
     let content = normalize_existing_files(content)?;
     let mut start = 0;
-    let annotations = content
+    let ranges = content
         .split('\n')
         .map(|path| {
             let end = start + path.len();
-            let annotation = ContentAnnotation {
-                start,
-                end,
-                kind: ContentAnnotationKind::Attachment {
-                    image: is_image_path(Path::new(path)),
-                    display_name: Path::new(path)
-                        .file_name()
-                        .and_then(|name| name.to_str())
-                        .unwrap_or(path)
-                        .to_owned(),
-                },
-            };
+            let range = start..end;
+            let image = is_image_path(Path::new(path));
+            let display_name = Path::new(path)
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or(path)
+                .to_owned();
             start = end.saturating_add(1);
-            annotation
+            (range, image, display_name)
         })
         .collect();
-    Some(PastePayload::annotated(content, annotations))
+    Some(PastePayload::attachments(content, ranges))
 }
 
 pub(super) fn attachment_payload(path: String, image: bool) -> PastePayload {
@@ -72,17 +64,7 @@ pub(super) fn attachment_payload(path: String, image: bool) -> PastePayload {
         .unwrap_or(&path)
         .to_owned();
     let end = path.len();
-    PastePayload::annotated(
-        path,
-        vec![ContentAnnotation {
-            start: 0,
-            end,
-            kind: ContentAnnotationKind::Attachment {
-                image,
-                display_name,
-            },
-        }],
-    )
+    PastePayload::attachments(path, vec![(0..end, image, display_name)])
 }
 
 fn is_image_path(path: &Path) -> bool {

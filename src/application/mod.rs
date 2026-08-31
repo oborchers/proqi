@@ -6,6 +6,14 @@ mod attachments;
 mod capture;
 mod control;
 mod error;
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "stable application-owned API is consumed after the open tutorial branch rebases"
+    )
+)]
+mod instructional_text;
 mod locks;
 mod model;
 mod mutations;
@@ -20,6 +28,7 @@ mod update;
 mod update_coordination;
 
 pub use action::Action;
+pub(crate) use action::{OwnedThoughtCreation, OwnedThoughtEdit};
 pub use admission::{PendingMutationIntent, PendingMutationIntents};
 pub use attachments::{
     AttachmentAccessibilityState, AttachmentPreflightOutcome, AttachmentRefreshCause,

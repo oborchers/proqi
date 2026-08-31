@@ -30,13 +30,15 @@ Never advertise, install, or publish this skill as an end-user Proqi skill.
    patch increase for compatible fixes and operational hardening. The user owns
    the final version choice.
 3. Update the workspace version in `Cargo.toml`, refresh `Cargo.lock` through
-   normal Cargo tooling, and create
-   `.github/release-notes/vX.Y.Z.md`. Do not maintain another version source or
-   changelog.
-4. Run focused checks while editing, then the complete release gate documented
-   in `docs/RELEASING.md`. At minimum, require the canonical quality gate,
-   dependency audit, package checks, release plan, release rehearsal, workflow
-   linting, and whitespace validation.
+   normal Cargo tooling, create `.github/release-notes/vX.Y.Z.md`, and update the
+   bounded reviewed entry in `release-highlights.json`. Do not maintain another
+   version source or changelog.
+4. Run focused checks appropriate to the changed code. Routine release
+   preparation then runs the cheap `cargo xtask release-plan vX.Y.Z` contract
+   and Git diff hygiene. Run workflow lint only when workflows changed. Full
+   check, PTY, coverage, audit, package, crate dry run, full MSRV, rehearsal,
+   and Linux parity remain milestone or diagnostic gates as documented in
+   `docs/RELEASING.md`; do not repeat them merely because metadata is prepared.
 5. Review generated or changed release artifacts explicitly. Never weaken a
    gate, accept snapshots automatically, or claim an unavailable platform check
    passed.
@@ -48,8 +50,9 @@ Never advertise, install, or publish this skill as an end-user Proqi skill.
 
 Before asking for publication confirmation:
 
-1. Require the release commit on `main`, its required CI result to be green, and
-   the exact `vX.Y.Z` tag to match the Cargo version and notes filename.
+1. Require the release commit on `main`, its required CI result and immutable
+   candidate workflow to be green, and the exact `vX.Y.Z` tag to match the Cargo
+   version, notes filename, and reviewed highlights.
 2. Confirm that the exact tag is absent locally and remotely and that no
    conflicting GitHub Release or crates.io version exists.
 3. Record the full release commit SHA and verify that the worktree contains no
@@ -79,12 +82,13 @@ Release before the user answers affirmatively to the exact tag and commit.
 2. Create and push one annotated stable tag. Do not create or publish a GitHub
    Release manually. The protected tag is the workflow's sole publication
    trigger.
-3. Monitor the tag-triggered `Release` workflow. It builds the candidate once,
-   publishes crates.io through OIDC, publishes and verifies GitHub assets, then
-   notifies the Homebrew tap.
-4. If promotion fails, inspect the exact failing step. Rerun failed jobs in the
-   same workflow run when safe so successful native builds and artifacts are
-   reused. Never publish around a failed verification.
+3. Monitor the tag-triggered `Release` workflow. It selects the exact prior main
+   candidate without rebuilding native binaries, publishes crates.io through
+   OIDC, publishes and verifies GitHub assets, then notifies the Homebrew tap.
+4. If promotion fails, inspect the exact failing step. Rerun the same promotion
+   when safe. If the candidate is missing or expired, manually run the
+   non-publishing candidate workflow for the exact main SHA or protected tag,
+   then retry promotion. Never publish around a failed verification.
 5. Verify the public GitHub Release, exact crates.io version, Homebrew formula,
    and installed `proqi --version`. Report each channel independently.
 

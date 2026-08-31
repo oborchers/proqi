@@ -1,16 +1,12 @@
 name: Release candidate
 
 on:
-  workflow_call:
-    inputs:
-      tag:
-        description: Exact stable tag that this candidate will serve
-        required: true
-        type: string
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       tag:
-        description: Exact stable tag that this candidate will serve
+        description: Exact stable tag for an explicit non-publishing recovery candidate
         required: true
         type: string
 
@@ -18,7 +14,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: release-candidate-${{ inputs.tag }}
+  group: release-candidate-${{ github.ref }}-${{ github.sha }}
   cancel-in-progress: false
 
 jobs:
@@ -27,39 +23,45 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     outputs:
+      ready: ${{ steps.plan.outputs.ready }}
       source-ref: ${{ steps.plan.outputs.source-ref }}
       tag: ${{ steps.plan.outputs.tag }}
       source-sha: ${{ steps.plan.outputs.source-sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
-      - uses: taiki-e/install-action@6cd13508893c0e7eab5f273c2575d3859bd7229a # v2.86.6
-        with:
-          tool: cargo-dist@0.32.0
       - id: plan
-        name: Validate tag, release notes, and successful main CI
+        name: Classify exact release-ready source
         env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ inputs.tag }}
+          REQUESTED_TAG: ${{ inputs.tag }}
         run: |
-          case "$GITHUB_REF" in
-            refs/heads/main) ;;
-            refs/tags/*) test "$GITHUB_REF" = "refs/tags/$TAG" ;;
-            *) echo "release candidates require main or the exact release tag" >&2; exit 1 ;;
-          esac
-          cargo xtask release-plan "$TAG"
-          conclusion="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --branch main --commit "$GITHUB_SHA" --limit 1 --json conclusion --jq '.[0].conclusion // ""')"
-          test "$conclusion" = "success"
+          if [[ "$GITHUB_EVENT_NAME" = "push" ]]; then
+            test "$GITHUB_REF" = refs/heads/main
+            cargo xtask release-ready "$GITHUB_SHA" > "$RUNNER_TEMP/release-ready.json"
+            ready="$(jq -r .ready "$RUNNER_TEMP/release-ready.json")"
+            tag="$(jq -r .tag "$RUNNER_TEMP/release-ready.json")"
+          else
+            tag="$REQUESTED_TAG"
+            case "$GITHUB_REF" in
+              refs/heads/main) cargo xtask release-plan "$tag" ;;
+              refs/tags/*) test "$GITHUB_REF" = "refs/tags/$tag"; cargo xtask release-promotion-plan "$tag" ;;
+              *) echo "recovery candidates require main or the exact stable tag" >&2; exit 1 ;;
+            esac
+            ready=true
+          fi
           {
+            echo "ready=$ready"
             echo "source-ref=$GITHUB_REF"
-            echo "tag=$TAG"
+            echo "tag=$tag"
             echo "source-sha=$GITHUB_SHA"
           } >> "$GITHUB_OUTPUT"
 
   notices:
     name: Generate union third-party notices
     needs: plan
+    if: needs.plan.outputs.ready == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -88,26 +90,25 @@ jobs:
   crate:
     name: Verify registry package
     needs: plan
+    if: needs.plan.outputs.ready == 'true'
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-        with:
-          key: ubuntu-22.04
-      - run: cargo xtask crate-package
+      - run: cargo xtask crate-evidence
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           if-no-files-found: error
           name: registry-evidence
           path: target/crate-package
-          retention-days: 7
+          retention-days: 30
 
   build:
     name: Build candidate (${{ matrix.target }})
     needs: [plan, notices]
+    if: needs.plan.outputs.ready == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -241,7 +242,7 @@ jobs:
             ${{ env.ARCHIVE }}
             ${{ env.ARCHIVE }}.sha256
             ${{ env.SBOM }}
-          retention-days: 7
+          retention-days: 30
       - name: Upload Debian candidate files
         if: matrix.target == 'x86_64-unknown-linux-gnu'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -253,11 +254,12 @@ jobs:
             ${{ env.DEB }}.sha256
             ${{ env.DEB_SBOM }}
             target/package/debian-evidence.json
-          retention-days: 7
+          retention-days: 30
 
   assemble:
     name: Assemble immutable candidate
     needs: [plan, build, crate]
+    if: needs.plan.outputs.ready == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
@@ -330,22 +332,15 @@ jobs:
         run: |
           cargo xtask homebrew-formula target/release-assets target/release-assets/proqi.rb
           ruby -c target/release-assets/proqi.rb
-          cd target/release-assets
-          release_files="$(find . -maxdepth 1 -type f ! -name candidate-manifest.json -printf '%P\n' | sort | while read -r file; do printf '%s  %s\n' "$(shasum -a 256 "$file" | cut -d ' ' -f 1)" "$file"; done | jq -Rn '[inputs | capture("^(?<sha256>[0-9a-f]{64})  (?<name>.+)$")]')"
-          evidence_files="$(find evidence -type f -printf '%P\n' | sort | while read -r file; do name="evidence/$file"; printf '%s  %s\n' "$(shasum -a 256 "$name" | cut -d ' ' -f 1)" "$name"; done | jq -Rn '[inputs | capture("^(?<sha256>[0-9a-f]{64})  (?<name>.+)$")]')"
-          jq -n --arg tag "$TAG" --arg source_ref "$SOURCE_REF" --arg source_sha "$SOURCE_SHA" --arg run_id "$GITHUB_RUN_ID" \
-            --argjson release_files "$release_files" --argjson evidence_files "$evidence_files" \
-            '{schema_version: 3, tag: $tag, source_ref: $source_ref, source_sha: $source_sha, build_run_id: ($run_id | tonumber), workflow: "release-candidate.yml", targets: ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu"], release_files: $release_files, evidence_files: $evidence_files}' \
-            > candidate-manifest.json
-          jq -e '.schema_version == 3 and (.release_files | length == 14) and (.evidence_files | length == 4)' candidate-manifest.json
+          cargo xtask candidate-manifest create target/release-assets "$TAG" "$SOURCE_REF" "$SOURCE_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT"
       - id: upload
         name: Upload immutable candidate
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           if-no-files-found: error
-          name: release-candidate-${{ needs.plan.outputs.tag }}
+          name: release-candidate-${{ needs.plan.outputs.tag }}-${{ needs.plan.outputs.source-sha }}
           path: target/release-assets
-          retention-days: 7
+          retention-days: 30
       - name: Summarize promotion identity
         env:
           ARTIFACT_DIGEST: ${{ steps.upload.outputs.artifact-digest }}

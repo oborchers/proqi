@@ -299,8 +299,8 @@ mod tests {
         },
         application::{AppState, Effect, ThoughtMutation},
         domain::{
-            ContentAnnotation, ContentAnnotationKind, OperationSequence, Session, SessionBoard,
-            Thought, ThoughtPosition, Timestamp,
+            ContentAnnotation, OperationSequence, Session, SessionBoard, Thought, ThoughtPosition,
+            Timestamp,
         },
         ports::{
             editor::CursorMovement,
@@ -324,19 +324,12 @@ mod tests {
         let mut thought = Thought::new(
             ids.thought_id(),
             source.id,
-            "/tmp/image.png".to_owned(),
+            "Press Enter".to_owned(),
             ThoughtPosition::new(0),
             Timestamp::from_millis(1),
         );
         thought
-            .set_annotations(vec![ContentAnnotation {
-                start: 0,
-                end: thought.content.len(),
-                kind: ContentAnnotationKind::Attachment {
-                    image: true,
-                    display_name: "image.png".to_owned(),
-                },
-            }])
+            .set_annotations(vec![ContentAnnotation::shortcut(6, 11)])
             .expect("annotation");
         let thought_id = thought.id;
         let board = SessionBoard::new(source, vec![thought.clone()]).expect("board");

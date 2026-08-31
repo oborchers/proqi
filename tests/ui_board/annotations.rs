@@ -1,9 +1,9 @@
 use super::*;
 use proptest::prelude::*;
-
+#[path = "annotations/semantic.rs"]
+mod semantic;
 #[path = "annotations/support.rs"]
 mod support;
-
 use support::insert_accessible;
 
 fn image_payload(path: &str) -> PastePayload {
@@ -22,6 +22,7 @@ fn attachment_payload(path: &str, image: bool) -> PastePayload {
             },
         }],
     )
+    .expect("valid attachment payload")
 }
 
 #[test]
@@ -125,17 +126,20 @@ fn fast_and_boundary_navigation_keep_a_collapsed_annotation_atomic() {
     let graphemes =
         unicode_segmentation::UnicodeSegmentation::graphemes(content.as_str(), true).count();
     let mut fixture = Fixture::new();
-    fixture.input(UiInput::PasteAnnotated(PastePayload::annotated(
-        content.clone(),
-        vec![ContentAnnotation {
-            start: 0,
-            end: content.len(),
-            kind: ContentAnnotationKind::LargePaste {
-                lines: 10,
-                graphemes,
-            },
-        }],
-    )));
+    fixture.input(UiInput::PasteAnnotated(
+        PastePayload::annotated(
+            content.clone(),
+            vec![ContentAnnotation {
+                start: 0,
+                end: content.len(),
+                kind: ContentAnnotationKind::LargePaste {
+                    lines: 10,
+                    graphemes,
+                },
+            }],
+        )
+        .expect("valid large-paste payload"),
+    ));
     fixture.input(UiInput::Key(UiKey::Move {
         movement: CursorMovement::DocumentStart,
         extend_selection: false,
@@ -324,17 +328,20 @@ fn reverse_fold_navigation_uses_the_visible_space_before_an_inline_placeholder()
     let content = format!("{prefix}{path}{suffix}");
     let start = prefix.len();
     let mut fixture = Fixture::new();
-    fixture.input(UiInput::PasteAnnotated(PastePayload::annotated(
-        content,
-        vec![ContentAnnotation {
-            start,
-            end: start + path.len(),
-            kind: ContentAnnotationKind::Attachment {
-                image: true,
-                display_name: "screenshot.png".to_owned(),
-            },
-        }],
-    )));
+    fixture.input(UiInput::PasteAnnotated(
+        PastePayload::annotated(
+            content,
+            vec![ContentAnnotation {
+                start,
+                end: start + path.len(),
+                kind: ContentAnnotationKind::Attachment {
+                    image: true,
+                    display_name: "screenshot.png".to_owned(),
+                },
+            }],
+        )
+        .expect("valid inline attachment payload"),
+    ));
     for _ in 0..suffix.chars().count() {
         fixture.input(UiInput::Key(UiKey::Move {
             movement: CursorMovement::GraphemeBack,
@@ -400,7 +407,8 @@ fn adjacent_folds_remain_independently_atomic() {
                 },
             },
         ],
-    );
+    )
+    .expect("valid adjacent attachment payload");
     let mut fixture = Fixture::new();
     fixture.input(UiInput::PasteAnnotated(payload));
 

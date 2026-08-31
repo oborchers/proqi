@@ -639,11 +639,12 @@ The application refuses to open a database schema newer than it understands.
 It does not attempt a best-effort downgrade. Export and explicit recovery tools
 remain available without modifying the source database.
 
-Schema and storage protocol version 9 register invocation-reference annotations
-as durable thought and revision metadata. The migration from version 8 is a
-transactional protocol stamp because the annotation column and JSON envelope
-already exist. The version still prevents an older writer from interpreting a
-new annotation variant as compatible state.
+Schema and storage protocol version 10 register shortcut-emphasis annotations
+as durable thought and revision metadata. Version 9 introduced invocation
+references. Both migrations are transactional protocol stamps because the
+annotation column and JSON envelope already exist. The current version prevents
+an older writer from interpreting an unknown annotation variant as compatible
+state.
 
 ## Multiple running versions during an update
 
@@ -1003,14 +1004,16 @@ Attachment annotations retain only presentation-safe metadata and byte ranges;
 the absolute path remains the canonical text. Large-paste annotations retain
 derived line and grapheme counts. Invocation-reference annotations retain only
 a bounded display label over the canonical, self-contained collaborator
-location. A UI-owned projection substitutes folded labels for board rendering
-and editor snapshots, while the editor model, clipboard, recovery, CLI, search,
-and integration boundaries continue to consume canonical content. Invocation
-mentions are never resolved again at submission time. The projection owns
-lossless canonical-to-visible cursor and selection mapping. Collapsed ranges
-are atomic for pointer, cursor, selection, and deletion commands. Edits rebase
-unaffected ranges and dissolve overlapping ranges. Revisions persist both sides
-of the annotation change so undo and redo remain restart-safe.
+location. Shortcut emphasis retains only its closed semantic kind and exact
+UTF-8 range. Each durable kind exhaustively selects substitution or inline-style
+behavior in one UI-owned projection. Substitutions own lossless
+canonical-to-visible mapping and atomic folded interaction. Inline styles copy
+every canonical byte and contribute only semantic visible ranges. Board and
+editor rendering, measurement, wrapping, cursor and selection mapping, and hit
+testing consume that same projection. Clipboard, recovery, CLI, search,
+submission, and integration boundaries continue to consume canonical content.
+Edits rebase unaffected ranges and dissolve intersected ranges. Revisions
+persist both sides of the annotation change so undo and redo remain restart-safe.
 
 URL recognition is a render-only pass over canonical content. Only explicit
 HTTP and HTTPS ranges receive accent and underline styling. URL recognition does
@@ -1178,7 +1181,7 @@ bounded messages, protocol negotiation, idempotency keys, and timeouts are
 mandatory. If forwarding is unsupported or the owner cannot be verified, the
 CLI returns `session_busy`.
 
-Control protocol version 6 is current. Version 2 introduced legacy durable
+Control protocol version 7 is current. Version 2 introduced legacy durable
 presentation annotations. Version 4 added session rename, owner synchronization,
 exact editor replacement, and durable collapse state. An add mutation carrying
 an invocation-reference annotation requires version 6, so an older active owner
@@ -1187,7 +1190,8 @@ replacement carries a typed `rev_` idempotency identity plus either
 the caller's expected SHA-256 content digest or an explicit force intention and
 enters the ordinary editor revision history. The owner rejects every mutation of a source thought while its
 submission is in flight. Cross-session delivery inspects the source, commits an
-idempotent destination creation through the verified owner or an acquired
+idempotent destination creation through the version 7 purpose-specific
+preservation request or an acquired
 inactive-session lease, and only then requests an ordinary source deletion. No
 direct database write bypasses an active destination owner.
 
@@ -1222,6 +1226,13 @@ There is no security boundary between the application and other processes
 running as the same operating-system user. The design prevents accidental
 cross-session writes and unsafe command construction, not a malicious local
 administrator.
+
+Shortcut-emphasis authority follows that boundary. Supported application, UI,
+CLI, JSON, control, import, transfer, and agent-facing APIs cannot originate an
+arbitrary semantic range. The serialized kind carries no `system_owned` claim,
+signature, or key. A structurally valid range inserted directly into SQLite by
+the same user may therefore load; unknown kinds, malformed ranges, and
+unsupported storage protocols still fail closed.
 
 ## Test architecture
 
@@ -1374,22 +1385,32 @@ Pull requests and pushes to the protected default branch run these jobs:
   checks on the pinned stable toolchain.
 - `test` runs the deterministic suite on macOS and Linux. The matrix
   does not use fail-fast because all platform results are diagnostically useful.
-- `msrv` compiles and tests with the declared minimum supported Rust version.
+- `msrv` checks compilation with the declared minimum supported Rust version.
+  Manifest, toolchain, packaging, CI, and release-boundary changes run the full
+  MSRV suite. The complete suite also remains available as a manual diagnostic.
 - `pty` runs terminal scenarios on each platform where the harness is supported.
-- `coverage` publishes a report from Linux and enforces a 70 percent line
-  threshold. Exclusions must be narrow and justified in configuration.
+- `coverage` publishes one report from Linux for relevant Rust and toolchain
+  changes and enforces a 70 percent line threshold. Exclusions must be narrow
+  and justified in configuration.
+- `crate` owns the registry package and publication dry-run contract once.
+- Native package jobs retain their installed-product and Debian boundaries
+  without repeating the registry dry run.
 - `security` runs dependency advisory, license, source, and policy checks.
 - `check` is an aggregate job that succeeds only when every required job has
   succeeded or has been explicitly marked inapplicable.
 
-A preflight job classifies the complete pull-request or push diff before the
-matrix starts. When every changed path ends in `.md`, CI runs one lightweight
-documentation gate for whitespace and repository-owned public-asset contracts;
+A preflight job uses the xtask-owned classifier on the complete pull-request or
+push diff before the matrix starts. When every changed path is ordinary
+Markdown, CI runs one lightweight documentation gate for whitespace and
+repository-owned public-asset contracts. Reviewed files under
+`.github/release-notes/` are product inputs even though they are Markdown;
 the Rust test, coverage, audit, PTY, package, and platform jobs are explicitly
-skipped. Any non-Markdown path runs the complete matrix. The aggregate `check`
-job verifies the exact expected success-and-skip topology in both cases, so a
-path optimization cannot leave the protected required check pending or turn an
-unexpectedly skipped product job into success.
+skipped. Any non-Markdown path runs the distinct product boundaries. Coverage
+runs only for relevant code changes, and the full MSRV suite runs only for its
+classified compatibility boundaries. The aggregate `check` job verifies the
+exact expected success-and-skip topology, so a path optimization cannot leave
+the protected required check pending or turn an unexpectedly skipped product
+job into success.
 
 The aggregate `check` job is the stable branch-protection contract. Individual
 jobs may evolve without repeatedly changing repository settings. Superseded
@@ -1399,8 +1420,8 @@ to a full commit SHA with its human-readable version recorded in a comment.
 
 Tests that require a real desktop clipboard, a specific terminal emulator, or a
 live Herdr session are gated smoke tests. Their deterministic equivalents remain
-required on every pull request. Live smoke tests run before releases and may also
-run on a schedule without weakening the required gate.
+required on every pull request. Live smoke tests remain explicit milestone or
+diagnostic work and are not scheduled.
 
 New coding-agent harnesses use
 [`HARNESS_QUALIFICATION_CHECKLIST.md`](HARNESS_QUALIFICATION_CHECKLIST.md) for
@@ -1442,19 +1463,23 @@ teaches coding agents to use the installed application.
 
 ### Release pipeline
 
-Every release candidate starts from a protected stable tag whose exact commit
-has passed the aggregate `main` gate. The tag-triggered release workflow calls
-the candidate workflow as a reusable workflow, so the expensive matrix and
-promotion share one run and one immutable artifact set. A manual candidate
-dispatch remains available only as a non-publishing preflight or recovery tool.
-Both entry points accept an exact `vX.Y.Z` tag, reject a tag that differs from
-the single Cargo workspace version, and record the source ref and commit. The
-matrix builds only Apple silicon macOS, Intel macOS, and x86-64 GNU Linux
-artifacts on native runners. The GNU/Linux candidate is built on Ubuntu 22.04,
-must not require a glibc symbol newer than `GLIBC_2.35`, and is started from its
-final archive on Ubuntu 22.04, Debian bookworm, and Ubuntu 24.04. One Linux job
-generates a union third-party notice file for all targets, so Intel macOS never
-compiles the packaging tool.
+Release readiness is a deterministic property of checked-in inputs, never
+commit prose. The Cargo version, matching reviewed notes, bounded release
+highlights, clean worktree, exact main identity, and absent canonical tag form
+the preparation contract. Routine local preparation validates only those cheap
+inputs. Development, milestone, and diagnostic commands retain full checks,
+PTY, coverage, audit, packaging, rehearsal, full MSRV, and Linux container
+parity without making them prerequisites of metadata preparation.
+
+For an exact release-ready main SHA, the candidate workflow runs alongside
+ordinary CI and has no publication credentials. It builds only Apple silicon
+macOS, Intel macOS, and x86-64 GNU Linux artifacts on native runners. Each native
+binary is built once. The Linux binary is reused byte for byte in the Debian
+package. The GNU/Linux candidate is built on Ubuntu 22.04, must not require a
+glibc symbol newer than `GLIBC_2.35`, and is started from its final archive on
+Ubuntu 22.04, Debian bookworm, and Ubuntu 24.04. One Linux job generates a union
+third-party notice file for all targets, so Intel macOS never compiles the
+packaging tool.
 
 A reviewed pinned `cargo-dist` configuration or equivalent narrow Rust tool
 stages archives containing one executable, MIT license, required notices, and
@@ -1462,21 +1487,32 @@ shell completions. Jobs create and verify SHA-256 manifests, SPDX JSON SBOMs,
 and GitHub OIDC Sigstore provenance attestations. Every third-party Action is
 pinned by full commit SHA and ordinary CI remains read-only.
 
-The candidate workflow creates a seven-day immutable artifact only after every
+The candidate workflow creates a 30-day immutable artifact only after every
 target, installed smoke, crate dry run, Debian package contract, checksum, SBOM,
 attestation, formula, and manifest step succeeds. The Debian package reuses the
 verified Linux archive executable byte for byte. The manifest separates public
 release files from private crate and Debian evidence and binds the future tag,
-source commit, build run, workflow, target registry, filenames, and file
-digests. Promotion downloads the candidate produced by the same tag run,
-verifies every internal hash and candidate attestation, adds tag-bound
-attestations, and publishes the same bytes. It never rebuilds successful native
-jobs. A failed promotion can be rerun while retaining their candidate artifacts.
-Release creation is idempotent for absent releases,
-matching drafts, and already published identical assets. Conflicting assets
-fail closed. GitHub Release notes are the only changelog. The protected release
-environment has no manual approval gate. Release runs are never cancelled and
-existing assets for a version are immutable.
+source commit, source ref, build run and attempt, exact workflow, filenames, and
+file digests. A protected stable tag remains the explicit publication authority.
+Promotion requires the tag commit to be the exact prepared main SHA, one
+successful aggregate main CI run for that SHA, and exactly one successful,
+unexpired candidate for the same version and SHA. It downloads by exact run and
+artifact identity, verifies the REST artifact digest before extraction, then
+verifies every internal hash and candidate attestation. Missing, expired,
+duplicate, mismatched, conflicting, or unattested candidates fail closed.
+Promotion checks the immutable tag commit, not the moving main tip. A later
+main commit therefore does not invalidate an authorized prepared candidate.
+Promotion adds tag-bound attestations and publishes the same bytes. It never
+rebuilds a successful native candidate. A manual candidate dispatch provides a
+non-publishing recovery path at main or at the exact protected tag.
+Release creation is idempotent for absent releases, empty or partially uploaded
+matching drafts, complete drafts, and already published identical assets. The
+workflow creates an empty verified draft, reconciles exact candidate bytes,
+uploads only missing assets, then downloads and verifies the complete set before
+registry publication. Duplicate, unexpected, conflicting, or incomplete public
+assets fail closed. GitHub Release notes are the only changelog. The protected
+release environment has no manual approval gate. Release runs are never
+cancelled and existing assets for a version are immutable.
 
 The same protected promotion job publishes the verified crate through
 crates.io trusted publishing. The crate trusts only the Proqi repository,
@@ -1504,6 +1540,17 @@ all three targets, builds and smokes the host artifact, and generates host
 checksums, completions, notices, SPDX output, and formula metadata under
 `target`. It reports platform work that only CI can verify. No paid platform
 signing or notarization is performed.
+
+Pinned Linux QA tools are published separately from release artifacts. The
+single repository identity is owned by `tools/ci-linux/image.json`. A dedicated
+workflow builds amd64 and arm64 variants on matching native GitHub-hosted
+runners, validates pull requests without pushing, and publishes only from
+trusted main activity using the short-lived repository token. Content-derived,
+run-qualified tags are checked for absence before publication and are never
+overwritten. Digest-only consumption, registry provenance, and SBOMs make the
+input explicit. Its registry-backed BuildKit cache is regenerable and untrusted.
+Neither Proqi source nor release artifacts enter the tools image. Native smoke
+and explicit amd64 parity are xtask diagnostics, not routine release preparation.
 
 ## Source organization
 

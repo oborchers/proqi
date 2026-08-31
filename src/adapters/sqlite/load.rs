@@ -219,6 +219,9 @@ fn load_board_operations(
                 "board operation columns disagree with payload".to_owned(),
             ));
         }
+        operation
+            .validate_annotations()
+            .map_err(|error| StoreError::Corrupt(error.to_string()))?;
         operations.push(operation);
     }
     Ok(operations)
@@ -268,6 +271,9 @@ fn load_revisions(
                 "revision columns disagree with payload".to_owned(),
             ));
         }
+        revision
+            .validate_annotations()
+            .map_err(|error| StoreError::Corrupt(error.to_string()))?;
         revisions.push(revision);
     }
     Ok(revisions)

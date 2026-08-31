@@ -32,27 +32,47 @@ where
         position: Option<usize>,
         supplied_operation: Option<OperationId>,
     ) -> Result<ThoughtMutation, SessionServiceError> {
-        self.add_thought_annotated(
+        self.add_thought_with_annotations(
             session_id,
             content,
             Vec::new(),
             position,
             supplied_operation,
+            false,
         )
     }
 
-    /// Add exact content and durable presentation annotations.
+    /// Preserve exact content and already-valid Proqi presentation annotations.
     ///
     /// # Errors
     ///
     /// Returns a typed lease, reducer, idempotency, annotation, or persistence failure.
-    pub fn add_thought_annotated(
+    pub(crate) fn preserve_thought(
         &mut self,
         session_id: SessionId,
         content: String,
         annotations: Vec<ContentAnnotation>,
         position: Option<usize>,
         supplied_operation: Option<OperationId>,
+    ) -> Result<ThoughtMutation, SessionServiceError> {
+        self.add_thought_with_annotations(
+            session_id,
+            content,
+            annotations,
+            position,
+            supplied_operation,
+            true,
+        )
+    }
+
+    fn add_thought_with_annotations(
+        &mut self,
+        session_id: SessionId,
+        content: String,
+        annotations: Vec<ContentAnnotation>,
+        position: Option<usize>,
+        supplied_operation: Option<OperationId>,
+        preserve: bool,
     ) -> Result<ThoughtMutation, SessionServiceError> {
         let operation_id = supplied_operation.unwrap_or_else(|| self.ids.operation_id());
         let thought_id = if supplied_operation.is_some() {
@@ -61,12 +81,22 @@ where
         } else {
             self.ids.thought_id()
         };
-        let replay = ControlMutation::Add {
-            operation_id,
-            thought_id,
-            content: content.clone(),
-            annotations: annotations.clone(),
-            position,
+        let replay = if preserve {
+            ControlMutation::PreserveAdd {
+                operation_id,
+                thought_id,
+                content: content.clone(),
+                annotations: annotations.clone(),
+                position,
+            }
+        } else {
+            ControlMutation::Add {
+                operation_id,
+                thought_id,
+                content: content.clone(),
+                annotations: Vec::new(),
+                position,
+            }
         };
         if let Some(existing) = self.store.operation_request(operation_id)? {
             return match_existing_thought(&existing, session_id, &replay);
@@ -76,8 +106,16 @@ where
             return match_existing_thought(&existing, session_id, &replay);
         }
         let mut state = self.load_live_state(session_id)?;
-        let effects = reduce(
-            &mut state,
+        let action = if preserve {
+            Action::CreateOwnedThought(crate::application::OwnedThoughtCreation::preserved(
+                thought_id,
+                operation_id,
+                content,
+                annotations,
+                position,
+                self.clock.now(),
+            ))
+        } else {
             Action::CreateThought {
                 thought_id,
                 operation_id,
@@ -85,8 +123,9 @@ where
                 annotations,
                 insertion_index: position,
                 at: self.clock.now(),
-            },
-        )?;
+            }
+        };
+        let effects = reduce(&mut state, action)?;
         let receipt = self.commit_single_effect(&effects)?;
         Ok(ThoughtMutation {
             thought_id,

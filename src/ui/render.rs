@@ -285,7 +285,7 @@ fn render_thought(
         styled_line(
             &presentation.content,
             &row.visual,
-            &presentation.folds,
+            &presentation.styles,
             &links,
             &invocations,
             theme,
@@ -333,7 +333,7 @@ fn render_editor(
             styled_line(
                 &snapshot.content,
                 line,
-                &presentation.folds,
+                &presentation.styles,
                 &links,
                 &invocations,
                 theme,
@@ -361,7 +361,7 @@ fn render_editor(
 fn styled_line(
     content: &str,
     line: &crate::ports::editor::VisualLine,
-    folds: &[crate::ui::annotations::PresentedFold],
+    semantic_styles: &[crate::ui::annotations::PresentedStyle],
     links: &[std::ops::Range<usize>],
     invocations: &[std::ops::Range<usize>],
     theme: &Theme,
@@ -378,25 +378,28 @@ fn styled_line(
             let selected = line.selected_cells.is_some_and(|selection| {
                 column < selection.end && column.saturating_add(width) > selection.start
             });
-            let folded = folds
+            let semantic = semantic_styles
                 .iter()
-                .any(|fold| fold.collapsed && byte >= fold.start && byte < fold.end);
-            let inaccessible = folds
-                .iter()
-                .any(|fold| fold.inaccessible && byte >= fold.start && byte < fold.end);
+                .find(|style| byte >= style.start && byte < style.end)
+                .map(|style| style.kind);
             let linked = links.iter().any(|range| range.contains(&byte));
             let invocation = invocations.iter().any(|range| range.contains(&byte));
             column = column.saturating_add(width);
-            let mut style = Style::default().fg(if inaccessible {
-                theme.warning
-            } else if folded || invocation {
-                theme.annotation
-            } else if linked {
-                theme.link
-            } else {
-                theme.foreground
-            });
-            if folded || inaccessible || invocation {
+            let mut style = Style::default().fg(
+                if matches!(
+                    semantic,
+                    Some(crate::ui::annotations::PresentedStyleKind::Warning)
+                ) {
+                    theme.warning
+                } else if semantic.is_some() || invocation {
+                    theme.annotation
+                } else if linked {
+                    theme.link
+                } else {
+                    theme.foreground
+                },
+            );
+            if semantic.is_some() || invocation {
                 style = style.add_modifier(Modifier::BOLD);
             }
             if linked {

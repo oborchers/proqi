@@ -381,6 +381,7 @@ fn attachment_payload(path: &str, image: bool) -> PastePayload {
             },
         }],
     )
+    .expect("valid attachment payload")
 }
 
 fn attachment_batch(effects: &[Effect]) -> AttachmentCheckBatch {

@@ -16,12 +16,9 @@ const DIST_VERSION: &str = "0.32.0";
 use super::release_targets::ALL as TARGETS;
 
 pub(super) fn plan(root: &Path, requested_tag: Option<&str>) -> Result<(), String> {
-    let output = plan_output(root, requested_tag)?;
-    let manifest: Value = serde_json::from_slice(&output)
-        .map_err(|error| format!("parse cargo-dist plan: {error}"))?;
-    validate_planned_targets(&manifest)?;
-    println!("release plan: {}", String::from_utf8_lossy(&output));
-    Ok(())
+    let version = workspace_version(root)?;
+    let tag = requested_tag.map_or_else(|| format!("v{version}"), str::to_owned);
+    super::release_readiness::validate_preparation(root, &tag)
 }
 
 pub(super) fn rehearse(root: &Path) -> Result<(), String> {
@@ -76,7 +73,7 @@ fn plan_output(root: &Path, requested_tag: Option<&str>) -> Result<Vec<u8>, Stri
     let version = workspace_version(root)?;
     let tag = requested_tag.map_or_else(|| format!("v{version}"), str::to_owned);
     validate_tag(&tag, &version)?;
-    validate_release_notes(root, &tag)?;
+    super::release_readiness::validate_release_content(root, &tag)?;
     let output = Command::new("dist")
         .args(["plan", "--tag", &tag, "--output-format", "json"])
         .current_dir(root)
@@ -89,20 +86,6 @@ fn plan_output(root: &Path, requested_tag: Option<&str>) -> Result<Vec<u8>, Stri
             "cargo-dist plan exited with {}: {}",
             output.status,
             String::from_utf8_lossy(&output.stderr)
-        ))
-    }
-}
-
-fn validate_release_notes(root: &Path, tag: &str) -> Result<(), String> {
-    let path = root.join(".github/release-notes").join(format!("{tag}.md"));
-    let metadata = fs::metadata(&path)
-        .map_err(|error| format!("release notes {} are unavailable: {error}", path.display()))?;
-    if metadata.is_file() && metadata.len() > 0 {
-        Ok(())
-    } else {
-        Err(format!(
-            "release notes {} must be a nonempty file",
-            path.display()
         ))
     }
 }
@@ -272,7 +255,7 @@ fn filename(path: &Path) -> Result<String, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{hex_digest, validate_release_notes, validate_tag, workspace_version};
+    use super::{hex_digest, validate_tag, workspace_version};
     use semver::Version;
     use std::path::Path;
 
@@ -293,8 +276,11 @@ mod tests {
             .expect("xtask manifest has a workspace parent");
         let expected = Version::parse(env!("CARGO_PKG_VERSION")).expect("workspace version");
         assert_eq!(workspace_version(root), Ok(expected.clone()));
-        assert!(validate_release_notes(root, &format!("v{expected}")).is_ok());
-        assert!(validate_release_notes(root, "v9.9.9").is_err());
+        let tag = format!("v{expected}");
+        assert!(
+            root.join(format!(".github/release-notes/{tag}.md"))
+                .is_file()
+        );
     }
 
     #[test]
