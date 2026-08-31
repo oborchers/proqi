@@ -9,7 +9,8 @@ use crate::{
 };
 
 use super::{
-    BoardApp, InsertionConfirmation, InsertionFocus, pending_types::PendingEditorClipboard,
+    BoardApp, ComposePresentation, EditorOwner, InsertionConfirmation, InsertionFocus,
+    pending_types::{ClipboardReadOwner, PendingEditorClipboard},
 };
 use crate::ui::PastePayload;
 
@@ -25,6 +26,18 @@ impl BoardApp {
                 return Vec::new();
             }
             self.create(payload, ids, clock)
+        } else if matches!(self.state.mode, InteractionMode::Compose) {
+            let (content, annotations, verified_paths) = payload.into_parts();
+            if content.is_empty() {
+                return Vec::new();
+            }
+            let effects = self.apply_compose_paste(content, &annotations, ids, clock);
+            if let InteractionMode::Edit { thought_id } = self.state.mode {
+                self.state
+                    .attachments
+                    .mark_paths_accessible(thought_id, &verified_paths);
+            }
+            effects
         } else {
             let thought_id = self.active_thought_id();
             let (content, annotations, verified_paths) = payload.into_parts();
@@ -47,6 +60,7 @@ impl BoardApp {
         clock: &impl Clock,
     ) -> Vec<Effect> {
         self.clear_board_selection();
+        self.compose_presentation = ComposePresentation::Prompt;
         self.insertion_focus = InsertionFocus::Inactive;
         self.insertion_confirmation = InsertionConfirmation::Idle;
         let thought_id = ids.thought_id();
@@ -170,8 +184,38 @@ impl BoardApp {
 
     pub(super) fn read_clipboard(&mut self, ids: &mut impl IdGenerator) -> Vec<Effect> {
         let request_id = ids.request_id();
-        self.pending_clipboard_reads.insert(request_id);
+        let owner = match self.state.mode {
+            InteractionMode::Board => ClipboardReadOwner::Board,
+            InteractionMode::Compose => ClipboardReadOwner::Compose {
+                generation: self.compose_generation,
+            },
+            InteractionMode::Edit { thought_id } => ClipboardReadOwner::Thought {
+                thought_id,
+                generation: self.edit_owner_generation,
+            },
+        };
+        self.pending_clipboard_reads.insert(request_id, owner);
         vec![Effect::ReadClipboard { request_id }]
+    }
+
+    pub(super) fn rebind_compose_clipboard_reads(
+        &mut self,
+        generation: u64,
+        thought_id: crate::domain::ThoughtId,
+    ) {
+        for owner in self.pending_clipboard_reads.values_mut() {
+            if matches!(
+                owner,
+                ClipboardReadOwner::Compose {
+                    generation: owner_generation
+                } if *owner_generation == generation
+            ) {
+                *owner = ClipboardReadOwner::Thought {
+                    thought_id,
+                    generation: self.edit_owner_generation,
+                };
+            }
+        }
     }
 
     /// Complete one external clipboard write on the reducer-owning UI lane.
@@ -200,7 +244,10 @@ impl BoardApp {
         }
         let intent = self.state.pending_clipboard_intent(request_id);
         let success = result.is_ok();
-        let effects = self.reduce(Action::ClipboardResult { request_id, result });
+        let effects = self.reduce_with_empty_transition(
+            Action::ClipboardResult { request_id, result },
+            crate::application::EmptyBoardTransition::ComposeAfterLocalRemoval,
+        );
         if success && intent == Some(ClipboardIntent::Copy) {
             self.set_success("copied selected thoughts");
         }
@@ -235,7 +282,10 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        if !self.pending_clipboard_reads.remove(&request_id) {
+        let Some(owner) = self.pending_clipboard_reads.remove(&request_id) else {
+            return Vec::new();
+        };
+        if !self.clipboard_read_owner_is_current(owner) {
             return Vec::new();
         }
         match result {
@@ -247,6 +297,31 @@ impl BoardApp {
             Err(code) => {
                 self.notify(code);
                 Vec::new()
+            }
+        }
+    }
+
+    fn clipboard_read_owner_is_current(&self, owner: ClipboardReadOwner) -> bool {
+        match owner {
+            ClipboardReadOwner::Board => matches!(self.state.mode, InteractionMode::Board),
+            ClipboardReadOwner::Compose { generation } => {
+                generation == self.compose_generation
+                    && matches!(self.state.mode, InteractionMode::Compose)
+                    && matches!(self.editor.as_ref(), Some((EditorOwner::Compose, _)))
+            }
+            ClipboardReadOwner::Thought {
+                thought_id: expected,
+                generation,
+            } => {
+                matches!(
+                    self.state.mode,
+                    InteractionMode::Edit { thought_id } if thought_id == expected
+                ) && generation == self.edit_owner_generation
+                    && matches!(
+                        self.editor.as_ref(),
+                        Some((EditorOwner::Thought(actual), _)) if *actual == expected
+                    )
+                    && !self.edit_content_mutation_blocked(expected)
             }
         }
     }
@@ -271,7 +346,7 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         intent: ClipboardIntent,
     ) -> Vec<Effect> {
-        let Some((thought_id, editor)) = &self.editor else {
+        let Some((super::EditorOwner::Thought(thought_id), editor)) = &self.editor else {
             return Vec::new();
         };
         let Some(content) = editor.selected_text() else {

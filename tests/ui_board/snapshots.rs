@@ -3,10 +3,7 @@ use super::*;
 use proqi::{
     domain::Direction,
     ports::{
-        agent::{
-            AgentSessionBinding, AgentState, AgentTarget, CODEX_AGENT_KIND, HarnessKind,
-            PaneContext, PaneRect,
-        },
+        agent::{AgentState, HarnessKind},
         attachment_accessibility::{
             AttachmentAccessFailure, AttachmentCheckBatchResult, AttachmentCheckResult,
         },
@@ -21,47 +18,47 @@ use proqi::{
 mod snapshot_support;
 
 use snapshot_support::snapshot_buffer;
+
+macro_rules! assert_platform_snapshot {
+    ($value:expr) => {{
+        let platform = if cfg!(target_os = "macos") {
+            "macos"
+        } else {
+            "portable"
+        };
+        insta::with_settings!({ snapshot_suffix => platform }, {
+            insta::assert_snapshot!($value);
+        });
+    }};
+}
+
 #[path = "snapshots/attachment_accessibility.rs"]
 mod attachment_accessibility_snapshots;
+#[path = "snapshots/support.rs"]
+mod support;
+
+use support::adjacent_target;
 
 fn snapshot(fixture: &mut Fixture, width: u16, height: u16, theme: ThemePreference) -> String {
     snapshot_buffer(draw_theme(fixture, width, height, theme).backend().buffer())
-}
-
-fn adjacent_target(direction: Direction, pane_id: &str, readiness: AgentState) -> AgentTarget {
-    let source = PaneContext {
-        workspace_id: "w1".to_owned(),
-        tab_id: "w1:t1".to_owned(),
-        pane_id: "w1:p1".to_owned(),
-        rect: PaneRect {
-            x: 40,
-            y: 20,
-            width: 40,
-            height: 20,
-        },
-    };
-    AgentTarget {
-        provider: "herdr".to_owned(),
-        protocol: 19,
-        direction,
-        pane_id: pane_id.to_owned(),
-        workspace_id: source.workspace_id.clone(),
-        tab_id: source.tab_id.clone(),
-        agent_kind: HarnessKind::new(CODEX_AGENT_KIND).expect("fixture harness"),
-        agent_name: format!("Codex {pane_id}"),
-        agent_session: AgentSessionBinding::established(format!("session-{pane_id}"))
-            .expect("fixture session"),
-        readiness,
-        delivery: proqi::ports::agent::AgentDeliveryCapabilities::SUBMIT_ONLY,
-        rect: source.rect,
-        source,
-    }
 }
 
 #[test]
 fn empty_and_narrow_board() {
     let mut fixture = Fixture::new();
     insta::assert_snapshot!(snapshot(&mut fixture, 24, 6, ThemePreference::Dark));
+}
+
+#[test]
+fn engaged_empty_compose_editor() {
+    let mut fixture = Fixture::new();
+    let insert = fixture
+        .app
+        .prepare_frame(Rect::new(0, 0, 48, 8))
+        .insert
+        .expect("passive Compose prompt");
+    fixture.pointer(insert.x, insert.y, PointerKind::Down(PointerButton::Left));
+    insta::assert_snapshot!(snapshot(&mut fixture, 48, 8, ThemePreference::Dark));
 }
 
 #[test]
@@ -121,7 +118,7 @@ fn inaccessible_attachment_has_a_plain_warning_snapshot() {
                 .collect(),
         });
 
-    insta::assert_snapshot!(snapshot(&mut fixture, 60, 8, ThemePreference::Dark));
+    assert_platform_snapshot!(snapshot(&mut fixture, 60, 8, ThemePreference::Dark));
 }
 
 #[test]
@@ -161,20 +158,18 @@ fn discovered_invocations_use_the_annotation_visual_role() {
         }));
     fixture.input(UiInput::Paste("/plan ask $review ".to_owned()));
 
-    insta::assert_snapshot!(snapshot(&mut fixture, 58, 8, ThemePreference::Dark));
+    assert_platform_snapshot!(snapshot(&mut fixture, 58, 8, ThemePreference::Dark));
 }
 
 #[test]
 fn durable_blank_and_editing_surface() {
     let mut fixture = Fixture::new();
-    fixture.input(super::navigation::visual(
-        proqi::ports::editor::CursorMovement::VisualDown,
-        false,
-    ));
-    fixture.input(super::navigation::visual(
-        proqi::ports::editor::CursorMovement::VisualDown,
-        false,
-    ));
+    super::navigation::durable_thought(&mut fixture, "temporary anchor");
+    fixture.input(UiInput::Key(UiKey::Character('n')));
+    fixture.input(UiInput::Key(UiKey::Escape));
+    fixture.input(UiInput::Key(UiKey::Character('k')));
+    fixture.input(UiInput::Key(UiKey::Character('d')));
+    fixture.input(UiInput::Key(UiKey::Enter));
     insta::assert_snapshot!(snapshot(&mut fixture, 50, 9, ThemePreference::Light));
 }
 
@@ -202,6 +197,7 @@ fn failed_save_replaces_the_summary_without_changing_footer_height() {
 #[test]
 fn help_overlay_remains_composed_in_a_shallow_viewport() {
     let mut fixture = Fixture::new();
+    fixture.input(UiInput::Key(UiKey::Escape));
     let _initial = draw(&mut fixture, 42, 8);
     let layout = fixture.app.prepare_frame(Rect::new(0, 0, 42, 8));
     let help = layout
@@ -316,7 +312,7 @@ fn long_paste_stays_folded_and_accented_in_edit_mode() {
         .collect::<Vec<_>>()
         .join("\n");
     fixture.input(UiInput::Paste(content));
-    insta::assert_snapshot!(snapshot(&mut fixture, 72, 9, ThemePreference::Dark));
+    assert_platform_snapshot!(snapshot(&mut fixture, 72, 9, ThemePreference::Dark));
 }
 
 #[test]
@@ -443,7 +439,7 @@ fn expanded_debug_session_identity_preserves_footer_band_order() {
     fixture.input(UiInput::Key(UiKey::Escape));
     let second = fixture.paste("second thought");
     fixture.app.acknowledge_persistence(second, true);
-    insta::assert_snapshot!(snapshot(&mut fixture, 80, 11, ThemePreference::Dark));
+    assert_platform_snapshot!(snapshot(&mut fixture, 80, 11, ThemePreference::Dark));
 }
 
 #[test]
@@ -474,7 +470,8 @@ fn fast_navigation_fallbacks_are_visible_in_the_command_palette() {
 #[cfg(target_os = "macos")]
 fn fast_navigation_shortcuts_are_visible_in_edit_help() {
     let mut fixture = Fixture::new();
-    fixture.paste("one\ntwo\nthree\nfour\nfive\nsix");
+    let sequence = fixture.paste("one\ntwo\nthree\nfour\nfive\nsix");
+    let _effects = fixture.app.acknowledge_persistence(sequence, false);
     let help = fixture
         .app
         .prepare_frame(Rect::new(0, 0, 80, 14))

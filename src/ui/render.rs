@@ -144,7 +144,7 @@ fn render_board(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, 
         );
         if matches!(app.interaction_mode(), InteractionMode::Edit { thought_id } if thought_id == thought_layout.thought_id)
         {
-            render_editor(frame, app, thought_layout, theme);
+            render_editor(frame, app, thought_layout.text_area, theme);
         } else {
             render_thought(
                 frame,
@@ -156,13 +156,25 @@ fn render_board(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, 
             );
         }
     }
+    if let Some(compose) = &layout.compose {
+        frame.render_widget(Block::default().style(theme.focused_style()), compose.area);
+        render_compose_gutter(frame, compose, theme);
+        render_editor(frame, app, compose.text_area, theme);
+    }
     if let Some(insert) = layout.insert {
         let hovered = app.hovered() == Some(HitTarget::Insert);
+        let prompt = app.compose_prompt_visible();
         let label = Line::from(vec![
             Span::styled("+", Style::default().fg(theme.accent)),
-            Span::styled(" New thought", Style::default().fg(theme.foreground)),
+            Span::styled(
+                crate::ui::control_labels::insertion_text(
+                    app.interaction_mode(),
+                    insert.width < 14,
+                ),
+                Style::default().fg(theme.foreground),
+            ),
         ]);
-        let style = if hovered || app.insertion_focused() {
+        let style = if !prompt && (hovered || app.insertion_focused()) {
             theme.focused_style()
         } else {
             theme.base_style()
@@ -174,6 +186,25 @@ fn render_board(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, 
             insert,
         );
     }
+}
+
+fn render_compose_gutter(
+    frame: &mut Frame<'_>,
+    layout: &crate::ui::layout::ComposeLayout,
+    theme: &Theme,
+) {
+    let padding = usize::from(layout.gutter.height.saturating_sub(1) / 2);
+    let content = format!("{}⋮", "\n".repeat(padding));
+    frame.render_widget(
+        Paragraph::new(content).style(
+            Style::default()
+                .fg(theme.on_accent)
+                .bg(theme.accent_surface)
+                .remove_modifier(Modifier::REVERSED)
+                .add_modifier(Modifier::BOLD),
+        ),
+        layout.gutter,
+    );
 }
 
 fn render_separator(
@@ -274,7 +305,12 @@ fn render_thought(
     }
 }
 
-fn render_editor(frame: &mut Frame<'_>, app: &BoardApp, layout: &ThoughtLayout, theme: &Theme) {
+fn render_editor(
+    frame: &mut Frame<'_>,
+    app: &BoardApp,
+    text_area: ratatui_core::layout::Rect,
+    theme: &Theme,
+) {
     let Some(presentation) = app.editor_presentation() else {
         return;
     };
@@ -285,7 +321,7 @@ fn render_editor(frame: &mut Frame<'_>, app: &BoardApp, layout: &ThoughtLayout, 
         .visual_lines
         .iter()
         .skip(snapshot.scroll_row)
-        .take(usize::from(layout.text_area.height))
+        .take(usize::from(text_area.height))
         .map(|line| {
             styled_line(
                 &snapshot.content,
@@ -299,20 +335,18 @@ fn render_editor(frame: &mut Frame<'_>, app: &BoardApp, layout: &ThoughtLayout, 
         .collect::<Vec<_>>();
     frame.render_widget(
         Paragraph::new(visible).style(Style::default().fg(theme.foreground)),
-        layout.text_area,
+        text_area,
     );
     let Some((cursor_column, cursor_row)) = presentation.cursor_viewport_cell() else {
         return;
     };
-    let x = layout
-        .text_area
+    let x = text_area
         .x
         .saturating_add(u16::try_from(cursor_column).unwrap_or(u16::MAX));
-    let y = layout
-        .text_area
+    let y = text_area
         .y
         .saturating_add(u16::try_from(cursor_row).unwrap_or(u16::MAX));
-    if x < layout.text_area.right() && y < layout.text_area.bottom() {
+    if x < text_area.right() && y < text_area.bottom() {
         frame.set_cursor_position((x, y));
     }
 }

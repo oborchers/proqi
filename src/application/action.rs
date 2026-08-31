@@ -18,6 +18,10 @@ pub enum Action {
     FocusThought(Option<ThoughtId>),
     /// Enter the multiline editor for one live thought.
     EnterEdit(ThoughtId),
+    /// Enter the transient insertion editor without creating durable state.
+    EnterCompose,
+    /// Return from transient composition to the empty board.
+    ExitCompose,
     /// Return from edit mode to the board.
     ExitEdit,
     /// Create a blank or pre-populated thought as one operation.
@@ -123,6 +127,15 @@ pub enum Action {
         thought_ids: Vec<ThoughtId>,
         /// Semantic deletion kind.
         kind: BoardOperationKind,
+        /// Event time.
+        at: Timestamp,
+    },
+    /// Reserve a submission removal without changing the visible board before durability.
+    StageSubmissionRemoval {
+        /// Durable operation identity recorded with the accepted submission.
+        operation_id: OperationId,
+        /// Submission sources to remove atomically in board order.
+        thought_ids: Vec<ThoughtId>,
         /// Event time.
         at: Timestamp,
     },

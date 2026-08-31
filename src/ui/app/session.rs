@@ -49,6 +49,7 @@ impl BoardApp {
             UiInput::Pointer(_)
             | UiInput::Resize { .. }
             | UiInput::HostFocusGained
+            | UiInput::HostFocusLost
             | UiInput::Key(_) => {}
         }
         Vec::new()

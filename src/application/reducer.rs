@@ -9,7 +9,9 @@ use crate::application::model::{
     AppState, ClipboardIntent, DurabilityState, Effect, InteractionMode,
 };
 
-use super::mutations::bulk::{delete_thoughts, duplicate_thoughts, set_presentation_many};
+use super::mutations::bulk::{
+    delete_thoughts, duplicate_thoughts, set_presentation_many, stage_submission_removal,
+};
 use super::mutations::{
     create_thought, delete_thought, edit_thought, finish_clipboard, history_move, move_thought,
     request_clipboard, set_presentation,
@@ -29,9 +31,11 @@ pub fn reduce(state: &mut AppState, action: Action) -> ApplicationResult<Vec<Eff
     let previous_focus = state.focused_thought;
     let mut effects = match action {
         Action::RenameSession { name } => reduce_session_name(state, name),
-        Action::FocusThought(_) | Action::EnterEdit(_) | Action::ExitEdit => {
-            reduce_navigation(state, &action)
-        }
+        Action::FocusThought(_)
+        | Action::EnterEdit(_)
+        | Action::EnterCompose
+        | Action::ExitCompose
+        | Action::ExitEdit => reduce_navigation(state, &action),
         Action::CreateThought { .. }
         | Action::PasteAsThought { .. }
         | Action::EditThought { .. } => reduce_content(state, action),
@@ -43,6 +47,7 @@ pub fn reduce(state: &mut AppState, action: Action) -> ApplicationResult<Vec<Eff
         }
         Action::DeleteThought { .. }
         | Action::DeleteThoughts { .. }
+        | Action::StageSubmissionRemoval { .. }
         | Action::MoveThought { .. }
         | Action::SetPresentation { .. }
         | Action::SetPresentationMany { .. }
@@ -71,6 +76,7 @@ const fn mutates_durable_state(action: &Action) -> bool {
             | Action::CutThoughts { .. }
             | Action::DeleteThought { .. }
             | Action::DeleteThoughts { .. }
+            | Action::StageSubmissionRemoval { .. }
             | Action::MoveThought { .. }
             | Action::SetPresentation { .. }
             | Action::SetPresentationMany { .. }
@@ -108,7 +114,8 @@ fn reduce_navigation(state: &mut AppState, action: &Action) -> ApplicationResult
                 thought_id: *thought_id,
             };
         }
-        Action::ExitEdit => state.mode = InteractionMode::Board,
+        Action::EnterCompose => state.mode = InteractionMode::Compose,
+        Action::ExitCompose | Action::ExitEdit => state.mode = InteractionMode::Board,
         _ => return Err(ApplicationError::InvalidState),
     }
     Ok(Vec::new())
@@ -226,6 +233,11 @@ fn reduce_board(state: &mut AppState, action: &Action) -> ApplicationResult<Vec<
             kind,
             at,
         } => delete_thoughts(state, *operation_id, thought_ids, *kind, *at),
+        Action::StageSubmissionRemoval {
+            operation_id,
+            thought_ids,
+            at,
+        } => stage_submission_removal(state, *operation_id, thought_ids, *at),
         Action::MoveThought {
             operation_id,
             thought_id,
@@ -276,6 +288,7 @@ fn reduce_persistence(state: &mut AppState, action: &Action) -> ApplicationResul
             if state.pending_sequences.first().copied() != Some(*sequence) {
                 return Err(ApplicationError::InvalidState);
             }
+            state.commit_deferred_board_operation(*sequence)?;
             state.pending_sequences.remove(sequence);
             state.board.session.last_durable_sequence =
                 state.board.session.last_durable_sequence.max(*sequence);

@@ -23,7 +23,7 @@ use proqi::{
     },
 };
 
-use super::{
+use super::support::{
     expect_command, json_command, json_input_command, wait_for_control_owner, wait_for_path,
 };
 

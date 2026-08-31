@@ -56,6 +56,10 @@ pub enum UiKey {
     PrimaryCharacter(char),
     /// Insert a line break or enter the focused thought.
     Enter,
+    /// Submit the active durable thought and remove it after acceptance.
+    Submit,
+    /// Submit the active durable thought and keep it.
+    SubmitKeep,
     /// Accept a focused authoring completion or request indentation while editing.
     Tab,
     /// Request one conservative indentation level outward.
@@ -132,6 +136,8 @@ pub enum UiInput {
     },
     /// Terminal host focus returned to this pane.
     HostFocusGained,
+    /// Terminal host focus left this pane.
+    HostFocusLost,
     /// One normalized mouse or trackpad event.
     Pointer(PointerInput),
 }
@@ -153,7 +159,7 @@ impl UiInput {
                     | PointerKind::ScrollUp
                     | PointerKind::ScrollDown
             ),
-            Self::Resize { .. } | Self::HostFocusGained => false,
+            Self::Resize { .. } | Self::HostFocusGained | Self::HostFocusLost => false,
         }
     }
 }

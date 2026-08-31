@@ -132,6 +132,8 @@ mod annotations;
 mod bulk;
 #[path = "sqlite_store/compaction.rs"]
 mod compaction;
+#[path = "sqlite_store/compose.rs"]
+mod compose;
 #[path = "sqlite_store/concurrency.rs"]
 mod concurrency;
 #[path = "sqlite_store/core.rs"]

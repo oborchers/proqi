@@ -3,7 +3,10 @@
 use crate::{
     application::{DurabilityState, InteractionMode},
     domain::ThoughtId,
-    ports::{agent::AgentTarget, editor::EditorSnapshot, editor::TextViewport},
+    ports::{
+        agent::AgentTarget,
+        editor::{EditCommand, EditorSnapshot, TextViewport},
+    },
     ui::{HitTarget, KeyBindings, LayoutSnapshot},
 };
 use ratatui_core::layout::Rect;
@@ -21,14 +24,27 @@ impl BoardApp {
     pub(in crate::ui) fn editor_presentation(
         &self,
     ) -> Option<crate::ui::projection::EditorPresentation> {
-        let thought_id = self.active_thought_id()?;
+        if self.compose_prompt_visible() {
+            return None;
+        }
         let snapshot = self.editor_snapshot()?;
-        let annotations = self.current_annotations(thought_id);
+        let (annotations, expanded, thought_id) = match self.editor.as_ref()?.0 {
+            super::EditorOwner::Compose => (Vec::new(), Vec::new(), None),
+            super::EditorOwner::Thought(thought_id) => (
+                self.current_annotations(thought_id),
+                self.expanded_fold_indices(thought_id),
+                Some(thought_id),
+            ),
+        };
         Some(crate::ui::projection::editor_presentation(
             &snapshot,
             &annotations,
-            &self.expanded_fold_indices(thought_id),
-            |annotation_index| self.attachment_inaccessible(thought_id, annotation_index),
+            &expanded,
+            |annotation_index| {
+                thought_id.is_some_and(|thought_id| {
+                    self.attachment_inaccessible(thought_id, annotation_index)
+                })
+            },
         ))
     }
 
@@ -59,7 +75,7 @@ impl BoardApp {
     /// Focused durable thought identity.
     #[must_use]
     pub fn active_thought_id(&self) -> Option<ThoughtId> {
-        if self.insertion_focused() {
+        if self.insertion_focused() || matches!(self.state.mode, InteractionMode::Compose) {
             return None;
         }
         self.state.focused_thought
@@ -92,6 +108,30 @@ impl BoardApp {
         self.state.thought_locked(thought_id)
     }
 
+    pub(super) fn edit_content_mutation_blocked(&self, thought_id: ThoughtId) -> bool {
+        self.submission_locked(thought_id) || self.state.deferred_board_operation_pending()
+    }
+
+    pub(super) fn edit_command_blocked(&mut self, command: &EditCommand) -> bool {
+        if matches!(
+            command,
+            EditCommand::Move { .. }
+                | EditCommand::SelectAll
+                | EditCommand::ClearSelection
+                | EditCommand::SetCursor { .. }
+                | EditCommand::PointerStart { .. }
+                | EditCommand::PointerDrag { .. }
+                | EditCommand::PointerEnd
+        ) {
+            return false;
+        }
+        let blocked = matches!(self.editor.as_ref(), Some((super::EditorOwner::Thought(id), _)) if self.edit_content_mutation_blocked(*id));
+        if blocked {
+            self.set_warning("thought has a submission in progress");
+        }
+        blocked
+    }
+
     /// Number of currently visible durable thoughts.
     #[must_use]
     pub fn visible_thought_count(&self) -> usize {
@@ -104,6 +144,32 @@ impl BoardApp {
         matches!(self.state.mode, InteractionMode::Board)
             && (matches!(self.insertion_focus, super::InsertionFocus::Active)
                 || self.state.board.live_thoughts().is_empty())
+    }
+
+    /// Whether the transient insertion editor owns input and cursor focus.
+    #[must_use]
+    pub fn compose_active(&self) -> bool {
+        matches!(self.state.mode, InteractionMode::Compose)
+    }
+
+    /// Whether empty Compose uses the passive prompt projection.
+    #[must_use]
+    pub fn compose_prompt_visible(&self) -> bool {
+        self.compose_active()
+            && matches!(
+                self.compose_presentation,
+                super::ComposePresentation::Prompt
+            )
+    }
+
+    /// Whether empty Compose exposes its ordinary editor projection.
+    #[must_use]
+    pub fn compose_editor_visible(&self) -> bool {
+        self.compose_active()
+            && matches!(
+                self.compose_presentation,
+                super::ComposePresentation::Editor
+            )
     }
 
     /// Monotonic counter used by the runtime to detect new unflushed editor work.
@@ -224,13 +290,14 @@ impl BoardApp {
         self.reset_overlay_activation_for_geometry(area);
         let layout_state = self.presentation_state();
         let first_editor = self.editor_presentation();
+        let follow_insertion = self.insertion_focused() || self.compose_prompt_visible();
         let has_status = self.status_view().is_some()
             || matches!(self.state.durability, DurabilityState::Failed { .. });
         let (first, first_scroll) = crate::ui::layout::compute_for_app(
             &layout_state,
             first_editor.as_ref().map(|view| &view.snapshot),
             area,
-            self.insertion_focused(),
+            follow_insertion,
             !self.agent_targets.is_empty(),
             has_status,
             self.settings.density,
@@ -245,7 +312,7 @@ impl BoardApp {
             &layout_state,
             editor.as_ref().map(|view| &view.snapshot),
             area,
-            self.insertion_focused(),
+            follow_insertion,
             !self.agent_targets.is_empty(),
             has_status,
             self.settings.density,
@@ -256,6 +323,7 @@ impl BoardApp {
         layout.configure_agent_controls_with_keys(
             &self.agent_targets,
             self.submission_mode(),
+            self.interaction_mode(),
             &self.settings.keybindings,
         );
         let summary = self.footer_summary(layout.footer_context.width.saturating_sub(4));
@@ -328,23 +396,30 @@ impl BoardApp {
     fn footer_summary(&self, available_width: u16) -> String {
         let count = self.visible_thought_count();
         let noun = if count == 1 { "thought" } else { "thoughts" };
-        let mode = match self.interaction_mode() {
-            InteractionMode::Board if self.range_latched() => "range",
-            InteractionMode::Board => "board",
-            InteractionMode::Edit { .. } => "edit",
-        };
         let durability = self.durability_summary();
         let inbox = self
             .screenshot_footer_state(false)
             .map_or_else(String::new, |label| format!(" · {label}"));
-        let complete = format!("{count} {noun} · {mode} · {durability}{inbox}");
+        let mode = match self.interaction_mode() {
+            InteractionMode::Board if self.range_latched() => Some("range"),
+            InteractionMode::Board => Some("board"),
+            InteractionMode::Compose => None,
+            InteractionMode::Edit { .. } => Some("edit"),
+        };
+        let complete = mode.map_or_else(
+            || format!("{count} {noun} · {durability}{inbox}"),
+            |mode| format!("{count} {noun} · {mode} · {durability}{inbox}"),
+        );
         if complete.width() <= usize::from(available_width) {
             return complete;
         }
         let compact_inbox = self
             .screenshot_footer_state(true)
             .map_or_else(String::new, |label| format!(" · {label}"));
-        let compact = format!("{count} · {mode} · {durability}{compact_inbox}");
+        let compact = mode.map_or_else(
+            || format!("{count} · {durability}{compact_inbox}"),
+            |mode| format!("{count} · {mode} · {durability}{compact_inbox}"),
+        );
         if compact.width() <= usize::from(available_width) {
             return compact;
         }

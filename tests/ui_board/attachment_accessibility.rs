@@ -341,13 +341,14 @@ fn restarted_submission_fixture() -> Fixture {
 }
 
 fn execute_palette_from_edit(fixture: &mut Fixture, query: &str) -> (Vec<Effect>, Vec<Effect>) {
+    let commit = fixture.effects(UiInput::Key(UiKey::Escape));
     let layout = fixture.app.prepare_frame(Rect::new(0, 0, 80, 12));
     let commands = layout
         .controls
         .iter()
         .find_map(|(target, area)| (*target == HitTarget::Commands).then_some(*area))
         .expect("command palette control");
-    let commit = fixture.effects(UiInput::Pointer(PointerInput {
+    fixture.input(UiInput::Pointer(PointerInput {
         column: commands.x,
         row: commands.y,
         kind: PointerKind::Down(PointerButton::Left),

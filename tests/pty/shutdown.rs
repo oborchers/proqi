@@ -2,7 +2,10 @@
 
 use std::{fs, os::unix::fs::PermissionsExt as _, path::Path, time::Duration};
 
-use super::{expect_command, json_command, watchdog};
+use super::{
+    support::{expect_command, json_command},
+    watchdog,
+};
 
 #[test]
 fn termination_signal_restores_and_releases_the_session() {
@@ -76,6 +79,8 @@ fn one_hundred_terminal_cycles_restore_and_leave_no_processes() {
         for {set cycle 0} {$cycle < 100} {incr cycle} {
             spawn $env(PROQI_TEST_BINARY) --state-dir $env(PROQI_TEST_STATE)
             expect -exact "\x1b\[?1049h"
+            send -- "\x1b"
+            after 50
             send -- "q"
             expect -exact "\x1b\[0 q"
             expect eof
@@ -296,6 +301,8 @@ fn capture_shutdown_workflow(
     exit_action: &str,
     finish_action: &str,
 ) -> String {
+    // This workflow intentionally exposes terminal output to the watchdog. It
+    // proves that output-reader settlement shares the absolute shutdown bound.
     format!(
         r#"
         log_user 1
@@ -314,6 +321,8 @@ fn capture_shutdown_workflow(
         expect -exact "\x1b\[?1049h"
         expect -exact "\x1b\[1 q"
         after 1000
+        send -- "\x1b"
+        after 50
         send -- "i"
         set capture_lock "$env(PROQI_TEST_STATE)/runtime/screenshot-capture.json"
         for {{set attempt 0}} {{$attempt < 100 && ![file exists $capture_lock]}} {{incr attempt}} {{
@@ -329,6 +338,8 @@ fn capture_shutdown_workflow(
             }}
             exit 93
         }}
+        send -- "\r"
+        after 50
         send -- "\x1b\[200~durable editor\x1b\[201~"
         after 700
         spawn /usr/bin/sqlite3 $env(PROQI_TEST_DATABASE)

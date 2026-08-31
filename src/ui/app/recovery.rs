@@ -8,7 +8,7 @@ use crate::{
     ports::environment::{Clock, IdGenerator},
 };
 
-use super::{BoardApp, UiInput, UiKey};
+use super::{BoardApp, UiInput, UiKey, pending_types::EditFlush};
 
 impl BoardApp {
     pub(super) fn handle_quit_input(
@@ -23,10 +23,14 @@ impl BoardApp {
         if !matches!(input, UiInput::Key(UiKey::Quit)) && !self.is_failed_recovery_quit(input) {
             return None;
         }
-        let effects = if matches!(self.state.durability, DurabilityState::Failed { .. }) {
-            Vec::new()
+        let flush = if matches!(self.state.durability, DurabilityState::Failed { .. }) {
+            EditFlush::Complete(Vec::new())
         } else {
-            self.flush_pending_edit(ids, clock)
+            self.flush_edit_boundary(ids, clock)
+        };
+        let effects = match flush {
+            EditFlush::Complete(effects) => effects,
+            EditFlush::Blocked(effects) => return Some(effects),
         };
         self.request_quit();
         Some(effects)
@@ -58,7 +62,7 @@ impl BoardApp {
                 Some(self.export_recovery(ids, clock))
             }
             UiInput::Pointer(pointer) => Some(self.handle_recovery_pointer(*pointer, ids, clock)),
-            UiInput::Resize { .. } | UiInput::HostFocusGained => None,
+            UiInput::Resize { .. } | UiInput::HostFocusGained | UiInput::HostFocusLost => None,
             UiInput::Key(_) | UiInput::Paste(_) | UiInput::PasteAnnotated(_) => Some(Vec::new()),
         }
     }
