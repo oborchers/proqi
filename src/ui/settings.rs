@@ -195,6 +195,22 @@ impl KeyBindings {
             .find_map(|(binding, command)| (binding == character).then_some(command))
     }
 
+    /// Resolve a normalized key through the Board command map.
+    ///
+    /// Physical Delete is an invariant spelling of the remappable delete
+    /// command. Backspace deliberately remains unassigned in Board mode.
+    pub(super) fn command_for_key(&self, key: super::UiKey) -> Option<BoardCommand> {
+        match key {
+            super::UiKey::Delete => Some(BoardCommand::Delete),
+            super::UiKey::Character(character) => self.command(character),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn delete_label(&self) -> String {
+        format!("{}/Del", key_label(self.delete))
+    }
+
     /// Reject ambiguous board characters before the terminal starts.
     ///
     /// # Errors

@@ -884,6 +884,17 @@ can resolve the configured shifted range key, including when enhanced keyboard
 reporting encodes the shifted character without a separate Shift flag. It must
 not let arrow and `j`/`k`-style bindings acquire different intentions.
 
+The normalized physical `Delete` key is an invariant Board spelling of the
+configured delete command and therefore reaches the same typed action, locks,
+operation, persistence, and undo path. The configured character remains
+remappable independently. `Backspace` has no Board delete meaning. Compose and
+Edit continue to interpret `Delete` as forward text deletion, while query
+owners retain their existing local text-editing behavior.
+One typed non-text navigation decoder maps Up and Down to `k` and `j` in
+list-only surfaces and maps Left, Down, Up, and Right to `h`, `j`, `k`, and `l`
+in direction choosers. Text-entry dispatch runs outside those decoders, so the
+four letters remain content there.
+
 `Primary+A` selects the entire current thought only in edit mode. `Primary+U`
 deletes one newline-delimited logical line as a single undoable edit. Logical
 line commands operate on the text model and are independent of visual wrapping.

@@ -27,8 +27,8 @@ impl BoardApp {
                 self.clear_board_selection();
             }
             UiKey::SelectAll => self.select_all_thoughts(),
-            UiKey::Character(character) => {
-                return self.handle_board_command(character, ids, clock);
+            UiKey::Character(_) | UiKey::Delete => {
+                return self.handle_board_key_command(key, ids, clock);
             }
             UiKey::PrimaryCharacter(character) => {
                 return self.reorder_from_character(character, ids, clock);
@@ -93,7 +93,7 @@ impl BoardApp {
             {
                 self.confirm_insertion_creation(ids, clock)
             }
-            UiKey::Character(character) => self.handle_board_command(character, ids, clock),
+            UiKey::Character(_) | UiKey::Delete => self.handle_board_key_command(key, ids, clock),
             UiKey::Enter => self.begin_insertion(ids, clock),
             UiKey::Escape
             | UiKey::Move {
@@ -115,7 +115,6 @@ impl BoardApp {
                 extend_selection: true,
             }
             | UiKey::Backspace
-            | UiKey::Delete
             | UiKey::DeleteLine
             | UiKey::Copy
             | UiKey::Cut
@@ -164,14 +163,14 @@ impl BoardApp {
         }
     }
 
-    fn handle_board_command(
+    fn handle_board_key_command(
         &mut self,
-        character: char,
+        key: UiKey,
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
         if self.range_latched() {
-            match self.settings.keybindings.command(character) {
+            match self.settings.keybindings.command_for_key(key) {
                 Some(BoardCommand::FocusUp) => {
                     self.extend_range_by(-1);
                     return Vec::new();
@@ -183,7 +182,7 @@ impl BoardApp {
                 _ => {}
             }
         }
-        match self.settings.keybindings.command(character) {
+        match self.settings.keybindings.command_for_key(key) {
             Some(BoardCommand::New) => self.begin_insertion(ids, clock),
             Some(BoardCommand::Edit) => self.expand_and_enter_edit(ids, clock),
             Some(BoardCommand::Delete) => self.delete(ids, clock),

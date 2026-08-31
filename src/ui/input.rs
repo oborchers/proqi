@@ -1,6 +1,6 @@
 //! Terminal-independent keyboard and pointer input values.
 
-use crate::ports::editor::CursorMovement;
+use crate::{domain::Direction, ports::editor::CursorMovement};
 
 use super::PastePayload;
 
@@ -118,6 +118,61 @@ pub enum UiKey {
     Duplicate,
 }
 
+/// One-dimensional navigation for a non-text list or menu.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ListNavigation {
+    /// Select or reveal the preceding item.
+    Previous,
+    /// Select or reveal the following item.
+    Next,
+}
+
+impl UiKey {
+    /// Resolve the equivalent arrow and Vim spellings used by non-text lists.
+    pub(crate) const fn list_navigation(self) -> Option<ListNavigation> {
+        match self {
+            Self::Move {
+                movement: CursorMovement::VisualUp,
+                ..
+            }
+            | Self::Character('k') => Some(ListNavigation::Previous),
+            Self::Move {
+                movement: CursorMovement::VisualDown,
+                ..
+            }
+            | Self::Character('j') => Some(ListNavigation::Next),
+            _ => None,
+        }
+    }
+
+    /// Resolve the equivalent arrow and Vim spellings used by direction choosers.
+    pub(crate) const fn direction(self) -> Option<Direction> {
+        match self {
+            Self::Move {
+                movement: CursorMovement::GraphemeBack,
+                ..
+            }
+            | Self::Character('h') => Some(Direction::Left),
+            Self::Move {
+                movement: CursorMovement::VisualDown,
+                ..
+            }
+            | Self::Character('j') => Some(Direction::Down),
+            Self::Move {
+                movement: CursorMovement::VisualUp,
+                ..
+            }
+            | Self::Character('k') => Some(Direction::Up),
+            Self::Move {
+                movement: CursorMovement::GraphemeForward,
+                ..
+            }
+            | Self::Character('l') => Some(Direction::Right),
+            _ => None,
+        }
+    }
+}
+
 /// Input translated from a concrete terminal backend.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum UiInput {
@@ -161,5 +216,51 @@ impl UiInput {
             ),
             Self::Resize { .. } | Self::HostFocusGained | Self::HostFocusLost => false,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ListNavigation, UiKey};
+    use crate::{domain::Direction, ports::editor::CursorMovement};
+
+    const fn movement(movement: CursorMovement) -> UiKey {
+        UiKey::Move {
+            movement,
+            extend_selection: false,
+        }
+    }
+
+    #[test]
+    fn non_text_list_aliases_share_one_typed_intention() {
+        for (key, expected) in [
+            (movement(CursorMovement::VisualUp), ListNavigation::Previous),
+            (UiKey::Character('k'), ListNavigation::Previous),
+            (movement(CursorMovement::VisualDown), ListNavigation::Next),
+            (UiKey::Character('j'), ListNavigation::Next),
+        ] {
+            assert_eq!(key.list_navigation(), Some(expected));
+        }
+        for key in [UiKey::Character('h'), UiKey::Character('l'), UiKey::Delete] {
+            assert_eq!(key.list_navigation(), None);
+        }
+    }
+
+    #[test]
+    fn four_way_aliases_share_one_typed_direction() {
+        for (key, expected) in [
+            (movement(CursorMovement::GraphemeBack), Direction::Left),
+            (UiKey::Character('h'), Direction::Left),
+            (movement(CursorMovement::VisualDown), Direction::Down),
+            (UiKey::Character('j'), Direction::Down),
+            (movement(CursorMovement::VisualUp), Direction::Up),
+            (UiKey::Character('k'), Direction::Up),
+            (movement(CursorMovement::GraphemeForward), Direction::Right),
+            (UiKey::Character('l'), Direction::Right),
+        ] {
+            assert_eq!(key.direction(), Some(expected));
+        }
+        assert_eq!(UiKey::Character('J').direction(), None);
+        assert_eq!(UiKey::Delete.direction(), None);
     }
 }

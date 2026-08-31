@@ -233,8 +233,9 @@ contents. Sessions associated with the current directory rank first without
 hiding results from other locations. Recent results are grouped by useful time
 ranges such as today, yesterday, the previous week, and older.
 
-Arrow keys and `j` and `k` navigate. `Enter` resumes the selected session. A
-mouse click on a resumable result performs the same action. Session management
+Arrow keys navigate. Because typing searches immediately, `j` and `k` remain
+literal query text. `Enter` resumes the selected session. A mouse click on a
+resumable result performs the same action. Session management
 actions such as rename and move to trash remain available without dominating
 the browsing surface.
 
@@ -711,7 +712,7 @@ bindings are:
 | Edit thought | `Enter` or `e` | Click at the desired text position |
 | Copy thought | `y` | Click copy control |
 | Cut thought | `x` | Click cut control |
-| Delete thought | `d` | Click delete control |
+| Delete thought | `d` or `Del` (`Entf` on German keyboards) | Click delete control |
 | Duplicate thought or selection | `Meta+D` | Command palette |
 | Select or deselect thought | `Space` | Click the thought, then use the selection control |
 | Select all thoughts | `a` or `Primary+A` | Command palette |
@@ -727,6 +728,16 @@ bindings are:
 
 Final bindings remain configurable. The product must not depend on terminals
 forwarding `Cmd+C`, `Cmd+V`, or Meta keys consistently.
+
+Physical `Del` is an invariant second spelling of the configured Board delete
+command. Remapping the character binding does not remap or disable that physical
+alias. `Backspace` is not a Board delete alias. In Compose, Edit, search,
+rename, invocation, command, transfer, and other text-entry surfaces, `Del`
+remains owned by that text surface according to its existing editing behavior,
+never deletes a thought, and `h`, `j`, `k`, and `l` remain content. List-only
+overlays use `j` and `k` as exact Down and Up aliases. Four-way non-text
+direction choice uses `h`, `j`, `k`, and `l` as Left, Down, Up, and Right
+aliases.
 
 ### Meta and primary shortcuts
 

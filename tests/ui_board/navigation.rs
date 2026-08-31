@@ -80,6 +80,30 @@ fn shallow_two_column_help_scrolls_to_every_shortcut() {
 }
 
 #[test]
+fn help_list_uses_identical_arrow_and_jk_navigation() {
+    let mut arrow = Fixture::new();
+    let mut vim = Fixture::new();
+    for fixture in [&mut arrow, &mut vim] {
+        fixture.input(UiInput::Key(UiKey::Escape));
+        fixture.input(UiInput::Key(UiKey::Character('?')));
+        let _layout = draw(fixture, 42, 8);
+    }
+    arrow.input(visual(CursorMovement::VisualDown, false));
+    vim.input(UiInput::Key(UiKey::Character('j')));
+    assert_eq!(
+        text(draw(&mut arrow, 42, 8).backend().buffer()),
+        text(draw(&mut vim, 42, 8).backend().buffer())
+    );
+
+    arrow.input(visual(CursorMovement::VisualUp, false));
+    vim.input(UiInput::Key(UiKey::Character('k')));
+    assert_eq!(
+        text(draw(&mut arrow, 42, 8).backend().buffer()),
+        text(draw(&mut vim, 42, 8).backend().buffer())
+    );
+}
+
+#[test]
 fn wide_help_uses_at_most_two_strictly_aligned_columns() {
     let mut fixture = Fixture::new();
     fixture.input(UiInput::Key(UiKey::Escape));

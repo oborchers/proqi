@@ -188,6 +188,19 @@ fn invocation_picker_keys_are_normalized_without_literal_editor_input() {
 }
 
 #[test]
+fn physical_delete_and_backspace_remain_distinct_terminal_keys() {
+    for (code, expected) in [
+        (KeyCode::Delete, UiKey::Delete),
+        (KeyCode::Backspace, UiKey::Backspace),
+    ] {
+        assert_eq!(
+            translate(Event::Key(KeyEvent::new(code, KeyModifiers::NONE))),
+            Some(UiInput::Key(expected))
+        );
+    }
+}
+
+#[test]
 fn release_is_ignored_and_repeat_preserves_auto_repeat() {
     let release = Event::Key(KeyEvent::new_with_kind(
         KeyCode::Char('n'),

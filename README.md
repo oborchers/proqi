@@ -137,7 +137,8 @@ Board choice.
 | `j` / `k` or arrows | Focus next / previous |
 | `Enter` or `e` | Edit |
 | `Primary+J` / `Primary+K`, `Primary+Shift+↓` / `↑`, or drag | Reorder |
-| `y` / `Primary+C`; `x` / `Primary+X`; `d` | Copy; safe cut; delete |
+| `y` / `Primary+C`; `x` / `Primary+X` | Copy; safe cut |
+| `d` or `Del` (`Entf` on German keyboards) | Delete |
 | `Space`; `a` / `Primary+A` | Toggle selection; select all |
 | `Shift+↑` / `↓` or `K` / `J`; `v` then move | Extend or latch a range |
 | `Primary+D` | Duplicate thought or selection |
@@ -163,6 +164,12 @@ Board choice.
 | `Primary+Enter`; `Primary+Shift+Enter` | Submit and remove after acceptance; submit and keep |
 | Type `$name`, `/name`, or supported `@name` | Complete a local invocation |
 | `↑` / `↓` or `Primary+P` / `Primary+N`; `Enter` / `Tab`; `Esc` | Navigate, insert, or close invocation results |
+
+Physical `Del` is an invariant Board alias. Remapping the `delete` character
+changes `d`, not the physical key. In text editors and searchable query fields,
+`Del` remains a text-editing key, never a thought delete, and `h`, `j`, `k`, and
+`l` remain literal text. List-only menus use `j` and `k` as aliases for Down and
+Up.
 
 Mouse input covers the same core workflow. Images, files, and large pastes fold
 into compact annotations while their content stays intact. See
@@ -278,6 +285,7 @@ density = "comfortable" # or compact
 [keybindings]
 new = "n"
 edit = "e"
+delete = "d" # remaps the character only; physical Del remains available
 submit_remove = "s"
 submit_keep = "S"
 undo = "u"

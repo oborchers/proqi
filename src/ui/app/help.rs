@@ -1,7 +1,7 @@
 //! Contextual-help navigation kept separate from board mutations.
 
 use crate::application::Effect;
-use crate::ports::editor::CursorMovement;
+use crate::ui::ListNavigation;
 
 use super::{BoardApp, HitTarget, PointerButton, PointerKind, UiInput, UiKey};
 
@@ -22,14 +22,10 @@ impl BoardApp {
             {
                 self.close_help();
             }
-            UiInput::Key(UiKey::Move {
-                movement: CursorMovement::VisualUp,
-                ..
-            }) => self.help_scroll = self.help_scroll.saturating_sub(1),
-            UiInput::Key(UiKey::Move {
-                movement: CursorMovement::VisualDown,
-                ..
-            }) => {
+            UiInput::Key(key) if key.list_navigation() == Some(ListNavigation::Previous) => {
+                self.help_scroll = self.help_scroll.saturating_sub(1);
+            }
+            UiInput::Key(key) if key.list_navigation() == Some(ListNavigation::Next) => {
                 self.help_scroll = self
                     .help_scroll
                     .saturating_add(1)

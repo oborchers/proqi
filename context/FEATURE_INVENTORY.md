@@ -26,7 +26,7 @@ must not imply that the behavior exists.
 | Search and command discovery | Shipped | Thought search, a searchable command palette, contextual help, keyboard control, and mouse control are available. | `tests/ui_board.rs`, `tests/ui_board/snapshots.rs`, `tests/ui_mouse_actions.rs` |
 | Responsive rendering | Shipped | One-column layout reflows across narrow, wide, tall, shallow, and repeated-resize viewports without mutating content or logical cursor state. | `tests/ui_board/composition.rs`, `tests/pty.rs` |
 | Theme and focus accessibility | Shipped | Auto, dark, light, and limited-color modes plus bounded local semantic theme files and inline overrides use non-color focus cues, terminal-aware surfaces, and enforced contrast pairs. | `src/ui/theme.rs`, `src/ui/theme/`, `src/adapters/terminal/settings.rs`, `tests/ui_board/snapshots.rs` |
-| Keyboard and mouse parity | Shipped | Core creation, focus, edit, search, help, recovery, footer, and drag interactions have both input paths where terminals expose them. | `tests/ui_mouse_actions.rs`, `tests/ui_board.rs` |
+| Keyboard and mouse parity | Shipped | Core creation, focus, edit, search, help, recovery, footer, and drag interactions have both input paths where terminals expose them. Board delete uses the configured character or invariant physical `Del` (`Entf`). Non-text lists and direction choosers share arrow and Vim-style intentions while text-entry letters remain content. | `tests/ui_mouse_actions.rs`, `tests/ui_board.rs`, `tests/pty/delete_alias.rs` |
 | URL presentation | Shipped | Explicit HTTP and HTTPS ranges receive accent and underline styling without changing content. Activation remains a terminal capability. | `tests/ui_board/composition.rs` |
 
 ## Content provenance and recovery

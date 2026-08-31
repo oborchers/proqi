@@ -14,6 +14,7 @@ fn every_board_mutation_stays_locked_until_submission_is_journaled() {
 
     for input in [
         UiInput::Key(UiKey::Character('d')),
+        UiInput::Key(UiKey::Delete),
         UiInput::Key(UiKey::PrimaryCharacter('J')),
         UiInput::Key(UiKey::Undo),
     ] {

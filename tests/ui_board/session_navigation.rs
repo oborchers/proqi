@@ -60,6 +60,24 @@ fn current_session_can_be_renamed_from_the_palette_and_footer() {
 }
 
 #[test]
+fn session_rename_keeps_vim_letters_literal_and_delete_out_of_board_dispatch() {
+    let mut fixture = Fixture::new();
+    durable_thought(&mut fixture, "existing");
+    fixture.input(UiInput::Key(UiKey::Character(':')));
+    for character in "rename session".chars() {
+        fixture.input(UiInput::Key(UiKey::Character(character)));
+    }
+    fixture.input(UiInput::Key(UiKey::Enter));
+    for character in "hjklx".chars() {
+        fixture.input(UiInput::Key(UiKey::Character(character)));
+    }
+    fixture.input(UiInput::Key(UiKey::Delete));
+
+    assert_eq!(fixture.app.session_rename_view(), Some("hjklx"));
+    assert_eq!(fixture.app.state.board.live_thoughts().len(), 1);
+}
+
+#[test]
 fn failed_session_rename_restores_the_previous_durable_name() {
     let mut fixture = Fixture::new();
     durable_thought(&mut fixture, "existing");

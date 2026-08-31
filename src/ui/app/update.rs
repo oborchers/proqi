@@ -3,7 +3,7 @@
 use crate::{
     application::{DurabilityState, Effect, UpdateIntent},
     domain::{InstallationKind, RequestId, StableVersion, Timestamp},
-    ui::{HitTarget, PointerButton, PointerKind, UiInput, UiKey},
+    ui::{HitTarget, ListNavigation, PointerButton, PointerKind, UiInput, UiKey},
 };
 
 use super::BoardApp;
@@ -93,24 +93,12 @@ impl BoardApp {
                     .map_or(0, |prompt| prompt.selected);
                 self.choose_update(selected)
             }
-            UiInput::Key(UiKey::Move { movement, .. }) => {
-                match movement {
-                    crate::ports::editor::CursorMovement::VisualUp => {
-                        self.move_update_selection(-1);
-                    }
-                    crate::ports::editor::CursorMovement::VisualDown => {
-                        self.move_update_selection(1);
-                    }
-                    _ => {}
-                }
-                Vec::new()
-            }
-            UiInput::Key(UiKey::Character('j')) => {
-                self.move_update_selection(1);
-                Vec::new()
-            }
-            UiInput::Key(UiKey::Character('k')) => {
+            UiInput::Key(key) if key.list_navigation() == Some(ListNavigation::Previous) => {
                 self.move_update_selection(-1);
+                Vec::new()
+            }
+            UiInput::Key(key) if key.list_navigation() == Some(ListNavigation::Next) => {
+                self.move_update_selection(1);
                 Vec::new()
             }
             UiInput::Pointer(pointer)

@@ -40,7 +40,7 @@ pub(crate) fn items(app: &BoardApp) -> Vec<Shortcut> {
         ),
         (keys.copy.to_string(), "Copy"),
         (keys.cut.to_string(), "Cut"),
-        (keys.delete.to_string(), "Delete"),
+        (keys.delete_label(), "Delete"),
         (primary("D"), "Duplicate"),
         (super::settings::key_label(keys.select), "Select"),
         (

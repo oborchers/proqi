@@ -197,7 +197,10 @@ fn active_and_trashed_results_are_visible_but_cannot_open() {
             .as_deref()
             .is_some_and(|value| value.contains("419"))
     );
-    browser.handle(UiInput::Key(UiKey::Character('j')));
+    browser.handle(UiInput::Key(UiKey::Move {
+        movement: proqi::ports::editor::CursorMovement::VisualDown,
+        extend_selection: false,
+    }));
     assert_eq!(
         browser.handle(UiInput::Key(UiKey::Enter)),
         BrowserAction::Continue
@@ -208,6 +211,32 @@ fn active_and_trashed_results_are_visible_but_cannot_open() {
             .as_deref()
             .is_some_and(|value| value.contains("Restore"))
     );
+}
+
+#[test]
+fn searchable_browser_keeps_vim_letters_literal_and_delete_edits_the_query() {
+    let mut ids = FakeIdGenerator::new(1_725_000_000_000);
+    let entry = item(
+        &mut ids,
+        Some("hjkl"),
+        test_path("query-boundary"),
+        "literal query",
+        10,
+        resumable,
+    );
+    let mut browser = SessionBrowser::new(vec![entry], Timestamp::from_millis(20));
+    for character in "hjklx".chars() {
+        assert_eq!(
+            browser.handle(UiInput::Key(UiKey::Character(character))),
+            BrowserAction::Continue
+        );
+    }
+    assert_eq!(browser.query(), "hjklx");
+    assert_eq!(
+        browser.handle(UiInput::Key(UiKey::Delete)),
+        BrowserAction::Continue
+    );
+    assert_eq!(browser.query(), "hjkl");
 }
 
 #[test]
@@ -441,7 +470,10 @@ fn wide_browser_has_a_complete_reviewed_buffer() {
 #[test]
 fn narrow_browser_has_a_complete_reviewed_buffer() {
     let mut browser = snapshot_browser();
-    browser.handle(UiInput::Key(UiKey::Character('j')));
+    browser.handle(UiInput::Key(UiKey::Move {
+        movement: proqi::ports::editor::CursorMovement::VisualDown,
+        extend_selection: false,
+    }));
     let terminal = draw_theme(&mut browser, 44, 20, ThemePreference::Dark);
     insta::assert_snapshot!(snapshot_buffer(terminal.backend().buffer()));
 }

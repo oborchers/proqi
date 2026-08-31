@@ -447,6 +447,8 @@ mod clipboard;
 mod compose;
 #[path = "ui_board/composition.rs"]
 mod composition;
+#[path = "ui_board/delete_alias.rs"]
+mod delete_alias;
 #[path = "ui_board/durability.rs"]
 mod durability;
 #[path = "ui_board/fast_navigation.rs"]

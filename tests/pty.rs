@@ -16,6 +16,10 @@ mod active_control;
 mod collapsed_entry;
 
 #[cfg(target_os = "macos")]
+#[path = "pty/delete_alias.rs"]
+mod delete_alias;
+
+#[cfg(target_os = "macos")]
 #[path = "pty/editor_persistence.rs"]
 mod editor_persistence;
 
