@@ -77,14 +77,8 @@ impl Command {
         ),
         (Self::RefreshAgents, "Refresh adjacent agents"),
         (Self::RefreshAttachments, "Refresh attachments"),
-        (
-            Self::InsertInvocation,
-            "Insert invocation or Herdr reference",
-        ),
-        (
-            Self::RefreshInvocations,
-            "Refresh invocations and Herdr references",
-        ),
+        (Self::InsertInvocation, "Insert discovered invocation"),
+        (Self::RefreshInvocations, "Refresh invocations"),
         (Self::CheckUpdates, "Check for updates"),
         (Self::ScreenshotInbox, "Enable Screenshot Inbox"),
         (Self::RetryScreenshotCapture, "Retry Screenshot Capture"),

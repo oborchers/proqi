@@ -102,7 +102,6 @@ impl InvocationCatalog for FilesystemInvocationCatalog {
             cwd: request_cwd,
             global,
             project,
-            live: Vec::new(),
         })
     }
 }

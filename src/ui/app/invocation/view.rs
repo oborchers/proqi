@@ -23,3 +23,34 @@ pub(in crate::ui) struct InvocationChoiceView {
     /// Structural group rendered immediately above the first visible matching choice.
     pub(in crate::ui) group: Option<String>,
 }
+
+pub(super) fn scroll_for_selection(
+    choices: &[Choice],
+    selected: usize,
+    current_scroll: usize,
+    row_budget: usize,
+) -> usize {
+    let mut scroll = current_scroll.min(selected);
+    let row_budget = row_budget.max(1);
+    while scroll < selected && rows_through_selection(choices, scroll, selected) > row_budget {
+        scroll = scroll.saturating_add(1);
+    }
+    scroll
+}
+
+fn rows_through_selection(choices: &[Choice], start: usize, selected: usize) -> usize {
+    let mut previous_group = None;
+    choices
+        .iter()
+        .skip(start)
+        .take(selected.saturating_sub(start).saturating_add(1))
+        .map(|choice| {
+            let heading = choice.group.as_deref().is_some_and(|group| {
+                let changed = previous_group != Some(group);
+                previous_group = Some(group);
+                changed
+            });
+            1 + usize::from(heading)
+        })
+        .sum()
+}

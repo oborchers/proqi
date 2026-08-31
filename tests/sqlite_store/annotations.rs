@@ -76,7 +76,7 @@ fn folded_provenance_and_editor_undo_survive_reopen() {
 }
 
 #[test]
-fn invocation_reference_projection_survives_reopen_without_rewriting_content() {
+fn invocation_reference_projection_survives_protocol_nine_migration() {
     let fixture = DatabaseFixture::new();
     let mut store = fixture.open();
     let mut ids = FakeIdGenerator::new(1_725_000_100_000);
@@ -112,9 +112,23 @@ fn invocation_reference_projection_survives_reopen_without_rewriting_content() {
         .expect("durable create");
     persist_effect(&mut store, create);
     drop(store);
+    Connection::open(&fixture.config.database_path)
+        .expect("version eight database")
+        .execute_batch(
+            "DELETE FROM migration_history WHERE version = 9;
+             UPDATE schema_meta SET schema_version = 8, storage_protocol = 8;",
+        )
+        .expect("downgrade protocol stamp");
 
     let snapshot = fixture.open().load_session(session_id).expect("reopen");
     let restored = snapshot.board.thought(thought_id).expect("thought");
     assert_eq!(restored.content, content);
     assert_eq!(restored.annotations, [annotation]);
+    let version = Connection::open(&fixture.config.database_path)
+        .expect("migrated database")
+        .query_row("SELECT schema_version FROM schema_meta", [], |row| {
+            row.get::<_, i64>(0)
+        })
+        .expect("schema version");
+    assert_eq!(version, i64::from(SUPPORTED_SCHEMA_VERSION));
 }

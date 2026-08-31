@@ -2,6 +2,7 @@ use std::{os::unix::fs::DirBuilderExt as _, path::Path};
 
 use crate::{
     adapters::memory::FakeIdGenerator,
+    domain::{ContentAnnotation, ContentAnnotationKind},
     ports::{
         control::{
             CONTROL_PROTOCOL_VERSION, ControlClient, ControlError, ControlMutation, ControlRequest,
@@ -48,10 +49,35 @@ fn server_negotiates_protocol_and_bounds_encoded_messages() {
         ControlResult::Rejected { code, .. } if code == "protocol_mismatch"
     ));
 
-    request.protocol = CONTROL_PROTOCOL_VERSION;
-    let ControlMutation::Add { content, .. } = &mut request.mutation else {
+    request.protocol = 5;
+    let ControlMutation::Add { annotations, .. } = &mut request.mutation else {
         panic!("add request fixture");
     };
+    annotations.push(ContentAnnotation {
+        start: 0,
+        end: 4,
+        kind: ContentAnnotationKind::InvocationReference {
+            display_name: "@body · codex".to_owned(),
+        },
+    });
+    let stream = connect(&endpoint, owner.pid).expect("protocol five stream");
+    write_request(&stream, &request).expect("protocol five request");
+    let response = read_response(&stream).expect("protocol five response");
+    assert!(matches!(
+        response.result,
+        ControlResult::Rejected { code, .. } if code == "protocol_mismatch"
+    ));
+
+    request.protocol = CONTROL_PROTOCOL_VERSION;
+    let ControlMutation::Add {
+        content,
+        annotations,
+        ..
+    } = &mut request.mutation
+    else {
+        panic!("add request fixture");
+    };
+    annotations.clear();
     *content = "x".repeat(MAX_CONTROL_MESSAGE_BYTES);
     assert!(matches!(
         LocalControlClient.send(&owner, &request),

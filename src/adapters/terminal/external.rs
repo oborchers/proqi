@@ -28,6 +28,7 @@ use crate::{
         invocation::{
             AdditionalInvocationRoot, InvocationCatalog, InvocationCatalogError,
             InvocationDiscovery, InvocationDiscoveryRequest, InvocationReferenceCatalog,
+            InvocationReferenceDiscovery, InvocationReferenceDiscoveryRequest,
         },
         recovery::{RecoveryDocument, RecoveryError, RecoveryExporter},
     },
@@ -42,6 +43,7 @@ use super::{
 enum ExternalRequest {
     DiscoverAgents,
     DiscoverInvocations(InvocationDiscoveryRequest),
+    DiscoverInvocationReferences(InvocationReferenceDiscoveryRequest),
     SubmitAgent(Box<SubmissionRequest>),
     PublishPane {
         pane_id: String,
@@ -73,6 +75,7 @@ pub(super) enum ExternalResult {
         result: Result<Vec<AgentTarget>, AgentError>,
     },
     InvocationsDiscovered(Result<InvocationDiscovery, InvocationCatalogError>),
+    InvocationReferencesDiscovered(InvocationReferenceDiscovery),
     AgentSubmitted {
         submission_id: crate::domain::SubmissionId,
         result: Box<Result<SubmissionReceipt, AgentError>>,
@@ -147,6 +150,9 @@ impl ExternalLane {
             Effect::DiscoverAgents => ExternalRequest::DiscoverAgents,
             Effect::DiscoverInvocations(request) => {
                 ExternalRequest::DiscoverInvocations(request.clone())
+            }
+            Effect::DiscoverInvocationReferences(request) => {
+                ExternalRequest::DiscoverInvocationReferences(*request)
             }
             Effect::SubmitAgent(request) => ExternalRequest::SubmitAgent(Box::new(request.clone())),
             Effect::WriteClipboard {
@@ -278,7 +284,10 @@ fn external_loop(
         let outcome = match request {
             ExternalRequest::DiscoverAgents => discover_agents(&mut agents),
             ExternalRequest::DiscoverInvocations(request) => {
-                discover_invocations(&mut invocations, &mut agents, request)
+                discover_invocations(&mut invocations, request)
+            }
+            ExternalRequest::DiscoverInvocationReferences(request) => {
+                discover_invocation_references(&mut agents, request)
             }
             ExternalRequest::SubmitAgent(request) => {
                 let submission_id = request.submission_id;
@@ -332,14 +341,19 @@ fn external_loop(
 
 fn discover_invocations(
     invocations: &mut impl InvocationCatalog,
-    references: &mut impl InvocationReferenceCatalog,
     request: InvocationDiscoveryRequest,
 ) -> ExternalResult {
-    let result = invocations.discover(request).map(|mut discovery| {
-        discovery.live = references.discover_live_references().unwrap_or_default();
-        discovery
-    });
-    ExternalResult::InvocationsDiscovered(result)
+    ExternalResult::InvocationsDiscovered(invocations.discover(request))
+}
+
+fn discover_invocation_references(
+    references: &mut impl InvocationReferenceCatalog,
+    request: InvocationReferenceDiscoveryRequest,
+) -> ExternalResult {
+    ExternalResult::InvocationReferencesDiscovered(InvocationReferenceDiscovery {
+        generation: request.generation,
+        references: references.discover_live_references(),
+    })
 }
 
 fn discover_agents(agents: &mut impl AgentGateway) -> ExternalResult {

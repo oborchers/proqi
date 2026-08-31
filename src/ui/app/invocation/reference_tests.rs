@@ -4,10 +4,11 @@ use crate::{
     application::Effect,
     domain::ContentAnnotationKind,
     ports::{
-        agent::{AgentState, HarnessKind},
+        agent::{AgentFailureCode, AgentState, HarnessKind},
         editor::CursorMovement,
         invocation::{
-            InvocationDiscovery, InvocationEntry, InvocationReferenceProvider, LiveAgentReference,
+            InvocationDiscovery, InvocationEntry, InvocationReferenceDiscovery,
+            InvocationReferenceProvider, LiveAgentReference,
         },
     },
     ui::{PointerButton, PointerInput, PointerKind, UiInput, UiKey},
@@ -51,10 +52,9 @@ fn reference_kind(
 fn rows_deduplicate_names_and_use_real_topology_labels() {
     let cwd = tempfile::tempdir().expect("tempdir");
     let (mut app, _, _) = app("prompt", cwd.path());
-    install_live(
+    install_catalog(&mut app, cwd.path(), Vec::new());
+    open_with_live(
         &mut app,
-        cwd.path(),
-        Vec::new(),
         vec![
             reference_kind(
                 None,
@@ -90,7 +90,6 @@ fn rows_deduplicate_names_and_use_real_topology_labels() {
             ),
         ],
     );
-    app.open_invocation_picker();
 
     let choices = app.invocation_view().expect("picker").1;
     assert_eq!(choices[0].token, "codex");
@@ -126,11 +125,10 @@ fn reviewer(state: AgentState) -> LiveAgentReference {
     )
 }
 
-fn install_live(
+fn install_catalog(
     app: &mut crate::ui::BoardApp,
     cwd: &Path,
     project: Vec<InvocationEntry>,
-    live: Vec<LiveAgentReference>,
 ) -> u64 {
     let effects = app.refresh_invocations();
     let [Effect::DiscoverInvocations(request)] = effects.as_slice() else {
@@ -142,16 +140,39 @@ fn install_live(
         cwd: cwd.to_owned(),
         global: Vec::new(),
         project,
-        live,
     }));
     generation
+}
+
+fn complete_live(
+    app: &mut crate::ui::BoardApp,
+    effects: &[Effect],
+    references: Result<Vec<LiveAgentReference>, crate::ports::agent::AgentFailureCode>,
+) -> u64 {
+    let request = effects
+        .iter()
+        .find_map(|effect| match effect {
+            Effect::DiscoverInvocationReferences(request) => Some(request),
+            _ => None,
+        })
+        .expect("live refresh effect");
+    app.complete_invocation_reference_discovery(InvocationReferenceDiscovery {
+        generation: request.generation,
+        references,
+    });
+    request.generation
+}
+
+fn open_with_live(app: &mut crate::ui::BoardApp, live: Vec<LiveAgentReference>) -> u64 {
+    let effects = app.open_invocation_picker();
+    complete_live(app, &effects, Ok(live))
 }
 
 #[test]
 fn manual_picker_keeps_installed_entries_and_truthfully_groups_duplicate_agent_names() {
     let cwd = tempfile::tempdir().expect("tempdir");
     let (mut app, _, _) = app("prompt", cwd.path());
-    install_live(
+    install_catalog(
         &mut app,
         cwd.path(),
         vec![entry(
@@ -159,6 +180,9 @@ fn manual_picker_keeps_installed_entries_and_truthfully_groups_duplicate_agent_n
             crate::ports::invocation::InvocationKind::Skill,
             crate::ports::invocation::InvocationScope::Project,
         )],
+    );
+    open_with_live(
+        &mut app,
         vec![
             reviewer(AgentState::Working),
             reference(
@@ -177,7 +201,6 @@ fn manual_picker_keeps_installed_entries_and_truthfully_groups_duplicate_agent_n
             ),
         ],
     );
-    app.open_invocation_picker();
 
     let choices = app.invocation_view().expect("picker").1;
     assert_eq!(choices.len(), 4);
@@ -197,17 +220,13 @@ fn manual_picker_keeps_installed_entries_and_truthfully_groups_duplicate_agent_n
 fn automatic_selection_inserts_an_inert_location_and_readiness_is_display_only() {
     let cwd = tempfile::tempdir().expect("tempdir");
     let (mut app, mut ids, clock) = app("Ask @", cwd.path());
-    install_live(
+    install_catalog(&mut app, cwd.path(), Vec::new());
+    let discovery = app.handle(UiInput::Key(UiKey::Character('r')), &mut ids, &clock);
+    complete_live(
         &mut app,
-        cwd.path(),
-        Vec::new(),
-        vec![reviewer(AgentState::Working)],
+        &discovery,
+        Ok(vec![reviewer(AgentState::Working)]),
     );
-    let effects = app.handle(UiInput::Key(UiKey::Character('r')), &mut ids, &clock);
-    assert!(matches!(
-        effects.as_slice(),
-        [Effect::DiscoverInvocations(_)]
-    ));
 
     let choice = &app.invocation_view().expect("automatic picker").1[0];
     assert!(choice.qualifier.contains("working"));
@@ -250,12 +269,7 @@ fn manual_selection_replaces_the_exact_unicode_selection_in_one_history_step() {
     let cwd = tempfile::tempdir().expect("tempdir");
     let original = "α selected 🙂 omega";
     let (mut app, mut ids, clock) = app(original, cwd.path());
-    install_live(
-        &mut app,
-        cwd.path(),
-        Vec::new(),
-        vec![reviewer(AgentState::Idle)],
-    );
+    install_catalog(&mut app, cwd.path(), Vec::new());
     app.handle(
         UiInput::Key(UiKey::Move {
             movement: CursorMovement::DocumentStart,
@@ -272,7 +286,7 @@ fn manual_selection_replaces_the_exact_unicode_selection_in_one_history_step() {
         &mut ids,
         &clock,
     );
-    app.open_invocation_picker();
+    open_with_live(&mut app, vec![reviewer(AgentState::Idle)]);
     app.handle(UiInput::Key(UiKey::Enter), &mut ids, &clock);
 
     let inserted = "Herdr collaborator: reviewer (codex) at workspace Product (w2), tab Review (w2:t4), pane w2:p9 ";
@@ -287,13 +301,8 @@ fn manual_selection_replaces_the_exact_unicode_selection_in_one_history_step() {
 fn manual_live_reference_is_delimited_from_adjacent_prose() {
     let cwd = tempfile::tempdir().expect("tempdir");
     let (mut app, mut ids, clock) = app("Coordinate", cwd.path());
-    install_live(
-        &mut app,
-        cwd.path(),
-        Vec::new(),
-        vec![reviewer(AgentState::Idle)],
-    );
-    app.open_invocation_picker();
+    install_catalog(&mut app, cwd.path(), Vec::new());
+    open_with_live(&mut app, vec![reviewer(AgentState::Idle)]);
     app.handle(UiInput::Key(UiKey::Enter), &mut ids, &clock);
 
     assert_eq!(
@@ -303,76 +312,32 @@ fn manual_live_reference_is_delimited_from_adjacent_prose() {
 }
 
 #[test]
-fn command_surface_refreshes_each_time_the_existing_picker_opens() {
-    let cwd = tempfile::tempdir().expect("tempdir");
-    let (mut app, mut ids, clock) = app("prompt", cwd.path());
-    app.open_palette();
-    app.handle(
-        UiInput::Paste("Insert invocation or Herdr reference".to_owned()),
-        &mut ids,
-        &clock,
-    );
-    let (_, matches, _) = app.palette_view().expect("palette");
-    assert_eq!(matches, ["Insert invocation or Herdr reference"]);
-
-    let effects = app.handle(UiInput::Key(UiKey::Enter), &mut ids, &clock);
-    assert!(app.invocation_view().is_some());
-    assert!(matches!(
-        effects.as_slice(),
-        [Effect::DiscoverInvocations(_)]
-    ));
-}
-
-#[test]
-fn newest_empty_result_wins_when_an_agent_disappears() {
-    let cwd = tempfile::tempdir().expect("tempdir");
-    let (mut app, _, _) = app("prompt", cwd.path());
-    let old_effects = app.refresh_invocations();
-    let [Effect::DiscoverInvocations(old)] = old_effects.as_slice() else {
-        panic!("old refresh");
-    };
-    let old_generation = old.generation;
-    let newest_effects = app.refresh_invocations();
-    let [Effect::DiscoverInvocations(newest)] = newest_effects.as_slice() else {
-        panic!("new refresh");
-    };
-    let newest_generation = newest.generation;
-    app.complete_invocation_discovery(Ok(InvocationDiscovery {
-        generation: newest_generation,
-        cwd: cwd.path().to_owned(),
-        global: Vec::new(),
-        project: Vec::new(),
-        live: Vec::new(),
-    }));
-    app.complete_invocation_discovery(Ok(InvocationDiscovery {
-        generation: old_generation,
-        cwd: cwd.path().to_owned(),
-        global: Vec::new(),
-        project: Vec::new(),
-        live: vec![reviewer(AgentState::Working)],
-    }));
-    app.open_invocation_picker();
-    assert!(app.invocation_view().expect("picker").1.is_empty());
-}
-
-#[test]
 fn narrow_resized_mouse_geometry_selects_the_same_inert_reference() {
     let cwd = tempfile::tempdir().expect("tempdir");
     let (mut app, mut ids, clock) = app("", cwd.path());
-    install_live(
-        &mut app,
-        cwd.path(),
-        Vec::new(),
-        vec![reviewer(AgentState::Idle)],
-    );
-    app.open_invocation_picker();
+    install_catalog(&mut app, cwd.path(), Vec::new());
+    open_with_live(&mut app, vec![reviewer(AgentState::Idle)]);
     let layout = app.prepare_frame(ratatui_core::layout::Rect::new(0, 0, 30, 6));
-    let item = layout.overlay.expect("overlay").items[0];
-    assert_eq!(item.height, 2);
+    let overlay = layout.overlay.expect("overlay");
+    let item = overlay.items[0];
+    let heading = overlay.item_headings[0].expect("group heading");
+    assert_eq!(item.height, 1);
+    app.handle(
+        UiInput::Pointer(PointerInput {
+            column: heading.x,
+            row: heading.y,
+            kind: PointerKind::Down(PointerButton::Left),
+            extend_selection: false,
+        }),
+        &mut ids,
+        &clock,
+    );
+    assert!(app.invocation_view().is_some());
+    assert_eq!(app.editor_snapshot().expect("editor").content, "");
     app.handle(
         UiInput::Pointer(PointerInput {
             column: item.x,
-            row: item.y.saturating_add(1),
+            row: item.y,
             kind: PointerKind::Down(PointerButton::Left),
             extend_selection: false,
         }),
@@ -389,10 +354,17 @@ fn narrow_resized_mouse_geometry_selects_the_same_inert_reference() {
 fn shallow_keyboard_navigation_keeps_the_active_live_group_visible() {
     let cwd = tempfile::tempdir().expect("tempdir");
     let (mut app, mut ids, clock) = app("", cwd.path());
-    install_live(
+    install_catalog(
         &mut app,
         cwd.path(),
-        Vec::new(),
+        vec![entry(
+            "$review",
+            crate::ports::invocation::InvocationKind::Skill,
+            crate::ports::invocation::InvocationScope::Project,
+        )],
+    );
+    open_with_live(
+        &mut app,
         vec![
             reviewer(AgentState::Working),
             reference(
@@ -404,14 +376,15 @@ fn shallow_keyboard_navigation_keeps_the_active_live_group_visible() {
             ),
         ],
     );
-    app.open_invocation_picker();
     app.prepare_frame(ratatui_core::layout::Rect::new(0, 0, 30, 6));
+    app.handle(UiInput::Key(UiKey::PickerNext), &mut ids, &clock);
     app.handle(UiInput::Key(UiKey::PickerNext), &mut ids, &clock);
 
     let (_, choices, selected) = app.invocation_view().expect("scrolled picker");
-    assert_eq!(selected, 1);
-    assert_eq!(choices[1].token, "builder");
+    assert_eq!(choices[selected].token, "builder");
     assert_eq!(choices[0].group.as_deref(), Some("Live in Herdr"));
+    let layout = app.prepare_frame(ratatui_core::layout::Rect::new(0, 0, 30, 6));
+    assert!(selected < layout.overlay.expect("overlay").items.len());
     app.handle(UiInput::Key(UiKey::Enter), &mut ids, &clock);
     assert!(
         app.editor_snapshot()
@@ -421,6 +394,8 @@ fn shallow_keyboard_navigation_keeps_the_active_live_group_visible() {
     );
 }
 
+#[path = "reference_tests/lifecycle.rs"]
+mod lifecycle;
 #[path = "reference_tests/mentions.rs"]
 mod mentions;
 #[path = "reference_tests/snapshots.rs"]

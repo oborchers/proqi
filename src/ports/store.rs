@@ -17,9 +17,9 @@ pub use compaction::{CompactedOperationRequest, thought_payload_digest};
 pub use error::{StoreError, StoreFailureCode};
 
 /// Current storage schema understood by this binary.
-pub const SUPPORTED_SCHEMA_VERSION: u32 = 8;
+pub const SUPPORTED_SCHEMA_VERSION: u32 = 9;
 /// Current local storage protocol understood by this binary.
-pub const STORAGE_PROTOCOL_VERSION: u32 = 8;
+pub const STORAGE_PROTOCOL_VERSION: u32 = 9;
 
 /// One atomic screenshot receipt and prospective board operation.
 #[derive(Clone, Debug, Eq, PartialEq)]

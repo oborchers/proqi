@@ -106,6 +106,20 @@ fn duplicate_or_contradictory_snapshot_identities_fail_closed() {
     ));
 
     let response = live_snapshot(
+        &[
+            live_agent(Some("first"), "w1", "w1:t1", "shared-pane"),
+            live_agent(Some("second"), "w2", "w2:t1", "shared-pane"),
+        ],
+        &json!([]),
+        &json!([]),
+    );
+    let (mut reused_pane_gateway, _) = gateway(vec![response]);
+    assert!(matches!(
+        super::super::discovery::live_references(&mut reused_pane_gateway),
+        Err(AgentError::Ambiguous(_))
+    ));
+
+    let response = live_snapshot(
         &[live_agent(Some("agent"), "w1", "w1:t1", "w1:p1")],
         &json!([{"workspace_id":"w1","label":"Workspace"}]),
         &json!([{"workspace_id":"w2","tab_id":"w1:t1","label":"Wrong"}]),
@@ -144,7 +158,10 @@ fn malformed_timeout_and_oversized_results_degrade_with_fixed_bounds() {
     let (mut bounded, _) = gateway(vec![response]);
     let references =
         super::super::discovery::live_references(&mut bounded).expect("bounded references");
-    assert_eq!(references.len(), 64);
+    assert_eq!(
+        references.len(),
+        crate::ports::invocation::MAX_INVOCATION_REFERENCES
+    );
     assert!(references.iter().all(|reference| {
         reference.agent_name() == Some("duplicate-label") && reference.workspace_id() == "w1"
     }));

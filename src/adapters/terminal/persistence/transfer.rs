@@ -102,15 +102,22 @@ fn forward(
     let protocol = owner
         .control_protocol
         .ok_or_else(|| "destination owner does not advertise control forwarding".to_owned())?;
+    let thought_id = ThoughtId::from_database_bytes(request.operation_id.database_bytes())
+        .map_err(|error| error.to_string())?;
+    let mutation = ControlMutation::Add {
+        operation_id: request.operation_id,
+        thought_id,
+        content: request.content.clone(),
+        annotations: request.annotations.clone(),
+        position: None,
+    };
     if !(crate::ports::control::MIN_CONTROL_PROTOCOL_VERSION
         ..=crate::ports::control::CONTROL_PROTOCOL_VERSION)
         .contains(&protocol)
-        || !request.annotations.is_empty() && protocol < 2
+        || protocol < mutation.minimum_protocol()
     {
         return Err("destination owner does not support annotation-aware transfer".to_owned());
     }
-    let thought_id = ThoughtId::from_database_bytes(request.operation_id.database_bytes())
-        .map_err(|error| error.to_string())?;
     let receipt = runtime
         .client
         .send(
@@ -119,13 +126,7 @@ fn forward(
                 protocol,
                 request_id: runtime.ids.request_id(),
                 session_id: request.destination_session_id,
-                mutation: ControlMutation::Add {
-                    operation_id: request.operation_id,
-                    thought_id,
-                    content: request.content.clone(),
-                    annotations: request.annotations.clone(),
-                    position: None,
-                },
+                mutation,
             },
         )
         .map_err(|error| error.to_string())?;

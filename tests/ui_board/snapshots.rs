@@ -23,7 +23,7 @@ mod attachment_accessibility_snapshots;
 #[path = "snapshots/herdr.rs"]
 mod herdr_fixtures;
 
-use herdr_fixtures::{adjacent_target, install_live_reference};
+use herdr_fixtures::{adjacent_target, complete_live_reference};
 
 fn snapshot(fixture: &mut Fixture, width: u16, height: u16, theme: ThemePreference) -> String {
     snapshot_buffer(draw_theme(fixture, width, height, theme).backend().buffer())
@@ -129,7 +129,6 @@ fn discovered_invocations_use_the_annotation_visual_role() {
                 precedence: 20,
             }],
             project: Vec::new(),
-            live: Vec::new(),
         }));
     fixture.input(UiInput::Paste("/plan ask $review ".to_owned()));
 
@@ -141,12 +140,12 @@ fn existing_invocation_command_opens_terminal_independent_live_reference_picker(
     let mut fixture = Fixture::new();
     fixture.paste("Coordinate with another agent");
     fixture.input(UiInput::Key(UiKey::Escape));
-    install_live_reference(&mut fixture);
     fixture.input(UiInput::Key(UiKey::Character(':')));
-    for character in "Insert invocation or Herdr reference".chars() {
+    for character in "Insert discovered invocation".chars() {
         fixture.input(UiInput::Key(UiKey::Character(character)));
     }
-    fixture.input(UiInput::Key(UiKey::Enter));
+    let effects = fixture.effects(UiInput::Key(UiKey::Enter));
+    complete_live_reference(&mut fixture, &effects);
 
     insta::assert_snapshot!(snapshot(&mut fixture, 72, 12, ThemePreference::Dark));
     fixture.input(UiInput::Key(UiKey::Enter));

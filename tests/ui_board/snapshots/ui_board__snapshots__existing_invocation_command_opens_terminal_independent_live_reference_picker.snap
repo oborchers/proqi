@@ -7,7 +7,7 @@ SIZE 72x12
 
 TEXT
 00││
-01│⋮ Coor ┌ invocations and references ──────────────────────────[x]│
+01│⋮ Coor ┌ discovered invocations ──────────────────────────────[x]│
 02│       │›                                                       ││
 03│       │Live in Herdr                                           ││
 04│       │reviewer         Product / Review · p9 · codex · working││

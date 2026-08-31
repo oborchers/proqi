@@ -6,7 +6,9 @@ use proqi::{
             AgentDeliveryCapabilities, AgentSessionBinding, AgentState, AgentTarget,
             CODEX_AGENT_KIND, HarnessKind, PaneContext, PaneRect,
         },
-        invocation::{InvocationDiscovery, InvocationReferenceProvider, LiveAgentReference},
+        invocation::{
+            InvocationReferenceDiscovery, InvocationReferenceProvider, LiveAgentReference,
+        },
     },
 };
 
@@ -46,10 +48,9 @@ pub(super) fn adjacent_target(
     }
 }
 
-pub(super) fn install_live_reference(fixture: &mut Fixture) {
-    let effects = fixture.app.refresh_invocations();
-    let [Effect::DiscoverInvocations(request)] = effects.as_slice() else {
-        panic!("invocation refresh effect");
+pub(super) fn complete_live_reference(fixture: &mut Fixture, effects: &[Effect]) {
+    let [Effect::DiscoverInvocationReferences(request)] = effects else {
+        panic!("live reference refresh effect");
     };
     let reference = LiveAgentReference::new(
         InvocationReferenceProvider::Herdr,
@@ -65,11 +66,8 @@ pub(super) fn install_live_reference(fixture: &mut Fixture) {
     .expect("live reference");
     fixture
         .app
-        .complete_invocation_discovery(Ok(InvocationDiscovery {
+        .complete_invocation_reference_discovery(InvocationReferenceDiscovery {
             generation: request.generation,
-            cwd: request.cwd.clone(),
-            global: Vec::new(),
-            project: Vec::new(),
-            live: vec![reference],
-        }));
+            references: Ok(vec![reference]),
+        });
 }

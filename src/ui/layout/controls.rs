@@ -27,17 +27,19 @@ pub(super) fn overlay_layout(
                 1,
             )
         })
-        .collect();
+        .collect::<Vec<_>>();
+    let item_headings = vec![None; items.len()];
     OverlayLayout {
         area: modal,
         items,
+        item_headings,
         close: Rect::new(modal.right().saturating_sub(3), modal.y, 3, 1),
     }
 }
 
 pub(super) fn grouped_overlay_layout(
     area: Rect,
-    item_heights: &[u16],
+    item_groups: &[bool],
     preferred_rows: usize,
     cover_width: bool,
 ) -> OverlayLayout {
@@ -45,21 +47,34 @@ pub(super) fn grouped_overlay_layout(
     let mut item_y = modal.y.saturating_add(2);
     let bottom = modal.bottom().saturating_sub(1);
     let mut items = Vec::new();
-    for item_height in item_heights.iter().copied() {
-        if item_height == 0 || item_y.saturating_add(item_height) > bottom {
+    let mut item_headings = Vec::new();
+    for grouped in item_groups.iter().copied() {
+        if item_y >= bottom {
             break;
         }
+        let heading = (grouped && item_y.saturating_add(2) <= bottom).then(|| {
+            let area = Rect::new(
+                modal.x.saturating_add(1),
+                item_y,
+                modal.width.saturating_sub(2),
+                1,
+            );
+            item_y = item_y.saturating_add(1);
+            area
+        });
         items.push(Rect::new(
             modal.x.saturating_add(1),
             item_y,
             modal.width.saturating_sub(2),
-            item_height,
+            1,
         ));
-        item_y = item_y.saturating_add(item_height);
+        item_headings.push(heading);
+        item_y = item_y.saturating_add(1);
     }
     OverlayLayout {
         area: modal,
         items,
+        item_headings,
         close: Rect::new(modal.right().saturating_sub(3), modal.y, 3, 1),
     }
 }

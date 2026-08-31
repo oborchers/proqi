@@ -58,6 +58,7 @@ pub(super) fn enqueue_effects(
             }
             Effect::DiscoverAgents
             | Effect::DiscoverInvocations(_)
+            | Effect::DiscoverInvocationReferences(_)
             | Effect::SubmitAgent(_)
             | Effect::WriteClipboard { .. }
             | Effect::ReadClipboard { .. }

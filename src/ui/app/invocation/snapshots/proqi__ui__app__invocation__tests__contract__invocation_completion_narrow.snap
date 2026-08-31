@@ -4,7 +4,7 @@ assertion_line: 445
 expression: "completion_snapshot(40, 12)"
 ---
 00││
-01│┌ invocations and references ────────[x]│
+01│┌ discovered invocations ────────────[x]│
 02││›$pl                                  ││
 03││$plan                    Project Skill││
 04││$plugin                   Global Skill││

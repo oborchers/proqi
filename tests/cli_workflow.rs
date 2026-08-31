@@ -417,7 +417,7 @@ fn launch_modes_and_capability_discovery_have_stable_output() {
     let capabilities = success(root, &["capabilities"], None);
     assert_eq!(capabilities["cli_schema_version"], 1);
     assert_eq!(capabilities["active_session_control"], cfg!(unix));
-    assert_eq!(capabilities["control_protocol"], 5);
+    assert_eq!(capabilities["control_protocol"], 6);
     assert_eq!(capabilities["active_session_read_sync"], true);
     assert_eq!(capabilities["cross_session_transfer"], true);
     assert_eq!(capabilities["exact_thought_replacement"], true);

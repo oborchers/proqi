@@ -14,16 +14,16 @@ use crate::{
         environment::IdGenerator as _,
         invocation::{
             InvocationCatalog, InvocationCatalogError, InvocationDiscovery,
-            InvocationDiscoveryRequest, InvocationReferenceCatalog, InvocationReferenceProvider,
-            LiveAgentReference,
+            InvocationDiscoveryRequest, InvocationReferenceCatalog,
+            InvocationReferenceDiscoveryRequest, InvocationReferenceProvider, LiveAgentReference,
         },
     },
     ui::{BoardApp, UiInput, UiKey},
 };
 
 use super::{
-    ExternalLane, ExternalReadError, ExternalRequest, ExternalResult, discover_invocations,
-    read_clipboard,
+    ExternalLane, ExternalReadError, ExternalRequest, ExternalResult,
+    discover_invocation_references, discover_invocations, read_clipboard,
 };
 
 struct FakeClipboard(Result<ClipboardContent, ClipboardError>);
@@ -182,7 +182,6 @@ impl InvocationCatalog for FakeInvocations {
             cwd: request.cwd,
             global: Vec::new(),
             project: Vec::new(),
-            live: Vec::new(),
         })
     }
 }
@@ -220,28 +219,31 @@ fn live_reference_failure_never_breaks_filesystem_invocation_refresh() {
     let mut references = FakeReferences(Err(AgentFailureCode::TimedOut));
 
     let ExternalResult::InvocationsDiscovered(Ok(discovery)) =
-        discover_invocations(&mut invocations, &mut references, request)
+        discover_invocations(&mut invocations, request)
     else {
         panic!("invocation discovery result");
     };
     assert_eq!(discovery.generation, 7);
-    assert!(discovery.live.is_empty());
+    let ExternalResult::InvocationReferencesDiscovered(completion) = discover_invocation_references(
+        &mut references,
+        InvocationReferenceDiscoveryRequest { generation: 8 },
+    ) else {
+        panic!("reference discovery result");
+    };
+    assert_eq!(completion.generation, 8);
+    assert_eq!(completion.references, Err(AgentFailureCode::TimedOut));
 }
 
 #[test]
-fn live_references_join_the_same_generation_tagged_discovery_result() {
-    let request = InvocationDiscoveryRequest {
-        generation: 9,
-        cwd: PathBuf::from("/fixture"),
-    };
-    let mut invocations = FakeInvocations;
+fn live_references_keep_their_independent_generation_tag() {
     let mut references = FakeReferences(Ok(vec![reference()]));
 
-    let ExternalResult::InvocationsDiscovered(Ok(discovery)) =
-        discover_invocations(&mut invocations, &mut references, request)
-    else {
-        panic!("invocation discovery result");
+    let ExternalResult::InvocationReferencesDiscovered(completion) = discover_invocation_references(
+        &mut references,
+        InvocationReferenceDiscoveryRequest { generation: 9 },
+    ) else {
+        panic!("reference discovery result");
     };
-    assert_eq!(discovery.generation, 9);
-    assert_eq!(discovery.live, vec![reference()]);
+    assert_eq!(completion.generation, 9);
+    assert_eq!(completion.references, Ok(vec![reference()]));
 }

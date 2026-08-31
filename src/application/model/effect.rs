@@ -8,7 +8,7 @@ use crate::{
     ports::{
         agent::{AgentTarget, SubmissionRequest},
         attachment_accessibility::AttachmentCheckBatch,
-        invocation::InvocationDiscoveryRequest,
+        invocation::{InvocationDiscoveryRequest, InvocationReferenceDiscoveryRequest},
         recovery::RecoveryDocument,
         store::{OperationBatch, SubmissionAttempt, SubmissionOutcome},
         transfer::SessionTransferRequest,
@@ -47,6 +47,8 @@ pub enum Effect {
     DiscoverAgents,
     /// Refresh bounded authoring definitions without blocking the reducer lane.
     DiscoverInvocations(InvocationDiscoveryRequest),
+    /// Refresh one bounded picker-open collaborator snapshot.
+    DiscoverInvocationReferences(InvocationReferenceDiscoveryRequest),
     /// Submit exact thought content through a verified semantic agent gateway.
     SubmitAgent(SubmissionRequest),
     /// Durably prepare a redacted submission attempt before external delivery.

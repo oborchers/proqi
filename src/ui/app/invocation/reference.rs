@@ -5,25 +5,111 @@ use std::ops::Range;
 use crate::{
     application::Effect,
     domain::{ContentAnnotation, ContentAnnotationKind},
-    ports::invocation::LiveAgentReference,
+    ports::invocation::{
+        InvocationReferenceDiscovery, InvocationReferenceDiscoveryRequest, LiveAgentReference,
+        MAX_INVOCATION_REFERENCES,
+    },
     ui::PastePayload,
 };
 
 use super::{BoardApp, Choice, InvocationPopup};
 
-const MAX_LIVE_RESULTS: usize = 10;
-
 impl BoardApp {
+    pub(in crate::ui::app) fn open_invocation_picker(&mut self) -> Vec<Effect> {
+        if !matches!(
+            self.interaction_mode(),
+            crate::application::InteractionMode::Edit { .. }
+        ) {
+            self.enter_edit();
+        }
+        if !matches!(
+            self.interaction_mode(),
+            crate::application::InteractionMode::Edit { .. }
+        ) {
+            self.set_warning("focus a thought before inserting an invocation");
+            return Vec::new();
+        }
+        self.invocation_popup = Some(InvocationPopup {
+            query: String::new(),
+            range: None,
+            manual: true,
+            selected: 0,
+            scroll: 0,
+        });
+        self.begin_reference_refresh()
+    }
+
+    pub(in crate::ui::app) fn close_invocation_picker(&mut self) {
+        self.invocation_popup = None;
+        self.invocation_live.clear();
+        if self.invocation_reference_pending.take().is_some() {
+            self.invocation_reference_generation =
+                self.invocation_reference_generation.wrapping_add(1);
+        }
+    }
+
     pub(in crate::ui::app) fn refresh_invocation_popup_after_input(
         &mut self,
         mut effects: Vec<Effect>,
     ) -> Vec<Effect> {
         let was_open = self.invocation_popup.is_some();
         self.refresh_invocation_popup();
-        if !was_open && self.invocation_popup.is_some() {
-            effects.extend(self.refresh_invocations());
+        let opened = !was_open && self.invocation_popup.is_some();
+        let awaiting_automatic_reference = self.invocation_popup.is_none()
+            && self.invocation_reference_pending.is_none()
+            && self.reference_token_is_active();
+        if opened || awaiting_automatic_reference {
+            effects.extend(self.begin_reference_refresh());
         }
         effects
+    }
+
+    /// Apply only the newest live-reference result to the currently active picker generation.
+    pub fn complete_invocation_reference_discovery(
+        &mut self,
+        discovery: InvocationReferenceDiscovery,
+    ) {
+        if self.invocation_reference_pending != Some(discovery.generation)
+            || discovery.generation != self.invocation_reference_generation
+        {
+            return;
+        }
+        self.invocation_reference_pending = None;
+        self.invocation_live = discovery.references.unwrap_or_default();
+        self.invocation_live.truncate(MAX_INVOCATION_REFERENCES);
+        if self.invocation_popup.is_some() {
+            self.clamp_reference_popup();
+        } else if matches!(
+            self.interaction_mode(),
+            crate::application::InteractionMode::Edit { .. }
+        ) && self.reference_token_is_active()
+        {
+            self.refresh_invocation_popup();
+        }
+    }
+
+    fn begin_reference_refresh(&mut self) -> Vec<Effect> {
+        self.invocation_reference_generation = self.invocation_reference_generation.wrapping_add(1);
+        let generation = self.invocation_reference_generation;
+        self.invocation_reference_pending = Some(generation);
+        self.invocation_live.clear();
+        vec![Effect::DiscoverInvocationReferences(
+            InvocationReferenceDiscoveryRequest { generation },
+        )]
+    }
+
+    fn reference_token_is_active(&self) -> bool {
+        self.active_invocation_token()
+            .is_some_and(|(query, _)| query.starts_with('@'))
+    }
+
+    fn clamp_reference_popup(&mut self) {
+        let count = self.invocation_match_count();
+        let Some(popup) = &mut self.invocation_popup else {
+            return;
+        };
+        popup.selected = popup.selected.min(count.saturating_sub(1));
+        popup.scroll = popup.scroll.min(popup.selected);
     }
 }
 
@@ -35,7 +121,6 @@ pub(super) fn choices(
     app.invocation_live
         .iter()
         .filter(|reference| matches(reference, popup.manual, normalized_query))
-        .take(MAX_LIVE_RESULTS)
         .map(|reference| choice(reference, &app.invocation_live))
         .collect()
 }
@@ -65,7 +150,8 @@ fn qualifiers(reference: &LiveAgentReference, primary: &str) -> (String, Vec<Str
     let location = compact_location(reference, primary);
     let pane = compact_child(reference.workspace_id(), reference.pane_id());
     let location_and_pane = format!("{location} · {pane}");
-    let harness = (reference.harness().as_str() != primary).then_some(reference.harness().as_str());
+    let harness = (!same_display(reference.harness().as_str(), primary))
+        .then_some(reference.harness().as_str());
     let without_state = harness.map_or_else(
         || location_and_pane.clone(),
         |harness| format!("{location_and_pane} · {harness}"),
@@ -93,7 +179,7 @@ fn compact_location(reference: &LiveAgentReference, primary: &str) -> String {
     let tab = reference
         .tab_label()
         .filter(|label| meaningful_tab(label))
-        .filter(|label| *label != primary)
+        .filter(|label| !same_display(label, primary))
         .map(ToOwned::to_owned)
         .or_else(|| {
             reference
@@ -132,7 +218,7 @@ fn mention_label(reference: &LiveAgentReference, all: &[LiveAgentReference]) -> 
     let base = mention_base(reference);
     if all
         .iter()
-        .filter(|candidate| mention_base(candidate) == base)
+        .filter(|candidate| same_display(&mention_base(candidate), &base))
         .count()
         == 1
     {
@@ -142,7 +228,10 @@ fn mention_label(reference: &LiveAgentReference, all: &[LiveAgentReference]) -> 
     if all
         .iter()
         .filter(|candidate| {
-            mention_with_location(&mention_base(candidate), candidate, false) == human
+            same_display(
+                &mention_with_location(&mention_base(candidate), candidate, false),
+                &human,
+            )
         })
         .count()
         == 1
@@ -160,7 +249,7 @@ fn mention_base(reference: &LiveAgentReference) -> String {
     } else {
         subject
     };
-    if primary == reference.harness().as_str() {
+    if same_display(primary, reference.harness().as_str()) {
         format!("@{subject}")
     } else {
         format!("@{subject} · {}", reference.harness())
@@ -168,15 +257,18 @@ fn mention_base(reference: &LiveAgentReference) -> String {
 }
 
 fn mention_with_location(base: &str, reference: &LiveAgentReference, exact: bool) -> String {
-    let workspace = if exact {
-        reference.workspace_id()
-    } else {
-        reference
-            .workspace_label()
-            .unwrap_or_else(|| reference.workspace_id())
-    };
+    if exact {
+        return format!("{base} · pane {}", reference.pane_id());
+    }
+    let workspace = reference
+        .workspace_label()
+        .unwrap_or_else(|| reference.workspace_id());
     let pane = compact_child(reference.workspace_id(), reference.pane_id());
     format!("{base} · {workspace}/{pane}")
+}
+
+fn same_display(left: &str, right: &str) -> bool {
+    left.eq_ignore_ascii_case(right)
 }
 
 pub(super) fn insertion_payload(

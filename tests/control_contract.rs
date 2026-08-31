@@ -6,13 +6,13 @@ use proqi::ports::control::{
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::Value;
 
-const REQUEST: &str = include_str!("fixtures/control/v5/add.request.json");
-const ACCEPTED: &str = include_str!("fixtures/control/v5/add.accepted.json");
-const REJECTED: &str = include_str!("fixtures/control/v5/add.rejected.json");
-const UPDATE_PREPARE: &str = include_str!("fixtures/control/v5/update_prepare.request.json");
-const UPDATE_READY: &str = include_str!("fixtures/control/v5/update_prepare.ready.json");
-const CAPTURE_TAKEOVER: &str = include_str!("fixtures/control/v5/capture_takeover.request.json");
-const CAPTURE_SCHEDULED: &str = include_str!("fixtures/control/v5/capture_takeover.scheduled.json");
+const REQUEST: &str = include_str!("fixtures/control/v6/add.request.json");
+const ACCEPTED: &str = include_str!("fixtures/control/v6/add.accepted.json");
+const REJECTED: &str = include_str!("fixtures/control/v6/add.rejected.json");
+const UPDATE_PREPARE: &str = include_str!("fixtures/control/v6/update_prepare.request.json");
+const UPDATE_READY: &str = include_str!("fixtures/control/v6/update_prepare.ready.json");
+const CAPTURE_TAKEOVER: &str = include_str!("fixtures/control/v6/capture_takeover.request.json");
+const CAPTURE_SCHEDULED: &str = include_str!("fixtures/control/v6/capture_takeover.scheduled.json");
 
 #[test]
 fn current_request_success_and_error_fixtures_round_trip_canonically() {

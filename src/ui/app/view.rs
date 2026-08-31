@@ -292,12 +292,12 @@ impl BoardApp {
             .as_ref()
             .map_or(0, palette::PaletteState::match_count);
         let invocation_items = self.invocation_match_count();
-        let invocation_heights = self
+        let invocation_groups = self
             .invocation_view()
             .map_or_else(Vec::new, |(_, entries, _)| {
                 entries
                     .iter()
-                    .map(|entry| 1 + u16::from(entry.group.is_some()))
+                    .map(|entry| entry.group.is_some())
                     .collect::<Vec<_>>()
             });
         let search_items = self.search_match_count();
@@ -312,9 +312,9 @@ impl BoardApp {
         } else if self.rename.is_some() {
             2
         } else if self.invocation_popup.is_some() {
-            invocation_heights
+            invocation_groups
                 .iter()
-                .map(|height| usize::from(*height))
+                .map(|grouped| 1 + usize::from(*grouped))
                 .sum::<usize>()
                 .max(2)
         } else if self.palette.is_some() {
@@ -327,7 +327,7 @@ impl BoardApp {
             0
         };
         if self.invocation_popup.is_some() {
-            layout.configure_grouped_overlay(&invocation_heights, preferred_rows);
+            layout.configure_grouped_overlay(&invocation_groups, preferred_rows);
         } else {
             layout.configure_overlay(
                 screenshot_items

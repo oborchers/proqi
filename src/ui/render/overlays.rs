@@ -70,8 +70,10 @@ pub(super) fn render_picker(
     );
     frame.set_cursor_position((input.x.saturating_add(1).saturating_add(cursor), input.y));
     for (index, (entry, area)) in picker.entries.iter().zip(&overlay.items).enumerate() {
-        let entry_area = if let Some(group) = entry.group {
-            let heading = ratatui_core::layout::Rect::new(area.x, area.y, area.width, 1);
+        if let Some((group, heading)) = entry
+            .group
+            .zip(overlay.item_headings.get(index).copied().flatten())
+        {
             frame.render_widget(
                 Paragraph::new(ellipsize(group, usize::from(heading.width))).style(
                     theme
@@ -81,23 +83,15 @@ pub(super) fn render_picker(
                 ),
                 heading,
             );
-            ratatui_core::layout::Rect::new(
-                area.x,
-                area.y.saturating_add(1),
-                area.width,
-                area.height.saturating_sub(1),
-            )
-        } else {
-            *area
-        };
+        }
         frame.render_widget(
             Paragraph::new(picker_line(
                 *entry,
-                entry_area.width,
+                area.width,
                 index == picker.selected,
                 theme,
             )),
-            entry_area,
+            *area,
         );
     }
     render_close(frame, overlay, theme);
@@ -287,7 +281,11 @@ fn picker_line(entry: PickerRow<'_>, width: u16, selected: bool, theme: &Theme) 
         base.fg(theme.foreground)
     };
     let Some(secondary) = fitting_secondary(entry, width) else {
-        return Line::from(Span::styled(primary, primary_style));
+        let padding = " ".repeat(width.saturating_sub(primary.width()));
+        return Line::from(vec![
+            Span::styled(primary, primary_style),
+            Span::styled(padding, base),
+        ]);
     };
     let gap = width.saturating_sub(entry.primary.width() + secondary.width());
     Line::from(vec![

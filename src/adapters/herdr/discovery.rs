@@ -1,6 +1,6 @@
 //! Capability negotiation, live references, and verified directional lookup.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
     domain::Direction,
@@ -10,12 +10,11 @@ use crate::{
             PaneContext, PaneRect,
         },
         environment::ProcessRunner,
-        invocation::{InvocationReferenceProvider, LiveAgentReference},
+        invocation::{InvocationReferenceProvider, LiveAgentReference, MAX_INVOCATION_REFERENCES},
     },
 };
 
 const MAX_AGENT_ROWS: usize = 128;
-const MAX_LIVE_REFERENCES: usize = 64;
 
 use super::{
     DISCOVERY_TIMEOUT, HerdrGateway, SUPPORTED_PROTOCOL, SUPPORTED_SCHEMA,
@@ -103,10 +102,16 @@ pub(super) fn live_references<R: ProcessRunner>(
     let workspaces = workspace_labels(snapshot.workspaces)?;
     let tabs = tab_labels(snapshot.tabs)?;
     let mut references = BTreeMap::new();
+    let mut pane_ids = BTreeSet::new();
     for pane in snapshot.agents.into_iter().take(MAX_AGENT_ROWS) {
         let Some(reference) = live_reference(&pane, &workspaces, &tabs)? else {
             continue;
         };
+        if !pane_ids.insert(reference.pane_id().to_owned()) {
+            return Err(AgentError::Ambiguous(
+                "multiple recognized agents claim one pane identity".to_owned(),
+            ));
+        }
         let key = (
             reference.workspace_id().to_owned(),
             reference.tab_id().to_owned(),
@@ -118,7 +123,10 @@ pub(super) fn live_references<R: ProcessRunner>(
             ));
         }
     }
-    Ok(references.into_values().take(MAX_LIVE_REFERENCES).collect())
+    Ok(references
+        .into_values()
+        .take(MAX_INVOCATION_REFERENCES)
+        .collect())
 }
 
 fn live_reference(
@@ -126,11 +134,10 @@ fn live_reference(
     workspaces: &BTreeMap<String, Option<String>>,
     tabs: &BTreeMap<String, (String, Option<String>)>,
 ) -> Result<Option<LiveAgentReference>, AgentError> {
-    let harness = pane.agent.clone().and_then(|value| {
-        super::harness::kind(value).ok().filter(|kind| {
-            kind.as_str().chars().count() <= 32 && !kind.as_str().chars().any(char::is_whitespace)
-        })
-    });
+    let harness = pane
+        .agent
+        .clone()
+        .and_then(|value| super::harness::kind(value).ok());
     let Some(harness) = harness else {
         return Ok(None);
     };

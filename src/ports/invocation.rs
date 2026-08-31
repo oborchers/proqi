@@ -4,6 +4,9 @@ use std::path::PathBuf;
 
 use super::agent::{AgentFailureCode, AgentState, HarnessKind};
 
+/// Maximum recognized collaborators retained from one provider snapshot.
+pub const MAX_INVOCATION_REFERENCES: usize = 64;
+
 /// Conceptual definition layer represented by a catalog entry.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -137,8 +140,22 @@ pub struct InvocationDiscovery {
     pub global: Vec<InvocationEntry>,
     /// Entries associated with this cwd's ancestor chain.
     pub project: Vec<InvocationEntry>,
-    /// Recognized collaborators currently present on the local terminal server.
-    pub live: Vec<LiveAgentReference>,
+}
+
+/// Monotonic request for one picker-open collaborator snapshot.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct InvocationReferenceDiscoveryRequest {
+    /// UI-owned generation used to reject stale completion.
+    pub generation: u64,
+}
+
+/// Bounded collaborator completion for one picker-open generation.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct InvocationReferenceDiscovery {
+    /// Matching request generation.
+    pub generation: u64,
+    /// Recognized agents, or the stable failure from this exact generation.
+    pub references: Result<Vec<LiveAgentReference>, AgentFailureCode>,
 }
 
 /// Integration that supplied one ephemeral collaborator reference.

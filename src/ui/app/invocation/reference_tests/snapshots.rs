@@ -7,10 +7,9 @@ use super::*;
 pub(super) fn live_snapshot(width: u16, height: u16) -> String {
     let cwd = tempfile::tempdir().expect("tempdir");
     let (mut app, _, _) = app("Coordinate", cwd.path());
-    install_live(
+    install_catalog(&mut app, cwd.path(), Vec::new());
+    open_with_live(
         &mut app,
-        cwd.path(),
-        Vec::new(),
         vec![
             reviewer(AgentState::Working),
             reference(
@@ -22,7 +21,6 @@ pub(super) fn live_snapshot(width: u16, height: u16) -> String {
             ),
         ],
     );
-    app.open_invocation_picker();
     let mut terminal = Terminal::new(TestBackend::new(width, height)).expect("terminal");
     terminal
         .draw(|frame| {

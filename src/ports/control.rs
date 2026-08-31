@@ -4,7 +4,8 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::domain::{
-    ContentAnnotation, OperationId, RequestId, RevisionId, SessionId, ThoughtId, UndoScope,
+    ContentAnnotation, ContentAnnotationKind, OperationId, RequestId, RevisionId, SessionId,
+    ThoughtId, UndoScope,
 };
 
 use super::store::DurableIdentity;
@@ -14,7 +15,7 @@ use super::update::{
 use super::{runtime::InstanceInfo, store::CommitReceipt};
 
 /// Current local owner-control protocol.
-pub const CONTROL_PROTOCOL_VERSION: u32 = 5;
+pub const CONTROL_PROTOCOL_VERSION: u32 = 6;
 /// Current compatible screenshot takeover protocol.
 pub const CAPTURE_CONTROL_PROTOCOL_VERSION: u32 = 1;
 /// Oldest owner-control protocol accepted for plain-text mutations.
@@ -235,10 +236,20 @@ impl ControlMutation {
         matches!(self, Self::Add { annotations, .. } if !annotations.is_empty())
     }
 
+    /// Whether this mutation carries the invocation-reference annotation added in protocol six.
+    #[must_use]
+    pub fn requires_protocol_six(&self) -> bool {
+        matches!(self, Self::Add { annotations, .. } if annotations.iter().any(|annotation| {
+            matches!(annotation.kind, ContentAnnotationKind::InvocationReference { .. })
+        }))
+    }
+
     /// Oldest control protocol capable of representing this request.
     #[must_use]
     pub fn minimum_protocol(&self) -> u32 {
-        if matches!(self, Self::CaptureTakeover { .. }) {
+        if self.requires_protocol_six() {
+            6
+        } else if matches!(self, Self::CaptureTakeover { .. }) {
             5
         } else if matches!(
             self,

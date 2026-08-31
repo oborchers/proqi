@@ -103,7 +103,7 @@ pub(super) fn render_invocation_picker(
         frame,
         overlay,
         overlays::PickerView {
-            title: " invocations and references ",
+            title: " discovered invocations ",
             prompt: '›',
             query: &query,
             cursor: app.overlay_query_cursor().unwrap_or(query.len()),

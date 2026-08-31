@@ -68,7 +68,6 @@ impl BoardApp {
         }
         self.invocation_global = discovery.global;
         self.invocation_project = discovery.project;
-        self.invocation_live = discovery.live;
         self.refresh_invocation_popup();
     }
 
@@ -77,32 +76,9 @@ impl BoardApp {
         if cwd != self.invocation_cwd {
             self.invocation_cwd = cwd;
             self.invocation_project.clear();
-            self.invocation_popup = None;
+            self.close_invocation_picker();
         }
         self.refresh_invocations()
-    }
-
-    pub(super) fn open_invocation_picker(&mut self) {
-        if !matches!(
-            self.interaction_mode(),
-            crate::application::InteractionMode::Edit { .. }
-        ) {
-            self.enter_edit();
-        }
-        if matches!(
-            self.interaction_mode(),
-            crate::application::InteractionMode::Edit { .. }
-        ) {
-            self.invocation_popup = Some(InvocationPopup {
-                query: String::new(),
-                range: None,
-                manual: true,
-                selected: 0,
-                scroll: 0,
-            });
-        } else {
-            self.set_warning("focus a thought before inserting an invocation");
-        }
     }
 
     pub(super) fn refresh_invocation_popup(&mut self) {
@@ -171,7 +147,7 @@ impl BoardApp {
         clock: &impl Clock,
     ) -> Vec<Effect> {
         match input {
-            UiInput::Key(UiKey::Escape) => self.invocation_popup = None,
+            UiInput::Key(UiKey::Escape) => self.close_invocation_picker(),
             UiInput::Key(UiKey::Enter | UiKey::Tab) => {
                 let selected = self
                     .invocation_popup
@@ -310,16 +286,22 @@ impl BoardApp {
         });
         let (content, annotations, _) = insertion.into_parts();
         self.apply_annotated_edit(EditCommand::Paste(content), &annotations);
-        self.invocation_popup = None;
+        self.close_invocation_picker();
     }
 
     fn move_invocation(&mut self, delta: isize) {
-        let count = self.invocation_match_count();
-        let visible = self
+        let Some(popup) = self.invocation_popup.as_ref() else {
+            return;
+        };
+        let choices = self.invocation_choices(popup);
+        let count = choices.len();
+        let row_budget = self
             .layout
             .as_ref()
             .and_then(|layout| layout.overlay.as_ref())
-            .map_or(1, |overlay| overlay.items.len().max(1));
+            .map_or(1, |overlay| {
+                usize::from(overlay.area.height.saturating_sub(3)).max(1)
+            });
         let Some(popup) = &mut self.invocation_popup else {
             return;
         };
@@ -329,8 +311,9 @@ impl BoardApp {
             .min(count.saturating_sub(1));
         if popup.selected < popup.scroll {
             popup.scroll = popup.selected;
-        } else if popup.selected >= popup.scroll.saturating_add(visible) {
-            popup.scroll = popup.selected + 1 - visible;
+        } else {
+            popup.scroll =
+                view::scroll_for_selection(&choices, popup.selected, popup.scroll, row_budget);
         }
     }
 
@@ -402,11 +385,7 @@ impl BoardApp {
                 .then_with(|| left_entry.source.cmp(&right_entry.source))
                 .then_with(|| left_entry.canonical_path.cmp(&right_entry.canonical_path))
         });
-        candidates.truncate(
-            MAX_RESULTS
-                .saturating_sub(built_ins.len())
-                .saturating_sub(live.len()),
-        );
+        candidates.truncate(MAX_RESULTS.saturating_sub(built_ins.len()));
         let visible = candidates.clone();
         built_ins
             .into_iter()
