@@ -1,6 +1,6 @@
 //! Exact placeholder-aware Space durability and undo through a real PTY.
 
-use super::support::{expect_command, json_command};
+use super::support::{consume_first_run, expect_command, json_command};
 
 use proqi::domain::{ContentAnnotation, ContentAnnotationKind};
 use rusqlite::Connection;
@@ -13,6 +13,7 @@ fn selected_file_placeholder_moves_right_and_undoes_in_a_real_pty() {
     std::fs::write(&file, b"fixture image bytes").expect("file fixture");
     let binary = env!("CARGO_BIN_EXE_proqi");
 
+    consume_first_run(binary, state.path());
     create_placeholder(binary, state.path(), &file);
     let sessions = json_command(binary, state.path(), &["sessions", "list"]);
     let session = sessions["data"]["sessions"][0]["id"]
