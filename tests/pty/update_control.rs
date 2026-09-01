@@ -23,9 +23,12 @@ use proqi::{
     },
 };
 
-use super::{
+use super::support::{
     expect_command, json_command, json_input_command, wait_for_control_owner, wait_for_path,
 };
+
+#[path = "update_control/highlight_fixture.rs"]
+mod highlight_fixture;
 
 struct FakeInstaller {
     calls: usize,
@@ -168,7 +171,7 @@ fn in_app_restart_reopens_until_dismissed_then_remains_manual() {
     let created = json_command(original, state.path(), &[]);
     let session = created["data"]["session_id"].as_str().expect("session ID");
     let ready = state.path().join("highlight-owner-ready");
-    let mut owner = spawn_highlight_crash_owner(&binary, state.path(), session, &ready);
+    let mut owner = highlight_fixture::spawn_crash_owner(&binary, state.path(), session, &ready);
     wait_for_path(&ready);
     wait_for_control_owner(state.path(), session);
     rewrite_participant_version(state.path(), session, "0.3.0");
@@ -185,7 +188,7 @@ fn in_app_restart_reopens_until_dismissed_then_remains_manual() {
         .expect("pending announcement");
     assert!(!pending.acknowledged());
 
-    let status = run_highlight_dismissal(&binary, state.path(), session);
+    let status = highlight_fixture::run_dismissal(&binary, state.path(), session);
     assert!(status.success(), "dismissal fixture exited with {status}");
     let acknowledged = update_state
         .load(installation)
@@ -194,12 +197,12 @@ fn in_app_restart_reopens_until_dismissed_then_remains_manual() {
         .expect("acknowledged announcement");
     assert!(acknowledged.acknowledged());
 
-    let status = run_quiet_highlight_resume(&binary, state.path(), session);
+    let status = highlight_fixture::run_quiet_resume(&binary, state.path(), session);
     assert!(
         status.success(),
         "quiet resume fixture exited with {status}"
     );
-    let status = run_manual_highlight_reopen(&binary, state.path(), session);
+    let status = highlight_fixture::run_manual_reopen(&binary, state.path(), session);
     assert!(
         status.success(),
         "manual reopen fixture exited with {status}"
@@ -304,6 +307,11 @@ fn spawn_owner(binary: &str, state: &Path, session: &str, ready: &Path, done: &P
         set deadline [expr {[clock milliseconds] + 15000}]
         while {![file exists $env(PROQI_TEST_DONE)]} {
             if {[clock milliseconds] >= $deadline} { exit 91 }
+            expect -timeout 0 {
+                -re ".+" { exp_continue }
+                timeout {}
+                eof { exit 93 }
+            }
             after 20
         }
         send -- "\x11"
@@ -355,6 +363,11 @@ fn spawn_restarting_owner(
         set deadline [expr {[clock milliseconds] + 15000}]
         while {![file exists $env(PROQI_TEST_DONE)]} {
             if {[clock milliseconds] >= $deadline} { exit 92 }
+            expect -timeout 0 {
+                -re ".+" { exp_continue }
+                timeout {}
+                eof { exit 93 }
+            }
             after 20
         }
         send -- "\x11"
@@ -373,118 +386,4 @@ fn spawn_restarting_owner(
         .env("PROQI_TEST_DONE", done)
         .spawn()
         .expect("spawn restarting owner")
-}
-
-fn spawn_highlight_crash_owner(binary: &Path, state: &Path, session: &str, ready: &Path) -> Child {
-    let script = r#"
-        log_user 0
-        set timeout 20
-        spawn $env(PROQI_TEST_BINARY) --state-dir $env(PROQI_TEST_STATE) -r $env(PROQI_TEST_SESSION)
-        expect -exact "\x1b\[?1049h"
-        stty rows 18 columns 84
-        close [open $env(PROQI_TEST_READY) w]
-        expect -exact "\x1b\[?1049l"
-        expect -exact "\x1b\[?1049h"
-        stty rows 19 columns 85
-        after 500
-        exec kill -KILL [exp_pid]
-        expect eof
-        catch wait result
-        exit 0
-    "#;
-    expect_command()
-        .args(["-c", script])
-        .env("PROQI_TEST_BINARY", binary)
-        .env("PROQI_TEST_STATE", state)
-        .env("PROQI_TEST_SESSION", session)
-        .env("PROQI_TEST_READY", ready)
-        .spawn()
-        .expect("spawn highlight crash owner")
-}
-
-fn run_highlight_dismissal(binary: &Path, state: &Path, session: &str) -> std::process::ExitStatus {
-    let script = r#"
-        log_user 0
-        set timeout 20
-        spawn $env(PROQI_TEST_BINARY) --state-dir $env(PROQI_TEST_STATE) -r $env(PROQI_TEST_SESSION)
-        expect -exact "\x1b\[?1049h"
-        stty rows 18 columns 84
-        after 300
-        send -- "\x1b"
-        after 500
-        send -- "\x11"
-        expect eof
-        catch wait result
-        exit [lindex $result 3]
-    "#;
-    expect_command()
-        .args(["-c", script])
-        .env("PROQI_TEST_BINARY", binary)
-        .env("PROQI_TEST_STATE", state)
-        .env("PROQI_TEST_SESSION", session)
-        .status()
-        .expect("run highlight dismissal")
-}
-
-fn run_quiet_highlight_resume(
-    binary: &Path,
-    state: &Path,
-    session: &str,
-) -> std::process::ExitStatus {
-    let script = r#"
-        log_user 0
-        set timeout 20
-        spawn $env(PROQI_TEST_BINARY) --state-dir $env(PROQI_TEST_STATE) -r $env(PROQI_TEST_SESSION)
-        expect -exact "\x1b\[?1049h"
-        stty rows 18 columns 84
-        after 300
-        send -- "q"
-        expect eof
-        catch wait result
-        exit [lindex $result 3]
-    "#;
-    expect_command()
-        .args(["-c", script])
-        .env("PROQI_TEST_BINARY", binary)
-        .env("PROQI_TEST_STATE", state)
-        .env("PROQI_TEST_SESSION", session)
-        .status()
-        .expect("run quiet highlight resume")
-}
-
-fn run_manual_highlight_reopen(
-    binary: &Path,
-    state: &Path,
-    session: &str,
-) -> std::process::ExitStatus {
-    let script = r#"
-        log_user 0
-        set timeout 20
-        spawn $env(PROQI_TEST_BINARY) --state-dir $env(PROQI_TEST_STATE) -r $env(PROQI_TEST_SESSION)
-        expect -exact "\x1b\[?1049h"
-        stty rows 18 columns 84
-        after 300
-        send -- ":What's new\r"
-        after 300
-        send -- "q"
-        set timeout 1
-        expect {
-            eof { exit 94 }
-            timeout {}
-        }
-        set timeout 20
-        send -- "\x1b"
-        after 200
-        send -- "\x11"
-        expect eof
-        catch wait result
-        exit [lindex $result 3]
-    "#;
-    expect_command()
-        .args(["-c", script])
-        .env("PROQI_TEST_BINARY", binary)
-        .env("PROQI_TEST_STATE", state)
-        .env("PROQI_TEST_SESSION", session)
-        .status()
-        .expect("run manual highlight reopen")
 }

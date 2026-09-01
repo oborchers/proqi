@@ -25,6 +25,8 @@ mod kilo;
 mod opencode;
 #[path = "tests/pi.rs"]
 mod pi;
+#[path = "tests/references.rs"]
+mod references;
 #[path = "tests/sessionless.rs"]
 mod sessionless;
 #[path = "tests/submission_receipts.rs"]

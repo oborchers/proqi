@@ -1,5 +1,10 @@
 //! Atomic private PNG materialization for clipboard images.
 
+mod accessibility;
+pub(crate) mod worker;
+
+pub use accessibility::FileAttachmentAccessibility;
+
 use std::{
     fs::{self, File, OpenOptions},
     io::BufWriter,

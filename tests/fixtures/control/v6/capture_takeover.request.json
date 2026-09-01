@@ -1,0 +1,11 @@
+{
+  "protocol": 6,
+  "request_id": "req_06g30t8fudrq55fdkjqr6mpe44",
+  "session_id": "ses_06g30t7dv5qv55n1ppn3clis3k",
+  "mutation": {
+    "mutation": "capture_takeover",
+    "expected_owner_instance_id": "ins_06g3cnfeelq3707alnmfsvn1vo",
+    "requester_instance_id": "ins_06g3cnfeelq3707alnmfsvn1vs",
+    "capture_protocol": 1
+  }
+}

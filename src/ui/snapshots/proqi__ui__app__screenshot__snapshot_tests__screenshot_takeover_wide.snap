@@ -1,6 +1,6 @@
 ---
 source: src/ui/app/screenshot/tests.rs
-assertion_line: 13
+assertion_line: 30
 expression: "takeover_snapshot(82, 16)"
 ---
 00││
@@ -18,4 +18,4 @@ expression: "takeover_snapshot(82, 16)"
 12│  Screenshot Inbox is listening in another Proqi session│
 13│  screenshot-ui│
 14│  1 thought · board · saved│
-15│  n New   y Copy  x Cut  d Delete  Space Select u Undo  / Search  : Commands│
+15│  n New   y Copy  x Cut  d/Del  Space Select u Undo  / Search  : Commands│

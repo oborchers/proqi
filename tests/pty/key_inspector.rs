@@ -1,6 +1,6 @@
 //! Real terminal coverage for the keypress diagnostic.
 
-use super::expect_command;
+use super::support::expect_command;
 
 fn inspect_sequence(sequence: &str, raw_code: &str, action: &str) {
     let script = format!(
@@ -73,4 +73,34 @@ fn platform_primary_arrow_is_forwarded_through_the_real_pty_and_restores() {
             "EditNavigation { editor_movement: DocumentEnd, board_movement: VisualDown }",
         );
     }
+}
+
+#[test]
+fn primary_enter_variants_are_distinct_in_the_real_pty() {
+    let (submit, keep, modifier) = if cfg!(target_os = "macos") {
+        (r"\x1b\[13;9u", r"\x1b\[13;10u", "SUPER")
+    } else {
+        (r"\x1b\[13;5u", r"\x1b\[13;6u", "CONTROL")
+    };
+    inspect_sequence(
+        submit,
+        &format!("Enter, modifiers: KeyModifiers({modifier})"),
+        "Submit",
+    );
+    inspect_sequence(
+        keep,
+        &format!("Enter, modifiers: KeyModifiers(SHIFT | {modifier})"),
+        "SubmitKeep",
+    );
+}
+
+#[test]
+fn delete_and_backspace_are_distinct_in_the_real_pty() {
+    inspect_sequence(r"\x1b\[3~", "Delete", "Delete");
+    inspect_sequence(
+        r"\x1b\[3;2~",
+        "Delete, modifiers: KeyModifiers(SHIFT)",
+        "ModifiedDelete",
+    );
+    inspect_sequence(r"\x7f", "Backspace", "Backspace");
 }

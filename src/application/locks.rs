@@ -18,16 +18,21 @@ pub(super) fn ensure_action_unlocked(state: &AppState, action: &Action) -> Appli
         Action::Redo { scope, .. } => locked_history(state, *scope, false),
         Action::RenameSession { .. }
         | Action::FocusThought(_)
+        | Action::EnterCompose
+        | Action::ExitCompose
         | Action::ExitEdit
         | Action::CreateThought { .. }
+        | Action::CreateOwnedThought(_)
         | Action::PasteAsThought { .. }
         | Action::CopyThoughts { .. }
         | Action::ClipboardResult { .. }
         | Action::BeginSubmission { .. }
         | Action::EndSubmission { .. }
+        | Action::StageSubmissionRemoval { .. }
         | Action::PersistenceCommitted(_)
         | Action::PersistenceFailed { .. }
         | Action::RetryPersistence(_) => None,
+        Action::EditOwnedThought(edit) => locked_one(state, edit.thought_id),
     };
     locked.map_or(Ok(()), |thought_id| {
         Err(ApplicationError::ThoughtLocked(thought_id))

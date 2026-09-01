@@ -60,13 +60,17 @@ fn exhausted_recovery_capacity_exposes_export_without_retry() {
 #[test]
 fn typing_coalesces_until_a_semantic_boundary() {
     let mut fixture = Fixture::new();
-    let effects = fixture.effects(UiInput::Key(UiKey::Enter));
+    let effects = fixture.effects(UiInput::Key(UiKey::Character('h')));
     assert_eq!(effects.len(), 1);
     let Effect::CommitBoardOperation(operation) = &effects[0] else {
         panic!("expected initial thought persistence");
     };
     assert_eq!(operation.kind, proqi::domain::BoardOperationKind::Create);
-    for character in "hello".chars() {
+    let proqi::domain::BoardMutation::AddThought { thought } = &operation.forward else {
+        panic!("expected create payload");
+    };
+    assert_eq!(thought.content, "h");
+    for character in "ello".chars() {
         assert!(
             fixture
                 .effects(UiInput::Key(UiKey::Character(character)))
@@ -83,7 +87,7 @@ fn typing_coalesces_until_a_semantic_boundary() {
     let Effect::CommitRevision(revision) = &effects[0] else {
         panic!("expected one coalesced revision");
     };
-    assert_eq!(revision.before_content, "");
+    assert_eq!(revision.before_content, "h");
     assert_eq!(revision.after_content, "hello");
     assert!(!fixture.app.has_pending_edit());
 }

@@ -22,6 +22,9 @@ pub(in crate::ui) enum ScrollAnchor {
         byte: usize,
     },
     Overflow(ThoughtId),
+    Compose {
+        byte: usize,
+    },
     InsertGap,
     Insert,
 }
@@ -84,9 +87,18 @@ pub(super) struct ThoughtRows {
 pub(super) struct BoardFlow {
     pub(super) thoughts: Vec<ThoughtRows>,
     pub(super) top_padding: u16,
+    pub(super) compose: Option<ComposeRows>,
     pub(super) insert_gap: Option<usize>,
     pub(super) insert_row: Option<usize>,
     total_rows: usize,
+}
+
+#[derive(Clone, Debug)]
+pub(super) struct ComposeRows {
+    pub(super) content_start: usize,
+    pub(super) row_starts: Vec<usize>,
+    pub(super) scroll_row: usize,
+    pub(super) end: usize,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -136,14 +148,39 @@ impl BoardFlow {
             cursor = rows.end;
             thoughts.push(rows);
         }
-        let board_mode = matches!(state.mode, InteractionMode::Board);
-        let insert_gap = board_mode.then_some(cursor);
-        cursor = cursor.saturating_add(usize::from(board_mode));
-        let insert_row = board_mode.then_some(cursor);
-        cursor = cursor.saturating_add(usize::from(board_mode));
+        let compose = if matches!(state.mode, InteractionMode::Compose) {
+            editor.map(|snapshot| {
+                let gap = usize::from(!thoughts.is_empty()) * gap_rows;
+                let content_start = cursor.saturating_add(gap);
+                let row_starts = snapshot
+                    .visual_lines
+                    .iter()
+                    .map(|row| row.start_byte)
+                    .collect::<Vec<_>>();
+                let rows = row_starts.len().max(1);
+                ComposeRows {
+                    content_start,
+                    row_starts,
+                    scroll_row: snapshot.scroll_row,
+                    end: content_start.saturating_add(rows),
+                }
+            })
+        } else {
+            None
+        };
+        if let Some(compose) = &compose {
+            cursor = compose.end;
+        }
+        let insertion_prompt = matches!(state.mode, InteractionMode::Board)
+            || (matches!(state.mode, InteractionMode::Compose) && editor.is_none());
+        let insert_gap = insertion_prompt.then_some(cursor);
+        cursor = cursor.saturating_add(usize::from(insertion_prompt));
+        let insert_row = insertion_prompt.then_some(cursor);
+        cursor = cursor.saturating_add(usize::from(insertion_prompt));
         Self {
             thoughts,
             top_padding,
+            compose,
             insert_gap,
             insert_row,
             total_rows: cursor,
@@ -236,6 +273,14 @@ impl BoardFlow {
                         .saturating_add(thought.content_rows.saturating_sub(1))
                 })
             }),
+            ScrollAnchor::Compose { byte } => self.compose.as_ref().map(|compose| {
+                let row = compose
+                    .row_starts
+                    .iter()
+                    .rposition(|start| *start <= byte)
+                    .unwrap_or(0);
+                compose.content_start.saturating_add(row)
+            }),
             ScrollAnchor::InsertGap => self.insert_gap,
             ScrollAnchor::Insert => self.insert_row,
         }
@@ -268,6 +313,15 @@ impl BoardFlow {
             if thought.overflow_row == Some(ordinal) {
                 return ScrollAnchor::Overflow(thought.thought_id);
             }
+        }
+        if let Some(compose) = &self.compose
+            && ordinal >= compose.content_start
+            && ordinal < compose.end
+        {
+            let row = ordinal.saturating_sub(compose.content_start);
+            return ScrollAnchor::Compose {
+                byte: compose.row_starts.get(row).copied().unwrap_or(0),
+            };
         }
         if self.insert_gap == Some(ordinal) && self.insert_gap != self.insert_row {
             return ScrollAnchor::InsertGap;
@@ -304,6 +358,12 @@ impl BoardFlow {
     ) -> usize {
         if insertion_focused {
             return maximum;
+        }
+        if let Some(compose) = &self.compose {
+            return compose
+                .content_start
+                .saturating_add(compose.scroll_row)
+                .min(maximum);
         }
         let Some(rows) = focused.and_then(|id| self.thought(id)) else {
             return offset;

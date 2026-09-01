@@ -1,6 +1,6 @@
 //! Canonical-to-visible mapping for folded editor ranges.
 
-use super::annotations::{Presentation, PresentedFold, project};
+use super::annotations::{Presentation, PresentedStyle, PresentedSubstitution, ProjectionError};
 use crate::{
     domain::{ContentAnnotation, TextPosition},
     ports::{
@@ -15,7 +15,8 @@ use crate::{
 /// Fold-aware visible editor state with lossless canonical mappings.
 pub(super) struct EditorPresentation {
     pub(super) snapshot: EditorSnapshot,
-    pub(super) folds: Vec<PresentedFold>,
+    pub(super) substitutions: Vec<PresentedSubstitution>,
+    pub(super) styles: Vec<PresentedStyle>,
     canonical_content: String,
     rows: Vec<WrappedRow>,
     cursor_display_byte: usize,
@@ -40,7 +41,7 @@ pub(super) fn board_cell_target(
     let rows = wrap_rows(&presentation.content, usize::from(width.max(1)));
     let wrapped = rows.get(row)?;
     let display = byte_at_cell(&presentation.content, wrapped, usize::from(column));
-    if let Some(fold) = presentation.folds.iter().find(|fold| {
+    if let Some(fold) = presentation.substitutions.iter().find(|fold| {
         fold.collapsed
             && display >= fold.start
             && (display < fold.end || (display == fold.end && fold.start == wrapped.end_byte))
@@ -52,17 +53,17 @@ pub(super) fn board_cell_target(
     }
     Some(BoardCellTarget::Position(position_for_byte(
         canonical,
-        unproject_byte(display, &presentation.folds),
+        unproject_byte(display, &presentation.substitutions),
     )))
 }
 
 impl EditorPresentation {
-    pub(super) fn fold_at_cell(&self, row: u16, column: u16) -> Option<&PresentedFold> {
+    pub(super) fn fold_at_cell(&self, row: u16, column: u16) -> Option<&PresentedSubstitution> {
         let row = self
             .rows
             .get(self.snapshot.scroll_row.saturating_add(usize::from(row)))?;
         let byte = byte_at_cell(&self.snapshot.content, row, usize::from(column));
-        self.folds.iter().find(|fold| {
+        self.substitutions.iter().find(|fold| {
             fold.collapsed
                 && byte >= fold.start
                 && (byte < fold.end || (byte == fold.end && fold.start == row.end_byte))
@@ -79,7 +80,7 @@ impl EditorPresentation {
         let display = byte_at_cell(&self.snapshot.content, row, usize::from(column));
         position_for_byte(
             &self.canonical_content,
-            unproject_byte(display, &self.folds),
+            unproject_byte(display, &self.substitutions),
         )
     }
 
@@ -99,11 +100,17 @@ pub(super) fn editor_presentation(
     canonical: &EditorSnapshot,
     annotations: &[ContentAnnotation],
     expanded: &[usize],
-) -> EditorPresentation {
-    let presentation = project(&canonical.content, annotations, expanded);
+    inaccessible: impl FnMut(usize) -> bool,
+) -> Result<EditorPresentation, ProjectionError> {
+    let presentation = super::annotations::project_with_health(
+        &canonical.content,
+        annotations,
+        expanded,
+        inaccessible,
+    )?;
     let cursor_display_byte = project_byte(
         byte_for_position(&canonical.content, canonical.cursor),
-        &presentation.folds,
+        &presentation.substitutions,
     );
     let cursor = position_for_byte(&presentation.content, cursor_display_byte);
     let selection = canonical.selection.map(|selection| TextSelection {
@@ -124,13 +131,14 @@ pub(super) fn editor_presentation(
         scroll_row,
         visual_lines: rows.iter().map(|row| row.visual.clone()).collect(),
     };
-    EditorPresentation {
+    Ok(EditorPresentation {
         snapshot,
-        folds: presentation.folds,
+        substitutions: presentation.substitutions,
+        styles: presentation.styles,
         canonical_content: canonical.content.clone(),
         rows,
         cursor_display_byte,
-    }
+    })
 }
 
 fn project_position(
@@ -139,11 +147,11 @@ fn project_position(
     presentation: &Presentation,
 ) -> TextPosition {
     let byte = byte_for_position(canonical, position);
-    let projected = project_byte(byte, &presentation.folds);
+    let projected = project_byte(byte, &presentation.substitutions);
     position_for_byte(&presentation.content, projected)
 }
 
-fn project_byte(byte: usize, folds: &[PresentedFold]) -> usize {
+fn project_byte(byte: usize, folds: &[PresentedSubstitution]) -> usize {
     let mut canonical_cursor = 0;
     let mut display_cursor = 0;
     for fold in folds {
@@ -152,7 +160,8 @@ fn project_byte(byte: usize, folds: &[PresentedFold]) -> usize {
         }
         if byte <= fold.canonical_end {
             if !fold.collapsed {
-                return fold.start + byte.saturating_sub(fold.canonical_start);
+                return (fold.start + byte.saturating_sub(fold.canonical_start))
+                    .min(fold.content_end);
             }
             return if byte == fold.canonical_start {
                 fold.start
@@ -166,7 +175,7 @@ fn project_byte(byte: usize, folds: &[PresentedFold]) -> usize {
     display_cursor + byte.saturating_sub(canonical_cursor)
 }
 
-fn unproject_byte(byte: usize, folds: &[PresentedFold]) -> usize {
+fn unproject_byte(byte: usize, folds: &[PresentedSubstitution]) -> usize {
     let mut canonical_cursor = 0;
     let mut display_cursor = 0;
     for fold in folds {
@@ -174,7 +183,7 @@ fn unproject_byte(byte: usize, folds: &[PresentedFold]) -> usize {
             return canonical_cursor + byte.saturating_sub(display_cursor);
         }
         if byte <= fold.end {
-            return if fold.collapsed {
+            return if fold.collapsed || byte >= fold.content_end {
                 fold.canonical_end
             } else {
                 fold.canonical_start + byte.saturating_sub(fold.start)

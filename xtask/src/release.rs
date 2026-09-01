@@ -16,12 +16,9 @@ const DIST_VERSION: &str = "0.32.0";
 use super::release_targets::ALL as TARGETS;
 
 pub(super) fn plan(root: &Path, requested_tag: Option<&str>) -> Result<(), String> {
-    let output = plan_output(root, requested_tag)?;
-    let manifest: Value = serde_json::from_slice(&output)
-        .map_err(|error| format!("parse cargo-dist plan: {error}"))?;
-    validate_planned_targets(&manifest)?;
-    println!("release plan: {}", String::from_utf8_lossy(&output));
-    Ok(())
+    let version = workspace_version(root)?;
+    let tag = requested_tag.map_or_else(|| format!("v{version}"), str::to_owned);
+    super::release_readiness::validate_preparation(root, &tag)
 }
 
 pub(super) fn rehearse(root: &Path) -> Result<(), String> {
@@ -76,7 +73,7 @@ fn plan_output(root: &Path, requested_tag: Option<&str>) -> Result<Vec<u8>, Stri
     let version = workspace_version(root)?;
     let tag = requested_tag.map_or_else(|| format!("v{version}"), str::to_owned);
     validate_tag(&tag, &version)?;
-    super::release_highlights::validate(root, Some(&tag))?;
+    super::release_readiness::validate_release_content(root, &tag)?;
     let output = Command::new("dist")
         .args(["plan", "--tag", &tag, "--output-format", "json"])
         .current_dir(root)
@@ -283,6 +280,11 @@ mod tests {
             super::super::release_highlights::validate(root, Some(&format!("v{expected}"))).is_ok()
         );
         assert!(super::super::release_highlights::validate(root, Some("v9.9.9")).is_err());
+        let tag = format!("v{expected}");
+        assert!(
+            root.join(format!(".github/release-notes/{tag}.md"))
+                .is_file()
+        );
     }
 
     #[test]

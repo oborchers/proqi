@@ -1,7 +1,7 @@
 //! Pure reducer and mutation helpers.
 
 use super::{
-    Action,
+    Action, OwnedThoughtCreation, OwnedThoughtEdit,
     error::{ApplicationError, ApplicationResult},
     locks,
 };
@@ -9,7 +9,9 @@ use crate::application::model::{
     AppState, ClipboardIntent, DurabilityState, Effect, InteractionMode,
 };
 
-use super::mutations::bulk::{delete_thoughts, duplicate_thoughts, set_presentation_many};
+use super::mutations::bulk::{
+    delete_thoughts, duplicate_thoughts, set_presentation_many, stage_submission_removal,
+};
 use super::mutations::{
     create_thought, delete_thought, edit_thought, finish_clipboard, history_move, move_thought,
     request_clipboard, set_presentation,
@@ -26,14 +28,19 @@ pub fn reduce(state: &mut AppState, action: Action) -> ApplicationResult<Vec<Eff
     {
         return Err(ApplicationError::InvalidState);
     }
-    match action {
+    let previous_focus = state.focused_thought;
+    let mut effects = match action {
         Action::RenameSession { name } => reduce_session_name(state, name),
-        Action::FocusThought(_) | Action::EnterEdit(_) | Action::ExitEdit => {
-            reduce_navigation(state, &action)
-        }
+        Action::FocusThought(_)
+        | Action::EnterEdit(_)
+        | Action::EnterCompose
+        | Action::ExitCompose
+        | Action::ExitEdit => reduce_navigation(state, &action),
         Action::CreateThought { .. }
+        | Action::CreateOwnedThought(_)
         | Action::PasteAsThought { .. }
-        | Action::EditThought { .. } => reduce_content(state, action),
+        | Action::EditThought { .. }
+        | Action::EditOwnedThought(_) => reduce_content(state, action),
         Action::CopyThoughts { .. }
         | Action::CutThoughts { .. }
         | Action::ClipboardResult { .. } => reduce_clipboard(state, &action),
@@ -42,6 +49,7 @@ pub fn reduce(state: &mut AppState, action: Action) -> ApplicationResult<Vec<Eff
         }
         Action::DeleteThought { .. }
         | Action::DeleteThoughts { .. }
+        | Action::StageSubmissionRemoval { .. }
         | Action::MoveThought { .. }
         | Action::SetPresentation { .. }
         | Action::SetPresentationMany { .. }
@@ -50,19 +58,29 @@ pub fn reduce(state: &mut AppState, action: Action) -> ApplicationResult<Vec<Eff
         Action::PersistenceCommitted(_)
         | Action::PersistenceFailed { .. }
         | Action::RetryPersistence(_) => reduce_persistence(state, &action),
+    }?;
+    effects.extend(state.attachments.reconcile(&state.board));
+    if state.focused_thought != previous_focus
+        && let Some(thought_id) = state.focused_thought
+    {
+        effects.extend(state.attachments.prioritize_focus(thought_id));
     }
+    Ok(effects)
 }
 
 const fn mutates_durable_state(action: &Action) -> bool {
     matches!(
         action,
         Action::CreateThought { .. }
+            | Action::CreateOwnedThought(_)
             | Action::RenameSession { .. }
             | Action::PasteAsThought { .. }
             | Action::EditThought { .. }
+            | Action::EditOwnedThought(_)
             | Action::CutThoughts { .. }
             | Action::DeleteThought { .. }
             | Action::DeleteThoughts { .. }
+            | Action::StageSubmissionRemoval { .. }
             | Action::MoveThought { .. }
             | Action::SetPresentation { .. }
             | Action::SetPresentationMany { .. }
@@ -100,7 +118,8 @@ fn reduce_navigation(state: &mut AppState, action: &Action) -> ApplicationResult
                 thought_id: *thought_id,
             };
         }
-        Action::ExitEdit => state.mode = InteractionMode::Board,
+        Action::EnterCompose => state.mode = InteractionMode::Compose,
+        Action::ExitCompose | Action::ExitEdit => state.mode = InteractionMode::Board,
         _ => return Err(ApplicationError::InvalidState),
     }
     Ok(Vec::new())
@@ -115,30 +134,37 @@ fn reduce_content(state: &mut AppState, action: Action) -> ApplicationResult<Vec
             annotations,
             insertion_index,
             at,
-        } => create_thought(
-            state,
-            thought_id,
-            operation_id,
-            content,
-            annotations,
-            insertion_index.unwrap_or(state.insertion_index),
-            at,
-        ),
+        } => {
+            reject_new_shortcut_annotations(&annotations)?;
+            create_thought(
+                state,
+                thought_id,
+                operation_id,
+                content,
+                annotations,
+                insertion_index.unwrap_or(state.insertion_index),
+                at,
+            )
+        }
+        Action::CreateOwnedThought(creation) => create_owned_thought(state, creation),
         Action::PasteAsThought {
             thought_id,
             operation_id,
             content,
             annotations,
             at,
-        } => create_thought(
-            state,
-            thought_id,
-            operation_id,
-            content,
-            annotations,
-            state.insertion_index,
-            at,
-        ),
+        } => {
+            reject_new_shortcut_annotations(&annotations)?;
+            create_thought(
+                state,
+                thought_id,
+                operation_id,
+                content,
+                annotations,
+                state.insertion_index,
+                at,
+            )
+        }
         Action::EditThought {
             thought_id,
             revision_id,
@@ -149,19 +175,69 @@ fn reduce_content(state: &mut AppState, action: Action) -> ApplicationResult<Vec
             before_cursor,
             after_cursor,
             at,
-        } => edit_thought(
-            state,
-            thought_id,
-            revision_id,
-            before_content,
-            after_content,
-            before_annotations,
-            after_annotations,
-            before_cursor,
-            after_cursor,
-            at,
-        ),
+        } => {
+            reject_new_shortcut_annotations(&after_annotations)?;
+            edit_thought(
+                state,
+                thought_id,
+                revision_id,
+                before_content,
+                after_content,
+                before_annotations,
+                after_annotations,
+                before_cursor,
+                after_cursor,
+                at,
+            )
+        }
+        Action::EditOwnedThought(edit) => edit_owned_thought(state, edit),
         _ => Err(ApplicationError::InvalidState),
+    }
+}
+
+fn create_owned_thought(
+    state: &mut AppState,
+    creation: OwnedThoughtCreation,
+) -> ApplicationResult<Vec<Effect>> {
+    create_thought(
+        state,
+        creation.thought_id,
+        creation.operation_id,
+        creation.content,
+        creation.annotations,
+        creation.insertion_index.unwrap_or(state.insertion_index),
+        creation.at,
+    )
+}
+
+fn edit_owned_thought(
+    state: &mut AppState,
+    edit: OwnedThoughtEdit,
+) -> ApplicationResult<Vec<Effect>> {
+    edit_thought(
+        state,
+        edit.thought_id,
+        edit.revision_id,
+        edit.before_content,
+        edit.after_content,
+        edit.before_annotations,
+        edit.after_annotations,
+        edit.before_cursor,
+        edit.after_cursor,
+        edit.at,
+    )
+}
+
+fn reject_new_shortcut_annotations(
+    annotations: &[crate::domain::ContentAnnotation],
+) -> ApplicationResult<()> {
+    if annotations
+        .iter()
+        .any(crate::domain::ContentAnnotation::is_shortcut_emphasis)
+    {
+        Err(ApplicationError::InvalidState)
+    } else {
+        Ok(())
     }
 }
 
@@ -218,6 +294,11 @@ fn reduce_board(state: &mut AppState, action: &Action) -> ApplicationResult<Vec<
             kind,
             at,
         } => delete_thoughts(state, *operation_id, thought_ids, *kind, *at),
+        Action::StageSubmissionRemoval {
+            operation_id,
+            thought_ids,
+            at,
+        } => stage_submission_removal(state, *operation_id, thought_ids, *at),
         Action::MoveThought {
             operation_id,
             thought_id,
@@ -268,6 +349,7 @@ fn reduce_persistence(state: &mut AppState, action: &Action) -> ApplicationResul
             if state.pending_sequences.first().copied() != Some(*sequence) {
                 return Err(ApplicationError::InvalidState);
             }
+            state.commit_deferred_board_operation(*sequence)?;
             state.pending_sequences.remove(sequence);
             state.board.session.last_durable_sequence =
                 state.board.session.last_durable_sequence.max(*sequence);

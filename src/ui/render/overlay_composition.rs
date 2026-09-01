@@ -5,7 +5,8 @@ use ratatui_core::terminal::Frame;
 use crate::ui::{BoardApp, LayoutSnapshot, Theme};
 
 use super::{
-    InvocationPickerView, PlainPickerView, overlays, render_invocation_picker, render_plain_picker,
+    InvocationPickerView, PlainPickerView, overlays, release_highlights, render_invocation_picker,
+    render_plain_picker,
 };
 
 pub(super) fn render(
@@ -116,7 +117,7 @@ fn render_decision(
         .release_highlights_view(overlay.area.width.saturating_sub(2), 0)
         .is_some()
     {
-        overlays::render_release_highlights(frame, app, overlay, theme);
+        release_highlights::render(frame, app, overlay, theme);
         true
     } else {
         false

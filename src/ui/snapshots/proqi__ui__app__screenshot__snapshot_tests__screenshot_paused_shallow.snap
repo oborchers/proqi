@@ -1,6 +1,6 @@
 ---
 source: src/ui/app/screenshot/tests.rs
-assertion_line: 68
+assertion_line: 140
 expression: "paused_snapshot(62, 6)"
 ---
 00│⋮ active│
@@ -8,4 +8,4 @@ expression: "paused_snapshot(62, 6)"
 02│  Screenshot Inbox paused after 20 minutes without activity│
 03│  screenshot-ui│
 04│  1 thought · board · saved · inbox paused · inactive│
-05│  n New   y Copy  x Cut  d Delete  Space Select u Undo│
+05│  n New   y Copy  x Cut  d/Del  Space Select u Undo│

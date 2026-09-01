@@ -17,9 +17,9 @@ pub use compaction::{CompactedOperationRequest, thought_payload_digest};
 pub use error::{StoreError, StoreFailureCode};
 
 /// Current storage schema understood by this binary.
-pub const SUPPORTED_SCHEMA_VERSION: u32 = 8;
+pub const SUPPORTED_SCHEMA_VERSION: u32 = 10;
 /// Current local storage protocol understood by this binary.
-pub const STORAGE_PROTOCOL_VERSION: u32 = 8;
+pub const STORAGE_PROTOCOL_VERSION: u32 = 10;
 
 /// One atomic screenshot receipt and prospective board operation.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -441,6 +441,22 @@ pub trait Store {
     ) -> Result<(), StoreError> {
         Err(StoreError::Integrity(
             "submission journal is unavailable".to_owned(),
+        ))
+    }
+
+    /// Atomically record an accepted outcome and its source-removal operation.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed error with neither change committed.
+    fn finish_submission_with_removal(
+        &mut self,
+        _id: SubmissionId,
+        _outcome: &SubmissionOutcome,
+        _removal: &crate::domain::BoardOperation,
+    ) -> Result<CommitReceipt, StoreError> {
+        Err(StoreError::Integrity(
+            "atomic submission removal is unavailable".to_owned(),
         ))
     }
 

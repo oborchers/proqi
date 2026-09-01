@@ -12,6 +12,7 @@
     )
 )]
 
+mod ci_changes;
 mod crate_package;
 mod debian;
 mod debian_container;
@@ -24,8 +25,11 @@ mod package;
 mod policy;
 mod public_assets;
 mod release;
+mod release_candidate;
 mod release_highlights;
 mod release_policy;
+mod release_publication;
+mod release_readiness;
 mod release_targets;
 mod snapshots;
 mod source_limits;
@@ -49,6 +53,9 @@ fn main() -> ExitCode {
 fn execute() -> Result<(), String> {
     let command = env::args().nth(1).unwrap_or_else(|| "help".to_owned());
     let root = workspace_root()?;
+    if let Some(result) = release_command(&root, &command) {
+        return result;
+    }
 
     match command.as_str() {
         "setup" => setup(&root),
@@ -61,7 +68,15 @@ fn execute() -> Result<(), String> {
         "quality" => quality(&root),
         "check" => check(&root),
         "test" => test(&root),
-        "ci-linux" => linux_ci::run(&root),
+        "ci-linux" => linux_ci::run_local(&root),
+        "ci-linux-smoke" => {
+            let image = required_argument("ci-linux-smoke", 2, "digest-pinned image")?;
+            linux_ci::run_prebuilt(&root, &image, None, "smoke")
+        }
+        "ci-linux-amd64" => {
+            let image = required_argument("ci-linux-amd64", 2, "digest-pinned image")?;
+            linux_ci::run_prebuilt(&root, &image, Some("linux/amd64"), "parity")
+        }
         // Real PTY fixtures own process-wide terminal resources. Keep this
         // dedicated runner serial while each test still exercises concurrency.
         "test-pty" => run(
@@ -84,6 +99,11 @@ fn execute() -> Result<(), String> {
             package::run(&root, notices.as_deref())
         }
         "crate-package" => crate_package::run(&root),
+        "crate-evidence" => crate_package::evidence(&root),
+        "ci-change-class" => required_argument("ci-change-class", 2, "base SHA").and_then(|base| {
+            let head = required_argument("ci-change-class", 3, "head SHA")?;
+            ci_changes::print(&root, &base, &head)
+        }),
         "debian-package" => {
             let archive = required_path_argument("debian-package", 2, "Linux archive")?;
             let output = required_path_argument("debian-package", 3, "output directory")?;
@@ -94,39 +114,59 @@ fn execute() -> Result<(), String> {
             let package = required_path_argument("verify-debian", 3, "Debian package")?;
             debian_container::verify(&root, &archive, &package)
         }
-        "release-plan" => {
-            let tag = env::args().nth(2);
-            release::plan(&root, tag.as_deref())
-        }
-        "release-rehearsal" => release::rehearse(&root),
-        "release-checksum" => {
-            let path = env::args()
-                .nth(2)
-                .ok_or_else(|| "release-checksum requires one archive path".to_owned())?;
-            release::print_checksum(&root, Path::new(&path))
-        }
-        "verify-linux-archive" => {
-            let path = env::args()
-                .nth(2)
-                .ok_or_else(|| "verify-linux-archive requires one archive path".to_owned())?;
-            linux_compat::verify_archive(&root, Path::new(&path))
-        }
-        "homebrew-formula" => {
-            let artifacts = env::args()
-                .nth(2)
-                .ok_or_else(|| "homebrew-formula requires an artifacts directory".to_owned())?;
-            let output = env::args()
-                .nth(3)
-                .ok_or_else(|| "homebrew-formula requires an output path".to_owned())?;
-            homebrew::generate(&root, Path::new(&artifacts), Path::new(&output))
-        }
         "msrv" => msrv(&root),
+        "msrv-full" => msrv_full(&root),
         "help" | "--help" | "-h" => {
             print_help();
             Ok(())
         }
         other => Err(format!("unknown command `{other}`; run `cargo xtask help`")),
     }
+}
+
+fn release_command(root: &Path, command: &str) -> Option<Result<(), String>> {
+    let result = match command {
+        "release-plan" => {
+            let tag = env::args().nth(2);
+            release::plan(root, tag.as_deref())
+        }
+        "release-ready" => {
+            let source_sha = env::args().nth(2);
+            release_readiness::print_classification(root, source_sha.as_deref())
+        }
+        "release-promotion-plan" => required_argument("release-promotion-plan", 2, "vX.Y.Z")
+            .and_then(|tag| release_readiness::validate_promotion(root, &tag)),
+        "candidate-select" => required_argument("candidate-select", 2, "tag").and_then(|tag| {
+            let sha = required_argument("candidate-select", 3, "source SHA")?;
+            let index = required_path_argument("candidate-select", 4, "candidate index")?;
+            release_candidate::select(root, &tag, &sha, &index)
+        }),
+        "candidate-manifest" => required_argument("candidate-manifest", 2, "create or verify")
+            .and_then(|operation| release_candidate::manifest_command(root, &operation)),
+        "release-assets" => required_argument("release-assets", 2, "plan operation").and_then(
+            |operation| {
+                if operation != "plan" {
+                    return Err("release-assets expects `plan <candidate-dir> <existing-dir> <release-state.json>`".to_owned());
+                }
+                let candidate = required_path_argument("release-assets plan", 3, "candidate directory")?;
+                let existing = required_path_argument("release-assets plan", 4, "existing assets directory")?;
+                let state = required_path_argument("release-assets plan", 5, "release state JSON")?;
+                release_publication::plan(root, &candidate, &existing, &state)
+            },
+        ),
+        "release-rehearsal" => release::rehearse(root),
+        "release-checksum" => required_path_argument("release-checksum", 2, "archive path")
+            .and_then(|path| release::print_checksum(root, &path)),
+        "verify-linux-archive" => required_path_argument("verify-linux-archive", 2, "archive path")
+            .and_then(|path| linux_compat::verify_archive(root, &path)),
+        "homebrew-formula" => required_path_argument("homebrew-formula", 2, "artifacts directory")
+            .and_then(|artifacts| {
+                let output = required_path_argument("homebrew-formula", 3, "output path")?;
+                homebrew::generate(root, &artifacts, &output)
+            }),
+        _ => return None,
+    };
+    Some(result)
 }
 
 fn package_notices_argument() -> Result<Option<PathBuf>, String> {
@@ -159,19 +199,36 @@ fn print_help() {
          \n  cargo xtask check\
          \n  cargo xtask test\
          \n  cargo xtask ci-linux\
+         \n  cargo xtask ci-linux-smoke <image@sha256:digest>\
+         \n  cargo xtask ci-linux-amd64 <image@sha256:digest>\
          \n  cargo xtask test-pty\
          \n  cargo xtask coverage\
          \n  cargo xtask audit\
          \n  cargo xtask package\
          \n  cargo xtask crate-package\
+         \n  cargo xtask crate-evidence\
+         \n  cargo xtask ci-change-class <base-sha> <head-sha>\
          \n  cargo xtask debian-package <linux-archive> <output-dir>\
          \n  cargo xtask verify-debian <linux-archive> <deb>\
          \n  cargo xtask release-plan [vX.Y.Z]\
+         \n  cargo xtask release-ready [source-sha]\
+         \n  cargo xtask release-promotion-plan <vX.Y.Z>\
+         \n  cargo xtask candidate-select <vX.Y.Z> <source-sha> <index.json>\
+         \n  cargo xtask candidate-manifest <create|verify> ...\
+         \n  cargo xtask release-assets plan <candidate-dir> <existing-dir> <release-state.json>\
          \n  cargo xtask release-rehearsal\
          \n  cargo xtask release-checksum <archive>\
          \n  cargo xtask verify-linux-archive <archive>\
-         \n  cargo xtask homebrew-formula <artifacts-dir> <output>"
+         \n  cargo xtask homebrew-formula <artifacts-dir> <output>\
+         \n  cargo xtask msrv\
+         \n  cargo xtask msrv-full"
     );
+}
+
+fn required_argument(command: &str, index: usize, description: &str) -> Result<String, String> {
+    env::args()
+        .nth(index)
+        .ok_or_else(|| format!("{command} requires a {description}"))
 }
 
 fn required_path_argument(
@@ -295,7 +352,11 @@ fn msrv(root: &Path) -> Result<(), String> {
             "--all-targets",
             "--all-features",
         ],
-    )?;
+    )
+}
+
+fn msrv_full(root: &Path) -> Result<(), String> {
+    msrv(root)?;
     run(
         root,
         "cargo",

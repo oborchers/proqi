@@ -13,19 +13,8 @@ pub(super) fn overlay_layout(
     preferred_rows: usize,
     cover_width: bool,
 ) -> OverlayLayout {
-    let requested_height = overlay_height(preferred_rows);
-    let height = area.height.clamp(1, requested_height.max(5));
-    let width = if cover_width || height == area.height {
-        area.width
-    } else {
-        area.width.clamp(1, 58)
-    };
-    let modal = Rect::new(
-        area.x + area.width.saturating_sub(width) / 2,
-        area.y + area.height.saturating_sub(height) / 2,
-        width,
-        height,
-    );
+    let modal = modal_area(area, preferred_rows, cover_width);
+    let height = modal.height;
     let items = (0..item_count.min(usize::from(height.saturating_sub(3))))
         .map(|index| {
             Rect::new(
@@ -38,12 +27,72 @@ pub(super) fn overlay_layout(
                 1,
             )
         })
-        .collect();
+        .collect::<Vec<_>>();
+    let item_headings = vec![None; items.len()];
     OverlayLayout {
         area: modal,
         items,
+        item_headings,
         close: Rect::new(modal.right().saturating_sub(3), modal.y, 3, 1),
     }
+}
+
+pub(super) fn grouped_overlay_layout(
+    area: Rect,
+    item_groups: &[bool],
+    preferred_rows: usize,
+    cover_width: bool,
+) -> OverlayLayout {
+    let modal = modal_area(area, preferred_rows, cover_width);
+    let mut item_y = modal.y.saturating_add(2);
+    let bottom = modal.bottom().saturating_sub(1);
+    let mut items = Vec::new();
+    let mut item_headings = Vec::new();
+    for grouped in item_groups.iter().copied() {
+        if item_y >= bottom {
+            break;
+        }
+        let heading = (grouped && item_y.saturating_add(2) <= bottom).then(|| {
+            let area = Rect::new(
+                modal.x.saturating_add(1),
+                item_y,
+                modal.width.saturating_sub(2),
+                1,
+            );
+            item_y = item_y.saturating_add(1);
+            area
+        });
+        items.push(Rect::new(
+            modal.x.saturating_add(1),
+            item_y,
+            modal.width.saturating_sub(2),
+            1,
+        ));
+        item_headings.push(heading);
+        item_y = item_y.saturating_add(1);
+    }
+    OverlayLayout {
+        area: modal,
+        items,
+        item_headings,
+        close: Rect::new(modal.right().saturating_sub(3), modal.y, 3, 1),
+    }
+}
+
+fn modal_area(area: Rect, preferred_rows: usize, cover_width: bool) -> Rect {
+    let requested_height = overlay_height(preferred_rows);
+    let height = area.height.clamp(1, requested_height.max(5));
+    let width = if cover_width || height == area.height {
+        area.width
+    } else {
+        area.width.clamp(1, 58)
+    };
+    Rect::new(
+        area.x + area.width.saturating_sub(width) / 2,
+        area.y + area.height.saturating_sub(height) / 2,
+        width,
+        height,
+    )
 }
 
 pub(super) fn overlay_height(preferred_rows: usize) -> u16 {
@@ -103,6 +152,7 @@ pub(super) fn configure_agent_controls(
     layout: &mut LayoutSnapshot,
     targets: &[AgentTarget],
     selection: Option<SubmissionDisposition>,
+    mode: crate::application::InteractionMode,
     keybindings: &crate::ui::KeyBindings,
 ) {
     let area = crate::ui::geometry::inset_horizontal(layout.footer_agents, 2);
@@ -121,6 +171,9 @@ pub(super) fn configure_agent_controls(
                 label_width,
             );
         }
+        return;
+    }
+    if matches!(mode, crate::application::InteractionMode::Compose) {
         return;
     }
     for target in targets {
@@ -146,7 +199,8 @@ pub(super) fn configure_agent_controls(
             [only] => HitTarget::Deliver(only.direction, disposition),
             _ => HitTarget::BeginDelivery(disposition),
         };
-        let label_width = crate::ui::control_labels::submission_width(disposition, keybindings);
+        let label_width =
+            crate::ui::control_labels::submission_width(disposition, mode, keybindings);
         push(layout, &mut x, area, target, label_width);
     }
 }

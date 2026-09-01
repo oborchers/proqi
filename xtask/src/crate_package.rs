@@ -16,9 +16,19 @@ const REGISTRY: &str = "crates-io";
 const PRIVATE_MARKERS: [&str; 4] = ["/Users/", "Code.nosync", "TemporaryItems", "/home/runner"];
 
 pub(super) fn run(root: &Path) -> Result<(), String> {
+    verify(root, true)
+}
+
+pub(super) fn evidence(root: &Path) -> Result<(), String> {
+    verify(root, false)
+}
+
+fn verify(root: &Path, dry_run: bool) -> Result<(), String> {
     super::release_highlights::validate(root, None)?;
     super::run(root, "cargo", ["package", "--locked"])?;
-    super::run(root, "cargo", ["publish", "--dry-run", "--locked"])?;
+    if dry_run {
+        super::run(root, "cargo", ["publish", "--dry-run", "--locked"])?;
+    }
     let version = super::release::workspace_version(root)?;
     let crate_path = root
         .join("target/package")

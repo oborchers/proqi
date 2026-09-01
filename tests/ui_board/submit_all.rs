@@ -39,13 +39,14 @@ fn click_palette(fixture: &mut Fixture, query: &str) -> Vec<Effect> {
 }
 
 fn execute_palette_from_edit(fixture: &mut Fixture, query: &str) -> (Vec<Effect>, Vec<Effect>) {
+    let save = fixture.effects(UiInput::Key(UiKey::Escape));
     let layout = fixture.app.prepare_frame(Rect::new(0, 0, 80, 12));
     let commands = layout
         .controls
         .iter()
         .find_map(|(target, area)| (*target == proqi::ui::HitTarget::Commands).then_some(*area))
         .expect("command palette control");
-    let save = fixture.effects(UiInput::Pointer(PointerInput {
+    let _open = fixture.effects(UiInput::Pointer(PointerInput {
         column: commands.x,
         row: commands.y,
         kind: PointerKind::Down(PointerButton::Left),
@@ -71,6 +72,7 @@ fn editable_durable_board(fixture: &mut Fixture) {
 #[test]
 fn palette_submission_labels_use_one_concise_vocabulary() {
     let mut fixture = Fixture::new();
+    fixture.input(UiInput::Key(UiKey::Escape));
     fixture
         .app
         .complete_agent_discovery(Ok(vec![super::agent::target(Direction::Left, "w1:p2")]));
@@ -217,11 +219,11 @@ fn palette_submit_all_keep_and_remove_share_one_exact_ordered_request() {
     );
     assert!(matches!(
         removed.as_slice(),
-        [Effect::StoreIntegrationContext { .. }, Effect::CommitBoardOperation(operation)]
-            if operation.kind == proqi::domain::BoardOperationKind::SubmitAndRemove
+        [Effect::StoreIntegrationContext { .. }]
     ));
     assert!(fixture.app.state.board.live_thoughts().is_empty());
 
+    fixture.input(UiInput::Key(UiKey::Escape));
     fixture.input(UiInput::Key(UiKey::Undo));
     assert_eq!(fixture.app.state.board.live_thoughts().len(), 3);
 }
@@ -319,6 +321,7 @@ fn ambiguous_direction_keeps_selection_stable_through_pointer_and_resize() {
 #[test]
 fn all_submit_failures_and_empty_boards_are_non_destructive() {
     let mut empty = Fixture::new();
+    empty.input(UiInput::Key(UiKey::Escape));
     empty
         .app
         .complete_agent_discovery(Ok(vec![super::agent::target(Direction::Left, "w1:p2")]));

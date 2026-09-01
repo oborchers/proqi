@@ -60,6 +60,17 @@
         "Import shell-escaped Ghostty and Finder file drops as folded file or image attachments.",
         "Build contiguous thought ranges with shifted arrows or K and J, and reorder one thought with the corresponding Primary shortcut."
       ]
+    },
+    {
+      "version": "0.5.0",
+      "highlights": [
+        "Start typing or pasting on an empty board, then submit and keep or remove the active content with Primary+Enter shortcuts.",
+        "Complete local skills, agents, and commands, and insert inert references to recognized coding agents across the current Herdr server.",
+        "Build larger prompts with multi-selection, duplication, reordering, smart-list editing, and atomic whole-board submission.",
+        "On macOS, turn new images from a configured directory into private, annotatable thoughts with bounded Screenshot Inbox listening.",
+        "Verify file and image attachments immediately before submission so inaccessible sources leave the complete board unchanged.",
+        "Submit directly through Herdr to Claude Code, Codex, Pi, and Hermes, with documented conditional support for OpenCode and Kilo."
+      ]
     }
   ]
 }

@@ -89,3 +89,31 @@ mod clipboard;
 mod history;
 #[path = "domain_reducer/locks.rs"]
 mod locks;
+#[path = "domain_reducer/top_boundary.rs"]
+mod top_boundary;
+
+#[test]
+fn interaction_mode_is_explicit_and_empty_board_policy_is_typed() {
+    let mut fixture = Fixture::new();
+    assert_eq!(fixture.state.mode, InteractionMode::Compose);
+    assert!(
+        reduce(&mut fixture.state, Action::ExitCompose)
+            .expect("board")
+            .is_empty()
+    );
+    assert_eq!(fixture.state.mode, InteractionMode::Board);
+
+    fixture
+        .state
+        .reconcile_empty_board(proqi::application::EmptyBoardTransition::Preserve);
+    assert_eq!(fixture.state.mode, InteractionMode::Board);
+    fixture
+        .state
+        .reconcile_empty_board(proqi::application::EmptyBoardTransition::ComposeAfterLocalRemoval);
+    assert_eq!(fixture.state.mode, InteractionMode::Compose);
+    assert!(
+        reduce(&mut fixture.state, Action::EnterCompose)
+            .expect("compose")
+            .is_empty()
+    );
+}

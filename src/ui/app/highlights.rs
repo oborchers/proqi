@@ -143,6 +143,7 @@ impl BoardApp {
                 self.hovered = None;
             }
             UiInput::HostFocusGained
+            | UiInput::HostFocusLost
             | UiInput::Key(_)
             | UiInput::Paste(_)
             | UiInput::PasteAnnotated(_) => {}

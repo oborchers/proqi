@@ -75,7 +75,10 @@ impl BoardApp {
                 UiInput::PasteAnnotated(payload) => {
                     self.update_search_query(|query| query.paste(&payload.content))
                 }
-                UiInput::Resize { .. } | UiInput::HostFocusGained | UiInput::Key(_) => Vec::new(),
+                UiInput::Resize { .. }
+                | UiInput::HostFocusGained
+                | UiInput::HostFocusLost
+                | UiInput::Key(_) => Vec::new(),
             };
         };
         match *key {
@@ -101,7 +104,7 @@ impl BoardApp {
                     search.query.move_cursor(movement);
                 }
             }
-            UiKey::Delete => {
+            UiKey::Delete | UiKey::ModifiedDelete => {
                 if let Some(search) = &mut self.search {
                     search.query.delete();
                 }

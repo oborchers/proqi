@@ -23,7 +23,7 @@ pub(super) fn validate(root: &Path, requested_tag: Option<&str>) -> Result<(), S
     let contents = fs::read_to_string(&path)
         .map_err(|error| format!("read release highlights {}: {error}", path.display()))?;
     let manifest = ReleaseHighlightsManifest::parse_json(&contents)
-        .map_err(|error| format!("validate release highlights: {error}"))?;
+        .map_err(|error| format!("parse release highlights: {error}"))?;
     let current = StableVersion::parse(&super::release::workspace_version(root)?.to_string())
         .map_err(|error| format!("validate workspace version: {error}"))?;
     validate_agreement(

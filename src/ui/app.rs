@@ -5,6 +5,8 @@ mod agent;
 mod agent_delivery;
 mod agent_identity;
 mod agent_preparation;
+mod attachments;
+mod boundary_insertion;
 mod clipboard;
 mod commands;
 mod control;
@@ -20,6 +22,7 @@ mod palette_handoff;
 mod pending_types;
 mod pointer;
 mod pointer_activation;
+mod pointer_editor;
 mod presentation;
 mod query;
 mod recovery;
@@ -28,9 +31,11 @@ mod screenshot;
 mod search;
 mod selection;
 mod session;
+mod state_bridge;
 mod transfer;
 mod update;
 mod view;
+mod view_frame;
 
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -38,9 +43,7 @@ use std::{
 };
 
 use crate::{
-    application::{
-        Action, AppState, DurabilityState, Effect, FailureCode, InteractionMode, reduce,
-    },
+    application::{AppState, Effect, InteractionMode},
     domain::{OperationId, OperationSequence, RequestId, SubmissionId, ThoughtId},
     ports::{
         agent::AgentTarget,
@@ -50,14 +53,15 @@ use crate::{
 };
 
 use super::{
-    HitTarget, LayoutSnapshot, PastePayload, UiSettings,
+    HitTarget, LayoutSnapshot, UiSettings,
     input::{PointerButton, PointerInput, PointerKind, UiInput, UiKey},
     layout::scroll::{BoardViewport, ScrollGeometry},
 };
 
 pub(in crate::ui) use invocation::InvocationChoiceView;
 use pending_types::{
-    DeferredSubmissionIntent, PendingEditorClipboard, PendingSubmission, SubmissionMode,
+    ClipboardReadOwner, DeferredSubmissionIntent, PendingEditorClipboard, PendingSubmission,
+    SubmissionMode,
 };
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -71,17 +75,39 @@ enum InsertionFocus {
 enum InsertionConfirmation {
     #[default]
     Idle,
-    Armed,
+    Armed(BoundaryInsertion),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum BoundaryInsertion {
+    BeforeFirst,
+    AfterLast,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum EditorOwner {
+    Compose,
+    Thought(ThoughtId),
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+enum ComposePresentation {
+    #[default]
+    Prompt,
+    Editor,
 }
 
 /// Mutable UI state around the pure application reducer.
 pub struct BoardApp {
     /// Reducer-owned application state rendered by the board.
     pub state: AppState,
-    editor: Option<(ThoughtId, Box<dyn Editor>)>,
+    editor: Option<(EditorOwner, Box<dyn Editor>)>,
     editor_factory: Box<dyn EditorFactory>,
+    compose_presentation: ComposePresentation,
     pending_edit: Option<editing::PendingEdit>,
     edit_generation: u64,
+    edit_owner_generation: u64,
+    compose_generation: u64,
     /// Whether the user requested a clean exit.
     pub quit: bool,
     /// Whether contextual help is visible.
@@ -112,12 +138,14 @@ pub struct BoardApp {
     expanded_folds: BTreeSet<(ThoughtId, usize)>,
     pending_editor_clipboard: BTreeMap<RequestId, PendingEditorClipboard>,
     pending_session_clipboard: BTreeMap<RequestId, crate::application::ClipboardIntent>,
-    pending_clipboard_reads: BTreeSet<RequestId>,
+    pending_clipboard_reads: BTreeMap<RequestId, ClipboardReadOwner>,
     pending_recovery_exports: BTreeSet<RequestId>,
     recovery_exported_for: Option<OperationSequence>,
     agent_targets: Vec<AgentTarget>,
+    agent_refresh_in_flight: bool,
     submission_mode: Option<SubmissionMode>,
     deferred_submissions: BTreeMap<SubmissionId, DeferredSubmissionIntent>,
+    preflight_submissions: BTreeMap<SubmissionId, DeferredSubmissionIntent>,
     pending_submissions: BTreeMap<SubmissionId, PendingSubmission>,
     pending_transfer_removals: BTreeSet<OperationId>,
     screenshot: screenshot::ScreenshotInbox,
@@ -128,8 +156,11 @@ pub struct BoardApp {
     installed_highlights: Option<crate::domain::ReleaseHighlightGroup>,
     invocation_cwd: PathBuf,
     invocation_generation: u64,
+    invocation_reference_generation: u64,
+    invocation_reference_pending: Option<u64>,
     invocation_global: Vec<crate::ports::invocation::InvocationEntry>,
     invocation_project: Vec<crate::ports::invocation::InvocationEntry>,
+    invocation_live: Vec<crate::ports::invocation::LiveAgentReference>,
 }
 
 impl BoardApp {
@@ -157,17 +188,22 @@ impl BoardApp {
         invocation_cwd: PathBuf,
         editor_factory: impl EditorFactory + 'static,
     ) -> Self {
-        let insertion_focus = if state.board.live_thoughts().is_empty() {
-            InsertionFocus::Active
+        let insertion_focus = InsertionFocus::Inactive;
+        let editor_factory: Box<dyn EditorFactory> = Box::new(editor_factory);
+        let editor = if matches!(state.mode, InteractionMode::Compose) {
+            Some((EditorOwner::Compose, editor_factory.create("")))
         } else {
-            InsertionFocus::Inactive
+            None
         };
         Self {
             state,
-            editor: None,
-            editor_factory: Box::new(editor_factory),
+            editor,
+            editor_factory,
+            compose_presentation: ComposePresentation::Prompt,
             pending_edit: None,
             edit_generation: 0,
+            edit_owner_generation: 0,
+            compose_generation: 0,
             quit: false,
             help: false,
             help_scroll: 0,
@@ -195,12 +231,14 @@ impl BoardApp {
             expanded_folds: BTreeSet::new(),
             pending_editor_clipboard: BTreeMap::new(),
             pending_session_clipboard: BTreeMap::new(),
-            pending_clipboard_reads: BTreeSet::new(),
+            pending_clipboard_reads: BTreeMap::new(),
             pending_recovery_exports: BTreeSet::new(),
             recovery_exported_for: None,
             agent_targets: Vec::new(),
+            agent_refresh_in_flight: false,
             submission_mode: None,
             deferred_submissions: BTreeMap::new(),
+            preflight_submissions: BTreeMap::new(),
             pending_submissions: BTreeMap::new(),
             pending_transfer_removals: BTreeSet::new(),
             screenshot: screenshot::ScreenshotInbox::default(),
@@ -211,8 +249,11 @@ impl BoardApp {
             installed_highlights: None,
             invocation_cwd,
             invocation_generation: 0,
+            invocation_reference_generation: 0,
+            invocation_reference_pending: None,
             invocation_global: Vec::new(),
             invocation_project: Vec::new(),
+            invocation_live: Vec::new(),
         }
     }
 
@@ -227,17 +268,10 @@ impl BoardApp {
         self.reset_pointer_click_for_input(&input);
         self.note_screenshot_interaction(&input);
         self.reset_overlay_activation_for_input(&input, clock.now());
-        if self.help
-            || self.screenshot.takeover.is_some()
-            || self.update_prompt.is_some()
-            || self.release_highlights.is_some()
-            || self.palette.is_some()
-            || self.invocation_popup.is_some()
-            || self.transfer.is_some()
-            || self.rename.is_some()
-            || self.search.is_some()
-            || self.submission_mode.is_some()
-        {
+        if matches!(input, UiInput::HostFocusLost) {
+            self.collapse_empty_compose();
+        }
+        if self.modal_owns_pointer() {
             self.pointer_click = None;
         }
         if self.help {
@@ -259,12 +293,18 @@ impl BoardApp {
             return self.handle_release_highlights_input(&input);
         }
         if self.update_barrier.is_some()
-            && !matches!(input, UiInput::Resize { .. } | UiInput::HostFocusGained)
+            && !matches!(
+                input,
+                UiInput::Resize { .. } | UiInput::HostFocusGained | UiInput::HostFocusLost
+            )
         {
             return Vec::new();
         }
-        if !matches!(input, UiInput::Resize { .. } | UiInput::HostFocusGained) {
-            self.status = None;
+        if !matches!(
+            input,
+            UiInput::Resize { .. } | UiInput::HostFocusGained | UiInput::HostFocusLost
+        ) {
+            self.clear_status_for_interaction();
             self.screenshot.notice_count = 0;
         }
         if !matches!(
@@ -303,11 +343,36 @@ impl BoardApp {
         self.handle_primary_input(input, ids, clock)
     }
 
+    fn modal_owns_pointer(&self) -> bool {
+        self.help
+            || self.screenshot.takeover.is_some()
+            || self.update_prompt.is_some()
+            || self.release_highlights.is_some()
+            || self.palette.is_some()
+            || self.invocation_popup.is_some()
+            || self.transfer.is_some()
+            || self.rename.is_some()
+            || self.search.is_some()
+            || self.submission_mode.is_some()
+    }
+
     /// Rebuild the editor adapter when reducer state changes externally.
     pub fn sync_editor_from_state(&mut self) {
-        let InteractionMode::Edit { thought_id } = self.state.mode else {
-            self.editor = None;
-            return;
+        let thought_id = match self.state.mode {
+            InteractionMode::Board => {
+                self.editor = None;
+                return;
+            }
+            InteractionMode::Compose => {
+                if !matches!(self.editor, Some((EditorOwner::Compose, _))) {
+                    let mut editor = self.editor_factory.create("");
+                    editor.set_viewport(self.viewport);
+                    self.editor = Some((EditorOwner::Compose, editor));
+                    self.compose_presentation = ComposePresentation::Prompt;
+                }
+                return;
+            }
+            InteractionMode::Edit { thought_id } => thought_id,
         };
         let Some(thought) = self.state.board.thought(thought_id) else {
             self.editor = None;
@@ -315,13 +380,14 @@ impl BoardApp {
         };
         let content = thought.content.clone();
         let restored_cursor = self.state.restored_editor_cursor(thought_id);
-        if let Some((current, editor)) = &mut self.editor
+        if let Some((EditorOwner::Thought(current), editor)) = &mut self.editor
             && *current == thought_id
         {
             if self.pending_edit.is_none() && editor.snapshot().content != content {
                 let _outcome = editor.replace_content(content, restored_cursor.unwrap_or_default());
             }
         } else {
+            self.edit_owner_generation = self.edit_owner_generation.wrapping_add(1);
             let mut editor = self.editor_factory.create(&content);
             editor.set_viewport(self.viewport);
             if let Some(cursor) = restored_cursor {
@@ -332,136 +398,7 @@ impl BoardApp {
                     extend_selection: false,
                 });
             }
-            self.editor = Some((thought_id, editor));
-        }
-    }
-
-    /// Apply one ordered persistence acknowledgement to the reducer state.
-    pub fn acknowledge_persistence(
-        &mut self,
-        sequence: OperationSequence,
-        succeeded: bool,
-    ) -> Vec<Effect> {
-        self.acknowledge_persistence_result(
-            sequence,
-            succeeded.then_some(()).ok_or(FailureCode::StorageFailed),
-        )
-    }
-
-    /// Apply a typed ordered persistence result and release durability-gated follow-up work.
-    pub fn acknowledge_persistence_result(
-        &mut self,
-        sequence: OperationSequence,
-        result: Result<(), FailureCode>,
-    ) -> Vec<Effect> {
-        let succeeded = result.is_ok();
-        let failure = result.as_ref().err().copied();
-        if !succeeded {
-            self.quit = false;
-        } else if self.pending_edit.is_some() {
-            self.edit_generation = self.edit_generation.wrapping_add(1);
-        }
-        let action = if succeeded {
-            Action::PersistenceCommitted(sequence)
-        } else {
-            Action::PersistenceFailed {
-                sequence,
-                code: result.err().unwrap_or(FailureCode::StorageFailed),
-            }
-        };
-        let _effects = self.reduce(action);
-        self.complete_deferred_submission_durability(failure)
-    }
-
-    pub(super) fn request_quit(&mut self) {
-        if matches!(
-            self.state.durability,
-            DurabilityState::Failed { failed, .. }
-                if self.recovery_exported_for != Some(failed)
-        ) {
-            self.set_error("retry the save or export recovery before quitting");
-        } else {
-            self.quit = true;
-        }
-    }
-
-    fn create(
-        &mut self,
-        payload: PastePayload,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-    ) -> Vec<Effect> {
-        self.clear_board_selection();
-        self.insertion_focus = InsertionFocus::Inactive;
-        self.insertion_confirmation = InsertionConfirmation::Idle;
-        let effects = self.reduce(Action::CreateThought {
-            thought_id: ids.thought_id(),
-            operation_id: ids.operation_id(),
-            content: payload.content,
-            annotations: payload.annotations,
-            insertion_index: None,
-            at: clock.now(),
-        });
-        self.sync_editor_from_state();
-        effects
-    }
-
-    fn expand_and_enter_edit(
-        &mut self,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-    ) -> Vec<Effect> {
-        let Some(thought_id) = self.state.focused_thought else {
-            return Vec::new();
-        };
-        if self.submission_locked(thought_id) {
-            self.set_warning("thought has a submission in progress");
-            return Vec::new();
-        }
-        self.board_viewport = self.board_viewport.follow_focus();
-        self.scroll_geometry = None;
-        self.layout = None;
-        let effects = self.expand_thought(thought_id, ids, clock);
-        self.enter_edit();
-        effects
-    }
-
-    fn enter_edit(&mut self) {
-        self.insertion_focus = InsertionFocus::Inactive;
-        self.edit_boundary = None;
-        if let Some(thought_id) = self.state.focused_thought {
-            if self.submission_locked(thought_id) {
-                self.set_warning("thought has a submission in progress");
-                return;
-            }
-            self.clear_board_selection();
-            let _effects = self.reduce(Action::EnterEdit(thought_id));
-            self.sync_editor_from_state();
-        }
-    }
-
-    fn reload_editor(&mut self) {
-        self.editor = None;
-        self.sync_editor_from_state();
-    }
-
-    fn reduce(&mut self, action: Action) -> Vec<Effect> {
-        match reduce(&mut self.state, action) {
-            Ok(effects) => {
-                let order = self
-                    .state
-                    .board
-                    .live_thoughts()
-                    .into_iter()
-                    .map(|thought| thought.id)
-                    .collect::<Vec<_>>();
-                self.selection.reconcile(&order);
-                effects
-            }
-            Err(error) => {
-                self.set_error(error.to_string());
-                Vec::new()
-            }
+            self.editor = Some((EditorOwner::Thought(thought_id), editor));
         }
     }
 }

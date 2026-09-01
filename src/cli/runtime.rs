@@ -35,6 +35,7 @@ pub(super) struct RuntimeContext {
     attachment_dir: PathBuf,
     cache_dir: PathBuf,
     state_root: Option<PathBuf>,
+    executable: PathBuf,
     installation: Option<crate::domain::Installation>,
     schema_lease: FileSchemaLease,
 }
@@ -45,6 +46,9 @@ impl RuntimeContext {
             .current_directory()
             .map_err(|error| CliError::new("environment_failed", error.to_string(), 1))?;
         let paths = resolve_paths(state_root)?;
+        let executable = SystemEnvironment
+            .current_executable()
+            .map_err(|error| CliError::new("environment_failed", error.to_string(), 1))?;
         prepare_state_paths(&paths, state_root)?;
         let clock = SystemClock;
         let mut ids = SystemIdGenerator;
@@ -86,6 +90,7 @@ impl RuntimeContext {
             attachment_dir,
             cache_dir,
             state_root,
+            executable,
             installation,
             schema_lease,
         })
@@ -120,6 +125,7 @@ impl RuntimeContext {
             installation: self.installation,
             cache_directory: self.cache_dir,
             state_root: self.state_root,
+            executable: self.executable,
         }
     }
 }

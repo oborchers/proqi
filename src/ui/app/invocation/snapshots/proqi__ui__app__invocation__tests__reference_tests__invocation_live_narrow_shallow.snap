@@ -1,0 +1,11 @@
+---
+source: src/ui/app/invocation/reference_tests.rs
+assertion_line: 495
+expression: "snapshots::live_snapshot(30, 6)"
+---
+00│┌ discovered invocations ──[x]│
+01││›                           ││
+02││Live in Herdr               ││
+03││reviewer        Product · p9││
+04││builder  Implementation · p7││
+05│└────────────────────────────┘│

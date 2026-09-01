@@ -43,6 +43,51 @@ pub(in crate::application) fn delete_thoughts(
     Ok(vec![Effect::CommitBoardOperation(operation)])
 }
 
+pub(in crate::application) fn stage_submission_removal(
+    state: &mut AppState,
+    operation_id: OperationId,
+    thought_ids: &[ThoughtId],
+    at: Timestamp,
+) -> ApplicationResult<Vec<Effect>> {
+    if thought_ids
+        .iter()
+        .any(|thought_id| !state.thought_locked(*thought_id))
+    {
+        return Err(ApplicationError::InvalidState);
+    }
+    let operation = if thought_ids.len() == 1 {
+        super::build_delete_thought_operation(
+            state,
+            operation_id,
+            thought_ids[0],
+            BoardOperationKind::SubmitAndRemove,
+            at,
+        )?
+    } else {
+        validate_deletion(thought_ids, BoardOperationKind::SubmitAndRemove)?;
+        let selected = selected_thoughts(state, thought_ids)?;
+        let forward = selected
+            .iter()
+            .rev()
+            .map(|thought| deletion(thought, Some(at)))
+            .collect();
+        let inverse = selected
+            .iter()
+            .map(|thought| deletion(thought, None))
+            .collect();
+        batch_operation(
+            state,
+            operation_id,
+            BoardOperationKind::SubmitAndRemove,
+            forward,
+            inverse,
+            at,
+        )?
+    };
+    state.stage_board_operation(&operation)?;
+    Ok(vec![Effect::CommitBoardOperation(operation)])
+}
+
 pub(in crate::application) fn set_presentation_many(
     state: &mut AppState,
     operation_id: OperationId,

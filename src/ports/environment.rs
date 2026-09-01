@@ -69,6 +69,12 @@ pub trait Environment {
     ///
     /// Returns a typed error when the directory cannot be resolved.
     fn current_directory(&self) -> Result<PathBuf, PathError>;
+    /// Resolve the executable used for isolated internal worker processes.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed error when the process image cannot be resolved.
+    fn current_executable(&self) -> Result<PathBuf, PathError>;
 }
 
 /// Path resolution failure.

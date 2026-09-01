@@ -2,7 +2,7 @@
 
 use proqi::{adapters::runtime::SystemIdGenerator, ports::environment::IdGenerator as _};
 
-use super::{expect_command, json_command, raw_input_command, wait_for_path};
+use super::support::{expect_command, json_command, raw_input_command, wait_for_path};
 
 #[derive(Clone, Copy)]
 enum ExitScenario {
@@ -160,17 +160,31 @@ fn assert_owner_success(
 fn spawn_owner(fixture: OwnerFixture<'_>, exit: ExitScenario) -> std::process::Child {
     let script = r#"
         log_user 0
-        log_file -noappend $env(PROQI_TEST_TRANSCRIPT)
+        log_file -a $env(PROQI_TEST_TRANSCRIPT)
         set timeout 15
         spawn $env(PROQI_TEST_BINARY) --state-dir $env(PROQI_TEST_STATE) -r $env(PROQI_TEST_SESSION)
         expect -exact "\x1b\[?1049h"
         close [open $env(PROQI_TEST_READY) w]
-        while {![file exists $env(PROQI_TEST_START)]} { after 10 }
-        send -- "nlocal input survives"
+        while {![file exists $env(PROQI_TEST_START)]} {
+            expect -timeout 0 {
+                -re ".+" { exp_continue }
+                timeout {}
+                eof { exit 92 }
+            }
+            after 10
+        }
+        send -- "local input survives"
         stty rows 6 columns 24
         stty rows 28 columns 100
         send -- "\x1b"
-        while {![file exists $env(PROQI_TEST_DONE)]} { after 10 }
+        while {![file exists $env(PROQI_TEST_DONE)]} {
+            expect -timeout 0 {
+                -re ".+" { exp_continue }
+                timeout {}
+                eof { exit 93 }
+            }
+            after 10
+        }
         if {$env(PROQI_TEST_EXIT) eq "terminate"} {
             system /bin/kill -TERM [exp_pid]
         } else {

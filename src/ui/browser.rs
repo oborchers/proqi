@@ -314,7 +314,7 @@ impl SessionBrowser {
         match input {
             UiInput::Key(UiKey::Quit | UiKey::Escape) => BrowserAction::Cancel,
             UiInput::Key(UiKey::Enter) => self.activate(),
-            UiInput::Key(UiKey::Backspace | UiKey::Delete) => {
+            UiInput::Key(UiKey::Backspace | UiKey::Delete | UiKey::ModifiedDelete) => {
                 if let Some((index, _)) = self.query.grapheme_indices(true).next_back() {
                     self.query.truncate(index);
                 }
@@ -337,7 +337,8 @@ impl SessionBrowser {
                 'R' if self.query.is_empty() => self.begin_rename(),
                 'D' if self.query.is_empty() => self.trash_selected(),
                 _ => {
-                    self.handle_character(character);
+                    self.query.push(character);
+                    self.refilter();
                     BrowserAction::Continue
                 }
             },
@@ -353,9 +354,10 @@ impl SessionBrowser {
                 BrowserAction::Continue
             }
             UiInput::Pointer(pointer) => self.handle_pointer(pointer),
-            UiInput::Resize { .. } | UiInput::HostFocusGained | UiInput::Key(_) => {
-                BrowserAction::Continue
-            }
+            UiInput::Resize { .. }
+            | UiInput::HostFocusGained
+            | UiInput::HostFocusLost
+            | UiInput::Key(_) => BrowserAction::Continue,
         }
     }
 
@@ -376,17 +378,6 @@ impl SessionBrowser {
         self.selected = 0;
         self.first_visible = 0;
         self.layout = None;
-    }
-
-    fn handle_character(&mut self, character: char) {
-        match (self.query.is_empty(), character) {
-            (true, 'j') => self.move_selection(1),
-            (true, 'k') => self.move_selection(-1),
-            _ => {
-                self.query.push(character);
-                self.refilter();
-            }
-        }
     }
 
     fn move_selection(&mut self, amount: isize) {

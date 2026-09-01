@@ -1,6 +1,6 @@
 ---
 source: src/ui/app/highlights/tests.rs
-assertion_line: 179
+assertion_line: 213
 expression: "snapshot(84, 18, ThemePreference::Dark)"
 ---
 00││
@@ -20,4 +20,4 @@ expression: "snapshot(84, 18, ThemePreference::Dark)"
 14││                                                                                  ││
 15││                                                                                  ││
 16│└──────────────────────────────────────────────────────────────────────────────────┘│
-17│  n New   : Commands  ? Shortcuts│
+17│  Esc Board│

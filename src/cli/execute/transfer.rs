@@ -126,7 +126,7 @@ fn add_destination(
     thought: &crate::domain::Thought,
     operation: Option<OperationId>,
 ) -> Result<crate::application::ThoughtMutation, CliError> {
-    if let Some(result) = forwarding::add_annotated(
+    if let Some(result) = forwarding::preserve_add(
         context,
         session_id,
         &thought.content,
@@ -138,7 +138,7 @@ fn add_destination(
     }
     let mut service = super::session_service(context)?;
     service
-        .add_thought_annotated(
+        .preserve_thought(
             session_id,
             thought.content.clone(),
             thought.annotations.clone(),

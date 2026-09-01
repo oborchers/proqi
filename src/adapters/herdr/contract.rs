@@ -36,6 +36,25 @@ pub(super) struct SnapshotBody {
 pub(super) struct Snapshot {
     pub(super) protocol: u32,
     pub(super) version: String,
+    #[serde(default)]
+    pub(super) agents: Vec<PaneInfo>,
+    #[serde(default)]
+    pub(super) tabs: Vec<TabInfo>,
+    #[serde(default)]
+    pub(super) workspaces: Vec<WorkspaceInfo>,
+}
+
+#[derive(Deserialize)]
+pub(super) struct WorkspaceInfo {
+    pub(super) workspace_id: String,
+    pub(super) label: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub(super) struct TabInfo {
+    pub(super) workspace_id: String,
+    pub(super) tab_id: String,
+    pub(super) label: Option<String>,
 }
 
 #[derive(Deserialize)]

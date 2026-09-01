@@ -190,7 +190,7 @@ the database or a subprocess is slow.
 
 ### Execution lanes
 
-The process has six logical lanes:
+The process has seven logical lanes:
 
 1. The UI lane reduces actions, computes layout, and renders the latest state.
 2. The input lane reads terminal events and sends normalized input messages.
@@ -201,6 +201,9 @@ The process has six logical lanes:
 5. The update lane owns bounded installation discovery and explicit updates.
 6. The macOS screenshot lane owns bounded directory reconciliation; on Linux it
    exposes only the typed unsupported result and starts no watcher.
+7. The attachment-accessibility lane executes ordered, bounded readability
+   checks through the injected filesystem adapter. It owns no cache, trigger,
+   presentation, or submission policy.
 
 Channels are bounded. Resize events may be coalesced to the newest dimensions.
 Text edits and structural operations may not be dropped or reordered.
@@ -271,7 +274,14 @@ conditions into explicit storage errors.
 
 ### `Editor`
 
-One editor instance owns the transient editing state for one focused thought.
+One editor instance owns transient editing state under a typed UI owner. The
+owner is either `Compose` or one durable `ThoughtId`. `Compose` contains only an
+editor buffer and a typed UI-only `Prompt | Editor` presentation. `Prompt`
+suppresses the editor projection while retaining the empty Compose owner;
+`Editor` exposes the ordinary editor surface. Neither presentation owns a
+domain entity, operation, or persistence identity. Promoting Compose replaces
+the owner in place after the canonical populated create succeeds, which retains
+the exact cursor, selection, annotations, viewport, and first input.
 
 ```rust
 trait Editor {
@@ -291,9 +301,13 @@ cursor model from leaking into the application.
 
 ### `LayoutEngine`
 
-Layout is a pure function of board state, editor state, terminal capabilities,
-and viewport dimensions. It returns a `LayoutSnapshot` containing rectangles,
-wrapped visual lines, scroll bounds, focus geometry, and mouse hit targets.
+Layout is a pure function of board state, typed editor-owner state, terminal
+capabilities, and viewport dimensions. It returns a `LayoutSnapshot` containing
+rectangles, wrapped visual lines, scroll bounds, focus geometry, and mouse hit
+targets. Engaged Compose uses the same editor measurement and rendering path at
+the insertion row without synthesizing a durable thought. Passive Compose omits
+that editor projection and instead uses the canonical insertion-row geometry for
+the centered `+ Start typing` prompt and its whole-row hit target.
 
 The renderer consumes this snapshot. Mouse handling consults the same snapshot.
 This prevents visual geometry and clickable geometry from drifting apart after
@@ -327,6 +341,33 @@ absolute files. It supports local file URLs, quoted paths, escaped whitespace,
 POSIX shell-escaped punctuation, multiple paths, and Unicode names. Ordinary
 prompt text remains exact. Dropped files remain external references and are
 never read or copied automatically.
+
+### `AttachmentAccessibility`
+
+External attachment health crosses a terminal-independent read-only port. The
+filesystem adapter opens the exact absolute path without rewriting it, proves
+that it is a readable regular file, and returns typed missing, permission,
+unmounted, unreadable, or I/O failures. The bounded lane adds timeout and
+cancellation failures without waiting for a blocked filesystem call to return.
+Those reasons are content-free diagnostics only. Application and UI consumers
+reduce every failure to binary inaccessible health.
+
+Application state owns the transient exact-key cache and scheduling policy.
+Keys include the thought, annotation index and range, presentation metadata,
+canonical path, and digest of the canonical content revision. Insertion and
+relink mutations invalidate affected work. Restoration schedules the focused
+thought first, then bounded board batches. Real thought-focus transitions move
+unknown queued work forward. Debounced host focus, the bounded inactivity
+fallback, and the explicit `Refresh attachments` action invalidate and rescan
+without polling, directory watchers, or render-time filesystem access.
+
+Submission captures exact source thoughts and attachment keys before waiting
+for durability. Once pending edits are durable, a fresh bounded preflight owns
+the accessibility lane ahead of background continuation. The locked sources
+must still match both their content digests and attachment keys when the check
+completes. Any inaccessible, timed-out, cancelled, incomplete, or stale result
+releases the source locks without preparing a journal attempt or invoking an
+agent gateway.
 
 ### `ScreenshotWatcher`
 
@@ -472,10 +513,39 @@ for deduplication, and never crawls the home directory. Compatibility roots are
 checked in; extra roots enter through validated configuration with explicit
 kind, harness, and scope. Project and global vectors remain separate.
 
-The UI owner assigns a generation and cwd to each refresh. Results update state
-only when both still match, so stale external work cannot leak an older project
-catalog. Completion derives a byte range from the exact editor snapshot, moves
-the existing editor selection to that range, and performs one semantic paste.
+`InvocationReferenceCatalog` extends this discovery boundary with typed,
+ephemeral collaborator locations. The Herdr adapter implements it from one
+bounded protocol 19 snapshot and projects only agent name, harness, correlated
+workspace and tab identity, pane identity, and observed state. Raw snapshot
+JSON, directories, terminal titles, prompt text, and other privacy-sensitive
+fields remain adapter-local. Workspace and tab labels are accepted only from
+matching topology records in the same snapshot. Missing label collections use
+exact IDs, while contradictory or duplicate identities fail closed.
+
+Filesystem and live discovery share the bounded external worker lane but use
+independent requests and completions. Filesystem refreshes retain their own
+UI-assigned generation and cwd. Each manual or automatic picker open allocates
+a separate live generation, clears the preceding live projection, and accepts
+only the matching newest completion. A timeout or malformed completion carries
+that same generation, so an old failure cannot erase newer references. Closing
+the picker invalidates pending live work. There is no continuous refresh while
+the picker remains open, and live failure never replaces usable filesystem
+entries.
+
+The UI stores only the typed live projection, bounds the subset, and renders one
+`Live in Herdr` section through the picker's existing two-field row. The primary
+and secondary projections deduplicate session name, topology labels, harness,
+pane, and observed state, with responsive secondary fallbacks that retain
+location first. Numeric-only tab labels are not presented as user-facing
+worktree names. The exact workspace, tab, and pane identities remain in the
+insertion text. Observed state is rendered from the picker-open snapshot but
+deliberately omitted from inserted text. No reference selection reaches the
+Herdr submission, focus, reservation, or mutation ports.
+
+Filesystem results update state only when generation and cwd still match, so
+stale external work cannot leak an older project catalog. Completion derives a
+byte range from the exact editor snapshot, moves the existing editor selection
+to that range, and performs one semantic paste.
 The resulting `TextChangeSet` continues through annotation rebasing and editor
 undo without a parallel text-mutation contract.
 
@@ -568,6 +638,13 @@ then returns the stable `schema_busy` error instead of waiting indefinitely.
 The application refuses to open a database schema newer than it understands.
 It does not attempt a best-effort downgrade. Export and explicit recovery tools
 remain available without modifying the source database.
+
+Schema and storage protocol version 10 register shortcut-emphasis annotations
+as durable thought and revision metadata. Version 9 introduced invocation
+references. Both migrations are transactional protocol stamps because the
+annotation column and JSON envelope already exist. The current version prevents
+an older writer from interpreting an unknown annotation variant as compatible
+state.
 
 ## Multiple running versions during an update
 
@@ -813,13 +890,45 @@ Command on macOS and Control on Linux. Enhanced keyboard protocols
 are enabled when supported so Super and Meta events can be distinguished, but
 every action retains a terminal-safe fallback and a configurable binding.
 
+The application interaction state is the exhaustive terminal-independent set
+`Board`, `Compose`, and `Edit { thought_id }`. The UI dispatcher selects one of
+these modes before interpreting a normalized key. Board alone resolves printable
+shortcuts. Compose and Edit resolve text through editor commands. Host focus is
+never an application mode switch. Focus gain remains an integration refresh
+signal. Focus loss may collapse only the UI-only, untouched Compose presentation
+from `Editor` to `Prompt`; it does not reduce an application action. `AppState`
+initializes an empty durable snapshot as Compose, while a nonempty snapshot keeps
+the existing Board focus contract.
+
+`Primary+Enter` and `Primary+Shift+Enter` normalize to distinct Submit and
+SubmitKeep intentions before plain Enter handling. Plain Enter therefore remains
+an editor newline or smart-list command. Crossterm unit contracts and real PTY
+diagnostics verify the platform Primary event encodings. The command palette
+remains the modifier-independent fallback.
+
 Vertical board input uses one semantic modifier ladder for both arrow and
 configured character spellings: plain input moves focus, Shift extends an
-anchored range, and Primary+Shift reorders one thought. Input normalization
+anchored range, and Primary+Shift reorders one thought. Other modifiers resolve
+to the base focus intention. At the insertion row, range and reorder are
+thought-only no-ops while focus retains the boundary policy. Input normalization
 preserves otherwise unknown Primary character chords until the board keymap
 can resolve the configured shifted range key, including when enhanced keyboard
 reporting encodes the shifted character without a separate Shift flag. It must
 not let arrow and `j`/`k`-style bindings acquire different intentions.
+
+The normalized unmodified physical `Delete` key is an invariant Board spelling
+of the configured delete command and therefore reaches the same typed action,
+locks, operation, persistence, and undo path. Modified physical Delete retains
+a distinct normalized value and has no Board command meaning. The configured
+character remains remappable independently. `Backspace` has no Board delete
+meaning. Compose and Edit interpret both Delete values as forward text deletion,
+while query owners retain their existing local text-editing behavior.
+One typed non-text navigation decoder maps Up and Down to `k` and `j` in
+list-only surfaces and maps Left, Down, Up, and Right to `h`, `j`, `k`, and `l`
+in direction choosers. It ignores irrelevant modifiers symmetrically across
+both spellings. Text-entry dispatch runs outside those decoders, so the four
+letters remain content there. Modal navigation resolves before a configured
+Board shortcut, with Escape retained as the unconditional Help close action.
 
 `Primary+A` selects the entire current thought only in edit mode. `Primary+U`
 deletes one newline-delimited logical line as a single undoable edit. Logical
@@ -845,21 +954,62 @@ removes one tab. No parent-content offset participates in indentation or
 outdent, and later ordered markers are never renumbered. Outside recognized list
 context, Tab is exact space insertion and BackTab is a no-op. Palette commands
 route through the same intentions for modifier-independent keyboard and mouse
-access. An editor selection handed through Escape is transiently available only
-to the next command-palette indent or outdent on the same unchanged thought.
+access. An editor cursor and optional selection handed through Escape are
+transiently available only to the next command-palette editor action on the
+same unchanged thought. This preserves the editor position across the explicit
+Edit-to-Board boundary required to reach the portable command fallback.
 
 Bracketed paste is one payload and one undoable edit. When no thought is
 selected, paste creates and focuses a new thought. The application never tries
 to split a paste heuristically.
 
+Compose sends every character, paste, annotated paste, clipboard result,
+movement, selection, and supported composition intention through the existing
+editor. A content-changing outcome is snapshotted once and passed to the
+canonical `CreateThought` action with exact content and annotations. That action
+allocates the first durable identity and sequence, records one board history
+entry, and produces the existing persistence batch. Content-free editor events
+produce no action. This avoids a create-then-revise gap and makes crash, retry,
+restart, undo, and redo use the existing atomic operation contract.
+
+Native clipboard reads are asynchronous UI intentions stored with a typed
+initiating owner. Board results remain Board-owned, durable editor results must
+still match the same `ThoughtId`, and Compose results must match both the
+Compose owner and its lifecycle generation. Exiting or materializing Compose
+advances that generation. Late success and failure results are removed and
+discarded before paste dispatch, so completion cannot reinterpret an old editor
+request under a newer interaction mode.
+
 Board-mode printable keys always pass through the configured command map, even
-when the insertion row or a durable blank has focus. The second blocked
-downward movement at the end of a non-empty final edited thought creates a
-durable blank and enters its editor. Repeated movement while that blank remains
-empty cannot create additional thoughts. On the insertion row, two consecutive
-semantic downward navigation commands perform the same durable create-and-edit
-transition; unrelated or reorder input clears the confirmation. Other edit
-boundaries use the same navigation state machine.
+when the insertion row or a durable blank has focus. One typed boundary
+insertion policy owns both outer positions. The second blocked upward movement
+at the first nonempty thought inserts at position zero, while the second blocked
+downward movement at the end of a nonempty final thought appends. Both create a
+durable blank and enter its editor through the canonical create action. Arrow
+and configured previous or next spellings normalize to the same semantic
+confirmation outside text modes and may be mixed. Repeated movement while the
+new blank remains empty cannot create additional thoughts. On the insertion
+row, two consecutive semantic base downward navigation commands perform the
+same durable create-and-edit transition. Range, reorder, unrelated input,
+pointer input, and mode changes clear confirmation. Unsupported modifiers that
+normalize to base focus retain the same confirmation. Other edit boundaries use
+the same navigation state machine.
+
+Empty-board aftermath is reconciled by one typed policy owned beside
+`InteractionMode`. Deliberate local removals request Compose after the mutation;
+passive and external mutations request Preserve. Owner-control additions retain
+an active Compose editor and its insertion order. Owner-control deletion of the
+last durable thought resolves invalid durable focus to Board but never invents
+Compose. Startup is the only automatic snapshot-derived entry, so discovery,
+update checks, attachment scans, focus reports, and background completion cannot
+steal input state.
+
+Entering Compose after a deliberate local removal resets its UI presentation to
+`Prompt`. In particular, accepted submit-and-remove shows `+ Start typing` only
+after the matching receipt journal transition and canonical deletion are both
+durable. It never allocates a replacement blank thought. Clicking the prompt or
+an explicit Board insertion action changes only the presentation to `Editor`;
+typing or paste may materialize directly from either presentation.
 
 Board multi-selection is transient UI state with two explicit, non-overlapping
 forms: an arbitrary identity set and an anchored contiguous range. A range
@@ -881,14 +1031,18 @@ visible selection.
 The normalized paste payload carries exact text plus optional typed provenance.
 Attachment annotations retain only presentation-safe metadata and byte ranges;
 the absolute path remains the canonical text. Large-paste annotations retain
-derived line and grapheme counts. A UI-owned projection substitutes folded
-labels for both board rendering and editor snapshots, while the editor model,
-clipboard, recovery, CLI, search, and integration boundaries continue to
-consume canonical content. The projection owns lossless canonical-to-visible
-cursor and selection mapping. Collapsed ranges are atomic for pointer, cursor,
-selection, and deletion commands. Edits rebase unaffected ranges and dissolve
-overlapping ranges. Revisions persist both sides of the annotation change so
-undo and redo remain restart-safe.
+derived line and grapheme counts. Invocation-reference annotations retain only
+a bounded display label over the canonical, self-contained collaborator
+location. Shortcut emphasis retains only its closed semantic kind and exact
+UTF-8 range. Each durable kind exhaustively selects substitution or inline-style
+behavior in one UI-owned projection. Substitutions own lossless
+canonical-to-visible mapping and atomic folded interaction. Inline styles copy
+every canonical byte and contribute only semantic visible ranges. Board and
+editor rendering, measurement, wrapping, cursor and selection mapping, and hit
+testing consume that same projection. Clipboard, recovery, CLI, search,
+submission, and integration boundaries continue to consume canonical content.
+Edits rebase unaffected ranges and dissolve intersected ranges. Revisions
+persist both sides of the annotation change so undo and redo remain restart-safe.
 
 URL recognition is a render-only pass over canonical content. Only explicit
 HTTP and HTTPS ranges receive accent and underline styling. URL recognition does
@@ -910,6 +1064,9 @@ The adapter:
   integration. It never interpolates prompt text into shell syntax.
 - Applies bounded timeouts and maps JSON responses into typed results.
 - Never falls back to raw key injection.
+- Projects recognized coding agents from one bounded snapshot for inert
+  invocation-picker references, without exposing raw topology or terminal
+  metadata above the adapter.
 
 The receiving harness decides whether a prompt sent to a working agent is
 queued, treated as steering, or rejected. The gateway reports that state and
@@ -927,9 +1084,29 @@ receipt already contains the new session or precedes the session hook.
 Established sessions still require exact identity.
 The matching `agent_prompted` receipt establishes acceptance. Any
 post-submit agent state is advisory, including `blocked`, `unknown`, or no
-reported state. The accepted outcome is journaled durably before an unchanged
-thought may be removed. That deletion remains undoable. Every failure preserves
-the thought.
+reported state. For remove-after-success, SQLite commits the accepted terminal
+journal row and the unchanged-source `BoardOperation` in one transaction. The
+reducer stages that operation without changing the visible board and applies it
+to state and undo history only after the matching ordered commit receipt. A
+failed commit is retained on the bounded persistence lane for the ordinary
+retry path, while the source lock, Edit owner, exact editor content, and cursor
+remain unchanged. An ambiguous SQLite retry succeeds only when both the stored
+terminal outcome and durable operation receipt exactly match the original
+compound request. While the staged operation owns the next sequence, a typed UI
+flush barrier prevents owner, submission, history, transfer, pointer, and quit
+transitions from crossing an unflushed editor revision. That deletion remains
+one undoable operation. Every failure preserves the thought.
+
+Direct Edit submission first flushes the active editor revision and then enters
+the existing durability-gated submission state machine for that one thought.
+It uses the same attachment preflight, target discovery and revalidation,
+redacted attempt reservation, sending compare-and-set, semantic adapter call,
+receipt matching, atomic terminal journal and removal commit, and conditional
+removal. Keep returns to the same Edit owner. Remove enters Compose only after
+the matching ordered receipt applies the staged canonical delete operation.
+Empty Compose never
+creates an attempt, and missing or ambiguous targets retain the complete editor
+draft while using the existing refresh or chooser.
 
 Whole-board keep and remove actions reuse this exact request, journal, receipt,
 and deletion path with every live source identity. Prompt assembly uses the same
@@ -946,6 +1123,12 @@ automatically retries an ambiguous delivery. The journal stores ordered source
 identities, their SHA-256 digests, one aggregate payload digest, and a target
 identity fingerprint, never prompt content or raw pane and agent session
 identifiers.
+
+Attachment preflight precedes creation of this journal attempt. Successful
+preflight preserves the same direct Herdr request and journal transitions.
+External files remain caller-owned paths, so a file can disappear after the
+final successful check and before the receiving agent opens it. Proqi does not
+silently copy external files or rewrite canonical paths.
 
 `v0.1.0` implements this boundary against Herdr's structured schema
 and protocol discovery commands. Capability discovery verifies both the
@@ -1027,13 +1210,17 @@ bounded messages, protocol negotiation, idempotency keys, and timeouts are
 mandatory. If forwarding is unsupported or the owner cannot be verified, the
 CLI returns `session_busy`.
 
-Control protocol version 4 supports durable presentation annotations, session
-rename, owner synchronization, exact editor replacement, and durable collapse
-state. Exact replacement carries a typed `rev_` idempotency identity plus either
+Control protocol version 7 is current. Version 2 introduced legacy durable
+presentation annotations. Version 4 added session rename, owner synchronization,
+exact editor replacement, and durable collapse state. An add mutation carrying
+an invocation-reference annotation requires version 6, so an older active owner
+cannot silently persist content while dropping mention metadata. Exact
+replacement carries a typed `rev_` idempotency identity plus either
 the caller's expected SHA-256 content digest or an explicit force intention and
 enters the ordinary editor revision history. The owner rejects every mutation of a source thought while its
 submission is in flight. Cross-session delivery inspects the source, commits an
-idempotent destination creation through the verified owner or an acquired
+idempotent destination creation through the version 7 purpose-specific
+preservation request or an acquired
 inactive-session lease, and only then requests an ordinary source deletion. No
 direct database write bypasses an active destination owner.
 
@@ -1068,6 +1255,13 @@ There is no security boundary between the application and other processes
 running as the same operating-system user. The design prevents accidental
 cross-session writes and unsafe command construction, not a malicious local
 administrator.
+
+Shortcut-emphasis authority follows that boundary. Supported application, UI,
+CLI, JSON, control, import, transfer, and agent-facing APIs cannot originate an
+arbitrary semantic range. The serialized kind carries no `system_owned` claim,
+signature, or key. A structurally valid range inserted directly into SQLite by
+the same user may therefore load; unknown kinds, malformed ranges, and
+unsupported storage protocols still fail closed.
 
 ## Test architecture
 
@@ -1220,22 +1414,32 @@ Pull requests and pushes to the protected default branch run these jobs:
   checks on the pinned stable toolchain.
 - `test` runs the deterministic suite on macOS and Linux. The matrix
   does not use fail-fast because all platform results are diagnostically useful.
-- `msrv` compiles and tests with the declared minimum supported Rust version.
+- `msrv` checks compilation with the declared minimum supported Rust version.
+  Manifest, toolchain, packaging, CI, and release-boundary changes run the full
+  MSRV suite. The complete suite also remains available as a manual diagnostic.
 - `pty` runs terminal scenarios on each platform where the harness is supported.
-- `coverage` publishes a report from Linux and enforces a 70 percent line
-  threshold. Exclusions must be narrow and justified in configuration.
+- `coverage` publishes one report from Linux for relevant Rust and toolchain
+  changes and enforces a 70 percent line threshold. Exclusions must be narrow
+  and justified in configuration.
+- `crate` owns the registry package and publication dry-run contract once.
+- Native package jobs retain their installed-product and Debian boundaries
+  without repeating the registry dry run.
 - `security` runs dependency advisory, license, source, and policy checks.
 - `check` is an aggregate job that succeeds only when every required job has
   succeeded or has been explicitly marked inapplicable.
 
-A preflight job classifies the complete pull-request or push diff before the
-matrix starts. When every changed path ends in `.md`, CI runs one lightweight
-documentation gate for whitespace and repository-owned public-asset contracts;
+A preflight job uses the xtask-owned classifier on the complete pull-request or
+push diff before the matrix starts. When every changed path is ordinary
+Markdown, CI runs one lightweight documentation gate for whitespace and
+repository-owned public-asset contracts. Reviewed files under
+`.github/release-notes/` are product inputs even though they are Markdown;
 the Rust test, coverage, audit, PTY, package, and platform jobs are explicitly
-skipped. Any non-Markdown path runs the complete matrix. The aggregate `check`
-job verifies the exact expected success-and-skip topology in both cases, so a
-path optimization cannot leave the protected required check pending or turn an
-unexpectedly skipped product job into success.
+skipped. Any non-Markdown path runs the distinct product boundaries. Coverage
+runs only for relevant code changes, and the full MSRV suite runs only for its
+classified compatibility boundaries. The aggregate `check` job verifies the
+exact expected success-and-skip topology, so a path optimization cannot leave
+the protected required check pending or turn an unexpectedly skipped product
+job into success.
 
 The aggregate `check` job is the stable branch-protection contract. Individual
 jobs may evolve without repeatedly changing repository settings. Superseded
@@ -1245,8 +1449,8 @@ to a full commit SHA with its human-readable version recorded in a comment.
 
 Tests that require a real desktop clipboard, a specific terminal emulator, or a
 live Herdr session are gated smoke tests. Their deterministic equivalents remain
-required on every pull request. Live smoke tests run before releases and may also
-run on a schedule without weakening the required gate.
+required on every pull request. Live smoke tests remain explicit milestone or
+diagnostic work and are not scheduled.
 
 New coding-agent harnesses use
 [`HARNESS_QUALIFICATION_CHECKLIST.md`](HARNESS_QUALIFICATION_CHECKLIST.md) for
@@ -1288,19 +1492,23 @@ teaches coding agents to use the installed application.
 
 ### Release pipeline
 
-Every release candidate starts from a protected stable tag whose exact commit
-has passed the aggregate `main` gate. The tag-triggered release workflow calls
-the candidate workflow as a reusable workflow, so the expensive matrix and
-promotion share one run and one immutable artifact set. A manual candidate
-dispatch remains available only as a non-publishing preflight or recovery tool.
-Both entry points accept an exact `vX.Y.Z` tag, reject a tag that differs from
-the single Cargo workspace version, and record the source ref and commit. The
-matrix builds only Apple silicon macOS, Intel macOS, and x86-64 GNU Linux
-artifacts on native runners. The GNU/Linux candidate is built on Ubuntu 22.04,
-must not require a glibc symbol newer than `GLIBC_2.35`, and is started from its
-final archive on Ubuntu 22.04, Debian bookworm, and Ubuntu 24.04. One Linux job
-generates a union third-party notice file for all targets, so Intel macOS never
-compiles the packaging tool.
+Release readiness is a deterministic property of checked-in inputs, never
+commit prose. The Cargo version, matching reviewed notes, bounded release
+highlights, clean worktree, exact main identity, and absent canonical tag form
+the preparation contract. Routine local preparation validates only those cheap
+inputs. Development, milestone, and diagnostic commands retain full checks,
+PTY, coverage, audit, packaging, rehearsal, full MSRV, and Linux container
+parity without making them prerequisites of metadata preparation.
+
+For an exact release-ready main SHA, the candidate workflow runs alongside
+ordinary CI and has no publication credentials. It builds only Apple silicon
+macOS, Intel macOS, and x86-64 GNU Linux artifacts on native runners. Each native
+binary is built once. The Linux binary is reused byte for byte in the Debian
+package. The GNU/Linux candidate is built on Ubuntu 22.04, must not require a
+glibc symbol newer than `GLIBC_2.35`, and is started from its final archive on
+Ubuntu 22.04, Debian bookworm, and Ubuntu 24.04. One Linux job generates a union
+third-party notice file for all targets, so Intel macOS never compiles the
+packaging tool.
 
 A reviewed pinned `cargo-dist` configuration or equivalent narrow Rust tool
 stages archives containing one executable, MIT license, required notices, and
@@ -1314,21 +1522,32 @@ filenames and titles, the Cargo version, and the requested tag. Quality,
 release planning, standalone packaging, and crate packaging all fail closed on
 missing, corrupt, unreviewed, or mismatched highlights.
 
-The candidate workflow creates a seven-day immutable artifact only after every
+The candidate workflow creates a 30-day immutable artifact only after every
 target, installed smoke, crate dry run, Debian package contract, checksum, SBOM,
 attestation, formula, and manifest step succeeds. The Debian package reuses the
 verified Linux archive executable byte for byte. The manifest separates public
 release files from private crate and Debian evidence and binds the future tag,
-source commit, build run, workflow, target registry, filenames, and file
-digests. Promotion downloads the candidate produced by the same tag run,
-verifies every internal hash and candidate attestation, adds tag-bound
-attestations, and publishes the same bytes. It never rebuilds successful native
-jobs. A failed promotion can be rerun while retaining their candidate artifacts.
-Release creation is idempotent for absent releases,
-matching drafts, and already published identical assets. Conflicting assets
-fail closed. GitHub Release notes are the only changelog. The protected release
-environment has no manual approval gate. Release runs are never cancelled and
-existing assets for a version are immutable.
+source commit, source ref, build run and attempt, exact workflow, filenames, and
+file digests. A protected stable tag remains the explicit publication authority.
+Promotion requires the tag commit to be the exact prepared main SHA, one
+successful aggregate main CI run for that SHA, and exactly one successful,
+unexpired candidate for the same version and SHA. It downloads by exact run and
+artifact identity, verifies the REST artifact digest before extraction, then
+verifies every internal hash and candidate attestation. Missing, expired,
+duplicate, mismatched, conflicting, or unattested candidates fail closed.
+Promotion checks the immutable tag commit, not the moving main tip. A later
+main commit therefore does not invalidate an authorized prepared candidate.
+Promotion adds tag-bound attestations and publishes the same bytes. It never
+rebuilds a successful native candidate. A manual candidate dispatch provides a
+non-publishing recovery path at main or at the exact protected tag.
+Release creation is idempotent for absent releases, empty or partially uploaded
+matching drafts, complete drafts, and already published identical assets. The
+workflow creates an empty verified draft, reconciles exact candidate bytes,
+uploads only missing assets, then downloads and verifies the complete set before
+registry publication. Duplicate, unexpected, conflicting, or incomplete public
+assets fail closed. GitHub Release notes are the only changelog. The protected
+release environment has no manual approval gate. Release runs are never
+cancelled and existing assets for a version are immutable.
 
 The same protected promotion job publishes the verified crate through
 crates.io trusted publishing. The crate trusts only the Proqi repository,
@@ -1357,6 +1576,17 @@ checksums, completions, notices, SPDX output, and formula metadata under
 `target`. It reports platform work that only CI can verify. No paid platform
 signing or notarization is performed.
 
+Pinned Linux QA tools are published separately from release artifacts. The
+single repository identity is owned by `tools/ci-linux/image.json`. A dedicated
+workflow builds amd64 and arm64 variants on matching native GitHub-hosted
+runners, validates pull requests without pushing, and publishes only from
+trusted main activity using the short-lived repository token. Content-derived,
+run-qualified tags are checked for absence before publication and are never
+overwritten. Digest-only consumption, registry provenance, and SBOMs make the
+input explicit. Its registry-backed BuildKit cache is regenerable and untrusted.
+Neither Proqi source nor release artifacts enter the tools image. Native smoke
+and explicit amd64 parity are xtask diagnostics, not routine release preparation.
+
 ## Source organization
 
 Start with one library crate plus thin binaries:
@@ -1367,7 +1597,7 @@ src/
   lib.rs
   domain/          entities, values, invariants, operations
   application/     AppState, reducer, effects, SessionService
-  ports/           Store, Editor, Clipboard, AttachmentStore, AgentGateway, runtime traits
+  ports/           Store, Editor, Clipboard, attachment ports, AgentGateway, runtime traits
   adapters/
     sqlite/
     terminal/

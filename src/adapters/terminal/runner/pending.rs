@@ -10,6 +10,7 @@ use crate::{
 
 #[derive(Default)]
 pub(super) struct PendingWork {
+    pub(super) accessibility: usize,
     pub(super) persistence: usize,
     pub(super) external: usize,
     pub(super) controls: BTreeMap<OperationSequence, PendingControl>,
@@ -25,6 +26,7 @@ pub(super) struct PendingWork {
 impl PendingWork {
     pub(super) fn is_empty(&self) -> bool {
         self.persistence == 0
+            && self.accessibility == 0
             && self.external == 0
             && self.controls.is_empty()
             && self.control_lookups.is_empty()

@@ -1,17 +1,30 @@
 //! Read-only UI projections and frame preparation.
 
-use crate::{
-    application::{DurabilityState, InteractionMode},
-    domain::ThoughtId,
-    ports::{agent::AgentTarget, editor::EditorSnapshot, editor::TextViewport},
-    ui::{HitTarget, KeyBindings, LayoutSnapshot},
-};
-use ratatui_core::layout::Rect;
-use unicode_width::UnicodeWidthStr as _;
-
 use super::{BoardApp, invocation::InvocationChoiceView, palette, search, transfer};
+use crate::{
+    application::InteractionMode,
+    domain::ThoughtId,
+    ports::{
+        agent::AgentTarget,
+        editor::{EditCommand, EditorSnapshot},
+    },
+    ui::{HitTarget, KeyBindings},
+};
 
 impl BoardApp {
+    pub(super) fn current_content(&self, thought_id: ThoughtId) -> Option<String> {
+        self.pending_edit
+            .as_ref()
+            .filter(|pending| pending.thought_id == thought_id)
+            .map(|pending| pending.after.content.clone())
+            .or_else(|| {
+                self.state
+                    .board
+                    .thought(thought_id)
+                    .map(|thought| thought.content.clone())
+            })
+    }
+
     /// Return the active editor snapshot, if edit mode is active.
     #[must_use]
     pub fn editor_snapshot(&self) -> Option<EditorSnapshot> {
@@ -21,31 +34,44 @@ impl BoardApp {
     pub(in crate::ui) fn editor_presentation(
         &self,
     ) -> Option<crate::ui::projection::EditorPresentation> {
-        let thought_id = self.active_thought_id()?;
+        if self.compose_prompt_visible() {
+            return None;
+        }
         let snapshot = self.editor_snapshot()?;
-        let annotations = self.current_annotations(thought_id);
-        Some(crate::ui::projection::editor_presentation(
+        let (annotations, expanded, thought_id) = match self.editor.as_ref()?.0 {
+            super::EditorOwner::Compose => (Vec::new(), Vec::new(), None),
+            super::EditorOwner::Thought(thought_id) => (
+                self.current_annotations(thought_id),
+                self.expanded_fold_indices(thought_id),
+                Some(thought_id),
+            ),
+        };
+        crate::ui::projection::editor_presentation(
             &snapshot,
             &annotations,
-            &self.expanded_fold_indices(thought_id),
-        ))
+            &expanded,
+            |annotation_index| {
+                thought_id.is_some_and(|thought_id| {
+                    self.attachment_inaccessible(thought_id, annotation_index)
+                })
+            },
+        )
+        .ok()
     }
 
     pub(in crate::ui) fn presentation_for_render(
         &self,
         thought_id: ThoughtId,
     ) -> Option<crate::ui::annotations::Presentation> {
-        let content = self
-            .state
-            .board
-            .thought(thought_id)
-            .map(|thought| thought.content.clone())?;
+        let content = self.current_content(thought_id)?;
         let annotations = self.current_annotations(thought_id);
-        Some(crate::ui::annotations::project(
+        crate::ui::annotations::project_with_health(
             &content,
             &annotations,
             &self.expanded_fold_indices(thought_id),
-        ))
+            |annotation_index| self.attachment_inaccessible(thought_id, annotation_index),
+        )
+        .ok()
     }
 
     /// Effective interaction mode.
@@ -57,7 +83,7 @@ impl BoardApp {
     /// Focused durable thought identity.
     #[must_use]
     pub fn active_thought_id(&self) -> Option<ThoughtId> {
-        if self.insertion_focused() {
+        if self.insertion_focused() || matches!(self.state.mode, InteractionMode::Compose) {
             return None;
         }
         self.state.focused_thought
@@ -90,6 +116,30 @@ impl BoardApp {
         self.state.thought_locked(thought_id)
     }
 
+    pub(super) fn edit_content_mutation_blocked(&self, thought_id: ThoughtId) -> bool {
+        self.submission_locked(thought_id) || self.state.deferred_board_operation_pending()
+    }
+
+    pub(super) fn edit_command_blocked(&mut self, command: &EditCommand) -> bool {
+        if matches!(
+            command,
+            EditCommand::Move { .. }
+                | EditCommand::SelectAll
+                | EditCommand::ClearSelection
+                | EditCommand::SetCursor { .. }
+                | EditCommand::PointerStart { .. }
+                | EditCommand::PointerDrag { .. }
+                | EditCommand::PointerEnd
+        ) {
+            return false;
+        }
+        let blocked = matches!(self.editor.as_ref(), Some((super::EditorOwner::Thought(id), _)) if self.edit_content_mutation_blocked(*id));
+        if blocked {
+            self.set_warning("thought has a submission in progress");
+        }
+        blocked
+    }
+
     /// Number of currently visible durable thoughts.
     #[must_use]
     pub fn visible_thought_count(&self) -> usize {
@@ -102,6 +152,32 @@ impl BoardApp {
         matches!(self.state.mode, InteractionMode::Board)
             && (matches!(self.insertion_focus, super::InsertionFocus::Active)
                 || self.state.board.live_thoughts().is_empty())
+    }
+
+    /// Whether the transient insertion editor owns input and cursor focus.
+    #[must_use]
+    pub fn compose_active(&self) -> bool {
+        matches!(self.state.mode, InteractionMode::Compose)
+    }
+
+    /// Whether empty Compose uses the passive prompt projection.
+    #[must_use]
+    pub fn compose_prompt_visible(&self) -> bool {
+        self.compose_active()
+            && matches!(
+                self.compose_presentation,
+                super::ComposePresentation::Prompt
+            )
+    }
+
+    /// Whether empty Compose exposes its ordinary editor projection.
+    #[must_use]
+    pub fn compose_editor_visible(&self) -> bool {
+        self.compose_active()
+            && matches!(
+                self.compose_presentation,
+                super::ComposePresentation::Editor
+            )
     }
 
     /// Monotonic counter used by the runtime to detect new unflushed editor work.
@@ -209,205 +285,7 @@ impl BoardApp {
         self.submission_mode.as_ref().map(|mode| mode.disposition)
     }
 
-    /// Prepare current frame geometry without changing the logical cursor.
-    pub fn prepare_layout(&mut self, viewport: TextViewport) {
-        self.viewport = viewport;
-        if let Some((_, editor)) = &mut self.editor {
-            editor.set_viewport(viewport);
-        }
-    }
-
-    /// Recompute one authoritative frame layout and reflow the active editor.
-    pub fn prepare_frame(&mut self, area: Rect) -> LayoutSnapshot {
-        self.reset_overlay_activation_for_geometry(area);
-        let layout_state = self.presentation_state();
-        let first_editor = self.editor_presentation();
-        let has_status = self.status_view().is_some()
-            || matches!(self.state.durability, DurabilityState::Failed { .. });
-        let (first, first_scroll) = crate::ui::layout::compute_for_app(
-            &layout_state,
-            first_editor.as_ref().map(|view| &view.snapshot),
-            area,
-            self.insertion_focused(),
-            !self.agent_targets.is_empty(),
-            has_status,
-            self.settings.density,
-            &self.settings.keybindings,
-            self.board_viewport,
-        );
-        let height = self.focused_height(&first);
-        self.prepare_layout(TextViewport::new(first.content_width, height));
-        let editor = self.editor_presentation();
-        let viewport = self.board_viewport.at(first_scroll.current);
-        let (mut layout, scroll) = crate::ui::layout::compute_for_app(
-            &layout_state,
-            editor.as_ref().map(|view| &view.snapshot),
-            area,
-            self.insertion_focused(),
-            !self.agent_targets.is_empty(),
-            has_status,
-            self.settings.density,
-            &self.settings.keybindings,
-            viewport,
-        );
-        self.configure_overlay(&mut layout);
-        layout.configure_agent_controls_with_keys(
-            &self.agent_targets,
-            self.submission_mode(),
-            &self.settings.keybindings,
-        );
-        let summary = self.footer_summary(layout.footer_context.width.saturating_sub(4));
-        let session_id = self
-            .settings
-            .show_session_id
-            .then(|| self.state.board.session.id.to_string());
-        layout.configure_footer_summary(
-            summary,
-            self.session_display_name().to_owned(),
-            session_id,
-        );
-        let final_height = self.focused_height(&layout);
-        self.prepare_layout(TextViewport::new(layout.content_width, final_height));
-        self.board_viewport = self.board_viewport.at(scroll.current);
-        self.scroll_geometry = Some(scroll);
-        self.layout = Some(layout.clone());
-        self.clamp_release_highlights_scroll();
-        layout
-    }
-
-    fn focused_height(&self, layout: &LayoutSnapshot) -> u16 {
-        self.active_thought_id()
-            .and_then(|id| layout.thought(id))
-            .map_or(layout.board.height.max(1), |thought| {
-                thought.text_area.height.max(1)
-            })
-    }
-
-    fn configure_overlay(&self, layout: &mut LayoutSnapshot) {
-        let screenshot_items = usize::from(self.screenshot.takeover.is_some()) * 2;
-        let update_items = usize::from(self.update_prompt.is_some()) * 3;
-        let highlight_rows = usize::from(self.release_highlights.is_some()).saturating_mul(
-            self.release_highlights_row_count(layout.board.width.min(58).saturating_sub(2)),
-        );
-        let palette_items = self
-            .palette
-            .as_ref()
-            .map_or(0, palette::PaletteState::match_count);
-        let invocation_items = self.invocation_match_count();
-        let search_items = self.search_match_count();
-        let transfer_items = self.transfer_match_count();
-        let preferred_rows = if self.screenshot.takeover.is_some() {
-            2
-        } else if self.update_prompt.is_some() {
-            4
-        } else if self.release_highlights.is_some() {
-            highlight_rows.max(1)
-        } else if self.help {
-            let content_width = layout.board.width.min(58).saturating_sub(2);
-            crate::ui::shortcuts::row_count(self, content_width)
-        } else if self.rename.is_some() {
-            2
-        } else if self.invocation_popup.is_some() {
-            invocation_items.max(2)
-        } else if self.palette.is_some() {
-            palette_items.max(2)
-        } else if self.transfer.is_some() {
-            transfer_items.max(2)
-        } else if self.search.is_some() {
-            search_items.max(2)
-        } else {
-            0
-        };
-        layout.configure_overlay(
-            screenshot_items
-                .max(palette_items)
-                .max(search_items)
-                .max(transfer_items)
-                .max(invocation_items)
-                .max(update_items),
-            preferred_rows,
-        );
-    }
-
-    fn footer_summary(&self, available_width: u16) -> String {
-        let count = self.visible_thought_count();
-        let noun = if count == 1 { "thought" } else { "thoughts" };
-        let mode = match self.interaction_mode() {
-            InteractionMode::Board if self.range_latched() => "range",
-            InteractionMode::Board => "board",
-            InteractionMode::Edit { .. } => "edit",
-        };
-        let durability = self.durability_summary();
-        let inbox = self
-            .screenshot_footer_state(false)
-            .map_or_else(String::new, |label| format!(" · {label}"));
-        let complete = format!("{count} {noun} · {mode} · {durability}{inbox}");
-        if complete.width() <= usize::from(available_width) {
-            return complete;
-        }
-        let compact_inbox = self
-            .screenshot_footer_state(true)
-            .map_or_else(String::new, |label| format!(" · {label}"));
-        let compact = format!("{count} · {mode} · {durability}{compact_inbox}");
-        if compact.width() <= usize::from(available_width) {
-            return compact;
-        }
-        if let Some(paused) = self.screenshot_footer_state(true) {
-            return paused;
-        }
-        format!("{count} {durability}")
-    }
-
-    pub(crate) fn session_display_name(&self) -> &str {
-        let session = &self.state.board.session;
-        session.name.as_deref().unwrap_or_else(|| {
-            session
-                .last_opened_cwd
-                .file_name()
-                .or_else(|| session.origin_cwd.file_name())
-                .and_then(|name| name.to_str())
-                .unwrap_or("untitled")
-        })
-    }
-
-    fn durability_summary(&self) -> &'static str {
-        if matches!(self.state.durability, DurabilityState::Failed { .. }) {
-            "unsaved"
-        } else if self.has_pending_edit()
-            || matches!(self.state.durability, DurabilityState::Pending { .. })
-        {
-            "saving"
-        } else {
-            "saved"
-        }
-    }
-
-    fn presentation_state(&self) -> crate::application::AppState {
-        let mut state = self.state.clone();
-        if self.insertion_focused() {
-            state.focused_thought = None;
-        }
-        let ids = state
-            .board
-            .thoughts()
-            .iter()
-            .map(|thought| thought.id)
-            .collect::<Vec<_>>();
-        for id in ids {
-            if let Some(thought) = state.board.thought_mut(id) {
-                thought.content = crate::ui::annotations::project(
-                    &thought.content,
-                    &thought.annotations,
-                    &self.expanded_fold_indices(id),
-                )
-                .content;
-                thought.annotations.clear();
-            }
-        }
-        state
-    }
-
-    fn expanded_fold_indices(&self, thought_id: ThoughtId) -> Vec<usize> {
+    pub(super) fn expanded_fold_indices(&self, thought_id: ThoughtId) -> Vec<usize> {
         self.expanded_folds
             .iter()
             .filter_map(|(id, index)| (*id == thought_id).then_some(*index))

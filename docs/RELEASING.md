@@ -32,38 +32,50 @@ authority by itself.
   to GitHub Actions.
 - The Homebrew formula is generated only from the verified release checksums.
 
-## Local release candidate gate
+## Fast local release preparation
 
-Install the developer tools reported by `cargo xtask setup`, plus `cargo-dist
-0.32.0`, `cargo-about 0.9.2`, Syft 1.51.0, Actionlint, Zizmor, Ruby, Homebrew,
-Asciinema, agg, Expect, and librsvg. Then run:
+Routine preparation validates reviewed release inputs and repository hygiene:
+
+```shell
+cargo xtask release-plan <vX.Y.Z>
+git diff --check
+```
+
+`release-plan` checks the Cargo version, canonical absent tag, matching release
+notes, bounded reviewed `release-highlights.json`, exact locally known `main`
+identity, and a clean worktree. It does not compile, package, run containers, or
+repeat CI. Run Actionlint and Zizmor when workflow files changed.
+
+The complete development and milestone gates remain available. Use the gates
+relevant to the changed boundary, then use all of them for pipeline changes:
 
 ```shell
 cargo xtask check
 cargo xtask test-pty
-cargo xtask coverage
 cargo xtask audit
 cargo xtask package
 cargo xtask crate-package
-cargo xtask verify-linux-archive target/package/proqi-x86_64-unknown-linux-gnu.tar.gz
-cargo +1.88.0 xtask msrv
-cargo xtask release-plan <vX.Y.Z>
 cargo xtask release-rehearsal
-actionlint .github/workflows/ci.yml .github/workflows/release-candidate.yml .github/workflows/release.yml
-zizmor --pedantic .github/workflows/ci.yml .github/workflows/release-candidate.yml .github/workflows/release.yml
-git diff --check
+cargo xtask ci-linux-smoke <image-repository@sha256:digest>
+cargo xtask ci-linux-amd64 <image-repository@sha256:digest>
+actionlint .github/workflows/*.yml
+zizmor --pedantic .github/workflows/*.yml
 ```
 
-Inspect the rehearsal archive members, notices, checksum, SBOM, formula, social
-preview, diagram, and README GIF. Rehearsal output remains ignored below
-`target/release-rehearsal`.
+Coverage remains one relevant-change CI gate. Full Rust 1.88 testing is selected
+in ordinary CI for dependency, toolchain, manifest, packaging, and workflow
+changes, and is manually available through `Full MSRV diagnostic`. The explicit
+amd64 container command is diagnostic because it can use emulation on a non-x86
+host. Routine release preparation runs neither container path.
 
 `cargo xtask crate-package` runs `cargo package --locked` and `cargo publish
 --dry-run --locked` without a token. It checks the exact crate member allowlist,
 normalized manifest, clean VCS metadata, registry-only dependencies, private
 markers, checksum, isolated packaged-source installation, version,
-capabilities, and disposable state. Run it once with the checked-in toolchain
-and once with Rust 1.88.
+capabilities, and disposable state. Ordinary CI owns this dry run once in
+`Registry package contract`. The release-ready candidate uses
+`cargo xtask crate-evidence`, which performs the necessary locked packaging and
+installed-source checks without repeating the publication dry run.
 
 Debian assembly is authoritative only on native x86-64 GNU/Linux. The candidate
 job runs:
@@ -81,6 +93,27 @@ The verifier inspects metadata, members, modes, absence of maintainer scripts,
 dependency derivation, binary identity, and install, remove, state-preservation,
 and reinstall behavior in pinned Ubuntu 22.04, Ubuntu 24.04, and Debian
 bookworm containers.
+
+## Public Linux QA tools image
+
+`tools/ci-linux/image.json` exclusively owns the GHCR repository name. The
+`Linux QA tools image` workflow builds amd64 and arm64 on native hosted runners.
+Pull requests build without pushing. Trusted main runs use only `GITHUB_TOKEN`
+with `contents: read` and job-scoped `packages: write`, publish content-derived
+and run-qualified tags, attach BuildKit provenance and SBOMs, and create the
+multi-architecture manifest. A publication attempt proves every intended tag
+is absent before pushing and never overwrites it. Registry cache tags are
+disposable acceleration, never evidence.
+
+Consumers copy the published manifest digest from the successful workflow and
+pass the full `repository@sha256:digest` reference to `ci-linux-smoke` or
+`ci-linux-amd64`. The xtask rejects mutable tags and any other repository. Do
+not use `latest`. After the first trusted main publication, verify that the GHCR
+package is public and linked to this public repository. GitHub creates a new
+container package as private, so an owner must change its visibility once in
+the package settings and rerun the manual recovery workflow. The publish job
+logs out and requires anonymous access to the exact manifest digest, so it
+fails closed until that one-time prerequisite is complete.
 
 ## Repository settings
 
@@ -134,32 +167,36 @@ Manual and API-managed settings must also:
 After the readiness audit:
 
 1. Prepare and jointly review the Cargo version,
-   `.github/release-notes/vX.Y.Z.md`, and the matching
-   `release-highlights.json` entry, then push `main`.
-2. Wait for `Required CI result` to pass on the exact release commit.
-3. Create the exact annotated stable tag at that commit and push it. The tag is
+   `.github/release-notes/vX.Y.Z.md`, and the exact matching bounded entry in
+   `release-highlights.json`, then push `main`.
+2. The `Release candidate` workflow classifies that exact main SHA from the
+   checked-in inputs. If release-ready, it builds the native candidates in
+   parallel with ordinary CI and records one 30-day immutable candidate. It has
+   no publication credentials.
+3. Wait for `Required CI result` and the candidate workflow to pass on the exact
+   release commit.
+4. Create the exact annotated stable tag at that commit and push it. The tag is
    the single authorization to publish the crate, GitHub Release, and Homebrew
    formula. Do not create an empty public GitHub Release by hand.
-4. The tag-triggered `Release` workflow calls the reusable candidate workflow.
-   It performs the expensive hosted matrix exactly once in the same run. The
-   Linux job builds on Ubuntu 22.04, enforces the `GLIBC_2.35` ceiling, starts
-   the archive in pinned Ubuntu 22.04, Debian bookworm, and Ubuntu 24.04 images,
-   and builds and tests the Debian package from that same binary. The
-   credential-free crate job records the exact `.crate`, checksum, and dry-run
-   evidence.
-5. The promotion job consumes that run's immutable candidate. It verifies every
-   byte and attestation, creates a GitHub Release draft, publishes the exact
-   crate through crates.io trusted publishing, installs and tests the registry
+5. The tag-triggered `Release` workflow requires the tag commit to be the exact
+   prepared main SHA and finds exactly one successful, unexpired candidate for
+   the same version and SHA. Missing, expired, duplicate, failed, or mismatched
+   candidates fail closed. Later main commits do not invalidate the protected
+   tag because the successful main CI and candidate records bind the prepared
+   SHA. It downloads by REST artifact ID and checks the artifact archive digest
+   before extraction.
+6. The promotion job consumes those already-built bytes. It verifies every
+   byte and attestation, creates or resumes a GitHub Release draft, publishes
+   the exact crate through crates.io trusted publishing, installs and tests the registry
    version, makes the Release public, downloads every public asset again, and
    requires byte identity with the candidate.
-6. Only after public-byte verification does the workflow send the scoped
+7. Only after public-byte verification does the workflow send the scoped
    `proqi_release_published` event. The tap verifies and tests the formula before
    committing it. No polling job is involved.
-7. If a promotion step fails, rerun the failed jobs in the same workflow run.
-   Successful native build jobs and their candidate artifacts are reused. The
-   standalone `Release candidate` dispatch remains available only for
-   preflight diagnosis or recovery and never publishes.
-8. Verify the published GitHub Release, crates.io version, and Homebrew formula.
+8. If the candidate is absent or expired, manually dispatch `Release candidate`
+   at `main`, or at the exact protected tag for recovery. This path never
+   publishes. Rerun promotion only after the exact candidate succeeds.
+9. Verify the published GitHub Release, crates.io version, and Homebrew formula.
 
 The release workflow never cancels an in-progress tag release. Any failed
 target, smoke test, checksum, SBOM, attestation, or formula generation blocks
