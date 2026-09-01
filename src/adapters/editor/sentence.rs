@@ -4,18 +4,27 @@ use std::ops::Range;
 
 use unicode_segmentation::UnicodeSegmentation as _;
 
+use crate::ports::text_layout::{LogicalLine, logical_lines};
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct SentenceUnit {
     owned: Range<usize>,
     deletion: Range<usize>,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct SentenceBlock {
+    owned_start: usize,
+    content: Range<usize>,
+}
+
 pub(super) fn deletion_ranges(
     text: &str,
     cursor: usize,
     selection: Option<(usize, usize)>,
+    list_indent_width: u8,
 ) -> Vec<Range<usize>> {
-    let units = sentence_units(text);
+    let units = sentence_units(text, list_indent_width);
     let targets: Vec<&SentenceUnit> = selection.map_or_else(
         || {
             sentence_at_cursor(&units, cursor.min(text.len()))
@@ -37,15 +46,17 @@ pub(super) fn deletion_ranges(
     )
 }
 
-fn sentence_units(text: &str) -> Vec<SentenceUnit> {
+fn sentence_units(text: &str, list_indent_width: u8) -> Vec<SentenceUnit> {
+    let lines = logical_lines(text);
     paragraph_ranges(text)
         .into_iter()
-        .flat_map(|paragraph| units_in_paragraph(text, paragraph))
+        .flat_map(|paragraph| blocks_in_paragraph(text, paragraph, list_indent_width, &lines))
+        .flat_map(|block| units_in_block(text, &block))
         .collect()
 }
 
-fn units_in_paragraph(text: &str, paragraph: Range<usize>) -> Vec<SentenceUnit> {
-    let source = &text[paragraph.clone()];
+fn units_in_block(text: &str, block: &SentenceBlock) -> Vec<SentenceUnit> {
+    let source = &text[block.content.clone()];
     let shadow = source
         .chars()
         .map(|character| match character {
@@ -58,7 +69,7 @@ fn units_in_paragraph(text: &str, paragraph: Range<usize>) -> Vec<SentenceUnit> 
         .filter_map(|(offset, segment)| {
             let original = &source[offset..offset + segment.len()];
             non_whitespace_bounds(original).map(|core| {
-                paragraph.start + offset + core.start..paragraph.start + offset + core.end
+                block.content.start + offset + core.start..block.content.start + offset + core.end
             })
         })
         .collect::<Vec<_>>();
@@ -67,15 +78,17 @@ fn units_in_paragraph(text: &str, paragraph: Range<usize>) -> Vec<SentenceUnit> 
         .enumerate()
         .map(|(index, core)| {
             let owned_start = if index == 0 {
-                paragraph.start
+                block.owned_start
             } else {
                 core.start
             };
             let owned_end = cores
                 .get(index + 1)
-                .map_or(paragraph.end, |next| next.start);
+                .map_or(block.content.end, |next| next.start);
             let deletion_start = if index + 1 == cores.len() && index > 0 {
                 cores[index - 1].end
+            } else if index == 0 {
+                block.content.start
             } else {
                 owned_start
             };
@@ -85,6 +98,52 @@ fn units_in_paragraph(text: &str, paragraph: Range<usize>) -> Vec<SentenceUnit> 
             }
         })
         .collect()
+}
+
+fn blocks_in_paragraph(
+    text: &str,
+    paragraph: Range<usize>,
+    list_indent_width: u8,
+    lines: &[LogicalLine],
+) -> Vec<SentenceBlock> {
+    let first_line = lines.partition_point(|line| line.start < paragraph.start);
+    let after_last_line = lines.partition_point(|line| line.start < paragraph.end);
+    let item_lines = (first_line..after_last_line)
+        .filter_map(|index| {
+            super::smart_lists::recognized_prefix_len(text, lines, index, list_indent_width)
+                .map(|prefix_len| (index, prefix_len))
+        })
+        .collect::<Vec<_>>();
+    let Some((first_line, _)) = item_lines.first().copied() else {
+        return vec![SentenceBlock {
+            owned_start: paragraph.start,
+            content: paragraph,
+        }];
+    };
+    let mut blocks = Vec::new();
+    if paragraph.start < lines[first_line].start {
+        blocks.push(SentenceBlock {
+            owned_start: paragraph.start,
+            content: paragraph.start..lines[first_line].start,
+        });
+    }
+    for (position, (line_index, prefix_len)) in item_lines.iter().copied().enumerate() {
+        let line = lines[line_index];
+        let content_end = item_lines
+            .get(position + 1)
+            .map_or(paragraph.end, |(next, _)| {
+                line_before(lines, *next).content_end
+            });
+        blocks.push(SentenceBlock {
+            owned_start: line.start,
+            content: line.start + prefix_len..content_end,
+        });
+    }
+    blocks
+}
+
+fn line_before(lines: &[LogicalLine], index: usize) -> LogicalLine {
+    lines[index.saturating_sub(1)]
 }
 
 fn non_whitespace_bounds(text: &str) -> Option<Range<usize>> {

@@ -1,8 +1,8 @@
-# Experimental sentence deletion
+# Sentence deletion
 
-Status: experimental interaction contract
+Status: shipped interaction contract
 
-Last reviewed: 2026-08-30
+Last reviewed: 2026-09-01
 
 `Delete sentence` removes the grammatical sentence containing the cursor. A
 selection removes every sentence it touches as one edit after deletion ranges
@@ -10,8 +10,9 @@ are merged. The default shortcut is `Primary+Shift+U`. The Commands overlay and
 the configurable `keybindings.delete_sentence` chord suffix provide fallbacks.
 `Primary+U` remains `Delete logical line`.
 
-This command is intentionally experimental. Plain text does not contain enough
-information to identify grammatical sentences with certainty.
+Plain text does not contain enough information to identify grammatical
+sentences with certainty. The command is deterministic and Unicode-aware, but
+it is not a semantic or locale-aware language model.
 
 ## Boundary profile
 
@@ -21,26 +22,37 @@ Proqi implements a declared UAX29-C3-2 profile of Unicode Standard Annex 29:
    with an LF, CRLF, or lone CR and contains a second such newline after only
    whitespace. Repeated blank lines form one separator. The separator bytes are
    never passed into a neighboring paragraph's sentence segmenter.
-2. Within each nonblank paragraph, create a temporary segmentation shadow.
+2. Within each nonblank paragraph, recognize Markdown list items with the same
+   conservative parser and configured indentation width used by smart-list
+   editing. Every recognized item start is a structural sentence sub-boundary.
+   Its exact indentation, bullet or ordered marker, following spacing, optional
+   task marker, and task spacing are protected. Continuation lines remain part
+   of the item until the next recognized item or blank paragraph boundary.
+3. Within each resulting prose block, create a temporary segmentation shadow.
    Replace every CR and LF byte with one ASCII space. This preserves every UTF-8
    byte offset, including the two bytes of CRLF, while preventing a single prose
    newline from activating the default UAX 29 hard break rules.
-3. Run `unicode-segmentation` sentence-boundary iteration on that shadow. Map
+4. Run `unicode-segmentation` sentence-boundary iteration on that shadow. Map
    its byte ranges directly back to the unchanged canonical text.
-4. Treat each non-whitespace UAX 29 segment as one sentence unit. Punctuation-only
+5. Treat each non-whitespace UAX 29 segment as one sentence unit. Punctuation-only
    segments are retained because dropping them would require another linguistic
    heuristic.
 
 This is a programmatic override permitted by UAX29-C3-2, not a fork of the
 Unicode sentence rules. UAX 29 still determines breaks around terminators,
 closing punctuation, abbreviations, decimal punctuation, scripts, combining
-sequences, and emoji. Only newline structure is profiled.
+sequences, and emoji. Only newline and recognized list structure are profiled.
 
 ## Exact ownership and deletion
 
 Sentence ownership is deterministic and half open:
 
 - Paragraph-leading whitespace belongs to the first sentence.
+- A recognized list prefix belongs to the first sentence for cursor and
+  selection targeting, but deletion never removes the prefix itself.
+- The newline between recognized list items is structural and remains exact.
+  Deleting all prose from an item leaves its complete prefix, and ordered items
+  are never renumbered.
 - Whitespace between two sentence cores belongs to the preceding sentence.
 - Paragraph-trailing whitespace belongs to the final sentence.
 - A terminator and any closing punctuation remain in the UAX 29 segment that
@@ -60,11 +72,19 @@ that paragraph. Blank-line separators remain exact. All computed ranges are
 sorted and merged before one `TextChangeSet` is applied. Every byte outside the
 merged ranges remains unchanged.
 
-The editor's existing change transaction rebases unaffected annotations and
-folds, dissolves annotations intersected by deletion, collapses the selection to
-the first deleted byte, and supplies the same persistent revision path used by
-ordinary editor undo and redo. Visual wrapping and resize never participate in
-sentence resolution.
+The editor exposes one canonical range preview and uses the same owner when it
+applies the deletion. Before a destructive edit, the UI compares those ranges
+with every collapsed substitution annotation. If any target intersects folded
+content, Proqi expands every intersecting fold, leaves content, cursor,
+selection, and history unchanged, and asks the user to review and repeat the
+command. Inline style annotations, including application-owned shortcut
+emphasis, are not folds and do not trigger this guard.
+
+On the repeated command, the editor's existing change transaction rebases
+unaffected annotations, dissolves annotations intersected by deletion,
+collapses the selection to the first deleted byte, and supplies the same
+persistent revision path used by ordinary editor undo and redo. Visual wrapping
+and resize never participate in sentence resolution.
 
 ## Known ambiguity
 

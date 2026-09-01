@@ -1,9 +1,13 @@
 use proqi::{
     adapters::editor::RopeEditor,
     domain::TextPosition,
-    ports::editor::{CursorMovement, EditCommand, Editor, TextViewport},
+    ports::editor::{CursorMovement, EditCommand, Editor, TextChange, TextViewport},
 };
 use unicode_segmentation::UnicodeSegmentation as _;
+
+const DELETE_SENTENCE: EditCommand = EditCommand::DeleteSentence {
+    list_indent_width: 2,
+};
 
 fn position_for_byte(text: &str, byte: usize) -> TextPosition {
     let prefix = &text[..byte];
@@ -18,7 +22,7 @@ fn delete_at(text: &str, byte: usize) -> proqi::ports::editor::EditOutcome {
         position: position_for_byte(text, byte),
         extend_selection: false,
     });
-    editor.apply(EditCommand::DeleteSentence)
+    editor.apply(DELETE_SENTENCE)
 }
 
 fn selected_delete(text: &str, start: usize, end: usize) -> proqi::ports::editor::EditOutcome {
@@ -31,7 +35,7 @@ fn selected_delete(text: &str, start: usize, end: usize) -> proqi::ports::editor
         position: position_for_byte(text, end),
         extend_selection: true,
     });
-    editor.apply(EditCommand::DeleteSentence)
+    editor.apply(DELETE_SENTENCE)
 }
 
 #[test]
@@ -173,6 +177,104 @@ fn urls_decimals_versions_abbreviations_and_code_follow_uax29() {
 }
 
 #[test]
+fn list_prefixes_are_structural_and_cursor_owned_by_the_first_sentence() {
+    let text = "- First. Second.";
+    for byte in [0, text.find("First").expect("first sentence")] {
+        assert_eq!(delete_at(text, byte).snapshot.content, "- Second.");
+    }
+    assert_eq!(
+        delete_at(text, text.find("Second").expect("second sentence"))
+            .snapshot
+            .content,
+        "- First."
+    );
+
+    let task = "  - [x] Only sentence.";
+    assert_eq!(
+        delete_at(task, task.find("Only").expect("task content"))
+            .snapshot
+            .content,
+        "  - [x] "
+    );
+
+    let mut empty_item = RopeEditor::new("- Only.");
+    assert_eq!(empty_item.apply(DELETE_SENTENCE).snapshot.content, "- ");
+    assert!(empty_item.apply(DELETE_SENTENCE).changes.is_empty());
+}
+
+#[test]
+fn list_items_are_structural_boundaries_without_renumbering() {
+    let ordered = "7. First item\r\n8. Second item";
+    assert_eq!(
+        delete_at(ordered, ordered.find("First").expect("first item"))
+            .snapshot
+            .content,
+        "7. \r\n8. Second item"
+    );
+
+    let unterminated = "- First item\n- Second item";
+    assert_eq!(
+        delete_at(
+            unterminated,
+            unterminated.find("First").expect("first item")
+        )
+        .snapshot
+        .content,
+        "- \n- Second item"
+    );
+}
+
+#[test]
+fn list_continuations_remain_sentence_content_until_the_next_item() {
+    let text = "- First line\n  continues. Second.\n    - Child one. Child two.\n- Next.";
+    assert_eq!(
+        delete_at(text, text.find("continues").expect("continuation"))
+            .snapshot
+            .content,
+        "- Second.\n    - Child one. Child two.\n- Next."
+    );
+    assert_eq!(
+        delete_at(text, text.find("Child one").expect("nested item"))
+            .snapshot
+            .content,
+        "- First line\n  continues. Second.\n    - Child two.\n- Next."
+    );
+}
+
+#[test]
+fn selection_across_list_items_preserves_every_marker() {
+    let text = "- One. Two.\n- Three. Four.";
+    let deleted = selected_delete(
+        text,
+        text.find("Two").expect("second sentence"),
+        text.find("Four").expect("fourth sentence"),
+    );
+    assert_eq!(deleted.snapshot.content, "- One.\n- Four.");
+    assert_eq!(deleted.changes.len(), 2);
+}
+
+#[test]
+fn preview_and_apply_share_the_exact_merged_range_owner() {
+    let text = "- One. Two.\n- Three.";
+    let mut editor = RopeEditor::new(text);
+    editor.apply(EditCommand::SetCursor {
+        position: position_for_byte(text, text.find("Two").expect("second sentence")),
+        extend_selection: false,
+    });
+    let preview = editor.sentence_deletion_ranges(2);
+    let outcome = editor.apply(DELETE_SENTENCE);
+    assert_eq!(
+        preview,
+        outcome
+            .changes
+            .as_slice()
+            .iter()
+            .map(TextChange::old_range)
+            .collect::<Vec<_>>()
+    );
+}
+
+#[test]
 fn repeated_deletion_and_history_are_single_operations() {
     let mut editor = RopeEditor::new("One. Two. Three.");
     editor.apply(EditCommand::Move {
@@ -180,12 +282,9 @@ fn repeated_deletion_and_history_are_single_operations() {
         extend_selection: false,
     });
     for expected in ["One. Two.", "One.", ""] {
-        assert_eq!(
-            editor.apply(EditCommand::DeleteSentence).snapshot.content,
-            expected
-        );
+        assert_eq!(editor.apply(DELETE_SENTENCE).snapshot.content, expected);
     }
-    assert!(editor.apply(EditCommand::DeleteSentence).changes.is_empty());
+    assert!(editor.apply(DELETE_SENTENCE).changes.is_empty());
     assert_eq!(editor.apply(EditCommand::Undo).snapshot.content, "One.");
     assert_eq!(
         editor.apply(EditCommand::Undo).snapshot.content,
@@ -209,7 +308,7 @@ fn resize_does_not_change_the_sentence_target() {
             extend_selection: false,
         });
         assert_eq!(
-            editor.apply(EditCommand::DeleteSentence).snapshot.content,
+            editor.apply(DELETE_SENTENCE).snapshot.content,
             "Second sentence."
         );
     }

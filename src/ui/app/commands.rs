@@ -201,6 +201,11 @@ impl BoardApp {
         if let Some(effects) = self.handle_edit_effect(key, ids, clock) {
             return effects;
         }
+        if matches!(key, UiKey::DeleteSentence)
+            && self.reveal_sentence_folds(self.settings.list_indent_width)
+        {
+            return Vec::new();
+        }
         if let UiKey::Move {
             movement,
             extend_selection,
@@ -220,7 +225,9 @@ impl BoardApp {
             UiKey::Delete | UiKey::ModifiedDelete => self.delete_adjacent_fold(false),
             _ => false,
         };
-        let Some((command, boundary)) = editing::command_for_key(key, adjacent_fold) else {
+        let Some((command, boundary)) =
+            editing::command_for_key(key, adjacent_fold, self.settings.list_indent_width)
+        else {
             return Vec::new();
         };
         let movement = match &command {

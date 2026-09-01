@@ -165,7 +165,7 @@ fn whole_board_selection_binding_is_remappable() {
 }
 
 #[test]
-fn experimental_sentence_deletion_chord_is_remappable() {
+fn sentence_deletion_chord_is_remappable() {
     let directory = tempfile::tempdir().expect("config directory");
     fs::write(
         directory.path().join("config.toml"),

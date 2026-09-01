@@ -9,6 +9,40 @@ use unicode_segmentation::UnicodeSegmentation as _;
 use super::BoardApp;
 
 impl BoardApp {
+    pub(super) fn reveal_sentence_folds(&mut self, list_indent_width: u8) -> bool {
+        let Some(thought_id) = self.active_thought_id() else {
+            return false;
+        };
+        let Some((_, editor)) = &self.editor else {
+            return false;
+        };
+        let ranges = editor.sentence_deletion_ranges(list_indent_width);
+        if ranges.is_empty() {
+            return false;
+        }
+        let annotations = self.current_annotations(thought_id);
+        let targets = annotations
+            .iter()
+            .enumerate()
+            .filter(|(index, annotation)| {
+                annotation.kind.behavior() == AnnotationBehavior::Substitution
+                    && !self.expanded_folds.contains(&(thought_id, *index))
+                    && ranges
+                        .iter()
+                        .any(|range| range.start < annotation.end && annotation.start < range.end)
+            })
+            .map(|(index, _)| (thought_id, index))
+            .collect::<Vec<_>>();
+        if targets.is_empty() {
+            return false;
+        }
+        self.expanded_folds.extend(targets);
+        self.scroll_geometry = None;
+        self.layout = None;
+        self.set_warning("Sentence contains folded content. Review it, then delete again.");
+        true
+    }
+
     pub(super) fn expand_fold_at_cursor(&mut self) -> bool {
         let Some(thought_id) = self.active_thought_id() else {
             return false;

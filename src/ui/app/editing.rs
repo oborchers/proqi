@@ -12,7 +12,11 @@ use crate::{
 use super::{BoardApp, EditorOwner, UiInput, UiKey};
 use crate::ui::{annotations, settings::KeyBindings};
 
-pub(super) fn command_for_key(key: UiKey, adjacent_fold: bool) -> Option<(EditCommand, bool)> {
+pub(super) fn command_for_key(
+    key: UiKey,
+    adjacent_fold: bool,
+    list_indent_width: u8,
+) -> Option<(EditCommand, bool)> {
     match key {
         UiKey::Character(character) => Some((EditCommand::InsertChar(character), false)),
         UiKey::Enter => Some((EditCommand::InsertNewline, false)),
@@ -30,7 +34,7 @@ pub(super) fn command_for_key(key: UiKey, adjacent_fold: bool) -> Option<(EditCo
         )),
         UiKey::SelectAll => Some((EditCommand::SelectAll, true)),
         UiKey::DeleteLogicalLine => Some((EditCommand::DeleteLogicalLine, true)),
-        UiKey::DeleteSentence => Some((EditCommand::DeleteSentence, true)),
+        UiKey::DeleteSentence => Some((EditCommand::DeleteSentence { list_indent_width }, true)),
         UiKey::Escape
         | UiKey::Submit
         | UiKey::SubmitKeep
@@ -143,7 +147,9 @@ impl BoardApp {
                 smart_lists: self.settings.smart_lists,
             },
             _ => {
-                let Some((command, _)) = command_for_key(key, false) else {
+                let Some((command, _)) =
+                    command_for_key(key, false, self.settings.list_indent_width)
+                else {
                     return Vec::new();
                 };
                 command

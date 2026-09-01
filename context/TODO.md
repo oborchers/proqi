@@ -25,15 +25,6 @@ undo remain non-negotiable.
 
 ## Proposed order
 
-- [ ] **Prompt-ready primary input:** make an empty Proqi board immediately
-  ready for typing and make the active edit buffer directly submittable, so
-  Proqi is faster and more enjoyable than the native harness input for prompts
-  of every size.
-- [ ] **System-owned semantic inline emphasis:** let Proqi highlight exact
-  application-authored ranges such as first-run shortcut keys without adding
-  user-authored colors, rich text, or formatting to canonical thought content.
-- [ ] **Positioning:** describe Proqi in the README as a terminal-native
-  power-user prompt composer for parallel coding-agent work.
 - [ ] **Public documentation:** turn shipped interaction workstream handoffs
   into concise GitHub-facing feature guides, beginning with range selection.
 - [ ] **Release awareness:** package concise versioned highlights with every
@@ -52,6 +43,10 @@ undo remain non-negotiable.
 - [ ] **Herdr discovery:** surface recognized live agents from every workspace
   and tab in the existing invocation picker, then add an explicit global
   delivery route without changing the adjacent-submit fast path.
+- [ ] **Shared Proqi sessions:** let several interactive Proqi panes attach to
+  one logical board through a single authoritative owner, with private view
+  state, exclusive per-thought editing, and submission bound to the initiating
+  pane's verified agent.
 - [ ] **Standalone agent connectivity:** finish the architecture spike and any
   behavior-neutral prerequisite, then add non-Herdr connection only through a
   verified provider endpoint or required extension. Pi is the only current
@@ -74,11 +69,7 @@ Editor
 └─ Shared logical-line ranges ──> Logical-line duplicate/move/join
 
 Clipboard and attachments
-├─ Typed annotated clipboard payload ──> Lossless Proqi round trips
-└─ Attachment accessibility checks ──> Submit/Submit-all preflight
-
-Presentation metadata
-└─ Fold/style projection split ──> System-owned shortcut emphasis
+└─ Typed annotated clipboard payload ──> Lossless Proqi round trips
 
 Fast navigation
 └─ One five-step intention ──> Editor rows + picker entries + overlay rows
@@ -90,6 +81,12 @@ Board
 
 Herdr discovery and routing
 └─ Live agent catalog ──> Prompt reference insertion ──> Global semantic submit
+
+Shared Proqi sessions
+└─ Existing active-owner control ──> Snapshot and ordered change stream
+   ──> Read-only attach ──> Private per-view state
+   ──> Exclusive per-thought editing ──> Initiating-pane submission
+   ──> Bounded owner-loss recovery
 
 Standalone agent connectivity (no Herdr)
 ├─ Provider spikes: Pi, Hermes, Codex, and Claude Code complete
@@ -123,10 +120,7 @@ Git context
 └─ Injected discovery ──> Conditional status row ──> Optional durable browser data
 
 Independent
-├─ Prompt-ready primary input
-├─ System-owned semantic inline emphasis
 ├─ Shared five-step paging
-├─ README positioning
 ├─ GitHub Pages feature guides
 ├─ Commands-overlay section headings
 └─ Deterministic TUI scenario/session seeder
@@ -142,201 +136,12 @@ tickets in one practical lane. The commands overlay and release-highlights
 overlay can proceed independently at
 the model layer, but their final rendering work should be serialized. Screenshot
 TUI wiring and the Git status row both touch responsive chrome and should also
-be serialized.
-
-## Prompt-ready primary input
-
-### Make Proqi the fastest default prompt entry surface: P0, S/M (3–6 days)
-
-Product goal: Proqi should be prompt-ready. Even when the user has only one
-small prompt, no sorting work, and an empty board, entering and submitting that
-prompt through Proqi should require no more effort than a native harness input.
-For supported harnesses, Proqi should become the primary input surface because
-it is faster, safer, and more enjoyable, not merely because it has additional
-board features.
-
-User story: when an empty Proqi board becomes the actively focused input
-surface, it creates one ordinary blank thought and enters its editor before I
-type. I can therefore begin typing immediately without blurring the boundary
-between board shortcuts and editor input. When I am editing that thought, I can
-submit it directly without returning to board mode. After a successful
-submit-and-remove leaves the focused board empty, Proqi is immediately ready
-for the next prompt again.
-
-- [ ] Treat active focus, never an arbitrary printable key, as the transition
-  into prompt-ready input. On startup or a genuine host-focus transition, if
-  the board has no live thoughts and no modal, recovery decision, persistence
-  failure, or other protected state is active, create one ordinary durable
-  blank thought and enter its editor before accepting text input.
-- [ ] Reuse the existing durable create operation and editor lifecycle. The
-  focus-triggered blank has one stable identity, one ordinary board-history
-  entry, persistent undo and redo, and the same restart behavior as a blank
-  created with `n` or the insertion row. Do not add a transient editor, phantom
-  history, or a second empty-thought model.
-- [ ] Keep mode boundaries strict. Board mode continues to interpret printable
-  keys as board commands and never turns an unhandled key into text. `Escape`
-  leaves the prompt-ready editor for board navigation, while `n`, the insertion
-  row, or the next qualifying host-focus transition deliberately returns to an
-  editor.
-- [ ] Add one direct, terminal-portable submission chord in edit mode for
-  **Submit**, plus one deliberate variant for **Submit and keep**. Evaluate
-  `Primary+Enter` and `Primary+Shift+Enter` first, retain Commands fallbacks,
-  and verify the exact Crossterm events on supported macOS and Linux terminal
-  paths before freezing the defaults. Plain Enter remains newline insertion
-  unless an explicit product decision changes the multiline editor contract.
-- [ ] Direct edit-mode submission addresses the active thought only. Existing
-  board selection and Submit all workflows remain explicit board operations;
-  entering edit mode continues to clear incompatible multi-selection state.
-- [ ] Reuse the complete existing submission pipeline. Flush the exact editor
-  revision, wait for durable persistence, perform attachment preflight, create
-  the redacted journal attempt, revalidate the target, and remove only after a
-  matching accepted receipt. The shorter interaction must not bypass any
-  durability, accessibility, identity, or outcome-unknown guardrail.
-- [ ] When no verified target is available, preserve the complete draft and
-  explain the next action without swallowing the submission chord. When several
-  targets require a direction or destination choice, retain the draft and open
-  the existing bounded chooser rather than silently selecting one.
-- [ ] Preserve native harness semantics through the existing provider adapter.
-  A supported working agent may receive immediate steering or follow-up input
-  according to its verified contract; Proqi must not add a second queue or
-  promise cancellation after the harness has accepted the prompt.
-- [ ] Return to a prompt-ready editor when a focused user action removes the
-  last thought, including accepted Submit, board deletion, select-all deletion,
-  undo and redo, and completion of the first-run practice board. When background
-  capture, remote mutation, recovery, or another non-focused action empties the
-  board, defer creation until the next genuine host-focus transition.
-- [ ] Keep time to first input independent of agent discovery, update checks,
-  attachment scans, Git discovery, or other background work. Input arriving
-  during startup, first render, resize, or asynchronous discovery must be
-  retained exactly and displayed as soon as the board is usable.
-- [ ] Make the empty input state visually quiet and obvious. Reuse the current
-  editor, focus gutter, cursor, theme, and responsive layout rather than adding
-  a dashboard, card, permanent instruction block, or second text field. The
-  footer and help must expose the direct submit chords without crowding narrow
-  panes.
-- [ ] Measure the primary workflows by required user actions: zero preparatory
-  keystrokes before typing on an empty board, one chord to submit the active
-  edit buffer, and zero preparatory keystrokes before typing the next prompt
-  after submit-and-remove empties the board.
-- [ ] Cover an empty new session, an emptied resumed session, repeated focus
-  events, focus while a protected modal or persistence failure is active,
-  first-run tutorial completion, the first characters `n`, `q`, `s`, `:`, and
-  `?`, Unicode and combining input, dead keys and IME-style composition where
-  supported, multiline and annotated paste, input before first draw, narrow and
-  shallow resize, mouse activation, unavailable and multiple targets,
-  busy-agent delivery, accepted keep/remove, restart, and durable undo/redo.
-  Prove that printable input remains text only in edit mode and remains a board
-  command in board mode. Add real macOS PTY coverage for the chosen submission
-  chords and reviewed snapshots for empty edit and board states.
-
-## System-owned semantic inline emphasis
-
-### Highlight application-authored shortcut ranges: P0, S (2 to 4 days)
-
-Product boundary: Proqi may assign semantic presentation roles to exact ranges
-that the application itself authored. A user may customize the global theme
-palette, including how a semantic role appears, but may never apply a color or
-style to an arbitrary content range. Thought content remains plain text. Proqi
-does not accept ANSI styling, inline RGB values, rich text, or Markdown syntax
-as formatting instructions.
-
-Initial user story: on the first-run practice board, shortcut keys such as
-`Enter`, `Esc`, `n`, `j`, `k`, `↓`, `↑`, `d`, `u`, `s`, and `a`
-receive restrained forest-green emphasis plus a bold non-color cue. The text
-remains exact, readable, editable, searchable, copyable, and directly
-submittable as ordinary plain text.
-
-- [ ] Extend the existing durable presentation-metadata model with one closed,
-  semantic shortcut-emphasis kind. Store only the semantic role and its exact
-  validated UTF-8 byte range, never a color, font, terminal escape sequence, or
-  user-controlled style value.
-- [ ] Refactor the canonical presentation projection so durable annotations
-  explicitly choose either substitution behavior or inline-style behavior.
-  Attachments and large pastes continue to substitute folded labels. Shortcut
-  emphasis preserves every visible character and contributes only a style
-  range. Board rendering, editor rendering, measurement, cursor mapping,
-  selection, hit testing, and wrapping must consume the same projection.
-- [ ] Keep recognition, range ownership, and styling separate. The first-run
-  copy owner constructs each canonical string and its shortcut ranges together.
-  Do not rediscover single-character shortcuts through substring searches,
-  regular expressions, capitalization heuristics, or renderer knowledge of the
-  tutorial's prose.
-- [ ] Restrict creation of shortcut emphasis to the application-private literal
-  builder used by reviewed application policies. Ordinary TUI editing and
-  Compose, paste and clipboard input, public JSON and CLI commands, generic
-  owner-control Add, imports, the Proqi skill, and agent-authored text cannot
-  originate semantic styles. Cross-session transfer and thought duplication
-  may preserve already-valid metadata through purpose-specific paths without
-  exposing range or style selection. This is a supported-API invariant, not a
-  cryptographic provenance claim. Structurally valid bytes inserted directly
-  into SQLite by the same operating-system user may load because that tampering
-  is outside the documented threat model.
-- [ ] Preserve the existing edit contract. An edit outside a shortcut range
-  rebases that range through the canonical `TextChangeSet`. An edit intersecting
-  the range dissolves its emphasis rather than guessing new semantic ownership.
-  Persistent editor undo and redo restore both content and the application-owned
-  range exactly.
-- [ ] Keep every non-visual boundary plain and exact. SQLite content, search,
-  clipboard copy and cut, export, recovery, diagnostics, CLI reads, Herdr
-  submission, payload digests, and attachment preflight consume canonical text
-  with no styling bytes or generated markup.
-- [ ] Render shortcut emphasis through an existing validated semantic theme role
-  where its meaning remains clear, initially the annotation/accent role plus
-  bold. Custom themes may change that role globally but cannot change which
-  ranges receive it. Limited-color terminals retain the same bold non-color cue.
-  Add exact contrast checks if a distinct shortcut theme role proves necessary.
-- [ ] Register the durable enum variant in schema and storage protocol 10, with
-  a forward protocol-stamp migration and mixed-version refusal. Register the
-  purpose-specific preservation request in control protocol 7. Never let an
-  older process encounter an unknown annotation payload as ordinary compatible
-  state.
-- [ ] Scope the first release to application-authored instructional shortcuts.
-  Do not add general rich-text editing, arbitrary emphasis commands, syntax
-  highlighting, user-authored colors, per-thought palettes, or automatic
-  styling of key-like tokens in ordinary thoughts.
-- [ ] Cover serialization and corruption refusal, SQLite reopen, migration,
-  copy and transfer preservation, exact submission bytes, edits before, inside,
-  and after a styled range, undo and redo across restart, folds before and after
-  emphasis, URL and invocation overlap policy, selection precedence, narrow and
-  shallow wrapping, every built-in and custom theme mode, limited color,
-  keyboard and mouse behavior, reviewed first-run snapshots, and a real macOS
-  PTY onboarding flow.
-
-The presentation-metadata and annotation-rebasing architecture already owns
-most of this contract. The required implementation is a focused split between
-fold substitution and inline semantic style projection, not a second rich-text
-model.
+be serialized. Shared-session work changes the session lease, control protocol,
+editor ownership, submission coordination, and most PTY lifecycle contracts. It
+should run in one dedicated lane and reconcile those concurrent changes before
+implementation rather than copying them from open worktrees.
 
 ## Herdr discovery and global delivery
-
-### Insert references to live Herdr agents: P1, S (3–5 days)
-
-User story: while editing a thought, discover a recognized coding agent anywhere
-on the current Herdr server and insert enough stable context that the receiving
-agent can identify the intended collaborator without the user manually
-describing its workspace, tab, and pane.
-
-- [ ] Extend the existing invocation picker with a **Live in Herdr** section
-  instead of adding a competing search surface. Keep installed skills, agents,
-  and plugins available when Herdr is absent or discovery fails.
-- [ ] Discover recognized coding agents across every workspace and tab in the
-  current Herdr server. Group results by workspace and tab, and show the agent
-  name, harness, and live readiness without exposing raw snapshot payloads,
-  paths, titles, or unrelated shell panes.
-- [ ] Refresh the catalog whenever the picker opens. Apply only the newest
-  generation-tagged result, bound discovery time and result count, and preserve
-  responsive keyboard and mouse behavior while results change.
-- [ ] Insert a concise, self-contained plain-text reference containing the
-  bounded agent name plus workspace, tab, and pane identity. Readiness is
-  display-only because it can become stale immediately after insertion.
-- [ ] Keep insertion semantically inert. Selecting a reference must never send a
-  prompt, reserve the target, or imply that later delivery will use that agent.
-- [ ] Preserve exact cursor placement, selection replacement, Unicode, undo and
-  redo, invocation highlighting, resize behavior, and canonical thought bytes
-  outside the inserted reference.
-- [ ] Cover absent Herdr, malformed or delayed discovery, duplicate names,
-  renamed workspaces and tabs, disappearing agents, blocked and unknown states,
-  narrow and shallow panes, mouse hit testing, and reviewed TUI snapshots.
 
 ### Submit to any live Herdr agent: P1, M (7–12 days after discovery)
 
@@ -369,22 +174,6 @@ without moving panes or relying on raw terminal input.
   and equivalent keyboard and mouse flows.
 
 ## Product positioning
-
-### Position Proqi as a power-user prompt composer — P0, XS (0.5–1 day)
-
-- [ ] Rewrite the README opening so Proqi is immediately described as a
-  terminal-native power-user prompt composer for developers coordinating coding
-  agents in parallel.
-- [ ] Explain the concrete value: capture, edit, organize, recover, concatenate,
-  and submit exact prompts without interrupting an active agent session.
-- [ ] Show one compact workflow from rough thoughts to one ordered submission,
-  including the Herdr-supported adjacent-agent path.
-- [ ] Preserve the distinction from a task manager, Markdown editor, or complete
-  IDE. Until a qualified native adapter ships, do not imply submission outside
-  supported Herdr integrations; afterward, distinguish each optional
-  plugin-backed or provider-native compatibility boundary explicitly.
-- [ ] Keep the existing installation, safety, resume, and compatibility details
-  easy to find after the new positioning copy.
 
 ### Publish GitHub-facing feature guides — P1, S (2–4 days initially)
 
@@ -617,7 +406,7 @@ terminology consistently in product text, documentation, and implementation.
 
 ## Smart text editing
 
-### Paragraph deletion: P1, S (2 to 5 days)
+### Paragraph deletion — P1, S (2–5 days)
 
 - [ ] Add **Delete paragraph** through the command palette first, using
   blank-line-delimited blocks. Keep it distinct from both a newline-delimited
@@ -758,76 +547,107 @@ contains ordinary prose.
   malformed typed metadata, missing files, restart/process boundaries, and one-
   step persistent undo after a cut.
 
-### Attachment accessibility guardrails — P0, S/M (3–6 days)
+## Shared Proqi sessions
 
-User story: when a thought refers to an image or file that disappeared after a
-restart or became unreadable, Proqi marks the attachment plainly and prevents
-me from unknowingly submitting an unusable path—including through Submit all.
+### Attach several interactive views to one authoritative board: P1, XL (5 to 9 weeks)
 
-- [x] Keep the user-facing model binary. An attachment is either **accessible**
-  or **inaccessible**. Accessible attachments keep the existing `[Image N]` or
-  `[File N]` projection without extra chrome; inaccessible attachments render
-  as `[Image N · inaccessible]` or `[File N · inaccessible]`.
-- [x] Do not expose separate temporary, volatile, missing, permission-denied,
-  unmounted-volume, or I/O states in routine UI. Preserve typed internal failure
-  reasons only for truthful diagnostics and troubleshooting; every such failure
-  has the same submission consequence.
-- [x] Do not use strike-through, which suggests intentional deletion and is not
-  reliably available in every terminal. Reinforce the explicit
-  `inaccessible` text with the warning visual role, while keeping the state
-  understandable without color.
-- [x] Validate an attachment immediately when it is inserted or explicitly
-  relinked. Invalidate only the affected cached result when canonical content or
-  annotation ranges change.
-- [x] On session open or resume, check the focused thought first and then the
-  rest of the board through a bounded background lane. Never delay restoring or
-  editing the board while the complete scan runs.
-- [x] On a real thought-focus transition, prioritize that thought's attachments
-  when their result is unknown or stale. Repeated cursor movement, typing, or
-  pointer movement inside the same thought must not repeat filesystem work.
-- [x] On debounced host/pane focus regain, refresh referenced attachments in the
-  background. Where the terminal cannot report pane focus reliably, the first
-  deliberate interaction after a bounded inactive interval may trigger the
-  same refresh once; subsequent input does not.
-- [x] Add an explicit **Refresh attachments** Commands action as a deterministic
-  manual fallback. Do not add periodic polling, per-render checks, arbitrary
-  directory watchers, or checks on resize, autosave, cursor movement, passive
-  pointer movement, or every keystroke.
-- [x] Before Submit, Submit and keep, Submit all, or Submit all and keep, perform
-  a fresh mandatory check of every attachment in the exact captured source set.
-  This check runs after pending edits are durable and before the submission
-  journal enters a sending state. Cached presentation state alone never
-  authorizes submission.
-- [x] Keep source thoughts stable while the asynchronous preflight is active.
-  If any attachment is inaccessible or cannot be verified within the bounded
-  check, start no delivery, create no sending attempt, remove nothing, and show
-  one aggregate result such as `Proqi cannot access 2 attachments`.
-- [x] In v1, do not offer **Submit anyway** for an annotated inaccessible asset;
-  the binary contract remains trustworthy. A user who intentionally wants to
-  submit an ordinary path as text must explicitly remove or dissolve its
-  attachment annotation first.
-- [x] Treat `checking` as a short-lived operation, not a third attachment state.
-  Normal background checks remain quiet; a submission waiting on its preflight
-  may show `checking attachments` until it can proceed or report the aggregate
-  inaccessible result.
-- [x] Keep health results transient and keyed to the exact thought, annotation,
-  canonical path, and content revision. Do not persist a status that can become
-  false across restart, and never mutate canonical prompt content in response
-  to a failed check.
-- [x] Use an injected terminal-independent accessibility port. Filesystem
-  metadata and readability checks belong in an adapter; application owns the
-  trigger, bounded preflight, cache invalidation, and submission policy; UI only
-  renders the resulting state.
-- [x] Document the unavoidable external-file race: a linked file can disappear
-  after the final check but before an agent opens it. A later explicit
-  **Import into Proqi** workflow may provide stronger ownership, but this ticket
-  neither silently copies source files nor changes attachment paths.
-- [x] Cover session restart with an expired macOS `TemporaryItems` path, startup
-  scan ordering, focus changes, host-focus debounce, inactivity refresh,
-  mutation invalidation, manual refresh, permission and I/O failures, recovery
-  when a file returns, large boards, repeated events, resize, Unicode paths,
-  single submission, Submit all without visiting the affected thought, and
-  proof that inaccessible preflight sends nothing and removes nothing.
+User story: when several coding agents are working on the same task, I can open
+the same logical Proqi board beside each agent. Every pane sees durable board
+changes promptly, while its focus, cursor, selection, scroll position, hover,
+Compose buffer, and open overlays remain private. An action initiated from one
+pane is serialized once, appears in the other panes, and retains one truthful
+persistent undo history.
+
+Product boundary: this is a shared local board, not a distributed rich-text
+editor. Exactly one authoritative Proqi process retains the session lease,
+reducer, storage lane, operation sequence, submission journal, and durable
+history. Attached views never write around that owner or mutate the session
+database directly. Do not introduce multi-writer SQLite, CRDT, operational
+transformation, terminal screen scraping, or raw key forwarding.
+
+- [ ] Start with a focused architecture spike. Freeze the shared-state and
+  per-view-state boundary, per-thought editing ownership, owner-loss behavior,
+  shared undo semantics, initiating-pane submission contract, mixed-version
+  negotiation, and exact protocol limits before changing the session lease.
+- [ ] Add an explicit attach flow such as `proqi --attach <id-or-name>`. Keep
+  ordinary `proqi`, continue, and resume behavior safe by default so two panes
+  never begin sharing a session merely because they opened in the same
+  directory.
+- [ ] Extend the existing same-user active-owner control transport rather than
+  creating a second command service. Authenticate the exact owner and attached
+  instance, negotiate a versioned capability set, bound every frame and queue,
+  and preserve current fail-closed behavior for incompatible owners.
+- [ ] Introduce one canonical initial session snapshot and an ordered change
+  stream keyed by the durable session operation sequence. An attached view must
+  detect gaps, discard stale generations, and request a fresh canonical
+  snapshot instead of applying changes out of order or guessing missing state.
+- [ ] Keep durable board content, order, session name, presentation preference,
+  operation history, submission locks, and persistence state shared. Keep
+  focus, range selection, editor cursor and viewport, hover, mouse capture,
+  local modal state, transient status, and responsive layout private to each
+  attached view.
+- [ ] Keep passive and engaged Compose state private until materialization.
+  Concurrent first-content creation must allocate one ordinary thought per
+  accepted intention through the owner, preserve every exact input byte, and
+  never let two clients claim one transient Compose generation.
+- [ ] Give a thought at most one interactive editing owner at a time. Different
+  thoughts may be edited concurrently after the protocol proves their distinct
+  ownership. A second view attempting to edit an owned thought receives clear
+  read-only feedback and may retry after explicit release, disconnect, or
+  bounded crash recovery.
+- [ ] Route edits through typed expected-revision or expected-digest requests
+  and the owner's ordinary revision pipeline. Preserve autosave truth,
+  coalescing boundaries, annotations, Unicode positions, restart-safe undo and
+  redo, and idempotent retries. Never resolve an edit race with last-writer-wins
+  replacement.
+- [ ] Route structural actions through the existing owner reducer using unique
+  request and operation identities. Create, delete, duplicate, reorder,
+  collapse, multi-selection, split, extract, merge, transfer, and board history
+  must each produce the same single durable result they produce from the owner
+  TUI today.
+- [ ] Define undo as an action against the shared durable history, not a private
+  visual rewind. Editor undo addresses the exact thought and revision history;
+  board undo addresses the session board history. Every attached view receives
+  and renders the resulting canonical change.
+- [ ] Bind direct submission to the attached pane that initiated it. The owner
+  must still own source capture, durability barriers, attachment preflight,
+  submission locks, journal transitions, accepted receipt handling, and
+  optional removal. The initiating client must discover and revalidate its own
+  adjacent agent through a typed, attributable protocol. Never silently submit
+  to the authoritative owner's adjacent pane.
+- [ ] Retain one screenshot-inbox authority and one attachment-health policy.
+  A committed capture becomes an ordinary owner mutation and is broadcast once.
+  Transient filesystem observations may remain process-local only where they
+  cannot cause views to disagree about whether submission is permitted.
+- [ ] Make the first production milestone reconnect safely rather than elect a
+  new owner automatically. When the owner exits, attached views stop admitting
+  mutations, preserve any unacknowledged local editor buffer visibly, wait for
+  authoritative lease release, and offer bounded reconnect or ordinary resume.
+  Add automatic owner election only after deterministic failover and pending
+  operation recovery have a proven contract.
+- [ ] Do not let a slow or abandoned client block the owner. Use bounded
+  outbound queues, generation-aware resynchronization, heartbeat or connection
+  liveness, idempotent disconnect cleanup, and the existing overall bounded
+  shutdown discipline. Backpressure may force one client to resnapshot, never
+  stall durable work for the session.
+- [ ] Stage delivery. First ship live read-only mirrors with navigation and
+  resynchronization. Then add structural actions and private view state. Next
+  add exclusive per-thought editing. Add initiating-pane direct submission and
+  bounded owner-loss recovery only after the earlier stages are qualified.
+- [ ] Cover two to fifteen attached views, concurrent edits to different
+  thoughts, rejected same-thought editing, Compose races, rapid structural
+  actions, shared undo and redo, storage failure, sequence gaps, slow clients,
+  disconnect and reconnect, owner crash, mixed protocols, update replacement,
+  screenshots, attachments, narrow and shallow resize, mouse and keyboard
+  parity, Unicode and control-heavy content, direct submissions from different
+  adjacent panes, and proof that no operation is duplicated or silently lost.
+
+Effort includes the complete production path. A read-only synchronized mirror
+is approximately one to two weeks. Structural actions and per-thought editing
+add roughly two to four weeks. Initiating-pane submission, failure recovery,
+and complete PTY qualification add another two to four weeks. The stages may
+ship independently only when each has a truthful capability boundary and does
+not imply unsupported collaborative editing.
 
 ## Standalone coding-agent connectivity (without Herdr)
 
@@ -1214,39 +1034,6 @@ User story: while reviewing visual work in another application, enable capture
 on one Proqi board, take ordinary OS screenshots, and receive one new thought
 per completed screenshot without focusing or dragging into the Proqi pane.
 
-#### macOS classification and defaults
-
-- [ ] Default the watched directory to the current user's Desktop on macOS. Let
-  settings override it, but do not modify the user's Screenshot app preferences.
-- [ ] Snapshot existing directory entries when capture starts and ignore them;
-  only files completed after activation are candidates.
-- [ ] Require a regular, non-symlink, stable, bounded image in a supported format.
-  Debounce create/modify/rename events and reconcile directory state instead of
-  treating one filesystem notification as an exactly-once event.
-- [ ] Prefer the language-independent macOS extended attribute
-  `com.apple.metadata:kMDItemIsScreenCapture`. When available, also retain the
-  capture type only for diagnostics; do not make product behavior depend on the
-  undocumented value vocabulary.
-- [ ] Treat Apple screenshot metadata as a strong best-effort signal, not a sole
-  durable contract: editing, copying, syncing, or future macOS changes may strip
-  or alter extended attributes.
-- [ ] Support configurable localized filename fallback patterns, default empty,
-  such as `Bildschirmfoto *` or `Screen Shot *`. Do not maintain a hard-coded
-  translation table or accept a name match without the ordinary file, time,
-  stability, type, and size checks.
-- [ ] Add an explicit `capture_all_new_images = false` escape hatch. Broad Desktop
-  image capture must require opt-in and must never masquerade as screenshot-only
-  detection.
-- [ ] Handle current PNG screenshots and supported HEIC/HEIF or other image
-  outputs without assuming one extension or filename format.
-- [ ] Report macOS Desktop Files & Folders denial truthfully and explain which
-  terminal host needs permission. Passive directory watching must not request
-  Screen Recording or Accessibility permission.
-
-The classifier was verified against a real German macOS screenshot carrying
-`kMDItemIsScreenCapture`, `kMDItemScreenCaptureType = selection`, and global
-capture-rectangle metadata despite its localized `Bildschirmfoto ...` name.
-
 #### Linux behavior
 
 - [ ] Use an explicitly configurable screenshot directory on Linux. Suggest the
@@ -1255,46 +1042,6 @@ capture-rectangle metadata despite its localized `Bildschirmfoto ...` name.
 - [ ] Use the same stable-file and bounded-image pipeline on inotify-backed
   systems. Do not assume that the XDG Screenshot portal reports screenshots
   initiated by other applications; it only supports capture requests.
-
-#### One exclusive capture owner
-
-- [ ] Add one current-user, installation-wide `screenshot-capture.lock`, separate
-  from ordinary session leases. Exactly one live Proqi process may hold it,
-  regardless of watched directory.
-- [ ] Store explanatory metadata beside the authoritative OS lock: instance and
-  session identity, optional session name, process start identity, watched
-  directory, and activation time. Process exit or crash releases the lock.
-- [ ] If another session owns capture, show its verified identity and offer
-  **Cancel** or **Take over**. Never silently redirect captures.
-- [ ] Implement takeover through the existing verified owner-control transport.
-  The old owner stops admission, reconciles pending candidates, waits for
-  durable outcomes, stops the watcher with bounded teardown, and releases the
-  lock before the requester retries acquisition.
-- [ ] If the live owner is incompatible or unresponsive, leave ownership intact
-  and report that takeover could not be completed. Never force-unlock a live
-  process.
-
-#### Thought creation and recovery
-
-- [ ] Convert each accepted screenshot into one immediate durable thought in
-  detection order, using the same exact absolute-path image annotation contract
-  as a verified file drop. The first version does not read, analyze, upload, or
-  silently copy the source image.
-- [ ] When Proqi is unfocused and no edit would be displaced, make the newest
-  capture ready for annotation. While the user is actively editing, append
-  captures without stealing the caret and show a quiet `N new captures` state.
-- [ ] Add a visible but restrained active-capture indicator plus configurable
-  key and command-palette actions to enable and disable capture.
-- [ ] Commit a durable capture receipt with thought creation so duplicate watcher
-  events, retries, reconciliation, and ownership handoff cannot create duplicate
-  thoughts or send one screenshot to two sessions.
-- [ ] A failed validation, permission check, filesystem read, lock transition, or
-  database commit creates no partial thought and reports a truthful retryable
-  state. Never log image content or sensitive screenshot filenames.
-- [ ] Use an injected watcher port and a bounded, idempotently cancellable worker.
-  Cover repeated events, partial writes, rename completion, queue overflow,
-  symlinks, oversized images, Unicode filenames, crash release, takeover races,
-  focus preservation, resize, snapshots, and macOS/Linux integration behavior.
 
 ## Parallel-agent Git context
 

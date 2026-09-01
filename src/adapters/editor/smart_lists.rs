@@ -217,6 +217,18 @@ fn indentation_marker_at<'a>(
     Some(marker)
 }
 
+pub(super) fn recognized_prefix_len(
+    content: &str,
+    lines: &[LogicalLine],
+    line_index: usize,
+    width: u8,
+) -> Option<usize> {
+    let marker = indentation_marker_at(content, lines, line_index, width)?;
+    let line = *lines.get(line_index)?;
+    let line_text = &content[line.start..line.content_end];
+    Some(line_text.len().saturating_sub(marker.content.len()))
+}
+
 fn outdent_marker_at<'a>(
     content: &'a str,
     lines: &[LogicalLine],

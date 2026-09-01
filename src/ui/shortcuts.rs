@@ -20,7 +20,7 @@ pub(crate) fn items(app: &BoardApp) -> Vec<Shortcut> {
             (primary("U"), "Delete logical line"),
             (
                 primary(&format!("Shift+{}", keys.delete_sentence)),
-                "Delete sentence (experimental)",
+                "Delete sentence",
             ),
             (primary("Z"), "Undo"),
             (primary("Shift+Z"), "Redo"),

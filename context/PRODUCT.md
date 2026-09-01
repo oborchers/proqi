@@ -5,7 +5,7 @@ Status: v0.1.0 product contract
 Product name: Proqi
 
 Command: `proqi`
-Last updated: 2026-08-30
+Last updated: 2026-09-01
 
 ## Vision
 
@@ -776,10 +776,13 @@ Sentence deletion removes the complete Unicode sentence containing
 the cursor, independent of cursor direction. A selection removes every touched
 sentence as one edit. Single LF and CRLF sequences remain sentence content, and
 blank-line paragraph separators are hard boundaries. Exact terminator,
-whitespace, selection, and separator ownership follows the reviewed
+whitespace, selection, list-prefix, and separator ownership follows the reviewed
 [sentence deletion contract](../docs/SENTENCE_DELETION.md).
 The action deliberately documents ambiguity rather than claiming linguistic
-certainty. It does not replace logical-line deletion.
+certainty. A command that intersects collapsed substitution content reveals all
+target folds without editing and asks for one deliberate repeat. Inline style
+annotations are not folds. The action does not replace logical-line deletion,
+and width-dependent visual-row deletion is not provided or planned.
 
 Many terminals consume Command shortcuts before a TUI can receive them. Proqi
 therefore supports enhanced keyboard protocols where available, configurable

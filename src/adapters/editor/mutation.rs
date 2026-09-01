@@ -174,12 +174,13 @@ impl RopeEditor {
         (start != end).then(|| self.replace_byte_range(start, end, ""))
     }
 
-    pub(super) fn delete_sentence(&mut self) -> Option<TextChangeSet> {
+    pub(super) fn delete_sentence(&mut self, list_indent_width: u8) -> Option<TextChangeSet> {
         let content = self.content();
         let ranges = super::sentence::deletion_ranges(
             &content,
             self.state.cursor_byte,
             self.selection_bytes(),
+            list_indent_width,
         );
         let cursor = ranges.first()?.start;
         let replacements = ranges

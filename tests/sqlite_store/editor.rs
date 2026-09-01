@@ -94,7 +94,9 @@ fn sentence_deletion_undo_and_redo_survive_reopen() {
     let thought_id = create_thought(&mut store, &mut state, &mut ids, before, 2);
     let mut editor = RopeEditor::new(before);
     let before_snapshot = editor.snapshot();
-    let deleted = editor.apply(EditCommand::DeleteSentence);
+    let deleted = editor.apply(EditCommand::DeleteSentence {
+        list_indent_width: 2,
+    });
     assert_eq!(deleted.snapshot.content, "It failed.");
     let edit = one_effect(
         &mut state,

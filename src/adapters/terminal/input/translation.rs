@@ -130,9 +130,8 @@ fn primary_key(key: &KeyEvent) -> Option<UiKey> {
             Some(UiKey::DeleteLogicalLine)
         }
         KeyCode::Char('z') if key.modifiers.contains(KeyModifiers::SHIFT) => Some(UiKey::Redo),
-        KeyCode::Char('Z') => Some(UiKey::Redo),
+        KeyCode::Char('Z' | 'y') => Some(UiKey::Redo),
         KeyCode::Char('z') => Some(UiKey::Undo),
-        KeyCode::Char('y') => Some(UiKey::Redo),
         KeyCode::Char('p') => Some(UiKey::PickerPrevious),
         KeyCode::Char('n') => Some(UiKey::PickerNext),
         KeyCode::Char(character) => Some(UiKey::PrimaryCharacter(character)),

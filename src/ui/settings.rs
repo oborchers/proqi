@@ -110,7 +110,7 @@ pub struct KeyBindings {
     pub quit: char,
     /// Toggle the macOS screenshot inbox.
     pub screenshot_inbox: char,
-    /// Shifted Primary chord suffix for experimental sentence deletion.
+    /// Shifted Primary chord suffix for sentence deletion.
     pub delete_sentence: char,
 }
 
@@ -276,6 +276,12 @@ impl KeyBindings {
         if matches!(self.quit, RECOVERY_RETRY_KEY | RECOVERY_EXPORT_KEY) {
             return Err("the quit binding cannot use the reserved recovery keys r or w");
         }
+        if matches!(
+            self.delete_sentence.to_ascii_lowercase(),
+            'a' | 'c' | 'd' | 'n' | 'p' | 'q' | 'v' | 'x' | 'y' | 'z'
+        ) {
+            return Err("the sentence deletion binding conflicts with a reserved Primary chord");
+        }
         let values = [
             self.new,
             self.edit,
@@ -345,6 +351,17 @@ mod tests {
                 ..KeyBindings::default()
             };
             assert!(bindings.validate().is_err());
+        }
+    }
+
+    #[test]
+    fn sentence_deletion_rejects_primary_chords_consumed_before_edit_dispatch() {
+        for reserved in ['A', 'C', 'D', 'N', 'P', 'Q', 'V', 'X', 'Y', 'Z'] {
+            let bindings = KeyBindings {
+                delete_sentence: reserved,
+                ..KeyBindings::default()
+            };
+            assert!(bindings.validate().is_err(), "reserved suffix {reserved}");
         }
     }
 }

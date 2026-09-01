@@ -1,4 +1,6 @@
-use super::{expect_command, json_command};
+//! Sentence deletion, enhanced-key input, durability, and history in a real PTY.
+
+use super::support::{expect_command, json_command};
 
 #[test]
 fn primary_shift_u_deletes_and_persists_a_sentence_in_a_real_pty() {
@@ -15,6 +17,10 @@ fn primary_shift_u_deletes_and_persists_a_sentence_in_a_real_pty() {
         send -- "\x1b\[200~The quick brown fox\njumped over the hoop. It failed.\x1b\[201~"
         after 200
         send -- "\x1b\[117;10u"
+        after 200
+        send -- "\x1b\[122;9u"
+        after 200
+        send -- "\x1b\[90;9u"
         after 500
         send "\x1b"
         after 100
