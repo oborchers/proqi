@@ -367,7 +367,7 @@ fn bounded_schema_failure_leaves_no_runtime_advertisement_and_recovers() {
 fn shared_protocol_ten_owner_blocks_migration_without_backup_then_release_recovers() {
     let state = tempfile::tempdir().expect("state root");
     let initial = launch(state.path());
-    assert_successful_sessions(state.path(), &[initial], 1, 1);
+    let sessions = assert_successful_sessions(state.path(), &[initial], &BTreeSet::new());
     let database = state.path().join("data/proqi.sqlite3");
     Connection::open(&database)
         .expect("protocol ten fixture")
@@ -416,7 +416,7 @@ fn shared_protocol_ten_owner_blocks_migration_without_backup_then_release_recove
 
     drop(shared);
     let recovered = launch(state.path());
-    assert_successful_sessions(state.path(), &[recovered], 1, 2);
+    assert_successful_sessions(state.path(), &[recovered], &sessions);
     assert_eq!(
         std::fs::read_dir(backups)
             .expect("migration backup directory")
