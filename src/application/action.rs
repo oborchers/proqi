@@ -89,6 +89,10 @@ pub enum Action {
         expected_content: String,
         /// Required current annotations.
         expected_annotations: Vec<ContentAnnotation>,
+        /// Exact editor content transformed by this composite operation.
+        source_content: String,
+        /// Exact editor annotations transformed by this composite operation.
+        source_annotations: Vec<ContentAnnotation>,
         /// Exact UTF-8 byte boundary.
         at_byte: usize,
         /// Event time.
@@ -106,6 +110,10 @@ pub enum Action {
         expected_content: String,
         /// Required current annotations.
         expected_annotations: Vec<ContentAnnotation>,
+        /// Exact editor content transformed by this composite operation.
+        source_content: String,
+        /// Exact editor annotations transformed by this composite operation.
+        source_annotations: Vec<ContentAnnotation>,
         /// Exact normalized UTF-8 byte range.
         range: Range<usize>,
         /// Event time.

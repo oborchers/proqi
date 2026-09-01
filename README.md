@@ -303,8 +303,11 @@ exact selection. `Esc`, then `t`, is the portable immediate fallback. On the
 board, select two or more contiguous thoughts and press `t` to merge them with
 the configured exact separator. The command palette exposes all three actions
 for keyboard and mouse discovery. If an older config already assigns plain `t`
-to another board action, that established action keeps precedence until
-`transform` is remapped.
+to another board action, that established action keeps precedence and the
+footer omits the shadowed board spelling until `transform` is remapped. The
+Primary chord and command-palette actions remain available. Bindings reserved
+for established Primary shortcuts are rejected instead of silently disabling
+the configured transformation chord.
 
 Unsafe theme contrast is rejected. See the
 [theme example](docs/themes/proqi-dark.toml). Invocation roots stay local.

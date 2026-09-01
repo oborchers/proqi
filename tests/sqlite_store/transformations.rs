@@ -1,5 +1,7 @@
 use super::*;
 
+#[path = "transformations/review_regressions.rs"]
+mod review_regressions;
 #[path = "transformations/semantic_annotations.rs"]
 mod semantic_annotations;
 
@@ -105,6 +107,8 @@ fn committed_split() -> (
             operation_id: ids.operation_id(),
             expected_content: "alpha βeta".to_owned(),
             expected_annotations: Vec::new(),
+            source_content: "alpha βeta".to_owned(),
+            source_annotations: Vec::new(),
             at_byte: 6,
             at: Timestamp::from_millis(5),
         },
@@ -256,6 +260,8 @@ fn extract_undo_and_redo_each_survive_restart_with_consistent_search() {
             operation_id: ids.operation_id(),
             expected_content: "prefix世界suffix".to_owned(),
             expected_annotations: Vec::new(),
+            source_content: "prefix世界suffix".to_owned(),
+            source_annotations: Vec::new(),
             range: 6..12,
             at: Timestamp::from_millis(3),
         },

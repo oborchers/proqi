@@ -9,6 +9,14 @@ fn partial_attachment_transform_dissolves_annotation_and_preflight() {
     partial
         .app
         .complete_attachment_checks(complete(background, Ok(())));
+    let refresh = attachment_batch(&partial.app.refresh_attachments(true));
+    partial
+        .app
+        .complete_attachment_checks(complete(refresh, Ok(())));
+    assert_eq!(
+        partial.app.status_text(),
+        Some("all attachments are accessible")
+    );
     partial.input(UiInput::Key(UiKey::Move {
         movement: CursorMovement::DocumentStart,
         extend_selection: false,
@@ -29,6 +37,7 @@ fn partial_attachment_transform_dissolves_annotation_and_preflight() {
         }));
     }
     let transformed = partial.effects(UiInput::Key(UiKey::PrimaryCharacter('t')));
+    assert_eq!(partial.app.status_text(), None);
     assert!(
         transformed
             .iter()
@@ -71,11 +80,20 @@ fn intact_attachment_transform_preserves_annotation_and_preflight() {
     intact
         .app
         .complete_attachment_checks(complete(attachment_batch(&effects), Ok(())));
+    let refresh = attachment_batch(&intact.app.refresh_attachments(true));
+    intact
+        .app
+        .complete_attachment_checks(complete(refresh, Ok(())));
+    assert_eq!(
+        intact.app.status_text(),
+        Some("all attachments are accessible")
+    );
     intact.input(UiInput::Key(UiKey::Move {
         movement: CursorMovement::DocumentStart,
         extend_selection: false,
     }));
     let transformed = intact.effects(UiInput::Key(UiKey::PrimaryCharacter('t')));
+    assert_eq!(intact.app.status_text(), None);
     let moved_check = attachment_batch(&transformed);
     intact
         .app

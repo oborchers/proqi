@@ -46,17 +46,15 @@ impl BoardApp {
     ) -> Vec<Effect> {
         self.capture_palette_selection_handoff();
         let handoff = self.palette_selection_handoff.take();
-        let mut effects = self.flush_pending_edit(ids, clock);
         let Some(handoff) = handoff.as_ref() else {
             self.set_warning("place the editor cursor or select text before transforming");
-            return effects;
+            return Vec::new();
         };
-        effects.extend(if handoff.has_selection() {
+        if handoff.has_selection() {
             self.extract_handoff(Some(handoff), ids, clock)
         } else {
             self.split_at_handoff(Some(handoff), ids, clock)
-        });
-        effects
+        }
     }
 
     pub(super) fn execute_transformation_command(
@@ -85,7 +83,8 @@ impl BoardApp {
             self.set_warning("place the editor cursor before opening commands");
             return Vec::new();
         };
-        let Some(annotations) = self.exact_handoff_annotations(handoff) else {
+        let Some((expected_content, expected_annotations)) = self.exact_handoff_source(handoff)
+        else {
             return Vec::new();
         };
         let at_byte = byte_for_position(&handoff.content, handoff.cursor);
@@ -94,12 +93,15 @@ impl BoardApp {
             thought_id: handoff.thought_id,
             new_thought_id: ids.thought_id(),
             operation_id: ids.operation_id(),
-            expected_content: handoff.content.clone(),
-            expected_annotations: annotations,
+            expected_content,
+            expected_annotations,
+            source_content: handoff.content.clone(),
+            source_annotations: handoff.annotations.clone(),
             at_byte,
             at: clock.now(),
         });
         if !effects.is_empty() {
+            self.pending_edit = None;
             self.clear_board_selection();
             self.reload_editor();
             self.apply_edit(EditCommand::SetCursor {
@@ -124,7 +126,8 @@ impl BoardApp {
             self.set_warning("select non-empty editor text before extracting it");
             return Vec::new();
         };
-        let Some(annotations) = self.exact_handoff_annotations(handoff) else {
+        let Some((expected_content, expected_annotations)) = self.exact_handoff_source(handoff)
+        else {
             return Vec::new();
         };
         let start = byte_for_position(&handoff.content, selection.start);
@@ -134,12 +137,15 @@ impl BoardApp {
             thought_id: handoff.thought_id,
             new_thought_id: ids.thought_id(),
             operation_id: ids.operation_id(),
-            expected_content: handoff.content.clone(),
-            expected_annotations: annotations,
+            expected_content,
+            expected_annotations,
+            source_content: handoff.content.clone(),
+            source_annotations: handoff.annotations.clone(),
             range: start..end,
             at: clock.now(),
         });
         if !effects.is_empty() {
+            self.pending_edit = None;
             self.clear_board_selection();
             self.reload_editor();
             self.apply_edit(EditCommand::Move {
@@ -179,18 +185,24 @@ impl BoardApp {
         effects
     }
 
-    fn exact_handoff_annotations(
+    fn exact_handoff_source(
         &mut self,
         handoff: &EditorSelectionHandoff,
-    ) -> Option<Vec<crate::domain::ContentAnnotation>> {
+    ) -> Option<(String, Vec<crate::domain::ContentAnnotation>)> {
         let thought = self.state.board.thought(handoff.thought_id)?;
-        if !thought.is_live()
-            || thought.content != handoff.content
-            || thought.annotations != handoff.annotations
-        {
+        let durable_matches =
+            thought.content == handoff.content && thought.annotations == handoff.annotations;
+        let pending_matches = self.pending_edit.as_ref().is_some_and(|pending| {
+            pending.thought_id == handoff.thought_id
+                && pending.before.content == thought.content
+                && pending.before_annotations == thought.annotations
+                && pending.after.content == handoff.content
+                && pending.after_annotations == handoff.annotations
+        });
+        if !thought.is_live() || (!durable_matches && !pending_matches) {
             self.set_warning("thought changed after the editor selection was captured");
             return None;
         }
-        Some(handoff.annotations.clone())
+        Some((thought.content.clone(), thought.annotations.clone()))
     }
 }

@@ -78,6 +78,8 @@ fn edits_to_restored_split_and_extract_sources_invalidate_their_redo() {
                 operation_id,
                 expected_content: "left right".to_owned(),
                 expected_annotations: Vec::new(),
+                source_content: "left right".to_owned(),
+                source_annotations: Vec::new(),
                 range: 5..6,
                 at,
             }
@@ -88,6 +90,8 @@ fn edits_to_restored_split_and_extract_sources_invalidate_their_redo() {
                 operation_id,
                 expected_content: "left right".to_owned(),
                 expected_annotations: Vec::new(),
+                source_content: "left right".to_owned(),
+                source_annotations: Vec::new(),
                 at_byte: 5,
                 at,
             }

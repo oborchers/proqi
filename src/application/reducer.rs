@@ -214,6 +214,8 @@ fn reduce_content_transform(
             operation_id,
             expected_content,
             expected_annotations,
+            source_content,
+            source_annotations,
             at_byte,
             at,
         } => split_thought(
@@ -222,8 +224,10 @@ fn reduce_content_transform(
             new_thought_id,
             &ExactSource {
                 thought_id,
-                content: expected_content,
-                annotations: expected_annotations,
+                expected_content,
+                expected_annotations,
+                content: source_content,
+                annotations: source_annotations,
             },
             at_byte,
             at,
@@ -234,6 +238,8 @@ fn reduce_content_transform(
             operation_id,
             expected_content,
             expected_annotations,
+            source_content,
+            source_annotations,
             range,
             at,
         } => extract_thought(
@@ -242,8 +248,10 @@ fn reduce_content_transform(
             new_thought_id,
             &ExactSource {
                 thought_id,
-                content: expected_content,
-                annotations: expected_annotations,
+                expected_content,
+                expected_annotations,
+                content: source_content,
+                annotations: source_annotations,
             },
             range,
             at,

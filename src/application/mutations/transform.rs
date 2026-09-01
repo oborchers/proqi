@@ -13,6 +13,8 @@ use crate::domain::{
 #[derive(Clone)]
 pub(in crate::application) struct ExactSource {
     pub(in crate::application) thought_id: ThoughtId,
+    pub(in crate::application) expected_content: String,
+    pub(in crate::application) expected_annotations: Vec<ContentAnnotation>,
     pub(in crate::application) content: String,
     pub(in crate::application) annotations: Vec<ContentAnnotation>,
 }
@@ -27,13 +29,13 @@ pub(in crate::application) fn split_thought(
 ) -> ApplicationResult<Vec<Effect>> {
     let thought = exact_source(state, source)?.clone();
     let (left_annotations, right_annotations) =
-        partition_annotations(&thought.content, &thought.annotations, at_byte)?;
-    let left = thought
+        partition_annotations(&source.content, &source.annotations, at_byte)?;
+    let left = source
         .content
         .get(..at_byte)
         .ok_or(ApplicationError::InvalidState)?
         .to_owned();
-    let right = thought
+    let right = source
         .content
         .get(at_byte..)
         .ok_or(ApplicationError::InvalidState)?
@@ -62,17 +64,17 @@ pub(in crate::application) fn extract_thought(
 ) -> ApplicationResult<Vec<Effect>> {
     let thought = exact_source(state, source)?.clone();
     let (remaining_annotations, extracted_annotations) =
-        extract_annotations(&thought.content, &thought.annotations, range.clone())?;
-    let prefix = thought
+        extract_annotations(&source.content, &source.annotations, range.clone())?;
+    let prefix = source
         .content
         .get(..range.start)
         .ok_or(ApplicationError::InvalidState)?;
-    let extracted = thought
+    let extracted = source
         .content
         .get(range.clone())
         .ok_or(ApplicationError::InvalidState)?
         .to_owned();
-    let suffix = thought
+    let suffix = source
         .content
         .get(range.end..)
         .ok_or(ApplicationError::InvalidState)?;
@@ -214,7 +216,9 @@ fn transform_into_neighbor(
 
 fn exact_source<'a>(state: &'a AppState, source: &ExactSource) -> ApplicationResult<&'a Thought> {
     let thought = state.live_thought(source.thought_id)?;
-    if thought.content != source.content || thought.annotations != source.annotations {
+    if thought.content != source.expected_content
+        || thought.annotations != source.expected_annotations
+    {
         return Err(ApplicationError::ContentConflict(source.thought_id));
     }
     Ok(thought)
@@ -227,21 +231,14 @@ fn contiguous_sources(
     if thought_ids.len() < 2 {
         return Err(ApplicationError::InvalidState);
     }
-    let selected = state
-        .board
-        .live_thoughts()
-        .into_iter()
-        .filter(|thought| thought_ids.contains(&thought.id))
-        .cloned()
-        .collect::<Vec<_>>();
-    let ordered = selected
+    let selected = thought_ids
         .iter()
-        .map(|thought| thought.id)
-        .collect::<Vec<_>>();
+        .map(|thought_id| state.live_thought(*thought_id).cloned())
+        .collect::<ApplicationResult<Vec<_>>>()?;
     let contiguous = selected
         .windows(2)
         .all(|pair| pair[1].position.get() == pair[0].position.get().saturating_add(1));
-    if ordered != thought_ids || !contiguous {
+    if !contiguous {
         return Err(ApplicationError::NoncontiguousSelection);
     }
     Ok(selected)

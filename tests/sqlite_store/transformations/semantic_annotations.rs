@@ -50,6 +50,8 @@ fn shortcut_ranges_survive_split_history_restart_fts_and_compaction() {
             operation_id: split_id,
             expected_content: "AA Enter ZZ".to_owned(),
             expected_annotations: vec![shortcut(3, 8)],
+            source_content: "AA Enter ZZ".to_owned(),
+            source_annotations: vec![shortcut(3, 8)],
             at_byte: 3,
             at: Timestamp::from_millis(3),
         },

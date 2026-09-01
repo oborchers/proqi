@@ -4,6 +4,9 @@ use proqi::{
     domain::{BoardOperationKind, ContentAnnotation, ContentAnnotationKind, UndoScope},
 };
 
+#[path = "transformations/review_regressions.rs"]
+mod review_regressions;
+
 fn query_palette(fixture: &mut Fixture, query: &str) {
     fixture.input(UiInput::Key(UiKey::Character(':')));
     for character in query.chars() {

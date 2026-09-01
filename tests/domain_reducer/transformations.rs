@@ -1,6 +1,8 @@
 use super::*;
 use proqi::domain::{ContentAnnotation, ContentAnnotationKind};
 
+#[path = "transformations/review_regressions.rs"]
+mod review_regressions;
 #[path = "transformations/semantic_annotations.rs"]
 mod semantic_annotations;
 #[path = "transformations/stale_redo.rs"]
@@ -60,6 +62,8 @@ fn split_keeps_left_identity_and_exact_untrimmed_right_at_every_boundary() {
                 operation_id,
                 expected_content: "left\r\n右".to_owned(),
                 expected_annotations: vec![folded(2, "left\r\n右".len())],
+                source_content: "left\r\n右".to_owned(),
+                source_annotations: vec![folded(2, "left\r\n右".len())],
                 at_byte,
                 at,
             },
@@ -114,6 +118,8 @@ fn extract_closes_only_the_exact_range_and_dissolves_crossing_annotation() {
             operation_id,
             expected_content: "ab日本cd".to_owned(),
             expected_annotations: vec![folded(1, 10)],
+            source_content: "ab日本cd".to_owned(),
+            source_annotations: vec![folded(1, 10)],
             range: 2..8,
             at,
         },
@@ -147,6 +153,8 @@ fn transformations_reject_stale_empty_and_noncontiguous_inputs_without_mutation(
                 operation_id: stale_operation,
                 expected_content: "stale".to_owned(),
                 expected_annotations: Vec::new(),
+                source_content: "stale".to_owned(),
+                source_annotations: Vec::new(),
                 at_byte: 0,
                 at: stale_at,
             },
@@ -167,6 +175,8 @@ fn transformations_reject_stale_empty_and_noncontiguous_inputs_without_mutation(
                 operation_id: empty_operation,
                 expected_content: "two".to_owned(),
                 expected_annotations: Vec::new(),
+                source_content: "two".to_owned(),
+                source_annotations: Vec::new(),
                 range: 1..1,
                 at: empty_at,
             },
@@ -261,6 +271,8 @@ fn every_transformation_rejects_locked_sources_without_mutation() {
             operation_id: split_operation,
             expected_content: "one".to_owned(),
             expected_annotations: Vec::new(),
+            source_content: "one".to_owned(),
+            source_annotations: Vec::new(),
             at_byte: 1,
             at: split_at,
         },
@@ -270,6 +282,8 @@ fn every_transformation_rejects_locked_sources_without_mutation() {
             operation_id: extract_operation,
             expected_content: "one".to_owned(),
             expected_annotations: Vec::new(),
+            source_content: "one".to_owned(),
+            source_annotations: Vec::new(),
             range: 0..1,
             at: extract_at,
         },
@@ -362,6 +376,8 @@ fn repeated_large_unicode_split_and_merge_round_trips_exactly() {
                 operation_id: split_operation,
                 expected_content: content.clone(),
                 expected_annotations: Vec::new(),
+                source_content: content.clone(),
+                source_annotations: Vec::new(),
                 at_byte: "界\r\n".len(),
                 at: split_at,
             },

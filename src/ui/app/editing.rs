@@ -63,10 +63,10 @@ pub(super) fn normalize_edit_key(key: UiKey) -> Option<UiKey> {
 
 pub(super) struct PendingEdit {
     pub(super) thought_id: ThoughtId,
-    before: EditorSnapshot,
+    pub(super) before: EditorSnapshot,
     pub(super) after: EditorSnapshot,
-    before_annotations: Vec<ContentAnnotation>,
-    after_annotations: Vec<ContentAnnotation>,
+    pub(super) before_annotations: Vec<ContentAnnotation>,
+    pub(super) after_annotations: Vec<ContentAnnotation>,
 }
 
 impl BoardApp {

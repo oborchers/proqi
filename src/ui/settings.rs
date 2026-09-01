@@ -196,7 +196,6 @@ impl KeyBindings {
             (self.range_down, BoardCommand::RangeDown),
             (self.collapse, BoardCommand::Collapse),
             (self.select, BoardCommand::Select),
-            (self.transform, BoardCommand::Transform),
             (self.select_all, BoardCommand::SelectAll),
             (self.range_select, BoardCommand::RangeSelect),
             (self.search, BoardCommand::Search),
@@ -204,6 +203,7 @@ impl KeyBindings {
             (self.help, BoardCommand::Help),
             (self.quit, BoardCommand::Quit),
             (self.screenshot_inbox, BoardCommand::ScreenshotInbox),
+            (self.transform, BoardCommand::Transform),
         ];
         bindings
             .into_iter()
@@ -284,6 +284,12 @@ impl KeyBindings {
         if self.transform.is_control() {
             return Err("keybindings must be distinct printable characters");
         }
+        if matches!(
+            self.transform,
+            'a' | 'c' | 'd' | 'n' | 'p' | 'q' | 'u' | 'v' | 'x' | 'y' | 'z'
+        ) {
+            return Err("the transform binding conflicts with a reserved Primary shortcut");
+        }
         let values = [
             self.new,
             self.edit,
@@ -335,7 +341,7 @@ pub(crate) fn primary_key_label(suffix: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::KeyBindings;
+    use super::{BoardCommand, KeyBindings};
 
     #[test]
     fn ambiguous_bindings_are_rejected() {
@@ -352,6 +358,27 @@ mod tests {
                 ..KeyBindings::default()
             };
             assert!(bindings.validate().is_err());
+        }
+    }
+
+    #[test]
+    fn established_board_binding_precedes_compatible_transform_collision() {
+        let bindings = KeyBindings {
+            new: 't',
+            ..KeyBindings::default()
+        };
+        assert!(bindings.validate().is_ok());
+        assert_eq!(bindings.command('t'), Some(BoardCommand::New));
+    }
+
+    #[test]
+    fn reserved_primary_transform_bindings_are_rejected() {
+        for reserved in ['a', 'c', 'd', 'n', 'p', 'q', 'u', 'v', 'x', 'y', 'z'] {
+            let bindings = KeyBindings {
+                transform: reserved,
+                ..KeyBindings::default()
+            };
+            assert!(bindings.validate().is_err(), "reserved: {reserved}");
         }
     }
 }

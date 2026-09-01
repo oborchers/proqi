@@ -166,6 +166,18 @@ fn contextual_transform_binding_is_remappable() {
 }
 
 #[test]
+fn contextual_transform_rejects_reserved_primary_bindings() {
+    let directory = tempfile::tempdir().expect("config directory");
+    fs::write(
+        directory.path().join("config.toml"),
+        "[keybindings]\ntransform = 'x'\n",
+    )
+    .expect("write config");
+    let error = load_settings(directory.path()).expect_err("reserved transform");
+    assert!(error.to_string().contains("reserved Primary shortcut"));
+}
+
+#[test]
 fn whole_board_selection_binding_is_remappable() {
     let directory = tempfile::tempdir().expect("config directory");
     fs::write(

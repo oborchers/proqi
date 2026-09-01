@@ -71,6 +71,10 @@ mod smart_lists;
 #[path = "pty/top_boundary.rs"]
 mod top_boundary;
 
+#[cfg(target_os = "macos")]
+#[path = "pty/transformations.rs"]
+mod transformations;
+
 #[path = "pty/smoke.rs"]
 mod smoke;
 

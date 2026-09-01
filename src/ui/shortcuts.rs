@@ -21,7 +21,7 @@ pub(crate) fn items(app: &BoardApp) -> Vec<Shortcut> {
             (primary("Z"), "Undo"),
             (primary("Shift+Z"), "Redo"),
             (
-                primary(&keys.transform.to_uppercase().to_string()),
+                primary(&transform_key_label(keys.transform)),
                 "Split/extract",
             ),
             ("Alt+↑/↓".to_owned(), "Jump 5 rows"),
@@ -51,7 +51,6 @@ pub(crate) fn items(app: &BoardApp) -> Vec<Shortcut> {
         (keys.delete_label(), "Delete"),
         (primary("D"), "Duplicate"),
         (super::settings::key_label(keys.select), "Select"),
-        (keys.transform.to_string(), "Transform"),
         (
             format!(
                 "{}/{}",
@@ -67,6 +66,12 @@ pub(crate) fn items(app: &BoardApp) -> Vec<Shortcut> {
         (keys.commands.to_string(), "Commands"),
         (keys.screenshot_inbox.to_string(), "Inbox"),
     ];
+    if matches!(
+        keys.command(keys.transform),
+        Some(super::settings::BoardCommand::Transform)
+    ) {
+        items.insert(10, (keys.transform.to_string(), "Transform"));
+    }
     if app.supports_submission() {
         items.push((keys.submit_remove.to_string(), "Submit"));
         items.push((keys.submit_keep.to_string(), "Submit & keep"));
@@ -103,4 +108,12 @@ pub(crate) fn row_count(app: &BoardApp, width: u16) -> usize {
 
 fn primary(suffix: &str) -> String {
     super::settings::primary_key_label(suffix)
+}
+
+fn transform_key_label(key: char) -> String {
+    if key.is_ascii_alphabetic() {
+        key.to_ascii_uppercase().to_string()
+    } else {
+        key.to_string()
+    }
 }

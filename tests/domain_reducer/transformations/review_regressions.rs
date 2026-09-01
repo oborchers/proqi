@@ -1,0 +1,85 @@
+use super::*;
+
+#[test]
+fn split_absorbs_a_dirty_editor_snapshot_into_one_board_history_unit() {
+    let mut fixture = Fixture::new();
+    let source = fixture.create("base");
+    let neighbor = fixture.ids.thought_id();
+    let operation_id = fixture.operation_id();
+    let at = fixture.time();
+    let effects = reduce(
+        &mut fixture.state,
+        Action::SplitThought {
+            thought_id: source,
+            new_thought_id: neighbor,
+            operation_id,
+            expected_content: "base".to_owned(),
+            expected_annotations: Vec::new(),
+            source_content: "base dirty".to_owned(),
+            source_annotations: Vec::new(),
+            at_byte: 4,
+            at,
+        },
+    )
+    .expect("atomic dirty split");
+    assert!(matches!(
+        effects.as_slice(),
+        [Effect::CommitBoardOperation(_)]
+    ));
+    assert_eq!(
+        fixture
+            .state
+            .board
+            .live_thoughts()
+            .iter()
+            .map(|thought| thought.content.as_str())
+            .collect::<Vec<_>>(),
+        ["base", " dirty"]
+    );
+
+    move_history(&mut fixture, UndoScope::Board, true);
+    assert_eq!(fixture.state.board.live_thoughts().len(), 1);
+    assert_eq!(fixture.state.board.live_thoughts()[0].content, "base");
+}
+
+#[test]
+fn merge_reports_a_concurrently_deleted_source_as_missing_without_mutation() {
+    let mut fixture = Fixture::new();
+    let first = fixture.create("one");
+    let second = fixture.create("two");
+    let expected_sources = [first, second]
+        .into_iter()
+        .map(|id| fixture.state.board.thought(id).expect("source").clone())
+        .collect::<Vec<_>>();
+    let delete_operation = fixture.operation_id();
+    let deleted_at = fixture.time();
+    reduce(
+        &mut fixture.state,
+        Action::DeleteThought {
+            operation_id: delete_operation,
+            thought_id: second,
+            kind: BoardOperationKind::Delete,
+            at: deleted_at,
+        },
+    )
+    .expect("concurrent deletion");
+    let before = fixture.state.clone();
+    let merge_operation = fixture.operation_id();
+    let at = fixture.time();
+    assert_eq!(
+        reduce(
+            &mut fixture.state,
+            Action::MergeThoughts {
+                operation_id: merge_operation,
+                thought_ids: vec![first, second],
+                expected_sources,
+                separator: "\n\n".to_owned(),
+                at,
+            },
+        ),
+        Err(proqi::application::ApplicationError::ThoughtNotFound(
+            second
+        ))
+    );
+    assert_eq!(fixture.state, before);
+}
