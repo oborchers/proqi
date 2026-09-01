@@ -65,7 +65,6 @@ undo remain non-negotiable.
 ```text
 Editor
 ├─ Exact replace-all ──> Occurrence-only multi-selection
-├─ Paragraph deletion
 └─ Shared logical-line ranges ──> Logical-line duplicate/move/join
 
 Clipboard and attachments
@@ -405,16 +404,6 @@ terminology consistently in product text, documentation, and implementation.
   representative snapshots.
 
 ## Smart text editing
-
-### Paragraph deletion — P1, S (2–5 days)
-
-- [ ] Add **Delete paragraph** through the command palette first, using
-  blank-line-delimited blocks. Keep it distinct from both a newline-delimited
-  logical line and a width-dependent visual row.
-- [ ] Define separator and list-structure ownership exactly, preserve
-  annotations and exact line endings, and commit one persistent undo step.
-- [ ] Assign no prominent default shortcut until real sentence-deletion use
-  demonstrates that the broader destructive unit remains predictable.
 
 ### Logical-line duplicate and move — P1, M (4–7 days)
 
