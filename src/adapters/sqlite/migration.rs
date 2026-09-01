@@ -17,7 +17,7 @@ use super::{
     StoreConfig,
     schema::{
         MIGRATION_1, MIGRATION_2, MIGRATION_3, MIGRATION_4, MIGRATION_5, MIGRATION_6, MIGRATION_7,
-        MIGRATION_8, MIGRATION_9, MIGRATION_10, MIGRATION_11,
+        MIGRATION_8, MIGRATION_9, MIGRATION_10, MIGRATION_11, MIGRATION_12,
     },
     support::{
         create_private_dir, map_sql_error, set_private_file_permissions, set_private_open_mode,
@@ -95,75 +95,28 @@ pub(super) fn migrate(
 }
 
 fn apply_migrations(connection: &Connection, found: u32) -> Result<(), StoreError> {
-    match found {
-        0 => connection.execute_batch(MIGRATION_1),
-        1 => connection
-            .execute_batch(MIGRATION_2)
-            .and_then(|()| connection.execute_batch(MIGRATION_3))
-            .and_then(|()| connection.execute_batch(MIGRATION_4))
-            .and_then(|()| connection.execute_batch(MIGRATION_5))
-            .and_then(|()| connection.execute_batch(MIGRATION_6))
-            .and_then(|()| connection.execute_batch(MIGRATION_7))
-            .and_then(|()| connection.execute_batch(MIGRATION_8))
-            .and_then(|()| connection.execute_batch(MIGRATION_9))
-            .and_then(|()| connection.execute_batch(MIGRATION_10))
-            .and_then(|()| connection.execute_batch(MIGRATION_11)),
-        2 => connection
-            .execute_batch(MIGRATION_3)
-            .and_then(|()| connection.execute_batch(MIGRATION_4))
-            .and_then(|()| connection.execute_batch(MIGRATION_5))
-            .and_then(|()| connection.execute_batch(MIGRATION_6))
-            .and_then(|()| connection.execute_batch(MIGRATION_7))
-            .and_then(|()| connection.execute_batch(MIGRATION_8))
-            .and_then(|()| connection.execute_batch(MIGRATION_9))
-            .and_then(|()| connection.execute_batch(MIGRATION_10))
-            .and_then(|()| connection.execute_batch(MIGRATION_11)),
-        3 => connection
-            .execute_batch(MIGRATION_4)
-            .and_then(|()| connection.execute_batch(MIGRATION_5))
-            .and_then(|()| connection.execute_batch(MIGRATION_6))
-            .and_then(|()| connection.execute_batch(MIGRATION_7))
-            .and_then(|()| connection.execute_batch(MIGRATION_8))
-            .and_then(|()| connection.execute_batch(MIGRATION_9))
-            .and_then(|()| connection.execute_batch(MIGRATION_10))
-            .and_then(|()| connection.execute_batch(MIGRATION_11)),
-        4 => connection
-            .execute_batch(MIGRATION_5)
-            .and_then(|()| connection.execute_batch(MIGRATION_6))
-            .and_then(|()| connection.execute_batch(MIGRATION_7))
-            .and_then(|()| connection.execute_batch(MIGRATION_8))
-            .and_then(|()| connection.execute_batch(MIGRATION_9))
-            .and_then(|()| connection.execute_batch(MIGRATION_10))
-            .and_then(|()| connection.execute_batch(MIGRATION_11)),
-        5 => connection
-            .execute_batch(MIGRATION_6)
-            .and_then(|()| connection.execute_batch(MIGRATION_7))
-            .and_then(|()| connection.execute_batch(MIGRATION_8))
-            .and_then(|()| connection.execute_batch(MIGRATION_9))
-            .and_then(|()| connection.execute_batch(MIGRATION_10))
-            .and_then(|()| connection.execute_batch(MIGRATION_11)),
-        6 => connection
-            .execute_batch(MIGRATION_7)
-            .and_then(|()| connection.execute_batch(MIGRATION_8))
-            .and_then(|()| connection.execute_batch(MIGRATION_9))
-            .and_then(|()| connection.execute_batch(MIGRATION_10))
-            .and_then(|()| connection.execute_batch(MIGRATION_11)),
-        7 => connection
-            .execute_batch(MIGRATION_8)
-            .and_then(|()| connection.execute_batch(MIGRATION_9))
-            .and_then(|()| connection.execute_batch(MIGRATION_10))
-            .and_then(|()| connection.execute_batch(MIGRATION_11)),
-        8 => connection
-            .execute_batch(MIGRATION_9)
-            .and_then(|()| connection.execute_batch(MIGRATION_10))
-            .and_then(|()| connection.execute_batch(MIGRATION_11)),
-        9 => connection
-            .execute_batch(MIGRATION_10)
-            .and_then(|()| connection.execute_batch(MIGRATION_11)),
-        10 => connection.execute_batch(MIGRATION_11),
-        _ => Ok(()),
+    if found == 0 {
+        return connection.execute_batch(MIGRATION_1).map_err(map_sql_error);
     }
-    .map_err(map_sql_error)
+    let forward = [
+        MIGRATION_2,
+        MIGRATION_3,
+        MIGRATION_4,
+        MIGRATION_5,
+        MIGRATION_6,
+        MIGRATION_7,
+        MIGRATION_8,
+        MIGRATION_9,
+        MIGRATION_10,
+        MIGRATION_11,
+        MIGRATION_12,
+    ];
+    let first = usize::try_from(found - 1)
+        .map_err(|_| StoreError::Corrupt("invalid schema version".to_owned()))?;
+    for migration in &forward[first..] {
+        connection.execute_batch(migration).map_err(map_sql_error)?;
+    }
+    Ok(())
 }
 
 pub(super) fn create_backup(

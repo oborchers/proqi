@@ -11,7 +11,6 @@ use proqi::{
 };
 
 use super::snapshot_support::snapshot_buffer;
-
 #[path = "snapshots/attachment_accessibility.rs"]
 mod attachment_accessibility_snapshots;
 #[path = "snapshots/herdr.rs"]

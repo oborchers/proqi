@@ -60,7 +60,10 @@ pub(super) fn commit_batch(
     }
 }
 
-fn create_session(transaction: &Transaction<'_>, session: &Session) -> Result<(), StoreError> {
+pub(super) fn create_session(
+    transaction: &Transaction<'_>,
+    session: &Session,
+) -> Result<(), StoreError> {
     if session.last_durable_sequence != OperationSequence::ZERO {
         return Err(StoreError::Conflict(
             "new sessions must start at operation sequence zero".to_owned(),

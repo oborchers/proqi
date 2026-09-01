@@ -20,6 +20,10 @@ mod collapsed_entry;
 mod delete_alias;
 
 #[cfg(target_os = "macos")]
+#[path = "pty/edit_submission.rs"]
+mod edit_submission;
+
+#[cfg(target_os = "macos")]
 #[path = "pty/editor_persistence.rs"]
 mod editor_persistence;
 
@@ -28,16 +32,16 @@ mod editor_persistence;
 mod fairness;
 
 #[cfg(target_os = "macos")]
-#[path = "pty/edit_submission.rs"]
-mod edit_submission;
-
-#[cfg(target_os = "macos")]
 #[path = "pty/invocation.rs"]
 mod invocation;
 
 #[cfg(target_os = "macos")]
 #[path = "pty/key_inspector.rs"]
 mod key_inspector;
+
+#[cfg(target_os = "macos")]
+#[path = "pty/onboarding.rs"]
+mod onboarding;
 
 #[cfg(target_os = "macos")]
 #[path = "pty/path_drop.rs"]

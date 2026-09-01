@@ -300,7 +300,7 @@ mod tests {
             editor::RopeEditorFactory,
             memory::{FakeClock, FakeIdGenerator},
         },
-        application::{AppState, Effect, ThoughtMutation},
+        application::{AppState, Effect, FirstRunEnvironment, ThoughtMutation, first_run_board},
         domain::{
             ContentAnnotation, OperationSequence, Session, SessionBoard, Thought, ThoughtPosition,
             Timestamp,
@@ -380,6 +380,35 @@ mod tests {
             [Effect::CommitBoardOperation(_)]
         ));
         assert!(app.state.board.live_thoughts().is_empty());
+    }
+
+    #[test]
+    fn tutorial_shortcut_annotations_cross_the_session_transfer_boundary_exactly() {
+        let mut ids = FakeIdGenerator::new(1_725_205_000_000);
+        let clock = FakeClock::new(Timestamp::from_millis(3));
+        let source = Session::new(
+            ids.session_id(),
+            std::env::temp_dir().join("proqi-tutorial-transfer-source"),
+            Timestamp::from_millis(1),
+        )
+        .expect("source session");
+        let board = first_run_board(source, &mut ids, FirstRunEnvironment::Standalone)
+            .expect("practice board");
+        let thought = board.board().live_thoughts()[1].clone();
+        let mut app = BoardApp::new(AppState::new(board.board().clone()), RopeEditorFactory);
+        app.state.focused_thought = Some(thought.id);
+
+        assert_eq!(
+            app.begin_session_transfer(false, &mut ids, &clock),
+            vec![Effect::DiscoverTransferSessions]
+        );
+        app.complete_transfer_discovery(Ok(vec![session_hit(ids.session_id())]));
+        let effects = app.handle_transfer_input(&UiInput::Key(UiKey::Enter), &mut ids, &clock);
+        let [Effect::TransferThought(request)] = effects.as_slice() else {
+            panic!("expected transfer request");
+        };
+        assert_eq!(request.content, thought.content);
+        assert_eq!(request.annotations, thought.annotations);
     }
 
     fn assert_modified_delete_edits_query(

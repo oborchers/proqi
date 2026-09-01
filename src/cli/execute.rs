@@ -18,7 +18,7 @@ use serde_json::{Value, json};
 
 use crate::{
     adapters::terminal,
-    application::SessionService,
+    application::{FirstRunEnvironment, SessionService},
     domain::{ThoughtId, UndoScope},
     ports::{
         environment::Clock,
@@ -146,6 +146,15 @@ fn execute_launch(
                     return Ok(cancelled_browser());
                 };
                 session
+            }
+            ResumeRequest::Fresh if interactive => {
+                let environment = if crate::adapters::herdr::HerdrEnvironment::detect().is_managed()
+                {
+                    FirstRunEnvironment::HerdrManaged
+                } else {
+                    FirstRunEnvironment::Standalone
+                };
+                session_service(&mut context)?.create_first_run_session(environment)?
             }
             ResumeRequest::Fresh => session_service(&mut context)?.create_session()?,
         }

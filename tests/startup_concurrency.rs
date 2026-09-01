@@ -364,18 +364,18 @@ fn bounded_schema_failure_leaves_no_runtime_advertisement_and_recovers() {
 }
 
 #[test]
-fn shared_protocol_ten_owner_blocks_migration_without_backup_then_release_recovers() {
+fn shared_schema_eleven_owner_blocks_migration_without_backup_then_release_recovers() {
     let state = tempfile::tempdir().expect("state root");
     let initial = launch(state.path());
     let sessions = assert_successful_sessions(state.path(), &[initial], &BTreeSet::new());
     let database = state.path().join("data/proqi.sqlite3");
     Connection::open(&database)
-        .expect("protocol ten fixture")
+        .expect("schema eleven fixture")
         .execute_batch(
-            "DELETE FROM migration_history WHERE version = 11;
-             UPDATE schema_meta SET schema_version = 10, storage_protocol = 10;",
+            "DELETE FROM migration_history WHERE version = 12;
+             UPDATE schema_meta SET schema_version = 11, storage_protocol = 10;",
         )
-        .expect("downgrade protocol stamp");
+        .expect("downgrade transformation protocol stamp");
 
     let mut ids = FakeIdGenerator::new(1_725_000_100_000);
     let coordinator = FileRuntimeCoordinator::new(
@@ -383,7 +383,7 @@ fn shared_protocol_ten_owner_blocks_migration_without_backup_then_release_recove
         ids.instance_id(),
         state.path().to_path_buf(),
         Timestamp::from_millis(2),
-        "protocol-ten-owner",
+        "schema-eleven-owner",
     )
     .expect("coordinator");
     let shared = coordinator
@@ -393,7 +393,7 @@ fn shared_protocol_ten_owner_blocks_migration_without_backup_then_release_recove
     assert!(!blocked.status.success());
     let response: Value = serde_json::from_slice(&blocked.stdout).expect("failure JSON");
     assert_eq!(response["error"]["code"], "schema_busy");
-    let connection = Connection::open(&database).expect("unchanged protocol ten database");
+    let connection = Connection::open(&database).expect("unchanged schema eleven database");
     assert_eq!(
         connection
             .query_row(
@@ -402,7 +402,7 @@ fn shared_protocol_ten_owner_blocks_migration_without_backup_then_release_recove
                 |row| Ok((row.get::<_, u32>(0)?, row.get::<_, u32>(1)?)),
             )
             .expect("versions"),
-        (10, 10)
+        (11, 10)
     );
     drop(connection);
     let backups = state.path().join("data/backups");

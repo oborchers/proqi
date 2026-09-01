@@ -1,11 +1,12 @@
 //! Real terminal and SQLite coverage for contextual transformation shortcuts.
 
-use super::support::{expect_command, json_command};
+use super::support::{consume_first_run, expect_command, json_command};
 
 #[test]
 fn primary_split_and_plain_board_merge_survive_a_real_pty_restart() {
     let state = tempfile::tempdir().expect("temporary state");
     let binary = env!("CARGO_BIN_EXE_proqi");
+    consume_first_run(binary, state.path());
     let script = r#"
         log_user 0
         set timeout 10

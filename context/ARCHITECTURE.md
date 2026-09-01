@@ -596,6 +596,9 @@ event-sourced system.
   persistent undo and redo.
 - `integration_context`: optional last-known terminal and verified agent
   metadata. Pane IDs are hints, never durable identity.
+- `onboarding_state`: one versioned installation-local completion marker. A
+  pristine schema starts eligible for version 1, while migration from every
+  prior schema initializes version 1 as completed.
 - `submission_attempts`: one content-redacted semantic delivery and its
   aggregate payload digest, target fingerprint, disposition, and state.
 - `submission_attempt_items`: ordered source thought identities and per-source
@@ -607,6 +610,18 @@ event-sourced system.
 Full-text search indexes session names, paths, and current thought content.
 Search indexes are derived and rebuildable. User content remains canonical in
 ordinary tables.
+
+The application owns the exact first-run copy and its typed managed-Herdr or
+standalone variant. It constructs every thought through the private
+`InstructionalTextBuilder`, appending each reviewed shortcut literal and its
+semantic range together before sealing an ordinary create action. No boundary
+infers shortcut annotations from completed prose. Only a fresh interactive
+launch supplies that candidate to the store. SQLite begins one immediate write transaction, reads and conditionally
+advances the marker, creates the session, inserts all six ordinary thoughts,
+and rebuilds its derived search row before commit. A completed marker creates
+the requested session empty. Any failure rolls back the marker, session,
+thoughts, and derived data together. JSON and other noninteractive paths use
+ordinary session creation and neither seed nor advance the marker.
 
 ### Invariants
 
@@ -648,18 +663,22 @@ The application refuses to open a database schema newer than it understands.
 It does not attempt a best-effort downgrade. Export and explicit recovery tools
 remain available without modifying the source database.
 
-Schema and storage protocol version 10 register shortcut-emphasis annotations
-as durable thought and revision metadata. Version 9 introduced invocation
-references. Both migrations are transactional protocol stamps because the
-annotation column and JSON envelope already exist. The current version prevents
-an older writer from interpreting an unknown annotation variant as compatible
-state.
+Schema version 11 adds the versioned `onboarding_state` marker while retaining
+storage protocol 10 because the marker does not change ordinary stored board
+data. Schema and storage protocol version 10 registered shortcut-emphasis
+annotations as durable thought and revision metadata. Version 9 introduced
+invocation references. The annotation and invocation migrations are
+transactional protocol stamps because the annotation column and JSON envelope
+already exist. The current storage protocol prevents an older writer from
+interpreting an unknown annotation variant as compatible state.
 
-Schema and storage protocol version 11 register the durable split, extraction,
-and merge operation payloads, including exact content replacement and
-state-checked recoverable deletion mutations. The metadata-only migration is a
-compatibility boundary: a version 10 process must never be admitted as a
-compatible owner after version 11 payloads may exist.
+Schema version 12 and storage protocol version 11 register the durable split,
+extraction, and merge operation payloads, including exact content replacement
+and state-checked recoverable deletion mutations. The metadata-only migration
+is a compatibility boundary: a protocol 10 process must never be admitted as a
+compatible owner after protocol 11 payloads may exist. The separate schema 11
+onboarding migration remains protocol 10, and migration 12 preserves its
+completed or eligible marker exactly.
 
 ## Multiple running versions during an update
 

@@ -10,12 +10,13 @@ use std::{
 
 use proqi::ports::recovery::RecoveryDocument;
 
-use super::support::{expect_command, json_command};
+use super::support::{consume_first_run, expect_command, json_command};
 
 #[test]
 fn exported_save_failure_accepts_the_raw_board_quit_key() {
     let state = tempfile::tempdir().expect("temporary state");
     let binary = env!("CARGO_BIN_EXE_proqi");
+    consume_first_run(binary, state.path());
     create_empty_session(binary, state.path());
     let sessions = json_command(binary, state.path(), &["sessions", "list"]);
     let session = sessions["data"]["sessions"][0]["id"]
