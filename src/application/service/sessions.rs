@@ -14,6 +14,9 @@ use crate::{
 
 use super::{LeasedSession, SessionService, SessionServiceError};
 
+#[cfg(test)]
+mod tests;
+
 impl<S, R, C, I> SessionService<'_, S, R, C, I>
 where
     S: Store,
@@ -203,18 +206,20 @@ where
         &mut self,
         id: SessionId,
         lease: R::SessionLease,
-        record_open: bool,
+        resuming: bool,
     ) -> Result<LeasedSession<R::SessionLease>, SessionServiceError> {
-        self.store.compact_session(id)?;
+        if resuming {
+            self.store.compact_session(id)?;
+        }
         let snapshot = self.store.load_session(id)?;
         if snapshot.board.session.deleted_at.is_some() {
             return Err(SessionServiceError::SessionTrashed(id));
         }
-        if record_open {
+        if resuming {
             self.store
                 .record_session_open(id, &self.cwd, self.clock.now())?;
         }
-        let snapshot = if record_open {
+        let snapshot = if resuming {
             self.store.load_session(id)?
         } else {
             snapshot
