@@ -15,7 +15,7 @@ use crate::{
 
 use super::{AppState, ApplicationError, ApplicationResult};
 
-/// Build one exact image-path thought without exposing it before durable acceptance.
+/// Build one prompt-ready image-path thought without exposing it before durable acceptance.
 ///
 /// # Errors
 ///
@@ -28,15 +28,17 @@ pub fn prepare_capture(
     operation_id: OperationId,
     at: Timestamp,
 ) -> ApplicationResult<CaptureCommit> {
-    let content = candidate
+    let path = candidate
         .path
         .to_str()
-        .ok_or(ApplicationError::InvalidState)?
-        .to_owned();
+        .ok_or(ApplicationError::InvalidState)?;
+    let mut content = String::with_capacity(path.len().saturating_add(1));
+    content.push_str(path);
+    content.push(' ');
     let display_name = safe_display_name(&candidate.path)?;
     let annotation = ContentAnnotation {
         start: 0,
-        end: content.len(),
+        end: path.len(),
         kind: ContentAnnotationKind::Attachment {
             image: true,
             display_name,
@@ -106,4 +108,53 @@ fn safe_display_name(path: &Path) -> ApplicationResult<String> {
         .filter(|name| !name.is_empty())
         .map(ToOwned::to_owned)
         .ok_or(ApplicationError::InvalidState)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        adapters::memory::FakeIdGenerator,
+        application::{AppState, attachments::attachment_keys},
+        domain::{BoardMutation, Session, SessionBoard, Timestamp},
+        ports::{
+            environment::IdGenerator as _,
+            screenshot::{ScreenshotCandidate, ScreenshotFingerprint, ScreenshotImageType},
+        },
+    };
+
+    use super::prepare_capture;
+
+    #[test]
+    fn capture_content_has_one_suffix_while_annotation_and_health_keep_the_exact_path() {
+        let mut ids = FakeIdGenerator::new(1_725_260_000_000);
+        let session = Session::new(
+            ids.session_id(),
+            std::env::temp_dir(),
+            Timestamp::from_millis(1),
+        )
+        .expect("session");
+        let state = AppState::new(SessionBoard::new(session, Vec::new()).expect("board"));
+        let candidate = ScreenshotCandidate {
+            fingerprint: ScreenshotFingerprint([7; 32]),
+            path: std::env::temp_dir().join("Unicode capture with spaces 🖼️.png"),
+            image_type: ScreenshotImageType::Png,
+        };
+        let commit = prepare_capture(
+            &state,
+            &candidate,
+            ids.thought_id(),
+            ids.operation_id(),
+            Timestamp::from_millis(2),
+        )
+        .expect("capture");
+        let BoardMutation::AddThought { thought } = &commit.operation.forward else {
+            panic!("capture thought");
+        };
+        let path = candidate.path.to_str().expect("UTF-8 path");
+        assert_eq!(thought.content, format!("{path} "));
+        assert_eq!(thought.annotations[0].end, path.len());
+        let keys = attachment_keys(thought);
+        assert_eq!(keys[0].canonical_path, path);
+        assert_eq!(keys[0].annotation_end, path.len());
+    }
 }
