@@ -56,14 +56,15 @@ fn capture_receipt_and_thought_commit_atomically_and_deduplicate_globally() {
         .expect("apply durable capture")
         .expect("created thought");
     let thought = state.board.thought(thought_id).expect("thought");
-    assert_eq!(thought.content, candidate.path.to_string_lossy());
+    let path = candidate.path.to_string_lossy();
+    assert_eq!(thought.content, format!("{path} "));
     assert!(matches!(
         thought.annotations.as_slice(),
         [ContentAnnotation {
             start: 0,
             end,
             kind: ContentAnnotationKind::Attachment { image: true, .. },
-        }] if *end == thought.content.len()
+        }] if *end == path.len()
     ));
 
     let duplicate = store.commit_capture(&commit).expect("deduplicate retry");
@@ -75,6 +76,10 @@ fn capture_receipt_and_thought_commit_atomically_and_deduplicate_globally() {
         .load_session(state.board.session.id)
         .expect("load captured session");
     assert_eq!(snapshot.board.thoughts().len(), 1);
+    assert_eq!(
+        snapshot.board.live_thoughts()[0].content,
+        format!("{path} ")
+    );
     let receipt_count: i64 = Connection::open(&fixture.config.database_path)
         .expect("inspect database")
         .query_row(
@@ -164,19 +169,74 @@ fn persistent_contention_leaves_no_partial_capture_and_exact_retry_succeeds() {
 
     let outcome = store.commit_capture(&capture).expect("retry capture");
     assert!(matches!(outcome, CaptureCommitOutcome::Created { .. }));
+    let snapshot = store
+        .load_session(state.board.session.id)
+        .expect("durable retry");
+    let thought = snapshot.board.live_thoughts()[0];
     assert_eq!(
-        store
-            .load_session(state.board.session.id)
-            .expect("durable retry")
-            .board
-            .live_thoughts()
-            .len(),
-        1
+        thought.content,
+        format!("{} ", test_path("capture-13.png").display())
     );
+    assert_eq!(thought.annotations[0].end, thought.content.len() - 1);
     assert!(matches!(
         store.commit_capture(&capture).expect("dedupe replay"),
         CaptureCommitOutcome::AlreadyCaptured(_)
     ));
+}
+
+#[test]
+fn capture_separator_survives_restart_undo_and_redo_without_duplication() {
+    let fixture = DatabaseFixture::new();
+    let mut store = fixture.open();
+    let mut ids = FakeIdGenerator::new(1_725_241_750_000);
+    let mut state = session_state(&mut ids, &test_path("screenshot-history"));
+    let session_id = state.board.session.id;
+    store
+        .commit(&OperationBatch::CreateSession(state.board.session.clone()))
+        .expect("create session");
+    let capture = prepared_capture(&state, &mut ids, 14, 2);
+    let outcome = store.commit_capture(&capture).expect("capture");
+    let thought_id = apply_capture(&mut state, &capture, &outcome)
+        .expect("apply capture")
+        .expect("created thought");
+    drop(store);
+
+    let mut store = fixture.open();
+    let snapshot = store.load_session(session_id).expect("restart capture");
+    let mut restored = AppState::from_snapshot(snapshot).expect("restore capture");
+    assert_eq!(
+        restored.board.thought(thought_id).expect("thought").content,
+        format!("{} ", test_path("capture-14.png").display())
+    );
+    let undo = one_effect(
+        &mut restored,
+        Action::Undo {
+            operation_id: ids.operation_id(),
+            scope: UndoScope::Board,
+            at: Timestamp::from_millis(3),
+        },
+    );
+    persist_effect(&mut store, &undo);
+    let redo_effects = reduce(
+        &mut restored,
+        Action::Redo {
+            operation_id: ids.operation_id(),
+            scope: UndoScope::Board,
+            at: Timestamp::from_millis(4),
+        },
+    )
+    .expect("redo capture");
+    let redo = redo_effects
+        .iter()
+        .find(|effect| matches!(effect, Effect::CommitHistoryMove { .. }))
+        .expect("durable redo");
+    persist_effect(&mut store, redo);
+    let redone = store.load_session(session_id).expect("redone capture");
+    assert_eq!(redone.board.live_thoughts().len(), 1);
+    assert_eq!(
+        redone.board.live_thoughts()[0].content,
+        format!("{} ", test_path("capture-14.png").display())
+    );
 }
 
 #[test]

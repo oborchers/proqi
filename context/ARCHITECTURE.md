@@ -225,9 +225,11 @@ that it is not durable and offers retry or export. It never silently changes a
 failed save into a successful one.
 
 Screenshot creation is deliberately commit-first rather than optimistic. The
-storage lane atomically inserts one capture receipt and its exact append
-operation in detection order. The UI applies the operation only after that
-transaction succeeds. The receipt's rename-stable source fingerprint prevents
+application-owned capture constructor stores the exact source path followed by
+one ASCII space while its attachment annotation and health key cover only the
+path. The storage lane atomically inserts one capture receipt and its exact
+append operation in detection order. The UI applies the operation only after
+that transaction succeeds. The receipt's rename-stable source fingerprint prevents
 duplicate delivery across repeated notifications, reconciliation, retry,
 restart, and ownership handoff. Failure leaves no partial thought and retains
 retryable work in the live session. An ordinary store failure initiates bounded
