@@ -60,6 +60,7 @@ fn copy_is_exact_and_never_mutates_the_board() {
             thought_id: Some(thought_id),
             intent: ClipboardIntent::Copy,
             content: "  exact\r\n".to_owned(),
+            annotations: Vec::new(),
         }]
     );
     reduce(
@@ -153,6 +154,71 @@ fn cut_deletes_only_after_clipboard_success() {
             .expect("thought")
             .is_live()
     );
+}
+
+#[test]
+fn annotated_cut_restores_exact_metadata_in_one_board_undo() {
+    let mut fixture = Fixture::new();
+    let path = "/missing/Grüße.png";
+    let thought_id = fixture.create(path);
+    let annotation = ContentAnnotation {
+        start: 0,
+        end: path.len(),
+        kind: ContentAnnotationKind::Attachment {
+            image: true,
+            display_name: "Grüße.png".to_owned(),
+        },
+    };
+    fixture
+        .state
+        .board
+        .thought_mut(thought_id)
+        .expect("thought")
+        .set_annotations(vec![annotation.clone()])
+        .expect("annotations");
+    let request_id = fixture.ids.request_id();
+    let operation_id = fixture.operation_id();
+    let at = fixture.time();
+    let effects = reduce(
+        &mut fixture.state,
+        Action::CutThoughts {
+            request_id,
+            operation_id,
+            thought_ids: vec![thought_id],
+            at,
+        },
+    )
+    .expect("cut request");
+    let write = effects.iter().find(|effect| {
+        matches!(
+            effect,
+            Effect::WriteClipboard { content, annotations, .. }
+                if content == path && annotations == std::slice::from_ref(&annotation)
+        )
+    });
+    assert!(write.is_some());
+    reduce(
+        &mut fixture.state,
+        Action::ClipboardResult {
+            request_id,
+            result: Ok(()),
+        },
+    )
+    .expect("cut success");
+    assert!(
+        !fixture
+            .state
+            .board
+            .thought(thought_id)
+            .expect("thought")
+            .is_live()
+    );
+
+    move_history(&mut fixture, UndoScope::Board, true);
+    let restored = fixture.state.board.thought(thought_id).expect("restored");
+    assert!(restored.is_live());
+    assert_eq!(restored.content, path);
+    assert_eq!(restored.annotations, vec![annotation]);
 }
 
 #[test]

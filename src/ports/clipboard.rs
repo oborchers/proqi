@@ -2,13 +2,64 @@
 
 use thiserror::Error;
 
+use crate::domain::{ContentAnnotation, DomainError, RequestId, validate_annotations};
+
 use super::attachment::RasterImage;
+
+/// Exact interoperable text plus validated Proqi presentation metadata.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ClipboardText {
+    content: String,
+    annotations: Vec<ContentAnnotation>,
+}
+
+impl ClipboardText {
+    /// Construct one exact clipboard text representation.
+    ///
+    /// # Errors
+    ///
+    /// Returns an annotation error when metadata does not belong to the exact text.
+    pub fn new(content: String, annotations: Vec<ContentAnnotation>) -> Result<Self, DomainError> {
+        validate_annotations(&content, &annotations)?;
+        Ok(Self {
+            content,
+            annotations,
+        })
+    }
+
+    /// Construct exact plain text without Proqi metadata.
+    #[must_use]
+    pub fn plain(content: String) -> Self {
+        Self {
+            content,
+            annotations: Vec::new(),
+        }
+    }
+
+    /// Exact UTF-8 text exposed through the ordinary system flavor.
+    #[must_use]
+    pub fn content(&self) -> &str {
+        &self.content
+    }
+
+    /// Validated selection-relative presentation metadata.
+    #[must_use]
+    pub fn annotations(&self) -> &[ContentAnnotation] {
+        &self.annotations
+    }
+
+    /// Consume the value into exact text and annotations.
+    #[must_use]
+    pub fn into_parts(self) -> (String, Vec<ContentAnnotation>) {
+        (self.content, self.annotations)
+    }
+}
 
 /// Native clipboard content accepted for prompt insertion.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ClipboardContent {
-    /// Exact UTF-8 text.
-    Text(String),
+    /// Exact UTF-8 text with optional verified Proqi metadata.
+    Text(ClipboardText),
     /// Validated raw image pixels requiring durable materialization.
     Image(RasterImage),
 }
@@ -44,12 +95,18 @@ pub enum ClipboardError {
 
 /// Exact text clipboard operations.
 pub trait Clipboard {
-    /// Write exact text through a native provider or return an OSC 52 fallback sequence.
+    /// Write exact text and metadata through a native provider.
+    ///
+    /// OSC 52 is permitted only when `content` has no annotations.
     ///
     /// # Errors
     ///
     /// Returns a typed non-destructive error when no safe path succeeds.
-    fn write(&mut self, content: &str) -> Result<ClipboardWrite, ClipboardError>;
+    fn write(
+        &mut self,
+        request_id: RequestId,
+        content: &ClipboardText,
+    ) -> Result<ClipboardWrite, ClipboardError>;
 
     /// Read exact text from the native clipboard.
     ///

@@ -417,34 +417,34 @@ selection, or thoughts containing annotations and paste them elsewhere in
 Proqi, every placeholder and fold remains intact even when the content also
 contains ordinary prose.
 
-- [ ] Preserve the current external contract: the system clipboard always
+- [x] Preserve the current external contract: the system clipboard always
   receives the exact canonical plain text, including underlying absolute paths,
   so content remains useful in terminals, editors, and other applications.
-- [ ] Add a typed internal clipboard representation carrying validated relative
+- [x] Add a typed internal clipboard representation carrying validated relative
   annotation ranges and kinds. Choose an OS clipboard flavor or another
   current-user mechanism that can prove it belongs to the exact current plain-
   text payload; never attach stale metadata merely because text happens to
   match.
-- [ ] Project copied annotations into selection-relative ranges. For complete
+- [x] Project copied annotations into selection-relative ranges. For complete
   board selections, shift annotations through the canonical inter-thought
   separator without losing their order or identity.
-- [ ] Keep collapsed annotations atomic. Copying or cutting a visible image,
+- [x] Keep collapsed annotations atomic. Copying or cutting a visible image,
   file, or pasted-text placeholder operates on its complete canonical range and
   cannot expose or remove only part of its hidden content.
-- [ ] Make cut non-destructive until both the interoperable text and the
+- [x] Make cut non-destructive until both the interoperable text and the
   annotation-preserving Proqi payload have been accepted. On failure, retain the
   source and report truthfully instead of silently degrading a requested move
   into metadata-losing plain text.
-- [ ] Prefer a verified typed payload on paste, then retain the current
+- [x] Prefer a verified typed payload on paste, then retain the current
   best-effort existing-path reconstruction as the fallback for plain clipboard
   text and terminal file drops.
-- [ ] Never move, copy, rewrite, upload, or delete a referenced source file as a
+- [x] Never move, copy, rewrite, upload, or delete a referenced source file as a
   side effect of copy, cut, or paste. Missing files retain truthful canonical
   content and must not cause unrelated annotations to be discarded.
-- [ ] Reuse the same annotation slicing, shifting, validation, and rebasing
+- [x] Reuse the same annotation slicing, shifting, validation, and rebasing
   owner for editor selections, whole-thought operations, split/extract/merge,
   duplication, and session transfer rather than creating parallel range logic.
-- [ ] Cover attachment-only and mixed-prose thoughts, multiple images/files,
+- [x] Cover attachment-only and mixed-prose thoughts, multiple images/files,
   large-paste folds, Unicode paths, repeated identical paths, multi-thought
   separators, copy and cut failure, external clipboard replacement, stale or
   malformed typed metadata, missing files, restart/process boundaries, and one-

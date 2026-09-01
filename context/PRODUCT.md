@@ -324,6 +324,9 @@ Bracketed paste is treated as one semantic input event.
 - When the native clipboard contains raw image pixels, `Ctrl+V` writes a private
   durable PNG inside the current Proqi session and inserts its absolute path.
   Proqi never uploads or analyzes the image automatically.
+- A verified Proqi clipboard item restores its complete relative annotation
+  ranges before path reconstruction. Plain external clipboard text keeps the
+  existing conservative path and large-paste reconstruction behavior.
 
 File paths and large pasted context use folded presentation immediately in both
 board and edit mode while their canonical text remains exact. Images appear as
@@ -510,11 +513,25 @@ and subsequent typing materializes normally.
 
 ### Copy, cut, and delete
 
-Copying a thought writes its exact content to the native system clipboard.
+Copying a thought or selection writes its exact canonical content to the
+ordinary native plain-text clipboard flavor. Complete annotation ranges also
+cross a Proqi-to-Proqi clipboard round trip. On macOS, one pasteboard item owns
+the plain text and a Proqi-specific typed flavor. A private, content-free cache
+record binds that typed payload to the exact pasteboard generation and request
+binding. Two stable generation reads and the matching private record are
+required before metadata is accepted, so a same-text replacement, malformed
+payload, or clipboard-only forgery falls back to plain text. The record
+survives a Proqi restart and contains no copied text, paths, or annotations.
+
+Platforms where the current clipboard dependency cannot expose an equivalent
+item identity reject annotated copy and cut with an actionable error. They do
+not silently report a metadata-losing copy as successful. Unannotated text
+retains the native and OSC 52 paths on every supported platform.
 
 Cut is atomic from the user's perspective. The product writes the content to
-the clipboard first and removes the thought only after clipboard success. A
-clipboard failure leaves the thought unchanged and displays an actionable
+the clipboard first and removes the thought only after both the exact plain
+text and typed metadata have been read back and accepted. A clipboard or
+provenance failure leaves the thought unchanged and displays an actionable
 error.
 
 Deleting removes a thought without changing the clipboard. Both cut and delete

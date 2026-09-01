@@ -2,6 +2,7 @@
 
 use crate::{
     application::{Action, ClipboardIntent, Effect, FailureCode, InteractionMode},
+    domain::extract_annotations,
     ports::{
         editor::EditCommand,
         environment::{Clock, IdGenerator},
@@ -15,6 +16,14 @@ use super::{
 use crate::ui::PastePayload;
 
 impl BoardApp {
+    fn apply_preserved_edit(
+        &mut self,
+        command: EditCommand,
+        inserted_annotations: &[crate::domain::ContentAnnotation],
+    ) {
+        self.apply_annotated_edit_with_policy(command, inserted_annotations, true);
+    }
+
     pub(super) fn paste_payload(
         &mut self,
         payload: PastePayload,
@@ -27,11 +36,12 @@ impl BoardApp {
             }
             self.create(payload, ids, clock)
         } else if matches!(self.state.mode, InteractionMode::Compose) {
-            let (content, annotations, verified_paths) = payload.into_parts();
+            let (content, annotations, verified_paths, preserve_owned) = payload.into_parts();
             if content.is_empty() {
                 return Vec::new();
             }
-            let effects = self.apply_compose_paste(content, &annotations, ids, clock);
+            let effects =
+                self.apply_compose_paste(content, &annotations, preserve_owned, ids, clock);
             if let InteractionMode::Edit { thought_id } = self.state.mode {
                 self.state
                     .attachments
@@ -40,9 +50,13 @@ impl BoardApp {
             effects
         } else {
             let thought_id = self.active_thought_id();
-            let (content, annotations, verified_paths) = payload.into_parts();
+            let (content, annotations, verified_paths, preserve_owned) = payload.into_parts();
             let mut effects = self.flush_pending_edit(ids, clock);
-            self.apply_annotated_edit(EditCommand::Paste(content), &annotations);
+            if preserve_owned {
+                self.apply_preserved_edit(EditCommand::Paste(content), &annotations);
+            } else {
+                self.apply_annotated_edit(EditCommand::Paste(content), &annotations);
+            }
             effects.extend(self.flush_pending_edit(ids, clock));
             if let Some(thought_id) = thought_id {
                 self.state
@@ -84,15 +98,29 @@ impl BoardApp {
         self.insertion_focus = InsertionFocus::Inactive;
         self.insertion_confirmation = InsertionConfirmation::Idle;
         let thought_id = ids.thought_id();
-        let (content, annotations, verified_paths) = payload.into_parts();
-        let effects = self.reduce(Action::CreateThought {
-            thought_id,
-            operation_id: ids.operation_id(),
-            content,
-            annotations,
-            insertion_index,
-            at: clock.now(),
-        });
+        let (content, annotations, verified_paths, preserve_owned) = payload.into_parts();
+        let operation_id = ids.operation_id();
+        let at = clock.now();
+        let action = if preserve_owned {
+            Action::CreateOwnedThought(crate::application::OwnedThoughtCreation::preserved(
+                thought_id,
+                operation_id,
+                content,
+                annotations,
+                insertion_index,
+                at,
+            ))
+        } else {
+            Action::CreateThought {
+                thought_id,
+                operation_id,
+                content,
+                annotations,
+                insertion_index,
+                at,
+            }
+        };
+        let effects = self.reduce(action);
         if matches!(
             self.state.mode,
             InteractionMode::Edit {
@@ -193,6 +221,7 @@ impl BoardApp {
             thought_id: None,
             intent,
             content,
+            annotations: Vec::new(),
         }]
     }
 
@@ -379,16 +408,28 @@ impl BoardApp {
         let Some((super::EditorOwner::Thought(thought_id), editor)) = &self.editor else {
             return Vec::new();
         };
-        let Some(content) = editor.selected_text() else {
+        let snapshot = editor.snapshot();
+        let Some(selection) = snapshot.selection else {
             self.set_warning("select text before copying or cutting");
             return Vec::new();
         };
+        let start =
+            crate::ports::text_layout::byte_for_position(&snapshot.content, selection.start);
+        let end = crate::ports::text_layout::byte_for_position(&snapshot.content, selection.end);
+        let current_annotations = self.current_annotations(*thought_id);
+        let Ok((_, annotations)) =
+            extract_annotations(&snapshot.content, &current_annotations, start..end)
+        else {
+            self.set_error("selection metadata is invalid");
+            return Vec::new();
+        };
+        let content = snapshot.content[start..end].to_owned();
         let request_id = ids.request_id();
         self.pending_editor_clipboard.insert(
             request_id,
             PendingEditorClipboard {
                 intent,
-                before: editor.snapshot(),
+                before: snapshot,
             },
         );
         vec![Effect::WriteClipboard {
@@ -396,6 +437,7 @@ impl BoardApp {
             thought_id: Some(*thought_id),
             intent,
             content,
+            annotations,
         }]
     }
 

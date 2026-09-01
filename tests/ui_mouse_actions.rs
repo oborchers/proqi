@@ -85,6 +85,7 @@ fn visible_session_id_mouse_target_matches_palette_copy_intent() {
             thought_id: None,
             intent: proqi::application::ClipboardIntent::CopySessionId,
             content,
+            ..
         },
     ] = effects.as_slice()
     else {

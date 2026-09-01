@@ -391,6 +391,8 @@ mod attachment_accessibility;
 mod blank;
 #[path = "ui_board/clipboard.rs"]
 mod clipboard;
+#[path = "ui_board/clipboard_annotations.rs"]
+mod clipboard_annotations;
 #[path = "ui_board/compose.rs"]
 mod compose;
 #[path = "ui_board/composition.rs"]

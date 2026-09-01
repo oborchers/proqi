@@ -1,26 +1,44 @@
 //! Native system clipboard with an OSC 52 write fallback.
 
-use base64::{Engine, engine::general_purpose::STANDARD};
+#[cfg(target_os = "macos")]
+mod macos;
+mod provenance;
 
-use crate::ports::{
-    attachment::RasterImage,
-    clipboard::{Clipboard, ClipboardContent, ClipboardError, ClipboardWrite},
+use std::path::Path;
+
+use base64::{Engine, engine::general_purpose::STANDARD};
+use serde::{Deserialize, Serialize};
+use sha2::{Digest as _, Sha256};
+
+use crate::{
+    domain::{RequestId, validate_annotations},
+    ports::{
+        attachment::RasterImage,
+        clipboard::{Clipboard, ClipboardContent, ClipboardError, ClipboardText, ClipboardWrite},
+        environment::ProcessRunner,
+    },
 };
 
+use provenance::{FileClipboardProvenance, ProvenanceRecord};
+
 const OSC52_MAX_BYTES: usize = 100_000;
+const METADATA_MAX_BYTES: usize = 512 * 1024;
+const WIRE_SCHEMA_VERSION: u8 = 1;
 
 /// Native clipboard adapter with a bounded terminal fallback.
 pub struct PlatformClipboard {
     native: Box<dyn NativeClipboard + Send>,
+    provenance: FileClipboardProvenance,
     osc52: bool,
 }
 
 impl PlatformClipboard {
-    /// Enable native access and the terminal write fallback.
+    /// Enable native access, generation-bound provenance, and the terminal fallback.
     #[must_use]
-    pub fn new() -> Self {
+    pub fn new(cache_directory: &Path, runner: Box<dyn ProcessRunner + Send>) -> Self {
         Self {
-            native: Box::new(ArboardNative::default()),
+            native: Box::new(ArboardNative::new(platform_typed_clipboard(runner))),
+            provenance: FileClipboardProvenance::new(cache_directory),
             osc52: true,
         }
     }
@@ -33,23 +51,40 @@ impl PlatformClipboard {
     }
 }
 
-impl Default for PlatformClipboard {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl Clipboard for PlatformClipboard {
-    fn write(&mut self, content: &str) -> Result<ClipboardWrite, ClipboardError> {
-        if self.native.write(content).is_ok() {
+    fn write(
+        &mut self,
+        request_id: RequestId,
+        content: &ClipboardText,
+    ) -> Result<ClipboardWrite, ClipboardError> {
+        if content.annotations().is_empty() && self.native.write_text(content.content()).is_ok() {
             return Ok(ClipboardWrite::Native);
+        }
+        if !content.annotations().is_empty() {
+            let encoded = encode_payload(request_id, content)?;
+            let lease = self
+                .provenance
+                .acquire()
+                .map_err(ClipboardError::Unavailable)?;
+            let generation = self
+                .native
+                .write_typed(content.content(), &encoded.payload)
+                .map_err(ClipboardError::Unavailable)?;
+            let record = ProvenanceRecord::new(generation, encoded.request_id, encoded.binding);
+            lease.store(&record).map_err(ClipboardError::Unavailable)?;
+            if self.typed_write_matches(generation, &encoded.payload) {
+                return Ok(ClipboardWrite::Native);
+            }
+            return Err(ClipboardError::Unavailable(
+                "native provider did not retain both clipboard representations".to_owned(),
+            ));
         }
         if !self.osc52 {
             return Err(ClipboardError::Unavailable(
                 "native providers failed and OSC 52 is disabled".to_owned(),
             ));
         }
-        osc52(content).map(ClipboardWrite::Osc52)
+        osc52(content.content()).map(ClipboardWrite::Osc52)
     }
 
     fn read(&mut self) -> Result<ClipboardContent, ClipboardError> {
@@ -58,20 +93,50 @@ impl Clipboard for PlatformClipboard {
             Err(NativeReadError::InvalidImage) => return Err(ClipboardError::InvalidImage),
             Err(NativeReadError::Unavailable(_)) => {}
         }
-        self.native
-            .read_text()
-            .map(ClipboardContent::Text)
-            .map_err(|error| match error {
-                NativeReadError::Unavailable(message) => ClipboardError::Unavailable(message),
-                NativeReadError::InvalidImage => ClipboardError::InvalidImage,
-            })
+        let lease = self.provenance.acquire().ok();
+        let first_typed = lease.as_ref().and_then(|_| self.native.read_typed().ok());
+        let text = self.native.read_text().map_err(|error| match error {
+            NativeReadError::Unavailable(message) => ClipboardError::Unavailable(message),
+            NativeReadError::InvalidImage => ClipboardError::InvalidImage,
+        })?;
+        let second_typed = lease.as_ref().and_then(|_| self.native.read_typed().ok());
+        let provenance = lease.as_ref().and_then(|lease| lease.load().ok().flatten());
+        let content = verified_typed_text(
+            text,
+            first_typed,
+            second_typed.as_ref(),
+            provenance.as_ref(),
+        );
+        Ok(ClipboardContent::Text(content))
+    }
+}
+
+impl PlatformClipboard {
+    fn typed_write_matches(&mut self, generation: u64, expected_payload: &str) -> bool {
+        self.native.read_typed().is_ok_and(|snapshot| {
+            snapshot.generation == generation
+                && snapshot.payload.as_deref() == Some(expected_payload)
+        })
     }
 }
 
 trait NativeClipboard {
-    fn write(&mut self, content: &str) -> Result<(), String>;
+    fn write_text(&mut self, content: &str) -> Result<(), String>;
+    fn write_typed(&mut self, content: &str, payload: &str) -> Result<u64, String>;
     fn read_text(&mut self) -> Result<String, NativeReadError>;
+    fn read_typed(&mut self) -> Result<TypedSnapshot, String>;
     fn read_image(&mut self) -> Result<RasterImage, NativeReadError>;
+}
+
+trait TypedClipboard {
+    fn write(&mut self, text: &str, typed: &str) -> Result<u64, String>;
+    fn read(&mut self) -> Result<TypedSnapshot, String>;
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct TypedSnapshot {
+    generation: u64,
+    payload: Option<String>,
 }
 
 enum NativeReadError {
@@ -79,12 +144,19 @@ enum NativeReadError {
     InvalidImage,
 }
 
-#[derive(Default)]
 struct ArboardNative {
     clipboard: Option<arboard::Clipboard>,
+    typed: Box<dyn TypedClipboard + Send>,
 }
 
 impl ArboardNative {
+    fn new(typed: Box<dyn TypedClipboard + Send>) -> Self {
+        Self {
+            clipboard: None,
+            typed,
+        }
+    }
+
     fn clipboard(&mut self) -> Result<&mut arboard::Clipboard, String> {
         if self.clipboard.is_none() {
             self.clipboard = Some(arboard::Clipboard::new().map_err(|error| error.to_string())?);
@@ -96,10 +168,14 @@ impl ArboardNative {
 }
 
 impl NativeClipboard for ArboardNative {
-    fn write(&mut self, content: &str) -> Result<(), String> {
+    fn write_text(&mut self, content: &str) -> Result<(), String> {
         self.clipboard()?
             .set_text(content.to_owned())
             .map_err(|error| error.to_string())
+    }
+
+    fn write_typed(&mut self, content: &str, payload: &str) -> Result<u64, String> {
+        self.typed.write(content, payload)
     }
 
     fn read_text(&mut self) -> Result<String, NativeReadError> {
@@ -107,6 +183,10 @@ impl NativeClipboard for ArboardNative {
             .map_err(NativeReadError::Unavailable)?
             .get_text()
             .map_err(native_unavailable)
+    }
+
+    fn read_typed(&mut self) -> Result<TypedSnapshot, String> {
+        self.typed.read()
     }
 
     fn read_image(&mut self) -> Result<RasterImage, NativeReadError> {
@@ -118,6 +198,143 @@ impl NativeClipboard for ArboardNative {
         RasterImage::new(image.width, image.height, image.bytes.into_owned())
             .map_err(|_| NativeReadError::InvalidImage)
     }
+}
+
+#[cfg(target_os = "macos")]
+fn platform_typed_clipboard(
+    runner: Box<dyn ProcessRunner + Send>,
+) -> Box<dyn TypedClipboard + Send> {
+    Box::new(macos::MacTypedClipboard::new(runner))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn platform_typed_clipboard(
+    _runner: Box<dyn ProcessRunner + Send>,
+) -> Box<dyn TypedClipboard + Send> {
+    Box::new(UnsupportedTypedClipboard)
+}
+
+#[cfg(not(target_os = "macos"))]
+struct UnsupportedTypedClipboard;
+
+#[cfg(not(target_os = "macos"))]
+impl TypedClipboard for UnsupportedTypedClipboard {
+    fn write(&mut self, _text: &str, _typed: &str) -> Result<u64, String> {
+        Err("safe multi-format clipboard identity is unavailable on this platform".to_owned())
+    }
+
+    fn read(&mut self) -> Result<TypedSnapshot, String> {
+        Err("safe multi-format clipboard identity is unavailable on this platform".to_owned())
+    }
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct WirePayload {
+    schema_version: u8,
+    request_id: String,
+    binding: [u8; 32],
+    annotations: Vec<crate::domain::ContentAnnotation>,
+}
+
+struct EncodedPayload {
+    payload: String,
+    request_id: String,
+    binding: [u8; 32],
+}
+
+fn encode_payload(
+    request_id: RequestId,
+    content: &ClipboardText,
+) -> Result<EncodedPayload, ClipboardError> {
+    let request_id = request_id.to_string();
+    let binding = payload_binding(&request_id, content.content(), content.annotations())?;
+    let wire = WirePayload {
+        schema_version: WIRE_SCHEMA_VERSION,
+        request_id: request_id.clone(),
+        binding,
+        annotations: content.annotations().to_vec(),
+    };
+    let encoded = serde_json::to_vec(&wire)
+        .map_err(|error| ClipboardError::Unavailable(error.to_string()))?;
+    if encoded.len() > METADATA_MAX_BYTES {
+        return Err(ClipboardError::TooLarge);
+    }
+    Ok(EncodedPayload {
+        payload: STANDARD.encode(encoded),
+        request_id,
+        binding,
+    })
+}
+
+fn decode_payload(content: &str, encoded: &str) -> Option<(ClipboardText, String, [u8; 32])> {
+    if encoded.len() > METADATA_MAX_BYTES.saturating_mul(2) {
+        return None;
+    }
+    let bytes = STANDARD.decode(encoded).ok()?;
+    if bytes.len() > METADATA_MAX_BYTES {
+        return None;
+    }
+    let wire: WirePayload = serde_json::from_slice(&bytes).ok()?;
+    if wire.schema_version != WIRE_SCHEMA_VERSION {
+        return None;
+    }
+    let _: RequestId = wire.request_id.parse().ok()?;
+    validate_annotations(content, &wire.annotations).ok()?;
+    let binding = payload_binding(&wire.request_id, content, &wire.annotations).ok()?;
+    if binding != wire.binding {
+        return None;
+    }
+    ClipboardText::new(content.to_owned(), wire.annotations)
+        .ok()
+        .map(|text| (text, wire.request_id, wire.binding))
+}
+
+fn verified_typed_text(
+    text: String,
+    first: Option<TypedSnapshot>,
+    second: Option<&TypedSnapshot>,
+    provenance: Option<&ProvenanceRecord>,
+) -> ClipboardText {
+    let Some(snapshot) = first.filter(|snapshot| Some(snapshot) == second) else {
+        return ClipboardText::plain(text);
+    };
+    let Some(payload) = snapshot.payload.as_deref() else {
+        return ClipboardText::plain(text);
+    };
+    let Some((typed, request_id, binding)) = decode_payload(&text, payload) else {
+        return ClipboardText::plain(text);
+    };
+    let expected = ProvenanceRecord::new(snapshot.generation, request_id, binding);
+    if provenance == Some(&expected) {
+        typed
+    } else {
+        ClipboardText::plain(text)
+    }
+}
+
+fn payload_binding(
+    request_id: &str,
+    content: &str,
+    annotations: &[crate::domain::ContentAnnotation],
+) -> Result<[u8; 32], ClipboardError> {
+    let annotations = serde_json::to_vec(annotations)
+        .map_err(|error| ClipboardError::Unavailable(error.to_string()))?;
+    let mut digest = Sha256::new();
+    digest.update(b"proqi-clipboard-v1\0");
+    digest.update(wire_length(request_id.len())?);
+    digest.update(request_id.as_bytes());
+    digest.update(wire_length(content.len())?);
+    digest.update(content.as_bytes());
+    digest.update(wire_length(annotations.len())?);
+    digest.update(annotations);
+    Ok(digest.finalize().into())
+}
+
+fn wire_length(length: usize) -> Result<[u8; 8], ClipboardError> {
+    u64::try_from(length)
+        .map(u64::to_le_bytes)
+        .map_err(|_| ClipboardError::TooLarge)
 }
 
 fn native_unavailable(error: impl ToString) -> NativeReadError {
@@ -139,89 +356,4 @@ fn osc52(content: &str) -> Result<Vec<u8>, ClipboardError> {
 }
 
 #[cfg(test)]
-mod tests {
-    use crate::ports::{
-        attachment::RasterImage,
-        clipboard::{Clipboard, ClipboardContent, ClipboardWrite},
-    };
-
-    use super::{NativeClipboard, NativeReadError, PlatformClipboard};
-
-    #[derive(Default)]
-    struct FakeNative {
-        content: Option<String>,
-        image: Option<RasterImage>,
-        unavailable: bool,
-    }
-
-    impl NativeClipboard for FakeNative {
-        fn write(&mut self, content: &str) -> Result<(), String> {
-            if self.unavailable {
-                Err("unavailable".to_owned())
-            } else {
-                self.content = Some(content.to_owned());
-                Ok(())
-            }
-        }
-
-        fn read_text(&mut self) -> Result<String, NativeReadError> {
-            self.content
-                .clone()
-                .ok_or_else(|| NativeReadError::Unavailable("unavailable".to_owned()))
-        }
-
-        fn read_image(&mut self) -> Result<RasterImage, NativeReadError> {
-            self.image
-                .clone()
-                .ok_or_else(|| NativeReadError::Unavailable("unavailable".to_owned()))
-        }
-    }
-
-    fn clipboard(native: FakeNative) -> PlatformClipboard {
-        PlatformClipboard {
-            native: Box::new(native),
-            osc52: true,
-        }
-    }
-
-    #[test]
-    fn native_failure_returns_an_exact_bounded_osc52_sequence() {
-        let mut clipboard = clipboard(FakeNative {
-            unavailable: true,
-            ..FakeNative::default()
-        });
-        assert_eq!(
-            clipboard.write("Grüße\n"),
-            Ok(ClipboardWrite::Osc52(
-                b"\x1b]52;c;R3LDvMOfZQo=\x07".to_vec()
-            ))
-        );
-    }
-
-    #[test]
-    fn successful_native_read_preserves_exact_text() {
-        let mut clipboard = clipboard(FakeNative {
-            content: Some(" exact\r\n".to_owned()),
-            image: None,
-            unavailable: false,
-        });
-        assert_eq!(
-            clipboard.read().expect("clipboard"),
-            ClipboardContent::Text(" exact\r\n".to_owned())
-        );
-    }
-
-    #[test]
-    fn native_image_is_preferred_and_remains_exact_rgba() {
-        let image = RasterImage::new(1, 1, vec![1, 2, 3, 255]).expect("image");
-        let mut clipboard = clipboard(FakeNative {
-            content: Some("fallback text".to_owned()),
-            image: Some(image.clone()),
-            unavailable: false,
-        });
-        assert_eq!(
-            clipboard.read().expect("clipboard"),
-            ClipboardContent::Image(image)
-        );
-    }
-}
+mod tests;

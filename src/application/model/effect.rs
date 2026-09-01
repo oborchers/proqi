@@ -2,8 +2,8 @@
 
 use crate::{
     domain::{
-        BoardOperation, OperationId, OperationSequence, RequestId, SessionId, ThoughtId,
-        ThoughtRevision, Timestamp, UndoScope,
+        BoardOperation, ContentAnnotation, OperationId, OperationSequence, RequestId, SessionId,
+        ThoughtId, ThoughtRevision, Timestamp, UndoScope,
     },
     ports::{
         agent::{AgentTarget, SubmissionRequest},
@@ -107,6 +107,8 @@ pub enum Effect {
         intent: ClipboardIntent,
         /// Exact clipboard content.
         content: String,
+        /// Validated selection-relative presentation metadata.
+        annotations: Vec<ContentAnnotation>,
     },
     /// Read exact content from the native clipboard.
     ReadClipboard {

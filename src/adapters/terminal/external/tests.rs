@@ -6,11 +6,13 @@ use crate::{
         memory::{FakeClock, FakeIdGenerator},
     },
     application::{AppState, Effect, ScreenshotPauseReason},
-    domain::{RequestId, Session, SessionBoard, Timestamp},
+    domain::{
+        ContentAnnotation, ContentAnnotationKind, RequestId, Session, SessionBoard, Timestamp,
+    },
     ports::{
         agent::{AgentFailureCode, AgentState, HarnessKind},
         attachment::{AttachmentError, AttachmentStore, RasterImage},
-        clipboard::{Clipboard, ClipboardContent, ClipboardError, ClipboardWrite},
+        clipboard::{Clipboard, ClipboardContent, ClipboardError, ClipboardText, ClipboardWrite},
         environment::IdGenerator as _,
         invocation::{
             InvocationCatalog, InvocationCatalogError, InvocationDiscovery,
@@ -29,7 +31,11 @@ use super::{
 struct FakeClipboard(Result<ClipboardContent, ClipboardError>);
 
 impl Clipboard for FakeClipboard {
-    fn write(&mut self, _content: &str) -> Result<ClipboardWrite, ClipboardError> {
+    fn write(
+        &mut self,
+        _request_id: crate::domain::RequestId,
+        _content: &ClipboardText,
+    ) -> Result<ClipboardWrite, ClipboardError> {
         Err(ClipboardError::Unavailable("unused".to_owned()))
     }
 
@@ -132,6 +138,79 @@ fn attachment_failure_returns_no_insertable_path() {
         read_clipboard(&mut clipboard, &mut attachments, ids.request_id()),
         Err(ExternalReadError::Attachment)
     ));
+}
+
+#[test]
+fn verified_clipboard_metadata_preserves_every_supported_kind_on_paste() {
+    let pieces = ["/missing/界.png", "large prose", "wA:p5", "Enter"];
+    let content = pieces.join("|");
+    let mut cursor = 0usize;
+    let mut ranges = Vec::new();
+    for piece in pieces {
+        let start = cursor;
+        let end = start + piece.len();
+        ranges.push(start..end);
+        cursor = end + 1;
+    }
+    let annotations = vec![
+        ContentAnnotation {
+            start: ranges[0].start,
+            end: ranges[0].end,
+            kind: ContentAnnotationKind::Attachment {
+                image: true,
+                display_name: "界.png".to_owned(),
+            },
+        },
+        ContentAnnotation {
+            start: ranges[1].start,
+            end: ranges[1].end,
+            kind: ContentAnnotationKind::LargePaste {
+                lines: 12,
+                graphemes: 1_200,
+            },
+        },
+        ContentAnnotation {
+            start: ranges[2].start,
+            end: ranges[2].end,
+            kind: ContentAnnotationKind::InvocationReference {
+                display_name: "@reviewer · codex".to_owned(),
+            },
+        },
+        ContentAnnotation::shortcut(ranges[3].start, ranges[3].end),
+    ];
+    let text = ClipboardText::new(content.clone(), annotations.clone()).expect("clipboard text");
+    let mut clipboard = FakeClipboard(Ok(ClipboardContent::Text(text)));
+    let mut attachments = FakeAttachments::default();
+    let mut ids = FakeIdGenerator::new(1_725_000_000_000);
+    let request_id = ids.request_id();
+    let payload = read_clipboard(&mut clipboard, &mut attachments, request_id).expect("payload");
+
+    let clock = FakeClock::new(Timestamp::from_millis(2));
+    let session = Session::new(
+        ids.session_id(),
+        std::env::temp_dir().join("clipboard-annotation-round-trip"),
+        Timestamp::from_millis(1),
+    )
+    .expect("session");
+    let board = SessionBoard::new(session, Vec::new()).expect("board");
+    let mut app = BoardApp::new(AppState::new(board), RopeEditorFactory);
+    let read = app.handle(UiInput::Key(UiKey::PasteClipboard), &mut ids, &clock);
+    let pending_id = read
+        .into_iter()
+        .find_map(|effect| match effect {
+            Effect::ReadClipboard { request_id } => Some(request_id),
+            _ => None,
+        })
+        .expect("read request");
+    let effects = app.complete_clipboard_read_payload(pending_id, Ok(payload), &mut ids, &clock);
+
+    assert!(matches!(
+        effects.as_slice(),
+        [Effect::CommitBoardOperation(_), ..]
+    ));
+    let thought = app.state.board.live_thoughts()[0];
+    assert_eq!(thought.content, content);
+    assert_eq!(thought.annotations, annotations);
 }
 
 #[test]

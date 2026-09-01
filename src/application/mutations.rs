@@ -10,7 +10,8 @@ use crate::{
     domain::{
         BoardMutation, BoardOperation, BoardOperationKind, ContentAnnotation, DomainError,
         OperationId, RequestId, RevisionId, TextPosition, Thought, ThoughtId, ThoughtPosition,
-        ThoughtPresentation, ThoughtRevision, Timestamp, UndoScope, validate_annotations,
+        ThoughtPresentation, ThoughtRevision, Timestamp, UndoScope, merge_annotations,
+        validate_annotations,
     },
 };
 
@@ -139,6 +140,12 @@ pub(super) fn request_clipboard(
         .map(|thought| thought.content.as_str())
         .collect::<Vec<_>>()
         .join(MULTI_THOUGHT_SEPARATOR);
+    let annotations = merge_annotations(
+        selected
+            .iter()
+            .map(|thought| (thought.content.as_str(), thought.annotations.as_slice())),
+        MULTI_THOUGHT_SEPARATOR,
+    )?;
     let thought_id = ordered_ids[0];
     state
         .pending_clipboard
@@ -154,6 +161,7 @@ pub(super) fn request_clipboard(
         thought_id: Some(thought_id),
         intent,
         content,
+        annotations,
     }])
 }
 
