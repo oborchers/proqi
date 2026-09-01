@@ -5,7 +5,7 @@ use std::collections::BTreeSet;
 use proqi::{
     adapters::memory::FakeIdGenerator,
     application::{FirstRunEnvironment, first_run_board},
-    domain::{ContentAnnotation, Session, Timestamp},
+    domain::{ContentAnnotation, Session, SessionId, ThoughtId, Timestamp},
     ports::environment::IdGenerator as _,
 };
 
@@ -155,21 +155,92 @@ fn pristine_session_browser_neither_seeds_nor_consumes_interactive_eligibility()
     let browser = r#"
         log_user 0
         set timeout 10
-        spawn $env(PROQI_TEST_BINARY) --state-dir $env(PROQI_TEST_STATE) sessions
+        spawn $env(PROQI_TEST_BINARY) --state-dir $env(PROQI_TEST_STATE) -r
         expect -exact "\x1b\[?1049h"
         after 400
-        catch {send "q"}
-        catch {expect eof}
+        send "\x1b"
+        expect {
+            eof {}
+            timeout {exit 124}
+        }
         catch wait result
         exit [lindex $result 3]
     "#;
     run_launch(binary, state.path(), browser, None, "pristine browser");
     assert!(session_ids(binary, state.path()).is_empty());
 
-    let fresh = browser.replace(" sessions", "");
+    let fresh = browser
+        .replace(" -r", "")
+        .replace("send \"\\x1b\"", "send \"q\"");
     run_launch(binary, state.path(), &fresh, None, "eligible fresh launch");
     let tutorial = only_session(binary, state.path());
     assert_eq!(contents(binary, state.path(), &tutorial).len(), 6);
+}
+
+#[test]
+fn tutorial_shortcut_annotations_survive_cli_cross_session_transfer() {
+    let state = tempfile::tempdir().expect("temporary state");
+    let binary = env!("CARGO_BIN_EXE_proqi");
+    let first_launch = r#"
+        log_user 0
+        set timeout 10
+        spawn $env(PROQI_TEST_BINARY) --state-dir $env(PROQI_TEST_STATE)
+        expect -exact "\x1b\[?1049h"
+        after 500
+        send "q"
+        expect eof
+        catch wait result
+        exit [lindex $result 3]
+    "#;
+    run_launch(
+        binary,
+        state.path(),
+        first_launch,
+        None,
+        "seed tutorial for transfer",
+    );
+    let source = only_session(binary, state.path());
+    let listed = json_command(binary, state.path(), &["thoughts", "list", &source]);
+    let source_thought = &listed["data"]["thoughts"][1];
+    let source_thought_id = source_thought["id"].as_str().expect("thought ID");
+    let destination = json_command(binary, state.path(), &[])["data"]["session_id"]
+        .as_str()
+        .expect("destination session ID")
+        .to_owned();
+    let transferred = json_command(
+        binary,
+        state.path(),
+        &["thoughts", "send", &source, source_thought_id, &destination],
+    );
+    let destination_thought = transferred["data"]["destination_thought_id"]
+        .as_str()
+        .expect("destination thought ID");
+
+    let expected_board = expected_board(FirstRunEnvironment::Standalone);
+    let expected = expected_board.live_thoughts()[1];
+    let destination_bytes = destination
+        .parse::<SessionId>()
+        .expect("destination session ID")
+        .database_bytes();
+    let thought_bytes = destination_thought
+        .parse::<ThoughtId>()
+        .expect("destination thought ID")
+        .database_bytes();
+    let connection =
+        rusqlite::Connection::open(state.path().join("data/proqi.sqlite3")).expect("reload store");
+    let (content, annotations_json): (String, String) = connection
+        .query_row(
+            "SELECT content, annotations_json FROM thoughts \
+             WHERE session_id = ?1 AND id = ?2 AND deleted_at IS NULL",
+            rusqlite::params![destination_bytes.as_slice(), thought_bytes.as_slice()],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("transferred durable thought");
+    let annotations: Vec<ContentAnnotation> =
+        serde_json::from_str(&annotations_json).expect("transferred annotations");
+    assert_eq!(content, expected.content);
+    assert_eq!(annotations, expected.annotations);
+    assert!(content.contains("Primary+Shift+U"));
 }
 
 #[test]
