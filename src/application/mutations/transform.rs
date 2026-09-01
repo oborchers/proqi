@@ -133,7 +133,10 @@ pub(in crate::application) fn merge_thoughts(
             .rev()
             .map(|thought| deletion(thought, at)),
     );
-    let mut inverse = selected[1..].iter().map(restoration).collect::<Vec<_>>();
+    let mut inverse = selected[1..]
+        .iter()
+        .map(|thought| restoration(thought, at))
+        .collect::<Vec<_>>();
     inverse.push(replacement_values(
         first.id,
         merged_content,
@@ -149,7 +152,7 @@ pub(in crate::application) fn merge_thoughts(
         inverse,
         at,
     )?;
-    record_transform(state, &operation, &[first.id])?;
+    record_transform(state, &operation, thought_ids)?;
     state.focused_thought = Some(first.id);
     state.mode = crate::application::InteractionMode::Board;
     Ok(vec![Effect::CommitBoardOperation(operation)])
@@ -275,16 +278,24 @@ fn replacement_values(
 }
 
 fn deletion(thought: &Thought, at: Timestamp) -> BoardMutation {
-    BoardMutation::SetDeletion {
+    BoardMutation::SetDeletionExact {
         thought_id: thought.id,
+        expected_content: thought.content.clone(),
+        expected_annotations: thought.annotations.clone(),
+        expected_deleted_at: None,
+        expected_position: thought.position,
         deleted_at: Some(at),
         position: thought.position,
     }
 }
 
-fn restoration(thought: &Thought) -> BoardMutation {
-    BoardMutation::SetDeletion {
+fn restoration(thought: &Thought, deleted_at: Timestamp) -> BoardMutation {
+    BoardMutation::SetDeletionExact {
         thought_id: thought.id,
+        expected_content: thought.content.clone(),
+        expected_annotations: thought.annotations.clone(),
+        expected_deleted_at: Some(deleted_at),
+        expected_position: thought.position,
         deleted_at: None,
         position: thought.position,
     }

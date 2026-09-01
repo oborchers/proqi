@@ -1,0 +1,26 @@
+---
+source: tests/ui_board/snapshots.rs
+assertion_line: 191
+expression: "snapshot(&mut fixture, 72, 8, ThemePreference::Dark)"
+---
+SIZE 72x8
+
+TEXT
+00││
+01│⋮ Coordinate with another agent @reviewer · codex│
+02││
+03││
+04││
+05│  proqi-ui-contract│
+06│  1 thought · edit · saving│
+07│  Esc Board  ⌘C Copy ⌘X Cut ⌘Z Undo│
+
+STYLE RUNS
+0: 0-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+1: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-31 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 32-48 fg=Rgb(112, 214, 155) bg=Rgb(39, 40, 48) mod=BOLD | 49-71 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
+2: 0-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+3: 0-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+4: 0-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+5: 0-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+6: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-69 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE | 70-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+7: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-4 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 5-12 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 13-14 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 15-20 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 21-22 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 23-27 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 28-29 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 30-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE

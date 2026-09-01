@@ -12,6 +12,53 @@ use crate::{
 use super::{BoardApp, palette::command::Command, palette_handoff::EditorSelectionHandoff};
 
 impl BoardApp {
+    pub(super) fn contextual_board_transformation(
+        &mut self,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        if self.selection_len() >= 2 {
+            let expected_sources: Vec<_> = self
+                .action_thought_ids()
+                .into_iter()
+                .filter_map(|id| self.state.board.thought(id).cloned())
+                .collect();
+            return self.merge_selection(Some(&expected_sources), ids, clock);
+        }
+        let handoff = self.palette_selection_handoff.take();
+        let Some(handoff) = handoff.as_ref() else {
+            self.set_warning(
+                "select contiguous thoughts, or press Esc then transform from an editor cursor",
+            );
+            return Vec::new();
+        };
+        if handoff.has_selection() {
+            self.extract_handoff(Some(handoff), ids, clock)
+        } else {
+            self.split_at_handoff(Some(handoff), ids, clock)
+        }
+    }
+
+    pub(super) fn contextual_edit_transformation(
+        &mut self,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        self.capture_palette_selection_handoff();
+        let handoff = self.palette_selection_handoff.take();
+        let mut effects = self.flush_pending_edit(ids, clock);
+        let Some(handoff) = handoff.as_ref() else {
+            self.set_warning("place the editor cursor or select text before transforming");
+            return effects;
+        };
+        effects.extend(if handoff.has_selection() {
+            self.extract_handoff(Some(handoff), ids, clock)
+        } else {
+            self.split_at_handoff(Some(handoff), ids, clock)
+        });
+        effects
+    }
+
     pub(super) fn execute_transformation_command(
         &mut self,
         command: Command,

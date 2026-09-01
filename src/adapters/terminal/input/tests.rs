@@ -188,6 +188,39 @@ fn invocation_picker_keys_are_normalized_without_literal_editor_input() {
 }
 
 #[test]
+fn physical_delete_and_backspace_remain_distinct_terminal_keys() {
+    for (code, expected) in [
+        (KeyCode::Delete, UiKey::Delete),
+        (KeyCode::Backspace, UiKey::Backspace),
+    ] {
+        assert_eq!(
+            translate(Event::Key(KeyEvent::new(code, KeyModifiers::NONE))),
+            Some(UiInput::Key(expected))
+        );
+    }
+}
+
+#[test]
+fn every_modified_physical_delete_remains_distinct_from_board_delete() {
+    for modifiers in [
+        KeyModifiers::SHIFT,
+        KeyModifiers::ALT,
+        KeyModifiers::CONTROL,
+        KeyModifiers::SUPER,
+        KeyModifiers::META,
+        KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+        KeyModifiers::SUPER | KeyModifiers::SHIFT,
+        KeyModifiers::ALT | KeyModifiers::SHIFT,
+    ] {
+        assert_eq!(
+            translate(Event::Key(KeyEvent::new(KeyCode::Delete, modifiers))),
+            Some(UiInput::Key(UiKey::ModifiedDelete)),
+            "modifiers: {modifiers:?}"
+        );
+    }
+}
+
+#[test]
 fn release_is_ignored_and_repeat_preserves_auto_repeat() {
     let release = Event::Key(KeyEvent::new_with_kind(
         KeyCode::Char('n'),
@@ -375,12 +408,33 @@ fn enter_is_normalized_independently_from_exact_bracketed_paste() {
 }
 
 #[test]
-fn host_focus_is_a_semantic_refresh_signal() {
+fn primary_enter_chords_are_distinct_from_plain_multiline_enter() {
+    for modifier in [
+        KeyModifiers::CONTROL,
+        KeyModifiers::SUPER,
+        KeyModifiers::META,
+    ] {
+        assert_eq!(
+            translate(Event::Key(KeyEvent::new(KeyCode::Enter, modifier))),
+            Some(UiInput::Key(UiKey::Submit))
+        );
+        assert_eq!(
+            translate(Event::Key(KeyEvent::new(
+                KeyCode::Enter,
+                modifier | KeyModifiers::SHIFT,
+            ))),
+            Some(UiInput::Key(UiKey::SubmitKeep))
+        );
+    }
+}
+
+#[test]
+fn host_focus_events_are_distinct_normalized_passive_signals() {
     assert_eq!(
         translate(Event::FocusGained),
         Some(UiInput::HostFocusGained)
     );
-    assert_eq!(translate(Event::FocusLost), None);
+    assert_eq!(translate(Event::FocusLost), Some(UiInput::HostFocusLost));
 }
 
 #[test]

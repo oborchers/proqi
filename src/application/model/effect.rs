@@ -7,7 +7,8 @@ use crate::{
     },
     ports::{
         agent::{AgentTarget, SubmissionRequest},
-        invocation::InvocationDiscoveryRequest,
+        attachment_accessibility::AttachmentCheckBatch,
+        invocation::{InvocationDiscoveryRequest, InvocationReferenceDiscoveryRequest},
         recovery::RecoveryDocument,
         store::{OperationBatch, SubmissionAttempt, SubmissionOutcome},
         transfer::SessionTransferRequest,
@@ -19,6 +20,8 @@ use super::{ClipboardIntent, FailureCode, ScreenshotIntent, ScreenshotPauseReaso
 /// One external or durable effect emitted by the reducer and application UI.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Effect {
+    /// Verify exact transient attachment revisions on the bounded accessibility lane.
+    CheckAttachments(AttachmentCheckBatch),
     /// Start, stop, or explicitly take over screenshot capture.
     Screenshot(ScreenshotIntent),
     /// Present one best-effort terminal-host notification after truthful automatic pause.
@@ -44,6 +47,8 @@ pub enum Effect {
     DiscoverAgents,
     /// Refresh bounded authoring definitions without blocking the reducer lane.
     DiscoverInvocations(InvocationDiscoveryRequest),
+    /// Refresh one bounded picker-open collaborator snapshot.
+    DiscoverInvocationReferences(InvocationReferenceDiscoveryRequest),
     /// Submit exact thought content through a verified semantic agent gateway.
     SubmitAgent(SubmissionRequest),
     /// Durably prepare a redacted submission attempt before external delivery.
@@ -61,6 +66,8 @@ pub enum Effect {
         submission_id: crate::domain::SubmissionId,
         /// Content-redacted terminal outcome.
         outcome: SubmissionOutcome,
+        /// Accepted source removal committed atomically with the terminal journal row.
+        removal: Option<BoardOperation>,
     },
     /// Persist recognition-only context after an accepted submission.
     StoreIntegrationContext {

@@ -28,7 +28,7 @@ impl BoardApp {
     pub(super) fn capture_palette_selection_handoff(&mut self) {
         self.palette_selection_handoff = self.editor_snapshot().and_then(|snapshot| {
             let thought_id = self.active_thought_id()?;
-            let annotations = self.state.board.thought(thought_id)?.annotations.clone();
+            let annotations = self.current_annotations(thought_id);
             Some(EditorSelectionHandoff {
                 thought_id,
                 content: snapshot.content,
@@ -41,11 +41,17 @@ impl BoardApp {
 
     pub(super) fn invalidate_palette_selection_handoff(&mut self, input: &UiInput) {
         let preserves = match input {
-            UiInput::Resize { .. } | UiInput::HostFocusGained => true,
+            UiInput::Resize { .. } | UiInput::HostFocusGained | UiInput::HostFocusLost => true,
             UiInput::Pointer(pointer) if matches!(pointer.kind, PointerKind::Move) => true,
-            UiInput::Key(UiKey::Character(character)) => {
-                self.settings.keybindings.command(*character)
-                    == Some(crate::ui::settings::BoardCommand::Commands)
+            UiInput::Key(UiKey::Character(character)) => matches!(
+                self.settings.keybindings.command(*character),
+                Some(
+                    crate::ui::settings::BoardCommand::Commands
+                        | crate::ui::settings::BoardCommand::Transform
+                )
+            ),
+            UiInput::Key(UiKey::PrimaryCharacter(character)) => {
+                *character == self.settings.keybindings.transform
             }
             UiInput::Pointer(pointer)
                 if matches!(pointer.kind, PointerKind::Down(PointerButton::Left)) =>

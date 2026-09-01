@@ -1,5 +1,8 @@
 use super::*;
 
+#[path = "transformations/semantic_annotations.rs"]
+mod semantic_annotations;
+
 fn persist_action(store: &mut SqliteStore, state: &mut AppState, action: Action) {
     let effect = one_effect(state, action);
     persist_effect(store, &effect);
@@ -376,4 +379,77 @@ fn merge_undo_and_redo_each_survive_restart_with_recoverable_sources() {
     );
     assert!(!snapshot.board.thought(second).expect("second").is_live());
     assert!(!snapshot.board.thought(third).expect("third").is_live());
+}
+
+#[test]
+fn edit_of_restored_merge_source_durably_invalidates_redo_across_restart() {
+    let fixture = DatabaseFixture::new();
+    let mut store = fixture.open();
+    let mut ids = FakeIdGenerator::new(1_725_000_000_000);
+    let mut state = session_state(&mut ids, &test_path("proqi-merge-stale-redo"));
+    let session_id = state.board.session.id;
+    store
+        .commit(&OperationBatch::CreateSession(state.board.session.clone()))
+        .expect("create session");
+    let first = create_thought(&mut store, &mut state, &mut ids, "A", 2);
+    let second = create_thought(&mut store, &mut state, &mut ids, "B", 3);
+    let expected_sources = [first, second]
+        .into_iter()
+        .map(|id| state.board.thought(id).expect("source").clone())
+        .collect();
+    persist_action(
+        &mut store,
+        &mut state,
+        Action::MergeThoughts {
+            operation_id: ids.operation_id(),
+            thought_ids: vec![first, second],
+            expected_sources,
+            separator: "\n\n".to_owned(),
+            at: Timestamp::from_millis(4),
+        },
+    );
+    persist_board_history(&mut store, &mut state, &mut ids, true, 5);
+    persist_action(
+        &mut store,
+        &mut state,
+        Action::EditThought {
+            thought_id: second,
+            revision_id: ids.revision_id(),
+            before_content: "B".to_owned(),
+            after_content: "B changed".to_owned(),
+            before_annotations: Vec::new(),
+            after_annotations: Vec::new(),
+            before_cursor: TextPosition::new(0, 1),
+            after_cursor: TextPosition::new(0, 9),
+            at: Timestamp::from_millis(6),
+        },
+    );
+    drop(store);
+
+    let mut reopened = fixture.open();
+    let snapshot = reopened
+        .load_session(session_id)
+        .expect("reopen edited undo");
+    assert_eq!(live_contents(&snapshot), vec!["A", "B changed"]);
+    assert!(
+        snapshot
+            .board_operations
+            .iter()
+            .all(|operation| operation.kind != BoardOperationKind::Merge),
+        "the conflicting durable redo suffix must be removed"
+    );
+    let mut restored = AppState::from_snapshot(snapshot).expect("rehydrate edited undo");
+    let before = restored.clone();
+    assert!(
+        reduce(
+            &mut restored,
+            Action::Redo {
+                operation_id: ids.operation_id(),
+                scope: UndoScope::Board,
+                at: Timestamp::from_millis(7),
+            },
+        )
+        .is_err()
+    );
+    assert_eq!(restored, before);
 }

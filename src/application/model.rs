@@ -6,9 +6,8 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use super::error::{ApplicationError, ApplicationResult, FailureCode};
 use crate::domain::{
-    BoardMutation, BoardOperation, BoardOperationKind, OperationId, OperationSequence, RequestId,
-    SessionBoard, StableVersion, TextPosition, Thought, ThoughtId, ThoughtRevision, Timestamp,
-    UndoScope,
+    BoardOperation, BoardOperationKind, OperationId, OperationSequence, RequestId, SessionBoard,
+    StableVersion, TextPosition, Thought, ThoughtId, ThoughtRevision, Timestamp, UndoScope,
 };
 
 use crate::ports::runtime::CaptureOwnerInfo;
@@ -20,11 +19,22 @@ pub use effect::Effect;
 pub enum InteractionMode {
     /// Navigate and operate on whole thoughts.
     Board,
+    /// Edit one transient insertion buffer before its first semantic content intention.
+    Compose,
     /// Edit the focused thought.
     Edit {
         /// Thought being edited.
         thought_id: ThoughtId,
     },
+}
+
+/// Canonical policy for a completed mutation that leaves no durable thoughts.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum EmptyBoardTransition {
+    /// Preserve the current interaction decision for passive or external work.
+    Preserve,
+    /// Enter prompt composition after a deliberate local workflow removed the final thought.
+    ComposeAfterLocalRemoval,
 }
 
 /// Durability state shown truthfully by the interface.
@@ -160,12 +170,15 @@ pub struct AppState {
     pub insertion_index: usize,
     /// Current durability status.
     pub durability: DurabilityState,
+    /// Transient attachment health and application-owned scheduling policy.
+    pub attachments: super::AttachmentAccessibilityState,
     pub(super) board_history: Vec<BoardOperation>,
     pub(super) board_history_cursor: usize,
     pub(super) editor_histories: HashMap<ThoughtId, EditorHistory>,
     pub(super) pending_clipboard: BTreeMap<RequestId, PendingClipboard>,
     pub(super) locked_thoughts: BTreeSet<ThoughtId>,
     pub(super) pending_sequences: BTreeSet<OperationSequence>,
+    pub(super) deferred_board_operations: BTreeMap<OperationSequence, BoardOperation>,
     pub(super) highest_sequence: OperationSequence,
 }
 
@@ -176,18 +189,25 @@ impl AppState {
         let focused_thought = board.live_thoughts().first().map(|thought| thought.id);
         let insertion_index = board.live_thoughts().len();
         let sequence = board.session.last_durable_sequence;
+        let mode = if focused_thought.is_some() {
+            InteractionMode::Board
+        } else {
+            InteractionMode::Compose
+        };
         Self {
             board,
-            mode: InteractionMode::Board,
+            mode,
             focused_thought,
             insertion_index,
             durability: DurabilityState::Durable { sequence },
+            attachments: super::AttachmentAccessibilityState::default(),
             board_history: Vec::new(),
             board_history_cursor: 0,
             editor_histories: HashMap::new(),
             pending_clipboard: BTreeMap::new(),
             locked_thoughts: BTreeSet::new(),
             pending_sequences: BTreeSet::new(),
+            deferred_board_operations: BTreeMap::new(),
             highest_sequence: sequence,
         }
     }
@@ -256,7 +276,7 @@ impl AppState {
                     BoardOperationKind::Split
                         | BoardOperationKind::Extract
                         | BoardOperationKind::Merge
-                ) && mutation_addresses(&operation.forward, thought_id)
+                ) && operation.forward.addresses(thought_id)
             });
         if transformation.is_some_and(|operation| {
             editor_sequence.is_none_or(|sequence| operation.sequence > sequence)
@@ -268,6 +288,9 @@ impl AppState {
     }
 
     pub(super) fn next_sequence(&self) -> ApplicationResult<OperationSequence> {
+        if !self.deferred_board_operations.is_empty() {
+            return Err(ApplicationError::InvalidState);
+        }
         self.highest_sequence
             .checked_next()
             .ok_or(ApplicationError::SequenceExhausted)
@@ -309,6 +332,12 @@ impl AppState {
         self.locked_thoughts.contains(&id)
     }
 
+    /// Whether an ordered board operation is waiting for its atomic durable receipt.
+    #[must_use]
+    pub fn deferred_board_operation_pending(&self) -> bool {
+        !self.deferred_board_operations.is_empty()
+    }
+
     /// Pending board clipboard purpose for UI-only success feedback.
     #[must_use]
     pub fn pending_clipboard_intent(&self, request_id: RequestId) -> Option<ClipboardIntent> {
@@ -337,6 +366,37 @@ impl AppState {
         self.board_history.push(operation.clone());
         self.board_history_cursor += 1;
         self.track_pending(operation.sequence);
+        self.keep_focus_valid();
+        Ok(())
+    }
+
+    pub(super) fn stage_board_operation(
+        &mut self,
+        operation: &BoardOperation,
+    ) -> ApplicationResult<()> {
+        if operation.sequence != self.next_sequence()? {
+            return Err(ApplicationError::InvalidState);
+        }
+        self.track_pending(operation.sequence);
+        self.deferred_board_operations
+            .insert(operation.sequence, operation.clone());
+        Ok(())
+    }
+
+    pub(super) fn commit_deferred_board_operation(
+        &mut self,
+        sequence: OperationSequence,
+    ) -> ApplicationResult<()> {
+        let Some(operation) = self.deferred_board_operations.get(&sequence).cloned() else {
+            return Ok(());
+        };
+        let mut board = self.board.clone();
+        board.apply_mutation(&operation.forward, operation.created_at)?;
+        self.board = board;
+        self.board_history.truncate(self.board_history_cursor);
+        self.board_history.push(operation);
+        self.board_history_cursor += 1;
+        self.deferred_board_operations.remove(&sequence);
         self.keep_focus_valid();
         Ok(())
     }
@@ -374,33 +434,27 @@ impl AppState {
             self.mode = InteractionMode::Board;
         }
     }
-}
 
-fn mutation_addresses(mutation: &BoardMutation, thought_id: ThoughtId) -> bool {
-    match mutation {
-        BoardMutation::Batch { mutations } => mutations
+    pub(super) fn truncate_conflicting_board_redo(&mut self, thought_id: ThoughtId) {
+        let conflicting = self.board_history[self.board_history_cursor..]
             .iter()
-            .any(|mutation| mutation_addresses(mutation, thought_id)),
-        BoardMutation::AddThought { thought } => thought.id == thought_id,
-        BoardMutation::SetDeletion {
-            thought_id: affected,
-            ..
+            .position(|operation| {
+                operation.forward.addresses(thought_id) || operation.inverse.addresses(thought_id)
+            });
+        if let Some(offset) = conflicting {
+            self.board_history
+                .truncate(self.board_history_cursor.saturating_add(offset));
         }
-        | BoardMutation::MoveThought {
-            thought_id: affected,
-            ..
+    }
+
+    /// Apply one typed empty-board interaction policy after a completed mutation.
+    pub fn reconcile_empty_board(&mut self, transition: EmptyBoardTransition) {
+        if transition == EmptyBoardTransition::ComposeAfterLocalRemoval
+            && self.board.live_thoughts().is_empty()
+        {
+            self.mode = InteractionMode::Compose;
+            self.focused_thought = None;
+            self.insertion_index = 0;
         }
-        | BoardMutation::ReplaceContent {
-            thought_id: affected,
-            ..
-        }
-        | BoardMutation::SetPresentation {
-            thought_id: affected,
-            ..
-        }
-        | BoardMutation::LegacySetCollapsed {
-            thought_id: affected,
-            ..
-        } => *affected == thought_id,
     }
 }

@@ -54,6 +54,7 @@ pub(super) fn validate(theme: &Theme) -> Result<(), ThemeError> {
             ("accent", theme.accent),
             ("link", theme.link),
             ("annotation", theme.annotation),
+            ("warning", theme.warning),
         ] {
             check(role, color, "focused_surface", rgb(surface), 4.5)?;
         }

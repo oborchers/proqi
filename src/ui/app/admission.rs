@@ -36,6 +36,13 @@ impl BoardApp {
                     .filter(|item| {
                         item.pending.disposition == SubmissionDisposition::RemoveAfterSuccess
                     })
+                    .count()
+                + self
+                    .preflight_submissions
+                    .values()
+                    .filter(|item| {
+                        item.pending.disposition == SubmissionDisposition::RemoveAfterSuccess
+                    })
                     .count(),
         );
         pending.add(

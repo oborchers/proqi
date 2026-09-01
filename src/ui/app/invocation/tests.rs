@@ -193,6 +193,41 @@ mod contract {
     }
 
     #[test]
+    fn discovered_shared_starter_collisions_remain_document_start_only() {
+        let cwd = tempfile::tempdir().expect("tempdir");
+        let content = "/plan first\nUse /plan inline\n/goal later";
+
+        for target_kind in [Some(CODEX_AGENT_KIND), None] {
+            let (mut app, _, _) = app(content, cwd.path());
+            if let Some(target_kind) = target_kind {
+                app.complete_agent_discovery(Ok(vec![target(target_kind)]));
+            }
+            let mut plan = entry("/plan", InvocationKind::Command, InvocationScope::Project);
+            plan.source = InvocationHarness::ClaudeCode;
+            plan.forms[0].harness = InvocationHarness::ClaudeCode;
+            let mut goal = entry("/goal", InvocationKind::Skill, InvocationScope::Project);
+            goal.source = InvocationHarness::ClaudeCode;
+            goal.forms[0].harness = InvocationHarness::ClaudeCode;
+            install(&mut app, cwd.path(), vec![plan, goal]);
+
+            let values = app
+                .invocation_ranges(content)
+                .into_iter()
+                .filter_map(|range| content.get(range))
+                .collect::<Vec<_>>();
+            assert_eq!(values, ["/plan"]);
+        }
+
+        let (mut unsupported, _, _) = app(content, cwd.path());
+        unsupported.complete_agent_discovery(Ok(vec![target(OPENCODE_AGENT_KIND)]));
+        let mut plan = entry("/plan", InvocationKind::Command, InvocationScope::Project);
+        plan.source = InvocationHarness::ClaudeCode;
+        plan.forms[0].harness = InvocationHarness::ClaudeCode;
+        install(&mut unsupported, cwd.path(), vec![plan]);
+        assert!(unsupported.invocation_ranges(content).is_empty());
+    }
+
+    #[test]
     fn shared_starter_picker_requires_a_supported_target_and_byte_zero() {
         let cwd = tempfile::tempdir().expect("tempdir");
         let (mut supported, mut ids, clock) = app("task", cwd.path());
@@ -437,7 +472,14 @@ mod contract {
 
     #[test]
     fn shared_starter_popup_snapshot_is_visually_an_ordinary_command() {
-        insta::assert_snapshot!("invocation_plan_starter", plan_completion_snapshot());
+        let platform = if cfg!(target_os = "macos") {
+            "macos"
+        } else {
+            "portable"
+        };
+        insta::with_settings!({snapshot_suffix => platform}, {
+            insta::assert_snapshot!("invocation_plan_starter", plan_completion_snapshot());
+        });
     }
 
     #[test]
@@ -453,3 +495,5 @@ mod contract {
 
 #[path = "alias_tests.rs"]
 mod alias_tests;
+#[path = "reference_tests.rs"]
+mod reference_tests;

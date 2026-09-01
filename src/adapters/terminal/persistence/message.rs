@@ -47,7 +47,9 @@ pub(in crate::adapters::terminal) enum PersistenceResult {
     },
     SubmissionFinished {
         submission_id: SubmissionId,
-        result: Result<(), StoreError>,
+        sequence: Option<OperationSequence>,
+        result: Result<Option<CommitReceipt>, StoreError>,
+        retried: bool,
     },
 }
 
@@ -78,5 +80,6 @@ pub(super) enum PersistenceRequest {
     FinishSubmission {
         submission_id: SubmissionId,
         outcome: Box<SubmissionOutcome>,
+        removal: Option<Box<crate::domain::BoardOperation>>,
     },
 }

@@ -1,6 +1,11 @@
 use super::*;
 use proqi::domain::{ContentAnnotation, ContentAnnotationKind};
 
+#[path = "transformations/semantic_annotations.rs"]
+mod semantic_annotations;
+#[path = "transformations/stale_redo.rs"]
+mod stale_redo;
+
 fn folded(start: usize, end: usize) -> ContentAnnotation {
     ContentAnnotation {
         start,
@@ -95,7 +100,7 @@ fn split_keeps_left_identity_and_exact_untrimmed_right_at_every_boundary() {
 }
 
 #[test]
-fn extract_closes_only_the_exact_range_and_partitions_crossing_annotation() {
+fn extract_closes_only_the_exact_range_and_dissolves_crossing_annotation() {
     let mut fixture = Fixture::new();
     let source = create_annotated(&mut fixture, "ab日本cd", vec![folded(1, 10)]);
     let new = fixture.ids.thought_id();
@@ -117,13 +122,9 @@ fn extract_closes_only_the_exact_range_and_partitions_crossing_annotation() {
     let source = fixture.state.board.thought(source).expect("source");
     let extracted = fixture.state.board.thought(new).expect("extracted");
     assert_eq!(source.content, "abcd");
-    assert_eq!(source.annotations[0].start, 1);
-    assert_eq!(source.annotations[0].end, 4);
-    assert_eq!(source.annotations[0].kind, folded(1, 10).kind);
+    assert!(source.annotations.is_empty());
     assert_eq!(extracted.content, "日本");
-    assert_eq!(extracted.annotations[0].start, 0);
-    assert_eq!(extracted.annotations[0].end, 6);
-    assert_eq!(extracted.annotations[0].kind, folded(1, 10).kind);
+    assert!(extracted.annotations.is_empty());
 }
 
 #[test]

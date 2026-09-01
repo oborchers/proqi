@@ -73,7 +73,7 @@ fn remapped_shifted_vertical_key_keeps_range_and_primary_reorder_semantics() {
     assert_eq!(order(&fixture), ["second", "first", "third"]);
 }
 
-fn selected(fixture: &Fixture) -> Vec<&str> {
+pub(super) fn selected(fixture: &Fixture) -> Vec<&str> {
     fixture
         .app
         .state
@@ -85,7 +85,7 @@ fn selected(fixture: &Fixture) -> Vec<&str> {
         .collect()
 }
 
-fn order(fixture: &Fixture) -> Vec<&str> {
+pub(super) fn order(fixture: &Fixture) -> Vec<&str> {
     fixture
         .app
         .state

@@ -2,11 +2,12 @@
 
 use crate::adapters::{control::ControlServer, process::CancellationFlag};
 
-use super::{ExternalLane, InputLane, PersistenceLane, TerminalError};
+use super::{AccessibilityLane, ExternalLane, InputLane, PersistenceLane, TerminalError};
 use crate::adapters::terminal::runner::finish::CleanupStage;
 use crate::adapters::terminal::screenshot_lane::ScreenshotLane;
 
 pub(super) struct OwnedLanes {
+    pub(super) accessibility: AccessibilityLane,
     pub(super) control: Option<ControlServer>,
     pub(super) input: InputLane,
     pub(super) persistence: PersistenceLane,
@@ -19,6 +20,7 @@ pub(super) struct OwnedLanes {
 impl OwnedLanes {
     pub(super) fn request_stop(&mut self) {
         self.cancellation.cancel();
+        self.accessibility.request_stop();
         self.input.request_stop();
         if let Some(control) = self.control.as_ref() {
             control.request_stop();
@@ -41,9 +43,13 @@ impl OwnedLanes {
     pub(super) fn stop_workers(
         mut self,
         deadline: crate::adapters::terminal::supervisor::ShutdownDeadline,
-    ) -> [(CleanupStage, Result<(), TerminalError>); 5] {
+    ) -> [(CleanupStage, Result<(), TerminalError>); 6] {
         self.request_stop();
         [
+            (
+                CleanupStage::Accessibility,
+                self.accessibility.stop(deadline),
+            ),
             (CleanupStage::Input, self.input.stop(deadline)),
             (CleanupStage::Persistence, self.persistence.stop(deadline)),
             (CleanupStage::External, self.external.stop(deadline)),

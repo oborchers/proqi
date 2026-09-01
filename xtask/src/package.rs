@@ -38,7 +38,6 @@ pub(super) fn run(root: &Path, notices: Option<&Path>) -> Result<(), String> {
     if host == super::release_targets::LINUX_X86_64 {
         super::linux_compat::verify_archive(root, &archive)?;
     }
-    prepare_isolated_state(temporary.path())?;
     run_installed_contract(root, temporary.path(), &installed, &archive)?;
     persist_archive(root, &archive)
 }
@@ -153,21 +152,26 @@ fn verify_archive(archive: &Path, host: &str) -> Result<(), String> {
                 .map_err(|error| format!("read archive path: {error}"))?
                 .into_owned();
             validate_member_path(&path)?;
-            Ok(path)
+            let mode = entry
+                .header()
+                .mode()
+                .map_err(|error| format!("read archive mode: {error}"))?
+                & 0o777;
+            Ok((path, mode))
         })
         .collect::<Result<Vec<_>, String>>()?;
     entries.sort();
     let package = package_name(host);
     let mut expected = [
-        executable_name(),
-        "LICENSE",
-        "THIRD-PARTY-NOTICES.md",
-        "proqi-installation.json",
-        "completions/proqi.bash",
-        "completions/_proqi",
-        "completions/proqi.fish",
+        (executable_name(), 0o755),
+        ("LICENSE", 0o644),
+        ("THIRD-PARTY-NOTICES.md", 0o644),
+        ("proqi-installation.json", 0o644),
+        ("completions/proqi.bash", 0o644),
+        ("completions/_proqi", 0o644),
+        ("completions/proqi.fish", 0o644),
     ]
-    .map(|relative| Path::new(&package).join(relative))
+    .map(|(relative, mode)| (Path::new(&package).join(relative), mode))
     .to_vec();
     expected.sort();
     (entries == expected)
@@ -183,24 +187,6 @@ fn validate_member_path(path: &Path) -> Result<(), String> {
     valid
         .then_some(())
         .ok_or_else(|| format!("archive contains unsafe member path: {}", path.display()))
-}
-
-fn prepare_isolated_state(temporary: &Path) -> Result<(), String> {
-    for path in [
-        temporary.join("state/config"),
-        temporary.join("state/data"),
-        temporary.join("state/cache"),
-        temporary.join("state/runtime"),
-        temporary.join("working"),
-    ] {
-        fs::create_dir_all(&path)
-            .map_err(|error| format!("create isolated {}: {error}", path.display()))?;
-    }
-    fs::write(
-        temporary.join("state/config/config.toml"),
-        b"check_for_updates = false\n",
-    )
-    .map_err(|error| format!("disable package-smoke update check: {error}"))
 }
 
 fn run_installed_contract(
@@ -223,8 +209,7 @@ fn run_installed_contract(
         ])
         .env("PROQI_PACKAGE_BINARY", installed)
         .env("PROQI_PACKAGE_ARCHIVE", archive)
-        .env("PROQI_PACKAGE_STATE", temporary.join("state"))
-        .env("PROQI_PACKAGE_WORKING", temporary.join("working"))
+        .env("PROQI_PACKAGE_ROOT", temporary.join("contract-runs"))
         .env("PROQI_DISABLE_HERDR", "1")
         .current_dir(root)
         .status()

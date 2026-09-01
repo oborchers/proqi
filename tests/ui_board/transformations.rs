@@ -118,17 +118,20 @@ fn mouse_palette_extracts_a_reverse_selection_and_places_cursor_at_new_end() {
 #[test]
 fn split_uses_annotations_rebased_by_the_edit_flushed_on_exit() {
     let mut fixture = Fixture::new();
-    fixture.input(UiInput::PasteAnnotated(PastePayload::annotated(
-        "abcdef".to_owned(),
-        vec![ContentAnnotation {
-            start: 0,
-            end: 6,
-            kind: ContentAnnotationKind::Attachment {
-                image: false,
-                display_name: "fold.txt".to_owned(),
-            },
-        }],
-    )));
+    fixture.input(UiInput::PasteAnnotated(
+        PastePayload::annotated(
+            "abcdef".to_owned(),
+            vec![ContentAnnotation {
+                start: 0,
+                end: 6,
+                kind: ContentAnnotationKind::Attachment {
+                    image: false,
+                    display_name: "fold.txt".to_owned(),
+                },
+            }],
+        )
+        .expect("valid attachment payload"),
+    ));
     fixture.input(UiInput::Key(UiKey::Move {
         movement: CursorMovement::GraphemeBack,
         extend_selection: false,
@@ -155,17 +158,20 @@ fn split_uses_annotations_rebased_by_the_edit_flushed_on_exit() {
 #[test]
 fn palette_rejects_annotation_only_staleness_with_actionable_feedback() {
     let mut fixture = Fixture::new();
-    fixture.input(UiInput::PasteAnnotated(PastePayload::annotated(
-        "folded".to_owned(),
-        vec![ContentAnnotation {
-            start: 0,
-            end: 6,
-            kind: ContentAnnotationKind::LargePaste {
-                lines: 12,
-                graphemes: 6,
-            },
-        }],
-    )));
+    fixture.input(UiInput::PasteAnnotated(
+        PastePayload::annotated(
+            "folded".to_owned(),
+            vec![ContentAnnotation {
+                start: 0,
+                end: 6,
+                kind: ContentAnnotationKind::LargePaste {
+                    lines: 12,
+                    graphemes: 6,
+                },
+            }],
+        )
+        .expect("valid folded payload"),
+    ));
     fixture.input(UiInput::Key(UiKey::Escape));
     query_palette(&mut fixture, "split thought");
     let thought_id = fixture.app.state.board.live_thoughts()[0].id;
@@ -244,4 +250,133 @@ fn palette_merge_uses_configured_separator_and_rejects_discontiguous_selection()
     );
     let terminal = draw(&mut fixture, 70, 10);
     assert!(text(terminal.backend().buffer()).contains("contiguous"));
+}
+
+#[test]
+fn primary_transform_splits_at_cursor_or_extracts_exact_reverse_selection() {
+    let mut split = Fixture::new();
+    split.paste("A界 B");
+    split.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::DocumentStart,
+        extend_selection: false,
+    }));
+    for _ in 0..2 {
+        split.input(UiInput::Key(UiKey::Move {
+            movement: CursorMovement::GraphemeForward,
+            extend_selection: false,
+        }));
+    }
+    let effects = split.effects(UiInput::Key(UiKey::PrimaryCharacter('t')));
+    assert_eq!(board_operation(&effects).kind, BoardOperationKind::Split);
+    assert_eq!(
+        split
+            .app
+            .state
+            .board
+            .live_thoughts()
+            .iter()
+            .map(|thought| thought.content.as_str())
+            .collect::<Vec<_>>(),
+        vec!["A界", " B"]
+    );
+
+    let mut extract = Fixture::new();
+    extract.paste("zero 日本\r\nend");
+    extract.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::DocumentStart,
+        extend_selection: true,
+    }));
+    let effects = extract.effects(UiInput::Key(UiKey::PrimaryCharacter('t')));
+    assert_eq!(board_operation(&effects).kind, BoardOperationKind::Extract);
+    assert_eq!(extract.app.state.board.live_thoughts()[0].content, "");
+    assert_eq!(
+        extract.app.state.board.live_thoughts()[1].content,
+        "zero 日本\r\nend"
+    );
+}
+
+#[test]
+fn plain_transform_merges_selection_and_escape_transform_uses_one_shot_handoff() {
+    let mut merge = Fixture::new();
+    for content in ["one", "two"] {
+        merge.paste(content);
+        merge.input(UiInput::Key(UiKey::Escape));
+        if content == "one" {
+            merge.input(UiInput::Key(UiKey::Character('n')));
+        }
+    }
+    merge.input(UiInput::Key(UiKey::Character('a')));
+    let effects = merge.effects(UiInput::Key(UiKey::Character('t')));
+    assert_eq!(board_operation(&effects).kind, BoardOperationKind::Merge);
+    assert_eq!(
+        merge.app.state.board.live_thoughts()[0].content,
+        "one\n\ntwo"
+    );
+
+    let mut fallback = Fixture::new();
+    fallback.paste("left right");
+    fallback.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::DocumentStart,
+        extend_selection: false,
+    }));
+    fallback.input(UiInput::Key(UiKey::Escape));
+    let effects = fallback.effects(UiInput::Key(UiKey::Character('t')));
+    assert_eq!(board_operation(&effects).kind, BoardOperationKind::Split);
+    assert_eq!(fallback.app.state.board.live_thoughts()[0].content, "");
+    assert_eq!(
+        fallback.app.state.board.live_thoughts()[1].content,
+        "left right"
+    );
+
+    fallback.input(UiInput::Key(UiKey::Character('t')));
+    assert_eq!(
+        fallback
+            .app
+            .editor_snapshot()
+            .expect("right editor")
+            .content,
+        "tleft right",
+        "plain transform key remains ordinary text while editing"
+    );
+}
+
+#[test]
+fn contextual_transform_is_remappable_and_does_not_claim_compose_primary_input() {
+    let mut settings = UiSettings::default();
+    settings.keybindings.transform = 'g';
+    let mut fixture = Fixture::with_settings(settings);
+    assert!(
+        fixture
+            .effects(UiInput::Key(UiKey::PrimaryCharacter('g')))
+            .is_empty()
+    );
+    assert_eq!(fixture.app.interaction_mode(), InteractionMode::Compose);
+    fixture.paste("ab");
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::DocumentStart,
+        extend_selection: false,
+    }));
+    let effects = fixture.effects(UiInput::Key(UiKey::PrimaryCharacter('g')));
+    assert_eq!(board_operation(&effects).kind, BoardOperationKind::Split);
+}
+
+#[test]
+fn thought_transformations_are_discoverable_from_an_editor_selection() {
+    let mut fixture = Fixture::new();
+    let sequence = fixture.paste("keep this exact\r\nselection");
+    fixture.app.acknowledge_persistence(sequence, true);
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::DocumentStart,
+        extend_selection: true,
+    }));
+    fixture.input(UiInput::Key(UiKey::Escape));
+    fixture.input(UiInput::Key(UiKey::Character(':')));
+    for character in "thought".chars() {
+        fixture.input(UiInput::Key(UiKey::Character(character)));
+    }
+    insta::assert_snapshot!(super::snapshot_support::snapshot_buffer(
+        draw_theme(&mut fixture, 72, 16, ThemePreference::Dark)
+            .backend()
+            .buffer()
+    ));
 }

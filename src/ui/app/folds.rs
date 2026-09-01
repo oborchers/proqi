@@ -1,7 +1,7 @@
 //! Atomic interaction with display-only folded content ranges.
 
 use crate::{
-    domain::{ContentAnnotation, ThoughtId},
+    domain::{AnnotationBehavior, ContentAnnotation, ThoughtId},
     ports::editor::{CursorMovement, EditCommand},
 };
 use unicode_segmentation::UnicodeSegmentation as _;
@@ -28,6 +28,7 @@ impl BoardApp {
             .enumerate()
             .find_map(|(index, annotation)| {
                 (!self.expanded_folds.contains(&(thought_id, index))
+                    && annotation.kind.behavior() == AnnotationBehavior::Substitution
                     && selection == Some((annotation.start, annotation.end)))
                 .then_some(index)
             });
@@ -94,6 +95,7 @@ impl BoardApp {
             .enumerate()
             .find_map(|(index, annotation)| {
                 (!self.expanded_folds.contains(&(thought_id, index))
+                    && annotation.kind.behavior() == AnnotationBehavior::Substitution
                     && cursor_in_fold(cursor, annotation, movement))
                 .then_some((annotation.start, annotation.end))
             });
@@ -130,6 +132,7 @@ impl BoardApp {
             .enumerate()
             .find(|(index, annotation)| {
                 !self.expanded_folds.contains(&(thought_id, *index))
+                    && annotation.kind.behavior() == AnnotationBehavior::Substitution
                     && range == (annotation.start, annotation.end)
             })
             .map(|(_, annotation)| fold_departure_target(&snapshot.content, annotation, movement));
@@ -283,7 +286,9 @@ fn adjacent_range(
             } else {
                 annotation.start == cursor
             };
-            (boundary && !expanded.contains(&(thought_id, index)))
-                .then_some((annotation.start, annotation.end))
+            (boundary
+                && annotation.kind.behavior() == AnnotationBehavior::Substitution
+                && !expanded.contains(&(thought_id, index)))
+            .then_some((annotation.start, annotation.end))
         })
 }

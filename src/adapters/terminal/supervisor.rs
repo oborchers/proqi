@@ -21,6 +21,7 @@ const PANICKED: u8 = 4;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum WorkerRole {
+    Accessibility,
     Persistence,
     External,
     Update,
@@ -30,6 +31,7 @@ pub(super) enum WorkerRole {
 impl WorkerRole {
     pub(super) const fn as_str(self) -> &'static str {
         match self {
+            Self::Accessibility => "accessibility",
             Self::Persistence => "persistence",
             Self::External => "external",
             Self::Update => "update",
@@ -39,6 +41,7 @@ impl WorkerRole {
 
     const fn panicked_message(self) -> &'static str {
         match self {
+            Self::Accessibility => "accessibility lane panicked",
             Self::Persistence => "persistence lane panicked",
             Self::External => "external lane panicked",
             Self::Update => "update lane panicked",
@@ -48,6 +51,7 @@ impl WorkerRole {
 
     const fn exited_message(self) -> &'static str {
         match self {
+            Self::Accessibility => "accessibility lane exited unexpectedly",
             Self::Persistence => "persistence lane exited unexpectedly",
             Self::External => "external lane exited unexpectedly",
             Self::Update => "update lane exited unexpectedly",

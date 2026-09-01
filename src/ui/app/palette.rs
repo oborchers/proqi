@@ -1,14 +1,11 @@
 //! Searchable command discovery and execution.
 
 pub(super) mod command;
-mod global;
+mod dispatch;
 
 use crate::{
     application::Effect,
-    ports::{
-        editor::CursorMovement,
-        environment::{Clock, IdGenerator},
-    },
+    ports::environment::{Clock, IdGenerator},
 };
 
 use super::{
@@ -161,7 +158,7 @@ impl BoardApp {
         self.palette = None;
         self.search = None;
         self.transfer = None;
-        self.invocation_popup = None;
+        self.close_invocation_picker();
         self.help = false;
     }
 
@@ -222,7 +219,10 @@ impl BoardApp {
                 UiInput::PasteAnnotated(payload) => {
                     self.update_palette_query(|query| query.paste(&payload.content))
                 }
-                UiInput::Resize { .. } | UiInput::HostFocusGained | UiInput::Key(_) => Vec::new(),
+                UiInput::Resize { .. }
+                | UiInput::HostFocusGained
+                | UiInput::HostFocusLost
+                | UiInput::Key(_) => Vec::new(),
             };
         };
         match *key {
@@ -250,7 +250,7 @@ impl BoardApp {
                     palette.query.move_cursor(movement);
                 }
             }
-            UiKey::Delete => {
+            UiKey::Delete | UiKey::ModifiedDelete => {
                 if let Some(palette) = &mut self.palette {
                     palette.query.delete();
                     palette.clamp();
@@ -324,100 +324,64 @@ impl BoardApp {
         if let Some(effects) = self.execute_entry_command(command, ids, clock) {
             return effects;
         }
-        self.execute_global_command(command, ids, clock)
-    }
-
-    fn execute_entry_command(
-        &mut self,
-        command: Command,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-    ) -> Option<Vec<Effect>> {
+        if let Some(effects) = self.execute_selection_command(command, ids, clock) {
+            return effects;
+        }
+        if let Some(effects) = self.execute_runtime_command(command, ids, clock) {
+            return effects;
+        }
         match command {
-            Command::Edit => Some(self.expand_and_enter_edit(ids, clock)),
-            Command::InsertInvocation => {
-                let effects =
-                    if matches!(self.state.mode, crate::application::InteractionMode::Board) {
-                        self.expand_and_enter_edit(ids, clock)
-                    } else {
-                        Vec::new()
-                    };
-                self.open_invocation_picker();
-                Some(effects)
+            Command::New => self.create(crate::ui::PastePayload::text(String::new()), ids, clock),
+            Command::RenameSession => {
+                self.begin_session_rename();
+                Vec::new()
             }
-            _ => None,
-        }
-    }
-
-    fn execute_submission_command(
-        &mut self,
-        command: Command,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-    ) -> Option<Vec<Effect>> {
-        use crate::ports::agent::SubmissionDisposition::{Keep, RemoveAfterSuccess};
-        match command {
-            Command::SubmitRemove => Some(self.begin_delivery(RemoveAfterSuccess, ids, clock)),
-            Command::SubmitKeep => Some(self.begin_delivery(Keep, ids, clock)),
-            Command::SubmitAllRemove => {
-                Some(self.begin_delivery_all(RemoveAfterSuccess, ids, clock))
+            Command::CopySessionId => self.copy_session_id(ids),
+            Command::CopyResume => self.copy_resume_command(ids),
+            Command::SendSession => self.begin_session_transfer(false, ids, clock),
+            Command::SendSessionRemove => self.begin_session_transfer(true, ids, clock),
+            Command::Delete => self.delete(ids, clock),
+            Command::Copy => self.copy_active(ids),
+            Command::Cut => self.cut_active(ids, clock),
+            Command::Paste => self.read_clipboard(ids),
+            Command::Duplicate => self.duplicate(ids, clock),
+            Command::SubmitRemove
+            | Command::SubmitKeep
+            | Command::SubmitAllRemove
+            | Command::SubmitAllKeep
+            | Command::PlainNewline
+            | Command::JumpUp
+            | Command::JumpDown
+            | Command::ThoughtStart
+            | Command::ThoughtEnd
+            | Command::Indent
+            | Command::Outdent
+            | Command::SplitThought
+            | Command::ExtractSelection
+            | Command::MergeThoughts
+            | Command::Edit
+            | Command::InsertInvocation
+            | Command::RefreshAgents
+            | Command::RefreshAttachments
+            | Command::RefreshInvocations
+            | Command::CheckUpdates
+            | Command::ScreenshotInbox
+            | Command::RetryScreenshotCapture
+            | Command::RetryStorage
+            | Command::ExportRecovery
+            | Command::SelectAll
+            | Command::Select
+            | Command::RangeSelect => Vec::new(),
+            Command::Undo => self.history(ids, clock, true),
+            Command::Redo => self.history(ids, clock, false),
+            Command::MoveUp => self.reorder(ids, clock, -1),
+            Command::MoveDown => self.reorder(ids, clock, 1),
+            Command::Collapse => self.collapse(ids, clock),
+            Command::Help => {
+                self.help = true;
+                Vec::new()
             }
-            Command::SubmitAllKeep => Some(self.begin_delivery_all(Keep, ids, clock)),
-            _ => None,
+            Command::Quit => self.request_quit_after_edit_flush(ids, clock),
         }
-    }
-
-    fn execute_editor_command(
-        &mut self,
-        command: Command,
-        selection_handoff: Option<EditorSelectionHandoff>,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-    ) -> Option<Vec<Effect>> {
-        if !matches!(
-            command,
-            Command::PlainNewline
-                | Command::JumpUp
-                | Command::JumpDown
-                | Command::ThoughtStart
-                | Command::ThoughtEnd
-                | Command::Indent
-                | Command::Outdent
-        ) {
-            return None;
-        }
-        let mut effects = if matches!(
-            self.state.mode,
-            crate::application::InteractionMode::Edit { .. }
-        ) {
-            Vec::new()
-        } else {
-            self.expand_and_enter_edit(ids, clock)
-        };
-        if command == Command::PlainNewline {
-            effects.extend(self.insert_newline(false, ids, clock));
-            return Some(effects);
-        }
-        let movement = match command {
-            Command::JumpUp => Some(CursorMovement::VisualJumpUp),
-            Command::JumpDown => Some(CursorMovement::VisualJumpDown),
-            Command::ThoughtStart => Some(CursorMovement::DocumentStart),
-            Command::ThoughtEnd => Some(CursorMovement::DocumentEnd),
-            _ => None,
-        };
-        if let Some(movement) = movement {
-            effects.extend(self.handle_edit_key(
-                UiKey::Move {
-                    movement,
-                    extend_selection: false,
-                },
-                ids,
-                clock,
-            ));
-            return Some(effects);
-        }
-        self.restore_palette_selection_handoff(selection_handoff);
-        effects.extend(self.apply_indentation(command == Command::Outdent, ids, clock));
-        Some(effects)
     }
 }

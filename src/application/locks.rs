@@ -21,16 +21,21 @@ pub(super) fn ensure_action_unlocked(state: &AppState, action: &Action) -> Appli
         Action::Redo { scope, .. } => locked_history(state, *scope, false),
         Action::RenameSession { .. }
         | Action::FocusThought(_)
+        | Action::EnterCompose
+        | Action::ExitCompose
         | Action::ExitEdit
         | Action::CreateThought { .. }
+        | Action::CreateOwnedThought(_)
         | Action::PasteAsThought { .. }
         | Action::CopyThoughts { .. }
         | Action::ClipboardResult { .. }
         | Action::BeginSubmission { .. }
         | Action::EndSubmission { .. }
+        | Action::StageSubmissionRemoval { .. }
         | Action::PersistenceCommitted(_)
         | Action::PersistenceFailed { .. }
         | Action::RetryPersistence(_) => None,
+        Action::EditOwnedThought(edit) => locked_one(state, edit.thought_id),
     };
     locked.map_or(Ok(()), |thought_id| {
         Err(ApplicationError::ThoughtLocked(thought_id))
@@ -101,6 +106,7 @@ fn locked_mutation(state: &AppState, mutation: &BoardMutation) -> Option<Thought
             .find_map(|mutation| locked_mutation(state, mutation)),
         BoardMutation::AddThought { thought } => locked_one(state, thought.id),
         BoardMutation::SetDeletion { thought_id, .. }
+        | BoardMutation::SetDeletionExact { thought_id, .. }
         | BoardMutation::MoveThought { thought_id, .. }
         | BoardMutation::ReplaceContent { thought_id, .. }
         | BoardMutation::SetPresentation { thought_id, .. }

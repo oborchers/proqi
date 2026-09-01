@@ -143,10 +143,12 @@ impl PersistenceLane {
         &self,
         submission_id: crate::domain::SubmissionId,
         outcome: crate::ports::store::SubmissionOutcome,
+        removal: Option<crate::domain::BoardOperation>,
     ) -> Result<(), TerminalError> {
         self.send(PersistenceRequest::FinishSubmission {
             submission_id,
             outcome: Box::new(outcome),
+            removal: removal.map(Box::new),
         })
     }
 

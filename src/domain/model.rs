@@ -5,7 +5,9 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::{RevisionId, SessionId, TextPosition, ThoughtId, validate_annotations};
+use super::{
+    ContentAnnotation, RevisionId, SessionId, TextPosition, ThoughtId, validate_annotations,
+};
 
 /// UTC milliseconds since the Unix epoch.
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
@@ -333,37 +335,6 @@ impl Thought {
     }
 }
 
-/// Durable presentation metadata for one exact content range.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct ContentAnnotation {
-    /// Inclusive UTF-8 byte offset in the canonical thought content.
-    pub start: usize,
-    /// Exclusive UTF-8 byte offset in the canonical thought content.
-    pub end: usize,
-    /// Presentation origin retained independently from the text.
-    pub kind: ContentAnnotationKind,
-}
-
-/// Provenance used to fold context without rewriting canonical content.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case", tag = "kind")]
-pub enum ContentAnnotationKind {
-    /// One absolute local file path.
-    Attachment {
-        /// Whether the file should receive image-specific presentation.
-        image: bool,
-        /// Safe basename shown instead of the complete path.
-        display_name: String,
-    },
-    /// One large terminal or clipboard paste.
-    LargePaste {
-        /// Logical line count at capture time.
-        lines: usize,
-        /// Perceived Unicode character count at capture time.
-        graphemes: usize,
-    },
-}
-
 /// One coalesced editor revision with reversible cursor state.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ThoughtRevision {
@@ -391,6 +362,18 @@ pub struct ThoughtRevision {
     pub after_cursor: TextPosition,
     /// Revision time.
     pub created_at: Timestamp,
+}
+
+impl ThoughtRevision {
+    /// Validate both durable annotation snapshots against their exact content.
+    ///
+    /// # Errors
+    ///
+    /// Returns an annotation error when either history side is malformed.
+    pub fn validate_annotations(&self) -> Result<(), DomainError> {
+        validate_annotations(&self.before_content, &self.before_annotations)?;
+        validate_annotations(&self.after_content, &self.after_annotations)
+    }
 }
 
 /// Last verified integration context used for recognition only.

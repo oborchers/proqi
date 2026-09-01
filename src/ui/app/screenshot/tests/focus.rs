@@ -47,7 +47,9 @@ fn every_overlay_keeps_capture_delivery_quiet() {
     );
     interaction_stays(
         "invocation",
-        |app, _, _| app.open_invocation_picker(),
+        |app, _, _| {
+            app.open_invocation_picker();
+        },
         |app| app.invocation_popup.is_some(),
     );
     interaction_stays(

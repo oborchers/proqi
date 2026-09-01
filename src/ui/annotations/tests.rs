@@ -63,6 +63,35 @@ fn annotations_before_and_after_changes_are_preserved_and_shifted() {
 }
 
 #[test]
+fn shortcut_emphasis_rebases_only_when_the_complete_semantic_text_survives() {
+    let before = "AA Enter ZZ";
+    let shortcut = ContentAnnotation::shortcut(3, 8);
+    let prefixed = "!AA Enter ZZ";
+    assert_eq!(
+        rebase(
+            before,
+            prefixed,
+            &changes(before, prefixed, &[(0..0, 0..1)]),
+            std::slice::from_ref(&shortcut),
+            &[],
+        ),
+        [ContentAnnotation::shortcut(4, 9)]
+    );
+
+    let changed = "AA Enxter ZZ";
+    assert!(
+        rebase(
+            before,
+            changed,
+            &changes(before, changed, &[(5..5, 5..6)]),
+            &[shortcut],
+            &[],
+        )
+        .is_empty()
+    );
+}
+
+#[test]
 fn enclosing_enclosed_and_intersecting_destructive_edits_dissolve_annotations() {
     let before = "AA fold ZZ";
     let folded = annotation(3, 7);
@@ -179,5 +208,81 @@ fn inserted_annotations_are_anchored_to_the_single_resulting_change_range() {
             &[annotation(0, inserted_text.len())],
         ),
         [annotation(3, 3 + inserted_text.len())]
+    );
+}
+
+#[test]
+fn invocation_reference_projects_without_placeholder_brackets() {
+    let canonical = "Herdr collaborator: coaching-philipp (claude) at workspace Consulting (w4), tab coaching-philipp (w4:t2), pane w4:p2";
+    let display = "@coaching-philipp · claude";
+    let projected = super::project(
+        canonical,
+        &[ContentAnnotation {
+            start: 0,
+            end: canonical.len(),
+            kind: ContentAnnotationKind::InvocationReference {
+                display_name: display.to_owned(),
+            },
+        }],
+        &[],
+    )
+    .expect("valid invocation projection");
+
+    assert_eq!(projected.content, display);
+    assert_eq!(projected.substitutions.len(), 1);
+    assert_eq!(projected.substitutions[0].canonical_end, canonical.len());
+    assert_eq!(
+        projected.styles,
+        [super::PresentedStyle {
+            start: 0,
+            end: display.len(),
+            kind: super::PresentedStyleKind::Annotation,
+        }]
+    );
+}
+
+#[test]
+fn shortcut_emphasis_preserves_text_and_is_never_a_substitution() {
+    let content = "Press ↓, then Enter";
+    let start = "Press ".len();
+    let end = start + "↓".len();
+    let projected = super::project(content, &[ContentAnnotation::shortcut(start, end)], &[])
+        .expect("valid shortcut projection");
+
+    assert_eq!(projected.content, content);
+    assert!(projected.substitutions.is_empty());
+    assert_eq!(
+        projected.styles,
+        [super::PresentedStyle {
+            start,
+            end,
+            kind: super::PresentedStyleKind::ShortcutEmphasis,
+        }]
+    );
+}
+
+#[test]
+fn malformed_projection_fails_instead_of_discarding_metadata() {
+    let malformed = ContentAnnotation::shortcut(1, 2);
+    assert_eq!(
+        super::project("é", &[malformed], &[]),
+        Err(super::ProjectionError::InvalidAnnotationRange)
+    );
+}
+
+#[test]
+fn annotated_paste_cannot_originate_shortcut_emphasis() {
+    let before = "";
+    let after = "Enter";
+    let transaction = changes(before, after, &[(0..0, 0..after.len())]);
+    assert!(
+        rebase(
+            before,
+            after,
+            &transaction,
+            &[],
+            &[ContentAnnotation::shortcut(0, after.len())],
+        )
+        .is_empty()
     );
 }

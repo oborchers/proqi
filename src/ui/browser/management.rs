@@ -52,7 +52,7 @@ impl SessionBrowser {
                     name: (!value.is_empty()).then_some(value),
                 }
             }
-            UiInput::Key(UiKey::Backspace | UiKey::Delete) => {
+            UiInput::Key(UiKey::Backspace | UiKey::Delete | UiKey::ModifiedDelete) => {
                 if let Some(rename) = &mut self.rename
                     && let Some((index, _)) = rename.value.grapheme_indices(true).next_back()
                 {
@@ -83,6 +83,7 @@ impl SessionBrowser {
             UiInput::Key(_)
             | UiInput::Resize { .. }
             | UiInput::HostFocusGained
+            | UiInput::HostFocusLost
             | UiInput::Pointer(_) => BrowserAction::Continue,
         }
     }

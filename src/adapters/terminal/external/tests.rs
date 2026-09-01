@@ -1,17 +1,30 @@
 use std::{path::PathBuf, sync::mpsc::sync_channel, time::Duration};
 
 use crate::{
-    adapters::memory::FakeIdGenerator,
-    application::ScreenshotPauseReason,
-    domain::RequestId,
+    adapters::{
+        editor::RopeEditorFactory,
+        memory::{FakeClock, FakeIdGenerator},
+    },
+    application::{AppState, Effect, ScreenshotPauseReason},
+    domain::{RequestId, Session, SessionBoard, Timestamp},
     ports::{
+        agent::{AgentFailureCode, AgentState, HarnessKind},
         attachment::{AttachmentError, AttachmentStore, RasterImage},
         clipboard::{Clipboard, ClipboardContent, ClipboardError, ClipboardWrite},
         environment::IdGenerator as _,
+        invocation::{
+            InvocationCatalog, InvocationCatalogError, InvocationDiscovery,
+            InvocationDiscoveryRequest, InvocationReferenceCatalog,
+            InvocationReferenceDiscoveryRequest, InvocationReferenceProvider, LiveAgentReference,
+        },
     },
+    ui::{BoardApp, UiInput, UiKey},
 };
 
-use super::{ExternalLane, ExternalReadError, ExternalRequest, read_clipboard};
+use super::{
+    ExternalLane, ExternalReadError, ExternalRequest, ExternalResult,
+    discover_invocation_references, discover_invocations, read_clipboard,
+};
 
 struct FakeClipboard(Result<ClipboardContent, ClipboardError>);
 
@@ -61,9 +74,48 @@ fn image_read_materializes_exact_pixels_before_returning_a_path() {
         Ok(super::super::path_import::attachment_payload(
             path.to_string_lossy().into_owned(),
             true,
-        ))
+        )
+        .with_verified_attachments())
     );
     assert_eq!(attachments.saved, Some((request, image)));
+}
+
+#[test]
+fn materialized_clipboard_image_is_accessible_before_its_immediate_recheck() {
+    let mut ids = FakeIdGenerator::new(1_725_000_000_000);
+    let clock = FakeClock::new(Timestamp::from_millis(2));
+    let session = Session::new(
+        ids.session_id(),
+        std::env::temp_dir().join("clipboard-proof"),
+        Timestamp::from_millis(1),
+    )
+    .expect("session");
+    let board = SessionBoard::new(session, Vec::new()).expect("board");
+    let mut app = BoardApp::new(AppState::new(board), RopeEditorFactory);
+    let read = app.handle(UiInput::Key(UiKey::PasteClipboard), &mut ids, &clock);
+    let request_id = read
+        .iter()
+        .find_map(|effect| match effect {
+            Effect::ReadClipboard { request_id } => Some(*request_id),
+            _ => None,
+        })
+        .expect("clipboard read request");
+    let image = RasterImage::new(1, 1, vec![1, 2, 3, 255]).expect("image");
+    let mut clipboard = FakeClipboard(Ok(ClipboardContent::Image(image)));
+    let mut attachments = FakeAttachments {
+        saved: None,
+        result: Some(Ok(PathBuf::from("/private/proqi/clipboard-proof.png"))),
+    };
+    let payload = read_clipboard(&mut clipboard, &mut attachments, request_id)
+        .expect("materialized image payload");
+    let effects = app.complete_clipboard_read_payload(request_id, Ok(payload), &mut ids, &clock);
+    let thought_id = app.state.focused_thought.expect("created thought");
+    assert!(!app.state.attachments.inaccessible(thought_id, 0));
+    assert!(
+        effects
+            .iter()
+            .any(|effect| matches!(effect, Effect::CheckAttachments(_)))
+    );
 }
 
 #[test]
@@ -116,4 +168,82 @@ fn full_and_disconnected_request_lanes_fail_without_blocking() {
         Duration::from_secs(1),
     ))
     .expect("stop detached lane");
+}
+
+struct FakeInvocations;
+
+impl InvocationCatalog for FakeInvocations {
+    fn discover(
+        &mut self,
+        request: InvocationDiscoveryRequest,
+    ) -> Result<InvocationDiscovery, InvocationCatalogError> {
+        Ok(InvocationDiscovery {
+            generation: request.generation,
+            cwd: request.cwd,
+            global: Vec::new(),
+            project: Vec::new(),
+        })
+    }
+}
+
+struct FakeReferences(Result<Vec<LiveAgentReference>, AgentFailureCode>);
+
+impl InvocationReferenceCatalog for FakeReferences {
+    fn discover_live_references(&mut self) -> Result<Vec<LiveAgentReference>, AgentFailureCode> {
+        self.0.clone()
+    }
+}
+
+fn reference() -> LiveAgentReference {
+    LiveAgentReference::new(
+        InvocationReferenceProvider::Herdr,
+        Some("reviewer".to_owned()),
+        HarnessKind::new("codex").expect("harness"),
+        "w1".to_owned(),
+        Some("Workspace".to_owned()),
+        "w1:t1".to_owned(),
+        Some("Tab".to_owned()),
+        "w1:p2".to_owned(),
+        AgentState::Idle,
+    )
+    .expect("reference")
+}
+
+#[test]
+fn live_reference_failure_never_breaks_filesystem_invocation_refresh() {
+    let request = InvocationDiscoveryRequest {
+        generation: 7,
+        cwd: PathBuf::from("/fixture"),
+    };
+    let mut invocations = FakeInvocations;
+    let mut references = FakeReferences(Err(AgentFailureCode::TimedOut));
+
+    let ExternalResult::InvocationsDiscovered(Ok(discovery)) =
+        discover_invocations(&mut invocations, request)
+    else {
+        panic!("invocation discovery result");
+    };
+    assert_eq!(discovery.generation, 7);
+    let ExternalResult::InvocationReferencesDiscovered(completion) = discover_invocation_references(
+        &mut references,
+        InvocationReferenceDiscoveryRequest { generation: 8 },
+    ) else {
+        panic!("reference discovery result");
+    };
+    assert_eq!(completion.generation, 8);
+    assert_eq!(completion.references, Err(AgentFailureCode::TimedOut));
+}
+
+#[test]
+fn live_references_keep_their_independent_generation_tag() {
+    let mut references = FakeReferences(Ok(vec![reference()]));
+
+    let ExternalResult::InvocationReferencesDiscovered(completion) = discover_invocation_references(
+        &mut references,
+        InvocationReferenceDiscoveryRequest { generation: 9 },
+    ) else {
+        panic!("reference discovery result");
+    };
+    assert_eq!(completion.generation, 9);
+    assert_eq!(completion.references, Ok(vec![reference()]));
 }

@@ -20,6 +20,7 @@ fn missing_config_uses_the_narrow_pane_default() {
     assert_eq!(settings.ui.keybindings.range_up, 'K');
     assert_eq!(settings.ui.keybindings.range_down, 'J');
     assert_eq!(settings.ui.keybindings.range_select, 'v');
+    assert_eq!(settings.ui.keybindings.transform, 't');
     assert_eq!(settings.ui.keybindings.screenshot_inbox, 'i');
     assert!(settings.screenshot.directory.is_none());
     assert!(settings.screenshot.filename_patterns.is_empty());
@@ -150,6 +151,18 @@ fn range_selection_latch_binding_is_remappable() {
     .expect("write config");
     let settings = load_settings(directory.path()).expect("settings");
     assert_eq!(settings.ui.keybindings.range_select, 'b');
+}
+
+#[test]
+fn contextual_transform_binding_is_remappable() {
+    let directory = tempfile::tempdir().expect("config directory");
+    fs::write(
+        directory.path().join("config.toml"),
+        "[keybindings]\ntransform = 'g'\n",
+    )
+    .expect("write config");
+    let settings = load_settings(directory.path()).expect("settings");
+    assert_eq!(settings.ui.keybindings.transform, 'g');
 }
 
 #[test]
