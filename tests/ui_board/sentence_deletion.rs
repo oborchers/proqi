@@ -43,25 +43,28 @@ fn primary_u_still_deletes_only_the_current_logical_line() {
 
 #[test]
 fn configured_primary_shift_suffix_discovers_the_same_action() {
-    let mut settings = UiSettings::default();
-    settings.keybindings.delete_sentence = 'G';
-    let mut fixture = Fixture::with_settings(settings);
-    fixture.paste("One. Two.");
-    fixture.input(UiInput::Key(UiKey::Move {
-        movement: CursorMovement::DocumentStart,
-        extend_selection: false,
-    }));
+    for shifted_report in ['g', 'G'] {
+        let mut settings = UiSettings::default();
+        settings.keybindings.delete_sentence = 'G';
+        let mut fixture = Fixture::with_settings(settings);
+        fixture.paste("One. Two.");
+        fixture.input(UiInput::Key(UiKey::Move {
+            movement: CursorMovement::DocumentStart,
+            extend_selection: false,
+        }));
 
-    fixture.input(UiInput::Key(UiKey::PrimaryCharacter('g')));
-    assert_eq!(
-        fixture.app.editor_snapshot().expect("editor").content,
-        "One. Two."
-    );
-    fixture.input(UiInput::Key(UiKey::PrimaryShiftCharacter('G')));
-    assert_eq!(
-        fixture.app.editor_snapshot().expect("editor").content,
-        "Two."
-    );
+        fixture.input(UiInput::Key(UiKey::PrimaryCharacter('g')));
+        assert_eq!(
+            fixture.app.editor_snapshot().expect("editor").content,
+            "One. Two."
+        );
+        fixture.input(UiInput::Key(UiKey::PrimaryShiftCharacter(shifted_report)));
+        assert_eq!(
+            fixture.app.editor_snapshot().expect("editor").content,
+            "Two.",
+            "shifted report {shifted_report:?}"
+        );
+    }
 }
 
 #[test]
