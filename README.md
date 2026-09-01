@@ -179,7 +179,9 @@ literal text. List-only menus and four-way choosers ignore irrelevant modifiers
 equally for arrows and their Vim-style aliases.
 
 Mouse input covers the same core workflow. Images, files, and large pastes fold
-into compact annotations while their content stays intact. See
+into compact annotations while their content stays intact. In Edit mode, an
+unmodified `Space` on one completely selected collapsed annotation inserts a
+space immediately before it without replacing it. See
 [invocation compatibility](docs/INVOCATIONS.md).
 
 Inside Herdr, opening the same invocation picker also discovers recognized live

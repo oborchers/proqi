@@ -66,6 +66,12 @@ impl SessionBrowser {
                 }
                 BrowserAction::Continue
             }
+            UiInput::Key(UiKey::UnmodifiedSpace) => {
+                if let Some(rename) = &mut self.rename {
+                    rename.value.push(' ');
+                }
+                BrowserAction::Continue
+            }
             UiInput::Paste(text) => {
                 if let Some(rename) = &mut self.rename {
                     rename.value.push_str(&text.replace(['\r', '\n'], " "));

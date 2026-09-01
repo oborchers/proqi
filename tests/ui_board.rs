@@ -474,6 +474,8 @@ mod navigation;
 mod palette;
 #[path = "ui_board/placeholder_entry.rs"]
 mod placeholder_entry;
+#[path = "ui_board/placeholder_space.rs"]
+mod placeholder_space;
 #[path = "ui_board/pointer_selection.rs"]
 mod pointer_selection;
 #[path = "ui_board/scroll_regressions.rs"]
