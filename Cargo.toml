@@ -43,7 +43,7 @@ ureq = { version = "=3.4.0", default-features = false, features = ["rustls"] }
 uuid = { version = "1.18.1", features = ["serde", "v7"] }
 
 [workspace.dependencies.kqueue]
-version = "=1.2.0"
+version = "=1.2.1"
 
 [workspace.dependencies.xattr]
 version = "=1.6.1"
