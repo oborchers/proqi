@@ -3,7 +3,7 @@
 use std::{
     collections::BTreeSet,
     path::Path,
-    process::{Command, Output, Stdio},
+    process::{Child, Command, Output, Stdio},
     sync::{Arc, Barrier},
     time::{Duration, Instant},
 };
@@ -24,17 +24,21 @@ const FRESH_PARTICIPANTS: usize = 5;
 const FRESH_REPETITIONS: usize = 3;
 const INITIALIZED_PARTICIPANTS: usize = 15;
 
-fn launch(root: &Path) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_proqi"))
+fn command(root: &Path) -> Command {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_proqi"));
+    command
         .arg("--state-dir")
         .arg(root)
         .arg("--json")
         .env_remove("HERDR_ENV")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output()
-        .expect("launch Proqi")
+        .stderr(Stdio::piped());
+    command
+}
+
+fn launch(root: &Path) -> Output {
+    command(root).output().expect("launch Proqi")
 }
 
 fn launch_together(root: &Path, participants: usize) -> Vec<Output> {
@@ -117,6 +121,27 @@ fn assert_runtime_clean(root: &Path) {
     assert_no_transient_runtime_artifacts(&root.join("runtime"));
 }
 
+fn wait_for_runtime_advertisement(root: &Path, child: &mut Child) {
+    let instances = root.join("runtime/instances");
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        let advertised =
+            std::fs::read_dir(&instances).is_ok_and(|mut entries| entries.next().is_some());
+        if advertised {
+            return;
+        }
+        assert!(
+            child.try_wait().expect("inspect startup process").is_none(),
+            "startup exited before advertising its session lease"
+        );
+        assert!(
+            Instant::now() < deadline,
+            "startup did not advertise its session lease"
+        );
+        std::thread::sleep(Duration::from_millis(5));
+    }
+}
+
 fn assert_no_transient_runtime_artifacts(root: &Path) {
     let mut pending = vec![root.to_path_buf()];
     while let Some(directory) = pending.pop() {
@@ -171,6 +196,52 @@ fn initialized_schema_accepts_fifteen_concurrent_processes() {
         INITIALIZED_PARTICIPANTS,
         INITIALIZED_PARTICIPANTS + 1,
     );
+}
+
+#[test]
+fn transient_writer_contention_retries_one_session_creation_without_duplication() {
+    let state = tempfile::tempdir().expect("initialized state root");
+    let initial = launch(state.path());
+    assert_successful_sessions(state.path(), &[initial], 1, 1);
+    let writer =
+        Connection::open(state.path().join("data/proqi.sqlite3")).expect("open writer connection");
+    writer
+        .execute_batch("BEGIN IMMEDIATE")
+        .expect("acquire writer lock");
+    let mut child = command(state.path()).spawn().expect("spawn startup");
+    wait_for_runtime_advertisement(state.path(), &mut child);
+    std::thread::sleep(Duration::from_millis(300));
+    writer.execute_batch("ROLLBACK").expect("release writer");
+
+    let output = child.wait_with_output().expect("reap startup");
+    assert_successful_sessions(state.path(), &[output], 1, 2);
+}
+
+#[test]
+fn persistent_writer_contention_is_bounded_and_leaves_no_session() {
+    let state = tempfile::tempdir().expect("initialized state root");
+    let initial = launch(state.path());
+    assert_successful_sessions(state.path(), &[initial], 1, 1);
+    let writer =
+        Connection::open(state.path().join("data/proqi.sqlite3")).expect("open writer connection");
+    writer
+        .execute_batch("BEGIN IMMEDIATE")
+        .expect("acquire writer lock");
+    let started = Instant::now();
+    let blocked = launch(state.path());
+    assert!(!blocked.status.success());
+    let response: Value = serde_json::from_slice(&blocked.stdout).expect("failure JSON");
+    assert_eq!(response["error"]["code"], "storage_busy");
+    assert!(
+        started.elapsed() < Duration::from_secs(3),
+        "storage contention exceeded its bounded retry contract"
+    );
+    assert_database(state.path(), 1);
+    assert_runtime_clean(state.path());
+
+    writer.execute_batch("ROLLBACK").expect("release writer");
+    let recovered = launch(state.path());
+    assert_successful_sessions(state.path(), &[recovered], 1, 2);
 }
 
 #[test]
