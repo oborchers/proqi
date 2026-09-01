@@ -11,7 +11,9 @@ fn batch_recognition_matches_canonical_editing_across_structural_contexts() {
         ("- one\n\t- tab nested\nplain\n    - detached", 4),
         ("---\n- after thematic\n***\n1. ordered", 2),
         ("```md\n- fenced\n```\n- visible", 2),
+        ("```\n```\n- after close", 2),
         ("- before\n\n    - after blank", 2),
+        ("- one\r    - same logical line", 4),
         ("- parent\n  - two spaces\n    - four spaces", 4),
     ] {
         let lines = logical_lines(content);

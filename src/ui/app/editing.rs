@@ -131,14 +131,13 @@ impl BoardApp {
             | UiKey::SubmitKeep
             | UiKey::Undo
             | UiKey::Redo
-            // Nonempty Compose edits materialize into a thought immediately.
-            // If creation is rejected, keep the orphaned Compose buffer
-            // conservative because its transient annotations have no owner.
-            | UiKey::DeleteSentence
             | UiKey::Duplicate
             | UiKey::Quit => return Vec::new(),
             _ => {}
         }
+        // Compose has no durable annotation owner. Accepted nonempty content
+        // becomes a thought before the next key, so fold preflight belongs
+        // exclusively to the Edit path.
         let command = match key {
             UiKey::Enter if self.should_insert_smart_newline() => EditCommand::InsertSmartNewline {
                 indent_width: self.settings.list_indent_width,

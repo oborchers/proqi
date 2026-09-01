@@ -120,20 +120,20 @@ fn primary_key(key: &KeyEvent) -> Option<UiKey> {
     match key.code {
         KeyCode::Enter if key.modifiers.contains(KeyModifiers::SHIFT) => Some(UiKey::SubmitKeep),
         KeyCode::Enter => Some(UiKey::Submit),
-        KeyCode::Char('a') => Some(UiKey::SelectAll),
-        KeyCode::Char('c') => Some(UiKey::Copy),
-        KeyCode::Char('x') => Some(UiKey::Cut),
-        KeyCode::Char('v') => Some(UiKey::PasteClipboard),
-        KeyCode::Char('d') => Some(UiKey::Duplicate),
-        KeyCode::Char('q') => Some(UiKey::Quit),
+        KeyCode::Char('a' | 'A') => Some(UiKey::SelectAll),
+        KeyCode::Char('c' | 'C') => Some(UiKey::Copy),
+        KeyCode::Char('x' | 'X') => Some(UiKey::Cut),
+        KeyCode::Char('v' | 'V') => Some(UiKey::PasteClipboard),
+        KeyCode::Char('d' | 'D') => Some(UiKey::Duplicate),
+        KeyCode::Char('q' | 'Q') => Some(UiKey::Quit),
         KeyCode::Char('u') if !key.modifiers.contains(KeyModifiers::SHIFT) => {
             Some(UiKey::DeleteLogicalLine)
         }
         KeyCode::Char('z') if key.modifiers.contains(KeyModifiers::SHIFT) => Some(UiKey::Redo),
-        KeyCode::Char('Z' | 'y') => Some(UiKey::Redo),
+        KeyCode::Char('Z' | 'y' | 'Y') => Some(UiKey::Redo),
         KeyCode::Char('z') => Some(UiKey::Undo),
-        KeyCode::Char('p') => Some(UiKey::PickerPrevious),
-        KeyCode::Char('n') => Some(UiKey::PickerNext),
+        KeyCode::Char('p' | 'P') => Some(UiKey::PickerPrevious),
+        KeyCode::Char('n' | 'N') => Some(UiKey::PickerNext),
         KeyCode::Char(character)
             if key.modifiers.contains(KeyModifiers::SHIFT) || character.is_uppercase() =>
         {

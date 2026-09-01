@@ -13,8 +13,14 @@ const DELETE_SENTENCE: EditCommand = EditCommand::DeleteSentence {
 
 fn position_for_byte(text: &str, byte: usize) -> TextPosition {
     let prefix = &text[..byte];
-    let line = prefix.bytes().filter(|value| *value == b'\n').count();
-    let line_start = prefix.rfind('\n').map_or(0, |index| index + 1);
+    let separators = prefix
+        .char_indices()
+        .filter(|(_, character)| matches!(character, '\n' | '\u{2028}' | '\u{2029}'))
+        .collect::<Vec<_>>();
+    let line = separators.len();
+    let line_start = separators
+        .last()
+        .map_or(0, |(index, character)| index + character.len_utf8());
     TextPosition::new(line, text[line_start..byte].graphemes(true).count())
 }
 
@@ -107,6 +113,14 @@ fn selection_deletes_every_touched_sentence_after_ranges_merge() {
     assert_eq!(several.snapshot.content, "One. Four.");
     assert_eq!(several.changes.len(), 1);
     assert_eq!(several.snapshot.selection, None);
+
+    let suffix = selected_delete(
+        text,
+        text.find("Three").expect("third sentence"),
+        text.len(),
+    );
+    assert_eq!(suffix.snapshot.content, "One. Two? ");
+    assert_eq!(suffix.changes.len(), 1);
 }
 
 #[test]
@@ -131,6 +145,9 @@ fn blank_paragraphs_are_preserved_as_hard_boundaries() {
     assert_eq!(on_boundary.snapshot.content, "\n\nSecond.");
     let after_boundary = delete_at(text, text.find("Second").expect("second"));
     assert_eq!(after_boundary.snapshot.content, "First.\n\n");
+
+    let leading_boundary = "\n\nFollowing.";
+    assert_eq!(delete_at(leading_boundary, 0).snapshot.content, "\n\n");
 }
 
 #[test]
@@ -181,6 +198,21 @@ fn unicode_terminators_combining_marks_and_emoji_remain_whole() {
     let unicode_line_separator = "First.\u{2028}Second.";
     assert_eq!(
         delete_at(unicode_line_separator, 0).snapshot.content,
+        "Second."
+    );
+    assert_eq!(
+        delete_at(
+            unicode_line_separator,
+            unicode_line_separator.find("Second").expect("second")
+        )
+        .snapshot
+        .content,
+        "First."
+    );
+
+    let unicode_paragraph_separator = "First.\u{2029}Second.";
+    assert_eq!(
+        delete_at(unicode_paragraph_separator, 0).snapshot.content,
         "Second."
     );
 }
@@ -291,6 +323,7 @@ fn prose_to_list_newline_and_whitespace_prelude_have_exact_ownership() {
     let deleted = selected_delete(whitespace_then_list, 0, 1);
     assert_eq!(deleted.snapshot.content, "- ");
     assert_eq!(deleted.changes.len(), 2);
+    assert_eq!(deleted.snapshot.cursor, TextPosition::new(0, 0));
 }
 
 #[test]

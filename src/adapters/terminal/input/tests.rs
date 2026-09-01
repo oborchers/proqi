@@ -132,6 +132,38 @@ fn command_and_meta_shortcuts_share_semantics() {
 }
 
 #[test]
+fn reserved_primary_chords_ignore_shifted_case_encoding() {
+    for modifier in [
+        KeyModifiers::CONTROL,
+        KeyModifiers::SUPER,
+        KeyModifiers::META,
+    ] {
+        for (lowercase, uppercase, expected) in [
+            ('a', 'A', UiKey::SelectAll),
+            ('c', 'C', UiKey::Copy),
+            ('x', 'X', UiKey::Cut),
+            ('v', 'V', UiKey::PasteClipboard),
+            ('d', 'D', UiKey::Duplicate),
+            ('q', 'Q', UiKey::Quit),
+            ('p', 'P', UiKey::PickerPrevious),
+            ('n', 'N', UiKey::PickerNext),
+            ('y', 'Y', UiKey::Redo),
+        ] {
+            for character in [lowercase, uppercase] {
+                assert_eq!(
+                    translate(Event::Key(KeyEvent::new(
+                        KeyCode::Char(character),
+                        modifier | KeyModifiers::SHIFT,
+                    ))),
+                    Some(UiInput::Key(expected)),
+                    "character {character:?}, modifier {modifier:?}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn primary_shift_s_remains_an_unassigned_board_chord() {
     for character in ['s', 'S'] {
         let event = Event::Key(KeyEvent::new(

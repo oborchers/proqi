@@ -73,6 +73,9 @@ Sentence ownership is deterministic and half open:
 - A nonempty selection touches a sentence only when its half-open selected range
   intersects that sentence's owned range. A selection ending exactly at the
   next sentence start does not include that sentence.
+- Deleting a selected suffix of a paragraph preserves separator whitespace
+  owned by the last untouched sentence. This can differ from repeated deletion,
+  because each repeated command resolves ownership again against changed text.
 
 Deletion removes the selected sentence core plus its following owned separator.
 For the final sentence in a paragraph, it removes the preceding separator
