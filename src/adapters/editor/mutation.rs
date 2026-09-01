@@ -140,6 +140,13 @@ impl RopeEditor {
         Some(self.replace_byte_range(start, end, text))
     }
 
+    pub(super) fn insert_before_selection(&mut self, character: char) -> TextChangeSet {
+        self.mutate(|editor| {
+            let (start, _) = editor.selection_bytes()?;
+            Some(editor.replace_byte_range(start, start, &character.to_string()))
+        })
+    }
+
     pub(super) fn delete_back(&mut self) -> Option<AppliedRange> {
         if let Some((start, end)) = self.selection_bytes() {
             return Some(self.replace_byte_range(start, end, ""));

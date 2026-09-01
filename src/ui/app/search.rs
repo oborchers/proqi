@@ -116,6 +116,13 @@ impl BoardApp {
                     search.scroll = 0;
                 }
             }
+            UiKey::UnmodifiedSpace => {
+                if let Some(search) = &mut self.search {
+                    search.query.insert_char(' ');
+                    search.selected = 0;
+                    search.scroll = 0;
+                }
+            }
             _ => {}
         }
         Vec::new()

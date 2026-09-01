@@ -33,7 +33,7 @@ impl BoardApp {
                 self.clear_board_selection();
             }
             UiKey::SelectAll => self.select_all_thoughts(),
-            UiKey::Character(_) | UiKey::Delete => {
+            UiKey::Character(_) | UiKey::UnmodifiedSpace | UiKey::Delete => {
                 return self.handle_board_key_command(key, ids, clock);
             }
             UiKey::Enter => return self.expand_and_enter_edit(ids, clock),
@@ -75,7 +75,9 @@ impl BoardApp {
                 self.select_all_thoughts();
                 Vec::new()
             }
-            UiKey::Character(_) | UiKey::Delete => self.handle_board_key_command(key, ids, clock),
+            UiKey::Character(_) | UiKey::UnmodifiedSpace | UiKey::Delete => {
+                self.handle_board_key_command(key, ids, clock)
+            }
             UiKey::Enter => self.begin_insertion(ids, clock),
             UiKey::Escape => {
                 self.move_focus(-1);
@@ -203,6 +205,11 @@ impl BoardApp {
             return Vec::new();
         };
         if let Some(effects) = self.handle_edit_effect(key, ids, clock) {
+            return effects;
+        }
+        if matches!(key, UiKey::UnmodifiedSpace)
+            && let Some(effects) = self.insert_space_before_selected_fold(ids, clock)
+        {
             return effects;
         }
         if let UiKey::Move {

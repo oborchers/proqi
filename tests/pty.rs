@@ -44,6 +44,10 @@ mod key_inspector;
 mod path_drop;
 
 #[cfg(target_os = "macos")]
+#[path = "pty/placeholder_space.rs"]
+mod placeholder_space;
+
+#[cfg(target_os = "macos")]
 #[path = "pty/recovery.rs"]
 mod recovery;
 

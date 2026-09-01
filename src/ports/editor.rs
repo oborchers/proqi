@@ -89,6 +89,8 @@ pub enum SelectionGranularity {
 pub enum EditCommand {
     /// Insert one character.
     InsertChar(char),
+    /// Insert one character at the beginning of the active selection without replacing it.
+    InsertBeforeSelection(char),
     /// Insert an arbitrary payload as one semantic operation.
     Paste(String),
     /// Insert a line feed.

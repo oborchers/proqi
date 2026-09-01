@@ -53,6 +53,10 @@ impl BoardApp {
             UiInput::Key(UiKey::PrimaryCharacter(character)) => {
                 *character == self.settings.keybindings.transform
             }
+            UiInput::Key(UiKey::UnmodifiedSpace) => {
+                self.settings.keybindings.command(' ')
+                    == Some(crate::ui::settings::BoardCommand::Commands)
+            }
             UiInput::Pointer(pointer)
                 if matches!(pointer.kind, PointerKind::Down(PointerButton::Left)) =>
             {

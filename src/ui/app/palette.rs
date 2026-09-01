@@ -257,11 +257,10 @@ impl BoardApp {
                 }
             }
             UiKey::Character(character) if !character.is_control() => {
-                if let Some(palette) = &mut self.palette {
-                    palette.query.insert_char(character);
-                    palette.selected = 0;
-                    palette.scroll = 0;
-                }
+                return self.update_palette_query(|query| query.insert_char(character));
+            }
+            UiKey::UnmodifiedSpace => {
+                return self.update_palette_query(|query| query.insert_char(' '));
             }
             _ => {}
         }
