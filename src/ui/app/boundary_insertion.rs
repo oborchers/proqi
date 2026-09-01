@@ -40,12 +40,35 @@ impl BoardApp {
                 BoundaryInsertion::BeforeFirst => {
                     self.create_at(PastePayload::text(String::new()), 0, ids, clock)
                 }
-                BoundaryInsertion::AfterLast => self.begin_insertion(ids, clock),
+                BoundaryInsertion::AfterLast => self.begin_bottom_insertion(ids, clock),
             }
         } else {
             self.insertion_confirmation = InsertionConfirmation::Armed(boundary);
             Vec::new()
         }
+    }
+
+    pub(super) fn begin_bottom_insertion(
+        &mut self,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        let insertion_index = self.state.board.live_thoughts().len();
+        if insertion_index == 0 {
+            self.begin_insertion(ids, clock)
+        } else {
+            self.create_at_bottom(PastePayload::text(String::new()), ids, clock)
+        }
+    }
+
+    pub(super) fn create_at_bottom(
+        &mut self,
+        payload: PastePayload,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        let insertion_index = self.state.board.live_thoughts().len();
+        self.create_at(payload, insertion_index, ids, clock)
     }
 
     pub(super) fn at_first_thought(&self) -> bool {
@@ -119,17 +142,14 @@ impl BoardApp {
             self.insertion_focus = InsertionFocus::Inactive;
             effects.extend(self.reduce(Action::FocusThought(Some(target))));
         } else {
-            let insertion_index = match movement {
-                CursorMovement::VisualUp => 0,
-                CursorMovement::VisualDown => self.state.board.live_thoughts().len(),
+            let boundary_effects = match movement {
+                CursorMovement::VisualUp => {
+                    self.create_at(PastePayload::text(String::new()), 0, ids, clock)
+                }
+                CursorMovement::VisualDown => self.begin_bottom_insertion(ids, clock),
                 _ => return effects,
             };
-            effects.extend(self.create_at(
-                PastePayload::text(String::new()),
-                insertion_index,
-                ids,
-                clock,
-            ));
+            effects.extend(boundary_effects);
         }
         effects
     }

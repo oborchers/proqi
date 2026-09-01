@@ -24,7 +24,7 @@ impl BoardApp {
             self.place_compose_cursor(pointer);
             Vec::new()
         } else {
-            self.begin_insertion(ids, clock)
+            self.begin_bottom_insertion(ids, clock)
         }
     }
 
