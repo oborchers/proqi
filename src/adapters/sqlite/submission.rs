@@ -1,12 +1,15 @@
 //! Durable, content-redacted submission attempt journal.
 
-use rusqlite::{Transaction, params};
+use rusqlite::{OptionalExtension, Transaction, params};
 
 use crate::{
-    domain::{SessionId, SubmissionId, Timestamp},
+    domain::{BoardOperation, SessionId, SubmissionId, Timestamp},
     ports::{
         agent::AgentState,
-        store::{StoreError, SubmissionAttempt, SubmissionAttemptState, SubmissionOutcome},
+        store::{
+            CommitReceipt, OperationBatch, StoreError, StoredOperationRequest, SubmissionAttempt,
+            SubmissionAttemptState, SubmissionOutcome,
+        },
     },
 };
 
@@ -101,6 +104,79 @@ pub(super) fn finish(
         .map_err(map_sql_error)?;
     require_one(changed, id)?;
     deactivate_sources(transaction, id)
+}
+
+pub(super) fn finish_with_removal(
+    transaction: &Transaction<'_>,
+    id: SubmissionId,
+    outcome: &SubmissionOutcome,
+    removal: &BoardOperation,
+) -> Result<CommitReceipt, StoreError> {
+    if outcome.state != SubmissionAttemptState::Accepted
+        || outcome.deletion_operation_id != Some(removal.id)
+    {
+        return Err(StoreError::Integrity(
+            "submission removal must match an accepted outcome".to_owned(),
+        ));
+    }
+    match finish(transaction, id, outcome) {
+        Ok(()) => {
+            super::board_commit::commit_batch(transaction, &OperationBatch::Board(removal.clone()))?
+                .ok_or_else(|| {
+                    StoreError::Integrity("submission removal has no durable receipt".to_owned())
+                })
+        }
+        Err(conflict @ StoreError::Conflict(_)) => {
+            if !outcome_matches(transaction, id, outcome)? {
+                return Err(conflict);
+            }
+            match super::operation_lookup::operation_request(transaction, removal.id)? {
+                Some(StoredOperationRequest::Board { operation, receipt })
+                    if operation.as_ref() == removal =>
+                {
+                    Ok(receipt)
+                }
+                _ => Err(conflict),
+            }
+        }
+        Err(error) => Err(error),
+    }
+}
+
+fn outcome_matches(
+    transaction: &Transaction<'_>,
+    id: SubmissionId,
+    outcome: &SubmissionOutcome,
+) -> Result<bool, StoreError> {
+    type StoredOutcome = (String, Option<String>, Option<String>, Option<Vec<u8>>, i64);
+    let stored: Option<StoredOutcome> = transaction
+        .query_row(
+            "SELECT state, post_state, error_code, deletion_operation_id, updated_at
+             FROM submission_attempts WHERE id = ?1",
+            [id.database_bytes().as_slice()],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                ))
+            },
+        )
+        .optional()
+        .map_err(map_sql_error)?;
+    let Some((state, post_state, error_code, deletion_operation_id, updated_at)) = stored else {
+        return Ok(false);
+    };
+    Ok(state == outcome.state.as_str()
+        && post_state.as_deref() == outcome.post_state.map(AgentState::as_str)
+        && error_code == outcome.error_code
+        && deletion_operation_id
+            == outcome
+                .deletion_operation_id
+                .map(|operation| operation.database_bytes().to_vec())
+        && updated_at == outcome.at.as_millis())
 }
 
 pub(super) fn recover(

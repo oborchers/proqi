@@ -21,6 +21,7 @@ fn limited_terminals_never_receive_rgb_colors() {
         let theme = Theme::resolve(preference, false);
         assert_eq!(theme.foreground, Color::Reset);
         assert_eq!(theme.accent, Color::Green);
+        assert_eq!(theme.warning, Color::Yellow);
     }
 }
 
@@ -92,6 +93,9 @@ fn explicit_theme_text_pairs_meet_aa_contrast() {
     assert!(contrast((112, 214, 155), (39, 40, 48)) >= 4.5);
     assert!(contrast((112, 214, 155), (15, 13, 10)) >= 4.5);
     assert!(contrast((250, 250, 248), (45, 106, 79)) >= 4.5);
+    assert_eq!(dark.warning, Color::Rgb(204, 160, 58));
+    assert!(contrast((204, 160, 58), (15, 13, 10)) >= 4.5);
+    assert!(contrast((204, 160, 58), (39, 40, 48)) >= 4.5);
 
     let light = Theme::resolve(ThemePreference::Light, true);
     assert!(contrast((30, 27, 24), (250, 250, 248)) >= 4.5);
@@ -99,7 +103,36 @@ fn explicit_theme_text_pairs_meet_aa_contrast() {
     assert!(contrast((45, 106, 79), (236, 236, 240)) >= 4.5);
     assert!(contrast((45, 106, 79), (250, 250, 248)) >= 4.5);
     assert!(contrast((250, 250, 248), (45, 106, 79)) >= 4.5);
+    assert_eq!(light.warning, Color::Rgb(148, 95, 14));
+    assert!(contrast((148, 95, 14), (250, 250, 248)) >= 4.5);
+    assert!(contrast((148, 95, 14), (236, 236, 240)) >= 4.5);
     assert_ne!(dark.accent, light.accent);
+    assert_ne!(dark.warning, dark.accent);
+    assert_ne!(light.warning, light.accent);
+}
+
+#[test]
+fn automatic_warning_is_brand_derived_and_contrasts_with_both_surfaces() {
+    for palette in [
+        TerminalPalette {
+            foreground: (201, 205, 224),
+            background: (24, 25, 34),
+            dark: true,
+        },
+        TerminalPalette {
+            foreground: (30, 31, 34),
+            background: (245, 244, 240),
+            dark: false,
+        },
+    ] {
+        let theme = Theme::resolve_with_palette(ThemePreference::Auto, true, Some(palette));
+        let warning = rgb(theme.warning).expect("true-color warning");
+        assert!(contrast(warning, palette.background) >= 4.5);
+        if let Some(surface) = theme.focused_surface.and_then(rgb) {
+            assert!(contrast(warning, surface) >= 4.5);
+        }
+        assert_ne!(theme.warning, theme.accent);
+    }
 }
 
 #[test]
@@ -156,9 +189,12 @@ proptest! {
         ));
         prop_assert!(contrast(accent, background) >= 4.5);
         prop_assert!(contrast(on_accent, accent) >= 4.5);
+        let warning = rgb(theme.warning).expect("automatic warning is true color");
+        prop_assert!(contrast(warning, background) >= 4.5);
         if let Some(surface) = theme.focused_surface.and_then(rgb) {
             prop_assert!(contrast(foreground, surface) >= 4.5);
             prop_assert!(contrast(accent, surface) >= 4.5);
+            prop_assert!(contrast(warning, surface) >= 4.5);
         } else {
             prop_assert!(
                 theme

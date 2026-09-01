@@ -4,7 +4,7 @@ use ratatui_core::layout::Rect;
 
 use crate::{application::AppState, domain::ThoughtPresentation, ports::editor::EditorSnapshot};
 
-use super::{ThoughtLayout, scroll};
+use super::{ComposeLayout, ThoughtLayout, scroll};
 
 pub(super) struct ContentRequest<'a> {
     pub(super) state: &'a AppState,
@@ -20,6 +20,7 @@ pub(super) struct ContentRequest<'a> {
 
 pub(super) struct VisibleContent {
     pub(super) thoughts: Vec<ThoughtLayout>,
+    pub(super) compose: Option<ComposeLayout>,
     pub(super) insert: Option<Rect>,
     pub(super) first: usize,
     pub(super) first_row_offset: usize,
@@ -53,6 +54,7 @@ pub(super) fn visible_content(request: &ContentRequest<'_>) -> VisibleContent {
         request.board.height.saturating_sub(flow.top_padding),
     );
     let thoughts = visible_thoughts(&flow, resolved.offset, board);
+    let compose = visible_compose(&flow, resolved.offset, board);
     let insert = flow
         .insert_row
         .filter(|row| visible_row(*row, resolved.offset, board.height))
@@ -66,12 +68,39 @@ pub(super) fn visible_content(request: &ContentRequest<'_>) -> VisibleContent {
         });
     VisibleContent {
         thoughts,
+        compose,
         insert,
         first: resolved.first_index,
         first_row_offset: resolved.first_row_offset,
         max_first: resolved.max_first_index,
         scroll: resolved.geometry,
     }
+}
+
+fn visible_compose(flow: &scroll::BoardFlow, offset: usize, board: Rect) -> Option<ComposeLayout> {
+    let compose = flow.compose.as_ref()?;
+    let viewport_end = offset.saturating_add(usize::from(board.height));
+    let first = compose.content_start.max(offset);
+    let last = compose.end.min(viewport_end);
+    if first >= last {
+        return None;
+    }
+    let area = Rect::new(
+        board.x,
+        viewport_y(board, first, offset),
+        board.width,
+        u16::try_from(last.saturating_sub(first)).unwrap_or(u16::MAX),
+    );
+    Some(ComposeLayout {
+        area,
+        text_area: Rect::new(
+            area.x.saturating_add(2).min(area.right()),
+            area.y,
+            area.width.saturating_sub(2),
+            area.height,
+        ),
+        gutter: Rect::new(area.x, area.y, area.width.min(1), area.height),
+    })
 }
 
 fn visible_thoughts(flow: &scroll::BoardFlow, offset: usize, board: Rect) -> Vec<ThoughtLayout> {

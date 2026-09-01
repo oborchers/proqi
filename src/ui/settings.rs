@@ -168,6 +168,13 @@ pub(super) enum BoardCommand {
     ScreenshotInbox,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum BoardNavigation {
+    Focus(super::ListNavigation),
+    Extend(super::ListNavigation),
+    Reorder(super::ListNavigation),
+}
+
 impl KeyBindings {
     pub(super) fn command(&self, character: char) -> Option<BoardCommand> {
         let bindings = [
@@ -196,6 +203,68 @@ impl KeyBindings {
         bindings
             .into_iter()
             .find_map(|(binding, command)| (binding == character).then_some(command))
+    }
+
+    /// Resolve a normalized key through the Board command map.
+    ///
+    /// Unmodified physical Delete is an invariant spelling of the remappable
+    /// delete command. Modified Delete and Backspace remain unassigned in Board.
+    pub(super) fn command_for_key(&self, key: super::UiKey) -> Option<BoardCommand> {
+        match key {
+            super::UiKey::Delete => Some(BoardCommand::Delete),
+            super::UiKey::Character(character) => self.command(character),
+            _ => None,
+        }
+    }
+
+    pub(super) fn navigation(&self, key: super::UiKey) -> Option<BoardNavigation> {
+        use BoardNavigation::{Extend, Focus, Reorder};
+
+        match key {
+            super::UiKey::Move {
+                movement,
+                extend_selection,
+            } => super::input::list_movement(movement).map(if extend_selection {
+                Extend
+            } else {
+                Focus
+            }),
+            super::UiKey::EditNavigation { board_movement, .. } => {
+                super::input::list_movement(board_movement).map(Focus)
+            }
+            super::UiKey::PrimaryShiftMove { movement } => {
+                super::input::list_movement(movement).map(Reorder)
+            }
+            super::UiKey::Character(character) => {
+                Self::navigation_for_command(self.command(character), false)
+            }
+            super::UiKey::PrimaryCharacter(character) => {
+                Self::navigation_for_command(self.command(character), true)
+            }
+            _ => None,
+        }
+    }
+
+    fn navigation_for_command(
+        command: Option<BoardCommand>,
+        primary: bool,
+    ) -> Option<BoardNavigation> {
+        use super::ListNavigation::{Next, Previous};
+        use BoardNavigation::{Extend, Focus, Reorder};
+
+        match (command, primary) {
+            (Some(BoardCommand::FocusUp), _) => Some(Focus(Previous)),
+            (Some(BoardCommand::FocusDown), _) => Some(Focus(Next)),
+            (Some(BoardCommand::RangeUp), true) => Some(Reorder(Previous)),
+            (Some(BoardCommand::RangeDown), true) => Some(Reorder(Next)),
+            (Some(BoardCommand::RangeUp), false) => Some(Extend(Previous)),
+            (Some(BoardCommand::RangeDown), false) => Some(Extend(Next)),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn delete_label(&self) -> String {
+        format!("{}/Del", key_label(self.delete))
     }
 
     /// Reject ambiguous board characters before the terminal starts.
@@ -246,6 +315,14 @@ pub(crate) fn key_label(key: char) -> String {
         '\t' => "Tab".to_owned(),
         '\n' | '\r' => "Enter".to_owned(),
         _ => key.to_string(),
+    }
+}
+
+pub(crate) fn primary_key_label(suffix: &str) -> String {
+    if cfg!(target_os = "macos") {
+        format!("⌘{suffix}")
+    } else {
+        format!("Ctrl+{suffix}")
     }
 }
 

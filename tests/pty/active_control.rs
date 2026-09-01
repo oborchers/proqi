@@ -3,7 +3,7 @@
 use proqi::{adapters::runtime::SystemIdGenerator, ports::environment::IdGenerator};
 use serde_json::Value;
 
-use super::{
+use super::support::{
     expect_command, json_command, json_input_command, raw_input_command, wait_for_control_owner,
     wait_for_path,
 };
@@ -194,6 +194,11 @@ fn spawn_owner(
         set deadline [expr {[clock milliseconds] + 12000}]
         while {![file exists $env(PROQI_TEST_DONE)]} {
             if {[clock milliseconds] >= $deadline} { exit 91 }
+            expect -timeout 0 {
+                -re ".+" { exp_continue }
+                timeout {}
+                eof { exit 92 }
+            }
             after 20
         }
         system /bin/kill -KILL [exp_pid]

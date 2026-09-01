@@ -2,7 +2,7 @@
 
 use crate::{
     application::{Action, DurabilityState, Effect, FailureCode, reduce},
-    domain::ThoughtId,
+    domain::{Thought, ThoughtId},
     ports::{
         agent::{AgentTarget, SubmissionDisposition, SubmissionRequest},
         environment::{Clock, IdGenerator},
@@ -30,17 +30,18 @@ impl BoardApp {
             self.set_warning("save changes before submitting");
             return Vec::new();
         }
-        let source_contents = thought_ids
+        let source_thoughts = thought_ids
             .iter()
             .filter_map(|id| self.state.board.thought(*id))
             .filter(|thought| thought.is_live())
-            .map(|thought| (thought.id, thought.content.clone()))
+            .cloned()
             .collect::<Vec<_>>();
-        if source_contents.len() != thought_ids.len() {
+        if source_thoughts.len() != thought_ids.len() {
             self.set_warning("board changed before submission; thoughts kept");
             return Vec::new();
         }
-        let intent = self.build_submission_intent(target, disposition, source_contents, ids, clock);
+        let intent =
+            self.build_submission_intent(target, disposition, &source_thoughts, ids, clock);
         let source_ids = intent
             .pending
             .sources
@@ -63,10 +64,14 @@ impl BoardApp {
         &self,
         target: &AgentTarget,
         disposition: SubmissionDisposition,
-        source_contents: Vec<(ThoughtId, String)>,
+        source_thoughts: &[Thought],
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> DeferredSubmissionIntent {
+        let source_contents = source_thoughts
+            .iter()
+            .map(|thought| (thought.id, thought.content.clone()))
+            .collect::<Vec<_>>();
         let content = crate::application::join_prompt_for_target(target, &source_contents);
         let submission_id = ids.submission_id();
         let payload_digest = digest(content.as_bytes());
@@ -90,6 +95,7 @@ impl BoardApp {
             disposition,
             deletion_operation_id: ids.operation_id(),
             completion: None,
+            removal_sequence: None,
         };
         let attempt = SubmissionAttempt {
             id: submission_id,
@@ -111,16 +117,21 @@ impl BoardApp {
             pre_state: target.readiness,
             prepared_at: at,
         };
-        DeferredSubmissionIntent { attempt, pending }
+        let attachment_keys = source_thoughts
+            .iter()
+            .flat_map(crate::application::attachment_keys)
+            .collect();
+        DeferredSubmissionIntent {
+            attempt,
+            pending,
+            attachment_keys,
+        }
     }
 
     fn start_or_defer_submission(&mut self, intent: DeferredSubmissionIntent) -> Vec<Effect> {
         let submission_id = intent.attempt.id;
         if matches!(self.state.durability, DurabilityState::Durable { .. }) {
-            self.set_info(submission_progress(&intent));
-            self.pending_submissions
-                .insert(submission_id, intent.pending);
-            vec![Effect::PrepareSubmission(intent.attempt)]
+            self.begin_submission_preflight(intent)
         } else {
             self.deferred_submissions.insert(submission_id, intent);
             self.set_info("saving changes before submission");
@@ -140,13 +151,10 @@ impl BoardApp {
             return Vec::new();
         }
         let deferred = std::mem::take(&mut self.deferred_submissions);
-        let mut effects = Vec::with_capacity(deferred.len());
-        for (submission_id, mut intent) in deferred {
+        let mut effects = Vec::new();
+        for (_submission_id, mut intent) in deferred {
             intent.attempt.source_sequence = self.state.board.session.last_durable_sequence;
-            self.set_info(submission_progress(&intent));
-            self.pending_submissions
-                .insert(submission_id, intent.pending);
-            effects.push(Effect::PrepareSubmission(intent.attempt));
+            effects.extend(self.begin_submission_preflight(intent));
         }
         effects
     }
@@ -174,7 +182,7 @@ impl BoardApp {
     }
 }
 
-fn submission_progress(intent: &DeferredSubmissionIntent) -> &'static str {
+pub(super) fn submission_progress(intent: &DeferredSubmissionIntent) -> &'static str {
     match (intent.pending.disposition, intent.pending.sources.len() > 1) {
         (SubmissionDisposition::Keep, false) => "submitting now, thought will be kept",
         (SubmissionDisposition::Keep, true) => "submitting now, thoughts will be kept",

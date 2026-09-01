@@ -146,7 +146,7 @@ impl BoardApp {
         self.palette = None;
         self.search = None;
         self.transfer = None;
-        self.invocation_popup = None;
+        self.close_invocation_picker();
         self.help = false;
     }
 
@@ -197,7 +197,10 @@ impl BoardApp {
                 UiInput::PasteAnnotated(payload) => {
                     self.update_palette_query(|query| query.paste(&payload.content))
                 }
-                UiInput::Resize { .. } | UiInput::HostFocusGained | UiInput::Key(_) => Vec::new(),
+                UiInput::Resize { .. }
+                | UiInput::HostFocusGained
+                | UiInput::HostFocusLost
+                | UiInput::Key(_) => Vec::new(),
             };
         };
         match *key {
@@ -225,7 +228,7 @@ impl BoardApp {
                     palette.query.move_cursor(movement);
                 }
             }
-            UiKey::Delete => {
+            UiKey::Delete | UiKey::ModifiedDelete => {
                 if let Some(palette) = &mut self.palette {
                     palette.query.delete();
                     palette.clamp();
@@ -289,6 +292,12 @@ impl BoardApp {
         if let Some(effects) = self.execute_entry_command(command, ids, clock) {
             return effects;
         }
+        if let Some(effects) = self.execute_selection_command(command, ids, clock) {
+            return effects;
+        }
+        if let Some(effects) = self.execute_runtime_command(command, ids, clock) {
+            return effects;
+        }
         match command {
             Command::New => self.create(crate::ui::PastePayload::text(String::new()), ids, clock),
             Command::RenameSession => {
@@ -304,7 +313,6 @@ impl BoardApp {
             Command::Cut => self.cut_active(ids, clock),
             Command::Paste => self.read_clipboard(ids),
             Command::Duplicate => self.duplicate(ids, clock),
-            Command::SelectAll => self.select_all_from_palette(ids, clock),
             Command::SubmitRemove
             | Command::SubmitKeep
             | Command::SubmitAllRemove
@@ -319,55 +327,84 @@ impl BoardApp {
             | Command::Indent
             | Command::Outdent
             | Command::Edit
-            | Command::InsertInvocation => Vec::new(),
-            Command::RefreshAgents => self.refresh_agents(),
-            Command::RefreshInvocations => self.refresh_invocations(),
-            Command::CheckUpdates => {
-                vec![Effect::Update(crate::application::UpdateIntent::CheckNow)]
-            }
-            Command::ScreenshotInbox => self.toggle_screenshot_inbox(ids, clock),
-            Command::RetryScreenshotCapture => self.retry_screenshot_capture(ids, clock),
-            Command::RetryStorage => self.retry_persistence(),
-            Command::ExportRecovery => self.export_recovery(ids, clock),
+            | Command::InsertInvocation
+            | Command::RefreshAgents
+            | Command::RefreshAttachments
+            | Command::RefreshInvocations
+            | Command::CheckUpdates
+            | Command::ScreenshotInbox
+            | Command::RetryScreenshotCapture
+            | Command::RetryStorage
+            | Command::ExportRecovery
+            | Command::SelectAll
+            | Command::Select
+            | Command::RangeSelect => Vec::new(),
             Command::Undo => self.history(ids, clock, true),
             Command::Redo => self.history(ids, clock, false),
             Command::MoveUp => self.reorder(ids, clock, -1),
             Command::MoveDown => self.reorder(ids, clock, 1),
             Command::Collapse => self.collapse(ids, clock),
-            Command::Select => {
-                self.toggle_selection();
-                Vec::new()
-            }
-            Command::RangeSelect => {
-                self.activate_range_latch();
-                Vec::new()
-            }
             Command::Help => {
                 self.help = true;
                 Vec::new()
             }
-            Command::Quit => {
-                self.request_quit();
-                Vec::new()
-            }
+            Command::Quit => self.request_quit_after_edit_flush(ids, clock),
         }
     }
 
-    fn select_all_from_palette(
+    fn execute_selection_command(
         &mut self,
+        command: Command,
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
-    ) -> Vec<Effect> {
-        let effects = if matches!(
-            self.state.mode,
-            crate::application::InteractionMode::Edit { .. }
-        ) {
-            self.finish_edit(ids, clock)
-        } else {
-            Vec::new()
-        };
-        self.select_all_thoughts();
-        effects
+    ) -> Option<Vec<Effect>> {
+        match command {
+            Command::SelectAll => {
+                let effects = if matches!(
+                    self.state.mode,
+                    crate::application::InteractionMode::Edit { .. }
+                ) {
+                    self.finish_edit(ids, clock)
+                } else {
+                    Vec::new()
+                };
+                if self.pending_edit.is_some() {
+                    return Some(effects);
+                }
+                self.select_all_thoughts();
+                Some(effects)
+            }
+            Command::Select => {
+                self.toggle_selection();
+                Some(Vec::new())
+            }
+            Command::RangeSelect => {
+                self.activate_range_latch();
+                Some(Vec::new())
+            }
+            _ => None,
+        }
+    }
+
+    fn execute_runtime_command(
+        &mut self,
+        command: Command,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Option<Vec<Effect>> {
+        match command {
+            Command::RefreshAgents => Some(self.refresh_agents()),
+            Command::RefreshAttachments => Some(self.refresh_attachments(true)),
+            Command::RefreshInvocations => Some(self.refresh_invocations()),
+            Command::CheckUpdates => Some(vec![Effect::Update(
+                crate::application::UpdateIntent::CheckNow,
+            )]),
+            Command::ScreenshotInbox => Some(self.toggle_screenshot_inbox(ids, clock)),
+            Command::RetryScreenshotCapture => Some(self.retry_screenshot_capture(ids, clock)),
+            Command::RetryStorage => Some(self.retry_persistence()),
+            Command::ExportRecovery => Some(self.export_recovery(ids, clock)),
+            _ => None,
+        }
     }
 
     fn execute_entry_command(
@@ -385,7 +422,8 @@ impl BoardApp {
                     } else {
                         Vec::new()
                     };
-                self.open_invocation_picker();
+                let mut effects = effects;
+                effects.extend(self.open_invocation_picker());
                 Some(effects)
             }
             _ => None,
@@ -439,6 +477,7 @@ impl BoardApp {
         } else {
             self.expand_and_enter_edit(ids, clock)
         };
+        self.restore_palette_selection_handoff(selection_handoff);
         if command == Command::PlainNewline {
             effects.extend(self.insert_newline(false, ids, clock));
             return Some(effects);
@@ -447,7 +486,6 @@ impl BoardApp {
             command,
             Command::DeleteLogicalLine | Command::DeleteSentence
         ) {
-            self.restore_palette_selection_handoff(selection_handoff);
             let key = if command == Command::DeleteLogicalLine {
                 UiKey::DeleteLogicalLine
             } else {
@@ -474,7 +512,6 @@ impl BoardApp {
             ));
             return Some(effects);
         }
-        self.restore_palette_selection_handoff(selection_handoff);
         effects.extend(self.apply_indentation(command == Command::Outdent, ids, clock));
         Some(effects)
     }

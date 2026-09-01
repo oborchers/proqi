@@ -78,6 +78,11 @@ pub enum SafeEvent<'a> {
         /// Stable coarse failure code.
         code: &'a str,
     },
+    /// One attachment could not be verified, without recording its path or owner.
+    AttachmentInaccessible {
+        /// Typed content-free adapter failure.
+        reason: &'a str,
+    },
     /// One content-redacted submission transition occurred.
     Submission {
         /// Proqi-owned submission identity.
@@ -162,6 +167,9 @@ pub fn record(event: SafeEvent<'_>) {
         }
         SafeEvent::UpdateCheckFailed { mode, code } => {
             tracing::warn!(event = "update_check_failed", mode, code);
+        }
+        SafeEvent::AttachmentInaccessible { reason } => {
+            tracing::warn!(event = "attachment_inaccessible", reason);
         }
         SafeEvent::Submission {
             submission_id,

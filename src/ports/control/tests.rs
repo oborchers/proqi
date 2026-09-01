@@ -13,7 +13,7 @@ use super::{
 };
 
 #[test]
-fn plain_v1_add_stays_wire_compatible_and_annotations_require_v2() {
+fn plain_and_legacy_annotations_keep_their_existing_minimum_protocols() {
     let mut ids = FakeIdGenerator::new(1_725_200_000_000);
     let plain = ControlRequest {
         protocol: 1,
@@ -48,6 +48,44 @@ fn plain_v1_add_stays_wire_compatible_and_annotations_require_v2() {
         position: None,
     };
     assert!(annotated.requires_protocol_two());
+    assert_eq!(annotated.minimum_protocol(), 2);
+}
+
+#[test]
+fn invocation_reference_annotations_require_protocol_six() {
+    let mut ids = FakeIdGenerator::new(1_725_200_000_000);
+    let mutation = ControlMutation::Add {
+        operation_id: ids.operation_id(),
+        thought_id: ids.thought_id(),
+        content: "Herdr collaborator: reviewer".to_owned(),
+        annotations: vec![ContentAnnotation {
+            start: 0,
+            end: 28,
+            kind: ContentAnnotationKind::InvocationReference {
+                display_name: "@reviewer · codex".to_owned(),
+            },
+        }],
+        position: None,
+    };
+
+    assert!(mutation.requires_protocol_two());
+    assert!(mutation.requires_protocol_six());
+    assert_eq!(mutation.minimum_protocol(), 6);
+}
+
+#[test]
+fn preservation_of_semantic_inline_metadata_requires_protocol_seven() {
+    let mut ids = FakeIdGenerator::new(1_725_200_000_000);
+    let mutation = ControlMutation::PreserveAdd {
+        operation_id: ids.operation_id(),
+        thought_id: ids.thought_id(),
+        content: "Press Enter".to_owned(),
+        annotations: vec![ContentAnnotation::shortcut(6, 11)],
+        position: None,
+    };
+
+    assert!(mutation.requires_protocol_seven());
+    assert_eq!(mutation.minimum_protocol(), 7);
 }
 
 #[test]

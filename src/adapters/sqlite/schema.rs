@@ -136,7 +136,7 @@ CREATE VIRTUAL TABLE session_search USING fts5(
 );
 
 INSERT INTO schema_meta(singleton, schema_version, storage_protocol, migrated_at)
-VALUES (1, 8, 8, 0);
+VALUES (1, 10, 10, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (1, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (2, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (3, 0);
@@ -145,6 +145,8 @@ INSERT INTO migration_history(version, applied_at) VALUES (5, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (6, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (7, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (8, 0);
+INSERT INTO migration_history(version, applied_at) VALUES (9, 0);
+INSERT INTO migration_history(version, applied_at) VALUES (10, 0);
 ";
 
 pub(super) const MIGRATION_2: &str = r"
@@ -246,4 +248,14 @@ FROM screenshot_capture_receipts_v7;
 DROP TABLE screenshot_capture_receipts_v7;
 UPDATE schema_meta SET schema_version = 8, storage_protocol = 8;
 INSERT INTO migration_history(version, applied_at) VALUES (8, 0);
+";
+
+pub(super) const MIGRATION_9: &str = r"
+UPDATE schema_meta SET schema_version = 9, storage_protocol = 9;
+INSERT INTO migration_history(version, applied_at) VALUES (9, 0);
+";
+
+pub(super) const MIGRATION_10: &str = r"
+UPDATE schema_meta SET schema_version = 10, storage_protocol = 10;
+INSERT INTO migration_history(version, applied_at) VALUES (10, 0);
 ";

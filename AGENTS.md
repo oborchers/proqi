@@ -113,9 +113,18 @@ These rules become mandatory with the first real TUI implementation:
   portable.
 - Treat Up/Down arrows and the configured `k`/`j`-style vertical board keys as
   equivalent spellings of the same intention at every modifier level. The
-  preferred ladder is plain focus movement, Shift range extension, and
-  Primary+Shift single-thought reordering; do not assign different semantics
-  merely because one spelling is an arrow and the other is a character key.
+  Board ladder is plain focus movement, Shift range extension, and
+  Primary+Shift single-thought reordering. Other modifiers retain the base
+  focus intention. At the insertion row, range and reorder are thought-only
+  no-ops while base focus keeps its boundary behavior.
+- Non-text list and direction owners ignore irrelevant modifiers equally for
+  arrow and Vim-style spellings. Text-entry owners retain printable letters as
+  content and own their local cursor and deletion behavior.
+- Only unmodified physical Delete is the invariant Board delete alias. Modified
+  Delete is never a Board thought command. Backspace remains distinct.
+- A modal owner resolves its navigation before a configured Board shortcut.
+  Therefore modal `j` and `k` navigation wins over a colliding Help binding,
+  and Escape remains the unconditional Help close action.
 
 ## Design Context
 

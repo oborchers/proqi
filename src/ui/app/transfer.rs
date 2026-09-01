@@ -11,7 +11,7 @@ use crate::{
     },
 };
 
-use super::{BoardApp, UiInput, UiKey, query::QueryEditor};
+use super::{BoardApp, UiInput, UiKey, pending_types::EditFlush, query::QueryEditor};
 
 pub(super) struct TransferState {
     query: QueryEditor,
@@ -35,7 +35,10 @@ impl BoardApp {
             self.set_warning("select a thought before sending it to another session");
             return Vec::new();
         };
-        let mut effects = self.flush_pending_edit(ids, clock);
+        let mut effects = match self.flush_edit_boundary(ids, clock) {
+            EditFlush::Complete(effects) => effects,
+            EditFlush::Blocked(effects) => return effects,
+        };
         self.transfer = Some(TransferState {
             query: QueryEditor::default(),
             sessions: Vec::new(),
@@ -91,12 +94,15 @@ impl BoardApp {
             }
             Ok(_) => {
                 self.set_info("thought sent; removing the source");
-                self.reduce(Action::DeleteThought {
-                    operation_id: ids.operation_id(),
-                    thought_id: request.source_thought_id,
-                    kind: BoardOperationKind::Delete,
-                    at: clock.now(),
-                })
+                self.reduce_with_empty_transition(
+                    Action::DeleteThought {
+                        operation_id: ids.operation_id(),
+                        thought_id: request.source_thought_id,
+                        kind: BoardOperationKind::Delete,
+                        at: clock.now(),
+                    },
+                    crate::application::EmptyBoardTransition::ComposeAfterLocalRemoval,
+                )
             }
         }
     }
@@ -159,7 +165,7 @@ impl BoardApp {
             UiKey::Move { movement, .. } => {
                 self.update_transfer_query(|query| query.move_cursor(movement));
             }
-            UiKey::Delete => {
+            UiKey::Delete | UiKey::ModifiedDelete => {
                 self.update_transfer_query(QueryEditor::delete);
             }
             UiKey::Character(character) if !character.is_control() => {
@@ -293,10 +299,11 @@ mod tests {
         },
         application::{AppState, Effect, ThoughtMutation},
         domain::{
-            ContentAnnotation, ContentAnnotationKind, OperationSequence, Session, SessionBoard,
-            Thought, ThoughtPosition, Timestamp,
+            ContentAnnotation, OperationSequence, Session, SessionBoard, Thought, ThoughtPosition,
+            Timestamp,
         },
         ports::{
+            editor::CursorMovement,
             environment::IdGenerator,
             store::{CommitReceipt, DurableIdentity, SessionHit},
         },
@@ -317,19 +324,12 @@ mod tests {
         let mut thought = Thought::new(
             ids.thought_id(),
             source.id,
-            "/tmp/image.png".to_owned(),
+            "Press Enter".to_owned(),
             ThoughtPosition::new(0),
             Timestamp::from_millis(1),
         );
         thought
-            .set_annotations(vec![ContentAnnotation {
-                start: 0,
-                end: thought.content.len(),
-                kind: ContentAnnotationKind::Attachment {
-                    image: true,
-                    display_name: "image.png".to_owned(),
-                },
-            }])
+            .set_annotations(vec![ContentAnnotation::shortcut(6, 11)])
             .expect("annotation");
         let thought_id = thought.id;
         let board = SessionBoard::new(source, vec![thought.clone()]).expect("board");
@@ -340,6 +340,7 @@ mod tests {
         );
         assert_loading_input_is_ignored(&mut app, &mut ids, &clock);
         app.complete_transfer_discovery(Ok(vec![session_hit(destination)]));
+        assert_modified_delete_edits_query(&mut app, &mut ids, &clock);
         let effects = app.handle_transfer_input(&UiInput::Key(UiKey::Enter), &mut ids, &clock);
         let [Effect::TransferThought(request)] = effects.as_slice() else {
             panic!("expected transfer request");
@@ -376,6 +377,27 @@ mod tests {
             [Effect::CommitBoardOperation(_)]
         ));
         assert!(app.state.board.live_thoughts().is_empty());
+    }
+
+    fn assert_modified_delete_edits_query(
+        app: &mut BoardApp,
+        ids: &mut FakeIdGenerator,
+        clock: &FakeClock,
+    ) {
+        for character in "hx".chars() {
+            app.handle_transfer_input(&UiInput::Key(UiKey::Character(character)), ids, clock);
+        }
+        app.handle_transfer_input(
+            &UiInput::Key(UiKey::Move {
+                movement: CursorMovement::GraphemeBack,
+                extend_selection: false,
+            }),
+            ids,
+            clock,
+        );
+        app.handle_transfer_input(&UiInput::Key(UiKey::ModifiedDelete), ids, clock);
+        assert_eq!(app.transfer_view().expect("transfer").0, "h");
+        app.handle_transfer_input(&UiInput::Key(UiKey::Backspace), ids, clock);
     }
 
     fn assert_loading_input_is_ignored(

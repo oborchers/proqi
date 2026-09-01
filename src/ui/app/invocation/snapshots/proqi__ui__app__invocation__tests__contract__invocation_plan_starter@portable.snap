@@ -1,6 +1,5 @@
 ---
 source: src/ui/app/invocation/tests.rs
-assertion_line: 440
 expression: plan_completion_snapshot()
 ---
 00││
@@ -9,5 +8,5 @@ expression: plan_completion_snapshot()
 03││/plan                           Shared Command││
 04││                                              ││
 05│└──────────────────────────────────────────────┘│
-06│  Esc Board  : Commands  ? Shortcuts│
-07│  → Codex   s Submit    S Submit & keep│
+06│  Esc Board│
+07│  → Codex   Ctrl+Enter Submit│

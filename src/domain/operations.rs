@@ -105,6 +105,31 @@ pub enum BoardMutation {
     },
 }
 
+impl BoardMutation {
+    /// Validate every complete thought snapshot carried by this mutation.
+    ///
+    /// # Errors
+    ///
+    /// Returns an annotation error for malformed current or dormant history data.
+    pub fn validate_annotations(&self) -> Result<(), DomainError> {
+        match self {
+            Self::Batch { mutations } => {
+                for mutation in mutations {
+                    mutation.validate_annotations()?;
+                }
+                Ok(())
+            }
+            Self::AddThought { thought } => {
+                validate_annotations(&thought.content, &thought.annotations)
+            }
+            Self::SetDeletion { .. }
+            | Self::MoveThought { .. }
+            | Self::SetPresentation { .. }
+            | Self::LegacySetCollapsed { .. } => Ok(()),
+        }
+    }
+}
+
 /// Durable operation with a complete inverse payload.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct BoardOperation {
@@ -122,6 +147,18 @@ pub struct BoardOperation {
     pub inverse: BoardMutation,
     /// Operation creation time.
     pub created_at: Timestamp,
+}
+
+impl BoardOperation {
+    /// Validate annotation-bearing forward and inverse history payloads.
+    ///
+    /// # Errors
+    ///
+    /// Returns an annotation error when dormant undo or redo state is malformed.
+    pub fn validate_annotations(&self) -> Result<(), DomainError> {
+        self.forward.validate_annotations()?;
+        self.inverse.validate_annotations()
+    }
 }
 
 /// Validated session plus all live and recoverably deleted thoughts.

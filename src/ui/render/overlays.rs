@@ -70,16 +70,27 @@ pub(super) fn render_picker(
     );
     frame.set_cursor_position((input.x.saturating_add(1).saturating_add(cursor), input.y));
     for (index, (entry, area)) in picker.entries.iter().zip(&overlay.items).enumerate() {
-        let style = if index == picker.selected {
-            theme
-                .focused_style()
-                .fg(theme.accent)
-                .add_modifier(Modifier::BOLD)
-        } else {
-            theme.base_style()
-        };
+        if let Some((group, heading)) = entry
+            .group
+            .zip(overlay.item_headings.get(index).copied().flatten())
+        {
+            frame.render_widget(
+                Paragraph::new(ellipsize(group, usize::from(heading.width))).style(
+                    theme
+                        .base_style()
+                        .fg(theme.muted)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                heading,
+            );
+        }
         frame.render_widget(
-            Paragraph::new(picker_row(*entry, area.width)).style(style),
+            Paragraph::new(picker_line(
+                *entry,
+                area.width,
+                index == picker.selected,
+                theme,
+            )),
             *area,
         );
     }
@@ -194,6 +205,8 @@ pub(super) struct PickerView<'a> {
 pub(super) struct PickerRow<'a> {
     primary: &'a str,
     secondary: Option<&'a str>,
+    secondary_fallbacks: &'a [String],
+    group: Option<&'a str>,
 }
 
 impl<'a> PickerRow<'a> {
@@ -201,32 +214,102 @@ impl<'a> PickerRow<'a> {
         Self {
             primary,
             secondary: None,
+            secondary_fallbacks: &[],
+            group: None,
         }
     }
 
+    #[cfg(test)]
     pub(super) const fn fields(primary: &'a str, secondary: &'a str) -> Self {
         Self {
             primary,
             secondary: Some(secondary),
+            secondary_fallbacks: &[],
+            group: None,
+        }
+    }
+
+    pub(super) const fn grouped(
+        primary: &'a str,
+        secondary: &'a str,
+        secondary_fallbacks: &'a [String],
+        group: Option<&'a str>,
+    ) -> Self {
+        Self {
+            primary,
+            secondary: Some(secondary),
+            secondary_fallbacks,
+            group,
         }
     }
 }
 
+#[cfg(test)]
 fn picker_row(entry: PickerRow<'_>, width: u16) -> String {
     let width = usize::from(width);
     let primary_width = entry.primary.width();
-    if let Some(secondary) = entry.secondary {
-        let secondary_width = secondary.width();
-        if primary_width
-            .saturating_add(2)
-            .saturating_add(secondary_width)
-            <= width
-        {
-            let gap = width.saturating_sub(primary_width + secondary_width);
-            return format!("{}{}{secondary}", entry.primary, " ".repeat(gap));
-        }
+    if let Some(secondary) = fitting_secondary(entry, width) {
+        let gap = width.saturating_sub(primary_width + secondary.width());
+        return format!("{}{}{secondary}", entry.primary, " ".repeat(gap));
     }
     ellipsize(entry.primary, width)
+}
+
+fn picker_line(entry: PickerRow<'_>, width: u16, selected: bool, theme: &Theme) -> Line<'static> {
+    if entry.secondary.is_none() {
+        let style = if selected {
+            theme
+                .focused_style()
+                .fg(theme.accent)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            theme.base_style()
+        };
+        let mut content = ellipsize(entry.primary, usize::from(width));
+        content.push_str(&" ".repeat(usize::from(width).saturating_sub(content.width())));
+        return Line::from(Span::styled(content, style));
+    }
+    let width = usize::from(width);
+    let primary = ellipsize(entry.primary, width);
+    let base = if selected {
+        theme.focused_style()
+    } else {
+        theme.base_style()
+    };
+    let primary_style = if selected {
+        base.fg(theme.accent).add_modifier(Modifier::BOLD)
+    } else {
+        base.fg(theme.foreground)
+    };
+    let Some(secondary) = fitting_secondary(entry, width) else {
+        let padding = " ".repeat(width.saturating_sub(primary.width()));
+        return Line::from(vec![
+            Span::styled(primary, primary_style),
+            Span::styled(padding, base),
+        ]);
+    };
+    let gap = width.saturating_sub(entry.primary.width() + secondary.width());
+    Line::from(vec![
+        Span::styled(entry.primary.to_owned(), primary_style),
+        Span::styled(" ".repeat(gap), base),
+        Span::styled(secondary.to_owned(), base.fg(theme.muted)),
+    ])
+}
+
+fn fitting_secondary(entry: PickerRow<'_>, width: usize) -> Option<&str> {
+    let minimum_gap = usize::from(entry.group.is_none()) + 1;
+    entry
+        .secondary
+        .into_iter()
+        .chain(entry.secondary_fallbacks.iter().map(String::as_str))
+        .find(|secondary| {
+            entry
+                .primary
+                .width()
+                .saturating_add(minimum_gap)
+                .saturating_add(secondary.width())
+                <= width
+        })
 }
 
 fn ellipsize(value: &str, width: usize) -> String {
@@ -308,8 +391,9 @@ fn shortcut_row(
 
 #[cfg(test)]
 mod tests {
-    use super::{PickerRow, overlay_clear_area, picker_row};
-    use ratatui_core::layout::Rect;
+    use super::{PickerRow, overlay_clear_area, picker_line, picker_row};
+    use crate::ui::{Theme, ThemePreference};
+    use ratatui_core::{layout::Rect, style::Modifier};
     use unicode_width::UnicodeWidthStr as _;
 
     #[test]
@@ -326,6 +410,44 @@ mod tests {
             picker_row(PickerRow::fields("$long-skill", "Global Skill"), 11),
             "$long-skill"
         );
+    }
+
+    #[test]
+    fn responsive_row_keeps_location_fallbacks_in_priority_order() {
+        let fallbacks = vec!["Workspace · p1".to_owned(), "p1".to_owned()];
+        let row = PickerRow::grouped(
+            "reviewer",
+            "Workspace / tab · p1 · codex · idle",
+            &fallbacks,
+            Some("Live in Herdr"),
+        );
+
+        assert_eq!(picker_row(row, 24), "reviewer  Workspace · p1");
+        assert_eq!(picker_row(row, 12), "reviewer  p1");
+    }
+
+    #[test]
+    fn every_picker_secondary_uses_the_same_quiet_metadata_style() {
+        let theme = Theme::resolve(ThemePreference::Dark, true);
+        let row = PickerRow::fields("$skill", "Project Skill");
+
+        let ordinary = picker_line(row, 24, false, &theme);
+        assert_eq!(ordinary.spans.len(), 3);
+        assert_eq!(ordinary.spans[0].style.fg, Some(theme.foreground));
+        assert_eq!(ordinary.spans[2].style.fg, Some(theme.muted));
+
+        let selected = picker_line(row, 24, true, &theme);
+        assert_eq!(selected.spans.len(), 3);
+        assert_eq!(selected.spans[0].style.fg, Some(theme.accent));
+        assert!(
+            selected.spans[0]
+                .style
+                .add_modifier
+                .contains(Modifier::BOLD)
+        );
+        assert_eq!(selected.spans[2].style.fg, Some(theme.muted));
+        assert_eq!(selected.spans[2].style.bg, theme.focused_surface);
+        insta::assert_debug_snapshot!("picker_metadata_styles", (ordinary, selected));
     }
 
     #[test]

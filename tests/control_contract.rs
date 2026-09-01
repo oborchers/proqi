@@ -6,13 +6,14 @@ use proqi::ports::control::{
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::Value;
 
-const REQUEST: &str = include_str!("fixtures/control/v5/add.request.json");
-const ACCEPTED: &str = include_str!("fixtures/control/v5/add.accepted.json");
-const REJECTED: &str = include_str!("fixtures/control/v5/add.rejected.json");
-const UPDATE_PREPARE: &str = include_str!("fixtures/control/v5/update_prepare.request.json");
-const UPDATE_READY: &str = include_str!("fixtures/control/v5/update_prepare.ready.json");
-const CAPTURE_TAKEOVER: &str = include_str!("fixtures/control/v5/capture_takeover.request.json");
-const CAPTURE_SCHEDULED: &str = include_str!("fixtures/control/v5/capture_takeover.scheduled.json");
+const REQUEST: &str = include_str!("fixtures/control/v7/add.request.json");
+const ACCEPTED: &str = include_str!("fixtures/control/v7/add.accepted.json");
+const REJECTED: &str = include_str!("fixtures/control/v7/add.rejected.json");
+const PRESERVE: &str = include_str!("fixtures/control/v7/preserve_add.request.json");
+const UPDATE_PREPARE: &str = include_str!("fixtures/control/v7/update_prepare.request.json");
+const UPDATE_READY: &str = include_str!("fixtures/control/v7/update_prepare.ready.json");
+const CAPTURE_TAKEOVER: &str = include_str!("fixtures/control/v7/capture_takeover.request.json");
+const CAPTURE_SCHEDULED: &str = include_str!("fixtures/control/v7/capture_takeover.scheduled.json");
 
 #[test]
 fn current_request_success_and_error_fixtures_round_trip_canonically() {
@@ -25,6 +26,16 @@ fn current_request_success_and_error_fixtures_round_trip_canonically() {
     assert_eq!(rejected.protocol, CONTROL_PROTOCOL_VERSION);
     assert!(matches!(accepted.result, ControlResult::Accepted(_)));
     assert!(matches!(rejected.result, ControlResult::Rejected { .. }));
+}
+
+#[test]
+fn current_preservation_fixture_round_trips_with_closed_semantics() {
+    let request: ControlRequest = assert_round_trip(PRESERVE);
+    assert_eq!(request.protocol, CONTROL_PROTOCOL_VERSION);
+    assert!(matches!(
+        request.mutation,
+        proqi::ports::control::ControlMutation::PreserveAdd { .. }
+    ));
 }
 
 #[test]

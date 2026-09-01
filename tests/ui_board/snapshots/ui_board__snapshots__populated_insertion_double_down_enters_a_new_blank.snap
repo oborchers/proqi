@@ -1,6 +1,6 @@
 ---
 source: tests/ui_board/snapshots.rs
-assertion_line: 97
+assertion_line: 161
 expression: "snapshot(&mut fixture, 50, 10, ThemePreference::Dark)"
 ---
 SIZE 50x10
@@ -15,7 +15,7 @@ TEXT
 06││
 07│  proqi-ui-contract│
 08│  2 thoughts · edit · saving│
-09│  Esc Board  : Commands  ? Shortcuts│
+09│  Esc Board│
 
 STYLE RUNS
 0: 0-49 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
@@ -27,4 +27,4 @@ STYLE RUNS
 6: 0-49 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 7: 0-49 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 8: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-47 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE | 48-49 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-9: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-4 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 5-12 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 13-13 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 14-24 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 25-25 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 26-49 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+9: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-4 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 5-49 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE

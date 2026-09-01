@@ -71,10 +71,18 @@ pub(super) fn add(
     position: Option<usize>,
     supplied: Option<OperationId>,
 ) -> Result<Option<ThoughtMutation>, CliError> {
-    add_annotated(context, session_id, body, Vec::new(), position, supplied)
+    add_with_kind(
+        context,
+        session_id,
+        body,
+        Vec::new(),
+        position,
+        supplied,
+        false,
+    )
 }
 
-pub(super) fn add_annotated(
+pub(super) fn preserve_add(
     context: &mut RuntimeContext,
     session_id: SessionId,
     body: &str,
@@ -82,18 +90,48 @@ pub(super) fn add_annotated(
     position: Option<usize>,
     supplied: Option<OperationId>,
 ) -> Result<Option<ThoughtMutation>, CliError> {
+    add_with_kind(
+        context,
+        session_id,
+        body,
+        annotations,
+        position,
+        supplied,
+        true,
+    )
+}
+
+fn add_with_kind(
+    context: &mut RuntimeContext,
+    session_id: SessionId,
+    body: &str,
+    annotations: Vec<ContentAnnotation>,
+    position: Option<usize>,
+    supplied: Option<OperationId>,
+    preserve: bool,
+) -> Result<Option<ThoughtMutation>, CliError> {
     let Some(owner) = owner(context, session_id)? else {
         return Ok(None);
     };
     let operation_id = supplied.unwrap_or_else(|| context.ids.operation_id());
     let thought_id = ThoughtId::from_database_bytes(operation_id.database_bytes())
         .map_err(|error| CliError::identifier(error.to_string()))?;
-    let mutation = ControlMutation::Add {
-        operation_id,
-        thought_id,
-        content: body.to_owned(),
-        annotations,
-        position,
+    let mutation = if preserve {
+        ControlMutation::PreserveAdd {
+            operation_id,
+            thought_id,
+            content: body.to_owned(),
+            annotations,
+            position,
+        }
+    } else {
+        ControlMutation::Add {
+            operation_id,
+            thought_id,
+            content: body.to_owned(),
+            annotations: Vec::new(),
+            position,
+        }
     };
     let receipt = send(context, &owner, session_id, mutation)?;
     Ok(Some(ThoughtMutation {
@@ -325,7 +363,11 @@ mod tests {
             None
         );
         assert_eq!(sync_protocol(Some(3)).expect("protocol three owner"), None);
-        assert_eq!(sync_protocol(Some(4)).expect("current owner"), Some(4));
-        assert!(sync_protocol(Some(6)).is_err());
+        assert_eq!(
+            sync_protocol(Some(4)).expect("protocol four owner"),
+            Some(4)
+        );
+        assert_eq!(sync_protocol(Some(7)).expect("current owner"), Some(7));
+        assert!(sync_protocol(Some(8)).is_err());
     }
 }

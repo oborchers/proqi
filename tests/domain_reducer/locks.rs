@@ -118,3 +118,62 @@ fn locked_thoughts_can_be_copied_but_never_cut_after_clipboard_success() {
         Err(ApplicationError::ThoughtLocked(thought_id))
     );
 }
+
+#[test]
+fn staged_removal_blocks_later_sequence_allocation_until_its_receipt() {
+    let mut fixture = Fixture::new();
+    let source = fixture.create("submitted");
+    let unrelated = fixture.create("unrelated");
+    reduce(
+        &mut fixture.state,
+        Action::BeginSubmission {
+            thought_ids: vec![source],
+        },
+    )
+    .expect("lock source");
+    let operation_id = fixture.operation_id();
+    let at = fixture.time();
+    reduce(
+        &mut fixture.state,
+        Action::StageSubmissionRemoval {
+            operation_id,
+            thought_ids: vec![source],
+            at,
+        },
+    )
+    .expect("stage removal");
+    let history_len = fixture.state.board_history().len();
+    let create_id = fixture.ids.thought_id();
+    let create_operation = fixture.operation_id();
+    let create_at = fixture.time();
+    assert_eq!(
+        reduce(
+            &mut fixture.state,
+            Action::CreateThought {
+                thought_id: create_id,
+                operation_id: create_operation,
+                content: "must wait".to_owned(),
+                annotations: Vec::new(),
+                insertion_index: None,
+                at: create_at,
+            },
+        ),
+        Err(ApplicationError::InvalidState)
+    );
+    let move_operation = fixture.operation_id();
+    let move_at = fixture.time();
+    assert_eq!(
+        reduce(
+            &mut fixture.state,
+            Action::MoveThought {
+                operation_id: move_operation,
+                thought_id: unrelated,
+                to: 0,
+                at: move_at,
+            },
+        ),
+        Err(ApplicationError::InvalidState)
+    );
+    assert_eq!(fixture.state.board.live_thoughts().len(), 2);
+    assert_eq!(fixture.state.board_history().len(), history_len);
+}

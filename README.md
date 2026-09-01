@@ -120,6 +120,12 @@ prompt files or unsaved Sublime scratch document.
 Changes autosave; exit prints the resume command. Boards rename, trash, restore,
 and run in parallel; one lease prevents concurrent editing.
 
+A genuinely empty board opens with `+ Start typing`. Type or paste immediately
+to create the first thought, or click the insertion row to reveal the ordinary
+empty editor first. Nothing is saved until content is produced. Press `Esc` to
+use Board controls instead. Returning focus to the pane does not override that
+Board choice.
+
 `Primary` means `Command` on macOS and `Ctrl` on Linux.
 
 ### Board controls
@@ -128,10 +134,11 @@ and run in parallel; one lease prevents concurrent editing.
 | --- | --- |
 | `n`, `Enter` on `+ New thought`, paste, or click | Create a thought |
 | `Primary+V` with no selection | Create from the clipboard |
-| `j` / `k` or arrows | Focus next / previous |
+| `j` / `k` or arrows | Focus next / previous; twice at a blocked bottom / top edge creates there |
 | `Enter` or `e` | Edit |
 | `Primary+J` / `Primary+K`, `Primary+Shift+↓` / `↑`, or drag | Reorder |
-| `y` / `Primary+C`; `x` / `Primary+X`; `d` | Copy; safe cut; delete |
+| `y` / `Primary+C`; `x` / `Primary+X` | Copy; safe cut |
+| `d` or `Del` (`Entf` on German keyboards) | Delete |
 | `Space`; `a` / `Primary+A` | Toggle selection; select all |
 | `Shift+↑` / `↓` or `K` / `J`; `v` then move | Extend or latch a range |
 | `Primary+D` | Duplicate thought or selection |
@@ -154,13 +161,26 @@ and run in parallel; one lease prevents concurrent editing.
 | `Shift` + movement | Extend text selection |
 | `Alt+↑` / `↓`; `Primary+↑` / `↓` | Jump five rows; thought start / end |
 | `Enter`; `Tab`; `Shift+Tab` | Continue lists; nest; outdent |
-| `↑` / `↓` twice at a boundary | Focus the adjacent thought |
+| `↑` / `↓` twice at a boundary | Focus the adjacent thought, or create at the top / bottom board edge |
+| `Primary+Enter`; `Primary+Shift+Enter` | Submit and remove after acceptance; submit and keep |
 | Type `$name`, `/name`, or supported `@name` | Complete a local invocation |
 | `↑` / `↓` or `Primary+P` / `Primary+N`; `Enter` / `Tab`; `Esc` | Navigate, insert, or close invocation results |
+
+Unmodified physical `Del` is an invariant Board alias. Remapping the `delete`
+character changes `d`, not the physical key. Modified `Del` is not a Board
+command. In text editors and searchable query fields, `Del` remains a
+text-editing key, never a thought delete, and `h`, `j`, `k`, and `l` remain
+literal text. List-only menus and four-way choosers ignore irrelevant modifiers
+equally for arrows and their Vim-style aliases.
 
 Mouse input covers the same core workflow. Images, files, and large pastes fold
 into compact annotations while their content stays intact. See
 [invocation compatibility](docs/INVOCATIONS.md).
+
+Inside Herdr, opening the same invocation picker also discovers recognized live
+coding agents across the server. Selecting one inserts an inert collaborator
+location and displays it as a compact inline mention. It never focuses or
+submits to that agent.
 
 ## Screenshot Inbox on macOS
 
@@ -168,7 +188,8 @@ into compact annotations while their content stays intact. See
   <img src="assets/proqi-screenshot-inbox.gif" width="1000" alt="Proqi enabling Screenshot Inbox, receiving a new macOS screenshot, and turning it into an annotatable thought">
 </p>
 
-Press `i`: new Desktop screenshots become annotatable image thoughts. Proqi
+From `+ Start typing`, press `Esc`, then `i`: new Desktop screenshots become
+annotatable image thoughts. From an ordinary Board, press `i` directly. Proqi
 never takes, uploads, analyzes, copies, or configures them.
 
 One process listens. It pauses after 10 unattended captures or 20 inactive
@@ -191,7 +212,17 @@ notify_terminal_on_auto_pause = false
 </p>
 
 In Herdr, Proqi finds verified adjacent agents. `s` submits in visible order and
-removes after acceptance; `S` keeps. The palette submits the whole board.
+removes after acceptance; `S` keeps. While editing, `Primary+Enter` submits the
+active thought and `Primary+Shift+Enter` submits it while keeping it. The palette
+submits the whole board. With several verified adjacent agents, either edit
+chord opens the temporary direction chooser; press an arrow or `h`, `j`, `k`,
+or `l` next to choose the target. Those keys select a direction instead of
+moving or inserting text while the chooser is open. `Esc` cancels the chooser
+and returns to the unchanged editor.
+
+When an accepted submission removes the final thought, Proqi returns to the
+passive `+ Start typing` board. It does not create a replacement blank thought;
+the next typed or pasted content creates the next thought directly.
 
 Busy receivers decide whether input steers or queues. Any failed verification
 leaves the board unchanged.
@@ -256,6 +287,7 @@ density = "comfortable" # or compact
 [keybindings]
 new = "n"
 edit = "e"
+delete = "d" # remaps the character only; physical Del remains available
 submit_remove = "s"
 submit_keep = "S"
 undo = "u"

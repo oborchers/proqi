@@ -36,7 +36,8 @@ impl BoardApp {
             input @ (UiInput::Pointer(PointerInput {
                 kind: PointerKind::Move,
                 ..
-            }) | UiInput::Resize { .. }) => return self.handle_primary_input(input, ids, clock),
+            }) | UiInput::Resize { .. }
+            | UiInput::HostFocusLost) => return self.handle_primary_input(input, ids, clock),
             deferred @ (UiInput::Pointer(_)
             | UiInput::Paste(_)
             | UiInput::PasteAnnotated(_)

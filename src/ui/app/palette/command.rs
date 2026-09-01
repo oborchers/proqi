@@ -29,6 +29,7 @@ pub(super) enum Command {
     SubmitAllRemove,
     SubmitAllKeep,
     RefreshAgents,
+    RefreshAttachments,
     InsertInvocation,
     RefreshInvocations,
     CheckUpdates,
@@ -48,7 +49,7 @@ pub(super) enum Command {
 }
 
 impl Command {
-    pub(super) const ALL: [(Self, &'static str); 43] = [
+    pub(super) const ALL: [(Self, &'static str); 44] = [
         (Self::New, "New thought"),
         (Self::RenameSession, "Rename session"),
         (Self::CopySessionId, "Copy session ID"),
@@ -56,7 +57,7 @@ impl Command {
         (Self::Edit, "Edit thought"),
         (Self::PlainNewline, "Insert plain newline"),
         (Self::DeleteLogicalLine, "Delete logical line"),
-        (Self::DeleteSentence, "Delete sentence (experimental)"),
+        (Self::DeleteSentence, "Delete sentence"),
         (Self::JumpUp, "Jump cursor up 5 visual rows"),
         (Self::JumpDown, "Jump cursor down 5 visual rows"),
         (Self::ThoughtStart, "Move cursor to thought beginning"),
@@ -79,6 +80,7 @@ impl Command {
             "Send to another Proqi session and remove thought",
         ),
         (Self::RefreshAgents, "Refresh adjacent agents"),
+        (Self::RefreshAttachments, "Refresh attachments"),
         (Self::InsertInvocation, "Insert discovered invocation"),
         (Self::RefreshInvocations, "Refresh invocations"),
         (Self::CheckUpdates, "Check for updates"),

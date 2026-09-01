@@ -21,7 +21,8 @@ pub(super) fn translate(event: Event) -> Option<UiInput> {
         Event::Resize(width, height) => Some(UiInput::Resize { width, height }),
         Event::Mouse(mouse) => translate_mouse(mouse).map(UiInput::Pointer),
         Event::FocusGained => Some(UiInput::HostFocusGained),
-        Event::FocusLost | Event::Key(_) => None,
+        Event::FocusLost => Some(UiInput::HostFocusLost),
+        Event::Key(_) => None,
     }
 }
 
@@ -55,7 +56,7 @@ pub(super) fn translate_key(key: KeyEvent) -> Option<UiKey> {
     let primary = key
         .modifiers
         .intersects(KeyModifiers::CONTROL | KeyModifiers::SUPER | KeyModifiers::META);
-    if primary && let Some(command) = translate_primary_key(&key) {
+    if primary && let Some(command) = primary_key(&key) {
         return Some(command);
     }
     let extend_selection = key.modifiers.contains(KeyModifiers::SHIFT);
@@ -73,7 +74,8 @@ pub(super) fn translate_key(key: KeyEvent) -> Option<UiKey> {
         KeyCode::Tab => Some(UiKey::Tab),
         KeyCode::Esc => Some(UiKey::Escape),
         KeyCode::Backspace => Some(UiKey::Backspace),
-        KeyCode::Delete => Some(UiKey::Delete),
+        KeyCode::Delete if key.modifiers.is_empty() => Some(UiKey::Delete),
+        KeyCode::Delete => Some(UiKey::ModifiedDelete),
         KeyCode::Up => Some(vertical_navigation(
             CursorMovement::VisualUp,
             CursorMovement::VisualJumpUp,
@@ -114,27 +116,28 @@ pub(super) fn translate_key(key: KeyEvent) -> Option<UiKey> {
     }
 }
 
-fn translate_primary_key(key: &KeyEvent) -> Option<UiKey> {
-    let shifted = key.modifiers.contains(KeyModifiers::SHIFT);
-    let command = match key.code {
+fn primary_key(key: &KeyEvent) -> Option<UiKey> {
+    match key.code {
+        KeyCode::Enter if key.modifiers.contains(KeyModifiers::SHIFT) => Some(UiKey::SubmitKeep),
+        KeyCode::Enter => Some(UiKey::Submit),
         KeyCode::Char('a') => Some(UiKey::SelectAll),
         KeyCode::Char('c') => Some(UiKey::Copy),
         KeyCode::Char('x') => Some(UiKey::Cut),
         KeyCode::Char('v') => Some(UiKey::PasteClipboard),
         KeyCode::Char('d') => Some(UiKey::Duplicate),
         KeyCode::Char('q') => Some(UiKey::Quit),
-        KeyCode::Char('u') if !shifted => Some(UiKey::DeleteLogicalLine),
-        KeyCode::Char('z') if shifted => Some(UiKey::Redo),
+        KeyCode::Char('u') if !key.modifiers.contains(KeyModifiers::SHIFT) => {
+            Some(UiKey::DeleteLogicalLine)
+        }
+        KeyCode::Char('z') if key.modifiers.contains(KeyModifiers::SHIFT) => Some(UiKey::Redo),
+        KeyCode::Char('Z') => Some(UiKey::Redo),
         KeyCode::Char('z') => Some(UiKey::Undo),
         KeyCode::Char('y') => Some(UiKey::Redo),
         KeyCode::Char('p') => Some(UiKey::PickerPrevious),
         KeyCode::Char('n') => Some(UiKey::PickerNext),
-        _ => None,
-    };
-    command.or(match key.code {
         KeyCode::Char(character) => Some(UiKey::PrimaryCharacter(character)),
         _ => None,
-    })
+    }
 }
 
 fn vertical_navigation(

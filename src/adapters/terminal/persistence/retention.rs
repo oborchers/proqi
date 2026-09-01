@@ -4,32 +4,48 @@ use std::collections::BTreeMap;
 
 use crate::{domain::OperationSequence, ports::store::OperationBatch};
 
+use super::RetainedCommit;
+
 const RETAINED_BATCH_LIMIT: usize = 128;
 const RETAINED_BYTES_LIMIT: usize = 16 * 1024 * 1024;
 
 pub(super) fn can_retain(
-    retained: &BTreeMap<OperationSequence, Box<OperationBatch>>,
+    retained: &BTreeMap<OperationSequence, RetainedCommit>,
     sequence: OperationSequence,
-    batch: &OperationBatch,
+    commit: &RetainedCommit,
 ) -> bool {
     let replacing = retained.contains_key(&sequence);
     let count = retained.len() + usize::from(!replacing);
     if count > RETAINED_BATCH_LIMIT {
         return false;
     }
-    let previous = retained
-        .get(&sequence)
-        .map_or(0, |value| retained_batch_bytes(value));
+    let previous = retained.get(&sequence).map_or(0, retained_commit_bytes);
     let bytes = retained
         .values()
-        .map(|value| retained_batch_bytes(value))
+        .map(retained_commit_bytes)
         .sum::<usize>()
         .saturating_sub(previous)
-        .saturating_add(retained_batch_bytes(batch));
+        .saturating_add(retained_commit_bytes(commit));
     bytes <= RETAINED_BYTES_LIMIT
 }
 
-fn retained_batch_bytes(batch: &OperationBatch) -> usize {
+fn retained_commit_bytes(commit: &RetainedCommit) -> usize {
+    match commit {
+        RetainedCommit::Batch(batch) => retained_batch_bytes(batch),
+        RetainedCommit::SubmissionRemoval {
+            outcome, removal, ..
+        } => serde_json::to_vec(removal)
+            .map_or(usize::MAX, |value| value.len())
+            .saturating_add(
+                outcome
+                    .error_code
+                    .as_ref()
+                    .map_or(256, |code| code.len() + 256),
+            ),
+    }
+}
+
+fn retained_batch_bytes(batch: &crate::ports::store::OperationBatch) -> usize {
     match batch {
         OperationBatch::Board(operation) => {
             serde_json::to_vec(operation).map_or(usize::MAX, |value| value.len())
@@ -62,7 +78,7 @@ mod tests {
         ports::{environment::IdGenerator as _, store::OperationBatch},
     };
 
-    use super::can_retain;
+    use super::{RetainedCommit, can_retain};
 
     #[test]
     fn oversized_failed_batch_is_not_offered_for_retry() {
@@ -93,7 +109,7 @@ mod tests {
         assert!(!can_retain(
             &BTreeMap::new(),
             OperationSequence::new(1),
-            &batch
+            &RetainedCommit::Batch(Box::new(batch))
         ));
     }
 }

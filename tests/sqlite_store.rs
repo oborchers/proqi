@@ -126,10 +126,14 @@ fn create_thought(
     thought_id
 }
 
+#[path = "sqlite_store/annotations.rs"]
+mod annotations;
 #[path = "sqlite_store/bulk.rs"]
 mod bulk;
 #[path = "sqlite_store/compaction.rs"]
 mod compaction;
+#[path = "sqlite_store/compose.rs"]
+mod compose;
 #[path = "sqlite_store/concurrency.rs"]
 mod concurrency;
 #[path = "sqlite_store/core.rs"]
@@ -142,3 +146,5 @@ mod recovery;
 mod screenshot;
 #[path = "sqlite_store/submission.rs"]
 mod submission;
+#[path = "sqlite_store/top_boundary.rs"]
+mod top_boundary;

@@ -372,3 +372,30 @@ fn duplicate_copies_selection_below_its_range_as_one_undoable_operation() {
     fixture.input(UiInput::Key(UiKey::Undo));
     assert_eq!(fixture.app.state.board.live_thoughts().len(), 3);
 }
+
+#[test]
+fn duplicate_preserves_existing_shortcut_metadata_without_reauthoring_it() {
+    let annotation: ContentAnnotation = serde_json::from_value(serde_json::json!({
+        "start": 6,
+        "end": 11,
+        "kind": { "kind": "shortcut_emphasis" }
+    }))
+    .expect("structurally valid durable fixture");
+    let mut fixture = Fixture::with_annotated_thought("Press Enter", vec![annotation.clone()]);
+
+    let effects = fixture.effects(UiInput::Key(UiKey::Duplicate));
+
+    assert!(matches!(
+        effects.as_slice(),
+        [Effect::CommitBoardOperation(operation)]
+            if operation.kind == proqi::domain::BoardOperationKind::Duplicate
+    ));
+    let thoughts = fixture.app.state.board.live_thoughts();
+    assert_eq!(thoughts.len(), 2);
+    assert_eq!(thoughts[0].content, thoughts[1].content);
+    assert_eq!(
+        thoughts[0].annotations.as_slice(),
+        std::slice::from_ref(&annotation)
+    );
+    assert_eq!(thoughts[1].annotations, [annotation]);
+}

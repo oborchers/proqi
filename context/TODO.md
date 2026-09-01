@@ -25,22 +25,33 @@ undo remain non-negotiable.
 
 ## Proposed order
 
+- [ ] **Prompt-ready primary input:** make an empty Proqi board immediately
+  ready for typing and make the active edit buffer directly submittable, so
+  Proqi is faster and more enjoyable than the native harness input for prompts
+  of every size.
+- [ ] **System-owned semantic inline emphasis:** let Proqi highlight exact
+  application-authored ranges such as first-run shortcut keys without adding
+  user-authored colors, rich text, or formatting to canonical thought content.
 - [ ] **Positioning:** describe Proqi in the README as a terminal-native
   power-user prompt composer for parallel coding-agent work.
 - [ ] **Public documentation:** turn shipped interaction workstream handoffs
   into concise GitHub-facing feature guides, beginning with range selection.
 - [ ] **Release awareness:** package concise versioned highlights with every
   release and show them once in the session that initiated a successful update.
-- [ ] **Command discovery:** group the Commands overlay with inert, display-only
-  section headings that keyboard and mouse selection always skip.
+- [ ] **Fast paging and command discovery:** reuse the editor's five-row jump
+  across every picker and scrollable overlay, add Page Up and Page Down aliases,
+  and group the Commands overlay with inert headings that navigation skips.
 - [ ] **Deterministic TUI fixtures:** add an `xtask` scenario/session seeder for
   repeatable live walkthroughs, regression reproduction, and stress testing.
-- [ ] **High-return editing:** evaluate the experimental sentence command, then
-  add exact replace-all and logical-line duplicate/move.
+- [ ] **High-return editing:** add exact replace-all and logical-line
+  duplicate/move.
 - [ ] **Attachment integrity:** preserve file, image, and folded annotation
   metadata across Proqi-to-Proqi copy/cut/paste, and prevent submission when an
   annotated asset can no longer be accessed.
 - [ ] **Board flow:** search-driven selection and selected-block reordering.
+- [ ] **Herdr discovery:** surface recognized live agents from every workspace
+  and tab in the existing invocation picker, then add an explicit global
+  delivery route without changing the adjacent-submit fast path.
 - [ ] **Standalone agent connectivity:** finish the architecture spike and any
   behavior-neutral prerequisite, then add non-Herdr connection only through a
   verified provider endpoint or required extension. Pi is the only current
@@ -59,18 +70,26 @@ undo remain non-negotiable.
 ```text
 Editor
 ├─ Exact replace-all ──> Occurrence-only multi-selection
-├─ Experimental sentence deletion
-├─ Paragraph deletion
+├─ Existing sentence deletion ──> Paragraph deletion
 └─ Shared logical-line ranges ──> Logical-line duplicate/move/join
 
 Clipboard and attachments
 ├─ Typed annotated clipboard payload ──> Lossless Proqi round trips
 └─ Attachment accessibility checks ──> Submit/Submit-all preflight
 
+Presentation metadata
+└─ Fold/style projection split ──> System-owned shortcut emphasis
+
+Fast navigation
+└─ One five-step intention ──> Editor rows + picker entries + overlay rows
+
 Board
 ├─ Select all search matches
 ├─ Selected-block reorder
 └─ Composite board/editor transaction ──> Split/extract/merge thoughts
+
+Herdr discovery and routing
+└─ Live agent catalog ──> Prompt reference insertion ──> Global semantic submit
 
 Standalone agent connectivity (no Herdr)
 ├─ Provider spikes: Pi, Hermes, Codex, and Claude Code complete
@@ -104,6 +123,9 @@ Git context
 └─ Injected discovery ──> Conditional status row ──> Optional durable browser data
 
 Independent
+├─ Prompt-ready primary input
+├─ System-owned semantic inline emphasis
+├─ Shared five-step paging
 ├─ README positioning
 ├─ GitHub Pages feature guides
 ├─ Commands-overlay section headings
@@ -121,6 +143,230 @@ overlay can proceed independently at
 the model layer, but their final rendering work should be serialized. Screenshot
 TUI wiring and the Git status row both touch responsive chrome and should also
 be serialized.
+
+## Prompt-ready primary input
+
+### Make Proqi the fastest default prompt entry surface: P0, S/M (3–6 days)
+
+Product goal: Proqi should be prompt-ready. Even when the user has only one
+small prompt, no sorting work, and an empty board, entering and submitting that
+prompt through Proqi should require no more effort than a native harness input.
+For supported harnesses, Proqi should become the primary input surface because
+it is faster, safer, and more enjoyable, not merely because it has additional
+board features.
+
+User story: when an empty Proqi board becomes the actively focused input
+surface, it creates one ordinary blank thought and enters its editor before I
+type. I can therefore begin typing immediately without blurring the boundary
+between board shortcuts and editor input. When I am editing that thought, I can
+submit it directly without returning to board mode. After a successful
+submit-and-remove leaves the focused board empty, Proqi is immediately ready
+for the next prompt again.
+
+- [ ] Treat active focus, never an arbitrary printable key, as the transition
+  into prompt-ready input. On startup or a genuine host-focus transition, if
+  the board has no live thoughts and no modal, recovery decision, persistence
+  failure, or other protected state is active, create one ordinary durable
+  blank thought and enter its editor before accepting text input.
+- [ ] Reuse the existing durable create operation and editor lifecycle. The
+  focus-triggered blank has one stable identity, one ordinary board-history
+  entry, persistent undo and redo, and the same restart behavior as a blank
+  created with `n` or the insertion row. Do not add a transient editor, phantom
+  history, or a second empty-thought model.
+- [ ] Keep mode boundaries strict. Board mode continues to interpret printable
+  keys as board commands and never turns an unhandled key into text. `Escape`
+  leaves the prompt-ready editor for board navigation, while `n`, the insertion
+  row, or the next qualifying host-focus transition deliberately returns to an
+  editor.
+- [ ] Add one direct, terminal-portable submission chord in edit mode for
+  **Submit**, plus one deliberate variant for **Submit and keep**. Evaluate
+  `Primary+Enter` and `Primary+Shift+Enter` first, retain Commands fallbacks,
+  and verify the exact Crossterm events on supported macOS and Linux terminal
+  paths before freezing the defaults. Plain Enter remains newline insertion
+  unless an explicit product decision changes the multiline editor contract.
+- [ ] Direct edit-mode submission addresses the active thought only. Existing
+  board selection and Submit all workflows remain explicit board operations;
+  entering edit mode continues to clear incompatible multi-selection state.
+- [ ] Reuse the complete existing submission pipeline. Flush the exact editor
+  revision, wait for durable persistence, perform attachment preflight, create
+  the redacted journal attempt, revalidate the target, and remove only after a
+  matching accepted receipt. The shorter interaction must not bypass any
+  durability, accessibility, identity, or outcome-unknown guardrail.
+- [ ] When no verified target is available, preserve the complete draft and
+  explain the next action without swallowing the submission chord. When several
+  targets require a direction or destination choice, retain the draft and open
+  the existing bounded chooser rather than silently selecting one.
+- [ ] Preserve native harness semantics through the existing provider adapter.
+  A supported working agent may receive immediate steering or follow-up input
+  according to its verified contract; Proqi must not add a second queue or
+  promise cancellation after the harness has accepted the prompt.
+- [ ] Return to a prompt-ready editor when a focused user action removes the
+  last thought, including accepted Submit, board deletion, select-all deletion,
+  undo and redo, and completion of the first-run practice board. When background
+  capture, remote mutation, recovery, or another non-focused action empties the
+  board, defer creation until the next genuine host-focus transition.
+- [ ] Keep time to first input independent of agent discovery, update checks,
+  attachment scans, Git discovery, or other background work. Input arriving
+  during startup, first render, resize, or asynchronous discovery must be
+  retained exactly and displayed as soon as the board is usable.
+- [ ] Make the empty input state visually quiet and obvious. Reuse the current
+  editor, focus gutter, cursor, theme, and responsive layout rather than adding
+  a dashboard, card, permanent instruction block, or second text field. The
+  footer and help must expose the direct submit chords without crowding narrow
+  panes.
+- [ ] Measure the primary workflows by required user actions: zero preparatory
+  keystrokes before typing on an empty board, one chord to submit the active
+  edit buffer, and zero preparatory keystrokes before typing the next prompt
+  after submit-and-remove empties the board.
+- [ ] Cover an empty new session, an emptied resumed session, repeated focus
+  events, focus while a protected modal or persistence failure is active,
+  first-run tutorial completion, the first characters `n`, `q`, `s`, `:`, and
+  `?`, Unicode and combining input, dead keys and IME-style composition where
+  supported, multiline and annotated paste, input before first draw, narrow and
+  shallow resize, mouse activation, unavailable and multiple targets,
+  busy-agent delivery, accepted keep/remove, restart, and durable undo/redo.
+  Prove that printable input remains text only in edit mode and remains a board
+  command in board mode. Add real macOS PTY coverage for the chosen submission
+  chords and reviewed snapshots for empty edit and board states.
+
+## System-owned semantic inline emphasis
+
+### Highlight application-authored shortcut ranges: P0, S (2 to 4 days)
+
+Product boundary: Proqi may assign semantic presentation roles to exact ranges
+that the application itself authored. A user may customize the global theme
+palette, including how a semantic role appears, but may never apply a color or
+style to an arbitrary content range. Thought content remains plain text. Proqi
+does not accept ANSI styling, inline RGB values, rich text, or Markdown syntax
+as formatting instructions.
+
+Initial user story: on the first-run practice board, shortcut keys such as
+`Enter`, `Esc`, `n`, `j`, `k`, `↓`, `↑`, `d`, `u`, `s`, and `a`
+receive restrained forest-green emphasis plus a bold non-color cue. The text
+remains exact, readable, editable, searchable, copyable, and directly
+submittable as ordinary plain text.
+
+- [ ] Extend the existing durable presentation-metadata model with one closed,
+  semantic shortcut-emphasis kind. Store only the semantic role and its exact
+  validated UTF-8 byte range, never a color, font, terminal escape sequence, or
+  user-controlled style value.
+- [ ] Refactor the canonical presentation projection so durable annotations
+  explicitly choose either substitution behavior or inline-style behavior.
+  Attachments and large pastes continue to substitute folded labels. Shortcut
+  emphasis preserves every visible character and contributes only a style
+  range. Board rendering, editor rendering, measurement, cursor mapping,
+  selection, hit testing, and wrapping must consume the same projection.
+- [ ] Keep recognition, range ownership, and styling separate. The first-run
+  copy owner constructs each canonical string and its shortcut ranges together.
+  Do not rediscover single-character shortcuts through substring searches,
+  regular expressions, capitalization heuristics, or renderer knowledge of the
+  tutorial's prose.
+- [ ] Restrict creation of shortcut emphasis to the application-private literal
+  builder used by reviewed application policies. Ordinary TUI editing and
+  Compose, paste and clipboard input, public JSON and CLI commands, generic
+  owner-control Add, imports, the Proqi skill, and agent-authored text cannot
+  originate semantic styles. Cross-session transfer and thought duplication
+  may preserve already-valid metadata through purpose-specific paths without
+  exposing range or style selection. This is a supported-API invariant, not a
+  cryptographic provenance claim. Structurally valid bytes inserted directly
+  into SQLite by the same operating-system user may load because that tampering
+  is outside the documented threat model.
+- [ ] Preserve the existing edit contract. An edit outside a shortcut range
+  rebases that range through the canonical `TextChangeSet`. An edit intersecting
+  the range dissolves its emphasis rather than guessing new semantic ownership.
+  Persistent editor undo and redo restore both content and the application-owned
+  range exactly.
+- [ ] Keep every non-visual boundary plain and exact. SQLite content, search,
+  clipboard copy and cut, export, recovery, diagnostics, CLI reads, Herdr
+  submission, payload digests, and attachment preflight consume canonical text
+  with no styling bytes or generated markup.
+- [ ] Render shortcut emphasis through an existing validated semantic theme role
+  where its meaning remains clear, initially the annotation/accent role plus
+  bold. Custom themes may change that role globally but cannot change which
+  ranges receive it. Limited-color terminals retain the same bold non-color cue.
+  Add exact contrast checks if a distinct shortcut theme role proves necessary.
+- [ ] Register the durable enum variant in schema and storage protocol 10, with
+  a forward protocol-stamp migration and mixed-version refusal. Register the
+  purpose-specific preservation request in control protocol 7. Never let an
+  older process encounter an unknown annotation payload as ordinary compatible
+  state.
+- [ ] Scope the first release to application-authored instructional shortcuts.
+  Do not add general rich-text editing, arbitrary emphasis commands, syntax
+  highlighting, user-authored colors, per-thought palettes, or automatic
+  styling of key-like tokens in ordinary thoughts.
+- [ ] Cover serialization and corruption refusal, SQLite reopen, migration,
+  copy and transfer preservation, exact submission bytes, edits before, inside,
+  and after a styled range, undo and redo across restart, folds before and after
+  emphasis, URL and invocation overlap policy, selection precedence, narrow and
+  shallow wrapping, every built-in and custom theme mode, limited color,
+  keyboard and mouse behavior, reviewed first-run snapshots, and a real macOS
+  PTY onboarding flow.
+
+The presentation-metadata and annotation-rebasing architecture already owns
+most of this contract. The required implementation is a focused split between
+fold substitution and inline semantic style projection, not a second rich-text
+model.
+
+## Herdr discovery and global delivery
+
+### Insert references to live Herdr agents: P1, S (3–5 days)
+
+User story: while editing a thought, discover a recognized coding agent anywhere
+on the current Herdr server and insert enough stable context that the receiving
+agent can identify the intended collaborator without the user manually
+describing its workspace, tab, and pane.
+
+- [ ] Extend the existing invocation picker with a **Live in Herdr** section
+  instead of adding a competing search surface. Keep installed skills, agents,
+  and plugins available when Herdr is absent or discovery fails.
+- [ ] Discover recognized coding agents across every workspace and tab in the
+  current Herdr server. Group results by workspace and tab, and show the agent
+  name, harness, and live readiness without exposing raw snapshot payloads,
+  paths, titles, or unrelated shell panes.
+- [ ] Refresh the catalog whenever the picker opens. Apply only the newest
+  generation-tagged result, bound discovery time and result count, and preserve
+  responsive keyboard and mouse behavior while results change.
+- [ ] Insert a concise, self-contained plain-text reference containing the
+  bounded agent name plus workspace, tab, and pane identity. Readiness is
+  display-only because it can become stale immediately after insertion.
+- [ ] Keep insertion semantically inert. Selecting a reference must never send a
+  prompt, reserve the target, or imply that later delivery will use that agent.
+- [ ] Preserve exact cursor placement, selection replacement, Unicode, undo and
+  redo, invocation highlighting, resize behavior, and canonical thought bytes
+  outside the inserted reference.
+- [ ] Cover absent Herdr, malformed or delayed discovery, duplicate names,
+  renamed workspaces and tabs, disappearing agents, blocked and unknown states,
+  narrow and shallow panes, mouse hit testing, and reviewed TUI snapshots.
+
+### Submit to any live Herdr agent: P1, M (7–12 days after discovery)
+
+User story: submit one thought or the current multi-thought selection to a
+recognized coding agent in another tab or workspace on the current Herdr server
+without moving panes or relying on raw terminal input.
+
+- [ ] Add an explicit **Submit to agent...** chooser. Keep `s` and `S` as the
+  adjacent-agent fast paths, and never reinterpret an inserted reference as a
+  delivery target.
+- [ ] Replace the direction-only target contract with a discriminated route:
+  `AdjacentPane(Direction)` preserves existing topology and receipt semantics;
+  `HerdrAgent` carries a verified workspace, tab, pane, harness, and session
+  identity without fabricated geometry or sentinel directions.
+- [ ] Migrate the content-redacted submission journal with a versioned route
+  kind and optional adjacent direction. Decode every legacy attempt exactly and
+  recover in-flight legacy states conservatively.
+- [ ] Revalidate the exact global target immediately before `agent.prompt`.
+  Permit provider-supported `idle`, `done`, and `working` delivery; show
+  `blocked` and `unknown` targets but disable submission with truthful feedback.
+- [ ] Reuse the existing source locks, multi-thought prompt assembly, accepted
+  receipt matching, outcome-unknown recovery, and remove-only-after-acceptance
+  contract. Never fall back to raw text or key injection.
+- [ ] Scope the first version to the current Herdr server. Do not imply discovery
+  across named remote servers, SSH hosts, or historical sessions that Herdr
+  cannot currently prove are live.
+- [ ] Cover target rename, movement, disappearance, session replacement,
+  duplicate display names, concurrent submissions, changed source content,
+  accepted and rejected receipts, restart recovery, migration, diagnostics,
+  and equivalent keyboard and mouse flows.
 
 ## Product positioning
 
@@ -253,7 +499,57 @@ use them immediately. Other concurrently restarted Proqi sessions remain quiet.
   state. Add reviewed light/dark/limited-color snapshots plus narrow, shallow,
   scrolling, keyboard, mouse, resize, and real update-restart PTY coverage.
 
-### Group the Commands overlay with section headings — P1, S (2–4 days)
+### Share five-step paging across editors and overlays: P1, S (2 to 4 days)
+
+Current contract: `Alt+Up` and `Alt+Down` already move the editor cursor by
+exactly five wrapped visual rows while preserving its preferred terminal-cell
+column. `Page Up` and `Page Down` are currently unused. The shared interaction
+should offer both spellings without changing ordinary Up/Down behavior.
+
+User story: while editing a long thought or navigating a large picker, I can use
+the same fast-navigation shortcut to advance through content in predictable
+five-step increments instead of repeatedly pressing Up or Down.
+
+- [ ] Introduce one normalized fast-previous and fast-next intention below raw
+  terminal input. Map both `Alt+Up` / `Alt+Down` and `Page Up` / `Page Down` to
+  it in supported modes. Do not let individual overlays reinterpret raw key
+  codes independently.
+- [ ] In edit mode, move exactly five wrapped visual rows, preserve the preferred
+  terminal-cell column, keep the cursor visible through internal scrolling, and
+  clamp at the first or last row. Shift plus either spelling extends the current
+  text selection through the same movement.
+- [ ] In every selectable picker, overlay, browser, and future pointer-local
+  context menu, move exactly five selectable entries. Display-only headings,
+  separators, disabled structural rows, and overflow cues do not count toward
+  the five entries. Clamp at the first or last eligible entry instead of
+  wrapping across a boundary.
+- [ ] For scrollable overlays with no selected entry, including shortcuts and
+  release highlights, move exactly five visible content rows and clamp at the
+  scroll bounds. Keep ordinary Up/Down behavior unchanged where those keys
+  already have a more granular meaning.
+- [ ] Give every potentially long picker one bounded viewport and explicit
+  scroll offset. Keep the selected entry visible after fast navigation,
+  filtering, asynchronous result replacement, and resize. Show quiet overflow
+  cues when more content exists above or below; a permanent scrollbar is not
+  required in shallow terminal panes.
+- [ ] Keep mouse-wheel events inside the topmost open surface. They scroll that
+  picker or overlay and never the obscured board or editor. Recompute hit
+  geometry from the same visible slice after every wheel, paging, filter, and
+  resize event.
+- [ ] Preserve board-mode contracts. Plain and shifted vertical input continue
+  to focus and select thoughts, while Primary plus Shift continues to reorder.
+  Do not make the new Page keys or Alt paging an accidental second board reorder
+  or five-thought selection command without a separate product decision.
+- [ ] Derive README controls, contextual help, shortcut overlays, remapping
+  labels, and command discovery from the same semantic definition. Document the
+  existing Alt spelling and the new Page-key alias together.
+- [ ] Cover empty, one-entry, fewer-than-five, exact-five, and long inventories;
+  first and last boundary clamping; headings; filtered and asynchronously
+  replaced results; editor selection; Unicode width; narrow and shallow resize;
+  mouse-wheel isolation; repeated key input; every picker and scrollable
+  overlay; reviewed snapshots; and real PTY translation of both key spellings.
+
+### Group the Commands overlay with section headings: P1, S (2 to 4 days)
 
 User story: when the Commands overlay contains many interactions, I can scan
 stable sections such as editing, board organization, submission, session tools,
@@ -294,8 +590,8 @@ terminology consistently in product text, documentation, and implementation.
   alone.
 - [ ] Preserve the existing keyboard scroll contract: Up/Down and key repeat
   keep the selected executable command visible through the complete inventory.
-  Add Page Up/Page Down or equivalent semantic paging only if it materially
-  improves the long-list workflow; headings never count as selectable stops.
+  Reuse the shared five-step paging intention for both Alt+Up / Alt+Down and
+  Page Up / Page Down. Headings never count as selectable stops.
 - [ ] Make mouse-wheel input over an open Commands overlay scroll its command
   rows and never the obscured board or editor underneath. Keep clicked and
   hovered hit geometry aligned with the newly visible rows after every scroll.
@@ -321,43 +617,21 @@ terminology consistently in product text, documentation, and implementation.
 
 ## Smart text editing
 
-### Experimental whole-sentence deletion: P0, S/M (3 to 6 days)
-
-User story: while editing prose, one explicit command deletes the grammatical
-sentence containing the cursor without requiring a directional selection.
-
-- [x] Keep `Primary+U` as **Delete logical line**. Visual-row deletion is not
-  planned and must not be introduced as an implicit width-dependent behavior.
-- [x] Add experimental **Delete sentence** on `Primary+Shift+U`, with Commands
-  overlay and configurable-binding discovery.
-- [x] Use the maintained `unicode-segmentation` UAX 29 implementation through a
-  declared UAX29-C3-2 profile. Single LF and CRLF sequences remain prose
-  content. Blank-line paragraph separators remain hard structural boundaries.
-- [x] Define cursor, terminator, closing punctuation, whitespace, end-of-text,
-  selection, and deletion ownership precisely in
-  [`docs/EXPERIMENTAL_SENTENCE_DELETION.md`](../docs/EXPERIMENTAL_SENTENCE_DELETION.md).
-- [x] Merge every touched sentence range into one editor transaction. Preserve
-  exact unrelated bytes, annotations, folds, graphemes, cursor validity,
-  resize independence, and restart-safe persistent undo and redo.
-- [x] Cover Latin, CJK, Unicode terminators, combining marks, emoji, LF, CRLF,
-  blank paragraphs, missing terminators, repeated deletion, large input, URLs,
-  decimals, versions, abbreviations, quotations, ellipses, and code punctuation.
-- [x] Keep the action explicitly experimental. Document unavoidable ambiguity
-  and do not imply locale-aware or semantic sentence understanding.
-
 ### Paragraph deletion: P1, S (2 to 5 days)
 
-- [ ] Add **Delete paragraph** using blank-line-delimited blocks. Keep it
-  distinct from a newline-delimited logical line. Deleting the only paragraph
-  may intentionally empty the thought.
-- [ ] Define separator ownership and selection behavior before implementation.
-  Preserve exact LF, CRLF, Unicode, annotations, folds, and persistent history.
+- [ ] Add **Delete paragraph** through the command palette first, using
+  blank-line-delimited blocks. Keep it distinct from both a newline-delimited
+  logical line and a width-dependent visual row.
+- [ ] Define separator and list-structure ownership exactly, preserve
+  annotations and exact line endings, and commit one persistent undo step.
+- [ ] Assign no prominent default shortcut until real sentence-deletion use
+  demonstrates that the broader destructive unit remains predictable.
 
 ### Logical-line duplicate and move — P1, M (4–7 days)
 
 - [ ] Reuse the canonical logical-line range and touched-unit machinery from
-  safe deletion and smart-list indentation rather than introducing a second
-  definition of line boundaries or selection endpoint behavior.
+  logical-line deletion and smart-list indentation rather than introducing a
+  second definition of line boundaries or selection endpoint behavior.
 - [ ] In edit mode, make Primary+D duplicate the selected text or current logical
   line; retain thought duplication in board mode.
 - [ ] Move touched logical lines with Alt+Up/Down plus configurable/palette
@@ -490,65 +764,65 @@ User story: when a thought refers to an image or file that disappeared after a
 restart or became unreadable, Proqi marks the attachment plainly and prevents
 me from unknowingly submitting an unusable path—including through Submit all.
 
-- [ ] Keep the user-facing model binary. An attachment is either **accessible**
+- [x] Keep the user-facing model binary. An attachment is either **accessible**
   or **inaccessible**. Accessible attachments keep the existing `[Image N]` or
   `[File N]` projection without extra chrome; inaccessible attachments render
   as `[Image N · inaccessible]` or `[File N · inaccessible]`.
-- [ ] Do not expose separate temporary, volatile, missing, permission-denied,
+- [x] Do not expose separate temporary, volatile, missing, permission-denied,
   unmounted-volume, or I/O states in routine UI. Preserve typed internal failure
   reasons only for truthful diagnostics and troubleshooting; every such failure
   has the same submission consequence.
-- [ ] Do not use strike-through, which suggests intentional deletion and is not
+- [x] Do not use strike-through, which suggests intentional deletion and is not
   reliably available in every terminal. Reinforce the explicit
   `inaccessible` text with the warning visual role, while keeping the state
   understandable without color.
-- [ ] Validate an attachment immediately when it is inserted or explicitly
+- [x] Validate an attachment immediately when it is inserted or explicitly
   relinked. Invalidate only the affected cached result when canonical content or
   annotation ranges change.
-- [ ] On session open or resume, check the focused thought first and then the
+- [x] On session open or resume, check the focused thought first and then the
   rest of the board through a bounded background lane. Never delay restoring or
   editing the board while the complete scan runs.
-- [ ] On a real thought-focus transition, prioritize that thought's attachments
+- [x] On a real thought-focus transition, prioritize that thought's attachments
   when their result is unknown or stale. Repeated cursor movement, typing, or
   pointer movement inside the same thought must not repeat filesystem work.
-- [ ] On debounced host/pane focus regain, refresh referenced attachments in the
+- [x] On debounced host/pane focus regain, refresh referenced attachments in the
   background. Where the terminal cannot report pane focus reliably, the first
   deliberate interaction after a bounded inactive interval may trigger the
   same refresh once; subsequent input does not.
-- [ ] Add an explicit **Refresh attachments** Commands action as a deterministic
+- [x] Add an explicit **Refresh attachments** Commands action as a deterministic
   manual fallback. Do not add periodic polling, per-render checks, arbitrary
   directory watchers, or checks on resize, autosave, cursor movement, passive
   pointer movement, or every keystroke.
-- [ ] Before Submit, Submit and keep, Submit all, or Submit all and keep, perform
+- [x] Before Submit, Submit and keep, Submit all, or Submit all and keep, perform
   a fresh mandatory check of every attachment in the exact captured source set.
   This check runs after pending edits are durable and before the submission
   journal enters a sending state. Cached presentation state alone never
   authorizes submission.
-- [ ] Keep source thoughts stable while the asynchronous preflight is active.
+- [x] Keep source thoughts stable while the asynchronous preflight is active.
   If any attachment is inaccessible or cannot be verified within the bounded
   check, start no delivery, create no sending attempt, remove nothing, and show
   one aggregate result such as `Proqi cannot access 2 attachments`.
-- [ ] In v1, do not offer **Submit anyway** for an annotated inaccessible asset;
+- [x] In v1, do not offer **Submit anyway** for an annotated inaccessible asset;
   the binary contract remains trustworthy. A user who intentionally wants to
   submit an ordinary path as text must explicitly remove or dissolve its
   attachment annotation first.
-- [ ] Treat `checking` as a short-lived operation, not a third attachment state.
+- [x] Treat `checking` as a short-lived operation, not a third attachment state.
   Normal background checks remain quiet; a submission waiting on its preflight
   may show `checking attachments` until it can proceed or report the aggregate
   inaccessible result.
-- [ ] Keep health results transient and keyed to the exact thought, annotation,
+- [x] Keep health results transient and keyed to the exact thought, annotation,
   canonical path, and content revision. Do not persist a status that can become
   false across restart, and never mutate canonical prompt content in response
   to a failed check.
-- [ ] Use an injected terminal-independent accessibility port. Filesystem
+- [x] Use an injected terminal-independent accessibility port. Filesystem
   metadata and readability checks belong in an adapter; application owns the
   trigger, bounded preflight, cache invalidation, and submission policy; UI only
   renders the resulting state.
-- [ ] Document the unavoidable external-file race: a linked file can disappear
+- [x] Document the unavoidable external-file race: a linked file can disappear
   after the final check but before an agent opens it. A later explicit
   **Import into Proqi** workflow may provide stronger ownership, but this ticket
   neither silently copies source files nor changes attachment paths.
-- [ ] Cover session restart with an expired macOS `TemporaryItems` path, startup
+- [x] Cover session restart with an expired macOS `TemporaryItems` path, startup
   scan ordering, focus changes, host-focus debounce, inactivity refresh,
   mutation invalidation, manual refresh, permission and I/O failures, recovery
   when a file returns, large boards, repeated events, resize, Unicode paths,

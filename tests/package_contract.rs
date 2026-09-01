@@ -5,6 +5,7 @@ use std::{
     io::Write as _,
     path::{Path, PathBuf},
     process::{Command, Output, Stdio},
+    sync::Arc,
 };
 
 use rusqlite::Connection;
@@ -13,21 +14,31 @@ use serde_json::Value;
 #[cfg(unix)]
 #[path = "package_contract/pty.rs"]
 mod pty;
+#[path = "package_contract/sandbox.rs"]
+mod sandbox;
+
+use sandbox::PackageSandbox;
 
 struct InstalledProduct {
     binary: PathBuf,
     archive: PathBuf,
     state: PathBuf,
     working: PathBuf,
+    sandbox: Arc<PackageSandbox>,
 }
 
 impl InstalledProduct {
     fn from_environment() -> Self {
+        let sandbox = Arc::new(
+            PackageSandbox::create(&required_path("PROQI_PACKAGE_ROOT"))
+                .expect("create package-contract sandbox"),
+        );
         Self {
             binary: required_path("PROQI_PACKAGE_BINARY"),
             archive: required_path("PROQI_PACKAGE_ARCHIVE"),
-            state: required_path("PROQI_PACKAGE_STATE"),
-            working: required_path("PROQI_PACKAGE_WORKING"),
+            state: sandbox.state().to_owned(),
+            working: sandbox.working().to_owned(),
+            sandbox,
         }
     }
 
@@ -69,6 +80,7 @@ impl InstalledProduct {
 #[ignore = "run by cargo xtask package with an installed release binary"]
 fn installed_product_contract() {
     let product = InstalledProduct::from_environment();
+    let owned_root = product.sandbox.root().to_owned();
     assert!(!product.state.join("data/proqi.sqlite3").exists());
     assert_identity_and_completion_contract(&product);
     let (session, thought, content) = assert_json_workflow(&product);
@@ -77,6 +89,8 @@ fn installed_product_contract() {
     assert_archive_and_runtime_independence(&product);
     #[cfg(unix)]
     pty::assert_active_owner_and_terminal_restoration(&product, &session);
+    drop(product);
+    assert!(!owned_root.exists(), "package sandbox survived its owner");
 }
 
 fn assert_identity_and_completion_contract(product: &InstalledProduct) {
@@ -229,6 +243,7 @@ fn run_for_state(product: &InstalledProduct, state: &Path, arguments: &[&str]) -
 fn isolated_command(binary: &Path, working: &Path) -> Command {
     let mut command = Command::new(binary);
     command
+        .env_clear()
         .current_dir(working)
         .env("PROQI_DISABLE_HERDR", "1")
         .env("NO_PROXY", "*")

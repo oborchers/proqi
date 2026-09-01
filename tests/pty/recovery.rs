@@ -1,3 +1,5 @@
+//! Recovery-mode export, failure truth, and explicit Board-mode shutdown.
+
 use std::{
     fs,
     os::unix::fs::PermissionsExt as _,
@@ -8,7 +10,7 @@ use std::{
 
 use proqi::ports::recovery::RecoveryDocument;
 
-use super::{expect_command, json_command};
+use super::support::{expect_command, json_command};
 
 #[test]
 fn exported_save_failure_accepts_the_raw_board_quit_key() {
@@ -28,11 +30,19 @@ fn exported_save_failure_accepts_the_raw_board_quit_key() {
         set state $env(PROQI_TEST_STATE)
         set session $env(PROQI_TEST_SESSION)
         spawn $binary --state-dir $state -r $session
-        while {![file exists "$state/immutable-ready"]} { after 25 }
+        while {![file exists "$state/immutable-ready"]} {
+            expect -timeout 0 {
+                -re ".+" { exp_continue }
+                timeout {}
+                eof { exit 123 }
+            }
+            after 25
+        }
         send -- "\x1b\[200~recovery-quit-sentinel\x1b\[201~"
-        after 1400
+        expect -re "storage I/O failed"
         send "w"
-        after 700
+        expect -re "exporting recovery file"
+        expect -re "recovery exported"
         send "q"
         expect {
             eof {}
@@ -122,7 +132,9 @@ fn create_empty_session(binary: &str, state: &std::path::Path) {
         log_user 0
         set timeout 10
         spawn $env(PROQI_TEST_BINARY) --state-dir $env(PROQI_TEST_STATE)
-        after 700
+        expect -exact "\x1b\[?1049h"
+        send "\x1b"
+        after 50
         send "q"
         expect eof
         catch wait result

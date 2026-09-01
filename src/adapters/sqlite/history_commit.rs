@@ -115,6 +115,9 @@ fn move_board_history(
         &payload.ok_or_else(|| StoreError::Conflict("board redo history is empty".to_owned()))?,
     )
     .map_err(|error| StoreError::Corrupt(error.to_string()))?;
+    operation
+        .validate_annotations()
+        .map_err(|error| StoreError::Corrupt(error.to_string()))?;
     let mutation = if undo {
         &operation.inverse
     } else {
@@ -260,10 +263,14 @@ fn load_revision_at(
         )
         .optional()
         .map_err(map_sql_error)?;
-    serde_json::from_str(
+    let revision: ThoughtRevision = serde_json::from_str(
         &payload.ok_or_else(|| StoreError::Conflict("editor redo history is empty".to_owned()))?,
     )
-    .map_err(|error| StoreError::Corrupt(error.to_string()))
+    .map_err(|error| StoreError::Corrupt(error.to_string()))?;
+    revision
+        .validate_annotations()
+        .map_err(|error| StoreError::Corrupt(error.to_string()))?;
+    Ok(revision)
 }
 
 pub(super) fn existing_receipt(

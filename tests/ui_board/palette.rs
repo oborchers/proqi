@@ -49,6 +49,7 @@ fn palette_quit_is_global_and_shallow_navigation_stays_visible() {
 #[test]
 fn palette_query_accepts_normalized_paste_and_grapheme_cursor_edits() {
     let mut fixture = Fixture::new();
+    fixture.input(UiInput::Key(UiKey::Escape));
     fixture.input(UiInput::Key(UiKey::Character(':')));
     fixture.input(UiInput::Paste("qu\nit".to_owned()));
     let (query, _, _) = fixture.app.palette_view().expect("palette");
@@ -64,8 +65,29 @@ fn palette_query_accepts_normalized_paste_and_grapheme_cursor_edits() {
 }
 
 #[test]
+fn palette_query_keeps_vim_letters_literal_and_delete_edits_the_query() {
+    for delete in [UiKey::Delete, UiKey::ModifiedDelete] {
+        let mut fixture = Fixture::new();
+        fixture.input(UiInput::Key(UiKey::Escape));
+        fixture.input(UiInput::Key(UiKey::Character(':')));
+        for character in "hjklx".chars() {
+            fixture.input(UiInput::Key(UiKey::Character(character)));
+        }
+        fixture.input(UiInput::Key(UiKey::Move {
+            movement: CursorMovement::GraphemeBack,
+            extend_selection: false,
+        }));
+        fixture.input(UiInput::Key(delete));
+
+        let (query, _, _) = fixture.app.palette_view().expect("palette");
+        assert_eq!(query, "hjkl");
+    }
+}
+
+#[test]
 fn palette_exposes_an_explicit_update_check() {
     let mut fixture = Fixture::new();
+    fixture.input(UiInput::Key(UiKey::Escape));
     fixture.input(UiInput::Key(UiKey::Character(':')));
     for character in "check for updates".chars() {
         fixture.input(UiInput::Key(UiKey::Character(character)));
@@ -103,6 +125,7 @@ fn palette_fallbacks_execute_all_four_fast_editor_movements() {
             },
             extend_selection: false,
         }));
+        fixture.input(UiInput::Key(UiKey::Escape));
         let commands = fixture
             .app
             .prepare_frame(Rect::new(0, 0, 80, 8))
@@ -277,6 +300,7 @@ fn activate_jump_down_palette() -> (Fixture, Rect) {
     fixture.input(UiInput::Key(UiKey::Enter));
     move_editor_cursor(&mut fixture, CursorMovement::DocumentStart);
     move_editor_cursor(&mut fixture, CursorMovement::VisualJumpDown);
+    fixture.input(UiInput::Key(UiKey::Escape));
     let _board = draw(
         &mut fixture,
         PALETTE_VIEWPORT.width,
@@ -380,6 +404,7 @@ fn move_editor_cursor(fixture: &mut Fixture, movement: CursorMovement) {
 fn palette_copies_typed_session_metadata_exactly_and_reports_results() {
     let mut fixture = Fixture::new();
     let session_id = fixture.app.state.board.session.id.to_string();
+    fixture.input(UiInput::Key(UiKey::Escape));
     fixture.input(UiInput::Key(UiKey::Character(':')));
     for character in "copy session id".chars() {
         fixture.input(UiInput::Key(UiKey::Character(character)));

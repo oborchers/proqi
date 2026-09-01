@@ -81,7 +81,7 @@ fn palette_restores_a_selection_and_deletes_every_touched_sentence() {
         fixture.input(UiInput::Key(UiKey::Character(character)));
     }
     let (_, entries, _) = fixture.app.palette_view().expect("palette");
-    assert_eq!(entries, vec!["Delete sentence (experimental)"]);
+    assert_eq!(entries, vec!["Delete sentence"]);
 
     fixture.input(UiInput::Key(UiKey::Enter));
     assert_eq!(
@@ -127,10 +127,10 @@ fn sentence_deletion_rebases_unrelated_fold_annotations_exactly() {
         },
     };
     let mut fixture = Fixture::new();
-    fixture.input(UiInput::PasteAnnotated(PastePayload::annotated(
-        content.to_owned(),
-        vec![annotation],
-    )));
+    fixture.input(UiInput::PasteAnnotated(
+        PastePayload::annotated(content.to_owned(), vec![annotation])
+            .expect("valid attachment annotation"),
+    ));
     fixture.input(UiInput::Key(UiKey::Move {
         movement: CursorMovement::DocumentStart,
         extend_selection: false,
@@ -154,17 +154,20 @@ fn deleting_a_sentence_that_contains_a_fold_removes_its_annotation() {
     let path = "/tmp/image.png";
     let start = content.find(path).expect("path");
     let mut fixture = Fixture::new();
-    fixture.input(UiInput::PasteAnnotated(PastePayload::annotated(
-        content.to_owned(),
-        vec![ContentAnnotation {
-            start,
-            end: start + path.len(),
-            kind: ContentAnnotationKind::Attachment {
-                image: true,
-                display_name: "image.png".to_owned(),
-            },
-        }],
-    )));
+    fixture.input(UiInput::PasteAnnotated(
+        PastePayload::annotated(
+            content.to_owned(),
+            vec![ContentAnnotation {
+                start,
+                end: start + path.len(),
+                kind: ContentAnnotationKind::Attachment {
+                    image: true,
+                    display_name: "image.png".to_owned(),
+                },
+            }],
+        )
+        .expect("valid attachment annotation"),
+    ));
     fixture.input(UiInput::Key(UiKey::Move {
         movement: CursorMovement::DocumentStart,
         extend_selection: false,
