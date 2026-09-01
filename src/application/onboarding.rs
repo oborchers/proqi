@@ -1,24 +1,18 @@
-//! Canonical first-run practice-board policy and copy.
+//! Canonical first-run practice-board policy, copy, and semantic shortcut emphasis.
 
 use crate::{
-    domain::{DomainError, Session, SessionBoard, Thought, ThoughtPosition},
+    domain::{DomainError, Session, SessionBoard, Timestamp},
     ports::{
         environment::IdGenerator,
         store::{FirstRunBoard, OnboardingVersion},
     },
 };
 
-const WELCOME: &str = "Welcome to Proqi, a prompt composer designed to replace common agent input methods. Capture, refine, organize, and submit prompts here.";
-const EDITING: &str = "Press Enter to edit the focused thought. Press Esc to return to board mode.";
-const CREATION: &str =
-    "Press n to create a new thought, or paste in board mode to create one from the pasted text.";
-const NAVIGATION: &str = "Use j or ↓ to move to the next thought, and k or ↑ to move to the previous one. Press d to delete the focused thought and u to undo.";
-const HERDR_MANAGED: &str = "Herdr is detected. It organizes agent panes and lets Proqi submit with s when it verifies a compatible adjacent agent. Learn more at https://herdr.dev";
-const STANDALONE: &str = "Proqi works on its own. Herdr adds a power-user workflow for organized agent panes and verified adjacent submission when a compatible agent is available. Learn more at https://herdr.dev";
-
-/// Exact final practice thought required by the first-run contract.
-pub const PRACTICE_BOARD_DELETION: &str =
-    "Press a and d in board mode to delete this entire practice board.";
+use super::{
+    AppState, ApplicationError, ApplicationResult, Effect,
+    instructional_text::{InstructionalText, InstructionalTextBuilder},
+    reduce,
+};
 
 /// Cheap, truthful local environment distinction used only to select practice copy.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -29,79 +23,197 @@ pub enum FirstRunEnvironment {
     Standalone,
 }
 
-impl FirstRunEnvironment {
-    /// The exact six canonical thought bodies in board order.
-    #[must_use]
-    pub const fn thought_contents(self) -> [&'static str; 6] {
-        let integration = match self {
-            Self::HerdrManaged => HERDR_MANAGED,
-            Self::Standalone => STANDALONE,
-        };
-        [
-            WELCOME,
-            EDITING,
-            CREATION,
-            NAVIGATION,
-            integration,
-            PRACTICE_BOARD_DELETION,
-        ]
-    }
-}
-
-/// Build the current practice board from ordinary domain thoughts.
+/// Build the current practice board from ordinary application-created thoughts.
 ///
 /// # Errors
 ///
-/// Returns a domain error if the session or generated ordering is invalid.
+/// Returns an application error if the session, generated ordering, or reviewed
+/// instructional annotations are invalid.
 pub fn first_run_board(
     session: Session,
     ids: &mut impl IdGenerator,
     environment: FirstRunEnvironment,
-) -> Result<FirstRunBoard, DomainError> {
-    let session_id = session.id;
+) -> ApplicationResult<FirstRunBoard> {
     let now = session.created_at;
-    let thoughts = environment
-        .thought_contents()
-        .into_iter()
-        .zip(0_u32..)
-        .map(|(content, position)| {
-            Thought::new(
-                ids.thought_id(),
-                session_id,
-                content.to_owned(),
-                ThoughtPosition::new(position),
-                now,
-            )
-        })
-        .collect();
-    let board = SessionBoard::new(session, thoughts)?;
-    Ok(FirstRunBoard::new(OnboardingVersion::PRACTICE_BOARD, board))
+    let empty = SessionBoard::new(session, Vec::new())?;
+    let mut state = AppState::new(empty);
+    let instructions = instructions(environment)?;
+    for (insertion_index, instruction) in instructions.into_iter().enumerate() {
+        add_instruction(&mut state, ids, instruction, insertion_index, now)?;
+    }
+    Ok(FirstRunBoard::new(
+        OnboardingVersion::PRACTICE_BOARD,
+        state.board,
+    ))
+}
+
+fn add_instruction(
+    state: &mut AppState,
+    ids: &mut impl IdGenerator,
+    instruction: InstructionalText,
+    insertion_index: usize,
+    at: Timestamp,
+) -> ApplicationResult<()> {
+    let effects = reduce(
+        state,
+        instruction.create_action(
+            ids.thought_id(),
+            ids.operation_id(),
+            Some(insertion_index),
+            at,
+        ),
+    )?;
+    if !matches!(effects.as_slice(), [Effect::CommitBoardOperation(_)]) {
+        return Err(ApplicationError::InvalidState);
+    }
+    Ok(())
+}
+
+fn instructions(environment: FirstRunEnvironment) -> Result<[InstructionalText; 6], DomainError> {
+    let welcome = InstructionalTextBuilder::new()
+        .text("Welcome to Proqi, a prompt composer designed to replace common agent input methods. Capture, refine, organize, and submit prompts here.")
+        .finish()?;
+    let editing = InstructionalTextBuilder::new()
+        .text("Press ")
+        .shortcut("Enter")?
+        .text(" to edit the focused thought. Press ")
+        .shortcut("Esc")?
+        .text(" to return to board mode.")
+        .finish()?;
+    let creation = InstructionalTextBuilder::new()
+        .text("Press ")
+        .shortcut("n")?
+        .text(
+            " to create a new thought, or paste in board mode to create one from the pasted text.",
+        )
+        .finish()?;
+    let navigation = InstructionalTextBuilder::new()
+        .text("Use ")
+        .shortcut("j")?
+        .text(" or ")
+        .shortcut("↓")?
+        .text(" to move to the next thought, and ")
+        .shortcut("k")?
+        .text(" or ")
+        .shortcut("↑")?
+        .text(" to move to the previous one. Press ")
+        .shortcut("d")?
+        .text(" to delete the focused thought and ")
+        .shortcut("u")?
+        .text(" to undo.")
+        .finish()?;
+    let integration = integration_instruction(environment)?;
+    let deletion = InstructionalTextBuilder::new()
+        .text("Press ")
+        .shortcut("a")?
+        .text(" and ")
+        .shortcut("d")?
+        .text(" in board mode to delete this entire practice board.")
+        .finish()?;
+    Ok([
+        welcome,
+        editing,
+        creation,
+        navigation,
+        integration,
+        deletion,
+    ])
+}
+
+fn integration_instruction(
+    environment: FirstRunEnvironment,
+) -> Result<InstructionalText, DomainError> {
+    match environment {
+        FirstRunEnvironment::HerdrManaged => InstructionalTextBuilder::new()
+            .text("Herdr is detected. It organizes agent panes and lets Proqi submit with ")
+            .shortcut("s")?
+            .text(" when it verifies a compatible adjacent agent. Learn more at https://herdr.dev")
+            .finish(),
+        FirstRunEnvironment::Standalone => InstructionalTextBuilder::new()
+            .text("Proqi works on its own. Herdr adds a power-user workflow for organized agent panes and verified adjacent submission when a compatible agent is available. Learn more at https://herdr.dev")
+            .finish(),
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{
+        adapters::memory::FakeIdGenerator,
+        domain::{AnnotationBehavior, InlineStyleKind},
+    };
+
+    const MANAGED_CONTENT: [&str; 6] = [
+        "Welcome to Proqi, a prompt composer designed to replace common agent input methods. Capture, refine, organize, and submit prompts here.",
+        "Press Enter to edit the focused thought. Press Esc to return to board mode.",
+        "Press n to create a new thought, or paste in board mode to create one from the pasted text.",
+        "Use j or ↓ to move to the next thought, and k or ↑ to move to the previous one. Press d to delete the focused thought and u to undo.",
+        "Herdr is detected. It organizes agent panes and lets Proqi submit with s when it verifies a compatible adjacent agent. Learn more at https://herdr.dev",
+        "Press a and d in board mode to delete this entire practice board.",
+    ];
+    const STANDALONE_INTEGRATION: &str = "Proqi works on its own. Herdr adds a power-user workflow for organized agent panes and verified adjacent submission when a compatible agent is available. Learn more at https://herdr.dev";
 
     #[test]
-    fn variants_are_distinct_bounded_and_use_canonical_copy_and_keys() {
-        let managed = FirstRunEnvironment::HerdrManaged.thought_contents();
-        let standalone = FirstRunEnvironment::Standalone.thought_contents();
-        assert_eq!(managed.len(), 6);
-        assert_eq!(standalone.len(), 6);
-        assert_ne!(managed[4], standalone[4]);
-        assert!(managed[4].contains("Herdr is detected"));
-        assert!(standalone[4].contains("Proqi works on its own"));
-        assert!(managed[4].contains("https://herdr.dev"));
-        assert!(standalone[4].contains("https://herdr.dev"));
-        assert!(managed[1].contains("Press Enter"));
-        assert!(managed[1].contains("Press Esc"));
-        assert!(managed[2].contains("Press n"));
-        assert!(managed[3].contains("j or ↓"));
-        assert!(managed[3].contains("k or ↑"));
-        assert!(managed[3].contains("Press d"));
-        assert!(managed[3].contains("u to undo"));
-        assert!(managed[4].contains("submit with s"));
-        assert_eq!(managed[5], PRACTICE_BOARD_DELETION);
-        assert_eq!(standalone[5], PRACTICE_BOARD_DELETION);
+    fn variants_have_six_exact_ordered_ordinary_thoughts() {
+        let managed = board(FirstRunEnvironment::HerdrManaged);
+        let standalone = board(FirstRunEnvironment::Standalone);
+        assert_eq!(contents(&managed), MANAGED_CONTENT);
+        let mut expected = MANAGED_CONTENT;
+        expected[4] = STANDALONE_INTEGRATION;
+        assert_eq!(contents(&standalone), expected);
+    }
+
+    #[test]
+    fn reviewed_shortcut_literals_are_the_only_semantic_emphasis() {
+        let managed = board(FirstRunEnvironment::HerdrManaged);
+        let standalone = board(FirstRunEnvironment::Standalone);
+        assert_eq!(
+            shortcut_literals(&managed),
+            [
+                "Enter", "Esc", "n", "j", "↓", "k", "↑", "d", "u", "s", "a", "d"
+            ]
+        );
+        assert_eq!(
+            shortcut_literals(&standalone),
+            ["Enter", "Esc", "n", "j", "↓", "k", "↑", "d", "u", "a", "d"]
+        );
+    }
+
+    fn board(environment: FirstRunEnvironment) -> SessionBoard {
+        let mut ids = FakeIdGenerator::new(1_725_200_000_000);
+        let session = Session::new(
+            ids.session_id(),
+            std::env::temp_dir().join("proqi-onboarding-copy"),
+            Timestamp::from_millis(1),
+        )
+        .expect("session");
+        first_run_board(session, &mut ids, environment)
+            .expect("practice board")
+            .board()
+            .clone()
+    }
+
+    fn contents(board: &SessionBoard) -> Vec<&str> {
+        board
+            .live_thoughts()
+            .iter()
+            .map(|thought| thought.content.as_str())
+            .collect()
+    }
+
+    fn shortcut_literals(board: &SessionBoard) -> Vec<&str> {
+        board
+            .live_thoughts()
+            .iter()
+            .flat_map(|thought| {
+                thought.annotations.iter().map(|annotation| {
+                    assert_eq!(
+                        annotation.kind.behavior(),
+                        AnnotationBehavior::InlineStyle(InlineStyleKind::ShortcutEmphasis)
+                    );
+                    &thought.content[annotation.start..annotation.end]
+                })
+            })
+            .collect()
     }
 }

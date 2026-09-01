@@ -56,26 +56,6 @@ impl Fixture {
         }
     }
 
-    fn first_run(environment: FirstRunEnvironment) -> Self {
-        let mut ids = FakeIdGenerator::new(1_725_000_000_000);
-        let session = Session::new(
-            ids.session_id(),
-            std::env::temp_dir().join("proqi-ui-first-run"),
-            Timestamp::from_millis(10),
-        )
-        .expect("session");
-        let board = first_run_board(session, &mut ids, environment).expect("practice board");
-        Self {
-            app: BoardApp::with_settings(
-                AppState::new(board.board().clone()),
-                UiSettings::default(),
-                proqi::adapters::editor::RopeEditorFactory,
-            ),
-            ids,
-            clock: FakeClock::new(Timestamp::from_millis(20)),
-        }
-    }
-
     fn input(&mut self, input: UiInput) {
         let _effects = self.app.handle(input, &mut self.ids, &self.clock);
     }
@@ -149,9 +129,12 @@ fn empty_board_and_help_have_reviewable_complete_buffers() {
     let mut fixture = Fixture::new();
     let terminal = draw(&mut fixture, 40, 8);
     let rendered = text(terminal.backend().buffer());
-    assert!(rendered.contains("+ New thought"));
-    assert!(rendered.contains("board · saved"));
+    assert!(rendered.contains("+ Start typing"));
+    assert!(rendered.contains("0 thoughts · saved"));
+    assert!(!rendered.contains("compose"));
+    assert!(rendered.contains("Esc Board"));
 
+    fixture.input(UiInput::Key(UiKey::Escape));
     let layout = fixture.app.prepare_frame(Rect::new(0, 0, 40, 8));
     let help = layout
         .controls
@@ -162,8 +145,7 @@ fn empty_board_and_help_have_reviewable_complete_buffers() {
     let terminal = draw(&mut fixture, 40, 8);
     let rendered = text(terminal.backend().buffer());
     assert!(rendered.contains("proqi shortcuts"));
-    assert!(rendered.contains("J/K"));
-    assert!(rendered.contains("Reorder"));
+    assert!(rendered.contains("Select all"));
 }
 
 #[test]
@@ -306,16 +288,23 @@ fn pending_and_failed_durability_are_visibly_distinct() {
 fn mouse_can_create_focus_place_cursor_and_open_help() {
     let mut fixture = Fixture::new();
     let _empty = draw(&mut fixture, 40, 8);
-    let insert = fixture
+    let prompt = fixture
         .app
         .prepare_frame(Rect::new(0, 0, 40, 8))
         .insert
-        .expect("insert row");
-    fixture.pointer(insert.x, insert.y, PointerKind::Down(PointerButton::Left));
-    assert!(matches!(
+        .expect("compose prompt");
+    fixture.pointer(
+        prompt.x.saturating_add(prompt.width / 2),
+        prompt.y,
+        PointerKind::Down(PointerButton::Left),
+    );
+    assert_eq!(
         fixture.app.interaction_mode(),
-        proqi::application::InteractionMode::Edit { .. }
-    ));
+        proqi::application::InteractionMode::Compose
+    );
+    assert!(fixture.app.compose_editor_visible());
+    let mut engaged = draw(&mut fixture, 40, 8);
+    assert!(engaged.backend_mut().get_cursor_position().is_ok());
     fixture.input(UiInput::Paste("A界B".to_owned()));
     fixture.input(UiInput::Key(UiKey::Escape));
 
@@ -439,6 +428,8 @@ fn thought_search_filters_content_and_focuses_the_selected_match() {
 
 #[path = "ui_board/agent.rs"]
 mod agent;
+#[path = "ui_board/agent_direct.rs"]
+mod agent_direct;
 #[path = "ui_board/agent_discovery.rs"]
 mod agent_discovery;
 #[path = "ui_board/agent_hermes.rs"]
@@ -451,10 +442,14 @@ mod agent_selection;
 mod agent_session;
 #[path = "ui_board/annotations.rs"]
 mod annotations;
+#[path = "ui_board/attachment_accessibility.rs"]
+mod attachment_accessibility;
 #[path = "ui_board/blank.rs"]
 mod blank;
 #[path = "ui_board/clipboard.rs"]
 mod clipboard;
+#[path = "ui_board/compose.rs"]
+mod compose;
 #[path = "ui_board/composition.rs"]
 mod composition;
 #[path = "ui_board/durability.rs"]
@@ -463,6 +458,8 @@ mod durability;
 mod fast_navigation;
 #[path = "ui_board/first_run.rs"]
 mod first_run;
+#[path = "ui_board/fixture.rs"]
+mod fixture;
 #[path = "ui_board/insertion_navigation.rs"]
 mod insertion_navigation;
 #[path = "ui_board/kilo.rs"]
@@ -493,3 +490,5 @@ mod snapshots;
 mod submission_locks;
 #[path = "ui_board/submit_all.rs"]
 mod submit_all;
+#[path = "ui_board/top_boundary_snapshots.rs"]
+mod top_boundary_snapshots;

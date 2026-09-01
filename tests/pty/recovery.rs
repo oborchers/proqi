@@ -1,3 +1,5 @@
+//! Recovery-mode export, failure truth, and explicit Board-mode shutdown.
+
 use std::{
     fs,
     os::unix::fs::PermissionsExt as _,
@@ -8,7 +10,7 @@ use std::{
 
 use proqi::ports::recovery::RecoveryDocument;
 
-use super::{consume_first_run, expect_command, json_command};
+use super::support::{consume_first_run, expect_command, json_command};
 
 #[test]
 fn exported_save_failure_accepts_the_raw_board_quit_key() {
@@ -132,6 +134,8 @@ fn create_empty_session(binary: &str, state: &std::path::Path) {
         set timeout 10
         spawn $env(PROQI_TEST_BINARY) --state-dir $env(PROQI_TEST_STATE)
         expect -exact "\x1b\[?1049h"
+        send "\x1b"
+        after 50
         send "q"
         expect eof
         catch wait result

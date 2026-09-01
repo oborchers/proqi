@@ -1,5 +1,6 @@
 //! Persistence facade expressed in domain terms.
 
+mod capture;
 mod compaction;
 mod error;
 mod onboarding;
@@ -12,54 +13,16 @@ use crate::domain::{
     UndoScope,
 };
 use crate::ports::agent::{AgentState, SubmissionDisposition};
-use crate::ports::screenshot::ScreenshotFingerprint;
 
+pub use capture::{CaptureCommit, CaptureCommitOutcome, CaptureReceipt};
 pub use compaction::{CompactedOperationRequest, thought_payload_digest};
 pub use error::{StoreError, StoreFailureCode};
 pub use onboarding::{FirstRunBoard, FirstRunOutcome, OnboardingVersion};
 
 /// Current storage schema understood by this binary.
-pub const SUPPORTED_SCHEMA_VERSION: u32 = 9;
+pub const SUPPORTED_SCHEMA_VERSION: u32 = 11;
 /// Current local storage protocol understood by this binary.
-pub const STORAGE_PROTOCOL_VERSION: u32 = 9;
-
-/// One atomic screenshot receipt and prospective board operation.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct CaptureCommit {
-    /// Rename-stable source identity.
-    pub source: ScreenshotFingerprint,
-    /// Exact append operation, applied only with the receipt.
-    pub operation: BoardOperation,
-}
-
-/// Durable identity of one screenshot already delivered to a session.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct CaptureReceipt {
-    /// Rename-stable source identity.
-    pub source: ScreenshotFingerprint,
-    /// Session that received the screenshot.
-    pub session_id: SessionId,
-    /// Thought created for the screenshot.
-    pub thought_id: ThoughtId,
-    /// Structural operation that created the thought.
-    pub operation_id: OperationId,
-    /// Commit timestamp.
-    pub accepted_at: Timestamp,
-}
-
-/// Atomic screenshot commit result.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum CaptureCommitOutcome {
-    /// The receipt and thought were created together.
-    Created {
-        /// Ordinary board durability receipt.
-        durable: CommitReceipt,
-        /// Durable capture receipt.
-        capture: CaptureReceipt,
-    },
-    /// This source had already been delivered by an earlier owner or retry.
-    AlreadyCaptured(CaptureReceipt),
-}
+pub const STORAGE_PROTOCOL_VERSION: u32 = 10;
 
 /// One ordered, content-redacted source included in a submission.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -453,6 +416,22 @@ pub trait Store {
     ) -> Result<(), StoreError> {
         Err(StoreError::Integrity(
             "submission journal is unavailable".to_owned(),
+        ))
+    }
+
+    /// Atomically record an accepted outcome and its source-removal operation.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed error with neither change committed.
+    fn finish_submission_with_removal(
+        &mut self,
+        _id: SubmissionId,
+        _outcome: &SubmissionOutcome,
+        _removal: &crate::domain::BoardOperation,
+    ) -> Result<CommitReceipt, StoreError> {
+        Err(StoreError::Integrity(
+            "atomic submission removal is unavailable".to_owned(),
         ))
     }
 

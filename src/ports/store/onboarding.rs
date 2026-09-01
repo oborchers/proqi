@@ -27,7 +27,7 @@ pub struct FirstRunBoard {
 impl FirstRunBoard {
     /// Construct an already domain-validated candidate board.
     #[must_use]
-    pub const fn new(version: OnboardingVersion, board: SessionBoard) -> Self {
+    pub(crate) const fn new(version: OnboardingVersion, board: SessionBoard) -> Self {
         Self { version, board }
     }
 

@@ -9,7 +9,7 @@ use crate::{
     },
 };
 
-use super::{BoardApp, PastePayload, UiKey, editing};
+use super::{BoardApp, BoundaryInsertion, UiKey, editing, pending_types::EditFlush};
 use crate::ui::settings::BoardCommand;
 
 impl BoardApp {
@@ -56,6 +56,12 @@ impl BoardApp {
             UiKey::Move {
                 movement: CursorMovement::VisualUp,
                 extend_selection: false,
+            } if self.at_first_thought() => {
+                return self.confirm_boundary_creation(BoundaryInsertion::BeforeFirst, ids, clock);
+            }
+            UiKey::Move {
+                movement: CursorMovement::VisualUp,
+                extend_selection: false,
             } => self.move_focus_outside_range(-1),
             UiKey::Move {
                 movement: CursorMovement::VisualDown,
@@ -91,10 +97,10 @@ impl BoardApp {
                 if self.settings.keybindings.command(character)
                     == Some(BoardCommand::FocusDown) =>
             {
-                self.confirm_insertion_creation(ids, clock)
+                self.confirm_boundary_creation(BoundaryInsertion::AfterLast, ids, clock)
             }
             UiKey::Character(character) => self.handle_board_command(character, ids, clock),
-            UiKey::Enter => self.create(PastePayload::text(String::new()), ids, clock),
+            UiKey::Enter => self.begin_insertion(ids, clock),
             UiKey::Escape
             | UiKey::Move {
                 movement: CursorMovement::VisualUp,
@@ -109,7 +115,7 @@ impl BoardApp {
             UiKey::Move {
                 movement: CursorMovement::VisualDown,
                 extend_selection: false,
-            } => self.confirm_insertion_creation(ids, clock),
+            } => self.confirm_boundary_creation(BoundaryInsertion::AfterLast, ids, clock),
             UiKey::Move {
                 movement: CursorMovement::VisualDown,
                 extend_selection: true,
@@ -128,37 +134,9 @@ impl BoardApp {
             | UiKey::PrimaryCharacter(_)
             | UiKey::PrimaryShiftMove { .. }
             | UiKey::EditNavigation { .. }
+            | UiKey::Submit
+            | UiKey::SubmitKeep
             | UiKey::Move { .. } => Vec::new(),
-        }
-    }
-
-    pub(super) fn reset_insertion_confirmation(&mut self, input: &crate::ui::UiInput) {
-        let continues = self.insertion_focused()
-            && match input {
-                crate::ui::UiInput::Key(UiKey::Move {
-                    movement: CursorMovement::VisualDown,
-                    extend_selection: false,
-                }) => true,
-                crate::ui::UiInput::Key(UiKey::Character(character)) => {
-                    self.settings.keybindings.command(*character) == Some(BoardCommand::FocusDown)
-                }
-                _ => false,
-            };
-        if !continues {
-            self.insertion_confirmation = super::InsertionConfirmation::Idle;
-        }
-    }
-
-    fn confirm_insertion_creation(
-        &mut self,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-    ) -> Vec<Effect> {
-        if self.insertion_confirmation == super::InsertionConfirmation::Armed {
-            self.create(PastePayload::text(String::new()), ids, clock)
-        } else {
-            self.insertion_confirmation = super::InsertionConfirmation::Armed;
-            Vec::new()
         }
     }
 
@@ -182,7 +160,7 @@ impl BoardApp {
             }
         }
         match self.settings.keybindings.command(character) {
-            Some(BoardCommand::New) => self.create(PastePayload::text(String::new()), ids, clock),
+            Some(BoardCommand::New) => self.begin_insertion(ids, clock),
             Some(BoardCommand::Edit) => self.expand_and_enter_edit(ids, clock),
             Some(BoardCommand::Delete) => self.delete(ids, clock),
             Some(BoardCommand::Copy) => self.copy_thought(ids),
@@ -197,6 +175,13 @@ impl BoardApp {
             }
             Some(BoardCommand::Undo) => self.history(ids, clock, true),
             Some(BoardCommand::FocusUp) => {
+                if self.at_first_thought() {
+                    return self.confirm_boundary_creation(
+                        BoundaryInsertion::BeforeFirst,
+                        ids,
+                        clock,
+                    );
+                }
                 self.move_focus_outside_range(-1);
                 Vec::new()
             }
@@ -249,7 +234,7 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        let Some(key) = normalize_edit_key(key) else {
+        let Some(key) = editing::normalize_edit_key(key) else {
             return Vec::new();
         };
         if let Some(effects) = self.handle_edit_effect(key, ids, clock) {
@@ -318,6 +303,16 @@ impl BoardApp {
         }
         match key {
             UiKey::Escape => Some(self.finish_edit(ids, clock)),
+            UiKey::Submit => Some(self.begin_edit_delivery(
+                crate::ports::agent::SubmissionDisposition::RemoveAfterSuccess,
+                ids,
+                clock,
+            )),
+            UiKey::SubmitKeep => Some(self.begin_edit_delivery(
+                crate::ports::agent::SubmissionDisposition::Keep,
+                ids,
+                clock,
+            )),
             UiKey::Undo => Some(self.history(ids, clock, true)),
             UiKey::Redo => Some(self.history(ids, clock, false)),
             UiKey::Copy => {
@@ -347,32 +342,16 @@ impl BoardApp {
         self.edit_boundary = None;
         let thought_id = self.active_thought_id();
         self.capture_palette_selection_handoff();
-        let effects = self.flush_pending_edit(ids, clock);
+        let effects = match self.flush_edit_boundary(ids, clock) {
+            EditFlush::Complete(effects) => effects,
+            EditFlush::Blocked(effects) => return effects,
+        };
         if let Some(thought_id) = thought_id {
             self.clear_expanded_folds(thought_id);
         }
         let _effects = self.reduce(Action::ExitEdit);
         self.editor = None;
         effects
-    }
-
-    pub(super) fn paste_payload(
-        &mut self,
-        payload: PastePayload,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-    ) -> Vec<Effect> {
-        if matches!(self.state.mode, InteractionMode::Board) {
-            if payload.content.is_empty() {
-                return Vec::new();
-            }
-            self.create(payload, ids, clock)
-        } else {
-            let mut effects = self.flush_pending_edit(ids, clock);
-            self.apply_annotated_edit(EditCommand::Paste(payload.content), &payload.annotations);
-            effects.extend(self.flush_pending_edit(ids, clock));
-            effects
-        }
     }
 
     pub(super) fn delete(&mut self, ids: &mut impl IdGenerator, clock: &impl Clock) -> Vec<Effect> {
@@ -384,12 +363,15 @@ impl BoardApp {
             self.set_warning("selected thought has a submission in progress");
             return Vec::new();
         }
-        let effects = self.reduce(Action::DeleteThoughts {
-            operation_id: ids.operation_id(),
-            thought_ids,
-            kind: BoardOperationKind::Delete,
-            at: clock.now(),
-        });
+        let effects = self.reduce_with_empty_transition(
+            Action::DeleteThoughts {
+                operation_id: ids.operation_id(),
+                thought_ids,
+                kind: BoardOperationKind::Delete,
+                at: clock.now(),
+            },
+            crate::application::EmptyBoardTransition::ComposeAfterLocalRemoval,
+        );
         self.clear_board_selection();
         self.sync_empty_insertion_focus();
         effects
@@ -401,9 +383,13 @@ impl BoardApp {
         clock: &impl Clock,
         undo: bool,
     ) -> Vec<Effect> {
-        let mut effects = self.flush_pending_edit(ids, clock);
+        let mut effects = match self.flush_edit_boundary(ids, clock) {
+            EditFlush::Complete(effects) => effects,
+            EditFlush::Blocked(effects) => return effects,
+        };
         let scope = match self.state.mode {
             InteractionMode::Board => UndoScope::Board,
+            InteractionMode::Compose => return effects,
             InteractionMode::Edit { thought_id } => UndoScope::Editor { thought_id },
         };
         let action = if undo {
@@ -419,7 +405,10 @@ impl BoardApp {
                 at: clock.now(),
             }
         };
-        effects.extend(self.reduce(action));
+        effects.extend(self.reduce_with_empty_transition(
+            action,
+            crate::application::EmptyBoardTransition::ComposeAfterLocalRemoval,
+        ));
         self.reload_editor();
         self.sync_empty_insertion_focus();
         effects
@@ -463,16 +452,5 @@ impl BoardApp {
         } else if self.state.focused_thought.is_some() {
             self.insertion_focus = super::InsertionFocus::Inactive;
         }
-    }
-}
-
-fn normalize_edit_key(key: UiKey) -> Option<UiKey> {
-    match key {
-        UiKey::PrimaryShiftMove { movement } => Some(UiKey::Move {
-            movement,
-            extend_selection: true,
-        }),
-        UiKey::PrimaryCharacter(_) => None,
-        key => Some(key),
     }
 }

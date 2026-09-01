@@ -8,6 +8,7 @@ use proqi::{
     ports::{
         agent::{AgentGateway, SubmissionRequest},
         environment::IdGenerator,
+        invocation::InvocationReferenceCatalog,
     },
 };
 
@@ -25,6 +26,16 @@ fn recorded_fake_executable_proves_direct_semantic_cli_contract() {
         SystemProcessRunner::default(),
         true,
     );
+    let references = gateway.discover_live_references().expect("live references");
+    let [reference] = references.as_slice() else {
+        panic!("expected one live reference");
+    };
+    assert_eq!(reference.agent_name(), Some("fixture"));
+    assert_eq!(reference.workspace_id(), "w1");
+    assert_eq!(reference.workspace_label(), Some("Fixture workspace"));
+    assert_eq!(reference.tab_id(), "w1:t1");
+    assert_eq!(reference.tab_label(), Some("Fixture tab"));
+    assert_eq!(reference.pane_id(), "w1:p2");
     let capabilities = gateway.capabilities().expect("capabilities");
     let targets = gateway
         .adjacent_targets(&capabilities.context)
@@ -55,7 +66,7 @@ fn fixture_script(prompt_log: &std::path::Path) -> String {
 if [ "$1 $2 $3" = "api schema --json" ]; then
   printf '%s\n' '{{"protocol":19,"schema_version":1,"schemas":{{"request":{{"const":"agent.prompt"}},"response":{{"const":"agent_prompted"}}}}}}'
 elif [ "$1 $2" = "api snapshot" ]; then
-  printf '%s\n' '{{"result":{{"snapshot":{{"protocol":19,"version":"0.8.0"}}}}}}'
+  printf '%s\n' '{{"result":{{"snapshot":{{"protocol":19,"version":"0.8.0","workspaces":[{{"workspace_id":"w1","label":"Fixture workspace"}}],"tabs":[{{"workspace_id":"w1","tab_id":"w1:t1","label":"Fixture tab"}}],"agents":[{{"pane_id":"w1:p2","workspace_id":"w1","tab_id":"w1:t1","agent":"codex","name":"fixture","agent_status":"idle","cwd":"/private/not-a-label","terminal_title":"private prompt"}}]}}}}}}'
 elif [ "$1 $2 $3" = "pane current --current" ]; then
   printf '%s\n' '{{"result":{{"pane":{{"pane_id":"w1:p1","workspace_id":"w1","tab_id":"w1:t1"}}}}}}'
 elif [ "$1 $2" = "pane layout" ]; then

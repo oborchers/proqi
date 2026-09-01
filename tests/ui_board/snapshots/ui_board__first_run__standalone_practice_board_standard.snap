@@ -29,14 +29,14 @@ STYLE RUNS
 0: 0-0 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 1-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 1: 0-0 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 1-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 2: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-71 fg=Rgb(42, 37, 32) bg=Rgb(15, 13, 10) mod=NONE
-3: 0-0 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 1-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+3: 0-0 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 1-7 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 8-12 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=BOLD | 13-48 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 49-51 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=BOLD | 52-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 4: 0-0 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 1-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 5: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-71 fg=Rgb(42, 37, 32) bg=Rgb(15, 13, 10) mod=NONE
-6: 0-0 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 1-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+6: 0-0 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 1-7 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 8-8 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=BOLD | 9-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 7: 0-0 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 1-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 8: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-71 fg=Rgb(42, 37, 32) bg=Rgb(15, 13, 10) mod=NONE
-9: 0-0 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 1-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-10: 0-0 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 1-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+9: 0-0 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 1-5 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 6-6 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=BOLD | 7-10 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 11-11 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=BOLD | 12-45 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 46-46 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=BOLD | 47-50 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 51-51 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=BOLD | 52-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+10: 0-0 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 1-21 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 22-22 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=BOLD | 23-57 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 58-58 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=BOLD | 59-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 11: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-71 fg=Rgb(42, 37, 32) bg=Rgb(15, 13, 10) mod=NONE
 12: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-71 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
 13: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-71 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE

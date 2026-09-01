@@ -1,4 +1,6 @@
-use super::{consume_first_run, expect_command, json_command};
+//! Terminal file-drop translation into one exact durable attachment path.
+
+use super::support::{consume_first_run, expect_command, json_command};
 
 #[test]
 fn escaped_unicode_file_drop_becomes_one_durable_absolute_path() {

@@ -41,7 +41,10 @@ fn cut_and_capture_use_distinct_sequences_in_both_completion_orderings() {
             .is_empty()
     );
     let replay = app.complete_screenshot_capture(Ok(created(&capture)), &mut ids, &clock);
-    let [Effect::WriteClipboard { request_id, .. }] = replay.as_slice() else {
+    let Some(Effect::WriteClipboard { request_id, .. }) = replay
+        .iter()
+        .find(|effect| matches!(effect, Effect::WriteClipboard { .. }))
+    else {
         panic!("replayed cut");
     };
     let cut_effects = app.complete_clipboard_write(*request_id, Ok(()), &mut ids, &clock);
@@ -75,6 +78,7 @@ fn submit_remove_and_capture_use_distinct_sequences_in_both_orderings() {
     assert!(app.advance_screenshot_capture(&mut ids, &clock).is_empty());
     let submit_sequence = finish_submission(&mut app, &target, submission_id);
     app.acknowledge_persistence(submit_sequence, true);
+    app.complete_submission_journaled(submission_id, Ok(()));
     let capture = next_commit(&mut app, &mut ids, &clock);
     assert!(capture.operation.sequence > submit_sequence);
 
@@ -86,10 +90,15 @@ fn submit_remove_and_capture_use_distinct_sequences_in_both_orderings() {
     let capture = next_commit(&mut app, &mut ids, &clock);
     app.handle(UiInput::Key(UiKey::Character('s')), &mut ids, &clock);
     let replay = app.complete_screenshot_capture(Ok(created(&capture)), &mut ids, &clock);
-    let [Effect::PrepareSubmission(attempt)] = replay.as_slice() else {
+    let Some(Effect::PrepareSubmission(attempt)) = replay
+        .iter()
+        .find(|effect| matches!(effect, Effect::PrepareSubmission(_)))
+    else {
         panic!("replayed submission");
     };
     let submit_sequence = finish_submission(&mut app, &target, attempt.id);
+    app.acknowledge_persistence(submit_sequence, true);
+    app.complete_submission_journaled(attempt.id, Ok(()));
     assert!(submit_sequence > capture.operation.sequence);
 }
 
@@ -122,7 +131,10 @@ fn transfer_remove_and_capture_use_distinct_sequences_in_both_orderings() {
     let capture = next_commit(&mut app, &mut ids, &clock);
     app.handle(UiInput::Key(UiKey::Enter), &mut ids, &clock);
     let replay = app.complete_screenshot_capture(Ok(created(&capture)), &mut ids, &clock);
-    let [Effect::TransferThought(request)] = replay.as_slice() else {
+    let Some(Effect::TransferThought(request)) = replay
+        .iter()
+        .find(|effect| matches!(effect, Effect::TransferThought(_)))
+    else {
         panic!("replayed transfer");
     };
     let transfer_sequence = finish_transfer(&mut app, &mut ids, &clock, request, destination);
@@ -146,14 +158,16 @@ fn finish_submission(
             target: target.clone(),
             post_state: Some(AgentState::Working),
         }),
-    );
-    app.complete_submission_journaled(submission_id, Ok(()))
-        .iter()
-        .find_map(|effect| match effect {
-            Effect::CommitBoardOperation(operation) => Some(operation.sequence),
-            _ => None,
-        })
-        .unwrap_or_else(|| panic!("submission removal"))
+    )
+    .iter()
+    .find_map(|effect| match effect {
+        Effect::FinishSubmission {
+            removal: Some(operation),
+            ..
+        } => Some(operation.sequence),
+        _ => None,
+    })
+    .unwrap_or_else(|| panic!("submission removal"))
 }
 
 fn finish_transfer(

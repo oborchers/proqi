@@ -4,7 +4,8 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::domain::{
-    ContentAnnotation, OperationId, RequestId, RevisionId, SessionId, ThoughtId, UndoScope,
+    ContentAnnotation, ContentAnnotationKind, OperationId, RequestId, RevisionId, SessionId,
+    ThoughtId, UndoScope,
 };
 
 use super::store::DurableIdentity;
@@ -14,7 +15,7 @@ use super::update::{
 use super::{runtime::InstanceInfo, store::CommitReceipt};
 
 /// Current local owner-control protocol.
-pub const CONTROL_PROTOCOL_VERSION: u32 = 5;
+pub const CONTROL_PROTOCOL_VERSION: u32 = 7;
 /// Current compatible screenshot takeover protocol.
 pub const CAPTURE_CONTROL_PROTOCOL_VERSION: u32 = 1;
 /// Oldest owner-control protocol accepted for plain-text mutations.
@@ -126,6 +127,19 @@ pub enum ControlMutation {
         /// Optional zero-based insertion position.
         position: Option<usize>,
     },
+    /// Preserve one already-valid Proqi thought during cross-session transfer.
+    PreserveAdd {
+        /// Durable destination operation identity.
+        operation_id: OperationId,
+        /// Deterministic destination thought identity.
+        thought_id: ThoughtId,
+        /// Exact canonical source content.
+        content: String,
+        /// Existing validated presentation metadata preserved without re-authoring it.
+        annotations: Vec<ContentAnnotation>,
+        /// Optional zero-based destination position.
+        position: Option<usize>,
+    },
     /// Soft-delete one thought.
     Delete {
         /// Durable board operation identity.
@@ -183,6 +197,7 @@ impl ControlMutation {
     pub const fn durable_operation_id(&self) -> Option<OperationId> {
         match self {
             Self::Add { operation_id, .. }
+            | Self::PreserveAdd { operation_id, .. }
             | Self::Delete { operation_id, .. }
             | Self::Move { operation_id, .. }
             | Self::History { operation_id, .. }
@@ -214,6 +229,7 @@ impl ControlMutation {
     pub const fn thought_id(&self) -> Option<ThoughtId> {
         match self {
             Self::Add { thought_id, .. }
+            | Self::PreserveAdd { thought_id, .. }
             | Self::Delete { thought_id, .. }
             | Self::Move { thought_id, .. } => Some(*thought_id),
             Self::Replace { thought_id, .. } | Self::SetCollapsed { thought_id, .. } => {
@@ -235,10 +251,28 @@ impl ControlMutation {
         matches!(self, Self::Add { annotations, .. } if !annotations.is_empty())
     }
 
+    /// Whether this mutation carries the invocation-reference annotation added in protocol six.
+    #[must_use]
+    pub fn requires_protocol_six(&self) -> bool {
+        matches!(self, Self::Add { annotations, .. } if annotations.iter().any(|annotation| {
+            matches!(annotation.kind, ContentAnnotationKind::InvocationReference { .. })
+        }))
+    }
+
+    /// Whether this purpose-specific request preserves semantic inline metadata.
+    #[must_use]
+    pub fn requires_protocol_seven(&self) -> bool {
+        matches!(self, Self::PreserveAdd { .. })
+    }
+
     /// Oldest control protocol capable of representing this request.
     #[must_use]
     pub fn minimum_protocol(&self) -> u32 {
-        if matches!(self, Self::CaptureTakeover { .. }) {
+        if self.requires_protocol_seven() {
+            7
+        } else if self.requires_protocol_six() {
+            6
+        } else if matches!(self, Self::CaptureTakeover { .. }) {
             5
         } else if matches!(
             self,

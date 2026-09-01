@@ -1,0 +1,17 @@
+---
+source: src/ui/render/overlays.rs
+assertion_line: 437
+expression: "(ordinary, selected)"
+---
+(
+    Line::from_iter([
+        Span::from("$skill").fg(Color::Rgb(232, 228, 223)).bg(Color::Rgb(15, 13, 10)),
+        Span::from("     ").fg(Color::Rgb(232, 228, 223)).bg(Color::Rgb(15, 13, 10)),
+        Span::from("Project Skill").fg(Color::Rgb(176, 169, 160)).bg(Color::Rgb(15, 13, 10)),
+    ]),
+    Line::from_iter([
+        Span::from("$skill").fg(Color::Rgb(112, 214, 155)).bg(Color::Rgb(39, 40, 48)).bold(),
+        Span::from("     ").fg(Color::Rgb(232, 228, 223)).bg(Color::Rgb(39, 40, 48)),
+        Span::from("Project Skill").fg(Color::Rgb(176, 169, 160)).bg(Color::Rgb(39, 40, 48)),
+    ]),
+)

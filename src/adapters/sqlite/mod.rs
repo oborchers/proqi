@@ -120,14 +120,7 @@ pub struct SqliteStore {
 }
 
 #[cfg(test)]
-pub(crate) struct TestWriteLock(Connection);
-
-#[cfg(test)]
-impl TestWriteLock {
-    pub(crate) fn release(self) -> Result<(), StoreError> {
-        self.0.execute_batch("ROLLBACK").map_err(map_sql_error)
-    }
-}
+pub(crate) use support::TestWriteLock;
 
 impl SqliteStore {
     #[cfg(test)]
@@ -415,6 +408,17 @@ impl Store for SqliteStore {
         outcome: &SubmissionOutcome,
     ) -> Result<(), StoreError> {
         self.with_write_retry(|transaction| submission::finish(transaction, id, outcome))
+    }
+
+    fn finish_submission_with_removal(
+        &mut self,
+        id: crate::domain::SubmissionId,
+        outcome: &SubmissionOutcome,
+        removal: &crate::domain::BoardOperation,
+    ) -> Result<CommitReceipt, StoreError> {
+        self.with_write_retry(|transaction| {
+            submission::finish_with_removal(transaction, id, outcome, removal)
+        })
     }
 
     fn recover_submissions(

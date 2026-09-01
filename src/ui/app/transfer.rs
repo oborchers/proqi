@@ -11,7 +11,7 @@ use crate::{
     },
 };
 
-use super::{BoardApp, UiInput, UiKey, query::QueryEditor};
+use super::{BoardApp, UiInput, UiKey, pending_types::EditFlush, query::QueryEditor};
 
 pub(super) struct TransferState {
     query: QueryEditor,
@@ -35,7 +35,10 @@ impl BoardApp {
             self.set_warning("select a thought before sending it to another session");
             return Vec::new();
         };
-        let mut effects = self.flush_pending_edit(ids, clock);
+        let mut effects = match self.flush_edit_boundary(ids, clock) {
+            EditFlush::Complete(effects) => effects,
+            EditFlush::Blocked(effects) => return effects,
+        };
         self.transfer = Some(TransferState {
             query: QueryEditor::default(),
             sessions: Vec::new(),
@@ -91,12 +94,15 @@ impl BoardApp {
             }
             Ok(_) => {
                 self.set_info("thought sent; removing the source");
-                self.reduce(Action::DeleteThought {
-                    operation_id: ids.operation_id(),
-                    thought_id: request.source_thought_id,
-                    kind: BoardOperationKind::Delete,
-                    at: clock.now(),
-                })
+                self.reduce_with_empty_transition(
+                    Action::DeleteThought {
+                        operation_id: ids.operation_id(),
+                        thought_id: request.source_thought_id,
+                        kind: BoardOperationKind::Delete,
+                        at: clock.now(),
+                    },
+                    crate::application::EmptyBoardTransition::ComposeAfterLocalRemoval,
+                )
             }
         }
     }
@@ -291,10 +297,10 @@ mod tests {
             editor::RopeEditorFactory,
             memory::{FakeClock, FakeIdGenerator},
         },
-        application::{AppState, Effect, ThoughtMutation},
+        application::{AppState, Effect, FirstRunEnvironment, ThoughtMutation, first_run_board},
         domain::{
-            ContentAnnotation, ContentAnnotationKind, OperationSequence, Session, SessionBoard,
-            Thought, ThoughtPosition, Timestamp,
+            ContentAnnotation, OperationSequence, Session, SessionBoard, Thought, ThoughtPosition,
+            Timestamp,
         },
         ports::{
             environment::IdGenerator,
@@ -317,19 +323,12 @@ mod tests {
         let mut thought = Thought::new(
             ids.thought_id(),
             source.id,
-            "/tmp/image.png".to_owned(),
+            "Press Enter".to_owned(),
             ThoughtPosition::new(0),
             Timestamp::from_millis(1),
         );
         thought
-            .set_annotations(vec![ContentAnnotation {
-                start: 0,
-                end: thought.content.len(),
-                kind: ContentAnnotationKind::Attachment {
-                    image: true,
-                    display_name: "image.png".to_owned(),
-                },
-            }])
+            .set_annotations(vec![ContentAnnotation::shortcut(6, 11)])
             .expect("annotation");
         let thought_id = thought.id;
         let board = SessionBoard::new(source, vec![thought.clone()]).expect("board");
@@ -376,6 +375,35 @@ mod tests {
             [Effect::CommitBoardOperation(_)]
         ));
         assert!(app.state.board.live_thoughts().is_empty());
+    }
+
+    #[test]
+    fn tutorial_shortcut_annotations_cross_the_session_transfer_boundary_exactly() {
+        let mut ids = FakeIdGenerator::new(1_725_205_000_000);
+        let clock = FakeClock::new(Timestamp::from_millis(3));
+        let source = Session::new(
+            ids.session_id(),
+            std::env::temp_dir().join("proqi-tutorial-transfer-source"),
+            Timestamp::from_millis(1),
+        )
+        .expect("source session");
+        let board = first_run_board(source, &mut ids, FirstRunEnvironment::Standalone)
+            .expect("practice board");
+        let thought = board.board().live_thoughts()[1].clone();
+        let mut app = BoardApp::new(AppState::new(board.board().clone()), RopeEditorFactory);
+        app.state.focused_thought = Some(thought.id);
+
+        assert_eq!(
+            app.begin_session_transfer(false, &mut ids, &clock),
+            vec![Effect::DiscoverTransferSessions]
+        );
+        app.complete_transfer_discovery(Ok(vec![session_hit(ids.session_id())]));
+        let effects = app.handle_transfer_input(&UiInput::Key(UiKey::Enter), &mut ids, &clock);
+        let [Effect::TransferThought(request)] = effects.as_slice() else {
+            panic!("expected transfer request");
+        };
+        assert_eq!(request.content, thought.content);
+        assert_eq!(request.annotations, thought.annotations);
     }
 
     fn assert_loading_input_is_ignored(

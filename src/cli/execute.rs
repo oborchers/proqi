@@ -96,6 +96,9 @@ fn execute_inner(cli: Cli) -> Result<Outcome, CliError> {
             "completion generation was not dispatched".to_owned(),
         )),
         Some(Command::Update(_)) => Err(CliError::arguments("invalid update command".to_owned())),
+        Some(Command::AttachmentCheckWorker) => Err(CliError::arguments(
+            "internal attachment worker was not dispatched".to_owned(),
+        )),
         None => {
             let resume = match cli.resume {
                 None => ResumeRequest::Fresh,

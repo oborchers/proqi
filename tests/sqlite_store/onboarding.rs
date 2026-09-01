@@ -25,6 +25,21 @@ fn contents(store: &mut SqliteStore, board: &FirstRunBoard) -> Vec<String> {
         .collect()
 }
 
+fn content_and_annotations(board: &SessionBoard) -> Vec<(String, Vec<ContentAnnotation>)> {
+    board
+        .live_thoughts()
+        .into_iter()
+        .map(|thought| (thought.content.clone(), thought.annotations.clone()))
+        .collect()
+}
+
+fn assert_candidate_payloads(snapshot: &SessionSnapshot, candidate: &FirstRunBoard) {
+    assert_eq!(
+        content_and_annotations(&snapshot.board),
+        content_and_annotations(candidate.board())
+    );
+}
+
 #[test]
 fn first_claim_seeds_six_ordinary_searchable_thoughts_and_later_sessions_are_empty() {
     let fixture = DatabaseFixture::new();
@@ -47,9 +62,12 @@ fn first_claim_seeds_six_ordinary_searchable_thoughts_and_later_sessions_are_emp
     );
     assert_eq!(
         contents(&mut store, &first),
-        FirstRunEnvironment::Standalone
-            .thought_contents()
-            .map(str::to_owned)
+        first
+            .board()
+            .live_thoughts()
+            .into_iter()
+            .map(|thought| thought.content.clone())
+            .collect::<Vec<_>>()
     );
     assert_eq!(
         store
@@ -72,7 +90,7 @@ fn first_claim_seeds_six_ordinary_searchable_thoughts_and_later_sessions_are_emp
 }
 
 #[test]
-fn select_all_delete_is_one_ordinary_operation_and_one_undo_restores_all_six() {
+fn shortcut_annotations_and_select_all_history_survive_undo_redo_and_restart() {
     let fixture = DatabaseFixture::new();
     let mut store = fixture.open();
     let mut ids = FakeIdGenerator::new(1_725_000_000_000);
@@ -85,8 +103,11 @@ fn select_all_delete_is_one_ordinary_operation_and_one_undo_restores_all_six() {
         .create_first_run_session(&candidate)
         .expect("seed practice board");
     let session_id = candidate.board().session.id;
-    let mut state = AppState::from_snapshot(store.load_session(session_id).expect("snapshot"))
-        .expect("application state");
+    drop(store);
+    let mut store = fixture.open();
+    let seeded = store.load_session(session_id).expect("seeded restart");
+    assert_candidate_payloads(&seeded, &candidate);
+    let mut state = AppState::from_snapshot(seeded).expect("application state");
     let thought_ids = state
         .board
         .live_thoughts()
@@ -118,6 +139,33 @@ fn select_all_delete_is_one_ordinary_operation_and_one_undo_restores_all_six() {
     );
     persist_effect(&mut store, &undo);
     assert_eq!(contents(&mut store, &candidate).len(), 6);
+
+    let redo = one_effect(
+        &mut state,
+        Action::Redo {
+            operation_id: ids.operation_id(),
+            scope: UndoScope::Board,
+            at: Timestamp::from_millis(4),
+        },
+    );
+    persist_effect(&mut store, &redo);
+    assert!(contents(&mut store, &candidate).is_empty());
+
+    let restore = one_effect(
+        &mut state,
+        Action::Undo {
+            operation_id: ids.operation_id(),
+            scope: UndoScope::Board,
+            at: Timestamp::from_millis(5),
+        },
+    );
+    persist_effect(&mut store, &restore);
+    drop(store);
+    let restored = fixture
+        .open()
+        .load_session(session_id)
+        .expect("restored restart");
+    assert_candidate_payloads(&restored, &candidate);
 }
 
 #[test]

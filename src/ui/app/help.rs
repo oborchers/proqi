@@ -42,6 +42,7 @@ impl BoardApp {
             }
             UiInput::Pointer(pointer) => self.handle_help_pointer(*pointer),
             UiInput::HostFocusGained
+            | UiInput::HostFocusLost
             | UiInput::Key(_)
             | UiInput::Paste(_)
             | UiInput::PasteAnnotated(_) => {}

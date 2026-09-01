@@ -1,0 +1,16 @@
+---
+source: src/ui/app/invocation/reference_tests.rs
+expression: "snapshots::live_snapshot(72, 12)"
+---
+00││
+01│⋮ Coor ┌ discovered invocations ──────────────────────────────[x]│
+02│       │›                                                       ││
+03│       │Live in Herdr                                           ││
+04│       │reviewer         Product / Review · p9 · codex · working││
+05│       │builder       Implementation / Build · p7 · codex · idle││
+06│       └────────────────────────────────────────────────────────┘│
+07││
+08││
+09│  fixture│
+10│  1 thought · edit · saved│
+11│  Esc Board  Ctrl+C Copy Ctrl+X Cut Ctrl+Z Undo│

@@ -44,6 +44,7 @@ fn standalone_practice_board_is_reviewed_at_standard_and_wide_sizes() {
 #[test]
 fn canonical_herdr_url_uses_existing_link_styling_without_content_changes() {
     let mut fixture = Fixture::first_run(FirstRunEnvironment::HerdrManaged);
+    let original_content = fixture.app.state.board.live_thoughts()[4].content.clone();
     for _ in 0..4 {
         fixture.input(UiInput::Key(UiKey::Character('j')));
     }
@@ -67,6 +68,6 @@ fn canonical_herdr_url_uses_existing_link_styling_without_content_changes() {
     }
     assert_eq!(
         fixture.app.state.board.live_thoughts()[4].content,
-        FirstRunEnvironment::HerdrManaged.thought_contents()[4]
+        original_content
     );
 }

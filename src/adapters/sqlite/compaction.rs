@@ -58,6 +58,9 @@ fn compact_board(
     for row in rows.iter().take(drop) {
         let operation: BoardOperation = serde_json::from_str(&row.payload)
             .map_err(|error| StoreError::Corrupt(error.to_string()))?;
+        operation
+            .validate_annotations()
+            .map_err(|error| StoreError::Corrupt(error.to_string()))?;
         compact_receipt(transaction, "operation", row.id, board_replay(&operation)?)?;
     }
     delete_and_reindex_board(transaction, session_id, cursor, rows.len(), drop)
@@ -125,7 +128,10 @@ fn drop_editor_prefix(
         return Ok(());
     }
     for row in rows.iter().take(drop) {
-        let _: ThoughtRevision = serde_json::from_str(&row.payload)
+        let revision: ThoughtRevision = serde_json::from_str(&row.payload)
+            .map_err(|error| StoreError::Corrupt(error.to_string()))?;
+        revision
+            .validate_annotations()
             .map_err(|error| StoreError::Corrupt(error.to_string()))?;
         compact_receipt(
             transaction,

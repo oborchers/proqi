@@ -27,8 +27,9 @@ use proqi::{
         environment::IdGenerator,
         store::{
             DurableIdentity, FirstRunBoard, FirstRunOutcome, MigrationMode, OperationBatch,
-            STORAGE_PROTOCOL_VERSION, SUPPORTED_SCHEMA_VERSION, SessionQuery, Store, StoreError,
-            SubmissionAttempt, SubmissionAttemptState, SubmissionOutcome, SubmissionSource,
+            STORAGE_PROTOCOL_VERSION, SUPPORTED_SCHEMA_VERSION, SessionQuery, SessionSnapshot,
+            Store, StoreError, SubmissionAttempt, SubmissionAttemptState, SubmissionOutcome,
+            SubmissionSource,
         },
     },
 };
@@ -126,10 +127,14 @@ fn create_thought(
     thought_id
 }
 
+#[path = "sqlite_store/annotations.rs"]
+mod annotations;
 #[path = "sqlite_store/bulk.rs"]
 mod bulk;
 #[path = "sqlite_store/compaction.rs"]
 mod compaction;
+#[path = "sqlite_store/compose.rs"]
+mod compose;
 #[path = "sqlite_store/concurrency.rs"]
 mod concurrency;
 #[path = "sqlite_store/core.rs"]
@@ -146,3 +151,5 @@ mod recovery;
 mod screenshot;
 #[path = "sqlite_store/submission.rs"]
 mod submission;
+#[path = "sqlite_store/top_boundary.rs"]
+mod top_boundary;

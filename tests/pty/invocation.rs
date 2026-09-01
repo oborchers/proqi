@@ -1,4 +1,6 @@
-use super::*;
+//! Invocation discovery and completion through a real PTY.
+
+use super::support::{consume_first_run, expect_command, json_command};
 
 #[test]
 fn discovered_invocation_completes_and_shuts_down_in_a_real_pty() {
@@ -37,6 +39,7 @@ fn discovered_invocation_completes_and_shuts_down_in_a_real_pty() {
         .env("PROQI_TEST_BINARY", binary)
         .env("PROQI_TEST_STATE", state.path())
         .env("HOME", home.path())
+        .env_remove("HERDR_ENV")
         .status()
         .expect("run invocation PTY workflow");
     assert!(status.success());

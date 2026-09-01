@@ -1,8 +1,13 @@
 use std::collections::BTreeSet;
 
-use proqi::application::FirstRunEnvironment;
+use proqi::{
+    adapters::memory::FakeIdGenerator,
+    application::{FirstRunEnvironment, first_run_board},
+    domain::{ContentAnnotation, Session, Timestamp},
+    ports::environment::IdGenerator as _,
+};
 
-use super::{expect_command, json_command};
+use super::support::{expect_command, json_command};
 
 fn only_session(binary: &str, state: &std::path::Path) -> String {
     let sessions = json_command(binary, state, &["sessions", "list"]);
@@ -31,6 +36,51 @@ fn session_ids(binary: &str, state: &std::path::Path) -> BTreeSet<String> {
         .expect("sessions")
         .iter()
         .map(|session| session["id"].as_str().expect("session ID").to_owned())
+        .collect()
+}
+
+fn expected_contents(environment: FirstRunEnvironment) -> Vec<String> {
+    expected_board(environment)
+        .live_thoughts()
+        .into_iter()
+        .map(|thought| thought.content.clone())
+        .collect()
+}
+
+fn expected_annotations(environment: FirstRunEnvironment) -> Vec<Vec<ContentAnnotation>> {
+    expected_board(environment)
+        .live_thoughts()
+        .into_iter()
+        .map(|thought| thought.annotations.clone())
+        .collect()
+}
+
+fn expected_board(environment: FirstRunEnvironment) -> proqi::domain::SessionBoard {
+    let mut ids = FakeIdGenerator::new(1_725_300_000_000);
+    let session = Session::new(
+        ids.session_id(),
+        std::env::temp_dir().join("proqi-pty-onboarding-oracle"),
+        Timestamp::from_millis(1),
+    )
+    .expect("oracle session");
+    first_run_board(session, &mut ids, environment)
+        .expect("oracle practice board")
+        .board()
+        .clone()
+}
+
+fn durable_annotations(state: &std::path::Path) -> Vec<Vec<ContentAnnotation>> {
+    let connection =
+        rusqlite::Connection::open(state.join("data/proqi.sqlite3")).expect("onboarding database");
+    let mut statement = connection
+        .prepare("SELECT annotations_json FROM thoughts WHERE deleted_at IS NULL ORDER BY position")
+        .expect("annotation query");
+    statement
+        .query_map([], |row| row.get::<_, String>(0))
+        .expect("annotation rows")
+        .map(|row| {
+            serde_json::from_str(&row.expect("annotation JSON")).expect("valid durable annotations")
+        })
         .collect()
 }
 
@@ -87,7 +137,11 @@ fn managed_and_unmanaged_fresh_pty_launches_persist_exact_distinct_copy() {
         let session = only_session(binary, state.path());
         assert_eq!(
             contents(binary, state.path(), &session),
-            environment.thought_contents().map(str::to_owned)
+            expected_contents(environment)
+        );
+        assert_eq!(
+            durable_annotations(state.path()),
+            expected_annotations(environment)
         );
     }
 }
@@ -126,10 +180,14 @@ fn delete_undo_resume_continue_and_later_fresh_launches_never_reseed() {
         spawn $env(PROQI_TEST_BINARY) --state-dir $env(PROQI_TEST_STATE)
         expect -exact "\x1b\[?1049h"
         after 500
-        send "ad"
-        after 500
+        send "a"
+        after 200
+        send "d"
+        after 700
+        send "\x1b"
+        after 100
         send "u"
-        after 500
+        after 700
         send "q"
         expect eof
         catch wait result
@@ -147,6 +205,8 @@ fn delete_undo_resume_continue_and_later_fresh_launches_never_reseed() {
         after 500
         send "ad"
         after 500
+        send "\x1b"
+        after 100
         send "q"
         expect eof
         catch wait result
@@ -161,6 +221,8 @@ fn delete_undo_resume_continue_and_later_fresh_launches_never_reseed() {
         spawn $env(PROQI_TEST_BINARY) --state-dir $env(PROQI_TEST_STATE) -r $env(PROQI_TEST_SESSION)
         expect -exact "\x1b\[?1049h"
         after 500
+        send "\x1b"
+        after 100
         send "q"
         expect eof
         catch wait result
@@ -216,10 +278,14 @@ fn practice_board_uses_existing_navigation_edit_create_and_paste_paths() {
         after 100
         send "\x1b"
         after 200
-        send "ad"
-        after 300
+        send "a"
+        after 200
+        send "d"
+        after 700
+        send "\x1b"
+        after 100
         send "u"
-        after 300
+        after 700
         send -- "\x1b\[200~Grüße 界\nsecond\x1b\[201~"
         after 200
         send "\x1b"

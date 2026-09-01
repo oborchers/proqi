@@ -65,6 +65,7 @@ fn help_is_modal_and_escape_closes_it_without_mutating_the_board() {
 #[test]
 fn shallow_two_column_help_scrolls_to_every_shortcut() {
     let mut fixture = Fixture::new();
+    fixture.input(UiInput::Key(UiKey::Escape));
     fixture.input(UiInput::Key(UiKey::Character('?')));
     let _initial = draw(&mut fixture, 42, 8);
     fixture.input(visual(CursorMovement::VisualDown, false));
@@ -81,6 +82,7 @@ fn shallow_two_column_help_scrolls_to_every_shortcut() {
 #[test]
 fn wide_help_uses_at_most_two_strictly_aligned_columns() {
     let mut fixture = Fixture::new();
+    fixture.input(UiInput::Key(UiKey::Escape));
     fixture
         .app
         .complete_agent_discovery(Ok(vec![super::agent::target(Direction::Left, "w1:p2")]));

@@ -4,12 +4,12 @@ use crate::{
     application::{Action, Effect, InteractionMode, reduce},
     domain::{ContentAnnotation, ThoughtId},
     ports::{
-        editor::{CursorMovement, EditCommand, EditorSnapshot},
+        editor::{EditCommand, EditorSnapshot},
         environment::{Clock, IdGenerator},
     },
 };
 
-use super::{BoardApp, UiInput, UiKey};
+use super::{BoardApp, EditorOwner, UiInput, UiKey};
 use crate::ui::annotations;
 
 pub(super) fn command_for_key(key: UiKey, adjacent_fold: bool) -> Option<(EditCommand, bool)> {
@@ -31,6 +31,8 @@ pub(super) fn command_for_key(key: UiKey, adjacent_fold: bool) -> Option<(EditCo
         UiKey::SelectAll => Some((EditCommand::SelectAll, true)),
         UiKey::DeleteLine => Some((EditCommand::DeleteLogicalLine, true)),
         UiKey::Escape
+        | UiKey::Submit
+        | UiKey::SubmitKeep
         | UiKey::EditNavigation { .. }
         | UiKey::PrimaryCharacter(_)
         | UiKey::PrimaryShiftMove { .. }
@@ -48,15 +50,187 @@ pub(super) fn command_for_key(key: UiKey, adjacent_fold: bool) -> Option<(EditCo
     }
 }
 
+pub(super) fn normalize_edit_key(key: UiKey) -> Option<UiKey> {
+    match key {
+        UiKey::PrimaryShiftMove { movement } => Some(UiKey::Move {
+            movement,
+            extend_selection: true,
+        }),
+        UiKey::PrimaryCharacter(_) => None,
+        key => Some(key),
+    }
+}
+
 pub(super) struct PendingEdit {
-    thought_id: ThoughtId,
+    pub(super) thought_id: ThoughtId,
     before: EditorSnapshot,
-    after: EditorSnapshot,
+    pub(super) after: EditorSnapshot,
     before_annotations: Vec<ContentAnnotation>,
     after_annotations: Vec<ContentAnnotation>,
 }
 
 impl BoardApp {
+    pub(super) fn engage_compose(&mut self) {
+        if !matches!(self.state.mode, InteractionMode::Compose) {
+            return;
+        }
+        self.compose_presentation = super::ComposePresentation::Editor;
+        self.board_viewport = self.board_viewport.follow_focus();
+        self.scroll_geometry = None;
+        self.layout = None;
+    }
+
+    pub(super) fn collapse_empty_compose(&mut self) {
+        if !matches!(self.state.mode, InteractionMode::Compose)
+            || self
+                .editor_snapshot()
+                .is_some_and(|snapshot| !snapshot.content.is_empty())
+        {
+            return;
+        }
+        self.compose_presentation = super::ComposePresentation::Prompt;
+        self.scroll_geometry = None;
+        self.layout = None;
+        self.hovered = None;
+    }
+
+    pub(super) fn handle_compose_key(
+        &mut self,
+        key: UiKey,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        let Some(key) = normalize_edit_key(key) else {
+            return Vec::new();
+        };
+        match key {
+            UiKey::Escape => {
+                let effects = self.reduce(Action::ExitCompose);
+                self.compose_generation = self.compose_generation.wrapping_add(1);
+                self.editor = None;
+                self.compose_presentation = super::ComposePresentation::Prompt;
+                self.insertion_focus = super::InsertionFocus::Active;
+                self.layout = None;
+                return effects;
+            }
+            UiKey::PasteClipboard => return self.read_clipboard(ids),
+            UiKey::Copy => return self.copy_selection(ids),
+            UiKey::Cut => return self.cut_selection(ids),
+            UiKey::Submit
+            | UiKey::SubmitKeep
+            | UiKey::Undo
+            | UiKey::Redo
+            | UiKey::Duplicate
+            | UiKey::Quit => return Vec::new(),
+            _ => {}
+        }
+        let command = match key {
+            UiKey::Enter if self.should_insert_smart_newline() => EditCommand::InsertSmartNewline {
+                indent_width: self.settings.list_indent_width,
+            },
+            UiKey::Tab => EditCommand::Indent {
+                width: self.settings.list_indent_width,
+                smart_lists: self.settings.smart_lists,
+            },
+            UiKey::BackTab => EditCommand::Outdent {
+                width: self.settings.list_indent_width,
+                smart_lists: self.settings.smart_lists,
+            },
+            _ => {
+                let Some((command, _)) = command_for_key(key, false) else {
+                    return Vec::new();
+                };
+                command
+            }
+        };
+        self.apply_compose_command(command, &[], ids, clock)
+    }
+
+    pub(super) fn apply_compose_paste(
+        &mut self,
+        content: String,
+        inserted_annotations: &[ContentAnnotation],
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        self.apply_compose_command(
+            EditCommand::Paste(content),
+            inserted_annotations,
+            ids,
+            clock,
+        )
+    }
+
+    fn apply_compose_command(
+        &mut self,
+        command: EditCommand,
+        inserted_annotations: &[ContentAnnotation],
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        let Some((EditorOwner::Compose, editor)) = &mut self.editor else {
+            return Vec::new();
+        };
+        let before = editor.snapshot();
+        let outcome = editor.apply(command);
+        self.board_viewport = self.board_viewport.follow_focus();
+        self.scroll_geometry = None;
+        self.layout = None;
+        if outcome.changes.is_empty() {
+            return Vec::new();
+        }
+        let annotations = annotations::rebase(
+            &before.content,
+            &outcome.snapshot.content,
+            &outcome.changes,
+            &[],
+            inserted_annotations,
+        );
+        self.materialize_compose(outcome.snapshot, annotations, ids, clock)
+    }
+
+    pub(super) fn apply_compose_transient(&mut self, command: EditCommand) {
+        let Some((EditorOwner::Compose, editor)) = &mut self.editor else {
+            return;
+        };
+        let _outcome = editor.apply(command);
+        self.board_viewport = self.board_viewport.follow_focus();
+        self.scroll_geometry = None;
+        self.layout = None;
+    }
+
+    fn materialize_compose(
+        &mut self,
+        snapshot: EditorSnapshot,
+        annotations: Vec<ContentAnnotation>,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        if snapshot.content.is_empty() {
+            return Vec::new();
+        }
+        let thought_id = ids.thought_id();
+        let effects = self.reduce(Action::CreateThought {
+            thought_id,
+            operation_id: ids.operation_id(),
+            content: snapshot.content,
+            annotations,
+            insertion_index: None,
+            at: clock.now(),
+        });
+        if self.state.board.thought(thought_id).is_some()
+            && let Some((owner, _)) = &mut self.editor
+        {
+            self.edit_owner_generation = self.edit_owner_generation.wrapping_add(1);
+            *owner = EditorOwner::Thought(thought_id);
+            self.rebind_compose_clipboard_reads(self.compose_generation, thought_id);
+            self.compose_generation = self.compose_generation.wrapping_add(1);
+            self.compose_presentation = super::ComposePresentation::Prompt;
+            self.insertion_focus = super::InsertionFocus::Inactive;
+        }
+        effects
+    }
+
     pub(super) fn resolve_edit_navigation(&self, input: UiInput) -> UiInput {
         let UiInput::Key(UiKey::EditNavigation {
             editor_movement,
@@ -133,69 +307,6 @@ impl BoardApp {
         effects
     }
 
-    pub(super) fn finish_boundary_navigation(
-        &mut self,
-        movement: CursorMovement,
-        extend_selection: bool,
-        before: Option<&EditorSnapshot>,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-    ) -> Vec<Effect> {
-        if extend_selection
-            || !matches!(
-                movement,
-                CursorMovement::VisualUp | CursorMovement::VisualDown
-            )
-        {
-            self.edit_boundary = None;
-            return Vec::new();
-        }
-        let Some(before) = before else {
-            return Vec::new();
-        };
-        let Some(after) = self.editor_snapshot() else {
-            return Vec::new();
-        };
-        if before.cursor != after.cursor || before.selection != after.selection {
-            self.edit_boundary = None;
-            return Vec::new();
-        }
-        let armed = self.edit_boundary == Some(movement);
-        self.edit_boundary = Some(movement);
-        if !armed {
-            return Vec::new();
-        }
-        let target = self.edit_neighbor(movement);
-        if target.is_none() && movement != CursorMovement::VisualDown {
-            return Vec::new();
-        }
-        if target.is_none() && after.content.is_empty() {
-            self.edit_boundary = None;
-            return Vec::new();
-        }
-        let mut effects = self.finish_edit(ids, clock);
-        self.palette_selection_handoff = None;
-        if let Some(target) = target {
-            self.insertion_focus = super::InsertionFocus::Inactive;
-            effects.extend(self.reduce(Action::FocusThought(Some(target))));
-        } else {
-            effects.extend(self.create(crate::ui::PastePayload::text(String::new()), ids, clock));
-        }
-        effects
-    }
-
-    fn edit_neighbor(&self, movement: CursorMovement) -> Option<ThoughtId> {
-        let live = self.state.board.live_thoughts();
-        let active = self.active_thought_id()?;
-        let current = live.iter().position(|thought| thought.id == active)?;
-        let target = match movement {
-            CursorMovement::VisualUp => current.checked_sub(1)?,
-            CursorMovement::VisualDown => current.saturating_add(1),
-            _ => return None,
-        };
-        live.get(target).map(|thought| thought.id)
-    }
-
     pub(super) fn current_annotations(&self, thought_id: ThoughtId) -> Vec<ContentAnnotation> {
         self.pending_edit
             .as_ref()
@@ -219,7 +330,13 @@ impl BoardApp {
         command: EditCommand,
         inserted_annotations: &[ContentAnnotation],
     ) {
-        let edit = self.editor.as_mut().and_then(|(thought_id, editor)| {
+        if self.edit_command_blocked(&command) {
+            return;
+        }
+        let edit = self.editor.as_mut().and_then(|(owner, editor)| {
+            let EditorOwner::Thought(thought_id) = owner else {
+                return None;
+            };
             let before = editor.snapshot();
             let outcome = editor.apply(command);
             (!outcome.changes.is_empty()).then_some((
@@ -283,17 +400,17 @@ impl BoardApp {
         let Some(pending) = self.pending_edit.as_ref() else {
             return Vec::new();
         };
-        let action = Action::EditThought {
-            thought_id: pending.thought_id,
-            revision_id: ids.revision_id(),
-            before_content: pending.before.content.clone(),
-            after_content: pending.after.content.clone(),
-            before_annotations: pending.before_annotations.clone(),
-            after_annotations: pending.after_annotations.clone(),
-            before_cursor: pending.before.cursor,
-            after_cursor: pending.after.cursor,
-            at: clock.now(),
-        };
+        let action = Action::EditOwnedThought(crate::application::OwnedThoughtEdit::rebased(
+            pending.thought_id,
+            ids.revision_id(),
+            pending.before.content.clone(),
+            pending.after.content.clone(),
+            pending.before_annotations.clone(),
+            pending.after_annotations.clone(),
+            pending.before.cursor,
+            pending.after.cursor,
+            clock.now(),
+        ));
         match reduce(&mut self.state, action) {
             Ok(effects) => {
                 self.pending_edit = None;

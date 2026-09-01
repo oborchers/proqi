@@ -34,6 +34,9 @@ pub(super) struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub(super) enum Command {
+    /// Internal attachment accessibility worker.
+    #[command(name = "__attachment-check", hide = true)]
+    AttachmentCheckWorker,
     /// Describe the current CLI and optional integrations.
     Capabilities,
     /// Generate a shell completion script on standard output.

@@ -9,7 +9,7 @@ use crate::{
     },
 };
 
-use super::{BoardApp, PointerButton, PointerInput, PointerKind};
+use super::{BoardApp, PointerButton, PointerInput, PointerKind, pending_types::EditFlush};
 use crate::ui::{HitTarget, projection::BoardCellTarget};
 
 pub(super) const MULTI_CLICK_MILLIS: i64 = 500;
@@ -75,11 +75,17 @@ impl BoardApp {
         {
             return Vec::new();
         }
-        let mut effects = match pointer.kind {
+        let flush = match pointer.kind {
             PointerKind::Down(_) | PointerKind::Drag(_) | PointerKind::Up(_) => {
-                self.flush_pending_edit(ids, clock)
+                self.flush_edit_boundary(ids, clock)
             }
-            PointerKind::Move | PointerKind::ScrollUp | PointerKind::ScrollDown => Vec::new(),
+            PointerKind::Move | PointerKind::ScrollUp | PointerKind::ScrollDown => {
+                EditFlush::Complete(Vec::new())
+            }
+        };
+        let mut effects = match flush {
+            EditFlush::Complete(effects) => effects,
+            EditFlush::Blocked(effects) => return effects,
         };
         effects.extend(match pointer.kind {
             PointerKind::Move => {
@@ -148,9 +154,7 @@ impl BoardApp {
                 self.focus(thought_id);
                 self.expand_thought(thought_id, ids, clock)
             }
-            Some(HitTarget::Insert) => {
-                self.create(crate::ui::PastePayload::text(String::new()), ids, clock)
-            }
+            Some(HitTarget::Insert) => self.pointer_insert(pointer, ids, clock),
             Some(HitTarget::Search) => {
                 self.open_search();
                 Vec::new()
@@ -183,7 +187,7 @@ impl BoardApp {
                 self.request_quit();
                 Vec::new()
             }
-            Some(HitTarget::ExitEdit) => self.finish_edit(ids, clock),
+            Some(HitTarget::ExitEdit) => self.pointer_exit_edit(ids, clock),
             Some(HitTarget::Retry) => self.retry_persistence(),
             Some(HitTarget::ExportRecovery) => self.export_recovery(ids, clock),
             Some(HitTarget::PaletteItem(index)) => {
@@ -246,6 +250,19 @@ impl BoardApp {
             self.drag_target = self.position_at(pointer.row);
             return Vec::new();
         }
+        if self.hit(pointer) == Some(HitTarget::Insert)
+            && matches!(self.state.mode, InteractionMode::Compose)
+        {
+            if let Some((row, column)) = self.compose_cell(pointer) {
+                let position = self
+                    .editor
+                    .as_ref()
+                    .map(|(_, editor)| editor.position_at_cell(row, column))
+                    .unwrap_or_default();
+                self.apply_compose_transient(EditCommand::PointerDrag { position });
+            }
+            return Vec::new();
+        }
         let Some(HitTarget::Thought(thought_id)) = self.hit(pointer) else {
             return Vec::new();
         };
@@ -262,7 +279,11 @@ impl BoardApp {
     }
 
     fn pointer_up(&mut self, ids: &mut impl IdGenerator, clock: &impl Clock) -> Vec<Effect> {
-        self.apply_edit(EditCommand::PointerEnd);
+        if matches!(self.state.mode, InteractionMode::Compose) {
+            self.apply_compose_transient(EditCommand::PointerEnd);
+        } else {
+            self.apply_edit(EditCommand::PointerEnd);
+        }
         let thought_id = self.dragged_thought.take();
         let target = self.drag_target.take();
         match (thought_id, target) {
@@ -342,14 +363,14 @@ impl BoardApp {
         pointer: PointerInput,
     ) -> Option<BoardCellTarget> {
         let layout = self.layout.as_ref()?.thought(thought_id)?;
-        let thought = self.state.board.thought(thought_id)?;
+        let content = self.current_content(thought_id)?;
         let presentation = self.presentation_for_render(thought_id)?;
         let row = layout
             .content_row_offset
             .saturating_add(usize::from(pointer.row.saturating_sub(layout.text_area.y)));
         let column = pointer.column.saturating_sub(layout.text_area.x);
         crate::ui::projection::board_cell_target(
-            &thought.content,
+            &content,
             &presentation,
             layout.text_area.width,
             row,
@@ -391,7 +412,10 @@ impl BoardApp {
 
     fn scroll_pointer(&mut self, delta: isize) -> Vec<Effect> {
         if let Some((_, editor)) = &mut self.editor
-            && matches!(self.state.mode, InteractionMode::Edit { .. })
+            && matches!(
+                self.state.mode,
+                InteractionMode::Compose | InteractionMode::Edit { .. }
+            )
         {
             editor.scroll_by(delta);
             return Vec::new();
@@ -447,18 +471,6 @@ impl BoardApp {
             to,
             at: clock.now(),
         })
-    }
-
-    fn editor_cell(
-        &self,
-        thought_id: crate::domain::ThoughtId,
-        pointer: PointerInput,
-    ) -> Option<(u16, u16)> {
-        let text = self.layout.as_ref()?.thought(thought_id)?.text_area;
-        Some((
-            pointer.row.saturating_sub(text.y),
-            pointer.column.saturating_sub(text.x),
-        ))
     }
 
     pub(super) fn hit(&self, pointer: PointerInput) -> Option<HitTarget> {

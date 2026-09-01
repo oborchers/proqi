@@ -1,7 +1,9 @@
 //! Owner-control mutations applied through the same reducer as terminal input.
 
 use crate::{
-    application::{Action, ApplicationError, Effect, InteractionMode, reduce},
+    application::{
+        Action, ApplicationError, Effect, InteractionMode, OwnedThoughtCreation, reduce,
+    },
     domain::{BoardOperationKind, OperationId, TextPosition, ThoughtId, Timestamp, UndoScope},
     ports::{control::ControlMutation, environment::Clock},
 };
@@ -36,18 +38,9 @@ impl BoardApp {
         let action = match mutation {
             ControlMutation::RenameSession { name } => Action::RenameSession { name: name.clone() },
             ControlMutation::Sync => return Ok(None),
-            ControlMutation::Replace {
-                revision_id,
-                thought_id,
-                expected_digest,
-                content,
-            } => self.replacement_action(
-                *revision_id,
-                *thought_id,
-                *expected_digest,
-                content.clone(),
-                at,
-            )?,
+            mutation @ (ControlMutation::Replace { .. }
+            | ControlMutation::Add { .. }
+            | ControlMutation::PreserveAdd { .. }) => self.content_control_action(mutation, at)?,
             ControlMutation::SetCollapsed {
                 operation_id,
                 thought_id,
@@ -60,20 +53,6 @@ impl BoardApp {
                 } else {
                     crate::domain::ThoughtPresentation::Automatic
                 },
-                at,
-            },
-            ControlMutation::Add {
-                operation_id,
-                thought_id,
-                content,
-                annotations,
-                position,
-            } => Action::CreateThought {
-                thought_id: *thought_id,
-                operation_id: *operation_id,
-                content: content.clone(),
-                annotations: annotations.clone(),
-                insertion_index: *position,
                 at,
             },
             ControlMutation::Delete {
@@ -108,6 +87,64 @@ impl BoardApp {
             }
         };
         Ok(Some(action))
+    }
+
+    fn content_control_action(
+        &self,
+        mutation: &ControlMutation,
+        at: Timestamp,
+    ) -> Result<Action, ApplicationError> {
+        match mutation {
+            ControlMutation::Replace {
+                revision_id,
+                thought_id,
+                expected_digest,
+                content,
+            } => self.replacement_action(
+                *revision_id,
+                *thought_id,
+                *expected_digest,
+                content.clone(),
+                at,
+            ),
+            ControlMutation::Add {
+                operation_id,
+                thought_id,
+                content,
+                annotations,
+                position,
+            } => {
+                if annotations
+                    .iter()
+                    .any(crate::domain::ContentAnnotation::is_shortcut_emphasis)
+                {
+                    return Err(ApplicationError::InvalidState);
+                }
+                Ok(create_action(
+                    *operation_id,
+                    *thought_id,
+                    content,
+                    annotations,
+                    *position,
+                    at,
+                ))
+            }
+            ControlMutation::PreserveAdd {
+                operation_id,
+                thought_id,
+                content,
+                annotations,
+                position,
+            } => Ok(Action::CreateOwnedThought(OwnedThoughtCreation::preserved(
+                *thought_id,
+                *operation_id,
+                content.clone(),
+                annotations.clone(),
+                *position,
+                at,
+            ))),
+            _ => Err(ApplicationError::InvalidState),
+        }
     }
 
     fn replacement_action(
@@ -146,19 +183,38 @@ impl BoardApp {
         previous_mode: InteractionMode,
         previous_focus: Option<ThoughtId>,
     ) {
-        let Some(focus) = previous_focus.filter(|id| {
+        let live_focus = previous_focus.filter(|id| {
             self.state
                 .board
                 .thought(*id)
                 .is_some_and(crate::domain::Thought::is_live)
-        }) else {
-            return;
-        };
-        self.state.focused_thought = Some(focus);
+        });
         self.state.mode = match previous_mode {
-            InteractionMode::Edit { thought_id } if thought_id == focus => previous_mode,
-            _ => InteractionMode::Board,
+            InteractionMode::Compose => InteractionMode::Compose,
+            InteractionMode::Edit { thought_id } if live_focus == Some(thought_id) => {
+                InteractionMode::Edit { thought_id }
+            }
+            InteractionMode::Board | InteractionMode::Edit { .. } => InteractionMode::Board,
         };
+        self.state.focused_thought = live_focus;
+    }
+}
+
+fn create_action(
+    operation_id: OperationId,
+    thought_id: ThoughtId,
+    content: &str,
+    annotations: &[crate::domain::ContentAnnotation],
+    position: Option<usize>,
+    at: Timestamp,
+) -> Action {
+    Action::CreateThought {
+        thought_id,
+        operation_id,
+        content: content.to_owned(),
+        annotations: annotations.to_vec(),
+        insertion_index: position,
+        at,
     }
 }
 

@@ -1,4 +1,6 @@
-use super::*;
+//! Single-thought reordering through normalized modified terminal input.
+
+use super::support::{consume_first_run, expect_command, json_command};
 
 #[test]
 fn primary_shift_arrow_reorders_one_thought_in_a_real_pty() {

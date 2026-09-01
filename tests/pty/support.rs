@@ -1,10 +1,10 @@
-//! Shared real-process and pseudo-terminal fixture helpers.
+//! Shared process-boundary primitives for the PTY integration suite.
+//!
+//! This module owns Expect construction, bounded owner-readiness polling, and
+//! JSON CLI invocation. Product scenarios and their behavioral assertions
+//! belong in sibling modules.
 
-use std::{
-    io::Write as _,
-    path::Path,
-    process::{Command, Output, Stdio},
-};
+use std::process::Command;
 
 use serde_json::Value;
 
@@ -14,7 +14,7 @@ pub(super) fn expect_command() -> Command {
     command
 }
 
-pub(super) fn wait_for_path(path: &Path) {
+pub(super) fn wait_for_path(path: &std::path::Path) {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
     while !path.exists() {
         assert!(
@@ -25,7 +25,7 @@ pub(super) fn wait_for_path(path: &Path) {
     }
 }
 
-pub(super) fn wait_for_control_owner(state: &Path, session: &str) {
+pub(super) fn wait_for_control_owner(state: &std::path::Path, session: &str) {
     let instances = state.join("runtime/instances");
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
     loop {
@@ -40,7 +40,7 @@ pub(super) fn wait_for_control_owner(state: &Path, session: &str) {
     }
 }
 
-fn control_owner_is_ready(instances: &Path, session: &str) -> bool {
+fn control_owner_is_ready(instances: &std::path::Path, session: &str) -> bool {
     let Ok(entries) = std::fs::read_dir(instances) else {
         return false;
     };
@@ -49,7 +49,7 @@ fn control_owner_is_ready(instances: &Path, session: &str) -> bool {
         .any(|entry| control_metadata_is_ready(&entry.path(), session))
 }
 
-fn control_metadata_is_ready(path: &Path, session: &str) -> bool {
+fn control_metadata_is_ready(path: &std::path::Path, session: &str) -> bool {
     let Ok(bytes) = std::fs::read(path) else {
         return false;
     };
@@ -57,18 +57,21 @@ fn control_metadata_is_ready(path: &Path, session: &str) -> bool {
         return false;
     };
     value["session_id"] == session
-        && value["control_protocol"].as_u64() == Some(5)
+        && value["control_protocol"].as_u64()
+            == Some(u64::from(proqi::ports::control::CONTROL_PROTOCOL_VERSION))
         && value["control_endpoint"]
             .as_str()
-            .is_some_and(|endpoint| Path::new(endpoint).exists())
+            .is_some_and(|endpoint| std::path::Path::new(endpoint).exists())
 }
 
 pub(super) fn raw_input_command(
     binary: &str,
-    state: &Path,
+    state: &std::path::Path,
     arguments: &[&str],
     input: &str,
-) -> Output {
+) -> std::process::Output {
+    use std::{io::Write as _, process::Stdio};
+
     let mut child = Command::new(binary)
         .arg("--state-dir")
         .arg(state)
@@ -90,7 +93,7 @@ pub(super) fn raw_input_command(
 
 pub(super) fn json_input_command(
     binary: &str,
-    state: &Path,
+    state: &std::path::Path,
     arguments: &[&str],
     input: &str,
 ) -> Value {
@@ -103,7 +106,7 @@ pub(super) fn json_input_command(
     serde_json::from_slice(&output.stdout).expect("input command JSON")
 }
 
-pub(super) fn json_command(binary: &str, state: &Path, arguments: &[&str]) -> Value {
+pub(super) fn json_command(binary: &str, state: &std::path::Path, arguments: &[&str]) -> Value {
     let output = Command::new(binary)
         .arg("--state-dir")
         .arg(state)
@@ -115,7 +118,8 @@ pub(super) fn json_command(binary: &str, state: &Path, arguments: &[&str]) -> Va
     serde_json::from_slice(&output.stdout).expect("JSON output")
 }
 
-pub(super) fn consume_first_run(binary: &str, state: &Path) {
+/// Launch and close one fresh interactive session to prepare later PTY scenarios.
+pub(super) fn consume_first_run(binary: &str, state: &std::path::Path) {
     let script = r#"
         log_user 0
         set timeout 10
@@ -133,19 +137,12 @@ pub(super) fn consume_first_run(binary: &str, state: &Path) {
         .env("PROQI_TEST_STATE", state)
         .env_remove("HERDR_ENV")
         .status()
-        .expect("consume first-run practice board");
+        .expect("close first interactive session");
     assert!(status.success());
     let sessions = json_command(binary, state, &["sessions", "list"]);
-    let values = sessions["data"]["sessions"]
-        .as_array()
-        .expect("practice session");
-    assert_eq!(values.len(), 1);
-    let session = values[0]["id"].as_str().expect("practice session ID");
+    let session = sessions["data"]["sessions"][0]["id"]
+        .as_str()
+        .expect("first session ID");
     let _trashed = json_command(binary, state, &["sessions", "trash", session]);
     let _pruned = json_command(binary, state, &["sessions", "prune", session, "--yes"]);
-    assert!(
-        json_command(binary, state, &["sessions", "list"])["data"]["sessions"]
-            .as_array()
-            .is_some_and(Vec::is_empty)
-    );
 }

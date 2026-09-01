@@ -39,7 +39,8 @@ impl BoardApp {
             | crate::ui::UiInput::Paste(_)
             | crate::ui::UiInput::PasteAnnotated(_)
             | crate::ui::UiInput::Resize { .. }
-            | crate::ui::UiInput::HostFocusGained => false,
+            | crate::ui::UiInput::HostFocusGained
+            | crate::ui::UiInput::HostFocusLost => false,
         };
         if !preserves {
             self.overlay_activation = None;

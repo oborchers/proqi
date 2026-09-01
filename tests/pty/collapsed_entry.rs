@@ -1,9 +1,11 @@
+//! Collapsed-thought entry, pointer geometry, scrolling, and resize continuity.
+
 use std::{
     io::Write,
     process::{Command, Stdio},
 };
 
-use super::{expect_command, json_command};
+use super::support::{expect_command, json_command};
 
 const COLLAPSED_ENTRY_WORKFLOW: &str = r#"
     log_user 0

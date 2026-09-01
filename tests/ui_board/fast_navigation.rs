@@ -168,7 +168,8 @@ fn mode_aware_alt_navigation_keeps_board_focus_movement_unchanged() {
 #[test]
 fn contextual_help_uses_platform_primary_labels_for_fast_navigation() {
     let mut fixture = Fixture::new();
-    fixture.paste("one\ntwo\nthree\nfour\nfive\nsix");
+    let sequence = fixture.paste("one\ntwo\nthree\nfour\nfive\nsix");
+    let _effects = fixture.app.acknowledge_persistence(sequence, false);
     let help = fixture
         .app
         .prepare_frame(Rect::new(0, 0, 80, 14))

@@ -12,7 +12,7 @@ use super::BoardApp;
 pub(super) struct EditorSelectionHandoff {
     thought_id: ThoughtId,
     content: String,
-    selection: TextSelection,
+    selection: Option<TextSelection>,
     cursor: TextPosition,
 }
 
@@ -22,7 +22,7 @@ impl BoardApp {
             Some(EditorSelectionHandoff {
                 thought_id: self.active_thought_id()?,
                 content: snapshot.content,
-                selection: snapshot.selection?,
+                selection: snapshot.selection,
                 cursor: snapshot.cursor,
             })
         });
@@ -30,7 +30,7 @@ impl BoardApp {
 
     pub(super) fn invalidate_palette_selection_handoff(&mut self, input: &UiInput) {
         let preserves = match input {
-            UiInput::Resize { .. } | UiInput::HostFocusGained => true,
+            UiInput::Resize { .. } | UiInput::HostFocusGained | UiInput::HostFocusLost => true,
             UiInput::Pointer(pointer) if matches!(pointer.kind, PointerKind::Move) => true,
             UiInput::Key(UiKey::Character(character)) => {
                 self.settings.keybindings.command(*character)
@@ -69,10 +69,17 @@ impl BoardApp {
         if !valid {
             return;
         }
-        let anchor = if handoff.cursor == handoff.selection.start {
-            handoff.selection.end
-        } else if handoff.cursor == handoff.selection.end {
-            handoff.selection.start
+        let Some(selection) = handoff.selection else {
+            self.apply_edit(EditCommand::SetCursor {
+                position: handoff.cursor,
+                extend_selection: false,
+            });
+            return;
+        };
+        let anchor = if handoff.cursor == selection.start {
+            selection.end
+        } else if handoff.cursor == selection.end {
+            selection.start
         } else {
             return;
         };

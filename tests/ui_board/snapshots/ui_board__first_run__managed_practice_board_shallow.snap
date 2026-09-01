@@ -14,7 +14,7 @@ TEXT
 05│  n New   y Copy  x Cut  d Delete  Space Select u Undo  / Search  : Commands│
 
 STYLE RUNS
-0: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-79 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
+0: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-7 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 8-8 fg=Rgb(112, 214, 155) bg=Rgb(39, 40, 48) mod=BOLD | 9-13 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 14-14 fg=Rgb(112, 214, 155) bg=Rgb(39, 40, 48) mod=BOLD | 15-79 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
 1: 0-79 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 2: 0-33 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 34-34 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 35-79 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 3: 0-79 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE

@@ -92,43 +92,20 @@ fn control_candidates(
     has_focus: bool,
     keys: &KeyBindings,
 ) -> Vec<(HitTarget, u16)> {
-    if persistence_failed && retry_available {
-        candidates(
-            &[
-                (HitTarget::Retry, false),
-                (HitTarget::ExportRecovery, false),
-                (HitTarget::Help, false),
-            ],
-            keys,
-        )
-    } else if persistence_failed {
-        candidates(
-            &[(HitTarget::ExportRecovery, false), (HitTarget::Help, false)],
-            keys,
-        )
-    } else if !has_focus && matches!(mode, InteractionMode::Board) && width < 24 {
-        candidates(&[(HitTarget::Insert, false), (HitTarget::Help, true)], keys)
-    } else if !has_focus && matches!(mode, InteractionMode::Board) {
-        candidates(
-            &[
-                (HitTarget::Insert, false),
-                (HitTarget::Commands, false),
-                (HitTarget::Help, false),
-            ],
-            keys,
-        )
+    let compose_mode = matches!(mode, InteractionMode::Compose);
+    let edit_mode = matches!(mode, InteractionMode::Edit { .. });
+    if let Some(failure) = failure_candidates(persistence_failed, retry_available, mode, keys) {
+        return failure;
+    }
+    if let Some(unfocused) = unfocused_candidates(width, mode, has_focus, keys) {
+        return unfocused;
+    }
+    if compose_mode || (width < 60 && edit_mode) {
+        candidates(&[(HitTarget::ExitEdit, width < 16)], mode, keys)
     } else if width < 24 {
         candidates(
             &[(HitTarget::Commands, true), (HitTarget::Help, true)],
-            keys,
-        )
-    } else if width < 60 && matches!(mode, InteractionMode::Edit { .. }) {
-        candidates(
-            &[
-                (HitTarget::ExitEdit, false),
-                (HitTarget::Commands, false),
-                (HitTarget::Help, false),
-            ],
+            mode,
             keys,
         )
     } else if width < 60 {
@@ -138,18 +115,18 @@ fn control_candidates(
                 (HitTarget::Commands, false),
                 (HitTarget::Help, false),
             ],
+            mode,
             keys,
         )
-    } else if matches!(mode, InteractionMode::Edit { .. }) {
+    } else if edit_mode {
         candidates(
             &[
                 (HitTarget::ExitEdit, false),
                 (HitTarget::Copy, false),
                 (HitTarget::Cut, false),
                 (HitTarget::Undo, false),
-                (HitTarget::Commands, false),
-                (HitTarget::Help, false),
             ],
+            mode,
             keys,
         )
     } else {
@@ -165,16 +142,62 @@ fn control_candidates(
                 (HitTarget::Commands, false),
                 (HitTarget::Help, false),
             ],
+            mode,
             keys,
         )
     }
 }
 
-fn candidates(items: &[(HitTarget, bool)], keys: &KeyBindings) -> Vec<(HitTarget, u16)> {
+fn failure_candidates(
+    failed: bool,
+    retry: bool,
+    mode: InteractionMode,
+    keys: &KeyBindings,
+) -> Option<Vec<(HitTarget, u16)>> {
+    let items = if failed && retry {
+        &[
+            (HitTarget::Retry, false),
+            (HitTarget::ExportRecovery, false),
+            (HitTarget::Help, false),
+        ][..]
+    } else if failed {
+        &[(HitTarget::ExportRecovery, false), (HitTarget::Help, false)][..]
+    } else {
+        return None;
+    };
+    Some(candidates(items, mode, keys))
+}
+
+fn unfocused_candidates(
+    width: u16,
+    mode: InteractionMode,
+    has_focus: bool,
+    keys: &KeyBindings,
+) -> Option<Vec<(HitTarget, u16)>> {
+    if has_focus || !matches!(mode, InteractionMode::Board) {
+        return None;
+    }
+    let items = if width < 24 {
+        &[(HitTarget::Insert, false), (HitTarget::Help, true)][..]
+    } else {
+        &[
+            (HitTarget::Insert, false),
+            (HitTarget::Commands, false),
+            (HitTarget::Help, false),
+        ][..]
+    };
+    Some(candidates(items, mode, keys))
+}
+
+fn candidates(
+    items: &[(HitTarget, bool)],
+    mode: InteractionMode,
+    keys: &KeyBindings,
+) -> Vec<(HitTarget, u16)> {
     items
         .iter()
         .filter_map(|&(target, compact)| {
-            crate::ui::control_labels::action_width(target, compact, keys)
+            crate::ui::control_labels::action_width(target, compact, mode, keys)
                 .map(|width| (target, width))
         })
         .collect()
