@@ -12,6 +12,16 @@ use crate::{
     ports::store::StoreError,
 };
 
+#[cfg(test)]
+pub(crate) struct TestWriteLock(pub(super) Connection);
+
+#[cfg(test)]
+impl TestWriteLock {
+    pub(crate) fn release(self) -> Result<(), StoreError> {
+        self.0.execute_batch("ROLLBACK").map_err(map_sql_error)
+    }
+}
+
 pub(super) fn validate_commit_sequence(
     connection: &Connection,
     session_id: SessionId,

@@ -1,6 +1,6 @@
 //! Startup input admission and resize ordering after terminal ownership.
 
-use super::support::{expect_command, json_command};
+use super::support::{consume_first_run, expect_command, json_command};
 
 use rusqlite::Connection;
 
@@ -8,6 +8,7 @@ use rusqlite::Connection;
 fn empty_startup_prompt_and_focus_collapse_consume_no_durable_sequence() {
     let state = tempfile::tempdir().expect("temporary state");
     let binary = env!("CARGO_BIN_EXE_proqi");
+    consume_first_run(binary, state.path());
     let startup = r#"
         log_user 0
         set timeout 10
@@ -85,6 +86,7 @@ fn empty_startup_prompt_and_focus_collapse_consume_no_durable_sequence() {
 fn startup_typeahead_after_terminal_ownership_is_not_lost() {
     let state = tempfile::tempdir().expect("temporary state");
     let binary = env!("CARGO_BIN_EXE_proqi");
+    consume_first_run(binary, state.path());
     let startup = r#"
         log_user 0
         set timeout 10
@@ -124,6 +126,7 @@ fn startup_typeahead_after_terminal_ownership_is_not_lost() {
 fn keyboard_creation_survives_rapid_pty_resize() {
     let state = tempfile::tempdir().expect("temporary state");
     let binary = env!("CARGO_BIN_EXE_proqi");
+    consume_first_run(binary, state.path());
     let interact = r#"
         log_user 0
         set timeout 10

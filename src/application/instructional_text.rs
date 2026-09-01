@@ -14,6 +14,7 @@ pub(crate) struct InstructionalText {
 }
 
 impl InstructionalText {
+    #[cfg(test)]
     pub(crate) fn into_parts(self) -> (String, Vec<ContentAnnotation>) {
         (self.content, self.annotations)
     }

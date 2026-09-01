@@ -1,10 +1,11 @@
 //! Real PTY coverage for Board Delete aliases and durable undo.
 
-use super::support::{expect_command, json_command};
+use super::support::{consume_first_run, expect_command, json_command};
 
 fn run_delete(sequence: &str) {
     let state = tempfile::tempdir().expect("temporary state");
     let binary = env!("CARGO_BIN_EXE_proqi");
+    consume_first_run(binary, state.path());
     let script = format!(
         r#"
         log_user 0
@@ -86,6 +87,7 @@ fn d_and_physical_delete_each_commit_one_durable_undoable_deletion() {
 fn physical_delete_removes_one_multi_selection_and_undo_restores_it() {
     let state = tempfile::tempdir().expect("temporary state");
     let binary = env!("CARGO_BIN_EXE_proqi");
+    consume_first_run(binary, state.path());
     let script = r#"
         log_user 0
         set timeout 10
@@ -167,6 +169,7 @@ fn physical_delete_removes_one_multi_selection_and_undo_restores_it() {
 fn modified_delete_is_not_a_board_alias_but_still_deletes_forward_in_edit() {
     let state = tempfile::tempdir().expect("temporary state");
     let binary = env!("CARGO_BIN_EXE_proqi");
+    consume_first_run(binary, state.path());
     let script = r#"
         log_user 0
         set timeout 10

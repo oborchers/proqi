@@ -1,12 +1,13 @@
 //! Exact top-boundary key translation and durable insertion through a real PTY.
 
-use super::support::{expect_command, json_command};
+use super::support::{consume_first_run, expect_command, json_command};
 
 #[test]
 fn arrow_previous_and_mixed_top_creation_persist_exactly_once() {
     for keys in ["\x1b[A\x1b[A", "kk", "\x1b[Ak", "k\x1b[A"] {
         let state = tempfile::tempdir().expect("temporary state");
         let binary = env!("CARGO_BIN_EXE_proqi");
+        consume_first_run(binary, state.path());
         let script = r#"
             log_user 0
             set timeout 10

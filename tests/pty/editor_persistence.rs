@@ -1,6 +1,6 @@
 //! Exact editor durability, rehydration, and persistent undo through a PTY.
 
-use super::support::{expect_command, json_command};
+use super::support::{consume_first_run, expect_command, json_command};
 
 const ORIGINAL: &str = "This is a test thought.";
 const DELETED: &str = "This is a test";
@@ -9,6 +9,7 @@ const DELETED: &str = "This is a test";
 fn physical_macos_redo_encoding_restores_the_durable_deletion() {
     let state = tempfile::tempdir().expect("temporary state");
     let binary = env!("CARGO_BIN_EXE_proqi");
+    consume_first_run(binary, state.path());
     create_original_thought(binary, state.path());
 
     let sessions = json_command(binary, state.path(), &["sessions", "list"]);
@@ -117,6 +118,7 @@ fn run_editor_workflow(
 fn bracketed_paste_autosaves_and_resumes_in_a_real_pty() {
     let state = tempfile::tempdir().expect("temporary state");
     let binary = env!("CARGO_BIN_EXE_proqi");
+    consume_first_run(binary, state.path());
     let create = r#"
         log_user 0
         set timeout 10

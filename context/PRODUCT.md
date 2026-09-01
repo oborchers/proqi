@@ -200,6 +200,18 @@ proqi sessions              List and manage sessions
 Starting a fresh session by default prevents two adjacent agent panes from
 accidentally sharing thoughts.
 
+A pristine data store gives its first eligible fresh interactive session one
+once-only board of six ordinary practice thoughts. The board uses the same
+editing, ordering, persistence, search, deletion, and undo behavior as every
+other board. Its reviewed command-key ranges use the same quiet semantic
+shortcut emphasis as other application-authored instructions, while the stored
+text remains ordinary canonical thought content. Resume, continue, the session browser, intentionally emptied
+boards, JSON launches, and other noninteractive commands never seed it. JSON
+and noninteractive activity also does not consume eligibility, so the marker is
+claimed only by the first eligible fresh interactive session. Existing data
+stores are marked complete during migration and never receive the practice
+board after an upgrade.
+
 Only one process may edit a session at a time. Attempting to resume an active
 session produces a clear message and offers its identity. It never interleaves
 writes silently. An exclusive lease is released on normal exit and safely

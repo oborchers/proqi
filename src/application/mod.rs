@@ -6,17 +6,11 @@ mod attachments;
 mod capture;
 mod control;
 mod error;
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "stable application-owned API is consumed after the open tutorial branch rebases"
-    )
-)]
 mod instructional_text;
 mod locks;
 mod model;
 mod mutations;
+mod onboarding;
 mod prompt;
 mod recovery;
 mod reducer;
@@ -42,6 +36,7 @@ pub use model::{
     AppState, ClipboardIntent, DurabilityState, Effect, EmptyBoardTransition, InteractionMode,
     ScreenshotIntent, ScreenshotPauseReason, UpdateIntent,
 };
+pub use onboarding::{FirstRunEnvironment, first_run_board};
 pub(crate) use prompt::{
     SHARED_PROMPT_STARTERS, SharedPromptStarter, join_prompt_for_target, supports_shared_starters,
 };
