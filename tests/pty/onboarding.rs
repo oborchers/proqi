@@ -3,10 +3,14 @@
 use std::collections::BTreeSet;
 
 use proqi::{
-    adapters::memory::FakeIdGenerator,
-    application::{FirstRunEnvironment, first_run_board},
+    adapters::{
+        editor::RopeEditorFactory,
+        memory::{FakeClock, FakeIdGenerator},
+    },
+    application::{AppState, FirstRunEnvironment, first_run_board},
     domain::{ContentAnnotation, Session, SessionId, ThoughtId, Timestamp},
     ports::environment::IdGenerator as _,
+    ui::{BoardApp, UiInput, UiKey},
 };
 
 use super::support::{expect_command, json_command};
@@ -103,6 +107,19 @@ fn run_launch(
         command.env("PROQI_TEST_SESSION", session);
     }
     assert!(command.status().expect(expectation).success());
+}
+
+fn expected_after_edit_key(key: UiKey) -> String {
+    let mut ids = FakeIdGenerator::new(1_725_300_000_000);
+    let clock = FakeClock::new(Timestamp::from_millis(2));
+    let mut app = BoardApp::new(
+        AppState::new(expected_board(FirstRunEnvironment::Standalone)),
+        RopeEditorFactory,
+    );
+    for input in [UiKey::Character('j'), UiKey::Enter, key] {
+        let _effects = app.handle(UiInput::Key(input), &mut ids, &clock);
+    }
+    app.editor_snapshot().expect("editing instruction").content
 }
 
 #[test]
@@ -333,6 +350,51 @@ fn delete_undo_resume_continue_and_later_fresh_launches_never_reseed() {
         let created = after.difference(&before).collect::<Vec<_>>();
         assert_eq!(created.len(), 1);
         assert!(contents(binary, state.path(), created[0]).is_empty());
+    }
+}
+
+#[test]
+fn editing_instruction_demonstrates_list_line_and_sentence_actions_in_a_real_pty() {
+    let binary = env!("CARGO_BIN_EXE_proqi");
+    let cases = [
+        (r"\r", UiKey::Enter, "continue list"),
+        (r"\x1b\[117;9u", UiKey::DeleteLogicalLine, "delete line"),
+        (r"\x1b\[117;10u", UiKey::DeleteSentence, "delete sentence"),
+    ];
+    let script = r#"
+        log_user 0
+        set timeout 10
+        spawn $env(PROQI_TEST_BINARY) --state-dir $env(PROQI_TEST_STATE)
+        expect -exact "\x1b\[?1049h"
+        after 500
+        send "j"
+        send "\r"
+        after 200
+        send -- "DEMO_KEY"
+        after 500
+        send "\x1b"
+        after 100
+        send "q"
+        expect eof
+        catch wait result
+        exit [lindex $result 3]
+    "#;
+
+    for (key, action, label) in cases {
+        let state = tempfile::tempdir().expect("temporary state");
+        run_launch(
+            binary,
+            state.path(),
+            &script.replace("DEMO_KEY", key),
+            None,
+            label,
+        );
+        let session = only_session(binary, state.path());
+        assert_eq!(
+            contents(binary, state.path(), &session)[1],
+            expected_after_edit_key(action),
+            "{label}"
+        );
     }
 }
 
