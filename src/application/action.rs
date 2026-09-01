@@ -3,8 +3,9 @@
 use super::FailureCode;
 use crate::domain::{
     BoardOperationKind, ContentAnnotation, OperationId, OperationSequence, RequestId, RevisionId,
-    TextPosition, ThoughtId, ThoughtPresentation, Timestamp, UndoScope,
+    TextPosition, Thought, ThoughtId, ThoughtPresentation, Timestamp, UndoScope,
 };
+use std::ops::Range;
 
 /// Normalized input or external result accepted by the reducer.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -73,6 +74,61 @@ pub enum Action {
         before_cursor: TextPosition,
         /// Cursor after the edit.
         after_cursor: TextPosition,
+        /// Event time.
+        at: Timestamp,
+    },
+    /// Split one exact thought at a UTF-8 byte boundary.
+    SplitThought {
+        /// Source thought.
+        thought_id: ThoughtId,
+        /// Fresh identity for the exact right side.
+        new_thought_id: ThoughtId,
+        /// Durable operation identity.
+        operation_id: OperationId,
+        /// Required current content.
+        expected_content: String,
+        /// Required current annotations.
+        expected_annotations: Vec<ContentAnnotation>,
+        /// Exact editor content transformed by this composite operation.
+        source_content: String,
+        /// Exact editor annotations transformed by this composite operation.
+        source_annotations: Vec<ContentAnnotation>,
+        /// Exact UTF-8 byte boundary.
+        at_byte: usize,
+        /// Event time.
+        at: Timestamp,
+    },
+    /// Extract one exact non-empty source range into a neighboring thought.
+    ExtractThought {
+        /// Source thought.
+        thought_id: ThoughtId,
+        /// Fresh identity for the extracted content.
+        new_thought_id: ThoughtId,
+        /// Durable operation identity.
+        operation_id: OperationId,
+        /// Required current content.
+        expected_content: String,
+        /// Required current annotations.
+        expected_annotations: Vec<ContentAnnotation>,
+        /// Exact editor content transformed by this composite operation.
+        source_content: String,
+        /// Exact editor annotations transformed by this composite operation.
+        source_annotations: Vec<ContentAnnotation>,
+        /// Exact normalized UTF-8 byte range.
+        range: Range<usize>,
+        /// Event time.
+        at: Timestamp,
+    },
+    /// Merge contiguous selected thoughts in board order.
+    MergeThoughts {
+        /// Durable operation identity.
+        operation_id: OperationId,
+        /// Exact board-ordered selection.
+        thought_ids: Vec<ThoughtId>,
+        /// Exact source snapshots captured with the selection.
+        expected_sources: Vec<Thought>,
+        /// Exact configured separator.
+        separator: String,
         /// Event time.
         at: Timestamp,
     },

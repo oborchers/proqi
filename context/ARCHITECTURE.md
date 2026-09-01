@@ -635,11 +635,20 @@ ordinary session creation and neither seed nor advance the marker.
   atomically.
 - A multi-thought mutation is stored as one ordered batch with one inverse, so
   delete, duplicate, collapse, cut, and submit-and-remove remain one undo step.
+- Split, extract, and merge are board-history operations whose ordered batch
+  combines exact content and annotation replacement with neighboring creation
+  or recoverable deletion. The SQLite adapter applies the batch, truncates redo
+  revisions for content-replaced thoughts, advances one sequence, moves one
+  board cursor, and rebuilds FTS inside one transaction. Undo and redo apply the
+  complete inverse or forward batch after restart.
 - Soft deletion remains recoverable until explicit pruning.
 - Only the holder of the session lease may mutate that session.
 - All timestamps are stored as UTC integers and rendered in local time.
 - Presentation annotations are sorted, non-overlapping UTF-8 byte ranges within
   canonical thought content. They never replace or truncate that content.
+- Annotation validation, partition, extraction closure, concatenation shift,
+  and editor-change rebasing share the domain annotation-range owner. Adjacent
+  annotations are never coalesced merely because their provenance values match.
 
 ### Migrations and recovery
 
@@ -664,6 +673,14 @@ invocation references. The annotation and invocation migrations are
 transactional protocol stamps because the annotation column and JSON envelope
 already exist. The current storage protocol prevents an older writer from
 interpreting an unknown annotation variant as compatible state.
+
+Schema version 12 and storage protocol version 11 register the durable split,
+extraction, and merge operation payloads, including exact content replacement
+and state-checked recoverable deletion mutations. The metadata-only migration
+is a compatibility boundary: a protocol 10 process must never be admitted as a
+compatible owner after protocol 11 payloads may exist. The separate schema 11
+onboarding migration remains protocol 10, and migration 12 preserves its
+completed or eligible marker exactly.
 
 ## Multiple running versions during an update
 

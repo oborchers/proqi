@@ -140,6 +140,8 @@ mod concurrency;
 mod core;
 #[path = "sqlite_store/editor.rs"]
 mod editor;
+#[path = "sqlite_store/migration_12.rs"]
+mod migration_12;
 #[path = "sqlite_store/onboarding.rs"]
 mod onboarding;
 #[path = "sqlite_store/onboarding_migration.rs"]
@@ -152,3 +154,5 @@ mod screenshot;
 mod submission;
 #[path = "sqlite_store/top_boundary.rs"]
 mod top_boundary;
+#[path = "sqlite_store/transformations.rs"]
+mod transformations;

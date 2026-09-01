@@ -58,7 +58,7 @@
         "Press Down twice on + New thought to create a durable blank and enter edit mode.",
         "Continue downward past the final thought directly into a new editable thought.",
         "Import shell-escaped Ghostty and Finder file drops as folded file or image attachments.",
-        "Build contiguous thought ranges with shifted arrows or K and J, and reorder one thought with the corresponding Primary shortcut."
+        "Preserve ordinary prompt text exactly when an escaped payload does not resolve completely to existing absolute local files."
       ]
     },
     {

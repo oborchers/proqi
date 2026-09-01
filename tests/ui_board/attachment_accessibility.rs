@@ -11,6 +11,8 @@ use ratatui_core::style::Modifier;
 
 #[path = "attachment_accessibility/review.rs"]
 mod review;
+#[path = "attachment_accessibility/transformations.rs"]
+mod transformations;
 
 #[test]
 fn inaccessible_image_and_file_use_exact_plain_labels_and_warning_semantics_after_resize() {

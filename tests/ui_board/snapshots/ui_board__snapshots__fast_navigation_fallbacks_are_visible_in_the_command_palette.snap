@@ -6,27 +6,27 @@ expression: "snapshot(&mut fixture, 72, 12, ThemePreference::Dark)"
 SIZE 72x12
 
 TEXT
-00│       ┌ commands ────────────────────────────────────────────[x]│
-01│  one  │:cursor                                                 ││
-02│  two  │Jump cursor up 5 visual rows                            ││
-03│⋮ thre │Jump cursor down 5 visual rows                          ││
-04│  four │Move cursor to thought beginning                        ││
-05│  five │Move cursor to thought end                              ││
-06│  six  └────────────────────────────────────────────────────────┘│
-07││
+00│┌ commands ──────────────────────────────────────────────────────────[x]│
+01││:cursor                                                               ││
+02││Jump cursor up 5 visual rows                                          ││
+03││Jump cursor down 5 visual rows                                        ││
+04││Move cursor to thought beginning                                      ││
+05││Move cursor to thought end                                            ││
+06││Split thought at cursor                                               ││
+07│└──────────────────────────────────────────────────────────────────────┘│
 08││
 09│  proqi-ui-contract│
 10│  1 thought · board · saving│
 11│  n New   y Copy  x Cut  d/Del  Space Select u Undo  / Search│
 
 STYLE RUNS
-0: 0-5 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 6-6 fg=Reset bg=Reset mod=NONE | 7-61 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 62-64 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 65-65 fg=Reset bg=Reset mod=NONE | 66-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-1: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-5 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 6-6 fg=Reset bg=Reset mod=NONE | 7-7 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 8-63 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 64-64 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 65-65 fg=Reset bg=Reset mod=NONE | 66-71 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
-2: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-5 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 6-6 fg=Reset bg=Reset mod=NONE | 7-7 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 8-63 fg=Rgb(112, 214, 155) bg=Rgb(39, 40, 48) mod=BOLD | 64-64 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 65-65 fg=Reset bg=Reset mod=NONE | 66-71 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
-3: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-5 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 6-6 fg=Reset bg=Reset mod=NONE | 7-64 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 65-65 fg=Reset bg=Reset mod=NONE | 66-71 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
-4: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-5 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 6-6 fg=Reset bg=Reset mod=NONE | 7-64 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 65-65 fg=Reset bg=Reset mod=NONE | 66-71 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
-5: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-5 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 6-6 fg=Reset bg=Reset mod=NONE | 7-64 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 65-65 fg=Reset bg=Reset mod=NONE | 66-71 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
-6: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-5 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 6-6 fg=Reset bg=Reset mod=NONE | 7-64 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 65-65 fg=Reset bg=Reset mod=NONE | 66-71 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
+0: 0-68 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 69-71 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE
+1: 0-0 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 1-70 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 71-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+2: 0-0 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 1-70 fg=Rgb(112, 214, 155) bg=Rgb(39, 40, 48) mod=BOLD | 71-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+3: 0-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+4: 0-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+5: 0-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+6: 0-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 7: 0-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 8: 0-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 9: 0-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE

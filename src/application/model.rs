@@ -6,8 +6,8 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use super::error::{ApplicationError, ApplicationResult, FailureCode};
 use crate::domain::{
-    BoardOperation, OperationId, OperationSequence, RequestId, SessionBoard, StableVersion,
-    TextPosition, Thought, ThoughtId, ThoughtRevision, Timestamp,
+    BoardOperation, BoardOperationKind, OperationId, OperationSequence, RequestId, SessionBoard,
+    StableVersion, TextPosition, Thought, ThoughtId, ThoughtRevision, Timestamp, UndoScope,
 };
 
 use crate::ports::runtime::CaptureOwnerInfo;
@@ -251,6 +251,76 @@ impl AppState {
         }
     }
 
+    /// Choose a transformation as the next undo unit when it is newer than the
+    /// active thought's latest editor revision and directly owns that thought.
+    #[must_use]
+    pub fn preferred_undo_scope(&self, mode: InteractionMode) -> UndoScope {
+        let InteractionMode::Edit { thought_id } = mode else {
+            return UndoScope::Board;
+        };
+        let editor_sequence = self
+            .editor_histories
+            .get(&thought_id)
+            .and_then(|history| {
+                history
+                    .cursor
+                    .checked_sub(1)
+                    .and_then(|index| history.revisions.get(index))
+            })
+            .map(|revision| revision.sequence);
+        let transformation = self
+            .board_history_cursor
+            .checked_sub(1)
+            .and_then(|index| self.board_history.get(index))
+            .filter(|operation| {
+                matches!(
+                    operation.kind,
+                    BoardOperationKind::Split
+                        | BoardOperationKind::Extract
+                        | BoardOperationKind::Merge
+                ) && operation.forward.addresses(thought_id)
+            });
+        if transformation.is_some_and(|operation| {
+            editor_sequence.is_none_or(|sequence| operation.sequence > sequence)
+        }) {
+            UndoScope::Board
+        } else {
+            UndoScope::Editor { thought_id }
+        }
+    }
+
+    /// Choose a transformation as the next redo unit when it precedes the
+    /// active thought's next editor revision and directly owns that thought.
+    #[must_use]
+    pub fn preferred_redo_scope(&self, mode: InteractionMode) -> UndoScope {
+        let InteractionMode::Edit { thought_id } = mode else {
+            return UndoScope::Board;
+        };
+        let editor_sequence = self
+            .editor_histories
+            .get(&thought_id)
+            .and_then(|history| history.revisions.get(history.cursor))
+            .map(|revision| revision.sequence);
+        let transformation =
+            self.board_history
+                .get(self.board_history_cursor)
+                .filter(|operation| {
+                    matches!(
+                        operation.kind,
+                        BoardOperationKind::Split
+                            | BoardOperationKind::Extract
+                            | BoardOperationKind::Merge
+                    ) && operation.forward.addresses(thought_id)
+                });
+        if transformation.is_some_and(|operation| {
+            editor_sequence.is_none_or(|sequence| operation.sequence < sequence)
+        }) {
+            UndoScope::Board
+        } else {
+            UndoScope::Editor { thought_id }
+        }
+    }
+
     pub(super) fn next_sequence(&self) -> ApplicationResult<OperationSequence> {
         if !self.deferred_board_operations.is_empty() {
             return Err(ApplicationError::InvalidState);
@@ -396,6 +466,18 @@ impl AppState {
         self.focused_thought = self.board.live_thoughts().first().map(|thought| thought.id);
         if matches!(self.mode, InteractionMode::Edit { .. }) {
             self.mode = InteractionMode::Board;
+        }
+    }
+
+    pub(super) fn truncate_conflicting_board_redo(&mut self, thought_id: ThoughtId) {
+        let conflicting = self.board_history[self.board_history_cursor..]
+            .iter()
+            .position(|operation| {
+                operation.forward.addresses(thought_id) || operation.inverse.addresses(thought_id)
+            });
+        if let Some(offset) = conflicting {
+            self.board_history
+                .truncate(self.board_history_cursor.saturating_add(offset));
         }
     }
 

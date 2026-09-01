@@ -9,8 +9,9 @@ mod text;
 mod update;
 
 pub use annotation::{
-    AnnotationBehavior, ContentAnnotation, ContentAnnotationKind, InlineStyleKind,
-    ShortcutEmphasis, validate_annotations,
+    AnnotationBehavior, AnnotationTextChange, ContentAnnotation, ContentAnnotationKind,
+    InlineStyleKind, ShortcutEmphasis, extract_annotations, merge_annotations,
+    partition_annotations, rebase_annotations, validate_annotations,
 };
 pub use identifiers::{
     InstanceId, OperationId, RequestId, RevisionId, SessionId, SubmissionId, ThoughtId,

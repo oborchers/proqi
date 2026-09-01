@@ -20,9 +20,9 @@ pub use error::{StoreError, StoreFailureCode};
 pub use onboarding::{FirstRunBoard, FirstRunOutcome, OnboardingVersion};
 
 /// Current storage schema understood by this binary.
-pub const SUPPORTED_SCHEMA_VERSION: u32 = 11;
+pub const SUPPORTED_SCHEMA_VERSION: u32 = 12;
 /// Current local storage protocol understood by this binary.
-pub const STORAGE_PROTOCOL_VERSION: u32 = 10;
+pub const STORAGE_PROTOCOL_VERSION: u32 = 11;
 
 /// One ordered, content-redacted source included in a submission.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

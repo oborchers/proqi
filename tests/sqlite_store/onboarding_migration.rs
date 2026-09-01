@@ -16,9 +16,11 @@ use rusqlite::Connection;
 use super::{DatabaseFixture, test_path};
 
 fn downgrade_to(connection: &Connection, version: u32) {
-    connection
-        .execute_batch("DROP TABLE onboarding_state;")
-        .expect("remove onboarding marker");
+    if version < 11 {
+        connection
+            .execute_batch("DROP TABLE onboarding_state;")
+            .expect("remove onboarding marker");
+    }
     if version <= 6 {
         connection
             .execute_batch("DROP TABLE screenshot_capture_receipts;")
@@ -62,17 +64,18 @@ fn downgrade_to(connection: &Connection, version: u32) {
             [i64::from(version)],
         )
         .expect("truncate migration history");
+    let protocol = if version == 11 { 10 } else { version };
     connection
         .execute(
-            "UPDATE schema_meta SET schema_version = ?1, storage_protocol = ?1",
-            [i64::from(version)],
+            "UPDATE schema_meta SET schema_version = ?1, storage_protocol = ?2",
+            [i64::from(version), i64::from(protocol)],
         )
         .expect("set legacy version");
 }
 
 #[test]
-fn every_supported_prior_schema_migrates_with_current_onboarding_completed() {
-    for version in 1..SUPPORTED_SCHEMA_VERSION {
+fn every_pre_onboarding_schema_migrates_with_current_onboarding_completed() {
+    for version in 1..11 {
         let fixture = DatabaseFixture::new();
         drop(fixture.open());
         let connection = Connection::open(&fixture.config.database_path).expect("legacy database");
@@ -162,5 +165,13 @@ fn prior_schema_with_future_storage_protocol_fails_closed_without_migration() {
             |row| row.get(0),
         )
         .expect("marker existence");
-    assert!(!marker_exists);
+    assert!(marker_exists);
+    let completed: i64 = connection
+        .query_row(
+            "SELECT completed_version FROM onboarding_state WHERE singleton = 1",
+            [],
+            |row| row.get(0),
+        )
+        .expect("unchanged onboarding eligibility");
+    assert_eq!(completed, 0);
 }

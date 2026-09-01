@@ -443,6 +443,18 @@ pub enum DomainError {
     /// Content presentation metadata does not address valid canonical text.
     #[error("content annotation range is invalid")]
     InvalidContentAnnotation,
+    /// A requested content range is reversed, outside content, or splits UTF-8.
+    #[error("content range is invalid")]
+    InvalidContentRange,
+    /// An operation requires a non-empty exact content range.
+    #[error("content range cannot be empty")]
+    EmptyContentRange,
+    /// Exact concatenated content cannot be represented on this platform.
+    #[error("content length overflow")]
+    ContentLengthOverflow,
+    /// A reversible replacement no longer matches current thought content.
+    #[error("thought content changed before transformation: {0}")]
+    ThoughtContentConflict(ThoughtId),
 }
 
 fn validate_absolute_path(path: &Path) -> Result<(), DomainError> {

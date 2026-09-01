@@ -9,6 +9,8 @@ use super::{
     ThoughtPosition, ThoughtPresentation, Timestamp, validate_annotations,
 };
 
+mod mutation;
+
 /// Durable structural operation record.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct OperationRecord {
@@ -53,6 +55,12 @@ pub enum BoardOperationKind {
     Duplicate,
     /// Deleted after an accepted adjacent-agent submission.
     SubmitAndRemove,
+    /// Split one thought at an exact logical cursor.
+    Split,
+    /// Extract one exact editor selection into a neighboring thought.
+    Extract,
+    /// Merge a contiguous board selection into its first thought.
+    Merge,
 }
 
 /// One reversible change to current board state.
@@ -78,6 +86,23 @@ pub enum BoardMutation {
         /// Position occupied before deletion or desired after restoration.
         position: ThoughtPosition,
     },
+    /// Change deletion state only when the complete transformation source still matches.
+    SetDeletionExact {
+        /// Affected thought.
+        thought_id: ThoughtId,
+        /// Required current content.
+        expected_content: String,
+        /// Required current annotations.
+        expected_annotations: Vec<super::ContentAnnotation>,
+        /// Required current deletion state.
+        expected_deleted_at: Option<Timestamp>,
+        /// Required retained position.
+        expected_position: ThoughtPosition,
+        /// Deletion time, or `None` to restore.
+        deleted_at: Option<Timestamp>,
+        /// Position occupied before deletion or desired after restoration.
+        position: ThoughtPosition,
+    },
     /// Move a live thought between normalized positions.
     MoveThought {
         /// Affected thought.
@@ -86,6 +111,19 @@ pub enum BoardMutation {
         from: ThoughtPosition,
         /// Desired position.
         to: ThoughtPosition,
+    },
+    /// Replace exact thought content and all attached annotation ranges.
+    ReplaceContent {
+        /// Affected thought.
+        thought_id: ThoughtId,
+        /// Required current content.
+        before_content: String,
+        /// Required current annotations.
+        before_annotations: Vec<super::ContentAnnotation>,
+        /// Replacement content.
+        after_content: String,
+        /// Replacement annotations.
+        after_annotations: Vec<super::ContentAnnotation>,
     },
     /// Set the durable presentation preference.
     SetPresentation {
@@ -122,10 +160,60 @@ impl BoardMutation {
             Self::AddThought { thought } => {
                 validate_annotations(&thought.content, &thought.annotations)
             }
+            Self::ReplaceContent {
+                before_content,
+                before_annotations,
+                after_content,
+                after_annotations,
+                ..
+            } => {
+                validate_annotations(before_content, before_annotations)?;
+                validate_annotations(after_content, after_annotations)
+            }
+            Self::SetDeletionExact {
+                expected_content,
+                expected_annotations,
+                ..
+            } => validate_annotations(expected_content, expected_annotations),
             Self::SetDeletion { .. }
             | Self::MoveThought { .. }
             | Self::SetPresentation { .. }
             | Self::LegacySetCollapsed { .. } => Ok(()),
+        }
+    }
+
+    /// Whether this mutation addresses one thought identity.
+    #[must_use]
+    pub fn addresses(&self, thought_id: ThoughtId) -> bool {
+        match self {
+            Self::Batch { mutations } => mutations
+                .iter()
+                .any(|mutation| mutation.addresses(thought_id)),
+            Self::AddThought { thought } => thought.id == thought_id,
+            Self::SetDeletion {
+                thought_id: affected,
+                ..
+            }
+            | Self::SetDeletionExact {
+                thought_id: affected,
+                ..
+            }
+            | Self::MoveThought {
+                thought_id: affected,
+                ..
+            }
+            | Self::ReplaceContent {
+                thought_id: affected,
+                ..
+            }
+            | Self::SetPresentation {
+                thought_id: affected,
+                ..
+            }
+            | Self::LegacySetCollapsed {
+                thought_id: affected,
+                ..
+            } => *affected == thought_id,
         }
     }
 }
@@ -244,11 +332,43 @@ impl SessionBoard {
                 deleted_at,
                 position,
             } => self.set_deletion(*thought_id, *deleted_at, *position, at)?,
+            BoardMutation::SetDeletionExact {
+                thought_id,
+                expected_content,
+                expected_annotations,
+                expected_deleted_at,
+                expected_position,
+                deleted_at,
+                position,
+            } => self.set_deletion_exact(
+                *thought_id,
+                expected_content,
+                expected_annotations,
+                *expected_deleted_at,
+                *expected_position,
+                *deleted_at,
+                *position,
+                at,
+            )?,
             BoardMutation::MoveThought {
                 thought_id,
                 from,
                 to,
             } => self.move_thought(*thought_id, *from, *to, at)?,
+            BoardMutation::ReplaceContent {
+                thought_id,
+                before_content,
+                before_annotations,
+                after_content,
+                after_annotations,
+            } => self.replace_content(
+                *thought_id,
+                before_content,
+                before_annotations,
+                after_content,
+                after_annotations,
+                at,
+            )?,
             BoardMutation::SetPresentation {
                 thought_id,
                 presentation,
@@ -305,168 +425,4 @@ impl SessionBoard {
         }
         Ok(())
     }
-
-    fn add_or_restore(&mut self, mut thought: Thought, at: Timestamp) -> Result<(), DomainError> {
-        if thought.session_id != self.session.id {
-            return Err(DomainError::WrongSession {
-                thought_id: thought.id,
-                session_id: self.session.id,
-            });
-        }
-        let target = usize::try_from(thought.position.get()).unwrap_or(usize::MAX);
-        let live_len = self.live_thoughts().len();
-        if target > live_len {
-            return Err(DomainError::InvalidPosition {
-                requested: target,
-                len: live_len,
-            });
-        }
-        if let Some(existing) = self.thought(thought.id) {
-            if existing.is_live() {
-                return Err(DomainError::ThoughtAlreadyExists(thought.id));
-            }
-            self.shift_for_insert(target);
-            let existing = self
-                .thought_mut(thought.id)
-                .ok_or(DomainError::ThoughtNotFound(thought.id))?;
-            existing.deleted_at = None;
-            existing.position = ThoughtPosition::new(to_u32(target)?);
-            existing.updated_at = at;
-            return Ok(());
-        }
-        self.shift_for_insert(target);
-        thought.position = ThoughtPosition::new(to_u32(target)?);
-        thought.deleted_at = None;
-        thought.updated_at = at;
-        self.thoughts.push(thought);
-        Ok(())
-    }
-
-    fn set_deletion(
-        &mut self,
-        thought_id: ThoughtId,
-        deleted_at: Option<Timestamp>,
-        position: ThoughtPosition,
-        at: Timestamp,
-    ) -> Result<(), DomainError> {
-        let current = self
-            .thought(thought_id)
-            .ok_or(DomainError::ThoughtNotFound(thought_id))?
-            .clone();
-        match (current.deleted_at, deleted_at) {
-            (None, Some(deleted)) => {
-                let removed = usize::try_from(current.position.get()).unwrap_or(usize::MAX);
-                let thought = self
-                    .thought_mut(thought_id)
-                    .ok_or(DomainError::ThoughtNotFound(thought_id))?;
-                thought.deleted_at = Some(deleted);
-                thought.updated_at = at;
-                self.shift_after_remove(removed);
-            }
-            (Some(_), None) => {
-                let target = usize::try_from(position.get()).unwrap_or(usize::MAX);
-                let len = self.live_thoughts().len();
-                if target > len {
-                    return Err(DomainError::InvalidPosition {
-                        requested: target,
-                        len,
-                    });
-                }
-                self.shift_for_insert(target);
-                let thought = self
-                    .thought_mut(thought_id)
-                    .ok_or(DomainError::ThoughtNotFound(thought_id))?;
-                thought.deleted_at = None;
-                thought.position = position;
-                thought.updated_at = at;
-            }
-            (None, None) | (Some(_), Some(_)) => {}
-        }
-        Ok(())
-    }
-
-    fn move_thought(
-        &mut self,
-        thought_id: ThoughtId,
-        from: ThoughtPosition,
-        to: ThoughtPosition,
-        at: Timestamp,
-    ) -> Result<(), DomainError> {
-        let len = self.live_thoughts().len();
-        let from = usize::try_from(from.get()).unwrap_or(usize::MAX);
-        let to = usize::try_from(to.get()).unwrap_or(usize::MAX);
-        if from >= len || to >= len {
-            return Err(DomainError::InvalidPosition {
-                requested: from.max(to),
-                len,
-            });
-        }
-        let current = self
-            .thought(thought_id)
-            .ok_or(DomainError::ThoughtNotFound(thought_id))?;
-        if !current.is_live() || usize::try_from(current.position.get()).ok() != Some(from) {
-            return Err(DomainError::InvalidPosition {
-                requested: from,
-                len,
-            });
-        }
-        if from < to {
-            shift_range(&mut self.thoughts, from, to, ShiftDirection::TowardStart)?;
-        } else if to < from {
-            shift_range(&mut self.thoughts, to, from, ShiftDirection::TowardEnd)?;
-        }
-        let thought = self
-            .thought_mut(thought_id)
-            .ok_or(DomainError::ThoughtNotFound(thought_id))?;
-        thought.position = ThoughtPosition::new(to_u32(to)?);
-        thought.updated_at = at;
-        Ok(())
-    }
-
-    fn shift_for_insert(&mut self, target: usize) {
-        for thought in self.thoughts.iter_mut().filter(|thought| thought.is_live()) {
-            if usize::try_from(thought.position.get()).unwrap_or(usize::MAX) >= target {
-                thought.position = ThoughtPosition::new(thought.position.get().saturating_add(1));
-            }
-        }
-    }
-
-    fn shift_after_remove(&mut self, removed: usize) {
-        for thought in self.thoughts.iter_mut().filter(|thought| thought.is_live()) {
-            if usize::try_from(thought.position.get()).unwrap_or(usize::MAX) > removed {
-                thought.position = ThoughtPosition::new(thought.position.get() - 1);
-            }
-        }
-    }
-}
-
-#[derive(Clone, Copy)]
-enum ShiftDirection {
-    TowardStart,
-    TowardEnd,
-}
-
-fn shift_range(
-    thoughts: &mut [Thought],
-    start: usize,
-    end: usize,
-    direction: ShiftDirection,
-) -> Result<(), DomainError> {
-    for thought in thoughts.iter_mut().filter(|thought| thought.is_live()) {
-        let position = usize::try_from(thought.position.get()).unwrap_or(usize::MAX);
-        let shifted = match direction {
-            ShiftDirection::TowardStart if position > start && position <= end => position - 1,
-            ShiftDirection::TowardEnd if position >= start && position < end => position + 1,
-            _ => continue,
-        };
-        thought.position = ThoughtPosition::new(to_u32(shifted)?);
-    }
-    Ok(())
-}
-
-fn to_u32(value: usize) -> Result<u32, DomainError> {
-    u32::try_from(value).map_err(|_| DomainError::InvalidPosition {
-        requested: value,
-        len: usize::try_from(u32::MAX).unwrap_or(usize::MAX),
-    })
 }

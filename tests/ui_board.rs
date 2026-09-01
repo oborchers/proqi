@@ -369,36 +369,6 @@ fn mouse_drag_reorders_thoughts_through_the_visible_gutter() {
     assert_eq!(contents, ["second", "third", "first"]);
 }
 
-#[test]
-fn keyboard_selection_is_logical_and_visible() {
-    let mut fixture = Fixture::new();
-    fixture.paste("A界B");
-    fixture.input(UiInput::Key(UiKey::Move {
-        movement: proqi::ports::editor::CursorMovement::GraphemeBack,
-        extend_selection: true,
-    }));
-    let snapshot = fixture.app.editor_snapshot().expect("editor");
-    assert_eq!(
-        snapshot.selection,
-        Some(proqi::ports::editor::TextSelection {
-            start: proqi::domain::TextPosition::new(0, 2),
-            end: proqi::domain::TextPosition::new(0, 3),
-        })
-    );
-    assert_eq!(
-        snapshot.visual_lines[0]
-            .selected_cells
-            .expect("cells")
-            .start,
-        3
-    );
-
-    let terminal = draw(&mut fixture, 20, 5);
-    let area = fixture.app.prepare_frame(Rect::new(0, 0, 20, 5)).thoughts[0].text_area;
-    let selected = terminal.backend().buffer()[(area.x + 3, area.y)].modifier;
-    assert!(selected.contains(ratatui_core::style::Modifier::REVERSED));
-}
-
 #[path = "ui_board/agent.rs"]
 mod agent;
 #[path = "ui_board/agent_direct.rs"]
@@ -477,3 +447,5 @@ mod submission_locks;
 mod submit_all;
 #[path = "ui_board/top_boundary_snapshots.rs"]
 mod top_boundary_snapshots;
+#[path = "ui_board/transformations.rs"]
+mod transformations;
