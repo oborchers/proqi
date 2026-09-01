@@ -71,6 +71,17 @@
         "Verify file and image attachments immediately before submission so inaccessible sources leave the complete board unchanged.",
         "Submit directly through Herdr to Claude Code, Codex, Pi, and Hermes, with documented conditional support for OpenCode and Kilo."
       ]
+    },
+    {
+      "version": "0.6.0",
+      "highlights": [
+        "Start with six ordinary practice thoughts on a pristine first interactive board, with highlighted shortcuts and Herdr-aware guidance.",
+        "Split or extract a thought with Primary+T, or merge a contiguous Board selection with t, as one restart-safe operation with undo and redo.",
+        "Delete every Unicode sentence touched by the cursor or selection with Primary+Shift+U while Primary+U continues to delete one logical line.",
+        "Press Space on one selected collapsed placeholder to insert a separator before it without replacing the attachment, reference, or folded paste.",
+        "Press Up twice at the first thought to create above it, use arrows or matching Vim-style navigation, and delete in Board mode with d or physical Del.",
+        "Continue typing immediately after Screenshot Inbox capture because every inserted image path now ends with one ordinary space."
+      ]
     }
   ]
 }

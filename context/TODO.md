@@ -27,8 +27,6 @@ undo remain non-negotiable.
 
 - [ ] **Public documentation:** turn shipped interaction workstream handoffs
   into concise GitHub-facing feature guides, beginning with range selection.
-- [ ] **Release awareness:** package concise versioned highlights with every
-  release and show them once in the session that initiated a successful update.
 - [ ] **Fast paging and command discovery:** reuse the editor's five-row jump
   across every picker and scrollable overlay, add Page Up and Page Down aliases,
   and group the Commands overlay with inert headings that navigation skips.
@@ -37,12 +35,10 @@ undo remain non-negotiable.
 - [ ] **High-return editing:** add exact replace-all and logical-line
   duplicate/move.
 - [ ] **Attachment integrity:** preserve file, image, and folded annotation
-  metadata across Proqi-to-Proqi copy/cut/paste, and prevent submission when an
-  annotated asset can no longer be accessed.
+  metadata across Proqi-to-Proqi copy/cut/paste.
 - [ ] **Board flow:** search-driven selection and selected-block reordering.
-- [ ] **Herdr discovery:** surface recognized live agents from every workspace
-  and tab in the existing invocation picker, then add an explicit global
-  delivery route without changing the adjacent-submit fast path.
+- [ ] **Herdr global delivery:** add an explicit route from the shipped live-agent
+  picker to another workspace or tab without changing adjacent submission.
 - [ ] **Shared Proqi sessions:** let several interactive Proqi panes attach to
   one logical board through a single authoritative owner, with private view
   state, exclusive per-thought editing, and submission bound to the initiating
@@ -54,9 +50,8 @@ undo remain non-negotiable.
   must wait for stronger upstream contracts.
 - [ ] **Parallel context:** add a dedicated conditional Git context row beneath
   the existing thought-count/mode/persistence row.
-- [ ] **Composition:** split/extract/merge thoughts.
-- [ ] **Visual feedback capture:** let exactly one Proqi session turn new OS
-  screenshots into thoughts without dragging files across Herdr panes.
+- [ ] **Linux screenshot parity:** extend the shipped macOS Screenshot Inbox to
+  explicitly configured Linux screenshot directories through inotify.
 - [ ] **Later:** occurrence-only multi-selection if the exact replace-all
   workflow proves demand.
 
@@ -75,11 +70,10 @@ Fast navigation
 
 Board
 ├─ Select all search matches
-├─ Selected-block reorder
-└─ Composite board/editor transaction ──> Split/extract/merge thoughts
+└─ Selected-block reorder
 
-Herdr discovery and routing
-└─ Live agent catalog ──> Prompt reference insertion ──> Global semantic submit
+Herdr global delivery
+└─ Existing live-agent catalog and references ──> Global semantic submit
 
 Shared Proqi sessions
 └─ Existing active-owner control ──> Snapshot and ordered change stream
@@ -108,13 +102,6 @@ Codex native path
 Claude Code native path
 └─ Approved Channel/bridge + attributable receipt ──> Adapter qualification ──> UI
 
-Release awareness
-└─ Highlight manifest/validation ──> Targeted acknowledgement ──> One-time overlay
-
-Screenshot capture
-├─ Watcher/classifier ─┐
-└─ Exclusive lease ────┴─> Durable receipt/thought creation ──> Status/focus UX
-
 Git context
 └─ Injected discovery ──> Conditional status row ──> Optional durable browser data
 
@@ -126,21 +113,19 @@ Independent
 ```
 
 The safe parallel worktree lanes are **editor**, **board**, **Git/chrome**,
-**release awareness**, **screenshot infrastructure**, and
-**documentation/metadata**. Provider-specific standalone-agent prototypes may
+**Linux screenshot parity**, and **documentation/metadata**.
+Provider-specific standalone-agent prototypes may
 also proceed independently after all feasibility spikes are reconciled, but the
 provider-neutral connection identity, lifecycle, and chooser must land as one
 shared foundation rather than being reinvented by each adapter. Keep editor
-tickets in one practical lane. The commands overlay and release-highlights
-overlay can proceed independently at
-the model layer, but their final rendering work should be serialized. Screenshot
-TUI wiring and the Git status row both touch responsive chrome and should also
-be serialized. Shared-session work changes the session lease, control protocol,
+tickets in one practical lane. Commands-overlay and Git-status rendering both
+touch responsive UI composition and should reconcile their final rendering
+work. Shared-session work changes the session lease, control protocol,
 editor ownership, submission coordination, and most PTY lifecycle contracts. It
 should run in one dedicated lane and reconcile those concurrent changes before
 implementation rather than copying them from open worktrees.
 
-## Herdr discovery and global delivery
+## Herdr global delivery
 
 ### Submit to any live Herdr agent: P1, M (7–12 days after discovery)
 
@@ -232,60 +217,6 @@ engineering context.
   be created or updated when a shipped user workflow materially changes.
 - [ ] Validate links, privacy, narrow-screen readability, and agreement with the
   current product contract before publishing.
-
-### Show concise release highlights after an in-app upgrade — P1, M (5–9 days)
-
-User story: after I approve an in-app Proqi upgrade, the same session shows one
-small, readable summary of the most important newly installed features so I can
-use them immediately. Other concurrently restarted Proqi sessions remain quiet.
-
-- [ ] Add one checked-in, versioned, machine-readable release-highlight
-  manifest that is packaged with the installed product and available without a
-  network request. Keep the GitHub Release note as the complete external
-  changelog; the in-app manifest contains only three to six high-signal,
-  user-facing highlights per version.
-- [ ] Bind every highlight entry to an exact stable Proqi version. When an
-  upgrade skips versions, show the packaged entries newer than the previously
-  installed version through the new version, grouped by version in one
-  scrollable overlay.
-- [ ] After a successful Homebrew update, durably target the pending announcement
-  to the exact session in which the user confirmed **Update and restart all
-  sessions**. Do not infer the target from whichever participant happens to
-  restart first or last.
-- [ ] Show the announcement only after that initiating session has resumed under
-  the confirmed new executable and restored its board. Peer sessions restarted
-  by the same coordinator never show the automatic announcement.
-- [ ] Reuse the responsive frame, close target, scrolling, focus treatment, and
-  keyboard/mouse behavior of the current `proqi shortcuts` overlay. Title it
-  `what's new in Proqi X.Y.Z`; do not use the searchable command-palette layout
-  or introduce a new visual language.
-- [ ] Treat the announcement as acknowledged only when the user dismisses it by
-  keyboard or mouse. A crash or restart before acknowledgement shows it again;
-  dismissal is durable and suppresses that exact upgrade announcement forever.
-- [ ] Add an always-available **What's new** command-palette action that can
-  reopen the installed highlights without changing the one-time automatic
-  acknowledgement.
-- [ ] A failed, cancelled, ambiguous, or partially restarted update creates no
-  false announcement. If the initiating session cannot restart immediately,
-  retain the pending announcement for its next successful resume at the target
-  version. Missing or mismatched packaged highlights fail quietly and
-  truthfully rather than showing an empty or wrong-version overlay.
-- [ ] Keep this local and content-free: store only session identity, previous and
-  target versions, and acknowledgement state. Do not add telemetry, fetch
-  release notes after startup, or show the overlay for an external package
-  replacement that no Proqi session initiated.
-- [ ] Extend the release skill so every release preparation drafts and reviews
-  the compact in-app highlights alongside `.github/release-notes/vX.Y.Z.md`,
-  verifies exact version agreement, and includes both in the pre-commit release
-  review. The skill must never invent highlights from commit titles alone.
-- [ ] Enforce the same contract through `xtask` and CI so the maintainer skill is
-  guidance rather than the only gate: a release version without matching,
-  bounded, valid packaged highlights fails release preparation and packaging.
-- [ ] Test coordinator-only display across multiple active sessions, skipped
-  versions, successful dismissal, crash-before-dismissal, aborted installation,
-  partial restart, delayed coordinator resume, and corrupt or missing manifest
-  state. Add reviewed light/dark/limited-color snapshots plus narrow, shallow,
-  scrolling, keyboard, mouse, resize, and real update-restart PTY coverage.
 
 ### Share five-step paging across editors and overlays: P1, S (2 to 4 days)
 
@@ -477,24 +408,7 @@ This captures most of the proposed multi-cursor value with much less new state.
   into a stable block before moving; do not guess silently.
 - [ ] Persist the reorder atomically and restore it with one board undo.
 
-## Thought composition
-
-### Split, extract, and merge thoughts — P1, M (5–9 days)
-
-- [x] Split at the logical cursor with an exact boundary: left keeps its identity,
-  right becomes a new thought immediately below, and neither side is trimmed.
-- [x] Extract the exact active selection into a new thought and close the gap in
-  the source.
-- [x] Merge contiguous selected thoughts with exactly one configured separator
-  (default one blank line), keep the first identity, and recoverably delete the
-  sources.
-- [x] Partition, shift, or merge annotations without losing attachment/fold
-  identity.
-- [x] Reject locked or noncontiguous inputs with actionable feedback.
-- [x] Implement one atomic composite durable operation across editor and board
-  history; undo must survive restart and FTS must remain consistent.
-- [ ] Offer “split by blank lines” only as an explicit previewed bulk action, not
-  an automatic transformation.
+## Clipboard and annotation integrity
 
 ### Annotation-preserving clipboard round trips — P1, S/M (3–6 days)
 
@@ -1015,15 +929,12 @@ The official Channel plugin was installed in isolated state but the installed
 Claude build rejected Channel activation for the available auth route. All
 disposable panes, sessions, clones, and isolated state were removed.
 
-## Screenshot capture
+## Linux screenshot parity
 
-### Exclusive screenshot inbox — P1, M/L (2–3 weeks)
+### Extend Screenshot Inbox to Linux — P2, S/M (3–6 days)
 
-User story: while reviewing visual work in another application, enable capture
-on one Proqi board, take ordinary OS screenshots, and receive one new thought
-per completed screenshot without focusing or dragging into the Proqi pane.
-
-#### Linux behavior
+User story: use the shipped Screenshot Inbox on Linux with an explicitly
+configured directory and the same bounded, durable capture behavior as macOS.
 
 - [ ] Use an explicitly configurable screenshot directory on Linux. Suggest the
   documented GNOME `~/Pictures/Screenshots` location when it exists, while
