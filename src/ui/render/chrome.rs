@@ -25,7 +25,15 @@ pub(super) fn render_footer(
         if matches!(target, HitTarget::RenameSession | HitTarget::CopySessionId) {
             continue;
         }
-        render_control(frame, app, *target, *area, keys, theme);
+        render_control(
+            frame,
+            app,
+            *target,
+            *area,
+            keys,
+            layout.submission_label_style,
+            theme,
+        );
     }
 }
 
@@ -35,6 +43,7 @@ fn render_control(
     target: HitTarget,
     area: ratatui_core::layout::Rect,
     keys: &crate::ui::KeyBindings,
+    submission_style: Option<crate::ui::control_labels::SubmissionLabelStyle>,
     theme: &Theme,
 ) {
     let label = match target {
@@ -43,6 +52,14 @@ fn render_control(
             .iter()
             .find(|target| target.direction == direction)
             .map(crate::ui::control_labels::agent),
+        HitTarget::BeginDelivery(disposition) | HitTarget::Deliver(_, disposition) => {
+            Some(crate::ui::control_labels::submission(
+                disposition,
+                app.interaction_mode(),
+                keys,
+                submission_style.unwrap_or(crate::ui::control_labels::SubmissionLabelStyle::Full),
+            ))
+        }
         _ => {
             crate::ui::control_labels::action(target, area.width <= 6, app.interaction_mode(), keys)
         }

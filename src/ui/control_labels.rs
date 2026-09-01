@@ -13,6 +13,13 @@ pub(crate) struct ControlLabel {
     pub(crate) text: String,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum SubmissionLabelStyle {
+    Full,
+    Compact,
+    KeysOnly,
+}
+
 pub(crate) const fn insertion_text(mode: InteractionMode, compact: bool) -> &'static str {
     match (mode, compact) {
         (InteractionMode::Compose, true) => " Type",
@@ -63,7 +70,12 @@ pub(crate) fn action(
         HitTarget::Retry => ("r".to_owned(), " Retry"),
         HitTarget::ExportRecovery => ("w".to_owned(), " Export"),
         HitTarget::BeginDelivery(disposition) | HitTarget::Deliver(_, disposition) => {
-            return Some(submission(disposition, mode, keys));
+            return Some(submission(
+                disposition,
+                mode,
+                keys,
+                SubmissionLabelStyle::Full,
+            ));
         }
         HitTarget::Agent(_)
         | HitTarget::Thought(_)
@@ -140,21 +152,51 @@ pub(crate) fn submission(
     disposition: SubmissionDisposition,
     mode: InteractionMode,
     keys: &KeyBindings,
+    style: SubmissionLabelStyle,
 ) -> ControlLabel {
-    let editing = matches!(mode, InteractionMode::Edit { .. });
-    let (key, text) = match (disposition, editing) {
-        (SubmissionDisposition::RemoveAfterSuccess, true) => {
+    let editing = matches!(
+        mode,
+        InteractionMode::Compose | InteractionMode::Edit { .. }
+    );
+    let (key, text) = match (disposition, editing, style) {
+        (SubmissionDisposition::RemoveAfterSuccess, true, SubmissionLabelStyle::Compact) => {
+            (compact_primary_key_label(false), " Send")
+        }
+        (SubmissionDisposition::Keep, true, SubmissionLabelStyle::Compact) => {
+            (compact_primary_key_label(true), " Keep")
+        }
+        (SubmissionDisposition::RemoveAfterSuccess, false, SubmissionLabelStyle::Compact) => (
+            board_compact_submission_key(keys.submit_remove, false),
+            " Send",
+        ),
+        (SubmissionDisposition::Keep, false, SubmissionLabelStyle::Compact) => (
+            board_compact_submission_key(keys.submit_keep, true),
+            " Keep",
+        ),
+        (SubmissionDisposition::RemoveAfterSuccess, true, SubmissionLabelStyle::KeysOnly) => {
+            (compact_primary_key_label(false), "")
+        }
+        (SubmissionDisposition::Keep, true, SubmissionLabelStyle::KeysOnly) => {
+            (compact_primary_key_label(true), "")
+        }
+        (SubmissionDisposition::RemoveAfterSuccess, false, SubmissionLabelStyle::KeysOnly) => {
+            (super::settings::key_label(keys.submit_remove), "")
+        }
+        (SubmissionDisposition::Keep, false, SubmissionLabelStyle::KeysOnly) => {
+            (super::settings::key_label(keys.submit_keep), "")
+        }
+        (SubmissionDisposition::RemoveAfterSuccess, true, SubmissionLabelStyle::Full) => {
             (super::settings::primary_key_label("Enter"), " Submit")
         }
-        (SubmissionDisposition::Keep, true) => (
+        (SubmissionDisposition::Keep, true, SubmissionLabelStyle::Full) => (
             super::settings::primary_key_label("Shift+Enter"),
             " Submit & keep",
         ),
-        (SubmissionDisposition::RemoveAfterSuccess, false) => {
-            (super::settings::key_label(keys.submit_remove), " Submit")
+        (SubmissionDisposition::RemoveAfterSuccess, false, SubmissionLabelStyle::Full) => {
+            (board_submission_key(keys.submit_remove, "Enter"), " Submit")
         }
-        (SubmissionDisposition::Keep, false) => (
-            super::settings::key_label(keys.submit_keep),
+        (SubmissionDisposition::Keep, false, SubmissionLabelStyle::Full) => (
+            board_submission_key(keys.submit_keep, "Shift+Enter"),
             " Submit & keep",
         ),
     };
@@ -164,16 +206,41 @@ pub(crate) fn submission(
     }
 }
 
+pub(crate) fn submission_key(
+    disposition: SubmissionDisposition,
+    mode: InteractionMode,
+    keys: &KeyBindings,
+) -> String {
+    submission(disposition, mode, keys, SubmissionLabelStyle::Full).key
+}
+
+fn board_submission_key(board_key: char, primary_suffix: &str) -> String {
+    format!(
+        "{}/{}",
+        super::settings::key_label(board_key),
+        super::settings::primary_key_label(primary_suffix)
+    )
+}
+
+fn board_compact_submission_key(board_key: char, shifted: bool) -> String {
+    format!(
+        "{}/{}",
+        super::settings::key_label(board_key),
+        compact_primary_key_label(shifted)
+    )
+}
+
+fn compact_primary_key_label(shifted: bool) -> String {
+    super::settings::primary_key_label(if shifted { "⇧↵" } else { "↵" })
+}
+
 pub(crate) fn submission_width(
     disposition: SubmissionDisposition,
     mode: InteractionMode,
     keys: &KeyBindings,
+    style: SubmissionLabelStyle,
 ) -> u16 {
-    let minimum = match disposition {
-        SubmissionDisposition::RemoveAfterSuccess => 9,
-        SubmissionDisposition::Keep => 16,
-    };
-    submission(disposition, mode, keys).width().max(minimum)
+    submission(disposition, mode, keys, style).width()
 }
 
 fn compact_agent_name(kind: &str) -> String {

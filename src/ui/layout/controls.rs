@@ -155,6 +155,7 @@ pub(super) fn configure_agent_controls(
     mode: crate::application::InteractionMode,
     keybindings: &crate::ui::KeyBindings,
 ) {
+    layout.submission_label_style = None;
     let area = crate::ui::geometry::inset_horizontal(layout.footer_agents, 2);
     if area.height == 0 {
         return;
@@ -176,6 +177,7 @@ pub(super) fn configure_agent_controls(
     if matches!(mode, crate::application::InteractionMode::Compose) {
         return;
     }
+    let agent_controls_start = layout.controls.len();
     for target in targets {
         let label_width = crate::ui::control_labels::agent(target).width();
         push(
@@ -186,23 +188,74 @@ pub(super) fn configure_agent_controls(
             label_width,
         );
     }
-    for disposition in [
+    let eligible = targets
+        .iter()
+        .filter(|target| target.delivery.supports())
+        .collect::<Vec<_>>();
+    let delivery_target = match eligible.as_slice() {
+        [] => return,
+        [only] => Some(only.direction),
+        _ => None,
+    };
+    let submissions = [
         SubmissionDisposition::RemoveAfterSuccess,
         SubmissionDisposition::Keep,
-    ] {
-        let eligible = targets
-            .iter()
-            .filter(|target| target.delivery.supports())
-            .collect::<Vec<_>>();
-        let target = match eligible.as_slice() {
-            [] => continue,
-            [only] => HitTarget::Deliver(only.direction, disposition),
-            _ => HitTarget::BeginDelivery(disposition),
-        };
+    ];
+    if !matches!(mode, crate::application::InteractionMode::Board) {
+        let style = crate::ui::control_labels::SubmissionLabelStyle::Full;
+        layout.submission_label_style = Some(style);
+        for disposition in submissions {
+            let target = delivery_target
+                .map_or(HitTarget::BeginDelivery(disposition), |direction| {
+                    HitTarget::Deliver(direction, disposition)
+                });
+            let label_width =
+                crate::ui::control_labels::submission_width(disposition, mode, keybindings, style);
+            push(layout, &mut x, area, target, label_width);
+        }
+        return;
+    }
+    let mut style = submission_style_that_fits(x, area, submissions, mode, keybindings);
+    if style.is_none() {
+        layout.controls.truncate(agent_controls_start);
+        x = area.x;
+        style = submission_style_that_fits(x, area, submissions, mode, keybindings);
+    }
+    let Some(style) = style else {
+        return;
+    };
+    layout.submission_label_style = Some(style);
+    for disposition in submissions {
+        let target = delivery_target.map_or(HitTarget::BeginDelivery(disposition), |direction| {
+            HitTarget::Deliver(direction, disposition)
+        });
         let label_width =
-            crate::ui::control_labels::submission_width(disposition, mode, keybindings);
+            crate::ui::control_labels::submission_width(disposition, mode, keybindings, style);
         push(layout, &mut x, area, target, label_width);
     }
+}
+
+fn submission_style_that_fits(
+    mut x: u16,
+    area: Rect,
+    submissions: [SubmissionDisposition; 2],
+    mode: crate::application::InteractionMode,
+    keybindings: &crate::ui::KeyBindings,
+) -> Option<crate::ui::control_labels::SubmissionLabelStyle> {
+    use crate::ui::control_labels::SubmissionLabelStyle::{Compact, Full, KeysOnly};
+
+    [Full, Compact, KeysOnly].into_iter().find(|style| {
+        let start = x;
+        let fits = submissions.into_iter().all(|disposition| {
+            let gap = if x > area.x { 3 } else { 0 };
+            let width =
+                crate::ui::control_labels::submission_width(disposition, mode, keybindings, *style);
+            x = x.saturating_add(gap).saturating_add(width);
+            x <= area.right()
+        });
+        x = start;
+        fits
+    })
 }
 
 fn push(layout: &mut LayoutSnapshot, x: &mut u16, area: Rect, target: HitTarget, width: u16) {

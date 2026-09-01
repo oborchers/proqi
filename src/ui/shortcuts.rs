@@ -33,8 +33,9 @@ pub(crate) fn items(app: &BoardApp) -> Vec<Shortcut> {
             ("↑/↓×2".to_owned(), "Neighbor/new"),
         ];
         if app.supports_submission() {
-            items.insert(1, (primary("Enter"), "Submit"));
-            items.insert(2, (primary("Shift+Enter"), "Submit & keep"));
+            let [remove, keep] = submission_items(app.interaction_mode(), keys);
+            items.insert(1, remove);
+            items.insert(2, keep);
         }
         return items;
     }
@@ -77,12 +78,26 @@ pub(crate) fn items(app: &BoardApp) -> Vec<Shortcut> {
         items.insert(10, (keys.transform.to_string(), "Transform"));
     }
     if app.supports_submission() {
-        items.push((keys.submit_remove.to_string(), "Submit"));
-        items.push((keys.submit_keep.to_string(), "Submit & keep"));
+        items.extend(submission_items(InteractionMode::Board, keys));
     }
     items.push((keys.quit.to_string(), "Quit"));
     items.push((keys.help.to_string(), "Close"));
     items
+}
+
+fn submission_items(mode: InteractionMode, keys: &crate::ui::KeyBindings) -> [Shortcut; 2] {
+    use crate::ports::agent::SubmissionDisposition::{Keep, RemoveAfterSuccess};
+
+    [
+        (
+            super::control_labels::submission_key(RemoveAfterSuccess, mode, keys),
+            "Submit",
+        ),
+        (
+            super::control_labels::submission_key(Keep, mode, keys),
+            "Submit & keep",
+        ),
+    ]
 }
 
 pub(crate) fn grid_metrics(items: &[Shortcut], width: u16) -> (usize, usize) {

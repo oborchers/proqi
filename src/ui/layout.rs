@@ -146,6 +146,8 @@ pub struct LayoutSnapshot {
     pub footer_session_id: Option<String>,
     /// Footer command targets.
     pub controls: Vec<(HitTarget, Rect)>,
+    /// Canonical responsive submission-label choice shared by measurement and rendering.
+    pub(crate) submission_label_style: Option<crate::ui::control_labels::SubmissionLabelStyle>,
     /// Content width supplied to the editor.
     pub content_width: u16,
     /// Modal help or command geometry, when visible.
@@ -440,6 +442,7 @@ fn compute_frame(
             state.focused_thought.is_some(),
             keybindings,
         ),
+        submission_label_style: None,
         content_width,
         overlay: None,
     };

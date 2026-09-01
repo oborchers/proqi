@@ -148,7 +148,7 @@ Board choice.
 | `Space`; `a` / `Primary+A` | Toggle selection; select all |
 | `Shift+↑` / `↓` or `K` / `J`; `v` then move | Extend or latch a range |
 | `Primary+D` | Duplicate thought or selection |
-| `s`; `S`; then arrows or `h` / `j` / `k` / `l` if needed | Submit and remove after acceptance; submit and keep |
+| `s` / `Primary+Enter`; `S` / `Primary+Shift+Enter`; then arrows or `h` / `j` / `k` / `l` if needed | Submit and remove after acceptance; submit and keep |
 | `u` / `Primary+Z` | Undo a board operation |
 | `Primary+Shift+Z` / `Primary+Y` | **Redo a board operation** |
 | `c`; `/`; `:`; `i`; `?` | Collapse; search; commands; Screenshot Inbox; help |
@@ -219,10 +219,11 @@ notify_terminal_on_auto_pause = false
   <img src="assets/proqi-herdr-workflow.png" width="1000" alt="A Herdr workspace with Codex working beside a Proqi board of prepared prompt thoughts">
 </p>
 
-In Herdr, Proqi finds verified adjacent agents. `s` submits in visible order and
-removes after acceptance; `S` keeps. While editing, `Primary+Enter` submits the
-active thought and `Primary+Shift+Enter` submits it while keeping it. The palette
-submits the whole board. With several verified adjacent agents, either edit
+In Herdr, Proqi finds verified adjacent agents. In Board mode, `s` or
+`Primary+Enter` submits the selected thought or selection in visible order and
+removes after acceptance; `S` or `Primary+Shift+Enter` keeps it. While editing,
+the same Primary chords submit only the active thought. The palette submits the
+whole board. With several verified adjacent agents, either edit
 chord opens the temporary direction chooser; press an arrow or `h`, `j`, `k`,
 or `l` next to choose the target. Those keys select a direction instead of
 moving or inserting text while the chooser is open. `Esc` cancels the chooser

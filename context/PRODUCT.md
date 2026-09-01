@@ -702,10 +702,11 @@ during the narrow interval between revalidation and delivery is therefore not
 detectable by Proqi.
 
 Each verified adjacent target appears once in the integration row, without its
-readiness label. Board mode shows `s Submit` and `S Submit & keep`. Edit mode
-shows `Primary+Enter Submit` and `Primary+Shift+Enter Submit & keep` when width
-allows. Plain `Enter` remains newline or smart-list continuation. The command
-palette is the portable fallback. If exactly one eligible target supports an
+readiness label. Board mode shows `s/Primary+Enter Submit` and
+`S/Primary+Shift+Enter Submit & keep`. Edit mode shows `Primary+Enter Submit`
+and `Primary+Shift+Enter Submit & keep` when width allows. Plain `Enter` remains
+newline or smart-list continuation. The command palette is the portable
+fallback. If exactly one eligible target supports an
 action, that action is direct. If several support it, delivery enters a
 directional targeting state.
 Arrow keys and `h`, `j`, `k`, and `l` choose among the enabled directions. Mouse
@@ -779,8 +780,8 @@ bindings are:
 | Select or deselect thought | `Space` | Click the thought, then use the selection control |
 | Select all thoughts | `a` or `Primary+A` | Command palette |
 | Select contiguous range | `Shift+↑` / `Shift+↓`, `K` / `J`, or `v` then arrows or `j` / `k` | Shift-click a thought, or use `v` then click it |
-| Submit | `s`, when supported, then direction when needed | Click verified Submit control |
-| Submit and keep | `S`, when supported, then direction when needed | Click verified Submit & keep control |
+| Submit | `s` or `Primary+Enter`, when supported, then direction when needed | Click verified Submit control |
+| Submit and keep | `S` or `Primary+Shift+Enter`, when supported, then direction when needed | Click verified Submit & keep control |
 | Undo board action | `u` | Click undo control when visible |
 | Move thought | `Meta+Shift+↑` / `Meta+Shift+↓`, or `Meta+K` / `Meta+J` | Drag thought handle |
 | Expand or collapse | `c` | Click overflow indicator |
