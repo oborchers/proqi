@@ -55,6 +55,12 @@ belongs to one live stream. Draft the next prompt there and an agent question or
 wrong turn forces you to cut it out, clear the field, steer, and paste it back.
 Alternatives, later prompts, and screenshots spill into temporary files.
 
+An unsent harness draft is not isolated from other senders either. If another
+agent submits through Herdr while text is waiting in that input field, the
+harness can concatenate both independent instructions and submit them as one
+accidental prompt. What looked like a safe draft becomes part of another
+agent's message without a distinct turn boundary.
+
 **Proqi is the solution: an agent-ready prompt editor on steroids, built for
 power users.** Capture independently; edit, select, duplicate, reorder, recover,
 and discover local skills and commands later.
@@ -225,6 +231,12 @@ the next typed or pasted content creates the next thought directly.
 
 Busy receivers decide whether input steers or queues. Any failed verification
 leaves the board unchanged.
+
+Keep deferred prompts in Proqi rather than in the native harness input when
+other senders can target that agent. When two submissions overlap, the harness
+may not keep them in separate turns, so text already waiting in its input can
+merge with an incoming message. Proqi preserves its verified submission flow,
+but it cannot separate content after the receiving harness has combined it.
 
 Proqi never invokes a shell, injects keys, reads chats, or waits. Herdr is
 optional.
