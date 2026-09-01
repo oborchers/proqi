@@ -14,7 +14,7 @@ use crate::{
         update::{
             HomebrewInstaller, UPDATE_CONTROL_PROTOCOL_VERSION, UpdateCancellation, UpdateError,
             UpdateInstanceRegistry, UpdateLockKind, UpdateParticipantGateway, UpdatePrepareReply,
-            UpdatePrepareRequest, UpdateStateStore,
+            UpdatePrepareRequest, UpdateReplacementExpectation, UpdateStateStore,
         },
     },
 };
@@ -261,11 +261,11 @@ where
             &installed,
         );
         if progress.failed.is_empty() {
-            progress.failed = self.registry.wait_for_replacements(
-                request.installation,
+            progress.failed = self.wait_for_peer_replacements(
+                &request,
+                &ready,
                 &installed,
                 &progress.replacements,
-                REPLACEMENT_TIMEOUT,
                 cancellation,
             )?;
         }
@@ -309,6 +309,36 @@ where
                 && pending_recorded.unwrap_or(true),
             status: UpdateExecutionStatus::Installed { version: installed },
         })
+    }
+
+    fn wait_for_peer_replacements(
+        &mut self,
+        request: &UpdateRequest,
+        ready: &[InstanceInfo],
+        installed: &StableVersion,
+        replacements: &[UpdateReplacementExpectation],
+        cancellation: &dyn UpdateCancellation,
+    ) -> Result<Vec<InstanceId>, UpdateError> {
+        let result = self.registry.wait_for_replacements(
+            request.installation,
+            installed,
+            replacements,
+            REPLACEMENT_TIMEOUT,
+            cancellation,
+        );
+        let Err(error) = result else {
+            return result;
+        };
+        if let Some(initiating) = ready
+            .iter()
+            .find(|participant| participant.instance_id == request.initiating_instance)
+        {
+            let _released = self.gateway.release(initiating, request.operation_id);
+        }
+        let _state_recorded =
+            self.state
+                .record_restart_state(request.installation, installed.clone(), true);
+        Err(error)
     }
 }
 

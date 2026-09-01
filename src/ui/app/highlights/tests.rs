@@ -119,6 +119,7 @@ fn hidden_highlights_arm_only_when_they_become_the_rendered_overlay() {
         })
         .expect("draw update prompt");
     assert!(!highlights_visible);
+    app.note_release_highlights_rendered(false, 8);
     assert!(app.accept_protected_overlay_input(8));
 
     let effects = if app.accept_protected_overlay_input(8) {
@@ -140,9 +141,45 @@ fn hidden_highlights_arm_only_when_they_become_the_rendered_overlay() {
         })
         .expect("draw revealed highlights");
     assert!(highlights_visible);
-    app.arm_release_highlights(8);
+    app.note_release_highlights_rendered(true, 8);
     assert!(!app.accept_protected_overlay_input(8));
     assert!(app.accept_protected_overlay_input(9));
+
+    app.present_update(
+        StableVersion::parse("1.4.0").expect("later update version"),
+        InstallationKind::HomebrewFormula,
+        2,
+    );
+    terminal
+        .draw(|frame| {
+            let layout = app.prepare_frame(frame.area());
+            highlights_visible = render_with_outcome(
+                frame,
+                &app,
+                &layout,
+                &Theme::resolve(ThemePreference::Dark, true),
+            );
+        })
+        .expect("draw later update prompt");
+    assert!(!highlights_visible);
+    app.note_release_highlights_rendered(false, 10);
+    assert!(app.accept_protected_overlay_input(10));
+    let _effects = app.handle(UiInput::Key(UiKey::Escape), &mut ids, &clock);
+    terminal
+        .draw(|frame| {
+            let layout = app.prepare_frame(frame.area());
+            highlights_visible = render_with_outcome(
+                frame,
+                &app,
+                &layout,
+                &Theme::resolve(ThemePreference::Dark, true),
+            );
+        })
+        .expect("redraw highlights after later prompt");
+    assert!(highlights_visible);
+    app.note_release_highlights_rendered(true, 10);
+    assert!(!app.accept_protected_overlay_input(10));
+    assert!(app.accept_protected_overlay_input(11));
 }
 
 #[test]

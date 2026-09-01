@@ -157,6 +157,7 @@ impl UpdateStateStore for State {
 struct Registry {
     scans: RefCell<VecDeque<Vec<InstanceInfo>>>,
     replacement_failures: RefCell<Vec<InstanceId>>,
+    fail_replacement_wait: bool,
 }
 
 impl UpdateInstanceRegistry for Registry {
@@ -175,6 +176,11 @@ impl UpdateInstanceRegistry for Registry {
         _: Duration,
         _: &dyn UpdateCancellation,
     ) -> Result<Vec<InstanceId>, UpdateError> {
+        if self.fail_replacement_wait {
+            return Err(UpdateError::Coordination(
+                "injected replacement scan failure".to_owned(),
+            ));
+        }
         Ok(self.replacement_failures.borrow().clone())
     }
 }
@@ -287,6 +293,7 @@ fn blocked_preflight_releases_ready_peers_before_installation() {
     let registry = Registry {
         scans: RefCell::new(VecDeque::from([participants])),
         replacement_failures: RefCell::new(Vec::new()),
+        fail_replacement_wait: false,
     };
     let state = State::default();
     let mut gateway = Gateway {
@@ -381,6 +388,7 @@ fn unavailable_participant_aborts_and_releases_ready_peers() {
     let registry = Registry {
         scans: RefCell::new(VecDeque::from([participants])),
         replacement_failures: RefCell::new(Vec::new()),
+        fail_replacement_wait: false,
     };
     let state = State::default();
     let mut gateway = Gateway {
@@ -412,6 +420,7 @@ fn registry(before: Vec<InstanceInfo>, after: Vec<InstanceInfo>) -> Registry {
     Registry {
         scans: RefCell::new(VecDeque::from([before, after])),
         replacement_failures: RefCell::new(Vec::new()),
+        fail_replacement_wait: false,
     }
 }
 

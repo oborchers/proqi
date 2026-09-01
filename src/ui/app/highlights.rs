@@ -97,6 +97,19 @@ impl BoardApp {
         }
     }
 
+    pub(crate) fn note_release_highlights_rendered(&mut self, rendered: bool, input_boundary: u64) {
+        if !rendered {
+            if let Some(highlights) = &mut self.release_highlights
+                && matches!(&highlights.source, ReleaseHighlightsSource::Automatic(_))
+            {
+                highlights.input_boundary = highlights.input_boundary.max(input_boundary);
+                highlights.armed = false;
+            }
+            return;
+        }
+        self.arm_release_highlights(input_boundary);
+    }
+
     pub(crate) fn accept_release_highlights_input(&self, sequence: u64) -> bool {
         self.release_highlights.as_ref().is_none_or(|highlights| {
             highlights.armed && (sequence == 0 || sequence > highlights.input_boundary)

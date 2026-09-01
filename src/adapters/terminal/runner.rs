@@ -367,9 +367,8 @@ fn drive(
                 release_highlights_visible = render_with_outcome(frame, app, &layout, &theme);
             })?;
             app.arm_update_prompt();
-            if release_highlights_visible {
-                app.arm_release_highlights(lanes.input.latest_sequence());
-            }
+            let input_boundary = lanes.input.latest_sequence();
+            app.note_release_highlights_rendered(release_highlights_visible, input_boundary);
             redraw = false;
         }
         if let Some((sequence, event)) = held_input.take() {

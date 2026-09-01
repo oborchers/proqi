@@ -17,6 +17,7 @@ fn installer_failure_releases_every_ready_participant() {
     let registry = Registry {
         scans: RefCell::new(VecDeque::from([participants])),
         replacement_failures: RefCell::new(Vec::new()),
+        fail_replacement_wait: false,
     };
     let state = State::default();
     let mut gateway = Gateway::default();
@@ -49,6 +50,7 @@ fn unregistered_coordinator_aborts_before_installation() {
     let registry = Registry {
         scans: RefCell::new(VecDeque::from([participants])),
         replacement_failures: RefCell::new(Vec::new()),
+        fail_replacement_wait: false,
     };
     let state = State::default();
     let mut gateway = Gateway::default();
@@ -146,6 +148,7 @@ fn incomplete_peer_replacement_suppresses_automatic_highlights() {
     let registry = Registry {
         scans: RefCell::new(VecDeque::from([before.clone(), before])),
         replacement_failures: RefCell::new(vec![peer]),
+        fail_replacement_wait: false,
     };
     let state = State::default();
     let mut gateway = Gateway::default();
@@ -164,6 +167,36 @@ fn incomplete_peer_replacement_suppresses_automatic_highlights() {
 
     assert!(result.restart_failed.contains(&peer));
     assert!(state.cache.borrow().release_highlights.is_none());
+}
+
+#[test]
+fn replacement_scan_failure_releases_initiator_without_an_announcement() {
+    let mut ids = TestIds::new(1_800_000_000_000);
+    let identity = InstallationIdentity::from_digest([44; 32]);
+    let before = participants(&mut ids, identity, 2);
+    let initiating = before[0].instance_id;
+    let peer = before[1].instance_id;
+    let mut registry = registry(before.clone(), before);
+    registry.fail_replacement_wait = true;
+    let state = State::default();
+    let mut gateway = Gateway::default();
+    let mut installer = successful_installer();
+
+    let result = UpdateRestartCoordinator::new(&state, &registry, &mut gateway, &mut installer)
+        .execute(
+            ids.request_id(),
+            initiating,
+            identity,
+            &version("0.2.0"),
+            Timestamp::from_millis(1_800_000_030_000),
+            &(),
+        );
+
+    assert!(matches!(result, Err(UpdateError::Coordination(_))));
+    assert_eq!(gateway.restarted, vec![peer]);
+    assert_eq!(gateway.released, vec![initiating]);
+    assert!(state.cache.borrow().release_highlights.is_none());
+    assert!(state.cache.borrow().restart_needed);
 }
 
 #[test]
@@ -245,6 +278,7 @@ fn mismatched_installer_result_creates_no_announcement_or_restart() {
     let registry = Registry {
         scans: RefCell::new(VecDeque::from([before])),
         replacement_failures: RefCell::new(Vec::new()),
+        fail_replacement_wait: false,
     };
     let state = State::default();
     let mut gateway = Gateway::default();

@@ -765,6 +765,11 @@ only after every peer converges, then requests the initiating restart. Peer
 failure creates no announcement. A delayed initiating resume retains the
 pending record and may show it later under the exact target.
 
+If replacement discovery itself fails after peer restart requests, the
+coordinator releases the initiating process immediately, retains
+`restart_needed`, and creates no announcement. It does not leave the initiating
+board blocked until the prepare deadline.
+
 The pending announcement write is part of initiating restart admission. If its
 private atomic write fails, the coordinator releases the initiating process
 without asking it to restart, records restart convergence as incomplete, and
