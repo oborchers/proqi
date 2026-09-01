@@ -2,6 +2,7 @@
 
 use proqi::{
     application::FirstRunEnvironment,
+    domain::Direction,
     ui::{Theme, ThemePreference, UiInput, UiKey},
 };
 use ratatui_core::style::Modifier;
@@ -61,7 +62,7 @@ fn editing_thought_demonstrates_line_and_sentence_deletion_at_its_initial_cursor
             .editor_snapshot()
             .expect("editing thought")
             .content,
-        first_line
+        format!("{first_line}\n")
     );
 
     let mut sentence_fixture = Fixture::first_run(FirstRunEnvironment::Standalone);
@@ -73,7 +74,7 @@ fn editing_thought_demonstrates_line_and_sentence_deletion_at_its_initial_cursor
             .editor_snapshot()
             .expect("editing thought")
             .content,
-        format!("{first_line}\n{deletion_line}")
+        format!("{first_line}\n\n{deletion_line}")
     );
     sentence_fixture.input(UiInput::Key(UiKey::DeleteSentence));
     assert_eq!(
@@ -83,7 +84,7 @@ fn editing_thought_demonstrates_line_and_sentence_deletion_at_its_initial_cursor
             .expect("editing thought")
             .content,
         format!(
-            "{first_line}\n- Press Enter to continue this unordered list. Press Primary+U to delete this logical line."
+            "{first_line}\n\n- Press Enter to continue this unordered list. Press Primary+U to delete this logical line."
         )
     );
 }
@@ -118,7 +119,7 @@ fn canonical_herdr_url_uses_existing_link_styling_without_content_changes() {
     for _ in 0..4 {
         fixture.input(UiInput::Key(UiKey::Character('j')));
     }
-    let terminal = draw_theme(&mut fixture, 120, 30, ThemePreference::Dark);
+    let terminal = draw_theme(&mut fixture, 120, 40, ThemePreference::Dark);
     let buffer = terminal.backend().buffer();
     let url = "https://herdr.dev";
     let (row, start) = (0..buffer.area.height)
@@ -140,4 +141,40 @@ fn canonical_herdr_url_uses_existing_link_styling_without_content_changes() {
         fixture.app.state.board.live_thoughts()[4].content,
         original_content
     );
+}
+
+#[test]
+fn shared_plan_starter_is_emphasized_only_with_a_verified_compatible_target() {
+    let mut fixture = Fixture::first_run(FirstRunEnvironment::HerdrManaged);
+    for _ in 0..4 {
+        fixture.input(UiInput::Key(UiKey::Character('j')));
+    }
+    let theme = Theme::resolve(ThemePreference::Dark, true);
+    let plain = draw_theme(&mut fixture, 120, 30, ThemePreference::Dark);
+    let plain_cell = find_text_cell(plain.backend().buffer(), "/plan");
+    assert_ne!(plain_cell.fg, theme.annotation);
+    assert!(!plain_cell.modifier.contains(Modifier::BOLD));
+
+    fixture
+        .app
+        .complete_agent_discovery(Ok(vec![super::agent::target(Direction::Right, "w1:p2")]));
+    let recognized = draw_theme(&mut fixture, 120, 30, ThemePreference::Dark);
+    let recognized_cell = find_text_cell(recognized.backend().buffer(), "/plan");
+    assert_eq!(recognized_cell.fg, theme.annotation);
+    assert!(recognized_cell.modifier.contains(Modifier::BOLD));
+}
+
+fn find_text_cell<'a>(
+    buffer: &'a ratatui_core::buffer::Buffer,
+    needle: &str,
+) -> &'a ratatui_core::buffer::Cell {
+    (0..buffer.area.height)
+        .find_map(|row| {
+            let text = (0..buffer.area.width)
+                .map(|column| buffer[(column, row)].symbol())
+                .collect::<String>();
+            text.find(needle)
+                .map(|column| &buffer[(u16::try_from(column).expect("column within width"), row)])
+        })
+        .expect("visible text")
 }

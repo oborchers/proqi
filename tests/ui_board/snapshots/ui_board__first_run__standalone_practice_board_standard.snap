@@ -1,13 +1,13 @@
 ---
 source: tests/ui_board/first_run.rs
-assertion_line: 39
+assertion_line: 40
 expression: "snapshot(FirstRunEnvironment::Standalone, 72, 18, 4,)"
 ---
 SIZE 72x18
 
 TEXT
-00│  Press n to create a new thought, or paste in board mode to create one│
-01│  from the pasted text. Press y to copy the focused thought.│
+00│  In edit mode, type $name, /name, or supported @name to complete│
+01│  discovered local invocations.│
 02│  ──────────────────────────────────────────────────────────────────────│
 03│  Use j or ↓ to move to the next thought, and k or ↑ to move to the│
 04│  previous one. Press Space to select, d to delete, and u to undo.│
@@ -26,8 +26,8 @@ TEXT
 17│  n New   y Copy  x Cut  d/Del  Space Select u Undo  / Search│
 
 STYLE RUNS
-0: 0-0 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 1-7 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 8-8 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=BOLD | 9-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-1: 0-0 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 1-29 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 30-30 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=BOLD | 31-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+0: 0-0 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 1-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+1: 0-0 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 1-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 2: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-71 fg=Rgb(42, 37, 32) bg=Rgb(15, 13, 10) mod=NONE
 3: 0-0 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 1-5 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 6-6 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=BOLD | 7-10 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 11-11 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=BOLD | 12-45 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 46-46 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=BOLD | 47-50 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 51-51 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=BOLD | 52-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 4: 0-0 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 1-21 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 22-26 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=BOLD | 27-38 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 39-39 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=BOLD | 40-55 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 56-56 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=BOLD | 57-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE

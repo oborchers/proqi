@@ -78,7 +78,7 @@ fn instructions(environment: FirstRunEnvironment) -> Result<[InstructionalText; 
         .shortcut("Enter")?
         .text(" to edit the focused thought. Press ")
         .shortcut("Esc")?
-        .text(" to return to board mode.\n- Press ")
+        .text(" to return to board mode.\n\n- Press ")
         .shortcut("Enter")?
         .text(" to continue this unordered list. Press ")
         .shortcut("Primary+U")?
@@ -94,7 +94,7 @@ fn instructions(environment: FirstRunEnvironment) -> Result<[InstructionalText; 
         )
         .text(" Press ")
         .shortcut("y")?
-        .text(" to copy the focused thought.")
+        .text(" to copy the focused thought.\n\nIn edit mode, type $name, /name, or supported @name to complete discovered local invocations.")
         .finish()?;
     let navigation = InstructionalTextBuilder::new()
         .text("Use ")
@@ -136,7 +136,7 @@ fn integration_instruction(
 ) -> Result<InstructionalText, DomainError> {
     match environment {
         FirstRunEnvironment::HerdrManaged => InstructionalTextBuilder::new()
-            .text("Herdr is detected. With a compatible adjacent agent verified, press ")
+            .text("/plan starts a planning prompt when a compatible adjacent Codex or Claude Code agent is verified.\n\nHerdr is detected. With a compatible adjacent agent verified, press ")
             .shortcut("s")?
             .text(" to submit and remove or ")
             .shortcut("S")?
@@ -170,10 +170,10 @@ mod tests {
 
     const MANAGED_CONTENT: [&str; 6] = [
         "Welcome to Proqi!\n\nProqi is a prompt composer designed to replace common agent input methods. Capture, refine, organize, and submit prompts here.",
-        "Press Enter to edit the focused thought. Press Esc to return to board mode.\n- Press Enter to continue this unordered list. Press Primary+U to delete this logical line. Press Primary+Shift+U to delete this sentence.",
-        "Press n to create a new thought, or paste in board mode to create one from the pasted text. Press y to copy the focused thought.",
+        "Press Enter to edit the focused thought. Press Esc to return to board mode.\n\n- Press Enter to continue this unordered list. Press Primary+U to delete this logical line. Press Primary+Shift+U to delete this sentence.",
+        "Press n to create a new thought, or paste in board mode to create one from the pasted text. Press y to copy the focused thought.\n\nIn edit mode, type $name, /name, or supported @name to complete discovered local invocations.",
         "Use j or ↓ to move to the next thought, and k or ↑ to move to the previous one. Press Space to select, d to delete, and u to undo.",
-        "Herdr is detected. With a compatible adjacent agent verified, press s to submit and remove or S to keep in board mode. In edit mode, use Primary+Enter to submit and remove or Primary+Shift+Enter to keep. Learn more at https://herdr.dev",
+        "/plan starts a planning prompt when a compatible adjacent Codex or Claude Code agent is verified.\n\nHerdr is detected. With a compatible adjacent agent verified, press s to submit and remove or S to keep in board mode. In edit mode, use Primary+Enter to submit and remove or Primary+Shift+Enter to keep. Learn more at https://herdr.dev",
         "Press a and d in board mode to delete this entire practice board.",
     ];
     const STANDALONE_INTEGRATION: &str = "Proqi works on its own. Herdr adds verified adjacent submission. In board mode, use s to submit and remove or S to keep. In edit mode, use Primary+Enter to submit and remove or Primary+Shift+Enter to keep. Learn more at https://herdr.dev";
