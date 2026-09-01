@@ -87,7 +87,8 @@ impl BoardApp {
             UiKey::Undo => self.history(ids, clock, true),
             UiKey::Redo => self.history(ids, clock, false),
             UiKey::Backspace
-            | UiKey::DeleteLine
+            | UiKey::DeleteLogicalLine
+            | UiKey::DeleteSentence
             | UiKey::ModifiedDelete
             | UiKey::Copy
             | UiKey::Cut
@@ -98,6 +99,7 @@ impl BoardApp {
             | UiKey::PickerPrevious
             | UiKey::PickerNext
             | UiKey::PrimaryCharacter(_)
+            | UiKey::PrimaryShiftCharacter(_)
             | UiKey::PrimaryShiftMove { .. }
             | UiKey::EditNavigation { .. }
             | UiKey::Submit
@@ -196,7 +198,7 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        let Some(key) = editing::normalize_edit_key(key) else {
+        let Some(key) = editing::normalize_edit_key(key, &self.settings.keybindings) else {
             return Vec::new();
         };
         if let Some(effects) = self.handle_edit_effect(key, ids, clock) {
@@ -206,6 +208,11 @@ impl BoardApp {
             && let Some(effects) = self.insert_space_before_selected_fold(ids, clock)
         {
             return effects;
+        }
+        if matches!(key, UiKey::DeleteSentence)
+            && self.reveal_sentence_folds(self.settings.list_indent_width)
+        {
+            return Vec::new();
         }
         if let UiKey::Move {
             movement,
@@ -226,7 +233,9 @@ impl BoardApp {
             UiKey::Delete | UiKey::ModifiedDelete => self.delete_adjacent_fold(false),
             _ => false,
         };
-        let Some((command, boundary)) = editing::command_for_key(key, adjacent_fold) else {
+        let Some((command, boundary)) =
+            editing::command_for_key(key, adjacent_fold, self.settings.list_indent_width)
+        else {
             return Vec::new();
         };
         let movement = match &command {
@@ -253,7 +262,7 @@ impl BoardApp {
                 clock,
             ));
         }
-        if matches!(key, UiKey::DeleteLine) {
+        if matches!(key, UiKey::DeleteLogicalLine | UiKey::DeleteSentence) {
             effects.extend(self.flush_pending_edit(ids, clock));
         }
         effects

@@ -82,7 +82,8 @@ fn shifted_and_primary_shifted_spellings_keep_range_and_reorder() {
         UiKey::PrimaryShiftMove {
             movement: CursorMovement::DocumentStart,
         },
-        UiKey::PrimaryCharacter('K'),
+        UiKey::PrimaryShiftCharacter('K'),
+        UiKey::PrimaryShiftCharacter('k'),
     ] {
         let mut fixture = populated();
         fixture.input(UiInput::Key(key));
