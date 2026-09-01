@@ -1,7 +1,6 @@
 //! Content-sized footer controls and hit geometry.
 
 use ratatui_core::layout::Rect;
-use unicode_width::UnicodeWidthStr as _;
 
 use crate::ports::agent::{AgentTarget, SubmissionDisposition};
 
@@ -126,26 +125,33 @@ fn configure_session_targets(
     session_name: &str,
     session_id: Option<&str>,
 ) {
+    let (rename, copy) = session_target_geometry(area, session_name, session_id);
+    layout.controls.push((HitTarget::RenameSession, rename));
+    if let Some(copy) = copy {
+        layout.controls.push((HitTarget::CopySessionId, copy));
+    }
+}
+
+fn session_target_geometry(
+    area: Rect,
+    session_name: &str,
+    session_id: Option<&str>,
+) -> (Rect, Option<Rect>) {
     let name_width = width(session_name);
     let id_width = session_id.map_or(0, width);
     let id_fits =
         session_id.is_some() && name_width.saturating_add(3).saturating_add(id_width) <= area.width;
     let rename_width = if id_fits { name_width } else { area.width };
-    layout.controls.push((
-        HitTarget::RenameSession,
-        Rect::new(area.x, area.y, rename_width, 1),
-    ));
-    if id_fits {
-        layout.controls.push((
-            HitTarget::CopySessionId,
-            Rect::new(
-                area.x.saturating_add(name_width).saturating_add(3),
-                area.y,
-                id_width,
-                1,
-            ),
-        ));
-    }
+    let rename = Rect::new(area.x, area.y, rename_width, 1);
+    let copy = id_fits.then(|| {
+        Rect::new(
+            area.x.saturating_add(name_width).saturating_add(3),
+            area.y,
+            id_width,
+            1,
+        )
+    });
+    (rename, copy)
 }
 
 pub(super) fn configure_agent_controls(
@@ -217,5 +223,31 @@ fn push(layout: &mut LayoutSnapshot, x: &mut u16, area: Rect, target: HitTarget,
 }
 
 fn width(value: &str) -> u16 {
-    u16::try_from(value.width()).unwrap_or(u16::MAX)
+    crate::ports::text_layout::terminal_cell_width_u16(value)
+}
+
+#[cfg(test)]
+mod tests {
+    use ratatui_core::layout::Rect;
+
+    #[test]
+    fn unicode_session_identity_hit_geometry_matches_rendered_cells() {
+        let area = Rect::new(10, 4, 30, 1);
+        let (rename, copy) = super::session_target_geometry(area, "界e\u{301}👩‍💻", Some("ses_界"));
+        assert_eq!(rename, Rect::new(10, 4, 5, 1));
+        assert_eq!(copy, Some(Rect::new(18, 4, 6, 1)));
+
+        let (clipped, copy) =
+            super::session_target_geometry(Rect::new(10, 4, 12, 1), "界e\u{301}👩‍💻", Some("ses_界"));
+        assert_eq!(clipped, Rect::new(10, 4, 12, 1));
+        assert_eq!(copy, None);
+
+        let (sanitized, copy) = super::session_target_geometry(
+            Rect::new(10, 4, 30, 1),
+            "A\tB\u{7}界",
+            Some("ses_control"),
+        );
+        assert_eq!(sanitized, Rect::new(10, 4, 8, 1));
+        assert_eq!(copy, Some(Rect::new(21, 4, 11, 1)));
+    }
 }

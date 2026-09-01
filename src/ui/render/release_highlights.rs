@@ -54,6 +54,12 @@ pub(super) fn render(
             .wrap(Wrap { trim: false }),
         overlay.area,
     );
+    super::overlays::render_overflow_cues(
+        frame,
+        overlay,
+        (view.overflow_above, view.overflow_below),
+        theme,
+    );
     render_close(frame, overlay, theme);
 }
 

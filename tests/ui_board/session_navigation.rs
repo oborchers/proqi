@@ -60,6 +60,92 @@ fn current_session_can_be_renamed_from_the_palette_and_footer() {
 }
 
 #[test]
+fn footer_session_identity_sanitizes_tabs_and_controls_to_hit_geometry() {
+    let mut fixture = Fixture::with_settings(UiSettings {
+        show_session_id: true,
+        ..UiSettings::default()
+    });
+    durable_thought(&mut fixture, "existing");
+    fixture.app.state.board.session.name = Some("A\tB\u{7}界".to_owned());
+
+    let terminal = draw_theme(&mut fixture, 80, 8, ThemePreference::Dark);
+    let rendered = text(terminal.backend().buffer());
+    assert!(rendered.contains("A   B�界"));
+    assert!(!rendered.contains(['\t', '\u{7}']));
+    let layout = fixture.app.prepare_frame(Rect::new(0, 0, 80, 8));
+    assert!(layout.footer_session_id.is_some());
+    let rename = layout
+        .controls
+        .iter()
+        .find_map(|(target, area)| (*target == HitTarget::RenameSession).then_some(*area))
+        .expect("rename target");
+    assert_eq!(rename.width, 8);
+
+    fixture.pointer(rename.x, rename.y, PointerKind::Move);
+    let hovered = draw_theme(&mut fixture, 80, 8, ThemePreference::Dark);
+    let rendered = text(hovered.backend().buffer());
+    assert!(rendered.contains("A   B�界"));
+    assert!(!rendered.contains(['\t', '\u{7}']));
+}
+
+#[test]
+fn overlay_inputs_reserve_the_cursor_cell_inside_the_border() {
+    let mut palette = Fixture::new();
+    durable_thought(&mut palette, "existing");
+    palette.input(UiInput::Key(UiKey::Character(':')));
+    let area = palette
+        .app
+        .prepare_frame(Rect::new(0, 0, 18, 8))
+        .overlay
+        .expect("palette overlay")
+        .area;
+    let capacity = usize::from(area.width.saturating_sub(4));
+    palette.input(UiInput::Paste("x".repeat(capacity)));
+    let area = palette
+        .app
+        .prepare_frame(Rect::new(0, 0, 18, 8))
+        .overlay
+        .expect("filtered palette overlay")
+        .area;
+    let mut terminal = draw_theme(&mut palette, 18, 8, ThemePreference::Dark);
+    let cursor = terminal
+        .backend_mut()
+        .get_cursor_position()
+        .expect("palette cursor");
+    assert_eq!(cursor, (area.right().saturating_sub(2), area.y + 1).into());
+    assert_eq!(
+        terminal.backend().buffer()[(area.right() - 1, area.y + 1)].symbol(),
+        "│"
+    );
+
+    let mut rename = Fixture::new();
+    durable_thought(&mut rename, "existing");
+    rename.input(UiInput::Key(UiKey::Character(':')));
+    for character in "rename session".chars() {
+        rename.input(UiInput::Key(UiKey::Character(character)));
+    }
+    rename.input(UiInput::Key(UiKey::Enter));
+    rename.input(UiInput::Paste("prefix界e\u{301}👩‍💻suffix".to_owned()));
+    let area = rename
+        .app
+        .prepare_frame(Rect::new(0, 0, 18, 8))
+        .overlay
+        .expect("rename overlay")
+        .area;
+    let mut terminal = draw_theme(&mut rename, 18, 8, ThemePreference::Dark);
+    let cursor = terminal
+        .backend_mut()
+        .get_cursor_position()
+        .expect("rename cursor");
+    assert!(cursor.x <= area.right().saturating_sub(2));
+    assert_eq!(cursor.y, area.y + 1);
+    assert_eq!(
+        terminal.backend().buffer()[(area.right() - 1, area.y + 1)].symbol(),
+        "│"
+    );
+}
+
+#[test]
 fn session_rename_keeps_vim_letters_literal_and_delete_out_of_board_dispatch() {
     let mut fixture = Fixture::new();
     durable_thought(&mut fixture, "existing");
