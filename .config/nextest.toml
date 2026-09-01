@@ -1,0 +1,3 @@
+[[profile.default.overrides]]
+filter = 'test(=editor_persistence::physical_macos_redo_encoding_restores_the_durable_deletion)'
+threads-required = "num-test-threads"

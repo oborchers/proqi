@@ -95,6 +95,15 @@ fn primary_enter_variants_are_distinct_in_the_real_pty() {
 }
 
 #[test]
+fn macos_cmd_shift_z_encoding_is_redo_in_the_real_pty() {
+    inspect_sequence(
+        r"\x1b\[122:90;10u",
+        "Char('Z'), modifiers: KeyModifiers(SUPER)",
+        "Redo",
+    );
+}
+
+#[test]
 fn delete_and_backspace_are_distinct_in_the_real_pty() {
     inspect_sequence(r"\x1b\[3~", "Delete", "Delete");
     inspect_sequence(
