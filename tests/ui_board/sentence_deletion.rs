@@ -65,6 +65,19 @@ fn configured_primary_shift_suffix_discovers_the_same_action() {
 }
 
 #[test]
+fn remapped_sentence_suffix_is_discoverable_in_contextual_help() {
+    let mut settings = UiSettings::default();
+    settings.keybindings.delete_sentence = 'G';
+    let mut fixture = Fixture::with_settings(settings);
+    fixture.paste("One. Two.");
+    fixture.app.help = true;
+
+    let rendered = text(draw(&mut fixture, 80, 20).backend().buffer());
+    assert!(rendered.contains("Shift+G"));
+    assert!(rendered.contains("Delete sentence"));
+}
+
+#[test]
 fn palette_restores_a_selection_and_deletes_every_touched_sentence() {
     let mut fixture = Fixture::new();
     fixture.paste("One. Two. Three. Four.");
@@ -239,6 +252,47 @@ fn every_intersecting_fold_is_revealed_while_an_unrelated_fold_stays_collapsed()
     assert_eq!(thought.content, "Keep /tmp/c.png.");
     assert_eq!(thought.annotations.len(), 1);
     assert_eq!(thought.annotations[0].start, "Keep ".len());
+}
+
+#[test]
+fn selection_reveals_every_touched_fold_before_deleting_any_sentence() {
+    let content = "Use /tmp/a.png now. Keep /tmp/b.png later.";
+    let annotations = ["/tmp/a.png", "/tmp/b.png"]
+        .into_iter()
+        .map(|path| {
+            let start = content.find(path).expect("path");
+            ContentAnnotation {
+                start,
+                end: start + path.len(),
+                kind: ContentAnnotationKind::Attachment {
+                    image: true,
+                    display_name: path.trim_start_matches("/tmp/").to_owned(),
+                },
+            }
+        })
+        .collect::<Vec<_>>();
+    let mut fixture = Fixture::with_annotated_thought(content, annotations);
+    fixture.input(UiInput::Key(UiKey::Enter));
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::DocumentStart,
+        extend_selection: false,
+    }));
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::DocumentEnd,
+        extend_selection: true,
+    }));
+    let before = fixture.app.editor_snapshot().expect("selected editor");
+
+    assert!(
+        fixture
+            .effects(UiInput::Key(DELETE_SENTENCE_KEY))
+            .is_empty()
+    );
+    assert_eq!(fixture.app.editor_snapshot().expect("editor"), before);
+    let rendered = text(draw(&mut fixture, 80, 10).backend().buffer());
+    assert!(rendered.contains("/tmp/a.png"));
+    assert!(rendered.contains("/tmp/b.png"));
+    assert_eq!(fixture.app.state.board.live_thoughts()[0].content, content);
 }
 
 #[test]

@@ -347,6 +347,17 @@ fn primary_shift_arrow_and_character_chords_remain_board_semantics() {
         translate(alternate_report),
         Some(UiInput::Key(UiKey::PrimaryShiftCharacter('K')))
     );
+
+    for character in ['k', 'j'] {
+        let lowercase_shift_report = Event::Key(KeyEvent::new(
+            KeyCode::Char(character),
+            KeyModifiers::SHIFT | KeyModifiers::SUPER,
+        ));
+        assert_eq!(
+            translate(lowercase_shift_report),
+            Some(UiInput::Key(UiKey::PrimaryShiftCharacter(character)))
+        );
+    }
 }
 
 #[test]

@@ -55,8 +55,9 @@ Sentence ownership is deterministic and half open:
 - A whitespace-only prelude immediately before the first recognized list item
   targets that item's first sentence. Deletion removes the prelude and sentence
   as separate ranges while preserving the prefix between them.
-- The newline before the first recognized list item and between recognized list
-  items is structural and remains exact.
+- When prose precedes the first recognized list item, its separating newline is
+  structural and remains exact. Newlines between recognized list items also
+  remain exact. The whitespace-only prelude rule above is the sole exception.
   Deleting all prose from an item leaves its complete prefix, and ordered items
   are never renumbered.
 - A recognized item with no sentence content is a conservative no-op. It never

@@ -238,9 +238,11 @@ impl KeyBindings {
             super::UiKey::Character(character) => {
                 Self::navigation_for_command(self.command(character), false)
             }
-            super::UiKey::PrimaryCharacter(character)
-            | super::UiKey::PrimaryShiftCharacter(character) => {
+            super::UiKey::PrimaryCharacter(character) => {
                 Self::navigation_for_command(self.command(character), true)
+            }
+            super::UiKey::PrimaryShiftCharacter(character) => {
+                Self::navigation_for_command(self.command(character.to_ascii_uppercase()), true)
             }
             _ => None,
         }

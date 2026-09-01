@@ -1,5 +1,8 @@
 //! One-pass structural recognition for whole-document list consumers.
 
+#[cfg(test)]
+mod tests;
+
 use crate::ports::text_layout::LogicalLine;
 
 use super::{is_thematic_break, parse_marker, update_fence, whitespace_suffix_range};

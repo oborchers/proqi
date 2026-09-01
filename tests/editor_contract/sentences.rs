@@ -19,12 +19,20 @@ fn position_for_byte(text: &str, byte: usize) -> TextPosition {
 }
 
 fn delete_at(text: &str, byte: usize) -> proqi::ports::editor::EditOutcome {
+    delete_at_with_width(text, byte, 2)
+}
+
+fn delete_at_with_width(
+    text: &str,
+    byte: usize,
+    list_indent_width: u8,
+) -> proqi::ports::editor::EditOutcome {
     let mut editor = RopeEditor::new(text);
     editor.apply(EditCommand::SetCursor {
         position: position_for_byte(text, byte),
         extend_selection: false,
     });
-    editor.apply(DELETE_SENTENCE)
+    editor.apply(EditCommand::DeleteSentence { list_indent_width })
 }
 
 fn selected_delete(text: &str, start: usize, end: usize) -> proqi::ports::editor::EditOutcome {
@@ -169,6 +177,12 @@ fn unicode_terminators_combining_marks_and_emoji_remain_whole() {
 
     let combining_separator = "One. \u{301}Two.";
     assert_eq!(delete_at(combining_separator, 0).snapshot.content, "Two.");
+
+    let unicode_line_separator = "First.\u{2028}Second.";
+    assert_eq!(
+        delete_at(unicode_line_separator, 0).snapshot.content,
+        "Second."
+    );
 }
 
 #[test]
@@ -236,6 +250,27 @@ fn list_items_are_structural_boundaries_without_renumbering() {
         .snapshot
         .content,
         "- \n- Second item"
+    );
+
+    let between_items = "- One.\n- Two.";
+    let newline = between_items.find('\n').expect("item boundary");
+    assert_eq!(
+        delete_at(between_items, newline).snapshot.content,
+        "- \n- Two."
+    );
+}
+
+#[test]
+fn configured_indent_width_changes_nested_list_structure() {
+    let text = "- Parent without terminator\n    - Child. Tail.";
+    let cursor = text.find("Child").expect("nested sentence");
+    assert_eq!(
+        delete_at_with_width(text, cursor, 4).snapshot.content,
+        "- Parent without terminator\n    - Tail."
+    );
+    assert_eq!(
+        delete_at_with_width(text, cursor, 8).snapshot.content,
+        "- Tail."
     );
 }
 

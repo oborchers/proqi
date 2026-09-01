@@ -131,6 +131,10 @@ impl BoardApp {
             | UiKey::SubmitKeep
             | UiKey::Undo
             | UiKey::Redo
+            // Nonempty Compose edits materialize into a thought immediately.
+            // If creation is rejected, keep the orphaned Compose buffer
+            // conservative because its transient annotations have no owner.
+            | UiKey::DeleteSentence
             | UiKey::Duplicate
             | UiKey::Quit => return Vec::new(),
             _ => {}
