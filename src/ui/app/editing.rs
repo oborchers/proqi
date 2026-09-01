@@ -10,9 +10,13 @@ use crate::{
 };
 
 use super::{BoardApp, EditorOwner, UiInput, UiKey};
-use crate::ui::annotations;
+use crate::ui::{annotations, settings::KeyBindings};
 
-pub(super) fn command_for_key(key: UiKey, adjacent_fold: bool) -> Option<(EditCommand, bool)> {
+pub(super) fn command_for_key(
+    key: UiKey,
+    adjacent_fold: bool,
+    list_indent_width: u8,
+) -> Option<(EditCommand, bool)> {
     match key {
         UiKey::UnmodifiedSpace => Some((EditCommand::InsertChar(' '), false)),
         UiKey::Character(character) => Some((EditCommand::InsertChar(character), false)),
@@ -30,12 +34,14 @@ pub(super) fn command_for_key(key: UiKey, adjacent_fold: bool) -> Option<(EditCo
             true,
         )),
         UiKey::SelectAll => Some((EditCommand::SelectAll, true)),
-        UiKey::DeleteLine => Some((EditCommand::DeleteLogicalLine, true)),
+        UiKey::DeleteLogicalLine => Some((EditCommand::DeleteLogicalLine, true)),
+        UiKey::DeleteSentence => Some((EditCommand::DeleteSentence { list_indent_width }, true)),
         UiKey::Escape
         | UiKey::Submit
         | UiKey::SubmitKeep
         | UiKey::EditNavigation { .. }
         | UiKey::PrimaryCharacter(_)
+        | UiKey::PrimaryShiftCharacter(_)
         | UiKey::PrimaryShiftMove { .. }
         | UiKey::Undo
         | UiKey::Redo
@@ -51,13 +57,18 @@ pub(super) fn command_for_key(key: UiKey, adjacent_fold: bool) -> Option<(EditCo
     }
 }
 
-pub(super) fn normalize_edit_key(key: UiKey) -> Option<UiKey> {
+pub(super) fn normalize_edit_key(key: UiKey, keybindings: &KeyBindings) -> Option<UiKey> {
     match key {
         UiKey::PrimaryShiftMove { movement } => Some(UiKey::Move {
             movement,
             extend_selection: true,
         }),
-        UiKey::PrimaryCharacter(_) => None,
+        UiKey::PrimaryShiftCharacter(character)
+            if character.eq_ignore_ascii_case(&keybindings.delete_sentence) =>
+        {
+            Some(UiKey::DeleteSentence)
+        }
+        UiKey::PrimaryCharacter(_) | UiKey::PrimaryShiftCharacter(_) => None,
         key => Some(key),
     }
 }
@@ -101,7 +112,7 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        let Some(key) = normalize_edit_key(key) else {
+        let Some(key) = normalize_edit_key(key, &self.settings.keybindings) else {
             return Vec::new();
         };
         match key {
@@ -125,6 +136,9 @@ impl BoardApp {
             | UiKey::Quit => return Vec::new(),
             _ => {}
         }
+        // Compose has no durable annotation owner. Accepted nonempty content
+        // becomes a thought before the next key, so fold preflight belongs
+        // exclusively to the Edit path.
         let command = match key {
             UiKey::Enter if self.should_insert_smart_newline() => EditCommand::InsertSmartNewline {
                 indent_width: self.settings.list_indent_width,
@@ -138,7 +152,9 @@ impl BoardApp {
                 smart_lists: self.settings.smart_lists,
             },
             _ => {
-                let Some((command, _)) = command_for_key(key, false) else {
+                let Some((command, _)) =
+                    command_for_key(key, false, self.settings.list_indent_width)
+                else {
                     return Vec::new();
                 };
                 command

@@ -33,25 +33,36 @@ fn arrows_and_jk_share_focus_and_shift_range_intentions() {
 
 #[test]
 fn primary_shift_arrows_and_characters_share_reorder_intentions() {
-    let mut arrows = Fixture::new();
-    let mut letters = Fixture::new();
-    for content in ["first", "second", "third"] {
-        durable_thought(&mut arrows, content);
-        durable_thought(&mut letters, content);
-    }
-    arrows.input(UiInput::Key(UiKey::PrimaryShiftMove {
-        movement: CursorMovement::VisualUp,
-    }));
-    letters.input(UiInput::Key(UiKey::PrimaryCharacter('K')));
-    assert_eq!(order(&letters), order(&arrows));
-    assert_eq!(order(&letters), ["first", "third", "second"]);
+    for (up, down) in [
+        (
+            UiKey::PrimaryShiftCharacter('K'),
+            UiKey::PrimaryShiftCharacter('J'),
+        ),
+        (
+            UiKey::PrimaryShiftCharacter('k'),
+            UiKey::PrimaryShiftCharacter('j'),
+        ),
+    ] {
+        let mut arrows = Fixture::new();
+        let mut letters = Fixture::new();
+        for content in ["first", "second", "third"] {
+            durable_thought(&mut arrows, content);
+            durable_thought(&mut letters, content);
+        }
+        arrows.input(UiInput::Key(UiKey::PrimaryShiftMove {
+            movement: CursorMovement::VisualUp,
+        }));
+        letters.input(UiInput::Key(up));
+        assert_eq!(order(&letters), order(&arrows));
+        assert_eq!(order(&letters), ["first", "third", "second"]);
 
-    arrows.input(UiInput::Key(UiKey::PrimaryShiftMove {
-        movement: CursorMovement::VisualDown,
-    }));
-    letters.input(UiInput::Key(UiKey::PrimaryCharacter('J')));
-    assert_eq!(order(&arrows), ["first", "second", "third"]);
-    assert_eq!(order(&letters), ["first", "second", "third"]);
+        arrows.input(UiInput::Key(UiKey::PrimaryShiftMove {
+            movement: CursorMovement::VisualDown,
+        }));
+        letters.input(UiInput::Key(down));
+        assert_eq!(order(&arrows), ["first", "second", "third"]);
+        assert_eq!(order(&letters), ["first", "second", "third"]);
+    }
 }
 
 #[test]
@@ -69,7 +80,7 @@ fn remapped_shifted_vertical_key_keeps_range_and_primary_reorder_semantics() {
     fixture.input(UiInput::Key(UiKey::Character('I')));
     assert_eq!(selected(&fixture), ["second", "third"]);
     fixture.input(UiInput::Key(UiKey::Escape));
-    fixture.input(UiInput::Key(UiKey::PrimaryCharacter('I')));
+    fixture.input(UiInput::Key(UiKey::PrimaryShiftCharacter('i')));
     assert_eq!(order(&fixture), ["second", "first", "third"]);
 }
 
