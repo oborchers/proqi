@@ -120,6 +120,11 @@ pub enum EditCommand {
     DeleteForward,
     /// Delete the current newline-delimited logical line.
     DeleteLogicalLine,
+    /// Delete every Unicode sentence touched by the cursor or selection.
+    DeleteSentence {
+        /// Configured space indentation width used by canonical list recognition.
+        list_indent_width: u8,
+    },
     /// Move the cursor, optionally extending the selection.
     Move {
         /// Movement to apply.
@@ -238,6 +243,12 @@ pub trait Editor {
 
     /// Return selected text exactly as stored, including line delimiters.
     fn selected_text(&self) -> Option<String>;
+
+    /// Preview the exact byte ranges removed by sentence deletion.
+    ///
+    /// Applying [`EditCommand::DeleteSentence`] with the same indentation width
+    /// must remove exactly these merged ranges.
+    fn sentence_deletion_ranges(&self, list_indent_width: u8) -> Vec<std::ops::Range<usize>>;
 }
 
 /// Creates isolated editor instances without exposing an implementation to UI code.

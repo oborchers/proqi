@@ -2,6 +2,7 @@
 
 mod mutation;
 mod pointer;
+mod sentence;
 mod smart_lists;
 mod text;
 
@@ -193,6 +194,17 @@ impl RopeEditor {
             end: position_for_byte(content, end),
         })
     }
+
+    fn apply_sentence_deletion(&mut self, list_indent_width: u8) -> TextChangeSet {
+        self.mutate_many(|editor| editor.delete_sentence(list_indent_width))
+    }
+
+    fn outcome(&self, changes: TextChangeSet) -> EditOutcome {
+        EditOutcome {
+            changes,
+            snapshot: self.snapshot(),
+        }
+    }
 }
 
 impl Editor for RopeEditor {
@@ -220,6 +232,9 @@ impl Editor for RopeEditor {
             EditCommand::DeleteBack => self.mutate(Self::delete_back),
             EditCommand::DeleteForward => self.mutate(Self::delete_forward),
             EditCommand::DeleteLogicalLine => self.mutate(Self::delete_logical_line),
+            EditCommand::DeleteSentence { list_indent_width } => {
+                self.apply_sentence_deletion(list_indent_width)
+            }
             EditCommand::Move {
                 movement,
                 extend_selection,
@@ -273,10 +288,7 @@ impl Editor for RopeEditor {
             EditCommand::Redo => self.redo_edit(),
         };
 
-        EditOutcome {
-            changes,
-            snapshot: self.snapshot(),
-        }
+        self.outcome(changes)
     }
 
     fn set_viewport(&mut self, viewport: TextViewport) {
@@ -351,5 +363,14 @@ impl Editor for RopeEditor {
         let (start, end) = self.selection_bytes()?;
         let content = self.content();
         Some(content[start..end].to_owned())
+    }
+
+    fn sentence_deletion_ranges(&self, list_indent_width: u8) -> Vec<std::ops::Range<usize>> {
+        sentence::deletion_ranges(
+            &self.content(),
+            self.state.cursor_byte,
+            self.selection_bytes(),
+            list_indent_width,
+        )
     }
 }
