@@ -1,3 +1,7 @@
 [[profile.default.overrides]]
 filter = 'test(=editor_persistence::physical_macos_redo_encoding_restores_the_durable_deletion)'
 threads-required = "num-test-threads"
+
+[[profile.default.overrides]]
+filter = 'test(=persistent_writer_contention_is_bounded_and_leaves_no_session)'
+threads-required = "num-test-threads"
