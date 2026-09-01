@@ -35,6 +35,11 @@ impl BoardApp {
                     value.push(*character);
                 }
             }
+            UiInput::Key(UiKey::UnmodifiedSpace) => {
+                if let Some(value) = &mut self.rename {
+                    value.push(' ');
+                }
+            }
             UiInput::Paste(text) => self.append_session_name(text),
             UiInput::PasteAnnotated(payload) => self.append_session_name(&payload.content),
             UiInput::Pointer(pointer)

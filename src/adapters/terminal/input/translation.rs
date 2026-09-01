@@ -67,6 +67,7 @@ pub(super) fn translate_key(key: KeyEvent) -> Option<UiKey> {
         .modifiers
         .intersects(KeyModifiers::SUPER | KeyModifiers::META);
     match key.code {
+        KeyCode::Char(' ') if key.modifiers.is_empty() => Some(UiKey::UnmodifiedSpace),
         KeyCode::Char(character) => Some(UiKey::Character(character)),
         KeyCode::Enter => Some(UiKey::Enter),
         KeyCode::BackTab => Some(UiKey::BackTab),

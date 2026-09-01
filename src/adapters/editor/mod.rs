@@ -213,6 +213,7 @@ impl Editor for RopeEditor {
             EditCommand::InsertChar(character) => {
                 self.mutate(|editor| editor.replace_selection_or_insert(&character.to_string()))
             }
+            EditCommand::InsertBeforeSelection(c) => self.insert_before_selection(c),
             EditCommand::Paste(text) => {
                 self.mutate(|editor| editor.replace_selection_or_insert(&text))
             }

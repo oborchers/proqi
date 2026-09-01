@@ -1,0 +1,24 @@
+---
+source: tests/ui_board/placeholder_space.rs
+assertion_line: 475
+expression: snapshot_buffer(terminal.backend().buffer())
+---
+SIZE 32x7
+
+TEXT
+00││
+01│⋮ before  [Image 1 ·│
+02│  inaccessible] after│
+03││
+04│  proqi-ui-annotated-contract│
+05│  1 thought · edit · saving│
+06│  Esc Board│
+
+STYLE RUNS
+0: 0-31 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+1: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-9 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 10-20 fg=Rgb(204, 160, 58) bg=Rgb(39, 40, 48) mod=BOLD | 21-31 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
+2: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-1 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 2-14 fg=Rgb(204, 160, 58) bg=Rgb(39, 40, 48) mod=BOLD | 15-31 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
+3: 0-31 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+4: 0-31 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+5: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-29 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE | 30-31 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+6: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-4 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 5-31 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE

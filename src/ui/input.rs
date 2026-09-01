@@ -52,6 +52,8 @@ pub enum UiKey {
     Quit,
     /// Insert one Unicode scalar value.
     Character(char),
+    /// Insert an ordinary ASCII space reported without modifiers.
+    UnmodifiedSpace,
     /// A printable character reported with Primary for board-keymap resolution.
     PrimaryCharacter(char),
     /// A printable character whose Primary chord retained distinct Shift intent.

@@ -47,34 +47,45 @@ impl BoardApp {
         let Some(thought_id) = self.active_thought_id() else {
             return false;
         };
-        let Some(snapshot) = self.editor_snapshot() else {
-            return false;
-        };
-        let selection = snapshot.selection.map(|selection| {
-            (
-                crate::ports::text_layout::byte_for_position(&snapshot.content, selection.start),
-                crate::ports::text_layout::byte_for_position(&snapshot.content, selection.end),
-            )
-        });
-        let annotations = self.current_annotations(thought_id);
-        let candidate = annotations
-            .iter()
-            .enumerate()
-            .find_map(|(index, annotation)| {
-                (!self.expanded_folds.contains(&(thought_id, index))
-                    && annotation.kind.behavior() == AnnotationBehavior::Substitution
-                    && selection == Some((annotation.start, annotation.end)))
-                .then_some(index)
-            });
-        let Some(index) = candidate else {
+        let Some((index, end)) = self.editor_presentation().and_then(|presentation| {
+            presentation
+                .selected_collapsed_substitution()
+                .map(|substitution| (substitution.annotation_index, substitution.canonical_end))
+        }) else {
             return false;
         };
         if !self.expanded_folds.insert((thought_id, index)) {
             return false;
         }
-        let end = annotations[index].end;
         self.set_editor_range(end, end);
         true
+    }
+
+    pub(super) fn insert_space_before_selected_fold(
+        &mut self,
+        ids: &mut impl crate::ports::environment::IdGenerator,
+        clock: &impl crate::ports::environment::Clock,
+    ) -> Option<Vec<crate::application::Effect>> {
+        let thought_id = self.active_thought_id()?;
+        self.editor_presentation()?
+            .selected_collapsed_substitution()?;
+        let command = EditCommand::InsertBeforeSelection(' ');
+        if self.edit_command_blocked(&command) {
+            return Some(Vec::new());
+        }
+        let mut effects = match self.flush_edit_boundary(ids, clock) {
+            super::pending_types::EditFlush::Complete(effects) => effects,
+            super::pending_types::EditFlush::Blocked(effects) => return Some(effects),
+        };
+        let expanded = self.expanded_fold_indices(thought_id);
+        self.apply_edit(command);
+        self.expanded_folds
+            .extend(expanded.into_iter().map(|index| (thought_id, index)));
+        match self.flush_edit_boundary(ids, clock) {
+            super::pending_types::EditFlush::Complete(flushed)
+            | super::pending_types::EditFlush::Blocked(flushed) => effects.extend(flushed),
+        }
+        Some(effects)
     }
 
     pub(super) fn projected_position_at_cell(
