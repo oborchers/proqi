@@ -55,6 +55,7 @@ impl BoardApp {
             Command::CheckUpdates => Some(vec![Effect::Update(
                 crate::application::UpdateIntent::CheckNow,
             )]),
+            Command::WhatsNew => Some(self.open_installed_release_highlights()),
             Command::ScreenshotInbox => Some(self.toggle_screenshot_inbox(ids, clock)),
             Command::RetryScreenshotCapture => Some(self.retry_screenshot_capture(ids, clock)),
             Command::RetryStorage => Some(self.retry_persistence()),

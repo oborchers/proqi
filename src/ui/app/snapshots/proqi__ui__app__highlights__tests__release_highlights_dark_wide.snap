@@ -1,0 +1,23 @@
+---
+source: src/ui/app/highlights/tests.rs
+assertion_line: 213
+expression: "snapshot(84, 18, ThemePreference::Dark)"
+---
+00││
+01│┌ what's new in Proqi 1.2.0 ─────────────────────────────────────────────────────[x]│
+02││Proqi 1.1.0                                                                       ││
+03││• Skipped releases stay grouped for context                                       ││
+04││• Wide characters such as 界  and combining text stay intact                       ││
+05││• Mouse and keyboard dismissal are equivalent                                     ││
+06││                                                                                  ││
+07││Proqi 1.2.0                                                                       ││
+08││• One responsive overlay wraps concise highlights in narrow panes                 ││
+09││• Scrolling preserves the active row across shallow panes                         ││
+10││• Explicit dismissal is durable while a crash before dismissal reopens it         ││
+11││                                                                                  ││
+12││                                                                                  ││
+13││                                                                                  ││
+14││                                                                                  ││
+15││                                                                                  ││
+16│└──────────────────────────────────────────────────────────────────────────────────┘│
+17│  Esc Board│

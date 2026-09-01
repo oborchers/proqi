@@ -6,7 +6,7 @@ use semver::Version;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use thiserror::Error;
 
-use super::Timestamp;
+use super::{ReleaseHighlightAnnouncement, Timestamp};
 
 const INSTALLATION_ID_BYTES: usize = 32;
 const INSTALLATION_ID_HEX: usize = INSTALLATION_ID_BYTES * 2;
@@ -178,6 +178,8 @@ pub struct UpdateCacheState {
     pub observed_installed_version: Option<StableVersion>,
     /// Whether one or more old processes may still need restart.
     pub restart_needed: bool,
+    /// Exact initiating-session announcement from one verified in-app upgrade.
+    pub release_highlights: Option<ReleaseHighlightAnnouncement>,
     /// Optional bounded entity tag returned by GitHub.
     pub etag: Option<String>,
 }

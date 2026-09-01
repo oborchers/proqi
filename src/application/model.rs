@@ -97,6 +97,8 @@ pub enum UpdateIntent {
     Skip(StableVersion),
     /// Show accurate standalone replacement instructions.
     ViewInstructions(StableVersion),
+    /// Durably acknowledge one exact release-highlight announcement after explicit dismissal.
+    AcknowledgeReleaseHighlights(crate::domain::ReleaseHighlightAnnouncement),
 }
 
 /// Explicit screenshot-inbox runtime decision requested by the UI.

@@ -24,21 +24,29 @@ pub(super) fn prepare(
     Ok(Some(endpoint.to_string_lossy().into_owned()))
 }
 
-pub(super) fn existing(
+pub(super) fn matches_recorded(
     runtime_dir: &Path,
     instance_id: InstanceId,
-) -> Result<Option<PathBuf>, RuntimeError> {
-    let endpoint = endpoint_path(runtime_dir, instance_id)?;
-    let Some(parent) = endpoint.parent() else {
-        return Ok(None);
+    recorded: &Path,
+) -> Result<bool, RuntimeError> {
+    let current = endpoint_path(runtime_dir, instance_id)?;
+    let legacy = legacy_endpoint_path(runtime_dir, instance_id)?;
+    if recorded != current && recorded != legacy {
+        return Ok(false);
+    }
+    let Some(parent) = recorded.parent() else {
+        return Ok(false);
     };
     if validate_owned_directory(parent, owner_uid(runtime_dir)?).is_err() {
-        return Ok(None);
+        return Ok(false);
     }
-    Ok(Some(endpoint))
+    Ok(true)
 }
 
-fn endpoint_path(runtime_dir: &Path, instance_id: InstanceId) -> Result<PathBuf, RuntimeError> {
+fn legacy_endpoint_path(
+    runtime_dir: &Path,
+    instance_id: InstanceId,
+) -> Result<PathBuf, RuntimeError> {
     use std::os::unix::fs::MetadataExt as _;
 
     let local = runtime_dir
@@ -51,6 +59,25 @@ fn endpoint_path(runtime_dir: &Path, instance_id: InstanceId) -> Result<PathBuf,
     Ok(std::env::temp_dir()
         .join(format!("proqi-{uid}"))
         .join(format!("{instance_id}.sock")))
+}
+
+fn endpoint_path(runtime_dir: &Path, instance_id: InstanceId) -> Result<PathBuf, RuntimeError> {
+    use std::os::unix::fs::MetadataExt as _;
+
+    let local = runtime_dir
+        .join("control")
+        .join(format!("{instance_id}.sock"));
+    if local.as_os_str().as_encoded_bytes().len() <= MAX_UNIX_ENDPOINT_BYTES {
+        return Ok(local);
+    }
+    let uid = fs::metadata(runtime_dir).map_err(io_error)?.uid();
+    let encoded = instance_id.to_string();
+    let payload = encoded.strip_prefix("ins_").ok_or_else(|| {
+        RuntimeError::Invalid("instance identity has an invalid prefix".to_owned())
+    })?;
+    Ok(std::env::temp_dir()
+        .join(format!("p{uid}"))
+        .join(format!("{payload}.sock")))
 }
 
 fn owner_uid(path: &Path) -> Result<u32, RuntimeError> {
@@ -104,7 +131,8 @@ mod tests {
         thread,
     };
 
-    use super::{owner_uid, prepare_owned_directory};
+    use super::{MAX_UNIX_ENDPOINT_BYTES, endpoint_path, owner_uid, prepare_owned_directory};
+    use crate::{adapters::memory::FakeIdGenerator, ports::environment::IdGenerator as _};
     use tempfile::tempdir;
 
     #[test]
@@ -158,5 +186,48 @@ mod tests {
                 .expect("endpoint worker")
                 .expect("private endpoint directory");
         }
+    }
+
+    #[test]
+    fn long_runtime_paths_fall_back_to_a_bounded_private_socket_path() {
+        let temporary = tempdir().expect("temporary directory");
+        let runtime = temporary.path().join("a".repeat(120));
+        std::fs::create_dir(&runtime).expect("runtime directory");
+        let mut ids = FakeIdGenerator::new(1_800_000_000_000);
+        let endpoint = endpoint_path(&runtime, ids.instance_id()).expect("endpoint");
+
+        assert!(endpoint.starts_with(std::env::temp_dir()));
+        assert!(endpoint.as_os_str().as_encoded_bytes().len() <= MAX_UNIX_ENDPOINT_BYTES);
+    }
+
+    #[test]
+    fn long_runtime_session_can_bind_and_publish_its_fallback_endpoint() {
+        use crate::ports::runtime::RuntimeCoordinator as _;
+
+        let temporary = tempdir().expect("temporary directory");
+        let runtime = temporary.path().join("a".repeat(120));
+        let launch = temporary.path().to_path_buf();
+        let mut ids = FakeIdGenerator::new(1_800_000_000_000);
+        let coordinator = super::super::FileRuntimeCoordinator::new(
+            runtime,
+            ids.instance_id(),
+            launch,
+            crate::domain::Timestamp::from_millis(1),
+            "1.0.0",
+        )
+        .expect("coordinator");
+        let mut lease = coordinator
+            .acquire_session(ids.session_id())
+            .expect("session lease");
+        let endpoint = lease.control_endpoint().expect("endpoint").to_owned();
+        let server =
+            crate::adapters::control::ControlServer::spawn(&endpoint).expect("control server");
+        lease.publish_control().expect("publish endpoint");
+
+        assert_eq!(
+            lease.info().control_endpoint.as_deref(),
+            Some(endpoint.as_str())
+        );
+        server.stop().expect("stop server");
     }
 }

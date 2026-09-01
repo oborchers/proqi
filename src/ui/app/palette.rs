@@ -369,6 +369,7 @@ impl BoardApp {
             | Command::RefreshAttachments
             | Command::RefreshInvocations
             | Command::CheckUpdates
+            | Command::WhatsNew
             | Command::ScreenshotInbox
             | Command::RetryScreenshotCapture
             | Command::RetryStorage

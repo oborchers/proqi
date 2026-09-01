@@ -32,6 +32,9 @@ use super::{
     supervisor::{ShutdownDeadline, WorkerLifecycle, join_before},
 };
 
+#[cfg(test)]
+mod tests;
+
 const UPDATE_DEADLINE_MILLIS: i64 = 45_000;
 
 enum UpdateRequest {
@@ -50,6 +53,7 @@ pub(super) enum UpdateActionResult {
     Skipped,
     Instructions(StableVersion),
     Executed(crate::application::UpdateExecution),
+    HighlightsAcknowledged(Result<(), UpdateError>),
 }
 
 pub(super) enum ManualCheckResult {
@@ -225,6 +229,7 @@ fn update_loop(
                 Some(UpdateResult::ManualCheck(result))
             }
             UpdateRequest::Act(intent) => {
+                let concludes_prompt = concludes_prompt(&intent);
                 let action = act(
                     &state,
                     installation,
@@ -233,7 +238,9 @@ fn update_loop(
                     intent,
                     &mut process,
                 );
-                prompt_lease = None;
+                if concludes_prompt {
+                    prompt_lease = None;
+                }
                 Some(UpdateResult::Action(action))
             }
         };
@@ -243,6 +250,16 @@ fn update_loop(
             return;
         }
     }
+}
+
+const fn concludes_prompt(intent: &UpdateIntent) -> bool {
+    matches!(
+        intent,
+        UpdateIntent::Dismiss(_)
+            | UpdateIntent::Skip(_)
+            | UpdateIntent::ViewInstructions(_)
+            | UpdateIntent::Install(_)
+    )
 }
 
 fn check_now(
@@ -357,6 +374,11 @@ fn act(
             Ok(UpdateActionResult::Skipped)
         }
         UpdateIntent::ViewInstructions(version) => Ok(UpdateActionResult::Instructions(version)),
+        UpdateIntent::AcknowledgeReleaseHighlights(announcement) => {
+            Ok(highlight_acknowledgement_result(
+                state.acknowledge_release_highlights(installation.identity, &announcement),
+            ))
+        }
         UpdateIntent::Install(version) => install(
             state,
             installation,
@@ -366,6 +388,10 @@ fn act(
             process,
         ),
     }
+}
+
+fn highlight_acknowledgement_result(result: Result<bool, UpdateError>) -> UpdateActionResult {
+    UpdateActionResult::HighlightsAcknowledged(result.map(|_changed| ()))
 }
 
 fn install(
@@ -387,7 +413,8 @@ fn install(
         .ok_or_else(|| UpdateError::Installation("active Homebrew path is absent".to_owned()))?;
     let cancellation = process.cancellation();
     let mut installer = HomebrewFormulaInstaller::new(process, active);
-    let mut gateway = LocalUpdateControlClient::cancellable(SystemIdGenerator, cancellation);
+    let mut gateway =
+        LocalUpdateControlClient::cancellable(SystemIdGenerator, cancellation.clone());
     let now = SystemClock.now();
     let deadline = Timestamp::from_millis(now.as_millis().saturating_add(UPDATE_DEADLINE_MILLIS));
     let mut ids = SystemIdGenerator;
@@ -398,6 +425,7 @@ fn install(
             installation.identity,
             version,
             deadline,
+            &cancellation,
         )?;
     Ok(UpdateActionResult::Executed(execution))
 }

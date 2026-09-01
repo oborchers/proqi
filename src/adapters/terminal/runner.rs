@@ -13,6 +13,7 @@ mod input_admission;
 mod owned_lanes;
 mod owner_control;
 mod pending;
+mod release_highlights;
 mod restart;
 mod screenshot_results;
 mod termination;
@@ -43,9 +44,9 @@ use crate::{
     ports::{
         environment::{Clock as _, MonotonicClock},
         runtime::InstanceInfo,
-        store::{Store as _, StoreError},
+        store::Store as _,
     },
-    ui::{BoardApp, Theme, UiInput, UiKey, render},
+    ui::{BoardApp, Theme, UiInput, UiKey, render_with_outcome},
 };
 
 use super::{
@@ -58,7 +59,7 @@ use super::{
     screenshot_lane::ScreenshotLane,
 };
 
-use durability::{drain_persistence, enqueue_effects};
+use durability::{drain_persistence, enqueue_effects, storage_error_code};
 use finish::CleanupStage::{Control, TerminalRestoration};
 use heartbeat::PaneHeartbeat;
 use owned_lanes::OwnedLanes;
@@ -149,6 +150,8 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
     } = resources;
     let session_id = state.board.session.id;
     store.recover_submissions(session_id, clock.now())?;
+    let release_highlight_selection =
+        release_highlights::load(&cache_directory, installation.as_ref(), session_id);
     let (control, control_warning) = composition::start_optional_control(&mut session_lease);
     let (theme, guard) =
         composition::enter_terminal(&settings.theme, settings.ui.keyboard_enhancement)?;
@@ -188,6 +191,11 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
     let check_for_updates = settings.ui.check_for_updates;
     let mut app =
         BoardApp::with_settings_and_cwd(state, settings.ui, cwd.clone(), RopeEditorFactory);
+    app.install_release_highlights(
+        release_highlight_selection.installed,
+        release_highlight_selection.automatic,
+        owned.input.latest_sequence(),
+    );
     app.configure_screenshot_activity(screenshot_activity);
     if let Some(warning) = control_warning {
         app.set_warning(warning);
@@ -353,11 +361,14 @@ fn drive(
             let _refreshed = heartbeat.refresh_if_due(lanes.external);
         }
         if redraw {
+            let mut release_highlights_visible = false;
             terminal.draw(|frame| {
                 let layout = app.prepare_frame(frame.area());
-                render(frame, app, &layout, &theme);
+                release_highlights_visible = render_with_outcome(frame, app, &layout, &theme);
             })?;
             app.arm_update_prompt();
+            let input_boundary = lanes.input.latest_sequence();
+            app.note_release_highlights_rendered(release_highlights_visible, input_boundary);
             redraw = false;
         }
         if let Some((sequence, event)) = held_input.take() {
@@ -485,8 +496,4 @@ pub(super) fn supports_true_color() -> bool {
     std::env::var("COLORTERM")
         .is_ok_and(|value| matches!(value.to_ascii_lowercase().as_str(), "truecolor" | "24bit"))
         || std::env::var("TERM").is_ok_and(|value| value.to_ascii_lowercase().contains("direct"))
-}
-
-pub(super) const fn storage_error_code(error: &StoreError) -> &'static str {
-    error.failure_code().control_str()
 }

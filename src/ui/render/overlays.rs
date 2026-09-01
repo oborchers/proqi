@@ -162,7 +162,7 @@ pub(super) fn render_text_prompt(
     frame.set_cursor_position((x, overlay.area.y.saturating_add(1)));
 }
 
-fn clear_overlay(frame: &mut Frame<'_>, area: ratatui_core::layout::Rect) {
+pub(super) fn clear_overlay(frame: &mut Frame<'_>, area: ratatui_core::layout::Rect) {
     frame.render_widget(Clear, overlay_clear_area(frame.area(), area));
 }
 
@@ -312,7 +312,7 @@ fn fitting_secondary(entry: PickerRow<'_>, width: usize) -> Option<&str> {
         })
 }
 
-fn ellipsize(value: &str, width: usize) -> String {
+pub(super) fn ellipsize(value: &str, width: usize) -> String {
     crate::ports::text_layout::ellipsize_cells(value, width)
 }
 
@@ -339,7 +339,7 @@ fn visible_query(query: &str, cursor: usize, width: u16) -> (String, u16) {
     )
 }
 
-fn render_close(frame: &mut Frame<'_>, overlay: &OverlayLayout, theme: &Theme) {
+pub(super) fn render_close(frame: &mut Frame<'_>, overlay: &OverlayLayout, theme: &Theme) {
     frame.render_widget(
         Paragraph::new("[x]").style(Style::default().fg(theme.accent)),
         overlay.close,

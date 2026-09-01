@@ -8,6 +8,8 @@ use std::process::Command;
 
 use serde_json::Value;
 
+const OWNER_READINESS_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+
 pub(super) fn expect_command() -> Command {
     let mut command = Command::new("/usr/bin/expect");
     command.env("PROQI_DISABLE_HERDR", "1");
@@ -15,7 +17,7 @@ pub(super) fn expect_command() -> Command {
 }
 
 pub(super) fn wait_for_path(path: &std::path::Path) {
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    let deadline = std::time::Instant::now() + OWNER_READINESS_TIMEOUT;
     while !path.exists() {
         assert!(
             std::time::Instant::now() < deadline,
@@ -27,7 +29,7 @@ pub(super) fn wait_for_path(path: &std::path::Path) {
 
 pub(super) fn wait_for_control_owner(state: &std::path::Path, session: &str) {
     let instances = state.join("runtime/instances");
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    let deadline = std::time::Instant::now() + OWNER_READINESS_TIMEOUT;
     loop {
         if control_owner_is_ready(&instances, session) {
             return;

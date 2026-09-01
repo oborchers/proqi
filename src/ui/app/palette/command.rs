@@ -36,6 +36,7 @@ pub(in crate::ui::app) enum Command {
     InsertInvocation,
     RefreshInvocations,
     CheckUpdates,
+    WhatsNew,
     ScreenshotInbox,
     RetryScreenshotCapture,
     RetryStorage,
@@ -52,7 +53,7 @@ pub(in crate::ui::app) enum Command {
 }
 
 impl Command {
-    pub(super) const ALL: [(Self, &'static str); 47] = [
+    pub(super) const ALL: [(Self, &'static str); 48] = [
         (Self::New, "New thought"),
         (Self::RenameSession, "Rename session"),
         (Self::CopySessionId, "Copy session ID"),
@@ -90,6 +91,7 @@ impl Command {
         (Self::InsertInvocation, "Insert discovered invocation"),
         (Self::RefreshInvocations, "Refresh invocations"),
         (Self::CheckUpdates, "Check for updates"),
+        (Self::WhatsNew, "What's new"),
         (Self::ScreenshotInbox, "Enable Screenshot Inbox"),
         (Self::RetryScreenshotCapture, "Retry Screenshot Capture"),
         (Self::RetryStorage, "Retry failed save"),

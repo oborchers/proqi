@@ -3,6 +3,7 @@
 mod chrome;
 mod overlay_composition;
 mod overlays;
+mod release_highlights;
 
 use linkify::{LinkFinder, LinkKind};
 use ratatui_core::{
@@ -23,10 +24,19 @@ use super::{
 
 /// Render the complete board into one terminal frame.
 pub fn render(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, theme: &Theme) {
+    let _release_highlights_visible = render_with_outcome(frame, app, layout, theme);
+}
+
+pub(crate) fn render_with_outcome(
+    frame: &mut Frame<'_>,
+    app: &BoardApp,
+    layout: &LayoutSnapshot,
+    theme: &Theme,
+) -> bool {
     frame.render_widget(Block::default().style(theme.base_style()), layout.area);
     render_board(frame, app, layout, theme);
     chrome::render_footer(frame, app, layout, theme);
-    overlay_composition::render(frame, app, layout, theme);
+    overlay_composition::render(frame, app, layout, theme)
 }
 
 pub(super) struct PlainPickerView {

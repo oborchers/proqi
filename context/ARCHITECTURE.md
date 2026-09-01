@@ -723,6 +723,9 @@ user. It stores only:
 - Exact dismissed and skipped versions.
 - Last observed installed version.
 - Whether an older running process may still need restart.
+- Exact initiating session, prior and target versions, and acknowledgement for
+  a verified in-app release-highlight announcement. No highlight content or
+  telemetry is stored.
 - Optional bounded safe HTTP cache metadata.
 
 The cache is atomic, bounded, corruption-tolerant, and protected by an explicit
@@ -788,6 +791,27 @@ commits to shutdown only after the accepted receipt frame has been written to
 the verified local socket. A failed delivery leaves that participant running
 and records restart convergence as incomplete.
 
+Restart acceptance is not replacement evidence. After each peer accepts, the
+coordinator performs a fresh bounded, cancellation-aware registry wait. A peer
+converges only when the same session appears under a different instance ID,
+the same installation identity, the exact target version, and a published
+control endpoint. The endpoint is published only after board restoration. The
+coordinator writes the initiating session's content-free pending announcement
+only after every peer converges, then requests the initiating restart. Peer
+failure creates no announcement. A delayed initiating resume retains the
+pending record and may show it later under the exact target.
+
+If replacement discovery itself fails after peer restart requests, the
+coordinator releases the initiating process immediately, retains
+`restart_needed`, and creates no announcement. It does not leave the initiating
+board blocked until the prepare deadline.
+
+The pending announcement write is part of initiating restart admission. If its
+private atomic write fails, the coordinator releases the initiating process
+without asking it to restart, records restart convergence as incomplete, and
+shows no announcement. This keeps the old session usable and prevents a
+successful-looking update path from losing its required durable target.
+
 Each participant then independently restores terminal modes, stops worker
 threads, closes control transport, releases session and schema leases, applies
 an explicit descriptor policy, resolves and verifies the active Homebrew Proqi
@@ -838,6 +862,22 @@ documented user commands. The Debian artifact is a directly downloaded local
 package, not an APT repository. Removing it deletes package-owned files only and
 never user state. Cargo publication distributes the `proqi` binary and does not
 make the internal library a supported API.
+
+### Packaged release-highlight projection
+
+The root `release-highlights.json` is included in the Rust executable at build
+time. Domain validation owns its exact schema, canonical stable versions,
+ascending uniqueness, three to six item bound, text bounds, and skipped-version
+selection. Startup composition reads only the private update cache after the
+session board is restored. The UI receives either no automatic presentation or
+validated groups paired with one exact durable announcement identity.
+
+The release-highlight overlay reuses the canonical overlay geometry, close hit
+target, theme, terminal-cell wrapping, and protected input boundary. Rendering,
+row measurement, scrolling, resize clamping, and hit testing share one semantic
+projection. Manual reopen uses only the exact installed group and emits no
+acknowledgement effect. Automatic dismissal remains visible until the update
+state adapter atomically acknowledges the matching record.
 
 ## Terminal rendering and input
 
@@ -1543,6 +1583,12 @@ stages archives containing one executable, MIT license, required notices, and
 shell completions. Jobs create and verify SHA-256 manifests, SPDX JSON SBOMs,
 and GitHub OIDC Sigstore provenance attestations. Every third-party Action is
 pinned by full commit SHA and ordinary CI remains read-only.
+
+The checked-in release manifest is packaged with the crate and embedded in the
+binary. One shared xtask validator compares its exact versions with GitHub note
+filenames and titles, the Cargo version, and the requested tag. Quality,
+release planning, standalone packaging, and crate packaging all fail closed on
+missing, corrupt, unreviewed, or mismatched highlights.
 
 The candidate workflow creates a 30-day immutable artifact only after every
 target, installed smoke, crate dry run, Debian package contract, checksum, SBOM,

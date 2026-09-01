@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "releases": [
+    {
+      "version": "0.1.0",
+      "highlights": [
+        "Keep independent prompts, questions, and notes on a responsive terminal board with keyboard and mouse control.",
+        "Resume durable local sessions with search, recovery, and undo across restarts.",
+        "Edit exact Unicode text, use the native clipboard, and keep large pastes or local files folded until needed.",
+        "Submit thoughts to verified adjacent Herdr agent panes in any direction.",
+        "Use the versioned JSON CLI and dedicated Proqi skill for explicit agent and script access.",
+        "Coordinate confirmed Homebrew updates across active Proqi sessions on macOS and Linux."
+      ]
+    },
+    {
+      "version": "0.1.1",
+      "highlights": [
+        "Collect content-redacted local diagnostics even when the main database is locked, malformed, or newer than this Proqi version.",
+        "Keep submitted thoughts protected by durable delivery records and duplicate in-flight suppression.",
+        "Restore terminal state through bounded shutdown, signals, PTY closure, and child-process failures.",
+        "Use searchable overlays and improved Unicode wrapping across a wider range of terminals.",
+        "Receive installation-aware update prompts through safer coordinated session ownership."
+      ]
+    },
+    {
+      "version": "0.1.2",
+      "highlights": [
+        "Install the Proqi binary from crates.io with Rust 1.88 or newer.",
+        "Install the checksummed amd64 Debian package on supported Debian and Ubuntu systems.",
+        "Keep user sessions and state when removing the Debian package.",
+        "Verify startup concurrency, state-path safety, schema coordination, and Linux compatibility through package contracts."
+      ]
+    },
+    {
+      "version": "0.2.0",
+      "highlights": [
+        "Select several thoughts, then copy, cut, delete, collapse, or submit them as one ordered action.",
+        "Duplicate the focused thought or selection with Primary+D.",
+        "Scroll overflowing boards one wrapped line at a time with reliable bounds after edits and resizes.",
+        "Rename and mutate active sessions through the versioned JSON CLI while their Proqi TUI remains open.",
+        "Replace thought content idempotently while preserving persistent editor undo."
+      ]
+    },
+    {
+      "version": "0.3.0",
+      "highlights": [
+        "Install a local TOML theme or override individual semantic colors in config.toml.",
+        "Start from auto, light, or dark and customize the complete semantic palette.",
+        "Reject inaccessible custom palettes before entering the terminal and retain the limited-color fallback.",
+        "Keep the shortcut reference aligned and scrollable in wide, narrow, and shallow panes.",
+        "Run an immediate update check from the command palette while eligible startup checks remain nonblocking."
+      ]
+    },
+    {
+      "version": "0.4.0",
+      "highlights": [
+        "Submit to a ready adjacent Codex pane before its first prompt establishes a Codex session.",
+        "Press Down twice on + New thought to create a durable blank and enter edit mode.",
+        "Continue downward past the final thought directly into a new editable thought.",
+        "Import shell-escaped Ghostty and Finder file drops as folded file or image attachments.",
+        "Preserve ordinary prompt text exactly when an escaped payload does not resolve completely to existing absolute local files."
+      ]
+    },
+    {
+      "version": "0.5.0",
+      "highlights": [
+        "Start typing or pasting on an empty board, then submit and keep or remove the active content with Primary+Enter shortcuts.",
+        "Complete local skills, agents, and commands, and insert inert references to recognized coding agents across the current Herdr server.",
+        "Build larger prompts with multi-selection, duplication, reordering, smart-list editing, and atomic whole-board submission.",
+        "On macOS, turn new images from a configured directory into private, annotatable thoughts with bounded Screenshot Inbox listening.",
+        "Verify file and image attachments immediately before submission so inaccessible sources leave the complete board unchanged.",
+        "Submit directly through Herdr to Claude Code, Codex, Pi, and Hermes, with documented conditional support for OpenCode and Kilo."
+      ]
+    }
+  ]
+}

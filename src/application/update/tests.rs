@@ -3,8 +3,8 @@ use std::{cell::RefCell, collections::BTreeSet, path::PathBuf};
 use crate::{
     application::test_support::TestClock,
     domain::{
-        Installation, InstallationIdentity, InstallationKind, StableVersion, Timestamp,
-        UpdateCacheState,
+        Installation, InstallationIdentity, InstallationKind, ReleaseHighlightAnnouncement,
+        StableVersion, Timestamp, UpdateCacheState,
     },
     ports::update::{
         InstallDetector, ReleaseObservation, ReleaseSource, UpdateError, UpdateLease,
@@ -106,6 +106,31 @@ impl UpdateStateStore for State {
         cache.observed_installed_version = Some(installed);
         cache.restart_needed = restart_needed;
         Ok(cache.clone())
+    }
+
+    fn record_release_highlights(
+        &self,
+        _: InstallationIdentity,
+        announcement: ReleaseHighlightAnnouncement,
+    ) -> Result<UpdateCacheState, UpdateError> {
+        self.cache.borrow_mut().release_highlights = Some(announcement);
+        Ok(self.cache.borrow().clone())
+    }
+
+    fn acknowledge_release_highlights(
+        &self,
+        _: InstallationIdentity,
+        announcement: &ReleaseHighlightAnnouncement,
+    ) -> Result<bool, UpdateError> {
+        let mut cache = self.cache.borrow_mut();
+        let Some(current) = cache.release_highlights.as_mut() else {
+            return Ok(false);
+        };
+        if current.acknowledged() || !current.same_upgrade(announcement) {
+            return Ok(false);
+        }
+        current.acknowledge();
+        Ok(true)
     }
 }
 

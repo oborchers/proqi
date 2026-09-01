@@ -276,6 +276,10 @@ mod tests {
             .expect("xtask manifest has a workspace parent");
         let expected = Version::parse(env!("CARGO_PKG_VERSION")).expect("workspace version");
         assert_eq!(workspace_version(root), Ok(expected.clone()));
+        assert!(
+            super::super::release_highlights::validate(root, Some(&format!("v{expected}"))).is_ok()
+        );
+        assert!(super::super::release_highlights::validate(root, Some("v9.9.9")).is_err());
         let tag = format!("v{expected}");
         assert!(
             root.join(format!(".github/release-notes/{tag}.md"))

@@ -14,6 +14,8 @@ mod duplicate;
 mod editing;
 mod folds;
 mod help;
+pub(in crate::ui) mod highlights;
+mod input_dispatch;
 mod invocation;
 mod palette;
 mod palette_handoff;
@@ -52,7 +54,7 @@ use crate::{
 };
 
 use super::{
-    HitTarget, LayoutSnapshot, PastePayload, UiSettings,
+    HitTarget, LayoutSnapshot, UiSettings,
     input::{PointerButton, PointerInput, PointerKind, UiInput, UiKey},
     layout::scroll::{BoardViewport, ScrollGeometry},
 };
@@ -151,6 +153,8 @@ pub struct BoardApp {
     update_barrier: Option<update::UpdateBarrier>,
     update_restart: Option<crate::domain::StableVersion>,
     update_prompt: Option<update::UpdatePrompt>,
+    release_highlights: Option<highlights::ReleaseHighlightsOverlay>,
+    installed_highlights: Option<crate::domain::ReleaseHighlightGroup>,
     invocation_cwd: PathBuf,
     invocation_generation: u64,
     invocation_reference_generation: u64,
@@ -242,6 +246,8 @@ impl BoardApp {
             update_barrier: None,
             update_restart: None,
             update_prompt: None,
+            release_highlights: None,
+            installed_highlights: None,
             invocation_cwd,
             invocation_generation: 0,
             invocation_reference_generation: 0,
@@ -283,6 +289,9 @@ impl BoardApp {
         }
         if self.update_prompt.is_some() {
             return self.handle_update_prompt_input(&input);
+        }
+        if self.release_highlights.is_some() {
+            return self.handle_release_highlights_input(&input);
         }
         if self.update_barrier.is_some()
             && !matches!(
@@ -339,6 +348,7 @@ impl BoardApp {
         self.help
             || self.screenshot.takeover.is_some()
             || self.update_prompt.is_some()
+            || self.release_highlights.is_some()
             || self.palette.is_some()
             || self.invocation_popup.is_some()
             || self.transfer.is_some()
@@ -347,43 +357,13 @@ impl BoardApp {
             || self.submission_mode.is_some()
     }
 
-    fn handle_primary_input(
-        &mut self,
-        input: UiInput,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-    ) -> Vec<Effect> {
-        self.invalidate_palette_selection_handoff(&input);
-        match input {
-            UiInput::HostFocusGained => Self::discover_agents(),
-            UiInput::HostFocusLost => Vec::new(),
-            UiInput::Resize { .. } => {
-                self.layout = None;
-                self.hovered = None;
-                self.edit_boundary = None;
-                Vec::new()
-            }
-            UiInput::Pointer(pointer) => self.handle_pointer(pointer, ids, clock),
-            UiInput::Paste(content) => {
-                let effects = self.paste_payload(PastePayload::text(content), ids, clock);
-                self.refresh_invocation_popup_after_input(effects)
-            }
-            UiInput::PasteAnnotated(payload) => {
-                let effects = self.paste_payload(payload, ids, clock);
-                self.refresh_invocation_popup_after_input(effects)
-            }
-            UiInput::Key(key) => match self.interaction_mode() {
-                InteractionMode::Board => self.handle_board_key(key, ids, clock),
-                InteractionMode::Compose => {
-                    let effects = self.handle_compose_key(key, ids, clock);
-                    self.refresh_invocation_popup();
-                    effects
-                }
-                InteractionMode::Edit { .. } => {
-                    let effects = self.handle_edit_key(key, ids, clock);
-                    self.refresh_invocation_popup_after_input(effects)
-                }
-            },
+    pub(crate) fn accept_protected_overlay_input(&self, sequence: u64) -> bool {
+        if self.screenshot.takeover.is_some() {
+            true
+        } else if self.update_prompt.is_some() {
+            self.accept_update_input(sequence)
+        } else {
+            self.accept_release_highlights_input(sequence)
         }
     }
 

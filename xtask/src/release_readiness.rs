@@ -3,7 +3,7 @@
 use std::{fs, path::Path, process::Command};
 
 use semver::Version;
-use serde_json::{Value, json};
+use serde_json::json;
 
 pub(super) fn print_classification(root: &Path, source_sha: Option<&str>) -> Result<(), String> {
     let version = super::release::workspace_version(root)?;
@@ -144,50 +144,7 @@ fn validate_note(root: &Path, tag: &str, version: &Version) -> Result<(), String
 }
 
 fn validate_highlights(root: &Path, version: &Version) -> Result<(), String> {
-    let path = root.join("release-highlights.json");
-    let bytes = fs::read(&path).map_err(|error| {
-        format!(
-            "release highlights {} are unavailable: {error}",
-            path.display()
-        )
-    })?;
-    if bytes.len() > 64 * 1024 {
-        return Err("release highlights exceed the 64 KiB release-input bound".to_owned());
-    }
-    let manifest: Value = serde_json::from_slice(&bytes)
-        .map_err(|error| format!("parse release highlights: {error}"))?;
-    if manifest.get("schema_version").and_then(Value::as_u64) != Some(1) {
-        return Err("release highlights require schema_version 1".to_owned());
-    }
-    let releases = manifest
-        .get("releases")
-        .and_then(Value::as_array)
-        .ok_or_else(|| "release highlights require a releases array".to_owned())?;
-    let version_text = version.to_string();
-    let current = releases
-        .iter()
-        .filter(|release| {
-            release.get("version").and_then(Value::as_str) == Some(version_text.as_str())
-        })
-        .collect::<Vec<_>>();
-    if current.len() != 1 {
-        return Err(format!(
-            "release highlights must contain exactly one entry for Cargo version {version}"
-        ));
-    }
-    let highlights = current[0]
-        .get("highlights")
-        .and_then(Value::as_array)
-        .ok_or_else(|| format!("release {version} has no highlights array"))?;
-    let valid = (3..=6).contains(&highlights.len())
-        && highlights.iter().all(|highlight| {
-            highlight
-                .as_str()
-                .is_some_and(|text| !text.trim().is_empty() && text.len() <= 280)
-        });
-    valid.then_some(()).ok_or_else(|| {
-        format!("release {version} must have three to six nonempty highlights of at most 280 bytes")
-    })
+    super::release_highlights::validate(root, Some(&format!("v{version}")))
 }
 
 fn validate_source_sha(root: &Path, expected: &str) -> Result<(), String> {

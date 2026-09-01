@@ -13,7 +13,10 @@ use fs4::{FileExt, TryLockError};
 use super::etag::valid as valid_etag;
 
 use crate::{
-    domain::{InstallationIdentity, StableVersion, Timestamp, UpdateCacheState},
+    domain::{
+        InstallationIdentity, ReleaseHighlightAnnouncement, StableVersion, Timestamp,
+        UpdateCacheState,
+    },
     ports::update::{
         ReleaseObservation, UpdateError, UpdateLease, UpdateLockKind, UpdateStateStore,
     },
@@ -173,6 +176,36 @@ impl UpdateStateStore for FileUpdateStateStore {
             state.restart_needed = restart_needed;
             Ok(())
         })
+    }
+
+    fn record_release_highlights(
+        &self,
+        installation: InstallationIdentity,
+        announcement: ReleaseHighlightAnnouncement,
+    ) -> Result<UpdateCacheState, UpdateError> {
+        self.mutate(installation, |state| {
+            state.release_highlights = Some(announcement);
+            Ok(())
+        })
+    }
+
+    fn acknowledge_release_highlights(
+        &self,
+        installation: InstallationIdentity,
+        announcement: &ReleaseHighlightAnnouncement,
+    ) -> Result<bool, UpdateError> {
+        let mut acknowledged = false;
+        self.mutate(installation, |state| {
+            if let Some(current) = &mut state.release_highlights
+                && !current.acknowledged()
+                && current.same_upgrade(announcement)
+            {
+                current.acknowledge();
+                acknowledged = true;
+            }
+            Ok(())
+        })?;
+        Ok(acknowledged)
     }
 }
 

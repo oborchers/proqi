@@ -56,7 +56,12 @@ fn apply_result(
         }
         UpdateResult::Action(result) => {
             pending.update = pending.update.saturating_sub(1);
-            app.complete_update_action(action_message(result));
+            match result {
+                Ok(UpdateActionResult::HighlightsAcknowledged(result)) => {
+                    app.complete_release_highlights_acknowledgement(result.is_ok());
+                }
+                other => app.complete_update_action(action_message(other)),
+            }
         }
         UpdateResult::ManualCheck(result) => {
             pending.update = pending.update.saturating_sub(1);
@@ -105,6 +110,9 @@ fn action_message(
             "Proqi {version} is available at https://github.com/oborchers/proqi/releases/latest"
         )),
         Ok(UpdateActionResult::Executed(execution)) => execution_message(&execution),
+        Ok(UpdateActionResult::HighlightsAcknowledged(_)) => {
+            Err("What's new acknowledgement was routed incorrectly.".to_owned())
+        }
         Err(_) => Err("Update failed. Every session remains saved and usable.".to_owned()),
     }
 }

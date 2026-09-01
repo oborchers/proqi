@@ -5,15 +5,22 @@ use std::sync::mpsc::TryRecvError;
 use crate::{
     application::Effect,
     domain::OperationSequence,
-    ports::control::{ControlReceipt, ControlResult},
+    ports::{
+        control::{ControlReceipt, ControlResult},
+        store::StoreError,
+    },
     ui::BoardApp,
 };
 
 use super::{
     PendingWork, WorkerLanes,
     fairness::{DrainOutcome, drain_bounded},
-    owner_control, storage_error_code,
+    owner_control,
 };
+
+pub(super) const fn storage_error_code(error: &StoreError) -> &'static str {
+    error.failure_code().control_str()
+}
 use crate::adapters::terminal::{
     TerminalError, integration::integration_context, persistence::PersistenceResult,
 };

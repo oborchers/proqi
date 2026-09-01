@@ -251,6 +251,7 @@ fn assert_fake_update_services(
             installation,
             &version,
             deadline,
+            &(),
         );
     assert!(matches!(failure, Err(UpdateError::InstallerFailed)));
     assert_eq!(failing.calls, 1);
@@ -270,6 +271,7 @@ fn assert_fake_update_services(
             installation,
             &version,
             deadline,
+            &(),
         )
         .expect("coordinate one fake installation");
     assert_eq!(succeeding.calls, 1);

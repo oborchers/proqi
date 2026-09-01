@@ -91,7 +91,14 @@ authors = ["Oliver Borchers <oliver-borchers@gmx.net>"]
 keywords = ["tui", "terminal", "scratchpad", "ai-agents", "prompts"]
 categories = ["command-line-utilities"]
 publish = ["crates-io"]
-include = ["/src/**/*.rs", "/Cargo.toml", "/Cargo.lock", "/README.md", "/LICENSE"]
+include = [
+    "/src/**/*.rs",
+    "/Cargo.toml",
+    "/Cargo.lock",
+    "/README.md",
+    "/LICENSE",
+    "/release-highlights.json",
+]
 
 [package.metadata.dist]
 all-features = true

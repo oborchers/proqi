@@ -64,6 +64,21 @@ Material limitations that remain after this release.
 The title must match the Cargo version and filename exactly:
 `.github/release-notes/vX.Y.Z.md` contains `# Proqi X.Y.Z`.
 
+## Packaged highlights
+
+Every represented GitHub note has one exact matching version in
+`release-highlights.json`. Add three to six short user-facing outcomes for the
+new version. They are displayed inside the installed product, so each item must
+stand on its own without links, installation commands, internal architecture,
+or a surrounding release-note paragraph.
+
+Draft the GitHub note and packaged items from the same inspected user-visible
+diffs, tests, documentation, and known limitations. Commit titles alone are
+never evidence for either artifact. Review the exact two texts together before
+release preparation is committed. The release and package gates require all
+note versions, manifest versions, the Cargo version, and the requested tag to
+agree exactly.
+
 ## Writing rules
 
 - Lead with outcomes, then explain the interaction that changed.
@@ -95,3 +110,5 @@ Before approving the note, confirm:
 5. The note contains no temporary paths, private identifiers, credentials,
    unpublished URLs, or internal review artifacts.
 6. The filename, title, Cargo version, and proposed tag all agree.
+7. The matching manifest entry contains three to six reviewed outcomes and no
+   claim broader than the GitHub note evidence.

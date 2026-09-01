@@ -27,6 +27,7 @@ pub(crate) use input::ListNavigation;
 pub use input::{PointerButton, PointerInput, PointerKind, UiInput, UiKey};
 pub use layout::{HitTarget, LayoutSnapshot, ThoughtLayout, compute as compute_layout};
 pub use render::render;
+pub(crate) use render::render_with_outcome;
 pub use settings::{BoardDensity, KeyBindings, KeyboardEnhancement, UiSettings};
 pub use theme::{TerminalPalette, Theme, ThemePreference};
 pub(crate) use theme::{ThemeOverrides, ThemeRecipe};

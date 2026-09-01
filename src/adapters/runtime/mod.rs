@@ -4,6 +4,7 @@ mod capture;
 mod control_endpoint;
 mod schema_lock;
 mod system;
+mod update;
 
 pub use capture::FileCaptureLease;
 pub use schema_lock::{FileSchemaLease, SchemaLockPolicy};
@@ -258,13 +259,6 @@ impl RuntimeCoordinator for FileRuntimeCoordinator {
     }
 }
 
-impl crate::ports::update::UpdateInstanceRegistry for FileRuntimeCoordinator {
-    fn active_instances(&self) -> Result<Vec<InstanceInfo>, crate::ports::update::UpdateError> {
-        RuntimeCoordinator::active_instances(self)
-            .map_err(|error| crate::ports::update::UpdateError::Coordination(error.to_string()))
-    }
-}
-
 fn remove_stale_control_endpoint(
     runtime_dir: &Path,
     info: &InstanceInfo,
@@ -272,10 +266,7 @@ fn remove_stale_control_endpoint(
     let Some(endpoint) = info.control_endpoint.as_deref() else {
         return Ok(());
     };
-    let Some(expected) = control_endpoint::existing(runtime_dir, info.instance_id)? else {
-        return Ok(());
-    };
-    if Path::new(endpoint) == expected {
+    if control_endpoint::matches_recorded(runtime_dir, info.instance_id, Path::new(endpoint))? {
         remove_if_exists(Path::new(endpoint))?;
     }
     Ok(())

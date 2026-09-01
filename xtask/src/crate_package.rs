@@ -24,6 +24,7 @@ pub(super) fn evidence(root: &Path) -> Result<(), String> {
 }
 
 fn verify(root: &Path, dry_run: bool) -> Result<(), String> {
+    super::release_highlights::validate(root, None)?;
     super::run(root, "cargo", ["package", "--locked"])?;
     if dry_run {
         super::run(root, "cargo", ["publish", "--dry-run", "--locked"])?;
@@ -111,6 +112,7 @@ fn expected_members(root: &Path) -> Result<BTreeSet<PathBuf>, String> {
         "Cargo.toml.orig",
         "LICENSE",
         "README.md",
+        "release-highlights.json",
     ]
     .into_iter()
     .map(PathBuf::from)

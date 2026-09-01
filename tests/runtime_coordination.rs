@@ -149,7 +149,7 @@ fn schema_contender_waits_for_a_brief_holder_and_times_out_when_unavailable() {
 #[test]
 fn stale_descriptive_metadata_is_removed_when_no_lock_exists() {
     let temporary = tempfile::tempdir().expect("temporary directory");
-    let runtime = temporary.path().join("runtime");
+    let runtime = temporary.path().join("runtime").join("r".repeat(120));
     let mut ids = FakeIdGenerator::new(1_725_000_000_000);
     let session_id = ids.session_id();
     let instance_id = ids.instance_id();
@@ -200,6 +200,30 @@ fn stale_descriptive_metadata_is_removed_when_no_lock_exists() {
         let resumed = owner.acquire_session(session_id).expect("direct recovery");
         assert!(!endpoint.exists());
         drop(resumed);
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{DirBuilderExt as _, MetadataExt as _};
+
+        let uid = std::fs::metadata(&runtime).expect("runtime metadata").uid();
+        let legacy_parent = std::env::temp_dir().join(format!("proqi-{uid}"));
+        let mut builder = std::fs::DirBuilder::new();
+        builder.mode(0o700);
+        match builder.create(&legacy_parent) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(error) => panic!("legacy endpoint parent: {error}"),
+        }
+        let legacy = legacy_parent.join(format!("{instance_id}.sock"));
+        std::fs::write(&legacy, b"legacy stale").expect("legacy endpoint fixture");
+        let mut legacy_info = info.clone();
+        legacy_info.control_endpoint = Some(legacy.to_string_lossy().into_owned());
+        std::fs::write(&metadata, serde_json::to_vec(&legacy_info).expect("json"))
+            .expect("legacy metadata fixture");
+
+        owner.scan_runtime().expect("legacy recovery");
+        assert!(!legacy.exists());
     }
 
     let malformed = runtime.join("instances").join("malformed.json");

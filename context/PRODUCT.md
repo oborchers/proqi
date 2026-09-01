@@ -1050,8 +1050,9 @@ next successful eligible startup check. `Skip this version` remains exact and
 durable until a later release exists. A shared private cache stores only the
 latest stable version, refresh generation, last successful check time, exact
 dismissed or skipped version, observed installed version, restart-needed state,
-and bounded HTTP cache metadata. Cache corruption is a miss and never blocks
-startup.
+bounded HTTP cache metadata, and content-free release-highlight state. The
+latter contains only the exact initiating session, prior and target versions,
+and acknowledgement state. Cache corruption is a miss and never blocks startup.
 
 At most one process refreshes the generation observed by a concurrent startup
 cohort, and at most one process owns the actionable prompt. A later independent
@@ -1097,6 +1098,28 @@ process remains.
 Existing shared schema leases remain the compatibility barrier. A new process
 does not migrate while an old process still holds a conflicting lease. It waits
 for bounded restart convergence or reports that restart remains pending.
+
+### Release highlights after an in-app upgrade
+
+Each release executable embeds one reviewed, versioned manifest without a
+runtime network dependency. Every represented version has three to six concise
+user-facing highlights. After a successful in-app upgrade, the coordinator
+waits until every peer has resumed under the exact target executable and
+restored its board. It then targets a pending announcement only to the exact
+session that initiated the upgrade and restarts that session last. Peer
+sessions remain quiet.
+
+When the initiating session resumes under the exact target and its board has
+been restored, Proqi shows one responsive, scrollable `what's new in Proqi
+X.Y.Z` overlay. Skipped releases appear as versioned groups newer than the prior
+version through the installed target. `Escape` or the mouse close control is an
+explicit dismissal. Proqi acknowledges that exact upgrade durably only after
+such a dismissal, so a crash before dismissal shows it again. Missing, corrupt,
+ambiguous, failed, cancelled, partial, externally installed, and
+version-mismatched state stays quiet.
+
+The command palette always offers `What's new`. It reopens the installed
+version's packaged highlights and never changes automatic acknowledgement.
 
 ### Archive, Debian, Cargo, and unknown installations
 

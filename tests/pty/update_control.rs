@@ -11,14 +11,14 @@ use proqi::{
         update::{FileUpdateStateStore, SystemInstallDetector},
     },
     application::UpdateRestartCoordinator,
-    domain::{StableVersion, Timestamp},
+    domain::{InstallationIdentity, StableVersion, Timestamp},
     ports::{
         environment::{Clock as _, IdGenerator as _},
         runtime::InstanceInfo,
         update::{
             HomebrewInstaller, InstallDetector as _, UPDATE_CONTROL_PROTOCOL_VERSION, UpdateError,
             UpdateParticipantGateway as _, UpdatePrepareReply, UpdatePrepareRequest,
-            UpdateRestartRequest,
+            UpdateRestartRequest, UpdateStateStore as _,
         },
     },
 };
@@ -26,6 +26,9 @@ use proqi::{
 use super::support::{
     expect_command, json_command, json_input_command, wait_for_control_owner, wait_for_path,
 };
+
+#[path = "update_control/highlight_fixture.rs"]
+mod highlight_fixture;
 
 struct FakeInstaller {
     calls: usize,
@@ -78,6 +81,7 @@ fn real_owner_preflights_and_returns_to_use_after_one_fake_installation() {
                 installation.identity,
                 &target,
                 deadline,
+                &(),
             )
             .expect("coordinate update");
 
@@ -159,6 +163,144 @@ fn homebrew_owner_restores_and_replaces_itself_in_the_same_pty() {
     assert!(status.success(), "restarted owner PTY exited with {status}");
 }
 
+#[test]
+fn in_app_restart_reopens_until_dismissed_then_remains_manual() {
+    let state = tempfile::tempdir().expect("temporary state");
+    let binary = fake_homebrew_binary(state.path());
+    let original = env!("CARGO_BIN_EXE_proqi");
+    let created = json_command(original, state.path(), &[]);
+    let session = created["data"]["session_id"].as_str().expect("session ID");
+    let peer_created = json_command(original, state.path(), &[]);
+    let peer_session = peer_created["data"]["session_id"]
+        .as_str()
+        .expect("peer session ID");
+    let peer_ready = state.path().join("highlight-peer-ready");
+    let peer_restarted = state.path().join("highlight-peer-restarted");
+    let peer_done = state.path().join("highlight-peer-done");
+    let mut peer = highlight_fixture::spawn_quiet_restarting_peer(
+        &binary,
+        state.path(),
+        peer_session,
+        &peer_ready,
+        &peer_restarted,
+        &peer_done,
+    );
+    wait_for_path(&peer_ready);
+    wait_for_control_owner(state.path(), peer_session);
+    let ready = state.path().join("highlight-owner-ready");
+    let mut owner = highlight_fixture::spawn_crash_owner(&binary, state.path(), session, &ready);
+    wait_for_path(&ready);
+    wait_for_control_owner(state.path(), session);
+    rewrite_participant_version(state.path(), session, "0.3.0");
+    rewrite_participant_version(state.path(), peer_session, "0.3.0");
+
+    let before = active_participant(state.path(), session);
+    let (update_state, installation, target) =
+        coordinate_highlight_restart(&binary, state.path(), &before);
+    wait_for_path(&peer_restarted);
+    fs::write(&peer_done, b"done").expect("release restarted peer");
+    let peer_status = peer.wait().expect("wait for restarted peer");
+    assert!(
+        peer_status.success(),
+        "restarted peer exited with {peer_status}"
+    );
+    let peer_thoughts = json_command(original, state.path(), &["thoughts", "list", peer_session]);
+    assert_eq!(
+        peer_thoughts["data"]["thoughts"][0]["content"],
+        highlight_fixture::PEER_QUIET_PROOF
+    );
+    let status = owner.wait().expect("wait for crash fixture");
+    assert!(status.success(), "crash fixture exited with {status}");
+    let pending = update_state
+        .load(installation)
+        .expect("pending state")
+        .release_highlights
+        .expect("pending announcement");
+    assert!(!pending.acknowledged());
+
+    let status = highlight_fixture::run_dismissal(&binary, state.path(), session);
+    assert!(status.success(), "dismissal fixture exited with {status}");
+    let acknowledged = update_state
+        .load(installation)
+        .expect("acknowledged state")
+        .release_highlights
+        .expect("acknowledged announcement");
+    assert!(acknowledged.acknowledged());
+
+    let status = highlight_fixture::run_quiet_resume(&binary, state.path(), session);
+    assert!(
+        status.success(),
+        "quiet resume fixture exited with {status}"
+    );
+    let resumed = json_command(original, state.path(), &["thoughts", "list", session]);
+    assert_eq!(
+        resumed["data"]["thoughts"][0]["content"],
+        highlight_fixture::RESUME_QUIET_PROOF
+    );
+    let status = highlight_fixture::run_manual_reopen(&binary, state.path(), session);
+    assert!(
+        status.success(),
+        "manual reopen fixture exited with {status}"
+    );
+    assert_eq!(target.to_string(), env!("CARGO_PKG_VERSION"));
+}
+
+fn coordinate_highlight_restart(
+    binary: &Path,
+    state: &Path,
+    before: &InstanceInfo,
+) -> (FileUpdateStateStore, InstallationIdentity, StableVersion) {
+    let installation = SystemInstallDetector::for_executable(binary.to_path_buf())
+        .detect()
+        .expect("Homebrew installation");
+    let mut ids = SystemIdGenerator;
+    let registry = FileRuntimeCoordinator::new(
+        state.join("runtime"),
+        ids.instance_id(),
+        std::env::current_dir().expect("current directory"),
+        SystemClock.now(),
+        env!("CARGO_PKG_VERSION"),
+    )
+    .expect("registry")
+    .with_update_context(installation.identity, UPDATE_CONTROL_PROTOCOL_VERSION);
+    let update_state = FileUpdateStateStore::new(&state.join("cache")).expect("state");
+    let mut gateway = LocalUpdateControlClient::new(SystemIdGenerator);
+    let mut installer = FakeInstaller { calls: 0 };
+    let target = StableVersion::parse(env!("CARGO_PKG_VERSION")).expect("target");
+    let deadline = Timestamp::from_millis(SystemClock.now().as_millis().saturating_add(10_000));
+
+    let result =
+        UpdateRestartCoordinator::new(&update_state, &registry, &mut gateway, &mut installer)
+            .execute(
+                ids.request_id(),
+                before.instance_id,
+                installation.identity,
+                &target,
+                deadline,
+                &(),
+            )
+            .expect("coordinate restart");
+    assert_eq!(result.restart_requests, 2);
+    assert!(result.restart_failed.is_empty());
+    let recorded = update_state
+        .load(installation.identity)
+        .expect("recorded state")
+        .release_highlights
+        .expect("recorded announcement");
+    assert_eq!(recorded.session_id(), before.session_id);
+    let manifest = proqi::adapters::update::packaged_release_highlights().expect("manifest");
+    let selected = proqi::application::ReleaseHighlightSelection::select(
+        &manifest,
+        &update_state
+            .load(installation.identity)
+            .expect("selection state"),
+        before.session_id,
+        &target,
+    );
+    assert!(selected.automatic.is_some());
+    (update_state, installation.identity, target)
+}
+
 fn active_participant(state: &Path, session: &str) -> InstanceInfo {
     let directory = state.join("runtime/instances");
     fs::read_dir(directory)
@@ -168,6 +310,26 @@ fn active_participant(state: &Path, session: &str) -> InstanceInfo {
         .filter_map(|bytes| serde_json::from_slice::<InstanceInfo>(&bytes).ok())
         .find(|info| info.session_id.to_string() == session)
         .expect("active participant")
+}
+
+fn rewrite_participant_version(state: &Path, session: &str, version: &str) {
+    let directory = state.join("runtime/instances");
+    let entry = fs::read_dir(directory)
+        .expect("instance directory")
+        .filter_map(Result::ok)
+        .find_map(|entry| {
+            let bytes = fs::read(entry.path()).ok()?;
+            let info = serde_json::from_slice::<InstanceInfo>(&bytes).ok()?;
+            (info.session_id.to_string() == session).then_some((entry.path(), info))
+        })
+        .expect("participant metadata");
+    let (path, mut info) = entry;
+    version.clone_into(&mut info.version);
+    fs::write(
+        path,
+        serde_json::to_vec(&info).expect("serialize participant"),
+    )
+    .expect("rewrite participant version");
 }
 
 fn spawn_owner(binary: &str, state: &Path, session: &str, ready: &Path, done: &Path) -> Child {

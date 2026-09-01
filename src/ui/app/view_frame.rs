@@ -76,6 +76,7 @@ impl BoardApp {
         self.board_viewport = self.board_viewport.at(scroll.current);
         self.scroll_geometry = Some(scroll);
         self.layout = Some(layout.clone());
+        self.clamp_release_highlights_scroll();
         layout
     }
 
@@ -90,6 +91,9 @@ impl BoardApp {
     fn configure_overlay(&self, layout: &mut LayoutSnapshot) {
         let screenshot_items = usize::from(self.screenshot.takeover.is_some()) * 2;
         let update_items = usize::from(self.update_prompt.is_some()) * 3;
+        let highlight_rows = usize::from(self.release_highlights.is_some()).saturating_mul(
+            self.release_highlights_row_count(layout.board.width.min(58).saturating_sub(2)),
+        );
         let palette_items = self
             .palette
             .as_ref()
@@ -109,6 +113,8 @@ impl BoardApp {
             2
         } else if self.update_prompt.is_some() {
             4
+        } else if self.release_highlights.is_some() {
+            highlight_rows.max(1)
         } else if self.help {
             let content_width = layout.board.width.min(58).saturating_sub(2);
             crate::ui::shortcuts::row_count(self, content_width)
