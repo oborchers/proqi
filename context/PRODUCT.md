@@ -5,7 +5,7 @@ Status: v0.1.0 product contract
 Product name: Proqi
 
 Command: `proqi`
-Last updated: 2026-08-29
+Last updated: 2026-09-01
 
 ## Vision
 
@@ -808,12 +808,25 @@ Initial editing shortcuts include:
 |---|---|---|
 | Select all text in the focused thought | `Meta+A` | `Ctrl+A` or command palette |
 | Delete the current logical line | `Meta+U` | `Ctrl+U` or command palette |
+| Delete the containing sentence | `Meta+Shift+U` | Command palette or configured binding |
 | Submit active thought | `Meta+Enter` | Command palette |
 | Submit active thought and keep | `Meta+Shift+Enter` | Command palette |
 
 Select all is scoped to the current thought in edit mode and to every live
-thought in board mode. Delete line removes one newline-delimited logical line,
+thought in board mode. Delete logical line removes one newline-delimited logical line,
 not only the currently wrapped visual row, and is one undoable edit.
+
+Sentence deletion removes the complete Unicode sentence containing
+the cursor, independent of cursor direction. A selection removes every touched
+sentence as one edit. Single LF and CRLF sequences remain sentence content, and
+blank-line paragraph separators are hard boundaries. Exact terminator,
+whitespace, selection, list-prefix, and separator ownership follows the reviewed
+[sentence deletion contract](../docs/SENTENCE_DELETION.md).
+The action deliberately documents ambiguity rather than claiming linguistic
+certainty. A command that intersects collapsed substitution content reveals all
+target folds without editing and asks for one deliberate repeat. Inline style
+annotations are not folds. The action does not replace logical-line deletion,
+and width-dependent visual-row deletion is not provided or planned.
 
 Many terminals consume Command shortcuts before a TUI can receive them. Proqi
 therefore supports enhanced keyboard protocols where available, configurable

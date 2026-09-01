@@ -10,6 +10,8 @@ pub(in crate::ui::app) enum Command {
     SendSessionRemove,
     Edit,
     PlainNewline,
+    DeleteLogicalLine,
+    DeleteSentence,
     JumpUp,
     JumpDown,
     ThoughtStart,
@@ -50,13 +52,15 @@ pub(in crate::ui::app) enum Command {
 }
 
 impl Command {
-    pub(super) const ALL: [(Self, &'static str); 45] = [
+    pub(super) const ALL: [(Self, &'static str); 47] = [
         (Self::New, "New thought"),
         (Self::RenameSession, "Rename session"),
         (Self::CopySessionId, "Copy session ID"),
         (Self::CopyResume, "Copy resume command"),
         (Self::Edit, "Edit thought"),
         (Self::PlainNewline, "Insert plain newline"),
+        (Self::DeleteLogicalLine, "Delete logical line"),
+        (Self::DeleteSentence, "Delete sentence"),
         (Self::JumpUp, "Jump cursor up 5 visual rows"),
         (Self::JumpDown, "Jump cursor down 5 visual rows"),
         (Self::ThoughtStart, "Move cursor to thought beginning"),

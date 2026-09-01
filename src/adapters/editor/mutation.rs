@@ -181,6 +181,25 @@ impl RopeEditor {
         (start != end).then(|| self.replace_byte_range(start, end, ""))
     }
 
+    pub(super) fn delete_sentence(&mut self, list_indent_width: u8) -> Option<TextChangeSet> {
+        let content = self.content();
+        let ranges = super::sentence::deletion_ranges(
+            &content,
+            self.state.cursor_byte,
+            self.selection_bytes(),
+            list_indent_width,
+        );
+        let cursor = ranges.first()?.start;
+        let replacements = ranges
+            .into_iter()
+            .map(|range| (range, String::new()))
+            .collect::<Vec<_>>();
+        let changes = self.replace_byte_ranges(&replacements)?;
+        self.state.cursor_byte = cursor;
+        self.state.selection_anchor_byte = None;
+        Some(changes)
+    }
+
     pub(super) fn undo_edit(&mut self) -> TextChangeSet {
         let Some(entry) = self.undo.pop() else {
             return TextChangeSet::unchanged(self.state.text.len_bytes());

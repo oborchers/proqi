@@ -115,6 +115,8 @@ pub struct KeyBindings {
     pub quit: char,
     /// Toggle the macOS screenshot inbox.
     pub screenshot_inbox: char,
+    /// Shifted Primary chord suffix for sentence deletion.
+    pub delete_sentence: char,
 }
 
 impl Default for KeyBindings {
@@ -142,6 +144,7 @@ impl Default for KeyBindings {
             help: '?',
             quit: 'q',
             screenshot_inbox: 'i',
+            delete_sentence: 'U',
         }
     }
 }
@@ -248,6 +251,9 @@ impl KeyBindings {
             super::UiKey::PrimaryCharacter(character) => {
                 Self::navigation_for_command(self.command(character), true)
             }
+            super::UiKey::PrimaryShiftCharacter(character) => {
+                Self::navigation_for_command(self.command(character.to_ascii_uppercase()), true)
+            }
             _ => None,
         }
     }
@@ -292,6 +298,15 @@ impl KeyBindings {
         ) {
             return Err("the transform binding conflicts with a reserved Primary shortcut");
         }
+        if !self.delete_sentence.is_ascii_uppercase() {
+            return Err("the sentence deletion binding must be one uppercase ASCII letter");
+        }
+        if matches!(
+            self.delete_sentence.to_ascii_lowercase(),
+            'a' | 'c' | 'd' | 'n' | 'p' | 'q' | 'v' | 'x' | 'y' | 'z'
+        ) {
+            return Err("the sentence deletion binding conflicts with a reserved Primary chord");
+        }
         let values = [
             self.new,
             self.edit,
@@ -314,6 +329,7 @@ impl KeyBindings {
             self.help,
             self.quit,
             self.screenshot_inbox,
+            self.delete_sentence,
         ];
         for (index, value) in values.iter().enumerate() {
             if value.is_control() || values[index + 1..].contains(value) {
@@ -381,6 +397,31 @@ mod tests {
                 ..KeyBindings::default()
             };
             assert!(bindings.validate().is_err(), "reserved: {reserved}");
+        }
+    }
+
+    #[test]
+    fn sentence_deletion_rejects_primary_chords_consumed_before_edit_dispatch() {
+        for reserved in ['A', 'C', 'D', 'N', 'P', 'Q', 'V', 'X', 'Y', 'Z'] {
+            let bindings = KeyBindings {
+                delete_sentence: reserved,
+                ..KeyBindings::default()
+            };
+            assert!(bindings.validate().is_err(), "reserved suffix {reserved}");
+        }
+    }
+
+    #[test]
+    fn sentence_deletion_rejects_unreachable_shifted_suffixes() {
+        for unreachable in ['g', '1', '!', 'Ü'] {
+            let bindings = KeyBindings {
+                delete_sentence: unreachable,
+                ..KeyBindings::default()
+            };
+            assert!(
+                bindings.validate().is_err(),
+                "unreachable suffix {unreachable}"
+            );
         }
     }
 }

@@ -2,6 +2,7 @@
 
 pub(super) mod command;
 mod dispatch;
+mod editor;
 
 use crate::{
     application::Effect,
@@ -98,6 +99,8 @@ impl PaletteState {
             | Command::SubmitAllRemove
             | Command::SubmitAllKeep => self.submit_supported,
             Command::PlainNewline
+            | Command::DeleteLogicalLine
+            | Command::DeleteSentence
             | Command::JumpUp
             | Command::JumpDown
             | Command::ThoughtStart
@@ -349,6 +352,8 @@ impl BoardApp {
             | Command::SubmitAllRemove
             | Command::SubmitAllKeep
             | Command::PlainNewline
+            | Command::DeleteLogicalLine
+            | Command::DeleteSentence
             | Command::JumpUp
             | Command::JumpDown
             | Command::ThoughtStart

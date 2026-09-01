@@ -34,9 +34,8 @@ undo remain non-negotiable.
   and group the Commands overlay with inert headings that navigation skips.
 - [ ] **Deterministic TUI fixtures:** add an `xtask` scenario/session seeder for
   repeatable live walkthroughs, regression reproduction, and stress testing.
-- [ ] **High-return editing:** add experimental Unicode-aware sentence
-  deletion without changing logical-line deletion, then add exact replace-all
-  and logical-line duplicate/move.
+- [ ] **High-return editing:** add exact replace-all and logical-line
+  duplicate/move.
 - [ ] **Attachment integrity:** preserve file, image, and folded annotation
   metadata across Proqi-to-Proqi copy/cut/paste, and prevent submission when an
   annotated asset can no longer be accessed.
@@ -66,7 +65,7 @@ undo remain non-negotiable.
 ```text
 Editor
 ├─ Exact replace-all ──> Occurrence-only multi-selection
-├─ Existing logical-line deletion ──> Experimental sentence deletion
+├─ Existing sentence deletion ──> Paragraph deletion
 └─ Shared logical-line ranges ──> Logical-line duplicate/move/join
 
 Clipboard and attachments
@@ -407,38 +406,7 @@ terminology consistently in product text, documentation, and implementation.
 
 ## Smart text editing
 
-### Experimental sentence deletion — P1, S/M (3–6 days)
-
-User story: while editing prose, I can remove the complete sentence addressed
-by my cursor or selection as one undoable operation. The existing
-newline-delimited logical-line action remains predictable, and wrapping never
-changes what either action deletes.
-
-- [ ] Keep `Primary+U` as **Delete logical line**. It continues to remove one
-  complete LF/CRLF-delimited logical line and its newline using deterministic
-  first, middle, last, empty, and missing-final-newline behavior.
-- [ ] Add experimental **Delete sentence** as `Primary+Shift+U`, with a command
-  palette action and configurable fallback. Use a reviewed Unicode sentence
-  boundary implementation rather than a hand-maintained punctuation or language
-  table.
-- [ ] Treat **Delete visual row** as an explicit non-goal unless real user
-  evidence later demonstrates demand. Terminal wrapping is presentation and
-  must not silently change the canonical destructive unit.
-- [ ] Define cursor, selection, terminator, closing punctuation, leading and
-  trailing whitespace, blank-line, LF, and CRLF ownership exactly. Merge
-  overlapping selected sentence ranges and commit one atomic transaction,
-  persistent revision, and undo step.
-- [ ] Document unavoidable ambiguity around abbreviations, URLs, versions,
-  decimals, source code, quotations, ellipses, missing terminators, scripts
-  without routine terminators, and locale-sensitive text. Experimental means
-  the behavior is deterministic and testable, not grammatically infallible.
-- [ ] Preserve list indentation and markers when deleting a sentence inside a
-  list item. Never silently renumber later ordered items.
-- [ ] Expand or refuse folded ranges before destructive sentence deletion.
-  Preserve annotations, exact Unicode, cursor, selection, restart-safe undo and
-  redo, resize behavior, and bounded performance on very large prose.
-
-### Paragraph deletion — P2, S (2–4 days after sentence qualification)
+### Paragraph deletion — P1, S (2–5 days)
 
 - [ ] Add **Delete paragraph** through the command palette first, using
   blank-line-delimited blocks. Keep it distinct from both a newline-delimited

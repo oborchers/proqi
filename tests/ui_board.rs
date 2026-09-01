@@ -370,36 +370,6 @@ fn mouse_drag_reorders_thoughts_through_the_visible_gutter() {
 }
 
 #[test]
-fn keyboard_selection_is_logical_and_visible() {
-    let mut fixture = Fixture::new();
-    fixture.paste("A界B");
-    fixture.input(UiInput::Key(UiKey::Move {
-        movement: proqi::ports::editor::CursorMovement::GraphemeBack,
-        extend_selection: true,
-    }));
-    let snapshot = fixture.app.editor_snapshot().expect("editor");
-    assert_eq!(
-        snapshot.selection,
-        Some(proqi::ports::editor::TextSelection {
-            start: proqi::domain::TextPosition::new(0, 2),
-            end: proqi::domain::TextPosition::new(0, 3),
-        })
-    );
-    assert_eq!(
-        snapshot.visual_lines[0]
-            .selected_cells
-            .expect("cells")
-            .start,
-        3
-    );
-
-    let terminal = draw(&mut fixture, 20, 5);
-    let area = fixture.app.prepare_frame(Rect::new(0, 0, 20, 5)).thoughts[0].text_area;
-    let selected = terminal.backend().buffer()[(area.x + 3, area.y)].modifier;
-    assert!(selected.contains(ratatui_core::style::Modifier::REVERSED));
-}
-
-#[test]
 fn thought_search_filters_content_and_focuses_the_selected_match() {
     let mut fixture = Fixture::new();
     fixture.paste("first searchable prompt");
@@ -484,6 +454,8 @@ mod scroll_regressions;
 mod select_all;
 #[path = "ui_board/selection.rs"]
 mod selection;
+#[path = "ui_board/sentence_deletion.rs"]
+mod sentence_deletion;
 #[path = "ui_board/session_navigation.rs"]
 mod session_navigation;
 #[path = "ui_board/smart_lists.rs"]

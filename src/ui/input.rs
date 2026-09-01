@@ -56,6 +56,8 @@ pub enum UiKey {
     UnmodifiedSpace,
     /// A printable character reported with Primary for board-keymap resolution.
     PrimaryCharacter(char),
+    /// A printable character whose Primary chord retained distinct Shift intent.
+    PrimaryShiftCharacter(char),
     /// Insert a line break or enter the focused thought.
     Enter,
     /// Submit the active durable thought and remove it after acceptance.
@@ -109,8 +111,10 @@ pub enum UiKey {
     },
     /// Select the complete thought.
     SelectAll,
-    /// Delete the current logical line.
-    DeleteLine,
+    /// Delete the current newline-delimited logical line.
+    DeleteLogicalLine,
+    /// Delete every Unicode sentence touched by the cursor or selection.
+    DeleteSentence,
     /// Undo in the active history scope.
     Undo,
     /// Redo in the active history scope.
@@ -144,12 +148,12 @@ impl UiKey {
                 ..
             }
             | Self::PrimaryShiftMove { movement } => list_movement(movement),
-            Self::Character('k' | 'K') | Self::PrimaryCharacter('k' | 'K') => {
-                Some(ListNavigation::Previous)
-            }
-            Self::Character('j' | 'J') | Self::PrimaryCharacter('j' | 'J') => {
-                Some(ListNavigation::Next)
-            }
+            Self::Character('k' | 'K')
+            | Self::PrimaryCharacter('k' | 'K')
+            | Self::PrimaryShiftCharacter('k' | 'K') => Some(ListNavigation::Previous),
+            Self::Character('j' | 'J')
+            | Self::PrimaryCharacter('j' | 'J')
+            | Self::PrimaryShiftCharacter('j' | 'J') => Some(ListNavigation::Next),
             _ => None,
         }
     }
@@ -163,12 +167,18 @@ impl UiKey {
                 ..
             }
             | Self::PrimaryShiftMove { movement } => movement_direction(movement),
-            Self::Character('h' | 'H') | Self::PrimaryCharacter('h' | 'H') => Some(Direction::Left),
-            Self::Character('j' | 'J') | Self::PrimaryCharacter('j' | 'J') => Some(Direction::Down),
-            Self::Character('k' | 'K') | Self::PrimaryCharacter('k' | 'K') => Some(Direction::Up),
-            Self::Character('l' | 'L') | Self::PrimaryCharacter('l' | 'L') => {
-                Some(Direction::Right)
-            }
+            Self::Character('h' | 'H')
+            | Self::PrimaryCharacter('h' | 'H')
+            | Self::PrimaryShiftCharacter('h' | 'H') => Some(Direction::Left),
+            Self::Character('j' | 'J')
+            | Self::PrimaryCharacter('j' | 'J')
+            | Self::PrimaryShiftCharacter('j' | 'J') => Some(Direction::Down),
+            Self::Character('k' | 'K')
+            | Self::PrimaryCharacter('k' | 'K')
+            | Self::PrimaryShiftCharacter('k' | 'K') => Some(Direction::Up),
+            Self::Character('l' | 'L')
+            | Self::PrimaryCharacter('l' | 'L')
+            | Self::PrimaryShiftCharacter('l' | 'L') => Some(Direction::Right),
             _ => None,
         }
     }
@@ -279,6 +289,7 @@ mod tests {
             (UiKey::Character('K'), ListNavigation::Previous),
             (UiKey::PrimaryCharacter('k'), ListNavigation::Previous),
             (UiKey::PrimaryCharacter('K'), ListNavigation::Previous),
+            (UiKey::PrimaryShiftCharacter('K'), ListNavigation::Previous),
             (movement(CursorMovement::VisualDown), ListNavigation::Next),
             (
                 movement(CursorMovement::VisualJumpDown),
@@ -289,6 +300,7 @@ mod tests {
             (UiKey::Character('J'), ListNavigation::Next),
             (UiKey::PrimaryCharacter('j'), ListNavigation::Next),
             (UiKey::PrimaryCharacter('J'), ListNavigation::Next),
+            (UiKey::PrimaryShiftCharacter('J'), ListNavigation::Next),
         ] {
             assert_eq!(key.list_navigation(), Some(expected));
         }
@@ -340,23 +352,27 @@ mod tests {
             (UiKey::Character('h'), Direction::Left),
             (UiKey::Character('H'), Direction::Left),
             (UiKey::PrimaryCharacter('H'), Direction::Left),
+            (UiKey::PrimaryShiftCharacter('H'), Direction::Left),
             (movement(CursorMovement::VisualDown), Direction::Down),
             (movement(CursorMovement::VisualJumpDown), Direction::Down),
             (movement(CursorMovement::DocumentEnd), Direction::Down),
             (UiKey::Character('j'), Direction::Down),
             (UiKey::Character('J'), Direction::Down),
             (UiKey::PrimaryCharacter('J'), Direction::Down),
+            (UiKey::PrimaryShiftCharacter('J'), Direction::Down),
             (movement(CursorMovement::VisualUp), Direction::Up),
             (movement(CursorMovement::VisualJumpUp), Direction::Up),
             (movement(CursorMovement::DocumentStart), Direction::Up),
             (UiKey::Character('k'), Direction::Up),
             (UiKey::Character('K'), Direction::Up),
             (UiKey::PrimaryCharacter('K'), Direction::Up),
+            (UiKey::PrimaryShiftCharacter('K'), Direction::Up),
             (movement(CursorMovement::GraphemeForward), Direction::Right),
             (movement(CursorMovement::WordForward), Direction::Right),
             (UiKey::Character('l'), Direction::Right),
             (UiKey::Character('L'), Direction::Right),
             (UiKey::PrimaryCharacter('L'), Direction::Right),
+            (UiKey::PrimaryShiftCharacter('L'), Direction::Right),
         ] {
             assert_eq!(key.direction(), Some(expected));
         }

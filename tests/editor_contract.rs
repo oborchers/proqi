@@ -4,6 +4,8 @@
 mod changes;
 #[path = "editor_contract/navigation.rs"]
 mod navigation;
+#[path = "editor_contract/sentences.rs"]
+mod sentences;
 #[path = "editor_contract/smart_lists.rs"]
 mod smart_lists;
 
