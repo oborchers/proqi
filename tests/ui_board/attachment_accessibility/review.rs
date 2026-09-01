@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn startup_is_fail_closed_and_rechecks_do_not_flicker_or_leave_stale_status() {
+fn startup_is_visually_neutral_and_rechecks_do_not_flicker_or_leave_stale_status() {
     let path = "/private/TemporaryItems/missing.png";
     let mut source = Fixture::new();
     source.input(UiInput::PasteAnnotated(attachment_payload(path, true)));
@@ -21,7 +21,8 @@ fn startup_is_fail_closed_and_rechecks_do_not_flicker_or_leave_stale_status() {
     let startup = attachment_batch(&startup);
 
     let startup_render = text(draw(&mut fixture, 60, 8).backend().buffer());
-    assert!(startup_render.contains("[Image 1 · inaccessible]"));
+    assert!(startup_render.contains("[Image 1]"));
+    assert!(!startup_render.contains("inaccessible"));
     fixture
         .app
         .complete_attachment_checks(complete(startup, Ok(())));

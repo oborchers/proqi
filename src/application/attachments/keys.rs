@@ -72,6 +72,25 @@ impl AttachmentAccessibilityState {
         self.manual_refresh.is_some()
     }
 
+    pub(super) fn seed_unknown(&mut self) {
+        for key in self.known.values().flatten() {
+            self.health
+                .entry(key.clone())
+                .or_insert(AttachmentHealth::Unknown);
+        }
+    }
+
+    pub(super) fn mark_checking(&mut self, keys: &[AttachmentCheckKey]) {
+        for key in keys {
+            if !matches!(
+                self.health.get(key),
+                Some(AttachmentHealth::Accessible | AttachmentHealth::Inaccessible(_))
+            ) {
+                self.health.insert(key.clone(), AttachmentHealth::Checking);
+            }
+        }
+    }
+
     /// Seed current exact keys from transient proof established by an insertion adapter.
     pub fn mark_paths_accessible(&mut self, thought_id: ThoughtId, paths: &[String]) {
         let Some(keys) = self.known.get(&thought_id) else {
