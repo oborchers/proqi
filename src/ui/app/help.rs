@@ -31,6 +31,9 @@ impl BoardApp {
             {
                 self.close_help();
             }
+            UiInput::Key(UiKey::UnmodifiedSpace) if self.settings.keybindings.help == ' ' => {
+                self.close_help();
+            }
             UiInput::Resize { .. } => {
                 self.layout = None;
                 self.hovered = None;

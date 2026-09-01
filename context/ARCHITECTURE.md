@@ -894,6 +894,13 @@ a distinct normalized value and has no Board command meaning. The configured
 character remains remappable independently. `Backspace` has no Board delete
 meaning. Compose and Edit interpret both Delete values as forward text deletion,
 while query owners retain their existing local text-editing behavior.
+Unmodified Space retains its own normalized identity until the active owner
+handles it. Edit mode consults the canonical presentation projection before
+ordinary character insertion. When that projection resolves the exact canonical
+selection to one collapsed substitution, one placeholder-agnostic editor
+command inserts an ASCII space at the selection start without replacing the
+selection. Modified Space remains ordinary text input, and Board, Compose,
+queries, overlays, and the session browser retain their existing Space behavior.
 One typed non-text navigation decoder maps Up and Down to `k` and `j` in
 list-only surfaces and maps Left, Down, Up, and Right to `h`, `j`, `k`, and `l`
 in direction choosers. It ignores irrelevant modifiers symmetrically across
@@ -1014,6 +1021,9 @@ testing consume that same projection. Clipboard, recovery, CLI, search,
 submission, and integration boundaries continue to consume canonical content.
 Edits rebase unaffected ranges and dissolve intersected ranges. Revisions
 persist both sides of the annotation change so undo and redo remain restart-safe.
+Exact selected-substitution activation and placeholder-aware Space resolve from
+that same projection. They do not inspect a formatted label or reconstruct a
+semantic range from visible text.
 
 URL recognition is a render-only pass over canonical content. Only explicit
 HTTP and HTTPS ranges receive accent and underline styling. URL recognition does

@@ -342,6 +342,11 @@ impl SessionBrowser {
                     BrowserAction::Continue
                 }
             },
+            UiInput::Key(UiKey::UnmodifiedSpace) => {
+                self.query.push(' ');
+                self.refilter();
+                BrowserAction::Continue
+            }
             UiInput::Paste(text) => {
                 self.query.push_str(&text.replace(['\r', '\n'], " "));
                 self.refilter();

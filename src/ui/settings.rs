@@ -209,6 +209,7 @@ impl KeyBindings {
     pub(super) fn command_for_key(&self, key: super::UiKey) -> Option<BoardCommand> {
         match key {
             super::UiKey::Delete => Some(BoardCommand::Delete),
+            super::UiKey::UnmodifiedSpace => self.command(' '),
             super::UiKey::Character(character) => self.command(character),
             _ => None,
         }
@@ -235,6 +236,7 @@ impl KeyBindings {
             super::UiKey::Character(character) => {
                 Self::navigation_for_command(self.command(character), false)
             }
+            super::UiKey::UnmodifiedSpace => Self::navigation_for_command(self.command(' '), false),
             super::UiKey::PrimaryCharacter(character) => {
                 Self::navigation_for_command(self.command(character), true)
             }

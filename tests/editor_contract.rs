@@ -100,6 +100,36 @@ fn selection_replacement_and_cut_deletion_report_exact_ranges() {
 }
 
 #[test]
+fn insertion_before_selection_preserves_content_and_is_one_undo_unit() {
+    let mut editor = editor("a日本z");
+    editor.apply(EditCommand::SetCursor {
+        position: TextPosition::new(0, 3),
+        extend_selection: false,
+    });
+    for _ in 0..2 {
+        editor.apply(EditCommand::Move {
+            movement: CursorMovement::GraphemeBack,
+            extend_selection: true,
+        });
+    }
+    let inserted = editor.apply(EditCommand::InsertBeforeSelection(' '));
+    assert_change(&inserted, 1..1, 1..2);
+    assert_eq!(inserted.snapshot.content, "a 日本z");
+    assert_eq!(inserted.snapshot.cursor, TextPosition::new(0, 2));
+    assert_eq!(inserted.snapshot.selection, None);
+
+    let undone = editor.apply(EditCommand::Undo);
+    assert_eq!(undone.snapshot.content, "a日本z");
+    assert_eq!(
+        undone.snapshot.selection,
+        Some(proqi::ports::editor::TextSelection {
+            start: TextPosition::new(0, 1),
+            end: TextPosition::new(0, 3),
+        })
+    );
+}
+
+#[test]
 fn backward_and_forward_delete_report_complete_grapheme_byte_ranges() {
     let combining = "e\u{301}";
     let combining_content = format!("A{combining}B");
