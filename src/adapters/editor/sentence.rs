@@ -9,13 +9,14 @@ use crate::ports::text_layout::{LogicalLine, logical_lines};
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct SentenceUnit {
     owned: Range<usize>,
-    deletion: Range<usize>,
+    deletions: Vec<Range<usize>>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct SentenceBlock {
     owned_start: usize,
     content: Range<usize>,
+    leading_deletion: Option<Range<usize>>,
 }
 
 pub(super) fn deletion_ranges(
@@ -41,16 +42,18 @@ pub(super) fn deletion_ranges(
     merge_ranges(
         targets
             .into_iter()
-            .map(|unit| unit.deletion.clone())
+            .flat_map(|unit| unit.deletions.iter().cloned())
             .collect(),
     )
 }
 
 fn sentence_units(text: &str, list_indent_width: u8) -> Vec<SentenceUnit> {
     let lines = logical_lines(text);
+    let list_prefixes =
+        super::smart_lists::recognized_prefix_lengths(text, &lines, list_indent_width);
     paragraph_ranges(text)
         .into_iter()
-        .flat_map(|paragraph| blocks_in_paragraph(text, paragraph, list_indent_width, &lines))
+        .flat_map(|paragraph| blocks_in_paragraph(text, paragraph, &lines, &list_prefixes))
         .flat_map(|block| units_in_block(text, &block))
         .collect()
 }
@@ -73,6 +76,12 @@ fn units_in_block(text: &str, block: &SentenceBlock) -> Vec<SentenceUnit> {
             })
         })
         .collect::<Vec<_>>();
+    if cores.is_empty() {
+        return vec![SentenceUnit {
+            owned: block.owned_start..block.content.end,
+            deletions: Vec::new(),
+        }];
+    }
     cores
         .iter()
         .enumerate()
@@ -92,9 +101,17 @@ fn units_in_block(text: &str, block: &SentenceBlock) -> Vec<SentenceUnit> {
             } else {
                 owned_start
             };
+            let mut deletions = Vec::with_capacity(2);
+            if index == 0
+                && let Some(leading) = block.leading_deletion.clone()
+                && !leading.is_empty()
+            {
+                deletions.push(leading);
+            }
+            deletions.push(deletion_start..owned_end);
             SentenceUnit {
                 owned: owned_start..owned_end,
-                deletion: deletion_start..owned_end,
+                deletions,
             }
         })
         .collect()
@@ -103,28 +120,33 @@ fn units_in_block(text: &str, block: &SentenceBlock) -> Vec<SentenceUnit> {
 fn blocks_in_paragraph(
     text: &str,
     paragraph: Range<usize>,
-    list_indent_width: u8,
     lines: &[LogicalLine],
+    list_prefixes: &[Option<usize>],
 ) -> Vec<SentenceBlock> {
     let first_line = lines.partition_point(|line| line.start < paragraph.start);
     let after_last_line = lines.partition_point(|line| line.start < paragraph.end);
     let item_lines = (first_line..after_last_line)
-        .filter_map(|index| {
-            super::smart_lists::recognized_prefix_len(text, lines, index, list_indent_width)
-                .map(|prefix_len| (index, prefix_len))
-        })
+        .filter_map(|index| list_prefixes[index].map(|prefix_len| (index, prefix_len)))
         .collect::<Vec<_>>();
     let Some((first_line, _)) = item_lines.first().copied() else {
         return vec![SentenceBlock {
             owned_start: paragraph.start,
             content: paragraph,
+            leading_deletion: None,
         }];
     };
     let mut blocks = Vec::new();
-    if paragraph.start < lines[first_line].start {
+    let first_item_start = lines[first_line].start;
+    let whitespace_prelude = paragraph.start < first_item_start
+        && text[paragraph.start..first_item_start]
+            .chars()
+            .all(char::is_whitespace);
+    if paragraph.start < first_item_start && !whitespace_prelude {
+        let content_end = line_before(lines, first_line).content_end;
         blocks.push(SentenceBlock {
             owned_start: paragraph.start,
-            content: paragraph.start..lines[first_line].start,
+            content: paragraph.start..content_end,
+            leading_deletion: None,
         });
     }
     for (position, (line_index, prefix_len)) in item_lines.iter().copied().enumerate() {
@@ -135,8 +157,14 @@ fn blocks_in_paragraph(
                 line_before(lines, *next).content_end
             });
         blocks.push(SentenceBlock {
-            owned_start: line.start,
+            owned_start: if position == 0 && whitespace_prelude {
+                paragraph.start
+            } else {
+                line.start
+            },
             content: line.start + prefix_len..content_end,
+            leading_deletion: (position == 0 && whitespace_prelude)
+                .then_some(paragraph.start..line.start),
         });
     }
     blocks
@@ -147,14 +175,18 @@ fn line_before(lines: &[LogicalLine], index: usize) -> LogicalLine {
 }
 
 fn non_whitespace_bounds(text: &str) -> Option<Range<usize>> {
-    let start = text
-        .char_indices()
-        .find_map(|(index, character)| (!character.is_whitespace()).then_some(index))?;
-    let (last, character) = text
-        .char_indices()
+    let start = text.grapheme_indices(true).find_map(|(index, grapheme)| {
+        (!grapheme_starts_with_whitespace(grapheme)).then_some(index)
+    })?;
+    let (last, grapheme) = text
+        .grapheme_indices(true)
         .rev()
-        .find(|(_, character)| !character.is_whitespace())?;
-    Some(start..last + character.len_utf8())
+        .find(|(_, grapheme)| !grapheme_starts_with_whitespace(grapheme))?;
+    Some(start..last + grapheme.len())
+}
+
+fn grapheme_starts_with_whitespace(grapheme: &str) -> bool {
+    grapheme.chars().next().is_some_and(char::is_whitespace)
 }
 
 fn paragraph_ranges(text: &str) -> Vec<Range<usize>> {

@@ -40,6 +40,7 @@ pub(super) fn command_for_key(
         | UiKey::SubmitKeep
         | UiKey::EditNavigation { .. }
         | UiKey::PrimaryCharacter(_)
+        | UiKey::PrimaryShiftCharacter(_)
         | UiKey::PrimaryShiftMove { .. }
         | UiKey::Undo
         | UiKey::Redo
@@ -61,12 +62,12 @@ pub(super) fn normalize_edit_key(key: UiKey, keybindings: &KeyBindings) -> Optio
             movement,
             extend_selection: true,
         }),
-        UiKey::PrimaryCharacter(character)
+        UiKey::PrimaryShiftCharacter(character)
             if character.eq_ignore_ascii_case(&keybindings.delete_sentence) =>
         {
             Some(UiKey::DeleteSentence)
         }
-        UiKey::PrimaryCharacter(_) => None,
+        UiKey::PrimaryCharacter(_) | UiKey::PrimaryShiftCharacter(_) => None,
         key => Some(key),
     }
 }

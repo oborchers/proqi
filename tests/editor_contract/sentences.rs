@@ -1,3 +1,5 @@
+use std::fmt::Write as _;
+
 use proqi::{
     adapters::editor::RopeEditor,
     domain::TextPosition,
@@ -104,6 +106,7 @@ fn blank_paragraphs_are_preserved_as_hard_boundaries() {
     for text in [
         "First line\ncontinues here.\n\nSecond paragraph.",
         "First line\r\ncontinues here.\r\n\r\nSecond paragraph.",
+        "First line\rcontinues here.\r\rSecond paragraph.",
         "First line\ncontinues here.\n \t\nSecond paragraph.",
     ] {
         let deleted = delete_at(text, text.find("continues").expect("first paragraph"));
@@ -120,6 +123,15 @@ fn blank_paragraphs_are_preserved_as_hard_boundaries() {
     assert_eq!(on_boundary.snapshot.content, "\n\nSecond.");
     let after_boundary = delete_at(text, text.find("Second").expect("second"));
     assert_eq!(after_boundary.snapshot.content, "First.\n\n");
+}
+
+#[test]
+fn selection_confined_to_a_blank_boundary_is_a_no_op() {
+    let text = "First.\r\n\r\nSecond.";
+    let boundary = text.find("\r\n\r\n").expect("blank boundary");
+    let deleted = selected_delete(text, boundary, boundary + 4);
+    assert_eq!(deleted.snapshot.content, text);
+    assert!(deleted.changes.is_empty());
 }
 
 #[test]
@@ -154,6 +166,9 @@ fn unicode_terminators_combining_marks_and_emoji_remain_whole() {
 
     let thai_without_terminator = "ภาษาไทยไม่มีเครื่องหมายจบ";
     assert_eq!(delete_at(thai_without_terminator, 0).snapshot.content, "");
+
+    let combining_separator = "One. \u{301}Two.";
+    assert_eq!(delete_at(combining_separator, 0).snapshot.content, "Two.");
 }
 
 #[test]
@@ -222,6 +237,35 @@ fn list_items_are_structural_boundaries_without_renumbering() {
         .content,
         "- \n- Second item"
     );
+}
+
+#[test]
+fn prose_to_list_newline_and_whitespace_prelude_have_exact_ownership() {
+    let prose_then_list = "Notes. Buy later.\r\n- Milk. More.";
+    assert_eq!(
+        delete_at(
+            prose_then_list,
+            prose_then_list.find("Buy").expect("trailing prose")
+        )
+        .snapshot
+        .content,
+        "Notes.\r\n- Milk. More."
+    );
+
+    let whitespace_then_list = " \n- One.";
+    let deleted = selected_delete(whitespace_then_list, 0, 1);
+    assert_eq!(deleted.snapshot.content, "- ");
+    assert_eq!(deleted.changes.len(), 2);
+}
+
+#[test]
+fn sentence_less_list_item_is_a_conservative_no_op() {
+    let text = "- \n- Real sentence.";
+    for cursor in [0, 1, 2] {
+        let deleted = delete_at(text, cursor);
+        assert_eq!(deleted.snapshot.content, text);
+        assert!(deleted.changes.is_empty());
+    }
 }
 
 #[test]
@@ -294,6 +338,26 @@ fn repeated_deletion_and_history_are_single_operations() {
 }
 
 #[test]
+fn undo_restores_the_exact_pre_deletion_selection() {
+    let text = "One. Two. Three.";
+    let mut editor = RopeEditor::new(text);
+    editor.apply(EditCommand::SetCursor {
+        position: position_for_byte(text, text.find("Two").expect("selection start")),
+        extend_selection: false,
+    });
+    editor.apply(EditCommand::SetCursor {
+        position: position_for_byte(text, text.find("Three").expect("selection end")),
+        extend_selection: true,
+    });
+    let before = editor.snapshot();
+    editor.apply(DELETE_SENTENCE);
+    let undone = editor.apply(EditCommand::Undo).snapshot;
+    assert_eq!(undone.content, before.content);
+    assert_eq!(undone.cursor, before.cursor);
+    assert_eq!(undone.selection, before.selection);
+}
+
+#[test]
 fn resize_does_not_change_the_sentence_target() {
     let text = "A deliberately wrapped first sentence. Second sentence.";
     for viewport in [
@@ -320,4 +384,17 @@ fn large_unterminated_input_is_one_bounded_exact_deletion() {
     let deleted = delete_at(&text, text.len() / 2);
     assert_eq!(deleted.snapshot.content, "");
     assert_eq!(deleted.changes.as_slice()[0].old_range(), 0..text.len());
+}
+
+#[test]
+fn large_list_uses_bounded_canonical_structure_discovery() {
+    let mut text = String::new();
+    for index in 0..10_000 {
+        writeln!(text, "- Item {index}. Keep.").expect("write list item");
+    }
+    text.pop();
+    let cursor = text.rfind("Keep").expect("last sentence");
+    let deleted = delete_at(&text, cursor);
+    assert!(deleted.snapshot.content.ends_with("- Item 9999."));
+    assert_eq!(deleted.changes.len(), 1);
 }

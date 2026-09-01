@@ -134,6 +134,11 @@ fn primary_key(key: &KeyEvent) -> Option<UiKey> {
         KeyCode::Char('z') => Some(UiKey::Undo),
         KeyCode::Char('p') => Some(UiKey::PickerPrevious),
         KeyCode::Char('n') => Some(UiKey::PickerNext),
+        KeyCode::Char(character)
+            if key.modifiers.contains(KeyModifiers::SHIFT) || character.is_uppercase() =>
+        {
+            Some(UiKey::PrimaryShiftCharacter(character))
+        }
         KeyCode::Char(character) => Some(UiKey::PrimaryCharacter(character)),
         _ => None,
     }

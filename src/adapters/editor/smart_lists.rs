@@ -1,5 +1,7 @@
 //! Conservative, exact Markdown list continuation and indentation.
 
+mod scan;
+
 use std::ops::Range;
 
 use crate::ports::{
@@ -8,6 +10,8 @@ use crate::ports::{
 };
 
 use super::{RopeEditor, mutation::AppliedRange};
+
+pub(super) use scan::recognized_prefix_lengths;
 
 #[derive(Clone, Copy)]
 struct ListMarker<'a> {
@@ -215,18 +219,6 @@ fn indentation_marker_at<'a>(
         return None;
     }
     Some(marker)
-}
-
-pub(super) fn recognized_prefix_len(
-    content: &str,
-    lines: &[LogicalLine],
-    line_index: usize,
-    width: u8,
-) -> Option<usize> {
-    let marker = indentation_marker_at(content, lines, line_index, width)?;
-    let line = *lines.get(line_index)?;
-    let line_text = &content[line.start..line.content_end];
-    Some(line_text.len().saturating_sub(marker.content.len()))
 }
 
 fn outdent_marker_at<'a>(
@@ -447,22 +439,26 @@ fn inside_fenced_code(content: &str, current_start: usize) -> bool {
         .take_while(|line| line.start < current_start)
     {
         let text = &content[line.start..line.content_end];
-        let Some((marker, count, trailing)) = fence(text) else {
-            continue;
-        };
-        match open {
-            None => open = Some((marker, count)),
-            Some((open_marker, minimum))
-                if marker == open_marker
-                    && count >= minimum
-                    && trailing.trim_matches([' ', '\t']).is_empty() =>
-            {
-                open = None;
-            }
-            Some(_) => {}
-        }
+        update_fence(&mut open, text);
     }
     open.is_some()
+}
+
+fn update_fence(open: &mut Option<(char, usize)>, text: &str) {
+    let Some((marker, count, trailing)) = fence(text) else {
+        return;
+    };
+    match *open {
+        None => *open = Some((marker, count)),
+        Some((open_marker, minimum))
+            if marker == open_marker
+                && count >= minimum
+                && trailing.trim_matches([' ', '\t']).is_empty() =>
+        {
+            *open = None;
+        }
+        Some(_) => {}
+    }
 }
 
 fn fence(line: &str) -> Option<(char, usize, &str)> {

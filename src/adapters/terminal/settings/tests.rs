@@ -177,6 +177,19 @@ fn sentence_deletion_chord_is_remappable() {
 }
 
 #[test]
+fn sentence_deletion_rejects_unshifted_or_reserved_primary_suffixes() {
+    for suffix in ['g', '1', 'A', 'Z', 'Ü'] {
+        let directory = tempfile::tempdir().expect("config directory");
+        fs::write(
+            directory.path().join("config.toml"),
+            format!("[keybindings]\ndelete_sentence = '{suffix}'\n"),
+        )
+        .expect("write invalid sentence binding");
+        assert!(load_settings(directory.path()).is_err(), "suffix {suffix}");
+    }
+}
+
+#[test]
 fn existing_settings_remain_compatible() {
     let directory = tempfile::tempdir().expect("config directory");
     fs::write(

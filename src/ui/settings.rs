@@ -238,7 +238,8 @@ impl KeyBindings {
             super::UiKey::Character(character) => {
                 Self::navigation_for_command(self.command(character), false)
             }
-            super::UiKey::PrimaryCharacter(character) => {
+            super::UiKey::PrimaryCharacter(character)
+            | super::UiKey::PrimaryShiftCharacter(character) => {
                 Self::navigation_for_command(self.command(character), true)
             }
             _ => None,
@@ -275,6 +276,9 @@ impl KeyBindings {
     pub fn validate(&self) -> Result<(), &'static str> {
         if matches!(self.quit, RECOVERY_RETRY_KEY | RECOVERY_EXPORT_KEY) {
             return Err("the quit binding cannot use the reserved recovery keys r or w");
+        }
+        if !self.delete_sentence.is_ascii_uppercase() {
+            return Err("the sentence deletion binding must be one uppercase ASCII letter");
         }
         if matches!(
             self.delete_sentence.to_ascii_lowercase(),
@@ -362,6 +366,20 @@ mod tests {
                 ..KeyBindings::default()
             };
             assert!(bindings.validate().is_err(), "reserved suffix {reserved}");
+        }
+    }
+
+    #[test]
+    fn sentence_deletion_rejects_unreachable_shifted_suffixes() {
+        for unreachable in ['g', '1', '!', 'Ü'] {
+            let bindings = KeyBindings {
+                delete_sentence: unreachable,
+                ..KeyBindings::default()
+            };
+            assert!(
+                bindings.validate().is_err(),
+                "unreachable suffix {unreachable}"
+            );
         }
     }
 }

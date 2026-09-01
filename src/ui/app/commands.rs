@@ -97,6 +97,7 @@ impl BoardApp {
             | UiKey::PickerPrevious
             | UiKey::PickerNext
             | UiKey::PrimaryCharacter(_)
+            | UiKey::PrimaryShiftCharacter(_)
             | UiKey::PrimaryShiftMove { .. }
             | UiKey::EditNavigation { .. }
             | UiKey::Submit

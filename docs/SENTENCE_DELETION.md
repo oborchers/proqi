@@ -9,6 +9,8 @@ selection removes every sentence it touches as one edit after deletion ranges
 are merged. The default shortcut is `Primary+Shift+U`. The Commands overlay and
 the configurable `keybindings.delete_sentence` chord suffix provide fallbacks.
 `Primary+U` remains `Delete logical line`.
+Configured suffixes are uppercase ASCII letters; suffixes already consumed by
+another Primary chord are rejected so the displayed shifted chord is exact.
 
 Plain text does not contain enough information to identify grammatical
 sentences with certainty. The command is deterministic and Unicode-aware, but
@@ -50,9 +52,15 @@ Sentence ownership is deterministic and half open:
 - Paragraph-leading whitespace belongs to the first sentence.
 - A recognized list prefix belongs to the first sentence for cursor and
   selection targeting, but deletion never removes the prefix itself.
-- The newline between recognized list items is structural and remains exact.
+- A whitespace-only prelude immediately before the first recognized list item
+  targets that item's first sentence. Deletion removes the prelude and sentence
+  as separate ranges while preserving the prefix between them.
+- The newline before the first recognized list item and between recognized list
+  items is structural and remains exact.
   Deleting all prose from an item leaves its complete prefix, and ordered items
   are never renumbered.
+- A recognized item with no sentence content is a conservative no-op. It never
+  redirects deletion into a neighboring item.
 - Whitespace between two sentence cores belongs to the preceding sentence.
 - Paragraph-trailing whitespace belongs to the final sentence.
 - A terminator and any closing punctuation remain in the UAX 29 segment that

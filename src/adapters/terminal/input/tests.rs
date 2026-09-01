@@ -140,7 +140,7 @@ fn primary_shift_s_remains_an_unassigned_board_chord() {
         ));
         assert_eq!(
             translate(event),
-            Some(UiInput::Key(UiKey::PrimaryCharacter(character)))
+            Some(UiInput::Key(UiKey::PrimaryShiftCharacter(character)))
         );
     }
 }
@@ -162,12 +162,12 @@ fn logical_line_and_sentence_deletion_keep_distinct_primary_chords() {
                     KeyCode::Char(character),
                     modifier | KeyModifiers::SHIFT,
                 ))),
-                Some(UiInput::Key(UiKey::PrimaryCharacter(character)))
+                Some(UiInput::Key(UiKey::PrimaryShiftCharacter(character)))
             );
         }
         assert_eq!(
             translate(Event::Key(KeyEvent::new(KeyCode::Char('U'), modifier))),
-            Some(UiInput::Key(UiKey::PrimaryCharacter('U')))
+            Some(UiInput::Key(UiKey::PrimaryShiftCharacter('U')))
         );
     }
 
@@ -339,13 +339,13 @@ fn primary_shift_arrow_and_character_chords_remain_board_semantics() {
     ));
     assert_eq!(
         translate(character),
-        Some(UiInput::Key(UiKey::PrimaryCharacter('K')))
+        Some(UiInput::Key(UiKey::PrimaryShiftCharacter('K')))
     );
 
     let alternate_report = Event::Key(KeyEvent::new(KeyCode::Char('K'), KeyModifiers::SUPER));
     assert_eq!(
         translate(alternate_report),
-        Some(UiInput::Key(UiKey::PrimaryCharacter('K')))
+        Some(UiInput::Key(UiKey::PrimaryShiftCharacter('K')))
     );
 }
 
