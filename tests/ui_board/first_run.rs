@@ -1,7 +1,12 @@
-use super::*;
+//! First-run board rendering, semantic shortcut emphasis, and canonical URL styling.
 
-use super::snapshot_support::snapshot_buffer;
+use proqi::{
+    application::FirstRunEnvironment,
+    ui::{Theme, ThemePreference, UiInput, UiKey},
+};
 use ratatui_core::style::Modifier;
+
+use super::{Fixture, draw_theme, snapshot_support::snapshot_buffer};
 
 fn snapshot(
     environment: FirstRunEnvironment,

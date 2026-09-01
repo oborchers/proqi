@@ -1,3 +1,5 @@
+//! First-run PTY behavior, durable copy, ordinary interactions, and once-only eligibility.
+
 use std::collections::BTreeSet;
 
 use proqi::{

@@ -1,4 +1,22 @@
-use super::*;
+//! Atomic first-run claims, ordinary board history, concurrency, and rollback behavior.
+
+use std::{
+    path::Path,
+    sync::{Arc, Barrier},
+};
+
+use proqi::{
+    adapters::{memory::FakeIdGenerator, sqlite::SqliteStore},
+    application::{Action, AppState, FirstRunEnvironment, first_run_board},
+    domain::{BoardOperationKind, ContentAnnotation, Session, SessionBoard, Timestamp, UndoScope},
+    ports::{
+        environment::IdGenerator as _,
+        store::{FirstRunBoard, FirstRunOutcome, SessionQuery, SessionSnapshot, Store},
+    },
+};
+use rusqlite::Connection;
+
+use super::{DatabaseFixture, one_effect, persist_effect, test_path};
 
 fn candidate(
     ids: &mut FakeIdGenerator,
@@ -261,6 +279,69 @@ fn injected_insert_failure_rolls_back_marker_session_thoughts_and_search() {
     connection
         .execute_batch("DROP TRIGGER fail_practice_insert")
         .expect("remove failure trigger");
+    assert_eq!(
+        store
+            .create_first_run_session(&candidate)
+            .expect("retry claim"),
+        FirstRunOutcome::Seeded
+    );
+    assert_eq!(contents(&mut store, &candidate).len(), 6);
+}
+
+#[test]
+fn deferred_commit_failure_rolls_back_complete_claim_and_retains_eligibility() {
+    let fixture = DatabaseFixture::new();
+    let mut store = fixture.open();
+    let mut ids = FakeIdGenerator::new(1_725_000_000_000);
+    let candidate = candidate(
+        &mut ids,
+        &test_path("proqi-onboarding-commit-rollback"),
+        FirstRunEnvironment::Standalone,
+    );
+    let connection = Connection::open(&fixture.config.database_path).expect("failure injector");
+    connection
+        .execute_batch(
+            "CREATE TABLE commit_failure_probe (
+                 session_id BLOB NOT NULL
+                     REFERENCES sessions(id) DEFERRABLE INITIALLY DEFERRED
+             ) STRICT;
+             CREATE TRIGGER fail_onboarding_commit
+             AFTER UPDATE OF completed_version ON onboarding_state
+             WHEN NEW.completed_version = 1 BEGIN
+                 INSERT INTO commit_failure_probe(session_id) VALUES (zeroblob(16));
+             END;",
+        )
+        .expect("deferred failure trigger");
+
+    assert!(store.create_first_run_session(&candidate).is_err());
+    let counts: (i64, i64, i64, i64, i64, i64, i64) = connection
+        .query_row(
+            "SELECT (SELECT completed_version FROM onboarding_state WHERE singleton = 1),
+                    (SELECT count(*) FROM sessions),
+                    (SELECT count(*) FROM thoughts),
+                    (SELECT count(*) FROM thought_revisions),
+                    (SELECT count(*) FROM board_operations),
+                    (SELECT count(*) FROM session_search),
+                    (SELECT count(*) FROM commit_failure_probe)",
+            [],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                    row.get(6)?,
+                ))
+            },
+        )
+        .expect("rolled back commit counts");
+    assert_eq!(counts, (0, 0, 0, 0, 0, 0, 0));
+
+    connection
+        .execute_batch("DROP TRIGGER fail_onboarding_commit; DROP TABLE commit_failure_probe;")
+        .expect("remove deferred failure trigger");
     assert_eq!(
         store
             .create_first_run_session(&candidate)

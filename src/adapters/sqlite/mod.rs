@@ -174,7 +174,7 @@ impl SqliteStore {
                 supported: SUPPORTED_SCHEMA_VERSION,
             });
         }
-        if found == SUPPORTED_SCHEMA_VERSION {
+        if found != 0 {
             let protocol = storage_protocol(&connection)?;
             if protocol > STORAGE_PROTOCOL_VERSION {
                 return Err(StoreError::UnsupportedStorageProtocol {

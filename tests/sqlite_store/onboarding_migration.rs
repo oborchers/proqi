@@ -1,4 +1,19 @@
-use super::*;
+//! Onboarding marker migration and mixed-version refusal across supported schemas.
+
+use proqi::{
+    adapters::{memory::FakeIdGenerator, sqlite::SqliteStore},
+    application::{FirstRunEnvironment, first_run_board},
+    domain::{Session, Timestamp},
+    ports::{
+        environment::IdGenerator as _,
+        store::{
+            FirstRunOutcome, STORAGE_PROTOCOL_VERSION, SUPPORTED_SCHEMA_VERSION, Store, StoreError,
+        },
+    },
+};
+use rusqlite::Connection;
+
+use super::{DatabaseFixture, test_path};
 
 fn downgrade_to(connection: &Connection, version: u32) {
     connection
@@ -100,4 +115,52 @@ fn every_supported_prior_schema_migrates_with_current_onboarding_completed() {
                 .is_empty()
         );
     }
+}
+
+#[test]
+fn prior_schema_with_future_storage_protocol_fails_closed_without_migration() {
+    let fixture = DatabaseFixture::new();
+    drop(fixture.open());
+    let connection = Connection::open(&fixture.config.database_path).expect("legacy database");
+    let prior_schema = SUPPORTED_SCHEMA_VERSION - 1;
+    let future_protocol = STORAGE_PROTOCOL_VERSION + 1;
+    downgrade_to(&connection, prior_schema);
+    connection
+        .execute(
+            "UPDATE schema_meta SET storage_protocol = ?1",
+            [i64::from(future_protocol)],
+        )
+        .expect("set future protocol");
+    drop(connection);
+
+    assert!(matches!(
+        SqliteStore::open(&fixture.config),
+        Err(StoreError::UnsupportedStorageProtocol {
+            found,
+            supported: STORAGE_PROTOCOL_VERSION,
+        }) if found == future_protocol
+    ));
+    let connection = Connection::open(&fixture.config.database_path).expect("unchanged database");
+    let versions: (i64, i64) = connection
+        .query_row(
+            "SELECT schema_version, storage_protocol FROM schema_meta WHERE singleton = 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("unchanged versions");
+    assert_eq!(
+        versions,
+        (i64::from(prior_schema), i64::from(future_protocol))
+    );
+    let marker_exists: bool = connection
+        .query_row(
+            "SELECT EXISTS(
+                 SELECT 1 FROM sqlite_master
+                 WHERE type = 'table' AND name = 'onboarding_state'
+             )",
+            [],
+            |row| row.get(0),
+        )
+        .expect("marker existence");
+    assert!(!marker_exists);
 }

@@ -15,7 +15,7 @@ use proqi::{
         memory::FakeIdGenerator,
         sqlite::{RetryPolicy, SqliteStore, StoreConfig},
     },
-    application::{Action, AppState, Effect, FirstRunEnvironment, first_run_board, reduce},
+    application::{Action, AppState, Effect, reduce},
     domain::{
         BoardMutation, BoardOperation, BoardOperationKind, ContentAnnotation,
         ContentAnnotationKind, Direction, IntegrationContext, OperationSequence, Session,
@@ -26,10 +26,9 @@ use proqi::{
         agent::{AgentState, SubmissionDisposition},
         environment::IdGenerator,
         store::{
-            DurableIdentity, FirstRunBoard, FirstRunOutcome, MigrationMode, OperationBatch,
-            STORAGE_PROTOCOL_VERSION, SUPPORTED_SCHEMA_VERSION, SessionQuery, SessionSnapshot,
-            Store, StoreError, SubmissionAttempt, SubmissionAttemptState, SubmissionOutcome,
-            SubmissionSource,
+            DurableIdentity, MigrationMode, OperationBatch, STORAGE_PROTOCOL_VERSION,
+            SUPPORTED_SCHEMA_VERSION, SessionQuery, Store, StoreError, SubmissionAttempt,
+            SubmissionAttemptState, SubmissionOutcome, SubmissionSource,
         },
     },
 };

@@ -125,9 +125,9 @@ fn integration_instruction(
 ) -> Result<InstructionalText, DomainError> {
     match environment {
         FirstRunEnvironment::HerdrManaged => InstructionalTextBuilder::new()
-            .text("Herdr is detected. It organizes agent panes and lets Proqi submit with ")
+            .text("Herdr is detected. It organizes agent panes. With Proqi integration enabled, press ")
             .shortcut("s")?
-            .text(" when it verifies a compatible adjacent agent. Learn more at https://herdr.dev")
+            .text(" to submit when it verifies a compatible adjacent agent. Learn more at https://herdr.dev")
             .finish(),
         FirstRunEnvironment::Standalone => InstructionalTextBuilder::new()
             .text("Proqi works on its own. Herdr adds a power-user workflow for organized agent panes and verified adjacent submission when a compatible agent is available. Learn more at https://herdr.dev")
@@ -148,7 +148,7 @@ mod tests {
         "Press Enter to edit the focused thought. Press Esc to return to board mode.",
         "Press n to create a new thought, or paste in board mode to create one from the pasted text.",
         "Use j or ↓ to move to the next thought, and k or ↑ to move to the previous one. Press d to delete the focused thought and u to undo.",
-        "Herdr is detected. It organizes agent panes and lets Proqi submit with s when it verifies a compatible adjacent agent. Learn more at https://herdr.dev",
+        "Herdr is detected. It organizes agent panes. With Proqi integration enabled, press s to submit when it verifies a compatible adjacent agent. Learn more at https://herdr.dev",
         "Press a and d in board mode to delete this entire practice board.",
     ];
     const STANDALONE_INTEGRATION: &str = "Proqi works on its own. Herdr adds a power-user workflow for organized agent panes and verified adjacent submission when a compatible agent is available. Learn more at https://herdr.dev";

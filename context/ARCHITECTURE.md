@@ -654,12 +654,14 @@ The application refuses to open a database schema newer than it understands.
 It does not attempt a best-effort downgrade. Export and explicit recovery tools
 remain available without modifying the source database.
 
-Schema and storage protocol version 10 register shortcut-emphasis annotations
-as durable thought and revision metadata. Version 9 introduced invocation
-references. Both migrations are transactional protocol stamps because the
-annotation column and JSON envelope already exist. The current version prevents
-an older writer from interpreting an unknown annotation variant as compatible
-state.
+Schema version 11 adds the versioned `onboarding_state` marker while retaining
+storage protocol 10 because the marker does not change ordinary stored board
+data. Schema and storage protocol version 10 registered shortcut-emphasis
+annotations as durable thought and revision metadata. Version 9 introduced
+invocation references. The annotation and invocation migrations are
+transactional protocol stamps because the annotation column and JSON envelope
+already exist. The current storage protocol prevents an older writer from
+interpreting an unknown annotation variant as compatible state.
 
 ## Multiple running versions during an update
 
