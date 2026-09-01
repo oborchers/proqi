@@ -1,3 +1,5 @@
+//! Session creation, compatibility refusal, identifiers, and active-owner CLI contracts.
+
 use proqi::{
     adapters::runtime::{FileRuntimeCoordinator, SystemIdGenerator},
     domain::{SessionId, Timestamp},

@@ -1,5 +1,17 @@
-use super::*;
-use proqi::domain::{Thought, ThoughtPosition};
+//! Shared deterministic constructors for complete-board UI behavior modules.
+
+use proqi::{
+    adapters::{
+        editor::RopeEditorFactory,
+        memory::{FakeClock, FakeIdGenerator},
+    },
+    application::{AppState, FirstRunEnvironment, first_run_board},
+    domain::{ContentAnnotation, Session, SessionBoard, Thought, ThoughtPosition, Timestamp},
+    ports::{environment::IdGenerator as _, store::SessionSnapshot},
+    ui::{BoardApp, UiSettings},
+};
+
+use super::Fixture;
 
 impl Fixture {
     pub(super) fn first_run(environment: FirstRunEnvironment) -> Self {
@@ -11,12 +23,17 @@ impl Fixture {
         )
         .expect("session");
         let board = first_run_board(session, &mut ids, environment).expect("practice board");
+        let state = AppState::from_snapshot(SessionSnapshot {
+            board: board.board().clone(),
+            board_operations: Vec::new(),
+            board_history_cursor: 0,
+            revisions: Vec::new(),
+            editor_history_cursors: Vec::new(),
+            integration_context: None,
+        })
+        .expect("rehydrate practice board");
         Self {
-            app: BoardApp::with_settings(
-                AppState::new(board.board().clone()),
-                UiSettings::default(),
-                proqi::adapters::editor::RopeEditorFactory,
-            ),
+            app: BoardApp::with_settings(state, UiSettings::default(), RopeEditorFactory),
             ids,
             clock: FakeClock::new(Timestamp::from_millis(20)),
         }
@@ -47,10 +64,7 @@ impl Fixture {
             .expect("valid direct durable fixture");
         let board = SessionBoard::new(session, vec![thought]).expect("board");
         Self {
-            app: BoardApp::new(
-                AppState::new(board),
-                proqi::adapters::editor::RopeEditorFactory,
-            ),
+            app: BoardApp::new(AppState::new(board), RopeEditorFactory),
             ids,
             clock: FakeClock::new(Timestamp::from_millis(20)),
         }

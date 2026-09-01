@@ -2,9 +2,7 @@
 
 use proqi::{
     adapters::memory::{FakeClock, FakeIdGenerator},
-    application::{
-        AppState, ClipboardIntent, Effect, FailureCode, FirstRunEnvironment, first_run_board,
-    },
+    application::{AppState, ClipboardIntent, Effect, FailureCode},
     domain::{
         ContentAnnotation, ContentAnnotationKind, OperationSequence, Session, SessionBoard,
         Timestamp,
