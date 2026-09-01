@@ -6,7 +6,7 @@ use crossterm::event::{
 
 use crate::{
     ports::editor::CursorMovement,
-    ui::{PointerButton, PointerInput, PointerKind, UiInput, UiKey},
+    ui::{PointerButton, PointerInput, PointerKind, UiInput, UiKey, VisualRowEdge},
 };
 
 pub(super) fn translate(event: Event) -> Option<UiInput> {
@@ -95,6 +95,16 @@ pub(super) fn translate_key(key: KeyEvent) -> Option<UiKey> {
             document,
             extend_selection,
         )),
+        KeyCode::Left if extend_selection && platform_primary(key.modifiers) => {
+            Some(UiKey::ExtendVisualRow {
+                edge: VisualRowEdge::Start,
+            })
+        }
+        KeyCode::Right if extend_selection && platform_primary(key.modifiers) => {
+            Some(UiKey::ExtendVisualRow {
+                edge: VisualRowEdge::End,
+            })
+        }
         KeyCode::Left => Some(move_key(
             if word {
                 CursorMovement::WordBack
@@ -158,12 +168,7 @@ fn vertical_navigation(
     if extend_selection {
         return vertical_key(legacy, primary, true);
     }
-    let platform_primary = if cfg!(target_os = "macos") {
-        modifiers.intersects(KeyModifiers::SUPER | KeyModifiers::META)
-    } else {
-        modifiers.contains(KeyModifiers::CONTROL)
-    };
-    let editor_movement = if platform_primary {
+    let editor_movement = if platform_primary(modifiers) {
         boundary
     } else if modifiers.contains(KeyModifiers::ALT) {
         accelerated
@@ -173,6 +178,14 @@ fn vertical_navigation(
     UiKey::EditNavigation {
         editor_movement,
         board_movement: legacy,
+    }
+}
+
+fn platform_primary(modifiers: KeyModifiers) -> bool {
+    if cfg!(target_os = "macos") {
+        modifiers.intersects(KeyModifiers::SUPER | KeyModifiers::META)
+    } else {
+        modifiers.contains(KeyModifiers::CONTROL)
     }
 }
 

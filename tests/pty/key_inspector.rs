@@ -95,6 +95,22 @@ fn primary_enter_variants_are_distinct_in_the_real_pty() {
 }
 
 #[test]
+fn macos_primary_shift_horizontal_arrows_have_exact_distinct_pty_encodings() {
+    if cfg!(target_os = "macos") {
+        inspect_sequence(
+            r"\x1b\[1;10D",
+            "Left, modifiers: KeyModifiers(SHIFT | SUPER)",
+            "ExtendVisualRow { edge: Start }",
+        );
+        inspect_sequence(
+            r"\x1b\[1;10C",
+            "Right, modifiers: KeyModifiers(SHIFT | SUPER)",
+            "ExtendVisualRow { edge: End }",
+        );
+    }
+}
+
+#[test]
 fn macos_cmd_shift_z_encoding_is_redo_in_the_real_pty() {
     inspect_sequence(
         r"\x1b\[122:90;10u",

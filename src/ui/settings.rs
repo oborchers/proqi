@@ -117,6 +117,10 @@ pub struct KeyBindings {
     pub screenshot_inbox: char,
     /// Shifted Primary chord suffix for sentence deletion.
     pub delete_sentence: char,
+    /// Shifted Primary chord suffix for selection to the visual-row start.
+    pub select_visual_row_start: char,
+    /// Shifted Primary chord suffix for selection to the visual-row end.
+    pub select_visual_row_end: char,
 }
 
 impl Default for KeyBindings {
@@ -145,6 +149,8 @@ impl Default for KeyBindings {
             quit: 'q',
             screenshot_inbox: 'i',
             delete_sentence: 'U',
+            select_visual_row_start: 'H',
+            select_visual_row_end: 'L',
         }
     }
 }
@@ -301,11 +307,28 @@ impl KeyBindings {
         if !self.delete_sentence.is_ascii_uppercase() {
             return Err("the sentence deletion binding must be one uppercase ASCII letter");
         }
-        if matches!(
-            self.delete_sentence.to_ascii_lowercase(),
-            'a' | 'c' | 'd' | 'n' | 'p' | 'q' | 'v' | 'x' | 'y' | 'z'
-        ) {
+        if !self.select_visual_row_start.is_ascii_uppercase()
+            || !self.select_visual_row_end.is_ascii_uppercase()
+        {
+            return Err("visual-row selection bindings must be uppercase ASCII letters");
+        }
+        if reserved_primary_suffix(self.delete_sentence) {
             return Err("the sentence deletion binding conflicts with a reserved Primary chord");
+        }
+        if reserved_primary_suffix(self.select_visual_row_start)
+            || reserved_primary_suffix(self.select_visual_row_end)
+        {
+            return Err("visual-row selection bindings conflict with a reserved Primary chord");
+        }
+        let shifted_primary = [
+            self.delete_sentence,
+            self.select_visual_row_start,
+            self.select_visual_row_end,
+        ];
+        for (index, value) in shifted_primary.iter().enumerate() {
+            if shifted_primary[index + 1..].contains(value) {
+                return Err("shifted Primary bindings must be distinct");
+            }
         }
         let values = [
             self.new,
@@ -338,6 +361,13 @@ impl KeyBindings {
         }
         Ok(())
     }
+}
+
+fn reserved_primary_suffix(character: char) -> bool {
+    matches!(
+        character.to_ascii_lowercase(),
+        'a' | 'c' | 'd' | 'n' | 'p' | 'q' | 'v' | 'x' | 'y' | 'z'
+    )
 }
 
 pub(crate) fn key_label(key: char) -> String {
@@ -423,5 +453,34 @@ mod tests {
                 "unreachable suffix {unreachable}"
             );
         }
+    }
+
+    #[test]
+    fn visual_row_fallbacks_reject_unreachable_reserved_and_duplicate_suffixes() {
+        for unreachable in ['g', '1', 'A', 'Z', 'Ü'] {
+            let bindings = KeyBindings {
+                select_visual_row_start: unreachable,
+                ..KeyBindings::default()
+            };
+            assert!(
+                bindings.validate().is_err(),
+                "unreachable suffix {unreachable}"
+            );
+        }
+        let duplicate = KeyBindings {
+            select_visual_row_end: 'H',
+            ..KeyBindings::default()
+        };
+        assert!(duplicate.validate().is_err());
+    }
+
+    #[test]
+    fn visual_row_fallbacks_do_not_invalidate_existing_board_remaps() {
+        let bindings = KeyBindings {
+            new: 'H',
+            focus_up: 'L',
+            ..KeyBindings::default()
+        };
+        assert_eq!(bindings.validate(), Ok(()));
     }
 }

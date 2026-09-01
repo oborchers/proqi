@@ -4,6 +4,15 @@ use crate::{domain::Direction, ports::editor::CursorMovement};
 
 use super::PastePayload;
 
+/// Directional edge of one wrapped visual editor row.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum VisualRowEdge {
+    /// First canonical position represented by the visual row.
+    Start,
+    /// Canonical position immediately after the visual row.
+    End,
+}
+
 /// Mouse button after terminal-backend normalization.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PointerButton {
@@ -89,6 +98,11 @@ pub enum UiKey {
         movement: CursorMovement,
         /// Whether to extend the active selection.
         extend_selection: bool,
+    },
+    /// Extend the active editor selection to one fold-aware visual-row edge.
+    ExtendVisualRow {
+        /// Edge resolved from the current rendered projection.
+        edge: VisualRowEdge,
     },
     /// A mode-aware vertical chord with distinct editor and board intentions.
     ///

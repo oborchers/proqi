@@ -101,6 +101,7 @@ impl BoardApp {
             | UiKey::PrimaryCharacter(_)
             | UiKey::PrimaryShiftCharacter(_)
             | UiKey::PrimaryShiftMove { .. }
+            | UiKey::ExtendVisualRow { .. }
             | UiKey::EditNavigation { .. }
             | UiKey::Submit
             | UiKey::SubmitKeep
@@ -206,6 +207,11 @@ impl BoardApp {
         let Some(key) = editing::normalize_edit_key(key, &self.settings.keybindings) else {
             return Vec::new();
         };
+        if let UiKey::ExtendVisualRow { edge } = key {
+            let effects = self.flush_pending_edit(ids, clock);
+            self.extend_selection_to_visual_row_edge(edge);
+            return effects;
+        }
         if let Some(effects) = self.handle_edit_effect(key, ids, clock) {
             return effects;
         }

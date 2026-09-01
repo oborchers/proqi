@@ -449,3 +449,5 @@ mod submit_all;
 mod top_boundary_snapshots;
 #[path = "ui_board/transformations.rs"]
 mod transformations;
+#[path = "ui_board/visual_row_selection.rs"]
+mod visual_row_selection;

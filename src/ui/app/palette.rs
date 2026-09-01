@@ -103,6 +103,8 @@ impl PaletteState {
             | Command::DeleteSentence
             | Command::JumpUp
             | Command::JumpDown
+            | Command::SelectVisualRowStart
+            | Command::SelectVisualRowEnd
             | Command::ThoughtStart
             | Command::ThoughtEnd
             | Command::Indent
@@ -332,6 +334,15 @@ impl BoardApp {
         if let Some(effects) = self.execute_runtime_command(command, ids, clock) {
             return effects;
         }
+        self.execute_board_command(command, ids, clock)
+    }
+
+    fn execute_board_command(
+        &mut self,
+        command: Command,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
         match command {
             Command::New => self.create(crate::ui::PastePayload::text(String::new()), ids, clock),
             Command::RenameSession => {
@@ -356,6 +367,8 @@ impl BoardApp {
             | Command::DeleteSentence
             | Command::JumpUp
             | Command::JumpDown
+            | Command::SelectVisualRowStart
+            | Command::SelectVisualRowEnd
             | Command::ThoughtStart
             | Command::ThoughtEnd
             | Command::Indent

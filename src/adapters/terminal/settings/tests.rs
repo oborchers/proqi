@@ -23,6 +23,8 @@ fn missing_config_uses_the_narrow_pane_default() {
     assert_eq!(settings.ui.keybindings.transform, 't');
     assert_eq!(settings.ui.keybindings.screenshot_inbox, 'i');
     assert_eq!(settings.ui.keybindings.delete_sentence, 'U');
+    assert_eq!(settings.ui.keybindings.select_visual_row_start, 'H');
+    assert_eq!(settings.ui.keybindings.select_visual_row_end, 'L');
     assert!(settings.screenshot.directory.is_none());
     assert!(settings.screenshot.filename_patterns.is_empty());
     assert!(!settings.screenshot.capture_all_new_images);
@@ -211,6 +213,29 @@ fn sentence_deletion_rejects_unshifted_or_reserved_primary_suffixes() {
             format!("[keybindings]\ndelete_sentence = '{suffix}'\n"),
         )
         .expect("write invalid sentence binding");
+        assert!(load_settings(directory.path()).is_err(), "suffix {suffix}");
+    }
+}
+
+#[test]
+fn visual_row_selection_fallbacks_are_remappable_and_validated() {
+    let directory = tempfile::tempdir().expect("config directory");
+    fs::write(
+        directory.path().join("config.toml"),
+        "[keybindings]\nselect_visual_row_start = 'G'\nselect_visual_row_end = 'R'\n",
+    )
+    .expect("write config");
+    let settings = load_settings(directory.path()).expect("settings");
+    assert_eq!(settings.ui.keybindings.select_visual_row_start, 'G');
+    assert_eq!(settings.ui.keybindings.select_visual_row_end, 'R');
+
+    for suffix in ['g', '1', 'A', 'Z', 'Ü'] {
+        let directory = tempfile::tempdir().expect("config directory");
+        fs::write(
+            directory.path().join("config.toml"),
+            format!("[keybindings]\nselect_visual_row_end = '{suffix}'\n"),
+        )
+        .expect("write invalid visual-row binding");
         assert!(load_settings(directory.path()).is_err(), "suffix {suffix}");
     }
 }
