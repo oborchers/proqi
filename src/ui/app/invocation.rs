@@ -194,6 +194,9 @@ impl BoardApp {
             UiInput::Key(UiKey::Character(character)) if !character.is_control() => {
                 self.update_manual_query(|query| query.push(*character));
             }
+            UiInput::Key(UiKey::UnmodifiedSpace) => {
+                self.update_manual_query(|query| query.push(' '));
+            }
             UiInput::Key(UiKey::Backspace) => self.pop_manual_query(),
             UiInput::Paste(value) => self.extend_manual_query(value),
             UiInput::PasteAnnotated(payload) => self.extend_manual_query(&payload.content),

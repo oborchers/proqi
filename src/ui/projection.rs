@@ -18,6 +18,7 @@ pub(super) struct EditorPresentation {
     pub(super) substitutions: Vec<PresentedSubstitution>,
     pub(super) styles: Vec<PresentedStyle>,
     canonical_content: String,
+    canonical_selection: Option<(usize, usize)>,
     rows: Vec<WrappedRow>,
     cursor_display_byte: usize,
 }
@@ -58,6 +59,14 @@ pub(super) fn board_cell_target(
 }
 
 impl EditorPresentation {
+    pub(super) fn selected_collapsed_substitution(&self) -> Option<&PresentedSubstitution> {
+        let selection = self.canonical_selection?;
+        self.substitutions.iter().find(|substitution| {
+            substitution.collapsed
+                && selection == (substitution.canonical_start, substitution.canonical_end)
+        })
+    }
+
     pub(super) fn fold_at_cell(&self, row: u16, column: u16) -> Option<&PresentedSubstitution> {
         let row = self
             .rows
@@ -102,6 +111,12 @@ pub(super) fn editor_presentation(
     expanded: &[usize],
     inaccessible: impl FnMut(usize) -> bool,
 ) -> Result<EditorPresentation, ProjectionError> {
+    let canonical_selection = canonical.selection.map(|selection| {
+        (
+            byte_for_position(&canonical.content, selection.start),
+            byte_for_position(&canonical.content, selection.end),
+        )
+    });
     let presentation = super::annotations::project_with_health(
         &canonical.content,
         annotations,
@@ -136,6 +151,7 @@ pub(super) fn editor_presentation(
         substitutions: presentation.substitutions,
         styles: presentation.styles,
         canonical_content: canonical.content.clone(),
+        canonical_selection,
         rows,
         cursor_display_byte,
     })

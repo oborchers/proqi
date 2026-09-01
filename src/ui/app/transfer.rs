@@ -171,6 +171,9 @@ impl BoardApp {
             UiKey::Character(character) if !character.is_control() => {
                 self.update_transfer_query(|query| query.insert_char(character));
             }
+            UiKey::UnmodifiedSpace => {
+                self.update_transfer_query(|query| query.insert_char(' '));
+            }
             _ => {}
         }
         Vec::new()

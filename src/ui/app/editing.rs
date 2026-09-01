@@ -14,6 +14,7 @@ use crate::ui::annotations;
 
 pub(super) fn command_for_key(key: UiKey, adjacent_fold: bool) -> Option<(EditCommand, bool)> {
     match key {
+        UiKey::UnmodifiedSpace => Some((EditCommand::InsertChar(' '), false)),
         UiKey::Character(character) => Some((EditCommand::InsertChar(character), false)),
         UiKey::Enter => Some((EditCommand::InsertNewline, false)),
         UiKey::Backspace => Some((EditCommand::DeleteBack, adjacent_fold)),

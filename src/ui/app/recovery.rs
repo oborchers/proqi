@@ -38,11 +38,12 @@ impl BoardApp {
 
     pub(super) fn is_failed_recovery_quit(&self, input: &UiInput) -> bool {
         matches!(self.state.durability, DurabilityState::Failed { .. })
-            && matches!(
+            && (matches!(
                 input,
                 UiInput::Key(UiKey::Character(character))
                     if *character == self.settings.keybindings.quit
-            )
+            ) || matches!(input, UiInput::Key(UiKey::UnmodifiedSpace))
+                && self.settings.keybindings.quit == ' ')
     }
 
     pub(super) fn handle_failed_recovery_input(

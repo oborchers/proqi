@@ -336,7 +336,11 @@ paths or filenames.
 
 Moving onto or clicking a folded token selects its complete visible placeholder.
 `Enter` expands the selected token's exact path or text for editing. Typing,
-backspace, and delete replace or remove the complete canonical range. A
+backspace, and delete replace or remove the complete canonical range. One
+unmodified `Space` is the narrow exception: when exactly one complete collapsed
+placeholder is selected in Edit mode, it inserts one ordinary ASCII space at
+the canonical start, preserves and shifts the complete annotation, clears the
+selection, and leaves the caret immediately before the placeholder. A
 collapsed token is one logical editor unit, so the cursor can never disappear
 inside hidden content.
 Leaving edit mode returns expanded ranges to their compact presentation. Copy,

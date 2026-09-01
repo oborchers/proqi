@@ -338,3 +338,6 @@ fn send_lossless(
 #[cfg(test)]
 #[path = "input/tests.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "input/translation_tests.rs"]
+mod translation_tests;
