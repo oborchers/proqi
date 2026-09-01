@@ -86,3 +86,52 @@ fn mouse_commands_preserves_the_exact_selection_captured_on_edit_exit() {
         "exact selection"
     );
 }
+
+#[test]
+fn edit_mode_redo_reapplies_the_transformation_just_undone_from_its_source() {
+    let mut fixture = Fixture::new();
+    fixture.paste("left right");
+    for _ in 0..6 {
+        fixture.input(UiInput::Key(UiKey::Move {
+            movement: CursorMovement::GraphemeBack,
+            extend_selection: false,
+        }));
+    }
+    fixture.input(UiInput::Key(UiKey::PrimaryCharacter('t')));
+    fixture.input(UiInput::Key(UiKey::Escape));
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::VisualUp,
+        extend_selection: false,
+    }));
+    fixture.input(UiInput::Key(UiKey::Enter));
+
+    let undo = fixture.effects(UiInput::Key(UiKey::Undo));
+    assert!(matches!(
+        undo.as_slice(),
+        [Effect::CommitHistoryMove {
+            scope: UndoScope::Board,
+            undo: true,
+            ..
+        }]
+    ));
+    let redo = fixture.effects(UiInput::Key(UiKey::Redo));
+    assert!(matches!(
+        redo.as_slice(),
+        [Effect::CommitHistoryMove {
+            scope: UndoScope::Board,
+            undo: false,
+            ..
+        }]
+    ));
+    assert_eq!(
+        fixture
+            .app
+            .state
+            .board
+            .live_thoughts()
+            .iter()
+            .map(|thought| thought.content.as_str())
+            .collect::<Vec<_>>(),
+        ["left", " right"]
+    );
+}

@@ -2,7 +2,7 @@
 
 use crate::{
     application::{Action, Effect, InteractionMode},
-    domain::{BoardOperationKind, UndoScope},
+    domain::BoardOperationKind,
     ports::{
         editor::EditCommand,
         environment::{Clock, IdGenerator},
@@ -356,9 +356,10 @@ impl BoardApp {
             self.state.preferred_undo_scope(self.state.mode)
         } else {
             match self.state.mode {
-                InteractionMode::Board => UndoScope::Board,
                 InteractionMode::Compose => return effects,
-                InteractionMode::Edit { thought_id } => UndoScope::Editor { thought_id },
+                InteractionMode::Board | InteractionMode::Edit { .. } => {
+                    self.state.preferred_redo_scope(self.state.mode)
+                }
             }
         };
         if matches!(self.state.mode, InteractionMode::Compose) {

@@ -623,7 +623,9 @@ also truncates affected editor redo branches and rebuilds search. One undo or
 redo restores the complete transformation after restart. When a split or
 extract has just focused its new editor and no later editor revision exists,
 the ordinary undo intention addresses that transformation as one unit. Undoing
-either transformation returns board focus to the retained source identity.
+either transformation returns board focus to the retained source identity when
+the generated neighbor had focus and was removed. An immediate redo from the
+retained source editor addresses the same transformation as one unit.
 
 ### Submit to an adjacent agent
 

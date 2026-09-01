@@ -55,7 +55,9 @@ pub enum ApplicationError {
     #[error("live thought not found: {0}")]
     ThoughtNotFound(ThoughtId),
     /// Revision does not match current content or ownership.
-    #[error("revision precondition failed for thought {0}")]
+    #[error(
+        "thought changed since this editor revision; exit edit to undo newer board operations first: {0}"
+    )]
     RevisionConflict(ThoughtId),
     /// Exact replacement digest no longer matches current content.
     #[error("content precondition failed for thought {0}")]

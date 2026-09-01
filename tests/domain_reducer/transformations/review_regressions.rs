@@ -115,3 +115,68 @@ fn undoing_a_split_returns_focus_to_its_retained_source_instead_of_board_start()
     assert_eq!(fixture.state.focused_thought, Some(source));
     assert_eq!(fixture.state.mode, InteractionMode::Board);
 }
+
+#[test]
+fn incompatible_editor_undo_after_a_newer_board_change_is_actionable_and_exact() {
+    let mut fixture = Fixture::new();
+    let source = fixture.create("before");
+    let revision_id = fixture.ids.revision_id();
+    let at = fixture.time();
+    reduce(
+        &mut fixture.state,
+        Action::EditThought {
+            thought_id: source,
+            revision_id,
+            before_content: "before".to_owned(),
+            after_content: "changed".to_owned(),
+            before_annotations: Vec::new(),
+            after_annotations: Vec::new(),
+            before_cursor: TextPosition::new(0, 6),
+            after_cursor: TextPosition::new(0, 7),
+            at,
+        },
+    )
+    .expect("edit");
+    let new_thought_id = fixture.ids.thought_id();
+    let operation_id = fixture.operation_id();
+    let at = fixture.time();
+    reduce(
+        &mut fixture.state,
+        Action::SplitThought {
+            thought_id: source,
+            new_thought_id,
+            operation_id,
+            expected_content: "changed".to_owned(),
+            expected_annotations: Vec::new(),
+            source_content: "changed".to_owned(),
+            source_annotations: Vec::new(),
+            at_byte: 3,
+            at,
+        },
+    )
+    .expect("split");
+    fixture.create("newer board change");
+    reduce(&mut fixture.state, Action::EnterEdit(source)).expect("enter source editor");
+    assert_eq!(
+        fixture.state.preferred_undo_scope(fixture.state.mode),
+        UndoScope::Editor { thought_id: source }
+    );
+    let before = fixture.state.clone();
+    let operation_id = fixture.operation_id();
+    let at = fixture.time();
+    let error = reduce(
+        &mut fixture.state,
+        Action::Undo {
+            operation_id,
+            scope: UndoScope::Editor { thought_id: source },
+            at,
+        },
+    )
+    .expect_err("incompatible editor undo");
+    assert!(
+        error
+            .to_string()
+            .contains("exit edit to undo newer board operations first")
+    );
+    assert_eq!(fixture.state, before);
+}

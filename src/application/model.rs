@@ -287,6 +287,38 @@ impl AppState {
         }
     }
 
+    /// Choose a transformation as the next redo unit when it precedes the
+    /// active thought's next editor revision and directly owns that thought.
+    #[must_use]
+    pub fn preferred_redo_scope(&self, mode: InteractionMode) -> UndoScope {
+        let InteractionMode::Edit { thought_id } = mode else {
+            return UndoScope::Board;
+        };
+        let editor_sequence = self
+            .editor_histories
+            .get(&thought_id)
+            .and_then(|history| history.revisions.get(history.cursor))
+            .map(|revision| revision.sequence);
+        let transformation =
+            self.board_history
+                .get(self.board_history_cursor)
+                .filter(|operation| {
+                    matches!(
+                        operation.kind,
+                        BoardOperationKind::Split
+                            | BoardOperationKind::Extract
+                            | BoardOperationKind::Merge
+                    ) && operation.forward.addresses(thought_id)
+                });
+        if transformation.is_some_and(|operation| {
+            editor_sequence.is_none_or(|sequence| operation.sequence < sequence)
+        }) {
+            UndoScope::Board
+        } else {
+            UndoScope::Editor { thought_id }
+        }
+    }
+
     pub(super) fn next_sequence(&self) -> ApplicationResult<OperationSequence> {
         if !self.deferred_board_operations.is_empty() {
             return Err(ApplicationError::InvalidState);
