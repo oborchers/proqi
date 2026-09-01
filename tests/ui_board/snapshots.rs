@@ -250,7 +250,7 @@ fn four_direction_agent_controls_have_a_dedicated_footer_band() {
         adjacent_target(Direction::Down, "w1:p4", AgentState::Done),
         adjacent_target(Direction::Left, "w1:p5", AgentState::Idle),
     ]));
-    insta::assert_snapshot!(snapshot(&mut fixture, 120, 12, ThemePreference::Dark));
+    assert_platform_snapshot!(snapshot(&mut fixture, 120, 12, ThemePreference::Dark));
 }
 
 #[test]
@@ -265,7 +265,7 @@ fn mixed_claude_and_hermes_targets_have_equal_directional_controls() {
     right.agent_kind = HarnessKind::new("hermes").expect("fixture harness");
     right.agent_name = "Hermes qualifier".to_owned();
     fixture.app.complete_agent_discovery(Ok(vec![left, right]));
-    insta::assert_snapshot!(snapshot(&mut fixture, 88, 9, ThemePreference::Dark));
+    assert_platform_snapshot!(snapshot(&mut fixture, 88, 9, ThemePreference::Dark));
 }
 
 #[test]
@@ -403,7 +403,7 @@ fn submit_all_palette_actions_are_complete_and_direct() {
     for character in "submit all".chars() {
         fixture.input(UiInput::Key(UiKey::Character(character)));
     }
-    insta::assert_snapshot!(snapshot(&mut fixture, 72, 14, ThemePreference::Dark));
+    assert_platform_snapshot!(snapshot(&mut fixture, 72, 14, ThemePreference::Dark));
 }
 
 #[test]
