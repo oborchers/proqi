@@ -47,13 +47,78 @@ fn standalone_practice_board_is_reviewed_at_standard_and_wide_sizes() {
 }
 
 #[test]
+fn editing_thought_demonstrates_line_and_sentence_deletion_at_its_initial_cursor() {
+    let first_line = "Press Enter to edit the focused thought. Press Esc to return to board mode.";
+    let deletion_line = "- Press Enter to continue this unordered list. Press Primary+U to delete this logical line. Press Primary+Shift+U to delete this sentence.";
+
+    let mut line_fixture = Fixture::first_run(FirstRunEnvironment::Standalone);
+    line_fixture.input(UiInput::Key(UiKey::Character('j')));
+    line_fixture.input(UiInput::Key(UiKey::Enter));
+    line_fixture.input(UiInput::Key(UiKey::DeleteLogicalLine));
+    assert_eq!(
+        line_fixture
+            .app
+            .editor_snapshot()
+            .expect("editing thought")
+            .content,
+        first_line
+    );
+
+    let mut sentence_fixture = Fixture::first_run(FirstRunEnvironment::Standalone);
+    sentence_fixture.input(UiInput::Key(UiKey::Character('j')));
+    sentence_fixture.input(UiInput::Key(UiKey::Enter));
+    assert_eq!(
+        sentence_fixture
+            .app
+            .editor_snapshot()
+            .expect("editing thought")
+            .content,
+        format!("{first_line}\n{deletion_line}")
+    );
+    sentence_fixture.input(UiInput::Key(UiKey::DeleteSentence));
+    assert_eq!(
+        sentence_fixture
+            .app
+            .editor_snapshot()
+            .expect("editing thought")
+            .content,
+        format!(
+            "{first_line}\n- Press Enter to continue this unordered list. Press Primary+U to delete this logical line."
+        )
+    );
+}
+
+#[test]
+fn editing_thought_continues_its_unordered_list_at_the_initial_cursor() {
+    let mut fixture = Fixture::first_run(FirstRunEnvironment::Standalone);
+    fixture.input(UiInput::Key(UiKey::Character('j')));
+    fixture.input(UiInput::Key(UiKey::Enter));
+    let before = fixture
+        .app
+        .editor_snapshot()
+        .expect("editing thought")
+        .content;
+
+    fixture.input(UiInput::Key(UiKey::Enter));
+
+    assert_eq!(
+        fixture
+            .app
+            .editor_snapshot()
+            .expect("continued unordered list")
+            .content,
+        format!("{before}\n- ")
+    );
+}
+
+#[test]
 fn canonical_herdr_url_uses_existing_link_styling_without_content_changes() {
     let mut fixture = Fixture::first_run(FirstRunEnvironment::HerdrManaged);
     let original_content = fixture.app.state.board.live_thoughts()[4].content.clone();
     for _ in 0..4 {
         fixture.input(UiInput::Key(UiKey::Character('j')));
     }
-    let terminal = draw_theme(&mut fixture, 120, 20, ThemePreference::Dark);
+    let terminal = draw_theme(&mut fixture, 120, 30, ThemePreference::Dark);
     let buffer = terminal.backend().buffer();
     let url = "https://herdr.dev";
     let (row, start) = (0..buffer.area.height)
