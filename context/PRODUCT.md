@@ -364,7 +364,9 @@ board key `i`, or choosing `Enable Screenshot Inbox`, watches the current user's
 Desktop by default. The directory is configurable. Existing entries are
 snapshotted and ignored at activation; each subsequently completed accepted
 image becomes one immediate durable thought whose canonical content is the
-exact absolute source path and whose presentation is the ordinary image fold.
+exact absolute source path followed by one ordinary ASCII space. The attachment
+annotation covers only the path, so the ordinary image fold is followed by an
+editable space and a safely focused editor is ready to type after that space.
 
 Proqi does not take screenshots. It watches files produced by the user's normal
 macOS screenshot tool and never requests Screen Recording or Accessibility,

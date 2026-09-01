@@ -174,6 +174,22 @@ mod tests {
     }
 
     #[test]
+    fn attachment_range_can_preserve_unannotated_trailing_content() {
+        let path = "/tmp/Grüße 🖼️.png";
+        let content = format!("{path} ");
+        let annotation = ContentAnnotation {
+            start: 0,
+            end: path.len(),
+            kind: ContentAnnotationKind::Attachment {
+                image: true,
+                display_name: "Grüße 🖼️.png".to_owned(),
+            },
+        };
+
+        assert_eq!(validate_annotations(&content, &[annotation]), Ok(()));
+    }
+
+    #[test]
     fn unsafe_or_unhelpful_invocation_labels_fail_closed() {
         for label in ["@", " reviewer", "@reviewer\nsecret"] {
             assert_eq!(

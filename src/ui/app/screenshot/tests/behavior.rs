@@ -38,17 +38,21 @@ fn durable_capture_preserves_an_active_editor_and_exact_path_annotation() {
     assert!(effects.is_empty());
     let editor_during = app.editor_snapshot().expect("live editor during commit");
     assert_eq!(editor_during, editor_before);
-    app.complete_screenshot_capture(Ok(created(&commit)), &mut ids, &clock);
-
+    let effects = app.complete_screenshot_capture(Ok(created(&commit)), &mut ids, &clock);
     assert_eq!(app.state.focused_thought, Some(original_id));
     assert_eq!(
         app.editor_snapshot().expect("replayed editor").content,
         "active!"
     );
     let captured = app.state.board.live_thoughts()[1];
-    assert_eq!(captured.content, candidate(3).path.to_string_lossy());
+    let path = candidate(3).path.to_string_lossy().into_owned();
+    assert_eq!(captured.content, format!("{path} "));
     assert_eq!(captured.annotations[0].start, 0);
-    assert_eq!(captured.annotations[0].end, captured.content.len());
+    assert_eq!(captured.annotations[0].end, path.len());
+    let Effect::CheckAttachments(batch) = &effects[0] else {
+        panic!("attachment check")
+    };
+    assert_eq!(batch.checks[0].canonical_path, path);
     assert_eq!(app.status_text(), None);
 }
 
@@ -67,7 +71,6 @@ fn durable_capture_uses_admission_proof_before_its_immediate_recheck() {
         panic!("immediate accessibility check");
     };
     assert!(!app.attachment_inaccessible(thought_id, 0));
-
     app.complete_attachment_checks(AttachmentCheckBatchResult {
         id: batch.id,
         purpose: batch.purpose,
@@ -89,13 +92,11 @@ fn newest_capture_in_one_detection_burst_is_left_ready_for_annotation() {
     let (mut app, mut ids, clock, _) = app_with_thought();
     app.screenshot_started(Duration::ZERO);
     app.queue_screenshot_candidates([candidate(4), candidate(5)]);
-
     let first = next_commit(&mut app, &mut ids, &clock);
     app.complete_screenshot_capture(Ok(created(&first)), &mut ids, &clock);
     let second = next_commit(&mut app, &mut ids, &clock);
     let newest_id = capture_thought_id(&second);
     app.complete_screenshot_capture(Ok(created(&second)), &mut ids, &clock);
-
     assert_eq!(app.state.focused_thought, Some(newest_id));
     assert_eq!(
         app.state.mode,
@@ -104,6 +105,10 @@ fn newest_capture_in_one_detection_burst_is_left_ready_for_annotation() {
         }
     );
     assert_eq!(app.status_text(), Some("2 new captures"));
+    assert_eq!(
+        app.editor_snapshot().expect("capture editor").content,
+        capture_content(5)
+    );
 }
 
 #[test]
@@ -114,11 +119,9 @@ fn separated_capture_feedback_restarts_at_one() {
     let first = next_commit(&mut app, &mut ids, &clock);
     app.complete_screenshot_capture(Ok(created(&first)), &mut ids, &clock);
     app.state.mode = InteractionMode::Board;
-
     app.queue_screenshot_candidates([candidate(7)]);
     let second = next_commit(&mut app, &mut ids, &clock);
     app.complete_screenshot_capture(Ok(created(&second)), &mut ids, &clock);
-
     assert_eq!(app.status_text(), Some("1 new capture"));
 }
 
@@ -145,7 +148,6 @@ fn retry_rebuilds_after_an_intervening_durable_editor_change() {
     app.queue_screenshot_candidates([candidate(18)]);
     let failed = next_commit(&mut app, &mut ids, &clock);
     app.complete_screenshot_capture(Err(StoreError::Busy), &mut ids, &clock);
-
     app.state.mode = InteractionMode::Edit {
         thought_id: original_id,
     };
@@ -156,7 +158,6 @@ fn retry_rebuilds_after_an_intervening_durable_editor_change() {
         panic!("editor revision");
     };
     app.acknowledge_persistence_result(revision.sequence, Ok(()));
-
     let retry_effects = app.retry_screenshot_capture(&mut ids, &clock);
     let [Effect::CommitCapture(retry)] = retry_effects.as_slice() else {
         panic!("fresh retry capture");
@@ -175,7 +176,6 @@ fn failed_first_capture_in_a_burst_retries_then_drains_in_order() {
     app.queue_screenshot_candidates([candidate(13), candidate(14)]);
     let first = next_commit(&mut app, &mut ids, &clock);
     app.complete_screenshot_capture(Err(StoreError::Busy), &mut ids, &clock);
-
     let retry_effects = app.retry_screenshot_capture(&mut ids, &clock);
     let [Effect::CommitCapture(retry)] = retry_effects.as_slice() else {
         panic!("retry first capture");
@@ -187,6 +187,14 @@ fn failed_first_capture_in_a_burst_retries_then_drains_in_order() {
     assert_eq!(second.source, candidate(14).fingerprint);
     app.complete_screenshot_capture(Ok(created(&second)), &mut ids, &clock);
     assert_eq!(app.state.board.live_thoughts().len(), 3);
+    assert_eq!(
+        app.state.board.live_thoughts()[1].content,
+        capture_content(13)
+    );
+    assert_eq!(
+        app.state.board.live_thoughts()[2].content,
+        capture_content(14)
+    );
 }
 
 #[test]
@@ -208,7 +216,6 @@ fn quit_during_capture_is_deferred_and_flushes_the_live_editor() {
             .is_empty()
     );
     assert!(!app.quit);
-
     let effects = app.complete_screenshot_capture(Ok(created(&capture)), &mut ids, &clock);
     assert!(app.quit);
     let Some(Effect::CommitRevision(revision)) = effects
@@ -287,7 +294,7 @@ fn explicit_editor_interaction_prevents_burst_auto_advance() {
             .thought(first_id)
             .expect("first capture")
             .content,
-        format!("{}x", candidate(16).path.to_string_lossy())
+        format!("{}x", capture_content(16))
     );
     assert_eq!(app.state.board.live_thoughts().len(), 3);
 }
@@ -447,6 +454,10 @@ pub(super) fn candidate(byte: u8) -> ScreenshotCandidate {
         path: std::env::temp_dir().join(format!("Unicode capture {byte} 🖼️.png")),
         image_type: ScreenshotImageType::Png,
     }
+}
+
+fn capture_content(byte: u8) -> String {
+    format!("{} ", candidate(byte).path.display())
 }
 
 fn capture_thought_id(commit: &CaptureCommit) -> crate::domain::ThoughtId {
