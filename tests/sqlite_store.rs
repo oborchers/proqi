@@ -140,6 +140,10 @@ mod concurrency;
 mod core;
 #[path = "sqlite_store/editor.rs"]
 mod editor;
+#[path = "sqlite_store/onboarding.rs"]
+mod onboarding;
+#[path = "sqlite_store/onboarding_migration.rs"]
+mod onboarding_migration;
 #[path = "sqlite_store/recovery.rs"]
 mod recovery;
 #[path = "sqlite_store/screenshot.rs"]

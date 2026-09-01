@@ -117,3 +117,32 @@ pub(super) fn json_command(binary: &str, state: &std::path::Path, arguments: &[&
     assert!(output.status.success());
     serde_json::from_slice(&output.stdout).expect("JSON output")
 }
+
+/// Launch and close one fresh interactive session to prepare later PTY scenarios.
+pub(super) fn consume_first_run(binary: &str, state: &std::path::Path) {
+    let script = r#"
+        log_user 0
+        set timeout 10
+        spawn $env(PROQI_TEST_BINARY) --state-dir $env(PROQI_TEST_STATE)
+        expect -exact "\x1b\[?1049h"
+        after 400
+        send "q"
+        expect eof
+        catch wait result
+        exit [lindex $result 3]
+    "#;
+    let status = expect_command()
+        .args(["-c", script])
+        .env("PROQI_TEST_BINARY", binary)
+        .env("PROQI_TEST_STATE", state)
+        .env_remove("HERDR_ENV")
+        .status()
+        .expect("close first interactive session");
+    assert!(status.success());
+    let sessions = json_command(binary, state, &["sessions", "list"]);
+    let session = sessions["data"]["sessions"][0]["id"]
+        .as_str()
+        .expect("first session ID");
+    let _trashed = json_command(binary, state, &["sessions", "trash", session]);
+    let _pruned = json_command(binary, state, &["sessions", "prune", session, "--yes"]);
+}
