@@ -91,6 +91,8 @@ mod history;
 mod locks;
 #[path = "domain_reducer/top_boundary.rs"]
 mod top_boundary;
+#[path = "domain_reducer/transformations.rs"]
+mod transformations;
 
 #[test]
 fn interaction_mode_is_explicit_and_empty_board_policy_is_typed() {

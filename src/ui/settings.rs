@@ -27,6 +27,8 @@ pub struct UiSettings {
     pub smart_lists: bool,
     /// Spaces inserted for every list indentation level.
     pub list_indent_width: u8,
+    /// Exact text inserted between thoughts by the merge transformation.
+    pub merge_separator: String,
     /// Keyboard protocol negotiation.
     pub keyboard_enhancement: KeyboardEnhancement,
     /// Remappable direct board keys.
@@ -42,6 +44,7 @@ impl Default for UiSettings {
             show_session_id: false,
             smart_lists: true,
             list_indent_width: 2,
+            merge_separator: "\n\n".to_owned(),
             keyboard_enhancement: KeyboardEnhancement::default(),
             keybindings: KeyBindings::default(),
             density: BoardDensity::default(),
@@ -96,6 +99,8 @@ pub struct KeyBindings {
     pub collapse: char,
     /// Toggle the focused thought in the multi-selection.
     pub select: char,
+    /// Apply the contextual thought transformation.
+    pub transform: char,
     /// Select every live thought in board order.
     pub select_all: char,
     /// Latch contiguous range selection.
@@ -131,6 +136,7 @@ impl Default for KeyBindings {
             range_down: 'J',
             collapse: 'c',
             select: ' ',
+            transform: 't',
             select_all: 'a',
             range_select: 'v',
             search: '/',
@@ -159,6 +165,7 @@ pub(super) enum BoardCommand {
     RangeDown,
     Collapse,
     Select,
+    Transform,
     SelectAll,
     RangeSelect,
     Search,
@@ -199,6 +206,7 @@ impl KeyBindings {
             (self.help, BoardCommand::Help),
             (self.quit, BoardCommand::Quit),
             (self.screenshot_inbox, BoardCommand::ScreenshotInbox),
+            (self.transform, BoardCommand::Transform),
         ];
         bindings
             .into_iter()
@@ -281,6 +289,15 @@ impl KeyBindings {
         if matches!(self.quit, RECOVERY_RETRY_KEY | RECOVERY_EXPORT_KEY) {
             return Err("the quit binding cannot use the reserved recovery keys r or w");
         }
+        if self.transform.is_control() {
+            return Err("keybindings must be distinct printable characters");
+        }
+        if matches!(
+            self.transform,
+            'a' | 'c' | 'd' | 'n' | 'p' | 'q' | 'u' | 'v' | 'x' | 'y' | 'z'
+        ) {
+            return Err("the transform binding conflicts with a reserved Primary shortcut");
+        }
         if !self.delete_sentence.is_ascii_uppercase() {
             return Err("the sentence deletion binding must be one uppercase ASCII letter");
         }
@@ -342,7 +359,7 @@ pub(crate) fn primary_key_label(suffix: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::KeyBindings;
+    use super::{BoardCommand, KeyBindings};
 
     #[test]
     fn ambiguous_bindings_are_rejected() {
@@ -359,6 +376,27 @@ mod tests {
                 ..KeyBindings::default()
             };
             assert!(bindings.validate().is_err());
+        }
+    }
+
+    #[test]
+    fn established_board_binding_precedes_compatible_transform_collision() {
+        let bindings = KeyBindings {
+            new: 't',
+            ..KeyBindings::default()
+        };
+        assert!(bindings.validate().is_ok());
+        assert_eq!(bindings.command('t'), Some(BoardCommand::New));
+    }
+
+    #[test]
+    fn reserved_primary_transform_bindings_are_rejected() {
+        for reserved in ['a', 'c', 'd', 'n', 'p', 'q', 'u', 'v', 'x', 'y', 'z'] {
+            let bindings = KeyBindings {
+                transform: reserved,
+                ..KeyBindings::default()
+            };
+            assert!(bindings.validate().is_err(), "reserved: {reserved}");
         }
     }
 

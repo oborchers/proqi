@@ -57,6 +57,7 @@ struct SettingsDocument {
     show_session_id: bool,
     smart_lists: bool,
     list_indent_width: u8,
+    merge_separator: String,
     theme: String,
     theme_overrides: ThemeOverrides,
     keyboard_enhancement: KeyboardEnhancement,
@@ -73,6 +74,7 @@ impl Default for SettingsDocument {
             show_session_id: false,
             smart_lists: true,
             list_indent_width: 2,
+            merge_separator: "\n\n".to_owned(),
             theme: "auto".to_owned(),
             theme_overrides: ThemeOverrides::default(),
             keyboard_enhancement: KeyboardEnhancement::default(),
@@ -130,6 +132,11 @@ fn parse_settings(config_dir: &Path, content: &str) -> Result<LoadedSettings, Te
             "list_indent_width must be between 1 and 8 spaces".to_owned(),
         ));
     }
+    if document.merge_separator.is_empty() || document.merge_separator.len() > 1_024 {
+        return Err(TerminalError::Config(
+            "merge_separator must contain between 1 and 1024 UTF-8 bytes".to_owned(),
+        ));
+    }
     document
         .keybindings
         .validate()
@@ -139,6 +146,7 @@ fn parse_settings(config_dir: &Path, content: &str) -> Result<LoadedSettings, Te
         show_session_id: document.show_session_id,
         smart_lists: document.smart_lists,
         list_indent_width: document.list_indent_width,
+        merge_separator: document.merge_separator,
         keyboard_enhancement: document.keyboard_enhancement,
         keybindings: document.keybindings,
         density: document.density,

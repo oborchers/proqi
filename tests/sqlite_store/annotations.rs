@@ -122,7 +122,7 @@ fn invocation_reference_projection_survives_protocol_nine_migration() {
         .expect("version eight database")
         .execute_batch(
             "DROP TABLE onboarding_state;
-             DELETE FROM migration_history WHERE version IN (9, 10, 11);
+             DELETE FROM migration_history WHERE version IN (9, 10, 11, 12);
              UPDATE schema_meta SET schema_version = 8, storage_protocol = 8;",
         )
         .expect("downgrade protocol stamp");
@@ -176,7 +176,7 @@ fn protocol_ten_loads_structurally_valid_direct_shortcut_bytes_and_rejects_corru
     connection
         .execute_batch(
             "DROP TABLE onboarding_state;
-             DELETE FROM migration_history WHERE version IN (10, 11);
+             DELETE FROM migration_history WHERE version IN (10, 11, 12);
              UPDATE schema_meta SET schema_version = 9, storage_protocol = 9;",
         )
         .expect("version nine protocol stamp");

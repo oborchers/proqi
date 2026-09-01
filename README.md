@@ -297,6 +297,7 @@ Optional platform-native `config.toml`:
 check_for_updates = true
 theme = "auto" # auto, light, dark, limited, or a bounded local theme file
 density = "comfortable" # or compact
+merge_separator = "\n\n" # one blank line between merged thoughts
 
 [keybindings]
 new = "n"
@@ -307,9 +308,22 @@ submit_keep = "S"
 undo = "u"
 focus_up = "k"
 focus_down = "j"
+transform = "t" # merge selection; Esc,t splits or extracts the last editor range
 screenshot_inbox = "i"
 delete_sentence = "U" # Primary+Shift+U, use another unreserved uppercase suffix to remap
 ```
+
+Thought transformations are contextual and remappable. In an editor, use
+`Cmd+T` on macOS or `Ctrl+T` elsewhere to split at the cursor, or to extract the
+exact selection. `Esc`, then `t`, is the portable immediate fallback. On the
+board, select two or more contiguous thoughts and press `t` to merge them with
+the configured exact separator. The command palette exposes all three actions
+for keyboard and mouse discovery. If an older config already assigns plain `t`
+to another board action, that established action keeps precedence and the
+footer omits the shadowed board spelling until `transform` is remapped. The
+Primary chord and command-palette actions remain available. Bindings reserved
+for established Primary shortcuts are rejected instead of silently disabling
+the configured transformation chord.
 
 Unsafe theme contrast is rejected. See the
 [theme example](docs/themes/proqi-dark.toml). Invocation roots stay local.

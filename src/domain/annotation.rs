@@ -4,6 +4,13 @@ use serde::{Deserialize, Serialize};
 
 use super::model::DomainError;
 
+mod ranges;
+
+pub use ranges::{
+    AnnotationTextChange, extract_annotations, merge_annotations, partition_annotations,
+    rebase_annotations,
+};
+
 const MAX_INVOCATION_REFERENCE_LABEL_CHARS: usize = 256;
 
 /// Closed rendering behavior owned by one durable annotation kind.

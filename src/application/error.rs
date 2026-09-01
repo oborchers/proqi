@@ -55,7 +55,9 @@ pub enum ApplicationError {
     #[error("live thought not found: {0}")]
     ThoughtNotFound(ThoughtId),
     /// Revision does not match current content or ownership.
-    #[error("revision precondition failed for thought {0}")]
+    #[error(
+        "thought changed since this editor revision; exit edit to undo newer board operations first: {0}"
+    )]
     RevisionConflict(ThoughtId),
     /// Exact replacement digest no longer matches current content.
     #[error("content precondition failed for thought {0}")]
@@ -63,6 +65,9 @@ pub enum ApplicationError {
     /// Mutation is forbidden during an in-flight submission.
     #[error("thought has a submission in progress: {0}")]
     ThoughtLocked(ThoughtId),
+    /// A board selection does not describe one contiguous ordered range.
+    #[error("thought selection must be contiguous and in board order")]
+    NoncontiguousSelection,
     /// An action requires another interaction state.
     #[error("action is invalid in the current application state")]
     InvalidState,
@@ -79,9 +84,10 @@ impl ApplicationError {
             Self::ThoughtNotFound(_) => FailureCode::ThoughtNotFound,
             Self::ContentConflict(_) => FailureCode::ContentConflict,
             Self::ThoughtLocked(_) => FailureCode::ThoughtLocked,
-            Self::RevisionConflict(_) | Self::InvalidState | Self::SequenceExhausted => {
-                FailureCode::InvalidState
-            }
+            Self::RevisionConflict(_)
+            | Self::NoncontiguousSelection
+            | Self::InvalidState
+            | Self::SequenceExhausted => FailureCode::InvalidState,
             Self::Domain(_) => FailureCode::InvariantViolation,
         }
     }

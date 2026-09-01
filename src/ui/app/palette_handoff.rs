@@ -2,26 +2,37 @@
 
 use crate::{
     application::InteractionMode,
-    domain::{TextPosition, ThoughtId},
+    domain::{ContentAnnotation, TextPosition, ThoughtId},
     ports::editor::{EditCommand, TextSelection},
     ui::{HitTarget, PointerButton, PointerKind, UiInput, UiKey},
 };
 
 use super::BoardApp;
 
+#[derive(Clone)]
 pub(super) struct EditorSelectionHandoff {
-    thought_id: ThoughtId,
-    content: String,
-    selection: Option<TextSelection>,
-    cursor: TextPosition,
+    pub(super) thought_id: ThoughtId,
+    pub(super) content: String,
+    pub(super) annotations: Vec<ContentAnnotation>,
+    pub(super) selection: Option<TextSelection>,
+    pub(super) cursor: TextPosition,
+}
+
+impl EditorSelectionHandoff {
+    pub(super) const fn has_selection(&self) -> bool {
+        self.selection.is_some()
+    }
 }
 
 impl BoardApp {
     pub(super) fn capture_palette_selection_handoff(&mut self) {
         self.palette_selection_handoff = self.editor_snapshot().and_then(|snapshot| {
+            let thought_id = self.active_thought_id()?;
+            let annotations = self.current_annotations(thought_id);
             Some(EditorSelectionHandoff {
-                thought_id: self.active_thought_id()?,
+                thought_id,
                 content: snapshot.content,
+                annotations,
                 selection: snapshot.selection,
                 cursor: snapshot.cursor,
             })
@@ -32,9 +43,15 @@ impl BoardApp {
         let preserves = match input {
             UiInput::Resize { .. } | UiInput::HostFocusGained | UiInput::HostFocusLost => true,
             UiInput::Pointer(pointer) if matches!(pointer.kind, PointerKind::Move) => true,
-            UiInput::Key(UiKey::Character(character)) => {
-                self.settings.keybindings.command(*character)
-                    == Some(crate::ui::settings::BoardCommand::Commands)
+            UiInput::Key(UiKey::Character(character)) => matches!(
+                self.settings.keybindings.command(*character),
+                Some(
+                    crate::ui::settings::BoardCommand::Commands
+                        | crate::ui::settings::BoardCommand::Transform
+                )
+            ),
+            UiInput::Key(UiKey::PrimaryCharacter(character)) => {
+                *character == self.settings.keybindings.transform
             }
             UiInput::Key(UiKey::UnmodifiedSpace) => {
                 self.settings.keybindings.command(' ')

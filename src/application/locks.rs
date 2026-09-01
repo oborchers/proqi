@@ -7,13 +7,16 @@ pub(super) fn ensure_action_unlocked(state: &AppState, action: &Action) -> Appli
     let locked = match action {
         Action::EnterEdit(thought_id)
         | Action::EditThought { thought_id, .. }
+        | Action::SplitThought { thought_id, .. }
+        | Action::ExtractThought { thought_id, .. }
         | Action::DeleteThought { thought_id, .. }
         | Action::MoveThought { thought_id, .. }
         | Action::SetPresentation { thought_id, .. } => locked_one(state, *thought_id),
         Action::CutThoughts { thought_ids, .. }
         | Action::DeleteThoughts { thought_ids, .. }
         | Action::SetPresentationMany { thought_ids, .. }
-        | Action::DuplicateThoughts { thought_ids, .. } => locked_many(state, thought_ids),
+        | Action::DuplicateThoughts { thought_ids, .. }
+        | Action::MergeThoughts { thought_ids, .. } => locked_many(state, thought_ids),
         Action::Undo { scope, .. } => locked_history(state, *scope, true),
         Action::Redo { scope, .. } => locked_history(state, *scope, false),
         Action::RenameSession { .. }
@@ -103,7 +106,9 @@ fn locked_mutation(state: &AppState, mutation: &BoardMutation) -> Option<Thought
             .find_map(|mutation| locked_mutation(state, mutation)),
         BoardMutation::AddThought { thought } => locked_one(state, thought.id),
         BoardMutation::SetDeletion { thought_id, .. }
+        | BoardMutation::SetDeletionExact { thought_id, .. }
         | BoardMutation::MoveThought { thought_id, .. }
+        | BoardMutation::ReplaceContent { thought_id, .. }
         | BoardMutation::SetPresentation { thought_id, .. }
         | BoardMutation::LegacySetCollapsed { thought_id, .. } => locked_one(state, *thought_id),
     }

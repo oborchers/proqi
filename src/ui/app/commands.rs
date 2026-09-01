@@ -2,7 +2,7 @@
 
 use crate::{
     application::{Action, Effect, InteractionMode},
-    domain::{BoardOperationKind, UndoScope},
+    domain::BoardOperationKind,
     ports::{
         editor::EditCommand,
         environment::{Clock, IdGenerator},
@@ -167,6 +167,7 @@ impl BoardApp {
                 self.toggle_selection();
                 Vec::new()
             }
+            Some(BoardCommand::Transform) => self.contextual_board_transformation(ids, clock),
             Some(BoardCommand::SelectAll) => {
                 self.select_all_thoughts();
                 Vec::new()
@@ -198,6 +199,10 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
+        if matches!(key, UiKey::PrimaryCharacter(character) if character == self.settings.keybindings.transform)
+        {
+            return self.contextual_edit_transformation(ids, clock);
+        }
         let Some(key) = editing::normalize_edit_key(key, &self.settings.keybindings) else {
             return Vec::new();
         };
@@ -363,11 +368,19 @@ impl BoardApp {
             EditFlush::Complete(effects) => effects,
             EditFlush::Blocked(effects) => return effects,
         };
-        let scope = match self.state.mode {
-            InteractionMode::Board => UndoScope::Board,
-            InteractionMode::Compose => return effects,
-            InteractionMode::Edit { thought_id } => UndoScope::Editor { thought_id },
+        let scope = if undo {
+            self.state.preferred_undo_scope(self.state.mode)
+        } else {
+            match self.state.mode {
+                InteractionMode::Compose => return effects,
+                InteractionMode::Board | InteractionMode::Edit { .. } => {
+                    self.state.preferred_redo_scope(self.state.mode)
+                }
+            }
         };
+        if matches!(self.state.mode, InteractionMode::Compose) {
+            return effects;
+        }
         let action = if undo {
             Action::Undo {
                 operation_id: ids.operation_id(),

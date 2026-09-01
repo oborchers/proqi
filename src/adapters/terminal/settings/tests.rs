@@ -20,6 +20,7 @@ fn missing_config_uses_the_narrow_pane_default() {
     assert_eq!(settings.ui.keybindings.range_up, 'K');
     assert_eq!(settings.ui.keybindings.range_down, 'J');
     assert_eq!(settings.ui.keybindings.range_select, 'v');
+    assert_eq!(settings.ui.keybindings.transform, 't');
     assert_eq!(settings.ui.keybindings.screenshot_inbox, 'i');
     assert_eq!(settings.ui.keybindings.delete_sentence, 'U');
     assert!(settings.screenshot.directory.is_none());
@@ -44,6 +45,7 @@ fn missing_config_uses_the_narrow_pane_default() {
     assert!(!settings.ui.show_session_id);
     assert!(settings.ui.smart_lists);
     assert_eq!(settings.ui.list_indent_width, 2);
+    assert_eq!(settings.ui.merge_separator, "\n\n");
     assert_eq!(settings.theme.base, ThemePreference::Auto);
     assert_eq!(settings.theme_source, ThemeSource::BuiltIn);
 }
@@ -150,6 +152,30 @@ fn range_selection_latch_binding_is_remappable() {
     .expect("write config");
     let settings = load_settings(directory.path()).expect("settings");
     assert_eq!(settings.ui.keybindings.range_select, 'b');
+}
+
+#[test]
+fn contextual_transform_binding_is_remappable() {
+    let directory = tempfile::tempdir().expect("config directory");
+    fs::write(
+        directory.path().join("config.toml"),
+        "[keybindings]\ntransform = 'g'\n",
+    )
+    .expect("write config");
+    let settings = load_settings(directory.path()).expect("settings");
+    assert_eq!(settings.ui.keybindings.transform, 'g');
+}
+
+#[test]
+fn contextual_transform_rejects_reserved_primary_bindings() {
+    let directory = tempfile::tempdir().expect("config directory");
+    fs::write(
+        directory.path().join("config.toml"),
+        "[keybindings]\ntransform = 'x'\n",
+    )
+    .expect("write config");
+    let error = load_settings(directory.path()).expect_err("reserved transform");
+    assert!(error.to_string().contains("reserved Primary shortcut"));
 }
 
 #[test]
@@ -294,6 +320,25 @@ fn list_indentation_width_is_configurable_and_bounded() {
         .expect("write invalid config");
         assert!(load_settings(directory.path()).is_err());
     }
+}
+
+#[test]
+fn merge_separator_is_exactly_configurable_and_bounded() {
+    let directory = tempfile::tempdir().expect("config directory");
+    fs::write(
+        directory.path().join("config.toml"),
+        "merge_separator = \"\\r\\n---\\r\\n\"\n",
+    )
+    .expect("write config");
+    let settings = load_settings(directory.path()).expect("settings");
+    assert_eq!(settings.ui.merge_separator, "\r\n---\r\n");
+
+    fs::write(
+        directory.path().join("config.toml"),
+        "merge_separator = ''\n",
+    )
+    .expect("write empty separator");
+    assert!(load_settings(directory.path()).is_err());
 }
 
 #[test]

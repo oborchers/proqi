@@ -315,15 +315,12 @@ fn persistent_writer_contention_is_bounded_and_leaves_no_session() {
         .expect("acquire writer lock");
     let mut blocked = BoundedChild::new(command(state.path()).spawn().expect("spawn startup"));
     wait_for_runtime_advertisement(state.path(), &mut blocked);
-    let started = Instant::now();
+    // BoundedChild owns the real-process deadline. The SQLite adapter test owns
+    // the exact production retry-attempt bound without scheduler-sensitive timing.
     let blocked = blocked.wait_with_output();
     assert!(!blocked.status.success());
     let response: Value = serde_json::from_slice(&blocked.stdout).expect("failure JSON");
     assert_eq!(response["error"]["code"], "storage_busy");
-    assert!(
-        started.elapsed() < Duration::from_secs(3),
-        "storage contention exceeded its bounded retry contract"
-    );
     assert_database(state.path(), &sessions);
     assert_runtime_clean(state.path());
 
@@ -361,4 +358,66 @@ fn bounded_schema_failure_leaves_no_runtime_advertisement_and_recovers() {
     drop(exclusive);
     let recovered = launch(state.path());
     assert_successful_sessions(state.path(), &[recovered], &BTreeSet::new());
+}
+
+#[test]
+fn shared_schema_eleven_owner_blocks_migration_without_backup_then_release_recovers() {
+    let state = tempfile::tempdir().expect("state root");
+    let initial = launch(state.path());
+    let sessions = assert_successful_sessions(state.path(), &[initial], &BTreeSet::new());
+    let database = state.path().join("data/proqi.sqlite3");
+    Connection::open(&database)
+        .expect("schema eleven fixture")
+        .execute_batch(
+            "DELETE FROM migration_history WHERE version = 12;
+             UPDATE schema_meta SET schema_version = 11, storage_protocol = 10;",
+        )
+        .expect("downgrade transformation protocol stamp");
+
+    let mut ids = FakeIdGenerator::new(1_725_000_100_000);
+    let coordinator = FileRuntimeCoordinator::new(
+        state.path().join("runtime"),
+        ids.instance_id(),
+        state.path().to_path_buf(),
+        Timestamp::from_millis(2),
+        "schema-eleven-owner",
+    )
+    .expect("coordinator");
+    let shared = coordinator
+        .acquire_schema_shared()
+        .expect("shared schema owner");
+    let blocked = launch(state.path());
+    assert!(!blocked.status.success());
+    let response: Value = serde_json::from_slice(&blocked.stdout).expect("failure JSON");
+    assert_eq!(response["error"]["code"], "schema_busy");
+    let connection = Connection::open(&database).expect("unchanged schema eleven database");
+    assert_eq!(
+        connection
+            .query_row(
+                "SELECT schema_version, storage_protocol FROM schema_meta",
+                [],
+                |row| Ok((row.get::<_, u32>(0)?, row.get::<_, u32>(1)?)),
+            )
+            .expect("versions"),
+        (11, 10)
+    );
+    drop(connection);
+    let backups = state.path().join("data/backups");
+    assert!(
+        !backups.exists()
+            || std::fs::read_dir(&backups)
+                .expect("backup directory")
+                .next()
+                .is_none()
+    );
+
+    drop(shared);
+    let recovered = launch(state.path());
+    assert_successful_sessions(state.path(), &[recovered], &sessions);
+    assert_eq!(
+        std::fs::read_dir(backups)
+            .expect("migration backup directory")
+            .count(),
+        1
+    );
 }

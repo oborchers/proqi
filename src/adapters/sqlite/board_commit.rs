@@ -4,8 +4,8 @@ use rusqlite::{OptionalExtension, Transaction, params};
 
 use crate::{
     domain::{
-        BoardMutation, BoardOperation, ContentAnnotation, OperationSequence, Session,
-        ThoughtRevision, Timestamp,
+        BoardMutation, BoardOperation, ContentAnnotation, OperationSequence, Session, SessionId,
+        ThoughtId, ThoughtRevision, Timestamp,
     },
     ports::store::{CommitReceipt, DurableIdentity, OperationBatch, StoreError},
 };
@@ -146,6 +146,7 @@ pub(super) fn commit_board(
             ],
         )
         .map_err(map_sql_error)?;
+    truncate_editor_redo(transaction, &operation.forward)?;
     persist_board(transaction, &board)?;
     transaction
         .execute(
@@ -196,11 +197,43 @@ pub(super) fn commit_board(
 pub(super) fn mutation_changes_search(mutation: &BoardMutation) -> bool {
     match mutation {
         BoardMutation::Batch { mutations } => mutations.iter().any(mutation_changes_search),
-        BoardMutation::AddThought { .. } | BoardMutation::SetDeletion { .. } => true,
+        BoardMutation::AddThought { .. }
+        | BoardMutation::SetDeletion { .. }
+        | BoardMutation::SetDeletionExact { .. }
+        | BoardMutation::ReplaceContent { .. } => true,
         BoardMutation::MoveThought { .. }
         | BoardMutation::SetPresentation { .. }
         | BoardMutation::LegacySetCollapsed { .. } => false,
     }
+}
+
+fn truncate_editor_redo(
+    transaction: &Transaction<'_>,
+    mutation: &BoardMutation,
+) -> Result<(), StoreError> {
+    match mutation {
+        BoardMutation::Batch { mutations } => {
+            for mutation in mutations {
+                truncate_editor_redo(transaction, mutation)?;
+            }
+        }
+        BoardMutation::ReplaceContent { thought_id, .. }
+        | BoardMutation::SetDeletionExact { thought_id, .. } => {
+            transaction
+                .execute(
+                    "DELETE FROM thought_revisions WHERE thought_id = ?1 AND history_index >=
+                     (SELECT editor_history_cursor FROM thoughts WHERE id = ?1)",
+                    [thought_id.database_bytes().as_slice()],
+                )
+                .map_err(map_sql_error)?;
+        }
+        BoardMutation::AddThought { .. }
+        | BoardMutation::SetDeletion { .. }
+        | BoardMutation::MoveThought { .. }
+        | BoardMutation::SetPresentation { .. }
+        | BoardMutation::LegacySetCollapsed { .. } => {}
+    }
+    Ok(())
 }
 
 fn commit_revision(
@@ -220,6 +253,7 @@ fn commit_revision(
     }
     require_next_sequence(transaction, revision.session_id, revision.sequence)?;
     let cursor = revision_cursor(transaction, revision)?;
+    truncate_conflicting_board_redo(transaction, revision.session_id, revision.thought_id)?;
     persist_revision(transaction, revision, cursor, &request_json)?;
     insert_receipt(
         transaction,
@@ -243,6 +277,52 @@ fn commit_revision(
         identity: DurableIdentity::Revision(revision.id),
         idempotent_replay: false,
     })
+}
+
+fn truncate_conflicting_board_redo(
+    transaction: &Transaction<'_>,
+    session_id: SessionId,
+    thought_id: ThoughtId,
+) -> Result<(), StoreError> {
+    let cursor: i64 = transaction
+        .query_row(
+            "SELECT board_history_cursor FROM sessions WHERE id = ?1",
+            [session_id.database_bytes().as_slice()],
+            |row| row.get(0),
+        )
+        .map_err(map_sql_error)?;
+    let mut statement = transaction
+        .prepare(
+            "SELECT history_index, payload_json FROM board_operations
+             WHERE session_id = ?1 AND history_index >= ?2 ORDER BY history_index",
+        )
+        .map_err(map_sql_error)?;
+    let rows = statement
+        .query_map(
+            params![session_id.database_bytes().as_slice(), cursor],
+            |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)),
+        )
+        .map_err(map_sql_error)?;
+    let mut first_conflict = None;
+    for row in rows {
+        let (history_index, payload) = row.map_err(map_sql_error)?;
+        let operation: BoardOperation = serde_json::from_str(&payload)
+            .map_err(|error| StoreError::Corrupt(error.to_string()))?;
+        if operation.forward.addresses(thought_id) || operation.inverse.addresses(thought_id) {
+            first_conflict = Some(history_index);
+            break;
+        }
+    }
+    drop(statement);
+    if let Some(history_index) = first_conflict {
+        transaction
+            .execute(
+                "DELETE FROM board_operations WHERE session_id = ?1 AND history_index >= ?2",
+                params![session_id.database_bytes().as_slice(), history_index],
+            )
+            .map_err(map_sql_error)?;
+    }
+    Ok(())
 }
 
 fn revision_cursor(

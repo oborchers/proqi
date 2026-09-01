@@ -470,6 +470,18 @@ fn participants(
         .collect()
 }
 
+#[test]
+fn protocol_ten_process_is_not_compatible_with_protocol_eleven_update_convergence() {
+    let mut ids = TestIds::new(1_800_000_000_000);
+    let identity = InstallationIdentity::from_digest([39; 32]);
+    let mut participant = participants(&mut ids, identity, 1).remove(0);
+    participant.storage_protocol = 10;
+    assert!(!super::is_compatible_update_participant(
+        &participant,
+        identity
+    ));
+}
+
 fn successful_installer() -> Installer {
     Installer {
         calls: 0,

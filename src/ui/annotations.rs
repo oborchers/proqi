@@ -3,9 +3,10 @@
 use unicode_segmentation::UnicodeSegmentation as _;
 
 use crate::domain::{
-    AnnotationBehavior, ContentAnnotation, ContentAnnotationKind, InlineStyleKind,
+    AnnotationBehavior, AnnotationTextChange, ContentAnnotation, ContentAnnotationKind,
+    InlineStyleKind, rebase_annotations,
 };
-use crate::ports::editor::{OffsetAffinity, TextChange, TextChangeSet};
+use crate::ports::editor::TextChangeSet;
 
 const LARGE_PASTE_LINES: usize = 12;
 const LARGE_PASTE_GRAPHEMES: usize = 1_200;
@@ -416,60 +417,39 @@ pub(super) fn rebase(
     annotations: &[ContentAnnotation],
     inserted: &[ContentAnnotation],
 ) -> Vec<ContentAnnotation> {
-    let mut rebased = annotations
+    let changes = changes
+        .as_slice()
         .iter()
-        .filter(|annotation| {
-            !changes
-                .as_slice()
-                .iter()
-                .any(|change| intersects(annotation, change))
+        .map(|change| AnnotationTextChange {
+            old: change.old_range(),
+            new: change.new_range(),
         })
-        .filter_map(|annotation| map_annotation(before, changes, annotation))
         .collect::<Vec<_>>();
-    if let [change] = changes.as_slice() {
-        let new_range = change.new_range();
-        rebased.extend(inserted.iter().filter_map(|annotation| {
-            if annotation.is_shortcut_emphasis() {
-                return None;
-            }
-            let start = new_range.start.checked_add(annotation.start)?;
-            let end = new_range.start.checked_add(annotation.end)?;
-            (end <= new_range.end && after.get(start..end).is_some()).then(|| ContentAnnotation {
-                start,
-                end,
-                kind: annotation.kind.clone(),
-            })
-        }));
-    }
-    rebased.sort_by_key(|annotation| annotation.start);
-    rebased
+    let inserted = inserted
+        .iter()
+        .filter(|annotation| !annotation.is_shortcut_emphasis())
+        .cloned()
+        .collect::<Vec<_>>();
+    annotations_or_empty(rebase_annotations(
+        before,
+        after,
+        &changes,
+        annotations,
+        &inserted,
+    ))
 }
 
-fn intersects(annotation: &ContentAnnotation, change: &TextChange) -> bool {
-    let old = change.old_range();
-    if old.is_empty() {
-        annotation.start < old.start && old.start < annotation.end
-    } else {
-        old.start < annotation.end && annotation.start < old.end
+#[expect(
+    clippy::manual_unwrap_or_default,
+    reason = "invalid display metadata deliberately degrades to plain canonical text"
+)]
+fn annotations_or_empty(
+    result: Result<Vec<ContentAnnotation>, crate::domain::DomainError>,
+) -> Vec<ContentAnnotation> {
+    match result {
+        Ok(annotations) => annotations,
+        Err(_) => Vec::new(),
     }
-}
-
-fn map_annotation(
-    before: &str,
-    changes: &TextChangeSet,
-    annotation: &ContentAnnotation,
-) -> Option<ContentAnnotation> {
-    let start = changes
-        .map_old_offset(before, annotation.start, OffsetAffinity::After)
-        .ok()?;
-    let end = changes
-        .map_old_offset(before, annotation.end, OffsetAffinity::Before)
-        .ok()?;
-    (start < end).then(|| ContentAnnotation {
-        start,
-        end,
-        kind: annotation.kind.clone(),
-    })
 }
 
 fn grouped(value: usize) -> String {

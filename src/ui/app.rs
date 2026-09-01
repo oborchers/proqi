@@ -31,6 +31,7 @@ mod selection;
 mod session;
 mod state_bridge;
 mod transfer;
+mod transformations;
 mod update;
 mod view;
 mod view_frame;
