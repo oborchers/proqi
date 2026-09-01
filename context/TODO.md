@@ -53,6 +53,10 @@ undo remain non-negotiable.
 - [ ] **Herdr discovery:** surface recognized live agents from every workspace
   and tab in the existing invocation picker, then add an explicit global
   delivery route without changing the adjacent-submit fast path.
+- [ ] **Shared Proqi sessions:** let several interactive Proqi panes attach to
+  one logical board through a single authoritative owner, with private view
+  state, exclusive per-thought editing, and submission bound to the initiating
+  pane's verified agent.
 - [ ] **Standalone agent connectivity:** finish the architecture spike and any
   behavior-neutral prerequisite, then add non-Herdr connection only through a
   verified provider endpoint or required extension. Pi is the only current
@@ -91,6 +95,12 @@ Board
 
 Herdr discovery and routing
 └─ Live agent catalog ──> Prompt reference insertion ──> Global semantic submit
+
+Shared Proqi sessions
+└─ Existing active-owner control ──> Snapshot and ordered change stream
+   ──> Read-only attach ──> Private per-view state
+   ──> Exclusive per-thought editing ──> Initiating-pane submission
+   ──> Bounded owner-loss recovery
 
 Standalone agent connectivity (no Herdr)
 ├─ Provider spikes: Pi, Hermes, Codex, and Claude Code complete
@@ -143,7 +153,10 @@ tickets in one practical lane. The commands overlay and release-highlights
 overlay can proceed independently at
 the model layer, but their final rendering work should be serialized. Screenshot
 TUI wiring and the Git status row both touch responsive chrome and should also
-be serialized.
+be serialized. Shared-session work changes the session lease, control protocol,
+editor ownership, submission coordination, and most PTY lifecycle contracts. It
+should run in one dedicated lane and reconcile those concurrent changes before
+implementation rather than copying them from open worktrees.
 
 ## Prompt-ready primary input
 
@@ -860,6 +873,108 @@ me from unknowingly submitting an unusable path—including through Submit all.
   when a file returns, large boards, repeated events, resize, Unicode paths,
   single submission, Submit all without visiting the affected thought, and
   proof that inaccessible preflight sends nothing and removes nothing.
+
+## Shared Proqi sessions
+
+### Attach several interactive views to one authoritative board: P1, XL (5 to 9 weeks)
+
+User story: when several coding agents are working on the same task, I can open
+the same logical Proqi board beside each agent. Every pane sees durable board
+changes promptly, while its focus, cursor, selection, scroll position, hover,
+Compose buffer, and open overlays remain private. An action initiated from one
+pane is serialized once, appears in the other panes, and retains one truthful
+persistent undo history.
+
+Product boundary: this is a shared local board, not a distributed rich-text
+editor. Exactly one authoritative Proqi process retains the session lease,
+reducer, storage lane, operation sequence, submission journal, and durable
+history. Attached views never write around that owner or mutate the session
+database directly. Do not introduce multi-writer SQLite, CRDT, operational
+transformation, terminal screen scraping, or raw key forwarding.
+
+- [ ] Start with a focused architecture spike. Freeze the shared-state and
+  per-view-state boundary, per-thought editing ownership, owner-loss behavior,
+  shared undo semantics, initiating-pane submission contract, mixed-version
+  negotiation, and exact protocol limits before changing the session lease.
+- [ ] Add an explicit attach flow such as `proqi --attach <id-or-name>`. Keep
+  ordinary `proqi`, continue, and resume behavior safe by default so two panes
+  never begin sharing a session merely because they opened in the same
+  directory.
+- [ ] Extend the existing same-user active-owner control transport rather than
+  creating a second command service. Authenticate the exact owner and attached
+  instance, negotiate a versioned capability set, bound every frame and queue,
+  and preserve current fail-closed behavior for incompatible owners.
+- [ ] Introduce one canonical initial session snapshot and an ordered change
+  stream keyed by the durable session operation sequence. An attached view must
+  detect gaps, discard stale generations, and request a fresh canonical
+  snapshot instead of applying changes out of order or guessing missing state.
+- [ ] Keep durable board content, order, session name, presentation preference,
+  operation history, submission locks, and persistence state shared. Keep
+  focus, range selection, editor cursor and viewport, hover, mouse capture,
+  local modal state, transient status, and responsive layout private to each
+  attached view.
+- [ ] Keep passive and engaged Compose state private until materialization.
+  Concurrent first-content creation must allocate one ordinary thought per
+  accepted intention through the owner, preserve every exact input byte, and
+  never let two clients claim one transient Compose generation.
+- [ ] Give a thought at most one interactive editing owner at a time. Different
+  thoughts may be edited concurrently after the protocol proves their distinct
+  ownership. A second view attempting to edit an owned thought receives clear
+  read-only feedback and may retry after explicit release, disconnect, or
+  bounded crash recovery.
+- [ ] Route edits through typed expected-revision or expected-digest requests
+  and the owner's ordinary revision pipeline. Preserve autosave truth,
+  coalescing boundaries, annotations, Unicode positions, restart-safe undo and
+  redo, and idempotent retries. Never resolve an edit race with last-writer-wins
+  replacement.
+- [ ] Route structural actions through the existing owner reducer using unique
+  request and operation identities. Create, delete, duplicate, reorder,
+  collapse, multi-selection, split, extract, merge, transfer, and board history
+  must each produce the same single durable result they produce from the owner
+  TUI today.
+- [ ] Define undo as an action against the shared durable history, not a private
+  visual rewind. Editor undo addresses the exact thought and revision history;
+  board undo addresses the session board history. Every attached view receives
+  and renders the resulting canonical change.
+- [ ] Bind direct submission to the attached pane that initiated it. The owner
+  must still own source capture, durability barriers, attachment preflight,
+  submission locks, journal transitions, accepted receipt handling, and
+  optional removal. The initiating client must discover and revalidate its own
+  adjacent agent through a typed, attributable protocol. Never silently submit
+  to the authoritative owner's adjacent pane.
+- [ ] Retain one screenshot-inbox authority and one attachment-health policy.
+  A committed capture becomes an ordinary owner mutation and is broadcast once.
+  Transient filesystem observations may remain process-local only where they
+  cannot cause views to disagree about whether submission is permitted.
+- [ ] Make the first production milestone reconnect safely rather than elect a
+  new owner automatically. When the owner exits, attached views stop admitting
+  mutations, preserve any unacknowledged local editor buffer visibly, wait for
+  authoritative lease release, and offer bounded reconnect or ordinary resume.
+  Add automatic owner election only after deterministic failover and pending
+  operation recovery have a proven contract.
+- [ ] Do not let a slow or abandoned client block the owner. Use bounded
+  outbound queues, generation-aware resynchronization, heartbeat or connection
+  liveness, idempotent disconnect cleanup, and the existing overall bounded
+  shutdown discipline. Backpressure may force one client to resnapshot, never
+  stall durable work for the session.
+- [ ] Stage delivery. First ship live read-only mirrors with navigation and
+  resynchronization. Then add structural actions and private view state. Next
+  add exclusive per-thought editing. Add initiating-pane direct submission and
+  bounded owner-loss recovery only after the earlier stages are qualified.
+- [ ] Cover two to fifteen attached views, concurrent edits to different
+  thoughts, rejected same-thought editing, Compose races, rapid structural
+  actions, shared undo and redo, storage failure, sequence gaps, slow clients,
+  disconnect and reconnect, owner crash, mixed protocols, update replacement,
+  screenshots, attachments, narrow and shallow resize, mouse and keyboard
+  parity, Unicode and control-heavy content, direct submissions from different
+  adjacent panes, and proof that no operation is duplicated or silently lost.
+
+Effort includes the complete production path. A read-only synchronized mirror
+is approximately one to two weeks. Structural actions and per-thought editing
+add roughly two to four weeks. Initiating-pane submission, failure recovery,
+and complete PTY qualification add another two to four weeks. The stages may
+ship independently only when each has a truthful capability boundary and does
+not imply unsupported collaborative editing.
 
 ## Standalone coding-agent connectivity (without Herdr)
 
