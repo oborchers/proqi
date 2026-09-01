@@ -83,3 +83,35 @@ fn merge_reports_a_concurrently_deleted_source_as_missing_without_mutation() {
     );
     assert_eq!(fixture.state, before);
 }
+
+#[test]
+fn undoing_a_split_returns_focus_to_its_retained_source_instead_of_board_start() {
+    let mut fixture = Fixture::new();
+    fixture.create("first");
+    fixture.create("middle");
+    let source = fixture.create("left right");
+    let new_thought_id = fixture.ids.thought_id();
+    let operation_id = fixture.operation_id();
+    let at = fixture.time();
+    reduce(
+        &mut fixture.state,
+        Action::SplitThought {
+            thought_id: source,
+            new_thought_id,
+            operation_id,
+            expected_content: "left right".to_owned(),
+            expected_annotations: Vec::new(),
+            source_content: "left right".to_owned(),
+            source_annotations: Vec::new(),
+            at_byte: 5,
+            at,
+        },
+    )
+    .expect("split");
+    assert_eq!(fixture.state.focused_thought, Some(new_thought_id));
+
+    move_history(&mut fixture, UndoScope::Board, true);
+
+    assert_eq!(fixture.state.focused_thought, Some(source));
+    assert_eq!(fixture.state.mode, InteractionMode::Board);
+}

@@ -356,6 +356,8 @@ fn move_board_history(state: &mut AppState, at: Timestamp, undo: bool) -> Applic
     } else {
         &operation.forward
     };
+    let focused_before = state.focused_thought;
+    let transform_source = undo.then(|| transform_source(&operation)).flatten();
     let mut board = state.board.clone();
     board.apply_mutation(mutation, at)?;
     state.board = board;
@@ -363,8 +365,46 @@ fn move_board_history(state: &mut AppState, at: Timestamp, undo: bool) -> Applic
         state
             .board_history_cursor
             .saturating_add_signed(if undo { -1 } else { 1 });
+    let focus_was_removed = focused_before.is_some_and(|thought_id| {
+        state
+            .board
+            .thought(thought_id)
+            .is_none_or(|thought| !thought.is_live())
+    });
     state.keep_focus_valid();
+    if focus_was_removed
+        && let Some(thought_id) = transform_source
+        && state
+            .board
+            .thought(thought_id)
+            .is_some_and(Thought::is_live)
+    {
+        state.focused_thought = Some(thought_id);
+    }
     Ok(())
+}
+
+fn transform_source(operation: &BoardOperation) -> Option<ThoughtId> {
+    if !matches!(
+        operation.kind,
+        BoardOperationKind::Split | BoardOperationKind::Extract
+    ) {
+        return None;
+    }
+    replaced_thought(&operation.forward)
+}
+
+fn replaced_thought(mutation: &BoardMutation) -> Option<ThoughtId> {
+    match mutation {
+        BoardMutation::Batch { mutations } => mutations.iter().find_map(replaced_thought),
+        BoardMutation::ReplaceContent { thought_id, .. } => Some(*thought_id),
+        BoardMutation::AddThought { .. }
+        | BoardMutation::SetDeletion { .. }
+        | BoardMutation::SetDeletionExact { .. }
+        | BoardMutation::MoveThought { .. }
+        | BoardMutation::SetPresentation { .. }
+        | BoardMutation::LegacySetCollapsed { .. } => None,
+    }
 }
 
 fn move_editor_history(
