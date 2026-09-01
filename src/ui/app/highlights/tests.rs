@@ -119,10 +119,15 @@ fn hidden_highlights_arm_only_when_they_become_the_rendered_overlay() {
         })
         .expect("draw update prompt");
     assert!(!highlights_visible);
-    assert!(!app.accept_release_highlights_input(8));
+    assert!(app.accept_protected_overlay_input(8));
 
-    let effects = app.handle(UiInput::Key(UiKey::Escape), &mut ids, &clock);
+    let effects = if app.accept_protected_overlay_input(8) {
+        app.handle(UiInput::Key(UiKey::Escape), &mut ids, &clock)
+    } else {
+        Vec::new()
+    };
     assert_eq!(effects.len(), 1);
+    assert!(!app.accept_protected_overlay_input(8));
     terminal
         .draw(|frame| {
             let layout = app.prepare_frame(frame.area());
@@ -136,8 +141,8 @@ fn hidden_highlights_arm_only_when_they_become_the_rendered_overlay() {
         .expect("draw revealed highlights");
     assert!(highlights_visible);
     app.arm_release_highlights(8);
-    assert!(!app.accept_release_highlights_input(8));
-    assert!(app.accept_release_highlights_input(9));
+    assert!(!app.accept_protected_overlay_input(8));
+    assert!(app.accept_protected_overlay_input(9));
 }
 
 #[test]

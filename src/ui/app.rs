@@ -356,6 +356,16 @@ impl BoardApp {
             || self.submission_mode.is_some()
     }
 
+    pub(crate) fn accept_protected_overlay_input(&self, sequence: u64) -> bool {
+        if self.screenshot.takeover.is_some() {
+            true
+        } else if self.update_prompt.is_some() {
+            self.accept_update_input(sequence)
+        } else {
+            self.accept_release_highlights_input(sequence)
+        }
+    }
+
     /// Rebuild the editor adapter when reducer state changes externally.
     pub fn sync_editor_from_state(&mut self) {
         let thought_id = match self.state.mode {

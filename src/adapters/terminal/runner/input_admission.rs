@@ -54,7 +54,7 @@ pub(super) fn apply(
     sequence: u64,
     event: UiInput,
 ) -> Result<(), TerminalError> {
-    if !app.accept_update_input(sequence) || !app.accept_release_highlights_input(sequence) {
+    if !app.accept_protected_overlay_input(sequence) {
         return Ok(());
     }
     if matches!(event, UiInput::Resize { .. }) {
