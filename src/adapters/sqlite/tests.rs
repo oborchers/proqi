@@ -87,3 +87,44 @@ fn transient_busy_retries_whole_session_transaction_without_duplication() {
         assert_eq!(rows, 0, "fresh session unexpectedly populated {table}");
     }
 }
+
+#[test]
+fn persistent_busy_stops_after_production_attempt_bound_without_partial_state() {
+    let temporary = tempdir().expect("temporary state root");
+    let mut config = StoreConfig::new(
+        temporary.path().join("data/proqi.sqlite3"),
+        temporary.path().join("backups"),
+        MigrationMode::Allow,
+        Timestamp::from_millis(1),
+    );
+    config.retry.jitter_seed = 1;
+    let expected_attempts = config.retry.max_attempts;
+    let mut store = SqliteStore::open(&config).expect("open store");
+    let mut ids = FakeIdGenerator::new(1_725_000_000_000);
+    let session = Session::new(
+        ids.session_id(),
+        temporary.path().to_path_buf(),
+        Timestamp::from_millis(2),
+    )
+    .expect("session");
+    let batch = OperationBatch::CreateSession(session);
+    let mut attempts = 0;
+
+    let receipt = store.with_write_retry(|transaction| {
+        attempts += 1;
+        let _receipt = commit_batch(transaction, &batch)?;
+        Err::<Option<crate::ports::store::CommitReceipt>, _>(StoreError::Busy)
+    });
+
+    assert_eq!(receipt, Err(StoreError::Busy));
+    assert_eq!(attempts, expected_attempts);
+    for table in ["sessions", "session_search"] {
+        let rows: i64 = store
+            .connection
+            .query_row(&format!("SELECT count(*) FROM {table}"), [], |row| {
+                row.get(0)
+            })
+            .expect("persistent-busy table");
+        assert_eq!(rows, 0, "persistent busy left partial state in {table}");
+    }
+}

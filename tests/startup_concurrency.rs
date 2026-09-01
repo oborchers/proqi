@@ -313,8 +313,10 @@ fn persistent_writer_contention_is_bounded_and_leaves_no_session() {
     writer
         .execute_batch("BEGIN IMMEDIATE")
         .expect("acquire writer lock");
+    let mut blocked = BoundedChild::new(command(state.path()).spawn().expect("spawn startup"));
+    wait_for_runtime_advertisement(state.path(), &mut blocked);
     let started = Instant::now();
-    let blocked = launch(state.path());
+    let blocked = blocked.wait_with_output();
     assert!(!blocked.status.success());
     let response: Value = serde_json::from_slice(&blocked.stdout).expect("failure JSON");
     assert_eq!(response["error"]["code"], "storage_busy");
