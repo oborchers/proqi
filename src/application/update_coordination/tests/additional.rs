@@ -203,6 +203,40 @@ fn successful_peer_convergence_targets_only_the_initiating_session() {
 }
 
 #[test]
+fn failed_pending_write_keeps_the_initiator_running_without_a_false_announcement() {
+    let mut ids = TestIds::new(1_800_000_000_000);
+    let identity = InstallationIdentity::from_digest([43; 32]);
+    let before = participants(&mut ids, identity, 1);
+    let initiating = before[0].instance_id;
+    let registry = registry(before.clone(), before);
+    let state = State {
+        fail_release_highlights: true,
+        ..State::default()
+    };
+    let mut gateway = Gateway::default();
+    let mut installer = successful_installer();
+
+    let result = UpdateRestartCoordinator::new(&state, &registry, &mut gateway, &mut installer)
+        .execute(
+            ids.request_id(),
+            initiating,
+            identity,
+            &version("0.2.0"),
+            Timestamp::from_millis(1_800_000_030_000),
+            &(),
+        )
+        .expect("failed pending write stays bounded");
+
+    assert_eq!(result.restart_requests, 0);
+    assert_eq!(result.restart_failed, vec![initiating]);
+    assert!(!result.convergence_state_recorded);
+    assert_eq!(gateway.released, vec![initiating]);
+    assert!(gateway.restarted.is_empty());
+    assert!(state.cache.borrow().release_highlights.is_none());
+    assert!(state.cache.borrow().restart_needed);
+}
+
+#[test]
 fn mismatched_installer_result_creates_no_announcement_or_restart() {
     let mut ids = TestIds::new(1_800_000_000_000);
     let identity = InstallationIdentity::from_digest([41; 32]);

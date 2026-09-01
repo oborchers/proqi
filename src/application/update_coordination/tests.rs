@@ -48,6 +48,7 @@ impl Drop for Lease {
 struct State {
     installer_owned: Arc<AtomicBool>,
     cache: RefCell<UpdateCacheState>,
+    fail_release_highlights: bool,
 }
 
 impl UpdateStateStore for State {
@@ -127,6 +128,11 @@ impl UpdateStateStore for State {
         _: InstallationIdentity,
         announcement: ReleaseHighlightAnnouncement,
     ) -> Result<UpdateCacheState, UpdateError> {
+        if self.fail_release_highlights {
+            return Err(UpdateError::State(
+                "injected highlight write failure".to_owned(),
+            ));
+        }
         self.cache.borrow_mut().release_highlights = Some(announcement);
         Ok(self.cache.borrow().clone())
     }

@@ -24,18 +24,41 @@ pub(super) fn prepare(
     Ok(Some(endpoint.to_string_lossy().into_owned()))
 }
 
-pub(super) fn existing(
+pub(super) fn matches_recorded(
     runtime_dir: &Path,
     instance_id: InstanceId,
-) -> Result<Option<PathBuf>, RuntimeError> {
-    let endpoint = endpoint_path(runtime_dir, instance_id)?;
-    let Some(parent) = endpoint.parent() else {
-        return Ok(None);
+    recorded: &Path,
+) -> Result<bool, RuntimeError> {
+    let current = endpoint_path(runtime_dir, instance_id)?;
+    let legacy = legacy_endpoint_path(runtime_dir, instance_id)?;
+    if recorded != current && recorded != legacy {
+        return Ok(false);
+    }
+    let Some(parent) = recorded.parent() else {
+        return Ok(false);
     };
     if validate_owned_directory(parent, owner_uid(runtime_dir)?).is_err() {
-        return Ok(None);
+        return Ok(false);
     }
-    Ok(Some(endpoint))
+    Ok(true)
+}
+
+fn legacy_endpoint_path(
+    runtime_dir: &Path,
+    instance_id: InstanceId,
+) -> Result<PathBuf, RuntimeError> {
+    use std::os::unix::fs::MetadataExt as _;
+
+    let local = runtime_dir
+        .join("control")
+        .join(format!("{instance_id}.sock"));
+    if local.as_os_str().as_encoded_bytes().len() <= MAX_UNIX_ENDPOINT_BYTES {
+        return Ok(local);
+    }
+    let uid = fs::metadata(runtime_dir).map_err(io_error)?.uid();
+    Ok(std::env::temp_dir()
+        .join(format!("proqi-{uid}"))
+        .join(format!("{instance_id}.sock")))
 }
 
 fn endpoint_path(runtime_dir: &Path, instance_id: InstanceId) -> Result<PathBuf, RuntimeError> {

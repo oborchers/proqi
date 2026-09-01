@@ -765,6 +765,12 @@ only after every peer converges, then requests the initiating restart. Peer
 failure creates no announcement. A delayed initiating resume retains the
 pending record and may show it later under the exact target.
 
+The pending announcement write is part of initiating restart admission. If its
+private atomic write fails, the coordinator releases the initiating process
+without asking it to restart, records restart convergence as incomplete, and
+shows no announcement. This keeps the old session usable and prevents a
+successful-looking update path from losing its required durable target.
+
 Each participant then independently restores terminal modes, stops worker
 threads, closes control transport, releases session and schema leases, applies
 an explicit descriptor policy, resolves and verifies the active Homebrew Proqi

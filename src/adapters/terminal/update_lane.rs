@@ -32,6 +32,9 @@ use super::{
     supervisor::{ShutdownDeadline, WorkerLifecycle, join_before},
 };
 
+#[cfg(test)]
+mod tests;
+
 const UPDATE_DEADLINE_MILLIS: i64 = 45_000;
 
 enum UpdateRequest {
@@ -50,7 +53,7 @@ pub(super) enum UpdateActionResult {
     Skipped,
     Instructions(StableVersion),
     Executed(crate::application::UpdateExecution),
-    HighlightsAcknowledged(bool),
+    HighlightsAcknowledged(Result<(), UpdateError>),
 }
 
 pub(super) enum ManualCheckResult {
@@ -226,6 +229,7 @@ fn update_loop(
                 Some(UpdateResult::ManualCheck(result))
             }
             UpdateRequest::Act(intent) => {
+                let concludes_prompt = concludes_prompt(&intent);
                 let action = act(
                     &state,
                     installation,
@@ -234,7 +238,9 @@ fn update_loop(
                     intent,
                     &mut process,
                 );
-                prompt_lease = None;
+                if concludes_prompt {
+                    prompt_lease = None;
+                }
                 Some(UpdateResult::Action(action))
             }
         };
@@ -244,6 +250,16 @@ fn update_loop(
             return;
         }
     }
+}
+
+const fn concludes_prompt(intent: &UpdateIntent) -> bool {
+    matches!(
+        intent,
+        UpdateIntent::Dismiss(_)
+            | UpdateIntent::Skip(_)
+            | UpdateIntent::ViewInstructions(_)
+            | UpdateIntent::Install(_)
+    )
 }
 
 fn check_now(
@@ -359,10 +375,9 @@ fn act(
         }
         UpdateIntent::ViewInstructions(version) => Ok(UpdateActionResult::Instructions(version)),
         UpdateIntent::AcknowledgeReleaseHighlights(announcement) => {
-            let succeeded = state
-                .acknowledge_release_highlights(installation.identity, &announcement)
-                .unwrap_or_default();
-            Ok(UpdateActionResult::HighlightsAcknowledged(succeeded))
+            Ok(highlight_acknowledgement_result(
+                state.acknowledge_release_highlights(installation.identity, &announcement),
+            ))
         }
         UpdateIntent::Install(version) => install(
             state,
@@ -373,6 +388,10 @@ fn act(
             process,
         ),
     }
+}
+
+fn highlight_acknowledgement_result(result: Result<bool, UpdateError>) -> UpdateActionResult {
+    UpdateActionResult::HighlightsAcknowledged(result.map(|_changed| ()))
 }
 
 fn install(

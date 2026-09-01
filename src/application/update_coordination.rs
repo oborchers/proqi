@@ -21,7 +21,7 @@ use crate::{
 
 use restart::{initiating_upgrade, record_pending_highlights, restart_initiating, restart_peers};
 
-const REPLACEMENT_TIMEOUT: Duration = Duration::from_secs(2);
+const REPLACEMENT_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Whether one active process can participate in the current all-session update protocol.
 #[must_use]

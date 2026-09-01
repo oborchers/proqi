@@ -57,8 +57,8 @@ fn apply_result(
         UpdateResult::Action(result) => {
             pending.update = pending.update.saturating_sub(1);
             match result {
-                Ok(UpdateActionResult::HighlightsAcknowledged(succeeded)) => {
-                    app.complete_release_highlights_acknowledgement(succeeded);
+                Ok(UpdateActionResult::HighlightsAcknowledged(result)) => {
+                    app.complete_release_highlights_acknowledgement(result.is_ok());
                 }
                 other => app.complete_update_action(action_message(other)),
             }

@@ -68,7 +68,7 @@ fn install_automatic(app: &mut BoardApp, input_boundary: u64) -> ReleaseHighligh
 fn automatic_dismissal_waits_for_durable_exact_acknowledgement() {
     let (mut app, mut ids, clock) = app();
     let announcement = install_automatic(&mut app, 0);
-    app.arm_release_highlights();
+    app.arm_release_highlights(0);
 
     assert_eq!(
         app.handle(UiInput::Key(UiKey::Escape), &mut ids, &clock),
@@ -84,14 +84,15 @@ fn automatic_dismissal_waits_for_durable_exact_acknowledgement() {
 }
 
 #[test]
-fn protected_automatic_overlay_rejects_buffered_input_until_drawn() {
+fn protected_automatic_overlay_rejects_input_queued_before_its_first_draw() {
     let (mut app, _, _) = app();
     install_automatic(&mut app, 7);
     assert!(!app.accept_release_highlights_input(7));
     assert!(!app.accept_release_highlights_input(8));
-    app.arm_release_highlights();
+    app.arm_release_highlights(8);
     assert!(!app.accept_release_highlights_input(7));
-    assert!(app.accept_release_highlights_input(8));
+    assert!(!app.accept_release_highlights_input(8));
+    assert!(app.accept_release_highlights_input(9));
 }
 
 #[test]
@@ -115,7 +116,7 @@ fn manual_reopen_closes_without_an_update_effect() {
 fn mouse_close_is_explicit_dismissal_and_scroll_survives_resize() {
     let (mut app, mut ids, clock) = app();
     let announcement = install_automatic(&mut app, 0);
-    app.arm_release_highlights();
+    app.arm_release_highlights(0);
     let layout = app.prepare_frame(Rect::new(0, 0, 38, 8));
     let close = layout.overlay.expect("overlay").close;
     let _ = app.handle(
@@ -150,7 +151,7 @@ fn mouse_close_is_explicit_dismissal_and_scroll_survives_resize() {
 fn scroll_and_resize_reproject_and_clamp_without_losing_the_overlay() {
     let (mut app, mut ids, clock) = app();
     install_automatic(&mut app, 0);
-    app.arm_release_highlights();
+    app.arm_release_highlights(0);
     app.prepare_frame(Rect::new(0, 0, 38, 8));
     for _ in 0..20 {
         let _ = app.handle(
@@ -178,6 +179,38 @@ fn scroll_and_resize_reproject_and_clamp_without_losing_the_overlay() {
         .expect("resized overlay");
     assert!(resized.scroll <= resized.rows.len().saturating_sub(20));
     assert_eq!(resized.title, " what's new in Proqi 1.2.0 ");
+}
+
+#[test]
+fn overlay_navigation_uses_the_canonical_arrow_and_vim_modifier_parity() {
+    use crate::ports::editor::CursorMovement;
+
+    let (mut app, mut ids, clock) = app();
+    install_automatic(&mut app, 0);
+    app.arm_release_highlights(0);
+    app.prepare_frame(Rect::new(0, 0, 38, 8));
+    let inputs = [
+        UiKey::Move {
+            movement: CursorMovement::VisualDown,
+            extend_selection: true,
+        },
+        UiKey::PrimaryShiftMove {
+            movement: CursorMovement::VisualDown,
+        },
+        UiKey::EditNavigation {
+            editor_movement: CursorMovement::VisualJumpDown,
+            board_movement: CursorMovement::VisualDown,
+        },
+        UiKey::Character('J'),
+        UiKey::PrimaryCharacter('j'),
+    ];
+    for (index, key) in inputs.into_iter().enumerate() {
+        let _ = app.handle(UiInput::Key(key), &mut ids, &clock);
+        assert_eq!(
+            app.release_highlights_view(36, 6).expect("overlay").scroll,
+            index + 1
+        );
+    }
 }
 
 fn snapshot(width: u16, height: u16, preference: ThemePreference) -> String {

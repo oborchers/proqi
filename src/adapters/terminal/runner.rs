@@ -366,7 +366,7 @@ fn drive(
                 render(frame, app, &layout, &theme);
             })?;
             app.arm_update_prompt();
-            app.arm_release_highlights();
+            app.arm_release_highlights(lanes.input.latest_sequence());
             redraw = false;
         }
         if let Some((sequence, event)) = held_input.take() {

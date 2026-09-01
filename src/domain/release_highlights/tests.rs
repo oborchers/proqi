@@ -2,9 +2,13 @@ use super::{
     ReleaseHighlightAnnouncement, ReleaseHighlightAnnouncementError, ReleaseHighlightGroup,
     ReleaseHighlightsError, ReleaseHighlightsManifest,
 };
-use crate::{
-    adapters::memory::FakeIdGenerator, domain::StableVersion, ports::environment::IdGenerator as _,
-};
+use std::str::FromStr as _;
+
+use crate::domain::{SessionId, StableVersion};
+
+fn session() -> SessionId {
+    SessionId::from_str("ses_06g30t7dv5qv55n1ppn3clis3k").expect("canonical session")
+}
 
 fn manifest(groups: &str) -> String {
     format!(r#"{{"schema_version":1,"releases":[{groups}]}}"#)
@@ -132,8 +136,7 @@ fn unknown_fields_and_oversized_input_fail_closed() {
 
 #[test]
 fn durable_announcement_requires_an_exact_advancing_version_range() {
-    let mut ids = FakeIdGenerator::new(1_800_000_000_000);
-    let session = ids.session_id();
+    let session = session();
     let previous = StableVersion::parse("1.2.2").expect("previous");
     let target = StableVersion::parse("1.2.3").expect("target");
     let mut announcement =
@@ -150,8 +153,7 @@ fn durable_announcement_requires_an_exact_advancing_version_range() {
 
 #[test]
 fn malformed_durable_announcement_fails_deserialization() {
-    let mut ids = FakeIdGenerator::new(1_800_000_000_000);
-    let session = ids.session_id();
+    let session = session();
     let value = serde_json::json!({
         "session_id": session,
         "previous_version": "2.0.0",

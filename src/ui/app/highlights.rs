@@ -3,8 +3,7 @@
 use crate::{
     application::{Effect, ReleaseHighlightPresentation, UpdateIntent},
     domain::{ReleaseHighlightAnnouncement, ReleaseHighlightGroup},
-    ports::editor::CursorMovement,
-    ui::{HitTarget, PointerButton, PointerKind, UiInput, UiKey},
+    ui::{HitTarget, ListNavigation, PointerButton, PointerKind, UiInput, UiKey},
 };
 
 use super::BoardApp;
@@ -88,8 +87,12 @@ impl BoardApp {
         self.transfer = None;
     }
 
-    pub(crate) fn arm_release_highlights(&mut self) {
+    pub(crate) fn arm_release_highlights(&mut self, input_boundary: u64) {
         if let Some(highlights) = &mut self.release_highlights {
+            if highlights.armed {
+                return;
+            }
+            highlights.input_boundary = highlights.input_boundary.max(input_boundary);
             highlights.armed = true;
         }
     }
@@ -103,22 +106,10 @@ impl BoardApp {
     pub(super) fn handle_release_highlights_input(&mut self, input: &UiInput) -> Vec<Effect> {
         match input {
             UiInput::Key(UiKey::Escape) => return self.dismiss_release_highlights(),
-            UiInput::Key(UiKey::Move {
-                movement: CursorMovement::VisualUp,
-                ..
-            }) => self.scroll_release_highlights(-1),
-            UiInput::Key(UiKey::Move {
-                movement: CursorMovement::VisualDown,
-                ..
-            }) => self.scroll_release_highlights(1),
-            UiInput::Key(UiKey::Character(character))
-                if *character == self.settings.keybindings.focus_up =>
-            {
+            UiInput::Key(key) if key.list_navigation() == Some(ListNavigation::Previous) => {
                 self.scroll_release_highlights(-1);
             }
-            UiInput::Key(UiKey::Character(character))
-                if *character == self.settings.keybindings.focus_down =>
-            {
+            UiInput::Key(key) if key.list_navigation() == Some(ListNavigation::Next) => {
                 self.scroll_release_highlights(1);
             }
             UiInput::Pointer(pointer) => match pointer.kind {

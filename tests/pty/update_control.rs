@@ -170,15 +170,45 @@ fn in_app_restart_reopens_until_dismissed_then_remains_manual() {
     let original = env!("CARGO_BIN_EXE_proqi");
     let created = json_command(original, state.path(), &[]);
     let session = created["data"]["session_id"].as_str().expect("session ID");
+    let peer_created = json_command(original, state.path(), &[]);
+    let peer_session = peer_created["data"]["session_id"]
+        .as_str()
+        .expect("peer session ID");
+    let peer_ready = state.path().join("highlight-peer-ready");
+    let peer_restarted = state.path().join("highlight-peer-restarted");
+    let peer_done = state.path().join("highlight-peer-done");
+    let mut peer = highlight_fixture::spawn_quiet_restarting_peer(
+        &binary,
+        state.path(),
+        peer_session,
+        &peer_ready,
+        &peer_restarted,
+        &peer_done,
+    );
+    wait_for_path(&peer_ready);
+    wait_for_control_owner(state.path(), peer_session);
     let ready = state.path().join("highlight-owner-ready");
     let mut owner = highlight_fixture::spawn_crash_owner(&binary, state.path(), session, &ready);
     wait_for_path(&ready);
     wait_for_control_owner(state.path(), session);
     rewrite_participant_version(state.path(), session, "0.3.0");
+    rewrite_participant_version(state.path(), peer_session, "0.3.0");
 
     let before = active_participant(state.path(), session);
     let (update_state, installation, target) =
         coordinate_highlight_restart(&binary, state.path(), &before);
+    wait_for_path(&peer_restarted);
+    fs::write(&peer_done, b"done").expect("release restarted peer");
+    let peer_status = peer.wait().expect("wait for restarted peer");
+    assert!(
+        peer_status.success(),
+        "restarted peer exited with {peer_status}"
+    );
+    let peer_thoughts = json_command(original, state.path(), &["thoughts", "list", peer_session]);
+    assert_eq!(
+        peer_thoughts["data"]["thoughts"][0]["content"],
+        highlight_fixture::PEER_QUIET_PROOF
+    );
     let status = owner.wait().expect("wait for crash fixture");
     assert!(status.success(), "crash fixture exited with {status}");
     let pending = update_state
@@ -201,6 +231,11 @@ fn in_app_restart_reopens_until_dismissed_then_remains_manual() {
     assert!(
         status.success(),
         "quiet resume fixture exited with {status}"
+    );
+    let resumed = json_command(original, state.path(), &["thoughts", "list", session]);
+    assert_eq!(
+        resumed["data"]["thoughts"][0]["content"],
+        highlight_fixture::RESUME_QUIET_PROOF
     );
     let status = highlight_fixture::run_manual_reopen(&binary, state.path(), session);
     assert!(
@@ -245,7 +280,7 @@ fn coordinate_highlight_restart(
                 &(),
             )
             .expect("coordinate restart");
-    assert_eq!(result.restart_requests, 1);
+    assert_eq!(result.restart_requests, 2);
     assert!(result.restart_failed.is_empty());
     let recorded = update_state
         .load(installation.identity)

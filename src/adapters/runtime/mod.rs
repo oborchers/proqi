@@ -266,10 +266,7 @@ fn remove_stale_control_endpoint(
     let Some(endpoint) = info.control_endpoint.as_deref() else {
         return Ok(());
     };
-    let Some(expected) = control_endpoint::existing(runtime_dir, info.instance_id)? else {
-        return Ok(());
-    };
-    if Path::new(endpoint) == expected {
+    if control_endpoint::matches_recorded(runtime_dir, info.instance_id, Path::new(endpoint))? {
         remove_if_exists(Path::new(endpoint))?;
     }
     Ok(())
