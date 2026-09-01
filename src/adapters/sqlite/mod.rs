@@ -15,6 +15,9 @@ mod session_admin;
 mod submission;
 mod support;
 
+#[cfg(test)]
+mod tests;
+
 pub use doctor::{SqliteHealth, inspect_read_only_snapshot};
 
 use std::{path::PathBuf, thread, time::Duration};
