@@ -30,6 +30,10 @@ impl HerdrEnvironment {
         matches!(self, Self::Enabled)
     }
 
+    pub(crate) const fn is_managed(self) -> bool {
+        matches!(self, Self::Disabled | Self::Enabled)
+    }
+
     fn from_values(managed: Option<&std::ffi::OsStr>, disabled: bool) -> Self {
         if managed != Some(std::ffi::OsStr::new("1")) {
             Self::Outside
@@ -152,22 +156,20 @@ mod tests {
 
     #[test]
     fn managed_environment_states_do_not_confuse_disabled_herdr_with_standalone() {
-        assert_eq!(
-            HerdrEnvironment::from_values(None, false),
-            HerdrEnvironment::Outside
-        );
-        assert_eq!(
-            HerdrEnvironment::from_values(Some(std::ffi::OsStr::new("0")), false),
-            HerdrEnvironment::Outside
-        );
-        assert_eq!(
-            HerdrEnvironment::from_values(Some(std::ffi::OsStr::new("1")), true),
-            HerdrEnvironment::Disabled
-        );
-        assert_eq!(
-            HerdrEnvironment::from_values(Some(std::ffi::OsStr::new("1")), false),
-            HerdrEnvironment::Enabled
-        );
+        let outside = HerdrEnvironment::from_values(None, false);
+        let noncanonical = HerdrEnvironment::from_values(Some(std::ffi::OsStr::new("0")), false);
+        let disabled = HerdrEnvironment::from_values(Some(std::ffi::OsStr::new("1")), true);
+        let enabled = HerdrEnvironment::from_values(Some(std::ffi::OsStr::new("1")), false);
+        assert_eq!(outside, HerdrEnvironment::Outside);
+        assert_eq!(noncanonical, HerdrEnvironment::Outside);
+        assert_eq!(disabled, HerdrEnvironment::Disabled);
+        assert_eq!(enabled, HerdrEnvironment::Enabled);
+        assert!(!outside.is_managed());
+        assert!(!noncanonical.is_managed());
+        assert!(disabled.is_managed());
+        assert!(enabled.is_managed());
+        assert!(!disabled.integration_enabled());
+        assert!(enabled.integration_enabled());
     }
 
     #[test]

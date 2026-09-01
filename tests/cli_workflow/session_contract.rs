@@ -1,3 +1,5 @@
+//! Session creation, compatibility refusal, identifiers, and active-owner CLI contracts.
+
 use proqi::{
     adapters::runtime::{FileRuntimeCoordinator, SystemIdGenerator},
     domain::{SessionId, Timestamp},
@@ -6,6 +8,25 @@ use proqi::{
 use serde_json::Value;
 
 use super::{create_session, run, success};
+
+#[test]
+fn json_fresh_launch_is_empty_and_retains_interactive_onboarding_eligibility() {
+    let temporary = tempfile::tempdir().expect("temporary directory");
+    let root = temporary.path();
+    let session = create_session(root);
+    let thoughts = success(root, &["thoughts", "list", &session], None);
+    assert!(thoughts["thoughts"].as_array().is_some_and(Vec::is_empty));
+    let connection =
+        rusqlite::Connection::open(root.join("data/proqi.sqlite3")).expect("open database");
+    let completed: i64 = connection
+        .query_row(
+            "SELECT completed_version FROM onboarding_state WHERE singleton = 1",
+            [],
+            |row| row.get(0),
+        )
+        .expect("onboarding marker");
+    assert_eq!(completed, 0);
+}
 
 #[test]
 fn newer_schema_is_reported_as_unsupported() {

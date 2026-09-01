@@ -380,7 +380,8 @@ fn version_seven_receipts_migrate_without_ownership_foreign_keys() {
              INSERT INTO screenshot_capture_receipts
              SELECT * FROM screenshot_capture_receipts_current;
              DROP TABLE screenshot_capture_receipts_current;
-             DELETE FROM migration_history WHERE version IN (8, 9, 10);
+             DROP TABLE onboarding_state;
+             DELETE FROM migration_history WHERE version IN (8, 9, 10, 11);
              UPDATE schema_meta SET schema_version = 7, storage_protocol = 7;",
         )
         .expect("legacy restrictive schema");

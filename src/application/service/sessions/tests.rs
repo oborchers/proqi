@@ -8,8 +8,8 @@ use crate::{
     ports::{
         runtime::{Lease, RuntimeCoordinator, RuntimeError, RuntimeScan},
         store::{
-            CommitReceipt, OperationBatch, SessionHit, SessionQuery, SessionSnapshot, Store,
-            StoreError, StoredOperationRequest,
+            CommitReceipt, FirstRunBoard, FirstRunOutcome, OperationBatch, SessionHit,
+            SessionQuery, SessionSnapshot, Store, StoreError, StoredOperationRequest,
         },
     },
 };
@@ -75,6 +75,13 @@ impl Store for BusyCompactionStore {
         &mut self,
         _id: RevisionId,
     ) -> Result<Option<StoredOperationRequest>, StoreError> {
+        Err(unused_store_call())
+    }
+
+    fn create_first_run_session(
+        &mut self,
+        _board: &FirstRunBoard,
+    ) -> Result<FirstRunOutcome, StoreError> {
         Err(unused_store_call())
     }
 

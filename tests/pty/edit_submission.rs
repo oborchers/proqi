@@ -1,6 +1,6 @@
 //! Edit-mode submission chord routing through the running terminal product.
 
-use super::support::{expect_command, json_command};
+use super::support::{consume_first_run, expect_command, json_command};
 
 use rusqlite::Connection;
 
@@ -17,6 +17,7 @@ fn primary_enter_variants_reach_edit_submission_and_retain_an_unroutable_draft()
 fn assert_unavailable_submission_retains_draft(sequence: &str, draft: &str) {
     let state = tempfile::tempdir().expect("temporary state");
     let binary = env!("CARGO_BIN_EXE_proqi");
+    consume_first_run(binary, state.path());
     let script = r#"
         log_user 0
         set timeout 10
