@@ -125,6 +125,47 @@ fn keyboard_choices_emit_one_explicit_update_intent() {
 }
 
 #[test]
+fn update_list_uses_identical_arrow_and_jk_navigation() {
+    for (arrow, vim) in [
+        (
+            UiKey::Move {
+                movement: crate::ports::editor::CursorMovement::VisualDown,
+                extend_selection: true,
+            },
+            UiKey::PrimaryCharacter('J'),
+        ),
+        (
+            UiKey::PrimaryShiftMove {
+                movement: crate::ports::editor::CursorMovement::DocumentStart,
+            },
+            UiKey::Character('K'),
+        ),
+        (
+            UiKey::EditNavigation {
+                editor_movement: crate::ports::editor::CursorMovement::VisualJumpDown,
+                board_movement: crate::ports::editor::CursorMovement::VisualDown,
+            },
+            UiKey::Character('j'),
+        ),
+        (
+            UiKey::Move {
+                movement: crate::ports::editor::CursorMovement::VisualUp,
+                extend_selection: false,
+            },
+            UiKey::Character('k'),
+        ),
+    ] {
+        let (mut arrow_app, mut arrow_ids, clock) = app();
+        let (mut vim_app, mut vim_ids, _) = app();
+        arrow_app.present_update(version(), InstallationKind::HomebrewFormula, 3);
+        vim_app.present_update(version(), InstallationKind::HomebrewFormula, 3);
+        arrow_app.handle(UiInput::Key(arrow), &mut arrow_ids, &clock);
+        vim_app.handle(UiInput::Key(vim), &mut vim_ids, &clock);
+        assert_eq!(arrow_app.update_prompt_view(), vim_app.update_prompt_view());
+    }
+}
+
+#[test]
 fn protected_prompt_rejects_stale_input_until_its_first_frame() {
     let (mut app, mut ids, clock) = app();
     app.present_update_protected(version(), InstallationKind::HomebrewFormula, 1, 7);

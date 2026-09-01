@@ -74,7 +74,8 @@ pub(super) fn translate_key(key: KeyEvent) -> Option<UiKey> {
         KeyCode::Tab => Some(UiKey::Tab),
         KeyCode::Esc => Some(UiKey::Escape),
         KeyCode::Backspace => Some(UiKey::Backspace),
-        KeyCode::Delete => Some(UiKey::Delete),
+        KeyCode::Delete if key.modifiers.is_empty() => Some(UiKey::Delete),
+        KeyCode::Delete => Some(UiKey::ModifiedDelete),
         KeyCode::Up => Some(vertical_navigation(
             CursorMovement::VisualUp,
             CursorMovement::VisualJumpUp,

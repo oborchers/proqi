@@ -10,7 +10,7 @@ TEXT
 01││n       New         Enter/e Edit        ││
 02││j/↓ k/↑ Move/new×2  J/K     Range       ││
 03││⌘J/K    Reorder     y       Copy        ││
-04││x       Cut         d       Delete      ││
+04││x       Cut         d/Del   Delete      ││
 05││⌘D      Duplicate   Space   Select      ││
 06││a/⌘A    Select all  v       Latch       ││
 07│└────────────────────────────────────────┘│
@@ -20,7 +20,7 @@ STYLE RUNS
 1: 0-0 fg=Reset bg=Reset mod=NONE | 1-1 fg=Green bg=Reset mod=NONE | 2-20 fg=Reset bg=Reset mod=NONE | 21-27 fg=Green bg=Reset mod=NONE | 28-41 fg=Reset bg=Reset mod=NONE
 2: 0-0 fg=Reset bg=Reset mod=NONE | 1-7 fg=Green bg=Reset mod=NONE | 8-20 fg=Reset bg=Reset mod=NONE | 21-23 fg=Green bg=Reset mod=NONE | 24-41 fg=Reset bg=Reset mod=NONE
 3: 0-0 fg=Reset bg=Reset mod=NONE | 1-4 fg=Green bg=Reset mod=NONE | 5-20 fg=Reset bg=Reset mod=NONE | 21-21 fg=Green bg=Reset mod=NONE | 22-41 fg=Reset bg=Reset mod=NONE
-4: 0-0 fg=Reset bg=Reset mod=NONE | 1-1 fg=Green bg=Reset mod=NONE | 2-20 fg=Reset bg=Reset mod=NONE | 21-21 fg=Green bg=Reset mod=NONE | 22-41 fg=Reset bg=Reset mod=NONE
+4: 0-0 fg=Reset bg=Reset mod=NONE | 1-1 fg=Green bg=Reset mod=NONE | 2-20 fg=Reset bg=Reset mod=NONE | 21-25 fg=Green bg=Reset mod=NONE | 26-41 fg=Reset bg=Reset mod=NONE
 5: 0-0 fg=Reset bg=Reset mod=NONE | 1-2 fg=Green bg=Reset mod=NONE | 3-20 fg=Reset bg=Reset mod=NONE | 21-25 fg=Green bg=Reset mod=NONE | 26-41 fg=Reset bg=Reset mod=NONE
 6: 0-0 fg=Reset bg=Reset mod=NONE | 1-4 fg=Green bg=Reset mod=NONE | 5-20 fg=Reset bg=Reset mod=NONE | 21-21 fg=Green bg=Reset mod=NONE | 22-41 fg=Reset bg=Reset mod=NONE
 7: 0-41 fg=Reset bg=Reset mod=NONE

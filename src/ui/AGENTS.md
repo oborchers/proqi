@@ -47,6 +47,15 @@ interaction rules for the Ratatui interface.
 
 - Normalize Crossterm events before they reach application state or the
   reducer. Domain and application code never import terminal event types.
+- Preserve enough normalized identity to distinguish unmodified physical
+  Delete from modified Delete and to derive Board focus, range, and reorder
+  through one typed keymap owner. Do not reconstruct those intentions in mode
+  handlers from raw characters or cursor movements.
+- Dispatch to the active input owner before interpreting aliases. Non-text
+  list and direction decoders may ignore irrelevant modifiers; Compose, Edit,
+  and query owners must retain printable `h`, `j`, `k`, and `l` as text.
+- Modal navigation takes precedence over configured Board commands while the
+  modal owns input. Escape remains the stable modal close path.
 - Ignore key-release events. Preserve key-repeat events so held navigation and
   deletion keys retain native auto-repeat behavior.
 - Read and poll Crossterm events from one input lane. Only resize notifications

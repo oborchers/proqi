@@ -17,7 +17,7 @@ pub(super) fn command_for_key(key: UiKey, adjacent_fold: bool) -> Option<(EditCo
         UiKey::Character(character) => Some((EditCommand::InsertChar(character), false)),
         UiKey::Enter => Some((EditCommand::InsertNewline, false)),
         UiKey::Backspace => Some((EditCommand::DeleteBack, adjacent_fold)),
-        UiKey::Delete => Some((EditCommand::DeleteForward, adjacent_fold)),
+        UiKey::Delete | UiKey::ModifiedDelete => Some((EditCommand::DeleteForward, adjacent_fold)),
         UiKey::Move {
             movement,
             extend_selection,

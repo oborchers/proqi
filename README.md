@@ -137,7 +137,8 @@ Board choice.
 | `j` / `k` or arrows | Focus next / previous; twice at a blocked bottom / top edge creates there |
 | `Enter` or `e` | Edit |
 | `Primary+J` / `Primary+K`, `Primary+Shift+↓` / `↑`, or drag | Reorder |
-| `y` / `Primary+C`; `x` / `Primary+X`; `d` | Copy; safe cut; delete |
+| `y` / `Primary+C`; `x` / `Primary+X` | Copy; safe cut |
+| `d` or `Del` (`Entf` on German keyboards) | Delete |
 | `Space`; `a` / `Primary+A` | Toggle selection; select all |
 | `Shift+↑` / `↓` or `K` / `J`; `v` then move | Extend or latch a range |
 | `Primary+D` | Duplicate thought or selection |
@@ -164,8 +165,12 @@ Board choice.
 | Type `$name`, `/name`, or supported `@name` | Complete a local invocation |
 | `↑` / `↓` or `Primary+P` / `Primary+N`; `Enter` / `Tab`; `Esc` | Navigate, insert, or close invocation results |
 
-Plain `j` and `k` are equivalent to Down and Up only outside text modes. In
-Compose and Edit they remain ordinary text.
+Unmodified physical `Del` is an invariant Board alias. Remapping the `delete`
+character changes `d`, not the physical key. Modified `Del` is not a Board
+command. In text editors and searchable query fields, `Del` remains a
+text-editing key, never a thought delete, and `h`, `j`, `k`, and `l` remain
+literal text. List-only menus and four-way choosers ignore irrelevant modifiers
+equally for arrows and their Vim-style aliases.
 
 Mouse input covers the same core workflow. Images, files, and large pastes fold
 into compact annotations while their content stays intact. See
@@ -281,6 +286,7 @@ density = "comfortable" # or compact
 [keybindings]
 new = "n"
 edit = "e"
+delete = "d" # remaps the character only; physical Del remains available
 submit_remove = "s"
 submit_keep = "S"
 undo = "u"

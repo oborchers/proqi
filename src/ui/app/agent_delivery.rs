@@ -5,7 +5,6 @@ use crate::{
     domain::{Direction, ThoughtId},
     ports::{
         agent::SubmissionDisposition,
-        editor::CursorMovement,
         environment::{Clock, IdGenerator},
     },
 };
@@ -126,39 +125,17 @@ impl BoardApp {
                 self.set_info("submission cancelled");
                 return Some(Vec::new());
             }
-            UiInput::Key(
-                UiKey::Character('h')
-                | UiKey::Move {
-                    movement: CursorMovement::GraphemeBack,
-                    ..
-                },
-            ) => Direction::Left,
-            UiInput::Key(
-                UiKey::Character('l')
-                | UiKey::Move {
-                    movement: CursorMovement::GraphemeForward,
-                    ..
-                },
-            ) => Direction::Right,
-            UiInput::Key(
-                UiKey::Character('k')
-                | UiKey::Move {
-                    movement: CursorMovement::VisualUp,
-                    ..
-                },
-            ) => Direction::Up,
-            UiInput::Key(
-                UiKey::Character('j')
-                | UiKey::Move {
-                    movement: CursorMovement::VisualDown,
-                    ..
-                },
-            ) => Direction::Down,
+            UiInput::Key(key) => {
+                let Some(direction) = key.direction() else {
+                    return Some(Vec::new());
+                };
+                direction
+            }
             UiInput::Resize { .. }
             | UiInput::HostFocusGained
             | UiInput::HostFocusLost
             | UiInput::Pointer(_) => return None,
-            _ => return Some(Vec::new()),
+            UiInput::Paste(_) | UiInput::PasteAnnotated(_) => return Some(Vec::new()),
         };
         Some(self.deliver_to(direction, disposition, ids, clock))
     }
