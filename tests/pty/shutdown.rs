@@ -391,10 +391,11 @@ fn assert_capture_shutdown_result(
         .iter()
         .map(|thought| thought["content"].as_str().expect("content"))
         .collect::<Vec<_>>();
+    let captured_content = format!("{} ", target.to_str().expect("target"));
     let expected = if persistent_failure {
         vec!["durable editor"]
     } else {
-        vec!["durable editor!", target.to_str().expect("target")]
+        vec!["durable editor!", captured_content.as_str()]
     };
     assert_eq!(contents, expected);
     let resumed = json_command(binary, state, &["-r", session]);
