@@ -156,7 +156,11 @@ fn pristine_session_browser_neither_seeds_nor_consumes_interactive_eligibility()
         log_user 0
         set timeout 10
         spawn $env(PROQI_TEST_BINARY) --state-dir $env(PROQI_TEST_STATE) -r
-        expect -exact "\x1b\[?1049h"
+        expect {
+            -exact "\x1b\[?1049h" {}
+            eof {exit 123}
+            timeout {exit 124}
+        }
         after 400
         send "\x1b"
         expect {
