@@ -65,7 +65,7 @@ undo remain non-negotiable.
 ```text
 Editor
 ├─ Exact replace-all ──> Occurrence-only multi-selection
-├─ Existing sentence deletion ──> Paragraph deletion
+├─ Paragraph deletion
 └─ Shared logical-line ranges ──> Logical-line duplicate/move/join
 
 Clipboard and attachments
