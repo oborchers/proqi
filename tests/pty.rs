@@ -60,6 +60,10 @@ mod recovery;
 mod reorder;
 
 #[cfg(target_os = "macos")]
+#[path = "pty/sentence_deletion.rs"]
+mod sentence_deletion;
+
+#[cfg(target_os = "macos")]
 #[path = "pty/select_all.rs"]
 mod select_all;
 

@@ -8,17 +8,20 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crossterm::event::{
-    Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
-};
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 use crate::{
     adapters::terminal::supervisor::ShutdownDeadline,
     ports::editor::CursorMovement,
-    ui::{PointerButton, PointerInput, PointerKind, UiInput, UiKey},
+    ui::{UiInput, UiKey},
 };
 
 use super::{EventSource, InputFailure, InputLane, InputMessage, translate};
+
+#[path = "tests/pointer.rs"]
+mod pointer;
+#[path = "tests/primary.rs"]
+mod primary;
 
 struct FakeSource {
     polls: VecDeque<io::Result<bool>>,
@@ -119,18 +122,6 @@ fn stalled_registry_event_source_becomes_a_typed_failure() {
 }
 
 #[test]
-fn command_and_meta_shortcuts_share_semantics() {
-    for modifier in [
-        KeyModifiers::CONTROL,
-        KeyModifiers::SUPER,
-        KeyModifiers::META,
-    ] {
-        let event = Event::Key(KeyEvent::new(KeyCode::Char('a'), modifier));
-        assert_eq!(translate(event), Some(UiInput::Key(UiKey::SelectAll)));
-    }
-}
-
-#[test]
 fn primary_shift_s_remains_an_unassigned_board_chord() {
     for character in ['s', 'S'] {
         let event = Event::Key(KeyEvent::new(
@@ -139,8 +130,66 @@ fn primary_shift_s_remains_an_unassigned_board_chord() {
         ));
         assert_eq!(
             translate(event),
-            Some(UiInput::Key(UiKey::PrimaryCharacter(character)))
+            Some(UiInput::Key(UiKey::PrimaryShiftCharacter(character)))
         );
+    }
+}
+
+#[test]
+fn logical_line_and_sentence_deletion_keep_distinct_primary_chords() {
+    for modifier in [
+        KeyModifiers::CONTROL,
+        KeyModifiers::SUPER,
+        KeyModifiers::META,
+    ] {
+        assert_eq!(
+            translate(Event::Key(KeyEvent::new(KeyCode::Char('u'), modifier))),
+            Some(UiInput::Key(UiKey::DeleteLogicalLine))
+        );
+        for character in ['u', 'U'] {
+            assert_eq!(
+                translate(Event::Key(KeyEvent::new(
+                    KeyCode::Char(character),
+                    modifier | KeyModifiers::SHIFT,
+                ))),
+                Some(UiInput::Key(UiKey::PrimaryShiftCharacter(character)))
+            );
+        }
+        assert_eq!(
+            translate(Event::Key(KeyEvent::new(KeyCode::Char('U'), modifier))),
+            Some(UiInput::Key(UiKey::PrimaryShiftCharacter('U')))
+        );
+    }
+
+    assert_eq!(
+        translate(Event::Key(KeyEvent::new(
+            KeyCode::Char('u'),
+            KeyModifiers::ALT,
+        ))),
+        Some(UiInput::Key(UiKey::Character('u')))
+    );
+}
+
+#[test]
+fn primary_shift_z_is_redo_for_both_terminal_case_encodings() {
+    for modifier in [
+        KeyModifiers::CONTROL,
+        KeyModifiers::SUPER,
+        KeyModifiers::META,
+    ] {
+        for (character, modifiers) in [
+            ('z', modifier | KeyModifiers::SHIFT),
+            ('Z', modifier | KeyModifiers::SHIFT),
+            ('Z', modifier),
+        ] {
+            assert_eq!(
+                translate(Event::Key(KeyEvent::new(
+                    KeyCode::Char(character),
+                    modifiers,
+                ))),
+                Some(UiInput::Key(UiKey::Redo))
+            );
+        }
     }
 }
 
@@ -280,14 +329,25 @@ fn primary_shift_arrow_and_character_chords_remain_board_semantics() {
     ));
     assert_eq!(
         translate(character),
-        Some(UiInput::Key(UiKey::PrimaryCharacter('K')))
+        Some(UiInput::Key(UiKey::PrimaryShiftCharacter('K')))
     );
 
     let alternate_report = Event::Key(KeyEvent::new(KeyCode::Char('K'), KeyModifiers::SUPER));
     assert_eq!(
         translate(alternate_report),
-        Some(UiInput::Key(UiKey::PrimaryCharacter('K')))
+        Some(UiInput::Key(UiKey::PrimaryShiftCharacter('K')))
     );
+
+    for character in ['k', 'j'] {
+        let lowercase_shift_report = Event::Key(KeyEvent::new(
+            KeyCode::Char(character),
+            KeyModifiers::SHIFT | KeyModifiers::SUPER,
+        ));
+        assert_eq!(
+            translate(lowercase_shift_report),
+            Some(UiInput::Key(UiKey::PrimaryShiftCharacter(character)))
+        );
+    }
 }
 
 #[test]
@@ -435,66 +495,4 @@ fn host_focus_events_are_distinct_normalized_passive_signals() {
         Some(UiInput::HostFocusGained)
     );
     assert_eq!(translate(Event::FocusLost), Some(UiInput::HostFocusLost));
-}
-
-#[test]
-fn mouse_coordinates_are_normalized_without_terminal_types() {
-    let event = Event::Mouse(MouseEvent {
-        kind: MouseEventKind::Down(MouseButton::Left),
-        column: 7,
-        row: 3,
-        modifiers: KeyModifiers::NONE,
-    });
-    assert_eq!(
-        translate(event),
-        Some(UiInput::Pointer(PointerInput {
-            column: 7,
-            row: 3,
-            kind: PointerKind::Down(PointerButton::Left),
-            extend_selection: false,
-        }))
-    );
-}
-
-#[test]
-fn shifted_mouse_input_preserves_selection_extension_intent() {
-    let event = Event::Mouse(MouseEvent {
-        kind: MouseEventKind::Down(MouseButton::Left),
-        column: 4,
-        row: 2,
-        modifiers: KeyModifiers::SHIFT,
-    });
-    assert_eq!(
-        translate(event),
-        Some(UiInput::Pointer(PointerInput {
-            column: 4,
-            row: 2,
-            kind: PointerKind::Down(PointerButton::Left),
-            extend_selection: true,
-        }))
-    );
-}
-
-#[test]
-fn each_vertical_wheel_event_remains_one_directional_pointer_intention() {
-    for (mouse, expected) in [
-        (MouseEventKind::ScrollUp, PointerKind::ScrollUp),
-        (MouseEventKind::ScrollDown, PointerKind::ScrollDown),
-    ] {
-        let event = Event::Mouse(MouseEvent {
-            kind: mouse,
-            column: 9,
-            row: 4,
-            modifiers: KeyModifiers::NONE,
-        });
-        assert_eq!(
-            translate(event),
-            Some(UiInput::Pointer(PointerInput {
-                column: 9,
-                row: 4,
-                kind: expected,
-                extend_selection: false,
-            }))
-        );
-    }
 }

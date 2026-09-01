@@ -17,7 +17,11 @@ pub(crate) fn items(app: &BoardApp) -> Vec<Shortcut> {
             (primary("C"), "Copy"),
             (primary("X"), "Cut"),
             (primary("A"), "Select all"),
-            (primary("U"), "Delete line"),
+            (primary("U"), "Delete logical line"),
+            (
+                primary(&format!("Shift+{}", keys.delete_sentence)),
+                "Delete sentence",
+            ),
             (primary("Z"), "Undo"),
             (primary("Shift+Z"), "Redo"),
             ("Alt+↑/↓".to_owned(), "Jump 5 rows"),

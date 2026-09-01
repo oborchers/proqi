@@ -1,6 +1,6 @@
 # Proqi feature inventory
 
-Status: current `v0.2.0` release candidate, reviewed 2026-08-26.
+Status: current `v0.2.0` release candidate, reviewed 2026-09-01.
 
 This inventory connects observable behavior to implementation and test
 evidence. `Shipped` means a user can reach the behavior in the current native
@@ -18,6 +18,7 @@ must not imply that the behavior exists.
 | Board and edit modes | Shipped | Users navigate thoughts in board mode and enter exact multiline editing explicitly. | `tests/ui_board/navigation.rs`, `tests/editor_contract.rs` |
 | Thought creation | Shipped | `n`, the keyboard-focusable insertion row, its mouse target, board paste, and two consecutive downward navigation commands on the insertion row create thoughts. An explicitly created blank is durable. | `tests/ui_board/blank.rs`, `tests/ui_board/insertion_navigation.rs`, `tests/ui_mouse_actions.rs` |
 | Exact Unicode editing | Shipped | Grapheme-aware cursor movement preserves combining marks, emoji sequences, CJK, wide cells, tabs, CRLF, and whitespace. | `tests/editor_contract.rs`, `tests/ui_board.rs` |
+| Sentence deletion | Shipped | `Primary+Shift+U`, the Commands overlay, and a configured shifted Primary chord delete every Unicode sentence touched by the cursor or selection. `Primary+U` remains logical-line deletion. The documented UAX 29 profile preserves single prose newlines and hard blank-line boundaries without claiming linguistic certainty. List structure remains exact, and intersecting folds are revealed for review before deletion. | `docs/SENTENCE_DELETION.md`, `tests/editor_contract/sentences.rs`, `tests/ui_board/sentence_deletion.rs`, `tests/pty/sentence_deletion.rs` |
 | Selection and cursor | Shipped | Keyboard selection, single-click placement, character dragging, double-click word selection, triple-click logical-line selection, granular dragging, Shift-click extension, wrapped cursor placement, five-visual-row jumps, exact thought-boundary movement, trailing newlines, and a terminal-owned blinking cursor are supported. | `tests/editor_contract.rs`, `tests/ui_board/fast_navigation.rs`, `tests/ui_board/pointer_selection.rs`, `tests/pty/key_inspector.rs` |
 | Copy, cut, and delete | Shipped | Copy preserves exact content. Cut and editor cut delete only after clipboard success. Delete retains undo history. | `tests/domain_reducer/clipboard.rs`, `tests/ui_board/clipboard.rs` |
 | Multi-selection | Implemented | `Space` toggles arbitrary thoughts. The remappable `a` command and forwarded `Primary+A` idempotently select the complete live board. Shifted arrows, `K` / `J`, and Shift-click extend a stable anchored range; the remappable `v` latch supplies modifier-free arrow, `j`/`k`, and click parity. Bulk actions preserve board order and structural undo. | `tests/ui_board/selection.rs`, `tests/ui_board/select_all.rs`, `tests/ui_board/agent_selection.rs`, `tests/sqlite_store/bulk.rs`, `tests/pty.rs` |

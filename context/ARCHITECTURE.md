@@ -5,7 +5,7 @@ Status: v0.1.0 architecture contract
 Project: Proqi
 
 Command: `proqi`
-Last updated: 2026-08-29
+Last updated: 2026-09-01
 
 ## Purpose
 
@@ -928,6 +928,17 @@ Board shortcut, with Escape retained as the unconditional Help close action.
 `Primary+A` selects the entire current thought only in edit mode. `Primary+U`
 deletes one newline-delimited logical line as a single undoable edit. Logical
 line commands operate on the text model and are independent of visual wrapping.
+
+`Primary+Shift+U` requests containing-sentence deletion when the
+terminal reports the chord distinctly. The Rope editor is the canonical owner
+of sentence ranges. It applies the documented UAX29-C3-2 paragraph profile,
+uses the smart-list parser to protect recognized item prefixes, resolves cursor
+or selection ownership in canonical UTF-8 byte space, merges deletion ranges,
+and emits one `TextChangeSet`. The editor exposes the same ranges for the UI's
+reveal-before-delete fold guard. Terminal translation, palette dispatch,
+rendering, wrapping, and persistence never reconstruct sentence boundaries.
+The complete profile and research record live in
+[`docs/SENTENCE_DELETION.md`](../docs/SENTENCE_DELETION.md).
 
 The default `smart_lists = true` setting maps an unselected editor `Enter` to a
 terminal-independent smart-newline command. The editor recognizes only the
