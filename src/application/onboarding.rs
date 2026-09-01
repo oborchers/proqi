@@ -78,7 +78,9 @@ fn instructions(environment: FirstRunEnvironment) -> Result<[InstructionalText; 
         .shortcut("Enter")?
         .text(" to edit the focused thought. Press ")
         .shortcut("Esc")?
-        .text(" to return to board mode.")
+        .text(" to return to board mode. In edit mode, press ")
+        .shortcut("Primary+Shift+U")?
+        .text(" to delete the containing sentence.")
         .finish()?;
     let creation = InstructionalTextBuilder::new()
         .text("Press ")
@@ -145,7 +147,7 @@ mod tests {
 
     const MANAGED_CONTENT: [&str; 6] = [
         "Welcome to Proqi, a prompt composer designed to replace common agent input methods. Capture, refine, organize, and submit prompts here.",
-        "Press Enter to edit the focused thought. Press Esc to return to board mode.",
+        "Press Enter to edit the focused thought. Press Esc to return to board mode. In edit mode, press Primary+Shift+U to delete the containing sentence.",
         "Press n to create a new thought, or paste in board mode to create one from the pasted text.",
         "Use j or ↓ to move to the next thought, and k or ↑ to move to the previous one. Press d to delete the focused thought and u to undo.",
         "Herdr is detected. It organizes agent panes. With Proqi integration enabled, press s to submit when it verifies a compatible adjacent agent. Learn more at https://herdr.dev",
@@ -170,12 +172,37 @@ mod tests {
         assert_eq!(
             shortcut_literals(&managed),
             [
-                "Enter", "Esc", "n", "j", "↓", "k", "↑", "d", "u", "s", "a", "d"
+                "Enter",
+                "Esc",
+                "Primary+Shift+U",
+                "n",
+                "j",
+                "↓",
+                "k",
+                "↑",
+                "d",
+                "u",
+                "s",
+                "a",
+                "d"
             ]
         );
         assert_eq!(
             shortcut_literals(&standalone),
-            ["Enter", "Esc", "n", "j", "↓", "k", "↑", "d", "u", "a", "d"]
+            [
+                "Enter",
+                "Esc",
+                "Primary+Shift+U",
+                "n",
+                "j",
+                "↓",
+                "k",
+                "↑",
+                "d",
+                "u",
+                "a",
+                "d"
+            ]
         );
     }
 

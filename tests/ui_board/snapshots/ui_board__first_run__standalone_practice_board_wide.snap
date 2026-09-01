@@ -11,24 +11,24 @@ TEXT
 02│  submit prompts here.│
 03│  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│
 04││
-05│  Press Enter to edit the focused thought. Press Esc to return to board mode.│
-06│  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│
-07││
-08│  Press n to create a new thought, or paste in board mode to create one from the pasted text.│
-09│  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│
-10││
-11│  Use j or ↓ to move to the next thought, and k or ↑ to move to the previous one. Press d to delete the focused thought│
-12│  and u to undo.│
-13│  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│
-14││
-15│  Proqi works on its own. Herdr adds a power-user workflow for organized agent panes and verified adjacent submission│
-16│  when a compatible agent is available. Learn more at https://herdr.dev│
-17│  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│
-18││
-19│⋮ Press a and d in board mode to delete this entire practice board.│
-20││
-21│                                                      + New thought│
-22││
+05│  Press Enter to edit the focused thought. Press Esc to return to board mode. In edit mode, press Primary+Shift+U to│
+06│  delete the containing sentence.│
+07│  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│
+08││
+09│  Press n to create a new thought, or paste in board mode to create one from the pasted text.│
+10│  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│
+11││
+12│  Use j or ↓ to move to the next thought, and k or ↑ to move to the previous one. Press d to delete the focused thought│
+13│  and u to undo.│
+14│  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│
+15││
+16│  Proqi works on its own. Herdr adds a power-user workflow for organized agent panes and verified adjacent submission│
+17│  when a compatible agent is available. Learn more at https://herdr.dev│
+18│  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│
+19││
+20│⋮ Press a and d in board mode to delete this entire practice board.│
+21││
+22│                                                      + New thought│
 23││
 24││
 25││
@@ -43,24 +43,24 @@ STYLE RUNS
 2: 0-0 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 1-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 3: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-119 fg=Rgb(42, 37, 32) bg=Rgb(15, 13, 10) mod=NONE
 4: 0-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-5: 0-0 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 1-7 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 8-12 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=BOLD | 13-48 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 49-51 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=BOLD | 52-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-6: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-119 fg=Rgb(42, 37, 32) bg=Rgb(15, 13, 10) mod=NONE
-7: 0-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-8: 0-0 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 1-7 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 8-8 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=BOLD | 9-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-9: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-119 fg=Rgb(42, 37, 32) bg=Rgb(15, 13, 10) mod=NONE
-10: 0-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-11: 0-0 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 1-5 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 6-6 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=BOLD | 7-10 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 11-11 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=BOLD | 12-45 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 46-46 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=BOLD | 47-50 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 51-51 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=BOLD | 52-87 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 88-88 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=BOLD | 89-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-12: 0-0 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 1-5 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 6-6 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=BOLD | 7-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-13: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-119 fg=Rgb(42, 37, 32) bg=Rgb(15, 13, 10) mod=NONE
-14: 0-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-15: 0-0 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 1-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-16: 0-0 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 1-53 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 54-70 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=UNDERLINED | 71-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-17: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-119 fg=Rgb(42, 37, 32) bg=Rgb(15, 13, 10) mod=NONE
-18: 0-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-19: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-7 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 8-8 fg=Rgb(112, 214, 155) bg=Rgb(39, 40, 48) mod=BOLD | 9-13 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 14-14 fg=Rgb(112, 214, 155) bg=Rgb(39, 40, 48) mod=BOLD | 15-119 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
-20: 0-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-21: 0-53 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 54-54 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 55-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-22: 0-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+5: 0-0 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 1-7 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 8-12 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=BOLD | 13-48 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 49-51 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=BOLD | 52-97 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 98-112 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=BOLD | 113-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+6: 0-0 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 1-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+7: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-119 fg=Rgb(42, 37, 32) bg=Rgb(15, 13, 10) mod=NONE
+8: 0-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+9: 0-0 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 1-7 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 8-8 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=BOLD | 9-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+10: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-119 fg=Rgb(42, 37, 32) bg=Rgb(15, 13, 10) mod=NONE
+11: 0-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+12: 0-0 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 1-5 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 6-6 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=BOLD | 7-10 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 11-11 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=BOLD | 12-45 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 46-46 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=BOLD | 47-50 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 51-51 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=BOLD | 52-87 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 88-88 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=BOLD | 89-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+13: 0-0 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 1-5 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 6-6 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=BOLD | 7-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+14: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-119 fg=Rgb(42, 37, 32) bg=Rgb(15, 13, 10) mod=NONE
+15: 0-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+16: 0-0 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 1-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+17: 0-0 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 1-53 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 54-70 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=UNDERLINED | 71-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+18: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-119 fg=Rgb(42, 37, 32) bg=Rgb(15, 13, 10) mod=NONE
+19: 0-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+20: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-7 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 8-8 fg=Rgb(112, 214, 155) bg=Rgb(39, 40, 48) mod=BOLD | 9-13 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 14-14 fg=Rgb(112, 214, 155) bg=Rgb(39, 40, 48) mod=BOLD | 15-119 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
+21: 0-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+22: 0-53 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 54-54 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 55-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 23: 0-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 24: 0-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 25: 0-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
