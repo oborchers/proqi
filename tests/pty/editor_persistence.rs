@@ -9,6 +9,7 @@ const DELETED: &str = "This is a test";
 fn physical_macos_redo_encoding_restores_the_durable_deletion() {
     let state = tempfile::tempdir().expect("temporary state");
     let binary = env!("CARGO_BIN_EXE_proqi");
+    consume_first_run(binary, state.path());
     create_original_thought(binary, state.path());
 
     let sessions = json_command(binary, state.path(), &["sessions", "list"]);
