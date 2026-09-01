@@ -5,12 +5,13 @@ use crate::{
     },
     application::{AppState, Effect, ReleaseHighlightPresentation, UpdateIntent},
     domain::{
-        ReleaseHighlightAnnouncement, ReleaseHighlightsManifest, Session, SessionBoard,
-        StableVersion, Timestamp,
+        InstallationKind, ReleaseHighlightAnnouncement, ReleaseHighlightsManifest, Session,
+        SessionBoard, StableVersion, Timestamp,
     },
     ports::environment::IdGenerator as _,
     ui::{
         PointerButton, PointerInput, PointerKind, Theme, ThemePreference, UiInput, UiKey, render,
+        render_with_outcome,
     },
 };
 use ratatui_core::{backend::TestBackend, layout::Rect, terminal::Terminal};
@@ -91,6 +92,50 @@ fn protected_automatic_overlay_rejects_input_queued_before_its_first_draw() {
     assert!(!app.accept_release_highlights_input(8));
     app.arm_release_highlights(8);
     assert!(!app.accept_release_highlights_input(7));
+    assert!(!app.accept_release_highlights_input(8));
+    assert!(app.accept_release_highlights_input(9));
+}
+
+#[test]
+fn hidden_highlights_arm_only_when_they_become_the_rendered_overlay() {
+    let (mut app, mut ids, clock) = app();
+    install_automatic(&mut app, 7);
+    app.present_update(
+        StableVersion::parse("1.3.0").expect("update version"),
+        InstallationKind::HomebrewFormula,
+        2,
+    );
+    let mut terminal = Terminal::new(TestBackend::new(72, 16)).expect("terminal");
+    let mut highlights_visible = false;
+    terminal
+        .draw(|frame| {
+            let layout = app.prepare_frame(frame.area());
+            highlights_visible = render_with_outcome(
+                frame,
+                &app,
+                &layout,
+                &Theme::resolve(ThemePreference::Dark, true),
+            );
+        })
+        .expect("draw update prompt");
+    assert!(!highlights_visible);
+    assert!(!app.accept_release_highlights_input(8));
+
+    let effects = app.handle(UiInput::Key(UiKey::Escape), &mut ids, &clock);
+    assert_eq!(effects.len(), 1);
+    terminal
+        .draw(|frame| {
+            let layout = app.prepare_frame(frame.area());
+            highlights_visible = render_with_outcome(
+                frame,
+                &app,
+                &layout,
+                &Theme::resolve(ThemePreference::Dark, true),
+            );
+        })
+        .expect("draw revealed highlights");
+    assert!(highlights_visible);
+    app.arm_release_highlights(8);
     assert!(!app.accept_release_highlights_input(8));
     assert!(app.accept_release_highlights_input(9));
 }

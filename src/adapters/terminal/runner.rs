@@ -46,7 +46,7 @@ use crate::{
         runtime::InstanceInfo,
         store::Store as _,
     },
-    ui::{BoardApp, Theme, UiInput, UiKey, render},
+    ui::{BoardApp, Theme, UiInput, UiKey, render_with_outcome},
 };
 
 use super::{
@@ -361,12 +361,15 @@ fn drive(
             let _refreshed = heartbeat.refresh_if_due(lanes.external);
         }
         if redraw {
+            let mut release_highlights_visible = false;
             terminal.draw(|frame| {
                 let layout = app.prepare_frame(frame.area());
-                render(frame, app, &layout, &theme);
+                release_highlights_visible = render_with_outcome(frame, app, &layout, &theme);
             })?;
             app.arm_update_prompt();
-            app.arm_release_highlights(lanes.input.latest_sequence());
+            if release_highlights_visible {
+                app.arm_release_highlights(lanes.input.latest_sequence());
+            }
             redraw = false;
         }
         if let Some((sequence, event)) = held_input.take() {

@@ -14,9 +14,9 @@ pub(super) fn render(
     app: &BoardApp,
     layout: &LayoutSnapshot,
     theme: &Theme,
-) {
-    if render_decision(frame, app, layout, theme) {
-        return;
+) -> bool {
+    if let Some(release_highlights_visible) = render_decision(frame, app, layout, theme) {
+        return release_highlights_visible;
     }
     if let Some((query, entries, selected)) = app.search_view() {
         if let Some(overlay) = &layout.overlay {
@@ -89,6 +89,7 @@ pub(super) fn render(
     {
         overlays::render_help(frame, app, overlay, theme);
     }
+    false
 }
 
 fn render_decision(
@@ -96,9 +97,9 @@ fn render_decision(
     app: &BoardApp,
     layout: &LayoutSnapshot,
     theme: &Theme,
-) -> bool {
+) -> Option<bool> {
     let Some(overlay) = &layout.overlay else {
-        return false;
+        return None;
     };
     if let Some((entries, selected)) = app.screenshot_takeover_view() {
         overlays::render_update(
@@ -109,17 +110,17 @@ fn render_decision(
             selected,
             theme,
         );
-        true
+        Some(false)
     } else if let Some((title, entries, selected)) = app.update_prompt_view() {
         overlays::render_update(frame, overlay, &title, &entries, selected, theme);
-        true
+        Some(false)
     } else if app
         .release_highlights_view(overlay.area.width.saturating_sub(2), 0)
         .is_some()
     {
         release_highlights::render(frame, app, overlay, theme);
-        true
+        Some(true)
     } else {
-        false
+        None
     }
 }
