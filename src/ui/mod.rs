@@ -23,6 +23,7 @@ pub use browser::{
     SessionBrowser, SessionBrowserItem,
 };
 pub use browser_render::render_browser;
+pub(crate) use input::ListNavigation;
 pub use input::{PointerButton, PointerInput, PointerKind, UiInput, UiKey};
 pub use layout::{HitTarget, LayoutSnapshot, ThoughtLayout, compute as compute_layout};
 pub use render::render;

@@ -1,6 +1,6 @@
 ---
 source: src/ui/app/screenshot/tests.rs
-assertion_line: 75
+assertion_line: 119
 expression: "releasing_snapshot(62, 6)"
 ---
 00││
@@ -8,4 +8,4 @@ expression: "releasing_snapshot(62, 6)"
 02││
 03│  screenshot-ui│
 04│  1 thought · board · saved · inbox releasing│
-05│  n New   y Copy  x Cut  d Delete  Space Select u Undo│
+05│  n New   y Copy  x Cut  d/Del  Space Select u Undo│

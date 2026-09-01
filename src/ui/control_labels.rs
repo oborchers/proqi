@@ -46,7 +46,7 @@ pub(crate) fn action(
         HitTarget::Insert => (super::settings::key_label(keys.new), " New"),
         HitTarget::Copy => (mode_key(editor_mode, "C", keys.copy), " Copy"),
         HitTarget::Cut => (mode_key(editor_mode, "X", keys.cut), " Cut"),
-        HitTarget::Delete => (super::settings::key_label(keys.delete), " Delete"),
+        HitTarget::Delete => (keys.delete_label(), ""),
         HitTarget::Select => (super::settings::key_label(keys.select), " Select"),
         HitTarget::Undo => (mode_key(editor_mode, "Z", keys.undo), " Undo"),
         HitTarget::Search => (super::settings::key_label(keys.search), " Search"),
@@ -97,8 +97,8 @@ pub(crate) fn action_width(
     action(target, compact, mode, keys).map(|label| {
         let minimum = match target {
             HitTarget::Insert | HitTarget::Copy | HitTarget::Undo => 7,
-            HitTarget::Cut => 6,
-            HitTarget::Delete | HitTarget::Search => 9,
+            HitTarget::Cut | HitTarget::Delete => 6,
+            HitTarget::Search => 9,
             HitTarget::Select => 12,
             HitTarget::Commands => {
                 if compact {

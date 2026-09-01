@@ -1,6 +1,6 @@
 ---
 source: src/ui/app/screenshot/tests.rs
-assertion_line: 27
+assertion_line: 44
 expression: "takeover_snapshot(62, 6)"
 ---
 00│┌ screenshot inbox in use ─────────────────────────────────[x]│
@@ -8,4 +8,4 @@ expression: "takeover_snapshot(62, 6)"
 02││› Cancel                                                    ││
 03││  Take over                                                 ││
 04│└────────────────────────────────────────────────────────────┘│
-05│  n New   y Copy  x Cut  d Delete  Space Select u Undo│
+05│  n New   y Copy  x Cut  d/Del  Space Select u Undo│

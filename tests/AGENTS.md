@@ -41,3 +41,10 @@ These rules apply to the complete first-party integration test tree.
   acknowledgement.
 - Keep failure paths in the same behavior module as the successful contract so
   their ownership cannot drift.
+- Prove key aliases table-first at their typed semantic owner, including plain,
+  Shift, Primary, Primary+Shift, Alt, and mixed modifier reports that the
+  terminal adapter supports. Add integration coverage only for mode ownership,
+  insertion boundaries, durable effects, and configured-binding precedence.
+- Terminal input changes require real PTY encodings with durable or editor-state
+  oracles. A successful key send or escape-sequence write is not evidence of
+  behavior.

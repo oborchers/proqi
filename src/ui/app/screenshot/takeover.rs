@@ -2,11 +2,8 @@
 
 use crate::{
     application::{Effect, ScreenshotIntent},
-    ports::{
-        editor::CursorMovement,
-        environment::{Clock, IdGenerator},
-    },
-    ui::{UiInput, UiKey},
+    ports::environment::{Clock, IdGenerator},
+    ui::{ListNavigation, UiInput, UiKey},
 };
 
 use super::super::BoardApp;
@@ -22,14 +19,12 @@ impl BoardApp {
         match input {
             UiInput::Key(UiKey::Escape) => self.cancel_screenshot_takeover(),
             UiInput::Key(UiKey::Enter) => return self.choose_screenshot_takeover(ids),
-            UiInput::Key(UiKey::Move {
-                movement: CursorMovement::VisualUp,
-                ..
-            }) => self.screenshot.takeover_selected = 0,
-            UiInput::Key(UiKey::Move {
-                movement: CursorMovement::VisualDown,
-                ..
-            }) => self.screenshot.takeover_selected = 1,
+            UiInput::Key(key) if key.list_navigation() == Some(ListNavigation::Previous) => {
+                self.screenshot.takeover_selected = 0;
+            }
+            UiInput::Key(key) if key.list_navigation() == Some(ListNavigation::Next) => {
+                self.screenshot.takeover_selected = 1;
+            }
             UiInput::Pointer(pointer) => return self.handle_pointer(*pointer, ids, clock),
             UiInput::Resize { .. }
             | UiInput::HostFocusGained

@@ -46,6 +46,48 @@ fn takeover_overlay_has_a_complete_shallow_snapshot() {
 }
 
 #[test]
+fn takeover_list_uses_identical_arrow_and_jk_navigation() {
+    for (arrow, vim) in [
+        (
+            crate::ui::UiKey::Move {
+                movement: crate::ports::editor::CursorMovement::VisualDown,
+                extend_selection: true,
+            },
+            crate::ui::UiKey::PrimaryCharacter('J'),
+        ),
+        (
+            crate::ui::UiKey::PrimaryShiftMove {
+                movement: crate::ports::editor::CursorMovement::DocumentStart,
+            },
+            crate::ui::UiKey::Character('k'),
+        ),
+    ] {
+        let (mut arrow_app, mut arrow_ids) = app_with_thought();
+        let (mut vim_app, mut vim_ids) = app_with_thought();
+        let session_id = arrow_app.state.board.session.id;
+        let owner = CaptureOwnerInfo {
+            instance_id: arrow_ids.instance_id(),
+            session_id,
+            pid: 42,
+            version: "test".to_owned(),
+            capture_protocol: crate::ports::control::CAPTURE_CONTROL_PROTOCOL_VERSION,
+            control_protocol: crate::ports::control::CONTROL_PROTOCOL_VERSION,
+            control_endpoint: "private-control-endpoint".to_owned(),
+            started_at: Timestamp::from_millis(1),
+        };
+        arrow_app.screenshot_conflict(owner.clone());
+        vim_app.screenshot_conflict(owner);
+        let clock = crate::adapters::memory::FakeClock::new(Timestamp::from_millis(2));
+        arrow_app.handle(crate::ui::UiInput::Key(arrow), &mut arrow_ids, &clock);
+        vim_app.handle(crate::ui::UiInput::Key(vim), &mut vim_ids, &clock);
+        assert_eq!(
+            arrow_app.screenshot_takeover_view(),
+            vim_app.screenshot_takeover_view()
+        );
+    }
+}
+
+#[test]
 fn listening_indicator_is_present_without_permanent_status_chrome() {
     let (mut app, _) = app_with_thought();
     app.screenshot_started(Duration::ZERO);

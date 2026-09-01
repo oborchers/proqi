@@ -226,7 +226,7 @@ impl BoardApp {
                     palette.query.move_cursor(movement);
                 }
             }
-            UiKey::Delete => {
+            UiKey::Delete | UiKey::ModifiedDelete => {
                 if let Some(palette) = &mut self.palette {
                     palette.query.delete();
                     palette.clamp();
