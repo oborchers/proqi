@@ -30,6 +30,8 @@ fn file_diagnostics_are_private_bounded_and_content_redacted() {
         .map(|path| std::fs::read_to_string(path).expect("diagnostic log"))
         .collect::<String>();
     assert!(content.contains("diagnostics_initialized"));
+    assert!(content.contains("schema_lifecycle"));
+    assert!(content.contains("\"stage\":\"ready\""));
     assert!(content.contains("command_succeeded"));
     assert!(!content.contains(secret));
     for line in content.lines() {

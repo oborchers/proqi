@@ -7,8 +7,8 @@ use crate::{
         StableVersion, Timestamp, UpdateCacheState,
     },
     ports::update::{
-        InstallDetector, ReleaseObservation, ReleaseSource, UpdateError, UpdateLease,
-        UpdateLockKind, UpdateStateStore,
+        InstallDetector, ReleaseObservation, ReleaseSource, RestartCompletion, UpdateError,
+        UpdateLease, UpdateLockKind, UpdateStateStore,
     },
 };
 
@@ -108,6 +108,27 @@ impl UpdateStateStore for State {
         Ok(cache.clone())
     }
 
+    fn complete_restart(
+        &self,
+        _: InstallationIdentity,
+        announcement: &ReleaseHighlightAnnouncement,
+    ) -> Result<RestartCompletion, UpdateError> {
+        let mut cache = self.cache.borrow_mut();
+        let matches = cache.observed_installed_version.as_ref()
+            == Some(announcement.target_version())
+            && cache.release_highlights.as_ref().is_some_and(|current| {
+                !current.acknowledged() && current.same_upgrade(announcement)
+            });
+        if matches && cache.restart_needed {
+            cache.restart_needed = false;
+            return Ok(RestartCompletion::Completed);
+        }
+        if matches {
+            return Ok(RestartCompletion::AlreadyComplete);
+        }
+        Ok(RestartCompletion::Mismatch)
+    }
+
     fn record_release_highlights(
         &self,
         _: InstallationIdentity,
@@ -115,6 +136,22 @@ impl UpdateStateStore for State {
     ) -> Result<UpdateCacheState, UpdateError> {
         self.cache.borrow_mut().release_highlights = Some(announcement);
         Ok(self.cache.borrow().clone())
+    }
+
+    fn discard_release_highlights(
+        &self,
+        _: InstallationIdentity,
+        announcement: &ReleaseHighlightAnnouncement,
+    ) -> Result<bool, UpdateError> {
+        let mut cache = self.cache.borrow_mut();
+        let matches = cache
+            .release_highlights
+            .as_ref()
+            .is_some_and(|current| !current.acknowledged() && current.same_upgrade(announcement));
+        if matches {
+            cache.release_highlights = None;
+        }
+        Ok(matches)
     }
 
     fn acknowledge_release_highlights(

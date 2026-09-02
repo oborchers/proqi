@@ -347,6 +347,7 @@ fn push(
     };
     entries.push(consolidate::observe(
         root,
+        definition,
         InvocationEntry {
             name,
             description,

@@ -43,6 +43,23 @@ pub enum SafeEvent<'a> {
         /// Running process identity.
         instance_id: InstanceId,
     },
+    /// SQLite schema opening crossed one reviewed lifecycle boundary.
+    SchemaLifecycle {
+        /// Closed, content-free schema stage.
+        stage: SchemaLifecycleStage,
+    },
+    /// The restored board and optional control endpoint are ready for use.
+    RuntimeReady {
+        /// Whether verified owner control was published at this boundary.
+        control_ready: bool,
+    },
+    /// The exact initiating replacement reached the final convergence boundary.
+    UpdateConverged,
+    /// The initiating replacement could not prove the final convergence boundary.
+    UpdateFinalizationFailed {
+        /// Closed, content-free finalization failure.
+        code: UpdateFinalizationFailure,
+    },
     /// Terminal shutdown began.
     ShutdownStarted,
     /// Terminal shutdown finished.
@@ -107,6 +124,54 @@ pub enum SafeEvent<'a> {
     },
 }
 
+/// Content-free SQLite opening stages.
+#[derive(Clone, Copy, Debug)]
+pub enum SchemaLifecycleStage {
+    /// The current executable requires a forward migration.
+    MigrationRequired,
+    /// This process acquired exclusive migration ownership.
+    MigrationStarted,
+    /// Exclusive migration and integrity validation completed.
+    MigrationCompleted,
+    /// Another process completed migration before this contender revalidated.
+    FollowerRevalidated,
+    /// The store is open under the current schema and a shared lease.
+    Ready,
+}
+
+/// Content-free update finalization failures.
+#[derive(Clone, Copy, Debug)]
+pub enum UpdateFinalizationFailure {
+    /// Owner control was not published for the restored board.
+    ControlUnavailable,
+    /// The private cache could not be opened or atomically updated.
+    StateUnavailable,
+    /// Cached target state no longer matched this replacement.
+    StateMismatch,
+}
+
+impl UpdateFinalizationFailure {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::ControlUnavailable => "control_unavailable",
+            Self::StateUnavailable => "state_unavailable",
+            Self::StateMismatch => "state_mismatch",
+        }
+    }
+}
+
+impl SchemaLifecycleStage {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::MigrationRequired => "migration_required",
+            Self::MigrationStarted => "migration_started",
+            Self::MigrationCompleted => "migration_completed",
+            Self::FollowerRevalidated => "follower_revalidated",
+            Self::Ready => "ready",
+        }
+    }
+}
+
 /// Install one process-wide JSONL subscriber for a typed running instance.
 ///
 /// # Errors
@@ -148,6 +213,24 @@ pub fn record(event: SafeEvent<'_>) {
         SafeEvent::RuntimeOpening { instance_id } => {
             tracing::info!(event = "runtime_opening", instance_id = %instance_id);
         }
+        SafeEvent::SchemaLifecycle { stage } => {
+            tracing::info!(event = "schema_lifecycle", stage = stage.as_str());
+        }
+        SafeEvent::RuntimeReady { control_ready } => {
+            tracing::info!(event = "runtime_ready", control_ready);
+        }
+        SafeEvent::UpdateConverged => {
+            tracing::info!(
+                event = "update_convergence",
+                complete = true,
+                stage = "board_ready"
+            );
+        }
+        SafeEvent::UpdateFinalizationFailed { code } => tracing::warn!(
+            event = "update_failure",
+            stage = "finalization",
+            code = code.as_str()
+        ),
         SafeEvent::ShutdownStarted => tracing::info!(event = "shutdown_started"),
         SafeEvent::ShutdownFinished {
             cleanup_failures,
@@ -195,5 +278,128 @@ pub fn record(event: SafeEvent<'_>) {
             state,
             outcome
         ),
+    }
+}
+
+/// Record one complete, aggregated, content-free update attempt.
+pub fn record_update_execution(execution: &crate::application::UpdateExecution) {
+    tracing::info!(
+        event = "update_participants",
+        selected = execution.selected_participants,
+        prepared = execution.prepared_participants
+    );
+    tracing::info!(
+        event = "update_restarts",
+        requested = execution.restart_requests,
+        accepted = execution.restart_accepted
+    );
+    tracing::info!(
+        event = "update_replacements",
+        ready = execution.replacement_ready,
+        missing = execution.replacement_missing
+    );
+    let complete = update_execution_complete(execution);
+    if let Some((stage, code)) = update_execution_failure(execution) {
+        tracing::warn!(event = "update_failure", stage, code);
+    }
+    tracing::info!(
+        event = "update_convergence",
+        complete,
+        stage = "coordinator"
+    );
+}
+
+fn update_execution_complete(execution: &crate::application::UpdateExecution) -> bool {
+    matches!(
+        execution.status,
+        crate::application::UpdateExecutionStatus::Installed { .. }
+    ) && execution.restart_failed.is_empty()
+        && execution.replacement_missing == 0
+        && execution.restart_requests == execution.restart_accepted
+        && execution.convergence_state_recorded
+}
+
+/// Record a typed update error without its arbitrary adapter detail.
+pub fn record_update_error(error: &crate::ports::update::UpdateError) {
+    let code = match error {
+        crate::ports::update::UpdateError::Network => "network",
+        crate::ports::update::UpdateError::InvalidResponse => "invalid_response",
+        crate::ports::update::UpdateError::ResponseTooLarge => "response_too_large",
+        crate::ports::update::UpdateError::Installation(_) => "installation",
+        crate::ports::update::UpdateError::State(_) => "state",
+        crate::ports::update::UpdateError::Coordination(_) => "coordination",
+        crate::ports::update::UpdateError::InstallerFailed => "installer_failed",
+    };
+    tracing::warn!(event = "update_failure", stage = "execution", code);
+}
+
+fn update_execution_failure(
+    execution: &crate::application::UpdateExecution,
+) -> Option<(&'static str, &'static str)> {
+    match &execution.status {
+        crate::application::UpdateExecutionStatus::Aborted { code, .. } => {
+            Some(("preparation", safe_abort_code(code)))
+        }
+        crate::application::UpdateExecutionStatus::Installed { .. }
+            if !execution.restart_failed.is_empty() || execution.replacement_missing > 0 =>
+        {
+            Some(("restart", "incomplete_convergence"))
+        }
+        crate::application::UpdateExecutionStatus::AlreadyInProgress
+        | crate::application::UpdateExecutionStatus::Installed { .. } => None,
+    }
+}
+
+fn safe_abort_code(code: &str) -> &'static str {
+    match code {
+        "no_compatible_participants" => "no_compatible_participants",
+        "coordinator_not_registered" => "coordinator_not_registered",
+        "invalid_coordinator_version" => "invalid_coordinator_version",
+        "invalid_readiness_receipt" => "invalid_readiness_receipt",
+        "participant_unavailable" => "participant_unavailable",
+        "save_failed" => "save_failed",
+        "deadline_expired" => "deadline_expired",
+        _ => "participant_blocked",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        adapters::memory::FakeIdGenerator,
+        application::{UpdateExecution, UpdateExecutionStatus},
+        domain::StableVersion,
+        ports::environment::IdGenerator as _,
+    };
+
+    #[test]
+    fn arbitrary_participant_failure_codes_are_redacted() {
+        assert_eq!(
+            super::safe_abort_code("private-owner-detail"),
+            "participant_blocked"
+        );
+        assert_eq!(super::safe_abort_code("save_failed"), "save_failed");
+    }
+
+    #[test]
+    fn successful_coordinator_completion_compares_requests_with_acceptances() {
+        let mut ids = FakeIdGenerator::new(1_800_000_000_000);
+        let mut execution = UpdateExecution {
+            operation_id: ids.request_id(),
+            selected_participants: 2,
+            prepared_participants: 2,
+            restart_requests: 2,
+            restart_accepted: 2,
+            replacement_ready: 1,
+            replacement_missing: 0,
+            restart_failed: Vec::new(),
+            convergence_state_recorded: true,
+            status: UpdateExecutionStatus::Installed {
+                version: StableVersion::parse("1.2.0").expect("version"),
+            },
+        };
+        assert!(super::update_execution_complete(&execution));
+        execution.restart_accepted = 1;
+        assert!(!super::update_execution_complete(&execution));
     }
 }

@@ -1,5 +1,6 @@
 ---
 source: tests/ui_board/transformations.rs
+assertion_line: 380
 expression: "super::snapshot_support::snapshot_buffer(draw_theme(&mut fixture, 72, 16,\nThemePreference::Dark).backend().buffer())"
 ---
 SIZE 72x16
@@ -19,7 +20,7 @@ TEXT
 11││Duplicate thought or selection                                        ││
 12││Select all thoughts                                                   ││
 13││Send to another Proqi session and remove thought                      ││
-14││Move thought up                                                       ││
+14││Move thought up                                                       ↓│
 15│└──────────────────────────────────────────────────────────────────────┘│
 
 STYLE RUNS
@@ -37,5 +38,5 @@ STYLE RUNS
 11: 0-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 12: 0-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 13: 0-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-14: 0-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+14: 0-70 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 71-71 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE
 15: 0-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE

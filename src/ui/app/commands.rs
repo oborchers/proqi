@@ -98,6 +98,7 @@ impl BoardApp {
             | UiKey::BackTab
             | UiKey::PickerPrevious
             | UiKey::PickerNext
+            | UiKey::FastNavigation { .. }
             | UiKey::PrimaryCharacter(_)
             | UiKey::PrimaryShiftCharacter(_)
             | UiKey::PrimaryShiftMove { .. }

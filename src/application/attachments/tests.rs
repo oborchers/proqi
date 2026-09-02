@@ -83,14 +83,14 @@ fn inaccessible_health_is_binary_and_manual_refresh_recovers_it() {
 }
 
 #[test]
-fn startup_is_fail_closed_and_rechecks_preserve_the_last_resolved_health() {
+fn startup_unknown_and_checking_are_neutral_while_rechecks_preserve_resolved_health() {
     let (board, ids) = board_with_attachments(2);
     let mut state = AttachmentAccessibilityState::default();
-    assert!(state.inaccessible(ids[0], 0));
+    assert!(!state.inaccessible(ids[0], 0));
 
     let startup = one_batch(state.start(&board, Some(ids[0]), Duration::ZERO));
-    assert!(state.inaccessible(ids[0], 0));
-    assert!(state.inaccessible(ids[1], 0));
+    assert!(!state.inaccessible(ids[0], 0));
+    assert!(!state.inaccessible(ids[1], 0));
     assert!(state.complete(accessible(startup)).0.is_empty());
     assert!(!state.inaccessible(ids[0], 0));
     assert!(!state.inaccessible(ids[1], 0));

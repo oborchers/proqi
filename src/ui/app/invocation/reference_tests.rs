@@ -11,7 +11,7 @@ use crate::{
             InvocationReferenceProvider, LiveAgentReference,
         },
     },
-    ui::{PointerButton, PointerInput, PointerKind, UiInput, UiKey},
+    ui::{FastNavigation, PointerButton, PointerInput, PointerKind, UiInput, UiKey},
 };
 
 use super::contract::{app, entry};
@@ -232,6 +232,7 @@ fn automatic_selection_inserts_an_inert_location_and_readiness_is_display_only()
     assert!(choice.qualifier.contains("working"));
     let selection_effects = app.handle(UiInput::Key(UiKey::Enter), &mut ids, &clock);
     assert!(selection_effects.is_empty());
+    app.prepare_frame(ratatui_core::layout::Rect::new(0, 0, 80, 8));
     let inserted = "Ask Herdr collaborator: reviewer (codex) at workspace Product (w2), tab Review (w2:t4), pane w2:p9 ";
     assert_eq!(app.editor_snapshot().expect("editor").content, inserted);
     assert!(!inserted.contains("working"));
@@ -392,6 +393,48 @@ fn shallow_keyboard_navigation_keeps_the_active_live_group_visible() {
             .content
             .starts_with("Herdr collaborator: builder (codex)")
     );
+}
+
+#[test]
+fn fast_navigation_counts_live_entries_without_counting_the_group_heading() {
+    let cwd = tempfile::tempdir().expect("tempdir");
+    let (mut app, mut ids, clock) = app("", cwd.path());
+    install_catalog(
+        &mut app,
+        cwd.path(),
+        vec![entry(
+            "$review",
+            crate::ports::invocation::InvocationKind::Skill,
+            crate::ports::invocation::InvocationScope::Project,
+        )],
+    );
+    open_with_live(
+        &mut app,
+        (0..7)
+            .map(|index| {
+                reference(
+                    &format!("agent-{index}"),
+                    ("w3", Some("Implementation")),
+                    ("w3:t2", Some("Build")),
+                    &format!("w3:p{index}"),
+                    AgentState::Idle,
+                )
+            })
+            .collect(),
+    );
+    let expected = app.invocation_view().expect("picker").1[5].token.clone();
+    app.prepare_frame(ratatui_core::layout::Rect::new(0, 0, 34, 7));
+    app.handle(
+        UiInput::Key(UiKey::FastNavigation {
+            direction: FastNavigation::Next,
+            extend_selection: false,
+        }),
+        &mut ids,
+        &clock,
+    );
+    let (_, choices, selected) = app.invocation_view().expect("paged picker");
+    assert_eq!(choices[selected].token, expected);
+    assert_eq!(choices[0].group.as_deref(), Some("Live in Herdr"));
 }
 
 #[path = "reference_tests/lifecycle.rs"]

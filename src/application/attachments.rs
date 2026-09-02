@@ -30,6 +30,8 @@ const INACTIVE_REFRESH_AFTER: Duration = Duration::from_secs(5 * 60);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum AttachmentHealth {
+    Unknown,
+    Checking,
     Accessible,
     Inaccessible(AttachmentAccessFailure),
 }
@@ -127,6 +129,7 @@ impl AttachmentAccessibilityState {
     ) -> Vec<Effect> {
         self.last_deliberate = Some(now);
         self.known = attachment_keys_by_thought(board);
+        self.seed_unknown();
         self.enqueue_board(board, focused, false);
         self.schedule()
     }
@@ -148,6 +151,7 @@ impl AttachmentAccessibilityState {
         }
         let (replacements, identities_stable) = self.migrate_health(&current, &changed);
         self.known = current;
+        self.seed_unknown();
         self.remap_scheduled_keys(&replacements);
         let restart_manual = self.manual_refresh.is_some();
         if restart_manual && !identities_stable {
@@ -181,6 +185,7 @@ impl AttachmentAccessibilityState {
         self.queued.clear();
         self.known = attachment_keys_by_thought(board);
         self.retain_current_health();
+        self.seed_unknown();
         self.refreshed_since_last_deliberate = true;
         let total: usize = self.known.values().map(Vec::len).sum();
         if cause == AttachmentRefreshCause::Manual {
@@ -287,7 +292,7 @@ impl AttachmentAccessibilityState {
         (effects, preflight, refresh)
     }
 
-    /// Binary user-visible health for one current attachment annotation.
+    /// Confirmed user-visible failure for one current attachment annotation.
     #[must_use]
     pub fn inaccessible(&self, thought_id: ThoughtId, annotation_index: usize) -> bool {
         self.known
@@ -297,7 +302,7 @@ impl AttachmentAccessibilityState {
                     .find(|key| key.annotation_index == annotation_index)
             })
             .and_then(|key| self.health.get(key))
-            .is_none_or(|health| !matches!(health, AttachmentHealth::Accessible))
+            .is_some_and(|health| matches!(health, AttachmentHealth::Inaccessible(_)))
     }
 
     /// Exact current keys for source capture and fresh preflight.
@@ -422,6 +427,7 @@ impl AttachmentAccessibilityState {
             keys: keys.clone(),
             background_epoch: self.background_epoch,
         });
+        self.mark_checking(&keys);
         vec![Effect::CheckAttachments(AttachmentCheckBatch {
             id,
             purpose,

@@ -24,6 +24,8 @@ pub(in crate::ui::app) mod builtins;
 mod compatibility;
 #[path = "invocation/highlight.rs"]
 mod highlight;
+#[path = "invocation/navigation.rs"]
+mod navigation;
 #[path = "invocation/reference.rs"]
 mod reference;
 #[path = "invocation/view.rs"]
@@ -69,6 +71,7 @@ impl BoardApp {
         self.invocation_global = discovery.global;
         self.invocation_project = discovery.project;
         self.refresh_invocation_popup();
+        self.clamp_invocation_popup();
     }
 
     /// Replace only project discovery when the runtime cwd changes.
@@ -134,6 +137,17 @@ impl BoardApp {
             .map_or(0, |popup| self.invocation_choices(popup).len())
     }
 
+    pub(super) fn invocation_overflow(&self, visible: usize) -> (bool, bool) {
+        self.invocation_popup
+            .as_ref()
+            .map_or((false, false), |popup| {
+                (
+                    popup.scroll > 0,
+                    popup.scroll.saturating_add(visible) < self.invocation_choices(popup).len(),
+                )
+            })
+    }
+
     pub(super) fn invocation_query_cursor(&self) -> Option<usize> {
         self.invocation_popup
             .as_ref()
@@ -169,14 +183,17 @@ impl BoardApp {
                     ..
                 },
             ) => self.move_invocation(1),
-            UiInput::Pointer(pointer) => {
-                if matches!(
-                    pointer.kind,
-                    PointerKind::Down(crate::ui::PointerButton::Left)
-                ) {
+            UiInput::Key(UiKey::FastNavigation { direction, .. }) => {
+                self.move_invocation(direction.delta());
+            }
+            UiInput::Pointer(pointer) => match pointer.kind {
+                PointerKind::ScrollUp => self.move_invocation(-1),
+                PointerKind::ScrollDown => self.move_invocation(1),
+                PointerKind::Down(crate::ui::PointerButton::Left) => {
                     return self.handle_pointer(*pointer, ids, clock);
                 }
-            }
+                _ => {}
+            },
             _ if self
                 .invocation_popup
                 .as_ref()
@@ -294,34 +311,6 @@ impl BoardApp {
         let (content, annotations, _) = insertion.into_parts();
         self.apply_annotated_edit(EditCommand::Paste(content), &annotations);
         self.close_invocation_picker();
-    }
-
-    fn move_invocation(&mut self, delta: isize) {
-        let Some(popup) = self.invocation_popup.as_ref() else {
-            return;
-        };
-        let choices = self.invocation_choices(popup);
-        let count = choices.len();
-        let row_budget = self
-            .layout
-            .as_ref()
-            .and_then(|layout| layout.overlay.as_ref())
-            .map_or(1, |overlay| {
-                usize::from(overlay.area.height.saturating_sub(3)).max(1)
-            });
-        let Some(popup) = &mut self.invocation_popup else {
-            return;
-        };
-        popup.selected = popup
-            .selected
-            .saturating_add_signed(delta)
-            .min(count.saturating_sub(1));
-        if popup.selected < popup.scroll {
-            popup.scroll = popup.selected;
-        } else {
-            popup.scroll =
-                view::scroll_for_selection(&choices, popup.selected, popup.scroll, row_budget);
-        }
     }
 
     fn update_manual_query(&mut self, update: impl FnOnce(&mut String)) {
@@ -479,6 +468,9 @@ fn inside_code_fence(prefix: &str) -> bool {
         == 1
 }
 
+#[cfg(test)]
+#[path = "invocation/paging_tests.rs"]
+mod paging_tests;
 #[cfg(test)]
 #[path = "invocation/tests.rs"]
 mod tests;

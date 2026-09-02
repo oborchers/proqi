@@ -93,6 +93,10 @@ impl BoardApp {
                     .map_or(0, |prompt| prompt.selected);
                 self.choose_update(selected)
             }
+            UiInput::Key(UiKey::FastNavigation { direction, .. }) => {
+                self.move_update_selection(direction.delta());
+                Vec::new()
+            }
             UiInput::Key(key) if key.list_navigation() == Some(ListNavigation::Previous) => {
                 self.move_update_selection(-1);
                 Vec::new()
@@ -113,6 +117,14 @@ impl BoardApp {
                     Some(HitTarget::CloseOverlay) => self.choose_update(1),
                     _ => Vec::new(),
                 }
+            }
+            UiInput::Pointer(pointer) if matches!(pointer.kind, PointerKind::ScrollUp) => {
+                self.move_update_selection(-1);
+                Vec::new()
+            }
+            UiInput::Pointer(pointer) if matches!(pointer.kind, PointerKind::ScrollDown) => {
+                self.move_update_selection(1);
+                Vec::new()
             }
             UiInput::Resize { .. } => {
                 self.layout = None;

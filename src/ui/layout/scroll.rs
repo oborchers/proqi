@@ -2,12 +2,16 @@
 
 use crate::{
     application::{AppState, InteractionMode},
-    domain::{Thought, ThoughtId, ThoughtPresentation},
-    ports::{editor::EditorSnapshot, text_layout::wrap_rows},
+    domain::{ThoughtId, ThoughtPresentation},
+    ports::text_layout::wrap_rows,
+    ui::projection::{FramePresentation, PresentedThought},
 };
 
+mod anchor;
 #[cfg(test)]
 mod tests;
+
+use anchor::{ContentAnchor, content_row_anchors, content_row_for_anchor};
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(in crate::ui) enum ScrollAnchor {
@@ -19,7 +23,7 @@ pub(in crate::ui) enum ScrollAnchor {
     },
     Content {
         thought_id: ThoughtId,
-        byte: usize,
+        position: ContentAnchor,
     },
     Overflow(ThoughtId),
     Compose {
@@ -75,7 +79,7 @@ pub(super) struct ThoughtRows {
     pub(super) gap_start: usize,
     pub(super) gap_rows: usize,
     pub(super) content_start: usize,
-    pub(super) row_starts: Vec<usize>,
+    row_anchors: Vec<ContentAnchor>,
     pub(super) content_rows: usize,
     pub(super) natural_rows: usize,
     pub(super) overflow_row: Option<usize>,
@@ -112,7 +116,7 @@ pub(super) struct ResolvedScroll {
 
 struct MeasureContext<'a> {
     state: &'a AppState,
-    editor: Option<&'a EditorSnapshot>,
+    presentation: &'a FramePresentation,
     content_width: u16,
     board_height: u16,
     gap_rows: usize,
@@ -121,12 +125,12 @@ struct MeasureContext<'a> {
 impl BoardFlow {
     pub(super) fn measure(
         state: &AppState,
-        editor: Option<&EditorSnapshot>,
+        presentation: &FramePresentation,
         content_width: u16,
         board_height: u16,
         density: crate::ui::settings::BoardDensity,
     ) -> Self {
-        let live = state.board.live_thoughts();
+        let live = presentation.thoughts();
         let roomy = usize::from(board_height)
             >= live
                 .len()
@@ -138,18 +142,18 @@ impl BoardFlow {
         let mut thoughts = Vec::with_capacity(live.len());
         let context = MeasureContext {
             state,
-            editor,
+            presentation,
             content_width,
             board_height,
             gap_rows,
         };
-        for (index, thought) in live.into_iter().enumerate() {
+        for (index, thought) in live.iter().enumerate() {
             let rows = measure_thought(&context, thought, index, cursor);
             cursor = rows.end;
             thoughts.push(rows);
         }
         let compose = if matches!(state.mode, InteractionMode::Compose) {
-            editor.map(|snapshot| {
+            presentation.editor_snapshot().map(|snapshot| {
                 let gap = usize::from(!thoughts.is_empty()) * gap_rows;
                 let content_start = cursor.saturating_add(gap);
                 let row_starts = snapshot
@@ -172,7 +176,8 @@ impl BoardFlow {
             cursor = compose.end;
         }
         let insertion_prompt = matches!(state.mode, InteractionMode::Board)
-            || (matches!(state.mode, InteractionMode::Compose) && editor.is_none());
+            || (matches!(state.mode, InteractionMode::Compose)
+                && presentation.editor_snapshot().is_none());
         let insert_gap = insertion_prompt.then_some(cursor);
         cursor = cursor.saturating_add(usize::from(insertion_prompt));
         let insert_row = insertion_prompt.then_some(cursor);
@@ -247,7 +252,11 @@ impl BoardFlow {
         let row = row.min(thought.content_rows.saturating_sub(1));
         ScrollAnchor::Content {
             thought_id: thought.thought_id,
-            byte: thought.row_starts.get(row).copied().unwrap_or(0),
+            position: thought
+                .row_anchors
+                .get(row)
+                .copied()
+                .unwrap_or(ContentAnchor::Canonical(0)),
         }
     }
 
@@ -257,15 +266,12 @@ impl BoardFlow {
             ScrollAnchor::GapBefore { thought_id, row } => self
                 .thought(thought_id)
                 .map(|thought| thought.gap_start + row.min(thought.gap_rows)),
-            ScrollAnchor::Content { thought_id, byte } => self.thought(thought_id).map(|thought| {
-                let row = thought
-                    .row_starts
-                    .iter()
-                    .take(thought.content_rows)
-                    .rposition(|start| *start <= byte)
-                    .unwrap_or(0);
-                thought.content_start + row
-            }),
+            ScrollAnchor::Content {
+                thought_id,
+                position,
+            } => self
+                .thought(thought_id)
+                .map(|thought| thought.content_start + content_row_for_anchor(thought, position)),
             ScrollAnchor::Overflow(thought_id) => self.thought(thought_id).map(|thought| {
                 thought.overflow_row.unwrap_or_else(|| {
                     thought
@@ -307,7 +313,11 @@ impl BoardFlow {
                 let row = ordinal - thought.content_start;
                 return ScrollAnchor::Content {
                     thought_id: thought.thought_id,
-                    byte: thought.row_starts.get(row).copied().unwrap_or(0),
+                    position: thought
+                        .row_anchors
+                        .get(row)
+                        .copied()
+                        .unwrap_or(ContentAnchor::Canonical(0)),
                 };
             }
             if thought.overflow_row == Some(ordinal) {
@@ -379,17 +389,17 @@ impl BoardFlow {
 
 fn measure_thought(
     context: &MeasureContext<'_>,
-    thought: &Thought,
+    thought: &PresentedThought,
     index: usize,
     cursor: usize,
 ) -> ThoughtRows {
     let gap_rows = usize::from(index > 0) * context.gap_rows;
     let content_start = cursor.saturating_add(gap_rows);
-    let active_editor = context.editor.filter(|_| {
-        matches!(context.state.mode, InteractionMode::Edit { thought_id } if thought_id == thought.id)
+    let active_editor = context.presentation.editor_snapshot().filter(|_| {
+        matches!(context.state.mode, InteractionMode::Edit { thought_id } if thought_id == thought.thought_id)
     });
     let row_starts = active_editor.map_or_else(
-        || wrapped_row_starts(&thought.content, context.content_width),
+        || wrapped_row_starts(&thought.presentation.content, context.content_width),
         |snapshot| {
             snapshot
                 .visual_lines
@@ -398,9 +408,10 @@ fn measure_thought(
                 .collect()
         },
     );
+    let row_anchors = content_row_anchors(thought, &row_starts);
     let natural_rows = row_starts.len().max(1);
     let cap = presentation_cap(
-        thought.presentation,
+        thought.preference,
         natural_rows,
         context.board_height,
         active_editor.is_some(),
@@ -416,17 +427,17 @@ fn measure_thought(
         .saturating_add(content_rows)
         .saturating_add(usize::from(capped));
     ThoughtRows {
-        thought_id: thought.id,
+        thought_id: thought.thought_id,
         index,
         gap_start: cursor,
         gap_rows,
         content_start,
-        row_starts,
+        row_anchors,
         content_rows,
         natural_rows,
         overflow_row,
         end,
-        presentation: thought.presentation,
+        presentation: thought.preference,
     }
 }
 

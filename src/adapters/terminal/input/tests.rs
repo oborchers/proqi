@@ -13,11 +13,13 @@ use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use crate::{
     adapters::terminal::supervisor::ShutdownDeadline,
     ports::editor::CursorMovement,
-    ui::{UiInput, UiKey},
+    ui::{FastNavigation, UiInput, UiKey},
 };
 
 use super::{EventSource, InputFailure, InputLane, InputMessage, translate};
 
+#[path = "tests/paging.rs"]
+mod paging;
 #[path = "tests/pointer.rs"]
 mod pointer;
 #[path = "tests/primary.rs"]
@@ -381,22 +383,7 @@ fn shift_and_word_navigation_remain_semantic() {
 }
 
 #[test]
-fn unshifted_alt_and_platform_primary_arrows_preserve_both_mode_intentions() {
-    assert_eq!(
-        translate(Event::Key(KeyEvent::new(KeyCode::Up, KeyModifiers::ALT,))),
-        Some(UiInput::Key(UiKey::EditNavigation {
-            editor_movement: CursorMovement::VisualJumpUp,
-            board_movement: CursorMovement::VisualUp,
-        }))
-    );
-    assert_eq!(
-        translate(Event::Key(KeyEvent::new(KeyCode::Down, KeyModifiers::ALT,))),
-        Some(UiInput::Key(UiKey::EditNavigation {
-            editor_movement: CursorMovement::VisualJumpDown,
-            board_movement: CursorMovement::VisualDown,
-        }))
-    );
-
+fn platform_primary_arrows_preserve_both_mode_intentions() {
     let modifier = if cfg!(target_os = "macos") {
         KeyModifiers::SUPER
     } else {
@@ -424,20 +411,6 @@ fn unshifted_alt_and_platform_primary_arrows_preserve_both_mode_intentions() {
         Some(UiInput::Key(UiKey::EditNavigation {
             editor_movement: CursorMovement::DocumentEnd,
             board_movement: board_down,
-        }))
-    );
-}
-
-#[test]
-fn shifted_alt_arrows_keep_the_existing_one_row_selection_intention() {
-    assert_eq!(
-        translate(Event::Key(KeyEvent::new(
-            KeyCode::Down,
-            KeyModifiers::ALT | KeyModifiers::SHIFT,
-        ))),
-        Some(UiInput::Key(UiKey::Move {
-            movement: CursorMovement::VisualDown,
-            extend_selection: true,
         }))
     );
 }
