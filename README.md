@@ -288,6 +288,10 @@ proqi diagnostics collect --output proqi-diagnostics.json
 Diagnostics are redacted and local; review before sharing. See
 [SECURITY.md](SECURITY.md). Disable content-free update checks with
 `check_for_updates = false`.
+Collected update diagnostics include only closed lifecycle stages, aggregate
+participant and replacement counts, stable failure codes, and convergence.
+Finalization diagnostics distinguish unavailable control, unavailable private
+cache state, and an exact-state mismatch without recording local identifiers.
 
 ## Configuration
 

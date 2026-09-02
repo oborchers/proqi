@@ -803,8 +803,16 @@ the same installation identity, the exact target version, and a published
 control endpoint. The endpoint is published only after board restoration. The
 coordinator writes the initiating session's content-free pending announcement
 only after every peer converges, then requests the initiating restart. Peer
-failure creates no announcement. A delayed initiating resume retains the
-pending record and may show it later under the exact target.
+failure creates no announcement and releases the initiating process without an
+`exec` request. Initiating restart rejection atomically discards its exact
+pending announcement and releases the preparation barrier. A delayed accepted
+initiating resume retains the pending record and may show it later under the
+exact target. `restart_needed` is cleared only when the
+exact target announcement selects the initiating session after board
+restoration and owner-control publication. Automatic presentation is installed
+only when that atomic transition completes or the same exact transition had
+already completed. Control unavailability, cache failure, and stale cache state
+suppress presentation and emit closed finalization failure codes.
 
 If replacement discovery itself fails after peer restart requests, the
 coordinator releases the initiating process immediately, retains
@@ -848,6 +856,15 @@ process waits within the update convergence window or reports a bounded
 restart-pending state and retries after the old process leaves. It never migrates
 behind an older writer. This conservative barrier remains mandatory even though
 the public CLI has no compatibility guarantee before `1.0`.
+
+Concurrent replacements may all first observe `MigrationRequired`, release
+their shared leases, and contend for the exclusive lease. The winner performs
+the verified migration. A contender that reaches the unchanged bounded
+exclusive timeout makes one nonblocking shared acquisition and reopens in
+refuse-migration mode. It resumes only if the winner already established the
+current schema. If migration is still required, or an exclusive owner is still
+active, it returns the ordinary bounded `schema_busy` result. This follower
+revalidation never weakens shared and exclusive compatibility.
 
 ### Standalone, Debian, Cargo, and unknown installations
 
@@ -1312,6 +1329,9 @@ or automatic scratchpad reads.
   runtime, terminal, or usage data.
 - Diagnostic logs exclude thought content, clipboard content, session names,
   workspace paths, pane identifiers, and raw external responses.
+- Update lifecycle events contain closed schema stages, aggregate participant,
+  restart, and replacement counts, stable failure stage and code pairs, and
+  final convergence. They contain no durable distributed update phase record.
 - Each instance owns a locked JSONL stream with five 1 MiB segments. Startup
   prunes inactive streams toward a 20 MiB installation-wide ceiling without
   deleting active logs.

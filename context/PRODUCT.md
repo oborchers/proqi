@@ -109,6 +109,9 @@ transitions without recording thought or clipboard content, session names,
 workspace paths, pane identifiers, or raw external responses. Users can
 explicitly collect retained events into a versioned local support bundle. Proqi
 never uploads the bundle and never overwrites an existing output file.
+Update diagnostics add only reviewed schema stages, aggregate selected and
+prepared counts, restart request and acceptance counts, replacement ready and
+missing counts, stable failure stage and code pairs, and final convergence.
 
 ## Core concepts
 
@@ -1099,7 +1102,10 @@ process remains.
 
 Existing shared schema leases remain the compatibility barrier. A new process
 does not migrate while an old process still holds a conflicting lease. It waits
-for bounded restart convergence or reports that restart remains pending.
+for bounded restart convergence or reports that restart remains pending. When
+one replacement completes the migration, followers that lost the exclusive
+lease race revalidate the current schema under a shared lease and resume. A
+genuinely old writer still prevents migration for the existing bounded wait.
 
 ### Release highlights after an in-app upgrade
 
@@ -1119,6 +1125,15 @@ explicit dismissal. Proqi acknowledges that exact upgrade durably only after
 such a dismissal, so a crash before dismissal shows it again. Missing, corrupt,
 ambiguous, failed, cancelled, partial, externally installed, and
 version-mismatched state stays quiet.
+
+If any peer replacement is missing or failed, the initiating board is released
+and remains usable. Proqi retains `restart_needed`, creates no automatic
+highlight announcement, reports the incomplete session count, and does not
+replace the initiating process. Complete convergence clears `restart_needed`
+only after the exact initiating replacement has restored its board and
+published owner control. The automatic highlights remain hidden until that
+atomic completion succeeds. A control or cache finalization failure stays
+quiet and is retained as a stable, content-free diagnostic code.
 
 The command palette always offers `What's new`. It reopens the installed
 version's packaged highlights and never changes automatic acknowledgement.

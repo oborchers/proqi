@@ -99,5 +99,9 @@ mod startup;
 mod update_control;
 
 #[cfg(target_os = "macos")]
+#[path = "pty/update_migration.rs"]
+mod update_migration;
+
+#[cfg(target_os = "macos")]
 #[path = "pty/watchdog.rs"]
 mod watchdog;

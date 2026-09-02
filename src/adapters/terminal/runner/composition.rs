@@ -1,5 +1,6 @@
 //! Owned worker-lane composition.
 
+use std::io::{IsTerminal as _, stdin, stdout};
 use std::path::PathBuf;
 
 use crate::{
@@ -23,8 +24,18 @@ use crate::{
 
 use super::owned_lanes::OwnedLanes;
 
+pub(crate) fn require_interactive() -> Result<(), TerminalError> {
+    if stdin().is_terminal() && stdout().is_terminal() {
+        Ok(())
+    } else {
+        Err(TerminalError::Io(
+            "interactive launch requires a terminal; use --json for scriptable output".to_owned(),
+        ))
+    }
+}
+
 pub(super) fn start_optional_control(
-    session_lease: &mut FileSessionLease,
+    session_lease: &FileSessionLease,
 ) -> (Option<ControlServer>, Option<String>) {
     let Some(endpoint) = session_lease.control_endpoint() else {
         return (
@@ -43,16 +54,27 @@ pub(super) fn start_optional_control(
             );
         }
     };
-    if let Err(error) = session_lease.publish_control() {
-        let _stopped = server.stop();
-        return (
-            None,
-            Some(format!(
-                "active-session CLI forwarding unavailable: {error}"
-            )),
-        );
-    }
     (Some(server), None)
+}
+
+pub(super) fn publish_optional_control(
+    session_lease: &mut FileSessionLease,
+    control: &mut Option<ControlServer>,
+    warning: &mut Option<String>,
+) -> bool {
+    if control.is_none() {
+        return false;
+    }
+    if let Err(error) = session_lease.publish_control() {
+        if let Some(server) = control.take() {
+            let _stopped = server.stop();
+        }
+        *warning = Some(format!(
+            "active-session CLI forwarding unavailable: {error}"
+        ));
+        return false;
+    }
+    true
 }
 
 pub(super) fn enter_terminal(

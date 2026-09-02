@@ -9,6 +9,34 @@ impl UpdateCancellation for Cancelled {
 }
 
 #[test]
+fn already_current_preflight_participants_are_released_after_installation() {
+    let mut ids = TestIds::new(1_800_000_000_000);
+    let identity = InstallationIdentity::from_digest([34; 32]);
+    let mut current = participants(&mut ids, identity, 1);
+    let initiating = current[0].instance_id;
+    current[0].version = "0.2.0".to_owned();
+    let registry = registry(current.clone(), current);
+    let state = State::default();
+    let mut gateway = Gateway::default();
+    let mut installer = successful_installer();
+
+    let result = UpdateRestartCoordinator::new(&state, &registry, &mut gateway, &mut installer)
+        .execute(
+            ids.request_id(),
+            initiating,
+            identity,
+            &version("0.2.0"),
+            Timestamp::from_millis(1_800_000_030_000),
+            &(),
+        )
+        .expect("coordinate current participant");
+
+    assert_eq!(result.prepared_participants, 1);
+    assert_eq!(result.restart_requests, 0);
+    assert_eq!(gateway.released.len(), 1);
+}
+
+#[test]
 fn installer_failure_releases_every_ready_participant() {
     let mut ids = TestIds::new(1_800_000_000_000);
     let identity = InstallationIdentity::from_digest([36; 32]);
@@ -102,12 +130,11 @@ fn cancelled_single_session_restart_creates_no_automatic_highlights() {
 }
 
 #[test]
-fn coordinator_missing_after_installation_retains_pending_for_delayed_resume() {
+fn coordinator_missing_after_installation_retains_restart_without_an_announcement() {
     let mut ids = TestIds::new(1_800_000_000_000);
     let identity = InstallationIdentity::from_digest([38; 32]);
     let before = participants(&mut ids, identity, 1);
     let initiating = before[0].instance_id;
-    let initiating_session = before[0].session_id;
     let registry = registry(before, Vec::new());
     let state = State::default();
     let mut gateway = Gateway::default();
@@ -124,18 +151,10 @@ fn coordinator_missing_after_installation_retains_pending_for_delayed_resume() {
         )
         .expect("record missing coordinator");
 
-    assert_eq!(result.restart_requests, 1);
+    assert_eq!(result.restart_requests, 0);
     assert_eq!(result.restart_failed, vec![initiating]);
     assert!(state.cache.borrow().restart_needed);
-    assert_eq!(
-        state
-            .cache
-            .borrow()
-            .release_highlights
-            .as_ref()
-            .map(ReleaseHighlightAnnouncement::session_id),
-        Some(initiating_session)
-    );
+    assert!(state.cache.borrow().release_highlights.is_none());
 }
 
 #[test]
@@ -166,6 +185,9 @@ fn incomplete_peer_replacement_suppresses_automatic_highlights() {
         .expect("partial replacement");
 
     assert!(result.restart_failed.contains(&peer));
+    assert!(result.restart_failed.contains(&initiating));
+    assert_eq!(gateway.released, vec![initiating]);
+    assert_eq!(gateway.restarted, vec![peer]);
     assert!(state.cache.borrow().release_highlights.is_none());
 }
 
@@ -267,6 +289,39 @@ fn failed_pending_write_keeps_the_initiator_running_without_a_false_announcement
     assert!(gateway.restarted.is_empty());
     assert!(state.cache.borrow().release_highlights.is_none());
     assert!(state.cache.borrow().restart_needed);
+}
+
+#[test]
+fn rejected_initiating_restart_discards_announcement_and_releases_barrier() {
+    let mut ids = TestIds::new(1_800_000_000_000);
+    let identity = InstallationIdentity::from_digest([45; 32]);
+    let before = participants(&mut ids, identity, 1);
+    let initiating = before[0].instance_id;
+    let registry = registry(before.clone(), before);
+    let state = State::default();
+    let mut gateway = Gateway {
+        fail_restart: Some(initiating),
+        ..Gateway::default()
+    };
+    let mut installer = successful_installer();
+
+    let result = UpdateRestartCoordinator::new(&state, &registry, &mut gateway, &mut installer)
+        .execute(
+            ids.request_id(),
+            initiating,
+            identity,
+            &version("0.2.0"),
+            Timestamp::from_millis(1_800_000_030_000),
+            &(),
+        )
+        .expect("rejected initiating restart");
+
+    assert_eq!(result.restart_requests, 1);
+    assert_eq!(result.restart_accepted, 0);
+    assert_eq!(result.restart_failed, vec![initiating]);
+    assert_eq!(gateway.released, vec![initiating]);
+    assert!(state.cache.borrow().restart_needed);
+    assert!(state.cache.borrow().release_highlights.is_none());
 }
 
 #[test]

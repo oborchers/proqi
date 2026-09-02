@@ -97,6 +97,12 @@ impl FileRuntimeCoordinator {
         self
     }
 
+    pub(crate) fn try_acquire_schema_shared(
+        &self,
+    ) -> Result<Option<FileSchemaLease>, RuntimeError> {
+        schema_lock::try_acquire(&self.runtime_dir.join("schema.lock"), false)
+    }
+
     fn session_lock_path(&self, session_id: SessionId) -> PathBuf {
         self.runtime_dir
             .join("sessions")

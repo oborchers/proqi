@@ -89,3 +89,20 @@ pub(super) fn acquire(
         }
     }
 }
+
+pub(super) fn try_acquire(
+    path: &Path,
+    exclusive: bool,
+) -> Result<Option<FileSchemaLease>, RuntimeError> {
+    let file = open_private_file(path)?;
+    let result = if exclusive {
+        FileExt::try_lock(&file)
+    } else {
+        FileExt::try_lock_shared(&file)
+    };
+    match result {
+        Ok(()) => Ok(Some(FileSchemaLease { file })),
+        Err(TryLockError::WouldBlock) => Ok(None),
+        Err(TryLockError::Error(error)) => Err(super::io_error(error)),
+    }
+}
