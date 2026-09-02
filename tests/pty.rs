@@ -12,6 +12,10 @@ mod support;
 mod active_control;
 
 #[cfg(target_os = "macos")]
+#[path = "pty/bottom_boundary.rs"]
+mod bottom_boundary;
+
+#[cfg(target_os = "macos")]
 #[path = "pty/collapsed_entry.rs"]
 mod collapsed_entry;
 

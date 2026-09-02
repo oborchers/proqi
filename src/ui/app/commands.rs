@@ -78,7 +78,7 @@ impl BoardApp {
             UiKey::Character(_) | UiKey::UnmodifiedSpace | UiKey::Delete => {
                 self.handle_board_key_command(key, ids, clock)
             }
-            UiKey::Enter => self.begin_insertion(ids, clock),
+            UiKey::Enter => self.begin_bottom_insertion(ids, clock),
             UiKey::Escape => {
                 self.move_focus(-1);
                 Vec::new()
@@ -142,6 +142,9 @@ impl BoardApp {
         clock: &impl Clock,
     ) -> Vec<Effect> {
         match self.settings.keybindings.command_for_key(key) {
+            Some(BoardCommand::New) if self.insertion_focused() => {
+                self.begin_bottom_insertion(ids, clock)
+            }
             Some(BoardCommand::New) => self.begin_insertion(ids, clock),
             Some(BoardCommand::Edit) => self.expand_and_enter_edit(ids, clock),
             Some(BoardCommand::Delete) => self.delete(ids, clock),
