@@ -18,7 +18,8 @@ use crate::{
         UpdateCacheState,
     },
     ports::update::{
-        ReleaseObservation, UpdateError, UpdateLease, UpdateLockKind, UpdateStateStore,
+        ReleaseObservation, RestartCompletion, UpdateError, UpdateLease, UpdateLockKind,
+        UpdateStateStore,
     },
 };
 
@@ -178,6 +179,19 @@ impl UpdateStateStore for FileUpdateStateStore {
         })
     }
 
+    fn complete_restart(
+        &self,
+        installation: InstallationIdentity,
+        announcement: &ReleaseHighlightAnnouncement,
+    ) -> Result<RestartCompletion, UpdateError> {
+        let mut completion = RestartCompletion::Mismatch;
+        self.mutate(installation, |state| {
+            completion = classify_restart_completion(state, announcement);
+            Ok(())
+        })?;
+        Ok(completion)
+    }
+
     fn record_release_highlights(
         &self,
         installation: InstallationIdentity,
@@ -187,6 +201,25 @@ impl UpdateStateStore for FileUpdateStateStore {
             state.release_highlights = Some(announcement);
             Ok(())
         })
+    }
+
+    fn discard_release_highlights(
+        &self,
+        installation: InstallationIdentity,
+        announcement: &ReleaseHighlightAnnouncement,
+    ) -> Result<bool, UpdateError> {
+        let mut discarded = false;
+        self.mutate(installation, |state| {
+            let matches = state.release_highlights.as_ref().is_some_and(|current| {
+                !current.acknowledged() && current.same_upgrade(announcement)
+            });
+            if matches {
+                state.release_highlights = None;
+                discarded = true;
+            }
+            Ok(())
+        })?;
+        Ok(discarded)
     }
 
     fn acknowledge_release_highlights(
@@ -207,6 +240,26 @@ impl UpdateStateStore for FileUpdateStateStore {
         })?;
         Ok(acknowledged)
     }
+}
+
+fn classify_restart_completion(
+    state: &mut UpdateCacheState,
+    announcement: &ReleaseHighlightAnnouncement,
+) -> RestartCompletion {
+    let exact_target =
+        state.observed_installed_version.as_ref() == Some(announcement.target_version());
+    let exact_announcement = state
+        .release_highlights
+        .as_ref()
+        .is_some_and(|current| !current.acknowledged() && current.same_upgrade(announcement));
+    if !exact_target || !exact_announcement {
+        return RestartCompletion::Mismatch;
+    }
+    if !state.restart_needed {
+        return RestartCompletion::AlreadyComplete;
+    }
+    state.restart_needed = false;
+    RestartCompletion::Completed
 }
 
 fn merge_latest(state: &mut UpdateCacheState, version: StableVersion, etag: Option<String>) {
