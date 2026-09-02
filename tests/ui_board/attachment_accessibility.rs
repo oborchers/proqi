@@ -11,6 +11,8 @@ use ratatui_core::style::Modifier;
 
 #[path = "attachment_accessibility/flicker_regressions.rs"]
 mod flicker_regressions;
+#[path = "attachment_accessibility/frame_presentation.rs"]
+mod frame_presentation;
 #[path = "attachment_accessibility/review.rs"]
 mod review;
 #[path = "attachment_accessibility/transformations.rs"]

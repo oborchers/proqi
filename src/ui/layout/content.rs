@@ -2,13 +2,15 @@
 
 use ratatui_core::layout::Rect;
 
-use crate::{application::AppState, domain::ThoughtPresentation, ports::editor::EditorSnapshot};
+use crate::{
+    application::AppState, domain::ThoughtPresentation, ui::projection::FramePresentation,
+};
 
 use super::{ComposeLayout, ThoughtLayout, scroll};
 
 pub(super) struct ContentRequest<'a> {
     pub(super) state: &'a AppState,
-    pub(super) editor: Option<&'a EditorSnapshot>,
+    pub(super) presentation: &'a FramePresentation,
     pub(super) board: Rect,
     pub(super) content_width: u16,
     pub(super) insertion_focused: bool,
@@ -31,7 +33,7 @@ pub(super) struct VisibleContent {
 pub(super) fn visible_content(request: &ContentRequest<'_>) -> VisibleContent {
     let flow = scroll::BoardFlow::measure(
         request.state,
-        request.editor,
+        request.presentation,
         request.content_width,
         request.board.height,
         request.density,

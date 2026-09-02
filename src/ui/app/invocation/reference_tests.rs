@@ -232,6 +232,7 @@ fn automatic_selection_inserts_an_inert_location_and_readiness_is_display_only()
     assert!(choice.qualifier.contains("working"));
     let selection_effects = app.handle(UiInput::Key(UiKey::Enter), &mut ids, &clock);
     assert!(selection_effects.is_empty());
+    app.prepare_frame(ratatui_core::layout::Rect::new(0, 0, 80, 8));
     let inserted = "Ask Herdr collaborator: reviewer (codex) at workspace Product (w2), tab Review (w2:t4), pane w2:p9 ";
     assert_eq!(app.editor_snapshot().expect("editor").content, inserted);
     assert!(!inserted.contains("working"));

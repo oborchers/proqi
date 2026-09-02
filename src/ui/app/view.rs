@@ -10,6 +10,7 @@ use crate::{
     },
     ui::{HitTarget, KeyBindings},
 };
+use std::borrow::Cow;
 
 impl BoardApp {
     pub(super) fn current_content(&self, thought_id: ThoughtId) -> Option<String> {
@@ -33,45 +34,112 @@ impl BoardApp {
 
     pub(in crate::ui) fn editor_presentation(
         &self,
-    ) -> Option<crate::ui::projection::EditorPresentation> {
-        if self.compose_prompt_visible() {
-            return None;
-        }
-        let snapshot = self.editor_snapshot()?;
-        let (annotations, expanded, thought_id) = match self.editor.as_ref()?.0 {
-            super::EditorOwner::Compose => (Vec::new(), Vec::new(), None),
-            super::EditorOwner::Thought(thought_id) => (
-                self.current_annotations(thought_id),
-                self.expanded_fold_indices(thought_id),
-                Some(thought_id),
-            ),
-        };
-        crate::ui::projection::editor_presentation(
-            &snapshot,
-            &annotations,
-            &expanded,
-            |annotation_index| {
-                thought_id.is_some_and(|thought_id| {
-                    self.attachment_inaccessible(thought_id, annotation_index)
-                })
-            },
-        )
-        .ok()
+    ) -> Option<&crate::ui::projection::EditorPresentation> {
+        self.layout.as_ref()?;
+        self.frame_presentation
+            .as_ref()
+            .and_then(crate::ui::projection::FramePresentation::editor)
     }
 
-    pub(in crate::ui) fn presentation_for_render(
+    pub(super) fn active_presented_thought(
         &self,
-        thought_id: ThoughtId,
-    ) -> Option<crate::ui::annotations::Presentation> {
+    ) -> Option<Cow<'_, crate::ui::projection::PresentedThought>> {
+        let thought_id = self.active_thought_id()?;
         let content = self.current_content(thought_id)?;
-        let annotations = self.current_annotations(thought_id);
-        crate::ui::annotations::project_with_health(
-            &content,
-            &annotations,
-            &self.expanded_fold_indices(thought_id),
-            |annotation_index| self.attachment_inaccessible(thought_id, annotation_index),
-        )
-        .ok()
+        if let Some(thought) = self
+            .frame_presentation
+            .as_ref()
+            .and_then(|presentation| presentation.thought(thought_id))
+            .filter(|thought| {
+                thought.canonical_content == content
+                    && thought
+                        .presentation
+                        .substitutions
+                        .iter()
+                        .all(|substitution| {
+                            substitution.collapsed
+                                != self
+                                    .expanded_folds
+                                    .contains(&(thought_id, substitution.annotation_index))
+                        })
+            })
+        {
+            return Some(Cow::Borrowed(thought));
+        }
+        self.build_frame_presentation()
+            .thought(thought_id)
+            .cloned()
+            .map(Cow::Owned)
+    }
+
+    pub(super) fn build_frame_presentation(&self) -> crate::ui::projection::FramePresentation {
+        let thoughts = self
+            .state
+            .board
+            .live_thoughts()
+            .into_iter()
+            .map(|thought| {
+                let content = self
+                    .current_content(thought.id)
+                    .unwrap_or_else(|| thought.content.clone());
+                let annotations = self.current_annotations(thought.id);
+                let projection = crate::ui::annotations::project_with_health(
+                    &content,
+                    &annotations,
+                    &self.expanded_fold_indices(thought.id),
+                    |annotation_index| self.attachment_inaccessible(thought.id, annotation_index),
+                )
+                .unwrap_or_else(|_| {
+                    crate::ui::annotations::Presentation::canonical(content.clone())
+                });
+                crate::ui::projection::PresentedThought {
+                    thought_id: thought.id,
+                    canonical_content: content,
+                    presentation: projection,
+                    preference: thought.presentation,
+                }
+            })
+            .collect();
+        crate::ui::projection::FramePresentation::new(thoughts)
+    }
+
+    pub(in crate::ui) fn presentation_for_layout<'a>(
+        &'a self,
+        layout: &crate::ui::LayoutSnapshot,
+    ) -> Cow<'a, crate::ui::projection::FramePresentation> {
+        if self.layout.as_ref() == Some(layout)
+            && let Some(presentation) = &self.frame_presentation
+        {
+            return Cow::Borrowed(presentation);
+        }
+        let mut presentation = self.build_frame_presentation();
+        self.attach_editor_presentation(&mut presentation);
+        Cow::Owned(presentation)
+    }
+
+    pub(super) fn attach_editor_presentation(
+        &self,
+        frame: &mut crate::ui::projection::FramePresentation,
+    ) {
+        if self.compose_prompt_visible() {
+            return;
+        }
+        let Some(snapshot) = self.editor_snapshot() else {
+            return;
+        };
+        let source = match self.editor.as_ref().map(|editor| editor.0) {
+            Some(super::EditorOwner::Compose) => {
+                crate::ui::annotations::Presentation::canonical(snapshot.content.clone())
+            }
+            Some(super::EditorOwner::Thought(thought_id)) => {
+                let Some(thought) = frame.thought(thought_id) else {
+                    return;
+                };
+                thought.presentation.clone()
+            }
+            None => return,
+        };
+        frame.set_editor(&snapshot, source);
     }
 
     /// Effective interaction mode.

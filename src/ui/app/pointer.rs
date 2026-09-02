@@ -305,16 +305,25 @@ impl BoardApp {
     ) -> Vec<Effect> {
         if matches!(self.state.mode, InteractionMode::Edit { thought_id: active } if active == thought_id)
         {
-            let cell = self.editor_cell(thought_id, pointer);
+            let target = self
+                .editor_cell(thought_id, pointer)
+                .and_then(|(row, column)| self.editor_cell_target(row, column));
             self.focus(thought_id);
             self.enter_edit();
-            let Some((row, column)) = cell else {
+            let Some(target) = target else {
                 return Vec::new();
             };
-            if self.select_fold_at_cell(thought_id, row, column) {
+            if let BoardCellTarget::Fold {
+                canonical_start,
+                canonical_end,
+            } = target
+            {
+                self.set_editor_range(canonical_start, canonical_end);
                 return Vec::new();
             }
-            let position = self.projected_position_at_cell(row, column);
+            let BoardCellTarget::Position(position) = target else {
+                return Vec::new();
+            };
             self.apply_pointer_start(position, pointer, click_count);
             return Vec::new();
         }
@@ -362,16 +371,16 @@ impl BoardApp {
         thought_id: crate::domain::ThoughtId,
         pointer: PointerInput,
     ) -> Option<BoardCellTarget> {
-        let layout = self.layout.as_ref()?.thought(thought_id)?;
-        let content = self.current_content(thought_id)?;
-        let presentation = self.presentation_for_render(thought_id)?;
+        let frame = self.layout.as_ref()?;
+        let layout = frame.thought(thought_id)?;
+        let thought = self.frame_presentation.as_ref()?.thought(thought_id)?;
         let row = layout
             .content_row_offset
             .saturating_add(usize::from(pointer.row.saturating_sub(layout.text_area.y)));
         let column = pointer.column.saturating_sub(layout.text_area.x);
         crate::ui::projection::board_cell_target(
-            &content,
-            &presentation,
+            &thought.canonical_content,
+            &thought.presentation,
             layout.text_area.width,
             row,
             column,
