@@ -22,14 +22,18 @@ impl BoardApp {
     /// Recompute one authoritative frame layout and reflow the active editor.
     pub fn prepare_frame(&mut self, area: Rect) -> LayoutSnapshot {
         self.reset_overlay_activation_for_geometry(area);
-        let layout_state = self.presentation_state();
-        let first_editor = self.editor_presentation();
+        self.prepare_layout(TextViewport::new(
+            area.width.saturating_sub(2).max(1),
+            self.viewport.height,
+        ));
+        let mut presentation = self.build_frame_presentation();
+        self.attach_editor_presentation(&mut presentation);
         let follow_insertion = self.insertion_focused() || self.compose_prompt_visible();
         let has_status = self.status_view().is_some()
             || matches!(self.state.durability, DurabilityState::Failed { .. });
         let (first, first_scroll) = crate::ui::layout::compute_for_app(
-            &layout_state,
-            first_editor.as_ref().map(|view| &view.snapshot),
+            &self.state,
+            &presentation,
             area,
             follow_insertion,
             !self.agent_targets.is_empty(),
@@ -40,11 +44,11 @@ impl BoardApp {
         );
         let height = self.focused_height(&first);
         self.prepare_layout(TextViewport::new(first.content_width, height));
-        let editor = self.editor_presentation();
+        self.attach_editor_presentation(&mut presentation);
         let viewport = self.board_viewport.at(first_scroll.current);
         let (mut layout, scroll) = crate::ui::layout::compute_for_app(
-            &layout_state,
-            editor.as_ref().map(|view| &view.snapshot),
+            &self.state,
+            &presentation,
             area,
             follow_insertion,
             !self.agent_targets.is_empty(),
@@ -76,6 +80,7 @@ impl BoardApp {
         self.prepare_layout(TextViewport::new(layout.content_width, final_height));
         self.board_viewport = self.board_viewport.at(scroll.current);
         self.scroll_geometry = Some(scroll);
+        self.frame_presentation = Some(presentation);
         self.layout = Some(layout.clone());
         self.clamp_help_scroll();
         self.clamp_release_highlights_scroll();
@@ -220,34 +225,6 @@ impl BoardApp {
         } else {
             "saved"
         }
-    }
-
-    fn presentation_state(&self) -> crate::application::AppState {
-        let mut state = self.state.clone();
-        if self.insertion_focused() {
-            state.focused_thought = None;
-        }
-        let ids = state
-            .board
-            .thoughts()
-            .iter()
-            .map(|thought| thought.id)
-            .collect::<Vec<_>>();
-        for id in ids {
-            let Some(thought) = state.board.thought_mut(id) else {
-                continue;
-            };
-            let Ok(presentation) = crate::ui::annotations::project(
-                &thought.content,
-                &thought.annotations,
-                &self.expanded_fold_indices(id),
-            ) else {
-                continue;
-            };
-            thought.content = presentation.content;
-            thought.annotations.clear();
-        }
-        state
     }
 }
 

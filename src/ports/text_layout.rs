@@ -141,7 +141,7 @@ pub(crate) struct LogicalLine {
     pub(crate) end: usize,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct WrappedRow {
     pub(crate) visual: VisualLine,
     pub(crate) start_byte: usize,

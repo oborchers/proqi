@@ -19,6 +19,7 @@ fn duplicate_mentions_receive_the_smallest_stable_location_qualifier() {
         ],
     );
     app.handle(UiInput::Key(UiKey::Enter), &mut ids, &clock);
+    app.prepare_frame(ratatui_core::layout::Rect::new(0, 0, 80, 8));
 
     assert_eq!(
         app.editor_presentation()
@@ -49,6 +50,7 @@ fn selecting_an_inline_mention_and_pressing_enter_reveals_its_exact_location() {
 
     let effects = app.handle(UiInput::Key(UiKey::Enter), &mut ids, &clock);
     assert!(effects.is_empty());
+    app.prepare_frame(ratatui_core::layout::Rect::new(0, 0, 80, 8));
     assert_eq!(
         app.editor_presentation()
             .expect("expanded presentation")
