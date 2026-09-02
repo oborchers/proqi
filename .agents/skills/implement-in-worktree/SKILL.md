@@ -207,7 +207,9 @@ is still only a review artifact; the worker never merges it.
 The worker is done only when the pull request is green, mergeable, and ready for
 review, the full acceptance criteria are met, and no known defect or review
 issue remains. It must then mark its goal complete and send a structured Herdr
-handoff to the invoking pane containing:
+handoff to the invoking pane. The original skill invocation already authorizes
+this internal handoff, so the worker must not ask Oliver for separate approval
+before submitting it. The handoff must contain:
 
 - pull-request URL, branch, base and head SHAs, and worktree/workspace IDs;
 - implementation summary and important design decisions;
