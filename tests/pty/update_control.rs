@@ -308,7 +308,14 @@ fn active_participant(state: &Path, session: &str) -> InstanceInfo {
         .filter_map(Result::ok)
         .filter_map(|entry| fs::read(entry.path()).ok())
         .filter_map(|bytes| serde_json::from_slice::<InstanceInfo>(&bytes).ok())
-        .find(|info| info.session_id.to_string() == session)
+        .find(|info| {
+            info.session_id.to_string() == session
+                && info.control_protocol == Some(proqi::ports::control::CONTROL_PROTOCOL_VERSION)
+                && info
+                    .control_endpoint
+                    .as_deref()
+                    .is_some_and(|endpoint| Path::new(endpoint).exists())
+        })
         .expect("active participant")
 }
 
