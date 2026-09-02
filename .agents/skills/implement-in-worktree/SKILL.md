@@ -69,6 +69,12 @@ The brief must contain:
   and useful upstream or open-source implementations;
 - permission to use read-only research subagents when valuable, while keeping a
   single implementation owner and avoiding overlapping edits;
+- a requirement that every Codex review use `$codex-review` and every Claude
+  review use `$claude-code-review`; reviewers are non-interactive background
+  workers and must never receive a Herdr pane, tab, workspace, worktree, or
+  `herdr agent` process; a Codex implementation owner must use a native Codex
+  subagent and must never launch `codex exec`, while only a non-Codex harness may
+  use the Codex CLI; apply the equivalent native-versus-CLI rule to Claude Code;
 - focused and canonical test expectations, snapshot review, and the mandatory
   live Herdr stress checkpoint below, including real API, PTY, or visual paths
   that the feature exposes, plus the prohibition against weakening gates;
@@ -121,7 +127,7 @@ blocked transition, keep the goal active and still report immediately.
   Address them by explicit IDs with `--no-focus`; never reuse the invoking
   coordinator's pane, another workstream's workspace, or a user's unrelated
   pane. Temporary test panes do not authorize another implementation agent,
-  worktree, or parallel implementation owner.
+  reviewer, worktree, or parallel implementation owner.
 - When the feature integrates with Herdr or a harness, exercise the real
   structured API and relevant UI/PTY behavior in the worker's Herdr workspace.
   A mock-only result is insufficient when live qualification is feasible.
