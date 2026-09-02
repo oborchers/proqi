@@ -32,22 +32,21 @@ pub(crate) fn display_grapheme(grapheme: &str, column: usize) -> (String, usize)
 
 pub(crate) fn truncate_cells(value: &str, width: usize) -> String {
     let mut cells = 0_usize;
-    value
-        .graphemes(true)
-        .take_while(|grapheme| {
-            let next = cells.saturating_add(grapheme_cell_width(grapheme, cells));
-            let keep = next <= width;
-            if keep {
-                cells = next;
-            }
-            keep
-        })
-        .collect()
+    let mut visible = String::new();
+    for grapheme in value.graphemes(true) {
+        let (display, grapheme_width) = display_grapheme(grapheme, cells);
+        if cells.saturating_add(grapheme_width) > width {
+            break;
+        }
+        visible.push_str(&display);
+        cells = cells.saturating_add(grapheme_width);
+    }
+    visible
 }
 
 pub(crate) fn ellipsize_cells(value: &str, width: usize) -> String {
     if terminal_cell_width(value) <= width {
-        return value.to_owned();
+        return truncate_cells(value, width);
     }
     if width == 0 {
         return String::new();
@@ -61,6 +60,78 @@ pub(crate) fn terminal_cell_width(value: &str) -> usize {
     value.graphemes(true).fold(0, |cells, grapheme| {
         cells + grapheme_cell_width(grapheme, cells)
     })
+}
+
+/// Saturating terminal-cell width for Ratatui geometry.
+pub(crate) fn terminal_cell_width_u16(value: &str) -> u16 {
+    u16::try_from(terminal_cell_width(value)).unwrap_or(u16::MAX)
+}
+
+/// One rendered window over user-entered text and its cursor cell within that window.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct VisibleCellWindow {
+    pub(crate) text: String,
+    pub(crate) cursor_cell: usize,
+}
+
+/// Project a byte cursor to its terminal-cell column, clamping inside a grapheme backward.
+pub(crate) fn cursor_cell(value: &str, cursor_byte: usize) -> usize {
+    let cursor_byte = cursor_byte.min(value.len());
+    let mut cells = 0_usize;
+    for (byte, grapheme) in value.grapheme_indices(true) {
+        if byte.saturating_add(grapheme.len()) > cursor_byte {
+            break;
+        }
+        cells = cells.saturating_add(grapheme_cell_width(grapheme, cells));
+    }
+    cells
+}
+
+/// Keep the cursor visible in one sanitized terminal-cell-bounded text window.
+pub(crate) fn visible_cell_window(
+    value: &str,
+    cursor_byte: usize,
+    width: usize,
+) -> VisibleCellWindow {
+    if width == 0 {
+        return VisibleCellWindow {
+            text: String::new(),
+            cursor_cell: 0,
+        };
+    }
+    let cursor = cursor_cell(value, cursor_byte);
+    let graphemes = display_graphemes(value);
+    let mut start = 0;
+    let mut start_cell = 0_usize;
+    while start < graphemes.len() && cursor.saturating_sub(start_cell) > width {
+        start_cell = start_cell.saturating_add(graphemes[start].1);
+        start += 1;
+    }
+    let mut cells = 0_usize;
+    let mut text = String::new();
+    for (display, grapheme_width) in graphemes.into_iter().skip(start) {
+        if cells.saturating_add(grapheme_width) > width {
+            break;
+        }
+        text.push_str(&display);
+        cells = cells.saturating_add(grapheme_width);
+    }
+    VisibleCellWindow {
+        text,
+        cursor_cell: cursor.saturating_sub(start_cell).min(width),
+    }
+}
+
+fn display_graphemes(value: &str) -> Vec<(String, usize)> {
+    let mut cells = 0_usize;
+    value
+        .graphemes(true)
+        .map(|grapheme| {
+            let display = display_grapheme(grapheme, cells);
+            cells = cells.saturating_add(display.1);
+            display
+        })
+        .collect()
 }
 
 #[derive(Clone, Copy)]
@@ -262,7 +333,42 @@ mod tests {
 
     use crate::domain::TextPosition;
 
-    use super::{LogicalLine, byte_for_position, logical_lines, position_for_byte, wrap_rows};
+    use super::{
+        LogicalLine, byte_for_position, cursor_cell, ellipsize_cells, logical_lines,
+        position_for_byte, terminal_cell_width, truncate_cells, visible_cell_window, wrap_rows,
+    };
+
+    #[test]
+    fn terminal_cell_helpers_share_tabs_controls_and_unicode_width() {
+        let value = "a\te\u{301}界👩‍💻\u{7}";
+        assert_eq!(terminal_cell_width(value), 10);
+        assert_eq!(cursor_cell(value, "a\te\u{301}".len()), 5);
+        assert_eq!(cursor_cell(value, "a\te".len()), 4);
+        assert_eq!(truncate_cells(value, 7), "a   e\u{301}界");
+        assert_eq!(truncate_cells(value, 10), "a   e\u{301}界👩‍💻�");
+        assert_eq!(ellipsize_cells("\t\u{7}", 5), "    �");
+    }
+
+    #[test]
+    fn visible_window_keeps_cursor_in_cells_and_never_splits_graphemes() {
+        let value = "ab\t界e\u{301}👩‍💻\u{7}z";
+        let at_emoji = "ab\t界e\u{301}👩‍💻".len();
+        assert_eq!(
+            visible_cell_window(value, at_emoji, 6),
+            super::VisibleCellWindow {
+                text: "界e\u{301}👩‍💻�".to_owned(),
+                cursor_cell: 5,
+            }
+        );
+        assert_eq!(
+            visible_cell_window(value, "ab\t界e".len(), 4),
+            super::VisibleCellWindow {
+                text: "  界".to_owned(),
+                cursor_cell: 4,
+            }
+        );
+        assert_eq!(visible_cell_window(value, at_emoji, 0).cursor_cell, 0);
+    }
 
     #[test]
     fn ordinary_words_wrap_at_the_latest_whitespace_boundary() {

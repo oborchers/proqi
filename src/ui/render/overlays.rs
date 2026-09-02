@@ -11,8 +11,6 @@ use ratatui_widgets::{
     clear::Clear,
     paragraph::{Paragraph, Wrap},
 };
-use unicode_segmentation::UnicodeSegmentation as _;
-use unicode_width::UnicodeWidthStr as _;
 
 use super::super::{BoardApp, Theme, layout::OverlayLayout};
 
@@ -44,6 +42,7 @@ pub(super) fn render_help(
         .wrap(Wrap { trim: true }),
         overlay.area,
     );
+    render_overflow_cues(frame, overlay, app.help_overflow(), theme);
     render_close(frame, overlay, theme);
 }
 
@@ -51,6 +50,7 @@ pub(super) fn render_picker(
     frame: &mut Frame<'_>,
     overlay: &OverlayLayout,
     picker: PickerView<'_>,
+    overflow: (bool, bool),
     theme: &Theme,
 ) {
     clear_overlay(frame, overlay.area);
@@ -62,12 +62,17 @@ pub(super) fn render_picker(
         overlay.area,
     );
     let input = input_area(overlay);
-    let available = input.width.saturating_sub(1);
-    let (query, cursor) = visible_query(picker.query, picker.cursor, available);
+    let available = input.width.saturating_sub(2);
+    let query = crate::ports::text_layout::visible_cell_window(
+        picker.query,
+        picker.cursor,
+        usize::from(available),
+    );
     frame.render_widget(
-        Paragraph::new(format!("{}{query}", picker.prompt)).style(theme.focused_style()),
+        Paragraph::new(format!("{}{}", picker.prompt, query.text)).style(theme.focused_style()),
         input,
     );
+    let cursor = u16::try_from(query.cursor_cell).unwrap_or(available);
     frame.set_cursor_position((input.x.saturating_add(1).saturating_add(cursor), input.y));
     for (index, (entry, area)) in picker.entries.iter().zip(&overlay.items).enumerate() {
         if let Some((group, heading)) = entry
@@ -94,6 +99,7 @@ pub(super) fn render_picker(
             *area,
         );
     }
+    render_overflow_cues(frame, overlay, overflow, theme);
     render_close(frame, overlay, theme);
 }
 
@@ -148,18 +154,17 @@ pub(super) fn render_text_prompt(
             .borders(Borders::ALL),
         overlay.area,
     );
+    let input = input_area(overlay);
+    let available = usize::from(input.width.saturating_sub(3));
+    let value = crate::ports::text_layout::visible_cell_window(value, value.len(), available);
     frame.render_widget(
-        Paragraph::new(format!("> {value}")).style(theme.focused_style()),
-        input_area(overlay),
+        Paragraph::new(format!("> {}", value.text)).style(theme.focused_style()),
+        input,
     );
     render_close(frame, overlay, theme);
-    let x = overlay
-        .area
-        .x
-        .saturating_add(3)
-        .saturating_add(u16::try_from(value.width()).unwrap_or(u16::MAX))
-        .min(overlay.area.right().saturating_sub(2));
-    frame.set_cursor_position((x, overlay.area.y.saturating_add(1)));
+    let cursor = u16::try_from(value.cursor_cell).unwrap_or(u16::MAX);
+    let x = input.x.saturating_add(2).saturating_add(cursor);
+    frame.set_cursor_position((x, input.y));
 }
 
 pub(super) fn clear_overlay(frame: &mut Frame<'_>, area: ratatui_core::layout::Rect) {
@@ -247,10 +252,12 @@ impl<'a> PickerRow<'a> {
 #[cfg(test)]
 fn picker_row(entry: PickerRow<'_>, width: u16) -> String {
     let width = usize::from(width);
-    let primary_width = entry.primary.width();
+    let primary = display(entry.primary);
+    let primary_width = cell_width(&primary);
     if let Some(secondary) = fitting_secondary(entry, width) {
-        let gap = width.saturating_sub(primary_width + secondary.width());
-        return format!("{}{}{secondary}", entry.primary, " ".repeat(gap));
+        let secondary = display(secondary);
+        let gap = width.saturating_sub(primary_width + cell_width(&secondary));
+        return format!("{primary}{}{secondary}", " ".repeat(gap));
     }
     ellipsize(entry.primary, width)
 }
@@ -266,7 +273,7 @@ fn picker_line(entry: PickerRow<'_>, width: u16, selected: bool, theme: &Theme) 
             theme.base_style()
         };
         let mut content = ellipsize(entry.primary, usize::from(width));
-        content.push_str(&" ".repeat(usize::from(width).saturating_sub(content.width())));
+        content.push_str(&" ".repeat(usize::from(width).saturating_sub(cell_width(&content))));
         return Line::from(Span::styled(content, style));
     }
     let width = usize::from(width);
@@ -281,18 +288,18 @@ fn picker_line(entry: PickerRow<'_>, width: u16, selected: bool, theme: &Theme) 
     } else {
         base.fg(theme.foreground)
     };
-    let Some(secondary) = fitting_secondary(entry, width) else {
-        let padding = " ".repeat(width.saturating_sub(primary.width()));
+    let Some(secondary) = fitting_secondary(entry, width).map(display) else {
+        let padding = " ".repeat(width.saturating_sub(cell_width(&primary)));
         return Line::from(vec![
             Span::styled(primary, primary_style),
             Span::styled(padding, base),
         ]);
     };
-    let gap = width.saturating_sub(entry.primary.width() + secondary.width());
+    let gap = width.saturating_sub(cell_width(&primary) + cell_width(&secondary));
     Line::from(vec![
-        Span::styled(entry.primary.to_owned(), primary_style),
+        Span::styled(primary, primary_style),
         Span::styled(" ".repeat(gap), base),
-        Span::styled(secondary.to_owned(), base.fg(theme.muted)),
+        Span::styled(secondary, base.fg(theme.muted)),
     ])
 }
 
@@ -303,11 +310,9 @@ fn fitting_secondary(entry: PickerRow<'_>, width: usize) -> Option<&str> {
         .into_iter()
         .chain(entry.secondary_fallbacks.iter().map(String::as_str))
         .find(|secondary| {
-            entry
-                .primary
-                .width()
+            cell_width(entry.primary)
                 .saturating_add(minimum_gap)
-                .saturating_add(secondary.width())
+                .saturating_add(cell_width(secondary))
                 <= width
         })
 }
@@ -316,27 +321,12 @@ pub(super) fn ellipsize(value: &str, width: usize) -> String {
     crate::ports::text_layout::ellipsize_cells(value, width)
 }
 
-fn visible_query(query: &str, cursor: usize, width: u16) -> (String, u16) {
-    let cursor = cursor.min(query.len());
-    let prefix = &query[..cursor];
-    let mut start = 0;
-    while prefix[start..].width() > usize::from(width) {
-        start = prefix[start..]
-            .grapheme_indices(true)
-            .nth(1)
-            .map_or(cursor, |(offset, _)| start + offset);
-    }
-    let mut end = query.len();
-    while query[start..end].width() > usize::from(width) {
-        end = query[..end]
-            .grapheme_indices(true)
-            .next_back()
-            .map_or(start, |(index, _)| index);
-    }
-    (
-        query[start..end].to_owned(),
-        u16::try_from(query[start..cursor].width()).unwrap_or(width),
-    )
+fn cell_width(value: &str) -> usize {
+    crate::ports::text_layout::terminal_cell_width(value)
+}
+
+fn display(value: &str) -> String {
+    crate::ports::text_layout::truncate_cells(value, cell_width(value))
 }
 
 pub(super) fn render_close(frame: &mut Frame<'_>, overlay: &OverlayLayout, theme: &Theme) {
@@ -344,6 +334,30 @@ pub(super) fn render_close(frame: &mut Frame<'_>, overlay: &OverlayLayout, theme
         Paragraph::new("[x]").style(Style::default().fg(theme.accent)),
         overlay.close,
     );
+}
+
+pub(super) fn render_overflow_cues(
+    frame: &mut Frame<'_>,
+    overlay: &OverlayLayout,
+    (above, below): (bool, bool),
+    theme: &Theme,
+) {
+    if overlay.area.width == 0 || overlay.area.height < 3 {
+        return;
+    }
+    let x = overlay.area.right().saturating_sub(1);
+    if above {
+        frame.render_widget(
+            Paragraph::new("↑").style(Style::default().fg(theme.muted)),
+            ratatui_core::layout::Rect::new(x, overlay.area.y.saturating_add(1), 1, 1),
+        );
+    }
+    if below {
+        frame.render_widget(
+            Paragraph::new("↓").style(Style::default().fg(theme.muted)),
+            ratatui_core::layout::Rect::new(x, overlay.area.bottom().saturating_sub(2), 1, 1),
+        );
+    }
 }
 
 fn help_lines(app: &BoardApp, theme: &Theme, width: u16, height: u16) -> Vec<Line<'static>> {
@@ -370,7 +384,7 @@ fn shortcut_grid(
 fn shortcut_row(
     items: &[(String, &'static str)],
     columns: usize,
-    cell_width: usize,
+    column_width: usize,
     key_width: usize,
     theme: &Theme,
 ) -> Line<'static> {
@@ -378,96 +392,17 @@ fn shortcut_row(
     for (index, (key, label)) in items.iter().enumerate() {
         spans.push(Span::styled(key.clone(), Style::default().fg(theme.accent)));
         spans.push(Span::raw(
-            " ".repeat(key_width.saturating_sub(key.width()) + 1),
+            " ".repeat(key_width.saturating_sub(cell_width(key)) + 1),
         ));
         spans.push(Span::styled(*label, Style::default().fg(theme.foreground)));
         if index + 1 < columns {
-            let used = key_width + 1 + label.width();
-            spans.push(Span::raw(" ".repeat(cell_width.saturating_sub(used))));
+            let used = key_width + 1 + cell_width(label);
+            spans.push(Span::raw(" ".repeat(column_width.saturating_sub(used))));
         }
     }
     Line::from(spans)
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{PickerRow, overlay_clear_area, picker_line, picker_row};
-    use crate::ui::{Theme, ThemePreference};
-    use ratatui_core::{layout::Rect, style::Modifier};
-    use unicode_width::UnicodeWidthStr as _;
-
-    #[test]
-    fn two_field_row_right_aligns_qualifier() {
-        assert_eq!(
-            picker_row(PickerRow::fields("$skill", "Global Skill"), 24),
-            "$skill      Global Skill"
-        );
-    }
-
-    #[test]
-    fn narrow_row_hides_qualifier_before_token() {
-        assert_eq!(
-            picker_row(PickerRow::fields("$long-skill", "Global Skill"), 11),
-            "$long-skill"
-        );
-    }
-
-    #[test]
-    fn responsive_row_keeps_location_fallbacks_in_priority_order() {
-        let fallbacks = vec!["Workspace · p1".to_owned(), "p1".to_owned()];
-        let row = PickerRow::grouped(
-            "reviewer",
-            "Workspace / tab · p1 · codex · idle",
-            &fallbacks,
-            Some("Live in Herdr"),
-        );
-
-        assert_eq!(picker_row(row, 24), "reviewer  Workspace · p1");
-        assert_eq!(picker_row(row, 12), "reviewer  p1");
-    }
-
-    #[test]
-    fn every_picker_secondary_uses_the_same_quiet_metadata_style() {
-        let theme = Theme::resolve(ThemePreference::Dark, true);
-        let row = PickerRow::fields("$skill", "Project Skill");
-
-        let ordinary = picker_line(row, 24, false, &theme);
-        assert_eq!(ordinary.spans.len(), 3);
-        assert_eq!(ordinary.spans[0].style.fg, Some(theme.foreground));
-        assert_eq!(ordinary.spans[2].style.fg, Some(theme.muted));
-
-        let selected = picker_line(row, 24, true, &theme);
-        assert_eq!(selected.spans.len(), 3);
-        assert_eq!(selected.spans[0].style.fg, Some(theme.accent));
-        assert!(
-            selected.spans[0]
-                .style
-                .add_modifier
-                .contains(Modifier::BOLD)
-        );
-        assert_eq!(selected.spans[2].style.fg, Some(theme.muted));
-        assert_eq!(selected.spans[2].style.bg, theme.focused_surface);
-        insta::assert_debug_snapshot!("picker_metadata_styles", (ordinary, selected));
-    }
-
-    #[test]
-    fn overlong_token_ellipsizes_on_grapheme_and_cell_boundaries() {
-        let rendered = picker_row(PickerRow::fields("$界界e\u{301}🙂", "Global Skill"), 5);
-
-        assert_eq!(rendered, "$界…");
-        assert!(rendered.width() <= 5);
-    }
-
-    #[test]
-    fn overlay_clear_halo_clamps_to_the_viewport() {
-        let viewport = Rect::new(4, 2, 20, 8);
-        assert_eq!(
-            overlay_clear_area(viewport, Rect::new(8, 3, 10, 4)),
-            Rect::new(7, 3, 12, 4)
-        );
-        assert_eq!(
-            overlay_clear_area(viewport, Rect::new(4, 2, 20, 8)),
-            viewport
-        );
-    }
-}
+#[path = "overlays/tests.rs"]
+mod tests;

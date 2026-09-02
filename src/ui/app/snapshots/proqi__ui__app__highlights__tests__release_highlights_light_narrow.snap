@@ -1,6 +1,6 @@
 ---
 source: src/ui/app/highlights/tests.rs
-assertion_line: 186
+assertion_line: 375
 expression: "snapshot(38, 16, ThemePreference::Light)"
 ---
 00│┌ what's new in Proqi 1.2.0 ───────[x]│
@@ -17,5 +17,5 @@ expression: "snapshot(38, 16, ThemePreference::Light)"
 11││  concise highlights in narrow panes││
 12││• Scrolling preserves the active    ││
 13││  row across shallow panes          ││
-14││• Explicit dismissal is durable     ││
+14││• Explicit dismissal is durable     ↓│
 15│└────────────────────────────────────┘│

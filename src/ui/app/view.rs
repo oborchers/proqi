@@ -259,6 +259,21 @@ impl BoardApp {
             })
     }
 
+    pub(in crate::ui) fn picker_overflow(&self, visible: usize) -> (bool, bool) {
+        if self.search.is_some() {
+            return self.search_overflow(visible);
+        }
+        if self.transfer.is_some() {
+            return self.transfer_overflow(visible);
+        }
+        if self.invocation_popup.is_some() {
+            return self.invocation_overflow(visible);
+        }
+        self.palette
+            .as_ref()
+            .map_or((false, false), |palette| palette.overflow(visible))
+    }
+
     /// Active board bindings used by hints and command translation.
     #[must_use]
     pub const fn keybindings(&self) -> &KeyBindings {

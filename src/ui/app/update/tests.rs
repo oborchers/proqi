@@ -7,7 +7,8 @@ use crate::{
     domain::{InstallationKind, Session, SessionBoard, StableVersion, Timestamp},
     ports::environment::IdGenerator as _,
     ui::{
-        PointerButton, PointerInput, PointerKind, Theme, ThemePreference, UiInput, UiKey, render,
+        FastNavigation, PointerButton, PointerInput, PointerKind, Theme, ThemePreference, UiInput,
+        UiKey, render,
     },
 };
 use ratatui_core::{backend::TestBackend, layout::Rect, terminal::Terminal};
@@ -163,6 +164,30 @@ fn update_list_uses_identical_arrow_and_jk_navigation() {
         vim_app.handle(UiInput::Key(vim), &mut vim_ids, &clock);
         assert_eq!(arrow_app.update_prompt_view(), vim_app.update_prompt_view());
     }
+}
+
+#[test]
+fn update_prompt_fast_navigation_clamps_across_its_short_inventory() {
+    let (mut app, mut ids, clock) = app();
+    app.present_update(version(), InstallationKind::HomebrewFormula, 3);
+    app.handle(
+        UiInput::Key(UiKey::FastNavigation {
+            direction: FastNavigation::Next,
+            extend_selection: false,
+        }),
+        &mut ids,
+        &clock,
+    );
+    assert_eq!(app.update_prompt_view().expect("prompt").2, 2);
+    app.handle(
+        UiInput::Key(UiKey::FastNavigation {
+            direction: FastNavigation::Previous,
+            extend_selection: false,
+        }),
+        &mut ids,
+        &clock,
+    );
+    assert_eq!(app.update_prompt_view().expect("prompt").2, 0);
 }
 
 #[test]

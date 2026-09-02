@@ -1,6 +1,6 @@
 ---
 source: tests/ui_board/snapshots.rs
-assertion_line: 470
+assertion_line: 469
 expression: "snapshot(&mut fixture, 80, 14, ThemePreference::Dark)"
 ---
 SIZE 80x14
@@ -11,7 +11,7 @@ TEXT
 02││⌘X       Cut                           ⌘A       Select all                    ││
 03││⌘U       Delete logical line           ⌘Shift+U Delete sentence               ││
 04││⌘Z       Undo                          ⌘Shift+Z Redo                          ││
-05││⌘T       Split/extract                 Alt+↑/↓  Jump 5 rows                   ││
+05││⌘T       Split/extract                 Alt+↑/↓  5-row · PgUp/PgDn             ││
 06││⌘↑/⌘↓    Start/end                     ↑/↓×2    Neighbor/new                  ││
 07││                                                                              ││
 08│└──────────────────────────────────────────────────────────────────────────────┘│

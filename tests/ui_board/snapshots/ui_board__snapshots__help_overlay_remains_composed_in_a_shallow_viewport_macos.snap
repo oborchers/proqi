@@ -1,5 +1,6 @@
 ---
 source: tests/ui_board/snapshots.rs
+assertion_line: 200
 expression: "snapshot(&mut fixture, 42, 8, ThemePreference::Auto)"
 ---
 SIZE 42x8
@@ -11,7 +12,7 @@ TEXT
 03││⌘J/K    Reorder     y       Copy        ││
 04││x       Cut         d/Del   Delete      ││
 05││⌘D      Duplicate   Space   Select      ││
-06││t       Transform   a/⌘A    Select all  ││
+06││t       Transform   a/⌘A    Select all  ↓│
 07│└────────────────────────────────────────┘│
 
 STYLE RUNS
@@ -21,5 +22,5 @@ STYLE RUNS
 3: 0-0 fg=Reset bg=Reset mod=NONE | 1-4 fg=Green bg=Reset mod=NONE | 5-20 fg=Reset bg=Reset mod=NONE | 21-21 fg=Green bg=Reset mod=NONE | 22-41 fg=Reset bg=Reset mod=NONE
 4: 0-0 fg=Reset bg=Reset mod=NONE | 1-1 fg=Green bg=Reset mod=NONE | 2-20 fg=Reset bg=Reset mod=NONE | 21-25 fg=Green bg=Reset mod=NONE | 26-41 fg=Reset bg=Reset mod=NONE
 5: 0-0 fg=Reset bg=Reset mod=NONE | 1-2 fg=Green bg=Reset mod=NONE | 3-20 fg=Reset bg=Reset mod=NONE | 21-25 fg=Green bg=Reset mod=NONE | 26-41 fg=Reset bg=Reset mod=NONE
-6: 0-0 fg=Reset bg=Reset mod=NONE | 1-1 fg=Green bg=Reset mod=NONE | 2-20 fg=Reset bg=Reset mod=NONE | 21-24 fg=Green bg=Reset mod=NONE | 25-41 fg=Reset bg=Reset mod=NONE
+6: 0-0 fg=Reset bg=Reset mod=NONE | 1-1 fg=Green bg=Reset mod=NONE | 2-20 fg=Reset bg=Reset mod=NONE | 21-24 fg=Green bg=Reset mod=NONE | 25-40 fg=Reset bg=Reset mod=NONE | 41-41 fg=DarkGray bg=Reset mod=NONE
 7: 0-41 fg=Reset bg=Reset mod=NONE

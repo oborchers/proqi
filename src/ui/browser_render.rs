@@ -50,6 +50,14 @@ pub fn render_browser(
             render_detail(frame, item, area, theme);
         }
     }
+    for (cue, symbol) in [(layout.overflow_above, "↑"), (layout.overflow_below, "↓")] {
+        if let Some(area) = cue {
+            frame.render_widget(
+                Paragraph::new(symbol).style(Style::default().fg(theme.muted)),
+                area,
+            );
+        }
+    }
     if browser.visible_items().next().is_none() {
         frame.render_widget(
             Paragraph::new(" No matching sessions").style(Style::default().fg(theme.muted)),
@@ -83,6 +91,10 @@ fn render_header(
         let rename = browser.rename_value();
         let (label, value) =
             rename.map_or((" Search: ", browser.query()), |value| (" Rename: ", value));
+        let available = usize::from(layout.header.width)
+            .saturating_sub(crate::ports::text_layout::terminal_cell_width(label))
+            .saturating_sub(1);
+        let value = crate::ports::text_layout::visible_cell_window(value, value.len(), available);
         let style = if rename.is_some() {
             theme.focused_style()
         } else {
@@ -91,7 +103,7 @@ fn render_header(
         frame.render_widget(
             Paragraph::new(Line::from(vec![
                 Span::styled(label, Style::default().fg(theme.muted)),
-                Span::raw(value.to_owned()),
+                Span::raw(value.text),
                 Span::styled("_", Style::default().fg(theme.accent)),
             ]))
             .style(style),
@@ -122,7 +134,8 @@ fn render_result(
         });
     let focus = if selected { "│" } else { " " };
     let badge = format!("[{}]", item.availability.label());
-    let fixed_cells = 4_usize.saturating_add(unicode_width::UnicodeWidthStr::width(badge.as_str()));
+    let fixed_cells =
+        4_usize.saturating_add(crate::ports::text_layout::terminal_cell_width(&badge));
     let label_cells = usize::from(area.width).saturating_sub(fixed_cells);
     let style = if selected {
         theme.focused_style().fg(theme.accent)
