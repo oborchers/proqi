@@ -258,14 +258,16 @@ fn push_markdown(
     let Ok(file_metadata) = fs::metadata(definition) else {
         return;
     };
-    if !file_metadata.is_file() || file_metadata.len() > metadata::MAX_METADATA_BYTES {
+    if !file_metadata.is_file() {
         return;
     }
-    let parsed = metadata::markdown(definition);
-    if matches!(root.shape, RootShape::Skills | RootShape::MarkdownAgents) && parsed.is_none() {
-        return;
-    }
-    let metadata = parsed.unwrap_or_default();
+    let metadata = match metadata::markdown(definition) {
+        metadata::MarkdownMetadata::Parsed(metadata) => metadata,
+        metadata::MarkdownMetadata::Absent if root.shape == RootShape::MarkdownCommands => {
+            metadata::Metadata::default()
+        }
+        metadata::MarkdownMetadata::Absent | metadata::MarkdownMetadata::Invalid => return,
+    };
     if metadata.hidden {
         return;
     }

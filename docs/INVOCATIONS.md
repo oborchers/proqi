@@ -65,6 +65,22 @@ as folded image and large-paste placeholders. The styling is render-only: it
 does not create durable annotations or change editor text, wrapping, cursor
 positions, persistence, or undo.
 
+## Discovery resource boundary
+
+Markdown definitions are discovered from at most 64 KiB of frontmatter. Proqi
+stops at the complete closing `---` line and never reads or retains the
+instruction body. An opened frontmatter header that does not close within the
+budget is rejected. Invalid UTF-8 inside frontmatter is rejected, while invalid
+bytes after a valid closing delimiter are irrelevant to discovery. A Markdown
+command whose name comes from its filename needs no frontmatter and does not
+require its instruction body to be read.
+
+Skills and Markdown agents still require their existing metadata. The metadata
+line limit, field sanitization, visibility flags, root and traversal budgets,
+canonical-path deduplication, scope, precedence, and plugin limits remain
+unchanged. TOML agents, plugin manifests, and plugin registries require complete
+parsing and retain their separate whole-file limits.
+
 The byte-zero rule applies only to the shared `/plan` and `/goal` starters.
 Discovered compatible slash forms, including project and local skills or
 commands, highlight at exact token boundaries after whitespace and on later
