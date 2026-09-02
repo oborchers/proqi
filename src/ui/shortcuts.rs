@@ -28,7 +28,10 @@ pub(crate) fn items(app: &BoardApp) -> Vec<Shortcut> {
                 primary(&transform_key_label(keys.transform)),
                 "Split/extract",
             ),
-            ("Alt+↑/↓".to_owned(), "Jump 5 rows"),
+            (
+                super::paging::FAST_NAVIGATION_SHORTCUT_KEY.to_owned(),
+                super::paging::FAST_NAVIGATION_SHORTCUT_LABEL,
+            ),
             (format!("{}/{}", primary("↑"), primary("↓")), "Start/end"),
             ("↑/↓×2".to_owned(), "Neighbor/new"),
         ];

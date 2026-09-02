@@ -1,6 +1,6 @@
 ---
 source: src/ui/app/highlights/tests.rs
-assertion_line: 193
+assertion_line: 382
 expression: "snapshot(64, 8, ThemePreference::Limited)"
 ---
 00│┌ what's new in Proqi 1.2.0 ─────────────────────────────────[x]│
@@ -9,5 +9,5 @@ expression: "snapshot(64, 8, ThemePreference::Limited)"
 03││• Wide characters such as 界  and combining text stay intact   ││
 04││• Mouse and keyboard dismissal are equivalent                 ││
 05││                                                              ││
-06││Proqi 1.2.0                                                   ││
+06││Proqi 1.2.0                                                   ↓│
 07│└──────────────────────────────────────────────────────────────┘│

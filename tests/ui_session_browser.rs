@@ -479,3 +479,6 @@ fn narrow_browser_has_a_complete_reviewed_buffer() {
     let terminal = draw_theme(&mut browser, 44, 20, ThemePreference::Dark);
     insta::assert_snapshot!(snapshot_buffer(terminal.backend().buffer()));
 }
+
+#[path = "ui_session_browser/paging.rs"]
+mod paging;

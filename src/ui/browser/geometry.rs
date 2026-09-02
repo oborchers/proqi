@@ -56,12 +56,32 @@ impl SessionBrowser {
                 body_height,
             )
         });
+        let entries = self.place_entries(results, !wide);
+        let overflow_above = (self.first_visible > 0 && results.width > 0 && results.height > 0)
+            .then(|| Rect::new(results.right().saturating_sub(1), results.y, 1, 1));
+        let last_visible = entries.last().and_then(|entry| {
+            self.filtered
+                .iter()
+                .position(|index| *index == entry.item_index)
+        });
+        let overflow_below = last_visible
+            .is_some_and(|position| position.saturating_add(1) < self.filtered.len())
+            .then(|| {
+                Rect::new(
+                    results.right().saturating_sub(1),
+                    results.bottom().saturating_sub(1),
+                    1,
+                    1,
+                )
+            });
         BrowserLayout {
             area,
             header,
             results,
             detail,
-            entries: self.place_entries(results, !wide),
+            entries,
+            overflow_above,
+            overflow_below,
             footer,
         }
     }
@@ -79,8 +99,8 @@ impl SessionBrowser {
         {
             let item = &self.items[item_index];
             let group = self.group_for(item);
-            let group_area =
-                (previous_group != Some(group)).then(|| Rect::new(area.x, y, area.width, 1));
+            let group_area = (previous_group != Some(group) && y.saturating_add(1) < area.bottom())
+                .then(|| Rect::new(area.x, y, area.width, 1));
             if group_area.is_some() {
                 y = y.saturating_add(1);
             }

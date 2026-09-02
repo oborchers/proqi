@@ -165,7 +165,7 @@ Board choice.
 | `Primary+C` / `X` / `V` | Native copy / safe cut / paste |
 | `Alt` or `Ctrl` + `←` / `→`; `Home` / `End` | Move by word; line boundary |
 | `Shift` + movement | Extend text selection |
-| `Alt+↑` / `↓`; `Primary+↑` / `↓` | Jump five rows; thought start / end |
+| `Alt+↑` / `↓` or `Page Up` / `Page Down`; `Primary+↑` / `↓` | Jump five rows; thought start / end |
 | `Enter`; `Tab`; `Shift+Tab` | Continue lists; nest; outdent |
 | `↑` / `↓` twice at a boundary | Focus the adjacent thought, or create at the top / bottom board edge |
 | `Primary+Enter`; `Primary+Shift+Enter` | Submit and remove after acceptance; submit and keep |

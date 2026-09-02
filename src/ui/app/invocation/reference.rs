@@ -77,7 +77,7 @@ impl BoardApp {
         self.invocation_live = discovery.references.unwrap_or_default();
         self.invocation_live.truncate(MAX_INVOCATION_REFERENCES);
         if self.invocation_popup.is_some() {
-            self.clamp_reference_popup();
+            self.clamp_invocation_popup();
         } else if matches!(
             self.interaction_mode(),
             crate::application::InteractionMode::Edit { .. }
@@ -100,15 +100,6 @@ impl BoardApp {
     fn reference_token_is_active(&self) -> bool {
         self.active_invocation_token()
             .is_some_and(|(query, _)| query.starts_with('@'))
-    }
-
-    fn clamp_reference_popup(&mut self) {
-        let count = self.invocation_match_count();
-        let Some(popup) = &mut self.invocation_popup else {
-            return;
-        };
-        popup.selected = popup.selected.min(count.saturating_sub(1));
-        popup.scroll = popup.scroll.min(popup.selected);
     }
 }
 

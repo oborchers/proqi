@@ -6,7 +6,7 @@ use crossterm::event::{
 
 use crate::{
     ports::editor::CursorMovement,
-    ui::{PointerButton, PointerInput, PointerKind, UiInput, UiKey},
+    ui::{FastNavigation, PointerButton, PointerInput, PointerKind, UiInput, UiKey},
 };
 
 pub(super) fn translate(event: Event) -> Option<UiInput> {
@@ -95,6 +95,8 @@ pub(super) fn translate_key(key: KeyEvent) -> Option<UiKey> {
             document,
             extend_selection,
         )),
+        KeyCode::PageUp => Some(fast_navigation(FastNavigation::Previous, extend_selection)),
+        KeyCode::PageDown => Some(fast_navigation(FastNavigation::Next, extend_selection)),
         KeyCode::Left => Some(move_key(
             if word {
                 CursorMovement::WordBack
@@ -155,24 +157,39 @@ fn vertical_navigation(
     extend_selection: bool,
 ) -> UiKey {
     let legacy = if legacy_document { boundary } else { ordinary };
-    if extend_selection {
-        return vertical_key(legacy, primary, true);
-    }
     let platform_primary = if cfg!(target_os = "macos") {
         modifiers.intersects(KeyModifiers::SUPER | KeyModifiers::META)
     } else {
         modifiers.contains(KeyModifiers::CONTROL)
     };
+    if modifiers.contains(KeyModifiers::ALT) && !platform_primary {
+        return fast_navigation(
+            if accelerated == CursorMovement::VisualJumpUp {
+                FastNavigation::Previous
+            } else {
+                FastNavigation::Next
+            },
+            extend_selection,
+        );
+    }
+    if extend_selection {
+        return vertical_key(legacy, primary, true);
+    }
     let editor_movement = if platform_primary {
         boundary
-    } else if modifiers.contains(KeyModifiers::ALT) {
-        accelerated
     } else {
         return vertical_key(legacy, primary, false);
     };
     UiKey::EditNavigation {
         editor_movement,
         board_movement: legacy,
+    }
+}
+
+const fn fast_navigation(direction: FastNavigation, extend_selection: bool) -> UiKey {
+    UiKey::FastNavigation {
+        direction,
+        extend_selection,
     }
 }
 

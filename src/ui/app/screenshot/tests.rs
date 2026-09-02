@@ -23,6 +23,8 @@ mod behavior;
 mod focus;
 #[path = "tests/lifecycle.rs"]
 mod lifecycle;
+#[path = "tests/paging.rs"]
+mod paging;
 
 #[test]
 fn takeover_overlay_has_a_complete_wide_snapshot() {
