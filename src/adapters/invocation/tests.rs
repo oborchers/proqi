@@ -9,6 +9,9 @@ use crate::ports::invocation::{
 
 use super::FilesystemInvocationCatalog;
 
+#[cfg(unix)]
+mod symlink_layout;
+
 fn write(path: &Path, content: &str) {
     fs::create_dir_all(path.parent().expect("fixture parent")).expect("create fixture directory");
     fs::write(path, content).expect("write fixture");

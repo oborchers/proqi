@@ -28,9 +28,13 @@ symlink aliases while same-name definitions with distinct type or source remain
 separately labeled. When a `.claude/skills` entry resolves to the corresponding
 physical `.agents/skills` definition, `.agents` remains the canonical owner and
 the one catalog entry retains both `$name` and `/name` with independent harness
-precedence. The reverse symlink direction does not gain shared forms. Copy-mode
-installations remain separate harness-specific entries because their physical
-definitions can diverge even when names and metadata initially match.
+precedence. The physical definition may itself be reached through a symlinked
+skill folder in `.agents/skills`; a Claude alias that explicitly points through
+that Agent Skills entry retains both forms after canonical deduplication.
+Independent aliases to the same external definition do not establish that
+relationship, and the reverse symlink direction does not gain shared forms.
+Copy-mode installations remain separate harness-specific entries because their
+physical definitions can diverge even when names and metadata initially match.
 
 ## Target boundaries and shared built-ins
 

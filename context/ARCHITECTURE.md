@@ -570,9 +570,12 @@ exact bounded tokens and decorate terminal cells with the existing annotation
 semantic role without changing editor text, cursor geometry, persistence, or
 undo. Forms retain harness-specific precedence. A `.claude/skills` symlink into
 the corresponding physical `.agents/skills` definition contributes its Claude
-form to the Agent Skills-owned entry, while independent copies remain separate
-definitions. Outbound submission remains plain text and therefore does not
-claim live harness enablement.
+form to the Agent Skills-owned entry. This remains true when the Agent Skills
+entry is itself a supported symlinked skill folder whose final definition is
+outside the root; independent aliases to the same external target do not
+establish ownership, and independent copies remain separate definitions.
+Outbound submission remains plain text and therefore does not claim live
+harness enablement.
 
 An explicitly created empty thought is an ordinary durable domain entity. Its
 creation is committed through the same board operation as populated thoughts,
