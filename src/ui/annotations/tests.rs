@@ -215,7 +215,7 @@ fn inserted_annotations_are_anchored_to_the_single_resulting_change_range() {
 fn invocation_reference_projects_without_placeholder_brackets() {
     let canonical = "Herdr collaborator: coaching-philipp (claude) at workspace Consulting (w4), tab coaching-philipp (w4:t2), pane w4:p2";
     let display = "@coaching-philipp · claude";
-    let projected = super::project(
+    let projected = super::project_with_health(
         canonical,
         &[ContentAnnotation {
             start: 0,
@@ -225,6 +225,7 @@ fn invocation_reference_projects_without_placeholder_brackets() {
             },
         }],
         &[],
+        |_| false,
     )
     .expect("valid invocation projection");
 
@@ -246,8 +247,13 @@ fn shortcut_emphasis_preserves_text_and_is_never_a_substitution() {
     let content = "Press ↓, then Enter";
     let start = "Press ".len();
     let end = start + "↓".len();
-    let projected = super::project(content, &[ContentAnnotation::shortcut(start, end)], &[])
-        .expect("valid shortcut projection");
+    let projected = super::project_with_health(
+        content,
+        &[ContentAnnotation::shortcut(start, end)],
+        &[],
+        |_| false,
+    )
+    .expect("valid shortcut projection");
 
     assert_eq!(projected.content, content);
     assert!(projected.substitutions.is_empty());
@@ -265,7 +271,7 @@ fn shortcut_emphasis_preserves_text_and_is_never_a_substitution() {
 fn malformed_projection_fails_instead_of_discarding_metadata() {
     let malformed = ContentAnnotation::shortcut(1, 2);
     assert_eq!(
-        super::project("é", &[malformed], &[]),
+        super::project_with_health("é", &[malformed], &[], |_| false),
         Err(super::ProjectionError::InvalidAnnotationRange)
     );
 }

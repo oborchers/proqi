@@ -183,7 +183,14 @@ fn failed_save_replaces_the_summary_without_changing_footer_height() {
 #[test]
 fn help_overlay_remains_composed_in_a_shallow_viewport() {
     let mut fixture = Fixture::new();
-    fixture.input(UiInput::Key(UiKey::Escape));
+    super::agent::prepare_thought(&mut fixture);
+    fixture
+        .app
+        .complete_agent_discovery(Ok(vec![adjacent_target(
+            Direction::Right,
+            "w1:p2",
+            AgentState::Idle,
+        )]));
     let _initial = draw(&mut fixture, 42, 8);
     let layout = fixture.app.prepare_frame(Rect::new(0, 0, 42, 8));
     let help = layout
@@ -192,6 +199,13 @@ fn help_overlay_remains_composed_in_a_shallow_viewport() {
         .find_map(|(target, area)| (*target == HitTarget::Help).then_some(*area))
         .expect("help control");
     fixture.pointer(help.x, help.y, PointerKind::Down(PointerButton::Left));
+    let _opened = draw(&mut fixture, 42, 8);
+    for _ in 0..30 {
+        fixture.input(super::navigation::visual(
+            proqi::ports::editor::CursorMovement::VisualDown,
+            false,
+        ));
+    }
     let platform = if cfg!(target_os = "macos") {
         "macos"
     } else {
@@ -250,7 +264,7 @@ fn four_direction_agent_controls_have_a_dedicated_footer_band() {
         adjacent_target(Direction::Down, "w1:p4", AgentState::Done),
         adjacent_target(Direction::Left, "w1:p5", AgentState::Idle),
     ]));
-    assert_platform_snapshot!(snapshot(&mut fixture, 120, 12, ThemePreference::Dark));
+    insta::assert_snapshot!(snapshot(&mut fixture, 120, 12, ThemePreference::Dark));
 }
 
 #[test]
@@ -265,7 +279,7 @@ fn mixed_claude_and_hermes_targets_have_equal_directional_controls() {
     right.agent_kind = HarnessKind::new("hermes").expect("fixture harness");
     right.agent_name = "Hermes qualifier".to_owned();
     fixture.app.complete_agent_discovery(Ok(vec![left, right]));
-    assert_platform_snapshot!(snapshot(&mut fixture, 88, 9, ThemePreference::Dark));
+    insta::assert_snapshot!(snapshot(&mut fixture, 88, 9, ThemePreference::Dark));
 }
 
 #[test]
@@ -403,7 +417,7 @@ fn submit_all_palette_actions_are_complete_and_direct() {
     for character in "submit all".chars() {
         fixture.input(UiInput::Key(UiKey::Character(character)));
     }
-    assert_platform_snapshot!(snapshot(&mut fixture, 72, 14, ThemePreference::Dark));
+    insta::assert_snapshot!(snapshot(&mut fixture, 72, 14, ThemePreference::Dark));
 }
 
 #[test]

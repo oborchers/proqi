@@ -14,6 +14,7 @@ use crate::{
         agent::{AgentTarget, SubmissionDisposition},
         editor::EditorSnapshot,
     },
+    ui::projection::FramePresentation,
 };
 
 /// Semantic target resolved from the latest rendered geometry.
@@ -146,8 +147,6 @@ pub struct LayoutSnapshot {
     pub footer_session_id: Option<String>,
     /// Footer command targets.
     pub controls: Vec<(HitTarget, Rect)>,
-    /// Canonical responsive submission-label choice shared by measurement and rendering.
-    pub(crate) submission_label_style: Option<crate::ui::control_labels::SubmissionLabelStyle>,
     /// Content width supplied to the editor.
     pub content_width: u16,
     /// Modal help or command geometry, when visible.
@@ -296,9 +295,10 @@ pub fn compute(
     insertion_focused: bool,
     has_agents: bool,
 ) -> LayoutSnapshot {
+    let presentation = FramePresentation::canonical(state, editor);
     compute_with_density(
         state,
-        editor,
+        &presentation,
         area,
         requested_first,
         insertion_focused,
@@ -316,9 +316,9 @@ pub fn compute(
     clippy::too_many_arguments,
     reason = "layout inputs are independent viewport contracts"
 )]
-pub fn compute_with_density(
+pub(super) fn compute_with_density(
     state: &AppState,
-    editor: Option<&EditorSnapshot>,
+    presentation: &FramePresentation,
     area: Rect,
     requested_first: usize,
     insertion_focused: bool,
@@ -330,7 +330,7 @@ pub fn compute_with_density(
 ) -> LayoutSnapshot {
     compute_frame(
         state,
-        editor,
+        presentation,
         area,
         requested_first,
         insertion_focused,
@@ -350,7 +350,7 @@ pub fn compute_with_density(
 )]
 pub(super) fn compute_for_app(
     state: &AppState,
-    editor: Option<&EditorSnapshot>,
+    presentation: &FramePresentation,
     area: Rect,
     insertion_focused: bool,
     has_agents: bool,
@@ -361,7 +361,7 @@ pub(super) fn compute_for_app(
 ) -> (LayoutSnapshot, scroll::ScrollGeometry) {
     compute_frame(
         state,
-        editor,
+        presentation,
         area,
         0,
         insertion_focused,
@@ -380,7 +380,7 @@ pub(super) fn compute_for_app(
 )]
 fn compute_frame(
     state: &AppState,
-    editor: Option<&EditorSnapshot>,
+    presentation: &FramePresentation,
     area: Rect,
     requested_first: usize,
     insertion_focused: bool,
@@ -396,7 +396,7 @@ fn compute_frame(
     let content_width = board.width.saturating_sub(2).max(1);
     let content = content::visible_content(&content::ContentRequest {
         state,
-        editor,
+        presentation,
         board,
         content_width,
         insertion_focused,
@@ -442,7 +442,6 @@ fn compute_frame(
             state.focused_thought.is_some(),
             keybindings,
         ),
-        submission_label_style: None,
         content_width,
         overlay: None,
     };

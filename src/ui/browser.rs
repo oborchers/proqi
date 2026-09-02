@@ -100,6 +100,10 @@ pub struct BrowserLayout {
     pub detail: Option<Rect>,
     /// Visible result geometry.
     pub entries: Vec<BrowserEntryLayout>,
+    /// Quiet non-interactive cue when earlier results exist.
+    pub overflow_above: Option<Rect>,
+    /// Quiet non-interactive cue when later results exist.
+    pub overflow_below: Option<Rect>,
     /// Clickable cancellation footer.
     pub footer: Rect,
 }
@@ -314,6 +318,11 @@ impl SessionBrowser {
         match input {
             UiInput::Key(UiKey::Quit | UiKey::Escape) => BrowserAction::Cancel,
             UiInput::Key(UiKey::Enter) => self.activate(),
+            UiInput::Key(UiKey::FastNavigation { direction, .. }) => {
+                self.selected = direction.move_index(self.selected, self.filtered.len());
+                self.layout = None;
+                BrowserAction::Continue
+            }
             UiInput::Key(UiKey::Backspace | UiKey::Delete | UiKey::ModifiedDelete) => {
                 if let Some((index, _)) = self.query.grapheme_indices(true).next_back() {
                     self.query.truncate(index);

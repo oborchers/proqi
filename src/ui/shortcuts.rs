@@ -28,7 +28,10 @@ pub(crate) fn items(app: &BoardApp) -> Vec<Shortcut> {
                 primary(&transform_key_label(keys.transform)),
                 "Split/extract",
             ),
-            ("Alt+↑/↓".to_owned(), "Jump 5 rows"),
+            (
+                super::paging::FAST_NAVIGATION_SHORTCUT_KEY.to_owned(),
+                super::paging::FAST_NAVIGATION_SHORTCUT_LABEL,
+            ),
             (format!("{}/{}", primary("↑"), primary("↓")), "Start/end"),
             ("↑/↓×2".to_owned(), "Neighbor/new"),
         ];
@@ -86,17 +89,16 @@ pub(crate) fn items(app: &BoardApp) -> Vec<Shortcut> {
 }
 
 fn submission_items(mode: InteractionMode, keys: &crate::ui::KeyBindings) -> [Shortcut; 2] {
-    use crate::ports::agent::SubmissionDisposition::{Keep, RemoveAfterSuccess};
-
+    let board_key = |key: char, suffix: &str| {
+        if matches!(mode, InteractionMode::Board) {
+            format!("{}/{}", super::settings::key_label(key), primary(suffix))
+        } else {
+            primary(suffix)
+        }
+    };
     [
-        (
-            super::control_labels::submission_key(RemoveAfterSuccess, mode, keys),
-            "Submit",
-        ),
-        (
-            super::control_labels::submission_key(Keep, mode, keys),
-            "Submit & keep",
-        ),
+        (board_key(keys.submit_remove, "Enter"), "Submit"),
+        (board_key(keys.submit_keep, "Shift+Enter"), "Submit & keep"),
     ]
 }
 

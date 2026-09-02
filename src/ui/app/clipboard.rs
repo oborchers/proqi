@@ -25,7 +25,11 @@ impl BoardApp {
             if payload.content.is_empty() {
                 return Vec::new();
             }
-            self.create(payload, ids, clock)
+            if self.insertion_focused() {
+                self.create_at_bottom(payload, ids, clock)
+            } else {
+                self.create(payload, ids, clock)
+            }
         } else if matches!(self.state.mode, InteractionMode::Compose) {
             let (content, annotations, verified_paths) = payload.into_parts();
             if content.is_empty() {

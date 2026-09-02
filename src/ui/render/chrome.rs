@@ -6,7 +6,6 @@ use ratatui_core::{
     text::{Line, Span},
 };
 use ratatui_widgets::paragraph::Paragraph;
-use unicode_width::UnicodeWidthStr as _;
 
 use crate::{application::DurabilityState, ui::status::StatusSeverity};
 
@@ -25,15 +24,7 @@ pub(super) fn render_footer(
         if matches!(target, HitTarget::RenameSession | HitTarget::CopySessionId) {
             continue;
         }
-        render_control(
-            frame,
-            app,
-            *target,
-            *area,
-            keys,
-            layout.submission_label_style,
-            theme,
-        );
+        render_control(frame, app, *target, *area, keys, theme);
     }
 }
 
@@ -43,7 +34,6 @@ fn render_control(
     target: HitTarget,
     area: ratatui_core::layout::Rect,
     keys: &crate::ui::KeyBindings,
-    submission_style: Option<crate::ui::control_labels::SubmissionLabelStyle>,
     theme: &Theme,
 ) {
     let label = match target {
@@ -52,14 +42,6 @@ fn render_control(
             .iter()
             .find(|target| target.direction == direction)
             .map(crate::ui::control_labels::agent),
-        HitTarget::BeginDelivery(disposition) | HitTarget::Deliver(_, disposition) => {
-            Some(crate::ui::control_labels::submission(
-                disposition,
-                app.interaction_mode(),
-                keys,
-                submission_style.unwrap_or(crate::ui::control_labels::SubmissionLabelStyle::Full),
-            ))
-        }
         _ => {
             crate::ui::control_labels::action(target, area.width <= 6, app.interaction_mode(), keys)
         }
@@ -67,7 +49,8 @@ fn render_control(
     let Some(label) = label else {
         return;
     };
-    let available = usize::from(area.width).saturating_sub(label.key.width());
+    let available = usize::from(area.width)
+        .saturating_sub(crate::ports::text_layout::terminal_cell_width(&label.key));
     let text = truncate(&label.text, available);
     let line = Line::from(vec![
         Span::styled(label.key, Style::default().fg(theme.accent)),
@@ -151,11 +134,7 @@ fn render_session_identity(
     if area.height == 0 {
         return;
     }
-    let name = if layout.footer_session_id.is_some() {
-        layout.footer_session_name.clone()
-    } else {
-        truncate(&layout.footer_session_name, usize::from(area.width))
-    };
+    let name = truncate(&layout.footer_session_name, usize::from(area.width));
     let mut spans = vec![Span::styled(name, Style::default().fg(theme.foreground))];
     if let Some(session_id) = &layout.footer_session_id {
         spans.push(Span::styled(" · ", Style::default().fg(theme.muted)));
@@ -199,8 +178,9 @@ fn render_identity_hover(
         }
         _ => return,
     };
+    let value = truncate(value, usize::from(area.width));
     frame.render_widget(
-        Paragraph::new(value.as_str()).style(theme.focused_style().fg(color)),
+        Paragraph::new(value).style(theme.focused_style().fg(color)),
         *area,
     );
 }

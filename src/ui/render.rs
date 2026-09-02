@@ -76,6 +76,7 @@ pub(super) fn render_plain_picker(
             entries: &rows,
             selected,
         },
+        app.picker_overflow(overlay.items.len()),
         theme,
     );
 }
@@ -120,6 +121,7 @@ pub(super) fn render_invocation_picker(
             entries: &rows,
             selected,
         },
+        app.picker_overflow(overlay.items.len()),
         theme,
     );
 }
@@ -128,8 +130,10 @@ fn render_board(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, 
     if layout.board.width == 0 || layout.board.height == 0 {
         return;
     }
+    let presentation = app.presentation_for_layout(layout);
+    let editor = presentation.editor();
     for thought_layout in &layout.thoughts {
-        let Some(presentation) = app.presentation_for_render(thought_layout.thought_id) else {
+        let Some(thought) = presentation.thought(thought_layout.thought_id) else {
             continue;
         };
         let focused = app.active_thought_id() == Some(thought_layout.thought_id);
@@ -161,12 +165,12 @@ fn render_board(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, 
         );
         if matches!(app.interaction_mode(), InteractionMode::Edit { thought_id } if thought_id == thought_layout.thought_id)
         {
-            render_editor(frame, app, thought_layout.text_area, theme);
+            render_editor(frame, app, editor, thought_layout.text_area, theme);
         } else {
             render_thought(
                 frame,
                 app,
-                &presentation,
+                &thought.presentation,
                 thought_layout,
                 focused || selected,
                 theme,
@@ -176,7 +180,7 @@ fn render_board(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, 
     if let Some(compose) = &layout.compose {
         frame.render_widget(Block::default().style(theme.focused_style()), compose.area);
         render_compose_gutter(frame, compose, theme);
-        render_editor(frame, app, compose.text_area, theme);
+        render_editor(frame, app, editor, compose.text_area, theme);
     }
     if let Some(insert) = layout.insert {
         let hovered = app.hovered() == Some(HitTarget::Insert);
@@ -325,10 +329,11 @@ fn render_thought(
 fn render_editor(
     frame: &mut Frame<'_>,
     app: &BoardApp,
+    presentation: Option<&crate::ui::projection::EditorPresentation>,
     text_area: ratatui_core::layout::Rect,
     theme: &Theme,
 ) {
-    let Some(presentation) = app.editor_presentation() else {
+    let Some(presentation) = presentation else {
         return;
     };
     let snapshot = &presentation.snapshot;

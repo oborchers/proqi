@@ -149,6 +149,21 @@ pub trait UpdateStateStore {
         restart_needed: bool,
     ) -> Result<UpdateCacheState, UpdateError>;
 
+    /// Atomically complete one exact pending restart transition.
+    ///
+    /// Distinguishes the caller that clears the pending restart, an earlier
+    /// exact completion whose announcement still awaits dismissal, and a cache
+    /// mismatch.
+    ///
+    /// # Errors
+    ///
+    /// Returns a private atomic cache-write failure.
+    fn complete_restart(
+        &self,
+        installation: InstallationIdentity,
+        announcement: &ReleaseHighlightAnnouncement,
+    ) -> Result<RestartCompletion, UpdateError>;
+
     /// Durably target one verified in-app upgrade announcement.
     ///
     /// # Errors
@@ -159,6 +174,19 @@ pub trait UpdateStateStore {
         installation: InstallationIdentity,
         announcement: ReleaseHighlightAnnouncement,
     ) -> Result<UpdateCacheState, UpdateError>;
+
+    /// Atomically discard one exact unacknowledged announcement after restart rejection.
+    ///
+    /// Returns false when the cached announcement no longer describes this upgrade.
+    ///
+    /// # Errors
+    ///
+    /// Returns a private atomic cache-write failure.
+    fn discard_release_highlights(
+        &self,
+        installation: InstallationIdentity,
+        announcement: &ReleaseHighlightAnnouncement,
+    ) -> Result<bool, UpdateError>;
 
     /// Durably acknowledge one exact matching announcement.
     ///
@@ -172,6 +200,17 @@ pub trait UpdateStateStore {
         installation: InstallationIdentity,
         announcement: &ReleaseHighlightAnnouncement,
     ) -> Result<bool, UpdateError>;
+}
+
+/// Exact result of checking the board-ready restart boundary under the cache lock.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RestartCompletion {
+    /// This caller atomically cleared the pending restart.
+    Completed,
+    /// The same exact announcement was completed earlier and remains pending dismissal.
+    AlreadyComplete,
+    /// Cached state belongs to another target or announcement.
+    Mismatch,
 }
 
 /// Bounded readiness request sent to one verified live participant.

@@ -62,6 +62,15 @@ impl BoardApp {
             .map_or(0, |_| self.search_matches().len())
     }
 
+    pub(super) fn search_overflow(&self, visible: usize) -> (bool, bool) {
+        self.search.as_ref().map_or((false, false), |search| {
+            (
+                search.scroll > 0,
+                search.scroll.saturating_add(visible) < self.search_matches().len(),
+            )
+        })
+    }
+
     pub(super) fn handle_search_input(
         &mut self,
         input: &UiInput,
@@ -70,7 +79,17 @@ impl BoardApp {
     ) -> Vec<Effect> {
         let UiInput::Key(key) = input else {
             return match input {
-                UiInput::Pointer(pointer) => self.handle_pointer(*pointer, ids, clock),
+                UiInput::Pointer(pointer) => match pointer.kind {
+                    crate::ui::PointerKind::ScrollUp => {
+                        self.move_search(-1);
+                        Vec::new()
+                    }
+                    crate::ui::PointerKind::ScrollDown => {
+                        self.move_search(1);
+                        Vec::new()
+                    }
+                    _ => self.handle_pointer(*pointer, ids, clock),
+                },
                 UiInput::Paste(value) => self.update_search_query(|query| query.paste(value)),
                 UiInput::PasteAnnotated(payload) => {
                     self.update_search_query(|query| query.paste(&payload.content))
@@ -91,6 +110,7 @@ impl BoardApp {
                     search.scroll = 0;
                 }
             }
+            UiKey::FastNavigation { direction, .. } => self.move_search(direction.delta()),
             UiKey::Move {
                 movement: crate::ports::editor::CursorMovement::VisualUp,
                 ..
@@ -167,11 +187,17 @@ impl BoardApp {
             .selected
             .saturating_add_signed(delta)
             .min(count.saturating_sub(1));
-        if search.selected < search.scroll {
-            search.scroll = search.selected;
-        } else if search.selected >= search.scroll.saturating_add(visible) {
-            search.scroll = search.selected + 1 - visible;
-        }
+        search.scroll = crate::ui::paging::first_visible(search.selected, search.scroll, visible);
+        self.layout = None;
+    }
+
+    pub(super) fn ensure_search_visible(&mut self, visible: usize) {
+        let count = self.search_matches().len();
+        let Some(search) = &mut self.search else {
+            return;
+        };
+        search.selected = search.selected.min(count.saturating_sub(1));
+        search.scroll = crate::ui::paging::first_visible(search.selected, search.scroll, visible);
     }
 
     fn search_matches(&self) -> Vec<ThoughtId> {

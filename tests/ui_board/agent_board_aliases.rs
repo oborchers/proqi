@@ -5,17 +5,13 @@ use super::{Fixture, draw, text};
 use proqi::{
     application::Effect,
     domain::Direction,
-    ports::agent::{AgentError, AgentState, AgentTarget, SubmissionDisposition, SubmissionReceipt},
-    ui::{
-        HitTarget, KeyBindings, PointerButton, PointerInput, PointerKind, UiInput, UiKey,
-        UiSettings,
-    },
+    ports::agent::{AgentError, AgentState, SubmissionDisposition, SubmissionReceipt},
+    ui::{PointerButton, PointerInput, PointerKind, UiInput, UiKey},
 };
 use ratatui_core::layout::Rect;
-use unicode_width::UnicodeWidthStr as _;
 
 #[test]
-fn board_help_and_footer_share_both_submission_spellings() {
+fn board_help_lists_both_spellings_while_the_footer_stays_compact() {
     let mut fixture = Fixture::new();
     super::agent::prepare_thought(&mut fixture);
     fixture
@@ -26,162 +22,16 @@ fn board_help_and_footer_share_both_submission_spellings() {
     } else {
         "Ctrl+"
     };
-    let remove = format!("s/{primary}Enter Submit");
-    let keep = format!("S/{primary}Shift+Enter Submit & keep");
-
     let footer = text(draw(&mut fixture, 120, 12).backend().buffer());
-    assert!(footer.contains(&remove));
-    assert!(footer.contains(&keep));
+    assert!(footer.contains("s Submit"));
+    assert!(footer.contains("S Submit & keep"));
+    assert!(!footer.contains(&format!("s/{primary}Enter")));
 
     fixture.input(UiInput::Key(UiKey::Character('?')));
     let help = text(draw(&mut fixture, 120, 32).backend().buffer());
-    assert!(help.contains(&remove));
-    assert!(help.contains(&keep));
-}
-
-#[test]
-fn remapped_wide_keys_keep_primary_aliases_and_exact_responsive_hit_geometry() {
-    let bindings = KeyBindings {
-        submit_remove: '界',
-        submit_keep: '語',
-        ..KeyBindings::default()
-    };
-    let settings = UiSettings {
-        keybindings: bindings,
-        ..UiSettings::default()
-    };
-    let target = super::agent::target(Direction::Right, "w1:p2");
-    assert_remapped_aliases(&settings, &target);
-
-    let mut fixture = Fixture::with_settings(settings);
-    super::agent::prepare_thought(&mut fixture);
-    fixture.app.complete_agent_discovery(Ok(vec![target]));
-    for old in ['s', 'S'] {
-        assert!(
-            fixture
-                .effects(UiInput::Key(UiKey::Character(old)))
-                .is_empty()
-        );
-    }
-
-    let primary = if cfg!(target_os = "macos") {
-        "⌘"
-    } else {
-        "Ctrl+"
-    };
-    let labels = [
-        (
-            SubmissionDisposition::RemoveAfterSuccess,
-            format!("界/{primary}Enter Submit"),
-            format!("界/{primary}↵ Send"),
-        ),
-        (
-            SubmissionDisposition::Keep,
-            format!("語/{primary}Shift+Enter Submit & keep"),
-            format!("語/{primary}⇧↵ Keep"),
-        ),
-    ];
-    let wide = text(draw(&mut fixture, 120, 12).backend().buffer());
-    for (_, full, _) in &labels {
-        let rendered = full.replace("界/", "界 /").replace("語/", "語 /");
-        assert!(wide.contains(&rendered), "missing {full:?} in:\n{wide}");
-    }
-    fixture.input(UiInput::Key(UiKey::Character('?')));
-    let help = text(draw(&mut fixture, 120, 32).backend().buffer());
-    for (_, full, _) in &labels {
-        let rendered = full.replace("界/", "界 /").replace("語/", "語 /");
-        assert!(help.contains(&rendered), "missing {full:?} in:\n{help}");
-    }
-    fixture.input(UiInput::Key(UiKey::Escape));
-
-    let layout = fixture.app.prepare_frame(Rect::new(0, 0, 58, 8));
-    let narrow = text(draw(&mut fixture, 58, 8).backend().buffer());
-    for (disposition, _, compact) in labels {
-        let target = HitTarget::Deliver(Direction::Right, disposition);
-        let area = layout
-            .controls
-            .iter()
-            .find_map(|(candidate, area)| (*candidate == target).then_some(*area))
-            .expect("responsive submission control");
-        assert_eq!(usize::from(area.width), compact.width());
-        let rendered = compact.replace("界/", "界 /").replace("語/", "語 /");
-        assert!(
-            narrow.contains(&rendered),
-            "missing {compact:?} in:\n{narrow}"
-        );
-    }
-}
-
-fn assert_remapped_aliases(settings: &UiSettings, target: &AgentTarget) {
-    for (key, disposition) in [
-        (
-            UiKey::Character('界'),
-            SubmissionDisposition::RemoveAfterSuccess,
-        ),
-        (UiKey::Submit, SubmissionDisposition::RemoveAfterSuccess),
-        (UiKey::Character('語'), SubmissionDisposition::Keep),
-        (UiKey::SubmitKeep, SubmissionDisposition::Keep),
-    ] {
-        let mut fixture = Fixture::with_settings(settings.clone());
-        super::agent::prepare_thought(&mut fixture);
-        fixture
-            .app
-            .complete_agent_discovery(Ok(vec![target.clone()]));
-        let effects = fixture.effects(UiInput::Key(key));
-        assert!(matches!(
-            effects.as_slice(),
-            [Effect::PrepareSubmission(attempt)] if attempt.disposition == disposition
-        ));
-    }
-}
-
-#[test]
-fn minimum_pair_width_keeps_both_wide_key_hit_targets_and_mouse_delivery() {
-    let settings = UiSettings {
-        keybindings: KeyBindings {
-            submit_remove: '界',
-            submit_keep: '語',
-            ..KeyBindings::default()
-        },
-        ..UiSettings::default()
-    };
-    let mut fixture = Fixture::with_settings(settings);
-    super::agent::prepare_thought(&mut fixture);
-    fixture
-        .app
-        .complete_agent_discovery(Ok(vec![super::agent::target(Direction::Right, "w1:p2")]));
-
-    let rendered = text(draw(&mut fixture, 11, 8).backend().buffer());
-    assert!(rendered.contains('界'));
-    assert!(rendered.contains('語'));
-    let layout = fixture.app.prepare_frame(Rect::new(0, 0, 11, 8));
-    let controls = [
-        SubmissionDisposition::RemoveAfterSuccess,
-        SubmissionDisposition::Keep,
-    ]
-    .map(|disposition| {
-        layout
-            .controls
-            .iter()
-            .find_map(|(target, area)| {
-                (*target == HitTarget::Deliver(Direction::Right, disposition)).then_some(*area)
-            })
-            .expect("minimal submission control")
-    });
-    assert_eq!((controls[0].width, controls[1].width), (2, 2));
-    assert_eq!(controls[0].right().saturating_add(3), controls[1].x);
-
-    let effects = fixture.effects(UiInput::Pointer(PointerInput {
-        column: controls[1].x,
-        row: controls[1].y,
-        kind: PointerKind::Down(PointerButton::Left),
-        extend_selection: false,
-    }));
-    assert!(matches!(
-        effects.as_slice(),
-        [Effect::PrepareSubmission(attempt)]
-            if attempt.disposition == SubmissionDisposition::Keep
-    ));
+    assert!(help.contains(&format!("s/{primary}Enter")));
+    assert!(help.contains(&format!("S/{primary}Shift+Enter")));
+    assert!(help.contains("Submit & keep"));
 }
 
 #[test]

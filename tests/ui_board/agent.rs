@@ -313,14 +313,9 @@ fn controls_and_hint_disappear_when_discovery_is_unsupported() {
         .complete_agent_discovery(Ok(vec![target(Direction::Left, "w1:p2")]));
     let shown = draw(&mut fixture, 120, 6);
     let rendered = text(shown.backend().buffer());
-    let primary = if cfg!(target_os = "macos") {
-        "⌘"
-    } else {
-        "Ctrl+"
-    };
     assert!(rendered.contains("← Codex"));
-    assert!(rendered.contains(&format!("s/{primary}Enter Submit")));
-    assert!(rendered.contains(&format!("S/{primary}Shift+Enter Submit & keep")));
+    assert!(rendered.contains("s Submit"));
+    assert!(rendered.contains("S Submit & keep"));
     assert!(!rendered.contains("working"));
     assert!(!rendered.contains(" Send"));
 

@@ -13,6 +13,10 @@ use crate::{
 
 use super::{BoardApp, UiInput, UiKey, pending_types::EditFlush, query::QueryEditor};
 
+#[path = "transfer/view.rs"]
+mod view;
+use view::SessionHitLabel as _;
+
 pub(super) struct TransferState {
     query: QueryEditor,
     sessions: Vec<SessionHit>,
@@ -65,7 +69,11 @@ impl BoardApp {
                 self.transfer = None;
                 self.set_warning("no other resumable Proqi session is available");
             }
-            Ok(sessions) => state.sessions = sessions,
+            Ok(sessions) => {
+                state.sessions = sessions;
+                state.selected = state.selected.min(state.matches().len().saturating_sub(1));
+                state.scroll = state.scroll.min(state.selected);
+            }
             Err(error) => {
                 self.transfer = None;
                 self.set_error(format!("could not list destination sessions: {error}"));
@@ -132,6 +140,15 @@ impl BoardApp {
             .map_or(0, |state| state.matches().len())
     }
 
+    pub(super) fn transfer_overflow(&self, visible: usize) -> (bool, bool) {
+        self.transfer.as_ref().map_or((false, false), |state| {
+            (
+                state.scroll > 0,
+                state.scroll.saturating_add(visible) < state.matches().len(),
+            )
+        })
+    }
+
     pub(super) fn handle_transfer_input(
         &mut self,
         input: &UiInput,
@@ -140,7 +157,17 @@ impl BoardApp {
     ) -> Vec<Effect> {
         let UiInput::Key(key) = input else {
             return match input {
-                UiInput::Pointer(pointer) => self.handle_pointer(*pointer, ids, clock),
+                UiInput::Pointer(pointer) => match pointer.kind {
+                    crate::ui::PointerKind::ScrollUp => {
+                        self.move_transfer(-1);
+                        Vec::new()
+                    }
+                    crate::ui::PointerKind::ScrollDown => {
+                        self.move_transfer(1);
+                        Vec::new()
+                    }
+                    _ => self.handle_pointer(*pointer, ids, clock),
+                },
                 UiInput::Paste(value) => self.update_transfer_query(|query| query.paste(value)),
                 UiInput::PasteAnnotated(payload) => {
                     self.update_transfer_query(|query| query.paste(&payload.content))
@@ -154,6 +181,7 @@ impl BoardApp {
             UiKey::Backspace => {
                 self.update_transfer_query(QueryEditor::backspace);
             }
+            UiKey::FastNavigation { direction, .. } => self.move_transfer(direction.delta()),
             UiKey::Move {
                 movement: CursorMovement::VisualUp,
                 ..
@@ -237,11 +265,16 @@ impl BoardApp {
             .selected
             .saturating_add_signed(delta)
             .min(state.matches().len().saturating_sub(1));
-        if state.selected < state.scroll {
-            state.scroll = state.selected;
-        } else if state.selected >= state.scroll.saturating_add(visible) {
-            state.scroll = state.selected + 1 - visible;
-        }
+        state.scroll = crate::ui::paging::first_visible(state.selected, state.scroll, visible);
+        self.layout = None;
+    }
+
+    pub(super) fn ensure_transfer_visible(&mut self, visible: usize) {
+        let Some(state) = &mut self.transfer else {
+            return;
+        };
+        state.selected = state.selected.min(state.matches().len().saturating_sub(1));
+        state.scroll = crate::ui::paging::first_visible(state.selected, state.scroll, visible);
     }
 }
 
@@ -273,25 +306,9 @@ impl TransferState {
     }
 }
 
-trait SessionHitLabel {
-    fn label(&self) -> String;
-}
-impl SessionHitLabel for SessionHit {
-    fn label(&self) -> String {
-        let name = self.name.as_deref().unwrap_or_else(|| {
-            if self.excerpt.is_empty() {
-                "untitled"
-            } else {
-                &self.excerpt
-            }
-        });
-        format!(
-            "{name} · {} thoughts · {}",
-            self.thought_count,
-            self.last_opened_cwd.display()
-        )
-    }
-}
+#[cfg(test)]
+#[path = "transfer/tests/paging.rs"]
+mod paging_tests;
 
 #[cfg(test)]
 mod tests {

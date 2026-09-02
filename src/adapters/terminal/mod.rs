@@ -23,7 +23,8 @@ use crate::ports::{control::ControlError, runtime::RuntimeError, store::StoreErr
 
 pub(crate) use browser::pick_session;
 pub(crate) use input::inspect_keypress;
-pub(crate) use runner::{TerminalResources, require_interactive, run};
+pub(crate) use runner::composition::require_interactive;
+pub(crate) use runner::{TerminalResources, run};
 pub(crate) use settings::{LoadedSettings, inspect_settings, load_settings};
 
 /// Failure while owning or driving the interactive terminal.

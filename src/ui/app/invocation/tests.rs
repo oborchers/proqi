@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod contract {
+pub(super) mod contract {
     use std::path::{Path, PathBuf};
 
     use ratatui_core::{backend::TestBackend, terminal::Terminal};
@@ -32,7 +32,7 @@ mod contract {
 
     use crate::ui::BoardApp;
 
-    pub(super) fn app(content: &str, cwd: &Path) -> (BoardApp, FakeIdGenerator, FakeClock) {
+    pub(crate) fn app(content: &str, cwd: &Path) -> (BoardApp, FakeIdGenerator, FakeClock) {
         let mut ids = FakeIdGenerator::new(1_900_000_000_000);
         let mut session = Session::new(ids.session_id(), cwd.to_owned(), Timestamp::from_millis(1))
             .expect("session");
@@ -60,7 +60,7 @@ mod contract {
         (app, ids, FakeClock::new(Timestamp::from_millis(2)))
     }
 
-    pub(super) fn entry(
+    pub(crate) fn entry(
         token: &str,
         kind: InvocationKind,
         scope: InvocationScope,
@@ -81,7 +81,7 @@ mod contract {
         }
     }
 
-    pub(super) fn install(app: &mut BoardApp, cwd: &Path, entries: Vec<InvocationEntry>) {
+    pub(crate) fn install(app: &mut BoardApp, cwd: &Path, entries: Vec<InvocationEntry>) {
         let effects = app.refresh_invocations();
         let [crate::application::Effect::DiscoverInvocations(request)] = effects.as_slice() else {
             panic!("refresh effect");

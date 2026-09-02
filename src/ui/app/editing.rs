@@ -39,6 +39,7 @@ pub(super) fn command_for_key(
         UiKey::Escape
         | UiKey::Submit
         | UiKey::SubmitKeep
+        | UiKey::FastNavigation { .. }
         | UiKey::EditNavigation { .. }
         | UiKey::PrimaryCharacter(_)
         | UiKey::PrimaryShiftCharacter(_)
@@ -249,6 +250,28 @@ impl BoardApp {
     }
 
     pub(super) fn resolve_edit_navigation(&self, input: UiInput) -> UiInput {
+        if let UiInput::Key(UiKey::FastNavigation {
+            direction,
+            extend_selection,
+        }) = input
+        {
+            let overlay_open = self.modal_surface_open();
+            if overlay_open {
+                return input;
+            }
+            let movement = if matches!(
+                self.interaction_mode(),
+                InteractionMode::Edit { .. } | InteractionMode::Compose
+            ) {
+                direction.editor_movement()
+            } else {
+                direction.board_movement()
+            };
+            return UiInput::Key(UiKey::Move {
+                movement,
+                extend_selection,
+            });
+        }
         let UiInput::Key(UiKey::EditNavigation {
             editor_movement,
             board_movement,
@@ -256,15 +279,7 @@ impl BoardApp {
         else {
             return input;
         };
-        let overlay_open = self.help
-            || self.update_prompt.is_some()
-            || self.release_highlights.is_some()
-            || self.palette.is_some()
-            || self.invocation_popup.is_some()
-            || self.transfer.is_some()
-            || self.rename.is_some()
-            || self.search.is_some()
-            || self.submission_mode.is_some();
+        let overlay_open = self.modal_surface_open();
         let movement =
             if !overlay_open && matches!(self.interaction_mode(), InteractionMode::Edit { .. }) {
                 editor_movement
@@ -275,6 +290,19 @@ impl BoardApp {
             movement,
             extend_selection: false,
         })
+    }
+
+    fn modal_surface_open(&self) -> bool {
+        self.help
+            || self.screenshot.takeover.is_some()
+            || self.update_prompt.is_some()
+            || self.release_highlights.is_some()
+            || self.palette.is_some()
+            || self.invocation_popup.is_some()
+            || self.transfer.is_some()
+            || self.rename.is_some()
+            || self.search.is_some()
+            || self.submission_mode.is_some()
     }
 
     pub(super) fn should_insert_smart_newline(&self) -> bool {
