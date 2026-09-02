@@ -302,13 +302,21 @@ fn coordinate_highlight_restart(
 }
 
 fn active_participant(state: &Path, session: &str) -> InstanceInfo {
+    active_participant_entry(state, session).1
+}
+
+fn active_participant_entry(state: &Path, session: &str) -> (std::path::PathBuf, InstanceInfo) {
     let directory = state.join("runtime/instances");
     fs::read_dir(directory)
         .expect("instance directory")
         .filter_map(Result::ok)
-        .filter_map(|entry| fs::read(entry.path()).ok())
-        .filter_map(|bytes| serde_json::from_slice::<InstanceInfo>(&bytes).ok())
-        .find(|info| {
+        .filter_map(|entry| {
+            let path = entry.path();
+            let bytes = fs::read(&path).ok()?;
+            let info = serde_json::from_slice::<InstanceInfo>(&bytes).ok()?;
+            Some((path, info))
+        })
+        .find(|(_, info)| {
             info.session_id.to_string() == session
                 && info.control_protocol == Some(proqi::ports::control::CONTROL_PROTOCOL_VERSION)
                 && info
@@ -320,17 +328,7 @@ fn active_participant(state: &Path, session: &str) -> InstanceInfo {
 }
 
 fn rewrite_participant_version(state: &Path, session: &str, version: &str) {
-    let directory = state.join("runtime/instances");
-    let entry = fs::read_dir(directory)
-        .expect("instance directory")
-        .filter_map(Result::ok)
-        .find_map(|entry| {
-            let bytes = fs::read(entry.path()).ok()?;
-            let info = serde_json::from_slice::<InstanceInfo>(&bytes).ok()?;
-            (info.session_id.to_string() == session).then_some((entry.path(), info))
-        })
-        .expect("participant metadata");
-    let (path, mut info) = entry;
+    let (path, mut info) = active_participant_entry(state, session);
     version.clone_into(&mut info.version);
     fs::write(
         path,
