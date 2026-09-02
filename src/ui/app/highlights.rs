@@ -34,6 +34,8 @@ pub(in crate::ui) struct ReleaseHighlightsView {
     pub(in crate::ui) title: String,
     pub(in crate::ui) rows: Vec<ReleaseHighlightRow>,
     pub(in crate::ui) scroll: usize,
+    pub(in crate::ui) overflow_above: bool,
+    pub(in crate::ui) overflow_below: bool,
 }
 
 impl BoardApp {
@@ -119,6 +121,9 @@ impl BoardApp {
     pub(super) fn handle_release_highlights_input(&mut self, input: &UiInput) -> Vec<Effect> {
         match input {
             UiInput::Key(UiKey::Escape) => return self.dismiss_release_highlights(),
+            UiInput::Key(UiKey::FastNavigation { direction, .. }) => {
+                self.fast_scroll_release_highlights(*direction);
+            }
             UiInput::Key(key) if key.list_navigation() == Some(ListNavigation::Previous) => {
                 self.scroll_release_highlights(-1);
             }
@@ -159,6 +164,13 @@ impl BoardApp {
         let maximum = self.release_highlights_max_scroll();
         if let Some(highlights) = &mut self.release_highlights {
             highlights.scroll = highlights.scroll.saturating_add_signed(delta).min(maximum);
+        }
+    }
+
+    fn fast_scroll_release_highlights(&mut self, direction: crate::ui::FastNavigation) {
+        let maximum = self.release_highlights_max_scroll();
+        if let Some(highlights) = &mut self.release_highlights {
+            highlights.scroll = direction.move_scroll(highlights.scroll, maximum);
         }
     }
 
@@ -207,6 +219,8 @@ impl BoardApp {
             title: title(&highlights.groups),
             rows,
             scroll: highlights.scroll.min(maximum),
+            overflow_above: highlights.scroll.min(maximum) > 0,
+            overflow_below: highlights.scroll.min(maximum) < maximum,
         })
     }
 

@@ -526,12 +526,14 @@ can be undone after restarting the application.
 ### Attachment accessibility
 
 Attachment annotations keep an external absolute path as canonical prompt
-content. Proqi presents a readable attachment as `[Image N]` or `[File N]`.
-When the current process cannot prove that the referenced regular file is
-readable, the same annotation becomes `[Image N · inaccessible]` or
-`[File N · inaccessible]` and uses the warning visual role. Missing files,
-permissions, unavailable volumes, filesystem failures, and bounded check
-timeouts remain diagnostic details rather than additional user-visible states.
+content. Proqi presents a readable or not-yet-resolved attachment as
+`[Image N]` or `[File N]`. Unknown and checking health are not accessibility
+proof and remain fail-closed for actions that require a readable file, but they
+do not show a false warning. Only a completed failed check changes the same
+annotation to `[Image N · inaccessible]` or `[File N · inaccessible]` and uses
+the warning visual role. Missing files, permissions, unavailable volumes,
+filesystem failures, and bounded check timeouts remain diagnostic details
+rather than additional user-visible states.
 
 Health is transient and never changes prompt content. Proqi checks new
 annotations immediately, checks a restored board with the focused thought

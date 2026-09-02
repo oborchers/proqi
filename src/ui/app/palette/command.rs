@@ -62,8 +62,14 @@ impl Command {
         (Self::PlainNewline, "Insert plain newline"),
         (Self::DeleteLogicalLine, "Delete logical line"),
         (Self::DeleteSentence, "Delete sentence"),
-        (Self::JumpUp, "Jump cursor up 5 visual rows"),
-        (Self::JumpDown, "Jump cursor down 5 visual rows"),
+        (
+            Self::JumpUp,
+            crate::ui::paging::command_label(crate::ui::FastNavigation::Previous),
+        ),
+        (
+            Self::JumpDown,
+            crate::ui::paging::command_label(crate::ui::FastNavigation::Next),
+        ),
         (Self::ThoughtStart, "Move cursor to thought beginning"),
         (Self::ThoughtEnd, "Move cursor to thought end"),
         (Self::Indent, "Indent line or selection"),

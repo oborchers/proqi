@@ -1,6 +1,6 @@
 ---
 source: tests/ui_board/snapshots.rs
-assertion_line: 458
+assertion_line: 452
 expression: "snapshot(&mut fixture, 72, 12, ThemePreference::Dark)"
 ---
 SIZE 72x12
@@ -8,8 +8,8 @@ SIZE 72x12
 TEXT
 00│┌ commands ──────────────────────────────────────────────────────────[x]│
 01││:cursor                                                               ││
-02││Jump cursor up 5 visual rows                                          ││
-03││Jump cursor down 5 visual rows                                        ││
+02││Jump cursor up 5 visual rows (Alt+↑ or Page Up)                       ││
+03││Jump cursor down 5 visual rows (Alt+↓ or Page Down)                   ││
 04││Move cursor to thought beginning                                      ││
 05││Move cursor to thought end                                            ││
 06││Split thought at cursor                                               ││

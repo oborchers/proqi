@@ -14,15 +14,19 @@ pub(super) struct ObservedEntry {
     entry: InvocationEntry,
     shared_base: Option<PathBuf>,
     canonical_agent_root: Option<PathBuf>,
+    claude_aliases_agent_skill: bool,
 }
 
-pub(super) fn observe(root: &ScanRoot, entry: InvocationEntry) -> ObservedEntry {
+pub(super) fn observe(root: &ScanRoot, definition: &Path, entry: InvocationEntry) -> ObservedEntry {
     let shared_base = shared_skills_base(root);
     let canonical_agent_root = canonical_agent_root(root, shared_base.as_deref());
+    let claude_aliases_agent_skill =
+        claude_aliases_agent_skill(root, definition, shared_base.as_deref());
     ObservedEntry {
         entry,
         shared_base,
         canonical_agent_root,
+        claude_aliases_agent_skill,
     }
 }
 
@@ -49,10 +53,7 @@ fn shared_agent_skill(group: &[ObservedEntry]) -> Option<InvocationEntry> {
     let owner = group.iter().find(|observation| {
         observation.entry.source == InvocationHarness::AgentSkills
             && observation.entry.kind == InvocationKind::Skill
-            && observation
-                .canonical_agent_root
-                .as_ref()
-                .is_some_and(|root| observation.entry.canonical_path.starts_with(root))
+            && observation.canonical_agent_root.is_some()
     })?;
     let base = owner.shared_base.as_ref()?;
     let scope = owner.entry.scope;
@@ -62,6 +63,8 @@ fn shared_agent_skill(group: &[ObservedEntry]) -> Option<InvocationEntry> {
     {
         return None;
     }
+    let canonical_agent_root = owner.canonical_agent_root.as_ref()?;
+    let physically_agent_owned = owner.entry.canonical_path.starts_with(canonical_agent_root);
     let aliases = group.iter().filter(|observation| {
         observation.shared_base.as_ref() == Some(base)
             && matches!(
@@ -69,6 +72,9 @@ fn shared_agent_skill(group: &[ObservedEntry]) -> Option<InvocationEntry> {
                 InvocationHarness::AgentSkills | InvocationHarness::ClaudeCode
             )
             && observation.entry.kind == InvocationKind::Skill
+            && (observation.entry.source == InvocationHarness::AgentSkills
+                || physically_agent_owned
+                || observation.claude_aliases_agent_skill)
     });
     let mut forms = aliases
         .clone()
@@ -111,12 +117,52 @@ fn canonical_agent_root(root: &ScanRoot, base: Option<&Path>) -> Option<PathBuf>
     if root.harness != InvocationHarness::AgentSkills {
         return None;
     }
-    let base = base?;
+    canonical_agent_root_for_base(base?)
+}
+
+fn canonical_agent_root_for_base(base: &Path) -> Option<PathBuf> {
     let agent_dir = base.join(".agents");
-    if is_symlink(&agent_dir) || is_symlink(&root.path) {
+    let skills = agent_dir.join("skills");
+    if is_symlink(&agent_dir) || is_symlink(&skills) {
         return None;
     }
-    fs::canonicalize(&root.path).ok()
+    fs::canonicalize(skills).ok()
+}
+
+fn claude_aliases_agent_skill(root: &ScanRoot, definition: &Path, base: Option<&Path>) -> bool {
+    if root.harness != InvocationHarness::ClaudeCode
+        || root.plugin.is_some()
+        || root.shape != RootShape::Skills
+    {
+        return false;
+    }
+    let Some(canonical_agent_root) = base.and_then(canonical_agent_root_for_base) else {
+        return false;
+    };
+    if fs::canonicalize(&root.path).ok().as_ref() == Some(&canonical_agent_root) {
+        return true;
+    }
+    definition
+        .parent()
+        .is_some_and(|directory| symlink_parent_is_within(directory, &canonical_agent_root))
+}
+
+fn symlink_parent_is_within(path: &Path, expected_root: &Path) -> bool {
+    let Ok(target) = fs::read_link(path) else {
+        return false;
+    };
+    let resolved = if target.is_absolute() {
+        target
+    } else {
+        let Some(parent) = path.parent() else {
+            return false;
+        };
+        parent.join(target)
+    };
+    resolved
+        .parent()
+        .and_then(|parent| fs::canonicalize(parent).ok())
+        .is_some_and(|parent| parent.starts_with(expected_root))
 }
 
 fn is_symlink(path: &Path) -> bool {

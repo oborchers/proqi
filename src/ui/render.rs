@@ -76,6 +76,7 @@ pub(super) fn render_plain_picker(
             entries: &rows,
             selected,
         },
+        app.picker_overflow(overlay.items.len()),
         theme,
     );
 }
@@ -120,6 +121,7 @@ pub(super) fn render_invocation_picker(
             entries: &rows,
             selected,
         },
+        app.picker_overflow(overlay.items.len()),
         theme,
     );
 }

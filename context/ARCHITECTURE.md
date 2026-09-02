@@ -352,9 +352,11 @@ that it is a readable regular file, and returns typed missing, permission,
 unmounted, unreadable, or I/O failures. The bounded lane adds timeout and
 cancellation failures without waiting for a blocked filesystem call to return.
 Those reasons are content-free diagnostics only. Application and UI consumers
-reduce every failure to binary inaccessible health.
+reduce every completed failure to binary inaccessible health. Unknown and
+checking state remain visually neutral without becoming accessibility proof.
 
-Application state owns the transient exact-key cache and scheduling policy.
+Application state owns the transient exact-key cache, its explicit unknown,
+checking, accessible, and inaccessible states, and the scheduling policy.
 Keys include the thought, annotation index and range, presentation metadata,
 canonical path, and digest of the canonical content revision. Insertion and
 relink mutations invalidate affected work. Restoration schedules the focused
@@ -568,9 +570,12 @@ exact bounded tokens and decorate terminal cells with the existing annotation
 semantic role without changing editor text, cursor geometry, persistence, or
 undo. Forms retain harness-specific precedence. A `.claude/skills` symlink into
 the corresponding physical `.agents/skills` definition contributes its Claude
-form to the Agent Skills-owned entry, while independent copies remain separate
-definitions. Outbound submission remains plain text and therefore does not
-claim live harness enablement.
+form to the Agent Skills-owned entry. This remains true when the Agent Skills
+entry is itself a supported symlinked skill folder whose final definition is
+outside the root; independent aliases to the same external target do not
+establish ownership, and independent copies remain separate definitions.
+Outbound submission remains plain text and therefore does not claim live
+harness enablement.
 
 An explicitly created empty thought is an ordinary durable domain entity. Its
 creation is committed through the same board operation as populated thoughts,
