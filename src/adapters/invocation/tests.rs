@@ -9,6 +9,10 @@ use crate::ports::invocation::{
 
 use super::FilesystemInvocationCatalog;
 
+mod markdown_prefix;
+#[cfg(unix)]
+mod symlink_layout;
+
 fn write(path: &Path, content: &str) {
     fs::create_dir_all(path.parent().expect("fixture parent")).expect("create fixture directory");
     fs::write(path, content).expect("write fixture");
@@ -85,7 +89,7 @@ fn kinds_and_documented_harness_forms_stay_distinct() {
 }
 
 #[test]
-fn symlinks_are_canonicalized_and_invalid_or_large_metadata_is_skipped() {
+fn symlinks_are_canonicalized_and_filename_commands_need_no_frontmatter() {
     let fixture = TempDir::new().expect("tempdir");
     let home = fixture.path().join("home");
     let cwd = fixture.path().join("repo");
@@ -133,7 +137,12 @@ fn symlinks_are_canonicalized_and_invalid_or_large_metadata_is_skipped() {
         .expect("linked skill");
     assert_eq!(linked.forms.len(), 1);
     assert_eq!(linked.forms[0].token, "$linked");
-    assert!(result.project.iter().all(|entry| entry.name != "huge"));
+    assert!(
+        result
+            .project
+            .iter()
+            .any(|entry| entry.forms.iter().any(|form| form.token == "/huge"))
+    );
     assert!(
         result
             .project

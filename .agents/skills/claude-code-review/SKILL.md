@@ -1,14 +1,14 @@
 ---
 name: claude-code-review
-description: Run a general read-only implementation review through the local Claude Code CLI with a requested model, especially Fable, while preserving complete stdout and stderr in a persistent result file. Use for feature branches, bug fixes, worktrees, pull requests, or focused code reviews. Do not use for Proqi's repository-wide architecture review.
+description: Run a general read-only implementation review with Claude Code as a native background subagent from Claude Code, or through the non-interactive Claude Code CLI from another harness. Never create a Herdr pane, tab, workspace, or agent for a reviewer. Do not use for Proqi's repository-wide architecture review.
 ---
 
 # Claude Code Review
 
-Run one dependable Claude Code CLI review of a bounded implementation. Preserve
-the complete result independently of Claude's control daemon, then verify and
-incorporate the findings before removing the artifact. This skill is a general
-review lane. It does not replace or modify `$architecture-review`.
+Run one dependable Claude Code review of a bounded implementation. Use the
+invoking harness's native subagent when it is Claude Code, or the managed CLI
+route from another harness. This skill is a general review lane. It does not
+replace or modify `$architecture-review`.
 
 ## Establish the review snapshot
 
@@ -71,7 +71,23 @@ Claude may use `Bash` only for read-only inspection such as `git diff`, `rg`,
 and test-result inspection. The prompt prohibition remains mandatory because
 the CLI tool allowlist itself does not make Bash read-only.
 
-## Dispatch through the managed process runner
+## Dispatch through the harness-native route
+
+Claude must run as a non-interactive background reviewer relative to Herdr.
+Never create or split a Herdr pane, tab, workspace, or worktree for it, and never
+use `herdr agent start` or `herdr agent prompt` to host the review. A Claude Code
+agent hosted inside Herdr is still running in the Claude Code harness. Herdr is
+only the terminal host and does not change the harness identity.
+
+When the invoking harness is Claude Code, use exactly one native Claude Code
+subagent through its agent or task mechanism. Never launch the `claude`
+executable from a Claude Code agent. If that agent cannot spawn a native
+subagent, report the blocker to its parent session. Do not fall back to the CLI,
+a Herdr reviewer, or primary-agent review.
+
+Only when the invoking harness is not Claude Code, run the CLI inside the
+implementation owner's existing worktree through the invoking harness's managed
+process runner.
 
 When this skill is running inside Codex, launch the Claude CLI outside the
 Codex filesystem/process sandbox from the first attempt. Use the process
@@ -96,12 +112,14 @@ Pass the prompt as one safely quoted argument after `--`. Never interpolate
 untrusted repository text as shell syntax. Redirect both stdout and stderr to
 the result file from process start.
 
-Run this command as a managed foreground process through the harness process
-runner. It may continue after the initial tool call yields, but do not detach it
-with shell `&`, `nohup`, `claude --bg`, or a Claude-managed background session.
+Run a permitted CLI command as a managed foreground process through the harness
+process runner. It may continue after the initial tool call yields, but do not
+detach it with shell `&`, `nohup`, `claude --bg`, or a Claude-managed background
+session.
 Retain the returned process or session identifier and poll that same managed
-process until it exits. Redirected output can make a healthy review appear
-silent, so silence is never evidence of completion.
+process until it exits. Here, background means non-interactive relative to
+Herdr, not an unowned detached shell process. Redirected output can make a
+healthy review appear silent, so silence is never evidence of completion.
 
 ## Collect and assess the review
 

@@ -183,7 +183,14 @@ fn failed_save_replaces_the_summary_without_changing_footer_height() {
 #[test]
 fn help_overlay_remains_composed_in_a_shallow_viewport() {
     let mut fixture = Fixture::new();
-    fixture.input(UiInput::Key(UiKey::Escape));
+    super::agent::prepare_thought(&mut fixture);
+    fixture
+        .app
+        .complete_agent_discovery(Ok(vec![adjacent_target(
+            Direction::Right,
+            "w1:p2",
+            AgentState::Idle,
+        )]));
     let _initial = draw(&mut fixture, 42, 8);
     let layout = fixture.app.prepare_frame(Rect::new(0, 0, 42, 8));
     let help = layout
@@ -192,6 +199,13 @@ fn help_overlay_remains_composed_in_a_shallow_viewport() {
         .find_map(|(target, area)| (*target == HitTarget::Help).then_some(*area))
         .expect("help control");
     fixture.pointer(help.x, help.y, PointerKind::Down(PointerButton::Left));
+    let _opened = draw(&mut fixture, 42, 8);
+    for _ in 0..30 {
+        fixture.input(super::navigation::visual(
+            proqi::ports::editor::CursorMovement::VisualDown,
+            false,
+        ));
+    }
     let platform = if cfg!(target_os = "macos") {
         "macos"
     } else {

@@ -33,7 +33,11 @@ impl BoardApp {
                 self.clear_board_selection();
             }
             UiKey::SelectAll => self.select_all_thoughts(),
-            UiKey::Character(_) | UiKey::UnmodifiedSpace | UiKey::Delete => {
+            UiKey::Character(_)
+            | UiKey::UnmodifiedSpace
+            | UiKey::Delete
+            | UiKey::Submit
+            | UiKey::SubmitKeep => {
                 return self.handle_board_key_command(key, ids, clock);
             }
             UiKey::Enter => return self.expand_and_enter_edit(ids, clock),
@@ -75,10 +79,12 @@ impl BoardApp {
                 self.select_all_thoughts();
                 Vec::new()
             }
-            UiKey::Character(_) | UiKey::UnmodifiedSpace | UiKey::Delete => {
-                self.handle_board_key_command(key, ids, clock)
-            }
-            UiKey::Enter => self.begin_insertion(ids, clock),
+            UiKey::Character(_)
+            | UiKey::UnmodifiedSpace
+            | UiKey::Delete
+            | UiKey::Submit
+            | UiKey::SubmitKeep => self.handle_board_key_command(key, ids, clock),
+            UiKey::Enter => self.begin_bottom_insertion(ids, clock),
             UiKey::Escape => {
                 self.move_focus(-1);
                 Vec::new()
@@ -98,13 +104,12 @@ impl BoardApp {
             | UiKey::BackTab
             | UiKey::PickerPrevious
             | UiKey::PickerNext
+            | UiKey::FastNavigation { .. }
             | UiKey::PrimaryCharacter(_)
             | UiKey::PrimaryShiftCharacter(_)
             | UiKey::PrimaryShiftMove { .. }
             | UiKey::ExtendVisualRow { .. }
             | UiKey::EditNavigation { .. }
-            | UiKey::Submit
-            | UiKey::SubmitKeep
             | UiKey::Move { .. } => Vec::new(),
         }
     }
@@ -142,6 +147,9 @@ impl BoardApp {
         clock: &impl Clock,
     ) -> Vec<Effect> {
         match self.settings.keybindings.command_for_key(key) {
+            Some(BoardCommand::New) if self.insertion_focused() => {
+                self.begin_bottom_insertion(ids, clock)
+            }
             Some(BoardCommand::New) => self.begin_insertion(ids, clock),
             Some(BoardCommand::Edit) => self.expand_and_enter_edit(ids, clock),
             Some(BoardCommand::Delete) => self.delete(ids, clock),

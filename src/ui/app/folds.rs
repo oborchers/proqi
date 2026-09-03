@@ -1,8 +1,9 @@
 //! Atomic interaction with display-only folded content ranges.
 
 use crate::{
-    domain::{AnnotationBehavior, ContentAnnotation, ThoughtId},
+    domain::ThoughtId,
     ports::editor::{CursorMovement, EditCommand},
+    ui::annotations::PresentedSubstitution,
 };
 use unicode_segmentation::UnicodeSegmentation as _;
 
@@ -11,10 +12,9 @@ use crate::ui::VisualRowEdge;
 
 impl BoardApp {
     pub(super) fn extend_selection_to_visual_row_edge(&mut self, edge: VisualRowEdge) {
-        let Some(position) = self
-            .editor_presentation()
-            .map(|presentation| presentation.visual_row_edge(edge))
-        else {
+        let mut frame = self.build_frame_presentation();
+        self.attach_editor_presentation(&mut frame);
+        let Some(position) = frame.editor().map(|editor| editor.visual_row_edge(edge)) else {
             return;
         };
         let Some((_, editor)) = &mut self.editor else {
@@ -38,18 +38,21 @@ impl BoardApp {
         if ranges.is_empty() {
             return false;
         }
-        let annotations = self.current_annotations(thought_id);
-        let targets = annotations
+        let Some(thought) = self.active_presented_thought() else {
+            return false;
+        };
+        let targets = thought
+            .presentation
+            .substitutions
             .iter()
-            .enumerate()
-            .filter(|(index, annotation)| {
-                annotation.kind.behavior() == AnnotationBehavior::Substitution
-                    && !self.expanded_folds.contains(&(thought_id, *index))
-                    && ranges
-                        .iter()
-                        .any(|range| range.start < annotation.end && annotation.start < range.end)
+            .filter(|substitution| {
+                substitution.collapsed
+                    && ranges.iter().any(|range| {
+                        range.start < substitution.canonical_end
+                            && substitution.canonical_start < range.end
+                    })
             })
-            .map(|(index, _)| (thought_id, index))
+            .map(|substitution| (thought_id, substitution.annotation_index))
             .collect::<Vec<_>>();
         if targets.is_empty() {
             return false;
@@ -65,11 +68,7 @@ impl BoardApp {
         let Some(thought_id) = self.active_thought_id() else {
             return false;
         };
-        let Some((index, end)) = self.editor_presentation().and_then(|presentation| {
-            presentation
-                .selected_collapsed_substitution()
-                .map(|substitution| (substitution.annotation_index, substitution.canonical_end))
-        }) else {
+        let Some((index, _, end)) = self.selected_collapsed_annotation() else {
             return false;
         };
         if !self.expanded_folds.insert((thought_id, index)) {
@@ -85,8 +84,7 @@ impl BoardApp {
         clock: &impl crate::ports::environment::Clock,
     ) -> Option<Vec<crate::application::Effect>> {
         let thought_id = self.active_thought_id()?;
-        self.editor_presentation()?
-            .selected_collapsed_substitution()?;
+        self.selected_collapsed_annotation()?;
         let command = EditCommand::InsertBeforeSelection(' ');
         if self.edit_command_blocked(&command) {
             return Some(Vec::new());
@@ -117,23 +115,13 @@ impl BoardApp {
             })
     }
 
-    pub(super) fn select_fold_at_cell(
-        &mut self,
-        thought_id: ThoughtId,
+    pub(super) fn editor_cell_target(
+        &self,
         row: u16,
         column: u16,
-    ) -> bool {
-        if self.active_thought_id() != Some(thought_id) {
-            return false;
-        }
-        let Some(presentation) = self.editor_presentation() else {
-            return false;
-        };
-        let Some(fold) = presentation.fold_at_cell(row, column) else {
-            return false;
-        };
-        self.set_editor_range(fold.canonical_start, fold.canonical_end);
-        true
+    ) -> Option<crate::ui::projection::BoardCellTarget> {
+        self.editor_presentation()
+            .map(|presentation| presentation.cell_target(row, column))
     }
 
     pub(super) fn normalize_fold_cursor(
@@ -144,7 +132,7 @@ impl BoardApp {
         if extend_selection {
             return;
         }
-        let Some(thought_id) = self.active_thought_id() else {
+        let Some(_) = self.active_thought_id() else {
             return;
         };
         let Some(snapshot) = self.editor_snapshot() else {
@@ -152,16 +140,16 @@ impl BoardApp {
         };
         let cursor =
             crate::ports::text_layout::byte_for_position(&snapshot.content, snapshot.cursor);
-        let annotations = self.current_annotations(thought_id);
-        let target = annotations
-            .iter()
-            .enumerate()
-            .find_map(|(index, annotation)| {
-                (!self.expanded_folds.contains(&(thought_id, index))
-                    && annotation.kind.behavior() == AnnotationBehavior::Substitution
-                    && cursor_in_fold(cursor, annotation, movement))
-                .then_some((annotation.start, annotation.end))
-            });
+        let target = self.active_presented_thought().and_then(|thought| {
+            thought
+                .presentation
+                .substitutions
+                .iter()
+                .find(|substitution| {
+                    substitution.collapsed && cursor_in_fold(cursor, substitution, movement)
+                })
+                .map(|substitution| (substitution.canonical_start, substitution.canonical_end))
+        });
         let Some((start, end)) = target else {
             return;
         };
@@ -176,7 +164,7 @@ impl BoardApp {
         if extend_selection {
             return false;
         }
-        let Some(thought_id) = self.active_thought_id() else {
+        let Some(_) = self.active_thought_id() else {
             return false;
         };
         let Some(snapshot) = self.editor_snapshot() else {
@@ -189,16 +177,24 @@ impl BoardApp {
             crate::ports::text_layout::byte_for_position(&snapshot.content, selection.start),
             crate::ports::text_layout::byte_for_position(&snapshot.content, selection.end),
         );
-        let annotations = self.current_annotations(thought_id);
-        let target = annotations
-            .iter()
-            .enumerate()
-            .find(|(index, annotation)| {
-                !self.expanded_folds.contains(&(thought_id, *index))
-                    && annotation.kind.behavior() == AnnotationBehavior::Substitution
-                    && range == (annotation.start, annotation.end)
-            })
-            .map(|(_, annotation)| fold_departure_target(&snapshot.content, annotation, movement));
+        let target = self.active_presented_thought().and_then(|thought| {
+            thought
+                .presentation
+                .substitutions
+                .iter()
+                .find(|substitution| {
+                    substitution.collapsed
+                        && range == (substitution.canonical_start, substitution.canonical_end)
+                })
+                .map(|substitution| {
+                    fold_departure_target(
+                        &snapshot.content,
+                        substitution.canonical_start,
+                        substitution.canonical_end,
+                        movement,
+                    )
+                })
+        });
         let Some(target) = target else {
             return false;
         };
@@ -210,7 +206,7 @@ impl BoardApp {
     }
 
     pub(super) fn delete_adjacent_fold(&mut self, backwards: bool) -> bool {
-        let Some(thought_id) = self.active_thought_id() else {
+        let Some(_) = self.active_thought_id() else {
             return false;
         };
         let Some(snapshot) = self.editor_snapshot() else {
@@ -221,14 +217,9 @@ impl BoardApp {
         }
         let cursor =
             crate::ports::text_layout::byte_for_position(&snapshot.content, snapshot.cursor);
-        let annotations = self.current_annotations(thought_id);
-        let range = adjacent_range(
-            thought_id,
-            cursor,
-            backwards,
-            &annotations,
-            &self.expanded_folds,
-        );
+        let range = self.active_presented_thought().and_then(|thought| {
+            adjacent_range(cursor, backwards, &thought.presentation.substitutions)
+        });
         let Some((start, end)) = range else {
             return false;
         };
@@ -268,6 +259,30 @@ impl BoardApp {
     pub(super) fn clear_expanded_folds(&mut self, thought_id: ThoughtId) {
         self.expanded_folds.retain(|(id, _)| *id != thought_id);
     }
+
+    fn selected_collapsed_annotation(&self) -> Option<(usize, usize, usize)> {
+        let snapshot = self.editor_snapshot()?;
+        let selection = snapshot.selection?;
+        let selected = (
+            crate::ports::text_layout::byte_for_position(&snapshot.content, selection.start),
+            crate::ports::text_layout::byte_for_position(&snapshot.content, selection.end),
+        );
+        self.active_presented_thought()?
+            .presentation
+            .substitutions
+            .iter()
+            .find(|substitution| {
+                substitution.collapsed
+                    && selected == (substitution.canonical_start, substitution.canonical_end)
+            })
+            .map(|substitution| {
+                (
+                    substitution.annotation_index,
+                    substitution.canonical_start,
+                    substitution.canonical_end,
+                )
+            })
+    }
 }
 
 fn boundary_before_fold(content: &str, fold_start: usize) -> usize {
@@ -290,13 +305,17 @@ fn moves_before(movement: CursorMovement) -> bool {
     )
 }
 
-fn cursor_in_fold(cursor: usize, annotation: &ContentAnnotation, movement: CursorMovement) -> bool {
+fn cursor_in_fold(
+    cursor: usize,
+    substitution: &PresentedSubstitution,
+    movement: CursorMovement,
+) -> bool {
     if moves_before(movement) {
-        cursor > annotation.start && cursor <= annotation.end
+        cursor > substitution.canonical_start && cursor <= substitution.canonical_end
     } else if moves_after(movement) {
-        cursor >= annotation.start && cursor < annotation.end
+        cursor >= substitution.canonical_start && cursor < substitution.canonical_end
     } else {
-        cursor > annotation.start && cursor < annotation.end
+        cursor > substitution.canonical_start && cursor < substitution.canonical_end
     }
 }
 
@@ -314,7 +333,8 @@ fn moves_after(movement: CursorMovement) -> bool {
 
 fn fold_departure_target(
     content: &str,
-    annotation: &ContentAnnotation,
+    start: usize,
+    end: usize,
     movement: CursorMovement,
 ) -> usize {
     match movement {
@@ -324,34 +344,27 @@ fn fold_departure_target(
         | CursorMovement::WordBack
         | CursorMovement::VisualUp
         | CursorMovement::VisualJumpUp
-        | CursorMovement::LineStart => boundary_before_fold(content, annotation.start),
+        | CursorMovement::LineStart => boundary_before_fold(content, start),
         CursorMovement::GraphemeForward
         | CursorMovement::WordForward
         | CursorMovement::VisualDown
         | CursorMovement::VisualJumpDown
-        | CursorMovement::LineEnd => annotation.end,
+        | CursorMovement::LineEnd => end,
     }
 }
 
 fn adjacent_range(
-    thought_id: ThoughtId,
     cursor: usize,
     backwards: bool,
-    annotations: &[ContentAnnotation],
-    expanded: &std::collections::BTreeSet<(ThoughtId, usize)>,
+    substitutions: &[PresentedSubstitution],
 ) -> Option<(usize, usize)> {
-    annotations
-        .iter()
-        .enumerate()
-        .find_map(|(index, annotation)| {
-            let boundary = if backwards {
-                annotation.end == cursor
-            } else {
-                annotation.start == cursor
-            };
-            (boundary
-                && annotation.kind.behavior() == AnnotationBehavior::Substitution
-                && !expanded.contains(&(thought_id, index)))
-            .then_some((annotation.start, annotation.end))
-        })
+    substitutions.iter().find_map(|substitution| {
+        let boundary = if backwards {
+            substitution.canonical_end == cursor
+        } else {
+            substitution.canonical_start == cursor
+        };
+        (boundary && substitution.collapsed)
+            .then_some((substitution.canonical_start, substitution.canonical_end))
+    })
 }

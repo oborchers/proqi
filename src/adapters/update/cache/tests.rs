@@ -329,6 +329,49 @@ fn mismatched_release_highlight_acknowledgement_changes_nothing() {
     );
 }
 
+#[test]
+fn exact_release_highlight_discard_is_atomic_and_does_not_remove_a_mismatch() {
+    let temporary = tempfile::tempdir().expect("cache root");
+    let store = FileUpdateStateStore::new(temporary.path()).expect("store");
+    let expected = announcement();
+    store
+        .record_release_highlights(identity(), expected.clone())
+        .expect("record announcement");
+    let mut ids = crate::adapters::memory::FakeIdGenerator::new(1_800_000_000_100);
+    let mismatched = ReleaseHighlightAnnouncement::pending(
+        ids.session_id(),
+        expected.previous_version().clone(),
+        expected.target_version().clone(),
+    )
+    .expect("mismatch");
+    assert!(
+        !store
+            .discard_release_highlights(identity(), &mismatched)
+            .expect("preserve mismatch")
+    );
+    assert_eq!(
+        store.load(identity()).expect("stored").release_highlights,
+        Some(expected.clone())
+    );
+    assert!(
+        store
+            .discard_release_highlights(identity(), &expected)
+            .expect("discard exact announcement")
+    );
+    assert!(
+        !store
+            .discard_release_highlights(identity(), &expected)
+            .expect("idempotent discard")
+    );
+    assert!(
+        store
+            .load(identity())
+            .expect("discarded")
+            .release_highlights
+            .is_none()
+    );
+}
+
 #[cfg(unix)]
 #[test]
 fn cache_directories_and_files_are_user_only() {

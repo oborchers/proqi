@@ -1,11 +1,85 @@
 use super::*;
 use proqi::domain::TextPosition;
+use proqi::ui::FastNavigation;
 
 fn move_cursor(fixture: &mut Fixture, movement: CursorMovement) {
     fixture.input(UiInput::Key(UiKey::Move {
         movement,
         extend_selection: false,
     }));
+}
+
+fn fast(fixture: &mut Fixture, direction: FastNavigation, extend_selection: bool) {
+    fixture.input(UiInput::Key(UiKey::FastNavigation {
+        direction,
+        extend_selection,
+    }));
+}
+
+#[test]
+fn command_palette_fast_navigation_moves_five_entries_and_clamps() {
+    let mut fixture = Fixture::new();
+    fixture.input(UiInput::Key(UiKey::Escape));
+    fixture.input(UiInput::Key(UiKey::Character(':')));
+    let (_, all, _) = fixture.app.palette_view().expect("palette");
+    let expected = all[5].clone();
+    let _ = draw(&mut fixture, 38, 6);
+    fast(&mut fixture, FastNavigation::Next, false);
+    let (_, visible, selected) = fixture.app.palette_view().expect("palette");
+    assert_eq!(visible[selected], expected);
+
+    for _ in 0..20 {
+        fast(&mut fixture, FastNavigation::Next, false);
+    }
+    let (_, visible, selected) = fixture.app.palette_view().expect("palette");
+    assert_eq!(visible[selected], "Quit Proqi");
+}
+
+#[test]
+fn command_palette_wheel_is_contained_and_retargets_the_visible_slice() {
+    let mut fixture = Fixture::new();
+    for index in 0..12 {
+        navigation::durable_thought(&mut fixture, &format!("thought {index}"));
+    }
+    let before = fixture
+        .app
+        .prepare_frame(Rect::new(0, 0, 36, 7))
+        .first_index;
+    fixture.input(UiInput::Key(UiKey::Character(':')));
+    let layout = fixture.app.prepare_frame(Rect::new(0, 0, 36, 7));
+    let item = layout.overlay.expect("overlay").items[0];
+    fixture.pointer(item.x, item.y, PointerKind::ScrollDown);
+    let _ = draw(&mut fixture, 36, 7);
+    let (_, visible, selected) = fixture.app.palette_view().expect("palette");
+    assert_eq!(visible[selected], "Rename session");
+    fixture.input(UiInput::Key(UiKey::Escape));
+    assert_eq!(
+        fixture
+            .app
+            .prepare_frame(Rect::new(0, 0, 36, 7))
+            .first_index,
+        before
+    );
+}
+
+#[test]
+fn help_fast_navigation_moves_exactly_five_visible_rows() {
+    let mut paged = Fixture::new();
+    let mut repeated = Fixture::new();
+    for fixture in [&mut paged, &mut repeated] {
+        fixture.input(UiInput::Key(UiKey::Escape));
+        fixture.input(UiInput::Key(UiKey::Character('?')));
+        let initial = draw(fixture, 42, 8);
+        assert!(text(initial.backend().buffer()).contains('↓'));
+    }
+    fast(&mut paged, FastNavigation::Next, false);
+    for _ in 0..5 {
+        repeated.input(navigation::visual(CursorMovement::VisualDown, false));
+    }
+    assert_eq!(
+        text(draw(&mut paged, 42, 8).backend().buffer()),
+        text(draw(&mut repeated, 42, 8).backend().buffer())
+    );
 }
 
 fn wrapped_thought(label: &str) -> String {
@@ -166,6 +240,61 @@ fn mode_aware_alt_navigation_keeps_board_focus_movement_unchanged() {
 }
 
 #[test]
+fn normalized_fast_intention_moves_and_selects_exactly_five_wrapped_rows() {
+    let mut fixture = Fixture::new();
+    fixture.paste("0123456789界🙂 alpha beta gamma delta epsilon zeta eta theta");
+    let _ = draw(&mut fixture, 14, 8);
+    move_cursor(&mut fixture, CursorMovement::DocumentStart);
+    let before = fixture.app.editor_snapshot().expect("editor").cursor;
+    fast(&mut fixture, FastNavigation::Next, true);
+    let selected = fixture.app.editor_snapshot().expect("editor");
+    assert_eq!(selected.selection.map(|range| range.start), Some(before));
+
+    let mut comparison = Fixture::new();
+    comparison.paste("0123456789界🙂 alpha beta gamma delta epsilon zeta eta theta");
+    let _ = draw(&mut comparison, 14, 8);
+    move_cursor(&mut comparison, CursorMovement::DocumentStart);
+    move_cursor(&mut comparison, CursorMovement::VisualJumpDown);
+    assert_eq!(
+        selected.cursor,
+        comparison.app.editor_snapshot().expect("comparison").cursor
+    );
+}
+
+#[test]
+fn fast_navigation_retains_the_one_thought_board_modifier_ladder() {
+    let mut fixture = Fixture::new();
+    for content in [
+        "first", "second", "third", "fourth", "fifth", "sixth", "seventh",
+    ] {
+        navigation::durable_thought(&mut fixture, content);
+    }
+    let start = fixture.app.state.focused_thought;
+    fast(&mut fixture, FastNavigation::Previous, false);
+    assert_ne!(fixture.app.state.focused_thought, start);
+    assert_eq!(
+        fixture.app.state.focused_thought,
+        Some(fixture.app.state.board.live_thoughts()[5].id)
+    );
+
+    fast(&mut fixture, FastNavigation::Previous, true);
+    assert!(
+        fixture
+            .app
+            .thought_selected(fixture.app.state.board.live_thoughts()[4].id)
+    );
+    assert!(
+        fixture
+            .app
+            .thought_selected(fixture.app.state.board.live_thoughts()[5].id)
+    );
+    assert_eq!(
+        fixture.app.state.focused_thought,
+        Some(fixture.app.state.board.live_thoughts()[4].id)
+    );
+}
+
+#[test]
 fn contextual_help_uses_platform_primary_labels_for_fast_navigation() {
     let mut fixture = Fixture::new();
     let sequence = fixture.paste("one\ntwo\nthree\nfour\nfive\nsix");
@@ -180,12 +309,12 @@ fn contextual_help_uses_platform_primary_labels_for_fast_navigation() {
     fixture.pointer(help.x, help.y, PointerKind::Down(PointerButton::Left));
     let terminal = draw(&mut fixture, 80, 14);
     let rendered = text(terminal.backend().buffer());
-    assert!(rendered.contains("Alt/"));
-    assert!(rendered.contains("Jump 5"));
+    assert!(rendered.contains("Alt+↑/↓"));
+    assert!(rendered.contains("5-row · PgUp/PgDn"));
     let primary = if cfg!(target_os = "macos") {
-        "⌘↑/↓"
+        "⌘↑/⌘↓"
     } else {
-        "Ctrl+↑/↓"
+        "Ctrl+↑/Ctrl+↓"
     };
     assert!(rendered.contains(primary));
     assert!(rendered.contains("Start/end"));

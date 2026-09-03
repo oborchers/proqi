@@ -222,10 +222,14 @@ impl KeyBindings {
     /// Resolve a normalized key through the Board command map.
     ///
     /// Unmodified physical Delete is an invariant spelling of the remappable
-    /// delete command. Modified Delete and Backspace remain unassigned in Board.
+    /// delete command. The typed submission intentions are invariant aliases
+    /// for the corresponding remappable Board submission commands. Modified
+    /// Delete and Backspace remain unassigned in Board.
     pub(super) fn command_for_key(&self, key: super::UiKey) -> Option<BoardCommand> {
         match key {
             super::UiKey::Delete => Some(BoardCommand::Delete),
+            super::UiKey::Submit => Some(BoardCommand::SubmitRemove),
+            super::UiKey::SubmitKeep => Some(BoardCommand::SubmitKeep),
             super::UiKey::UnmodifiedSpace => self.command(' '),
             super::UiKey::Character(character) => self.command(character),
             _ => None,
@@ -388,99 +392,5 @@ pub(crate) fn primary_key_label(suffix: &str) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{BoardCommand, KeyBindings};
-
-    #[test]
-    fn ambiguous_bindings_are_rejected() {
-        let mut bindings = KeyBindings::default();
-        bindings.edit = bindings.new;
-        assert!(bindings.validate().is_err());
-    }
-
-    #[test]
-    fn recovery_keys_cannot_be_used_for_quit() {
-        for reserved in ['r', 'w'] {
-            let bindings = KeyBindings {
-                quit: reserved,
-                ..KeyBindings::default()
-            };
-            assert!(bindings.validate().is_err());
-        }
-    }
-
-    #[test]
-    fn established_board_binding_precedes_compatible_transform_collision() {
-        let bindings = KeyBindings {
-            new: 't',
-            ..KeyBindings::default()
-        };
-        assert!(bindings.validate().is_ok());
-        assert_eq!(bindings.command('t'), Some(BoardCommand::New));
-    }
-
-    #[test]
-    fn reserved_primary_transform_bindings_are_rejected() {
-        for reserved in ['a', 'c', 'd', 'n', 'p', 'q', 'u', 'v', 'x', 'y', 'z'] {
-            let bindings = KeyBindings {
-                transform: reserved,
-                ..KeyBindings::default()
-            };
-            assert!(bindings.validate().is_err(), "reserved: {reserved}");
-        }
-    }
-
-    #[test]
-    fn sentence_deletion_rejects_primary_chords_consumed_before_edit_dispatch() {
-        for reserved in ['A', 'C', 'D', 'N', 'P', 'Q', 'V', 'X', 'Y', 'Z'] {
-            let bindings = KeyBindings {
-                delete_sentence: reserved,
-                ..KeyBindings::default()
-            };
-            assert!(bindings.validate().is_err(), "reserved suffix {reserved}");
-        }
-    }
-
-    #[test]
-    fn sentence_deletion_rejects_unreachable_shifted_suffixes() {
-        for unreachable in ['g', '1', '!', 'Ü'] {
-            let bindings = KeyBindings {
-                delete_sentence: unreachable,
-                ..KeyBindings::default()
-            };
-            assert!(
-                bindings.validate().is_err(),
-                "unreachable suffix {unreachable}"
-            );
-        }
-    }
-
-    #[test]
-    fn visual_row_fallbacks_reject_unreachable_reserved_and_duplicate_suffixes() {
-        for unreachable in ['g', '1', 'A', 'Z', 'Ü'] {
-            let bindings = KeyBindings {
-                select_visual_row_start: unreachable,
-                ..KeyBindings::default()
-            };
-            assert!(
-                bindings.validate().is_err(),
-                "unreachable suffix {unreachable}"
-            );
-        }
-        let duplicate = KeyBindings {
-            select_visual_row_end: 'H',
-            ..KeyBindings::default()
-        };
-        assert!(duplicate.validate().is_err());
-    }
-
-    #[test]
-    fn visual_row_fallbacks_do_not_invalidate_existing_board_remaps() {
-        let bindings = KeyBindings {
-            new: 'H',
-            focus_up: 'L',
-            ..KeyBindings::default()
-        };
-        assert_eq!(bindings.validate(), Ok(()));
-    }
-}
+#[path = "settings/tests.rs"]
+mod tests;

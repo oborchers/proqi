@@ -12,7 +12,7 @@ pub(crate) fn items(app: &BoardApp) -> Vec<Shortcut> {
         app.interaction_mode(),
         InteractionMode::Compose | InteractionMode::Edit { .. }
     ) {
-        return edit_items(keys, app.supports_submission());
+        return edit_items(app.interaction_mode(), keys, app.supports_submission());
     }
     let mut items = vec![
         (keys.new.to_string(), "New"),
@@ -53,15 +53,18 @@ pub(crate) fn items(app: &BoardApp) -> Vec<Shortcut> {
         items.insert(10, (keys.transform.to_string(), "Transform"));
     }
     if app.supports_submission() {
-        items.push((keys.submit_remove.to_string(), "Submit"));
-        items.push((keys.submit_keep.to_string(), "Submit & keep"));
+        items.extend(submission_items(InteractionMode::Board, keys));
     }
     items.push((keys.quit.to_string(), "Quit"));
     items.push((keys.help.to_string(), "Close"));
     items
 }
 
-fn edit_items(keys: &super::settings::KeyBindings, supports_submission: bool) -> Vec<Shortcut> {
+fn edit_items(
+    mode: InteractionMode,
+    keys: &super::settings::KeyBindings,
+    supports_submission: bool,
+) -> Vec<Shortcut> {
     let mut items = vec![
         ("Esc".to_owned(), "Board"),
         (primary("C"), "Copy"),
@@ -78,7 +81,11 @@ fn edit_items(keys: &super::settings::KeyBindings, supports_submission: bool) ->
             primary(&transform_key_label(keys.transform)),
             "Split/extract",
         ),
-        (format!("Alt/{}", primary("↑/↓")), "Jump 5 / Start/end"),
+        (
+            super::paging::FAST_NAVIGATION_SHORTCUT_KEY.to_owned(),
+            super::paging::FAST_NAVIGATION_SHORTCUT_LABEL,
+        ),
+        (format!("{}/{}", primary("↑"), primary("↓")), "Start/end"),
         (
             format!(
                 "←/→·{}/{}",
@@ -89,10 +96,25 @@ fn edit_items(keys: &super::settings::KeyBindings, supports_submission: bool) ->
         ("↑/↓×2".to_owned(), "Neighbor/new"),
     ];
     if supports_submission {
-        items.insert(1, (primary("Enter"), "Submit"));
-        items.insert(2, (primary("Shift+Enter"), "Submit & keep"));
+        let [remove, keep] = submission_items(mode, keys);
+        items.insert(1, remove);
+        items.insert(2, keep);
     }
     items
+}
+
+fn submission_items(mode: InteractionMode, keys: &crate::ui::KeyBindings) -> [Shortcut; 2] {
+    let board_key = |key: char, suffix: &str| {
+        if matches!(mode, InteractionMode::Board) {
+            format!("{}/{}", super::settings::key_label(key), primary(suffix))
+        } else {
+            primary(suffix)
+        }
+    };
+    [
+        (board_key(keys.submit_remove, "Enter"), "Submit"),
+        (board_key(keys.submit_keep, "Shift+Enter"), "Submit & keep"),
+    ]
 }
 
 pub(crate) fn grid_metrics(items: &[Shortcut], width: u16) -> (usize, usize) {

@@ -10,8 +10,8 @@ use crate::{
     },
     ports::environment::IdGenerator as _,
     ui::{
-        PointerButton, PointerInput, PointerKind, Theme, ThemePreference, UiInput, UiKey, render,
-        render_with_outcome,
+        FastNavigation, PointerButton, PointerInput, PointerKind, Theme, ThemePreference, UiInput,
+        UiKey, render, render_with_outcome,
     },
 };
 use ratatui_core::{backend::TestBackend, layout::Rect, terminal::Terminal};
@@ -266,6 +266,41 @@ fn scroll_and_resize_reproject_and_clamp_without_losing_the_overlay() {
         .expect("resized overlay");
     assert!(resized.scroll <= resized.rows.len().saturating_sub(20));
     assert_eq!(resized.title, " what's new in Proqi 1.2.0 ");
+}
+
+#[test]
+fn release_highlights_fast_navigation_moves_exactly_five_visible_rows() {
+    let (mut app, mut ids, clock) = app();
+    install_automatic(&mut app, 0);
+    app.arm_release_highlights(0);
+    app.prepare_frame(Rect::new(0, 0, 38, 8));
+    let before = app.release_highlights_view(36, 6).expect("overlay");
+    assert_eq!(before.scroll, 0);
+    assert!(before.overflow_below);
+    app.handle(
+        UiInput::Key(UiKey::FastNavigation {
+            direction: FastNavigation::Next,
+            extend_selection: false,
+        }),
+        &mut ids,
+        &clock,
+    );
+    let after = app.release_highlights_view(36, 6).expect("overlay");
+    assert_eq!(after.scroll, 5);
+    assert!(after.overflow_above);
+
+    for _ in 0..20 {
+        app.handle(
+            UiInput::Key(UiKey::FastNavigation {
+                direction: FastNavigation::Next,
+                extend_selection: false,
+            }),
+            &mut ids,
+            &clock,
+        );
+    }
+    let clamped = app.release_highlights_view(36, 6).expect("overlay");
+    assert!(!clamped.overflow_below);
 }
 
 #[test]

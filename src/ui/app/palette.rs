@@ -70,6 +70,13 @@ impl PaletteState {
         self.matches().len()
     }
 
+    pub(super) fn overflow(&self, visible: usize) -> (bool, bool) {
+        (
+            self.scroll > 0,
+            self.scroll.saturating_add(visible) < self.match_count(),
+        )
+    }
+
     fn matches(&self) -> Vec<(Command, &'static str)> {
         let query = self.query.text().to_lowercase();
         Command::ALL
@@ -219,7 +226,17 @@ impl BoardApp {
     ) -> Vec<Effect> {
         let UiInput::Key(key) = input else {
             return match input {
-                UiInput::Pointer(pointer) => self.handle_pointer(*pointer, ids, clock),
+                UiInput::Pointer(pointer) => match pointer.kind {
+                    crate::ui::PointerKind::ScrollUp => {
+                        self.move_palette(-1);
+                        Vec::new()
+                    }
+                    crate::ui::PointerKind::ScrollDown => {
+                        self.move_palette(1);
+                        Vec::new()
+                    }
+                    _ => self.handle_pointer(*pointer, ids, clock),
+                },
                 UiInput::Paste(value) => self.update_palette_query(|query| query.paste(value)),
                 UiInput::PasteAnnotated(payload) => {
                     self.update_palette_query(|query| query.paste(&payload.content))
@@ -242,6 +259,7 @@ impl BoardApp {
                     palette.clamp();
                 }
             }
+            UiKey::FastNavigation { direction, .. } => self.move_palette(direction.delta()),
             UiKey::Move {
                 movement: crate::ports::editor::CursorMovement::VisualUp,
                 ..
@@ -295,11 +313,20 @@ impl BoardApp {
             .selected
             .saturating_add_signed(delta)
             .min(palette.match_count().saturating_sub(1));
-        if palette.selected < palette.scroll {
-            palette.scroll = palette.selected;
-        } else if palette.selected >= palette.scroll.saturating_add(visible) {
-            palette.scroll = palette.selected + 1 - visible;
-        }
+        palette.scroll =
+            crate::ui::paging::first_visible(palette.selected, palette.scroll, visible);
+        self.layout = None;
+    }
+
+    pub(super) fn ensure_palette_visible(&mut self, visible: usize) {
+        let Some(palette) = &mut self.palette else {
+            return;
+        };
+        palette.selected = palette
+            .selected
+            .min(palette.match_count().saturating_sub(1));
+        palette.scroll =
+            crate::ui::paging::first_visible(palette.selected, palette.scroll, visible);
     }
 
     fn execute_command(
