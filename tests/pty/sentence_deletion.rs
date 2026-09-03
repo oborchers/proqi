@@ -21,7 +21,7 @@ fn primary_shift_u_deletes_and_persists_a_sentence_in_a_real_pty() {
         after 200
         send -- "\x1b\[122;9u"
         after 200
-        send -- "\x1b\[90;9u"
+        send -- "\x1b\[90;10u"
         after 500
         send "\x1b"
         after 100

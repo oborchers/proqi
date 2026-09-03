@@ -46,6 +46,7 @@ pub(super) fn command_for_key(
         | UiKey::PrimaryShiftCharacter(_)
         | UiKey::PrimaryShiftMove { .. }
         | UiKey::ExtendVisualRow { .. }
+        | UiKey::MoveVisualRow { .. }
         | UiKey::Undo
         | UiKey::Redo
         | UiKey::Quit

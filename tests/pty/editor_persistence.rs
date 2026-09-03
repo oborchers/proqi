@@ -33,7 +33,7 @@ fn physical_macos_redo_encoding_restores_the_durable_deletion() {
     apply_edit_input(binary, state.path(), session, "\x1b[122;9u");
     assert_persisted_content(binary, state.path(), session, thought, ORIGINAL);
 
-    apply_edit_input(binary, state.path(), session, "\x1b[122:90;10u");
+    apply_edit_input(binary, state.path(), session, "\x1b[90;10u");
     assert_persisted_content(binary, state.path(), session, thought, DELETED);
 }
 

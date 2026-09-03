@@ -965,7 +965,9 @@ receives intentions such as `CreateThought`, `MoveCursor`, `CutThought`, or
 layout snapshot into the same intentions.
 
 Raw modifiers are normalized into semantic modifiers. `Primary` maps to
-Command on macOS and Control on Linux. Enhanced keyboard protocols
+Command on macOS and Control elsewhere. These are logical modifiers reported
+after operating-system and terminal handling, never physical left or right
+keys. Enhanced keyboard protocols
 are enabled when supported so Super and Meta events can be distinguished, but
 every action retains a terminal-safe fallback and a configurable binding.
 
@@ -1024,16 +1026,37 @@ Board shortcut, with Escape retained as the unconditional Help close action.
 deletes one newline-delimited logical line as a single undoable edit. Logical
 line commands operate on the text model and are independent of visual wrapping.
 
-`Primary+Shift+Left` and `Primary+Shift+Right` normalize to distinct visual-row
+On macOS, logical `Command+Left` and `Command+Right` normalize to wrapped
+visual-row movement, while the Shift variants normalize to distinct visual-row
 selection intentions before mode dispatch. Edit mode resolves their active
 endpoint from the current canonical-to-visible projection, including current
 width, terminal-cell wrapping, collapsed substitutions, and expanded folds,
-then extends through the editor's existing stable anchor. Exact visual-row
-boundaries use directional affinity so repeated chords advance across rows.
+then moves without selection or extends through the editor's existing stable
+anchor. Shared soft-wrap boundaries use the same visual cursor affinity as
+rendering. Selection uses directional affinity so repeated chords advance
+across rows.
 Empty rows and document boundaries clamp without creating text revisions.
 Configured shifted Primary suffixes and command-palette actions retain a
 truthful fallback when a terminal does not forward the arrow chord distinctly.
-Board navigation and unshifted Primary arrows do not consume these intentions.
+On macOS, Option plus horizontal arrows retains word movement. On other
+platforms, Control plus horizontal arrows retains word movement, and adding
+Shift extends by word. Board navigation does not consume visual-row intentions.
+
+One UI-owned standard-shortcut metadata table records canonical Primary labels,
+mode scopes, shifted meanings, and configurable Board fallbacks. Contextual
+Help, full and compact footer labels, keybinding reservation validation, and
+inventory tests derive from that owner. Crossterm parsing remains in the
+terminal adapter and is checked against the metadata instead of being copied
+into presentation data. Distinct Shift reports for reserved character chords
+remain typed `PrimaryShiftCharacter` values unless an established shifted
+action owns them. Uppercase character reports without a Shift flag retain the
+compatible unshifted action where that is how the terminal encodes the chord.
+
+Global `Primary+Q` is resolved before Help and Screenshot takeover navigation,
+but after a commit-first Screenshot save barrier has admitted or deferred the
+input. Quit therefore retains the ordinary editor flush, durability failure,
+capture reconciliation, cancellation, and bounded terminal teardown barriers.
+Modal navigation still resolves before configurable Board shortcuts.
 
 `Primary+Shift+U` requests containing-sentence deletion when the
 terminal reports the chord distinctly. The Rope editor is the canonical owner

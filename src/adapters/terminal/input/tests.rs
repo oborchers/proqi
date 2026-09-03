@@ -159,7 +159,7 @@ fn logical_line_and_sentence_deletion_keep_distinct_primary_chords() {
         }
         assert_eq!(
             translate(Event::Key(KeyEvent::new(KeyCode::Char('U'), modifier))),
-            Some(UiInput::Key(UiKey::PrimaryShiftCharacter('U')))
+            Some(UiInput::Key(UiKey::DeleteLogicalLine))
         );
     }
 
@@ -173,7 +173,7 @@ fn logical_line_and_sentence_deletion_keep_distinct_primary_chords() {
 }
 
 #[test]
-fn primary_shift_z_is_redo_for_both_terminal_case_encodings() {
+fn distinctly_reported_primary_shift_z_is_redo_for_both_character_cases() {
     for modifier in [
         KeyModifiers::CONTROL,
         KeyModifiers::SUPER,
@@ -182,7 +182,6 @@ fn primary_shift_z_is_redo_for_both_terminal_case_encodings() {
         for (character, modifiers) in [
             ('z', modifier | KeyModifiers::SHIFT),
             ('Z', modifier | KeyModifiers::SHIFT),
-            ('Z', modifier),
         ] {
             assert_eq!(
                 translate(Event::Key(KeyEvent::new(

@@ -212,7 +212,7 @@ fn edit_footer_uses_only_truthful_native_chords() {
     let terminal = draw(&mut fixture, 100, 8);
     let rendered = text(terminal.backend().buffer());
     let primary = if cfg!(target_os = "macos") {
-        "⌘"
+        "Command+"
     } else {
         "Ctrl+"
     };

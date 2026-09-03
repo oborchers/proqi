@@ -132,7 +132,8 @@ empty editor first. Nothing is saved until content is produced. Press `Esc` to
 use Board controls instead. Returning focus to the pane does not override that
 Board choice.
 
-`Primary` means `Command` on macOS and `Ctrl` on Linux.
+`Primary` means `Command` on macOS and `Ctrl` elsewhere. Proqi receives logical
+modifiers only after the operating system and terminal have handled the key.
 
 ### Board controls
 
@@ -143,16 +144,16 @@ Board choice.
 | `j` / `k` or arrows | Focus next / previous; twice at a blocked bottom / top edge creates there |
 | `Enter` or `e` | Edit |
 | `Primary+J` / `Primary+K`, `Primary+Shift+↓` / `↑`, or drag | Reorder |
-| `y` / `Primary+C`; `x` / `Primary+X` | Copy; safe cut |
+| `Primary+C` / `y`; `Primary+X` / `x` | Copy; safe cut |
 | `d` or `Del` (`Entf` on German keyboards) | Delete |
-| `Space`; `a` / `Primary+A` | Toggle selection; select all |
+| `Space`; `Primary+A` / `a` | Toggle selection; select all |
 | `Shift+↑` / `↓` or `K` / `J`; `v` then move | Extend or latch a range |
 | `Primary+D` | Duplicate thought or selection |
-| `s` / `Primary+Enter`; `S` / `Primary+Shift+Enter`; then arrows or `h` / `j` / `k` / `l` if needed | Submit and remove after acceptance; submit and keep |
-| `u` / `Primary+Z` | Undo a board operation |
+| `Primary+Enter` / `s`; `Primary+Shift+Enter` / `S`; then arrows or `h` / `j` / `k` / `l` if needed | Submit and remove after acceptance; submit and keep |
+| `Primary+Z` / `u` | Undo a board operation |
 | `Primary+Shift+Z` / `Primary+Y` | **Redo a board operation** |
 | `c`; `/`; `:`; `i`; `?` | Collapse; search; commands; Screenshot Inbox; help |
-| `Esc`; `q` / `Primary+Q` | Clear selection; exit after durable flush |
+| `Esc`; `Primary+Q` / `q` | Clear selection; exit after durable flush |
 
 ### Editor controls
 
@@ -163,9 +164,11 @@ Board choice.
 | `Primary+Shift+U` | Delete containing sentence |
 | `Primary+Z`; `Primary+Shift+Z` / `Primary+Y` | Undo; redo |
 | `Primary+C` / `X` / `V` | Native copy / safe cut / paste |
-| `Alt` or `Ctrl` + `←` / `→`; `Home` / `End` | Move by word; line boundary |
+| macOS: `Command+←` / `→` | Move to the current wrapped visual-row start / end |
+| macOS: `Option+←` / `→`; elsewhere: `Ctrl+←` / `→` | Move by word |
 | `Shift` + movement | Extend text selection |
-| `Primary+Shift+←` / `→` | Extend to the current wrapped visual-row start / end |
+| macOS: `Command+Shift+←` / `→` | Extend to the current wrapped visual-row start / end |
+| `Home` / `End` | Move to the logical line boundary |
 | `Alt+↑` / `↓` or `Page Up` / `Page Down`; `Primary+↑` / `↓` | Jump five rows; thought start / end |
 | `Enter`; `Tab`; `Shift+Tab` | Continue lists; nest; outdent |
 | `↑` / `↓` twice at a boundary | Focus the adjacent thought, or create at the top / bottom board edge |
@@ -179,6 +182,16 @@ command. In text editors and searchable query fields, `Del` remains a
 text-editing key, never a thought delete, and `h`, `j`, `k`, and `l` remain
 literal text. List-only menus and four-way choosers ignore irrelevant modifiers
 equally for arrows and their Vim-style aliases.
+
+Standard Primary chords are the canonical commands across Board and Edit.
+Configurable Board characters such as `y`, `x`, `u`, `s`, `S`, and `q` remain
+portable aliases when a terminal consumes a system chord. Ghostty consumes
+configured keybindings before Proqi receives input. Its macOS defaults include
+the common Command clipboard, selection, history, duplicate, submission, quit,
+and Command-arrow chords, including `Command+Shift+V` as a host paste action.
+Proqi does not promise delivery of intercepted chords, change Ghostty settings,
+or repeat a host paste. Use the Board aliases, command palette, bracketed paste,
+and `proqi diagnostics keypress` when a key does not reach the application.
 
 Mouse input covers the same core workflow. Images, files, and large pastes fold
 into compact annotations while their content stays intact. In Edit mode, an
@@ -322,7 +335,7 @@ select_visual_row_end = "L" # Primary+Shift+L fallback
 ```
 
 Thought transformations are contextual and remappable. In an editor, use
-`Cmd+T` on macOS or `Ctrl+T` elsewhere to split at the cursor, or to extract the
+`Primary+T` to split at the cursor, or to extract the
 exact selection. `Esc`, then `t`, is the portable immediate fallback. On the
 board, select two or more contiguous thoughts and press `t` to merge them with
 the configured exact separator. The command palette exposes all three actions
@@ -338,8 +351,11 @@ Unsafe theme contrast is rejected. See the
 Sentence deletion uses a documented Unicode profile with unavoidable ambiguity.
 See [sentence deletion](docs/SENTENCE_DELETION.md).
 Visual-row selection uses the current rendered width and folded presentation.
-If a terminal does not report `Primary+Shift+←` / `→` distinctly, use the
-command palette or the configured shifted Primary suffixes above.
+On macOS, Command plus horizontal arrows uses the current wrapped row and
+Option retains word movement. Elsewhere, Control plus horizontal arrows retains
+word movement, including with Shift. If the terminal intercepts the macOS
+Command-arrow selection chords, use the command palette or the configured
+shifted Primary suffixes above.
 
 ## Compatibility and contributing
 

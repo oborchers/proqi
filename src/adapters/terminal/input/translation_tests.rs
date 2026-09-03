@@ -7,7 +7,10 @@ use crate::{
     ui::{UiInput, UiKey, VisualRowEdge},
 };
 
-use super::translate;
+use super::{
+    translate,
+    translation::{ModifierPlatform, translate_key_for_platform},
+};
 
 #[test]
 fn only_unmodified_space_receives_the_placeholder_aware_identity() {
@@ -39,64 +42,84 @@ fn only_unmodified_space_receives_the_placeholder_aware_identity() {
 }
 
 #[test]
-fn platform_primary_shift_horizontal_arrows_are_visual_row_selection() {
-    let primary = if cfg!(target_os = "macos") {
-        KeyModifiers::SUPER
-    } else {
-        KeyModifiers::CONTROL
-    };
+fn macos_command_horizontal_arrows_use_wrapped_rows_with_and_without_shift() {
     for (code, edge) in [
         (KeyCode::Left, VisualRowEdge::Start),
         (KeyCode::Right, VisualRowEdge::End),
     ] {
         assert_eq!(
-            translate(Event::Key(KeyEvent::new(
-                code,
-                primary | KeyModifiers::SHIFT,
-            ))),
-            Some(UiInput::Key(UiKey::ExtendVisualRow { edge }))
+            translate_key_for_platform(
+                KeyEvent::new(code, KeyModifiers::SUPER),
+                ModifierPlatform::MacOs,
+            ),
+            Some(UiKey::MoveVisualRow { edge })
+        );
+        assert_eq!(
+            translate_key_for_platform(
+                KeyEvent::new(code, KeyModifiers::SUPER | KeyModifiers::SHIFT,),
+                ModifierPlatform::MacOs,
+            ),
+            Some(UiKey::ExtendVisualRow { edge })
         );
     }
 }
 
 #[test]
-fn unshifted_primary_and_ordinary_shift_horizontal_arrows_keep_existing_meanings() {
-    let primary = if cfg!(target_os = "macos") {
-        KeyModifiers::SUPER
-    } else {
-        KeyModifiers::CONTROL
-    };
-    for (code, macos, portable, shifted) in [
+fn non_macos_control_and_shift_control_horizontal_arrows_move_by_word() {
+    for (code, movement) in [
+        (KeyCode::Left, CursorMovement::WordBack),
+        (KeyCode::Right, CursorMovement::WordForward),
+    ] {
+        for extend_selection in [false, true] {
+            let modifiers = if extend_selection {
+                KeyModifiers::CONTROL | KeyModifiers::SHIFT
+            } else {
+                KeyModifiers::CONTROL
+            };
+            assert_eq!(
+                translate_key_for_platform(KeyEvent::new(code, modifiers), ModifierPlatform::Other,),
+                Some(UiKey::Move {
+                    movement,
+                    extend_selection,
+                })
+            );
+        }
+    }
+}
+
+#[test]
+fn macos_option_word_and_ordinary_shift_horizontal_arrows_keep_existing_meanings() {
+    for (code, word, grapheme) in [
         (
             KeyCode::Left,
-            CursorMovement::GraphemeBack,
             CursorMovement::WordBack,
             CursorMovement::GraphemeBack,
         ),
         (
             KeyCode::Right,
-            CursorMovement::GraphemeForward,
             CursorMovement::WordForward,
             CursorMovement::GraphemeForward,
         ),
     ] {
         assert_eq!(
-            translate(Event::Key(KeyEvent::new(code, primary))),
-            Some(UiInput::Key(UiKey::Move {
-                movement: if cfg!(target_os = "macos") {
-                    macos
-                } else {
-                    portable
-                },
-                extend_selection: false,
-            }))
+            translate_key_for_platform(
+                KeyEvent::new(code, KeyModifiers::ALT | KeyModifiers::SHIFT),
+                ModifierPlatform::MacOs,
+            ),
+            Some(UiKey::Move {
+                movement: word,
+                extend_selection: true,
+            })
         );
         assert_eq!(
-            translate(Event::Key(KeyEvent::new(code, KeyModifiers::SHIFT))),
-            Some(UiInput::Key(UiKey::Move {
-                movement: shifted,
+            translate_key_for_platform(
+                KeyEvent::new(code, KeyModifiers::SHIFT),
+                ModifierPlatform::MacOs,
+            ),
+            Some(UiKey::Move {
+                movement: grapheme,
                 extend_selection: true,
-            }))
+            })
         );
     }
 }

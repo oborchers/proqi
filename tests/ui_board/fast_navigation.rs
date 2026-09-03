@@ -301,23 +301,28 @@ fn contextual_help_uses_platform_primary_labels_for_fast_navigation() {
     let _effects = fixture.app.acknowledge_persistence(sequence, false);
     let help = fixture
         .app
-        .prepare_frame(Rect::new(0, 0, 80, 14))
+        .prepare_frame(Rect::new(0, 0, 120, 14))
         .controls
         .into_iter()
         .find_map(|(target, area)| (target == HitTarget::Help).then_some(area))
         .expect("help control");
     fixture.pointer(help.x, help.y, PointerKind::Down(PointerButton::Left));
-    let terminal = draw(&mut fixture, 80, 14);
+    let terminal = draw(&mut fixture, 120, 14);
     let rendered = text(terminal.backend().buffer());
     assert!(rendered.contains("Alt+↑/↓"));
     assert!(rendered.contains("5-row · PgUp/PgDn"));
     let primary = if cfg!(target_os = "macos") {
-        "⌘↑/⌘↓"
+        "Command+↑/Command+↓"
     } else {
         "Ctrl+↑/Ctrl+↓"
     };
     assert!(rendered.contains(primary));
     assert!(rendered.contains("Start/end"));
-    assert!(rendered.contains("Primary+Shift row"));
-    assert!(rendered.contains("←/→·H/L"));
+    let visual_row = if cfg!(target_os = "macos") {
+        "Command+Shift+←/→/H/L"
+    } else {
+        "Ctrl+Shift+H/L"
+    };
+    assert!(rendered.contains(visual_row));
+    assert!(rendered.contains("Select visual row"));
 }

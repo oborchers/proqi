@@ -302,10 +302,7 @@ impl KeyBindings {
         if self.transform.is_control() {
             return Err("keybindings must be distinct printable characters");
         }
-        if matches!(
-            self.transform,
-            'a' | 'c' | 'd' | 'n' | 'p' | 'q' | 'u' | 'v' | 'x' | 'y' | 'z'
-        ) {
+        if super::shortcut_metadata::reserved_unshifted_character(self.transform) {
             return Err("the transform binding conflicts with a reserved Primary shortcut");
         }
         if !self.delete_sentence.is_ascii_uppercase() {
@@ -316,12 +313,14 @@ impl KeyBindings {
         {
             return Err("visual-row selection bindings must be uppercase ASCII letters");
         }
-        if reserved_primary_suffix(self.delete_sentence) {
+        if super::shortcut_metadata::reserved_shifted_configuration_suffix(self.delete_sentence) {
             return Err("the sentence deletion binding conflicts with a reserved Primary chord");
         }
-        if reserved_primary_suffix(self.select_visual_row_start)
-            || reserved_primary_suffix(self.select_visual_row_end)
-        {
+        if super::shortcut_metadata::reserved_shifted_configuration_suffix(
+            self.select_visual_row_start,
+        ) || super::shortcut_metadata::reserved_shifted_configuration_suffix(
+            self.select_visual_row_end,
+        ) {
             return Err("visual-row selection bindings conflict with a reserved Primary chord");
         }
         let shifted_primary = [
@@ -367,13 +366,6 @@ impl KeyBindings {
     }
 }
 
-fn reserved_primary_suffix(character: char) -> bool {
-    matches!(
-        character.to_ascii_lowercase(),
-        'a' | 'c' | 'd' | 'n' | 'p' | 'q' | 'v' | 'x' | 'y' | 'z'
-    )
-}
-
 pub(crate) fn key_label(key: char) -> String {
     match key {
         ' ' => "Space".to_owned(),
@@ -385,7 +377,7 @@ pub(crate) fn key_label(key: char) -> String {
 
 pub(crate) fn primary_key_label(suffix: &str) -> String {
     if cfg!(target_os = "macos") {
-        format!("⌘{suffix}")
+        format!("Command+{suffix}")
     } else {
         format!("Ctrl+{suffix}")
     }

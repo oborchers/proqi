@@ -14,6 +14,10 @@ fn extend(fixture: &mut Fixture, edge: VisualRowEdge) {
     fixture.input(UiInput::Key(UiKey::ExtendVisualRow { edge }));
 }
 
+fn move_to_edge(fixture: &mut Fixture, edge: VisualRowEdge) {
+    fixture.input(UiInput::Key(UiKey::MoveVisualRow { edge }));
+}
+
 fn move_to_grapheme(fixture: &mut Fixture, grapheme: usize) {
     fixture.input(UiInput::Key(UiKey::Move {
         movement: CursorMovement::DocumentStart,
@@ -81,6 +85,44 @@ fn repeated_chords_extend_both_selection_directions_across_wrapped_unicode_rows(
             start: TextPosition::new(0, forward_anchor),
             end: row_position(&rows[1], true),
         })
+    );
+}
+
+#[test]
+fn unshifted_row_edge_movement_uses_the_current_wrapped_row_without_selection() {
+    let mut fixture = Fixture::new();
+    fixture.paste("0123456789 abcdefghijklmnopqrstuvwxyz");
+    let _frame = draw(&mut fixture, 16, 8);
+    let rows = fixture.app.editor_snapshot().expect("editor").visual_lines;
+    assert!(rows.len() >= 3, "expected wrapping: {rows:?}");
+    move_to_grapheme(&mut fixture, rows[1].start_grapheme + 2);
+
+    move_to_edge(&mut fixture, VisualRowEdge::Start);
+    let at_start = fixture.app.editor_snapshot().expect("row start");
+    assert_eq!(at_start.cursor, row_position(&rows[1], false));
+    assert_eq!(at_start.selection, None);
+    move_to_edge(&mut fixture, VisualRowEdge::Start);
+    assert_eq!(
+        fixture
+            .app
+            .editor_snapshot()
+            .expect("stable row start")
+            .cursor,
+        row_position(&rows[1], false)
+    );
+
+    move_to_edge(&mut fixture, VisualRowEdge::End);
+    let at_end = fixture.app.editor_snapshot().expect("row end");
+    assert_eq!(at_end.cursor, row_position(&rows[1], true));
+    assert_eq!(at_end.selection, None);
+    move_to_edge(&mut fixture, VisualRowEdge::End);
+    assert_eq!(
+        fixture
+            .app
+            .editor_snapshot()
+            .expect("stable row end")
+            .cursor,
+        row_position(&rows[2], true)
     );
 }
 
@@ -293,12 +335,21 @@ fn visual_row_selection_intentions_do_not_change_board_navigation_or_selection()
         navigation::durable_thought(&mut fixture, content);
     }
     let focused = fixture.app.state.focused_thought;
-    for edge in [VisualRowEdge::Start, VisualRowEdge::End] {
-        assert!(
-            fixture
-                .effects(UiInput::Key(UiKey::ExtendVisualRow { edge }))
-                .is_empty()
-        );
+    for key in [
+        UiKey::ExtendVisualRow {
+            edge: VisualRowEdge::Start,
+        },
+        UiKey::ExtendVisualRow {
+            edge: VisualRowEdge::End,
+        },
+        UiKey::MoveVisualRow {
+            edge: VisualRowEdge::Start,
+        },
+        UiKey::MoveVisualRow {
+            edge: VisualRowEdge::End,
+        },
+    ] {
+        assert!(fixture.effects(UiInput::Key(key)).is_empty());
         assert_eq!(fixture.app.state.focused_thought, focused);
     }
 }

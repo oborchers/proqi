@@ -6,6 +6,7 @@ use crate::{
     ports::agent::{AgentTarget, SubmissionDisposition},
 };
 
+use super::shortcut_metadata::{self, ShortcutAction};
 use super::{HitTarget, KeyBindings};
 
 pub(crate) struct ControlLabel {
@@ -44,11 +45,20 @@ pub(crate) fn action(
     );
     let (key, text) = match target {
         HitTarget::Insert => (super::settings::key_label(keys.new), " New"),
-        HitTarget::Copy => (mode_key(editor_mode, "C", keys.copy), " Copy"),
-        HitTarget::Cut => (mode_key(editor_mode, "X", keys.cut), " Cut"),
+        HitTarget::Copy => (
+            mode_key(editor_mode, compact, ShortcutAction::Copy, keys),
+            " Copy",
+        ),
+        HitTarget::Cut => (
+            mode_key(editor_mode, compact, ShortcutAction::Cut, keys),
+            " Cut",
+        ),
         HitTarget::Delete => (keys.delete_label(), ""),
         HitTarget::Select => (super::settings::key_label(keys.select), " Select"),
-        HitTarget::Undo => (mode_key(editor_mode, "Z", keys.undo), " Undo"),
+        HitTarget::Undo => (
+            mode_key(editor_mode, compact, ShortcutAction::Undo, keys),
+            " Undo",
+        ),
         HitTarget::Search => (super::settings::key_label(keys.search), " Search"),
         HitTarget::Commands => (
             super::settings::key_label(keys.commands),
@@ -80,11 +90,16 @@ pub(crate) fn action(
     })
 }
 
-fn mode_key(editor_mode: bool, editor_suffix: &str, board_key: char) -> String {
+fn mode_key(
+    editor_mode: bool,
+    compact: bool,
+    action: ShortcutAction,
+    keys: &KeyBindings,
+) -> String {
     if editor_mode {
-        super::settings::primary_key_label(editor_suffix)
+        shortcut_metadata::canonical_label(action)
     } else {
-        super::settings::key_label(board_key)
+        shortcut_metadata::board_control_label(action, keys, compact)
     }
 }
 
@@ -143,11 +158,12 @@ pub(crate) fn submission(
 ) -> ControlLabel {
     let editing = matches!(mode, InteractionMode::Edit { .. });
     let (key, text) = match (disposition, editing) {
-        (SubmissionDisposition::RemoveAfterSuccess, true) => {
-            (super::settings::primary_key_label("Enter"), " Submit")
-        }
+        (SubmissionDisposition::RemoveAfterSuccess, true) => (
+            shortcut_metadata::primary_label(ShortcutAction::Submit),
+            " Submit",
+        ),
         (SubmissionDisposition::Keep, true) => (
-            super::settings::primary_key_label("Shift+Enter"),
+            shortcut_metadata::canonical_label(ShortcutAction::SubmitKeep),
             " Submit & keep",
         ),
         (SubmissionDisposition::RemoveAfterSuccess, false) => {
@@ -189,5 +205,39 @@ const fn direction_symbol(direction: Direction) -> &'static str {
         Direction::Right => "→",
         Direction::Down => "↓",
         Direction::Left => "←",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn board_copy_cut_and_undo_labels_share_full_and_compact_measurement() {
+        let keys = KeyBindings::default();
+        let primary = if cfg!(target_os = "macos") {
+            "Command+"
+        } else {
+            "Ctrl+"
+        };
+        for (target, suffix, fallback, text) in [
+            (HitTarget::Copy, "C", "y", " Copy"),
+            (HitTarget::Cut, "X", "x", " Cut"),
+            (HitTarget::Undo, "Z", "u", " Undo"),
+        ] {
+            let full = action(target, false, InteractionMode::Board, &keys).expect("full label");
+            assert_eq!(full.key, format!("{primary}{suffix}/{fallback}"));
+            assert_eq!(full.text, text);
+            assert_eq!(
+                action_width(target, false, InteractionMode::Board, &keys),
+                Some(full.width())
+            );
+
+            let compact =
+                action(target, true, InteractionMode::Board, &keys).expect("compact label");
+            assert_eq!(compact.key, fallback);
+            assert_eq!(compact.text, text);
+            assert!(compact.width() <= full.width());
+        }
     }
 }

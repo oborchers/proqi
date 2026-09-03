@@ -42,7 +42,7 @@ const BOTTOM_WORKFLOW: &str = r#"
     after 150
     send "u"
     after 300
-    send -- "\x1b\[122:90;10u"
+    send -- "\x1b\[90;10u"
     after 500
     send "\x1b"
     after 150

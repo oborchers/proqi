@@ -474,13 +474,13 @@ fn fast_navigation_shortcuts_are_visible_in_edit_help() {
     let _effects = fixture.app.acknowledge_persistence(sequence, false);
     let help = fixture
         .app
-        .prepare_frame(Rect::new(0, 0, 80, 14))
+        .prepare_frame(Rect::new(0, 0, 120, 14))
         .controls
         .into_iter()
         .find_map(|(target, area)| (target == HitTarget::Help).then_some(area))
         .expect("help control");
     fixture.pointer(help.x, help.y, PointerKind::Down(PointerButton::Left));
-    insta::assert_snapshot!(snapshot(&mut fixture, 80, 14, ThemePreference::Dark));
+    insta::assert_snapshot!(snapshot(&mut fixture, 120, 14, ThemePreference::Dark));
 }
 
 #[test]

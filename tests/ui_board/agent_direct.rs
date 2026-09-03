@@ -355,7 +355,7 @@ fn direct_submission_controls_follow_editor_controls_in_the_footer() {
     let terminal = draw(&mut fixture, 120, 12);
     let rendered = text(terminal.backend().buffer());
     let primary = if cfg!(target_os = "macos") {
-        "⌘"
+        "Command+"
     } else {
         "Ctrl+"
     };

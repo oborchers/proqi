@@ -314,7 +314,7 @@ Bracketed paste is treated as one semantic input event.
 - Pasting in board mode creates one new thought at the active insertion point,
   enters edit mode, and places the cursor after the pasted content.
 - Pasting in edit mode inserts the complete payload at the cursor.
-- When no thought is selected, `Ctrl+V` reads the native clipboard, creates one
+- When no thought is selected, `Primary+V` reads the native clipboard, creates one
   new thought containing its complete payload, enters edit mode, and places the
   cursor after the pasted content.
 - Whitespace, blank lines, Unicode, and line endings are preserved.
@@ -324,7 +324,7 @@ Bracketed paste is treated as one semantic input event.
   mode they enter the current thought; in board mode they create and focus one
   thought. Unicode names, spaces, quotes, local file URLs, and POSIX shell
   escaping remain supported.
-- When the native clipboard contains raw image pixels, `Ctrl+V` writes a private
+- When the native clipboard contains raw image pixels, `Primary+V` writes a private
   durable PNG inside the current Proqi session and inserts its absolute path.
   Proqi never uploads or analyzes the image automatically.
 
@@ -360,9 +360,9 @@ preserve and rebase its offsets. Restarting the application restores the same
 folded presentation and undo state.
 
 Creating and populating a thought through one paste is one undoable operation.
-If clipboard access fails, `Ctrl+V` reports the failure without creating an
+If clipboard access fails, `Primary+V` reports the failure without creating an
 empty thought. Bracketed paste produces the same result without depending on a
-terminal forwarding `Ctrl+V` as a paste shortcut.
+terminal forwarding `Primary+V` as a paste shortcut.
 
 Path conversion is deliberately conservative. Proqi converts a payload only
 when every referenced item is an existing local file. Otherwise it preserves
@@ -582,7 +582,7 @@ thought bindings extend or shrink the range, and clicking a thought extends to
 it. `Escape` clears the range and latch. Opening a modal releases the latch,
 and entering thought edit mode clears every board selection.
 
-`Meta+D` duplicates the focused thought or complete selection. Exact content,
+`Primary+D` duplicates the focused thought or complete selection. Exact content,
 annotations, and presentation preferences are copied in board order directly
 below the source range. Duplicates receive fresh identities and timestamps,
 become the new selection, and are created as one persistent undo step. Entering
@@ -741,8 +741,8 @@ the agent state but does not reinterpret the harness's behavior.
 
 ### Reordering
 
-Thoughts can be moved up and down with `Meta+Shift+Up` and
-`Meta+Shift+Down`, equivalently `Meta+K` and `Meta+J`, or with mouse drag.
+Thoughts can be moved up and down with `Primary+Shift+Up` and
+`Primary+Shift+Down`, equivalently `Primary+K` and `Primary+J`, or with mouse drag.
 Reordering is immediate, autosaved, and undoable.
 
 Keyboard reordering wraps across the board boundaries. Moving the last thought
@@ -777,26 +777,27 @@ bindings are:
 | Action | Keyboard | Mouse |
 |---|---|---|
 | Create thought | `n` | Click `+` or the insertion area |
-| Paste as new thought when none is selected | `Ctrl+V` or native paste | Use the terminal paste action |
+| Paste as new thought when none is selected | `Primary+V` or native paste | Use the terminal paste action |
 | Edit thought | `Enter` or `e` | Click at the desired text position |
-| Copy thought | `y` | Click copy control |
-| Cut thought | `x` | Click cut control |
+| Copy thought | `Primary+C` or `y` | Click copy control |
+| Cut thought | `Primary+X` or `x` | Click cut control |
 | Delete thought | `d` or `Del` (`Entf` on German keyboards) | Click delete control |
-| Duplicate thought or selection | `Meta+D` | Command palette |
+| Duplicate thought or selection | `Primary+D` | Command palette |
 | Select or deselect thought | `Space` | Click the thought, then use the selection control |
 | Select all thoughts | `a` or `Primary+A` | Command palette |
 | Select contiguous range | `Shift+↑` / `Shift+↓`, `K` / `J`, or `v` then arrows or `j` / `k` | Shift-click a thought, or use `v` then click it |
-| Submit | `s` or `Primary+Enter`, when supported, then direction when needed | Click verified Submit control |
-| Submit and keep | `S` or `Primary+Shift+Enter`, when supported, then direction when needed | Click verified Submit & keep control |
-| Undo board action | `u` | Click undo control when visible |
-| Move thought | `Meta+Shift+↑` / `Meta+Shift+↓`, or `Meta+K` / `Meta+J` | Drag thought handle |
+| Submit | `Primary+Enter` or `s`, when supported, then direction when needed | Click verified Submit control |
+| Submit and keep | `Primary+Shift+Enter` or `S`, when supported, then direction when needed | Click verified Submit & keep control |
+| Undo board action | `Primary+Z` or `u` | Click undo control when visible |
+| Redo board action | `Primary+Shift+Z` or `Primary+Y` | Command palette |
+| Move thought | `Primary+Shift+↑` / `Primary+Shift+↓`, or `Primary+K` / `Primary+J` | Drag thought handle |
 | Expand or collapse | `c` | Click overflow indicator |
 | Search | `/` | Click search control |
 | Help | `?` | Click help control |
-| Exit | `q` | Click exit control |
+| Exit | `Primary+Q` or `q` | Click exit control |
 
 Final bindings remain configurable. The product must not depend on terminals
-forwarding `Cmd+C`, `Cmd+V`, or Meta keys consistently.
+forwarding `Command+C`, `Command+V`, or Primary keys consistently.
 
 Unmodified physical `Del` is an invariant second spelling of the configured
 Board delete command. Remapping the character binding does not remap or disable
@@ -816,23 +817,26 @@ Up, and Right aliases. These non-text owners ignore irrelevant modifiers for
 both spellings. While Help owns input, its navigation wins over a configured
 Board binding collision and Escape always closes it.
 
-### Meta and primary shortcuts
+### Primary shortcuts
 
-Proqi supports familiar modifier shortcuts when the terminal reports them. In
-the user-facing keymap, `Meta` means the platform's primary application
-modifier: Command on macOS and Control on Linux. Internally this is
-normalized as `Primary`, independently of the terminal's raw modifier name.
+Proqi supports familiar modifier shortcuts when the terminal reports them. The
+user-facing term is `Primary`, rendered as Command on macOS and Ctrl elsewhere.
+Internally this remains a logical modifier reported after the operating system
+and terminal. Proqi never interprets physical left or right modifier keys.
 
 Initial editing shortcuts include:
 
 | Action | Preferred | Portable fallback |
 |---|---|---|
-| Select all text in the focused thought | `Meta+A` | `Ctrl+A` or command palette |
-| Extend selection to a wrapped visual-row edge | `Meta+Shift+←` / `→` | Command palette or configured shifted Primary binding |
-| Delete the current logical line | `Meta+U` | `Ctrl+U` or command palette |
-| Delete the containing sentence | `Meta+Shift+U` | Command palette or configured binding |
-| Submit active thought | `Meta+Enter` | Command palette |
-| Submit active thought and keep | `Meta+Shift+Enter` | Command palette |
+| Select all text in the focused thought | `Primary+A` | Command palette |
+| Move to a wrapped visual-row edge on macOS | `Command+←` / `→` | `Home` / `End` retain logical-line movement |
+| Extend selection to a wrapped visual-row edge on macOS | `Command+Shift+←` / `→` | Command palette or configured shifted Primary binding |
+| Move by word | macOS `Option+←` / `→`; elsewhere `Ctrl+←` / `→` | Standard editor movement |
+| Extend selection by word | macOS `Option+Shift+←` / `→`; elsewhere `Ctrl+Shift+←` / `→` | Standard editor movement |
+| Delete the current logical line | `Primary+U` | Command palette |
+| Delete the containing sentence | `Primary+Shift+U` | Command palette or configured binding |
+| Submit active thought | `Primary+Enter` | Command palette |
+| Submit active thought and keep | `Primary+Shift+Enter` | Command palette |
 
 Select all is scoped to the current thought in edit mode and to every live
 thought in board mode. Delete logical line removes one newline-delimited logical line,
@@ -853,7 +857,18 @@ and width-dependent visual-row deletion is not provided or planned.
 Many terminals consume Command shortcuts before a TUI can receive them. Proqi
 therefore supports enhanced keyboard protocols where available, configurable
 bindings, and portable fallbacks. Core functionality never depends on a
-terminal forwarding Command or Meta successfully.
+terminal forwarding Primary successfully.
+
+Ghostty consumes configured keybindings before the child process by default.
+Its current macOS defaults include Command chords for copy, both paste forms,
+select all, undo, redo, duplicate, submission, quit, and several arrow actions.
+Proqi does not claim guaranteed delivery, modify host configuration, or repeat
+a paste already performed by the host. Portable Board aliases, command-palette
+actions, bracketed paste, and raw key diagnostics remain necessary fallbacks.
+Distinctly reported Shift remains meaningful. A shifted reserved character
+chord never silently becomes the unshifted copy, cut, paste, select-all,
+duplicate, or quit command. `Primary+Y` remains the unshifted alternate redo
+chord, while `Primary+Shift+V` remains unassigned for a future paste variant.
 
 ### Edit mode
 

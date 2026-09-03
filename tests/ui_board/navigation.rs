@@ -63,21 +63,20 @@ fn help_is_modal_and_escape_closes_it_without_mutating_the_board() {
 }
 
 #[test]
-fn shallow_two_column_help_scrolls_to_every_shortcut() {
+fn shallow_help_scrolls_to_every_shortcut() {
     let mut fixture = Fixture::new();
     fixture.input(UiInput::Key(UiKey::Escape));
     fixture.input(UiInput::Key(UiKey::Character('?')));
     let _initial = draw(&mut fixture, 42, 8);
-    fixture.input(visual(CursorMovement::VisualDown, false));
-    fixture.input(visual(CursorMovement::VisualDown, false));
-    fixture.input(visual(CursorMovement::VisualDown, false));
-    fixture.input(visual(CursorMovement::VisualDown, false));
+    for _ in 0..64 {
+        fixture.input(visual(CursorMovement::VisualDown, false));
+    }
     let terminal = draw(&mut fixture, 42, 8);
     assert!(text(terminal.backend().buffer()).contains("Quit"));
 
     fixture.pointer(1, 1, PointerKind::ScrollUp);
     let terminal = draw(&mut fixture, 42, 8);
-    assert!(text(terminal.backend().buffer()).contains("Collapse"));
+    assert!(text(terminal.backend().buffer()).contains("Redo"));
 }
 
 #[test]
@@ -124,6 +123,17 @@ fn modal_navigation_wins_when_help_is_remapped_to_j() {
     assert_eq!(
         text(draw(&mut arrow, 42, 8).backend().buffer()),
         text(draw(&mut vim, 42, 8).backend().buffer())
+    );
+    let rendered = text(draw(&mut vim, 120, 32).backend().buffer());
+    assert!(
+        rendered
+            .lines()
+            .any(|line| line.contains("Esc") && line.contains("Close"))
+    );
+    assert!(
+        !rendered
+            .lines()
+            .any(|line| line.contains('j') && line.contains("Close"))
     );
     vim.input(UiInput::Key(UiKey::Escape));
     assert!(!vim.app.help);

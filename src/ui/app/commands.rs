@@ -109,6 +109,7 @@ impl BoardApp {
             | UiKey::PrimaryShiftCharacter(_)
             | UiKey::PrimaryShiftMove { .. }
             | UiKey::ExtendVisualRow { .. }
+            | UiKey::MoveVisualRow { .. }
             | UiKey::EditNavigation { .. }
             | UiKey::Move { .. } => Vec::new(),
         }
@@ -215,9 +216,9 @@ impl BoardApp {
         let Some(key) = editing::normalize_edit_key(key, &self.settings.keybindings) else {
             return Vec::new();
         };
-        if let UiKey::ExtendVisualRow { edge } = key {
+        if let Some((edge, extend_selection)) = visual_row_move(key) {
             let effects = self.flush_pending_edit(ids, clock);
-            self.extend_selection_to_visual_row_edge(edge);
+            self.move_to_visual_row_edge(edge, extend_selection);
             return effects;
         }
         if let Some(effects) = self.handle_edit_effect(key, ids, clock) {
@@ -455,5 +456,13 @@ impl BoardApp {
         } else if self.state.focused_thought.is_some() {
             self.insertion_focus = super::InsertionFocus::Inactive;
         }
+    }
+}
+
+fn visual_row_move(key: UiKey) -> Option<(crate::ui::VisualRowEdge, bool)> {
+    match key {
+        UiKey::ExtendVisualRow { edge } => Some((edge, true)),
+        UiKey::MoveVisualRow { edge } => Some((edge, false)),
+        _ => None,
     }
 }
