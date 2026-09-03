@@ -3,17 +3,18 @@
 use super::support::{consume_first_run, expect_command, json_command};
 
 #[test]
-fn discovered_invocation_completes_and_shuts_down_in_a_real_pty() {
+fn large_discovered_invocation_completes_and_shuts_down_in_a_real_pty() {
     let state = tempfile::tempdir().expect("temporary state");
     let home = tempfile::tempdir().expect("isolated home");
     let external = home.path().join("catalog/aos-media-image");
     let skill = external.join("SKILL.md");
     std::fs::create_dir_all(&external).expect("external skill directory");
-    std::fs::write(
-        skill,
-        "---\nname: aos-media-image\ndescription: Erstellt Bilder für Grüße und 界\n---\nfixture body",
-    )
-    .expect("skill fixture");
+    let mut definition =
+        "---\nname: aos-media-image\ndescription: Erstellt Bilder für Grüße und 界\n---\n"
+            .as_bytes()
+            .to_vec();
+    definition.resize(64 * 1024, 0xff);
+    std::fs::write(skill, definition).expect("large skill fixture");
     let agent_root = home.path().join(".agents/skills");
     let claude_root = home.path().join(".claude/skills");
     std::fs::create_dir_all(&agent_root).expect("Agent Skills root");

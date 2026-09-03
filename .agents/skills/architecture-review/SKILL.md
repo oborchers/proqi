@@ -88,6 +88,12 @@ the Claude review lane.
 
 ### Shared dispatch rules
 
+- Both reviewers must be non-interactive background workers relative to Herdr.
+  Never create or split a Herdr pane, tab, workspace, or worktree for either
+  reviewer, and never use `herdr agent start` or `herdr agent prompt` to host a
+  review. Native reviewers use the invoking harness's subagent mechanism. CLI
+  reviewers use the invoking harness's managed process runner in the existing
+  review worktree.
 - Dispatch both lanes before waiting for either so they run concurrently.
 - Ask each lane for one complete independent review rather than splitting
   ownership into unrelated micro-audits. A reviewer may use read-only helpers

@@ -1,0 +1,6 @@
+interface:
+  display_name: "Codex Review"
+  short_description: "Run a native background Codex code review"
+  default_prompt: "Use $codex-review to run a read-only Codex review as a non-interactive background reviewer."
+policy:
+  allow_implicit_invocation: true

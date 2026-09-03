@@ -869,7 +869,7 @@ Edit mode behaves like a focused multiline text editor. It supports:
   where their source harness documents an exact authoring token.
 
 Invocation completion is authoring-only. Proqi never executes a discovered
-definition, reads its instruction body into the catalog, inspects a live agent
+definition, reads its instruction body during discovery, inspects a live agent
 conversation, or claims the adjacent harness has enabled it. `$`, `/`, and
 evidence-backed `@` tokens open only in edit mode and only when the token at the
 logical cursor plausibly matches an insertable catalog form. Shell variables,
