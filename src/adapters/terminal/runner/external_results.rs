@@ -5,7 +5,7 @@ use std::{io::Write as _, sync::mpsc::TryRecvError};
 use crate::{
     adapters::terminal::{TerminalError, external::ExternalResult},
     application::FailureCode,
-    ports::clipboard::ClipboardWrite,
+    ports::clipboard::{ClipboardError, ClipboardWrite},
     ui::BoardApp,
 };
 
@@ -62,7 +62,14 @@ fn complete(
                     let emitted = write_osc52(&sequence).is_ok();
                     emitted && intent.supports_osc52()
                 }
-                Err(_) => false,
+                Err(error) => {
+                    return app.complete_clipboard_write(
+                        request_id,
+                        Err(clipboard_failure(&error)),
+                        ids,
+                        &clock,
+                    );
+                }
             };
             app.complete_clipboard_write(
                 request_id,
@@ -113,6 +120,17 @@ fn complete(
     }
 }
 
+const fn clipboard_failure(error: &ClipboardError) -> FailureCode {
+    match error {
+        ClipboardError::MetadataUnsupported => FailureCode::ClipboardMetadataUnsupported,
+        ClipboardError::Unavailable(_)
+        | ClipboardError::TooLarge
+        | ClipboardError::TimedOut
+        | ClipboardError::InvalidText
+        | ClipboardError::InvalidImage => FailureCode::ClipboardFailed,
+    }
+}
+
 const fn agent_error_code(error: &crate::ports::agent::AgentError) -> &'static str {
     error.stable_code().as_str()
 }
@@ -137,4 +155,21 @@ fn write_osc52(sequence: &[u8]) -> std::io::Result<()> {
     let mut writer = output.lock();
     writer.write_all(sequence)?;
     writer.flush()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn clipboard_failure_preserves_only_the_safe_unsupported_classification() {
+        assert_eq!(
+            clipboard_failure(&ClipboardError::MetadataUnsupported),
+            FailureCode::ClipboardMetadataUnsupported
+        );
+        assert_eq!(
+            clipboard_failure(&ClipboardError::Unavailable("private detail".to_owned())),
+            FailureCode::ClipboardFailed
+        );
+    }
 }

@@ -406,6 +406,10 @@ mod bottom_insertion;
 mod bottom_insertion_snapshots;
 #[path = "ui_board/clipboard.rs"]
 mod clipboard;
+#[path = "ui_board/clipboard_annotations.rs"]
+mod clipboard_annotations;
+#[path = "ui_board/clipboard_races.rs"]
+mod clipboard_races;
 #[path = "ui_board/compose.rs"]
 mod compose;
 #[path = "ui_board/composition.rs"]

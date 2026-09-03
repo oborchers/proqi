@@ -1,0 +1,205 @@
+//! Safe macOS typed-pasteboard access through the bounded process adapter.
+
+use std::{ffi::OsString, time::Duration};
+
+use serde::{Deserialize, Serialize};
+
+use crate::ports::{
+    clipboard::ClipboardError,
+    environment::{ProcessRequest, ProcessRunner},
+};
+
+use super::{TypedClipboard, TypedSnapshot, TypedVerification};
+
+const OSASCRIPT: &str = "/usr/bin/osascript";
+const PROCESS_TIMEOUT: Duration = Duration::from_secs(2);
+
+const WRITE_SCRIPT: &str = r"
+ObjC.import('AppKit');
+ObjC.import('Foundation');
+var inputData = $.NSFileHandle.fileHandleWithStandardInput.readDataToEndOfFile;
+var inputString = $.NSString.alloc.initWithDataEncoding(inputData, $.NSUTF8StringEncoding);
+if (!inputString) throw new Error('clipboard request is not UTF-8');
+var request = JSON.parse(ObjC.unwrap(inputString));
+var board = $.NSPasteboard.generalPasteboard;
+if (!board) throw new Error('general pasteboard is unavailable');
+var item = $.NSPasteboardItem.alloc.init;
+var typedType = $('dev.proqi.clipboard.annotations-v1');
+var textAccepted = item.setStringForType($(request.text), $.NSPasteboardTypeString);
+var typedAccepted = item.setStringForType($(request.typed), typedType);
+board.clearContents;
+var written = board.writeObjects($.NSArray.arrayWithObject(item));
+var generationBeforeRead = Number(board.changeCount);
+var items = board.pasteboardItems;
+var current = items && items.count > 0 ? items.objectAtIndex(0) : null;
+var actualText = current ? current.stringForType($.NSPasteboardTypeString) : null;
+var actualTyped = current ? current.stringForType(typedType) : null;
+var generationAfterRead = Number(board.changeCount);
+var accepted = Boolean(textAccepted && typedAccepted && written && actualText && actualTyped)
+    && generationBeforeRead === generationAfterRead
+    && ObjC.unwrap(actualText) === request.text
+    && ObjC.unwrap(actualTyped) === request.typed;
+JSON.stringify({ generation: generationAfterRead, accepted: accepted });
+";
+
+const READ_SCRIPT: &str = r"
+ObjC.import('AppKit');
+var board = $.NSPasteboard.generalPasteboard;
+if (!board) throw new Error('general pasteboard is unavailable');
+var generationBeforeRead = Number(board.changeCount);
+var items = board.pasteboardItems;
+var current = items && items.count > 0 ? items.objectAtIndex(0) : null;
+var typedType = $('dev.proqi.clipboard.annotations-v1');
+var typed = current ? current.stringForType(typedType) : null;
+var generationAfterRead = Number(board.changeCount);
+JSON.stringify({
+    generation: generationAfterRead,
+    stable: generationBeforeRead === generationAfterRead,
+    typed: typed ? ObjC.unwrap(typed) : null
+});
+";
+
+const VERIFY_SCRIPT: &str = r"
+ObjC.import('AppKit');
+ObjC.import('Foundation');
+var inputData = $.NSFileHandle.fileHandleWithStandardInput.readDataToEndOfFile;
+var inputString = $.NSString.alloc.initWithDataEncoding(inputData, $.NSUTF8StringEncoding);
+if (!inputString) throw new Error('clipboard request is not UTF-8');
+var request = JSON.parse(ObjC.unwrap(inputString));
+var board = $.NSPasteboard.generalPasteboard;
+if (!board) throw new Error('general pasteboard is unavailable');
+var generationBeforeRead = Number(board.changeCount);
+var items = board.pasteboardItems;
+var current = items && items.count > 0 ? items.objectAtIndex(0) : null;
+var typedType = $('dev.proqi.clipboard.annotations-v1');
+var typed = current ? current.stringForType(typedType) : null;
+var generationAfterRead = Number(board.changeCount);
+JSON.stringify({
+    generation: generationAfterRead,
+    stable: generationBeforeRead === generationAfterRead,
+    generation_matches: generationAfterRead === request.generation,
+    payload_matches: Boolean(typed) && ObjC.unwrap(typed) === request.typed
+});
+";
+
+pub(super) struct MacTypedClipboard {
+    runner: Box<dyn ProcessRunner + Send>,
+}
+
+impl MacTypedClipboard {
+    pub(super) fn new(runner: Box<dyn ProcessRunner + Send>) -> Self {
+        Self { runner }
+    }
+
+    fn run(&mut self, script: &str, stdin: Option<Vec<u8>>) -> Result<Vec<u8>, String> {
+        let output = self
+            .runner
+            .run(ProcessRequest {
+                program: OsString::from(OSASCRIPT),
+                args: vec![
+                    OsString::from("-l"),
+                    OsString::from("JavaScript"),
+                    OsString::from("-e"),
+                    OsString::from(script),
+                ],
+                stdin,
+                timeout: PROCESS_TIMEOUT,
+            })
+            .map_err(|error| error.to_string())?;
+        if output.exit_code != Some(0) {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("macOS pasteboard bridge failed: {}", stderr.trim()));
+        }
+        Ok(output.stdout)
+    }
+}
+
+impl TypedClipboard for MacTypedClipboard {
+    fn write(&mut self, text: &str, typed: &str) -> Result<u64, ClipboardError> {
+        let request = serde_json::to_vec(&WriteRequest { text, typed })
+            .map_err(|error| ClipboardError::Unavailable(error.to_string()))?;
+        let output = self
+            .run(WRITE_SCRIPT, Some(request))
+            .map_err(ClipboardError::Unavailable)?;
+        let reply: WriteReply = serde_json::from_slice(&output)
+            .map_err(|error| ClipboardError::Unavailable(error.to_string()))?;
+        if !reply.accepted {
+            return Err(ClipboardError::Unavailable(
+                "macOS pasteboard did not retain both representations".to_owned(),
+            ));
+        }
+        Ok(reply.generation)
+    }
+
+    fn read(&mut self) -> Result<TypedSnapshot, String> {
+        let output = self.run(READ_SCRIPT, None)?;
+        let reply: ReadReply =
+            serde_json::from_slice(&output).map_err(|error| error.to_string())?;
+        if !reply.stable {
+            return Err("macOS pasteboard changed while representations were read".to_owned());
+        }
+        Ok(TypedSnapshot {
+            generation: reply.generation,
+            payload: reply.typed,
+        })
+    }
+
+    fn verify(&mut self, generation: u64, payload: &str) -> Result<TypedVerification, String> {
+        let request = serde_json::to_vec(&VerifyRequest {
+            generation,
+            typed: payload,
+        })
+        .map_err(|error| error.to_string())?;
+        let output = self.run(VERIFY_SCRIPT, Some(request))?;
+        serde_json::from_slice::<VerifyReply>(&output)
+            .map(Into::into)
+            .map_err(|error| error.to_string())
+    }
+}
+
+#[derive(Serialize)]
+struct WriteRequest<'a> {
+    text: &'a str,
+    typed: &'a str,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WriteReply {
+    generation: u64,
+    accepted: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ReadReply {
+    generation: u64,
+    stable: bool,
+    typed: Option<String>,
+}
+
+#[derive(Serialize)]
+struct VerifyRequest<'a> {
+    generation: u64,
+    typed: &'a str,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct VerifyReply {
+    generation: u64,
+    stable: bool,
+    generation_matches: bool,
+    payload_matches: bool,
+}
+
+impl From<VerifyReply> for TypedVerification {
+    fn from(reply: VerifyReply) -> Self {
+        Self {
+            generation: reply.generation,
+            stable: reply.stable,
+            generation_matches: reply.generation_matches,
+            payload_matches: reply.payload_matches,
+        }
+    }
+}

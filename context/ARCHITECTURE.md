@@ -152,7 +152,9 @@ never invoke network or shell behavior. The resolver validates every custom
 role pair against Proqi's WCAG contrast policy before the terminal guard enters
 raw mode. Terminals without reliable true-color support receive the built-in
 limited palette instead of an inaccurate custom approximation.
-- `arboard` for the native clipboard, with OSC 52 behind the same facade.
+- `arboard` for plain text and image clipboard access, with OSC 52 behind the
+  same facade. macOS typed annotation items use AppKit through the bounded
+  process adapter so the crate-wide unsafe-code prohibition remains intact.
 - `tracing` behind one typed diagnostics adapter. Callers emit only reviewed
   lifecycle, command, and submission-state fields. Direct tracing calls outside
   the adapter are rejected by the executable architecture policy.
@@ -320,14 +322,30 @@ a resize.
 ```rust
 trait Clipboard {
     fn read(&mut self) -> Result<ClipboardContent, ClipboardError>;
-    fn write(&mut self, text: &str) -> Result<ClipboardWrite, ClipboardError>;
+    fn write(
+        &mut self,
+        request_id: RequestId,
+        text: &ClipboardText,
+    ) -> Result<ClipboardWrite, ClipboardError>;
 }
 ```
 
 Native clipboard and OSC 52 are adapter choices. Cut is an application
-transaction: write the exact content first, then commit deletion. Clipboard
-failure leaves the thought unchanged. `ClipboardContent` is either exact text
-or a validated, bounded RGBA image.
+transaction: write and verify the exact content first, then commit deletion.
+Clipboard failure leaves the thought unchanged. `ClipboardContent` is either
+exact text with validated relative annotations or a validated, bounded RGBA
+image.
+
+On macOS, the clipboard adapter writes exact plain text and a Proqi-specific
+typed flavor into one `NSPasteboardItem`. AppKit access runs through the
+existing bounded child-process port because first-party unsafe Rust remains
+forbidden. A private cache record stores only the request binding and
+`NSPasteboard` generation under an installation-wide file lock. Reads accept
+annotations only when stable typed snapshots, exact text binding, and the
+private generation record all agree. Missing, malformed, forged, raced, or
+same-text replacement state fails closed to plain text. Platforms whose
+current native clipboard dependency exposes no equivalent item generation
+reject annotated writes rather than relying on text equality.
 
 ### `AttachmentStore`
 

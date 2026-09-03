@@ -2,7 +2,7 @@
 
 use crate::{
     application::{ClipboardIntent, Effect},
-    domain::{OperationId, OperationSequence, ThoughtId, Timestamp},
+    domain::{ContentAnnotation, OperationId, OperationSequence, ThoughtId, Timestamp},
     ports::{
         agent::{AgentError, SubmissionDisposition, SubmissionReceipt, SubmissionRequest},
         attachment_accessibility::AttachmentCheckKey,
@@ -30,7 +30,10 @@ pub(super) enum ClipboardReadOwner {
 
 pub(super) struct PendingEditorClipboard {
     pub(super) intent: ClipboardIntent,
+    pub(super) thought_id: ThoughtId,
+    pub(super) edit_owner_generation: u64,
     pub(super) before: EditorSnapshot,
+    pub(super) source_annotations: Vec<ContentAnnotation>,
 }
 
 pub(super) struct PendingSubmission {

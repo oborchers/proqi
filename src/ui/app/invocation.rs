@@ -308,7 +308,7 @@ impl BoardApp {
             position: position_for_byte(&snapshot.content, range.end),
             extend_selection: true,
         });
-        let (content, annotations, _) = insertion.into_parts();
+        let (content, annotations, _, _) = insertion.into_parts();
         self.apply_annotated_edit(EditCommand::Paste(content), &annotations);
         self.close_invocation_picker();
     }

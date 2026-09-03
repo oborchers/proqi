@@ -20,6 +20,8 @@ pub enum FailureCode {
     InvalidState,
     /// Clipboard access failed without mutating content.
     ClipboardFailed,
+    /// Typed clipboard metadata cannot be safely represented on this platform.
+    ClipboardMetadataUnsupported,
     /// Persistence failed and state is not yet durable.
     StorageFailed,
     /// Persistence failed and the exact failed batch could not be retained for retry.
@@ -38,6 +40,7 @@ impl FailureCode {
             Self::ThoughtLocked => "thought_locked",
             Self::InvalidState => "invalid_state",
             Self::ClipboardFailed => "clipboard_failed",
+            Self::ClipboardMetadataUnsupported => "clipboard_metadata_unsupported",
             Self::StorageFailed => "storage_failed",
             Self::RecoveryCapacity => "recovery_capacity",
             Self::InvariantViolation => "invariant_violation",
