@@ -1,6 +1,5 @@
 ---
 source: tests/ui_board/first_run.rs
-assertion_line: 40
 expression: "snapshot(FirstRunEnvironment::Standalone, 72, 18, 4,)"
 ---
 SIZE 72x18
@@ -14,8 +13,8 @@ TEXT
 05│  ──────────────────────────────────────────────────────────────────────│
 06│  Proqi works on its own. Herdr adds verified adjacent submission. In│
 07│⋮ board mode, use s to submit and remove or S to keep. In edit mode,│
-08│  use Primary+Enter to submit and remove or Primary+Shift+Enter to│
-09│  keep. Learn more at https://herdr.dev│
+08│  use Cmd+Enter to submit and remove or Cmd+Shift+Enter to keep. Learn│
+09│  more at https://herdr.dev│
 10│  ──────────────────────────────────────────────────────────────────────│
 11│  Press a and d in board mode to delete this entire practice board.│
 12││
@@ -34,8 +33,8 @@ STYLE RUNS
 5: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-71 fg=Rgb(42, 37, 32) bg=Rgb(15, 13, 10) mod=NONE
 6: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-71 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
 7: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-17 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 18-18 fg=Rgb(112, 214, 155) bg=Rgb(39, 40, 48) mod=BOLD | 19-43 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 44-44 fg=Rgb(112, 214, 155) bg=Rgb(39, 40, 48) mod=BOLD | 45-71 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
-8: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-5 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 6-18 fg=Rgb(112, 214, 155) bg=Rgb(39, 40, 48) mod=BOLD | 19-43 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 44-62 fg=Rgb(112, 214, 155) bg=Rgb(39, 40, 48) mod=BOLD | 63-71 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
-9: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-21 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 22-38 fg=Rgb(112, 214, 155) bg=Rgb(39, 40, 48) mod=UNDERLINED | 39-71 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
+8: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-5 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 6-14 fg=Rgb(112, 214, 155) bg=Rgb(39, 40, 48) mod=BOLD | 15-39 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 40-54 fg=Rgb(112, 214, 155) bg=Rgb(39, 40, 48) mod=BOLD | 55-71 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
+9: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-9 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 10-26 fg=Rgb(112, 214, 155) bg=Rgb(39, 40, 48) mod=UNDERLINED | 27-71 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
 10: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-71 fg=Rgb(42, 37, 32) bg=Rgb(15, 13, 10) mod=NONE
 11: 0-0 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 1-7 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 8-8 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=BOLD | 9-13 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 14-14 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=BOLD | 15-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 12: 0-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE

@@ -312,14 +312,14 @@ fn contextual_help_uses_platform_primary_labels_for_fast_navigation() {
     assert!(rendered.contains("Alt+↑/↓"));
     assert!(rendered.contains("5-row · PgUp/PgDn"));
     let primary = if cfg!(target_os = "macos") {
-        "Command+↑/Command+↓"
+        "Cmd+↑/Cmd+↓"
     } else {
         "Ctrl+↑/Ctrl+↓"
     };
     assert!(rendered.contains(primary));
     assert!(rendered.contains("Start/end"));
     let visual_row = if cfg!(target_os = "macos") {
-        "Command+Shift+←/→/H/L"
+        "Cmd+Shift+←/→/H/L"
     } else {
         "Ctrl+Shift+H/L"
     };

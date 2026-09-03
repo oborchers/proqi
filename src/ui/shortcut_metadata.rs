@@ -366,14 +366,19 @@ mod tests {
     fn public_contracts_record_platform_and_host_boundaries() {
         let readme = include_str!("../../README.md");
         let product = include_str!("../../context/PRODUCT.md");
+        let architecture = include_str!("../../context/ARCHITECTURE.md");
         for contract in [readme, product] {
             assert!(contract.contains("Primary"));
             assert!(contract.contains("bracketed paste"));
             assert!(contract.contains("command palette"));
         }
-        assert!(readme.contains("Command+Shift+V"));
+        assert!(readme.contains("Cmd+Shift+V"));
+        assert!(!readme.contains("Command+"));
         assert!(readme.contains("proqi diagnostics keypress"));
         assert!(product.contains("Primary+Shift+V"));
+        assert!(!product.contains("Command+"));
         assert!(product.contains("raw key diagnostics"));
+        assert!(architecture.contains("Cmd on macOS and Ctrl elsewhere"));
+        assert!(!architecture.contains("Command+"));
     }
 }

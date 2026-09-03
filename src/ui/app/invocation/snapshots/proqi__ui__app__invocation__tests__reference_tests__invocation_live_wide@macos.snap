@@ -1,6 +1,5 @@
 ---
 source: src/ui/app/invocation/reference_tests.rs
-assertion_line: 455
 expression: "snapshots::live_snapshot(72, 12)"
 ---
 00││
@@ -14,4 +13,4 @@ expression: "snapshots::live_snapshot(72, 12)"
 08││
 09│  fixture│
 10│  1 thought · edit · saved│
-11│  Esc Board  Command+C Copy Command+X Cut Command+Z Undo│
+11│  Esc Board  Cmd+C Copy Cmd+X Cut Cmd+Z Undo│

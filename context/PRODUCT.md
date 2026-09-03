@@ -206,9 +206,11 @@ accidentally sharing thoughts.
 A pristine data store gives its first eligible fresh interactive session one
 once-only board of six ordinary practice thoughts. The board uses the same
 editing, ordering, persistence, search, deletion, and undo behavior as every
-other board. Its reviewed command-key ranges use the same quiet semantic
-shortcut emphasis as other application-authored instructions, while the stored
-text remains ordinary canonical thought content. Resume, continue, the session browser, intentionally emptied
+other board. Its reviewed shortcut ranges use the same quiet semantic emphasis
+as other application-authored instructions and spell the platform modifier as
+Cmd on macOS or Ctrl elsewhere. The stored text remains ordinary canonical
+thought content, so existing practice boards are never rewritten. Resume,
+continue, the session browser, intentionally emptied
 boards, JSON launches, and other noninteractive commands never seed it. JSON
 and noninteractive activity also does not consume eligibility, so the marker is
 claimed only by the first eligible fresh interactive session. Existing data
@@ -814,7 +816,7 @@ bindings are:
 | Exit | `Primary+Q` or `q` | Click exit control |
 
 Final bindings remain configurable. The product must not depend on terminals
-forwarding `Command+C`, `Command+V`, or Primary keys consistently.
+forwarding `Cmd+C`, `Cmd+V`, or Primary keys consistently.
 
 Unmodified physical `Del` is an invariant second spelling of the configured
 Board delete command. Remapping the character binding does not remap or disable
@@ -837,7 +839,7 @@ Board binding collision and Escape always closes it.
 ### Primary shortcuts
 
 Proqi supports familiar modifier shortcuts when the terminal reports them. The
-user-facing term is `Primary`, rendered as Command on macOS and Ctrl elsewhere.
+user-facing term is `Primary`, rendered as Cmd on macOS and Ctrl elsewhere.
 Internally this remains a logical modifier reported after the operating system
 and terminal. Proqi never interprets physical left or right modifier keys.
 
@@ -846,8 +848,8 @@ Initial editing shortcuts include:
 | Action | Preferred | Portable fallback |
 |---|---|---|
 | Select all text in the focused thought | `Primary+A` | Command palette |
-| Move to a wrapped visual-row edge on macOS | `Command+←` / `→` | `Home` / `End` retain logical-line movement |
-| Extend selection to a wrapped visual-row edge on macOS | `Command+Shift+←` / `→` | Command palette or configured shifted Primary binding |
+| Move to a wrapped visual-row edge on macOS | `Cmd+←` / `→` | `Home` / `End` retain logical-line movement |
+| Extend selection to a wrapped visual-row edge on macOS | `Cmd+Shift+←` / `→` | Command palette or configured shifted Primary binding |
 | Move by word | macOS `Option+←` / `→`; elsewhere `Ctrl+←` / `→` | Standard editor movement |
 | Extend selection by word | macOS `Option+Shift+←` / `→`; elsewhere `Ctrl+Shift+←` / `→` | Standard editor movement |
 | Delete the current logical line | `Primary+U` | Command palette |
@@ -871,13 +873,13 @@ target folds without editing and asks for one deliberate repeat. Inline style
 annotations are not folds. The action does not replace logical-line deletion,
 and width-dependent visual-row deletion is not provided or planned.
 
-Many terminals consume Command shortcuts before a TUI can receive them. Proqi
+Many terminals consume Cmd shortcuts before a TUI can receive them. Proqi
 therefore supports enhanced keyboard protocols where available, configurable
 bindings, and portable fallbacks. Core functionality never depends on a
 terminal forwarding Primary successfully.
 
 Ghostty consumes configured keybindings before the child process by default.
-Its current macOS defaults include Command chords for copy, both paste forms,
+Its current macOS defaults include Cmd chords for copy, both paste forms,
 select all, undo, redo, duplicate, submission, quit, and several arrow actions.
 Proqi does not claim guaranteed delivery, modify host configuration, or repeat
 a paste already performed by the host. Portable Board aliases, command-palette

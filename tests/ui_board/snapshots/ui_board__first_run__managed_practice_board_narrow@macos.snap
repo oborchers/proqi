@@ -1,6 +1,5 @@
 ---
 source: tests/ui_board/first_run.rs
-assertion_line: 28
 expression: "snapshot(FirstRunEnvironment::HerdrManaged, 34, 12, 4,)"
 ---
 SIZE 34x12
@@ -11,7 +10,7 @@ TEXT
 02│⋮ Codex or Claude Code agent is│
 03│  verified.│
 04││
-05│  9 more lines  expand│
+05│  8 more lines  expand│
 06│  ────────────────────────────────│
 07│  Press a and d in board mode to│
 08││

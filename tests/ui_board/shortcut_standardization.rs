@@ -10,7 +10,7 @@ use ratatui_core::layout::Rect;
 
 fn primary() -> &'static str {
     if cfg!(target_os = "macos") {
-        "Command+"
+        "Cmd+"
     } else {
         "Ctrl+"
     }

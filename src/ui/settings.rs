@@ -376,11 +376,7 @@ pub(crate) fn key_label(key: char) -> String {
 }
 
 pub(crate) fn primary_key_label(suffix: &str) -> String {
-    if cfg!(target_os = "macos") {
-        format!("Command+{suffix}")
-    } else {
-        format!("Ctrl+{suffix}")
-    }
+    crate::application::PrimaryKeyPlatform::current().label(suffix)
 }
 
 #[cfg(test)]

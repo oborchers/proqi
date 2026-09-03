@@ -1,6 +1,5 @@
 ---
 source: tests/ui_board/snapshots.rs
-assertion_line: 442
 expression: "snapshot(&mut fixture, 80, 11, ThemePreference::Dark)"
 ---
 SIZE 80x11
@@ -16,7 +15,7 @@ TEXT
 07││
 08│  Mouse selection QA · ses_068q40p201o010000000000000│
 09│  2 thoughts · edit · saved│
-10│  Esc Board  Command+C Copy Command+X Cut Command+Z Undo│
+10│  Esc Board  Cmd+C Copy Cmd+X Cut Cmd+Z Undo│
 
 STYLE RUNS
 0: 0-79 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
@@ -29,4 +28,4 @@ STYLE RUNS
 7: 0-79 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 8: 0-19 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 20-52 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE | 53-79 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 9: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-77 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE | 78-79 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-10: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-4 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 5-12 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 13-21 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 22-27 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 28-36 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 37-41 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 42-50 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 51-79 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+10: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-4 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 5-12 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 13-17 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 18-23 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 24-28 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 29-33 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 34-38 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 39-79 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE

@@ -1,6 +1,5 @@
 ---
 source: tests/ui_board/first_run.rs
-assertion_line: 31
 expression: "snapshot(FirstRunEnvironment::HerdrManaged, 80, 6, 5,)"
 ---
 SIZE 80x6

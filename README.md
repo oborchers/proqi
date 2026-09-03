@@ -132,7 +132,7 @@ empty editor first. Nothing is saved until content is produced. Press `Esc` to
 use Board controls instead. Returning focus to the pane does not override that
 Board choice.
 
-`Primary` means `Command` on macOS and `Ctrl` elsewhere. Proqi receives logical
+`Primary` means `Cmd` on macOS and `Ctrl` elsewhere. Proqi receives logical
 modifiers only after the operating system and terminal have handled the key.
 
 ### Board controls
@@ -164,10 +164,10 @@ modifiers only after the operating system and terminal have handled the key.
 | `Primary+Shift+U` | Delete containing sentence |
 | `Primary+Z`; `Primary+Shift+Z` / `Primary+Y` | Undo; redo |
 | `Primary+C` / `X` / `V` | Native copy / safe cut / paste |
-| macOS: `Command+←` / `→` | Move to the current wrapped visual-row start / end |
+| macOS: `Cmd+←` / `→` | Move to the current wrapped visual-row start / end |
 | macOS: `Option+←` / `→`; elsewhere: `Ctrl+←` / `→` | Move by word |
 | `Shift` + movement | Extend text selection |
-| macOS: `Command+Shift+←` / `→` | Extend to the current wrapped visual-row start / end |
+| macOS: `Cmd+Shift+←` / `→` | Extend to the current wrapped visual-row start / end |
 | `Home` / `End` | Move to the logical line boundary |
 | `Alt+↑` / `↓` or `Page Up` / `Page Down`; `Primary+↑` / `↓` | Jump five rows; thought start / end |
 | `Enter`; `Tab`; `Shift+Tab` | Continue lists; nest; outdent |
@@ -187,8 +187,8 @@ Standard Primary chords are the canonical commands across Board and Edit.
 Configurable Board characters such as `y`, `x`, `u`, `s`, `S`, and `q` remain
 portable aliases when a terminal consumes a system chord. Ghostty consumes
 configured keybindings before Proqi receives input. Its macOS defaults include
-the common Command clipboard, selection, history, duplicate, submission, quit,
-and Command-arrow chords, including `Command+Shift+V` as a host paste action.
+the common macOS clipboard, selection, history, duplicate, submission, quit,
+and Cmd-arrow chords, including `Cmd+Shift+V` as a host paste action.
 Proqi does not promise delivery of intercepted chords, change Ghostty settings,
 or repeat a host paste. Use the Board aliases, command palette, bracketed paste,
 and `proqi diagnostics keypress` when a key does not reach the application.
@@ -351,10 +351,10 @@ Unsafe theme contrast is rejected. See the
 Sentence deletion uses a documented Unicode profile with unavoidable ambiguity.
 See [sentence deletion](docs/SENTENCE_DELETION.md).
 Visual-row selection uses the current rendered width and folded presentation.
-On macOS, Command plus horizontal arrows uses the current wrapped row and
-Option retains word movement. Elsewhere, Control plus horizontal arrows retains
+On macOS, Cmd plus horizontal arrows uses the current wrapped row and
+Option retains word movement. Elsewhere, Ctrl plus horizontal arrows retains
 word movement, including with Shift. If the terminal intercepts the macOS
-Command-arrow selection chords, use the command palette or the configured
+Cmd-arrow selection chords, use the command palette or the configured
 shifted Primary suffixes above.
 
 ## Compatibility and contributing

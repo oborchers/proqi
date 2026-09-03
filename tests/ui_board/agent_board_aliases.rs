@@ -18,7 +18,7 @@ fn board_help_lists_both_spellings_while_the_footer_stays_compact() {
         .app
         .complete_agent_discovery(Ok(vec![super::agent::target(Direction::Right, "w1:p2")]));
     let primary = if cfg!(target_os = "macos") {
-        "Command+"
+        "Cmd+"
     } else {
         "Ctrl+"
     };

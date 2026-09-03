@@ -226,7 +226,7 @@ mod tests {
     fn visual_row_help_only_advertises_primary_arrows_on_macos() {
         let keys = super::super::settings::KeyBindings::default();
         let prefix = if cfg!(target_os = "macos") {
-            "Command+"
+            "Cmd+"
         } else {
             "Ctrl+"
         };

@@ -647,10 +647,12 @@ Search indexes are derived and rebuildable. User content remains canonical in
 ordinary tables.
 
 The application owns the exact first-run copy and its typed managed-Herdr or
-standalone variant. It constructs every thought through the private
+standalone variant, including the target-platform projection of Primary as Cmd
+on macOS or Ctrl elsewhere. It constructs every thought through the private
 `InstructionalTextBuilder`, appending each reviewed shortcut literal and its
 semantic range together before sealing an ordinary create action. No boundary
-infers shortcut annotations from completed prose. Only a fresh interactive
+infers shortcut annotations from completed prose, and persisted tutorial text
+is never migrated or rewritten. Only a fresh interactive
 launch supplies that candidate to the store. SQLite begins one immediate write transaction, reads and conditionally
 advances the marker, creates the session, inserts all six ordinary thoughts,
 and rebuilds its derived search row before commit. A completed marker creates
@@ -983,7 +985,7 @@ receives intentions such as `CreateThought`, `MoveCursor`, `CutThought`, or
 layout snapshot into the same intentions.
 
 Raw modifiers are normalized into semantic modifiers. `Primary` maps to
-Command on macOS and Control elsewhere. These are logical modifiers reported
+Cmd on macOS and Ctrl elsewhere. These are logical modifiers reported
 after operating-system and terminal handling, never physical left or right
 keys. Enhanced keyboard protocols
 are enabled when supported so Super and Meta events can be distinguished, but
@@ -1044,7 +1046,7 @@ Board shortcut, with Escape retained as the unconditional Help close action.
 deletes one newline-delimited logical line as a single undoable edit. Logical
 line commands operate on the text model and are independent of visual wrapping.
 
-On macOS, logical `Command+Left` and `Command+Right` normalize to wrapped
+On macOS, logical `Cmd+Left` and `Cmd+Right` normalize to wrapped
 visual-row movement, while the Shift variants normalize to distinct visual-row
 selection intentions before mode dispatch. Edit mode resolves their active
 endpoint from the current canonical-to-visible projection, including current
@@ -1057,7 +1059,7 @@ Empty rows and document boundaries clamp without creating text revisions.
 Configured shifted Primary suffixes and command-palette actions retain a
 truthful fallback when a terminal does not forward the arrow chord distinctly.
 On macOS, Option plus horizontal arrows retains word movement. On other
-platforms, Control plus horizontal arrows retains word movement, and adding
+platforms, Ctrl plus horizontal arrows retains word movement, and adding
 Shift extends by word. Board navigation does not consume visual-row intentions.
 
 One UI-owned standard-shortcut metadata table records canonical Primary labels,

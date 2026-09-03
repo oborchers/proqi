@@ -216,7 +216,7 @@ mod tests {
     fn board_copy_cut_and_undo_labels_share_full_and_compact_measurement() {
         let keys = KeyBindings::default();
         let primary = if cfg!(target_os = "macos") {
-            "Command+"
+            "Cmd+"
         } else {
             "Ctrl+"
         };
