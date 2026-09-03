@@ -130,6 +130,8 @@ fn create_thought(
 mod annotations;
 #[path = "sqlite_store/bulk.rs"]
 mod bulk;
+#[path = "sqlite_store/clipboard_annotations.rs"]
+mod clipboard_annotations;
 #[path = "sqlite_store/compaction.rs"]
 mod compaction;
 #[path = "sqlite_store/compose.rs"]

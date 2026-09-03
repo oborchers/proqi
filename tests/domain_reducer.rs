@@ -7,8 +7,9 @@ use proqi::{
         reduce,
     },
     domain::{
-        BoardMutation, BoardOperationKind, OperationSequence, Session, SessionBoard, TextPosition,
-        ThoughtId, ThoughtPosition, ThoughtPresentation, Timestamp, UndoScope,
+        BoardMutation, BoardOperationKind, ContentAnnotation, ContentAnnotationKind,
+        OperationSequence, Session, SessionBoard, TextPosition, ThoughtId, ThoughtPosition,
+        ThoughtPresentation, Timestamp, UndoScope,
     },
     ports::environment::IdGenerator,
 };

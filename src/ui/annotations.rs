@@ -3,10 +3,12 @@
 use unicode_segmentation::UnicodeSegmentation as _;
 
 use crate::domain::{
-    AnnotationBehavior, AnnotationTextChange, ContentAnnotation, ContentAnnotationKind,
-    InlineStyleKind, rebase_annotations,
+    AnnotationBehavior, ContentAnnotation, ContentAnnotationKind, InlineStyleKind,
 };
-use crate::ports::editor::TextChangeSet;
+
+mod rebase;
+
+pub(super) use rebase::{rebase, rebase_preserved};
 
 const LARGE_PASTE_LINES: usize = 12;
 const LARGE_PASTE_GRAPHEMES: usize = 1_200;
@@ -20,6 +22,7 @@ pub struct PastePayload {
     /// Presentation metadata over UTF-8 byte ranges in `content`.
     pub annotations: Vec<ContentAnnotation>,
     verified_paths: Vec<String>,
+    preserve_owned_annotations: bool,
 }
 
 impl PastePayload {
@@ -43,6 +46,7 @@ impl PastePayload {
             content,
             annotations,
             verified_paths: Vec::new(),
+            preserve_owned_annotations: false,
         }
     }
 
@@ -67,6 +71,7 @@ impl PastePayload {
             content,
             annotations,
             verified_paths: Vec::new(),
+            preserve_owned_annotations: false,
         })
     }
 
@@ -90,6 +95,7 @@ impl PastePayload {
             content,
             annotations,
             verified_paths: Vec::new(),
+            preserve_owned_annotations: false,
         }
     }
 
@@ -107,7 +113,22 @@ impl PastePayload {
                 kind: ContentAnnotationKind::InvocationReference { display_name },
             }],
             verified_paths: Vec::new(),
+            preserve_owned_annotations: false,
         }
+    }
+
+    /// Construct metadata that a verified Proqi clipboard flavor preserved.
+    pub(crate) fn preserved_clipboard(
+        content: String,
+        annotations: Vec<ContentAnnotation>,
+    ) -> Result<Self, crate::domain::DomainError> {
+        crate::domain::validate_annotations(&content, &annotations)?;
+        Ok(Self {
+            content,
+            annotations,
+            verified_paths: Vec::new(),
+            preserve_owned_annotations: true,
+        })
     }
 
     /// Retain transient accessibility evidence established by the producing adapter.
@@ -126,8 +147,13 @@ impl PastePayload {
         self
     }
 
-    pub(in crate::ui) fn into_parts(self) -> (String, Vec<ContentAnnotation>, Vec<String>) {
-        (self.content, self.annotations, self.verified_paths)
+    pub(in crate::ui) fn into_parts(self) -> (String, Vec<ContentAnnotation>, Vec<String>, bool) {
+        (
+            self.content,
+            self.annotations,
+            self.verified_paths,
+            self.preserve_owned_annotations,
+        )
     }
 }
 
@@ -409,48 +435,6 @@ fn substitution(
         canonical_end: annotation.end,
         collapsed,
         inaccessible,
-    }
-}
-
-pub(super) fn rebase(
-    before: &str,
-    after: &str,
-    changes: &TextChangeSet,
-    annotations: &[ContentAnnotation],
-    inserted: &[ContentAnnotation],
-) -> Vec<ContentAnnotation> {
-    let changes = changes
-        .as_slice()
-        .iter()
-        .map(|change| AnnotationTextChange {
-            old: change.old_range(),
-            new: change.new_range(),
-        })
-        .collect::<Vec<_>>();
-    let inserted = inserted
-        .iter()
-        .filter(|annotation| !annotation.is_shortcut_emphasis())
-        .cloned()
-        .collect::<Vec<_>>();
-    annotations_or_empty(rebase_annotations(
-        before,
-        after,
-        &changes,
-        annotations,
-        &inserted,
-    ))
-}
-
-#[expect(
-    clippy::manual_unwrap_or_default,
-    reason = "invalid display metadata deliberately degrades to plain canonical text"
-)]
-fn annotations_or_empty(
-    result: Result<Vec<ContentAnnotation>, crate::domain::DomainError>,
-) -> Vec<ContentAnnotation> {
-    match result {
-        Ok(annotations) => annotations,
-        Err(_) => Vec::new(),
     }
 }
 

@@ -24,7 +24,7 @@ use crate::{
             SubmissionRequest,
         },
         attachment::AttachmentStore,
-        clipboard::{Clipboard, ClipboardContent, ClipboardError, ClipboardWrite},
+        clipboard::{Clipboard, ClipboardContent, ClipboardError, ClipboardText, ClipboardWrite},
         invocation::{
             AdditionalInvocationRoot, InvocationCatalog, InvocationCatalogError,
             InvocationDiscovery, InvocationDiscoveryRequest, InvocationReferenceCatalog,
@@ -58,7 +58,7 @@ enum ExternalRequest {
     Write {
         request_id: RequestId,
         intent: ClipboardIntent,
-        content: String,
+        content: ClipboardText,
     },
     Read {
         request_id: RequestId,
@@ -112,10 +112,17 @@ pub(super) struct ExternalLane {
     lifecycle: WorkerLifecycle,
 }
 
+struct ExternalDirectories {
+    recovery: PathBuf,
+    attachment: PathBuf,
+    cache: PathBuf,
+}
+
 impl ExternalLane {
     pub(super) fn spawn_with_invocation_roots(
         recovery_directory: PathBuf,
         attachment_directory: PathBuf,
+        cache_directory: PathBuf,
         presentation_source: String,
         cancellation: CancellationFlag,
         invocation_roots: Vec<AdditionalInvocationRoot>,
@@ -124,13 +131,17 @@ impl ExternalLane {
         let (result_sender, result_receiver) = sync_channel(32);
         let lifecycle = WorkerLifecycle::default();
         let worker_lifecycle = lifecycle.clone();
+        let directories = ExternalDirectories {
+            recovery: recovery_directory,
+            attachment: attachment_directory,
+            cache: cache_directory,
+        };
         let handle = thread::spawn(move || {
             worker_lifecycle.run(super::supervisor::WorkerRole::External, || {
                 external_loop(
                     &request_receiver,
                     &result_sender,
-                    recovery_directory,
-                    attachment_directory,
+                    directories,
                     presentation_source,
                     cancellation,
                     invocation_roots,
@@ -159,11 +170,13 @@ impl ExternalLane {
                 request_id,
                 intent,
                 content,
+                annotations,
                 ..
             } => ExternalRequest::Write {
                 request_id: *request_id,
                 intent: *intent,
-                content: content.clone(),
+                content: ClipboardText::new(content.clone(), annotations.clone())
+                    .map_err(|_| TerminalError::Worker("invalid clipboard annotations"))?,
             },
             Effect::ReadClipboard { request_id } => ExternalRequest::Read {
                 request_id: *request_id,
@@ -267,16 +280,20 @@ fn map_send_error(error: &TrySendError<ExternalRequest>) -> TerminalError {
 fn external_loop(
     requests: &Receiver<ExternalRequest>,
     results: &SyncSender<ExternalResult>,
-    recovery_directory: PathBuf,
-    attachment_directory: PathBuf,
+    directories: ExternalDirectories,
     presentation_source: String,
     cancellation: CancellationFlag,
     invocation_roots: Vec<AdditionalInvocationRoot>,
 ) {
-    let mut clipboard = PlatformClipboard::new();
-    let mut recovery = FileRecoveryExporter::new(recovery_directory);
-    let mut attachments = FileAttachmentStore::new(attachment_directory);
+    let ExternalDirectories {
+        recovery,
+        attachment,
+        cache,
+    } = directories;
     let runner = SystemProcessRunner::cancellable(cancellation);
+    let mut clipboard = PlatformClipboard::new(&cache, Box::new(runner.clone()));
+    let mut recovery = FileRecoveryExporter::new(recovery);
+    let mut attachments = FileAttachmentStore::new(attachment);
     let mut notifications = HerdrPauseNotifier::from_environment_with_runner(runner.clone());
     let mut agents = HerdrGateway::from_environment_with_runner(presentation_source, runner);
     let mut invocations = FilesystemInvocationCatalog::system(invocation_roots);
@@ -319,7 +336,7 @@ fn external_loop(
             } => ExternalResult::Written {
                 request_id,
                 intent,
-                result: clipboard.write(&content),
+                result: clipboard.write(request_id, &content),
             },
             ExternalRequest::Read { request_id } => ExternalResult::Read {
                 request_id,
@@ -376,9 +393,15 @@ fn read_clipboard(
     request_id: RequestId,
 ) -> Result<PastePayload, ExternalReadError> {
     match clipboard.read().map_err(|_| ExternalReadError::Clipboard)? {
-        ClipboardContent::Text(content) => {
-            Ok(super::path_import::annotate_existing_files(&content)
-                .unwrap_or_else(|| PastePayload::text(content)))
+        ClipboardContent::Text(text) => {
+            let (content, annotations) = text.into_parts();
+            if annotations.is_empty() {
+                Ok(super::path_import::annotate_existing_files(&content)
+                    .unwrap_or_else(|| PastePayload::text(content)))
+            } else {
+                PastePayload::preserved_clipboard(content, annotations)
+                    .map_err(|_| ExternalReadError::Clipboard)
+            }
         }
         ClipboardContent::Image(image) => attachments
             .save_clipboard_image(request_id, &image)

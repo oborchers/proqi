@@ -121,6 +121,7 @@ pub(super) fn spawn_lanes(
         external: ExternalLane::spawn_with_invocation_roots(
             recovery_directory,
             attachment_directory,
+            cache_directory.clone(),
             presentation_source,
             cancellation.clone(),
             invocation_roots,

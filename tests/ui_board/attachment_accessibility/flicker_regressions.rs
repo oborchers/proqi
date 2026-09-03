@@ -107,6 +107,60 @@ fn deleting_a_complete_placeholder_then_undoing_restores_neutral_pending_health(
     );
 }
 
+#[test]
+fn cutting_an_image_then_undoing_never_flashes_inaccessible_before_recheck() {
+    let path = "/tmp/cut-history-restored.png";
+    let mut fixture = Fixture::new();
+    let insertion = fixture.effects(UiInput::PasteAnnotated(attachment_payload(path, true)));
+    let background = attachment_batch(&insertion);
+    fixture
+        .app
+        .complete_attachment_checks(complete(background, Ok(())));
+    acknowledge_persistence(&mut fixture, &insertion);
+
+    fixture.input(UiInput::Key(UiKey::Escape));
+    let neighbor_sequence = fixture.paste("neighboring thought");
+    fixture.app.acknowledge_persistence(neighbor_sequence, true);
+    fixture.input(UiInput::Key(UiKey::Escape));
+    fixture.input(UiInput::Key(UiKey::Character('k')));
+
+    let cut = fixture.effects(UiInput::Key(UiKey::Cut));
+    let [
+        Effect::WriteClipboard {
+            request_id,
+            content,
+            annotations,
+            ..
+        },
+    ] = cut.as_slice()
+    else {
+        panic!("cut must wait for one complete annotated clipboard write");
+    };
+    assert_eq!(content, path);
+    assert_eq!(annotations.len(), 1);
+    let deletion =
+        fixture
+            .app
+            .complete_clipboard_write(*request_id, Ok(()), &mut fixture.ids, &fixture.clock);
+    assert_eq!(fixture.app.state.board.live_thoughts().len(), 1);
+    acknowledge_persistence(&mut fixture, &deletion);
+
+    let undo = fixture.effects(UiInput::Key(UiKey::Undo));
+    let recheck = attachment_batch(&undo);
+    assert_eq!(fixture.app.state.board.live_thoughts().len(), 2);
+    assert_normal_attachment(&mut fixture, "[Image 1]");
+    acknowledge_persistence(&mut fixture, &undo);
+
+    assert!(
+        fixture
+            .app
+            .complete_attachment_checks(complete(recheck, Err(AttachmentAccessFailure::Missing),))
+            .is_empty()
+    );
+    let rendered = text(draw(&mut fixture, 60, 10).backend().buffer());
+    assert!(rendered.contains("[Image 1 · inaccessible]"));
+}
+
 fn assert_normal_attachment(fixture: &mut Fixture, label: &str) {
     let rendered = text(draw(fixture, 60, 8).backend().buffer());
     assert!(rendered.contains(label), "rendered frame:\n{rendered}");

@@ -9,9 +9,11 @@ use crate::{
     },
 };
 
-use super::{BoardApp, EditorOwner, UiInput, UiKey};
+use super::{BoardApp, EditorOwner, UiKey};
 use crate::ui::VisualRowEdge;
 use crate::ui::{annotations, settings::KeyBindings};
+
+mod navigation;
 
 pub(super) fn command_for_key(
     key: UiKey,
@@ -177,19 +179,21 @@ impl BoardApp {
                 command
             }
         };
-        self.apply_compose_command(command, &[], ids, clock)
+        self.apply_compose_command(command, &[], false, ids, clock)
     }
 
     pub(super) fn apply_compose_paste(
         &mut self,
         content: String,
         inserted_annotations: &[ContentAnnotation],
+        preserve_owned: bool,
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
         self.apply_compose_command(
             EditCommand::Paste(content),
             inserted_annotations,
+            preserve_owned,
             ids,
             clock,
         )
@@ -199,6 +203,7 @@ impl BoardApp {
         &mut self,
         command: EditCommand,
         inserted_annotations: &[ContentAnnotation],
+        preserve_owned: bool,
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
@@ -213,14 +218,24 @@ impl BoardApp {
         if outcome.changes.is_empty() {
             return Vec::new();
         }
-        let annotations = annotations::rebase(
-            &before.content,
-            &outcome.snapshot.content,
-            &outcome.changes,
-            &[],
-            inserted_annotations,
-        );
-        self.materialize_compose(outcome.snapshot, annotations, ids, clock)
+        let annotations = if preserve_owned {
+            annotations::rebase_preserved(
+                &before.content,
+                &outcome.snapshot.content,
+                &outcome.changes,
+                &[],
+                inserted_annotations,
+            )
+        } else {
+            annotations::rebase(
+                &before.content,
+                &outcome.snapshot.content,
+                &outcome.changes,
+                &[],
+                inserted_annotations,
+            )
+        };
+        self.materialize_compose(outcome.snapshot, annotations, preserve_owned, ids, clock)
     }
 
     pub(super) fn apply_compose_transient(&mut self, command: EditCommand) {
@@ -237,6 +252,7 @@ impl BoardApp {
         &mut self,
         snapshot: EditorSnapshot,
         annotations: Vec<ContentAnnotation>,
+        preserve_owned: bool,
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
@@ -244,14 +260,28 @@ impl BoardApp {
             return Vec::new();
         }
         let thought_id = ids.thought_id();
-        let effects = self.reduce(Action::CreateThought {
-            thought_id,
-            operation_id: ids.operation_id(),
-            content: snapshot.content,
-            annotations,
-            insertion_index: None,
-            at: clock.now(),
-        });
+        let operation_id = ids.operation_id();
+        let at = clock.now();
+        let action = if preserve_owned {
+            Action::CreateOwnedThought(crate::application::OwnedThoughtCreation::preserved(
+                thought_id,
+                operation_id,
+                snapshot.content,
+                annotations,
+                None,
+                at,
+            ))
+        } else {
+            Action::CreateThought {
+                thought_id,
+                operation_id,
+                content: snapshot.content,
+                annotations,
+                insertion_index: None,
+                at,
+            }
+        };
+        let effects = self.reduce(action);
         if self.state.board.thought(thought_id).is_some()
             && let Some((owner, _)) = &mut self.editor
         {
@@ -263,62 +293,6 @@ impl BoardApp {
             self.insertion_focus = super::InsertionFocus::Inactive;
         }
         effects
-    }
-
-    pub(super) fn resolve_edit_navigation(&self, input: UiInput) -> UiInput {
-        if let UiInput::Key(UiKey::FastNavigation {
-            direction,
-            extend_selection,
-        }) = input
-        {
-            let overlay_open = self.modal_surface_open();
-            if overlay_open {
-                return input;
-            }
-            let movement = if matches!(
-                self.interaction_mode(),
-                InteractionMode::Edit { .. } | InteractionMode::Compose
-            ) {
-                direction.editor_movement()
-            } else {
-                direction.board_movement()
-            };
-            return UiInput::Key(UiKey::Move {
-                movement,
-                extend_selection,
-            });
-        }
-        let UiInput::Key(UiKey::EditNavigation {
-            editor_movement,
-            board_movement,
-        }) = input
-        else {
-            return input;
-        };
-        let overlay_open = self.modal_surface_open();
-        let movement =
-            if !overlay_open && matches!(self.interaction_mode(), InteractionMode::Edit { .. }) {
-                editor_movement
-            } else {
-                board_movement
-            };
-        UiInput::Key(UiKey::Move {
-            movement,
-            extend_selection: false,
-        })
-    }
-
-    fn modal_surface_open(&self) -> bool {
-        self.help
-            || self.screenshot.takeover.is_some()
-            || self.update_prompt.is_some()
-            || self.release_highlights.is_some()
-            || self.palette.is_some()
-            || self.invocation_popup.is_some()
-            || self.transfer.is_some()
-            || self.rename.is_some()
-            || self.search.is_some()
-            || self.submission_mode.is_some()
     }
 
     pub(super) fn should_insert_smart_newline(&self) -> bool {
@@ -392,6 +366,15 @@ impl BoardApp {
         command: EditCommand,
         inserted_annotations: &[ContentAnnotation],
     ) {
+        self.apply_annotated_edit_with_policy(command, inserted_annotations, false);
+    }
+
+    pub(super) fn apply_annotated_edit_with_policy(
+        &mut self,
+        command: EditCommand,
+        inserted_annotations: &[ContentAnnotation],
+        preserve_owned: bool,
+    ) {
         if self.edit_command_blocked(&command) {
             return;
         }
@@ -425,13 +408,23 @@ impl BoardApp {
                 },
                 |pending| pending.after_annotations.clone(),
             );
-        let after_annotations = annotations::rebase(
-            &before.content,
-            &after.content,
-            &changes,
-            &current_annotations,
-            inserted_annotations,
-        );
+        let after_annotations = if preserve_owned {
+            annotations::rebase_preserved(
+                &before.content,
+                &after.content,
+                &changes,
+                &current_annotations,
+                inserted_annotations,
+            )
+        } else {
+            annotations::rebase(
+                &before.content,
+                &after.content,
+                &changes,
+                &current_annotations,
+                inserted_annotations,
+            )
+        };
         match &mut self.pending_edit {
             Some(pending) if pending.thought_id == thought_id => {
                 pending.after = after;

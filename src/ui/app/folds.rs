@@ -156,6 +156,41 @@ impl BoardApp {
         self.set_editor_range(start, end);
     }
 
+    pub(super) fn normalize_clipboard_selection(&mut self) {
+        let Some(snapshot) = self.editor_snapshot() else {
+            return;
+        };
+        let Some(selection) = snapshot.selection else {
+            return;
+        };
+        let selected = (
+            crate::ports::text_layout::byte_for_position(&snapshot.content, selection.start),
+            crate::ports::text_layout::byte_for_position(&snapshot.content, selection.end),
+        );
+        let Some(normalized) = self.active_presented_thought().map(|thought| {
+            thought
+                .presentation
+                .substitutions
+                .iter()
+                .filter(|substitution| {
+                    substitution.collapsed
+                        && selected.0 < substitution.canonical_end
+                        && substitution.canonical_start < selected.1
+                })
+                .fold(selected, |range, substitution| {
+                    (
+                        range.0.min(substitution.canonical_start),
+                        range.1.max(substitution.canonical_end),
+                    )
+                })
+        }) else {
+            return;
+        };
+        if normalized != selected {
+            self.set_editor_range(normalized.0, normalized.1);
+        }
+    }
+
     pub(super) fn leave_selected_fold(
         &mut self,
         movement: CursorMovement,

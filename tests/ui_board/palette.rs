@@ -416,6 +416,7 @@ fn palette_copies_typed_session_metadata_exactly_and_reports_results() {
             thought_id: None,
             intent: ClipboardIntent::CopySessionId,
             content,
+            ..
         },
     ] = copy_id.as_slice()
     else {
@@ -438,6 +439,7 @@ fn palette_copies_typed_session_metadata_exactly_and_reports_results() {
             thought_id: None,
             intent: ClipboardIntent::CopyResumeCommand,
             content,
+            ..
         },
     ] = copy_resume.as_slice()
     else {
