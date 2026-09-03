@@ -980,8 +980,12 @@ initializes an empty durable snapshot as Compose, while a nonempty snapshot keep
 the existing Board focus contract.
 
 `Primary+Enter` and `Primary+Shift+Enter` normalize to distinct Submit and
-SubmitKeep intentions before plain Enter handling. Plain Enter therefore remains
-an editor newline or smart-list command. Crossterm unit contracts and real PTY
+SubmitKeep intentions before plain Enter handling. Board resolves those typed
+intentions as invariant aliases of its configured submit-and-remove and
+submit-and-keep commands, so selection and insertion-row behavior stay identical
+to the configured character spellings. Edit routes them directly to its active
+thought, while Compose remains unchanged. Plain Enter therefore remains an
+editor newline or smart-list command. Crossterm unit contracts and real PTY
 diagnostics verify the platform Primary event encodings. The command palette
 remains the modifier-independent fallback.
 

@@ -1,26 +1,26 @@
 ---
 source: tests/ui_board/snapshots.rs
-assertion_line: 200
+assertion_line: 214
 expression: "snapshot(&mut fixture, 42, 8, ThemePreference::Auto)"
 ---
 SIZE 42x8
 
 TEXT
 00│┌ proqi shortcuts ─────────────────────[x]│
-01││n        New        Enter/e  Edit       ││
-02││j/↓ k/↑  Move/new×2 J/K      Range      ││
-03││Ctrl+J/K Reorder    y        Copy       ││
-04││x        Cut        d/Del    Delete     ││
-05││Ctrl+D   Duplicate  Space    Select     ││
-06││t        Transform  a/Ctrl+A Select all ↓│
+01││:                  Commands             ↑│
+02││i                  Inbox                ││
+03││s/Ctrl+Enter       Submit               ││
+04││S/Ctrl+Shift+Enter Submit & keep        ││
+05││q                  Quit                 ││
+06││?                  Close                ││
 07│└────────────────────────────────────────┘│
 
 STYLE RUNS
 0: 0-0 fg=Reset bg=Reset mod=NONE | 1-17 fg=Green bg=Reset mod=BOLD | 18-38 fg=Reset bg=Reset mod=NONE | 39-41 fg=Green bg=Reset mod=NONE
-1: 0-0 fg=Reset bg=Reset mod=NONE | 1-1 fg=Green bg=Reset mod=NONE | 2-20 fg=Reset bg=Reset mod=NONE | 21-27 fg=Green bg=Reset mod=NONE | 28-41 fg=Reset bg=Reset mod=NONE
-2: 0-0 fg=Reset bg=Reset mod=NONE | 1-7 fg=Green bg=Reset mod=NONE | 8-20 fg=Reset bg=Reset mod=NONE | 21-23 fg=Green bg=Reset mod=NONE | 24-41 fg=Reset bg=Reset mod=NONE
-3: 0-0 fg=Reset bg=Reset mod=NONE | 1-8 fg=Green bg=Reset mod=NONE | 9-20 fg=Reset bg=Reset mod=NONE | 21-21 fg=Green bg=Reset mod=NONE | 22-41 fg=Reset bg=Reset mod=NONE
-4: 0-0 fg=Reset bg=Reset mod=NONE | 1-1 fg=Green bg=Reset mod=NONE | 2-20 fg=Reset bg=Reset mod=NONE | 21-25 fg=Green bg=Reset mod=NONE | 26-41 fg=Reset bg=Reset mod=NONE
-5: 0-0 fg=Reset bg=Reset mod=NONE | 1-6 fg=Green bg=Reset mod=NONE | 7-20 fg=Reset bg=Reset mod=NONE | 21-25 fg=Green bg=Reset mod=NONE | 26-41 fg=Reset bg=Reset mod=NONE
-6: 0-0 fg=Reset bg=Reset mod=NONE | 1-1 fg=Green bg=Reset mod=NONE | 2-20 fg=Reset bg=Reset mod=NONE | 21-28 fg=Green bg=Reset mod=NONE | 29-40 fg=Reset bg=Reset mod=NONE | 41-41 fg=DarkGray bg=Reset mod=NONE
+1: 0-0 fg=Reset bg=Reset mod=NONE | 1-1 fg=Green bg=Reset mod=NONE | 2-40 fg=Reset bg=Reset mod=NONE | 41-41 fg=DarkGray bg=Reset mod=NONE
+2: 0-0 fg=Reset bg=Reset mod=NONE | 1-1 fg=Green bg=Reset mod=NONE | 2-41 fg=Reset bg=Reset mod=NONE
+3: 0-0 fg=Reset bg=Reset mod=NONE | 1-12 fg=Green bg=Reset mod=NONE | 13-41 fg=Reset bg=Reset mod=NONE
+4: 0-0 fg=Reset bg=Reset mod=NONE | 1-18 fg=Green bg=Reset mod=NONE | 19-41 fg=Reset bg=Reset mod=NONE
+5: 0-0 fg=Reset bg=Reset mod=NONE | 1-1 fg=Green bg=Reset mod=NONE | 2-41 fg=Reset bg=Reset mod=NONE
+6: 0-0 fg=Reset bg=Reset mod=NONE | 1-1 fg=Green bg=Reset mod=NONE | 2-41 fg=Reset bg=Reset mod=NONE
 7: 0-41 fg=Reset bg=Reset mod=NONE

@@ -216,10 +216,14 @@ impl KeyBindings {
     /// Resolve a normalized key through the Board command map.
     ///
     /// Unmodified physical Delete is an invariant spelling of the remappable
-    /// delete command. Modified Delete and Backspace remain unassigned in Board.
+    /// delete command. The typed submission intentions are invariant aliases
+    /// for the corresponding remappable Board submission commands. Modified
+    /// Delete and Backspace remain unassigned in Board.
     pub(super) fn command_for_key(&self, key: super::UiKey) -> Option<BoardCommand> {
         match key {
             super::UiKey::Delete => Some(BoardCommand::Delete),
+            super::UiKey::Submit => Some(BoardCommand::SubmitRemove),
+            super::UiKey::SubmitKeep => Some(BoardCommand::SubmitKeep),
             super::UiKey::UnmodifiedSpace => self.command(' '),
             super::UiKey::Character(character) => self.command(character),
             _ => None,
@@ -360,6 +364,34 @@ pub(crate) fn primary_key_label(suffix: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{BoardCommand, KeyBindings};
+    use crate::ui::UiKey;
+
+    #[test]
+    fn board_submission_chords_resolve_to_the_configured_submission_commands() {
+        let bindings = KeyBindings {
+            submit_remove: '界',
+            submit_keep: '語',
+            ..KeyBindings::default()
+        };
+        assert!(bindings.validate().is_ok());
+        for (key, command) in [
+            (
+                UiKey::Character(bindings.submit_remove),
+                BoardCommand::SubmitRemove,
+            ),
+            (UiKey::Submit, BoardCommand::SubmitRemove),
+            (
+                UiKey::Character(bindings.submit_keep),
+                BoardCommand::SubmitKeep,
+            ),
+            (UiKey::SubmitKeep, BoardCommand::SubmitKeep),
+        ] {
+            assert_eq!(bindings.command_for_key(key), Some(command));
+        }
+        assert_eq!(bindings.command_for_key(UiKey::Character('s')), None);
+        assert_eq!(bindings.command_for_key(UiKey::Character('S')), None);
+        assert_eq!(bindings.command_for_key(UiKey::Enter), None);
+    }
 
     #[test]
     fn ambiguous_bindings_are_rejected() {

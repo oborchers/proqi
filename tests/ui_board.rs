@@ -371,6 +371,8 @@ fn mouse_drag_reorders_thoughts_through_the_visible_gutter() {
 
 #[path = "ui_board/agent.rs"]
 mod agent;
+#[path = "ui_board/agent_board_aliases.rs"]
+mod agent_board_aliases;
 #[path = "ui_board/agent_direct.rs"]
 mod agent_direct;
 #[path = "ui_board/agent_discovery.rs"]

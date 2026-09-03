@@ -36,8 +36,9 @@ pub(crate) fn items(app: &BoardApp) -> Vec<Shortcut> {
             ("↑/↓×2".to_owned(), "Neighbor/new"),
         ];
         if app.supports_submission() {
-            items.insert(1, (primary("Enter"), "Submit"));
-            items.insert(2, (primary("Shift+Enter"), "Submit & keep"));
+            let [remove, keep] = submission_items(app.interaction_mode(), keys);
+            items.insert(1, remove);
+            items.insert(2, keep);
         }
         return items;
     }
@@ -80,12 +81,25 @@ pub(crate) fn items(app: &BoardApp) -> Vec<Shortcut> {
         items.insert(10, (keys.transform.to_string(), "Transform"));
     }
     if app.supports_submission() {
-        items.push((keys.submit_remove.to_string(), "Submit"));
-        items.push((keys.submit_keep.to_string(), "Submit & keep"));
+        items.extend(submission_items(InteractionMode::Board, keys));
     }
     items.push((keys.quit.to_string(), "Quit"));
     items.push((keys.help.to_string(), "Close"));
     items
+}
+
+fn submission_items(mode: InteractionMode, keys: &crate::ui::KeyBindings) -> [Shortcut; 2] {
+    let board_key = |key: char, suffix: &str| {
+        if matches!(mode, InteractionMode::Board) {
+            format!("{}/{}", super::settings::key_label(key), primary(suffix))
+        } else {
+            primary(suffix)
+        }
+    };
+    [
+        (board_key(keys.submit_remove, "Enter"), "Submit"),
+        (board_key(keys.submit_keep, "Shift+Enter"), "Submit & keep"),
+    ]
 }
 
 pub(crate) fn grid_metrics(items: &[Shortcut], width: u16) -> (usize, usize) {
