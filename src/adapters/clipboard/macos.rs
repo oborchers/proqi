@@ -9,7 +9,7 @@ use crate::ports::{
     environment::{ProcessRequest, ProcessRunner},
 };
 
-use super::{TypedClipboard, TypedSnapshot};
+use super::{TypedClipboard, TypedSnapshot, TypedVerification};
 
 const OSASCRIPT: &str = "/usr/bin/osascript";
 const PROCESS_TIMEOUT: Duration = Duration::from_secs(2);
@@ -50,14 +50,35 @@ var generationBeforeRead = Number(board.changeCount);
 var items = board.pasteboardItems;
 var current = items && items.count > 0 ? items.objectAtIndex(0) : null;
 var typedType = $('dev.proqi.clipboard.annotations-v1');
-var plain = current ? current.stringForType($.NSPasteboardTypeString) : null;
 var typed = current ? current.stringForType(typedType) : null;
 var generationAfterRead = Number(board.changeCount);
 JSON.stringify({
     generation: generationAfterRead,
     stable: generationBeforeRead === generationAfterRead,
-    text: plain ? ObjC.unwrap(plain) : null,
-    typed: plain && typed ? ObjC.unwrap(typed) : null
+    typed: typed ? ObjC.unwrap(typed) : null
+});
+";
+
+const VERIFY_SCRIPT: &str = r"
+ObjC.import('AppKit');
+ObjC.import('Foundation');
+var inputData = $.NSFileHandle.fileHandleWithStandardInput.readDataToEndOfFile;
+var inputString = $.NSString.alloc.initWithDataEncoding(inputData, $.NSUTF8StringEncoding);
+if (!inputString) throw new Error('clipboard request is not UTF-8');
+var request = JSON.parse(ObjC.unwrap(inputString));
+var board = $.NSPasteboard.generalPasteboard;
+if (!board) throw new Error('general pasteboard is unavailable');
+var generationBeforeRead = Number(board.changeCount);
+var items = board.pasteboardItems;
+var current = items && items.count > 0 ? items.objectAtIndex(0) : null;
+var typedType = $('dev.proqi.clipboard.annotations-v1');
+var typed = current ? current.stringForType(typedType) : null;
+var generationAfterRead = Number(board.changeCount);
+JSON.stringify({
+    generation: generationAfterRead,
+    stable: generationBeforeRead === generationAfterRead,
+    generation_matches: generationAfterRead === request.generation,
+    payload_matches: Boolean(typed) && ObjC.unwrap(typed) === request.typed
 });
 ";
 
@@ -119,9 +140,20 @@ impl TypedClipboard for MacTypedClipboard {
         }
         Ok(TypedSnapshot {
             generation: reply.generation,
-            text: reply.text,
             payload: reply.typed,
         })
+    }
+
+    fn verify(&mut self, generation: u64, payload: &str) -> Result<TypedVerification, String> {
+        let request = serde_json::to_vec(&VerifyRequest {
+            generation,
+            typed: payload,
+        })
+        .map_err(|error| error.to_string())?;
+        let output = self.run(VERIFY_SCRIPT, Some(request))?;
+        serde_json::from_slice::<VerifyReply>(&output)
+            .map(Into::into)
+            .map_err(|error| error.to_string())
     }
 }
 
@@ -143,6 +175,31 @@ struct WriteReply {
 struct ReadReply {
     generation: u64,
     stable: bool,
-    text: Option<String>,
     typed: Option<String>,
+}
+
+#[derive(Serialize)]
+struct VerifyRequest<'a> {
+    generation: u64,
+    typed: &'a str,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct VerifyReply {
+    generation: u64,
+    stable: bool,
+    generation_matches: bool,
+    payload_matches: bool,
+}
+
+impl From<VerifyReply> for TypedVerification {
+    fn from(reply: VerifyReply) -> Self {
+        Self {
+            generation: reply.generation,
+            stable: reply.stable,
+            generation_matches: reply.generation_matches,
+            payload_matches: reply.payload_matches,
+        }
+    }
 }

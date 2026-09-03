@@ -12,7 +12,7 @@ use crate::{
 
 use super::{
     FileClipboardProvenance, NativeClipboard, NativeReadError, PlatformClipboard, TypedSnapshot,
-    decode_payload, encode_payload,
+    TypedVerification, decode_payload, encode_payload,
 };
 
 #[derive(Default)]
@@ -21,10 +21,19 @@ struct FakeState {
     typed: Option<String>,
     image: Option<RasterImage>,
     generation: u64,
-    unavailable: bool,
-    omit_typed: bool,
-    replace_after_typed_read: bool,
+    fault: FakeFault,
     replace_written_text: Option<String>,
+}
+
+#[derive(Default, Eq, PartialEq)]
+enum FakeFault {
+    #[default]
+    None,
+    Unavailable,
+    OmitTyped,
+    ReplaceAfterTypedRead,
+    ReplaceAfterTypedVerify,
+    TypedReadsUnavailable,
 }
 
 #[derive(Clone, Default)]
@@ -35,7 +44,7 @@ struct FakeNative {
 impl NativeClipboard for FakeNative {
     fn write_text(&mut self, content: &str) -> Result<(), String> {
         let mut state = self.state.lock().map_err(|error| error.to_string())?;
-        if state.unavailable {
+        if state.fault == FakeFault::Unavailable {
             return Err("unavailable".to_owned());
         }
         state.generation = state.generation.saturating_add(1);
@@ -49,7 +58,7 @@ impl NativeClipboard for FakeNative {
             .state
             .lock()
             .map_err(|error| ClipboardError::Unavailable(error.to_string()))?;
-        if state.unavailable {
+        if state.fault == FakeFault::Unavailable {
             return Err(ClipboardError::Unavailable("unavailable".to_owned()));
         }
         state.generation = state.generation.saturating_add(1);
@@ -57,7 +66,7 @@ impl NativeClipboard for FakeNative {
             .replace_written_text
             .take()
             .or_else(|| Some(content.to_owned()));
-        state.typed = (!state.omit_typed).then(|| payload.to_owned());
+        state.typed = (state.fault != FakeFault::OmitTyped).then(|| payload.to_owned());
         Ok(state.generation)
     }
 
@@ -72,19 +81,43 @@ impl NativeClipboard for FakeNative {
 
     fn read_typed(&mut self) -> Result<TypedSnapshot, String> {
         let mut state = self.state.lock().map_err(|error| error.to_string())?;
-        if state.unavailable {
+        if matches!(
+            state.fault,
+            FakeFault::Unavailable | FakeFault::TypedReadsUnavailable
+        ) {
             return Err("unavailable".to_owned());
         }
         let snapshot = TypedSnapshot {
             generation: state.generation,
-            text: state.content.clone(),
             payload: state.typed.clone(),
         };
-        if state.replace_after_typed_read {
-            state.replace_after_typed_read = false;
+        if state.fault == FakeFault::ReplaceAfterTypedRead {
+            state.fault = FakeFault::None;
             state.generation = state.generation.saturating_add(1);
         }
         Ok(snapshot)
+    }
+
+    fn verify_typed(
+        &mut self,
+        generation: u64,
+        payload: &str,
+    ) -> Result<TypedVerification, String> {
+        let mut state = self.state.lock().map_err(|error| error.to_string())?;
+        if state.fault == FakeFault::Unavailable {
+            return Err("unavailable".to_owned());
+        }
+        let verification = TypedVerification {
+            generation: state.generation,
+            stable: true,
+            generation_matches: state.generation == generation,
+            payload_matches: state.typed.as_deref() == Some(payload),
+        };
+        if state.fault == FakeFault::ReplaceAfterTypedVerify {
+            state.fault = FakeFault::None;
+            state.generation = state.generation.saturating_add(1);
+        }
+        Ok(verification)
     }
 
     fn read_image(&mut self) -> Result<RasterImage, NativeReadError> {
@@ -136,7 +169,7 @@ fn attachment(content: &str) -> ClipboardText {
 fn native_failure_returns_an_exact_bounded_osc52_sequence() {
     let root = tempfile::tempdir().expect("temporary directory");
     let native = FakeNative::default();
-    native.state.lock().expect("state").unavailable = true;
+    native.state.lock().expect("state").fault = FakeFault::Unavailable;
     let mut clipboard = clipboard(native, root.path());
     assert_eq!(
         clipboard.write(request_id(), &ClipboardText::plain("Grüße\n".to_owned())),
@@ -150,7 +183,7 @@ fn native_failure_returns_an_exact_bounded_osc52_sequence() {
 fn annotated_write_requires_both_native_representations() {
     let root = tempfile::tempdir().expect("temporary directory");
     let native = FakeNative::default();
-    native.state.lock().expect("state").omit_typed = true;
+    native.state.lock().expect("state").fault = FakeFault::OmitTyped;
     let mut clipboard = clipboard(native, root.path());
     assert!(matches!(
         clipboard.write(request_id(), &attachment("/tmp/missing.png")),
@@ -169,6 +202,59 @@ fn annotated_write_rejects_retained_metadata_when_plain_text_changed() {
         clipboard.write(request_id(), &attachment("/tmp/missing.png")),
         Err(ClipboardError::Unavailable(_))
     ));
+}
+
+#[test]
+fn annotated_write_rejects_replacement_during_compact_verification() {
+    let root = tempfile::tempdir().expect("temporary directory");
+    let native = FakeNative::default();
+    native.state.lock().expect("state").fault = FakeFault::ReplaceAfterTypedVerify;
+    let mut clipboard = clipboard(native, root.path());
+
+    assert!(matches!(
+        clipboard.write(request_id(), &attachment("/tmp/missing.png")),
+        Err(ClipboardError::Unavailable(_))
+    ));
+}
+
+#[test]
+fn annotated_write_verification_accepts_large_ascii_plain_text() {
+    let root = tempfile::tempdir().expect("temporary directory");
+    let content = "a".repeat(2 * 1024 * 1024);
+    let annotation = ContentAnnotation::shortcut(0, 1);
+    let expected = ClipboardText::new(content.clone(), vec![annotation]).expect("annotation");
+    let native = FakeNative::default();
+    native.state.lock().expect("state").fault = FakeFault::TypedReadsUnavailable;
+    let mut clipboard = clipboard(native.clone(), root.path());
+
+    assert_eq!(
+        clipboard.write(request_id(), &expected),
+        Ok(ClipboardWrite::Native)
+    );
+    assert_eq!(
+        native.state.lock().expect("state").content.as_deref(),
+        Some(content.as_str())
+    );
+}
+
+#[test]
+fn annotated_write_verification_accepts_control_heavy_plain_text() {
+    let root = tempfile::tempdir().expect("temporary directory");
+    let content = "\n\t\r\u{0008}\u{000c}".repeat(240_000);
+    let annotation = ContentAnnotation::shortcut(0, 1);
+    let expected = ClipboardText::new(content.clone(), vec![annotation]).expect("annotation");
+    let native = FakeNative::default();
+    native.state.lock().expect("state").fault = FakeFault::TypedReadsUnavailable;
+    let mut clipboard = clipboard(native.clone(), root.path());
+
+    assert_eq!(
+        clipboard.write(request_id(), &expected),
+        Ok(ClipboardWrite::Native)
+    );
+    assert_eq!(
+        native.state.lock().expect("state").content.as_deref(),
+        Some(content.as_str())
+    );
 }
 
 #[test]
@@ -256,7 +342,7 @@ fn replacement_during_read_cannot_mix_typed_and_plain_snapshots() {
     let native = FakeNative::default();
     let mut clipboard = clipboard(native.clone(), root.path());
     clipboard.write(request_id(), &expected).expect("write");
-    native.state.lock().expect("state").replace_after_typed_read = true;
+    native.state.lock().expect("state").fault = FakeFault::ReplaceAfterTypedRead;
     assert_eq!(
         clipboard.read().expect("clipboard"),
         ClipboardContent::Text(ClipboardText::plain(expected.content().to_owned()))

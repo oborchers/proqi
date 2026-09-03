@@ -117,11 +117,21 @@ impl PlatformClipboard {
         expected_text: &str,
         expected_payload: &str,
     ) -> bool {
-        self.native.read_typed().is_ok_and(|snapshot| {
-            snapshot.generation == generation
-                && snapshot.text.as_deref() == Some(expected_text)
-                && snapshot.payload.as_deref() == Some(expected_payload)
-        })
+        let Ok(first) = self.native.verify_typed(generation, expected_payload) else {
+            return false;
+        };
+        let Ok(text) = self.native.read_text() else {
+            return false;
+        };
+        let Ok(second) = self.native.verify_typed(generation, expected_payload) else {
+            return false;
+        };
+        first == second
+            && first.generation == generation
+            && first.stable
+            && first.generation_matches
+            && first.payload_matches
+            && text == expected_text
     }
 }
 
@@ -130,19 +140,29 @@ trait NativeClipboard {
     fn write_typed(&mut self, content: &str, payload: &str) -> Result<u64, ClipboardError>;
     fn read_text(&mut self) -> Result<String, NativeReadError>;
     fn read_typed(&mut self) -> Result<TypedSnapshot, String>;
+    fn verify_typed(&mut self, generation: u64, payload: &str)
+    -> Result<TypedVerification, String>;
     fn read_image(&mut self) -> Result<RasterImage, NativeReadError>;
 }
 
 trait TypedClipboard {
     fn write(&mut self, text: &str, typed: &str) -> Result<u64, ClipboardError>;
     fn read(&mut self) -> Result<TypedSnapshot, String>;
+    fn verify(&mut self, generation: u64, payload: &str) -> Result<TypedVerification, String>;
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct TypedSnapshot {
     generation: u64,
-    text: Option<String>,
     payload: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct TypedVerification {
+    generation: u64,
+    stable: bool,
+    generation_matches: bool,
+    payload_matches: bool,
 }
 
 enum NativeReadError {
@@ -195,6 +215,14 @@ impl NativeClipboard for ArboardNative {
         self.typed.read()
     }
 
+    fn verify_typed(
+        &mut self,
+        generation: u64,
+        payload: &str,
+    ) -> Result<TypedVerification, String> {
+        self.typed.verify(generation, payload)
+    }
+
     fn read_image(&mut self) -> Result<RasterImage, NativeReadError> {
         let image = self
             .clipboard()
@@ -230,6 +258,10 @@ impl TypedClipboard for UnsupportedTypedClipboard {
     }
 
     fn read(&mut self) -> Result<TypedSnapshot, String> {
+        Err("safe multi-format clipboard identity is unavailable on this platform".to_owned())
+    }
+
+    fn verify(&mut self, _generation: u64, _payload: &str) -> Result<TypedVerification, String> {
         Err("safe multi-format clipboard identity is unavailable on this platform".to_owned())
     }
 }

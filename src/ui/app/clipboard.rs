@@ -1,7 +1,6 @@
 //! Non-destructive clipboard intentions and asynchronous completion.
 
 mod messages;
-
 use crate::{
     application::{Action, ClipboardIntent, Effect, FailureCode, InteractionMode},
     domain::extract_annotations,
@@ -439,7 +438,10 @@ impl BoardApp {
             request_id,
             PendingEditorClipboard {
                 intent,
+                thought_id: *thought_id,
+                edit_owner_generation: self.edit_owner_generation,
                 before: snapshot,
+                source_annotations: current_annotations,
             },
         );
         vec![Effect::WriteClipboard {
@@ -473,12 +475,22 @@ impl BoardApp {
             self.set_error("storage failed, selection was copied without deletion");
             return Vec::new();
         }
-        let unchanged = self.editor_snapshot().is_some_and(|current| {
+        let owner_is_current = matches!(
+            self.state.mode,
+            InteractionMode::Edit { thought_id } if thought_id == pending.thought_id
+        ) && self.edit_owner_generation == pending.edit_owner_generation
+            && matches!(
+                self.editor.as_ref(),
+                Some((EditorOwner::Thought(thought_id), _)) if *thought_id == pending.thought_id
+            );
+        let editor_is_unchanged = self.editor_snapshot().is_some_and(|current| {
             current.content == pending.before.content
                 && current.cursor == pending.before.cursor
                 && current.selection == pending.before.selection
         });
-        if !unchanged || !matches!(self.state.mode, InteractionMode::Edit { .. }) {
+        let annotations_are_unchanged =
+            self.current_annotations(pending.thought_id) == pending.source_annotations;
+        if !owner_is_current || !editor_is_unchanged || !annotations_are_unchanged {
             self.set_warning("selection changed before clipboard confirmation");
             return Vec::new();
         }
