@@ -7,12 +7,12 @@ SIZE 42x8
 
 TEXT
 00│┌ proqi shortcuts ─────────────────────[x]│
-01││:                  Commands             ↑│
-02││i                  Inbox                ││
-03││Ctrl+Enter/s       Submit               ││
-04││Ctrl+Shift+Enter/S Submit & keep        ││
-05││Ctrl+Q/q           Quit                 ││
-06││Esc/?              Close                ││
+01││:                   Commands            ↑│
+02││i                   Inbox               ││
+03││Ctrl+Enter/s        Submit              ││
+04││Ctrl+Shift+Enter/S  Submit & keep       ││
+05││Ctrl+Q/q            Quit                ││
+06││Esc/?               Close               ││
 07│└────────────────────────────────────────┘│
 
 STYLE RUNS
