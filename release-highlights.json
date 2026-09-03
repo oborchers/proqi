@@ -82,6 +82,17 @@
         "Press Up twice at the first thought to create above it, use arrows or matching Vim-style navigation, and delete in Board mode with d or physical Del.",
         "Continue typing immediately after Screenshot Inbox capture because every inserted image path now ends with one ordinary space."
       ]
+    },
+    {
+      "version": "0.7.0",
+      "highlights": [
+        "Preserve attachments, folded content, invocation references, and semantic annotations when copying or cutting between Proqi instances on macOS.",
+        "Use familiar Primary shortcuts across Board and Edit while retaining portable single-key Board fallbacks.",
+        "Move five visual rows or eligible entries with Alt arrows or Page Up and Page Down across editors, pickers, browsers, and scrollable overlays.",
+        "Select to wrapped visual-row edges on macOS with Primary+Shift+Left or Primary+Shift+Right.",
+        "Discover globally symlinked Agent Skills and large Markdown invocation definitions through bounded frontmatter reads.",
+        "Keep coordinated schema-changing upgrades open until every participating replacement restores its board and becomes ready."
+      ]
     }
   ]
 }
