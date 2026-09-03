@@ -264,7 +264,7 @@ fn four_direction_agent_controls_have_a_dedicated_footer_band() {
         adjacent_target(Direction::Down, "w1:p4", AgentState::Done),
         adjacent_target(Direction::Left, "w1:p5", AgentState::Idle),
     ]));
-    insta::assert_snapshot!(snapshot(&mut fixture, 120, 12, ThemePreference::Dark));
+    assert_platform_snapshot!(snapshot(&mut fixture, 120, 12, ThemePreference::Dark));
 }
 
 #[test]
