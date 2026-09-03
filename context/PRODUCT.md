@@ -828,6 +828,7 @@ Initial editing shortcuts include:
 | Action | Preferred | Portable fallback |
 |---|---|---|
 | Select all text in the focused thought | `Meta+A` | `Ctrl+A` or command palette |
+| Extend selection to a wrapped visual-row edge | `Meta+Shift+←` / `→` | Command palette or configured shifted Primary binding |
 | Delete the current logical line | `Meta+U` | `Ctrl+U` or command palette |
 | Delete the containing sentence | `Meta+Shift+U` | Command palette or configured binding |
 | Submit active thought | `Meta+Enter` | Command palette |
@@ -859,6 +860,8 @@ terminal forwarding Command or Meta successfully.
 Edit mode behaves like a focused multiline text editor. It supports:
 
 - Character, word, visual line, and document movement.
+- Selection extension to the beginning or end of the current wrapped visual
+  row, using current terminal-cell geometry and folded presentation.
 - Text selection by keyboard and mouse drag.
 - Native clipboard copy, cut, and paste.
 - Insert, replace, delete, undo, and redo.

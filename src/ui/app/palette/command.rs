@@ -14,6 +14,8 @@ pub(in crate::ui::app) enum Command {
     DeleteSentence,
     JumpUp,
     JumpDown,
+    SelectVisualRowStart,
+    SelectVisualRowEnd,
     ThoughtStart,
     ThoughtEnd,
     Indent,
@@ -53,7 +55,7 @@ pub(in crate::ui::app) enum Command {
 }
 
 impl Command {
-    pub(super) const ALL: [(Self, &'static str); 48] = [
+    pub(super) const ALL: [(Self, &'static str); 50] = [
         (Self::New, "New thought"),
         (Self::RenameSession, "Rename session"),
         (Self::CopySessionId, "Copy session ID"),
@@ -69,6 +71,14 @@ impl Command {
         (
             Self::JumpDown,
             crate::ui::paging::command_label(crate::ui::FastNavigation::Next),
+        ),
+        (
+            Self::SelectVisualRowStart,
+            "Extend selection to visual row start",
+        ),
+        (
+            Self::SelectVisualRowEnd,
+            "Extend selection to visual row end",
         ),
         (Self::ThoughtStart, "Move cursor to thought beginning"),
         (Self::ThoughtEnd, "Move cursor to thought end"),

@@ -8,8 +8,25 @@ use crate::{
 use unicode_segmentation::UnicodeSegmentation as _;
 
 use super::BoardApp;
+use crate::ui::VisualRowEdge;
 
 impl BoardApp {
+    pub(super) fn extend_selection_to_visual_row_edge(&mut self, edge: VisualRowEdge) {
+        let mut frame = self.build_frame_presentation();
+        self.attach_editor_presentation(&mut frame);
+        let Some(position) = frame.editor().map(|editor| editor.visual_row_edge(edge)) else {
+            return;
+        };
+        let Some((_, editor)) = &mut self.editor else {
+            return;
+        };
+        let _outcome = editor.apply(EditCommand::SetCursor {
+            position,
+            extend_selection: true,
+        });
+        self.edit_boundary = None;
+    }
+
     pub(super) fn reveal_sentence_folds(&mut self, list_indent_width: u8) -> bool {
         let Some(thought_id) = self.active_thought_id() else {
             return false;

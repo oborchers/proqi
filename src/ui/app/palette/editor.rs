@@ -44,6 +44,10 @@ impl BoardApp {
             effects.extend(self.handle_edit_key(key, ids, clock));
             return Some(effects);
         }
+        if let Some(edge) = visual_row_edge(command) {
+            effects.extend(self.handle_edit_key(UiKey::ExtendVisualRow { edge }, ids, clock));
+            return Some(effects);
+        }
         if let Some(movement) = movement(command) {
             effects.extend(self.handle_edit_key(
                 UiKey::Move {
@@ -68,11 +72,21 @@ fn editor_owned(command: Command) -> bool {
             | Command::DeleteSentence
             | Command::JumpUp
             | Command::JumpDown
+            | Command::SelectVisualRowStart
+            | Command::SelectVisualRowEnd
             | Command::ThoughtStart
             | Command::ThoughtEnd
             | Command::Indent
             | Command::Outdent
     )
+}
+
+const fn visual_row_edge(command: Command) -> Option<crate::ui::VisualRowEdge> {
+    match command {
+        Command::SelectVisualRowStart => Some(crate::ui::VisualRowEdge::Start),
+        Command::SelectVisualRowEnd => Some(crate::ui::VisualRowEdge::End),
+        _ => None,
+    }
 }
 
 const fn movement(command: Command) -> Option<CursorMovement> {

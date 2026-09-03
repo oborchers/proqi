@@ -318,4 +318,6 @@ fn contextual_help_uses_platform_primary_labels_for_fast_navigation() {
     };
     assert!(rendered.contains(primary));
     assert!(rendered.contains("Start/end"));
+    assert!(rendered.contains("Primary+Shift row"));
+    assert!(rendered.contains("←/→·H/L"));
 }

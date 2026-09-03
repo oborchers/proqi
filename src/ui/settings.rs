@@ -117,6 +117,10 @@ pub struct KeyBindings {
     pub screenshot_inbox: char,
     /// Shifted Primary chord suffix for sentence deletion.
     pub delete_sentence: char,
+    /// Shifted Primary chord suffix for selection to the visual-row start.
+    pub select_visual_row_start: char,
+    /// Shifted Primary chord suffix for selection to the visual-row end.
+    pub select_visual_row_end: char,
 }
 
 impl Default for KeyBindings {
@@ -145,6 +149,8 @@ impl Default for KeyBindings {
             quit: 'q',
             screenshot_inbox: 'i',
             delete_sentence: 'U',
+            select_visual_row_start: 'H',
+            select_visual_row_end: 'L',
         }
     }
 }
@@ -305,11 +311,28 @@ impl KeyBindings {
         if !self.delete_sentence.is_ascii_uppercase() {
             return Err("the sentence deletion binding must be one uppercase ASCII letter");
         }
-        if matches!(
-            self.delete_sentence.to_ascii_lowercase(),
-            'a' | 'c' | 'd' | 'n' | 'p' | 'q' | 'v' | 'x' | 'y' | 'z'
-        ) {
+        if !self.select_visual_row_start.is_ascii_uppercase()
+            || !self.select_visual_row_end.is_ascii_uppercase()
+        {
+            return Err("visual-row selection bindings must be uppercase ASCII letters");
+        }
+        if reserved_primary_suffix(self.delete_sentence) {
             return Err("the sentence deletion binding conflicts with a reserved Primary chord");
+        }
+        if reserved_primary_suffix(self.select_visual_row_start)
+            || reserved_primary_suffix(self.select_visual_row_end)
+        {
+            return Err("visual-row selection bindings conflict with a reserved Primary chord");
+        }
+        let shifted_primary = [
+            self.delete_sentence,
+            self.select_visual_row_start,
+            self.select_visual_row_end,
+        ];
+        for (index, value) in shifted_primary.iter().enumerate() {
+            if shifted_primary[index + 1..].contains(value) {
+                return Err("shifted Primary bindings must be distinct");
+            }
         }
         let values = [
             self.new,
@@ -344,6 +367,13 @@ impl KeyBindings {
     }
 }
 
+fn reserved_primary_suffix(character: char) -> bool {
+    matches!(
+        character.to_ascii_lowercase(),
+        'a' | 'c' | 'd' | 'n' | 'p' | 'q' | 'v' | 'x' | 'y' | 'z'
+    )
+}
+
 pub(crate) fn key_label(key: char) -> String {
     match key {
         ' ' => "Space".to_owned(),
@@ -362,98 +392,5 @@ pub(crate) fn primary_key_label(suffix: &str) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{BoardCommand, KeyBindings};
-    use crate::ui::UiKey;
-
-    #[test]
-    fn board_submission_chords_resolve_to_the_configured_submission_commands() {
-        let bindings = KeyBindings {
-            submit_remove: '界',
-            submit_keep: '語',
-            ..KeyBindings::default()
-        };
-        assert!(bindings.validate().is_ok());
-        for (key, command) in [
-            (
-                UiKey::Character(bindings.submit_remove),
-                BoardCommand::SubmitRemove,
-            ),
-            (UiKey::Submit, BoardCommand::SubmitRemove),
-            (
-                UiKey::Character(bindings.submit_keep),
-                BoardCommand::SubmitKeep,
-            ),
-            (UiKey::SubmitKeep, BoardCommand::SubmitKeep),
-        ] {
-            assert_eq!(bindings.command_for_key(key), Some(command));
-        }
-        assert_eq!(bindings.command_for_key(UiKey::Character('s')), None);
-        assert_eq!(bindings.command_for_key(UiKey::Character('S')), None);
-        assert_eq!(bindings.command_for_key(UiKey::Enter), None);
-    }
-
-    #[test]
-    fn ambiguous_bindings_are_rejected() {
-        let mut bindings = KeyBindings::default();
-        bindings.edit = bindings.new;
-        assert!(bindings.validate().is_err());
-    }
-
-    #[test]
-    fn recovery_keys_cannot_be_used_for_quit() {
-        for reserved in ['r', 'w'] {
-            let bindings = KeyBindings {
-                quit: reserved,
-                ..KeyBindings::default()
-            };
-            assert!(bindings.validate().is_err());
-        }
-    }
-
-    #[test]
-    fn established_board_binding_precedes_compatible_transform_collision() {
-        let bindings = KeyBindings {
-            new: 't',
-            ..KeyBindings::default()
-        };
-        assert!(bindings.validate().is_ok());
-        assert_eq!(bindings.command('t'), Some(BoardCommand::New));
-    }
-
-    #[test]
-    fn reserved_primary_transform_bindings_are_rejected() {
-        for reserved in ['a', 'c', 'd', 'n', 'p', 'q', 'u', 'v', 'x', 'y', 'z'] {
-            let bindings = KeyBindings {
-                transform: reserved,
-                ..KeyBindings::default()
-            };
-            assert!(bindings.validate().is_err(), "reserved: {reserved}");
-        }
-    }
-
-    #[test]
-    fn sentence_deletion_rejects_primary_chords_consumed_before_edit_dispatch() {
-        for reserved in ['A', 'C', 'D', 'N', 'P', 'Q', 'V', 'X', 'Y', 'Z'] {
-            let bindings = KeyBindings {
-                delete_sentence: reserved,
-                ..KeyBindings::default()
-            };
-            assert!(bindings.validate().is_err(), "reserved suffix {reserved}");
-        }
-    }
-
-    #[test]
-    fn sentence_deletion_rejects_unreachable_shifted_suffixes() {
-        for unreachable in ['g', '1', '!', 'Ü'] {
-            let bindings = KeyBindings {
-                delete_sentence: unreachable,
-                ..KeyBindings::default()
-            };
-            assert!(
-                bindings.validate().is_err(),
-                "unreachable suffix {unreachable}"
-            );
-        }
-    }
-}
+#[path = "settings/tests.rs"]
+mod tests;

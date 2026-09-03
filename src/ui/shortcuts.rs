@@ -12,35 +12,7 @@ pub(crate) fn items(app: &BoardApp) -> Vec<Shortcut> {
         app.interaction_mode(),
         InteractionMode::Compose | InteractionMode::Edit { .. }
     ) {
-        let mut items = vec![
-            ("Esc".to_owned(), "Board"),
-            (primary("C"), "Copy"),
-            (primary("X"), "Cut"),
-            (primary("A"), "Select all"),
-            (primary("U"), "Delete logical line"),
-            (
-                primary(&format!("Shift+{}", keys.delete_sentence)),
-                "Delete sentence",
-            ),
-            (primary("Z"), "Undo"),
-            (primary("Shift+Z"), "Redo"),
-            (
-                primary(&transform_key_label(keys.transform)),
-                "Split/extract",
-            ),
-            (
-                super::paging::FAST_NAVIGATION_SHORTCUT_KEY.to_owned(),
-                super::paging::FAST_NAVIGATION_SHORTCUT_LABEL,
-            ),
-            (format!("{}/{}", primary("↑"), primary("↓")), "Start/end"),
-            ("↑/↓×2".to_owned(), "Neighbor/new"),
-        ];
-        if app.supports_submission() {
-            let [remove, keep] = submission_items(app.interaction_mode(), keys);
-            items.insert(1, remove);
-            items.insert(2, keep);
-        }
-        return items;
+        return edit_items(app.interaction_mode(), keys, app.supports_submission());
     }
     let mut items = vec![
         (keys.new.to_string(), "New"),
@@ -85,6 +57,49 @@ pub(crate) fn items(app: &BoardApp) -> Vec<Shortcut> {
     }
     items.push((keys.quit.to_string(), "Quit"));
     items.push((keys.help.to_string(), "Close"));
+    items
+}
+
+fn edit_items(
+    mode: InteractionMode,
+    keys: &super::settings::KeyBindings,
+    supports_submission: bool,
+) -> Vec<Shortcut> {
+    let mut items = vec![
+        ("Esc".to_owned(), "Board"),
+        (primary("C"), "Copy"),
+        (primary("X"), "Cut"),
+        (primary("A"), "Select all"),
+        (primary("U"), "Delete logical line"),
+        (
+            primary(&format!("Shift+{}", keys.delete_sentence)),
+            "Delete sentence",
+        ),
+        (primary("Z"), "Undo"),
+        (primary("Shift+Z"), "Redo"),
+        (
+            primary(&transform_key_label(keys.transform)),
+            "Split/extract",
+        ),
+        (
+            super::paging::FAST_NAVIGATION_SHORTCUT_KEY.to_owned(),
+            super::paging::FAST_NAVIGATION_SHORTCUT_LABEL,
+        ),
+        (format!("{}/{}", primary("↑"), primary("↓")), "Start/end"),
+        (
+            format!(
+                "←/→·{}/{}",
+                keys.select_visual_row_start, keys.select_visual_row_end
+            ),
+            "Primary+Shift row",
+        ),
+        ("↑/↓×2".to_owned(), "Neighbor/new"),
+    ];
+    if supports_submission {
+        let [remove, keep] = submission_items(mode, keys);
+        items.insert(1, remove);
+        items.insert(2, keep);
+    }
     items
 }
 

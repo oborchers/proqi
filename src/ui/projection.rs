@@ -11,6 +11,7 @@ use crate::{
             wrap_rows, wrapped_row_index,
         },
     },
+    ui::VisualRowEdge,
 };
 
 /// One thought's canonical identity and complete display projection for a frame.
@@ -126,6 +127,19 @@ pub(super) fn board_cell_target(
 }
 
 impl EditorPresentation {
+    pub(super) fn visual_row_edge(&self, edge: VisualRowEdge) -> TextPosition {
+        let row_index = directional_row_index(&self.rows, self.cursor_display_byte, edge);
+        let row = &self.rows[row_index];
+        let display_byte = match edge {
+            VisualRowEdge::Start => row.start_byte,
+            VisualRowEdge::End => row.end_byte,
+        };
+        position_for_byte(
+            &self.canonical_content,
+            unproject_boundary(display_byte, &self.substitutions, edge),
+        )
+    }
+
     pub(super) fn cell_target(&self, row: u16, column: u16) -> BoardCellTarget {
         if let Some(fold) = self.fold_at_cell(row, column) {
             return BoardCellTarget::Fold {
@@ -171,6 +185,16 @@ impl EditorPresentation {
             cell_column_at_byte(&self.snapshot.content, wrapped, cursor),
             viewport_row,
         ))
+    }
+}
+
+fn directional_row_index(rows: &[WrappedRow], cursor: usize, edge: VisualRowEdge) -> usize {
+    let index = wrapped_row_index(rows, cursor);
+    let row = &rows[index];
+    match edge {
+        VisualRowEdge::Start if cursor == row.start_byte && index > 0 => index - 1,
+        VisualRowEdge::End if cursor == row.end_byte && index + 1 < rows.len() => index + 1,
+        VisualRowEdge::Start | VisualRowEdge::End => index,
     }
 }
 
@@ -257,6 +281,31 @@ pub(super) fn unproject_byte(byte: usize, folds: &[PresentedSubstitution]) -> us
                 fold.canonical_end
             } else {
                 fold.canonical_start + byte.saturating_sub(fold.start)
+            };
+        }
+        canonical_cursor = fold.canonical_end;
+        display_cursor = fold.end;
+    }
+    canonical_cursor + byte.saturating_sub(display_cursor)
+}
+
+fn unproject_boundary(byte: usize, folds: &[PresentedSubstitution], edge: VisualRowEdge) -> usize {
+    let mut canonical_cursor = 0;
+    let mut display_cursor = 0;
+    for fold in folds {
+        if byte < fold.start {
+            return canonical_cursor + byte.saturating_sub(display_cursor);
+        }
+        if byte == fold.start {
+            return fold.canonical_start;
+        }
+        if byte <= fold.end {
+            if !fold.collapsed && byte < fold.content_end {
+                return fold.canonical_start + byte.saturating_sub(fold.start);
+            }
+            return match edge {
+                VisualRowEdge::Start if byte < fold.end => fold.canonical_start,
+                VisualRowEdge::Start | VisualRowEdge::End => fold.canonical_end,
             };
         }
         canonical_cursor = fold.canonical_end;

@@ -1024,6 +1024,17 @@ Board shortcut, with Escape retained as the unconditional Help close action.
 deletes one newline-delimited logical line as a single undoable edit. Logical
 line commands operate on the text model and are independent of visual wrapping.
 
+`Primary+Shift+Left` and `Primary+Shift+Right` normalize to distinct visual-row
+selection intentions before mode dispatch. Edit mode resolves their active
+endpoint from the current canonical-to-visible projection, including current
+width, terminal-cell wrapping, collapsed substitutions, and expanded folds,
+then extends through the editor's existing stable anchor. Exact visual-row
+boundaries use directional affinity so repeated chords advance across rows.
+Empty rows and document boundaries clamp without creating text revisions.
+Configured shifted Primary suffixes and command-palette actions retain a
+truthful fallback when a terminal does not forward the arrow chord distinctly.
+Board navigation and unshifted Primary arrows do not consume these intentions.
+
 `Primary+Shift+U` requests containing-sentence deletion when the
 terminal reports the chord distinctly. The Rope editor is the canonical owner
 of sentence ranges. It applies the documented UAX29-C3-2 paragraph profile,

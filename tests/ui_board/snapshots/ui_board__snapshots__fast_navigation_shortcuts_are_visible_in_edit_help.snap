@@ -1,38 +1,38 @@
 ---
 source: tests/ui_board/snapshots.rs
-assertion_line: 469
+assertion_line: 483
 expression: "snapshot(&mut fixture, 80, 14, ThemePreference::Dark)"
 ---
 SIZE 80x14
 
 TEXT
-00│┌ proqi shortcuts ───────────────────────────────────────────────────────────[x]│
-01││Esc      Board                         ⌘C       Copy                          ││
-02││⌘X       Cut                           ⌘A       Select all                    ││
-03││⌘U       Delete logical line           ⌘Shift+U Delete sentence               ││
-04││⌘Z       Undo                          ⌘Shift+Z Redo                          ││
-05││⌘T       Split/extract                 Alt+↑/↓  5-row · PgUp/PgDn             ││
-06││⌘↑/⌘↓    Start/end                     ↑/↓×2    Neighbor/new                  ││
-07││                                                                              ││
-08│└──────────────────────────────────────────────────────────────────────────────┘│
-09││
-10│  save failed · r Retry · w Export recovery│
-11│  proqi-ui-contract│
+00││
+01│  one│
+02│┌ proqi shortcuts ───────────────────────────────────────────────────────────[x]│
+03││Esc      Board                         ⌘C       Copy                          ││
+04││⌘X       Cut                           ⌘A       Select all                    ││
+05││⌘U       Delete logical line           ⌘Shift+U Delete sentence               ││
+06││⌘Z       Undo                          ⌘Shift+Z Redo                          ││
+07││⌘T       Split/extract                 Alt+↑/↓  5-row · PgUp/PgDn             ││
+08││⌘↑/⌘↓    Start/end                     ←/→·H/L  Primary+Shift row             ││
+09││↑/↓×2    Neighbor/new                                                         ││
+10││                                                                              ││
+11│└──────────────────────────────────────────────────────────────────────────────┘│
 12│  1 thought · edit · unsaved│
 13│  r Retry  w Export   ? Shortcuts│
 
 STYLE RUNS
-0: 0-0 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 1-17 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=BOLD | 18-76 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 77-79 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE
-1: 0-0 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 1-3 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 4-39 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 40-41 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 42-79 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-2: 0-0 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 1-2 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 3-39 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 40-41 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 42-79 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-3: 0-0 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 1-2 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 3-39 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 40-47 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 48-79 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-4: 0-0 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 1-2 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 3-39 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 40-47 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 48-79 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-5: 0-0 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 1-2 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 3-39 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 40-46 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 47-79 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-6: 0-0 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 1-5 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 6-39 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 40-44 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 45-79 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-7: 0-79 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-8: 0-79 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-9: 0-79 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-10: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-77 fg=LightRed bg=Rgb(15, 13, 10) mod=NONE | 78-79 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+0: 0-79 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+1: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-79 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
+2: 0-0 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 1-17 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=BOLD | 18-76 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 77-79 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE
+3: 0-0 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 1-3 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 4-39 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 40-41 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 42-79 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+4: 0-0 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 1-2 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 3-39 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 40-41 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 42-79 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+5: 0-0 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 1-2 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 3-39 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 40-47 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 48-79 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+6: 0-0 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 1-2 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 3-39 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 40-47 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 48-79 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+7: 0-0 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 1-2 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 3-39 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 40-46 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 47-79 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+8: 0-0 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 1-5 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 6-39 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 40-46 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 47-79 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+9: 0-0 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 1-5 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 6-79 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+10: 0-79 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 11: 0-79 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 12: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-77 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE | 78-79 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 13: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-2 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 3-10 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 11-11 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 12-21 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 22-22 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 23-79 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE

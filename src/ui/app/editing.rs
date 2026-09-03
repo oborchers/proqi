@@ -10,6 +10,7 @@ use crate::{
 };
 
 use super::{BoardApp, EditorOwner, UiInput, UiKey};
+use crate::ui::VisualRowEdge;
 use crate::ui::{annotations, settings::KeyBindings};
 
 pub(super) fn command_for_key(
@@ -44,6 +45,7 @@ pub(super) fn command_for_key(
         | UiKey::PrimaryCharacter(_)
         | UiKey::PrimaryShiftCharacter(_)
         | UiKey::PrimaryShiftMove { .. }
+        | UiKey::ExtendVisualRow { .. }
         | UiKey::Undo
         | UiKey::Redo
         | UiKey::Quit
@@ -64,6 +66,20 @@ pub(super) fn normalize_edit_key(key: UiKey, keybindings: &KeyBindings) -> Optio
             movement,
             extend_selection: true,
         }),
+        UiKey::PrimaryShiftCharacter(character)
+            if character.eq_ignore_ascii_case(&keybindings.select_visual_row_start) =>
+        {
+            Some(UiKey::ExtendVisualRow {
+                edge: VisualRowEdge::Start,
+            })
+        }
+        UiKey::PrimaryShiftCharacter(character)
+            if character.eq_ignore_ascii_case(&keybindings.select_visual_row_end) =>
+        {
+            Some(UiKey::ExtendVisualRow {
+                edge: VisualRowEdge::End,
+            })
+        }
         UiKey::PrimaryShiftCharacter(character)
             if character.eq_ignore_ascii_case(&keybindings.delete_sentence) =>
         {

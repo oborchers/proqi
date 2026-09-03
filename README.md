@@ -165,6 +165,7 @@ Board choice.
 | `Primary+C` / `X` / `V` | Native copy / safe cut / paste |
 | `Alt` or `Ctrl` + `←` / `→`; `Home` / `End` | Move by word; line boundary |
 | `Shift` + movement | Extend text selection |
+| `Primary+Shift+←` / `→` | Extend to the current wrapped visual-row start / end |
 | `Alt+↑` / `↓` or `Page Up` / `Page Down`; `Primary+↑` / `↓` | Jump five rows; thought start / end |
 | `Enter`; `Tab`; `Shift+Tab` | Continue lists; nest; outdent |
 | `↑` / `↓` twice at a boundary | Focus the adjacent thought, or create at the top / bottom board edge |
@@ -316,6 +317,8 @@ focus_down = "j"
 transform = "t" # merge selection; Esc,t splits or extracts the last editor range
 screenshot_inbox = "i"
 delete_sentence = "U" # Primary+Shift+U, use another unreserved uppercase suffix to remap
+select_visual_row_start = "H" # Primary+Shift+H fallback
+select_visual_row_end = "L" # Primary+Shift+L fallback
 ```
 
 Thought transformations are contextual and remappable. In an editor, use
@@ -334,6 +337,9 @@ Unsafe theme contrast is rejected. See the
 [theme example](docs/themes/proqi-dark.toml). Invocation roots stay local.
 Sentence deletion uses a documented Unicode profile with unavoidable ambiguity.
 See [sentence deletion](docs/SENTENCE_DELETION.md).
+Visual-row selection uses the current rendered width and folded presentation.
+If a terminal does not report `Primary+Shift+←` / `→` distinctly, use the
+command palette or the configured shifted Primary suffixes above.
 
 ## Compatibility and contributing
 

@@ -6,7 +6,7 @@ use crossterm::event::{
 
 use crate::{
     ports::editor::CursorMovement,
-    ui::{FastNavigation, PointerButton, PointerInput, PointerKind, UiInput, UiKey},
+    ui::{FastNavigation, PointerButton, PointerInput, PointerKind, UiInput, UiKey, VisualRowEdge},
 };
 
 pub(super) fn translate(event: Event) -> Option<UiInput> {
@@ -95,6 +95,16 @@ pub(super) fn translate_key(key: KeyEvent) -> Option<UiKey> {
             document,
             extend_selection,
         )),
+        KeyCode::Left if extend_selection && platform_primary(key.modifiers) => {
+            Some(UiKey::ExtendVisualRow {
+                edge: VisualRowEdge::Start,
+            })
+        }
+        KeyCode::Right if extend_selection && platform_primary(key.modifiers) => {
+            Some(UiKey::ExtendVisualRow {
+                edge: VisualRowEdge::End,
+            })
+        }
         KeyCode::PageUp => Some(fast_navigation(FastNavigation::Previous, extend_selection)),
         KeyCode::PageDown => Some(fast_navigation(FastNavigation::Next, extend_selection)),
         KeyCode::Left => Some(move_key(
@@ -157,11 +167,7 @@ fn vertical_navigation(
     extend_selection: bool,
 ) -> UiKey {
     let legacy = if legacy_document { boundary } else { ordinary };
-    let platform_primary = if cfg!(target_os = "macos") {
-        modifiers.intersects(KeyModifiers::SUPER | KeyModifiers::META)
-    } else {
-        modifiers.contains(KeyModifiers::CONTROL)
-    };
+    let platform_primary = platform_primary(modifiers);
     if modifiers.contains(KeyModifiers::ALT) && !platform_primary {
         return fast_navigation(
             if accelerated == CursorMovement::VisualJumpUp {
@@ -183,6 +189,14 @@ fn vertical_navigation(
     UiKey::EditNavigation {
         editor_movement,
         board_movement: legacy,
+    }
+}
+
+fn platform_primary(modifiers: KeyModifiers) -> bool {
+    if cfg!(target_os = "macos") {
+        modifiers.intersects(KeyModifiers::SUPER | KeyModifiers::META)
+    } else {
+        modifiers.contains(KeyModifiers::CONTROL)
     }
 }
 

@@ -103,6 +103,10 @@ mod startup;
 mod update_control;
 
 #[cfg(target_os = "macos")]
+#[path = "pty/visual_row_selection.rs"]
+mod visual_row_selection;
+
+#[cfg(target_os = "macos")]
 #[path = "pty/update_migration.rs"]
 mod update_migration;
 
