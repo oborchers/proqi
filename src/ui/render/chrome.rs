@@ -42,9 +42,11 @@ fn render_control(
             .iter()
             .find(|target| target.direction == direction)
             .map(crate::ui::control_labels::agent),
-        _ => {
-            crate::ui::control_labels::action(target, area.width <= 6, app.interaction_mode(), keys)
-        }
+        _ => crate::ui::control_labels::action(target, false, app.interaction_mode(), keys)
+            .filter(|label| label.width() <= area.width)
+            .or_else(|| {
+                crate::ui::control_labels::action(target, true, app.interaction_mode(), keys)
+            }),
     };
     let Some(label) = label else {
         return;

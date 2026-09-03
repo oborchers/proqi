@@ -130,14 +130,24 @@ fn control_candidates(
             keys,
         )
     } else {
+        board_action_candidates(width.saturating_sub(4), mode, keys)
+    }
+}
+
+fn board_action_candidates(
+    available_width: u16,
+    mode: InteractionMode,
+    keys: &KeyBindings,
+) -> Vec<(HitTarget, u16)> {
+    let items = |compact| {
         candidates(
             &[
                 (HitTarget::Insert, false),
-                (HitTarget::Copy, false),
-                (HitTarget::Cut, false),
+                (HitTarget::Copy, compact),
+                (HitTarget::Cut, compact),
                 (HitTarget::Delete, false),
                 (HitTarget::Select, false),
-                (HitTarget::Undo, false),
+                (HitTarget::Undo, compact),
                 (HitTarget::Search, false),
                 (HitTarget::Commands, false),
                 (HitTarget::Help, false),
@@ -145,7 +155,21 @@ fn control_candidates(
             mode,
             keys,
         )
+    };
+    let full = items(false);
+    if placed_width(&full) <= available_width {
+        full
+    } else {
+        items(true)
     }
+}
+
+fn placed_width(candidates: &[(HitTarget, u16)]) -> u16 {
+    candidates
+        .iter()
+        .map(|(_, width)| *width)
+        .sum::<u16>()
+        .saturating_add(u16::try_from(candidates.len().saturating_sub(1)).unwrap_or(u16::MAX))
 }
 
 fn failure_candidates(

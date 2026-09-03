@@ -3,6 +3,7 @@
 use crate::application::InteractionMode;
 
 use super::BoardApp;
+use super::shortcut_metadata::{self, ShortcutAction};
 
 pub(crate) type Shortcut = (String, &'static str);
 
@@ -26,21 +27,38 @@ pub(crate) fn items(app: &BoardApp) -> Vec<Shortcut> {
             primary(&format!("{}/{}", keys.range_down, keys.range_up)),
             "Reorder",
         ),
-        (keys.copy.to_string(), "Copy"),
-        (keys.cut.to_string(), "Cut"),
+        (
+            shortcut_metadata::board_label(ShortcutAction::Copy, keys),
+            "Copy",
+        ),
+        (
+            shortcut_metadata::board_label(ShortcutAction::Cut, keys),
+            "Cut",
+        ),
         (keys.delete_label(), "Delete"),
-        (primary("D"), "Duplicate"),
+        (
+            shortcut_metadata::primary_label(ShortcutAction::Duplicate),
+            "Duplicate",
+        ),
         (super::settings::key_label(keys.select), "Select"),
         (
             format!(
                 "{}/{}",
-                super::settings::key_label(keys.select_all),
-                primary("A")
+                shortcut_metadata::primary_label(ShortcutAction::SelectAll),
+                super::settings::key_label(keys.select_all)
             ),
             "Select all",
         ),
         (super::settings::key_label(keys.range_select), "Latch"),
-        (keys.undo.to_string(), "Undo"),
+        (
+            shortcut_metadata::board_label(ShortcutAction::Undo, keys),
+            "Undo",
+        ),
+        (
+            shortcut_metadata::primary_label(ShortcutAction::Paste),
+            "Paste",
+        ),
+        (shortcut_metadata::redo_label(), "Redo"),
         (super::settings::key_label(keys.collapse), "Collapse"),
         (keys.search.to_string(), "Search"),
         (keys.commands.to_string(), "Commands"),
@@ -55,8 +73,11 @@ pub(crate) fn items(app: &BoardApp) -> Vec<Shortcut> {
     if app.supports_submission() {
         items.extend(submission_items(InteractionMode::Board, keys));
     }
-    items.push((keys.quit.to_string(), "Quit"));
-    items.push((keys.help.to_string(), "Close"));
+    items.push((
+        shortcut_metadata::board_label(ShortcutAction::Quit, keys),
+        "Quit",
+    ));
+    items.push((help_close_label(), "Close"));
     items
 }
 
@@ -66,17 +87,33 @@ fn edit_items(
     supports_submission: bool,
 ) -> Vec<Shortcut> {
     let mut items = vec![
-        ("Esc".to_owned(), "Board"),
-        (primary("C"), "Copy"),
-        (primary("X"), "Cut"),
-        (primary("A"), "Select all"),
-        (primary("U"), "Delete logical line"),
+        (help_close_label(), "Close"),
+        (
+            shortcut_metadata::primary_label(ShortcutAction::Copy),
+            "Copy",
+        ),
+        (shortcut_metadata::primary_label(ShortcutAction::Cut), "Cut"),
+        (
+            shortcut_metadata::primary_label(ShortcutAction::Paste),
+            "Paste",
+        ),
+        (
+            shortcut_metadata::primary_label(ShortcutAction::SelectAll),
+            "Select all",
+        ),
+        (
+            shortcut_metadata::primary_label(ShortcutAction::DeleteLogicalLine),
+            "Delete logical line",
+        ),
         (
             primary(&format!("Shift+{}", keys.delete_sentence)),
             "Delete sentence",
         ),
-        (primary("Z"), "Undo"),
-        (primary("Shift+Z"), "Redo"),
+        (
+            shortcut_metadata::primary_label(ShortcutAction::Undo),
+            "Undo",
+        ),
+        (shortcut_metadata::redo_label(), "Redo"),
         (
             primary(&transform_key_label(keys.transform)),
             "Split/extract",
@@ -86,13 +123,7 @@ fn edit_items(
             super::paging::FAST_NAVIGATION_SHORTCUT_LABEL,
         ),
         (format!("{}/{}", primary("↑"), primary("↓")), "Start/end"),
-        (
-            format!(
-                "←/→·{}/{}",
-                keys.select_visual_row_start, keys.select_visual_row_end
-            ),
-            "Primary+Shift row",
-        ),
+        visual_row_selection_shortcut(keys),
         ("↑/↓×2".to_owned(), "Neighbor/new"),
     ];
     if supports_submission {
@@ -103,17 +134,41 @@ fn edit_items(
     items
 }
 
+fn visual_row_selection_shortcut(keys: &super::settings::KeyBindings) -> Shortcut {
+    visual_row_selection_shortcut_for_platform(keys, cfg!(target_os = "macos"))
+}
+
+fn visual_row_selection_shortcut_for_platform(
+    keys: &super::settings::KeyBindings,
+    macos: bool,
+) -> Shortcut {
+    let fallback = format!(
+        "{}/{}",
+        keys.select_visual_row_start, keys.select_visual_row_end
+    );
+    let suffix = if macos {
+        format!("Shift+←/→/{fallback}")
+    } else {
+        format!("Shift+{fallback}")
+    };
+    (primary(&suffix), "Select visual row")
+}
+
+fn help_close_label() -> String {
+    "Esc".to_owned()
+}
+
 fn submission_items(mode: InteractionMode, keys: &crate::ui::KeyBindings) -> [Shortcut; 2] {
-    let board_key = |key: char, suffix: &str| {
+    let key = |action| {
         if matches!(mode, InteractionMode::Board) {
-            format!("{}/{}", super::settings::key_label(key), primary(suffix))
+            shortcut_metadata::board_label(action, keys)
         } else {
-            primary(suffix)
+            shortcut_metadata::canonical_label(action)
         }
     };
     [
-        (board_key(keys.submit_remove, "Enter"), "Submit"),
-        (board_key(keys.submit_keep, "Shift+Enter"), "Submit & keep"),
+        (key(ShortcutAction::Submit), "Submit"),
+        (key(ShortcutAction::SubmitKeep), "Submit & keep"),
     ]
 }
 
@@ -151,5 +206,33 @@ fn transform_key_label(key: char) -> String {
         key.to_ascii_uppercase().to_string()
     } else {
         key.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn visual_row_help_only_advertises_primary_arrows_on_macos() {
+        let keys = super::super::settings::KeyBindings::default();
+        let prefix = if cfg!(target_os = "macos") {
+            "Cmd+"
+        } else {
+            "Ctrl+"
+        };
+        assert_eq!(
+            visual_row_selection_shortcut_for_platform(&keys, true),
+            (format!("{prefix}Shift+←/→/H/L"), "Select visual row")
+        );
+        assert_eq!(
+            visual_row_selection_shortcut_for_platform(&keys, false),
+            (format!("{prefix}Shift+H/L"), "Select visual row")
+        );
+    }
+
+    #[test]
+    fn help_close_label_is_unambiguous_about_the_modal_close_action() {
+        assert_eq!(help_close_label(), "Esc");
     }
 }

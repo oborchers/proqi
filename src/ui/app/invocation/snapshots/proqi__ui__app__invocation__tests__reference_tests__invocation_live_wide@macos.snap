@@ -13,4 +13,4 @@ expression: "snapshots::live_snapshot(72, 12)"
 08││
 09│  fixture│
 10│  1 thought · edit · saved│
-11│  Esc Board  ⌘C Copy ⌘X Cut ⌘Z Undo│
+11│  Esc Board  Cmd+C Copy Cmd+X Cut Cmd+Z Undo│

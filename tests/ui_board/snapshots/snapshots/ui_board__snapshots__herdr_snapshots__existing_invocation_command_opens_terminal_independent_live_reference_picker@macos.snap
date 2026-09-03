@@ -1,6 +1,5 @@
 ---
-source: tests/ui_board/snapshots.rs
-assertion_line: 179
+source: tests/ui_board/snapshots/herdr.rs
 expression: "snapshot(&mut fixture, 72, 12, ThemePreference::Dark)"
 ---
 SIZE 72x12
@@ -17,7 +16,7 @@ TEXT
 08││
 09│  proqi-ui-contract│
 10│  1 thought · edit · saving│
-11│  Esc Board  ⌘C Copy ⌘X Cut ⌘Z Undo│
+11│  Esc Board  Cmd+C Copy Cmd+X Cut Cmd+Z Undo│
 
 STYLE RUNS
 0: 0-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
@@ -31,4 +30,4 @@ STYLE RUNS
 8: 0-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 9: 0-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 10: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-69 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE | 70-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-11: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-4 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 5-12 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 13-14 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 15-20 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 21-22 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 23-27 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 28-29 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 30-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+11: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-4 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 5-12 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 13-17 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 18-23 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 24-28 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 29-33 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 34-38 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 39-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE

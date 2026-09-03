@@ -13,6 +13,7 @@ mod paging;
 mod projection;
 mod render;
 mod settings;
+mod shortcut_metadata;
 mod shortcuts;
 mod status;
 mod theme;

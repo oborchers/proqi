@@ -90,6 +90,32 @@ fn takeover_list_uses_identical_arrow_and_jk_navigation() {
 }
 
 #[test]
+fn global_quit_precedes_screenshot_takeover_navigation() {
+    let (mut app, mut ids) = app_with_thought();
+    let session_id = app.state.board.session.id;
+    app.screenshot_conflict(CaptureOwnerInfo {
+        instance_id: ids.instance_id(),
+        session_id,
+        pid: 42,
+        version: "test".to_owned(),
+        capture_protocol: crate::ports::control::CAPTURE_CONTROL_PROTOCOL_VERSION,
+        control_protocol: crate::ports::control::CONTROL_PROTOCOL_VERSION,
+        control_endpoint: "private-control-endpoint".to_owned(),
+        started_at: Timestamp::from_millis(1),
+    });
+    let clock = crate::adapters::memory::FakeClock::new(Timestamp::from_millis(2));
+    assert!(
+        app.handle(
+            crate::ui::UiInput::Key(crate::ui::UiKey::Quit),
+            &mut ids,
+            &clock
+        )
+        .is_empty()
+    );
+    assert!(app.quit);
+}
+
+#[test]
 fn listening_indicator_is_present_without_permanent_status_chrome() {
     let (mut app, _) = app_with_thought();
     app.screenshot_started(Duration::ZERO);

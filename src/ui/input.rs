@@ -112,6 +112,11 @@ pub enum UiKey {
         /// Edge resolved from the current rendered projection.
         edge: VisualRowEdge,
     },
+    /// Move without selection to one fold-aware visual-row edge.
+    MoveVisualRow {
+        /// Edge resolved from the current rendered projection.
+        edge: VisualRowEdge,
+    },
     /// A mode-aware vertical chord with distinct editor and board intentions.
     ///
     /// The UI mode translator resolves this before command dispatch. This lets

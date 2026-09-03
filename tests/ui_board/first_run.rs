@@ -25,32 +25,40 @@ fn snapshot(
 
 #[test]
 fn managed_practice_board_is_reviewed_at_narrow_and_shallow_sizes() {
-    insta::assert_snapshot!(
-        "managed_practice_board_narrow",
-        snapshot(FirstRunEnvironment::HerdrManaged, 34, 12, 4,)
-    );
-    insta::assert_snapshot!(
-        "managed_practice_board_shallow",
-        snapshot(FirstRunEnvironment::HerdrManaged, 80, 6, 5,)
-    );
+    insta::with_settings!({ snapshot_suffix => platform_suffix() }, {
+        insta::assert_snapshot!(
+            "managed_practice_board_narrow",
+            snapshot(FirstRunEnvironment::HerdrManaged, 34, 12, 4,)
+        );
+        insta::assert_snapshot!(
+            "managed_practice_board_shallow",
+            snapshot(FirstRunEnvironment::HerdrManaged, 80, 6, 5,)
+        );
+    });
 }
 
 #[test]
 fn standalone_practice_board_is_reviewed_at_standard_and_wide_sizes() {
-    insta::assert_snapshot!(
-        "standalone_practice_board_standard",
-        snapshot(FirstRunEnvironment::Standalone, 72, 18, 4,)
-    );
-    insta::assert_snapshot!(
-        "standalone_practice_board_wide",
-        snapshot(FirstRunEnvironment::Standalone, 120, 30, 5,)
-    );
+    insta::with_settings!({ snapshot_suffix => platform_suffix() }, {
+        insta::assert_snapshot!(
+            "standalone_practice_board_standard",
+            snapshot(FirstRunEnvironment::Standalone, 72, 18, 4,)
+        );
+        insta::assert_snapshot!(
+            "standalone_practice_board_wide",
+            snapshot(FirstRunEnvironment::Standalone, 120, 30, 5,)
+        );
+    });
 }
 
 #[test]
 fn editing_thought_demonstrates_line_and_sentence_deletion_at_its_initial_cursor() {
     let first_line = "Press Enter to edit the focused thought. Press Esc to return to board mode.";
-    let deletion_line = "- Press Enter to continue this unordered list. Press Primary+U to delete this logical line. Press Primary+Shift+U to delete this sentence.";
+    let delete_line = primary_label("U");
+    let delete_sentence = primary_label("Shift+U");
+    let deletion_line = format!(
+        "- Press Enter to continue this unordered list. Press {delete_line} to delete this logical line. Press {delete_sentence} to delete this sentence."
+    );
 
     let mut line_fixture = Fixture::first_run(FirstRunEnvironment::Standalone);
     line_fixture.input(UiInput::Key(UiKey::Character('j')));
@@ -84,9 +92,26 @@ fn editing_thought_demonstrates_line_and_sentence_deletion_at_its_initial_cursor
             .expect("editing thought")
             .content,
         format!(
-            "{first_line}\n\n- Press Enter to continue this unordered list. Press Primary+U to delete this logical line."
+            "{first_line}\n\n- Press Enter to continue this unordered list. Press {delete_line} to delete this logical line."
         )
     );
+}
+
+fn platform_suffix() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "macos"
+    } else {
+        "portable"
+    }
+}
+
+fn primary_label(suffix: &str) -> String {
+    let prefix = if cfg!(target_os = "macos") {
+        "Cmd"
+    } else {
+        "Ctrl"
+    };
+    format!("{prefix}+{suffix}")
 }
 
 #[test]

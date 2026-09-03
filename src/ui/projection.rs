@@ -127,8 +127,16 @@ pub(super) fn board_cell_target(
 }
 
 impl EditorPresentation {
-    pub(super) fn visual_row_edge(&self, edge: VisualRowEdge) -> TextPosition {
-        let row_index = directional_row_index(&self.rows, self.cursor_display_byte, edge);
+    pub(super) fn visual_row_edge(
+        &self,
+        edge: VisualRowEdge,
+        advance_across_rows: bool,
+    ) -> TextPosition {
+        let row_index = if advance_across_rows {
+            directional_row_index(&self.rows, self.cursor_display_byte, edge)
+        } else {
+            wrapped_row_index(&self.rows, self.cursor_display_byte)
+        };
         let row = &self.rows[row_index];
         let display_byte = match edge {
             VisualRowEdge::Start => row.start_byte,

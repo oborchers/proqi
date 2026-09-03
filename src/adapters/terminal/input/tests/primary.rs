@@ -19,7 +19,7 @@ fn command_and_meta_shortcuts_share_semantics() {
 }
 
 #[test]
-fn reserved_primary_chords_ignore_shifted_case_encoding() {
+fn shifted_reserved_primary_chords_preserve_shift_and_uppercase_without_shift_stays_unshifted() {
     for modifier in [
         KeyModifiers::CONTROL,
         KeyModifiers::SUPER,
@@ -32,20 +32,73 @@ fn reserved_primary_chords_ignore_shifted_case_encoding() {
             ('v', 'V', UiKey::PasteClipboard),
             ('d', 'D', UiKey::Duplicate),
             ('q', 'Q', UiKey::Quit),
-            ('p', 'P', UiKey::PickerPrevious),
-            ('n', 'N', UiKey::PickerNext),
             ('y', 'Y', UiKey::Redo),
         ] {
+            assert_eq!(
+                translate(Event::Key(KeyEvent::new(
+                    KeyCode::Char(uppercase),
+                    modifier,
+                ))),
+                Some(UiInput::Key(expected)),
+                "uppercase {uppercase:?}, modifier {modifier:?}"
+            );
             for character in [lowercase, uppercase] {
                 assert_eq!(
                     translate(Event::Key(KeyEvent::new(
                         KeyCode::Char(character),
                         modifier | KeyModifiers::SHIFT,
                     ))),
-                    Some(UiInput::Key(expected)),
-                    "character {character:?}, modifier {modifier:?}"
+                    Some(UiInput::Key(UiKey::PrimaryShiftCharacter(character))),
+                    "shifted {character:?}, modifier {modifier:?}"
                 );
             }
         }
+    }
+}
+
+#[test]
+fn primary_y_is_redo_only_without_distinct_shift() {
+    for modifier in [
+        KeyModifiers::CONTROL,
+        KeyModifiers::SUPER,
+        KeyModifiers::META,
+    ] {
+        for character in ['y', 'Y'] {
+            assert_eq!(
+                translate(Event::Key(KeyEvent::new(
+                    KeyCode::Char(character),
+                    modifier
+                ))),
+                Some(UiInput::Key(UiKey::Redo))
+            );
+            assert_eq!(
+                translate(Event::Key(KeyEvent::new(
+                    KeyCode::Char(character),
+                    modifier | KeyModifiers::SHIFT,
+                ))),
+                Some(UiInput::Key(UiKey::PrimaryShiftCharacter(character)))
+            );
+        }
+    }
+}
+
+#[test]
+fn uppercase_z_without_shift_is_undo_while_distinct_shift_is_redo() {
+    for modifier in [
+        KeyModifiers::CONTROL,
+        KeyModifiers::SUPER,
+        KeyModifiers::META,
+    ] {
+        assert_eq!(
+            translate(Event::Key(KeyEvent::new(KeyCode::Char('Z'), modifier))),
+            Some(UiInput::Key(UiKey::Undo))
+        );
+        assert_eq!(
+            translate(Event::Key(KeyEvent::new(
+                KeyCode::Char('Z'),
+                modifier | KeyModifiers::SHIFT,
+            ))),
+            Some(UiInput::Key(UiKey::Redo))
+        );
     }
 }

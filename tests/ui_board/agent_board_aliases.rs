@@ -18,19 +18,19 @@ fn board_help_lists_both_spellings_while_the_footer_stays_compact() {
         .app
         .complete_agent_discovery(Ok(vec![super::agent::target(Direction::Right, "w1:p2")]));
     let primary = if cfg!(target_os = "macos") {
-        "⌘"
+        "Cmd+"
     } else {
         "Ctrl+"
     };
     let footer = text(draw(&mut fixture, 120, 12).backend().buffer());
     assert!(footer.contains("s Submit"));
     assert!(footer.contains("S Submit & keep"));
-    assert!(!footer.contains(&format!("s/{primary}Enter")));
+    assert!(!footer.contains(&format!("{primary}Enter/s")));
 
     fixture.input(UiInput::Key(UiKey::Character('?')));
     let help = text(draw(&mut fixture, 120, 32).backend().buffer());
-    assert!(help.contains(&format!("s/{primary}Enter")));
-    assert!(help.contains(&format!("S/{primary}Shift+Enter")));
+    assert!(help.contains(&format!("{primary}Enter/s")));
+    assert!(help.contains(&format!("{primary}Shift+Enter/S")));
     assert!(help.contains("Submit & keep"));
 }
 

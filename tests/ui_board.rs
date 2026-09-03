@@ -143,6 +143,15 @@ fn empty_board_and_help_have_reviewable_complete_buffers() {
     let terminal = draw(&mut fixture, 40, 8);
     let rendered = text(terminal.backend().buffer());
     assert!(rendered.contains("proqi shortcuts"));
+    assert!(rendered.contains("Copy"));
+    for _ in 0..8 {
+        fixture.input(UiInput::Key(UiKey::Move {
+            movement: CursorMovement::VisualDown,
+            extend_selection: false,
+        }));
+    }
+    let terminal = draw(&mut fixture, 40, 8);
+    let rendered = text(terminal.backend().buffer());
     assert!(rendered.contains("Select all"));
 }
 
@@ -447,6 +456,8 @@ mod selection;
 mod sentence_deletion;
 #[path = "ui_board/session_navigation.rs"]
 mod session_navigation;
+#[path = "ui_board/shortcut_standardization.rs"]
+mod shortcut_standardization;
 #[path = "ui_board/smart_lists.rs"]
 mod smart_lists;
 #[path = "ui_board/snapshots.rs"]

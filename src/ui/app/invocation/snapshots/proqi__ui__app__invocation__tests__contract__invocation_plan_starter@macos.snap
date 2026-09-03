@@ -9,4 +9,4 @@ expression: plan_completion_snapshot()
 04││                                              ││
 05│└──────────────────────────────────────────────┘│
 06│  Esc Board│
-07│  → Codex   ⌘Enter Submit│
+07│  → Codex   Cmd+Enter Submit│

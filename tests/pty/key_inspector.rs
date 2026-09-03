@@ -112,6 +112,16 @@ fn primary_enter_variants_are_distinct_in_the_real_pty() {
 fn macos_primary_shift_horizontal_arrows_have_exact_distinct_pty_encodings() {
     if cfg!(target_os = "macos") {
         inspect_sequence(
+            r"\x1b\[1;9D",
+            "Left, modifiers: KeyModifiers(SUPER)",
+            "MoveVisualRow { edge: Start }",
+        );
+        inspect_sequence(
+            r"\x1b\[1;9C",
+            "Right, modifiers: KeyModifiers(SUPER)",
+            "MoveVisualRow { edge: End }",
+        );
+        inspect_sequence(
             r"\x1b\[1;10D",
             "Left, modifiers: KeyModifiers(SHIFT | SUPER)",
             "ExtendVisualRow { edge: Start }",
@@ -125,10 +135,33 @@ fn macos_primary_shift_horizontal_arrows_have_exact_distinct_pty_encodings() {
 }
 
 #[test]
+fn control_shift_horizontal_arrow_keeps_word_selection_in_the_real_pty() {
+    inspect_sequence(
+        r"\x1b\[1;6D",
+        "Left, modifiers: KeyModifiers(SHIFT | CONTROL)",
+        "Move { movement: WordBack, extend_selection: true }",
+    );
+}
+
+#[test]
+fn distinctly_shifted_primary_v_stays_available_in_the_real_pty() {
+    let (sequence, modifier) = if cfg!(target_os = "macos") {
+        (r"\x1b\[118;10u", "SUPER")
+    } else {
+        (r"\x1b\[118;6u", "CONTROL")
+    };
+    inspect_sequence(
+        sequence,
+        &format!("Char('v'), modifiers: KeyModifiers(SHIFT | {modifier})"),
+        "PrimaryShiftCharacter('v')",
+    );
+}
+
+#[test]
 fn macos_cmd_shift_z_encoding_is_redo_in_the_real_pty() {
     inspect_sequence(
-        r"\x1b\[122:90;10u",
-        "Char('Z'), modifiers: KeyModifiers(SUPER)",
+        r"\x1b\[90;10u",
+        "Char('Z'), modifiers: KeyModifiers(SHIFT | SUPER)",
         "Redo",
     );
 }

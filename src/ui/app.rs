@@ -277,17 +277,17 @@ impl BoardApp {
         if self.modal_owns_pointer() {
             self.pointer_click = None;
         }
-        if self.help {
-            return self.handle_help_input(&input);
-        }
-        if self.screenshot.takeover.is_some() {
-            return self.handle_screenshot_takeover_input(&input, ids, clock);
-        }
         if self.screenshot_save_in_flight() {
             return self.handle_screenshot_commit_barrier(input, ids, clock);
         }
         if let Some(effects) = self.handle_quit_input(&input, ids, clock) {
             return effects;
+        }
+        if self.help {
+            return self.handle_help_input(&input);
+        }
+        if self.screenshot.takeover.is_some() {
+            return self.handle_screenshot_takeover_input(&input, ids, clock);
         }
         if self.update_prompt.is_some() {
             return self.handle_update_prompt_input(&input);
