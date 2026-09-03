@@ -509,11 +509,21 @@ prevents a Claude-specific rewrite when another documented harness adds an
 equivalent layer, and prevents catalog-only definitions from being fabricated
 into insertable tokens.
 
-Discovery reads only small metadata prefixes and never stores instruction
-bodies. The adapter caps roots, ancestor depth, recursion, entries, file sizes,
-metadata strings, plugin registries, and manifest component paths. It follows
-only explicitly encountered symlink definitions, canonicalizes physical paths
-for deduplication, and never crawls the home directory. Compatibility roots are
+Markdown discovery opens a regular definition and reads at most a 64 KiB
+frontmatter prefix. It stops as soon as the complete closing delimiter is
+known, never reads or stores the instruction body, and fails closed when an
+opened header does not close within that budget. A filename-derived Markdown
+command without frontmatter stops as soon as the absent opening delimiter is
+known. Skills and Markdown agents still require their valid metadata. Invalid
+UTF-8 inside frontmatter is rejected, while bytes after a valid closing
+delimiter are outside discovery and cannot invalidate it.
+
+Formats that require complete parsing retain separate whole-file bounds,
+including TOML agents, plugin manifests, and plugin registries. The adapter also
+caps roots, ancestor depth, recursion, entries, metadata lines and strings,
+manifest component paths, and plugin counts. It follows only explicitly
+encountered symlink definitions, canonicalizes physical paths for
+deduplication, and never crawls the home directory. Compatibility roots are
 checked in; extra roots enter through validated configuration with explicit
 kind, harness, and scope. Project and global vectors remain separate.
 

@@ -1,8 +1,14 @@
-use std::{fs, path::Path};
+use std::{
+    fs::{self, File},
+    io::{self, BufRead, BufReader, Read},
+    path::Path,
+};
 
 use crate::ports::invocation::InvocationHarness;
 
-pub(super) const MAX_METADATA_BYTES: u64 = 16 * 1024;
+pub(super) const MAX_MARKDOWN_FRONTMATTER_BYTES: usize = 64 * 1024;
+const MAX_COMPLETE_METADATA_BYTES: u64 = 16 * 1024;
+const MAX_METADATA_LINES: usize = 64;
 const MAX_NAME_CHARS: usize = 80;
 const MAX_DESCRIPTION_CHARS: usize = 180;
 
@@ -14,29 +20,54 @@ pub(super) struct Metadata {
     pub(super) hidden: bool,
 }
 
-pub(super) fn markdown(path: &Path) -> Option<Metadata> {
-    let content = bounded_text(path)?;
-    let frontmatter = content.strip_prefix("---\n")?;
-    let end = frontmatter.find("\n---")?;
-    let mut metadata = Metadata::default();
-    for line in frontmatter[..end].lines().take(64) {
-        let Some((key, value)) = line.split_once(':') else {
-            continue;
-        };
-        let value = scalar(value);
-        match key.trim() {
-            "name" => metadata.name = clean_name(&value),
-            "description" => metadata.description = clean_description(&value),
-            "mode" => metadata.mode = clean_name(&value).map(|value| value.to_lowercase()),
-            "hidden" | "disable" => metadata.hidden = matches!(value.as_str(), "true" | "yes"),
-            _ => {}
-        }
+pub(super) enum MarkdownMetadata {
+    Absent,
+    Parsed(Metadata),
+    Invalid,
+}
+
+pub(super) fn markdown(path: &Path) -> MarkdownMetadata {
+    let Ok(file_metadata) = fs::metadata(path) else {
+        return MarkdownMetadata::Invalid;
+    };
+    if !file_metadata.is_file() {
+        return MarkdownMetadata::Invalid;
     }
-    Some(metadata)
+    let Ok(mut file) = File::open(path) else {
+        return MarkdownMetadata::Invalid;
+    };
+    markdown_reader(&mut file)
+}
+
+fn markdown_reader(reader: &mut impl Read) -> MarkdownMetadata {
+    let mut reader = BufReader::with_capacity(1, reader);
+    let mut consumed = 0;
+    match opening_delimiter(&mut reader, &mut consumed) {
+        Ok(true) => {}
+        Ok(false) => return MarkdownMetadata::Absent,
+        Err(()) => return MarkdownMetadata::Invalid,
+    }
+    let mut metadata = Metadata::default();
+    let mut line_count = 0;
+    loop {
+        let Ok(Some(line)) = bounded_line(&mut reader, &mut consumed) else {
+            return MarkdownMetadata::Invalid;
+        };
+        if is_closing_delimiter(&line) {
+            return MarkdownMetadata::Parsed(metadata);
+        }
+        let Ok(text) = std::str::from_utf8(without_line_ending(&line)) else {
+            return MarkdownMetadata::Invalid;
+        };
+        if line_count < MAX_METADATA_LINES {
+            parse_line(&mut metadata, text);
+        }
+        line_count = line_count.saturating_add(1);
+    }
 }
 
 pub(super) fn toml_agent(path: &Path) -> Option<Metadata> {
-    let content = bounded_text(path)?;
+    let content = complete_bounded_text(path)?;
     let value = toml::from_str::<toml::Value>(&content).ok()?;
     Some(Metadata {
         name: value
@@ -72,12 +103,90 @@ pub(super) fn command_name(root: &Path, path: &Path, harness: InvocationHarness)
     clean_name(&parts.join(separator))
 }
 
-fn bounded_text(path: &Path) -> Option<String> {
+fn complete_bounded_text(path: &Path) -> Option<String> {
     let metadata = fs::metadata(path).ok()?;
-    if !metadata.is_file() || metadata.len() > MAX_METADATA_BYTES {
+    if !metadata.is_file() || metadata.len() > MAX_COMPLETE_METADATA_BYTES {
         return None;
     }
     fs::read_to_string(path).ok()
+}
+
+fn opening_delimiter(reader: &mut impl BufRead, consumed: &mut usize) -> Result<bool, ()> {
+    for expected in b"---" {
+        match read_byte(reader, consumed)? {
+            Some(byte) if byte == *expected => {}
+            Some(_) | None => return Ok(false),
+        }
+    }
+    match read_byte(reader, consumed)? {
+        Some(b'\n') => Ok(true),
+        Some(b'\r') => Ok(read_byte(reader, consumed)? == Some(b'\n')),
+        Some(_) | None => Ok(false),
+    }
+}
+
+fn read_byte(reader: &mut impl BufRead, consumed: &mut usize) -> Result<Option<u8>, ()> {
+    if *consumed >= MAX_MARKDOWN_FRONTMATTER_BYTES {
+        return Ok(None);
+    }
+    let available = reader.fill_buf().map_err(|_error| ())?;
+    let Some(byte) = available.first().copied() else {
+        return Ok(None);
+    };
+    reader.consume(1);
+    *consumed = consumed.saturating_add(1);
+    Ok(Some(byte))
+}
+
+fn bounded_line(
+    reader: &mut impl BufRead,
+    consumed: &mut usize,
+) -> Result<Option<Vec<u8>>, io::Error> {
+    let mut line = Vec::new();
+    loop {
+        if *consumed >= MAX_MARKDOWN_FRONTMATTER_BYTES {
+            return Ok(None);
+        }
+        let available = reader.fill_buf()?;
+        if available.is_empty() {
+            return Ok((!line.is_empty()).then_some(line));
+        }
+        let remaining = MAX_MARKDOWN_FRONTMATTER_BYTES.saturating_sub(*consumed);
+        let bounded = &available[..available.len().min(remaining)];
+        let length = bounded
+            .iter()
+            .position(|byte| *byte == b'\n')
+            .map_or(bounded.len(), |index| index.saturating_add(1));
+        line.extend_from_slice(&bounded[..length]);
+        reader.consume(length);
+        *consumed = consumed.saturating_add(length);
+        if line.ends_with(b"\n") {
+            return Ok(Some(line));
+        }
+    }
+}
+
+fn is_closing_delimiter(line: &[u8]) -> bool {
+    without_line_ending(line) == b"---"
+}
+
+fn without_line_ending(line: &[u8]) -> &[u8] {
+    let line = line.strip_suffix(b"\n").unwrap_or(line);
+    line.strip_suffix(b"\r").unwrap_or(line)
+}
+
+fn parse_line(metadata: &mut Metadata, line: &str) {
+    let Some((key, value)) = line.split_once(':') else {
+        return;
+    };
+    let value = scalar(value);
+    match key.trim() {
+        "name" => metadata.name = clean_name(&value),
+        "description" => metadata.description = clean_description(&value),
+        "mode" => metadata.mode = clean_name(&value).map(|value| value.to_lowercase()),
+        "hidden" | "disable" => metadata.hidden = matches!(value.as_str(), "true" | "yes"),
+        _ => {}
+    }
 }
 
 fn scalar(value: &str) -> String {
@@ -119,3 +228,6 @@ fn clean_description(value: &str) -> Option<String> {
     }
     Some(cleaned.chars().take(MAX_DESCRIPTION_CHARS).collect())
 }
+
+#[cfg(test)]
+mod tests;
