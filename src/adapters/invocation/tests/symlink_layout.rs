@@ -131,7 +131,7 @@ fn repeated_discovery_refreshes_new_external_skill_aliases() {
         cwd: cwd.clone(),
     };
 
-    let initial = catalog.discover(request(1)).expect("initial discovery");
+    let initial = catalog.discover(request(1));
     assert!(initial.global.is_empty());
 
     let external = home.join("agent-os/skills/newly-installed");
@@ -150,7 +150,7 @@ fn repeated_discovery_refreshes_new_external_skill_aliases() {
     )
     .expect("new Claude alias");
 
-    let refreshed = catalog.discover(request(2)).expect("refreshed discovery");
+    let refreshed = catalog.discover(request(2));
     let [entry] = refreshed.global.as_slice() else {
         panic!("one newly discovered global skill");
     };

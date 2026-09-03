@@ -2,6 +2,14 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+#[path = "discovery/topology.rs"]
+mod topology;
+
+use topology::{
+    correlated_tab_label, correlated_workspace_label, sanitize_agent_name, tab_labels,
+    workspace_labels,
+};
+
 use crate::{
     domain::Direction,
     ports::{
@@ -10,7 +18,10 @@ use crate::{
             PaneContext, PaneRect,
         },
         environment::ProcessRunner,
-        invocation::{InvocationReferenceProvider, LiveAgentReference, MAX_INVOCATION_REFERENCES},
+        invocation::{
+            InvocationCompleteness, InvocationDiscoveryStage, InvocationIncompleteReason,
+            InvocationReferenceProvider, InvocationReferenceSnapshot, LiveAgentReference,
+        },
     },
 };
 
@@ -86,7 +97,7 @@ pub(super) fn adjacent_targets<R: ProcessRunner>(
 
 pub(super) fn live_references<R: ProcessRunner>(
     gateway: &mut HerdrGateway<R>,
-) -> Result<Vec<LiveAgentReference>, AgentError> {
+) -> Result<InvocationReferenceSnapshot, AgentError> {
     if !gateway.managed {
         return Err(AgentError::Unavailable(
             "HERDR_ENV is not set for this pane".to_owned(),
@@ -99,12 +110,38 @@ pub(super) fn live_references<R: ProcessRunner>(
             "live references require Herdr protocol 19".to_owned(),
         ));
     }
-    let workspaces = workspace_labels(snapshot.workspaces)?;
-    let tabs = tab_labels(snapshot.tabs)?;
+    let mut completeness = InvocationCompleteness::Complete;
+    let workspace_count = snapshot.workspaces.len();
+    let tab_count = snapshot.tabs.len();
+    let agent_count = snapshot.agents.len();
+    note_row_budget(
+        &mut completeness,
+        InvocationDiscoveryStage::HerdrWorkspaces,
+        workspace_count,
+    );
+    note_row_budget(
+        &mut completeness,
+        InvocationDiscoveryStage::HerdrTabs,
+        tab_count,
+    );
+    note_row_budget(
+        &mut completeness,
+        InvocationDiscoveryStage::HerdrAgents,
+        agent_count,
+    );
+    let workspaces = workspace_labels(snapshot.workspaces, MAX_AGENT_ROWS)?;
+    let tabs = tab_labels(snapshot.tabs, MAX_AGENT_ROWS)?;
     let mut references = BTreeMap::new();
     let mut pane_ids = BTreeSet::new();
     for pane in snapshot.agents.into_iter().take(MAX_AGENT_ROWS) {
-        let Some(reference) = live_reference(&pane, &workspaces, &tabs)? else {
+        let Some(reference) = live_reference(
+            &pane,
+            &workspaces,
+            &tabs,
+            workspace_count > MAX_AGENT_ROWS,
+            tab_count > MAX_AGENT_ROWS,
+        )?
+        else {
             continue;
         };
         if !pane_ids.insert(reference.pane_id().to_owned()) {
@@ -123,16 +160,32 @@ pub(super) fn live_references<R: ProcessRunner>(
             ));
         }
     }
-    Ok(references
-        .into_values()
-        .take(MAX_INVOCATION_REFERENCES)
-        .collect())
+    Ok(InvocationReferenceSnapshot {
+        references: references.into_values().collect(),
+        completeness,
+    })
+}
+
+fn note_row_budget(
+    completeness: &mut InvocationCompleteness,
+    stage: InvocationDiscoveryStage,
+    observed: usize,
+) {
+    if observed > MAX_AGENT_ROWS {
+        completeness.add(InvocationIncompleteReason::ProviderRowBudget {
+            stage,
+            observed,
+            limit: MAX_AGENT_ROWS,
+        });
+    }
 }
 
 fn live_reference(
     pane: &PaneInfo,
     workspaces: &BTreeMap<String, Option<String>>,
     tabs: &BTreeMap<String, (String, Option<String>)>,
+    workspaces_truncated: bool,
+    tabs_truncated: bool,
 ) -> Result<Option<LiveAgentReference>, AgentError> {
     let harness = pane
         .agent
@@ -141,8 +194,9 @@ fn live_reference(
     let Some(harness) = harness else {
         return Ok(None);
     };
-    let workspace_label = correlated_workspace_label(workspaces, &pane.workspace_id)?;
-    let tab_label = correlated_tab_label(tabs, &pane.workspace_id, &pane.tab_id)?;
+    let workspace_label =
+        correlated_workspace_label(workspaces, &pane.workspace_id, workspaces_truncated)?;
+    let tab_label = correlated_tab_label(tabs, &pane.workspace_id, &pane.tab_id, tabs_truncated)?;
     let agent_name = pane
         .name
         .as_deref()
@@ -159,96 +213,6 @@ fn live_reference(
         pane.pane_id.clone(),
         observed_state(pane.agent_status),
     ))
-}
-
-fn workspace_labels(
-    values: Vec<super::contract::WorkspaceInfo>,
-) -> Result<BTreeMap<String, Option<String>>, AgentError> {
-    let mut labels = BTreeMap::new();
-    for value in values.into_iter().take(MAX_AGENT_ROWS) {
-        if labels
-            .insert(value.workspace_id, bounded_topology_label(value.label))
-            .is_some()
-        {
-            return Err(AgentError::Ambiguous(
-                "duplicate workspace identity in Herdr snapshot".to_owned(),
-            ));
-        }
-    }
-    Ok(labels)
-}
-
-fn tab_labels(
-    values: Vec<super::contract::TabInfo>,
-) -> Result<BTreeMap<String, (String, Option<String>)>, AgentError> {
-    let mut labels = BTreeMap::new();
-    for value in values.into_iter().take(MAX_AGENT_ROWS) {
-        if labels
-            .insert(
-                value.tab_id,
-                (value.workspace_id, bounded_topology_label(value.label)),
-            )
-            .is_some()
-        {
-            return Err(AgentError::Ambiguous(
-                "duplicate tab identity in Herdr snapshot".to_owned(),
-            ));
-        }
-    }
-    Ok(labels)
-}
-
-fn correlated_workspace_label(
-    workspaces: &BTreeMap<String, Option<String>>,
-    workspace_id: &str,
-) -> Result<Option<String>, AgentError> {
-    if workspaces.is_empty() {
-        return Ok(None);
-    }
-    workspaces.get(workspace_id).cloned().ok_or_else(|| {
-        AgentError::Malformed("recognized agent has no matching workspace identity".to_owned())
-    })
-}
-
-fn correlated_tab_label(
-    tabs: &BTreeMap<String, (String, Option<String>)>,
-    workspace_id: &str,
-    tab_id: &str,
-) -> Result<Option<String>, AgentError> {
-    if tabs.is_empty() {
-        return Ok(None);
-    }
-    let (tab_workspace, label) = tabs.get(tab_id).ok_or_else(|| {
-        AgentError::Malformed("recognized agent has no matching tab identity".to_owned())
-    })?;
-    if tab_workspace != workspace_id {
-        return Err(AgentError::Malformed(
-            "recognized agent and tab belong to different workspaces".to_owned(),
-        ));
-    }
-    Ok(label.clone())
-}
-
-fn bounded_topology_label(value: Option<String>) -> Option<String> {
-    let value = value?;
-    let sanitized = value
-        .chars()
-        .filter(|character| !character.is_control())
-        .take(48)
-        .collect::<String>()
-        .trim()
-        .to_owned();
-    (!sanitized.is_empty()).then_some(sanitized)
-}
-
-fn sanitize_agent_name(value: &str) -> String {
-    value
-        .chars()
-        .filter(|character| !character.is_control())
-        .take(32)
-        .collect::<String>()
-        .trim()
-        .to_owned()
 }
 
 const fn observed_state(value: Option<RawReadiness>) -> AgentState {

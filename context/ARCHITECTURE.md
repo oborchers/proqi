@@ -537,35 +537,60 @@ UTF-8 inside frontmatter is rejected, while bytes after a valid closing
 delimiter are outside discovery and cannot invalidate it.
 
 Formats that require complete parsing retain separate whole-file bounds,
-including TOML agents, plugin manifests, and plugin registries. The adapter also
-caps roots, ancestor depth, recursion, entries, metadata lines and strings,
-manifest component paths, and plugin counts. It follows only explicitly
-encountered symlink definitions, canonicalizes physical paths for
-deduplication, and never crawls the home directory. Compatibility roots are
-checked in; extra roots enter through validated configuration with explicit
-kind, harness, and scope. Project and global vectors remain separate.
+including TOML agents, plugin manifests, and plugin registries. An accepted
+Claude registry has no plugin, installation, or manifest-component count
+ceiling. Expansion proceeds under the shared root, visited-path, and
+cancellation budget, and an exhausted dimension remains explicit.
+Oversized registries and manifests retain healthy sources and report typed
+registry-size or manifest-size incompleteness. Manifest fallback directories
+remain available when a manifest is oversized.
+
+One named `InvocationWorkBudgetPolicy` owns the filesystem root, retained-entry,
+visited-path, and recursive-depth safeguards. Each exhausted dimension returns
+the deterministically retained entries plus an exact typed incomplete reason.
+Project ancestor discovery has no fixed count. It stops at the first repository
+root, or at the filesystem root when no repository exists. The adapter follows
+only explicitly encountered symlink definitions, canonicalizes physical paths
+for deduplication, and never crawls arbitrary home-directory children.
+Compatibility roots are checked in; extra roots enter through validated
+configuration with explicit kind, harness, and scope. Project and global
+vectors remain separate.
+
+`InvocationDiscovery` and `InvocationReferenceSnapshot` carry one closed
+`InvocationCompleteness` value at the port boundary. Stable string spellings
+exist only at the presentation and diagnostics boundaries. The UI's
+`InvocationCompletenessAggregate` is the single owner that combines filesystem,
+plugin, and provider status, so an independently refreshed source cannot
+overwrite another source's reason.
 
 `InvocationReferenceCatalog` extends this discovery boundary with typed,
 ephemeral collaborator locations. The Herdr adapter implements it from one
 bounded protocol 19 snapshot and projects only agent name, harness, correlated
-workspace and tab identity, pane identity, and observed state. Raw snapshot
-JSON, directories, terminal titles, prompt text, and other privacy-sensitive
-fields remain adapter-local. Workspace and tab labels are accepted only from
-matching topology records in the same snapshot. Missing label collections use
-exact IDs, while contradictory or duplicate identities fail closed.
+workspace and tab identity, pane identity, and observed state. Agent, workspace,
+and tab row bounds retain their valid prefix and report the exact typed source;
+there is no second reference-count truncation. Raw snapshot JSON, directories,
+terminal titles, prompt text, and other privacy-sensitive fields remain
+adapter-local. Workspace and tab labels are accepted only from matching
+topology records in the same snapshot. Missing label collections use exact IDs,
+while contradictory or duplicate identities fail closed.
 
 Filesystem and live discovery share the bounded external worker lane but use
-independent requests and completions. Filesystem refreshes retain their own
-UI-assigned generation and cwd. Each manual or automatic picker open allocates
-a separate live generation, clears the preceding live projection, and accepts
-only the matching newest completion. A timeout or malformed completion carries
-that same generation, so an old failure cannot erase newer references. Closing
-the picker invalidates pending live work. There is no continuous refresh while
-the picker remains open, and live failure never replaces usable filesystem
-entries.
+independent requests and completions. Filesystem traversal observes the shared
+runtime cancellation flag. Filesystem refreshes retain their own UI-assigned
+generation and cwd. Each manual or automatic picker open allocates a separate
+live generation, clears the preceding live projection, and accepts only the
+matching newest completion. A complete result, an incomplete result, and a
+provider failure all carry that generation, so stale status or entries cannot
+erase newer state. Closing the picker invalidates pending live work. There is no
+continuous refresh while the picker remains open, and live failure never
+replaces usable filesystem entries.
+An unavailable Herdr adapter outside a managed pane is an unselected optional
+source, not a provider failure. Failures after the managed provider is selected
+remain incomplete.
 
-The UI stores only the typed live projection, bounds the subset, and renders one
-`Live in Herdr` section through the picker's existing two-field row. The primary
+The UI stores the complete typed semantic result supplied by each accepted
+discovery and bounds only the rendered viewport. It renders one `Live in Herdr`
+section through the picker's existing two-field row. The primary
 and secondary projections deduplicate session name, topology labels, harness,
 pane, and observed state, with responsive secondary fallbacks that retain
 location first. Numeric-only tab labels are not presented as user-facing
@@ -573,6 +598,12 @@ worktree names. The exact workspace, tab, and pane identities remain in the
 insertion text. Observed state is rendered from the picker-open snapshot but
 deliberately omitted from inserted text. No reference selection reaches the
 Herdr submission, focus, reservation, or mutation ports.
+
+When the semantic match set exceeds twenty entries, every match remains
+navigable and selectable while the picker title asks the user to refine the
+query. Any active completeness reason takes precedence in that title. Accepted
+incomplete results emit one structured diagnostic per typed reason, containing
+only stable codes and aggregate counts.
 
 Filesystem results update state only when generation and cwd still match, so
 stale external work cannot leak an older project catalog. Completion derives a

@@ -1,29 +1,60 @@
 use std::{
     fs,
+    io::Read as _,
     path::{Component, Path, PathBuf},
 };
 
-use crate::ports::invocation::{InvocationHarness, InvocationKind, InvocationScope};
+use crate::ports::invocation::{
+    InvocationCompleteness, InvocationHarness, InvocationIncompleteReason, InvocationKind,
+    InvocationScope,
+};
 
+use super::scan::budget::WorkBudget;
 use super::{metadata, roots::RootShape, scan::ScanRoot};
 
 const MAX_REGISTRY_BYTES: u64 = 512 * 1024;
 const MAX_MANIFEST_BYTES: u64 = 64 * 1024;
-const MAX_PLUGINS: usize = 64;
+pub(super) const PRECEDENCE: u16 = 70;
 
-pub(super) fn roots(home: &Path, cwd: &Path, existing: usize) -> Vec<ScanRoot> {
-    let registry = home.join(".claude/plugins/installed_plugins.json");
-    let Some(value) = bounded_json(&registry, MAX_REGISTRY_BYTES) else {
-        return Vec::new();
+pub(super) struct PluginRoots {
+    pub(super) roots: Vec<ScanRoot>,
+    pub(super) completeness: InvocationCompleteness,
+}
+
+pub(super) fn roots(home: &Path, cwd: &Path, budget: &mut WorkBudget) -> PluginRoots {
+    let value = match registry(home, budget) {
+        BoundedJson::Value(value) => value,
+        BoundedJson::Oversized(observed) => {
+            let mut completeness = InvocationCompleteness::Complete;
+            completeness.add(InvocationIncompleteReason::RegistrySize {
+                observed,
+                limit: MAX_REGISTRY_BYTES,
+            });
+            return PluginRoots {
+                roots: Vec::new(),
+                completeness,
+            };
+        }
+        BoundedJson::Unavailable => {
+            return PluginRoots {
+                roots: Vec::new(),
+                completeness: InvocationCompleteness::Complete,
+            };
+        }
     };
     let Some(plugins) = value.get("plugins").and_then(serde_json::Value::as_object) else {
-        return Vec::new();
+        return PluginRoots {
+            roots: Vec::new(),
+            completeness: InvocationCompleteness::Complete,
+        };
     };
     let mut output = Vec::new();
-    for (registry_name, installations) in plugins.iter().take(MAX_PLUGINS) {
-        for installation in installations.as_array().into_iter().flatten().take(4) {
-            if output.len().saturating_add(existing) >= super::scan::MAX_ROOTS {
-                return output;
+    let mut oversized_manifests = 0usize;
+    let mut largest_manifest = 0u64;
+    for (registry_name, installations) in plugins {
+        for installation in installations.as_array().into_iter().flatten() {
+            if budget.should_stop() || budget.root_exhausted() {
+                break;
             }
             let Some(path) = installation
                 .get("installPath")
@@ -37,10 +68,41 @@ pub(super) fn roots(home: &Path, cwd: &Path, existing: usize) -> Vec<ScanRoot> {
             if !visible_from(cwd, installation) {
                 continue;
             }
-            output.extend(component_roots(&PathBuf::from(path), registry_name));
+            if !budget.visit_path() || budget.observe_cancellation() {
+                break;
+            }
+            output.extend(component_roots(
+                &PathBuf::from(path),
+                registry_name,
+                &mut oversized_manifests,
+                &mut largest_manifest,
+                budget,
+            ));
+        }
+        if budget.should_stop() || budget.root_exhausted() {
+            break;
         }
     }
-    output
+    let mut completeness = InvocationCompleteness::Complete;
+    if oversized_manifests > 0 {
+        completeness.add(InvocationIncompleteReason::ManifestSize {
+            observed: largest_manifest,
+            limit: MAX_MANIFEST_BYTES,
+            affected: oversized_manifests,
+        });
+    }
+    PluginRoots {
+        roots: output,
+        completeness,
+    }
+}
+
+fn registry(home: &Path, budget: &mut WorkBudget) -> BoundedJson {
+    let path = home.join(".claude/plugins/installed_plugins.json");
+    if !path.is_file() || !budget.visit_path() || budget.observe_cancellation() {
+        return BoundedJson::Unavailable;
+    }
+    bounded_json(&path, MAX_REGISTRY_BYTES)
 }
 
 fn visible_from(cwd: &Path, installation: &serde_json::Value) -> bool {
@@ -60,8 +122,23 @@ fn visible_from(cwd: &Path, installation: &serde_json::Value) -> bool {
         .is_some_and(|project| cwd.starts_with(project))
 }
 
-fn component_roots(base: &Path, registry_name: &str) -> Vec<ScanRoot> {
-    let manifest = bounded_json(&base.join(".claude-plugin/plugin.json"), MAX_MANIFEST_BYTES);
+fn component_roots(
+    base: &Path,
+    registry_name: &str,
+    oversized_manifests: &mut usize,
+    largest_manifest: &mut u64,
+    budget: &mut WorkBudget,
+) -> Vec<ScanRoot> {
+    let manifest = match bounded_json(&base.join(".claude-plugin/plugin.json"), MAX_MANIFEST_BYTES)
+    {
+        BoundedJson::Value(value) => Some(value),
+        BoundedJson::Oversized(observed) => {
+            *oversized_manifests = oversized_manifests.saturating_add(1);
+            *largest_manifest = (*largest_manifest).max(observed);
+            None
+        }
+        BoundedJson::Unavailable => None,
+    };
     let plugin = manifest
         .as_ref()
         .and_then(|value| value.get("name"))
@@ -88,40 +165,68 @@ fn component_roots(base: &Path, registry_name: &str) -> Vec<ScanRoot> {
         .as_ref()
         .and_then(|value| value.get("agents"))
         .map_or_else(|| vec![PathBuf::from("agents")], component_paths);
-    let mut output = skills
-        .into_iter()
-        .map(|path| {
-            component(
-                base.join(path),
-                &plugin,
-                InvocationKind::Skill,
-                RootShape::Skills,
-            )
-        })
-        .collect::<Vec<_>>();
-    output.extend(commands.into_iter().map(|path| {
-        component(
-            base.join(path),
-            &plugin,
-            InvocationKind::Command,
-            RootShape::MarkdownCommands,
-        )
-    }));
-    output.extend(agents.into_iter().map(|path| {
-        component(
-            base.join(path),
-            &plugin,
-            InvocationKind::Agent,
-            RootShape::MarkdownAgents,
-        )
-    }));
+    let mut output = Vec::new();
+    append_components(
+        &mut output,
+        base,
+        &plugin,
+        skills,
+        InvocationKind::Skill,
+        RootShape::Skills,
+        budget,
+    );
+    append_components(
+        &mut output,
+        base,
+        &plugin,
+        commands,
+        InvocationKind::Command,
+        RootShape::MarkdownCommands,
+        budget,
+    );
+    append_components(
+        &mut output,
+        base,
+        &plugin,
+        agents,
+        InvocationKind::Agent,
+        RootShape::MarkdownAgents,
+        budget,
+    );
     output
+}
+
+fn append_components(
+    output: &mut Vec<ScanRoot>,
+    base: &Path,
+    plugin: &str,
+    paths: Vec<PathBuf>,
+    kind: InvocationKind,
+    shape: RootShape,
+    budget: &mut WorkBudget,
+) {
+    for relative in paths {
+        if budget.should_stop() || budget.root_exhausted() {
+            return;
+        }
+        if !budget.visit_path() || budget.observe_cancellation() {
+            return;
+        }
+        let path = base.join(relative);
+        if !path.exists() {
+            continue;
+        }
+        if !budget.admit_root() {
+            return;
+        }
+        output.push(component(path, plugin, kind, shape));
+    }
 }
 
 fn component_paths(value: &serde_json::Value) -> Vec<PathBuf> {
     let values = value
         .as_array()
-        .map_or_else(|| vec![value], |items| items.iter().take(16).collect());
+        .map_or_else(|| vec![value], |items| items.iter().collect());
     values
         .into_iter()
         .filter_map(serde_json::Value::as_str)
@@ -143,16 +248,44 @@ fn component(path: PathBuf, plugin: &str, kind: InvocationKind, shape: RootShape
         harness: InvocationHarness::ClaudeCode,
         kind,
         shape,
-        precedence: 70,
+        precedence: PRECEDENCE,
         plugin: Some(plugin.to_owned()),
         insertable: true,
     }
 }
 
-fn bounded_json(path: &Path, maximum: u64) -> Option<serde_json::Value> {
-    let metadata = fs::metadata(path).ok()?;
-    if !metadata.is_file() || metadata.len() > maximum {
-        return None;
+enum BoundedJson {
+    Value(serde_json::Value),
+    Oversized(u64),
+    Unavailable,
+}
+
+fn bounded_json(path: &Path, maximum: u64) -> BoundedJson {
+    let Ok(file) = fs::File::open(path) else {
+        return BoundedJson::Unavailable;
+    };
+    let Ok(metadata) = file.metadata() else {
+        return BoundedJson::Unavailable;
+    };
+    if !metadata.is_file() {
+        return BoundedJson::Unavailable;
     }
-    serde_json::from_str(&fs::read_to_string(path).ok()?).ok()
+    if metadata.len() > maximum {
+        return BoundedJson::Oversized(metadata.len());
+    }
+    let mut bytes = Vec::with_capacity(usize::try_from(metadata.len()).unwrap_or(0));
+    if file
+        .take(maximum.saturating_add(1))
+        .read_to_end(&mut bytes)
+        .is_err()
+    {
+        return BoundedJson::Unavailable;
+    }
+    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > maximum {
+        return BoundedJson::Oversized(maximum.saturating_add(1));
+    }
+    String::from_utf8(bytes)
+        .ok()
+        .and_then(|content| serde_json::from_str(&content).ok())
+        .map_or(BoundedJson::Unavailable, BoundedJson::Value)
 }

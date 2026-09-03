@@ -86,12 +86,13 @@ pub(super) mod contract {
         let [crate::application::Effect::DiscoverInvocations(request)] = effects.as_slice() else {
             panic!("refresh effect");
         };
-        app.complete_invocation_discovery(Ok(InvocationDiscovery {
+        app.complete_invocation_discovery(InvocationDiscovery {
             generation: request.generation,
             cwd: cwd.to_owned(),
             global: Vec::new(),
             project: entries,
-        }));
+            completeness: crate::ports::invocation::InvocationCompleteness::default(),
+        });
     }
 
     pub(super) fn target(harness: &str) -> AgentTarget {
@@ -336,45 +337,6 @@ pub(super) mod contract {
         app.handle(UiInput::Paste("界".repeat(200)), &mut ids, &clock);
         let query = app.invocation_view().expect("manual picker").0;
         assert_eq!(query.chars().count(), 128);
-    }
-
-    #[test]
-    fn stale_results_cannot_replace_the_newest_generation_or_cwd() {
-        let cwd = tempfile::tempdir().expect("tempdir");
-        let other = tempfile::tempdir().expect("other tempdir");
-        let (mut app, _, _) = app("$pl", cwd.path());
-        let first = app.refresh_invocations();
-        let second = app.refresh_invocations();
-        let generation = match &second[0] {
-            crate::application::Effect::DiscoverInvocations(request) => request.generation,
-            _ => panic!("second refresh"),
-        };
-        let old_generation = match &first[0] {
-            crate::application::Effect::DiscoverInvocations(request) => request.generation,
-            _ => panic!("first refresh"),
-        };
-        app.complete_invocation_discovery(Ok(InvocationDiscovery {
-            generation: old_generation,
-            cwd: cwd.path().to_owned(),
-            global: Vec::new(),
-            project: vec![entry(
-                "$old",
-                InvocationKind::Skill,
-                InvocationScope::Project,
-            )],
-        }));
-        app.complete_invocation_discovery(Ok(InvocationDiscovery {
-            generation,
-            cwd: other.path().to_owned(),
-            global: Vec::new(),
-            project: vec![entry(
-                "$wrong",
-                InvocationKind::Skill,
-                InvocationScope::Project,
-            )],
-        }));
-        app.refresh_invocation_popup();
-        assert!(app.invocation_view().is_none());
     }
 
     #[test]

@@ -6,7 +6,6 @@ use crate::{
     application::Effect,
     ports::invocation::{
         InvocationReferenceDiscovery, InvocationReferenceDiscoveryRequest, LiveAgentReference,
-        MAX_INVOCATION_REFERENCES,
     },
     ui::PastePayload,
 };
@@ -41,6 +40,7 @@ impl BoardApp {
     pub(in crate::ui::app) fn close_invocation_picker(&mut self) {
         self.invocation_popup = None;
         self.invocation_live.clear();
+        self.invocation_completeness.clear_provider();
         if self.invocation_reference_pending.take().is_some() {
             self.invocation_reference_generation =
                 self.invocation_reference_generation.wrapping_add(1);
@@ -67,15 +67,16 @@ impl BoardApp {
     pub fn complete_invocation_reference_discovery(
         &mut self,
         discovery: InvocationReferenceDiscovery,
-    ) {
+    ) -> bool {
         if self.invocation_reference_pending != Some(discovery.generation)
             || discovery.generation != self.invocation_reference_generation
         {
-            return;
+            return false;
         }
         self.invocation_reference_pending = None;
-        self.invocation_live = discovery.references.unwrap_or_default();
-        self.invocation_live.truncate(MAX_INVOCATION_REFERENCES);
+        self.invocation_live = discovery.references;
+        self.invocation_completeness
+            .set_provider(discovery.completeness);
         if self.invocation_popup.is_some() {
             self.clamp_invocation_popup();
         } else if matches!(
@@ -85,6 +86,7 @@ impl BoardApp {
         {
             self.refresh_invocation_popup();
         }
+        true
     }
 
     fn begin_reference_refresh(&mut self) -> Vec<Effect> {
@@ -92,6 +94,7 @@ impl BoardApp {
         let generation = self.invocation_reference_generation;
         self.invocation_reference_pending = Some(generation);
         self.invocation_live.clear();
+        self.invocation_completeness.clear_provider();
         vec![Effect::DiscoverInvocationReferences(
             InvocationReferenceDiscoveryRequest { generation },
         )]

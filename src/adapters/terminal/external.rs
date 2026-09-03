@@ -26,9 +26,10 @@ use crate::{
         attachment::AttachmentStore,
         clipboard::{Clipboard, ClipboardContent, ClipboardError, ClipboardText, ClipboardWrite},
         invocation::{
-            AdditionalInvocationRoot, InvocationCatalog, InvocationCatalogError,
-            InvocationDiscovery, InvocationDiscoveryRequest, InvocationReferenceCatalog,
-            InvocationReferenceDiscovery, InvocationReferenceDiscoveryRequest,
+            AdditionalInvocationRoot, InvocationCatalog, InvocationDiscovery,
+            InvocationDiscoveryRequest, InvocationDiscoveryStage, InvocationIncompleteReason,
+            InvocationReferenceCatalog, InvocationReferenceDiscovery,
+            InvocationReferenceDiscoveryRequest,
         },
         recovery::{RecoveryDocument, RecoveryError, RecoveryExporter},
     },
@@ -74,7 +75,7 @@ pub(super) enum ExternalResult {
         pane_id: Option<String>,
         result: Result<Vec<AgentTarget>, AgentError>,
     },
-    InvocationsDiscovered(Result<InvocationDiscovery, InvocationCatalogError>),
+    InvocationsDiscovered(InvocationDiscovery),
     InvocationReferencesDiscovered(InvocationReferenceDiscovery),
     AgentSubmitted {
         submission_id: crate::domain::SubmissionId,
@@ -290,13 +291,16 @@ fn external_loop(
         attachment,
         cache,
     } = directories;
-    let runner = SystemProcessRunner::cancellable(cancellation);
+    let runner = SystemProcessRunner::cancellable(cancellation.clone());
     let mut clipboard = PlatformClipboard::new(&cache, Box::new(runner.clone()));
     let mut recovery = FileRecoveryExporter::new(recovery);
     let mut attachments = FileAttachmentStore::new(attachment);
     let mut notifications = HerdrPauseNotifier::from_environment_with_runner(runner.clone());
     let mut agents = HerdrGateway::from_environment_with_runner(presentation_source, runner);
-    let mut invocations = FilesystemInvocationCatalog::system(invocation_roots);
+    let mut invocations = FilesystemInvocationCatalog::cancellable(
+        invocation_roots,
+        std::sync::Arc::new(cancellation),
+    );
     while let Ok(request) = requests.recv() {
         let outcome = match request {
             ExternalRequest::DiscoverAgents => discover_agents(&mut agents),
@@ -367,9 +371,26 @@ fn discover_invocation_references(
     references: &mut impl InvocationReferenceCatalog,
     request: InvocationReferenceDiscoveryRequest,
 ) -> ExternalResult {
+    let discovery = references.discover_live_references();
+    let (references, completeness) = match discovery {
+        Ok(snapshot) => (snapshot.references, snapshot.completeness),
+        Err(crate::ports::agent::AgentFailureCode::Unavailable) => (
+            Vec::new(),
+            crate::ports::invocation::InvocationCompleteness::Complete,
+        ),
+        Err(code) => {
+            let mut completeness = crate::ports::invocation::InvocationCompleteness::Complete;
+            completeness.add(InvocationIncompleteReason::ProviderFailure {
+                stage: InvocationDiscoveryStage::HerdrProvider,
+                code,
+            });
+            (Vec::new(), completeness)
+        }
+    };
     ExternalResult::InvocationReferencesDiscovered(InvocationReferenceDiscovery {
         generation: request.generation,
-        references: references.discover_live_references(),
+        references,
+        completeness,
     })
 }
 

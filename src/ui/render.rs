@@ -85,6 +85,7 @@ pub(super) struct InvocationPickerView {
     pub(super) query: String,
     pub(super) entries: Vec<InvocationChoiceView>,
     pub(super) selected: usize,
+    pub(super) notice: Option<&'static str>,
 }
 
 pub(super) fn render_invocation_picker(
@@ -98,6 +99,7 @@ pub(super) fn render_invocation_picker(
         query,
         entries,
         selected,
+        notice,
     } = picker;
     let rows = entries
         .iter()
@@ -114,7 +116,7 @@ pub(super) fn render_invocation_picker(
         frame,
         overlay,
         overlays::PickerView {
-            title: " discovered invocations ",
+            title: notice.unwrap_or(" discovered invocations "),
             prompt: '›',
             query: &query,
             cursor: app.overlay_query_cursor().unwrap_or(query.len()),

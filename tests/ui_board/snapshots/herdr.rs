@@ -56,6 +56,7 @@ pub(super) fn complete_live_reference(fixture: &mut Fixture, effects: &[Effect])
         .app
         .complete_invocation_reference_discovery(InvocationReferenceDiscovery {
             generation: request.generation,
-            references: Ok(vec![reference]),
+            references: vec![reference],
+            completeness: proqi::ports::invocation::InvocationCompleteness::default(),
         });
 }

@@ -135,12 +135,13 @@ fn install_catalog(
         panic!("refresh effect");
     };
     let generation = request.generation;
-    app.complete_invocation_discovery(Ok(InvocationDiscovery {
+    app.complete_invocation_discovery(InvocationDiscovery {
         generation,
         cwd: cwd.to_owned(),
         global: Vec::new(),
         project,
-    }));
+        completeness: crate::ports::invocation::InvocationCompleteness::default(),
+    });
     generation
 }
 
@@ -156,9 +157,28 @@ fn complete_live(
             _ => None,
         })
         .expect("live refresh effect");
+    let (references, completeness) = references.map_or_else(
+        |code| {
+            let mut completeness = crate::ports::invocation::InvocationCompleteness::Complete;
+            completeness.add(
+                crate::ports::invocation::InvocationIncompleteReason::ProviderFailure {
+                    stage: crate::ports::invocation::InvocationDiscoveryStage::HerdrProvider,
+                    code,
+                },
+            );
+            (Vec::new(), completeness)
+        },
+        |references| {
+            (
+                references,
+                crate::ports::invocation::InvocationCompleteness::default(),
+            )
+        },
+    );
     app.complete_invocation_reference_discovery(InvocationReferenceDiscovery {
         generation: request.generation,
         references,
+        completeness,
     });
     request.generation
 }

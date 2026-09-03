@@ -4,8 +4,11 @@ use std::path::PathBuf;
 
 use super::agent::{AgentFailureCode, AgentState, HarnessKind};
 
-/// Maximum recognized collaborators retained from one provider snapshot.
-pub const MAX_INVOCATION_REFERENCES: usize = 64;
+mod completeness;
+pub use completeness::{
+    InvocationCompleteness, InvocationCompletenessAggregate, InvocationDiscoveryStage,
+    InvocationIncompleteReason,
+};
 
 /// Conceptual definition layer represented by a catalog entry.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, serde::Deserialize)]
@@ -140,6 +143,8 @@ pub struct InvocationDiscovery {
     pub global: Vec<InvocationEntry>,
     /// Entries associated with this cwd's ancestor chain.
     pub project: Vec<InvocationEntry>,
+    /// Truthful status of every accepted filesystem and plugin source.
+    pub completeness: InvocationCompleteness,
 }
 
 /// Monotonic request for one picker-open collaborator snapshot.
@@ -154,8 +159,10 @@ pub struct InvocationReferenceDiscoveryRequest {
 pub struct InvocationReferenceDiscovery {
     /// Matching request generation.
     pub generation: u64,
-    /// Recognized agents, or the stable failure from this exact generation.
-    pub references: Result<Vec<LiveAgentReference>, AgentFailureCode>,
+    /// Recognized agents retained from this exact generation.
+    pub references: Vec<LiveAgentReference>,
+    /// Truthful status of the provider snapshot.
+    pub completeness: InvocationCompleteness,
 }
 
 /// Integration that supplied one ephemeral collaborator reference.
@@ -316,25 +323,32 @@ pub struct AdditionalInvocationRoot {
     pub scope: InvocationScope,
 }
 
-/// Best-effort discovery failure. Individual invalid entries are skipped.
-#[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
-pub enum InvocationCatalogError {
-    /// A requested root set exceeds the adapter's fixed safety budget.
-    #[error("invocation root budget exceeded")]
-    RootBudget,
-}
-
 /// Blocking catalog capability implemented outside the application lane.
 pub trait InvocationCatalog: Send {
     /// Refresh project and global definitions for one cwd.
     ///
-    /// # Errors
-    ///
-    /// Returns a bounded catalog error when the configured root budget is exceeded.
-    fn discover(
-        &mut self,
-        request: InvocationDiscoveryRequest,
-    ) -> Result<InvocationDiscovery, InvocationCatalogError>;
+    fn discover(&mut self, request: InvocationDiscoveryRequest) -> InvocationDiscovery;
+}
+
+/// Runtime cancellation observed by bounded filesystem discovery.
+pub trait InvocationCancellation: Send + Sync {
+    /// Whether shutdown cancelled further best-effort discovery work.
+    fn is_cancelled(&self) -> bool;
+}
+
+impl InvocationCancellation for () {
+    fn is_cancelled(&self) -> bool {
+        false
+    }
+}
+
+/// Successful live-provider projection before the UI generation is attached.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct InvocationReferenceSnapshot {
+    /// Retained recognized collaborators.
+    pub references: Vec<LiveAgentReference>,
+    /// Truthful status of provider parsing and row bounds.
+    pub completeness: InvocationCompleteness,
 }
 
 /// Blocking ephemeral reference discovery composed into the invocation refresh.
@@ -344,5 +358,6 @@ pub trait InvocationReferenceCatalog: Send {
     /// # Errors
     ///
     /// Returns a content-free provider classification. Callers may degrade to no live group.
-    fn discover_live_references(&mut self) -> Result<Vec<LiveAgentReference>, AgentFailureCode>;
+    fn discover_live_references(&mut self)
+    -> Result<InvocationReferenceSnapshot, AgentFailureCode>;
 }

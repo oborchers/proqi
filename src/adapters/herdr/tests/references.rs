@@ -51,7 +51,8 @@ fn one_snapshot_correlates_labels_and_ignores_privacy_sensitive_fields() {
     );
     let (mut gateway, runner) = gateway(vec![response]);
 
-    let references = super::super::discovery::live_references(&mut gateway).expect("references");
+    let snapshot = super::super::discovery::live_references(&mut gateway).expect("references");
+    let references = snapshot.references;
 
     assert_eq!(references.len(), 2);
     assert_eq!(references[0].workspace_id(), "w1");
@@ -77,6 +78,7 @@ fn absent_topology_labels_preserve_exact_ids_and_missing_names() {
 
     let references =
         super::super::discovery::live_references(&mut labeled_gateway).expect("references");
+    let references = references.references;
 
     assert_eq!(references[0].agent_name(), None);
     assert_eq!(references[0].workspace_label(), None);
@@ -87,6 +89,7 @@ fn absent_topology_labels_preserve_exact_ids_and_missing_names() {
     assert!(
         super::super::discovery::live_references(&mut gateway)
             .expect("empty live references")
+            .references
             .is_empty()
     );
 }
@@ -144,7 +147,7 @@ fn malformed_timeout_and_oversized_results_degrade_with_fixed_bounds() {
         Err(AgentError::TimedOut)
     );
 
-    let agents = (0..90)
+    let agents = (0..129)
         .map(|index| {
             live_agent(
                 Some("duplicate-label"),
@@ -156,15 +159,52 @@ fn malformed_timeout_and_oversized_results_degrade_with_fixed_bounds() {
         .collect::<Vec<Value>>();
     let response = live_snapshot(&agents, &json!([]), &json!([]));
     let (mut bounded, _) = gateway(vec![response]);
-    let references =
+    let snapshot =
         super::super::discovery::live_references(&mut bounded).expect("bounded references");
-    assert_eq!(
-        references.len(),
-        crate::ports::invocation::MAX_INVOCATION_REFERENCES
-    );
-    assert!(references.iter().all(|reference| {
+    assert_eq!(snapshot.references.len(), 128);
+    assert!(matches!(
+        snapshot.completeness.reasons(),
+        [
+            crate::ports::invocation::InvocationIncompleteReason::ProviderRowBudget {
+                stage: crate::ports::invocation::InvocationDiscoveryStage::HerdrAgents,
+                observed: 129,
+                limit: 128
+            }
+        ]
+    ));
+    assert!(snapshot.references.iter().all(|reference| {
         reference.agent_name() == Some("duplicate-label") && reference.workspace_id() == "w1"
     }));
+}
+
+#[test]
+fn oversized_topology_retains_correlated_references_and_reports_each_row_budget() {
+    let workspaces = (0..129)
+        .map(|index| json!({"workspace_id":format!("w{index}"),"label":format!("W {index}")}))
+        .collect::<Vec<_>>();
+    let tabs = (0..129)
+        .map(|index| {
+            json!({"workspace_id":"w0","tab_id":format!("w0:t{index}"),"label":format!("T {index}")})
+        })
+        .collect::<Vec<_>>();
+    let response = live_snapshot(
+        &[live_agent(Some("retained"), "w0", "w0:t0", "w0:p1")],
+        &json!(workspaces),
+        &json!(tabs),
+    );
+    let (mut gateway, _) = gateway(vec![response]);
+
+    let snapshot = super::super::discovery::live_references(&mut gateway).expect("references");
+
+    assert_eq!(snapshot.references.len(), 1);
+    assert_eq!(snapshot.references[0].agent_name(), Some("retained"));
+    let reasons = snapshot.completeness.reasons();
+    assert_eq!(reasons.len(), 2);
+    assert!(
+        reasons
+            .iter()
+            .all(|reason| reason.diagnostic_code() == "provider_row_budget")
+    );
 }
 
 #[test]
@@ -175,7 +215,9 @@ fn topology_labels_are_sanitized_and_bounded_without_using_titles() {
         &json!([{"workspace_id":"w1","tab_id":"w1:t1","label":"Tab\u{0007} label"}]),
     );
     let (mut gateway, _) = gateway(vec![response]);
-    let references = super::super::discovery::live_references(&mut gateway).expect("references");
+    let references = super::super::discovery::live_references(&mut gateway)
+        .expect("references")
+        .references;
 
     assert_eq!(references[0].agent_name(), Some("agentname"));
     assert_eq!(

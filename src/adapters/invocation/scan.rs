@@ -1,12 +1,14 @@
 use std::{
+    collections::BTreeMap,
     fs,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use crate::ports::invocation::{
-    AdditionalInvocationRoot, InvocationCatalog, InvocationCatalogError, InvocationDiscovery,
-    InvocationDiscoveryRequest, InvocationEntry, InvocationForm, InvocationHarness, InvocationKind,
-    InvocationScope,
+    AdditionalInvocationRoot, InvocationCancellation, InvocationCatalog, InvocationCompleteness,
+    InvocationDiscovery, InvocationDiscoveryRequest, InvocationEntry, InvocationForm,
+    InvocationHarness, InvocationKind, InvocationScope,
 };
 
 use super::{
@@ -14,14 +16,12 @@ use super::{
     roots::{self, CompatibilityRoot, RootShape},
 };
 
+pub(super) mod budget;
 mod consolidate;
+mod forms;
 
+use budget::{WORK_BUDGET, WorkBudget};
 use consolidate::ObservedEntry;
-
-pub(super) const MAX_ROOTS: usize = 128;
-const MAX_DEPTH: usize = 6;
-const MAX_ENTRIES: usize = 2_048;
-const MAX_VISITED_PATHS: usize = 8_192;
 
 #[derive(Clone)]
 pub(super) struct ScanRoot {
@@ -39,6 +39,7 @@ pub(super) struct ScanRoot {
 pub struct FilesystemInvocationCatalog {
     home: Option<PathBuf>,
     additional: Vec<AdditionalInvocationRoot>,
+    cancellation: Arc<dyn InvocationCancellation>,
 }
 
 impl FilesystemInvocationCatalog {
@@ -48,46 +49,103 @@ impl FilesystemInvocationCatalog {
         Self {
             home: directories::BaseDirs::new().map(|directories| directories.home_dir().to_owned()),
             additional,
+            cancellation: Arc::new(()),
+        }
+    }
+
+    /// Construct the production catalog with shared runtime cancellation.
+    #[must_use]
+    pub fn cancellable(
+        additional: Vec<AdditionalInvocationRoot>,
+        cancellation: Arc<dyn InvocationCancellation>,
+    ) -> Self {
+        Self {
+            home: directories::BaseDirs::new().map(|directories| directories.home_dir().to_owned()),
+            additional,
+            cancellation,
         }
     }
 
     /// Construct an isolated adapter for deterministic tests.
     #[must_use]
-    pub const fn with_home(
+    pub fn with_home(home: Option<PathBuf>, additional: Vec<AdditionalInvocationRoot>) -> Self {
+        Self {
+            home,
+            additional,
+            cancellation: Arc::new(()),
+        }
+    }
+
+    #[cfg(test)]
+    pub(super) fn with_home_and_cancellation(
         home: Option<PathBuf>,
-        additional: Vec<AdditionalInvocationRoot>,
+        cancellation: Arc<dyn InvocationCancellation>,
     ) -> Self {
-        Self { home, additional }
+        Self {
+            home,
+            additional: Vec::new(),
+            cancellation,
+        }
     }
 }
 
 impl InvocationCatalog for FilesystemInvocationCatalog {
-    fn discover(
-        &mut self,
-        request: InvocationDiscoveryRequest,
-    ) -> Result<InvocationDiscovery, InvocationCatalogError> {
+    fn discover(&mut self, request: InvocationDiscoveryRequest) -> InvocationDiscovery {
         let request_cwd = request.cwd;
         let cwd = fs::canonicalize(&request_cwd).unwrap_or_else(|_| request_cwd.clone());
+        let mut budget = WorkBudget::new(Arc::clone(&self.cancellation));
+        if budget.observe_cancellation() {
+            return InvocationDiscovery {
+                generation: request.generation,
+                cwd: request_cwd,
+                global: Vec::new(),
+                project: Vec::new(),
+                completeness: budget.finish(&InvocationCompleteness::default()),
+            };
+        }
         let mut roots = compatible_roots(&cwd, self.home.as_deref());
         roots.extend(additional_roots(&cwd, &self.additional));
         roots.retain(|root| root.path.exists());
-        if roots.len() > MAX_ROOTS {
-            return Err(InvocationCatalogError::RootBudget);
-        }
-        if let Some(home) = self.home.as_deref() {
-            roots.extend(super::plugins::roots(home, &cwd, roots.len()));
-        }
-        roots.truncate(MAX_ROOTS);
         roots.sort_by(|left, right| {
             left.precedence
                 .cmp(&right.precedence)
                 .then_with(|| left.path.cmp(&right.path))
         });
-        let mut visited = 0;
+        budget.admit_initial_roots(roots.len());
+        roots.truncate(WORK_BUDGET.roots);
+        let late_roots = roots
+            .split_off(roots.partition_point(|root| root.precedence < super::plugins::PRECEDENCE));
         let mut observations = Vec::new();
         for root in roots {
-            scan_root(&root, &mut observations, &mut visited);
-            if observations.len() >= MAX_ENTRIES {
+            scan_root(&root, &mut observations, &mut budget);
+            if budget.should_stop() {
+                break;
+            }
+        }
+        let plugins = if budget.should_stop() || budget.root_exhausted() {
+            super::plugins::PluginRoots {
+                roots: Vec::new(),
+                completeness: InvocationCompleteness::default(),
+            }
+        } else {
+            self.home.as_deref().map_or_else(
+                || super::plugins::PluginRoots {
+                    roots: Vec::new(),
+                    completeness: InvocationCompleteness::default(),
+                },
+                |home| super::plugins::roots(home, &cwd, &mut budget),
+            )
+        };
+        let mut remaining_roots = late_roots;
+        remaining_roots.extend(plugins.roots);
+        remaining_roots.sort_by(|left, right| {
+            left.precedence
+                .cmp(&right.precedence)
+                .then_with(|| left.path.cmp(&right.path))
+        });
+        for root in remaining_roots {
+            scan_root(&root, &mut observations, &mut budget);
+            if budget.should_stop() {
                 break;
             }
         }
@@ -95,14 +153,15 @@ impl InvocationCatalog for FilesystemInvocationCatalog {
         let (mut project, mut global): (Vec<_>, Vec<_>) = entries
             .into_iter()
             .partition(|entry| entry.scope == InvocationScope::Project);
-        sort_entries(&mut project);
-        sort_entries(&mut global);
-        Ok(InvocationDiscovery {
+        consolidate::sort_entries(&mut project);
+        consolidate::sort_entries(&mut global);
+        InvocationDiscovery {
             generation: request.generation,
             cwd: request_cwd,
             global,
             project,
-        })
+            completeness: budget.finish(&plugins.completeness),
+        }
     }
 }
 
@@ -167,16 +226,16 @@ fn additional_roots(cwd: &Path, additional: &[AdditionalInvocationRoot]) -> Vec<
         .collect()
 }
 
-fn scan_root(root: &ScanRoot, entries: &mut Vec<ObservedEntry>, visited: &mut usize) {
-    if entries.len() >= MAX_ENTRIES || *visited >= MAX_VISITED_PATHS {
+fn scan_root(root: &ScanRoot, entries: &mut Vec<ObservedEntry>, budget: &mut WorkBudget) {
+    if budget.observe_cancellation() || budget.should_stop() {
         return;
     }
     if root.path.is_file() {
         match root.shape {
             RootShape::MarkdownCommands | RootShape::MarkdownAgents => {
-                push_markdown(root, &root.path, None, entries);
+                push_markdown(root, &root.path, None, entries, budget);
             }
-            RootShape::TomlAgents => push_toml(root, &root.path, entries),
+            RootShape::TomlAgents => push_toml(root, &root.path, entries, budget),
             RootShape::Skills => {}
         }
         return;
@@ -184,7 +243,7 @@ fn scan_root(root: &ScanRoot, entries: &mut Vec<ObservedEntry>, visited: &mut us
     if !root.path.is_dir() {
         return;
     }
-    walk(root, &root.path, 0, entries, visited);
+    walk(root, &root.path, 0, entries, budget);
 }
 
 fn walk(
@@ -192,30 +251,27 @@ fn walk(
     directory: &Path,
     depth: usize,
     entries: &mut Vec<ObservedEntry>,
-    visited: &mut usize,
+    budget: &mut WorkBudget,
 ) {
-    if depth > MAX_DEPTH || entries.len() >= MAX_ENTRIES || *visited >= MAX_VISITED_PATHS {
+    if budget.observe_cancellation() || budget.should_stop() {
+        return;
+    }
+    if depth > WORK_BUDGET.recursive_depth {
+        budget.note_depth(depth);
         return;
     }
     if root.shape == RootShape::Skills {
         let definition = directory.join("SKILL.md");
         if definition.is_file() {
-            push_markdown(root, &definition, Some(directory), entries);
+            push_markdown(root, &definition, Some(directory), entries, budget);
             return;
         }
     }
     let Ok(read) = fs::read_dir(directory) else {
         return;
     };
-    let remaining = MAX_VISITED_PATHS.saturating_sub(*visited);
-    let mut children = read
-        .filter_map(Result::ok)
-        .take(remaining)
-        .collect::<Vec<_>>();
-    children.sort_by_key(std::fs::DirEntry::file_name);
-    for child in children {
-        *visited = visited.saturating_add(1);
-        if entries.len() >= MAX_ENTRIES || *visited > MAX_VISITED_PATHS {
+    for child in bounded_children(read, budget) {
+        if !budget.visit_path() || budget.observe_cancellation() {
             return;
         }
         let path = child.path();
@@ -223,23 +279,54 @@ fn walk(
             continue;
         };
         if file_type.is_dir() {
-            walk(root, &path, depth.saturating_add(1), entries, visited);
+            walk(root, &path, depth.saturating_add(1), entries, budget);
         } else if file_type.is_symlink() && path.is_dir() && root.shape == RootShape::Skills {
             let definition = path.join("SKILL.md");
             if definition.is_file() {
-                push_markdown(root, &definition, Some(&path), entries);
+                push_markdown(root, &definition, Some(&path), entries, budget);
             }
         } else if path.extension().and_then(|extension| extension.to_str()) == Some(extension(root))
         {
             match root.shape {
                 RootShape::Skills => {}
                 RootShape::MarkdownCommands | RootShape::MarkdownAgents => {
-                    push_markdown(root, &path, None, entries);
+                    push_markdown(root, &path, None, entries, budget);
                 }
-                RootShape::TomlAgents => push_toml(root, &path, entries),
+                RootShape::TomlAgents => push_toml(root, &path, entries, budget),
             }
         }
+        if budget.should_stop() {
+            return;
+        }
     }
+}
+
+fn bounded_children(read: fs::ReadDir, budget: &mut WorkBudget) -> Vec<fs::DirEntry> {
+    let remaining = budget.remaining_paths();
+    let mut children = BTreeMap::new();
+    let mut overflow = false;
+    for child in read.filter_map(Result::ok) {
+        if budget.observe_cancellation() {
+            break;
+        }
+        if children.len() < remaining {
+            children.insert(child.file_name(), child);
+            continue;
+        }
+        overflow = true;
+        let name = child.file_name();
+        if children
+            .last_key_value()
+            .is_some_and(|(largest, _)| name < *largest)
+        {
+            children.pop_last();
+            children.insert(name, child);
+        }
+    }
+    if overflow {
+        budget.note_path_overflow();
+    }
+    children.into_values().collect()
 }
 
 const fn extension(root: &ScanRoot) -> &'static str {
@@ -254,6 +341,7 @@ fn push_markdown(
     definition: &Path,
     skill_directory: Option<&Path>,
     entries: &mut Vec<ObservedEntry>,
+    budget: &mut WorkBudget,
 ) {
     let Ok(file_metadata) = fs::metadata(definition) else {
         return;
@@ -309,14 +397,28 @@ fn push_markdown(
             metadata.description,
             Vec::new(),
             entries,
+            budget,
         );
         return;
     }
-    let forms = forms(root, &name);
-    push(root, definition, name, metadata.description, forms, entries);
+    let forms = forms::for_entry(root, &name);
+    push(
+        root,
+        definition,
+        name,
+        metadata.description,
+        forms,
+        entries,
+        budget,
+    );
 }
 
-fn push_toml(root: &ScanRoot, definition: &Path, entries: &mut Vec<ObservedEntry>) {
+fn push_toml(
+    root: &ScanRoot,
+    definition: &Path,
+    entries: &mut Vec<ObservedEntry>,
+    budget: &mut WorkBudget,
+) {
     let Some(metadata) = metadata::toml_agent(definition) else {
         return;
     };
@@ -333,6 +435,7 @@ fn push_toml(root: &ScanRoot, definition: &Path, entries: &mut Vec<ObservedEntry
         metadata.description,
         Vec::new(),
         entries,
+        budget,
     );
 }
 
@@ -343,10 +446,14 @@ fn push(
     description: Option<String>,
     forms: Vec<InvocationForm>,
     entries: &mut Vec<ObservedEntry>,
+    budget: &mut WorkBudget,
 ) {
     let Ok(canonical_path) = fs::canonicalize(definition) else {
         return;
     };
+    if !budget.admit_entry() {
+        return;
+    }
     entries.push(consolidate::observe(
         root,
         definition,
@@ -361,58 +468,4 @@ fn push(
             precedence: root.precedence,
         },
     ));
-}
-
-fn forms(root: &ScanRoot, name: &str) -> Vec<InvocationForm> {
-    if !root.insertable {
-        return Vec::new();
-    }
-    let token = match (root.harness, root.kind) {
-        (InvocationHarness::Codex | InvocationHarness::AgentSkills, InvocationKind::Skill) => {
-            Some(format!("${name}"))
-        }
-        (InvocationHarness::ClaudeCode, InvocationKind::Skill | InvocationKind::Command) => Some(
-            root.plugin
-                .as_ref()
-                .map_or_else(|| format!("/{name}"), |plugin| format!("/{plugin}:{name}")),
-        ),
-        (InvocationHarness::ClaudeCode, InvocationKind::Agent) => {
-            Some(root.plugin.as_ref().map_or_else(
-                || format!("@agent-{name}"),
-                |plugin| format!("@agent-{plugin}:{name}"),
-            ))
-        }
-        (
-            InvocationHarness::OpenCode | InvocationHarness::Pi | InvocationHarness::Configured,
-            InvocationKind::Command,
-        ) => Some(format!("/{name}")),
-        (InvocationHarness::OpenCode, InvocationKind::Agent) => Some(format!("@{name}")),
-        (InvocationHarness::Pi, InvocationKind::Skill) => Some(format!("/skill:{name}")),
-        (InvocationHarness::Configured, InvocationKind::Skill) => Some(format!("${name}")),
-        _ => None,
-    };
-    token
-        .map(|token| {
-            vec![InvocationForm {
-                harness: if root.harness == InvocationHarness::AgentSkills {
-                    InvocationHarness::Codex
-                } else {
-                    root.harness
-                },
-                token,
-                precedence: root.precedence,
-            }]
-        })
-        .unwrap_or_default()
-}
-
-fn sort_entries(entries: &mut [InvocationEntry]) {
-    entries.sort_by(|left, right| {
-        left.precedence
-            .cmp(&right.precedence)
-            .then_with(|| left.name.to_lowercase().cmp(&right.name.to_lowercase()))
-            .then_with(|| left.kind.cmp(&right.kind))
-            .then_with(|| left.source.cmp(&right.source))
-            .then_with(|| left.canonical_path.cmp(&right.canonical_path))
-    });
 }

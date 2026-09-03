@@ -213,7 +213,7 @@ impl AgentState {
 }
 
 /// Stable content-free classification for an agent integration failure.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum AgentFailureCode {
     /// Integration is not available in the current environment.
     Unavailable,

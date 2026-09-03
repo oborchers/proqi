@@ -917,10 +917,25 @@ keyboard navigation insert the exact canonical token plus a separator as one
 undoable edit.
 
 Machine-global entries survive cwd changes. Project entries follow the cwd
-through the repository root with deterministic nearest-root and documented
-harness precedence. Startup, explicit command-palette refresh, and debounced
-host focus replace generation-tagged results; an older in-flight project scan
-cannot leak into a newer cwd.
+through the repository root, or through the naturally finite parent chain when
+there is no repository, with deterministic nearest-root and documented harness
+precedence. Startup, explicit command-palette refresh, and debounced host focus
+replace generation-tagged results; an older in-flight project scan cannot leak
+into a newer cwd.
+
+Each successful refresh is explicitly complete or incomplete. An incomplete
+refresh retains every usable entry found within the shared work policy and
+shows `incomplete results, refine query` in the picker. Filesystem, Claude
+plugin, and live Herdr reasons combine without one source erasing another.
+Diagnostics record only stable stage and reason codes plus aggregate counts.
+They never record definition text, descriptions, paths, prompts, plugin
+content, installation details, or session content.
+
+The picker keeps the complete semantic match set supplied by discovery while
+rendering only the current viewport. More than twenty matches remain reachable
+with keyboard or mouse navigation and query refinement, and the picker shows
+`more results exist, refine query` instead of implying that the first viewport
+is the complete result.
 
 In a managed Herdr pane, the same invocation picker also presents a distinct
 `Live in Herdr` group. It refreshes on each picker open and lists only coding
@@ -949,8 +964,11 @@ always use the canonical text and never resolve the mention against later live
 state. Readiness is excluded because it is only a current display observation.
 Selection does not submit, reserve, focus, or otherwise mutate the target. A
 malformed, timed out, contradictory, duplicate, or disappearing live result
-contributes no live rows and never removes usable filesystem invocations.
-Outside Herdr, the existing invocation behavior is unchanged.
+contributes no live rows, marks the active picker incomplete, and never removes
+usable filesystem invocations. A genuinely empty provider snapshot remains
+complete. A row-bounded provider snapshot retains valid references and reports
+the exact incomplete source. Outside Herdr, the existing invocation behavior
+is unchanged.
 
 A small data-driven built-in table sits beside filesystem results: `/plan` and
 `/goal` are offered as shared Commands only at byte zero when a verified

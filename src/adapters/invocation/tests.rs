@@ -9,7 +9,9 @@ use crate::ports::invocation::{
 
 use super::FilesystemInvocationCatalog;
 
+mod completeness;
 mod markdown_prefix;
+mod ordering;
 #[cfg(unix)]
 mod symlink_layout;
 
@@ -19,12 +21,12 @@ fn write(path: &Path, content: &str) {
 }
 
 fn discover(home: &Path, cwd: &Path) -> crate::ports::invocation::InvocationDiscovery {
-    FilesystemInvocationCatalog::with_home(Some(home.to_owned()), Vec::new())
-        .discover(InvocationDiscoveryRequest {
+    FilesystemInvocationCatalog::with_home(Some(home.to_owned()), Vec::new()).discover(
+        InvocationDiscoveryRequest {
             generation: 7,
             cwd: cwd.to_owned(),
-        })
-        .expect("discover fixtures")
+        },
+    )
 }
 
 #[test]
@@ -394,12 +396,12 @@ fn unicode_descriptions_are_single_line_and_controls_are_removed() {
 }
 
 #[test]
-fn oversized_catalogs_stop_at_the_fixed_entry_budget() {
+fn oversized_catalogs_retain_the_entry_budget_and_report_incomplete() {
     let fixture = TempDir::new().expect("tempdir");
     let home = fixture.path().join("home");
     let cwd = fixture.path().join("repo");
     write(&cwd.join(".git/HEAD"), "ref: refs/heads/main\n");
-    for index in 0..2_055 {
+    for index in 0..2_048 {
         write(
             &cwd.join(format!(".opencode/commands/command-{index:04}.md")),
             "---\ndescription: Bounded fixture\n---\nbody",
@@ -414,6 +416,22 @@ fn oversized_catalogs_stop_at_the_fixed_entry_budget() {
         .expect("broken symlink fixture");
     }
 
+    let boundary = discover(&home, &cwd);
+    assert_eq!(boundary.project.len(), 2_048);
+    assert!(boundary.completeness.is_complete());
+    write(
+        &cwd.join(".opencode/commands/command-2048.md"),
+        "---\ndescription: Bounded fixture\n---\nbody",
+    );
     let result = discover(&home, &cwd);
     assert_eq!(result.project.len(), 2_048);
+    assert!(matches!(
+        result.completeness.reasons(),
+        [
+            crate::ports::invocation::InvocationIncompleteReason::EntryBudget {
+                observed: 2_049,
+                limit: 2_048
+            }
+        ]
+    ));
 }
