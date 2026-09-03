@@ -148,7 +148,7 @@ Board choice.
 | `Space`; `a` / `Primary+A` | Toggle selection; select all |
 | `Shift+↑` / `↓` or `K` / `J`; `v` then move | Extend or latch a range |
 | `Primary+D` | Duplicate thought or selection |
-| `s`; `S`; then arrows or `h` / `j` / `k` / `l` if needed | Submit and remove after acceptance; submit and keep |
+| `s` / `Primary+Enter`; `S` / `Primary+Shift+Enter`; then arrows or `h` / `j` / `k` / `l` if needed | Submit and remove after acceptance; submit and keep |
 | `u` / `Primary+Z` | Undo a board operation |
 | `Primary+Shift+Z` / `Primary+Y` | **Redo a board operation** |
 | `c`; `/`; `:`; `i`; `?` | Collapse; search; commands; Screenshot Inbox; help |
@@ -165,7 +165,8 @@ Board choice.
 | `Primary+C` / `X` / `V` | Native copy / safe cut / paste |
 | `Alt` or `Ctrl` + `←` / `→`; `Home` / `End` | Move by word; line boundary |
 | `Shift` + movement | Extend text selection |
-| `Alt+↑` / `↓`; `Primary+↑` / `↓` | Jump five rows; thought start / end |
+| `Primary+Shift+←` / `→` | Extend to the current wrapped visual-row start / end |
+| `Alt+↑` / `↓` or `Page Up` / `Page Down`; `Primary+↑` / `↓` | Jump five rows; thought start / end |
 | `Enter`; `Tab`; `Shift+Tab` | Continue lists; nest; outdent |
 | `↑` / `↓` twice at a boundary | Focus the adjacent thought, or create at the top / bottom board edge |
 | `Primary+Enter`; `Primary+Shift+Enter` | Submit and remove after acceptance; submit and keep |
@@ -219,10 +220,11 @@ notify_terminal_on_auto_pause = false
   <img src="assets/proqi-herdr-workflow.png" width="1000" alt="A Herdr workspace with Codex working beside a Proqi board of prepared prompt thoughts">
 </p>
 
-In Herdr, Proqi finds verified adjacent agents. `s` submits in visible order and
-removes after acceptance; `S` keeps. While editing, `Primary+Enter` submits the
-active thought and `Primary+Shift+Enter` submits it while keeping it. The palette
-submits the whole board. With several verified adjacent agents, either edit
+In Herdr, Proqi finds verified adjacent agents. In Board mode, `s` or
+`Primary+Enter` submits the selected thought or selection in visible order and
+removes after acceptance; `S` or `Primary+Shift+Enter` keeps it. While editing,
+the same Primary chords submit only the active thought. The palette submits the
+whole board. With several verified adjacent agents, either edit
 chord opens the temporary direction chooser; press an arrow or `h`, `j`, `k`,
 or `l` next to choose the target. Those keys select a direction instead of
 moving or inserting text while the chooser is open. `Esc` cancels the chooser
@@ -288,6 +290,10 @@ proqi diagnostics collect --output proqi-diagnostics.json
 Diagnostics are redacted and local; review before sharing. See
 [SECURITY.md](SECURITY.md). Disable content-free update checks with
 `check_for_updates = false`.
+Collected update diagnostics include only closed lifecycle stages, aggregate
+participant and replacement counts, stable failure codes, and convergence.
+Finalization diagnostics distinguish unavailable control, unavailable private
+cache state, and an exact-state mismatch without recording local identifiers.
 
 ## Configuration
 
@@ -311,6 +317,8 @@ focus_down = "j"
 transform = "t" # merge selection; Esc,t splits or extracts the last editor range
 screenshot_inbox = "i"
 delete_sentence = "U" # Primary+Shift+U, use another unreserved uppercase suffix to remap
+select_visual_row_start = "H" # Primary+Shift+H fallback
+select_visual_row_end = "L" # Primary+Shift+L fallback
 ```
 
 Thought transformations are contextual and remappable. In an editor, use
@@ -329,6 +337,9 @@ Unsafe theme contrast is rejected. See the
 [theme example](docs/themes/proqi-dark.toml). Invocation roots stay local.
 Sentence deletion uses a documented Unicode profile with unavoidable ambiguity.
 See [sentence deletion](docs/SENTENCE_DELETION.md).
+Visual-row selection uses the current rendered width and folded presentation.
+If a terminal does not report `Primary+Shift+←` / `→` distinctly, use the
+command palette or the configured shifted Primary suffixes above.
 
 ## Compatibility and contributing
 

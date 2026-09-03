@@ -2,6 +2,7 @@ use super::{Fixture, draw};
 
 use proqi::{
     application::{ClipboardIntent, Effect, FailureCode, InteractionMode},
+    domain::{ContentAnnotation, ContentAnnotationKind},
     ports::editor::CursorMovement,
     ui::{UiInput, UiKey},
 };
@@ -76,6 +77,67 @@ fn board_cut_waits_for_clipboard_success_and_copy_preserves_exact_content() {
     fixture.input(UiInput::Key(UiKey::Character('n')));
     fixture.input(UiInput::Key(UiKey::Escape));
     assert_eq!(fixture.app.state.board.live_thoughts()[0].content, "n");
+}
+
+#[test]
+fn delayed_board_cut_success_keeps_an_intervening_edit() {
+    let original = "/tmp/original.png";
+    let annotation = ContentAnnotation {
+        start: 0,
+        end: original.len(),
+        kind: ContentAnnotationKind::Attachment {
+            image: true,
+            display_name: "original.png".to_owned(),
+        },
+    };
+    let mut fixture = Fixture::with_annotated_thought(original, vec![annotation.clone()]);
+    let cut = fixture.effects(UiInput::Key(UiKey::Cut));
+    let request_id = cut
+        .iter()
+        .find_map(|effect| match effect {
+            Effect::WriteClipboard { request_id, .. } => Some(*request_id),
+            _ => None,
+        })
+        .expect("cut effect");
+
+    fixture.input(UiInput::Key(UiKey::Enter));
+    fixture.input(UiInput::Key(UiKey::Character('!')));
+    let completion =
+        fixture
+            .app
+            .complete_clipboard_write(request_id, Ok(()), &mut fixture.ids, &fixture.clock);
+
+    assert!(matches!(
+        completion.as_slice(),
+        [
+            Effect::CommitRevision(_),
+            Effect::Notify {
+                code: FailureCode::ContentConflict,
+            }
+        ]
+    ));
+    assert_eq!(
+        fixture.app.state.board.live_thoughts()[0].content,
+        "/tmp/original.png!"
+    );
+    assert_eq!(
+        fixture.app.state.board.live_thoughts()[0].annotations,
+        vec![annotation]
+    );
+}
+
+#[test]
+fn unsupported_annotated_clipboard_error_has_platform_guidance() {
+    let mut fixture = Fixture::new();
+    fixture
+        .app
+        .notify(FailureCode::ClipboardMetadataUnsupported);
+    assert_eq!(
+        fixture.app.status_text(),
+        Some(
+            "annotated copy is unavailable on this platform; copy only unannotated text or use macOS"
+        )
+    );
 }
 
 #[test]

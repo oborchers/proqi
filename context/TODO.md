@@ -229,40 +229,40 @@ User story: while editing a long thought or navigating a large picker, I can use
 the same fast-navigation shortcut to advance through content in predictable
 five-step increments instead of repeatedly pressing Up or Down.
 
-- [ ] Introduce one normalized fast-previous and fast-next intention below raw
+- [x] Introduce one normalized fast-previous and fast-next intention below raw
   terminal input. Map both `Alt+Up` / `Alt+Down` and `Page Up` / `Page Down` to
   it in supported modes. Do not let individual overlays reinterpret raw key
   codes independently.
-- [ ] In edit mode, move exactly five wrapped visual rows, preserve the preferred
+- [x] In edit mode, move exactly five wrapped visual rows, preserve the preferred
   terminal-cell column, keep the cursor visible through internal scrolling, and
   clamp at the first or last row. Shift plus either spelling extends the current
   text selection through the same movement.
-- [ ] In every selectable picker, overlay, browser, and future pointer-local
+- [x] In every selectable picker, overlay, browser, and future pointer-local
   context menu, move exactly five selectable entries. Display-only headings,
   separators, disabled structural rows, and overflow cues do not count toward
   the five entries. Clamp at the first or last eligible entry instead of
   wrapping across a boundary.
-- [ ] For scrollable overlays with no selected entry, including shortcuts and
+- [x] For scrollable overlays with no selected entry, including shortcuts and
   release highlights, move exactly five visible content rows and clamp at the
   scroll bounds. Keep ordinary Up/Down behavior unchanged where those keys
   already have a more granular meaning.
-- [ ] Give every potentially long picker one bounded viewport and explicit
+- [x] Give every potentially long picker one bounded viewport and explicit
   scroll offset. Keep the selected entry visible after fast navigation,
   filtering, asynchronous result replacement, and resize. Show quiet overflow
   cues when more content exists above or below; a permanent scrollbar is not
   required in shallow terminal panes.
-- [ ] Keep mouse-wheel events inside the topmost open surface. They scroll that
+- [x] Keep mouse-wheel events inside the topmost open surface. They scroll that
   picker or overlay and never the obscured board or editor. Recompute hit
   geometry from the same visible slice after every wheel, paging, filter, and
   resize event.
-- [ ] Preserve board-mode contracts. Plain and shifted vertical input continue
+- [x] Preserve board-mode contracts. Plain and shifted vertical input continue
   to focus and select thoughts, while Primary plus Shift continues to reorder.
   Do not make the new Page keys or Alt paging an accidental second board reorder
   or five-thought selection command without a separate product decision.
-- [ ] Derive README controls, contextual help, shortcut overlays, remapping
+- [x] Derive README controls, contextual help, shortcut overlays, remapping
   labels, and command discovery from the same semantic definition. Document the
   existing Alt spelling and the new Page-key alias together.
-- [ ] Cover empty, one-entry, fewer-than-five, exact-five, and long inventories;
+- [x] Cover empty, one-entry, fewer-than-five, exact-five, and long inventories;
   first and last boundary clamping; headings; filtered and asynchronously
   replaced results; editor selection; Unicode width; narrow and shallow resize;
   mouse-wheel isolation; repeated key input; every picker and scrollable

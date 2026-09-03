@@ -371,6 +371,8 @@ fn mouse_drag_reorders_thoughts_through_the_visible_gutter() {
 
 #[path = "ui_board/agent.rs"]
 mod agent;
+#[path = "ui_board/agent_board_aliases.rs"]
+mod agent_board_aliases;
 #[path = "ui_board/agent_direct.rs"]
 mod agent_direct;
 #[path = "ui_board/agent_discovery.rs"]
@@ -389,6 +391,10 @@ mod annotations;
 mod attachment_accessibility;
 #[path = "ui_board/blank.rs"]
 mod blank;
+#[path = "ui_board/bottom_insertion.rs"]
+mod bottom_insertion;
+#[path = "ui_board/bottom_insertion_snapshots.rs"]
+mod bottom_insertion_snapshots;
 #[path = "ui_board/clipboard.rs"]
 mod clipboard;
 #[path = "ui_board/clipboard_annotations.rs"]
@@ -451,3 +457,5 @@ mod submit_all;
 mod top_boundary_snapshots;
 #[path = "ui_board/transformations.rs"]
 mod transformations;
+#[path = "ui_board/visual_row_selection.rs"]
+mod visual_row_selection;

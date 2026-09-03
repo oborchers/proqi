@@ -2,7 +2,17 @@
 
 use crate::{domain::Direction, ports::editor::CursorMovement};
 
+use super::FastNavigation;
 use super::PastePayload;
+
+/// Directional edge of one wrapped visual editor row.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum VisualRowEdge {
+    /// First canonical position represented by the visual row.
+    Start,
+    /// Canonical position immediately after the visual row.
+    End,
+}
 
 /// Mouse button after terminal-backend normalization.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -72,6 +82,13 @@ pub enum UiKey {
     PickerPrevious,
     /// Move to the next bounded picker result.
     PickerNext,
+    /// Move five wrapped rows or five eligible entries in the requested direction.
+    FastNavigation {
+        /// Shared earlier/later intention below raw terminal input.
+        direction: FastNavigation,
+        /// Whether an editor or Board range should extend through the movement.
+        extend_selection: bool,
+    },
     /// Return from edit mode.
     Escape,
     /// Delete the preceding grapheme.
@@ -89,6 +106,11 @@ pub enum UiKey {
         movement: CursorMovement,
         /// Whether to extend the active selection.
         extend_selection: bool,
+    },
+    /// Extend the active editor selection to one fold-aware visual-row edge.
+    ExtendVisualRow {
+        /// Edge resolved from the current rendered projection.
+        edge: VisualRowEdge,
     },
     /// A mode-aware vertical chord with distinct editor and board intentions.
     ///

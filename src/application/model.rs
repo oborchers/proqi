@@ -1,13 +1,14 @@
 //! Application state, normalized actions, effects, and errors.
 
+pub(super) mod clipboard;
 mod effect;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use super::error::{ApplicationError, ApplicationResult, FailureCode};
 use crate::domain::{
-    BoardOperation, BoardOperationKind, OperationId, OperationSequence, RequestId, SessionBoard,
-    StableVersion, TextPosition, Thought, ThoughtId, ThoughtRevision, Timestamp, UndoScope,
+    BoardOperation, BoardOperationKind, OperationSequence, RequestId, SessionBoard, StableVersion,
+    TextPosition, Thought, ThoughtId, ThoughtRevision, UndoScope,
 };
 
 use crate::ports::runtime::CaptureOwnerInfo;
@@ -145,14 +146,6 @@ impl ScreenshotPauseReason {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub(super) struct PendingClipboard {
-    pub(super) thought_ids: Vec<ThoughtId>,
-    pub(super) intent: ClipboardIntent,
-    pub(super) operation_id: Option<OperationId>,
-    pub(super) at: Timestamp,
-}
-
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub(super) struct EditorHistory {
     pub(super) revisions: Vec<ThoughtRevision>,
@@ -177,7 +170,7 @@ pub struct AppState {
     pub(super) board_history: Vec<BoardOperation>,
     pub(super) board_history_cursor: usize,
     pub(super) editor_histories: HashMap<ThoughtId, EditorHistory>,
-    pub(super) pending_clipboard: BTreeMap<RequestId, PendingClipboard>,
+    pub(super) pending_clipboard: BTreeMap<RequestId, clipboard::PendingClipboard>,
     pub(super) locked_thoughts: BTreeSet<ThoughtId>,
     pub(super) pending_sequences: BTreeSet<OperationSequence>,
     pub(super) deferred_board_operations: BTreeMap<OperationSequence, BoardOperation>,

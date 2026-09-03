@@ -200,12 +200,14 @@ pub(super) struct Presentation {
     pub(super) styles: Vec<PresentedStyle>,
 }
 
-pub(super) fn project(
-    content: &str,
-    annotations: &[ContentAnnotation],
-    expanded: &[usize],
-) -> Result<Presentation, ProjectionError> {
-    project_with_health(content, annotations, expanded, |_| false)
+impl Presentation {
+    pub(super) const fn canonical(content: String) -> Self {
+        Self {
+            content,
+            substitutions: Vec::new(),
+            styles: Vec::new(),
+        }
+    }
 }
 
 pub(super) fn project_with_health(

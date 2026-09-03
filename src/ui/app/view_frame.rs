@@ -1,7 +1,6 @@
 //! Authoritative frame geometry and responsive footer projection.
 
 use ratatui_core::layout::Rect;
-use unicode_width::UnicodeWidthStr as _;
 
 use crate::{
     application::{DurabilityState, InteractionMode},
@@ -23,14 +22,18 @@ impl BoardApp {
     /// Recompute one authoritative frame layout and reflow the active editor.
     pub fn prepare_frame(&mut self, area: Rect) -> LayoutSnapshot {
         self.reset_overlay_activation_for_geometry(area);
-        let layout_state = self.presentation_state();
-        let first_editor = self.editor_presentation();
+        self.prepare_layout(TextViewport::new(
+            area.width.saturating_sub(2).max(1),
+            self.viewport.height,
+        ));
+        let mut presentation = self.build_frame_presentation();
+        self.attach_editor_presentation(&mut presentation);
         let follow_insertion = self.insertion_focused() || self.compose_prompt_visible();
         let has_status = self.status_view().is_some()
             || matches!(self.state.durability, DurabilityState::Failed { .. });
         let (first, first_scroll) = crate::ui::layout::compute_for_app(
-            &layout_state,
-            first_editor.as_ref().map(|view| &view.snapshot),
+            &self.state,
+            &presentation,
             area,
             follow_insertion,
             !self.agent_targets.is_empty(),
@@ -41,11 +44,11 @@ impl BoardApp {
         );
         let height = self.focused_height(&first);
         self.prepare_layout(TextViewport::new(first.content_width, height));
-        let editor = self.editor_presentation();
+        self.attach_editor_presentation(&mut presentation);
         let viewport = self.board_viewport.at(first_scroll.current);
         let (mut layout, scroll) = crate::ui::layout::compute_for_app(
-            &layout_state,
-            editor.as_ref().map(|view| &view.snapshot),
+            &self.state,
+            &presentation,
             area,
             follow_insertion,
             !self.agent_targets.is_empty(),
@@ -54,6 +57,8 @@ impl BoardApp {
             &self.settings.keybindings,
             viewport,
         );
+        self.configure_overlay(&mut layout);
+        self.keep_overlay_selection_visible(&layout);
         self.configure_overlay(&mut layout);
         layout.configure_agent_controls_with_keys(
             &self.agent_targets,
@@ -75,7 +80,9 @@ impl BoardApp {
         self.prepare_layout(TextViewport::new(layout.content_width, final_height));
         self.board_viewport = self.board_viewport.at(scroll.current);
         self.scroll_geometry = Some(scroll);
+        self.frame_presentation = Some(presentation);
         self.layout = Some(layout.clone());
+        self.clamp_help_scroll();
         self.clamp_release_highlights_scroll();
         layout
     }
@@ -150,6 +157,22 @@ impl BoardApp {
         }
     }
 
+    fn keep_overlay_selection_visible(&mut self, layout: &LayoutSnapshot) {
+        let Some(overlay) = layout.overlay.as_ref() else {
+            return;
+        };
+        let visible = overlay.items.len().max(1);
+        if self.palette.is_some() {
+            self.ensure_palette_visible(visible);
+        } else if self.invocation_popup.is_some() {
+            self.ensure_invocation_visible(usize::from(overlay.area.height.saturating_sub(3)));
+        } else if self.transfer.is_some() {
+            self.ensure_transfer_visible(visible);
+        } else if self.search.is_some() {
+            self.ensure_search_visible(visible);
+        }
+    }
+
     fn footer_summary(&self, available_width: u16) -> String {
         let count = self.visible_thought_count();
         let noun = if count == 1 { "thought" } else { "thoughts" };
@@ -167,9 +190,6 @@ impl BoardApp {
             || format!("{count} {noun} · {durability}{inbox}"),
             |mode| format!("{count} {noun} · {mode} · {durability}{inbox}"),
         );
-        if complete.width() <= usize::from(available_width) {
-            return complete;
-        }
         let compact_inbox = self
             .screenshot_footer_state(true)
             .map_or_else(String::new, |label| format!(" · {label}"));
@@ -177,13 +197,10 @@ impl BoardApp {
             || format!("{count} · {durability}{compact_inbox}"),
             |mode| format!("{count} · {mode} · {durability}{compact_inbox}"),
         );
-        if compact.width() <= usize::from(available_width) {
-            return compact;
-        }
-        if let Some(paused) = self.screenshot_footer_state(true) {
-            return paused;
-        }
-        format!("{count} {durability}")
+        let fallback = self
+            .screenshot_footer_state(true)
+            .unwrap_or_else(|| format!("{count} {durability}"));
+        fitting_footer_summary(complete, compact, fallback, available_width)
     }
 
     pub(crate) fn session_display_name(&self) -> &str {
@@ -209,32 +226,40 @@ impl BoardApp {
             "saved"
         }
     }
+}
 
-    fn presentation_state(&self) -> crate::application::AppState {
-        let mut state = self.state.clone();
-        if self.insertion_focused() {
-            state.focused_thought = None;
-        }
-        let ids = state
-            .board
-            .thoughts()
-            .iter()
-            .map(|thought| thought.id)
-            .collect::<Vec<_>>();
-        for id in ids {
-            let Some(thought) = state.board.thought_mut(id) else {
-                continue;
-            };
-            let Ok(presentation) = crate::ui::annotations::project(
-                &thought.content,
-                &thought.annotations,
-                &self.expanded_fold_indices(id),
-            ) else {
-                continue;
-            };
-            thought.content = presentation.content;
-            thought.annotations.clear();
-        }
-        state
+fn fitting_footer_summary(
+    complete: String,
+    compact: String,
+    fallback: String,
+    available_width: u16,
+) -> String {
+    let available = usize::from(available_width);
+    if crate::ports::text_layout::terminal_cell_width(&complete) <= available {
+        complete
+    } else if crate::ports::text_layout::terminal_cell_width(&compact) <= available {
+        compact
+    } else {
+        fallback
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::fitting_footer_summary;
+
+    #[test]
+    fn footer_compaction_uses_exact_terminal_cell_thresholds() {
+        let choose = |width| {
+            fitting_footer_summary(
+                "界e\u{301}👩‍💻".to_owned(),
+                "界".to_owned(),
+                "x".to_owned(),
+                width,
+            )
+        };
+        assert_eq!(choose(5), "界e\u{301}👩‍💻");
+        assert_eq!(choose(4), "界");
+        assert_eq!(choose(1), "x");
     }
 }

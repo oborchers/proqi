@@ -41,6 +41,17 @@ fn state(contents: &[(&str, ThoughtPresentation)]) -> AppState {
     AppState::new(SessionBoard::new(session, thoughts).expect("board"))
 }
 
+fn measure(
+    state: &AppState,
+    editor: Option<&EditorSnapshot>,
+    width: u16,
+    height: u16,
+    density: crate::ui::settings::BoardDensity,
+) -> BoardFlow {
+    let presentation = crate::ui::projection::FramePresentation::canonical(state, editor);
+    BoardFlow::measure(state, &presentation, width, height, density)
+}
+
 #[test]
 fn multiple_long_thought_presentation_matrix_scrolls_every_row_both_directions() {
     let long = [
@@ -116,7 +127,7 @@ fn assert_flow_case(
     height: u16,
     density: crate::ui::settings::BoardDensity,
 ) {
-    let flow = BoardFlow::measure(state, None, width, height, density);
+    let flow = measure(state, None, width, height, density);
     assert_eq!(
         flow.thoughts
             .iter()
@@ -203,7 +214,7 @@ fn every_visual_row_anchor_has_symmetric_neighbors() {
         (&long, ThoughtPresentation::Automatic),
         ("after", ThoughtPresentation::Automatic),
     ]);
-    let flow = BoardFlow::measure(
+    let flow = measure(
         &state,
         None,
         24,
@@ -254,7 +265,7 @@ fn active_editor_rows_replace_stale_durable_content_during_measurement() {
         visual_lines,
     };
 
-    let flow = BoardFlow::measure(
+    let flow = measure(
         &state,
         Some(&editor),
         20,
@@ -271,7 +282,7 @@ fn active_editor_rows_replace_stale_durable_content_during_measurement() {
 fn unicode_content_anchor_survives_width_reflow_by_projected_byte() {
     let content = "A界B e\u{301} 👩‍💻 wraps through several cells and remains anchored";
     let state = state(&[(content, ThoughtPresentation::Expanded)]);
-    let narrow = BoardFlow::measure(
+    let narrow = measure(
         &state,
         None,
         12,
@@ -279,12 +290,14 @@ fn unicode_content_anchor_survives_width_reflow_by_projected_byte() {
         crate::ui::settings::BoardDensity::Compact,
     );
     let thought = &narrow.thoughts[0];
-    let byte = thought.row_starts[2];
+    let ContentAnchor::Canonical(byte) = thought.row_anchors[2] else {
+        panic!("canonical presentation row");
+    };
     let anchor = ScrollAnchor::Content {
         thought_id: thought.thought_id,
-        byte,
+        position: ContentAnchor::Canonical(byte),
     };
-    let wide = BoardFlow::measure(
+    let wide = measure(
         &state,
         None,
         24,
@@ -294,7 +307,7 @@ fn unicode_content_anchor_survives_width_reflow_by_projected_byte() {
     let resolved = wide.resolve(BoardViewport::Manual(anchor), None, false, 5);
     let ScrollAnchor::Content {
         thought_id,
-        byte: reflowed,
+        position: ContentAnchor::Canonical(reflowed),
     } = resolved.geometry.current
     else {
         panic!("reflowed content anchor");
@@ -302,15 +315,15 @@ fn unicode_content_anchor_survives_width_reflow_by_projected_byte() {
     assert_eq!(thought_id, thought.thought_id);
     assert!(reflowed <= byte);
     let row = wide.thoughts[0]
-        .row_starts
+        .row_anchors
         .iter()
-        .position(|start| *start == reflowed)
+        .position(|anchor| *anchor == ContentAnchor::Canonical(reflowed))
         .expect("reflowed row");
     assert!(
         wide.thoughts[0]
-            .row_starts
+            .row_anchors
             .get(row + 1)
-            .is_none_or(|next| *next > byte)
+            .is_none_or(|next| next.canonical_byte() > byte)
     );
 }
 
@@ -324,7 +337,7 @@ fn missing_thought_anchor_reconciles_to_the_focused_live_thought() {
     ]);
     let focused = state.board.live_thoughts()[1].id;
     let missing = ThoughtId::from_uuid(uuid_v7(99)).expect("missing thought ID");
-    let flow = BoardFlow::measure(
+    let flow = measure(
         &state,
         None,
         24,
@@ -335,7 +348,7 @@ fn missing_thought_anchor_reconciles_to_the_focused_live_thought() {
     let resolved = flow.resolve(
         BoardViewport::Manual(ScrollAnchor::Content {
             thought_id: missing,
-            byte: 40,
+            position: ContentAnchor::Canonical(40),
         }),
         Some(focused),
         false,
@@ -346,7 +359,7 @@ fn missing_thought_anchor_reconciles_to_the_focused_live_thought() {
         resolved.geometry.current,
         ScrollAnchor::Content {
             thought_id,
-            byte: 0
+            position: ContentAnchor::Canonical(0)
         } if thought_id == focused
     ));
     assert_eq!(resolved.first_index, 1);

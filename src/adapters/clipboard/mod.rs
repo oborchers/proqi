@@ -68,11 +68,10 @@ impl Clipboard for PlatformClipboard {
                 .map_err(ClipboardError::Unavailable)?;
             let generation = self
                 .native
-                .write_typed(content.content(), &encoded.payload)
-                .map_err(ClipboardError::Unavailable)?;
+                .write_typed(content.content(), &encoded.payload)?;
             let record = ProvenanceRecord::new(generation, encoded.request_id, encoded.binding);
             lease.store(&record).map_err(ClipboardError::Unavailable)?;
-            if self.typed_write_matches(generation, &encoded.payload) {
+            if self.typed_write_matches(generation, content.content(), &encoded.payload) {
                 return Ok(ClipboardWrite::Native);
             }
             return Err(ClipboardError::Unavailable(
@@ -112,9 +111,15 @@ impl Clipboard for PlatformClipboard {
 }
 
 impl PlatformClipboard {
-    fn typed_write_matches(&mut self, generation: u64, expected_payload: &str) -> bool {
+    fn typed_write_matches(
+        &mut self,
+        generation: u64,
+        expected_text: &str,
+        expected_payload: &str,
+    ) -> bool {
         self.native.read_typed().is_ok_and(|snapshot| {
             snapshot.generation == generation
+                && snapshot.text.as_deref() == Some(expected_text)
                 && snapshot.payload.as_deref() == Some(expected_payload)
         })
     }
@@ -122,20 +127,21 @@ impl PlatformClipboard {
 
 trait NativeClipboard {
     fn write_text(&mut self, content: &str) -> Result<(), String>;
-    fn write_typed(&mut self, content: &str, payload: &str) -> Result<u64, String>;
+    fn write_typed(&mut self, content: &str, payload: &str) -> Result<u64, ClipboardError>;
     fn read_text(&mut self) -> Result<String, NativeReadError>;
     fn read_typed(&mut self) -> Result<TypedSnapshot, String>;
     fn read_image(&mut self) -> Result<RasterImage, NativeReadError>;
 }
 
 trait TypedClipboard {
-    fn write(&mut self, text: &str, typed: &str) -> Result<u64, String>;
+    fn write(&mut self, text: &str, typed: &str) -> Result<u64, ClipboardError>;
     fn read(&mut self) -> Result<TypedSnapshot, String>;
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct TypedSnapshot {
     generation: u64,
+    text: Option<String>,
     payload: Option<String>,
 }
 
@@ -174,7 +180,7 @@ impl NativeClipboard for ArboardNative {
             .map_err(|error| error.to_string())
     }
 
-    fn write_typed(&mut self, content: &str, payload: &str) -> Result<u64, String> {
+    fn write_typed(&mut self, content: &str, payload: &str) -> Result<u64, ClipboardError> {
         self.typed.write(content, payload)
     }
 
@@ -219,8 +225,8 @@ struct UnsupportedTypedClipboard;
 
 #[cfg(not(target_os = "macos"))]
 impl TypedClipboard for UnsupportedTypedClipboard {
-    fn write(&mut self, _text: &str, _typed: &str) -> Result<u64, String> {
-        Err("safe multi-format clipboard identity is unavailable on this platform".to_owned())
+    fn write(&mut self, _text: &str, _typed: &str) -> Result<u64, ClipboardError> {
+        Err(ClipboardError::MetadataUnsupported)
     }
 
     fn read(&mut self) -> Result<TypedSnapshot, String> {

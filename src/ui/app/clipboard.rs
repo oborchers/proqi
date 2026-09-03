@@ -1,5 +1,7 @@
 //! Non-destructive clipboard intentions and asynchronous completion.
 
+mod messages;
+
 use crate::{
     application::{Action, ClipboardIntent, Effect, FailureCode, InteractionMode},
     domain::extract_annotations,
@@ -11,7 +13,7 @@ use crate::{
 
 use super::{
     BoardApp, ComposePresentation, EditorOwner, InsertionConfirmation, InsertionFocus,
-    pending_types::{ClipboardReadOwner, PendingEditorClipboard},
+    pending_types::{ClipboardReadOwner, EditFlush, PendingEditorClipboard},
 };
 use crate::ui::PastePayload;
 
@@ -34,7 +36,11 @@ impl BoardApp {
             if payload.content.is_empty() {
                 return Vec::new();
             }
-            self.create(payload, ids, clock)
+            if self.insertion_focused() {
+                self.create_at_bottom(payload, ids, clock)
+            } else {
+                self.create(payload, ids, clock)
+            }
         } else if matches!(self.state.mode, InteractionMode::Compose) {
             let (content, annotations, verified_paths, preserve_owned) = payload.into_parts();
             if content.is_empty() {
@@ -303,14 +309,32 @@ impl BoardApp {
         }
         let intent = self.state.pending_clipboard_intent(request_id);
         let success = result.is_ok();
-        let effects = self.reduce_with_empty_transition(
-            Action::ClipboardResult { request_id, result },
+        let (mut effects, completion) = if success && intent == Some(ClipboardIntent::Cut) {
+            match self.flush_edit_boundary(ids, clock) {
+                EditFlush::Complete(effects) => (effects, result),
+                EditFlush::Blocked(effects) => (effects, Err(FailureCode::ContentConflict)),
+            }
+        } else {
+            (Vec::new(), result)
+        };
+        effects.extend(self.reduce_with_empty_transition(
+            Action::ClipboardResult {
+                request_id,
+                result: completion,
+            },
             crate::application::EmptyBoardTransition::ComposeAfterLocalRemoval,
-        );
+        ));
         if success && intent == Some(ClipboardIntent::Copy) {
             self.set_success("copied selected thoughts");
         }
-        if success && intent == Some(ClipboardIntent::Cut) && !effects.is_empty() {
+        let completed_cut = effects.iter().any(|effect| {
+            matches!(
+                effect,
+                Effect::CommitBoardOperation(operation)
+                    if operation.kind == crate::domain::BoardOperationKind::Cut
+            )
+        });
+        if success && intent == Some(ClipboardIntent::Cut) && completed_cut {
             self.clear_board_selection();
             self.sync_empty_insertion_focus();
         }
@@ -385,26 +409,12 @@ impl BoardApp {
         }
     }
 
-    /// Present an application notification returned by a background effect.
-    pub fn notify(&mut self, code: FailureCode) {
-        let message = match code {
-            FailureCode::ClipboardFailed => {
-                "clipboard unavailable; use bracketed terminal paste or retry".to_owned()
-            }
-            FailureCode::StorageFailed => {
-                "save failed; press r to retry or w to export recovery".to_owned()
-            }
-            FailureCode::RecoveryCapacity => "save failed; press w to export recovery".to_owned(),
-            _ => code.as_str().to_owned(),
-        };
-        self.set_error(message);
-    }
-
     fn write_selection(
         &mut self,
         ids: &mut impl IdGenerator,
         intent: ClipboardIntent,
     ) -> Vec<Effect> {
+        self.normalize_clipboard_selection();
         let Some((super::EditorOwner::Thought(thought_id), editor)) = &self.editor else {
             return Vec::new();
         };

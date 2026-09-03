@@ -4,7 +4,10 @@ use std::{ffi::OsString, time::Duration};
 
 use serde::{Deserialize, Serialize};
 
-use crate::ports::environment::{ProcessRequest, ProcessRunner};
+use crate::ports::{
+    clipboard::ClipboardError,
+    environment::{ProcessRequest, ProcessRunner},
+};
 
 use super::{TypedClipboard, TypedSnapshot};
 
@@ -26,27 +29,34 @@ var textAccepted = item.setStringForType($(request.text), $.NSPasteboardTypeStri
 var typedAccepted = item.setStringForType($(request.typed), typedType);
 board.clearContents;
 var written = board.writeObjects($.NSArray.arrayWithObject(item));
+var generationBeforeRead = Number(board.changeCount);
 var items = board.pasteboardItems;
 var current = items && items.count > 0 ? items.objectAtIndex(0) : null;
 var actualText = current ? current.stringForType($.NSPasteboardTypeString) : null;
 var actualTyped = current ? current.stringForType(typedType) : null;
+var generationAfterRead = Number(board.changeCount);
 var accepted = Boolean(textAccepted && typedAccepted && written && actualText && actualTyped)
+    && generationBeforeRead === generationAfterRead
     && ObjC.unwrap(actualText) === request.text
     && ObjC.unwrap(actualTyped) === request.typed;
-JSON.stringify({ generation: Number(board.changeCount), accepted: accepted });
+JSON.stringify({ generation: generationAfterRead, accepted: accepted });
 ";
 
 const READ_SCRIPT: &str = r"
 ObjC.import('AppKit');
 var board = $.NSPasteboard.generalPasteboard;
 if (!board) throw new Error('general pasteboard is unavailable');
+var generationBeforeRead = Number(board.changeCount);
 var items = board.pasteboardItems;
 var current = items && items.count > 0 ? items.objectAtIndex(0) : null;
 var typedType = $('dev.proqi.clipboard.annotations-v1');
 var plain = current ? current.stringForType($.NSPasteboardTypeString) : null;
 var typed = current ? current.stringForType(typedType) : null;
+var generationAfterRead = Number(board.changeCount);
 JSON.stringify({
-    generation: Number(board.changeCount),
+    generation: generationAfterRead,
+    stable: generationBeforeRead === generationAfterRead,
+    text: plain ? ObjC.unwrap(plain) : null,
     typed: plain && typed ? ObjC.unwrap(typed) : null
 });
 ";
@@ -84,14 +94,18 @@ impl MacTypedClipboard {
 }
 
 impl TypedClipboard for MacTypedClipboard {
-    fn write(&mut self, text: &str, typed: &str) -> Result<u64, String> {
-        let request =
-            serde_json::to_vec(&WriteRequest { text, typed }).map_err(|error| error.to_string())?;
-        let output = self.run(WRITE_SCRIPT, Some(request))?;
-        let reply: WriteReply =
-            serde_json::from_slice(&output).map_err(|error| error.to_string())?;
+    fn write(&mut self, text: &str, typed: &str) -> Result<u64, ClipboardError> {
+        let request = serde_json::to_vec(&WriteRequest { text, typed })
+            .map_err(|error| ClipboardError::Unavailable(error.to_string()))?;
+        let output = self
+            .run(WRITE_SCRIPT, Some(request))
+            .map_err(ClipboardError::Unavailable)?;
+        let reply: WriteReply = serde_json::from_slice(&output)
+            .map_err(|error| ClipboardError::Unavailable(error.to_string()))?;
         if !reply.accepted {
-            return Err("macOS pasteboard did not retain both representations".to_owned());
+            return Err(ClipboardError::Unavailable(
+                "macOS pasteboard did not retain both representations".to_owned(),
+            ));
         }
         Ok(reply.generation)
     }
@@ -100,8 +114,12 @@ impl TypedClipboard for MacTypedClipboard {
         let output = self.run(READ_SCRIPT, None)?;
         let reply: ReadReply =
             serde_json::from_slice(&output).map_err(|error| error.to_string())?;
+        if !reply.stable {
+            return Err("macOS pasteboard changed while representations were read".to_owned());
+        }
         Ok(TypedSnapshot {
             generation: reply.generation,
+            text: reply.text,
             payload: reply.typed,
         })
     }
@@ -124,5 +142,7 @@ struct WriteReply {
 #[serde(deny_unknown_fields)]
 struct ReadReply {
     generation: u64,
+    stable: bool,
+    text: Option<String>,
     typed: Option<String>,
 }

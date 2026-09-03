@@ -2,7 +2,8 @@
 
 mod accessibility_results;
 mod admission;
-mod composition;
+mod capture_runtime;
+pub(crate) mod composition;
 mod diagnostics;
 mod durability;
 mod external_results;
@@ -20,7 +21,7 @@ mod termination;
 mod update_results;
 
 use std::{
-    io::{IsTerminal, Stdout, stdin, stdout},
+    io::{Stdout, stdout},
     path::PathBuf,
     thread,
     time::{Duration, Instant},
@@ -34,8 +35,8 @@ use crate::{
         control::ControlServer,
         editor::RopeEditorFactory,
         runtime::{
-            FileCaptureLease, FileRuntimeCoordinator, FileSchemaLease, FileSessionLease,
-            SystemClock, SystemIdGenerator, SystemMonotonicClock,
+            FileRuntimeCoordinator, FileSchemaLease, FileSessionLease, SystemClock,
+            SystemIdGenerator, SystemMonotonicClock,
         },
         sqlite::SqliteStore,
     },
@@ -59,6 +60,7 @@ use super::{
     screenshot_lane::ScreenshotLane,
 };
 
+use capture_runtime::CaptureRuntime;
 use durability::{drain_persistence, enqueue_effects, storage_error_code};
 use finish::CleanupStage::{Control, TerminalRestoration};
 use heartbeat::PaneHeartbeat;
@@ -84,16 +86,6 @@ pub(crate) struct TerminalResources {
     pub(crate) executable: PathBuf,
 }
 
-pub(crate) fn require_interactive() -> Result<(), TerminalError> {
-    if stdin().is_terminal() && stdout().is_terminal() {
-        Ok(())
-    } else {
-        Err(TerminalError::Io(
-            "interactive launch requires a terminal; use --json for scriptable output".to_owned(),
-        ))
-    }
-}
-
 pub(super) struct WorkerLanes<'a> {
     pub(super) accessibility: &'a AccessibilityLane,
     pub(super) input: &'a InputLane,
@@ -109,28 +101,13 @@ pub(super) struct WorkerLanes<'a> {
     pub(super) cancellation: &'a crate::adapters::process::CancellationFlag,
 }
 
-#[derive(Default)]
-#[expect(
-    clippy::struct_excessive_bools,
-    reason = "orthogonal watcher, requester, takeover, and release facts have independent transitions"
-)]
-pub(super) struct CaptureRuntime {
-    lease: Option<FileCaptureLease>,
-    release_when_drained: bool,
-    shutdown_requested: bool,
-    takeover_delivery: Option<crate::adapters::control::ControlDeliveryReceipt>,
-    takeover_stopping: bool,
-    watcher_stopped: bool,
-    release_deadline: Option<Instant>,
-}
-
 /// Returns a typed setup, render, input, persistence, worker, or restoration failure.
 #[expect(
     clippy::too_many_lines,
     reason = "runtime composition keeps ownership and cleanup order visible"
 )]
 pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalError> {
-    require_interactive()?;
+    composition::require_interactive()?;
     let TerminalResources {
         state,
         mut store,
@@ -152,7 +129,7 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
     store.recover_submissions(session_id, clock.now())?;
     let release_highlight_selection =
         release_highlights::load(&cache_directory, installation.as_ref(), session_id);
-    let (control, control_warning) = composition::start_optional_control(&mut session_lease);
+    let (mut control, mut control_warning) = composition::start_optional_control(&session_lease);
     let (theme, guard) =
         composition::enter_terminal(&settings.theme, settings.ui.keyboard_enhancement)?;
     let panic_hook = PanicHookGuard::install();
@@ -169,6 +146,14 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
         crate::adapters::herdr::HerdrEnvironment::detect(),
         &terminal_host,
     );
+    let check_for_updates = settings.ui.check_for_updates;
+    let mut app =
+        BoardApp::with_settings_and_cwd(state, settings.ui, cwd.clone(), RopeEditorFactory);
+    let control_ready = composition::publish_optional_control(
+        &mut session_lease,
+        &mut control,
+        &mut control_warning,
+    );
     let mut owned = composition::spawn_lanes(
         control,
         store,
@@ -177,7 +162,7 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
         recovery_directory,
         attachment_directory,
         presentation_source,
-        cache_directory,
+        cache_directory.clone(),
         installation.clone(),
         session_lease.info().instance_id,
         invocation_roots,
@@ -188,12 +173,20 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
     );
     let mut pane_heartbeat = None;
     let shutdown = super::supervisor::ShutdownCoordinator::default();
-    let check_for_updates = settings.ui.check_for_updates;
-    let mut app =
-        BoardApp::with_settings_and_cwd(state, settings.ui, cwd.clone(), RopeEditorFactory);
+    let automatic_highlights_ready = release_highlights::mark_restart_ready(
+        &cache_directory,
+        installation.as_ref(),
+        &release_highlight_selection,
+        control_ready,
+    );
+    crate::adapters::diagnostics::record(crate::adapters::diagnostics::SafeEvent::RuntimeReady {
+        control_ready,
+    });
     app.install_release_highlights(
         release_highlight_selection.installed,
-        release_highlight_selection.automatic,
+        release_highlight_selection
+            .automatic
+            .filter(|_| automatic_highlights_ready),
         owned.input.latest_sequence(),
     );
     app.configure_screenshot_activity(screenshot_activity);

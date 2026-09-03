@@ -1,8 +1,9 @@
 //! Canonical-to-visible mapping for folded editor ranges.
 
-use super::annotations::{Presentation, PresentedStyle, PresentedSubstitution, ProjectionError};
+use super::annotations::{Presentation, PresentedStyle, PresentedSubstitution};
 use crate::{
-    domain::{ContentAnnotation, TextPosition},
+    application::AppState,
+    domain::{TextPosition, ThoughtId, ThoughtPresentation},
     ports::{
         editor::{CellRange, EditorSnapshot, TextSelection},
         text_layout::{
@@ -10,15 +11,82 @@ use crate::{
             wrap_rows, wrapped_row_index,
         },
     },
+    ui::VisualRowEdge,
 };
 
+/// One thought's canonical identity and complete display projection for a frame.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct PresentedThought {
+    pub(super) thought_id: ThoughtId,
+    pub(super) canonical_content: String,
+    pub(super) presentation: Presentation,
+    pub(super) preference: ThoughtPresentation,
+}
+
+/// The single presentation object consumed by every visual-frame consumer.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub(super) struct FramePresentation {
+    thoughts: Vec<PresentedThought>,
+    editor: Option<EditorPresentation>,
+}
+
+impl FramePresentation {
+    pub(super) const fn new(thoughts: Vec<PresentedThought>) -> Self {
+        Self {
+            thoughts,
+            editor: None,
+        }
+    }
+
+    pub(super) fn canonical(state: &AppState, editor: Option<&EditorSnapshot>) -> Self {
+        let thoughts = state
+            .board
+            .live_thoughts()
+            .into_iter()
+            .map(|thought| PresentedThought {
+                thought_id: thought.id,
+                canonical_content: thought.content.clone(),
+                presentation: Presentation::canonical(thought.content.clone()),
+                preference: thought.presentation,
+            })
+            .collect();
+        let mut frame = Self::new(thoughts);
+        if let Some(snapshot) = editor {
+            frame.set_editor(snapshot, Presentation::canonical(snapshot.content.clone()));
+        }
+        frame
+    }
+
+    pub(super) fn thoughts(&self) -> &[PresentedThought] {
+        &self.thoughts
+    }
+
+    pub(super) fn thought(&self, thought_id: ThoughtId) -> Option<&PresentedThought> {
+        self.thoughts
+            .iter()
+            .find(|thought| thought.thought_id == thought_id)
+    }
+
+    pub(super) fn editor(&self) -> Option<&EditorPresentation> {
+        self.editor.as_ref()
+    }
+
+    pub(super) fn editor_snapshot(&self) -> Option<&EditorSnapshot> {
+        self.editor().map(|editor| &editor.snapshot)
+    }
+
+    pub(super) fn set_editor(&mut self, canonical: &EditorSnapshot, source: Presentation) {
+        self.editor = Some(editor_presentation(canonical, source));
+    }
+}
+
 /// Fold-aware visible editor state with lossless canonical mappings.
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct EditorPresentation {
     pub(super) snapshot: EditorSnapshot,
     pub(super) substitutions: Vec<PresentedSubstitution>,
     pub(super) styles: Vec<PresentedStyle>,
     canonical_content: String,
-    canonical_selection: Option<(usize, usize)>,
     rows: Vec<WrappedRow>,
     cursor_display_byte: usize,
 }
@@ -59,12 +127,27 @@ pub(super) fn board_cell_target(
 }
 
 impl EditorPresentation {
-    pub(super) fn selected_collapsed_substitution(&self) -> Option<&PresentedSubstitution> {
-        let selection = self.canonical_selection?;
-        self.substitutions.iter().find(|substitution| {
-            substitution.collapsed
-                && selection == (substitution.canonical_start, substitution.canonical_end)
-        })
+    pub(super) fn visual_row_edge(&self, edge: VisualRowEdge) -> TextPosition {
+        let row_index = directional_row_index(&self.rows, self.cursor_display_byte, edge);
+        let row = &self.rows[row_index];
+        let display_byte = match edge {
+            VisualRowEdge::Start => row.start_byte,
+            VisualRowEdge::End => row.end_byte,
+        };
+        position_for_byte(
+            &self.canonical_content,
+            unproject_boundary(display_byte, &self.substitutions, edge),
+        )
+    }
+
+    pub(super) fn cell_target(&self, row: u16, column: u16) -> BoardCellTarget {
+        if let Some(fold) = self.fold_at_cell(row, column) {
+            return BoardCellTarget::Fold {
+                canonical_start: fold.canonical_start,
+                canonical_end: fold.canonical_end,
+            };
+        }
+        BoardCellTarget::Position(self.canonical_position_at_cell(row, column))
     }
 
     pub(super) fn fold_at_cell(&self, row: u16, column: u16) -> Option<&PresentedSubstitution> {
@@ -105,24 +188,20 @@ impl EditorPresentation {
     }
 }
 
+fn directional_row_index(rows: &[WrappedRow], cursor: usize, edge: VisualRowEdge) -> usize {
+    let index = wrapped_row_index(rows, cursor);
+    let row = &rows[index];
+    match edge {
+        VisualRowEdge::Start if cursor == row.start_byte && index > 0 => index - 1,
+        VisualRowEdge::End if cursor == row.end_byte && index + 1 < rows.len() => index + 1,
+        VisualRowEdge::Start | VisualRowEdge::End => index,
+    }
+}
+
 pub(super) fn editor_presentation(
     canonical: &EditorSnapshot,
-    annotations: &[ContentAnnotation],
-    expanded: &[usize],
-    inaccessible: impl FnMut(usize) -> bool,
-) -> Result<EditorPresentation, ProjectionError> {
-    let canonical_selection = canonical.selection.map(|selection| {
-        (
-            byte_for_position(&canonical.content, selection.start),
-            byte_for_position(&canonical.content, selection.end),
-        )
-    });
-    let presentation = super::annotations::project_with_health(
-        &canonical.content,
-        annotations,
-        expanded,
-        inaccessible,
-    )?;
+    presentation: Presentation,
+) -> EditorPresentation {
     let cursor_display_byte = project_byte(
         byte_for_position(&canonical.content, canonical.cursor),
         &presentation.substitutions,
@@ -146,15 +225,14 @@ pub(super) fn editor_presentation(
         scroll_row,
         visual_lines: rows.iter().map(|row| row.visual.clone()).collect(),
     };
-    Ok(EditorPresentation {
+    EditorPresentation {
         snapshot,
         substitutions: presentation.substitutions,
         styles: presentation.styles,
         canonical_content: canonical.content.clone(),
-        canonical_selection,
         rows,
         cursor_display_byte,
-    })
+    }
 }
 
 fn project_position(
@@ -191,7 +269,7 @@ fn project_byte(byte: usize, folds: &[PresentedSubstitution]) -> usize {
     display_cursor + byte.saturating_sub(canonical_cursor)
 }
 
-fn unproject_byte(byte: usize, folds: &[PresentedSubstitution]) -> usize {
+pub(super) fn unproject_byte(byte: usize, folds: &[PresentedSubstitution]) -> usize {
     let mut canonical_cursor = 0;
     let mut display_cursor = 0;
     for fold in folds {
@@ -203,6 +281,31 @@ fn unproject_byte(byte: usize, folds: &[PresentedSubstitution]) -> usize {
                 fold.canonical_end
             } else {
                 fold.canonical_start + byte.saturating_sub(fold.start)
+            };
+        }
+        canonical_cursor = fold.canonical_end;
+        display_cursor = fold.end;
+    }
+    canonical_cursor + byte.saturating_sub(display_cursor)
+}
+
+fn unproject_boundary(byte: usize, folds: &[PresentedSubstitution], edge: VisualRowEdge) -> usize {
+    let mut canonical_cursor = 0;
+    let mut display_cursor = 0;
+    for fold in folds {
+        if byte < fold.start {
+            return canonical_cursor + byte.saturating_sub(display_cursor);
+        }
+        if byte == fold.start {
+            return fold.canonical_start;
+        }
+        if byte <= fold.end {
+            if !fold.collapsed && byte < fold.content_end {
+                return fold.canonical_start + byte.saturating_sub(fold.start);
+            }
+            return match edge {
+                VisualRowEdge::Start if byte < fold.end => fold.canonical_start,
+                VisualRowEdge::Start | VisualRowEdge::End => fold.canonical_end,
             };
         }
         canonical_cursor = fold.canonical_end;

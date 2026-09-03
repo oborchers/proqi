@@ -157,6 +157,72 @@ fn cut_deletes_only_after_clipboard_success() {
 }
 
 #[test]
+fn cut_success_does_not_delete_an_intervening_annotated_edit() {
+    let mut fixture = Fixture::new();
+    let thought_id = fixture.create("/tmp/original.png");
+    let request_id = fixture.ids.request_id();
+    let operation_id = fixture.operation_id();
+    let at = fixture.time();
+    reduce(
+        &mut fixture.state,
+        Action::CutThoughts {
+            request_id,
+            operation_id,
+            thought_ids: vec![thought_id],
+            at,
+        },
+    )
+    .expect("cut request");
+
+    let before = "/tmp/original.png".to_owned();
+    let after = "/tmp/replacement.png".to_owned();
+    let annotation = ContentAnnotation {
+        start: 0,
+        end: after.len(),
+        kind: ContentAnnotationKind::Attachment {
+            image: true,
+            display_name: "replacement.png".to_owned(),
+        },
+    };
+    let revision_id = fixture.ids.revision_id();
+    let edit_at = fixture.time();
+    reduce(
+        &mut fixture.state,
+        Action::EditThought {
+            thought_id,
+            revision_id,
+            before_content: before,
+            after_content: after.clone(),
+            before_annotations: Vec::new(),
+            after_annotations: vec![annotation.clone()],
+            before_cursor: TextPosition::default(),
+            after_cursor: TextPosition::default(),
+            at: edit_at,
+        },
+    )
+    .expect("intervening edit");
+
+    let completion = reduce(
+        &mut fixture.state,
+        Action::ClipboardResult {
+            request_id,
+            result: Ok(()),
+        },
+    )
+    .expect("clipboard result");
+    assert_eq!(
+        completion,
+        vec![Effect::Notify {
+            code: FailureCode::ContentConflict
+        }]
+    );
+    let thought = fixture.state.board.thought(thought_id).expect("thought");
+    assert!(thought.is_live());
+    assert_eq!(thought.content, after);
+    assert_eq!(thought.annotations, vec![annotation]);
+}
+
+#[test]
 fn annotated_cut_restores_exact_metadata_in_one_board_undo() {
     let mut fixture = Fixture::new();
     let path = "/missing/Grüße.png";

@@ -17,8 +17,14 @@ use crate::{
 pub(super) struct RestartProgress {
     pub(super) initiating: Option<InstanceInfo>,
     pub(super) requested: usize,
+    pub(super) accepted: usize,
     pub(super) failed: Vec<InstanceId>,
     pub(super) replacements: Vec<UpdateReplacementExpectation>,
+}
+
+pub(super) struct PendingHighlights {
+    pub(super) recorded: bool,
+    pub(super) announcement: Option<ReleaseHighlightAnnouncement>,
 }
 
 pub(super) fn restart_peers<G: UpdateParticipantGateway>(
@@ -34,6 +40,7 @@ pub(super) fn restart_peers<G: UpdateParticipantGateway>(
         installed_version: installed.clone(),
     };
     let mut requested = 0_usize;
+    let mut accepted = 0_usize;
     let initiating = participants
         .iter()
         .position(|participant| participant.instance_id == initiating_instance)
@@ -47,17 +54,20 @@ pub(super) fn restart_peers<G: UpdateParticipantGateway>(
         }
         requested = requested.saturating_add(1);
         if restart_accepted(gateway, participant, &restart) {
+            accepted = accepted.saturating_add(1);
             replacements.push(UpdateReplacementExpectation {
                 session_id: participant.session_id,
                 previous_instance_id: participant.instance_id,
             });
         } else {
+            release_if_prepared(gateway, participant, prepared, operation_id);
             failed.push(participant.instance_id);
         }
     }
     RestartProgress {
         initiating,
         requested,
+        accepted,
         failed,
         replacements,
     }
@@ -74,12 +84,12 @@ pub(super) fn restart_initiating<G: UpdateParticipantGateway>(
     operation_id: RequestId,
     initiating_instance: InstanceId,
     installed: &StableVersion,
-    pending_recorded: Option<bool>,
+    restart_allowed: bool,
     requested: &mut usize,
+    accepted: &mut usize,
     failed: &mut Vec<InstanceId>,
 ) {
     let Some(participant) = participant else {
-        *requested = requested.saturating_add(1);
         failed.push(initiating_instance);
         return;
     };
@@ -87,7 +97,7 @@ pub(super) fn restart_initiating<G: UpdateParticipantGateway>(
         release_if_prepared(gateway, participant, prepared, operation_id);
         return;
     }
-    if pending_recorded == Some(false) {
+    if !restart_allowed {
         let _released = gateway.release(participant, operation_id);
         failed.push(participant.instance_id);
         return;
@@ -97,7 +107,10 @@ pub(super) fn restart_initiating<G: UpdateParticipantGateway>(
         operation_id,
         installed_version: installed.clone(),
     };
-    if !restart_accepted(gateway, participant, &restart) {
+    if restart_accepted(gateway, participant, &restart) {
+        *accepted = accepted.saturating_add(1);
+    } else {
+        release_if_prepared(gateway, participant, prepared, operation_id);
         failed.push(participant.instance_id);
     }
 }
@@ -122,21 +135,29 @@ pub(super) fn record_pending_highlights<S: UpdateStateStore>(
     session_id: Option<SessionId>,
     previous: &StableVersion,
     target: &StableVersion,
-) -> Option<bool> {
+) -> Option<PendingHighlights> {
     let session_id = session_id?;
     if previous == target {
-        return Some(true);
+        return Some(PendingHighlights {
+            recorded: true,
+            announcement: None,
+        });
     }
     let Ok(announcement) =
         ReleaseHighlightAnnouncement::pending(session_id, previous.clone(), target.clone())
     else {
-        return Some(false);
+        return Some(PendingHighlights {
+            recorded: false,
+            announcement: None,
+        });
     };
-    Some(
-        state
-            .record_release_highlights(installation, announcement)
-            .is_ok(),
-    )
+    let recorded = state
+        .record_release_highlights(installation, announcement.clone())
+        .is_ok();
+    Some(PendingHighlights {
+        recorded,
+        announcement: recorded.then_some(announcement),
+    })
 }
 
 fn release_if_prepared<G: UpdateParticipantGateway>(

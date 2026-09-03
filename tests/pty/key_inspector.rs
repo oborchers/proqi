@@ -54,7 +54,21 @@ fn alt_arrow_is_forwarded_through_the_real_pty_and_crossterm_parser() {
     inspect_sequence(
         r"\x1b\[1;3A",
         "Up, modifiers: KeyModifiers(ALT)",
-        "EditNavigation { editor_movement: VisualJumpUp, board_movement: VisualUp }",
+        "FastNavigation { direction: Previous, extend_selection: false }",
+    );
+}
+
+#[test]
+fn page_keys_are_forwarded_as_the_same_fast_intention_in_the_real_pty() {
+    inspect_sequence(
+        r"\x1b\[5~",
+        "PageUp",
+        "FastNavigation { direction: Previous, extend_selection: false }",
+    );
+    inspect_sequence(
+        r"\x1b\[6~",
+        "PageDown",
+        "FastNavigation { direction: Next, extend_selection: false }",
     );
 }
 
@@ -92,6 +106,22 @@ fn primary_enter_variants_are_distinct_in_the_real_pty() {
         &format!("Enter, modifiers: KeyModifiers(SHIFT | {modifier})"),
         "SubmitKeep",
     );
+}
+
+#[test]
+fn macos_primary_shift_horizontal_arrows_have_exact_distinct_pty_encodings() {
+    if cfg!(target_os = "macos") {
+        inspect_sequence(
+            r"\x1b\[1;10D",
+            "Left, modifiers: KeyModifiers(SHIFT | SUPER)",
+            "ExtendVisualRow { edge: Start }",
+        );
+        inspect_sequence(
+            r"\x1b\[1;10C",
+            "Right, modifiers: KeyModifiers(SHIFT | SUPER)",
+            "ExtendVisualRow { edge: End }",
+        );
+    }
 }
 
 #[test]

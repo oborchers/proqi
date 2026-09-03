@@ -24,6 +24,7 @@ struct FakeState {
     unavailable: bool,
     omit_typed: bool,
     replace_after_typed_read: bool,
+    replace_written_text: Option<String>,
 }
 
 #[derive(Clone, Default)]
@@ -43,13 +44,19 @@ impl NativeClipboard for FakeNative {
         Ok(())
     }
 
-    fn write_typed(&mut self, content: &str, payload: &str) -> Result<u64, String> {
-        let mut state = self.state.lock().map_err(|error| error.to_string())?;
+    fn write_typed(&mut self, content: &str, payload: &str) -> Result<u64, ClipboardError> {
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|error| ClipboardError::Unavailable(error.to_string()))?;
         if state.unavailable {
-            return Err("unavailable".to_owned());
+            return Err(ClipboardError::Unavailable("unavailable".to_owned()));
         }
         state.generation = state.generation.saturating_add(1);
-        state.content = Some(content.to_owned());
+        state.content = state
+            .replace_written_text
+            .take()
+            .or_else(|| Some(content.to_owned()));
         state.typed = (!state.omit_typed).then(|| payload.to_owned());
         Ok(state.generation)
     }
@@ -70,6 +77,7 @@ impl NativeClipboard for FakeNative {
         }
         let snapshot = TypedSnapshot {
             generation: state.generation,
+            text: state.content.clone(),
             payload: state.typed.clone(),
         };
         if state.replace_after_typed_read {
@@ -143,6 +151,19 @@ fn annotated_write_requires_both_native_representations() {
     let root = tempfile::tempdir().expect("temporary directory");
     let native = FakeNative::default();
     native.state.lock().expect("state").omit_typed = true;
+    let mut clipboard = clipboard(native, root.path());
+    assert!(matches!(
+        clipboard.write(request_id(), &attachment("/tmp/missing.png")),
+        Err(ClipboardError::Unavailable(_))
+    ));
+}
+
+#[test]
+fn annotated_write_rejects_retained_metadata_when_plain_text_changed() {
+    let root = tempfile::tempdir().expect("temporary directory");
+    let native = FakeNative::default();
+    native.state.lock().expect("state").replace_written_text =
+        Some("/tmp/replacement.png".to_owned());
     let mut clipboard = clipboard(native, root.path());
     assert!(matches!(
         clipboard.write(request_id(), &attachment("/tmp/missing.png")),

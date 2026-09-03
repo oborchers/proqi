@@ -6,7 +6,10 @@ pub(super) mod transform;
 use super::error::{ApplicationError, ApplicationResult, FailureCode};
 use super::{mutations::bulk::delete_thoughts, prompt::MULTI_THOUGHT_SEPARATOR};
 use crate::{
-    application::model::{AppState, ClipboardIntent, Effect, InteractionMode, PendingClipboard},
+    application::model::{
+        AppState, ClipboardIntent, Effect, InteractionMode,
+        clipboard::{ClipboardSource, PendingClipboard},
+    },
     domain::{
         BoardMutation, BoardOperation, BoardOperationKind, ContentAnnotation, DomainError,
         OperationId, RequestId, RevisionId, TextPosition, Thought, ThoughtId, ThoughtPosition,
@@ -131,9 +134,9 @@ pub(super) fn request_clipboard(
     if selected.len() != thought_ids.len() {
         return Err(ApplicationError::InvalidState);
     }
-    let ordered_ids = selected
+    let sources = selected
         .iter()
-        .map(|thought| thought.id)
+        .map(|thought| ClipboardSource::capture(thought))
         .collect::<Vec<_>>();
     let content = selected
         .iter()
@@ -146,12 +149,12 @@ pub(super) fn request_clipboard(
             .map(|thought| (thought.content.as_str(), thought.annotations.as_slice())),
         MULTI_THOUGHT_SEPARATOR,
     )?;
-    let thought_id = ordered_ids[0];
+    let thought_id = sources[0].thought_id;
     state
         .pending_clipboard
         .entry(request_id)
         .or_insert(PendingClipboard {
-            thought_ids: ordered_ids,
+            sources,
             intent,
             operation_id,
             at: at.unwrap_or_default(),
@@ -177,24 +180,40 @@ pub(super) fn finish_clipboard(
         return Ok(vec![Effect::Notify { code }]);
     }
     if pending.intent == ClipboardIntent::Cut {
-        if let Some(thought_id) = pending
-            .thought_ids
+        let source_changed = pending.sources.iter().any(|source| {
+            state
+                .board
+                .thought(source.thought_id)
+                .is_none_or(|thought| !source.still_matches(thought))
+        });
+        if source_changed {
+            return Ok(vec![Effect::Notify {
+                code: FailureCode::ContentConflict,
+            }]);
+        }
+        let thought_ids = pending
+            .sources
             .iter()
-            .find(|thought_id| state.thought_locked(**thought_id))
+            .map(|source| source.thought_id)
+            .collect::<Vec<_>>();
+        if let Some(thought_id) = pending
+            .sources
+            .iter()
+            .map(|source| source.thought_id)
+            .find(|thought_id| state.thought_locked(*thought_id))
         {
-            return Err(ApplicationError::ThoughtLocked(*thought_id));
+            return Err(ApplicationError::ThoughtLocked(thought_id));
         }
         return delete_thoughts(
             state,
             pending.operation_id.ok_or(ApplicationError::InvalidState)?,
-            &pending.thought_ids,
+            &thought_ids,
             BoardOperationKind::Cut,
             pending.at,
         );
     }
     Ok(Vec::new())
 }
-
 pub(super) fn delete_thought(
     state: &mut AppState,
     operation_id: OperationId,

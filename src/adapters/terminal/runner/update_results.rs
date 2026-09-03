@@ -126,7 +126,7 @@ fn execution_message(execution: &UpdateExecution) -> Result<String, String> {
             ))
         }
         UpdateExecutionStatus::Installed { version } => Err(format!(
-            "Proqi {version} installed, but {} session(s) could not restart. Resume them normally.",
+            "Proqi {version} installed, but restart is incomplete for {} session(s). This session stayed open; restart affected sessions with their normal resume commands.",
             execution.restart_failed.len()
         )),
         UpdateExecutionStatus::AlreadyInProgress => {
@@ -154,8 +154,12 @@ mod tests {
         let mut ids = FakeIdGenerator::new(1_800_000_000_000);
         let execution = UpdateExecution {
             operation_id: ids.request_id(),
+            selected_participants: 2,
             prepared_participants: 2,
             restart_requests: 2,
+            restart_accepted: 1,
+            replacement_ready: 0,
+            replacement_missing: 1,
             restart_failed: vec![ids.instance_id()],
             convergence_state_recorded: true,
             status: UpdateExecutionStatus::Installed {
@@ -164,7 +168,8 @@ mod tests {
         };
 
         let message = execution_message(&execution).expect_err("partial restart must warn");
-        assert!(message.contains("1 session(s) could not restart"));
-        assert!(message.contains("Resume them normally"));
+        assert!(message.contains("restart is incomplete for 1 session(s)"));
+        assert!(message.contains("This session stayed open"));
+        assert!(message.contains("normal resume commands"));
     }
 }

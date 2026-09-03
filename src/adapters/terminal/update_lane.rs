@@ -426,7 +426,12 @@ fn install(
             version,
             deadline,
             &cancellation,
-        )?;
+        );
+    match &execution {
+        Ok(execution) => crate::adapters::diagnostics::record_update_execution(execution),
+        Err(error) => crate::adapters::diagnostics::record_update_error(error),
+    }
+    let execution = execution?;
     Ok(UpdateActionResult::Executed(execution))
 }
 

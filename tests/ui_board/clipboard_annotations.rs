@@ -4,6 +4,7 @@ use super::{Fixture, draw};
 use proqi::{
     application::Effect,
     domain::{ContentAnnotation, ContentAnnotationKind},
+    ports::editor::CursorMovement,
     ui::{PastePayload, PointerButton, PointerKind, UiInput, UiKey},
 };
 
@@ -126,4 +127,97 @@ fn collapsed_placeholder_copy_and_cut_use_the_complete_canonical_range() {
             .annotations
             .is_empty()
     );
+}
+
+#[test]
+fn shrinking_a_keyboard_selection_inside_an_attachment_keeps_cut_atomic() {
+    let path = "/missing/界 image.png";
+    let content = format!("prefix {path} suffix");
+    let start = "prefix ".len();
+    let annotation = attachment(&content, start, start + path.len(), true);
+    let mut fixture = Fixture::with_annotated_thought(&content, vec![annotation]);
+    fixture.input(UiInput::Key(UiKey::Enter));
+    let _terminal = draw(&mut fixture, 60, 8);
+    let area = fixture
+        .app
+        .prepare_frame(ratatui_core::layout::Rect::new(0, 0, 60, 8))
+        .thoughts[0]
+        .text_area;
+    fixture.pointer(
+        area.x + u16::try_from(start).expect("column"),
+        area.y,
+        PointerKind::Down(PointerButton::Left),
+    );
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::GraphemeBack,
+        extend_selection: true,
+    }));
+
+    let cut = fixture.effects(UiInput::Key(UiKey::Cut));
+    let [
+        Effect::WriteClipboard {
+            request_id,
+            content: copied,
+            annotations,
+            ..
+        },
+    ] = cut.as_slice()
+    else {
+        panic!("cut write");
+    };
+    assert_eq!(copied, path);
+    assert_eq!(annotations.len(), 1);
+    let deletion =
+        fixture
+            .app
+            .complete_clipboard_write(*request_id, Ok(()), &mut fixture.ids, &fixture.clock);
+    assert!(matches!(deletion.as_slice(), [Effect::CommitRevision(_)]));
+    assert_eq!(
+        fixture.app.editor_snapshot().expect("editor").content,
+        "prefix  suffix"
+    );
+}
+
+#[test]
+fn extending_a_keyboard_selection_across_a_large_paste_keeps_its_metadata() {
+    let payload = "line one\nline two\nline three";
+    let content = format!("prefix {payload} suffix");
+    let start = "prefix ".len();
+    let annotation = ContentAnnotation {
+        start,
+        end: start + payload.len(),
+        kind: ContentAnnotationKind::LargePaste {
+            lines: 3,
+            graphemes: payload.chars().count(),
+        },
+    };
+    let mut fixture = Fixture::with_annotated_thought(&content, vec![annotation.clone()]);
+    fixture.input(UiInput::Key(UiKey::Enter));
+    let _terminal = draw(&mut fixture, 60, 8);
+    let area = fixture
+        .app
+        .prepare_frame(ratatui_core::layout::Rect::new(0, 0, 60, 8))
+        .thoughts[0]
+        .text_area;
+    fixture.pointer(
+        area.x + u16::try_from(start).expect("column"),
+        area.y,
+        PointerKind::Down(PointerButton::Left),
+    );
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::GraphemeForward,
+        extend_selection: true,
+    }));
+
+    let copy = fixture.effects(UiInput::Key(UiKey::Copy));
+    assert!(matches!(
+        copy.as_slice(),
+        [Effect::WriteClipboard { content, annotations, .. }]
+            if content == &format!("{payload} ")
+                && annotations == &[ContentAnnotation {
+                    start: 0,
+                    end: payload.len(),
+                    kind: annotation.kind,
+                }]
+    ));
 }

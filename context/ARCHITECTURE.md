@@ -370,9 +370,11 @@ that it is a readable regular file, and returns typed missing, permission,
 unmounted, unreadable, or I/O failures. The bounded lane adds timeout and
 cancellation failures without waiting for a blocked filesystem call to return.
 Those reasons are content-free diagnostics only. Application and UI consumers
-reduce every failure to binary inaccessible health.
+reduce every completed failure to binary inaccessible health. Unknown and
+checking state remain visually neutral without becoming accessibility proof.
 
-Application state owns the transient exact-key cache and scheduling policy.
+Application state owns the transient exact-key cache, its explicit unknown,
+checking, accessible, and inaccessible states, and the scheduling policy.
 Keys include the thought, annotation index and range, presentation metadata,
 canonical path, and digest of the canonical content revision. Insertion and
 relink mutations invalidate affected work. Restoration schedules the focused
@@ -525,11 +527,21 @@ prevents a Claude-specific rewrite when another documented harness adds an
 equivalent layer, and prevents catalog-only definitions from being fabricated
 into insertable tokens.
 
-Discovery reads only small metadata prefixes and never stores instruction
-bodies. The adapter caps roots, ancestor depth, recursion, entries, file sizes,
-metadata strings, plugin registries, and manifest component paths. It follows
-only explicitly encountered symlink definitions, canonicalizes physical paths
-for deduplication, and never crawls the home directory. Compatibility roots are
+Markdown discovery opens a regular definition and reads at most a 64 KiB
+frontmatter prefix. It stops as soon as the complete closing delimiter is
+known, never reads or stores the instruction body, and fails closed when an
+opened header does not close within that budget. A filename-derived Markdown
+command without frontmatter stops as soon as the absent opening delimiter is
+known. Skills and Markdown agents still require their valid metadata. Invalid
+UTF-8 inside frontmatter is rejected, while bytes after a valid closing
+delimiter are outside discovery and cannot invalidate it.
+
+Formats that require complete parsing retain separate whole-file bounds,
+including TOML agents, plugin manifests, and plugin registries. The adapter also
+caps roots, ancestor depth, recursion, entries, metadata lines and strings,
+manifest component paths, and plugin counts. It follows only explicitly
+encountered symlink definitions, canonicalizes physical paths for
+deduplication, and never crawls the home directory. Compatibility roots are
 checked in; extra roots enter through validated configuration with explicit
 kind, harness, and scope. Project and global vectors remain separate.
 
@@ -586,9 +598,12 @@ exact bounded tokens and decorate terminal cells with the existing annotation
 semantic role without changing editor text, cursor geometry, persistence, or
 undo. Forms retain harness-specific precedence. A `.claude/skills` symlink into
 the corresponding physical `.agents/skills` definition contributes its Claude
-form to the Agent Skills-owned entry, while independent copies remain separate
-definitions. Outbound submission remains plain text and therefore does not
-claim live harness enablement.
+form to the Agent Skills-owned entry. This remains true when the Agent Skills
+entry is itself a supported symlinked skill folder whose final definition is
+outside the root; independent aliases to the same external target do not
+establish ownership, and independent copies remain separate definitions.
+Outbound submission remains plain text and therefore does not claim live
+harness enablement.
 
 An explicitly created empty thought is an ordinary durable domain entity. Its
 creation is committed through the same board operation as populated thoughts,
@@ -816,8 +831,16 @@ the same installation identity, the exact target version, and a published
 control endpoint. The endpoint is published only after board restoration. The
 coordinator writes the initiating session's content-free pending announcement
 only after every peer converges, then requests the initiating restart. Peer
-failure creates no announcement. A delayed initiating resume retains the
-pending record and may show it later under the exact target.
+failure creates no announcement and releases the initiating process without an
+`exec` request. Initiating restart rejection atomically discards its exact
+pending announcement and releases the preparation barrier. A delayed accepted
+initiating resume retains the pending record and may show it later under the
+exact target. `restart_needed` is cleared only when the
+exact target announcement selects the initiating session after board
+restoration and owner-control publication. Automatic presentation is installed
+only when that atomic transition completes or the same exact transition had
+already completed. Control unavailability, cache failure, and stale cache state
+suppress presentation and emit closed finalization failure codes.
 
 If replacement discovery itself fails after peer restart requests, the
 coordinator releases the initiating process immediately, retains
@@ -861,6 +884,15 @@ process waits within the update convergence window or reports a bounded
 restart-pending state and retries after the old process leaves. It never migrates
 behind an older writer. This conservative barrier remains mandatory even though
 the public CLI has no compatibility guarantee before `1.0`.
+
+Concurrent replacements may all first observe `MigrationRequired`, release
+their shared leases, and contend for the exclusive lease. The winner performs
+the verified migration. A contender that reaches the unchanged bounded
+exclusive timeout makes one nonblocking shared acquisition and reopens in
+refuse-migration mode. It resumes only if the winner already established the
+current schema. If migration is still required, or an exclusive owner is still
+active, it returns the ordinary bounded `schema_busy` result. This follower
+revalidation never weakens shared and exclusive compatibility.
 
 ### Standalone, Debian, Cargo, and unknown installations
 
@@ -966,8 +998,12 @@ initializes an empty durable snapshot as Compose, while a nonempty snapshot keep
 the existing Board focus contract.
 
 `Primary+Enter` and `Primary+Shift+Enter` normalize to distinct Submit and
-SubmitKeep intentions before plain Enter handling. Plain Enter therefore remains
-an editor newline or smart-list command. Crossterm unit contracts and real PTY
+SubmitKeep intentions before plain Enter handling. Board resolves those typed
+intentions as invariant aliases of its configured submit-and-remove and
+submit-and-keep commands, so selection and insertion-row behavior stay identical
+to the configured character spellings. Edit routes them directly to its active
+thought, while Compose remains unchanged. Plain Enter therefore remains an
+editor newline or smart-list command. Crossterm unit contracts and real PTY
 diagnostics verify the platform Primary event encodings. The command palette
 remains the modifier-independent fallback.
 
@@ -1005,6 +1041,17 @@ Board shortcut, with Escape retained as the unconditional Help close action.
 `Primary+A` selects the entire current thought only in edit mode. `Primary+U`
 deletes one newline-delimited logical line as a single undoable edit. Logical
 line commands operate on the text model and are independent of visual wrapping.
+
+`Primary+Shift+Left` and `Primary+Shift+Right` normalize to distinct visual-row
+selection intentions before mode dispatch. Edit mode resolves their active
+endpoint from the current canonical-to-visible projection, including current
+width, terminal-cell wrapping, collapsed substitutions, and expanded folds,
+then extends through the editor's existing stable anchor. Exact visual-row
+boundaries use directional affinity so repeated chords advance across rows.
+Empty rows and document boundaries clamp without creating text revisions.
+Configured shifted Primary suffixes and command-palette actions retain a
+truthful fallback when a terminal does not forward the arrow chord distinctly.
+Board navigation and unshifted Primary arrows do not consume these intentions.
 
 `Primary+Shift+U` requests containing-sentence deletion when the
 terminal reports the chord distinctly. The Rope editor is the canonical owner
@@ -1325,6 +1372,9 @@ or automatic scratchpad reads.
   runtime, terminal, or usage data.
 - Diagnostic logs exclude thought content, clipboard content, session names,
   workspace paths, pane identifiers, and raw external responses.
+- Update lifecycle events contain closed schema stages, aggregate participant,
+  restart, and replacement counts, stable failure stage and code pairs, and
+  final convergence. They contain no durable distributed update phase record.
 - Each instance owns a locked JSONL stream with five 1 MiB segments. Startup
   prunes inactive streams toward a 20 MiB installation-wide ceiling without
   deleting active logs.

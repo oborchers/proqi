@@ -9,8 +9,11 @@ use crate::{
     },
 };
 
-use super::{BoardApp, EditorOwner, UiInput, UiKey};
+use super::{BoardApp, EditorOwner, UiKey};
+use crate::ui::VisualRowEdge;
 use crate::ui::{annotations, settings::KeyBindings};
+
+mod navigation;
 
 pub(super) fn command_for_key(
     key: UiKey,
@@ -39,10 +42,12 @@ pub(super) fn command_for_key(
         UiKey::Escape
         | UiKey::Submit
         | UiKey::SubmitKeep
+        | UiKey::FastNavigation { .. }
         | UiKey::EditNavigation { .. }
         | UiKey::PrimaryCharacter(_)
         | UiKey::PrimaryShiftCharacter(_)
         | UiKey::PrimaryShiftMove { .. }
+        | UiKey::ExtendVisualRow { .. }
         | UiKey::Undo
         | UiKey::Redo
         | UiKey::Quit
@@ -63,6 +68,20 @@ pub(super) fn normalize_edit_key(key: UiKey, keybindings: &KeyBindings) -> Optio
             movement,
             extend_selection: true,
         }),
+        UiKey::PrimaryShiftCharacter(character)
+            if character.eq_ignore_ascii_case(&keybindings.select_visual_row_start) =>
+        {
+            Some(UiKey::ExtendVisualRow {
+                edge: VisualRowEdge::Start,
+            })
+        }
+        UiKey::PrimaryShiftCharacter(character)
+            if character.eq_ignore_ascii_case(&keybindings.select_visual_row_end) =>
+        {
+            Some(UiKey::ExtendVisualRow {
+                edge: VisualRowEdge::End,
+            })
+        }
         UiKey::PrimaryShiftCharacter(character)
             if character.eq_ignore_ascii_case(&keybindings.delete_sentence) =>
         {
@@ -274,35 +293,6 @@ impl BoardApp {
             self.insertion_focus = super::InsertionFocus::Inactive;
         }
         effects
-    }
-
-    pub(super) fn resolve_edit_navigation(&self, input: UiInput) -> UiInput {
-        let UiInput::Key(UiKey::EditNavigation {
-            editor_movement,
-            board_movement,
-        }) = input
-        else {
-            return input;
-        };
-        let overlay_open = self.help
-            || self.update_prompt.is_some()
-            || self.release_highlights.is_some()
-            || self.palette.is_some()
-            || self.invocation_popup.is_some()
-            || self.transfer.is_some()
-            || self.rename.is_some()
-            || self.search.is_some()
-            || self.submission_mode.is_some();
-        let movement =
-            if !overlay_open && matches!(self.interaction_mode(), InteractionMode::Edit { .. }) {
-                editor_movement
-            } else {
-                board_movement
-            };
-        UiInput::Key(UiKey::Move {
-            movement,
-            extend_selection: false,
-        })
     }
 
     pub(super) fn should_insert_smart_newline(&self) -> bool {

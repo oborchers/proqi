@@ -76,6 +76,9 @@ pub enum ClipboardWrite {
 /// Clipboard operation failure that never implies content mutation.
 #[derive(Clone, Debug, Eq, Error, PartialEq)]
 pub enum ClipboardError {
+    /// The platform cannot safely bind typed metadata to the native clipboard item.
+    #[error("annotated clipboard copy is unsupported on this platform")]
+    MetadataUnsupported,
     /// No supported native or terminal clipboard path is available.
     #[error("clipboard is unavailable: {0}")]
     Unavailable(String),

@@ -20,11 +20,11 @@ use crate::{
         runtime::{InstanceInfo, UpdateInstanceContext},
         store::STORAGE_PROTOCOL_VERSION,
         update::{
-            HomebrewInstaller, ReleaseObservation, UPDATE_CONTROL_PROTOCOL_VERSION,
-            UpdateCancellation, UpdateError, UpdateInstanceRegistry, UpdateLease, UpdateLockKind,
-            UpdateParticipantGateway, UpdatePrepareReply, UpdatePrepareRequest,
-            UpdateReplacementExpectation, UpdateRestartReply, UpdateRestartRequest,
-            UpdateStateStore,
+            HomebrewInstaller, ReleaseObservation, RestartCompletion,
+            UPDATE_CONTROL_PROTOCOL_VERSION, UpdateCancellation, UpdateError,
+            UpdateInstanceRegistry, UpdateLease, UpdateLockKind, UpdateParticipantGateway,
+            UpdatePrepareReply, UpdatePrepareRequest, UpdateReplacementExpectation,
+            UpdateRestartReply, UpdateRestartRequest, UpdateStateStore,
         },
     },
 };
@@ -48,6 +48,7 @@ impl Drop for Lease {
 struct State {
     installer_owned: Arc<AtomicBool>,
     cache: RefCell<UpdateCacheState>,
+    restart_writes: RefCell<Vec<bool>>,
     fail_release_highlights: bool,
 }
 
@@ -117,10 +118,32 @@ impl UpdateStateStore for State {
         installed: StableVersion,
         restart_needed: bool,
     ) -> Result<UpdateCacheState, UpdateError> {
+        self.restart_writes.borrow_mut().push(restart_needed);
         let mut cache = self.cache.borrow_mut();
         cache.observed_installed_version = Some(installed);
         cache.restart_needed = restart_needed;
         Ok(cache.clone())
+    }
+
+    fn complete_restart(
+        &self,
+        _: InstallationIdentity,
+        announcement: &ReleaseHighlightAnnouncement,
+    ) -> Result<RestartCompletion, UpdateError> {
+        let mut cache = self.cache.borrow_mut();
+        let matches = cache.observed_installed_version.as_ref()
+            == Some(announcement.target_version())
+            && cache.release_highlights.as_ref().is_some_and(|current| {
+                !current.acknowledged() && current.same_upgrade(announcement)
+            });
+        if matches && cache.restart_needed {
+            cache.restart_needed = false;
+            return Ok(RestartCompletion::Completed);
+        }
+        if matches {
+            return Ok(RestartCompletion::AlreadyComplete);
+        }
+        Ok(RestartCompletion::Mismatch)
     }
 
     fn record_release_highlights(
@@ -135,6 +158,22 @@ impl UpdateStateStore for State {
         }
         self.cache.borrow_mut().release_highlights = Some(announcement);
         Ok(self.cache.borrow().clone())
+    }
+
+    fn discard_release_highlights(
+        &self,
+        _: InstallationIdentity,
+        announcement: &ReleaseHighlightAnnouncement,
+    ) -> Result<bool, UpdateError> {
+        let mut cache = self.cache.borrow_mut();
+        let matches = cache
+            .release_highlights
+            .as_ref()
+            .is_some_and(|current| !current.acknowledged() && current.same_upgrade(announcement));
+        if matches {
+            cache.release_highlights = None;
+        }
+        Ok(matches)
     }
 
     fn acknowledge_release_highlights(
@@ -274,13 +313,18 @@ fn one_ten_and_fifteen_participants_install_and_restart_once() {
             )
             .expect("coordinate");
         assert_eq!(result.prepared_participants, count);
+        assert_eq!(result.selected_participants, count);
         assert_eq!(result.restart_requests, count);
+        assert_eq!(result.restart_accepted, count);
+        assert_eq!(result.replacement_ready, count.saturating_sub(1));
+        assert_eq!(result.replacement_missing, 0);
         assert!(result.restart_failed.is_empty());
         assert_eq!(installer.calls, 1);
         assert_eq!(gateway.prepared.len(), count);
         assert_eq!(gateway.restarted.len(), count);
         assert_eq!(gateway.restarted.last(), Some(&initiating));
-        assert!(!state.cache.borrow().restart_needed);
+        assert!(state.cache.borrow().restart_needed);
+        assert_eq!(&*state.restart_writes.borrow(), &[true]);
     }
 }
 
@@ -346,37 +390,13 @@ fn post_install_rescan_includes_new_sessions_and_records_partial_restart() {
         )
         .expect("partial restart");
     assert_eq!(result.prepared_participants, 2);
-    assert_eq!(result.restart_requests, 3);
-    assert_eq!(result.restart_failed, vec![failed]);
+    assert_eq!(result.restart_requests, 2);
+    assert_eq!(result.restart_accepted, 1);
+    assert_eq!(result.replacement_ready, 1);
+    assert_eq!(result.restart_failed, vec![failed, initiating]);
+    assert_eq!(gateway.released, vec![failed, initiating]);
     assert!(state.cache.borrow().restart_needed);
-}
-
-#[test]
-fn already_current_preflight_participants_are_released_after_installation() {
-    let mut ids = TestIds::new(1_800_000_000_000);
-    let identity = InstallationIdentity::from_digest([34; 32]);
-    let mut current = participants(&mut ids, identity, 1);
-    let initiating = current[0].instance_id;
-    current[0].version = "0.2.0".to_owned();
-    let registry = registry(current.clone(), current);
-    let state = State::default();
-    let mut gateway = Gateway::default();
-    let mut installer = successful_installer();
-
-    let result = UpdateRestartCoordinator::new(&state, &registry, &mut gateway, &mut installer)
-        .execute(
-            ids.request_id(),
-            initiating,
-            identity,
-            &version("0.2.0"),
-            Timestamp::from_millis(1_800_000_030_000),
-            &(),
-        )
-        .expect("coordinate current participant");
-
-    assert_eq!(result.prepared_participants, 1);
-    assert_eq!(result.restart_requests, 0);
-    assert_eq!(gateway.released.len(), 1);
+    assert!(state.cache.borrow().release_highlights.is_none());
 }
 
 #[test]

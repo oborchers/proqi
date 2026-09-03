@@ -79,6 +79,11 @@ impl RuntimeContext {
                     .with_update_context(installation.identity, UPDATE_CONTROL_PROTOCOL_VERSION)
             });
         let (store, schema_lease) = open_store(&coordinator, &paths.data_dir, clock.now())?;
+        crate::adapters::diagnostics::record(
+            crate::adapters::diagnostics::SafeEvent::SchemaLifecycle {
+                stage: crate::adapters::diagnostics::SchemaLifecycleStage::Ready,
+            },
+        );
         Ok(Self {
             store,
             coordinator,
@@ -187,6 +192,11 @@ fn open_store(
     match SqliteStore::open(&refuse) {
         Ok(store) => Ok((store, shared)),
         Err(StoreError::MigrationRequired { .. }) => {
+            crate::adapters::diagnostics::record(
+                crate::adapters::diagnostics::SafeEvent::SchemaLifecycle {
+                    stage: crate::adapters::diagnostics::SchemaLifecycleStage::MigrationRequired,
+                },
+            );
             drop(shared);
             finish_required_migration(coordinator, database, backups, &refuse, now)
         }
@@ -201,13 +211,68 @@ fn finish_required_migration(
     refuse: &StoreConfig,
     now: Timestamp,
 ) -> Result<(SqliteStore, FileSchemaLease), CliError> {
-    let exclusive = coordinator.acquire_schema_exclusive()?;
+    let exclusive = match coordinator.acquire_schema_exclusive() {
+        Ok(exclusive) => exclusive,
+        Err(crate::ports::runtime::RuntimeError::SchemaBusy) => {
+            return revalidate_completed_migration(coordinator, refuse);
+        }
+        Err(error) => return Err(error.into()),
+    };
+    match SqliteStore::open(refuse) {
+        Ok(current) => {
+            drop(current);
+            crate::adapters::diagnostics::record(
+                crate::adapters::diagnostics::SafeEvent::SchemaLifecycle {
+                    stage: crate::adapters::diagnostics::SchemaLifecycleStage::FollowerRevalidated,
+                },
+            );
+            drop(exclusive);
+            let shared = coordinator.acquire_schema_shared()?;
+            let store = SqliteStore::open(refuse)?;
+            return Ok((store, shared));
+        }
+        Err(StoreError::MigrationRequired { .. }) => {}
+        Err(error) => return Err(error.into()),
+    }
+    crate::adapters::diagnostics::record(
+        crate::adapters::diagnostics::SafeEvent::SchemaLifecycle {
+            stage: crate::adapters::diagnostics::SchemaLifecycleStage::MigrationStarted,
+        },
+    );
     let migrate = StoreConfig::new(database, backups, MigrationMode::Allow, now);
     let _revalidated = SqliteStore::open(&migrate)?;
+    crate::adapters::diagnostics::record(
+        crate::adapters::diagnostics::SafeEvent::SchemaLifecycle {
+            stage: crate::adapters::diagnostics::SchemaLifecycleStage::MigrationCompleted,
+        },
+    );
     drop(exclusive);
     let shared = coordinator.acquire_schema_shared()?;
     let store = SqliteStore::open(refuse)?;
     Ok((store, shared))
+}
+
+fn revalidate_completed_migration(
+    coordinator: &FileRuntimeCoordinator,
+    refuse: &StoreConfig,
+) -> Result<(SqliteStore, FileSchemaLease), CliError> {
+    let Some(shared) = coordinator.try_acquire_schema_shared()? else {
+        return Err(crate::ports::runtime::RuntimeError::SchemaBusy.into());
+    };
+    match SqliteStore::open(refuse) {
+        Ok(store) => {
+            crate::adapters::diagnostics::record(
+                crate::adapters::diagnostics::SafeEvent::SchemaLifecycle {
+                    stage: crate::adapters::diagnostics::SchemaLifecycleStage::FollowerRevalidated,
+                },
+            );
+            Ok((store, shared))
+        }
+        Err(StoreError::MigrationRequired { .. }) => {
+            Err(crate::ports::runtime::RuntimeError::SchemaBusy.into())
+        }
+        Err(error) => Err(error.into()),
+    }
 }
 
 #[cfg(test)]
@@ -217,7 +282,10 @@ mod tests {
     use rusqlite::Connection;
 
     use super::*;
-    use crate::{adapters::memory::FakeIdGenerator, ports::store::SUPPORTED_SCHEMA_VERSION};
+    use crate::{
+        adapters::{memory::FakeIdGenerator, runtime::SchemaLockPolicy},
+        ports::store::SUPPORTED_SCHEMA_VERSION,
+    };
 
     #[test]
     fn stale_migration_contender_revalidates_after_another_process_wins() {
@@ -258,7 +326,14 @@ mod tests {
             Timestamp::from_millis(2),
             "contender",
         )
-        .expect("contender coordinator");
+        .expect("contender coordinator")
+        .with_schema_lock_policy(
+            SchemaLockPolicy::new(
+                std::time::Duration::from_millis(40),
+                std::time::Duration::from_millis(2),
+            )
+            .expect("bounded schema policy"),
+        );
         let winner_lease = winner.acquire_schema_exclusive().expect("winner lease");
         drop(
             SqliteStore::open(&StoreConfig::new(
@@ -270,6 +345,9 @@ mod tests {
             .expect("winner migration"),
         );
         drop(winner_lease);
+        let follower_shared = winner
+            .acquire_schema_shared()
+            .expect("follower shared lease");
 
         let (store, _shared) = finish_required_migration(
             &contender,
@@ -279,6 +357,7 @@ mod tests {
             Timestamp::from_millis(3),
         )
         .expect("stale contender revalidates");
+        drop(follower_shared);
         store.quick_check().expect("migrated integrity");
         let connection = Connection::open(database).expect("verify database");
         let schema: u32 = connection

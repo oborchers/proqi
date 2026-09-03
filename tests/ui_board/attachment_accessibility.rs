@@ -9,6 +9,10 @@ use proqi::{
 };
 use ratatui_core::style::Modifier;
 
+#[path = "attachment_accessibility/flicker_regressions.rs"]
+mod flicker_regressions;
+#[path = "attachment_accessibility/frame_presentation.rs"]
+mod frame_presentation;
 #[path = "attachment_accessibility/review.rs"]
 mod review;
 #[path = "attachment_accessibility/transformations.rs"]
@@ -24,6 +28,9 @@ fn inaccessible_image_and_file_use_exact_plain_labels_and_warning_semantics_afte
         let path = "/private/var/folders/TemporaryItems/Grüße 第一.png";
         let effects = fixture.effects(UiInput::PasteAnnotated(attachment_payload(path, image)));
         let batch = attachment_batch(&effects);
+        let checking = text(draw(&mut fixture, 80, 8).backend().buffer());
+        assert!(checking.contains(if image { "[Image 1]" } else { "[File 1]" }));
+        assert!(!checking.contains("inaccessible"));
         let completion = complete(batch, Err(AttachmentAccessFailure::Missing));
         assert!(
             fixture
