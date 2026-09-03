@@ -1,6 +1,6 @@
 ---
 source: tests/ui_board/first_run.rs
-assertion_line: 44
+assertion_line: 50
 expression: "snapshot(FirstRunEnvironment::Standalone, 120, 30, 5,)"
 ---
 SIZE 120x30

@@ -41,10 +41,17 @@ fn standalone_practice_board_is_reviewed_at_standard_and_wide_sizes() {
         "standalone_practice_board_standard",
         snapshot(FirstRunEnvironment::Standalone, 72, 18, 4,)
     );
-    insta::assert_snapshot!(
-        "standalone_practice_board_wide",
-        snapshot(FirstRunEnvironment::Standalone, 120, 30, 5,)
-    );
+    let platform = if cfg!(target_os = "macos") {
+        "macos"
+    } else {
+        "portable"
+    };
+    insta::with_settings!({ snapshot_suffix => platform }, {
+        insta::assert_snapshot!(
+            "standalone_practice_board_wide",
+            snapshot(FirstRunEnvironment::Standalone, 120, 30, 5,)
+        );
+    });
 }
 
 #[test]
