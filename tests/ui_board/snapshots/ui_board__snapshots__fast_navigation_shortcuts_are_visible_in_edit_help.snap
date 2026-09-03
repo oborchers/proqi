@@ -6,7 +6,7 @@ SIZE 120x14
 
 TEXT
 00│┌ proqi shortcuts ───────────────────────────────────────────────────────────────────────────────────────────────────[x]│
-01││Esc/?             Close                                    Cmd+C             Copy                                     ││
+01││Esc               Close                                    Cmd+C             Copy                                     ││
 02││Cmd+X             Cut                                      Cmd+V             Paste                                    ││
 03││Cmd+A             Select all                               Cmd+U             Delete logical line                      ││
 04││Cmd+Shift+U       Delete sentence                          Cmd+Z             Undo                                     ││
@@ -22,7 +22,7 @@ TEXT
 
 STYLE RUNS
 0: 0-0 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 1-17 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=BOLD | 18-116 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 117-119 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE
-1: 0-0 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 1-5 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 6-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 60-64 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 65-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+1: 0-0 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 1-3 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 4-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 60-64 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 65-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 2: 0-0 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 1-5 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 6-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 60-64 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 65-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 3: 0-0 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 1-5 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 6-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 60-64 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 65-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 4: 0-0 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 1-11 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 12-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 60-64 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 65-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE

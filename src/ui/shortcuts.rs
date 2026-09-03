@@ -2,8 +2,8 @@
 
 use crate::application::InteractionMode;
 
+use super::BoardApp;
 use super::shortcut_metadata::{self, ShortcutAction};
-use super::{BoardApp, UiKey};
 
 pub(crate) type Shortcut = (String, &'static str);
 
@@ -77,7 +77,7 @@ pub(crate) fn items(app: &BoardApp) -> Vec<Shortcut> {
         shortcut_metadata::board_label(ShortcutAction::Quit, keys),
         "Quit",
     ));
-    items.push((help_close_label(keys), "Close"));
+    items.push((help_close_label(), "Close"));
     items
 }
 
@@ -87,7 +87,7 @@ fn edit_items(
     supports_submission: bool,
 ) -> Vec<Shortcut> {
     let mut items = vec![
-        (help_close_label(keys), "Close"),
+        (help_close_label(), "Close"),
         (
             shortcut_metadata::primary_label(ShortcutAction::Copy),
             "Copy",
@@ -154,17 +154,8 @@ fn visual_row_selection_shortcut_for_platform(
     (primary(&suffix), "Select visual row")
 }
 
-fn help_close_label(keys: &super::settings::KeyBindings) -> String {
-    let configured = if keys.help == ' ' {
-        UiKey::UnmodifiedSpace
-    } else {
-        UiKey::Character(keys.help)
-    };
-    if configured.list_navigation().is_some() {
-        "Esc".to_owned()
-    } else {
-        format!("Esc/{}", super::settings::key_label(keys.help))
-    }
+fn help_close_label() -> String {
+    "Esc".to_owned()
 }
 
 fn submission_items(mode: InteractionMode, keys: &crate::ui::KeyBindings) -> [Shortcut; 2] {
@@ -241,14 +232,7 @@ mod tests {
     }
 
     #[test]
-    fn help_close_label_derives_from_modal_navigation_precedence() {
-        let mut keys = super::super::settings::KeyBindings::default();
-        assert_eq!(help_close_label(&keys), "Esc/?");
-
-        keys.help = 'j';
-        assert_eq!(help_close_label(&keys), "Esc");
-
-        keys.help = ' ';
-        assert_eq!(help_close_label(&keys), "Esc/Space");
+    fn help_close_label_is_unambiguous_about_the_modal_close_action() {
+        assert_eq!(help_close_label(), "Esc");
     }
 }
