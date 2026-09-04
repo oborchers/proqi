@@ -10,6 +10,7 @@ mod geometry;
 mod input;
 mod layout;
 mod paging;
+mod paste_reflow;
 mod projection;
 mod render;
 mod settings;

@@ -29,7 +29,6 @@ fn shifted_reserved_primary_chords_preserve_shift_and_uppercase_without_shift_st
             ('a', 'A', UiKey::SelectAll),
             ('c', 'C', UiKey::Copy),
             ('x', 'X', UiKey::Cut),
-            ('v', 'V', UiKey::PasteClipboard),
             ('d', 'D', UiKey::Duplicate),
             ('q', 'Q', UiKey::Quit),
             ('y', 'Y', UiKey::Redo),
@@ -52,6 +51,22 @@ fn shifted_reserved_primary_chords_preserve_shift_and_uppercase_without_shift_st
                     "shifted {character:?}, modifier {modifier:?}"
                 );
             }
+        }
+        for character in ['v', 'V'] {
+            assert_eq!(
+                translate(Event::Key(KeyEvent::new(
+                    KeyCode::Char(character),
+                    modifier
+                ))),
+                Some(UiInput::Key(UiKey::PasteClipboard))
+            );
+            assert_eq!(
+                translate(Event::Key(KeyEvent::new(
+                    KeyCode::Char(character),
+                    modifier | KeyModifiers::SHIFT,
+                ))),
+                Some(UiInput::Key(UiKey::PasteClipboardReflow))
+            );
         }
     }
 }

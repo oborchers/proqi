@@ -1149,6 +1149,27 @@ Bracketed paste is one payload and one undoable edit. When no thought is
 selected, paste creates and focuses a new thought. The application never tries
 to split a paste heuristically.
 
+Exact and reflow clipboard reads share one typed asynchronous owner record. The
+record retains `Exact` or `Reflow` through Compose materialization and rejects a
+completion after its Board, Compose generation, or thought editor owner changes.
+Raw bracketed paste always enters the exact path because a terminal host may
+have consumed a system shortcut before emitting paste bytes. Only the dedicated
+normalized `PasteClipboardReflow` intention or its Board and Commands aliases
+select the reflow path.
+
+The reflow classifier makes a bounded number of linear passes over logical
+lines. Shared terminal-independent Markdown structure recognition owns list
+markers, indentation columns, thematic breaks, and fence state for both editor
+smart lists and paste reflow. Reflow records ordered text replacements so
+ordinary annotation offsets map through the same explicit `TextChangeSet`
+contract as editor mutations. Non-large annotations make their containing block
+exact. Large-paste annotations are transformable envelopes. Partitioned cleanup
+records each envelope's exact transformed range directly so boundary whitespace
+can be normalized without absorbing neighboring content, then validates its
+derived counts again before insertion. The resulting payload is passed once to
+the existing paste transaction, preserving one durable undo unit and the
+ordinary persistence failure and retry contract.
+
 Compose sends every character, paste, annotated paste, clipboard result,
 movement, selection, and supported composition intention through the existing
 editor. A content-changing outcome is snapshotted once and passed to the
@@ -1229,6 +1250,10 @@ testing consume that same projection. Clipboard, recovery, CLI, search,
 submission, and integration boundaries continue to consume canonical content.
 Edits rebase unaffected ranges and dissolve intersected ranges. Revisions
 persist both sides of the annotation change so undo and redo remain restart-safe.
+Explicit paste reflow protects every attachment, invocation-reference, and
+shortcut-emphasis byte. Large-paste ranges are the one transformable annotation
+kind and are retained only when their transformed content still reaches the
+shared fold threshold.
 Exact selected-substitution activation and placeholder-aware Space resolve from
 that same projection. They do not inspect a formatted label or reconstruct a
 semantic range from visible text.

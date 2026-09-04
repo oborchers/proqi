@@ -144,7 +144,7 @@ fn control_shift_horizontal_arrow_keeps_word_selection_in_the_real_pty() {
 }
 
 #[test]
-fn distinctly_shifted_primary_v_stays_available_in_the_real_pty() {
+fn distinctly_shifted_primary_v_is_reflow_in_the_real_pty() {
     let (sequence, modifier) = if cfg!(target_os = "macos") {
         (r"\x1b\[118;10u", "SUPER")
     } else {
@@ -153,7 +153,7 @@ fn distinctly_shifted_primary_v_stays_available_in_the_real_pty() {
     inspect_sequence(
         sequence,
         &format!("Char('v'), modifiers: KeyModifiers(SHIFT | {modifier})"),
-        "PrimaryShiftCharacter('v')",
+        "PasteClipboardReflow",
     );
 }
 

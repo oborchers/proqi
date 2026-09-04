@@ -56,7 +56,11 @@ pub(crate) fn items(app: &BoardApp) -> Vec<Shortcut> {
         ),
         (
             shortcut_metadata::primary_label(ShortcutAction::Paste),
-            "Paste",
+            "Paste exactly",
+        ),
+        (
+            shortcut_metadata::board_label(ShortcutAction::PasteReflow, keys),
+            "Paste reflow",
         ),
         (shortcut_metadata::redo_label(), "Redo"),
         (super::settings::key_label(keys.collapse), "Collapse"),
@@ -95,7 +99,11 @@ fn edit_items(
         (shortcut_metadata::primary_label(ShortcutAction::Cut), "Cut"),
         (
             shortcut_metadata::primary_label(ShortcutAction::Paste),
-            "Paste",
+            "Paste exactly",
+        ),
+        (
+            shortcut_metadata::shifted_primary_label(ShortcutAction::PasteReflow),
+            "Paste reflow",
         ),
         (
             shortcut_metadata::primary_label(ShortcutAction::SelectAll),

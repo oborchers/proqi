@@ -7,6 +7,7 @@ pub(crate) enum ShortcutAction {
     Copy,
     Cut,
     Paste,
+    PasteReflow,
     SelectAll,
     Duplicate,
     Undo,
@@ -60,6 +61,12 @@ pub(crate) const STANDARD_SHORTCUTS: &[ShortcutMetadata] = &[
         "V",
         ShortcutScope::BoardAndEdit,
         UiKey::PasteClipboard,
+    ),
+    shifted(
+        ShortcutAction::PasteReflow,
+        "Shift+V",
+        ShortcutScope::BoardAndEdit,
+        UiKey::PasteClipboardReflow,
     ),
     standard(
         ShortcutAction::SelectAll,
@@ -240,7 +247,7 @@ fn single_character_suffix(shortcut: &ShortcutMetadata) -> Option<char> {
     characters.next().is_none().then_some(character)
 }
 
-const fn board_fallback(action: ShortcutAction, keys: &KeyBindings) -> Option<char> {
+fn board_fallback(action: ShortcutAction, keys: &KeyBindings) -> Option<char> {
     match action {
         ShortcutAction::Copy => Some(keys.copy),
         ShortcutAction::Cut => Some(keys.cut),
@@ -249,7 +256,14 @@ const fn board_fallback(action: ShortcutAction, keys: &KeyBindings) -> Option<ch
         ShortcutAction::Submit => Some(keys.submit_remove),
         ShortcutAction::SubmitKeep => Some(keys.submit_keep),
         ShortcutAction::Quit => Some(keys.quit),
+        ShortcutAction::PasteReflow
+            if keys.command(keys.paste_reflow)
+                == Some(super::settings::BoardCommand::PasteReflow) =>
+        {
+            Some(keys.paste_reflow)
+        }
         ShortcutAction::Paste
+        | ShortcutAction::PasteReflow
         | ShortcutAction::Duplicate
         | ShortcutAction::Redo
         | ShortcutAction::DeleteLogicalLine
@@ -291,6 +305,13 @@ mod tests {
             ShiftMeaning::Unshifted,
             UiKey::PasteClipboard,
             None,
+        ),
+        (
+            ShortcutAction::PasteReflow,
+            ShortcutScope::BoardAndEdit,
+            ShiftMeaning::Shifted,
+            UiKey::PasteClipboardReflow,
+            Some('p'),
         ),
         (
             ShortcutAction::SelectAll,

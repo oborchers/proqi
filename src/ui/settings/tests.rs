@@ -59,6 +59,18 @@ fn established_board_binding_precedes_compatible_transform_collision() {
 }
 
 #[test]
+fn paste_reflow_has_a_configurable_board_fallback_without_breaking_old_collisions() {
+    let defaults = KeyBindings::default();
+    assert_eq!(defaults.command('p'), Some(BoardCommand::PasteReflow));
+    let remapped: KeyBindings = toml::from_str("paste_reflow = 'g'").expect("remap");
+    assert_eq!(remapped.command('g'), Some(BoardCommand::PasteReflow));
+
+    let old_collision: KeyBindings = toml::from_str("new = 'p'").expect("old config");
+    assert_eq!(old_collision.validate(), Ok(()));
+    assert_eq!(old_collision.command('p'), Some(BoardCommand::New));
+}
+
+#[test]
 fn reserved_primary_transform_bindings_are_rejected() {
     for reserved in ['a', 'c', 'd', 'n', 'p', 'q', 'u', 'v', 'x', 'y', 'z'] {
         let bindings = KeyBindings {

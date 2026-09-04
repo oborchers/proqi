@@ -1,14 +1,14 @@
 //! Exact paste payloads and folded board presentation.
 
-use unicode_segmentation::UnicodeSegmentation as _;
-
 use crate::domain::{
     AnnotationBehavior, ContentAnnotation, ContentAnnotationKind, InlineStyleKind,
 };
 
 mod rebase;
+mod reflow;
 
 pub(super) use rebase::{rebase, rebase_preserved};
+pub(in crate::ui) use reflow::PasteReflow;
 
 const LARGE_PASTE_LINES: usize = 12;
 const LARGE_PASTE_GRAPHEMES: usize = 1_200;
@@ -29,19 +29,9 @@ impl PastePayload {
     /// Preserve plain text and fold it only when it exceeds the context threshold.
     #[must_use]
     pub fn text(content: String) -> Self {
-        let lines = content.lines().count().max(1);
-        let graphemes = content.graphemes(true).count();
-        let annotations = if !content.is_empty()
-            && (lines >= LARGE_PASTE_LINES || graphemes >= LARGE_PASTE_GRAPHEMES)
-        {
-            vec![ContentAnnotation {
-                start: 0,
-                end: content.len(),
-                kind: ContentAnnotationKind::LargePaste { lines, graphemes },
-            }]
-        } else {
-            Vec::new()
-        };
+        let annotations = reflow::large_paste_annotation(&content, 0, content.len())
+            .into_iter()
+            .collect();
         Self {
             content,
             annotations,

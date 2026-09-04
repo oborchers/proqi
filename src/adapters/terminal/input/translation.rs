@@ -160,9 +160,12 @@ fn primary_key(key: &KeyEvent) -> Option<UiKey> {
     match key.code {
         KeyCode::Enter if shifted => Some(UiKey::SubmitKeep),
         KeyCode::Enter => Some(UiKey::Submit),
-        KeyCode::Char(
-            character @ ('a' | 'A' | 'c' | 'C' | 'x' | 'X' | 'v' | 'V' | 'd' | 'D' | 'q' | 'Q'),
-        ) if shifted => Some(UiKey::PrimaryShiftCharacter(character)),
+        KeyCode::Char('v' | 'V') if shifted => Some(UiKey::PasteClipboardReflow),
+        KeyCode::Char(character @ ('a' | 'A' | 'c' | 'C' | 'x' | 'X' | 'd' | 'D' | 'q' | 'Q'))
+            if shifted =>
+        {
+            Some(UiKey::PrimaryShiftCharacter(character))
+        }
         KeyCode::Char('a' | 'A') => Some(UiKey::SelectAll),
         KeyCode::Char('c' | 'C') => Some(UiKey::Copy),
         KeyCode::Char('x' | 'X') => Some(UiKey::Cut),

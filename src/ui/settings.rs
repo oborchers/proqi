@@ -115,6 +115,8 @@ pub struct KeyBindings {
     pub quit: char,
     /// Toggle the macOS screenshot inbox.
     pub screenshot_inbox: char,
+    /// Paste the native clipboard with explicit prose reflow in Board mode.
+    pub paste_reflow: char,
     /// Shifted Primary chord suffix for sentence deletion.
     pub delete_sentence: char,
     /// Shifted Primary chord suffix for selection to the visual-row start.
@@ -148,6 +150,7 @@ impl Default for KeyBindings {
             help: '?',
             quit: 'q',
             screenshot_inbox: 'i',
+            paste_reflow: 'p',
             delete_sentence: 'U',
             select_visual_row_start: 'H',
             select_visual_row_end: 'L',
@@ -179,6 +182,7 @@ pub(super) enum BoardCommand {
     Help,
     Quit,
     ScreenshotInbox,
+    PasteReflow,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -213,6 +217,7 @@ impl KeyBindings {
             (self.quit, BoardCommand::Quit),
             (self.screenshot_inbox, BoardCommand::ScreenshotInbox),
             (self.transform, BoardCommand::Transform),
+            (self.paste_reflow, BoardCommand::PasteReflow),
         ];
         bindings
             .into_iter()
@@ -299,7 +304,7 @@ impl KeyBindings {
         if matches!(self.quit, RECOVERY_RETRY_KEY | RECOVERY_EXPORT_KEY) {
             return Err("the quit binding cannot use the reserved recovery keys r or w");
         }
-        if self.transform.is_control() {
+        if self.transform.is_control() || self.paste_reflow.is_control() {
             return Err("keybindings must be distinct printable characters");
         }
         if super::shortcut_metadata::reserved_unshifted_character(self.transform) {

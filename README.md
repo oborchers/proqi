@@ -152,6 +152,7 @@ modifiers only after the operating system and terminal have handled the key.
 | `Primary+Enter` / `s`; `Primary+Shift+Enter` / `S`; then arrows or `h` / `j` / `k` / `l` if needed | Submit and remove after acceptance; submit and keep |
 | `Primary+Z` / `u` | Undo a board operation |
 | `Primary+Shift+Z` / `Primary+Y` | **Redo a board operation** |
+| `Primary+Shift+V` / `p` | Paste and reflow copied prose |
 | `c`; `/`; `:`; `i`; `?` | Collapse; search; commands; Screenshot Inbox; help |
 | `Esc`; `Primary+Q` / `q` | Clear selection; exit after durable flush |
 
@@ -163,7 +164,8 @@ modifiers only after the operating system and terminal have handled the key.
 | `Primary+A`; `Primary+U` | Select all; delete logical line |
 | `Primary+Shift+U` | Delete containing sentence |
 | `Primary+Z`; `Primary+Shift+Z` / `Primary+Y` | Undo; redo |
-| `Primary+C` / `X` / `V` | Native copy / safe cut / paste |
+| `Primary+C` / `X`; `Primary+V` | Native copy / safe cut; paste exactly |
+| `Primary+Shift+V` | Paste and reflow copied prose |
 | macOS: `Cmd+←` / `→` | Move to the current wrapped visual-row start / end |
 | macOS: `Option+←` / `→`; elsewhere: `Ctrl+←` / `→` | Move by word |
 | `Shift` + movement | Extend text selection |
@@ -188,10 +190,18 @@ Configurable Board characters such as `y`, `x`, `u`, `s`, `S`, and `q` remain
 portable aliases when a terminal consumes a system chord. Ghostty consumes
 configured keybindings before Proqi receives input. Its macOS defaults include
 the common macOS clipboard, selection, history, duplicate, submission, quit,
-and Cmd-arrow chords, including `Cmd+Shift+V` as a host paste action.
+and Cmd-arrow chords. A host binding for `Cmd+Shift+V` may perform an ordinary
+bracketed paste before Proqi can observe the chord. That paste stays exact.
 Proqi does not promise delivery of intercepted chords, change Ghostty settings,
-or repeat a host paste. Use the Board aliases, command palette, bracketed paste,
-and `proqi diagnostics keypress` when a key does not reach the application.
+or repeat a host paste. Use `p` on the Board, choose `Paste and reflow` in
+Commands, or run `proqi diagnostics keypress` when the chord does not reach the
+application.
+
+Exact paste is always the default. Explicit paste and reflow joins copied prose
+lines, collapses repeated spaces and tabs, and reduces blank runs to one paragraph
+break. It preserves recognized lists and leaves code, tables, quotes, paths,
+URLs, controls, and annotated semantic ranges unchanged. Large-paste folds are
+recomputed from the transformed content.
 
 Mouse input covers the same core workflow. Images, files, and large pastes fold
 into compact annotations while their content stays intact. In Edit mode, an
@@ -329,6 +339,7 @@ focus_up = "k"
 focus_down = "j"
 transform = "t" # merge selection; Esc,t splits or extracts the last editor range
 screenshot_inbox = "i"
+paste_reflow = "p" # Board fallback for Primary+Shift+V
 delete_sentence = "U" # Primary+Shift+U, use another unreserved uppercase suffix to remap
 select_visual_row_start = "H" # Primary+Shift+H fallback
 select_visual_row_end = "L" # Primary+Shift+L fallback

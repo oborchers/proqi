@@ -337,6 +337,9 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
+        if matches!(command, Command::PasteExact | Command::PasteReflow) {
+            return self.execute_palette_paste(command, selection_handoff, ids, clock);
+        }
         if let Some(effects) = self.execute_transformation_command(
             command,
             selection_handoff.as_ref(),
@@ -383,7 +386,6 @@ impl BoardApp {
             Command::Delete => self.delete(ids, clock),
             Command::Copy => self.copy_active(ids),
             Command::Cut => self.cut_active(ids, clock),
-            Command::Paste => self.read_clipboard(ids),
             Command::Duplicate => self.duplicate(ids, clock),
             Command::SubmitRemove
             | Command::SubmitKeep
@@ -403,6 +405,8 @@ impl BoardApp {
             | Command::SplitThought
             | Command::ExtractSelection
             | Command::MergeThoughts
+            | Command::PasteExact
+            | Command::PasteReflow
             | Command::Edit
             | Command::InsertInvocation
             | Command::RefreshAgents

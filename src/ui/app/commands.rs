@@ -46,6 +46,7 @@ impl BoardApp {
             UiKey::Copy => return self.copy_thought(ids),
             UiKey::Cut => return self.cut_thought(ids, clock),
             UiKey::PasteClipboard => return self.read_clipboard(ids),
+            UiKey::PasteClipboardReflow => return self.read_clipboard_reflow(ids),
             UiKey::Duplicate => return self.duplicate(ids, clock),
             _ => {}
         }
@@ -90,6 +91,7 @@ impl BoardApp {
                 Vec::new()
             }
             UiKey::PasteClipboard => self.read_clipboard(ids),
+            UiKey::PasteClipboardReflow => self.read_clipboard_reflow(ids),
             UiKey::Undo => self.history(ids, clock, true),
             UiKey::Redo => self.history(ids, clock, false),
             UiKey::Backspace
@@ -200,6 +202,7 @@ impl BoardApp {
                 Vec::new()
             }
             Some(BoardCommand::ScreenshotInbox) => self.toggle_screenshot_inbox(ids, clock),
+            Some(BoardCommand::PasteReflow) => self.read_clipboard_reflow(ids),
         }
     }
 
@@ -324,6 +327,11 @@ impl BoardApp {
             UiKey::PasteClipboard => {
                 let mut effects = self.flush_pending_edit(ids, clock);
                 effects.extend(self.read_clipboard(ids));
+                Some(effects)
+            }
+            UiKey::PasteClipboardReflow => {
+                let mut effects = self.flush_pending_edit(ids, clock);
+                effects.extend(self.read_clipboard_reflow(ids));
                 Some(effects)
             }
             _ => None,
