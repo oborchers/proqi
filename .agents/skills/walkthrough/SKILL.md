@@ -89,16 +89,23 @@ Inside Herdr:
    requires an isolated layout. Never create a new tab merely for convenience.
    Address every disposable pane or tab by an explicit ID with `--no-focus`,
    and record every resource created.
-3. Build the exact checkout with `cargo build --locked --bin proqi`. Launch its
+3. Present live walkthroughs only in an ordinary, unzoomed, balanced side-by-side
+   layout where both the implementation or Codex pane and the demonstration pane
+   remain simultaneously usable. The Herdr `Z` zoom state must not be active.
+   Never present or leave an extreme split ratio that makes either pane too small.
+   When narrow or shallow responsive testing is required, use only recorded
+   walkthrough-owned disposable geometry, then restore the balanced side-by-side
+   layout before showing the result to the user.
+4. Build the exact checkout with `cargo build --locked --bin proqi`. Launch its
    real binary in a disposable pane with a private temporary `--state-dir`.
-4. Seed only synthetic walkthrough sessions and thoughts. Never inspect or
+5. Seed only synthetic walkthrough sessions and thoughts. Never inspect or
    mutate the user's ordinary Proqi state. Disable Herdr integration unless the
    selected behavior specifically requires it.
-5. Never submit to, rename, focus, or close an unrelated agent pane. A live
+6. Never submit to, rename, focus, or close an unrelated agent pane. A live
    integration demonstration that would create an agent session, consume model
    credentials, submit a prompt, or alter the clipboard requires the user's
    explicit authorization for that action.
-6. Prepare the exact visible state before describing the item, and leave it
+7. Prepare the exact visible state before describing the item, and leave it
    visible while the user inspects or operates it. State what is selected,
    persisted, pending, or expected after the suggested interaction.
 
