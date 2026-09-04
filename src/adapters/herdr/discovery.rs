@@ -28,7 +28,8 @@ use crate::{
 const MAX_AGENT_ROWS: usize = 128;
 
 use super::{
-    DISCOVERY_TIMEOUT, HerdrGateway, SUPPORTED_PROTOCOL, SUPPORTED_SCHEMA,
+    DISCOVERY_TIMEOUT, HerdrGateway,
+    compatibility::HerdrCompatibilityPolicy,
     contract::{
         AgentsBody, CurrentBody, Envelope, LayoutBody, NeighborBody, PaneInfo, RawReadiness,
         SchemaDocument, SnapshotBody,
@@ -45,7 +46,7 @@ pub(super) fn capabilities<R: ProcessRunner>(
     }
     let schema: SchemaDocument = gateway.json(&["api", "schema", "--json"], DISCOVERY_TIMEOUT)?;
     let live: Envelope<SnapshotBody> = gateway.json(&["api", "snapshot"], DISCOVERY_TIMEOUT)?;
-    verify_protocol(&schema, &live.result.snapshot)?;
+    let protocol = HerdrCompatibilityPolicy::negotiate(&schema, &live.result.snapshot)?;
     let current: Envelope<CurrentBody> =
         gateway.json(&["pane", "current", "--current"], DISCOVERY_TIMEOUT)?;
     let layout: Envelope<LayoutBody> = gateway.json(
@@ -56,7 +57,7 @@ pub(super) fn capabilities<R: ProcessRunner>(
     Ok(AgentCapabilities {
         provider: "herdr".to_owned(),
         version: live.result.snapshot.version,
-        protocol: schema.protocol,
+        protocol: protocol.value(),
         delivery: AgentDeliveryCapabilities::SUBMIT_ONLY,
         context,
     })
@@ -87,8 +88,13 @@ pub(super) fn adjacent_targets<R: ProcessRunner>(
             ],
             DISCOVERY_TIMEOUT,
         )?;
-        if let Some(target) = verify_neighbor(expected, direction, neighbor.result, &agents.result)?
-        {
+        if let Some(target) = verify_neighbor(
+            expected,
+            current.protocol,
+            direction,
+            neighbor.result,
+            &agents.result,
+        )? {
             targets.push(target);
         }
     }
@@ -103,13 +109,10 @@ pub(super) fn live_references<R: ProcessRunner>(
             "HERDR_ENV is not set for this pane".to_owned(),
         ));
     }
+    let schema: SchemaDocument = gateway.json(&["api", "schema", "--json"], DISCOVERY_TIMEOUT)?;
     let body: Envelope<SnapshotBody> = gateway.json(&["api", "snapshot"], DISCOVERY_TIMEOUT)?;
     let snapshot = body.result.snapshot;
-    if snapshot.protocol != SUPPORTED_PROTOCOL || snapshot.version.trim().is_empty() {
-        return Err(AgentError::Unsupported(
-            "live references require Herdr protocol 19".to_owned(),
-        ));
-    }
+    HerdrCompatibilityPolicy::negotiate(&schema, &snapshot)?;
     let mut completeness = InvocationCompleteness::Complete;
     let workspace_count = snapshot.workspaces.len();
     let tab_count = snapshot.tabs.len();
@@ -225,38 +228,6 @@ const fn observed_state(value: Option<RawReadiness>) -> AgentState {
     }
 }
 
-fn verify_protocol(
-    schema: &SchemaDocument,
-    live: &super::contract::Snapshot,
-) -> Result<(), AgentError> {
-    if schema.schema_version != SUPPORTED_SCHEMA
-        || schema.protocol != SUPPORTED_PROTOCOL
-        || live.protocol != schema.protocol
-        || live.version.trim().is_empty()
-        || !contains_const(&schema.schemas, "agent.prompt")
-        || !contains_const(&schema.schemas, "agent_prompted")
-    {
-        return Err(AgentError::Unsupported(format!(
-            "requires schema {SUPPORTED_SCHEMA} and protocol {SUPPORTED_PROTOCOL}, received schema {} and protocols {}/{}",
-            schema.schema_version, schema.protocol, live.protocol
-        )));
-    }
-    Ok(())
-}
-
-fn contains_const(value: &serde_json::Value, expected: &str) -> bool {
-    match value {
-        serde_json::Value::Object(fields) => {
-            fields.get("const").and_then(serde_json::Value::as_str) == Some(expected)
-                || fields.values().any(|value| contains_const(value, expected))
-        }
-        serde_json::Value::Array(values) => {
-            values.iter().any(|value| contains_const(value, expected))
-        }
-        _ => false,
-    }
-}
-
 fn context_from(
     current: &PaneInfo,
     layout: &super::contract::PaneLayout,
@@ -273,6 +244,7 @@ fn context_from(
 
 fn verify_neighbor(
     source: &PaneContext,
+    protocol: u32,
     direction: Direction,
     body: NeighborBody,
     agents: &AgentsBody,
@@ -298,7 +270,7 @@ fn verify_neighbor(
         Err(AgentError::Unsupported(_)) => return Ok(None),
         Err(error) => return Err(error),
     };
-    match eligible_target(source, direction, rect, agent) {
+    match eligible_target(source, protocol, direction, rect, agent) {
         Ok(target) => Ok(Some(target)),
         Err(AgentError::Unsupported(_)) => Ok(None),
         Err(error) => Err(error),
@@ -325,6 +297,7 @@ fn verify_neighbor_context(
 
 fn eligible_target(
     source: &PaneContext,
+    protocol: u32,
     direction: Direction,
     rect: PaneRect,
     agent: &PaneInfo,
@@ -352,7 +325,7 @@ fn eligible_target(
         .unwrap_or_else(|| format!("{kind} {}", agent.pane_id));
     Ok(AgentTarget {
         provider: "herdr".to_owned(),
-        protocol: super::SUPPORTED_PROTOCOL,
+        protocol,
         direction,
         pane_id: agent.pane_id.clone(),
         workspace_id: agent.workspace_id.clone(),

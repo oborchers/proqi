@@ -1,0 +1,120 @@
+{
+  "protocol": 20,
+  "schema_version": 1,
+  "schemas": {
+    "request": {
+      "$defs": {
+        "AgentPromptParams": {
+          "properties": {
+            "target": { "type": "string" },
+            "text": { "type": "string" },
+            "wait": {
+              "anyOf": [
+                { "$ref": "#/schemas/request/$defs/AgentPromptWaitOptions" },
+                { "type": "null" }
+              ]
+            }
+          },
+          "required": ["target", "text"],
+          "type": "object"
+        },
+        "AgentPromptWaitOptions": {
+          "properties": {
+            "timeout_ms": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": ["integer", "null"]
+            },
+            "until": {
+              "items": { "$ref": "#/schemas/request/$defs/AgentStatus" },
+              "type": "array"
+            }
+          },
+          "type": "object"
+        },
+        "AgentStatus": {
+          "enum": ["idle", "working", "blocked", "done", "unknown"],
+          "type": "string"
+        }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "method": { "const": "agent.prompt", "type": "string" },
+            "params": { "$ref": "#/schemas/request/$defs/AgentPromptParams" }
+          },
+          "required": ["method", "params"],
+          "type": "object"
+        }
+      ]
+    },
+    "success_response": {
+      "$defs": {
+        "ResponseResult": {
+          "oneOf": [
+            {
+              "properties": {
+                "agent": { "$ref": "#/schemas/success_response/$defs/AgentInfo" },
+                "type": { "const": "agent_prompted", "type": "string" }
+              },
+              "required": ["type", "agent"],
+              "type": "object"
+            }
+          ]
+        },
+        "AgentInfo": {
+          "properties": {
+            "terminal_id": { "type": "string" },
+            "agent_status": { "$ref": "#/schemas/success_response/$defs/AgentStatus" },
+            "workspace_id": { "type": "string" },
+            "tab_id": { "type": "string" },
+            "pane_id": { "type": "string" },
+            "focused": { "type": "boolean" },
+            "revision": { "type": "integer" },
+            "agent": { "type": ["string", "null"] },
+            "agent_session": {
+              "anyOf": [
+                { "$ref": "#/schemas/success_response/$defs/AgentSessionInfo" },
+                { "type": "null" }
+              ]
+            }
+          },
+          "required": [
+            "terminal_id",
+            "agent_status",
+            "workspace_id",
+            "tab_id",
+            "pane_id",
+            "focused",
+            "revision"
+          ],
+          "type": "object"
+        },
+        "AgentSessionInfo": {
+          "properties": {
+            "source": { "type": "string" },
+            "agent": { "type": "string" },
+            "kind": { "$ref": "#/schemas/success_response/$defs/AgentSessionRefKind" },
+            "value": { "type": "string" }
+          },
+          "required": ["source", "agent", "kind", "value"],
+          "type": "object"
+        },
+        "AgentSessionRefKind": {
+          "enum": ["id", "path"],
+          "type": "string"
+        },
+        "AgentStatus": {
+          "enum": ["idle", "working", "blocked", "done", "unknown"],
+          "type": "string"
+        }
+      },
+      "properties": {
+        "id": { "type": "string" },
+        "result": { "$ref": "#/schemas/success_response/$defs/ResponseResult" }
+      },
+      "required": ["id", "result"],
+      "type": "object"
+    }
+  }
+}

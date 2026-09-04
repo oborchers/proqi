@@ -1,6 +1,8 @@
 //! Read-only doctor and diagnostic independence contracts.
 
 use super::*;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt as _;
 
 #[test]
 fn doctor_reports_fresh_state_without_initializing_it() {
@@ -9,7 +11,6 @@ fn doctor_reports_fresh_state_without_initializing_it() {
     std::fs::create_dir(&root).expect("state root");
     #[cfg(unix)]
     {
-        use std::os::unix::fs::PermissionsExt as _;
         std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700))
             .expect("private state root");
     }
@@ -25,6 +26,74 @@ fn doctor_reports_fresh_state_without_initializing_it() {
         std::fs::read_dir(&root).expect("read state root").count(),
         0
     );
+}
+
+#[cfg(unix)]
+#[test]
+fn doctor_reports_supported_protocols_and_the_precise_compatibility_boundary() {
+    for protocol in [19, 20, 21] {
+        let fixture = herdr_fixture::HerdrFixture::new(protocol);
+        let temporary = tempfile::tempdir().expect("temporary directory");
+        let state_root = temporary.path().join("state");
+        std::fs::create_dir(&state_root).expect("state root");
+        std::fs::set_permissions(&state_root, std::fs::Permissions::from_mode(0o700))
+            .expect("private state root");
+        let mut command = Command::new(env!("CARGO_BIN_EXE_proqi"));
+        command
+            .arg("--state-dir")
+            .arg(&state_root)
+            .arg("--json")
+            .arg("doctor")
+            .env("HERDR_ENV", "1")
+            .env_remove("PROQI_DISABLE_HERDR")
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        let inherited = std::env::var_os("PATH").unwrap_or_default();
+        let fixture_program = fixture.program();
+        let fixture_directory = Path::new(&fixture_program)
+            .parent()
+            .expect("fixture directory")
+            .to_path_buf();
+        let paths = std::iter::once(fixture_directory).chain(std::env::split_paths(&inherited));
+        command.env("PATH", std::env::join_paths(paths).expect("fixture PATH"));
+        let output = command.output().expect("run doctor");
+        assert!(
+            output.status.success(),
+            "protocol {protocol}: stdout={} stderr={}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(
+            fixture.prompt_bytes(),
+            None,
+            "doctor must not send a prompt"
+        );
+        let envelope: Value = serde_json::from_slice(&output.stdout).expect("doctor JSON");
+        let checks = envelope["data"]["checks"]
+            .as_array()
+            .expect("doctor checks");
+        let herdr = checks
+            .iter()
+            .find(|check| check["id"] == "herdr")
+            .expect("Herdr check");
+        if protocol <= 20 {
+            assert_eq!(herdr["status"], "ok");
+            assert_eq!(herdr["facts"]["protocol"], protocol);
+            assert_eq!(herdr["facts"]["version"], fixture_version(protocol));
+            assert!(herdr.get("remediation").is_none());
+        } else {
+            assert_eq!(herdr["status"], "warning");
+            let remediation = herdr["remediation"].as_str().expect("remediation");
+            assert!(remediation.contains("schema 1, protocol 19 or 20"));
+            assert!(remediation.contains("protocols 21/21"));
+            assert!(remediation.contains("unsupported protocol version"));
+        }
+    }
+}
+
+const fn fixture_version(protocol: u32) -> &'static str {
+    if protocol == 19 { "0.8.0" } else { "0.8.2" }
 }
 
 #[test]

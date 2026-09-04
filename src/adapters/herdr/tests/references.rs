@@ -17,15 +17,18 @@ fn live_agent(name: Option<&str>, workspace: &str, tab: &str, pane: &str) -> Val
     value
 }
 
-fn live_snapshot(agents: &[Value], workspaces: &Value, tabs: &Value) -> FakeResponse {
-    success(json!({"result":{"snapshot":{
-        "protocol": 19,
-        "version": "0.8.0",
-        "agents": agents,
-        "workspaces": workspaces,
-        "tabs": tabs,
-        "panes": [{"cwd":"private","terminal_title":"private"}]
-    }}}))
+fn live_snapshot(agents: &[Value], workspaces: &Value, tabs: &Value) -> Vec<FakeResponse> {
+    vec![
+        success(schema(19)),
+        success(json!({"result":{"snapshot":{
+            "protocol": 19,
+            "version": "0.8.0",
+            "agents": agents,
+            "workspaces": workspaces,
+            "tabs": tabs,
+            "panes": [{"cwd":"private","terminal_title":"private"}]
+        }}})),
+    ]
 }
 
 #[test]
@@ -49,7 +52,7 @@ fn one_snapshot_correlates_labels_and_ignores_privacy_sensitive_fields() {
             {"workspace_id":"w1","tab_id":"w1:t2","label":"Build tab"}
         ]),
     );
-    let (mut gateway, runner) = gateway(vec![response]);
+    let (mut gateway, runner) = gateway(response);
 
     let snapshot = super::super::discovery::live_references(&mut gateway).expect("references");
     let references = snapshot.references;
@@ -62,7 +65,11 @@ fn one_snapshot_correlates_labels_and_ignores_privacy_sensitive_fields() {
     assert_eq!(references[0].pane_id(), "w1:p8");
     assert_eq!(references[0].agent_name(), Some("reviewer"));
     assert_eq!(references[0].state(), AgentState::Working);
-    let request = &runner.requests.borrow()[0];
+    assert_eq!(
+        runner.requests.borrow()[0].args,
+        ["api", "schema", "--json"]
+    );
+    let request = &runner.requests.borrow()[1];
     assert_eq!(request.args, ["api", "snapshot"]);
     assert_eq!(request.timeout, Duration::from_secs(3));
 }
@@ -74,7 +81,7 @@ fn absent_topology_labels_preserve_exact_ids_and_missing_names() {
         &json!([]),
         &json!([]),
     );
-    let (mut labeled_gateway, _) = gateway(vec![response]);
+    let (mut labeled_gateway, _) = gateway(response);
 
     let references =
         super::super::discovery::live_references(&mut labeled_gateway).expect("references");
@@ -85,7 +92,7 @@ fn absent_topology_labels_preserve_exact_ids_and_missing_names() {
     assert_eq!(references[0].tab_label(), None);
 
     let empty = live_snapshot(&[], &json!([]), &json!([]));
-    let (mut gateway, _) = gateway(vec![empty]);
+    let (mut gateway, _) = gateway(empty);
     assert!(
         super::super::discovery::live_references(&mut gateway)
             .expect("empty live references")
@@ -102,7 +109,7 @@ fn duplicate_or_contradictory_snapshot_identities_fail_closed() {
         &json!([{"workspace_id":"w1","label":"Workspace"}]),
         &json!([{"workspace_id":"w1","tab_id":"w1:t1","label":"Tab"}]),
     );
-    let (mut duplicate_gateway, _) = gateway(vec![response]);
+    let (mut duplicate_gateway, _) = gateway(response);
     assert!(matches!(
         super::super::discovery::live_references(&mut duplicate_gateway),
         Err(AgentError::Ambiguous(_))
@@ -116,7 +123,7 @@ fn duplicate_or_contradictory_snapshot_identities_fail_closed() {
         &json!([]),
         &json!([]),
     );
-    let (mut reused_pane_gateway, _) = gateway(vec![response]);
+    let (mut reused_pane_gateway, _) = gateway(response);
     assert!(matches!(
         super::super::discovery::live_references(&mut reused_pane_gateway),
         Err(AgentError::Ambiguous(_))
@@ -127,7 +134,7 @@ fn duplicate_or_contradictory_snapshot_identities_fail_closed() {
         &json!([{"workspace_id":"w1","label":"Workspace"}]),
         &json!([{"workspace_id":"w2","tab_id":"w1:t1","label":"Wrong"}]),
     );
-    let (mut gateway, _) = gateway(vec![response]);
+    let (mut gateway, _) = gateway(response);
     assert!(matches!(
         super::super::discovery::live_references(&mut gateway),
         Err(AgentError::Malformed(_))
@@ -158,7 +165,7 @@ fn malformed_timeout_and_oversized_results_degrade_with_fixed_bounds() {
         })
         .collect::<Vec<Value>>();
     let response = live_snapshot(&agents, &json!([]), &json!([]));
-    let (mut bounded, _) = gateway(vec![response]);
+    let (mut bounded, _) = gateway(response);
     let snapshot =
         super::super::discovery::live_references(&mut bounded).expect("bounded references");
     assert_eq!(snapshot.references.len(), 128);
@@ -192,7 +199,7 @@ fn oversized_topology_retains_correlated_references_and_reports_each_row_budget(
         &json!(workspaces),
         &json!(tabs),
     );
-    let (mut gateway, _) = gateway(vec![response]);
+    let (mut gateway, _) = gateway(response);
 
     let snapshot = super::super::discovery::live_references(&mut gateway).expect("references");
 
@@ -214,7 +221,7 @@ fn topology_labels_are_sanitized_and_bounded_without_using_titles() {
         &json!([{"workspace_id":"w1","label":format!("{}\nsecret", "界".repeat(60))}]),
         &json!([{"workspace_id":"w1","tab_id":"w1:t1","label":"Tab\u{0007} label"}]),
     );
-    let (mut gateway, _) = gateway(vec![response]);
+    let (mut gateway, _) = gateway(response);
     let references = super::super::discovery::live_references(&mut gateway)
         .expect("references")
         .references;

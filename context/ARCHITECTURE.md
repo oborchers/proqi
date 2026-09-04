@@ -565,7 +565,7 @@ overwrite another source's reason.
 
 `InvocationReferenceCatalog` extends this discovery boundary with typed,
 ephemeral collaborator locations. The Herdr adapter implements it from one
-bounded protocol 19 snapshot and projects only agent name, harness, correlated
+bounded schema-validated supported snapshot and projects only agent name, harness, correlated
 workspace and tab identity, pane identity, and observed state. Agent, workspace,
 and tab row bounds retain their valid prefix and report the exact typed source;
 there is no second reference-count truncation. Raw snapshot JSON, directories,
@@ -1320,8 +1320,16 @@ final successful check and before the receiving agent opens it. Proqi does not
 silently copy external files or rewrite canonical paths.
 
 `v0.1.0` implements this boundary against Herdr's structured schema
-and protocol discovery commands. Capability discovery verifies both the
-`agent.prompt` request and `agent_prompted` receipt shapes. Explicit
+and protocol discovery commands. One typed adapter policy accepts only schema 1
+with the known-compatible protocols 19 and 20, requires the live snapshot to
+report the same protocol, and verifies the exact required `agent.prompt`
+request, parameters, `agent_prompted` receipt, agent identity, session, and
+state shapes. The policy tolerates additive unknown response fields but rejects
+an older or future protocol without reviewed evidence, even when its schema
+looks similar. Herdr does not document an external forward-compatibility
+guarantee, so a higher protocol never becomes compatible from ordering alone.
+Capabilities, targets, and diagnostics retain the actual negotiated protocol.
+Explicit
 `interactive_ready=false` or `launch_pending=true` metadata makes a target
 ineligible, while absent optional readiness metadata remains compatible. It
 fails closed when the installed client and server no longer match the supported
@@ -1337,15 +1345,16 @@ Proqi accepts the
 matching receipt and immediately rediscovers adjacent targets without retrying
 the prompt.
 
-Herdr protocol 19 acknowledges accepted text entry but does not guarantee a
-distinct prompt boundary when another sender submits concurrently. This is a
-known provider-contract limitation. Proqi retains target verification, receipt
-matching, durable journaling, and remove-only-after-acceptance semantics, but
-cannot prevent the receiving harness from merging overlapping inputs. Protocol
-19 also cannot atomically reject replacement of one supported sessionless
-harness by another instance of the same kind in the same pane between
-revalidation and delivery because it exposes neither a pre-session instance
-identity nor an expected-instance precondition.
+Supported Herdr protocols 19 and 20 acknowledge accepted text entry but do not
+guarantee a distinct prompt boundary when another sender submits concurrently.
+This is a known provider-contract limitation. Proqi retains target
+verification, receipt matching, durable journaling, and
+remove-only-after-acceptance semantics, but cannot prevent the receiving
+harness from merging overlapping inputs. These protocols also cannot atomically
+reject replacement of one supported sessionless harness by another instance of
+the same kind in the same pane between revalidation and delivery because they
+expose neither a pre-session instance identity nor an expected-instance
+precondition.
 
 Herdr also implements a separate display-only `PanePresentation` port. In a
 managed pane, the terminal runtime publishes `title=proqi` and
