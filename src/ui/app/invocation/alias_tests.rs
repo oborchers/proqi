@@ -159,12 +159,13 @@ fn documented_precedence_orders_global_claude_skills_before_project_skills() {
     let [crate::application::Effect::DiscoverInvocations(request)] = refresh.as_slice() else {
         panic!("refresh effect");
     };
-    app.complete_invocation_discovery(Ok(InvocationDiscovery {
+    app.complete_invocation_discovery(InvocationDiscovery {
         generation: request.generation,
         cwd: cwd.path().to_owned(),
         global: vec![global],
         project: vec![project],
-    }));
+        completeness: crate::ports::invocation::InvocationCompleteness::default(),
+    });
     app.refresh_invocation_popup();
 
     let choices = app.invocation_view().expect("ordered results").1;

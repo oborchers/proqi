@@ -8,8 +8,7 @@ use crate::{
         editor::EditCommand,
         environment::{Clock, IdGenerator},
         invocation::{
-            InvocationCatalogError, InvocationDiscovery, InvocationDiscoveryRequest,
-            InvocationEntry, InvocationForm,
+            InvocationDiscovery, InvocationDiscoveryRequest, InvocationEntry, InvocationForm,
         },
         text_layout::{byte_for_position, position_for_byte},
     },
@@ -34,8 +33,6 @@ mod view;
 use view::Choice;
 pub(in crate::ui) use view::InvocationChoiceView;
 
-const MAX_RESULTS: usize = 20;
-
 pub(super) struct InvocationPopup {
     query: String,
     range: Option<Range<usize>>,
@@ -55,23 +52,19 @@ impl BoardApp {
     }
 
     /// Apply only the newest discovery for the current cwd.
-    pub fn complete_invocation_discovery(
-        &mut self,
-        result: Result<InvocationDiscovery, InvocationCatalogError>,
-    ) {
-        let Ok(discovery) = result else {
-            self.set_warning("invocation refresh exceeded its bounded root budget");
-            return;
-        };
+    pub fn complete_invocation_discovery(&mut self, discovery: InvocationDiscovery) -> bool {
         if discovery.generation != self.invocation_generation
             || discovery.cwd != self.invocation_cwd
         {
-            return;
+            return false;
         }
         self.invocation_global = discovery.global;
         self.invocation_project = discovery.project;
+        self.invocation_completeness
+            .set_filesystem(discovery.completeness);
         self.refresh_invocation_popup();
         self.clamp_invocation_popup();
+        true
     }
 
     /// Replace only project discovery when the runtime cwd changes.
@@ -135,6 +128,16 @@ impl BoardApp {
         self.invocation_popup
             .as_ref()
             .map_or(0, |popup| self.invocation_choices(popup).len())
+    }
+
+    pub(in crate::ui) fn invocation_notice(&self) -> Option<&'static str> {
+        if !self.invocation_completeness.combined().is_complete() {
+            Some(" incomplete results, refine query ")
+        } else if self.invocation_match_count() > 20 {
+            Some(" more results exist, refine query ")
+        } else {
+            None
+        }
     }
 
     pub(super) fn invocation_overflow(&self, visible: usize) -> (bool, bool) {
@@ -381,7 +384,6 @@ impl BoardApp {
                 .then_with(|| left_entry.source.cmp(&right_entry.source))
                 .then_with(|| left_entry.canonical_path.cmp(&right_entry.canonical_path))
         });
-        candidates.truncate(MAX_RESULTS.saturating_sub(built_ins.len()));
         let visible = candidates.clone();
         built_ins
             .into_iter()
@@ -468,6 +470,9 @@ fn inside_code_fence(prefix: &str) -> bool {
         == 1
 }
 
+#[cfg(test)]
+#[path = "invocation/discovery_tests.rs"]
+mod discovery_tests;
 #[cfg(test)]
 #[path = "invocation/paging_tests.rs"]
 mod paging_tests;

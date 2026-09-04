@@ -15,9 +15,10 @@ use crate::{
         clipboard::{Clipboard, ClipboardContent, ClipboardError, ClipboardText, ClipboardWrite},
         environment::IdGenerator as _,
         invocation::{
-            InvocationCatalog, InvocationCatalogError, InvocationDiscovery,
+            InvocationCatalog, InvocationCompleteness, InvocationDiscovery,
             InvocationDiscoveryRequest, InvocationReferenceCatalog,
-            InvocationReferenceDiscoveryRequest, InvocationReferenceProvider, LiveAgentReference,
+            InvocationReferenceDiscoveryRequest, InvocationReferenceProvider,
+            InvocationReferenceSnapshot, LiveAgentReference,
         },
     },
     ui::{BoardApp, UiInput, UiKey},
@@ -252,24 +253,29 @@ fn full_and_disconnected_request_lanes_fail_without_blocking() {
 struct FakeInvocations;
 
 impl InvocationCatalog for FakeInvocations {
-    fn discover(
-        &mut self,
-        request: InvocationDiscoveryRequest,
-    ) -> Result<InvocationDiscovery, InvocationCatalogError> {
-        Ok(InvocationDiscovery {
+    fn discover(&mut self, request: InvocationDiscoveryRequest) -> InvocationDiscovery {
+        InvocationDiscovery {
             generation: request.generation,
             cwd: request.cwd,
             global: Vec::new(),
             project: Vec::new(),
-        })
+            completeness: InvocationCompleteness::Complete,
+        }
     }
 }
 
 struct FakeReferences(Result<Vec<LiveAgentReference>, AgentFailureCode>);
 
 impl InvocationReferenceCatalog for FakeReferences {
-    fn discover_live_references(&mut self) -> Result<Vec<LiveAgentReference>, AgentFailureCode> {
-        self.0.clone()
+    fn discover_live_references(
+        &mut self,
+    ) -> Result<InvocationReferenceSnapshot, AgentFailureCode> {
+        self.0
+            .clone()
+            .map(|references| InvocationReferenceSnapshot {
+                references,
+                completeness: InvocationCompleteness::Complete,
+            })
     }
 }
 
@@ -297,7 +303,7 @@ fn live_reference_failure_never_breaks_filesystem_invocation_refresh() {
     let mut invocations = FakeInvocations;
     let mut references = FakeReferences(Err(AgentFailureCode::TimedOut));
 
-    let ExternalResult::InvocationsDiscovered(Ok(discovery)) =
+    let ExternalResult::InvocationsDiscovered(discovery) =
         discover_invocations(&mut invocations, request)
     else {
         panic!("invocation discovery result");
@@ -310,7 +316,26 @@ fn live_reference_failure_never_breaks_filesystem_invocation_refresh() {
         panic!("reference discovery result");
     };
     assert_eq!(completion.generation, 8);
-    assert_eq!(completion.references, Err(AgentFailureCode::TimedOut));
+    assert!(completion.references.is_empty());
+    assert_eq!(
+        completion.completeness.reasons()[0].diagnostic_code(),
+        "provider_failure"
+    );
+}
+
+#[test]
+fn unavailable_optional_provider_is_a_complete_empty_source() {
+    let mut references = FakeReferences(Err(AgentFailureCode::Unavailable));
+
+    let ExternalResult::InvocationReferencesDiscovered(completion) = discover_invocation_references(
+        &mut references,
+        InvocationReferenceDiscoveryRequest { generation: 9 },
+    ) else {
+        panic!("reference discovery result");
+    };
+
+    assert!(completion.references.is_empty());
+    assert!(completion.completeness.is_complete());
 }
 
 #[test]
@@ -324,5 +349,6 @@ fn live_references_keep_their_independent_generation_tag() {
         panic!("reference discovery result");
     };
     assert_eq!(completion.generation, 9);
-    assert_eq!(completion.references, Ok(vec![reference()]));
+    assert_eq!(completion.references, vec![reference()]);
+    assert!(completion.completeness.is_complete());
 }

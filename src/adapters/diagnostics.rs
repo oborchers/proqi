@@ -1,6 +1,7 @@
 //! Private, bounded, structured, content-redacted diagnostics.
 
 mod collect;
+mod invocation;
 mod writer;
 
 use std::{path::Path, sync::OnceLock};
@@ -99,6 +100,11 @@ pub enum SafeEvent<'a> {
     AttachmentInaccessible {
         /// Typed content-free adapter failure.
         reason: &'a str,
+    },
+    /// One invocation source returned retained but incomplete results.
+    InvocationIncomplete {
+        /// Typed reason containing only stable codes and aggregate counts.
+        reason: &'a crate::ports::invocation::InvocationIncompleteReason,
     },
     /// One content-redacted submission transition occurred.
     Submission {
@@ -254,6 +260,7 @@ pub fn record(event: SafeEvent<'_>) {
         SafeEvent::AttachmentInaccessible { reason } => {
             tracing::warn!(event = "attachment_inaccessible", reason);
         }
+        SafeEvent::InvocationIncomplete { reason } => invocation::record(reason),
         SafeEvent::Submission {
             submission_id,
             state,
@@ -278,6 +285,15 @@ pub fn record(event: SafeEvent<'_>) {
             state,
             outcome
         ),
+    }
+}
+
+/// Record every stable reason in one incomplete invocation result.
+pub fn record_invocation_completeness(
+    completeness: &crate::ports::invocation::InvocationCompleteness,
+) {
+    for reason in completeness.reasons() {
+        record(SafeEvent::InvocationIncomplete { reason });
     }
 }
 

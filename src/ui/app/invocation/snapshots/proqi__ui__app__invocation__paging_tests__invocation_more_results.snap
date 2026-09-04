@@ -1,0 +1,14 @@
+---
+source: src/ui/app/invocation/paging_tests.rs
+expression: snapshot
+---
+00│┌ more results exist, refine query ──────────────────[x]│
+01││›$s                                                   ││
+02││$skill00                                 Project Skill││
+03││$skill01                                 Project Skill││
+04││$skill02                                 Project Skill││
+05││$skill03                                 Project Skill││
+06││$skill04                                 Project Skill││
+07││$skill05                                 Project Skill││
+08││$skill06                                 Project Skill↓│
+09│└──────────────────────────────────────────────────────┘│

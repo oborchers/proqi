@@ -50,6 +50,7 @@ use crate::{
         agent::AgentTarget,
         editor::{CursorMovement, EditCommand, Editor, EditorFactory, TextViewport},
         environment::{Clock, IdGenerator},
+        invocation::InvocationCompletenessAggregate,
     },
 };
 
@@ -163,6 +164,7 @@ pub struct BoardApp {
     invocation_global: Vec<crate::ports::invocation::InvocationEntry>,
     invocation_project: Vec<crate::ports::invocation::InvocationEntry>,
     invocation_live: Vec<crate::ports::invocation::LiveAgentReference>,
+    invocation_completeness: crate::ports::invocation::InvocationCompletenessAggregate,
 }
 
 impl BoardApp {
@@ -257,6 +259,7 @@ impl BoardApp {
             invocation_global: Vec::new(),
             invocation_project: Vec::new(),
             invocation_live: Vec::new(),
+            invocation_completeness: InvocationCompletenessAggregate::default(),
         }
     }
 

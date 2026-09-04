@@ -1,21 +1,19 @@
 //! Direct, bounded child-process execution without a shell.
 
+mod cancellation;
 mod owned_child;
 
 use std::{
     io::{Read, Write},
     process::{Child, Command, Stdio},
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-        mpsc::{self, Receiver, RecvTimeoutError},
-    },
+    sync::mpsc::{self, Receiver, RecvTimeoutError},
     thread::{self, JoinHandle},
     time::{Duration, Instant},
 };
 
 use crate::ports::environment::{ProcessError, ProcessOutput, ProcessRequest, ProcessRunner};
 
+pub(crate) use cancellation::CancellationFlag;
 use owned_child::OwnedChild;
 
 const MAX_CAPTURE_BYTES: u64 = 1024 * 1024;
@@ -34,36 +32,6 @@ impl Clone for SystemProcessRunner {
             cancellation: self.cancellation.clone(),
             cleanup_incomplete: self.cleanup_incomplete,
         }
-    }
-}
-
-/// Shared, idempotent cancellation for adapter-owned process work.
-#[derive(Clone, Debug, Default)]
-pub(crate) struct CancellationFlag(Arc<AtomicBool>);
-
-impl CancellationFlag {
-    pub(crate) fn cancel(&self) {
-        self.0.store(true, Ordering::Release);
-    }
-
-    pub(crate) fn is_cancelled(&self) -> bool {
-        self.0.load(Ordering::Acquire)
-    }
-
-    pub(crate) fn signal(&self) -> &AtomicBool {
-        &self.0
-    }
-}
-
-impl crate::ports::screenshot::ScreenshotCancellation for CancellationFlag {
-    fn is_cancelled(&self) -> bool {
-        Self::is_cancelled(self)
-    }
-}
-
-impl crate::ports::update::UpdateCancellation for CancellationFlag {
-    fn is_cancelled(&self) -> bool {
-        Self::is_cancelled(self)
     }
 }
 

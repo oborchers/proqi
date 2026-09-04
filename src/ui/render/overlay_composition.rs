@@ -60,6 +60,7 @@ pub(super) fn render(
                     query,
                     entries,
                     selected,
+                    notice: app.invocation_notice(),
                 },
                 theme,
             );

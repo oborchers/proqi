@@ -18,7 +18,7 @@ use crate::ports::{
         SubmissionReceipt, SubmissionRequest,
     },
     environment::{ProcessError, ProcessRequest, ProcessRunner},
-    invocation::{InvocationReferenceCatalog, LiveAgentReference},
+    invocation::{InvocationReferenceCatalog, InvocationReferenceSnapshot},
 };
 
 use contract::ErrorEnvelope;
@@ -118,7 +118,7 @@ impl<R: ProcessRunner> AgentGateway for HerdrGateway<R> {
 impl<R: ProcessRunner + Send> InvocationReferenceCatalog for HerdrGateway<R> {
     fn discover_live_references(
         &mut self,
-    ) -> Result<Vec<LiveAgentReference>, crate::ports::agent::AgentFailureCode> {
+    ) -> Result<InvocationReferenceSnapshot, crate::ports::agent::AgentFailureCode> {
         discovery::live_references(self).map_err(|error| error.stable_code())
     }
 }

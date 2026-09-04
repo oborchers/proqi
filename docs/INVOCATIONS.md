@@ -8,9 +8,9 @@ means the definition is useful catalog evidence but cannot be inserted.
 | Harness / ecosystem | Kind | Project roots | Global roots | Plugin scope | Inserted form | Portability decision |
 | --- | --- | --- | --- | --- | --- | --- |
 | Agent Skills / npx skills | Skill | `.agents/skills` | `~/.agents/skills`, `~/.config/agents/skills` | Harness-specific | `$name` for the documented Codex form | `SKILL.md` metadata is portable; exact forms retain their receiving harness and a receiving harness still decides availability |
-| OpenAI Codex | Skill | `.agents/skills` from cwd through repository root | `~/.agents/skills`; `~/.codex/skills` as npx-skills compatibility | Bundled/system skills are outside user configuration | `$name` | First-class Agent Skills support |
+| OpenAI Codex | Skill | `.agents/skills` from cwd through repository or filesystem root | `~/.agents/skills`; `~/.codex/skills` as npx-skills compatibility | Bundled/system skills are outside user configuration | `$name` | First-class Agent Skills support |
 | OpenAI Codex | Agent | `.codex/agents/*.toml` | `~/.codex/agents/*.toml` | None documented | Catalog-only | Codex documents natural-language delegation and `/agent` thread management, not an exact per-agent token |
-| Claude Code | Skill | `.claude/skills/**/SKILL.md` from cwd through repository root | `~/.claude/skills` | Installed plugin `skills/` | `/name`; plugin `/plugin:name` | Skill wins a same-name legacy command in Claude; Proqi preserves both typed records and orders documented precedence |
+| Claude Code | Skill | `.claude/skills/**/SKILL.md` from cwd through repository or filesystem root | `~/.claude/skills` | Installed plugin `skills/` | `/name`; plugin `/plugin:name` | Skill wins a same-name legacy command in Claude; Proqi preserves both typed records and orders documented precedence |
 | Claude Code | Command | `.claude/commands/**/*.md` | `~/.claude/commands` | Manifest `commands` paths or plugin `commands/` | `/name`; plugin `/plugin:name` | Legacy commands remain documented and invokable |
 | Claude Code | Agent | `.claude/agents/**/*.md` | `~/.claude/agents` | Manifest `agents` paths or plugin `agents/` | `@agent-name`; plugin `@agent-plugin:name` | Agents are never mislabeled as skills or slash commands |
 | OpenCode | Skill | Shared `.agents/skills` | `~/.config/opencode/skills` | Package-managed roots require explicit configuration | Catalog-only | OpenCode's skill tool has no equivalent exact authored token |
@@ -76,10 +76,25 @@ command whose name comes from its filename needs no frontmatter and does not
 require its instruction body to be read.
 
 Skills and Markdown agents still require their existing metadata. The metadata
-line limit, field sanitization, visibility flags, root and traversal budgets,
-canonical-path deduplication, scope, precedence, and plugin limits remain
-unchanged. TOML agents, plugin manifests, and plugin registries require complete
-parsing and retain their separate whole-file limits.
+line limit, field sanitization, visibility flags, canonical-path deduplication,
+scope, and precedence remain unchanged. Project roots follow every ancestor to
+the repository root, or to the filesystem root when no repository exists.
+
+One named work policy bounds roots, retained entries, visited paths, and
+recursive depth. Reaching any dimension returns the deterministic retained
+catalog as incomplete with an exact stable reason. An accepted Claude plugin
+registry has no category-specific count ceilings: plugins, installations, and
+safe manifest component paths proceed until the shared root, path, or
+cancellation budget is exhausted. The registry and each manifest retain their
+separate whole-file byte bounds. An oversized input preserves healthy sources and reports registry-size
+or manifest-size incompleteness; an oversized manifest also retains its
+conventional component directories.
+
+Discovery results from the filesystem, Claude plugins, and live Herdr provider
+share one typed completeness model. Their reasons aggregate without discarding
+usable entries. The picker keeps every semantic match, bounds only its visible
+viewport, and explicitly asks for refinement when more than twenty matches
+exist or discovery is incomplete.
 
 The byte-zero rule applies only to the shared `/plan` and `/goal` starters.
 Discovered compatible slash forms, including project and local skills or
@@ -91,10 +106,15 @@ target forms, and non-boundary occurrences remain plain.
 
 In a Herdr-managed pane, the existing picker refreshes one bounded protocol 19
 snapshot when it opens. Its `Live in Herdr` group contains only recognized
-coding agents. Each row prefers an explicit agent name and composes the
+coding agents. Agent, workspace, and tab row exhaustion retains valid references
+with an explicit incomplete reason. A provider failure differs from a genuine
+empty collection and never removes healthy filesystem entries. Each row prefers
+an explicit agent name and composes the
 workspace label, a distinct tab label, pane, nonduplicate harness, and observed
 state into the existing quiet secondary field. Exact IDs replace unavailable
 workspace or tab labels. Directories and terminal titles never supply labels.
+Outside a Herdr-managed pane, the optional provider is not selected and does
+not mark the filesystem catalog incomplete.
 
 Selection inserts plain text with the agent name plus exact workspace, tab, and
 pane identities. Proqi displays that canonical range as an unbracketed inline

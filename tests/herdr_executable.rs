@@ -27,7 +27,7 @@ fn recorded_fake_executable_proves_direct_semantic_cli_contract() {
         true,
     );
     let references = gateway.discover_live_references().expect("live references");
-    let [reference] = references.as_slice() else {
+    let [reference] = references.references.as_slice() else {
         panic!("expected one live reference");
     };
     assert_eq!(reference.agent_name(), Some("fixture"));

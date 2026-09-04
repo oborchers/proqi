@@ -93,11 +93,17 @@ fn complete(
             Vec::new()
         }
         ExternalResult::InvocationsDiscovered(result) => {
-            app.complete_invocation_discovery(result);
+            let completeness = result.completeness.clone();
+            if app.complete_invocation_discovery(result) {
+                crate::adapters::diagnostics::record_invocation_completeness(&completeness);
+            }
             Vec::new()
         }
         ExternalResult::InvocationReferencesDiscovered(result) => {
-            app.complete_invocation_reference_discovery(result);
+            let completeness = result.completeness.clone();
+            if app.complete_invocation_reference_discovery(result) {
+                crate::adapters::diagnostics::record_invocation_completeness(&completeness);
+            }
             Vec::new()
         }
         ExternalResult::AgentSubmitted {

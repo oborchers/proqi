@@ -41,6 +41,17 @@ pub(super) fn entries(observations: Vec<ObservedEntry>) -> Vec<InvocationEntry> 
     groups.into_values().map(consolidate_group).collect()
 }
 
+pub(super) fn sort_entries(entries: &mut [InvocationEntry]) {
+    entries.sort_by(|left, right| {
+        left.precedence
+            .cmp(&right.precedence)
+            .then_with(|| left.name.to_lowercase().cmp(&right.name.to_lowercase()))
+            .then_with(|| left.kind.cmp(&right.kind))
+            .then_with(|| left.source.cmp(&right.source))
+            .then_with(|| left.canonical_path.cmp(&right.canonical_path))
+    });
+}
+
 fn consolidate_group(mut group: Vec<ObservedEntry>) -> InvocationEntry {
     group.sort_by(|left, right| entry_order(&left.entry, &right.entry));
     if let Some(entry) = shared_agent_skill(&group) {

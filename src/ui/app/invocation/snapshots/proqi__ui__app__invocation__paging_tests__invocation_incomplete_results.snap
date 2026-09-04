@@ -1,0 +1,14 @@
+---
+source: src/ui/app/invocation/paging_tests.rs
+expression: picker_snapshot(&mut app)
+---
+00│┌ incomplete results, refine query ──────────────────[x]│
+01││›$s                                                   ││
+02││$skill                                   Project Skill││
+03││                                                      ││
+04│└──────────────────────────────────────────────────────┘│
+05││
+06││
+07│  fixture│
+08│  1 thought · edit · saved│
+09│  Esc Board│

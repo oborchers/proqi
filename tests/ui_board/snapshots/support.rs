@@ -53,7 +53,7 @@ pub(super) fn install_inline_invocation_fixture(fixture: &mut Fixture) -> &'stat
     };
     fixture
         .app
-        .complete_invocation_discovery(Ok(InvocationDiscovery {
+        .complete_invocation_discovery(InvocationDiscovery {
             generation: request.generation,
             cwd: request.cwd.clone(),
             global: vec![
@@ -94,7 +94,8 @@ pub(super) fn install_inline_invocation_fixture(fixture: &mut Fixture) -> &'stat
                 },
             ],
             project: Vec::new(),
-        }));
+            completeness: proqi::ports::invocation::InvocationCompleteness::default(),
+        });
     let content = "/plan ask $review\nUse /implement-in-worktree then /plan";
     fixture.input(super::UiInput::Paste(content.to_owned()));
     content

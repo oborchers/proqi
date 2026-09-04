@@ -244,14 +244,11 @@ const fn catalog_only_global(relative: &'static str, precedence: u16) -> Compati
 pub(super) fn project_bases(cwd: &Path) -> Vec<PathBuf> {
     let mut bases = Vec::new();
     let mut current = cwd.to_path_buf();
-    for _ in 0..16 {
+    loop {
         bases.push(current.clone());
         if current.join(".git").exists() || !current.pop() {
             break;
         }
-    }
-    if !bases.iter().any(|path| path.join(".git").exists()) {
-        bases.truncate(1);
     }
     bases
 }

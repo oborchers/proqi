@@ -38,11 +38,13 @@ fn newest_result_wins_over_stale_success_and_failure() {
     let newest_generation = newest.generation;
     app.complete_invocation_reference_discovery(InvocationReferenceDiscovery {
         generation: newest_generation,
-        references: Ok(Vec::new()),
+        references: Vec::new(),
+        completeness: crate::ports::invocation::InvocationCompleteness::default(),
     });
     app.complete_invocation_reference_discovery(InvocationReferenceDiscovery {
         generation: old_generation,
-        references: Ok(vec![reviewer(AgentState::Working)]),
+        references: vec![reviewer(AgentState::Working)],
+        completeness: crate::ports::invocation::InvocationCompleteness::default(),
     });
     assert!(app.invocation_view().expect("picker").1.is_empty());
 
@@ -51,6 +53,79 @@ fn newest_result_wins_over_stale_success_and_failure() {
     complete_live(&mut app, &newest, Ok(vec![reviewer(AgentState::Idle)]));
     complete_live(&mut app, &stale, Err(AgentFailureCode::TimedOut));
     assert_eq!(app.invocation_view().expect("picker").1.len(), 1);
+    assert_eq!(app.invocation_notice(), None);
+}
+
+#[test]
+fn provider_failure_differs_from_empty_and_preserves_filesystem_choices() {
+    let cwd = tempfile::tempdir().expect("tempdir");
+    let (mut app, _, _) = app("prompt", cwd.path());
+    install_catalog(
+        &mut app,
+        cwd.path(),
+        vec![entry(
+            "$healthy",
+            crate::ports::invocation::InvocationKind::Skill,
+            crate::ports::invocation::InvocationScope::Project,
+        )],
+    );
+
+    let empty = app.open_invocation_picker();
+    complete_live(&mut app, &empty, Ok(Vec::new()));
+    assert_eq!(app.invocation_notice(), None);
+    assert!(
+        app.invocation_view()
+            .expect("empty provider picker")
+            .1
+            .iter()
+            .any(|choice| choice.token == "$healthy")
+    );
+
+    let failed = app.open_invocation_picker();
+    complete_live(&mut app, &failed, Err(AgentFailureCode::TimedOut));
+    assert_eq!(
+        app.invocation_notice(),
+        Some(" incomplete results, refine query ")
+    );
+    assert!(
+        app.invocation_view()
+            .expect("failed provider picker")
+            .1
+            .iter()
+            .any(|choice| choice.token == "$healthy")
+    );
+}
+
+#[test]
+fn settled_standalone_picker_does_not_report_an_optional_provider_as_incomplete() {
+    let cwd = tempfile::tempdir().expect("tempdir");
+    let (mut app, _, _) = app("prompt", cwd.path());
+    install_catalog(
+        &mut app,
+        cwd.path(),
+        vec![entry(
+            "$healthy",
+            crate::ports::invocation::InvocationKind::Skill,
+            crate::ports::invocation::InvocationScope::Project,
+        )],
+    );
+    let effects = app.open_invocation_picker();
+    let request = effects
+        .iter()
+        .find_map(|effect| match effect {
+            Effect::DiscoverInvocationReferences(request) => Some(request),
+            _ => None,
+        })
+        .expect("live refresh effect");
+
+    app.complete_invocation_reference_discovery(InvocationReferenceDiscovery {
+        generation: request.generation,
+        references: Vec::new(),
+        completeness: crate::ports::invocation::InvocationCompleteness::Complete,
+    });
+
+    assert_eq!(app.invocation_notice(), None);
+    assert_eq!(app.invocation_view().expect("settled picker").1.len(), 1);
 }
 
 #[test]
@@ -69,12 +144,13 @@ fn picker_snapshot_stays_stable_until_reopened() {
     let [Effect::DiscoverInvocations(request)] = filesystem.as_slice() else {
         panic!("filesystem refresh");
     };
-    app.complete_invocation_discovery(Ok(InvocationDiscovery {
+    app.complete_invocation_discovery(InvocationDiscovery {
         generation: request.generation,
         cwd: cwd.path().to_owned(),
         global: Vec::new(),
         project: Vec::new(),
-    }));
+        completeness: crate::ports::invocation::InvocationCompleteness::default(),
+    });
     assert!(
         app.invocation_view().expect("stable picker").1[0]
             .qualifier
@@ -91,7 +167,7 @@ fn picker_snapshot_stays_stable_until_reopened() {
 }
 
 #[test]
-fn completion_enforces_the_canonical_live_result_bound() {
+fn completion_retains_every_reference_supplied_by_the_provider() {
     let cwd = tempfile::tempdir().expect("tempdir");
     let (mut app, _, _) = app("prompt", cwd.path());
     install_catalog(&mut app, cwd.path(), Vec::new());
@@ -109,10 +185,7 @@ fn completion_enforces_the_canonical_live_result_bound() {
         .collect();
     complete_live(&mut app, &effects, Ok(references));
 
-    assert_eq!(
-        app.invocation_view().expect("bounded picker").1.len(),
-        crate::ports::invocation::MAX_INVOCATION_REFERENCES
-    );
+    assert_eq!(app.invocation_view().expect("picker").1.len(), 70);
 }
 
 #[test]
@@ -140,7 +213,7 @@ fn full_live_catalog_does_not_crowd_out_installed_invocations() {
             ),
         ],
     );
-    let live = (0..crate::ports::invocation::MAX_INVOCATION_REFERENCES)
+    let live = (0..70)
         .map(|index| {
             reference(
                 &format!("reviewer-{index}"),
@@ -164,8 +237,5 @@ fn full_live_catalog_does_not_crowd_out_installed_invocations() {
             .count(),
         1
     );
-    assert_eq!(
-        choices.len(),
-        3 + crate::ports::invocation::MAX_INVOCATION_REFERENCES
-    );
+    assert_eq!(choices.len(), 73);
 }
