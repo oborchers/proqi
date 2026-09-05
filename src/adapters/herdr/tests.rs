@@ -17,6 +17,8 @@ use crate::{
 
 use super::HerdrGateway;
 
+#[path = "tests/compatibility.rs"]
+mod compatibility;
 #[path = "tests/hermes.rs"]
 mod hermes;
 #[path = "tests/kilo.rs"]
@@ -92,18 +94,25 @@ fn source() -> PaneContext {
 }
 
 fn schema(protocol: u32) -> Value {
-    json!({
-        "protocol": protocol,
-        "schema_version": 1,
-        "schemas": {
-            "request": {"const": "agent.prompt"},
-            "response": {"const": "agent_prompted"}
-        }
-    })
+    let recorded = match protocol {
+        19 => include_str!("tests/fixtures/protocol19/schema.json"),
+        _ => include_str!("tests/fixtures/protocol20/schema.json"),
+    };
+    let mut value: Value = serde_json::from_str(recorded).expect("recorded Herdr schema");
+    value["protocol"] = json!(protocol);
+    value
 }
 
 fn snapshot(protocol: u32) -> Value {
-    json!({"result":{"snapshot":{"protocol":protocol,"version":"0.8.0"}}})
+    json!({"result":{"snapshot":{"protocol":protocol,"version":fixture_version(protocol)}}})
+}
+
+const fn fixture_version(protocol: u32) -> &'static str {
+    match protocol {
+        19 => "0.8.0",
+        20 => "0.8.2",
+        _ => "provisional-fixture",
+    }
 }
 
 fn current(context: &PaneContext) -> Value {
@@ -131,9 +140,13 @@ fn rect(area: PaneRect) -> Value {
 }
 
 fn capability_responses(context: &PaneContext) -> Vec<FakeResponse> {
+    capability_responses_for_protocol(context, 19)
+}
+
+fn capability_responses_for_protocol(context: &PaneContext, protocol: u32) -> Vec<FakeResponse> {
     vec![
-        success(schema(19)),
-        success(snapshot(19)),
+        success(schema(protocol)),
+        success(snapshot(protocol)),
         success(current(context)),
         success(layout(context)),
     ]
@@ -183,7 +196,16 @@ fn discovery_responses(
     agents: Value,
     right: Option<(&str, PaneRect)>,
 ) -> Vec<FakeResponse> {
-    let mut responses = capability_responses(context);
+    discovery_responses_for_protocol(context, 19, agents, right)
+}
+
+fn discovery_responses_for_protocol(
+    context: &PaneContext,
+    protocol: u32,
+    agents: Value,
+    right: Option<(&str, PaneRect)>,
+) -> Vec<FakeResponse> {
+    let mut responses = capability_responses_for_protocol(context, protocol);
     responses.push(success(json!({"result":{"agents":agents}})));
     drop(agents);
     responses.push(success(neighbor(context, Direction::Up, None)));
@@ -265,22 +287,6 @@ fn ordinary_neighbor_without_agent_identity_does_not_hide_a_valid_target() {
         .expect("ordinary shell is ignored");
     assert_eq!(targets.len(), 1);
     assert_eq!(targets[0].direction, Direction::Right);
-}
-
-#[test]
-fn protocol_mismatch_timeout_and_malformed_output_fail_closed() {
-    let (mut mismatch, _) = gateway(vec![success(schema(18)), success(snapshot(18))]);
-    assert!(matches!(
-        mismatch.capabilities(),
-        Err(AgentError::Unsupported(_))
-    ));
-    let (mut timed_out, _) = gateway(vec![FakeResponse::Error(ProcessError::TimedOut)]);
-    assert_eq!(timed_out.capabilities(), Err(AgentError::TimedOut));
-    let (mut malformed, _) = gateway(vec![success(json!({"not":"schema"}))]);
-    assert!(matches!(
-        malformed.capabilities(),
-        Err(AgentError::Malformed(_))
-    ));
 }
 
 #[test]
@@ -407,22 +413,6 @@ fn submission_revalidates_and_passes_exact_text_as_one_distinct_argument() {
     );
     assert_eq!(prompt.stdin, None);
     assert_eq!(prompt.timeout, Duration::from_secs(5));
-}
-
-#[test]
-fn capability_negotiation_rejects_a_schema_without_semantic_prompt_contracts() {
-    let context = source();
-    let incomplete = json!({"protocol":19,"schema_version":1,"schemas":{}});
-    let (mut gateway, _) = gateway(vec![
-        success(incomplete),
-        success(snapshot(19)),
-        success(current(&context)),
-        success(layout(&context)),
-    ]);
-    assert!(matches!(
-        gateway.capabilities(),
-        Err(AgentError::Unsupported(_))
-    ));
 }
 
 #[test]

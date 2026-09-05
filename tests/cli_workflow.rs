@@ -13,6 +13,8 @@ use serde_json::Value;
 mod diagnostics;
 #[path = "cli_workflow/doctor.rs"]
 mod doctor;
+#[path = "support/herdr.rs"]
+mod herdr_fixture;
 #[path = "cli_workflow/session_contract.rs"]
 mod session_contract;
 

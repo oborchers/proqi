@@ -16,7 +16,8 @@ use crate::ports::environment::{ProcessError, ProcessOutput, ProcessRequest, Pro
 pub(crate) use cancellation::CancellationFlag;
 use owned_child::OwnedChild;
 
-const MAX_CAPTURE_BYTES: u64 = 1024 * 1024;
+/// Maximum bytes captured independently from child-process stdout or stderr.
+pub const MAX_CAPTURE_BYTES: u64 = 1024 * 1024;
 const TERMINATION_GRACE: Duration = Duration::from_millis(250);
 
 /// Operating-system process runner with bounded output and a hard deadline.

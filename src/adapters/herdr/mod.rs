@@ -1,5 +1,6 @@
 //! Optional, fail-closed Herdr semantic prompt adapter.
 
+mod compatibility;
 mod contract;
 mod discovery;
 mod harness;
@@ -23,12 +24,11 @@ use crate::ports::{
 
 use contract::ErrorEnvelope;
 
+pub use compatibility::HerdrCompatibilityPolicy;
 pub(crate) use notification::{HerdrEnvironment, HerdrPauseNotifier};
 
 const DISCOVERY_TIMEOUT: Duration = Duration::from_secs(3);
 const SUBMISSION_TIMEOUT: Duration = Duration::from_secs(5);
-const SUPPORTED_PROTOCOL: u32 = 19;
-const SUPPORTED_SCHEMA: u32 = 1;
 
 /// Herdr gateway using direct, bounded child-process calls.
 pub struct HerdrGateway<R> {

@@ -565,7 +565,7 @@ overwrite another source's reason.
 
 `InvocationReferenceCatalog` extends this discovery boundary with typed,
 ephemeral collaborator locations. The Herdr adapter implements it from one
-bounded protocol 19 snapshot and projects only agent name, harness, correlated
+bounded schema-validated supported snapshot and projects only agent name, harness, correlated
 workspace and tab identity, pane identity, and observed state. Agent, workspace,
 and tab row bounds retain their valid prefix and report the exact typed source;
 there is no second reference-count truncation. Raw snapshot JSON, directories,
@@ -1320,8 +1320,18 @@ final successful check and before the receiving agent opens it. Proqi does not
 silently copy external files or rewrite canonical paths.
 
 `v0.1.0` implements this boundary against Herdr's structured schema
-and protocol discovery commands. Capability discovery verifies both the
-`agent.prompt` request and `agent_prompted` receipt shapes. Explicit
+and protocol discovery commands. One typed adapter policy accepts schema 1
+with the qualified protocols 19 and 20 plus the single provisional protocol 21,
+requires the live snapshot to report the same protocol, and verifies the exact required `agent.prompt`
+request, parameters, `agent_prompted` receipt, agent identity, session, and
+state shapes. The policy tolerates additive unknown response fields but rejects
+an older protocol and every protocol above the one-version provisional window,
+even when its schema looks similar. Herdr does not document an external
+forward-compatibility guarantee. Provisional acceptance is therefore an explicit
+bounded availability tradeoff, not a claim of semantic compatibility, and still
+fails closed when any consumed request or response shape changes.
+Capabilities, targets, and diagnostics retain the actual negotiated protocol.
+Explicit
 `interactive_ready=false` or `launch_pending=true` metadata makes a target
 ineligible, while absent optional readiness metadata remains compatible. It
 fails closed when the installed client and server no longer match the supported
@@ -1337,15 +1347,16 @@ Proqi accepts the
 matching receipt and immediately rediscovers adjacent targets without retrying
 the prompt.
 
-Herdr protocol 19 acknowledges accepted text entry but does not guarantee a
-distinct prompt boundary when another sender submits concurrently. This is a
-known provider-contract limitation. Proqi retains target verification, receipt
-matching, durable journaling, and remove-only-after-acceptance semantics, but
-cannot prevent the receiving harness from merging overlapping inputs. Protocol
-19 also cannot atomically reject replacement of one supported sessionless
-harness by another instance of the same kind in the same pane between
-revalidation and delivery because it exposes neither a pre-session instance
-identity nor an expected-instance precondition.
+Accepted Herdr protocols 19 through 21 acknowledge accepted text entry but do not
+guarantee a distinct prompt boundary when another sender submits concurrently.
+This is a known provider-contract limitation. Proqi retains target
+verification, receipt matching, durable journaling, and
+remove-only-after-acceptance semantics, but cannot prevent the receiving
+harness from merging overlapping inputs. These protocols also cannot atomically
+reject replacement of one supported sessionless harness by another instance of
+the same kind in the same pane between revalidation and delivery because they
+expose neither a pre-session instance identity nor an expected-instance
+precondition.
 
 Herdr also implements a separate display-only `PanePresentation` port. In a
 managed pane, the terminal runtime publishes `title=proqi` and
@@ -1643,6 +1654,15 @@ Tests that require a real desktop clipboard, a specific terminal emulator, or a
 live Herdr session are gated smoke tests. Their deterministic equivalents remain
 required on every pull request. Live smoke tests remain explicit milestone or
 diagnostic work and are not scheduled.
+
+One scheduled workflow is the narrow exception: the Herdr compatibility
+sentinel downloads the checksum-declared Linux CLI from the latest official
+release, isolates it from repository write credentials and user state, and runs
+its schema through the locally executable `cargo xtask herdr-compatibility`
+policy. It does not start a daemon or harness. A provisional or incompatible
+result creates one content-free, deduplicated qualification issue. Promoting a
+protocol remains a reviewed release change that advances the bounded provisional
+window by exactly one.
 
 New coding-agent harnesses use
 [`HARNESS_QUALIFICATION_CHECKLIST.md`](HARNESS_QUALIFICATION_CHECKLIST.md) for

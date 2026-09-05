@@ -715,15 +715,15 @@ becomes follow-up input. Proqi verifies at submission time that the target
 exposes Herdr's semantic request and receipt contract. It never substitutes raw
 key injection.
 
-Herdr protocol 19 does not guarantee a distinct user-turn boundary when another
-sender submits concurrently. Overlapping inputs can therefore merge at the
-receiving harness even though Herdr returns an accepted receipt. Proqi treats
-this as a known integration limitation and preserves its ordinary verified
-submission workflow. Protocol 19 also has no stable pre-session agent-instance
-identity or atomic expected-instance precondition. Replacing one supported
-sessionless harness with another instance of the same kind in the same pane
-during the narrow interval between revalidation and delivery is therefore not
-detectable by Proqi.
+Accepted Herdr protocols 19 through 21 do not guarantee a distinct user-turn
+boundary when another sender submits concurrently. Overlapping inputs can
+therefore merge at the receiving harness even though Herdr returns an accepted
+receipt. Proqi treats this as a known integration limitation and preserves its
+ordinary verified submission workflow. These protocols also have no stable
+pre-session agent-instance identity or atomic expected-instance precondition.
+Replacing one supported sessionless harness with another instance of the same
+kind in the same pane during the narrow interval between revalidation and
+delivery is therefore not detectable by Proqi.
 
 Each verified adjacent target appears once in the integration row, without its
 readiness label. Board mode shows the compact `s Submit` and `S Submit & keep`
@@ -939,7 +939,8 @@ is the complete result.
 
 In a managed Herdr pane, the same invocation picker also presents a distinct
 `Live in Herdr` group. It refreshes on each picker open and lists only coding
-agents recognized by the current Herdr server from one protocol 19 snapshot.
+agents recognized by the current Herdr server from one schema-validated
+supported snapshot.
 User-facing workspace and tab labels come only from that snapshot, with exact
 stable IDs as the fallback when labels are unavailable. Proqi never derives
 labels from directories or terminal titles, and it never includes ordinary

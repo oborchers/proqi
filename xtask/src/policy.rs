@@ -38,6 +38,7 @@ pub(crate) fn check(root: &Path) -> Result<(), String> {
         violations.extend(check_source(relative, &source));
     }
     violations.extend(crate::instructions::check(root)?);
+    violations.extend(crate::herdr_compatibility::policy_findings(root)?);
     violations.extend(crate::release_policy::check(root)?);
     if layer_counts.contains(&0) {
         return Err(format!(
