@@ -10,7 +10,7 @@ use crate::{
     ui::PastePayload,
 };
 
-use super::{BoardApp, Choice, InvocationPopup};
+use super::{BoardApp, Choice, InvocationPopup, choices as choice_catalog, matcher};
 
 impl BoardApp {
     pub(in crate::ui::app) fn open_invocation_picker(&mut self) -> Vec<Effect> {
@@ -27,13 +27,16 @@ impl BoardApp {
             self.set_warning("focus a thought before inserting an invocation");
             return Vec::new();
         }
-        self.invocation_popup = Some(InvocationPopup {
+        let mut popup = InvocationPopup {
             query: String::new(),
             range: None,
             manual: true,
             selected: 0,
             scroll: 0,
-        });
+            choices: Vec::new(),
+        };
+        popup.choices = choice_catalog::build(self, &popup);
+        self.invocation_popup = Some(popup);
         self.begin_reference_refresh()
     }
 
@@ -78,6 +81,7 @@ impl BoardApp {
         self.invocation_completeness
             .set_provider(discovery.completeness);
         if self.invocation_popup.is_some() {
+            self.rebuild_invocation_choices();
             self.clamp_invocation_popup();
         } else if matches!(
             self.interaction_mode(),
@@ -95,6 +99,7 @@ impl BoardApp {
         self.invocation_reference_pending = Some(generation);
         self.invocation_live.clear();
         self.invocation_completeness.clear_provider();
+        self.rebuild_invocation_choices();
         vec![Effect::DiscoverInvocationReferences(
             InvocationReferenceDiscoveryRequest { generation },
         )]
@@ -106,19 +111,24 @@ impl BoardApp {
     }
 }
 
-pub(super) fn choices(
-    app: &BoardApp,
-    popup: &InvocationPopup,
-    normalized_query: &str,
-) -> Vec<Choice> {
-    app.invocation_live
+pub(super) fn choices(app: &BoardApp, popup: &InvocationPopup) -> Vec<Choice> {
+    let mut ranked = app
+        .invocation_live
         .iter()
-        .filter(|reference| matches(reference, popup.manual, normalized_query))
-        .map(|reference| choice(reference, &app.invocation_live))
+        .filter_map(|reference| match_rank(reference, popup).map(|rank| (reference, rank)))
+        .collect::<Vec<_>>();
+    ranked.sort_by_key(|(_, rank)| *rank);
+    ranked
+        .into_iter()
+        .map(|(reference, rank)| choice(reference, &app.invocation_live, rank))
         .collect()
 }
 
-fn choice(reference: &LiveAgentReference, all: &[LiveAgentReference]) -> Choice {
+fn choice(
+    reference: &LiveAgentReference,
+    all: &[LiveAgentReference],
+    rank: matcher::MatchRank,
+) -> Choice {
     let token = primary_label(reference).to_owned();
     let (qualifier, qualifier_fallbacks) = qualifiers(reference, &token);
     Choice {
@@ -129,6 +139,7 @@ fn choice(reference: &LiveAgentReference, all: &[LiveAgentReference]) -> Choice 
         qualifier_fallbacks,
         group: Some(reference.provider().label().to_owned()),
         token,
+        rank,
     }
 }
 
@@ -298,37 +309,35 @@ fn labeled_identity(label: Option<&str>, identity: &str) -> String {
     )
 }
 
-fn matches(reference: &LiveAgentReference, manual: bool, normalized_query: &str) -> bool {
+fn match_rank(
+    reference: &LiveAgentReference,
+    popup: &InvocationPopup,
+) -> Option<matcher::MatchRank> {
     let primary = primary_label(reference);
-    if manual {
-        return reference
-            .agent_name()
-            .is_some_and(|name| contains(name, normalized_query))
-            || [
-                primary,
-                reference.harness().as_str(),
-                reference.workspace_id(),
-                reference.tab_id(),
-                reference.pane_id(),
-                reference.provider().label(),
-            ]
-            .iter()
-            .any(|value| contains(value, normalized_query))
-            || reference
-                .workspace_label()
-                .is_some_and(|label| contains(label, normalized_query))
-            || reference
-                .tab_label()
-                .is_some_and(|label| contains(label, normalized_query));
-    }
-    let Some(name_query) = normalized_query.strip_prefix('@') else {
-        return false;
-    };
-    !name_query.is_empty()
-        && (primary.to_lowercase().starts_with(name_query)
-            || reference.pane_id().to_lowercase().starts_with(name_query))
-}
-
-fn contains(value: &str, query: &str) -> bool {
-    value.to_lowercase().contains(query)
+    let token = format!("@{}", primary.trim_start_matches('@'));
+    let pane_token = format!("@{}", reference.pane_id().trim_start_matches('@'));
+    let automatic_pane = (!popup.manual)
+        .then(|| matcher::token(&pane_token, &popup.query))
+        .flatten();
+    matcher::token(&token, &popup.query)
+        .into_iter()
+        .chain(automatic_pane)
+        .min()
+        .or_else(|| {
+            popup.manual.then_some(()).and_then(|()| {
+                [
+                    primary,
+                    reference.harness().as_str(),
+                    reference.workspace_id(),
+                    reference.tab_id(),
+                    reference.pane_id(),
+                ]
+                .iter()
+                .copied()
+                .chain(reference.workspace_label())
+                .chain(reference.tab_label())
+                .filter_map(|value| matcher::secondary(value, &popup.query))
+                .min()
+            })
+        })
 }

@@ -95,7 +95,7 @@ pub(super) mod contract {
         });
     }
 
-    pub(super) fn target(harness: &str) -> AgentTarget {
+    pub(crate) fn target(harness: &str) -> AgentTarget {
         let source = PaneContext {
             workspace_id: "w1".to_owned(),
             tab_id: "w1:t1".to_owned(),
@@ -158,6 +158,44 @@ pub(super) mod contract {
             app.editor_snapshot().expect("editor").content,
             "$pl middle $pl"
         );
+    }
+
+    #[test]
+    fn automatic_picker_preserves_selection_and_scroll_across_resize_and_focus_events() {
+        let cwd = tempfile::tempdir().expect("tempdir");
+        let (mut app, mut ids, clock) = app("$sk", cwd.path());
+        install(
+            &mut app,
+            cwd.path(),
+            (0..6)
+                .map(|index| {
+                    entry(
+                        &format!("$skill-{index}"),
+                        InvocationKind::Skill,
+                        InvocationScope::Project,
+                    )
+                })
+                .collect(),
+        );
+        let Some(popup) = app.invocation_popup.as_mut() else {
+            panic!("automatic popup");
+        };
+        popup.selected = 4;
+        popup.scroll = 2;
+
+        for input in [
+            UiInput::Resize {
+                width: 72,
+                height: 18,
+            },
+            UiInput::HostFocusLost,
+            UiInput::HostFocusGained,
+        ] {
+            app.handle(input, &mut ids, &clock);
+            let popup = app.invocation_popup.as_ref().expect("popup remains open");
+            assert_eq!(popup.selected, 4);
+            assert_eq!(popup.scroll, 2);
+        }
     }
 
     #[test]

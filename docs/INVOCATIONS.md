@@ -36,6 +36,48 @@ relationship, and the reverse symlink direction does not gain shared forms.
 Copy-mode installations remain separate harness-specific entries because their
 physical definitions can diverge even when names and metadata initially match.
 
+## Search and ranking
+
+The automatic editor picker and the explicit manual picker share one
+deterministic matcher. If a query begins with `$`, `/`, or `@`, that sigil is a
+hard namespace filter. The weaker matching stages operate within the token body,
+so `/email` may match the contiguous suffix of
+`/aos-communication-email`, while slash, dollar, and at forms never mix.
+
+Both candidate and query use NFKC, Unicode lowercase, and NFKC again. This makes
+precomposed and combining spellings such as `café` and `café` equivalent and
+keeps case handling locale-independent. It is deliberately not accent folding:
+`cafe` does not equal `café`. Hyphens, underscores, colons, slashes, and dots
+remain significant when typed and create boundaries for ranking.
+
+The best-first order is:
+
+1. Exact token.
+2. Token prefix.
+3. Contiguous token-body fragment, with a boundary start preferred.
+4. Ordered token-body subsequence, preferring separator boundaries, fewer
+   contiguous runs, a compact span, fewer gaps, and an earlier start.
+5. The existing harness precedence, token, kind, source, canonical path, and
+   provider order as the stable final tie breaker.
+
+The token is always the primary search field. Automatic filesystem completion
+searches no other field. The manual picker may also fuzzy-search a definition
+description, but every description hit ranks below every token hit; scope and
+source labels do not participate. Live Herdr rows use the same primary ranking
+over their `@name` form. Automatic live-reference lookup also accepts the
+existing exact pane-ID alias at token rank and still inserts the canonical
+named token. Harness and topology fields, including pane IDs in manual lookup,
+remain subordinate fields inside the distinct `Live in Herdr` group.
+
+The scorer uses dynamic programming over query and token characters in
+O(E × Q × T) time and O(T) temporary memory per candidate. Discovery bounds E
+at 2,048 retained entries and the picker bounds Q at 128 characters. One ranked
+choice set is cached until the query, compatible target, filesystem catalog, or
+live-reference generation changes, so frame measurement, rendering, notices,
+scrolling, and hit testing do not rerun the scorer. Matching never truncates the
+semantic result set; the existing viewport and truthful overflow and
+incompleteness notices remain the presentation bounds.
+
 ## Target boundaries and shared built-ins
 
 If verified adjacent targets map to documented harnesses, completion and
@@ -125,6 +167,19 @@ or otherwise mutates the target.
 
 ## Evidence and licenses
 
+- Black-box observation of the installed Claude Code 2.1.260 picker on
+  2026-09-04 showed `/aos-ce` ranking `/aos-communication-email` first,
+  `/aos-mi` ranking the token hit `/aos-media-image` above a description-only
+  result, and `/aos-email` producing no match. This is a behavioral reference,
+  not an exact compatibility target; no proprietary implementation was
+  inspected or copied.
+- [fzf's scoring documentation](https://github.com/junegunn/fzf/blob/master/src/algo/algo.go)
+  describes boundary, gap, and consecutive-match signals and the O(nm)
+  optimal matcher. fzf is MIT licensed. Proqi's smaller rank model is an
+  independent implementation.
+- [Visual Studio Code's fuzzy scorer](https://github.com/microsoft/vscode/blob/main/src/vs/base/common/fuzzyScorer.ts)
+  provides an MIT-licensed command-palette reference for noncontiguous matching
+  and stable secondary comparison. No source code was copied.
 - [Claude Code skills and slash commands](https://code.claude.com/docs/en/slash-commands), [subagents](https://code.claude.com/docs/en/sub-agents), and [plugin manifests](https://code.claude.com/docs/en/plugins-reference) are vendor documentation.
 - [OpenAI Codex skills](https://developers.openai.com/codex/skills/) and [subagents](https://developers.openai.com/codex/subagents/) are vendor documentation.
 - [OpenAI Codex developer commands](https://learn.chatgpt.com/docs/developer-commands?surface=cli) documents `/plan`, `/goal`, and their CLI availability.

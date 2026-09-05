@@ -605,6 +605,30 @@ query. Any active completeness reason takes precedence in that title. Accepted
 incomplete results emit one structured diagnostic per typed reason, containing
 only stable codes and aggregate counts.
 
+One UI-owned invocation matcher ranks built-ins, filesystem forms, and live
+references without changing discovery order or completeness. It applies NFKC,
+Unicode lowercase, and NFKC again, preserves `$`, `/`, and `@` as exact namespace
+filters, and ranks exact, prefix, contiguous, and ordered-subsequence token
+matches in that order. Separator boundaries, contiguous runs, match span, and
+gaps refine fuzzy results. Stable sorting leaves the existing harness
+precedence, token, kind, source, canonical path, and provider order as the final
+tie breaker. Manual description and live-topology fields use a subordinate
+field rank. Automatic filesystem completion searches only the canonical
+invocation token. Automatic live-reference completion additionally accepts the
+existing exact pane-ID alias at token rank, while insertion remains the
+canonical named `@` token.
+
+Ranking is O(E × Q × T) over retained entries, normalized query characters, and
+normalized token characters. Discovery already bounds E at 2,048 and the picker
+bounds Q at 128 characters; definition metadata bounds ordinary names before a
+form is built. Actual local catalogs are normally tens of entries. The reducer
+computes and retains one ranked choice set only when the query, compatible
+target, filesystem catalog, or live-reference generation changes. Frame
+measurement, rendering, notices, scrolling, and hit testing read that retained
+set without reranking it. Blocking discovery remains on the existing external
+lane. The maximum valid catalog and the no-rerank frame path are covered without
+result truncation.
+
 Filesystem results update state only when generation and cwd still match, so
 stale external work cannot leak an older project catalog. Completion derives a
 byte range from the exact editor snapshot, moves the existing editor selection
