@@ -184,6 +184,47 @@ enum SourceMessage {
     Failed(InputFailure),
 }
 
+#[derive(Debug, Eq, PartialEq)]
+enum LeaseDecision {
+    Continue,
+    ResetAfterSupervisorGap { gap: Duration },
+    Unresponsive,
+}
+
+struct SourceLease {
+    last_response: Instant,
+    last_observation: Instant,
+}
+
+impl SourceLease {
+    fn new(now: Instant) -> Self {
+        Self {
+            last_response: now,
+            last_observation: now,
+        }
+    }
+
+    fn observe(&mut self, now: Instant, reader_responded: bool) -> LeaseDecision {
+        let supervisor_gap = now.saturating_duration_since(self.last_observation);
+        self.last_observation = now;
+        if reader_responded {
+            self.last_response = now;
+            return LeaseDecision::Continue;
+        }
+        if supervisor_gap >= SOURCE_STALL_LIMIT {
+            self.last_response = now;
+            return LeaseDecision::ResetAfterSupervisorGap {
+                gap: supervisor_gap,
+            };
+        }
+        if now.saturating_duration_since(self.last_response) >= SOURCE_STALL_LIMIT {
+            LeaseDecision::Unresponsive
+        } else {
+            LeaseDecision::Continue
+        }
+    }
+}
+
 fn supervise_input(
     mut source: Box<dyn EventSource>,
     sender: &SyncSender<InputMessage>,
@@ -197,28 +238,37 @@ fn supervise_input(
         read_source(&mut *source, &source_sender, &reader_stop);
     });
     let mut pending_resize = None;
-    let mut last_response = Instant::now();
+    let mut lease = SourceLease::new(Instant::now());
     while !stop.load(Ordering::Acquire) {
         flush_resize(sender, &mut pending_resize);
         match source_receiver.recv_timeout(MONITOR_INTERVAL) {
-            Ok(SourceMessage::Responsive) => last_response = Instant::now(),
+            Ok(SourceMessage::Responsive) => {
+                let _decision = lease.observe(Instant::now(), true);
+            }
             Ok(SourceMessage::Event(event)) => {
-                last_response = Instant::now();
+                let _decision = lease.observe(Instant::now(), true);
                 deliver(event, sender, stop, &mut pending_resize, latest_sequence);
             }
             Ok(SourceMessage::Failed(failure)) => {
                 let _sent = send_lossless(sender, InputMessage::Failed(failure), stop);
                 break;
             }
-            Err(RecvTimeoutError::Timeout) if last_response.elapsed() >= SOURCE_STALL_LIMIT => {
-                let _sent = send_lossless(
-                    sender,
-                    InputMessage::Failed(InputFailure::Unresponsive),
-                    stop,
-                );
-                break;
-            }
-            Err(RecvTimeoutError::Timeout) => {}
+            Err(RecvTimeoutError::Timeout) => match lease.observe(Instant::now(), false) {
+                LeaseDecision::Continue => {}
+                LeaseDecision::ResetAfterSupervisorGap { gap } => {
+                    crate::adapters::diagnostics::record_input_lease_reset(
+                        u64::try_from(gap.as_millis()).unwrap_or(u64::MAX),
+                    );
+                }
+                LeaseDecision::Unresponsive => {
+                    let _sent = send_lossless(
+                        sender,
+                        InputMessage::Failed(InputFailure::Unresponsive),
+                        stop,
+                    );
+                    break;
+                }
+            },
             Err(RecvTimeoutError::Disconnected) => {
                 let _sent = send_lossless(
                     sender,

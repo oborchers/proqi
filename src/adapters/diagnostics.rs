@@ -288,6 +288,15 @@ pub fn record(event: SafeEvent<'_>) {
     }
 }
 
+/// Record one content-free input lease reset without widening the public event vocabulary.
+pub(crate) fn record_input_lease_reset(observer_gap_ms: u64) {
+    tracing::warn!(
+        event = "input_lease_reset",
+        reason = "supervisor_gap",
+        observer_gap_ms
+    );
+}
+
 /// Record every stable reason in one incomplete invocation result.
 pub fn record_invocation_completeness(
     completeness: &crate::ports::invocation::InvocationCompleteness,
