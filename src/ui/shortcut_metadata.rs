@@ -260,9 +260,9 @@ fn board_fallbacks(action: ShortcutAction, keys: &KeyBindings) -> Vec<char> {
         ShortcutAction::Submit => vec![keys.submit_remove],
         ShortcutAction::SubmitKeep => vec![keys.submit_keep],
         ShortcutAction::Quit => vec![keys.quit],
+        ShortcutAction::Paste => keys.paste_exact_fallbacks(),
         ShortcutAction::PasteReflow => keys.paste_reflow_fallbacks(),
-        ShortcutAction::Paste
-        | ShortcutAction::Duplicate
+        ShortcutAction::Duplicate
         | ShortcutAction::Redo
         | ShortcutAction::DeleteLogicalLine
         | ShortcutAction::PickerPrevious
@@ -310,14 +310,14 @@ mod tests {
             ShortcutScope::BoardAndEdit,
             ShiftMeaning::Unshifted,
             UiKey::PasteClipboard,
-            &[],
+            &['p'],
         ),
         (
             ShortcutAction::PasteReflow,
             ShortcutScope::BoardAndEdit,
             ShiftMeaning::Shifted,
             UiKey::PasteClipboardReflow,
-            &['p', 'P'],
+            &['P'],
         ),
         (
             ShortcutAction::SelectAll,
@@ -404,7 +404,7 @@ mod tests {
             assert!(contract.contains("command palette"));
         }
         assert!(readme.contains("Cmd+Shift+V"));
-        assert!(readme.contains("keybind = super+shift+v=unbind"));
+        assert!(readme.contains("keybind = super+shift+v=csi:118;10u"));
         assert!(readme.contains("Raw `Ctrl` is not a second Primary"));
         assert!(!readme.contains("Command+"));
         assert!(readme.contains("proqi diagnostics keypress"));

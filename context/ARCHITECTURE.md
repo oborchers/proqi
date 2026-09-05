@@ -1161,9 +1161,10 @@ Exact and reflow clipboard reads share one typed asynchronous owner record. The
 record retains `Exact` or `Reflow` through Compose materialization and rejects a
 completion after its Board, Compose generation, or thought editor owner changes.
 Raw bracketed paste always enters the exact path because a terminal host may
-have consumed a system shortcut before emitting paste bytes. Only the dedicated
-normalized `PasteClipboardReflow` intention or its Board and Commands aliases
-select the reflow path.
+have consumed a system shortcut before emitting paste bytes. The configurable
+lowercase Board paste key selects the same exact path. Only the dedicated
+normalized `PasteClipboardReflow` intention, its uppercase Board counterpart,
+or the Commands action selects the reflow path.
 
 The reflow classifier makes a bounded number of linear passes over logical
 lines. Shared terminal-independent Markdown structure recognition owns list

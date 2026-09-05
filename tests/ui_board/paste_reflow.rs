@@ -210,7 +210,7 @@ fn transformed_large_paste_keeps_a_fold_through_narrow_shallow_rendering() {
 }
 
 #[test]
-fn board_fallback_is_reflow_while_text_and_query_owners_keep_their_inputs() {
+fn board_paste_pair_is_exact_then_reflow_while_text_and_query_owners_keep_their_inputs() {
     for character in ['p', 'P'] {
         let mut compose = Fixture::new();
         assert_eq!(
@@ -225,20 +225,30 @@ fn board_fallback_is_reflow_while_text_and_query_owners_keep_their_inputs() {
         );
     }
 
-    for character in ['p', 'P'] {
-        let mut board = Fixture::new();
-        board.input(UiInput::Key(UiKey::Escape));
-        let request_id = request(&mut board, UiKey::Character(character));
-        complete(&mut board, request_id, "board\nreflow");
-        assert_eq!(
-            board.app.state.board.live_thoughts()[0].content,
-            "board reflow"
-        );
-    }
+    let mut exact = Fixture::new();
+    exact.input(UiInput::Key(UiKey::Escape));
+    let request_id = request(&mut exact, UiKey::Character('p'));
+    complete(&mut exact, request_id, "board\nexact");
+    assert_eq!(
+        exact.app.state.board.live_thoughts()[0].content,
+        "board\nexact"
+    );
+
+    let mut reflow = Fixture::new();
+    reflow.input(UiInput::Key(UiKey::Escape));
+    let request_id = request(&mut reflow, UiKey::Character('P'));
+    complete(&mut reflow, request_id, "board\nreflow");
+    assert_eq!(
+        reflow.app.state.board.live_thoughts()[0].content,
+        "board reflow"
+    );
 
     let mut board = Fixture::new();
     board.input(UiInput::Key(UiKey::Escape));
     board.input(UiInput::Key(UiKey::Character('/')));
+    board.input(UiInput::Key(UiKey::Character('p')));
+    board.input(UiInput::Key(UiKey::Character('P')));
+    assert_eq!(board.app.search_view().expect("search query").0, "pP");
     assert!(
         board
             .effects(UiInput::Key(UiKey::PasteClipboardReflow))
@@ -246,6 +256,9 @@ fn board_fallback_is_reflow_while_text_and_query_owners_keep_their_inputs() {
     );
     board.input(UiInput::Key(UiKey::Escape));
     board.input(UiInput::Key(UiKey::Character(':')));
+    board.input(UiInput::Key(UiKey::Character('p')));
+    board.input(UiInput::Key(UiKey::Character('P')));
+    assert_eq!(board.app.palette_view().expect("palette query").0, "pP");
     assert!(
         board
             .effects(UiInput::Key(UiKey::PasteClipboardReflow))

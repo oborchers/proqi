@@ -55,7 +55,7 @@ pub(crate) fn items(app: &BoardApp) -> Vec<Shortcut> {
             "Undo",
         ),
         (
-            shortcut_metadata::primary_label(ShortcutAction::Paste),
+            shortcut_metadata::board_label(ShortcutAction::Paste, keys),
             "Paste exactly",
         ),
         (
@@ -245,14 +245,18 @@ mod tests {
     }
 
     #[test]
-    fn board_help_lists_only_effective_paste_reflow_fallbacks() {
+    fn board_help_lists_only_effective_paste_pair_fallbacks() {
         let mut keys = super::super::settings::KeyBindings::default();
-        let paste = shortcut_metadata::board_label(ShortcutAction::PasteReflow, &keys);
-        assert_eq!(paste, format!("{}/p/P", primary("Shift+V")));
+        let exact = shortcut_metadata::board_label(ShortcutAction::Paste, &keys);
+        let reflow = shortcut_metadata::board_label(ShortcutAction::PasteReflow, &keys);
+        assert_eq!(exact, format!("{}/p", primary("V")));
+        assert_eq!(reflow, format!("{}/P", primary("Shift+V")));
 
-        keys.paste_reflow = 'g';
+        keys.paste = 'g';
         keys.submit_keep = 'G';
-        let paste = shortcut_metadata::board_label(ShortcutAction::PasteReflow, &keys);
-        assert_eq!(paste, format!("{}/g", primary("Shift+V")));
+        let exact = shortcut_metadata::board_label(ShortcutAction::Paste, &keys);
+        let reflow = shortcut_metadata::board_label(ShortcutAction::PasteReflow, &keys);
+        assert_eq!(exact, format!("{}/g", primary("V")));
+        assert_eq!(reflow, primary("Shift+V"));
     }
 }

@@ -202,6 +202,7 @@ impl BoardApp {
                 Vec::new()
             }
             Some(BoardCommand::ScreenshotInbox) => self.toggle_screenshot_inbox(ids, clock),
+            Some(BoardCommand::PasteExact) => self.read_clipboard(ids),
             Some(BoardCommand::PasteReflow) => self.read_clipboard_reflow(ids),
         }
     }

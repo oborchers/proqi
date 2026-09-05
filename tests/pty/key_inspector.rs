@@ -9,8 +9,13 @@ fn inspect_sequence(sequence: &str, raw_code: &str, action: &str) {
         set timeout 10
         set binary $env(PROQI_TEST_BINARY)
         spawn $binary diagnostics keypress
+        expect {{
+            -exact "\x1b\[>5u" {{}}
+            -exact "\x1b\[>7u" {{}}
+        }}
         expect -exact "Press one key to inspect its terminal event and Proqi action."
         send -- "{sequence}"
+        expect -exact "\x1b\[<u"
         expect -exact "Raw event: KeyEvent {{ code: {raw_code}"
         expect -exact "Matched action: {action}"
         expect eof
@@ -33,8 +38,13 @@ fn keypress_inspector_reports_raw_and_normalized_input_then_restores() {
         set timeout 10
         set binary $env(PROQI_TEST_BINARY)
         spawn $binary diagnostics keypress
+        expect {{
+            -exact "\x1b\[>5u" {{}}
+            -exact "\x1b\[>7u" {{}}
+        }}
         expect -exact "Press one key to inspect its terminal event and Proqi action."
         send -- "a"
+        expect -exact "\x1b\[<u"
         expect -exact "Raw event: KeyEvent { code: Char('a')"
         expect -exact "Matched action: Character('a')"
         expect eof

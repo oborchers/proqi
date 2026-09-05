@@ -59,31 +59,49 @@ fn established_board_binding_precedes_compatible_transform_collision() {
 }
 
 #[test]
-fn paste_reflow_has_a_configurable_board_fallback_without_breaking_old_collisions() {
+fn paste_pair_has_configurable_board_fallbacks_without_breaking_old_collisions() {
     let defaults = KeyBindings::default();
-    assert_eq!(defaults.command('p'), Some(BoardCommand::PasteReflow));
+    assert_eq!(defaults.command('p'), Some(BoardCommand::PasteExact));
     assert_eq!(defaults.command('P'), Some(BoardCommand::PasteReflow));
-    assert_eq!(defaults.paste_reflow_fallbacks(), vec!['p', 'P']);
-    let remapped: KeyBindings = toml::from_str("paste_reflow = 'g'").expect("remap");
-    assert_eq!(remapped.command('g'), Some(BoardCommand::PasteReflow));
+    assert_eq!(defaults.paste_exact_fallbacks(), vec!['p']);
+    assert_eq!(defaults.paste_reflow_fallbacks(), vec!['P']);
+    let remapped: KeyBindings = toml::from_str("paste = 'g'").expect("remap");
+    assert_eq!(remapped.command('g'), Some(BoardCommand::PasteExact));
     assert_eq!(remapped.command('G'), Some(BoardCommand::PasteReflow));
-    assert_eq!(remapped.paste_reflow_fallbacks(), vec!['g', 'G']);
+    assert_eq!(remapped.paste_exact_fallbacks(), vec!['g']);
+    assert_eq!(remapped.paste_reflow_fallbacks(), vec!['G']);
 
     let old_collision: KeyBindings = toml::from_str("new = 'p'").expect("old config");
     assert_eq!(old_collision.validate(), Ok(()));
     assert_eq!(old_collision.command('p'), Some(BoardCommand::New));
     assert_eq!(old_collision.command('P'), Some(BoardCommand::PasteReflow));
+    assert!(old_collision.paste_exact_fallbacks().is_empty());
     assert_eq!(old_collision.paste_reflow_fallbacks(), vec!['P']);
 }
 
 #[test]
-fn explicit_opposite_case_binding_precedes_the_reflow_alias() {
+fn explicit_opposite_case_binding_precedes_the_reflow_fallback() {
     let bindings: KeyBindings =
-        toml::from_str("paste_reflow = 'g'\nsubmit_keep = 'G'").expect("collision");
+        toml::from_str("paste = 'g'\nsubmit_keep = 'G'").expect("collision");
     assert_eq!(bindings.validate(), Ok(()));
-    assert_eq!(bindings.command('g'), Some(BoardCommand::PasteReflow));
+    assert_eq!(bindings.command('g'), Some(BoardCommand::PasteExact));
     assert_eq!(bindings.command('G'), Some(BoardCommand::SubmitKeep));
-    assert_eq!(bindings.paste_reflow_fallbacks(), vec!['g']);
+    assert_eq!(bindings.paste_exact_fallbacks(), vec!['g']);
+    assert!(bindings.paste_reflow_fallbacks().is_empty());
+}
+
+#[test]
+fn paste_pair_requires_a_lowercase_ascii_base_key() {
+    for invalid in ['P', '1', '界', '\n'] {
+        let bindings = KeyBindings {
+            paste: invalid,
+            ..KeyBindings::default()
+        };
+        assert!(
+            bindings.validate().is_err(),
+            "invalid paste key {invalid:?}"
+        );
+    }
 }
 
 #[test]

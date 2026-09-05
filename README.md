@@ -142,7 +142,7 @@ modifier on macOS.
 | Input | Action |
 | --- | --- |
 | `n`, `Enter` on `+ New thought`, paste, or click | Create a thought |
-| `Primary+V` with no selection | Create from the clipboard |
+| `Primary+V` / `p` with no selection | Paste exactly as a new thought |
 | `j` / `k` or arrows | Focus next / previous; twice at a blocked bottom / top edge creates there |
 | `Enter` or `e` | Edit |
 | `Primary+J` / `Primary+K`, `Primary+Shift+↓` / `↑`, or drag | Reorder |
@@ -154,7 +154,7 @@ modifier on macOS.
 | `Primary+Enter` / `s`; `Primary+Shift+Enter` / `S`; then arrows or `h` / `j` / `k` / `l` if needed | Submit and remove after acceptance; submit and keep |
 | `Primary+Z` / `u` | Undo a board operation |
 | `Primary+Shift+Z` / `Primary+Y` | **Redo a board operation** |
-| `Primary+Shift+V` / `p` / `P` | Paste and reflow copied prose |
+| `Primary+Shift+V` / `P` | Paste and reflow copied prose |
 | `c`; `/`; `:`; `i`; `?` | Collapse; search; commands; Screenshot Inbox; help |
 | `Esc`; `Primary+Q` / `q` | Clear selection; exit after durable flush |
 
@@ -199,13 +199,15 @@ To forward the chord to Proqi, add this line to Ghostty's configuration and
 reload it:
 
 ```ini
-keybind = super+shift+v=unbind
+keybind = super+shift+v=csi:118;10u
 ```
 
-Proqi does not promise delivery of intercepted chords, change Ghostty settings,
-or repeat a host paste. Use `p` or `P` on the Board, choose `Paste and reflow`
-in Commands, or run `proqi diagnostics keypress` when the chord does not reach
-the application.
+This sends the Kitty keyboard encoding for Super+Shift+V. Merely using `unbind`
+is insufficient on Ghostty 1.3.1 for this Super-modified key. Proqi does not
+promise delivery of intercepted chords, change Ghostty settings, or repeat a
+host paste. Use `p` for exact paste or `P` for reflow on the Board, choose the
+corresponding action in Commands, or run `proqi diagnostics keypress` when the
+chord does not reach the application.
 
 Exact paste is always the default. Explicit paste and reflow joins copied prose
 lines, collapses repeated spaces and tabs, and reduces blank runs to one paragraph
@@ -349,7 +351,7 @@ focus_up = "k"
 focus_down = "j"
 transform = "t" # merge selection; Esc,t splits or extracts the last editor range
 screenshot_inbox = "i"
-paste_reflow = "p" # Board p/P fallback for Primary+Shift+V
+paste = "p" # Board p pastes exactly; its uppercase P counterpart reflows
 delete_sentence = "U" # Primary+Shift+U, use another unreserved uppercase suffix to remap
 select_visual_row_start = "H" # Primary+Shift+H fallback
 select_visual_row_end = "L" # Primary+Shift+L fallback

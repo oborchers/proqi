@@ -320,9 +320,10 @@ Bracketed paste is treated as one semantic input event.
   new thought containing its complete payload, enters edit mode, and places the
   cursor after the pasted content.
 - Whitespace, blank lines, Unicode, and line endings are preserved.
-- `Primary+V`, bracketed paste, and `Paste exactly` preserve the complete payload
-  byte for byte. Exact paste remains the default.
-- `Primary+Shift+V`, the remappable Board fallbacks `p` and `P`, and `Paste and reflow`
+- `Primary+V`, the remappable Board fallback `p`, bracketed paste, and
+  `Paste exactly` preserve the complete payload byte for byte. Exact paste
+  remains the default.
+- `Primary+Shift+V`, the paired Board fallback `P`, and `Paste and reflow`
   explicitly clean terminal-copied prose. The action joins single newlines,
   collapses ASCII spaces and tabs, removes copied Markdown hard breaks, trims
   outer whitespace, and reduces whitespace-only blank runs to one paragraph
@@ -818,8 +819,8 @@ bindings are:
 | Action | Keyboard | Mouse |
 |---|---|---|
 | Create thought | `n` | Click `+` or the insertion area |
-| Paste as new thought when none is selected | `Primary+V` or native paste | Use the terminal paste action |
-| Paste and reflow copied prose | `Primary+Shift+V`, `p`, or `P` | Choose `Paste and reflow` in Commands |
+| Paste as new thought when none is selected | `Primary+V`, `p`, or native paste | Choose `Paste exactly` in Commands |
+| Paste and reflow copied prose | `Primary+Shift+V` or `P` | Choose `Paste and reflow` in Commands |
 | Edit thought | `Enter` or `e` | Click at the desired text position |
 | Copy thought | `Primary+C` or `y` | Click copy control |
 | Cut thought | `Primary+X` or `x` | Click cut control |
@@ -910,20 +911,24 @@ Ghostty consumes configured keybindings before the child process by default.
 Its current macOS defaults include Cmd chords for copy, both paste forms,
 select all, undo, redo, duplicate, submission, quit, and several arrow actions.
 To forward `Cmd+Shift+V` to Proqi on macOS, users may add
-`keybind = super+shift+v=unbind` to Ghostty's configuration. Proqi does not
-claim guaranteed delivery, modify host configuration, or repeat a paste already
-performed by the host. Portable Board aliases `p` and `P`, command-palette
-actions, bracketed paste, and raw key diagnostics remain necessary fallbacks.
+`keybind = super+shift+v=csi:118;10u` to Ghostty's configuration. This explicitly
+sends the Kitty keyboard encoding for Super+Shift+V; merely removing the host
+binding is insufficient on Ghostty 1.3.1. Proqi does not claim guaranteed
+delivery, modify host configuration, or repeat a paste already performed by the
+host. The portable Board pair uses `p` for exact paste and `P` for reflow;
+command-palette actions, bracketed paste, and raw key diagnostics remain
+necessary fallbacks.
 Distinctly reported Shift remains meaningful. A shifted reserved character
 chord never silently becomes the unshifted copy, cut, paste, select-all,
 duplicate, or quit command. `Primary+Y` remains the unshifted alternate redo
 chord. `Primary+Shift+V` is the explicit `Paste and reflow` action. An uppercase
 `V` report without a distinct Shift modifier remains exact paste.
 
-The paste-reflow Board fallback also accepts its opposite ASCII case when that
-key is not explicitly assigned to another command. Explicit configured commands
-keep precedence. Help and footer labels list only the effective spellings, so a
-collision never advertises a shadowed alias.
+The configurable Board `paste` key must be one lowercase ASCII letter. That
+character pastes exactly and its uppercase counterpart reflows. Explicit
+configured commands keep precedence over either fallback. Help and footer
+labels list only the effective spellings, so a collision never advertises a
+shadowed route.
 
 ### Edit mode
 
