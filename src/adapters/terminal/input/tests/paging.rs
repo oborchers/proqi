@@ -3,14 +3,20 @@ use super::*;
 #[test]
 fn alt_arrows_and_page_keys_share_one_normalized_fast_intention() {
     assert_eq!(
-        translate(Event::Key(KeyEvent::new(KeyCode::Up, KeyModifiers::ALT))),
+        translate_in(
+            ShortcutContext::Edit,
+            Event::Key(KeyEvent::new(KeyCode::Up, KeyModifiers::ALT)),
+        ),
         Some(UiInput::Key(UiKey::FastNavigation {
             direction: FastNavigation::Previous,
             extend_selection: false,
         }))
     );
     assert_eq!(
-        translate(Event::Key(KeyEvent::new(KeyCode::Down, KeyModifiers::ALT))),
+        translate_in(
+            ShortcutContext::Edit,
+            Event::Key(KeyEvent::new(KeyCode::Down, KeyModifiers::ALT)),
+        ),
         Some(UiInput::Key(UiKey::FastNavigation {
             direction: FastNavigation::Next,
             extend_selection: false,
@@ -21,7 +27,10 @@ fn alt_arrows_and_page_keys_share_one_normalized_fast_intention() {
         (KeyCode::PageDown, FastNavigation::Next),
     ] {
         assert_eq!(
-            translate(Event::Key(KeyEvent::new(code, KeyModifiers::NONE))),
+            translate_in(
+                ShortcutContext::Edit,
+                Event::Key(KeyEvent::new(code, KeyModifiers::NONE)),
+            ),
             Some(UiInput::Key(UiKey::FastNavigation {
                 direction,
                 extend_selection: false,
@@ -39,7 +48,10 @@ fn shifted_fast_spellings_extend_the_same_five_row_selection() {
             KeyModifiers::SHIFT
         };
         assert_eq!(
-            translate(Event::Key(KeyEvent::new(code, modifiers))),
+            translate_in(
+                ShortcutContext::Edit,
+                Event::Key(KeyEvent::new(code, modifiers)),
+            ),
             Some(UiInput::Key(UiKey::FastNavigation {
                 direction: FastNavigation::Next,
                 extend_selection: true,

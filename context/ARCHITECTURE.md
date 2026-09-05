@@ -1034,22 +1034,28 @@ visual row and column. Selection anchors follow the same rule.
 
 ### Input translation
 
-Crossterm events first pass through a keymap and mode translator. The reducer
-receives intentions such as `CreateThought`, `MoveCursor`, `CutThought`, or
-`ChooseDirection`, not raw keys. Mouse coordinates resolve through the latest
-layout snapshot into the same intentions.
+Crossterm events first pass through one terminal translation boundary. That
+boundary produces a terminal-independent `KeyStroke` containing a character or
+named key, press phase, key state, and the separately preserved Shift, Control,
+Alt, Super, Meta, and Hyper modifiers. It does not choose application actions,
+mode behavior, Help labels, or fallback bindings. Bracketed paste, mouse,
+resize, host focus, timers, and effect completions remain distinct inputs.
 
-Raw modifiers are normalized into semantic modifiers. `Primary` maps only to
-logical Super or Meta on macOS and only to logical Control elsewhere. A
-Primary-style character or Enter chord containing a platform-ineligible or
-mixed command modifier is discarded at this boundary. It cannot fall through
-to a printable character or an unmodified Enter action. Other modified
-navigation retains its documented base intention. These are logical modifiers
-reported after operating-system and terminal handling, never physical left or
-right keys.
-Enhanced keyboard protocols
-are enabled when supported so Super and Meta events can be distinguished, but
-every action retains a terminal-safe fallback and a configurable binding.
+The shortcut registry resolves platform defaults, compatible aliases, and the
+existing character configuration before terminal setup. `Primary` is registry
+policy: exactly one logical Super or Meta is Primary on macOS, while logical
+Control is Primary elsewhere. Raw macOS Control, mixed command modifiers, and
+both Super and Meta together are not alternate Primary spellings. An ineligible
+command chord cannot fall through to printable text or plain Enter. Enhanced
+keyboard protocols are enabled when supported so the terminal can preserve
+these distinctions.
+
+Dispatch reads an explicit bottom-to-top active context stack. Its complete
+current context vocabulary is recorded in `context/SHORTCUTS.md`. Only the top
+text owner or overlay resolves a stroke, so overlay precedence is structural
+rather than declaration-order behavior. The result is a stable typed action
+identity plus the existing terminal-independent UI intention. Reducers and UI
+owners never inspect Crossterm key types.
 
 The application interaction state is the exhaustive terminal-independent set
 `Board`, `Compose`, and `Edit { thought_id }`. The UI dispatcher selects one of
@@ -1122,18 +1128,24 @@ On macOS, Option plus horizontal arrows retains word movement. On other
 platforms, Ctrl plus horizontal arrows retains word movement, and adding
 Shift extends by word. Board navigation does not consume visual-row intentions.
 
-One UI-owned standard-shortcut metadata table records canonical Primary labels,
-mode scopes, shifted meanings, and configurable Board fallbacks. Contextual
-Help, full and compact footer labels, keybinding reservation validation, and
-inventory tests derive from that owner. Crossterm parsing remains in the
-terminal adapter and is checked against the metadata instead of being copied
-into presentation data. Distinct Shift reports for reserved character chords
-remain typed `PrimaryShiftCharacter` values unless an established shifted
-action owns them. Uppercase character reports without a Shift flag retain the
-compatible unshifted action where that is how the terminal encodes the chord.
-For the paste-reflow ASCII-letter Board fallback, the settings owner also
-exposes the opposite-case spelling unless an explicit command owns it. Dispatch
-and shortcut presentation consume that same collision-resolved list.
+One typed shortcut registry owns stable action identities, active contexts,
+macOS and portable defaults, compatible aliases, safety classification, Help
+and footer projections, Commands visibility, content-free diagnostics, and the
+mapping to established UI intentions. Settings validation, dispatch,
+presentation, and diagnostics consume those identities. An executable xtask
+architecture policy rejects Crossterm key interpretation outside the terminal
+translation boundary, raw logical-key interpretation outside the registry,
+parallel binding declarations, parallel shortcut metadata, and a second
+Commands inventory. Its accepted and rejected fixtures are part of the
+canonical test suite.
+
+Distinct Shift reports for reserved character chords remain typed shifted
+intentions unless an established action owns them. Uppercase character reports
+without a Shift flag retain the compatible unshifted action where the terminal
+encodes the chord that way. For the paste-reflow ASCII-letter Board fallback,
+the registry exposes the opposite-case spelling unless an explicit command owns
+it. Collision validation operates on the effective context-qualified bindings
+before terminal setup.
 
 Global `Primary+Q` is resolved before Help and Screenshot takeover navigation,
 but after a commit-first Screenshot save barrier has admitted or deferred the

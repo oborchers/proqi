@@ -87,6 +87,7 @@ impl SessionBrowser {
                 BrowserAction::Continue
             }
             UiInput::Key(_)
+            | UiInput::KeyStroke(_)
             | UiInput::Resize { .. }
             | UiInput::HostFocusGained
             | UiInput::HostFocusLost

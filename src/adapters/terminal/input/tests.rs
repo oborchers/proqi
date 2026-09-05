@@ -2,10 +2,26 @@ use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 use crate::{
     ports::editor::CursorMovement,
-    ui::{FastNavigation, UiInput, UiKey},
+    ui::{FastNavigation, ShortcutContext, UiInput, UiKey},
 };
 
-use super::translate;
+use super::translate as decode_translate;
+
+fn translate(event: Event) -> Option<UiInput> {
+    translate_in(ShortcutContext::Board, event)
+}
+
+fn translate_in(context: ShortcutContext, event: Event) -> Option<UiInput> {
+    let decoded = decode_translate(event)?;
+    let UiInput::KeyStroke(stroke) = decoded else {
+        return Some(decoded);
+    };
+    let registry = crate::ui::ShortcutRegistry::default();
+    let contexts = crate::ui::ShortcutContextStack::new([context]);
+    registry
+        .dispatch(&contexts, stroke)
+        .map(|resolved| UiInput::Key(resolved.intention))
+}
 
 #[path = "tests/paging.rs"]
 mod paging;
@@ -41,7 +57,7 @@ fn primary_shift_s_remains_an_unassigned_board_chord() {
             current_primary() | KeyModifiers::SHIFT,
         ));
         assert_eq!(
-            translate(event),
+            translate(event.clone()),
             Some(UiInput::Key(UiKey::PrimaryShiftCharacter(character)))
         );
     }
@@ -74,7 +90,7 @@ fn logical_line_and_sentence_deletion_keep_distinct_primary_chords() {
             KeyCode::Char('u'),
             KeyModifiers::ALT,
         ))),
-        Some(UiInput::Key(UiKey::Character('u')))
+        Some(UiInput::Key(UiKey::Undo))
     );
 }
 
@@ -117,12 +133,18 @@ fn invocation_picker_keys_are_normalized_without_literal_editor_input() {
         (KeyCode::Char('n'), UiKey::PickerNext),
     ] {
         assert_eq!(
-            translate(Event::Key(KeyEvent::new(code, current_primary()))),
+            translate_in(
+                ShortcutContext::Invocation,
+                Event::Key(KeyEvent::new(code, current_primary())),
+            ),
             Some(UiInput::Key(expected))
         );
     }
     assert_eq!(
-        translate(Event::Key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE))),
+        translate_in(
+            ShortcutContext::Edit,
+            Event::Key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE)),
+        ),
         Some(UiInput::Key(UiKey::Tab))
     );
     for event in [
@@ -130,7 +152,7 @@ fn invocation_picker_keys_are_normalized_without_literal_editor_input() {
         KeyEvent::new(KeyCode::Tab, KeyModifiers::SHIFT),
     ] {
         assert_eq!(
-            translate(Event::Key(event)),
+            translate_in(ShortcutContext::Edit, Event::Key(event)),
             Some(UiInput::Key(UiKey::BackTab))
         );
     }
@@ -138,15 +160,22 @@ fn invocation_picker_keys_are_normalized_without_literal_editor_input() {
 
 #[test]
 fn physical_delete_and_backspace_remain_distinct_terminal_keys() {
-    for (code, expected) in [
-        (KeyCode::Delete, UiKey::Delete),
-        (KeyCode::Backspace, UiKey::Backspace),
-    ] {
-        assert_eq!(
-            translate(Event::Key(KeyEvent::new(code, KeyModifiers::NONE))),
-            Some(UiInput::Key(expected))
-        );
-    }
+    assert_eq!(
+        translate(Event::Key(KeyEvent::new(
+            KeyCode::Delete,
+            KeyModifiers::NONE,
+        ))),
+        Some(UiInput::Key(UiKey::Shortcut(
+            crate::ui::ShortcutActionId::Delete,
+        )))
+    );
+    assert_eq!(
+        translate_in(
+            ShortcutContext::Edit,
+            Event::Key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE)),
+        ),
+        Some(UiInput::Key(UiKey::Backspace))
+    );
 }
 
 #[test]
@@ -162,7 +191,10 @@ fn every_modified_physical_delete_remains_distinct_from_board_delete() {
         KeyModifiers::ALT | KeyModifiers::SHIFT,
     ] {
         assert_eq!(
-            translate(Event::Key(KeyEvent::new(KeyCode::Delete, modifiers))),
+            translate_in(
+                ShortcutContext::Edit,
+                Event::Key(KeyEvent::new(KeyCode::Delete, modifiers)),
+            ),
             Some(UiInput::Key(UiKey::ModifiedDelete)),
             "modifiers: {modifiers:?}"
         );
@@ -182,7 +214,12 @@ fn release_is_ignored_and_repeat_preserves_auto_repeat() {
         KeyModifiers::NONE,
         KeyEventKind::Repeat,
     ));
-    assert_eq!(translate(repeat), Some(UiInput::Key(UiKey::Character('n'))));
+    assert_eq!(
+        translate(repeat),
+        Some(UiInput::Key(UiKey::Shortcut(
+            crate::ui::ShortcutActionId::New,
+        )))
+    );
 
     let repeated_range = Event::Key(KeyEvent::new_with_kind(
         KeyCode::Down,
@@ -191,10 +228,9 @@ fn release_is_ignored_and_repeat_preserves_auto_repeat() {
     ));
     assert_eq!(
         translate(repeated_range),
-        Some(UiInput::Key(UiKey::Move {
-            movement: CursorMovement::VisualDown,
-            extend_selection: true,
-        }))
+        Some(UiInput::Key(UiKey::Shortcut(
+            crate::ui::ShortcutActionId::ExtendNext,
+        )))
     );
 
     let repeated_reorder = Event::Key(KeyEvent::new_with_kind(
@@ -204,9 +240,9 @@ fn release_is_ignored_and_repeat_preserves_auto_repeat() {
     ));
     assert_eq!(
         translate(repeated_reorder),
-        Some(UiInput::Key(UiKey::PrimaryShiftMove {
-            movement: CursorMovement::DocumentEnd,
-        }))
+        Some(UiInput::Key(UiKey::Shortcut(
+            crate::ui::ShortcutActionId::MoveDown,
+        )))
     );
 }
 
@@ -218,9 +254,9 @@ fn primary_shift_arrow_and_character_chords_remain_board_semantics() {
     ));
     assert_eq!(
         translate(arrow),
-        Some(UiInput::Key(UiKey::PrimaryShiftMove {
-            movement: CursorMovement::DocumentStart,
-        }))
+        Some(UiInput::Key(UiKey::Shortcut(
+            crate::ui::ShortcutActionId::MoveUp,
+        )))
     );
 
     let character = Event::Key(KeyEvent::new(
@@ -229,13 +265,17 @@ fn primary_shift_arrow_and_character_chords_remain_board_semantics() {
     ));
     assert_eq!(
         translate(character),
-        Some(UiInput::Key(UiKey::PrimaryShiftCharacter('K')))
+        Some(UiInput::Key(UiKey::Shortcut(
+            crate::ui::ShortcutActionId::MoveUp,
+        )))
     );
 
     let alternate_report = Event::Key(KeyEvent::new(KeyCode::Char('K'), current_primary()));
     assert_eq!(
         translate(alternate_report),
-        Some(UiInput::Key(UiKey::PrimaryShiftCharacter('K')))
+        Some(UiInput::Key(UiKey::Shortcut(
+            crate::ui::ShortcutActionId::MoveUp,
+        )))
     );
 
     for character in ['k', 'j'] {
@@ -245,7 +285,11 @@ fn primary_shift_arrow_and_character_chords_remain_board_semantics() {
         ));
         assert_eq!(
             translate(lowercase_shift_report),
-            Some(UiInput::Key(UiKey::PrimaryShiftCharacter(character)))
+            Some(UiInput::Key(UiKey::Shortcut(if character == 'k' {
+                crate::ui::ShortcutActionId::MoveUp
+            } else {
+                crate::ui::ShortcutActionId::MoveDown
+            })))
         );
     }
 }
@@ -270,7 +314,7 @@ fn shift_and_word_navigation_remain_semantic() {
     };
     let select = Event::Key(KeyEvent::new(KeyCode::Left, KeyModifiers::SHIFT | word));
     assert_eq!(
-        translate(select),
+        translate_in(ShortcutContext::Edit, select),
         Some(UiInput::Key(UiKey::Move {
             movement: CursorMovement::WordBack,
             extend_selection: true,
@@ -279,26 +323,37 @@ fn shift_and_word_navigation_remain_semantic() {
 }
 
 #[test]
-fn platform_primary_arrows_preserve_both_mode_intentions() {
+fn platform_primary_arrows_resolve_through_each_explicit_owner() {
     let modifier = if cfg!(target_os = "macos") {
         KeyModifiers::SUPER
     } else {
         KeyModifiers::CONTROL
     };
-    assert_eq!(
-        translate(Event::Key(KeyEvent::new(KeyCode::Up, modifier))),
-        Some(UiInput::Key(UiKey::EditNavigation {
-            editor_movement: CursorMovement::DocumentStart,
-            board_movement: CursorMovement::VisualUp,
-        }))
-    );
-    assert_eq!(
-        translate(Event::Key(KeyEvent::new(KeyCode::Down, modifier))),
-        Some(UiInput::Key(UiKey::EditNavigation {
-            editor_movement: CursorMovement::DocumentEnd,
-            board_movement: CursorMovement::VisualDown,
-        }))
-    );
+    for (code, board_action, editor_movement) in [
+        (
+            KeyCode::Up,
+            crate::ui::ShortcutActionId::FocusPrevious,
+            CursorMovement::DocumentStart,
+        ),
+        (
+            KeyCode::Down,
+            crate::ui::ShortcutActionId::FocusNext,
+            CursorMovement::DocumentEnd,
+        ),
+    ] {
+        let event = Event::Key(KeyEvent::new(code, modifier));
+        assert_eq!(
+            translate(event.clone()),
+            Some(UiInput::Key(UiKey::Shortcut(board_action)))
+        );
+        assert_eq!(
+            translate_in(ShortcutContext::Edit, event),
+            Some(UiInput::Key(UiKey::Move {
+                movement: editor_movement,
+                extend_selection: false,
+            }))
+        );
+    }
 }
 
 #[test]
@@ -317,7 +372,9 @@ fn enter_is_normalized_independently_from_exact_bracketed_paste() {
             KeyCode::Enter,
             KeyModifiers::NONE,
         ))),
-        Some(UiInput::Key(UiKey::Enter))
+        Some(UiInput::Key(UiKey::Shortcut(
+            crate::ui::ShortcutActionId::Edit,
+        )))
     );
     let list = "- pasted".to_owned();
     assert_eq!(

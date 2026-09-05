@@ -41,6 +41,7 @@ impl BoardApp {
             deferred @ (UiInput::Pointer(_)
             | UiInput::Paste(_)
             | UiInput::PasteAnnotated(_)
+            | UiInput::KeyStroke(_)
             | UiInput::Key(_))
                 if self.deferred_deliberate_count() < DEFERRED_INPUT_LIMIT =>
             {
@@ -55,6 +56,7 @@ impl BoardApp {
             UiInput::Pointer(_)
             | UiInput::Paste(_)
             | UiInput::PasteAnnotated(_)
+            | UiInput::KeyStroke(_)
             | UiInput::Key(_) => self.set_error(
                 "Screenshot Inbox input queue is full; that input was not accepted—wait for the save result and retry",
             ),

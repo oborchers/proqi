@@ -28,6 +28,7 @@ const THEME_SCHEMA_VERSION: u16 = 1;
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub(crate) struct LoadedSettings {
     pub(crate) ui: UiSettings,
+    pub(crate) shortcut_registry: crate::ui::ShortcutRegistry,
     pub(crate) theme: ThemeRecipe,
     pub(crate) invocation_roots: Vec<AdditionalInvocationRoot>,
     pub(crate) screenshot: ScreenshotSettings,
@@ -137,10 +138,8 @@ fn parse_settings(config_dir: &Path, content: &str) -> Result<LoadedSettings, Te
             "merge_separator must contain between 1 and 1024 UTF-8 bytes".to_owned(),
         ));
     }
-    document
-        .keybindings
-        .validate()
-        .map_err(|error| TerminalError::Config(error.to_owned()))?;
+    let shortcut_registry = crate::ui::ShortcutRegistry::current(&document.keybindings)
+        .map_err(|error| TerminalError::Config(error.to_string()))?;
     let ui = UiSettings {
         check_for_updates: document.check_for_updates,
         show_session_id: document.show_session_id,
@@ -156,6 +155,7 @@ fn parse_settings(config_dir: &Path, content: &str) -> Result<LoadedSettings, Te
     let screenshot = screenshot::validate(document.screenshot_inbox)?;
     Ok(LoadedSettings {
         ui,
+        shortcut_registry,
         theme,
         invocation_roots,
         screenshot,

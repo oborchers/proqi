@@ -37,6 +37,7 @@ impl BoardApp {
             UiInput::Resize { .. }
             | UiInput::HostFocusGained
             | UiInput::HostFocusLost
+            | UiInput::KeyStroke(_)
             | UiInput::Paste(_)
             | UiInput::PasteAnnotated(_)
             | UiInput::Key(_) => {}

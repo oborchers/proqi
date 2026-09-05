@@ -40,13 +40,14 @@ pub(super) fn execute(
 ) -> Result<Outcome, CliError> {
     match command {
         DiagnosticsCommand::Collect { output } => collect(paths, cwd, output.clone()),
-        DiagnosticsCommand::Keypress => inspect_keypress(),
+        DiagnosticsCommand::Keypress => inspect_keypress(paths),
     }
 }
 
-fn inspect_keypress() -> Result<Outcome, CliError> {
+fn inspect_keypress(paths: &AppPaths) -> Result<Outcome, CliError> {
     crate::adapters::terminal::require_interactive()?;
-    let inspection = crate::adapters::terminal::inspect_keypress()?;
+    let settings = crate::adapters::terminal::inspect_settings(&paths.config_dir)?;
+    let inspection = crate::adapters::terminal::inspect_keypress(&settings.shortcut_registry)?;
     Ok(Outcome {
         data: json!({
             "raw_event": inspection.raw_event,

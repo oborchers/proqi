@@ -348,6 +348,18 @@ impl BoardApp {
         &self.settings.keybindings
     }
 
+    pub(in crate::ui) const fn shortcut_registry(&self) -> &crate::ui::ShortcutRegistry {
+        &self.shortcut_registry
+    }
+
+    pub(in crate::ui) fn board_shortcut_action(
+        &self,
+        character: char,
+    ) -> Option<crate::ui::ShortcutActionId> {
+        self.shortcut_registry
+            .board_action_for_intention(crate::ui::UiKey::Character(character))
+    }
+
     /// Currently verified submission targets, empty when the enhancement is unavailable.
     #[must_use]
     pub fn agent_targets(&self) -> &[AgentTarget] {

@@ -4,7 +4,8 @@ use super::{Fixture, draw, text};
 use proqi::{
     application::Effect,
     domain::Direction,
-    ui::{PointerButton, PointerInput, PointerKind, UiInput, UiKey},
+    ports::editor::CursorMovement,
+    ui::{KeyStroke, LogicalKey, PointerButton, PointerInput, PointerKind, UiInput, UiKey},
 };
 use ratatui_core::layout::Rect;
 
@@ -14,6 +15,54 @@ fn primary() -> &'static str {
     } else {
         "Ctrl+"
     }
+}
+
+#[test]
+fn two_raw_arrows_keep_editor_ownership_until_neighbor_navigation_completes() {
+    let mut fixture = Fixture::new();
+    super::navigation::durable_thought(&mut fixture, "first");
+    super::navigation::durable_thought(&mut fixture, "second");
+    let first = fixture.app.state.board.live_thoughts()[0].id;
+    fixture.input(UiInput::Key(UiKey::Enter));
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::DocumentStart,
+        extend_selection: false,
+    }));
+
+    fixture.input(UiInput::KeyStroke(KeyStroke::press(LogicalKey::Up)));
+    fixture.input(UiInput::KeyStroke(KeyStroke::press(LogicalKey::Up)));
+
+    assert_eq!(
+        fixture.app.interaction_mode(),
+        proqi::application::InteractionMode::Board
+    );
+    assert_eq!(fixture.app.state.focused_thought, Some(first));
+}
+
+#[test]
+fn printable_board_alias_after_one_raw_boundary_arrow_remains_editor_text() {
+    let mut fixture = Fixture::new();
+    super::navigation::durable_thought(&mut fixture, "first");
+    super::navigation::durable_thought(&mut fixture, "second");
+    fixture.input(UiInput::Key(UiKey::Enter));
+    fixture.input(UiInput::Key(UiKey::Move {
+        movement: CursorMovement::DocumentStart,
+        extend_selection: false,
+    }));
+
+    fixture.input(UiInput::KeyStroke(KeyStroke::press(LogicalKey::Up)));
+    fixture.input(UiInput::KeyStroke(KeyStroke::press(LogicalKey::Character(
+        'n',
+    ))));
+
+    assert!(matches!(
+        fixture.app.interaction_mode(),
+        proqi::application::InteractionMode::Edit { .. }
+    ));
+    assert_eq!(
+        fixture.app.editor_snapshot().expect("editor").content,
+        "nsecond"
+    );
 }
 
 #[test]

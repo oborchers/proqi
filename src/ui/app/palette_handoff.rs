@@ -4,7 +4,7 @@ use crate::{
     application::InteractionMode,
     domain::{ContentAnnotation, TextPosition, ThoughtId},
     ports::editor::{EditCommand, TextSelection},
-    ui::{HitTarget, PointerButton, PointerKind, UiInput, UiKey},
+    ui::{HitTarget, PointerButton, PointerKind, UiInput},
 };
 
 use super::BoardApp;
@@ -56,26 +56,21 @@ impl BoardApp {
         let preserves = match input {
             UiInput::Resize { .. } | UiInput::HostFocusGained | UiInput::HostFocusLost => true,
             UiInput::Pointer(pointer) if matches!(pointer.kind, PointerKind::Move) => true,
-            UiInput::Key(UiKey::Character(character)) => matches!(
-                self.settings.keybindings.command(*character),
-                Some(
-                    crate::ui::settings::BoardCommand::Commands
-                        | crate::ui::settings::BoardCommand::Transform
+            UiInput::Key(key) => {
+                matches!(
+                    self.shortcut_registry.board_action_for_intention(*key),
+                    Some(
+                        crate::ui::ShortcutActionId::OpenCommands
+                            | crate::ui::ShortcutActionId::ContextualTransform
+                    )
                 )
-            ),
-            UiInput::Key(UiKey::PrimaryCharacter(character)) => {
-                *character == self.settings.keybindings.transform
-            }
-            UiInput::Key(UiKey::UnmodifiedSpace) => {
-                self.settings.keybindings.command(' ')
-                    == Some(crate::ui::settings::BoardCommand::Commands)
             }
             UiInput::Pointer(pointer)
                 if matches!(pointer.kind, PointerKind::Down(PointerButton::Left)) =>
             {
                 self.hit(*pointer) == Some(HitTarget::Commands)
             }
-            UiInput::Key(_)
+            UiInput::KeyStroke(_)
             | UiInput::Pointer(_)
             | UiInput::Paste(_)
             | UiInput::PasteAnnotated(_) => false,

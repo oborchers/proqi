@@ -78,12 +78,21 @@ fn one_hundred_terminal_cycles_restore_and_leave_no_processes() {
         set timeout 10
         for {set cycle 0} {$cycle < 100} {incr cycle} {
             spawn $env(PROQI_TEST_BINARY) --state-dir $env(PROQI_TEST_STATE)
+            set child [exp_pid]
             expect -exact "\x1b\[?1049h"
-            send -- "\x1b"
-            after 50
+            # Proqi requests Kitty disambiguation. Use its exact Escape encoding
+            # so rapid Escape then q cannot be misread as the legacy Alt+q chord.
+            send -- "\x1b\[27u"
             send -- "q"
-            expect -exact "\x1b\[0 q"
-            expect eof
+            expect {
+                -exact "\x1b\[0 q" {}
+                timeout { system /bin/kill -TERM $child; exit 92 }
+                eof { exit 93 }
+            }
+            expect {
+                eof {}
+                timeout { system /bin/kill -TERM $child; exit 94 }
+            }
             catch wait result
             if {[lindex $result 3] != 0} { exit 91 }
         }

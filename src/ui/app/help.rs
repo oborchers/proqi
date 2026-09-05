@@ -26,14 +26,6 @@ impl BoardApp {
             UiInput::Key(key) if key.list_navigation() == Some(ListNavigation::Next) => {
                 self.scroll_help_rows(1);
             }
-            UiInput::Key(UiKey::Character(character))
-                if *character == self.settings.keybindings.help =>
-            {
-                self.close_help();
-            }
-            UiInput::Key(UiKey::UnmodifiedSpace) if self.settings.keybindings.help == ' ' => {
-                self.close_help();
-            }
             UiInput::Resize { .. } => {
                 self.layout = None;
                 self.hovered = None;
@@ -41,6 +33,7 @@ impl BoardApp {
             UiInput::Pointer(pointer) => self.handle_help_pointer(*pointer),
             UiInput::HostFocusGained
             | UiInput::HostFocusLost
+            | UiInput::KeyStroke(_)
             | UiInput::Key(_)
             | UiInput::Paste(_)
             | UiInput::PasteAnnotated(_) => {}

@@ -97,6 +97,7 @@ impl BoardApp {
                 UiInput::Resize { .. }
                 | UiInput::HostFocusGained
                 | UiInput::HostFocusLost
+                | UiInput::KeyStroke(_)
                 | UiInput::Key(_) => Vec::new(),
             };
         };

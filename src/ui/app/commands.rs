@@ -10,10 +10,6 @@ use crate::{
 };
 
 use super::{BoardApp, BoundaryInsertion, UiKey, editing, pending_types::EditFlush};
-use crate::ui::{
-    ListNavigation,
-    settings::{BoardCommand, BoardNavigation},
-};
 
 impl BoardApp {
     pub(super) fn handle_board_key(
@@ -25,29 +21,13 @@ impl BoardApp {
         if self.insertion_focused() {
             return self.handle_insertion_key(key, ids, clock);
         }
-        if let Some(navigation) = self.settings.keybindings.navigation(key) {
-            return self.handle_board_navigation(navigation, ids, clock);
+        if let Some(action) = self.shortcut_registry.board_action_for_intention(key) {
+            return self.handle_board_registry_action(action, ids, clock);
         }
         match key {
             UiKey::Escape if !self.selection_is_empty() || self.range_latched() => {
                 self.clear_board_selection();
             }
-            UiKey::SelectAll => self.select_all_thoughts(),
-            UiKey::Character(_)
-            | UiKey::UnmodifiedSpace
-            | UiKey::Delete
-            | UiKey::Submit
-            | UiKey::SubmitKeep => {
-                return self.handle_board_key_command(key, ids, clock);
-            }
-            UiKey::Enter => return self.expand_and_enter_edit(ids, clock),
-            UiKey::Undo => return self.history(ids, clock, true),
-            UiKey::Redo => return self.history(ids, clock, false),
-            UiKey::Copy => return self.copy_thought(ids),
-            UiKey::Cut => return self.cut_thought(ids, clock),
-            UiKey::PasteClipboard => return self.read_clipboard(ids),
-            UiKey::PasteClipboardReflow => return self.read_clipboard_reflow(ids),
-            UiKey::Duplicate => return self.duplicate(ids, clock),
             _ => {}
         }
         Vec::new()
@@ -59,16 +39,26 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        if let Some(navigation) = self.settings.keybindings.navigation(key) {
-            return match navigation {
-                BoardNavigation::Focus(ListNavigation::Previous) => {
+        // Preserve the terminal-independent compatibility path used by callers
+        // that already supply the established semantic Enter intention. Raw
+        // terminal input reaches this owner as the registry's typed `New`.
+        if key == UiKey::Enter {
+            return self.begin_bottom_insertion(ids, clock);
+        }
+        if let Some(action) = self.shortcut_registry.board_action_for_intention(key) {
+            return match action {
+                crate::ui::ShortcutActionId::FocusPrevious => {
                     self.move_focus(-1);
                     Vec::new()
                 }
-                BoardNavigation::Focus(ListNavigation::Next) => {
+                crate::ui::ShortcutActionId::FocusNext => {
                     self.confirm_boundary_creation(BoundaryInsertion::AfterLast, ids, clock)
                 }
-                BoardNavigation::Extend(_) | BoardNavigation::Reorder(_) => Vec::new(),
+                crate::ui::ShortcutActionId::ExtendPrevious
+                | crate::ui::ShortcutActionId::ExtendNext
+                | crate::ui::ShortcutActionId::MoveUp
+                | crate::ui::ShortcutActionId::MoveDown => Vec::new(),
+                _ => self.handle_board_registry_action(action, ids, clock),
             };
         }
         match key {
@@ -76,134 +66,104 @@ impl BoardApp {
                 self.clear_board_selection();
                 Vec::new()
             }
-            UiKey::SelectAll => {
-                self.select_all_thoughts();
-                Vec::new()
-            }
-            UiKey::Character(_)
-            | UiKey::UnmodifiedSpace
-            | UiKey::Delete
-            | UiKey::Submit
-            | UiKey::SubmitKeep => self.handle_board_key_command(key, ids, clock),
-            UiKey::Enter => self.begin_bottom_insertion(ids, clock),
             UiKey::Escape => {
                 self.move_focus(-1);
                 Vec::new()
             }
-            UiKey::PasteClipboard => self.read_clipboard(ids),
-            UiKey::PasteClipboardReflow => self.read_clipboard_reflow(ids),
-            UiKey::Undo => self.history(ids, clock, true),
-            UiKey::Redo => self.history(ids, clock, false),
-            UiKey::Backspace
-            | UiKey::DeleteLogicalLine
-            | UiKey::DeleteSentence
-            | UiKey::ModifiedDelete
-            | UiKey::Copy
-            | UiKey::Cut
-            | UiKey::Duplicate
-            | UiKey::Quit
-            | UiKey::Tab
-            | UiKey::BackTab
-            | UiKey::PickerPrevious
-            | UiKey::PickerNext
-            | UiKey::FastNavigation { .. }
-            | UiKey::PrimaryCharacter(_)
-            | UiKey::PrimaryShiftCharacter(_)
-            | UiKey::PrimaryShiftMove { .. }
-            | UiKey::ExtendVisualRow { .. }
-            | UiKey::MoveVisualRow { .. }
-            | UiKey::EditNavigation { .. }
-            | UiKey::Move { .. } => Vec::new(),
+            _ => Vec::new(),
         }
     }
 
     fn handle_board_navigation(
         &mut self,
-        navigation: BoardNavigation,
+        action: crate::ui::ShortcutActionId,
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        let delta = match navigation {
-            BoardNavigation::Focus(ListNavigation::Previous)
-            | BoardNavigation::Extend(ListNavigation::Previous)
-            | BoardNavigation::Reorder(ListNavigation::Previous) => -1,
-            BoardNavigation::Focus(ListNavigation::Next)
-            | BoardNavigation::Extend(ListNavigation::Next)
-            | BoardNavigation::Reorder(ListNavigation::Next) => 1,
+        use crate::ui::ShortcutActionId as Shortcut;
+        let delta = match action {
+            Shortcut::FocusPrevious | Shortcut::ExtendPrevious | Shortcut::MoveUp => -1,
+            Shortcut::FocusNext | Shortcut::ExtendNext | Shortcut::MoveDown => 1,
+            _ => return Vec::new(),
         };
-        match navigation {
-            BoardNavigation::Focus(_) if self.range_latched() => self.extend_range_by(delta),
-            BoardNavigation::Focus(ListNavigation::Previous) if self.at_first_thought() => {
+        match action {
+            Shortcut::FocusPrevious | Shortcut::FocusNext if self.range_latched() => {
+                self.extend_range_by(delta);
+            }
+            Shortcut::FocusPrevious if self.at_first_thought() => {
                 return self.confirm_boundary_creation(BoundaryInsertion::BeforeFirst, ids, clock);
             }
-            BoardNavigation::Focus(_) => self.move_focus_outside_range(delta),
-            BoardNavigation::Extend(_) => self.extend_range_by(delta),
-            BoardNavigation::Reorder(_) => return self.reorder(ids, clock, delta),
+            Shortcut::FocusPrevious | Shortcut::FocusNext => self.move_focus_outside_range(delta),
+            Shortcut::ExtendPrevious | Shortcut::ExtendNext => self.extend_range_by(delta),
+            Shortcut::MoveUp | Shortcut::MoveDown => return self.reorder(ids, clock, delta),
+            _ => {}
         }
         Vec::new()
     }
 
-    fn handle_board_key_command(
+    fn handle_board_registry_action(
         &mut self,
-        key: UiKey,
+        action: crate::ui::ShortcutActionId,
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        match self.settings.keybindings.command_for_key(key) {
-            Some(BoardCommand::New) if self.insertion_focused() => {
-                self.begin_bottom_insertion(ids, clock)
-            }
-            Some(BoardCommand::New) => self.begin_insertion(ids, clock),
-            Some(BoardCommand::Edit) => self.expand_and_enter_edit(ids, clock),
-            Some(BoardCommand::Delete) => self.delete(ids, clock),
-            Some(BoardCommand::Copy) => self.copy_thought(ids),
-            Some(BoardCommand::Cut) => self.cut_thought(ids, clock),
-            Some(BoardCommand::SubmitRemove) => self.begin_delivery(
+        use crate::ui::ShortcutActionId as Action;
+
+        match action {
+            Action::FocusPrevious
+            | Action::FocusNext
+            | Action::ExtendPrevious
+            | Action::ExtendNext
+            | Action::MoveUp
+            | Action::MoveDown => self.handle_board_navigation(action, ids, clock),
+            Action::New if self.insertion_focused() => self.begin_bottom_insertion(ids, clock),
+            Action::New => self.begin_insertion(ids, clock),
+            Action::Edit => self.expand_and_enter_edit(ids, clock),
+            Action::Delete => self.delete(ids, clock),
+            Action::Copy => self.copy_thought(ids),
+            Action::Cut => self.cut_thought(ids, clock),
+            Action::Duplicate => self.duplicate(ids, clock),
+            Action::SubmitRemove => self.begin_delivery(
                 crate::ports::agent::SubmissionDisposition::RemoveAfterSuccess,
                 ids,
                 clock,
             ),
-            Some(BoardCommand::SubmitKeep) => {
+            Action::SubmitKeep => {
                 self.begin_delivery(crate::ports::agent::SubmissionDisposition::Keep, ids, clock)
             }
-            Some(BoardCommand::Undo) => self.history(ids, clock, true),
-            Some(
-                BoardCommand::FocusUp
-                | BoardCommand::FocusDown
-                | BoardCommand::RangeUp
-                | BoardCommand::RangeDown,
-            )
-            | None => Vec::new(),
-            Some(BoardCommand::Collapse) => self.collapse(ids, clock),
-            Some(BoardCommand::Select) => {
+            Action::Undo => self.history(ids, clock, true),
+            Action::Redo => self.history(ids, clock, false),
+            Action::Collapse => self.collapse(ids, clock),
+            Action::Select => {
                 self.toggle_selection();
                 Vec::new()
             }
-            Some(BoardCommand::Transform) => self.contextual_board_transformation(ids, clock),
-            Some(BoardCommand::SelectAll) => {
+            Action::ContextualTransform => self.contextual_board_transformation(ids, clock),
+            Action::SelectAll => {
                 self.select_all_thoughts();
                 Vec::new()
             }
-            Some(BoardCommand::RangeSelect) => {
+            Action::RangeSelect => {
                 self.activate_range_latch();
                 Vec::new()
             }
-            Some(BoardCommand::Search) => {
+            Action::OpenSearch => {
                 self.open_search();
                 Vec::new()
             }
-            Some(BoardCommand::Commands) => {
+            Action::OpenCommands => {
                 self.open_palette();
                 Vec::new()
             }
-            Some(BoardCommand::Help) => self.toggle_help(),
-            Some(BoardCommand::Quit) => {
+            Action::Help => self.toggle_help(),
+            Action::Quit => {
                 self.request_quit();
                 Vec::new()
             }
-            Some(BoardCommand::ScreenshotInbox) => self.toggle_screenshot_inbox(ids, clock),
-            Some(BoardCommand::PasteExact) => self.read_clipboard(ids),
-            Some(BoardCommand::PasteReflow) => self.read_clipboard_reflow(ids),
+            Action::ScreenshotInbox => self.toggle_screenshot_inbox(ids, clock),
+            Action::PasteExact => self.read_clipboard(ids),
+            Action::PasteReflow => self.read_clipboard_reflow(ids),
+            _ => Vec::new(),
         }
     }
 
@@ -213,11 +173,10 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        if matches!(key, UiKey::PrimaryCharacter(character) if character == self.settings.keybindings.transform)
-        {
+        if key == UiKey::Shortcut(crate::ui::ShortcutActionId::ContextualTransform) {
             return self.contextual_edit_transformation(ids, clock);
         }
-        let Some(key) = editing::normalize_edit_key(key, &self.settings.keybindings) else {
+        let Some(key) = editing::normalize_edit_key(key) else {
             return Vec::new();
         };
         if let Some((edge, extend_selection)) = visual_row_move(key) {
