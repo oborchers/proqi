@@ -24,9 +24,11 @@ fn prove_protocol(protocol: u32) {
     let fixture = herdr_fixture::HerdrFixture::new(protocol);
     let mut gateway = HerdrGateway::new(fixture.program(), SystemProcessRunner::default(), true);
     let references = gateway.discover_live_references().expect("live references");
-    let [reference] = references.references.as_slice() else {
-        panic!("expected one live reference");
-    };
+    let reference = references
+        .references
+        .iter()
+        .find(|reference| reference.pane_id() == "w1:p2")
+        .expect("adjacent live reference");
     assert_eq!(reference.agent_name(), Some("fixture"));
     assert_eq!(reference.workspace_label(), Some("Fixture workspace"));
     assert_eq!(reference.tab_label(), Some("Fixture tab"));
@@ -64,4 +66,24 @@ fn prove_protocol(protocol: u32) {
 
     assert_eq!(receipt.target, *target);
     assert_eq!(fixture.prompt_bytes().as_deref(), Some(exact.as_bytes()));
+
+    let global_targets = gateway.global_targets().expect("current-server targets");
+    let global = global_targets
+        .iter()
+        .find(|target| target.workspace_id() == "w2" && target.tab_id() == "w2:t4")
+        .expect("cross-workspace global target");
+    let global_exact = "global $(touch never); Grüße\n第二行\u{1b}[31m";
+    let global_receipt = gateway
+        .submit(SubmissionRequest {
+            submission_id: ids.submission_id(),
+            target: global.clone(),
+            content: global_exact.to_owned(),
+        })
+        .expect("accepted global prompt");
+    assert_eq!(global_receipt.target.workspace_id(), "w2");
+    assert_eq!(global_receipt.target.tab_id(), "w2:t4");
+    assert_eq!(
+        fixture.prompt_bytes().as_deref(),
+        Some(global_exact.as_bytes())
+    );
 }

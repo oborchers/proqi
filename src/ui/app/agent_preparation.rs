@@ -110,7 +110,7 @@ impl BoardApp {
             payload_digest,
             source_sequence: self.state.board.session.last_durable_sequence,
             disposition,
-            direction: target.direction,
+            route: crate::ports::store::SubmissionJournalRoute::from_route(&target.route),
             provider: target.provider.clone(),
             protocol: target.protocol,
             target_fingerprint: target_fingerprint(target),

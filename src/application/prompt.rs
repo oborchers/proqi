@@ -21,7 +21,7 @@ pub(crate) fn join_prompt_for_target(
     target: &AgentTarget,
     sources: &[(ThoughtId, String)],
 ) -> String {
-    let normalize_starters = supports_shared_starters(target.agent_kind.as_str());
+    let normalize_starters = supports_shared_starters(target.agent_kind().as_str());
     sources
         .iter()
         .enumerate()

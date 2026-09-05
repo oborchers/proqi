@@ -29,8 +29,9 @@ while adding only the structure that materially improves agent work:
 - Continuous reflow when its terminal pane is resized.
 
 Native copy and paste remain the universal transfer mechanism. In supported
-Herdr environments, direct submission to a verified adjacent agent is an
-optional progressive enhancement.
+Herdr environments, direct submission to a verified adjacent agent and
+Commands-only submission to a verified current-server agent are optional
+progressive enhancements.
 
 ## Product principles
 
@@ -692,7 +693,7 @@ either transformation returns board focus to the retained source identity when
 the generated neighbor had focus and was removed. An immediate redo from the
 retained source editor addresses the same transformation as one unit.
 
-### Submit to an adjacent agent
+### Submit to an agent
 
 When Proqi runs beside one or more agent panes in a supported terminal
 environment, it can submit the focused thought directly to a verified adjacent
@@ -701,6 +702,14 @@ agent above, below, left, or right.
 This is a progressive enhancement. Copy and cut remain available in every
 terminal. Submission controls appear only when an installed integration can
 identify an eligible adjacent agent with confidence.
+
+The searchable Commands overlay also exposes `Submit to agent...`. It discovers
+compatible coding agents in other tabs and workspaces on the current Herdr
+server. This global path has no dedicated shortcut, footer control, or
+always-visible action. After choosing a target, the user explicitly chooses
+`Submit`, which removes only after an accepted receipt, or `Submit and keep`.
+The existing adjacent `s`, `S`, Primary aliases, directional chooser, footer
+controls, and mouse behavior remain unchanged.
 
 Herdr is the first supported integration. It provides directional pane lookup,
 agent detection, optional session identity, readiness state, and an agent-aware
@@ -716,6 +725,13 @@ A submission target is eligible only when all of the following are true:
 - The target is recognized as a supported interactive agent.
 - The target exposes enough identity to show the user where the thought will
   go.
+
+For a global route, verified workspace, tab, pane, harness, and stable or
+qualified provisional session identity replace adjacency geometry. Discovery
+is limited to the current Herdr server. Idle, done, and working targets are
+eligible. Blocked and unknown targets, plus targets still launching or not yet
+interactive, remain visible in the chooser with delivery disabled and truthful
+feedback. Duplicate display names are harmless because labels are not identity.
 
 Directional lookup is never trusted without these independent checks. The
 product never guesses a target and never falls back to raw input injection.
@@ -780,6 +796,14 @@ Submission does not wait for the agent's response and does not import or inspect
 the agent conversation. The receiving harness decides whether a prompt sent
 while it is working is queued, treated as steering, or rejected. Proqi shows
 the agent state but does not reinterpret the harness's behavior.
+
+Global delivery captures the focused thought or current multi-thought selection
+in board order. It revalidates the exact target immediately before the Herdr
+prompt operation and fails closed if the target disappears, moves to another
+workspace or tab, changes session, becomes ambiguous, becomes ineligible, or
+returns a mismatched receipt. Workspace, tab, and agent label renames do not
+change identity. Live invocation references remain inert authoring annotations
+and are never interpreted as delivery targets.
 
 ### Reordering
 
@@ -1468,8 +1492,8 @@ model.
 
 ### Integration boundary
 
-The core defines a narrow adjacent-agent interface for capability discovery,
-verified target resolution, prompt submission, and structured errors. The TUI
+The core defines a narrow agent interface for capability discovery, adjacent
+and current-server target resolution, prompt submission, and structured errors. The TUI
 does not contain Herdr-specific process or protocol logic.
 
 The first adapter invokes the installed Herdr CLI directly without a shell. It
@@ -1477,10 +1501,13 @@ uses structured JSON responses, verifies the client and server protocol, applies
 bounded timeouts, and treats integration failures as non-destructive. Thought
 content is never interpolated into a shell command.
 
-The adapter resolves candidates in all four directions and then validates their
+For adjacent delivery, the adapter resolves candidates in all four directions and validates their
 pane identity, tab and workspace membership, geometry, detected agent, session,
 and interactive state. A direction with no verified candidate is unavailable.
-The adapter does not search unrelated tabs or workspaces for a convenient agent.
+For the explicit Commands action, it obtains one fresh bounded current-server
+snapshot and validates compatible agents across tabs and workspaces. It does not
+imply named remote servers, SSH hosts, historical sessions, arbitrary panes, or
+unrecognized shells.
 
 Other multiplexers may implement the same interface later. Unsupported
 terminals expose no submission capability and retain the complete clipboard-first
@@ -1684,6 +1711,8 @@ Specifically:
   action for a single target or one action plus a direction for several targets.
 - Submission can target verified agents above, below, left, or right without
   confusing their sessions.
+- Commands can submit the focused thought or current selection to a verified
+  compatible agent in another tab or workspace on the current Herdr server.
 - Failed or ambiguous submissions never remove or modify the thought.
 - Notes remain readable through continuous pane resizing.
 - Thoughts can be reordered by keyboard or direct mouse drag, and the new order

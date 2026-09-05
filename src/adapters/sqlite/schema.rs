@@ -96,7 +96,15 @@ CREATE TABLE submission_attempts (
     source_digest BLOB NOT NULL CHECK (length(source_digest) = 32),
     source_sequence INTEGER NOT NULL CHECK (source_sequence >= 0),
     disposition TEXT NOT NULL CHECK (disposition IN ('keep', 'remove_after_success')),
-    direction TEXT NOT NULL CHECK (direction IN ('up', 'right', 'down', 'left')),
+    route_version INTEGER NOT NULL CHECK (route_version IN (0, 1)),
+    route_kind TEXT NOT NULL CHECK (
+        route_kind IN ('adjacent_pane', 'herdr_agent')
+        AND (route_version = 1 OR route_kind = 'adjacent_pane')
+    ),
+    direction TEXT CHECK (
+        (route_kind = 'adjacent_pane' AND direction IN ('up', 'right', 'down', 'left'))
+        OR (route_kind = 'herdr_agent' AND direction IS NULL)
+    ),
     provider TEXT NOT NULL,
     protocol INTEGER NOT NULL CHECK (protocol >= 0),
     target_fingerprint BLOB NOT NULL CHECK (length(target_fingerprint) = 32),
@@ -141,7 +149,7 @@ CREATE VIRTUAL TABLE session_search USING fts5(
 );
 
 INSERT INTO schema_meta(singleton, schema_version, storage_protocol, migrated_at)
-VALUES (1, 12, 11, 0);
+VALUES (1, 13, 12, 0);
 INSERT INTO onboarding_state(singleton, completed_version) VALUES (1, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (1, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (2, 0);
@@ -155,6 +163,7 @@ INSERT INTO migration_history(version, applied_at) VALUES (9, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (10, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (11, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (12, 0);
+INSERT INTO migration_history(version, applied_at) VALUES (13, 0);
 ";
 
 pub(super) const MIGRATION_2: &str = r"
@@ -281,4 +290,69 @@ INSERT INTO migration_history(version, applied_at) VALUES (11, 0);
 pub(super) const MIGRATION_12: &str = r"
 UPDATE schema_meta SET schema_version = 12, storage_protocol = 11;
 INSERT INTO migration_history(version, applied_at) VALUES (12, 0);
+";
+
+pub(super) const MIGRATION_13: &str = r"
+DROP INDEX submission_attempt_items_active_thought;
+ALTER TABLE submission_attempt_items RENAME TO submission_attempt_items_v12;
+ALTER TABLE submission_attempts RENAME TO submission_attempts_v12;
+CREATE TABLE submission_attempts (
+    id BLOB PRIMARY KEY CHECK (length(id) = 16),
+    session_id BLOB NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    thought_id BLOB NOT NULL REFERENCES thoughts(id) ON DELETE CASCADE,
+    source_digest BLOB NOT NULL CHECK (length(source_digest) = 32),
+    source_sequence INTEGER NOT NULL CHECK (source_sequence >= 0),
+    disposition TEXT NOT NULL CHECK (disposition IN ('keep', 'remove_after_success')),
+    route_version INTEGER NOT NULL CHECK (route_version IN (0, 1)),
+    route_kind TEXT NOT NULL CHECK (
+        route_kind IN ('adjacent_pane', 'herdr_agent')
+        AND (route_version = 1 OR route_kind = 'adjacent_pane')
+    ),
+    direction TEXT CHECK (
+        (route_kind = 'adjacent_pane' AND direction IN ('up', 'right', 'down', 'left'))
+        OR (route_kind = 'herdr_agent' AND direction IS NULL)
+    ),
+    provider TEXT NOT NULL,
+    protocol INTEGER NOT NULL CHECK (protocol >= 0),
+    target_fingerprint BLOB NOT NULL CHECK (length(target_fingerprint) = 32),
+    pre_state TEXT NOT NULL,
+    post_state TEXT,
+    error_code TEXT,
+    deletion_operation_id BLOB CHECK (
+        deletion_operation_id IS NULL OR length(deletion_operation_id) = 16
+    ),
+    state TEXT NOT NULL CHECK (
+        state IN ('prepared', 'sending', 'accepted', 'failed', 'cancelled', 'outcome_unknown')
+    ),
+    prepared_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+) STRICT;
+INSERT INTO submission_attempts(
+    id, session_id, thought_id, source_digest, source_sequence, disposition,
+    route_version, route_kind, direction, provider, protocol, target_fingerprint,
+    pre_state, post_state, error_code, deletion_operation_id, state, prepared_at, updated_at
+)
+SELECT id, session_id, thought_id, source_digest, source_sequence, disposition,
+       0, 'adjacent_pane', direction, provider, protocol, target_fingerprint,
+       pre_state, post_state, error_code, deletion_operation_id, state, prepared_at, updated_at
+FROM submission_attempts_v12;
+CREATE TABLE submission_attempt_items (
+    submission_id BLOB NOT NULL REFERENCES submission_attempts(id) ON DELETE CASCADE,
+    thought_id BLOB NOT NULL REFERENCES thoughts(id) ON DELETE CASCADE,
+    ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+    source_digest BLOB NOT NULL CHECK (length(source_digest) = 32),
+    active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
+    PRIMARY KEY(submission_id, ordinal),
+    UNIQUE(submission_id, thought_id)
+) STRICT;
+INSERT INTO submission_attempt_items(submission_id, thought_id, ordinal, source_digest, active)
+SELECT submission_id, thought_id, ordinal, source_digest, active
+FROM submission_attempt_items_v12;
+DROP TABLE submission_attempt_items_v12;
+DROP TABLE submission_attempts_v12;
+CREATE UNIQUE INDEX submission_attempt_items_active_thought
+ON submission_attempt_items(thought_id)
+WHERE active = 1;
+UPDATE schema_meta SET schema_version = 13, storage_protocol = 12;
+INSERT INTO migration_history(version, applied_at) VALUES (13, 0);
 ";

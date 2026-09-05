@@ -43,6 +43,9 @@ use super::{
 
 enum ExternalRequest {
     DiscoverAgents,
+    DiscoverGlobalAgents {
+        generation: u64,
+    },
     DiscoverInvocations(InvocationDiscoveryRequest),
     DiscoverInvocationReferences(InvocationReferenceDiscoveryRequest),
     SubmitAgent(Box<SubmissionRequest>),
@@ -73,6 +76,10 @@ enum ExternalRequest {
 pub(super) enum ExternalResult {
     AgentsDiscovered {
         pane_id: Option<String>,
+        result: Result<Vec<AgentTarget>, AgentError>,
+    },
+    GlobalAgentsDiscovered {
+        generation: u64,
         result: Result<Vec<AgentTarget>, AgentError>,
     },
     InvocationsDiscovered(InvocationDiscovery),
@@ -160,6 +167,9 @@ impl ExternalLane {
     pub(super) fn send(&self, effect: &Effect) -> Result<bool, TerminalError> {
         let request = match effect {
             Effect::DiscoverAgents => ExternalRequest::DiscoverAgents,
+            Effect::DiscoverGlobalAgents { generation } => ExternalRequest::DiscoverGlobalAgents {
+                generation: *generation,
+            },
             Effect::DiscoverInvocations(request) => {
                 ExternalRequest::DiscoverInvocations(request.clone())
             }
@@ -304,6 +314,12 @@ fn external_loop(
     while let Ok(request) = requests.recv() {
         let outcome = match request {
             ExternalRequest::DiscoverAgents => discover_agents(&mut agents),
+            ExternalRequest::DiscoverGlobalAgents { generation } => {
+                ExternalResult::GlobalAgentsDiscovered {
+                    generation,
+                    result: agents.global_targets(),
+                }
+            }
             ExternalRequest::DiscoverInvocations(request) => {
                 discover_invocations(&mut invocations, request)
             }

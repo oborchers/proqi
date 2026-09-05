@@ -33,6 +33,47 @@ fn responsive_row_keeps_location_fallbacks_in_priority_order() {
 }
 
 #[test]
+fn prioritized_row_truncates_primary_before_pane_and_state() {
+    let fallbacks = vec!["Workspace · p1 · working".to_owned()];
+    let protected = vec!["p1 · working".to_owned(), "working".to_owned()];
+    let row = PickerRow::responsive_choice(
+        "very-long-agent-name",
+        "Workspace / tab · p1 · codex · working",
+        &fallbacks,
+        &protected,
+        true,
+    );
+
+    assert_eq!(picker_row(row, 26), "very-long-a…  p1 · working");
+    assert_eq!(picker_row(row, 14), "  p1 · working");
+    assert_eq!(picker_row(row, 10), "…  working");
+    assert_eq!(picker_row(row, 7), "working");
+}
+
+#[test]
+fn prioritized_disabled_row_keeps_truthful_state_visible() {
+    let protected = vec!["p8 · blocked".to_owned(), "blocked".to_owned()];
+    let row = PickerRow::responsive_choice(
+        "Blocked receiver with a long name",
+        "Workspace / tab · p8 · codex · blocked",
+        &[],
+        &protected,
+        false,
+    );
+    let theme = Theme::resolve(ThemePreference::Dark, true);
+
+    let rendered = picker_line(row, 20, true, &theme);
+    assert_eq!(rendered.to_string(), "Block…  p8 · blocked");
+    assert!(
+        rendered
+            .spans
+            .iter()
+            .all(|span| span.style.bg == theme.focused_surface)
+    );
+    assert_eq!(rendered.spans[0].style.fg, Some(theme.muted));
+}
+
+#[test]
 fn every_picker_secondary_uses_the_same_quiet_metadata_style() {
     let theme = Theme::resolve(ThemePreference::Dark, true);
     let row = PickerRow::fields("$skill", "Project Skill");
@@ -56,6 +97,25 @@ fn every_picker_secondary_uses_the_same_quiet_metadata_style() {
     insta::with_settings!({ snapshot_path => "../snapshots" }, {
         insta::assert_debug_snapshot!("picker_metadata_styles", (ordinary, selected));
     });
+}
+
+#[test]
+fn selected_disabled_choice_keeps_focus_surface_and_muted_text() {
+    let theme = Theme::resolve(ThemePreference::Dark, true);
+    let selected = picker_line(
+        PickerRow::choice("Blocked receiver", "blocked", false),
+        32,
+        true,
+        &theme,
+    );
+
+    assert!(
+        selected
+            .spans
+            .iter()
+            .all(|span| span.style.bg == theme.focused_surface)
+    );
+    assert_eq!(selected.spans[0].style.fg, Some(theme.muted));
 }
 
 #[test]

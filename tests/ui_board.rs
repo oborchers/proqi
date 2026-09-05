@@ -388,6 +388,8 @@ mod agent_direct;
 mod agent_discovery;
 #[path = "ui_board/agent_hermes.rs"]
 mod agent_hermes;
+#[path = "ui_board/agent_identity.rs"]
+mod agent_identity;
 #[path = "ui_board/agent_pi.rs"]
 mod agent_pi;
 #[path = "ui_board/agent_selection.rs"]
@@ -426,6 +428,12 @@ mod fast_navigation;
 mod first_run;
 #[path = "ui_board/fixture.rs"]
 mod fixture;
+#[path = "ui_board/global_agent_delivery.rs"]
+mod global_agent_delivery;
+#[path = "ui_board/global_agent_delivery_failures.rs"]
+mod global_agent_delivery_failures;
+#[path = "ui_board/global_delivery_snapshots.rs"]
+mod global_delivery_snapshots;
 #[path = "ui_board/insertion_navigation.rs"]
 mod insertion_navigation;
 #[path = "ui_board/kilo.rs"]

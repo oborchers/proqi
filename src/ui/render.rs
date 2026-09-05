@@ -1,6 +1,7 @@
 //! Deterministic one-column board renderer.
 
 mod chrome;
+mod global_delivery;
 mod overlay_composition;
 mod overlays;
 mod release_highlights;

@@ -45,6 +45,11 @@ pub enum Effect {
     },
     /// Discover verified adjacent agents without blocking the reducer lane.
     DiscoverAgents,
+    /// Discover compatible coding agents across the current Herdr server.
+    DiscoverGlobalAgents {
+        /// Picker generation used to discard stale completion.
+        generation: u64,
+    },
     /// Refresh bounded authoring definitions without blocking the reducer lane.
     DiscoverInvocations(InvocationDiscoveryRequest),
     /// Refresh one bounded picker-open collaborator snapshot.

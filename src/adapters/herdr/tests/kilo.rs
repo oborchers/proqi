@@ -63,16 +63,18 @@ fn recorded_agents(document: &str) -> Value {
 fn kilo_target() -> crate::ports::agent::AgentTarget {
     let context = source();
     let mut target = target(&context);
-    target.agent_kind = HarnessKind::new(KILO_AGENT_KIND).expect("Kilo harness kind");
+    target.set_test_agent_kind(HarnessKind::new(KILO_AGENT_KIND).expect("Kilo harness kind"));
     target.agent_name = "kilo-reviewer".to_owned();
-    target.agent_session = AgentSessionBinding::established("ses_fixture_kilo_established")
-        .expect("Kilo fixture session");
+    target.set_test_agent_session(
+        AgentSessionBinding::established("ses_fixture_kilo_established")
+            .expect("Kilo fixture session"),
+    );
     target
 }
 
 fn provisional_kilo_target() -> crate::ports::agent::AgentTarget {
     let mut target = kilo_target();
-    target.agent_session = AgentSessionBinding::provisional();
+    target.set_test_agent_session(AgentSessionBinding::provisional());
     target
 }
 
@@ -88,9 +90,9 @@ fn recorded_kilo_detection_uses_the_generic_established_session_path() {
 
     let targets = gateway.adjacent_targets(&context).expect("Kilo target");
     assert_eq!(targets.len(), 1);
-    assert_eq!(targets[0].agent_kind.as_str(), KILO_AGENT_KIND);
+    assert_eq!(targets[0].agent_kind().as_str(), KILO_AGENT_KIND);
     assert_eq!(
-        targets[0].agent_session.as_id(),
+        targets[0].agent_session().as_id(),
         Some("ses_fixture_kilo_established")
     );
     assert_eq!(targets[0].readiness, AgentState::Idle);
@@ -109,8 +111,8 @@ fn recorded_kilo_sessionless_is_provisional_while_unready_and_exit_stay_hidden()
         .adjacent_targets(&context)
         .expect("provisional Kilo target");
     assert_eq!(targets.len(), 1);
-    assert_eq!(targets[0].agent_kind.as_str(), KILO_AGENT_KIND);
-    assert!(targets[0].agent_session.is_provisional());
+    assert_eq!(targets[0].agent_kind().as_str(), KILO_AGENT_KIND);
+    assert!(targets[0].agent_session().is_provisional());
 
     let context = source();
     let responses = discovery_responses(
@@ -162,7 +164,7 @@ fn recorded_kilo_first_receipt_may_establish_the_session() {
         .expect("session-establishing Kilo receipt");
 
     assert_eq!(
-        receipt.target.agent_session.as_id(),
+        receipt.target.agent_session().as_id(),
         Some("ses_fixture_kilo_established")
     );
     assert_eq!(semantic_prompt_count(&runner.requests.borrow()), 1);
@@ -188,7 +190,7 @@ fn recorded_kilo_first_receipt_may_precede_the_session_hook() {
         })
         .expect("matching provisional Kilo receipt");
 
-    assert!(receipt.target.agent_session.is_provisional());
+    assert!(receipt.target.agent_session().is_provisional());
     assert_eq!(semantic_prompt_count(&runner.requests.borrow()), 1);
 }
 
@@ -215,7 +217,7 @@ fn recorded_kilo_receipt_accepts_one_exact_semantic_prompt() {
         .expect("matching Kilo receipt");
 
     assert_eq!(receipt.submission_id, submission_id);
-    assert_eq!(receipt.target.agent_kind.as_str(), KILO_AGENT_KIND);
+    assert_eq!(receipt.target.agent_kind().as_str(), KILO_AGENT_KIND);
     assert_eq!(receipt.post_state, Some(AgentState::Working));
     let requests = runner.requests.borrow();
     let request = requests.last().expect("semantic prompt request");

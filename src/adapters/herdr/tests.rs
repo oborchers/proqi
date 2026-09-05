@@ -19,6 +19,8 @@ use super::HerdrGateway;
 
 #[path = "tests/compatibility.rs"]
 mod compatibility;
+#[path = "tests/global.rs"]
+mod global;
 #[path = "tests/hermes.rs"]
 mod hermes;
 #[path = "tests/kilo.rs"]
@@ -252,7 +254,7 @@ fn all_directions_are_queried_and_only_independently_verified_agents_return() {
     ));
     let targets = gateway.adjacent_targets(&context).expect("targets");
     assert_eq!(targets.len(), 1);
-    assert_eq!(targets[0].direction, Direction::Right);
+    assert_eq!(targets[0].adjacent_direction(), Some(Direction::Right));
     assert_eq!(targets[0].readiness, AgentState::Idle);
     let requests = runner.requests.borrow();
     let directional = requests
@@ -286,7 +288,7 @@ fn ordinary_neighbor_without_agent_identity_does_not_hide_a_valid_target() {
         .adjacent_targets(&context)
         .expect("ordinary shell is ignored");
     assert_eq!(targets.len(), 1);
-    assert_eq!(targets[0].direction, Direction::Right);
+    assert_eq!(targets[0].adjacent_direction(), Some(Direction::Right));
 }
 
 #[test]
@@ -364,22 +366,24 @@ fn explicit_interactive_readiness_metadata_fails_closed() {
 }
 
 fn target(context: &PaneContext) -> AgentTarget {
-    AgentTarget {
-        provider: "herdr".to_owned(),
-        protocol: 19,
-        direction: Direction::Right,
-        pane_id: "w1:p2".to_owned(),
-        workspace_id: "w1".to_owned(),
-        tab_id: "w1:t1".to_owned(),
-        agent_kind: HarnessKind::new(CODEX_AGENT_KIND).expect("fixture harness"),
-        agent_name: "reviewer".to_owned(),
-        agent_session: AgentSessionBinding::established("agent-session-1")
-            .expect("fixture session"),
-        readiness: AgentState::Idle,
-        delivery: crate::ports::agent::AgentDeliveryCapabilities::SUBMIT_ONLY,
-        rect: right_rect(),
-        source: context.clone(),
-    }
+    AgentTarget::adjacent(
+        "herdr".to_owned(),
+        19,
+        Direction::Right,
+        crate::ports::agent::HerdrAgentAddress::new(
+            "w1".to_owned(),
+            "w1:t1".to_owned(),
+            "w1:p2".to_owned(),
+            HarnessKind::new(CODEX_AGENT_KIND).expect("fixture harness"),
+            AgentSessionBinding::established("agent-session-1").expect("fixture session"),
+        )
+        .expect("fixture address"),
+        "reviewer".to_owned(),
+        AgentState::Idle,
+        crate::ports::agent::AgentDeliveryCapabilities::SUBMIT_ONLY,
+        right_rect(),
+        context.clone(),
+    )
 }
 
 #[test]

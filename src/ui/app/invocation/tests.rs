@@ -1,9 +1,5 @@
 #[cfg(test)]
 pub(super) mod contract {
-    use std::path::{Path, PathBuf};
-
-    use ratatui_core::{backend::TestBackend, terminal::Terminal};
-
     use crate::{
         adapters::{
             editor::RopeEditorFactory,
@@ -29,6 +25,8 @@ pub(super) mod contract {
             render,
         },
     };
+    use ratatui_core::{backend::TestBackend, terminal::Terminal};
+    use std::path::{Path, PathBuf};
 
     use crate::ui::BoardApp;
 
@@ -107,26 +105,30 @@ pub(super) mod contract {
                 height: 20,
             },
         };
-        AgentTarget {
-            provider: "herdr".to_owned(),
-            protocol: 19,
-            direction: Direction::Right,
-            pane_id: "w1:p2".to_owned(),
-            workspace_id: source.workspace_id.clone(),
-            tab_id: source.tab_id.clone(),
-            agent_kind: HarnessKind::new(harness).expect("harness"),
-            agent_name: harness.to_owned(),
-            agent_session: AgentSessionBinding::established("session").expect("session"),
-            readiness: AgentState::Idle,
-            delivery: AgentDeliveryCapabilities::SUBMIT_ONLY,
-            rect: PaneRect {
+        let address = crate::ports::agent::HerdrAgentAddress::new(
+            source.workspace_id.clone(),
+            source.tab_id.clone(),
+            "w1:p2".to_owned(),
+            HarnessKind::new(harness).expect("harness"),
+            AgentSessionBinding::established("session").expect("session"),
+        )
+        .expect("address");
+        AgentTarget::adjacent(
+            "herdr".to_owned(),
+            19,
+            Direction::Right,
+            address,
+            harness.to_owned(),
+            AgentState::Idle,
+            AgentDeliveryCapabilities::SUBMIT_ONLY,
+            PaneRect {
                 x: 20,
                 y: 0,
                 width: 20,
                 height: 20,
             },
             source,
-        }
+        )
     }
 
     #[test]
@@ -492,7 +494,6 @@ pub(super) mod contract {
         insta::assert_snapshot!("invocation_completion_shallow", completion_snapshot(28, 6));
     }
 }
-
 #[path = "alias_tests.rs"]
 mod alias_tests;
 #[path = "reference_tests.rs"]

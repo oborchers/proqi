@@ -407,26 +407,30 @@ fn thought_mutations_are_locked_from_submission_intent_until_completion() {
             height: 10,
         },
     };
-    app.complete_agent_discovery(Ok(vec![AgentTarget {
-        provider: "herdr".to_owned(),
-        protocol: 1,
-        direction: Direction::Left,
-        pane_id: "target".to_owned(),
-        workspace_id: source.workspace_id.clone(),
-        tab_id: source.tab_id.clone(),
-        agent_kind: HarnessKind::new(CODEX_AGENT_KIND).expect("fixture harness"),
-        agent_name: "Codex".to_owned(),
-        agent_session: AgentSessionBinding::established("agent-session").expect("fixture session"),
-        readiness: AgentState::Working,
-        delivery: AgentDeliveryCapabilities::SUBMIT_ONLY,
-        rect: PaneRect {
+    let address = crate::ports::agent::HerdrAgentAddress::new(
+        source.workspace_id.clone(),
+        source.tab_id.clone(),
+        "target".to_owned(),
+        HarnessKind::new(CODEX_AGENT_KIND).expect("fixture harness"),
+        AgentSessionBinding::established("agent-session").expect("fixture session"),
+    )
+    .expect("fixture address");
+    app.complete_agent_discovery(Ok(vec![AgentTarget::adjacent(
+        "herdr".to_owned(),
+        1,
+        Direction::Left,
+        address,
+        "Codex".to_owned(),
+        AgentState::Working,
+        AgentDeliveryCapabilities::SUBMIT_ONLY,
+        PaneRect {
             x: 10,
             y: 0,
             width: 10,
             height: 10,
         },
         source,
-    }]));
+    )]));
     let clock = FakeClock::new(Timestamp::from_millis(2));
     let effects = app.handle(UiInput::Key(UiKey::Character('s')), &mut ids, &clock);
     assert!(matches!(

@@ -4,13 +4,13 @@ mod capture;
 mod compaction;
 mod error;
 mod onboarding;
+mod submission_route;
 
 use serde::{Deserialize, Serialize};
 
 use crate::domain::{
-    BoardOperation, Direction, IntegrationContext, OperationId, OperationSequence, RevisionId,
-    Session, SessionBoard, SessionId, SubmissionId, ThoughtId, ThoughtRevision, Timestamp,
-    UndoScope,
+    BoardOperation, IntegrationContext, OperationId, OperationSequence, RevisionId, Session,
+    SessionBoard, SessionId, SubmissionId, ThoughtId, ThoughtRevision, Timestamp, UndoScope,
 };
 use crate::ports::agent::{AgentState, SubmissionDisposition};
 
@@ -18,11 +18,12 @@ pub use capture::{CaptureCommit, CaptureCommitOutcome, CaptureReceipt};
 pub use compaction::{CompactedOperationRequest, thought_payload_digest};
 pub use error::{StoreError, StoreFailureCode};
 pub use onboarding::{FirstRunBoard, FirstRunOutcome, OnboardingVersion};
+pub use submission_route::{SUBMISSION_ROUTE_VERSION, SubmissionJournalRoute};
 
 /// Current storage schema understood by this binary.
-pub const SUPPORTED_SCHEMA_VERSION: u32 = 12;
+pub const SUPPORTED_SCHEMA_VERSION: u32 = 13;
 /// Current local storage protocol understood by this binary.
-pub const STORAGE_PROTOCOL_VERSION: u32 = 11;
+pub const STORAGE_PROTOCOL_VERSION: u32 = 12;
 
 /// One ordered, content-redacted source included in a submission.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -81,8 +82,8 @@ pub struct SubmissionAttempt {
     pub source_sequence: OperationSequence,
     /// Keep or remove after durable acceptance.
     pub disposition: SubmissionDisposition,
-    /// Adjacent target direction.
-    pub direction: Direction,
+    /// Versioned content-redacted delivery route.
+    pub route: SubmissionJournalRoute,
     /// Integration provider name.
     pub provider: String,
     /// Negotiated provider protocol.

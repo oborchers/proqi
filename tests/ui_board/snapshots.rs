@@ -273,10 +273,10 @@ fn mixed_claude_and_hermes_targets_have_equal_directional_controls() {
     fixture.input(UiInput::Paste("selected prompt".to_owned()));
     fixture.input(UiInput::Key(UiKey::Escape));
     let mut left = adjacent_target(Direction::Left, "w1:p2", AgentState::Idle);
-    left.agent_kind = HarnessKind::new("claude").expect("fixture harness");
+    left = left.with_agent_kind(HarnessKind::new("claude").expect("fixture harness"));
     left.agent_name = "Claude qualifier".to_owned();
     let mut right = adjacent_target(Direction::Right, "w1:p3", AgentState::Idle);
-    right.agent_kind = HarnessKind::new("hermes").expect("fixture harness");
+    right = right.with_agent_kind(HarnessKind::new("hermes").expect("fixture harness"));
     right.agent_name = "Hermes qualifier".to_owned();
     fixture.app.complete_agent_discovery(Ok(vec![left, right]));
     insta::assert_snapshot!(snapshot(&mut fixture, 88, 9, ThemePreference::Dark));

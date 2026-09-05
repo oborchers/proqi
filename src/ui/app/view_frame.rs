@@ -105,6 +105,7 @@ impl BoardApp {
             .palette
             .as_ref()
             .map_or(0, palette::PaletteState::match_count);
+        let global_delivery_items = self.global_delivery_match_count();
         let invocation_items = self.invocation_match_count();
         let invocation_groups = self
             .invocation_view()
@@ -135,6 +136,8 @@ impl BoardApp {
                 .max(2)
         } else if self.palette.is_some() {
             palette_items.max(2)
+        } else if self.global_delivery.is_some() {
+            global_delivery_items.max(2)
         } else if self.transfer.is_some() {
             transfer_items.max(2)
         } else if self.search.is_some() {
@@ -148,6 +151,7 @@ impl BoardApp {
             layout.configure_overlay(
                 screenshot_items
                     .max(palette_items)
+                    .max(global_delivery_items)
                     .max(search_items)
                     .max(transfer_items)
                     .max(invocation_items)
@@ -164,6 +168,8 @@ impl BoardApp {
         let visible = overlay.items.len().max(1);
         if self.palette.is_some() {
             self.ensure_palette_visible(visible);
+        } else if self.global_delivery.is_some() {
+            self.ensure_global_delivery_visible(visible);
         } else if self.invocation_popup.is_some() {
             self.ensure_invocation_visible(usize::from(overlay.area.height.saturating_sub(3)));
         } else if self.transfer.is_some() {

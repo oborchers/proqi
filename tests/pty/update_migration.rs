@@ -236,7 +236,7 @@ fn downgrade_to_schema_eleven(state: &Path) {
     Connection::open(state.join("data/proqi.sqlite3"))
         .expect("database")
         .execute_batch(
-            "DELETE FROM migration_history WHERE version = 12;
+            "DELETE FROM migration_history WHERE version IN (12, 13);
              UPDATE schema_meta SET schema_version = 11, storage_protocol = 10;",
         )
         .expect("schema eleven fixture");
@@ -288,12 +288,12 @@ fn assert_store(state: &Path, sessions: &[String]) {
     );
     let migration_rows: i64 = connection
         .query_row(
-            "SELECT count(*) FROM migration_history WHERE version = 12",
+            "SELECT count(*) FROM migration_history WHERE version IN (12, 13)",
             [],
             |row| row.get(0),
         )
         .expect("migration history count");
-    assert_eq!(migration_rows, 1);
+    assert_eq!(migration_rows, 2);
     for (table, expected) in [
         ("sessions", sessions.len()),
         ("session_search", sessions.len()),

@@ -110,6 +110,10 @@ impl<R: ProcessRunner> AgentGateway for HerdrGateway<R> {
         discovery::adjacent_targets(self, context)
     }
 
+    fn global_targets(&mut self) -> Result<Vec<AgentTarget>, AgentError> {
+        discovery::global_targets(self)
+    }
+
     fn submit(&mut self, request: SubmissionRequest) -> Result<SubmissionReceipt, AgentError> {
         submission::submit(self, &request)
     }

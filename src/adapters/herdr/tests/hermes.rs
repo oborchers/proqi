@@ -60,10 +60,10 @@ fn recorded_hermes_identity_uses_the_open_established_session_path() {
         let [target] = targets.as_slice() else {
             panic!("expected one recorded Hermes target");
         };
-        assert_eq!(target.agent_kind.as_str(), "hermes");
+        assert_eq!(target.agent_kind().as_str(), "hermes");
         assert_eq!(target.agent_name, "hermes-qualifier");
         assert_eq!(
-            target.agent_session.as_id(),
+            target.agent_session().as_id(),
             Some("hermes-session-fixture-a")
         );
         assert_eq!(target.readiness, readiness);
@@ -121,7 +121,7 @@ fn recorded_hermes_target_survives_unrelated_adjacent_shells() {
         .adjacent_targets(&context)
         .expect("ordinary shell neighbors are ignored");
     assert_eq!(targets.len(), 1);
-    assert_eq!(targets[0].agent_kind.as_str(), "hermes");
+    assert_eq!(targets[0].agent_kind().as_str(), "hermes");
 }
 
 #[test]
@@ -186,9 +186,9 @@ fn recorded_hermes_receipt_preserves_identity_and_exact_prompt_data() {
         })
         .expect("accepted established Hermes prompt");
 
-    assert_eq!(receipt.target.agent_kind.as_str(), "hermes");
+    assert_eq!(receipt.target.agent_kind().as_str(), "hermes");
     assert_eq!(
-        receipt.target.agent_session.as_id(),
+        receipt.target.agent_session().as_id(),
         Some("hermes-session-fixture-a")
     );
     assert_eq!(receipt.post_state, Some(AgentState::Working));

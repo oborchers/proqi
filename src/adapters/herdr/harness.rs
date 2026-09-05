@@ -38,7 +38,7 @@ pub(super) fn receipt_session(
     session: Option<&AgentSession>,
 ) -> Result<AgentSessionBinding, AgentError> {
     let Some(session) = session else {
-        return if target.agent_session.is_provisional() {
+        return if target.agent_session().is_provisional() {
             Ok(AgentSessionBinding::provisional())
         } else {
             Err(AgentError::Malformed(
@@ -46,8 +46,8 @@ pub(super) fn receipt_session(
             ))
         };
     };
-    let binding = established_session(&target.agent_kind, session)?;
-    if target.agent_session.accepts_receipt(&binding) {
+    let binding = established_session(target.agent_kind(), session)?;
+    if target.agent_session().accepts_receipt(&binding) {
         Ok(binding)
     } else {
         Err(AgentError::Malformed(

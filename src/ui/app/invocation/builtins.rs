@@ -63,5 +63,5 @@ fn app_supports_shared_starters(app: &BoardApp) -> bool {
     app.agent_targets()
         .iter()
         .filter(|target| target.delivery.supports())
-        .any(|target| agent_supports_shared_starters(target.agent_kind.as_str()))
+        .any(|target| agent_supports_shared_starters(target.agent_kind().as_str()))
 }

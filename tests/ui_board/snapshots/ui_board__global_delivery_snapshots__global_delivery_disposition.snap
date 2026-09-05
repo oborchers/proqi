@@ -1,0 +1,22 @@
+---
+source: tests/ui_board/global_delivery_snapshots.rs
+assertion_line: 56
+expression: "screen(&mut fixture, 50, 6)"
+---
+SIZE 50x6
+
+TEXT
+00│┌ submission behavior ─────────────────────────[x]│
+01││›                                               ││
+02││Submit             remove after accepted receipt││
+03││Submit and keep      keep after accepted receipt││
+04│└────────────────────────────────────────────────┘│
+05│  n New   : Commands  ? Shortcuts│
+
+STYLE RUNS
+0: 0-46 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 47-49 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE
+1: 0-0 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 1-48 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 49-49 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+2: 0-0 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 1-6 fg=Rgb(112, 214, 155) bg=Rgb(39, 40, 48) mod=BOLD | 7-19 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 20-48 fg=Rgb(176, 169, 160) bg=Rgb(39, 40, 48) mod=NONE | 49-49 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+3: 0-21 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 22-48 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE | 49-49 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+4: 0-49 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+5: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-2 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 3-9 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 10-10 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 11-21 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 22-22 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 23-49 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE

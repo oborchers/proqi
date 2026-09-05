@@ -55,6 +55,10 @@ fn direction_chooser_accepts_modified_arrows_and_vim_spellings_equally() {
         fixture.input(UiInput::Key(UiKey::Character('S')));
         let effects = fixture.effects(UiInput::Key(key));
         let request = super::agent::start_submission(&mut fixture, &effects);
-        assert_eq!(request.target.direction, expected, "key: {key:?}");
+        assert_eq!(
+            request.target.adjacent_direction(),
+            Some(expected),
+            "key: {key:?}"
+        );
     }
 }

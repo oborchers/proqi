@@ -16,7 +16,7 @@ fn attempt(
         payload_digest: digest,
         source_sequence: state.board.session.last_durable_sequence,
         disposition: SubmissionDisposition::RemoveAfterSuccess,
-        direction: Direction::Left,
+        route: proqi::ports::store::SubmissionJournalRoute::adjacent(Direction::Left),
         provider: "herdr".to_owned(),
         protocol: 19,
         target_fingerprint: [31; 32],
@@ -73,6 +73,61 @@ fn journal_is_redacted_and_one_thought_has_only_one_active_attempt() {
         )
         .expect("provider");
     assert_eq!(stored_provider, "herdr");
+}
+
+#[test]
+fn current_adjacent_and_global_routes_round_trip_without_topology_identifiers() {
+    let fixture = DatabaseFixture::new();
+    let mut store = fixture.open();
+    let mut ids = FakeIdGenerator::new(1_500);
+    let mut state = session_state(&mut ids, &test_path("submission-route-journal"));
+    store
+        .commit(&OperationBatch::CreateSession(state.board.session.clone()))
+        .expect("create session");
+    let adjacent_id = create_thought(&mut store, &mut state, &mut ids, "adjacent", 2);
+    let global_id = create_thought(&mut store, &mut state, &mut ids, "global", 3);
+    let adjacent = attempt(&mut ids, &state, adjacent_id, [21; 32]);
+    let mut global = attempt(&mut ids, &state, global_id, [22; 32]);
+    global.route = proqi::ports::store::SubmissionJournalRoute::herdr_agent();
+    store.prepare_submission(&adjacent).expect("adjacent route");
+    store.prepare_submission(&global).expect("global route");
+
+    let connection = Connection::open(&fixture.config.database_path).expect("journal database");
+    let adjacent_route: (u32, String, Option<String>) = connection
+        .query_row(
+            "SELECT route_version, route_kind, direction FROM submission_attempts WHERE id = ?1",
+            [adjacent.id.database_bytes().as_slice()],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .expect("adjacent route fields");
+    let global_route: (u32, String, Option<String>) = connection
+        .query_row(
+            "SELECT route_version, route_kind, direction FROM submission_attempts WHERE id = ?1",
+            [global.id.database_bytes().as_slice()],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .expect("global route fields");
+    assert_eq!(
+        adjacent_route,
+        (1, "adjacent_pane".to_owned(), Some("left".to_owned()))
+    );
+    assert_eq!(global_route, (1, "herdr_agent".to_owned(), None));
+    assert!(
+        connection
+            .execute(
+                "UPDATE submission_attempts SET direction = 'right' WHERE id = ?1",
+                [global.id.database_bytes().as_slice()],
+            )
+            .is_err()
+    );
+    assert!(
+        connection
+            .execute(
+                "UPDATE submission_attempts SET route_version = 0 WHERE id = ?1",
+                [global.id.database_bytes().as_slice()],
+            )
+            .is_err()
+    );
 }
 
 #[test]

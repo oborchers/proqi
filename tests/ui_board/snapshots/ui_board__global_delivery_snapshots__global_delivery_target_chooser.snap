@@ -1,0 +1,30 @@
+---
+source: tests/ui_board/global_delivery_snapshots.rs
+assertion_line: 37
+expression: "screen(&mut fixture, 64, 10)"
+---
+SIZE 64x10
+
+TEXT
+00│   ┌ submit to agent ─────────────────────────────────────[x]│
+01│⋮  │›                                                       ││
+02│   │Béta 世 界         Workspace w1 / Tab w1:t2 · p2 · working││
+03│   │Blocked receiver             Workspace w2 · p8 · blocked││
+04│   └────────────────────────────────────────────────────────┘│
+05││
+06││
+07│  proqi-ui-contract│
+08│  1 thought · board · saved│
+09│  n New   y Copy  x Cut  d/Del  Space Select u Undo  / Search│
+
+STYLE RUNS
+0: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-2 fg=Reset bg=Reset mod=NONE | 3-57 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 58-60 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 61-61 fg=Reset bg=Reset mod=NONE | 62-63 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+1: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-1 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 2-2 fg=Reset bg=Reset mod=NONE | 3-3 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 4-59 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 60-60 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 61-61 fg=Reset bg=Reset mod=NONE | 62-63 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
+2: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-2 fg=Reset bg=Reset mod=NONE | 3-9 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 10-10 fg=Reset bg=Reset mod=NONE | 11-11 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 12-12 fg=Reset bg=Reset mod=NONE | 13-20 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 21-59 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE | 60-60 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 61-61 fg=Reset bg=Reset mod=NONE | 62-63 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+3: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-2 fg=Reset bg=Reset mod=NONE | 3-3 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 4-19 fg=Rgb(176, 169, 160) bg=Rgb(39, 40, 48) mod=NONE | 20-32 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 33-59 fg=Rgb(176, 169, 160) bg=Rgb(39, 40, 48) mod=NONE | 60-60 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 61-61 fg=Reset bg=Reset mod=NONE | 62-63 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+4: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-2 fg=Reset bg=Reset mod=NONE | 3-60 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 61-61 fg=Reset bg=Reset mod=NONE | 62-63 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+5: 0-63 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+6: 0-63 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+7: 0-63 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+8: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-61 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE | 62-63 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+9: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-2 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 3-9 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 10-10 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 11-17 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 18-18 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 19-24 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 25-29 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 30-31 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 32-36 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 37-44 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 45-45 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 46-52 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 53-53 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 54-63 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE

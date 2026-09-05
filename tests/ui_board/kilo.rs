@@ -9,12 +9,13 @@ use proqi::{
 };
 
 fn mixed_target(direction: Direction, pane_id: &str, kind: &str, name: &str) -> AgentTarget {
-    let mut target = super::agent::target(direction, pane_id);
-    target.agent_kind = HarnessKind::new(kind).expect("fixture harness kind");
+    let mut target = super::agent::target(direction, pane_id)
+        .with_agent_kind(HarnessKind::new(kind).expect("fixture harness kind"));
     name.clone_into(&mut target.agent_name);
-    target.agent_session = AgentSessionBinding::established(format!("session-{kind}-{pane_id}"))
-        .expect("fixture harness session");
-    target
+    target.with_agent_session(
+        AgentSessionBinding::established(format!("session-{kind}-{pane_id}"))
+            .expect("fixture harness session"),
+    )
 }
 
 #[test]
@@ -67,8 +68,8 @@ fn kilo_in_either_mixed_row_position_never_bypasses_direction_choice() {
             extend_selection: false,
         }));
         let request = super::agent::start_submission(&mut fixture, &effects);
-        assert_eq!(request.target.direction, kilo_direction);
-        assert_eq!(request.target.agent_kind.as_str(), KILO_AGENT_KIND);
+        assert_eq!(request.target.adjacent_direction(), Some(kilo_direction));
+        assert_eq!(request.target.agent_kind().as_str(), KILO_AGENT_KIND);
     }
 }
 
@@ -76,17 +77,17 @@ fn kilo_in_either_mixed_row_position_never_bypasses_direction_choice() {
 fn kilo_receipt_with_session_upgrades_the_target_for_established_follow_up() {
     let mut fixture = Fixture::new();
     super::agent::prepare_thought(&mut fixture);
-    let mut provisional = mixed_target(Direction::Right, "w1:p2", KILO_AGENT_KIND, "kilo-reviewer");
-    provisional.agent_session = AgentSessionBinding::provisional();
+    let provisional = mixed_target(Direction::Right, "w1:p2", KILO_AGENT_KIND, "kilo-reviewer")
+        .with_agent_session(AgentSessionBinding::provisional());
     fixture
         .app
         .complete_agent_discovery(Ok(vec![provisional.clone()]));
 
     let effects = fixture.effects(UiInput::Key(UiKey::Character('S')));
     let request = super::agent::start_submission(&mut fixture, &effects);
-    let mut established = provisional;
-    established.agent_session =
-        AgentSessionBinding::established("session-kilo-established").expect("fixture Kilo session");
+    let established = provisional.with_agent_session(
+        AgentSessionBinding::established("session-kilo-established").expect("fixture Kilo session"),
+    );
     let completion = super::agent::finish_submission(
         &mut fixture,
         &request,
@@ -104,7 +105,7 @@ fn kilo_receipt_with_session_upgrades_the_target_for_established_follow_up() {
     let follow_up = fixture.effects(UiInput::Key(UiKey::Character('S')));
     let follow_up_request = super::agent::start_submission(&mut fixture, &follow_up);
     assert_eq!(
-        follow_up_request.target.agent_session.as_id(),
+        follow_up_request.target.agent_session().as_id(),
         Some("session-kilo-established")
     );
 }
@@ -113,8 +114,8 @@ fn kilo_receipt_with_session_upgrades_the_target_for_established_follow_up() {
 fn provisional_kilo_receipt_removes_once_then_rediscovers_without_resending() {
     let mut fixture = Fixture::new();
     super::agent::prepare_thought(&mut fixture);
-    let mut provisional = mixed_target(Direction::Right, "w1:p2", KILO_AGENT_KIND, "kilo-reviewer");
-    provisional.agent_session = AgentSessionBinding::provisional();
+    let provisional = mixed_target(Direction::Right, "w1:p2", KILO_AGENT_KIND, "kilo-reviewer")
+        .with_agent_session(AgentSessionBinding::provisional());
     fixture
         .app
         .complete_agent_discovery(Ok(vec![provisional.clone()]));

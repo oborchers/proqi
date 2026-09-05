@@ -6,12 +6,12 @@ use proqi::{
 };
 
 fn harness_target(direction: Direction, pane_id: &str, kind: &str) -> AgentTarget {
-    let mut target = super::agent::target(direction, pane_id);
-    target.agent_kind = HarnessKind::new(kind).expect("fixture harness");
+    let mut target = super::agent::target(direction, pane_id)
+        .with_agent_kind(HarnessKind::new(kind).expect("fixture harness"));
     target.agent_name = format!("{kind} qualifier");
-    target.agent_session =
-        AgentSessionBinding::established(format!("{kind}-session")).expect("fixture session");
-    target
+    target.with_agent_session(
+        AgentSessionBinding::established(format!("{kind}-session")).expect("fixture session"),
+    )
 }
 
 #[test]
@@ -37,8 +37,11 @@ fn hermes_in_both_mixed_row_positions_never_bypasses_direction_choice() {
             );
             let effects = fixture.effects(UiInput::Key(UiKey::Character(key)));
             let request = super::agent::start_submission(&mut fixture, &effects);
-            assert_eq!(request.target.direction, expected_direction);
-            assert_eq!(request.target.agent_kind.as_str(), expected_kind);
+            assert_eq!(
+                request.target.adjacent_direction(),
+                Some(expected_direction)
+            );
+            assert_eq!(request.target.agent_kind().as_str(), expected_kind);
         }
     }
 }

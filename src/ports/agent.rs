@@ -4,7 +4,12 @@ use serde::{Deserialize, Serialize};
 use std::{fmt, time::Duration};
 use thiserror::Error;
 
-use crate::domain::{Direction, SubmissionId};
+use crate::domain::SubmissionId;
+
+mod route;
+mod target;
+pub use route::{HerdrAgentAddress, SubmissionRoute, SubmissionRouteKind};
+pub use target::{AgentAvailability, AgentTarget, AgentTargetIdentity};
 
 /// Canonical adjacent-agent kind label for the Codex harness.
 pub const CODEX_AGENT_KIND: &str = "codex";
@@ -247,95 +252,6 @@ impl AgentFailureCode {
     }
 }
 
-/// One independently verified adjacent agent.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct AgentTarget {
-    /// Integration provider that verified this target.
-    pub provider: String,
-    /// Negotiated provider protocol.
-    pub protocol: u32,
-    /// Direction from the Proqi pane.
-    pub direction: Direction,
-    /// Opaque target pane identifier.
-    pub pane_id: String,
-    /// Opaque workspace identifier matching the source.
-    pub workspace_id: String,
-    /// Opaque tab identifier matching the source.
-    pub tab_id: String,
-    /// Recognized harness kind.
-    pub agent_kind: HarnessKind,
-    /// User-facing identity.
-    pub agent_name: String,
-    /// Stable or provisional harness session binding.
-    pub agent_session: AgentSessionBinding,
-    /// Verified readiness.
-    pub readiness: AgentState,
-    /// Delivery behaviors verified for this target.
-    pub delivery: AgentDeliveryCapabilities,
-    /// Target pane geometry.
-    pub rect: PaneRect,
-    /// Source context against which adjacency was verified.
-    pub source: PaneContext,
-}
-
-/// Stable identity used to match discovery and submission receipts.
-///
-/// Geometry, readiness, display names, and negotiated delivery metadata may
-/// legitimately change while one semantic prompt request is in flight.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct AgentTargetIdentity {
-    /// Integration provider.
-    pub provider: String,
-    /// Integration workspace containing both panes.
-    pub workspace_id: String,
-    /// Integration tab containing both panes.
-    pub tab_id: String,
-    /// Source Proqi pane.
-    pub source_pane_id: String,
-    /// Target agent pane.
-    pub target_pane_id: String,
-    /// Verified direction from source to target.
-    pub direction: Direction,
-    /// Recognized agent harness.
-    pub agent_kind: HarnessKind,
-    /// Stable or provisional harness session binding.
-    pub agent_session: AgentSessionBinding,
-}
-
-impl AgentTarget {
-    /// Return the stable receipt identity, excluding volatile presentation and state.
-    #[must_use]
-    pub fn identity(&self) -> AgentTargetIdentity {
-        AgentTargetIdentity {
-            provider: self.provider.clone(),
-            workspace_id: self.workspace_id.clone(),
-            tab_id: self.tab_id.clone(),
-            source_pane_id: self.source.pane_id.clone(),
-            target_pane_id: self.pane_id.clone(),
-            direction: self.direction,
-            agent_kind: self.agent_kind.clone(),
-            agent_session: self.agent_session.clone(),
-        }
-    }
-
-    /// Whether a receipt preserves an established or provisional target identity.
-    #[must_use]
-    pub fn accepts_receipt(&self, receipt: &Self) -> bool {
-        let expected = self.identity();
-        let actual = receipt.identity();
-        expected.provider == actual.provider
-            && expected.workspace_id == actual.workspace_id
-            && expected.tab_id == actual.tab_id
-            && expected.source_pane_id == actual.source_pane_id
-            && expected.target_pane_id == actual.target_pane_id
-            && expected.direction == actual.direction
-            && expected.agent_kind == actual.agent_kind
-            && expected
-                .agent_session
-                .accepts_receipt(&actual.agent_session)
-    }
-}
-
 /// One semantic prompt submission.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SubmissionRequest {
@@ -424,6 +340,13 @@ pub trait AgentGateway {
     ///
     /// Fails closed on stale context, ambiguous identity, or malformed topology.
     fn adjacent_targets(&mut self, context: &PaneContext) -> Result<Vec<AgentTarget>, AgentError>;
+
+    /// Discover compatible coding agents across the current Herdr server.
+    ///
+    /// # Errors
+    ///
+    /// Fails closed on incomplete, stale, ambiguous, or malformed identity data.
+    fn global_targets(&mut self) -> Result<Vec<AgentTarget>, AgentError>;
 
     /// Revalidate one target and submit exact text through a semantic provider command.
     ///

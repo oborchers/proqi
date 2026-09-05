@@ -41,7 +41,7 @@ fn opencode_routes_correctly_in_both_mixed_harness_positions() {
         );
         let effects = fixture.effects(UiInput::Key(UiKey::Character(key)));
         let request = super::agent::start_submission(&mut fixture, &effects);
-        assert_eq!(request.target.agent_kind.as_str(), expected_kind);
+        assert_eq!(request.target.agent_kind().as_str(), expected_kind);
     }
 }
 
