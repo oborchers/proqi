@@ -605,6 +605,30 @@ query. Any active completeness reason takes precedence in that title. Accepted
 incomplete results emit one structured diagnostic per typed reason, containing
 only stable codes and aggregate counts.
 
+One UI-owned invocation matcher ranks built-ins, filesystem forms, and live
+references without changing discovery order or completeness. It applies NFKC,
+Unicode lowercase, and NFKC again, preserves `$`, `/`, and `@` as exact namespace
+filters, and ranks exact, prefix, contiguous, and ordered-subsequence token
+matches in that order. Separator boundaries, contiguous runs, match span, and
+gaps refine fuzzy results. Stable sorting leaves the existing harness
+precedence, token, kind, source, canonical path, and provider order as the final
+tie breaker. Manual description and live-topology fields use a subordinate
+field rank. Automatic filesystem completion searches only the canonical
+invocation token. Automatic live-reference completion additionally accepts the
+existing exact pane-ID alias at token rank, while insertion remains the
+canonical named `@` token.
+
+Ranking is O(E × Q × T) over retained entries, normalized query characters, and
+normalized token characters. Discovery already bounds E at 2,048 and the picker
+bounds Q at 128 characters; definition metadata bounds ordinary names before a
+form is built. Actual local catalogs are normally tens of entries. The reducer
+computes and retains one ranked choice set only when the query, compatible
+target, filesystem catalog, or live-reference generation changes. Frame
+measurement, rendering, notices, scrolling, and hit testing read that retained
+set without reranking it. Blocking discovery remains on the existing external
+lane. The maximum valid catalog and the no-rerank frame path are covered without
+result truncation.
+
 Filesystem results update state only when generation and cwd still match, so
 stale external work cannot leak an older project catalog. Completion derives a
 byte range from the exact editor snapshot, moves the existing editor selection
@@ -1015,10 +1039,15 @@ receives intentions such as `CreateThought`, `MoveCursor`, `CutThought`, or
 `ChooseDirection`, not raw keys. Mouse coordinates resolve through the latest
 layout snapshot into the same intentions.
 
-Raw modifiers are normalized into semantic modifiers. `Primary` maps to
-Cmd on macOS and Ctrl elsewhere. These are logical modifiers reported
-after operating-system and terminal handling, never physical left or right
-keys. Enhanced keyboard protocols
+Raw modifiers are normalized into semantic modifiers. `Primary` maps only to
+logical Super or Meta on macOS and only to logical Control elsewhere. A
+Primary-style character or Enter chord containing a platform-ineligible or
+mixed command modifier is discarded at this boundary. It cannot fall through
+to a printable character or an unmodified Enter action. Other modified
+navigation retains its documented base intention. These are logical modifiers
+reported after operating-system and terminal handling, never physical left or
+right keys.
+Enhanced keyboard protocols
 are enabled when supported so Super and Meta events can be distinguished, but
 every action retains a terminal-safe fallback and a configurable binding.
 
@@ -1102,6 +1131,9 @@ into presentation data. Distinct Shift reports for reserved character chords
 remain typed `PrimaryShiftCharacter` values unless an established shifted
 action owns them. Uppercase character reports without a Shift flag retain the
 compatible unshifted action where that is how the terminal encodes the chord.
+For the paste-reflow ASCII-letter Board fallback, the settings owner also
+exposes the opposite-case spelling unless an explicit command owns it. Dispatch
+and shortcut presentation consume that same collision-resolved list.
 
 Global `Primary+Q` is resolved before Help and Screenshot takeover navigation,
 but after a commit-first Screenshot save barrier has admitted or deferred the
@@ -1148,6 +1180,28 @@ Edit-to-Board boundary required to reach the portable command fallback.
 Bracketed paste is one payload and one undoable edit. When no thought is
 selected, paste creates and focuses a new thought. The application never tries
 to split a paste heuristically.
+
+Exact and reflow clipboard reads share one typed asynchronous owner record. The
+record retains `Exact` or `Reflow` through Compose materialization and rejects a
+completion after its Board, Compose generation, or thought editor owner changes.
+Raw bracketed paste always enters the exact path because a terminal host may
+have consumed a system shortcut before emitting paste bytes. The configurable
+lowercase Board paste key selects the same exact path. Only the dedicated
+normalized `PasteClipboardReflow` intention, its uppercase Board counterpart,
+or the Commands action selects the reflow path.
+
+The reflow classifier makes a bounded number of linear passes over logical
+lines. Shared terminal-independent Markdown structure recognition owns list
+markers, indentation columns, thematic breaks, and fence state for both editor
+smart lists and paste reflow. Reflow records ordered text replacements so
+ordinary annotation offsets map through the same explicit `TextChangeSet`
+contract as editor mutations. Non-large annotations make their containing block
+exact. Large-paste annotations are transformable envelopes. Partitioned cleanup
+records each envelope's exact transformed range directly so boundary whitespace
+can be normalized without absorbing neighboring content, then validates its
+derived counts again before insertion. The resulting payload is passed once to
+the existing paste transaction, preserving one durable undo unit and the
+ordinary persistence failure and retry contract.
 
 Compose sends every character, paste, annotated paste, clipboard result,
 movement, selection, and supported composition intention through the existing
@@ -1229,6 +1283,10 @@ testing consume that same projection. Clipboard, recovery, CLI, search,
 submission, and integration boundaries continue to consume canonical content.
 Edits rebase unaffected ranges and dissolve intersected ranges. Revisions
 persist both sides of the annotation change so undo and redo remain restart-safe.
+Explicit paste reflow protects every attachment, invocation-reference, and
+shortcut-emphasis byte. Large-paste ranges are the one transformable annotation
+kind and are retained only when their transformed content still reaches the
+shared fold threshold.
 Exact selected-substitution activation and placeholder-aware Space resolve from
 that same projection. They do not inspect a formatted label or reconstruct a
 semantic range from visible text.

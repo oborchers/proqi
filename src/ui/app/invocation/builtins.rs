@@ -8,7 +8,7 @@ use crate::{
     ui::app::BoardApp,
 };
 
-use super::{Choice, InvocationPopup};
+use super::{Choice, InvocationPopup, matcher};
 
 pub(super) fn choices(app: &BoardApp, popup: &InvocationPopup) -> Vec<Choice> {
     if !starts_prompt(app, popup) || !app_supports_shared_starters(app) {
@@ -17,8 +17,10 @@ pub(super) fn choices(app: &BoardApp, popup: &InvocationPopup) -> Vec<Choice> {
     SHARED_PROMPT_STARTERS
         .iter()
         .copied()
-        .filter(|starter| matches_query(*starter, popup))
-        .map(|starter| Choice {
+        .filter_map(|starter| {
+            matcher::token(starter.token, &popup.query).map(|rank| (starter, rank))
+        })
+        .map(|(starter, rank)| Choice {
             token: starter.token.to_owned(),
             insertion: starter.token.to_owned(),
             annotation_display: None,
@@ -26,6 +28,7 @@ pub(super) fn choices(app: &BoardApp, popup: &InvocationPopup) -> Vec<Choice> {
             qualifier: "Shared Command".to_owned(),
             qualifier_fallbacks: Vec::new(),
             group: None,
+            rank,
         })
         .collect()
 }
@@ -54,18 +57,6 @@ pub(super) fn starts_prompt(app: &BoardApp, popup: &InvocationPopup) -> bool {
         },
         |range| range.start == 0,
     )
-}
-
-fn matches_query(
-    starter: crate::application::SharedPromptStarter,
-    popup: &InvocationPopup,
-) -> bool {
-    let query = popup.query.to_lowercase();
-    if popup.manual {
-        starter.token.contains(&query) || starter.search_name.contains(&query)
-    } else {
-        starter.token.starts_with(&query)
-    }
 }
 
 fn app_supports_shared_starters(app: &BoardApp) -> bool {

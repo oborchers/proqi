@@ -1,7 +1,8 @@
 //! Crossterm event normalization and lossless input delivery.
 
 use std::{
-    fmt, io,
+    fmt,
+    io::{self, stdout},
     sync::{
         Arc,
         atomic::{AtomicBool, AtomicU64, Ordering},
@@ -11,13 +12,17 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crossterm::event::{self, Event, KeyEventKind};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
+use crossterm::{
+    event::{self, Event, KeyEventKind, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags},
+    execute,
+};
 
 use crate::ui::UiInput;
 
 use super::{
     TerminalError,
+    control::{compatible_keyboard_flags, reset_keyboard_reporting},
     supervisor::{ShutdownDeadline, join_before},
 };
 
@@ -62,8 +67,8 @@ pub(crate) struct KeyInspection {
 }
 
 pub(crate) fn inspect_keypress() -> Result<KeyInspection, TerminalError> {
-    eprintln!("Press one key to inspect its terminal event and Proqi action.");
     let guard = RawInputGuard::enter()?;
+    eprintln!("Press one key to inspect its terminal event and Proqi action.");
     let key = loop {
         match event::read()? {
             Event::Key(key) if matches!(key.kind, KeyEventKind::Press | KeyEventKind::Repeat) => {
@@ -86,26 +91,48 @@ pub(crate) fn inspect_keypress() -> Result<KeyInspection, TerminalError> {
 
 struct RawInputGuard {
     active: bool,
+    keyboard_active: bool,
 }
 
 impl RawInputGuard {
     fn enter() -> io::Result<Self> {
         enable_raw_mode()?;
-        Ok(Self { active: true })
+        let keyboard_active = execute!(
+            stdout(),
+            PushKeyboardEnhancementFlags(compatible_keyboard_flags())
+        )
+        .is_ok();
+        Ok(Self {
+            active: true,
+            keyboard_active,
+        })
     }
 
     fn finish(mut self) -> io::Result<()> {
-        disable_raw_mode()?;
+        self.restore()
+    }
+
+    fn restore(&mut self) -> io::Result<()> {
+        let keyboard = if self.keyboard_active {
+            execute!(stdout(), PopKeyboardEnhancementFlags)
+        } else {
+            Ok(())
+        };
+        self.keyboard_active = false;
+        let reset = reset_keyboard_reporting();
+        let raw = if self.active {
+            disable_raw_mode()
+        } else {
+            Ok(())
+        };
         self.active = false;
-        Ok(())
+        keyboard.and(reset).and(raw)
     }
 }
 
 impl Drop for RawInputGuard {
     fn drop(&mut self) {
-        if self.active {
-            let _restored = disable_raw_mode();
-        }
+        let _restored = self.restore();
     }
 }
 

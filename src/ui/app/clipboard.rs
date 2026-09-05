@@ -1,6 +1,8 @@
 //! Non-destructive clipboard intentions and asynchronous completion.
 
 mod messages;
+mod owner;
+mod reflow;
 use crate::{
     application::{Action, ClipboardIntent, Effect, FailureCode, InteractionMode},
     domain::extract_annotations,
@@ -12,7 +14,10 @@ use crate::{
 
 use super::{
     BoardApp, ComposePresentation, EditorOwner, InsertionConfirmation, InsertionFocus,
-    pending_types::{ClipboardReadOwner, EditFlush, PendingEditorClipboard},
+    pending_types::{
+        ClipboardPasteMode, ClipboardReadOwner, EditFlush, PendingClipboardRead,
+        PendingEditorClipboard,
+    },
 };
 use crate::ui::PastePayload;
 
@@ -247,6 +252,14 @@ impl BoardApp {
     }
 
     pub(super) fn read_clipboard(&mut self, ids: &mut impl IdGenerator) -> Vec<Effect> {
+        self.read_clipboard_with_mode(ids, ClipboardPasteMode::Exact)
+    }
+
+    fn read_clipboard_with_mode(
+        &mut self,
+        ids: &mut impl IdGenerator,
+        mode: ClipboardPasteMode,
+    ) -> Vec<Effect> {
         let request_id = ids.request_id();
         let owner = match self.state.mode {
             InteractionMode::Board => ClipboardReadOwner::Board,
@@ -258,7 +271,8 @@ impl BoardApp {
                 generation: self.edit_owner_generation,
             },
         };
-        self.pending_clipboard_reads.insert(request_id, owner);
+        self.pending_clipboard_reads
+            .insert(request_id, PendingClipboardRead { owner, mode });
         vec![Effect::ReadClipboard { request_id }]
     }
 
@@ -267,14 +281,14 @@ impl BoardApp {
         generation: u64,
         thought_id: crate::domain::ThoughtId,
     ) {
-        for owner in self.pending_clipboard_reads.values_mut() {
+        for pending in self.pending_clipboard_reads.values_mut() {
             if matches!(
-                owner,
+                pending.owner,
                 ClipboardReadOwner::Compose {
                     generation: owner_generation
-                } if *owner_generation == generation
+                } if owner_generation == generation
             ) {
-                *owner = ClipboardReadOwner::Thought {
+                pending.owner = ClipboardReadOwner::Thought {
                     thought_id,
                     generation: self.edit_owner_generation,
                 };
@@ -364,10 +378,10 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        let Some(owner) = self.pending_clipboard_reads.remove(&request_id) else {
+        let Some(pending) = self.pending_clipboard_reads.remove(&request_id) else {
             return Vec::new();
         };
-        if !self.clipboard_read_owner_is_current(owner) {
+        if !self.clipboard_read_owner_is_current(pending.owner) {
             return Vec::new();
         }
         match result {
@@ -375,35 +389,13 @@ impl BoardApp {
                 self.set_warning("clipboard is empty");
                 Vec::new()
             }
-            Ok(payload) => self.paste_payload(payload, ids, clock),
+            Ok(payload) if pending.mode == ClipboardPasteMode::Exact => {
+                self.paste_payload(payload, ids, clock)
+            }
+            Ok(payload) => self.paste_reflow_result(payload, ids, clock),
             Err(code) => {
                 self.notify(code);
                 Vec::new()
-            }
-        }
-    }
-
-    fn clipboard_read_owner_is_current(&self, owner: ClipboardReadOwner) -> bool {
-        match owner {
-            ClipboardReadOwner::Board => matches!(self.state.mode, InteractionMode::Board),
-            ClipboardReadOwner::Compose { generation } => {
-                generation == self.compose_generation
-                    && matches!(self.state.mode, InteractionMode::Compose)
-                    && matches!(self.editor.as_ref(), Some((EditorOwner::Compose, _)))
-            }
-            ClipboardReadOwner::Thought {
-                thought_id: expected,
-                generation,
-            } => {
-                matches!(
-                    self.state.mode,
-                    InteractionMode::Edit { thought_id } if thought_id == expected
-                ) && generation == self.edit_owner_generation
-                    && matches!(
-                        self.editor.as_ref(),
-                        Some((EditorOwner::Thought(actual), _)) if *actual == expected
-                    )
-                    && !self.edit_content_mutation_blocked(expected)
             }
         }
     }

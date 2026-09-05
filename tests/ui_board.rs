@@ -438,6 +438,8 @@ mod movement_symmetry;
 mod navigation;
 #[path = "ui_board/palette.rs"]
 mod palette;
+#[path = "ui_board/paste_reflow.rs"]
+mod paste_reflow;
 #[path = "ui_board/placeholder_entry.rs"]
 mod placeholder_entry;
 #[path = "ui_board/placeholder_space.rs"]

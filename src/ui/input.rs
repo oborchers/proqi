@@ -152,6 +152,8 @@ pub enum UiKey {
     Cut,
     /// Read and paste the native clipboard.
     PasteClipboard,
+    /// Read the native clipboard and explicitly reflow unprotected prose.
+    PasteClipboardReflow,
     /// Duplicate the focused or selected thoughts below the source range.
     Duplicate,
 }

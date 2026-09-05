@@ -210,7 +210,7 @@ fn assert_persistent_editor_undo(
         expect -exact "\x1b\[?1049h"
         send "\r"
         after 100
-        send "\x1a"
+        send -- $env(PROQI_TEST_PRIMARY_Z)
         after 500
         send "\x1b"
         after 100

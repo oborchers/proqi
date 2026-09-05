@@ -25,6 +25,19 @@ impl EditorSelectionHandoff {
 }
 
 impl BoardApp {
+    pub(super) fn palette_handoff_is_current(&self, handoff: &EditorSelectionHandoff) -> bool {
+        self.state.focused_thought == Some(handoff.thought_id)
+            && self
+                .state
+                .board
+                .thought(handoff.thought_id)
+                .is_some_and(|thought| {
+                    thought.is_live()
+                        && thought.content == handoff.content
+                        && thought.annotations == handoff.annotations
+                })
+    }
+
     pub(super) fn capture_palette_selection_handoff(&mut self) {
         self.palette_selection_handoff = self.editor_snapshot().and_then(|snapshot| {
             let thought_id = self.active_thought_id()?;

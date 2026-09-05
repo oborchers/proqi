@@ -7,6 +7,7 @@ pub(crate) enum ShortcutAction {
     Copy,
     Cut,
     Paste,
+    PasteReflow,
     SelectAll,
     Duplicate,
     Undo,
@@ -60,6 +61,12 @@ pub(crate) const STANDARD_SHORTCUTS: &[ShortcutMetadata] = &[
         "V",
         ShortcutScope::BoardAndEdit,
         UiKey::PasteClipboard,
+    ),
+    shifted(
+        ShortcutAction::PasteReflow,
+        "Shift+V",
+        ShortcutScope::BoardAndEdit,
+        UiKey::PasteClipboardReflow,
     ),
     standard(
         ShortcutAction::SelectAll,
@@ -177,9 +184,12 @@ pub(crate) fn redo_label() -> String {
 
 pub(crate) fn board_label(action: ShortcutAction, keys: &KeyBindings) -> String {
     let primary = canonical_label(action);
-    board_fallback(action, keys).map_or(primary.clone(), |fallback| {
-        format!("{primary}/{}", super::settings::key_label(fallback))
-    })
+    let fallbacks = board_fallbacks(action, keys);
+    if fallbacks.is_empty() {
+        primary
+    } else {
+        format!("{primary}/{}", fallback_label(&fallbacks))
+    }
 }
 
 pub(crate) fn board_control_label(
@@ -187,11 +197,12 @@ pub(crate) fn board_control_label(
     keys: &KeyBindings,
     compact: bool,
 ) -> String {
-    let Some(fallback) = board_fallback(action, keys) else {
+    let fallbacks = board_fallbacks(action, keys);
+    if fallbacks.is_empty() {
         return canonical_label(action);
-    };
+    }
     if compact {
-        super::settings::key_label(fallback)
+        fallback_label(&fallbacks)
     } else {
         board_label(action, keys)
     }
@@ -240,22 +251,31 @@ fn single_character_suffix(shortcut: &ShortcutMetadata) -> Option<char> {
     characters.next().is_none().then_some(character)
 }
 
-const fn board_fallback(action: ShortcutAction, keys: &KeyBindings) -> Option<char> {
+fn board_fallbacks(action: ShortcutAction, keys: &KeyBindings) -> Vec<char> {
     match action {
-        ShortcutAction::Copy => Some(keys.copy),
-        ShortcutAction::Cut => Some(keys.cut),
-        ShortcutAction::SelectAll => Some(keys.select_all),
-        ShortcutAction::Undo => Some(keys.undo),
-        ShortcutAction::Submit => Some(keys.submit_remove),
-        ShortcutAction::SubmitKeep => Some(keys.submit_keep),
-        ShortcutAction::Quit => Some(keys.quit),
-        ShortcutAction::Paste
-        | ShortcutAction::Duplicate
+        ShortcutAction::Copy => vec![keys.copy],
+        ShortcutAction::Cut => vec![keys.cut],
+        ShortcutAction::SelectAll => vec![keys.select_all],
+        ShortcutAction::Undo => vec![keys.undo],
+        ShortcutAction::Submit => vec![keys.submit_remove],
+        ShortcutAction::SubmitKeep => vec![keys.submit_keep],
+        ShortcutAction::Quit => vec![keys.quit],
+        ShortcutAction::Paste => keys.paste_exact_fallbacks(),
+        ShortcutAction::PasteReflow => keys.paste_reflow_fallbacks(),
+        ShortcutAction::Duplicate
         | ShortcutAction::Redo
         | ShortcutAction::DeleteLogicalLine
         | ShortcutAction::PickerPrevious
-        | ShortcutAction::PickerNext => None,
+        | ShortcutAction::PickerNext => Vec::new(),
     }
+}
+
+fn fallback_label(fallbacks: &[char]) -> String {
+    fallbacks
+        .iter()
+        .map(|character| super::settings::key_label(*character))
+        .collect::<Vec<_>>()
+        .join("/")
 }
 
 #[cfg(test)]
@@ -267,7 +287,7 @@ mod tests {
         ShortcutScope,
         ShiftMeaning,
         UiKey,
-        Option<char>,
+        &'static [char],
     );
 
     const INVENTORY_CASES: &[InventoryCase] = &[
@@ -276,70 +296,77 @@ mod tests {
             ShortcutScope::BoardAndEdit,
             ShiftMeaning::Unshifted,
             UiKey::Copy,
-            Some('y'),
+            &['y'],
         ),
         (
             ShortcutAction::Cut,
             ShortcutScope::BoardAndEdit,
             ShiftMeaning::Unshifted,
             UiKey::Cut,
-            Some('x'),
+            &['x'],
         ),
         (
             ShortcutAction::Paste,
             ShortcutScope::BoardAndEdit,
             ShiftMeaning::Unshifted,
             UiKey::PasteClipboard,
-            None,
+            &['p'],
+        ),
+        (
+            ShortcutAction::PasteReflow,
+            ShortcutScope::BoardAndEdit,
+            ShiftMeaning::Shifted,
+            UiKey::PasteClipboardReflow,
+            &['P'],
         ),
         (
             ShortcutAction::SelectAll,
             ShortcutScope::BoardAndEdit,
             ShiftMeaning::Unshifted,
             UiKey::SelectAll,
-            Some('a'),
+            &['a'],
         ),
         (
             ShortcutAction::Duplicate,
             ShortcutScope::Board,
             ShiftMeaning::Unshifted,
             UiKey::Duplicate,
-            None,
+            &[],
         ),
         (
             ShortcutAction::Undo,
             ShortcutScope::BoardAndEdit,
             ShiftMeaning::Unshifted,
             UiKey::Undo,
-            Some('u'),
+            &['u'],
         ),
         (
             ShortcutAction::Redo,
             ShortcutScope::BoardAndEdit,
             ShiftMeaning::Shifted,
             UiKey::Redo,
-            None,
+            &[],
         ),
         (
             ShortcutAction::Submit,
             ShortcutScope::BoardAndEdit,
             ShiftMeaning::Unshifted,
             UiKey::Submit,
-            Some('s'),
+            &['s'],
         ),
         (
             ShortcutAction::SubmitKeep,
             ShortcutScope::BoardAndEdit,
             ShiftMeaning::Shifted,
             UiKey::SubmitKeep,
-            Some('S'),
+            &['S'],
         ),
         (
             ShortcutAction::Quit,
             ShortcutScope::Global,
             ShiftMeaning::Unshifted,
             UiKey::Quit,
-            Some('q'),
+            &['q'],
         ),
     ];
 
@@ -353,7 +380,11 @@ mod tests {
                 .expect("inventory entry");
             assert_eq!(shortcut.scope, scope, "action {action:?}");
             assert_eq!(shortcut.normalized, normalized, "action {action:?}");
-            assert_eq!(board_fallback(action, &keys), fallback, "action {action:?}");
+            assert_eq!(
+                board_fallbacks(action, &keys),
+                fallback,
+                "action {action:?}"
+            );
         }
         assert!(STANDARD_SHORTCUTS.iter().any(|shortcut| {
             shortcut.action == ShortcutAction::Redo
@@ -373,12 +404,15 @@ mod tests {
             assert!(contract.contains("command palette"));
         }
         assert!(readme.contains("Cmd+Shift+V"));
+        assert!(readme.contains("keybind = super+shift+v=csi:118;10u"));
+        assert!(readme.contains("Raw `Ctrl` is not a second Primary"));
         assert!(!readme.contains("Command+"));
         assert!(readme.contains("proqi diagnostics keypress"));
         assert!(product.contains("Primary+Shift+V"));
         assert!(!product.contains("Command+"));
         assert!(product.contains("raw key diagnostics"));
-        assert!(architecture.contains("Cmd on macOS and Ctrl elsewhere"));
+        assert!(architecture.contains("logical Super or Meta on macOS"));
+        assert!(architecture.contains("only to logical Control elsewhere"));
         assert!(!architecture.contains("Command+"));
     }
 }

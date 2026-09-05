@@ -9,8 +9,13 @@ fn inspect_sequence(sequence: &str, raw_code: &str, action: &str) {
         set timeout 10
         set binary $env(PROQI_TEST_BINARY)
         spawn $binary diagnostics keypress
+        expect {{
+            -exact "\x1b\[>5u" {{}}
+            -exact "\x1b\[>7u" {{}}
+        }}
         expect -exact "Press one key to inspect its terminal event and Proqi action."
         send -- "{sequence}"
+        expect -exact "\x1b\[<u"
         expect -exact "Raw event: KeyEvent {{ code: {raw_code}"
         expect -exact "Matched action: {action}"
         expect eof
@@ -33,8 +38,13 @@ fn keypress_inspector_reports_raw_and_normalized_input_then_restores() {
         set timeout 10
         set binary $env(PROQI_TEST_BINARY)
         spawn $binary diagnostics keypress
+        expect {{
+            -exact "\x1b\[>5u" {{}}
+            -exact "\x1b\[>7u" {{}}
+        }}
         expect -exact "Press one key to inspect its terminal event and Proqi action."
         send -- "a"
+        expect -exact "\x1b\[<u"
         expect -exact "Raw event: KeyEvent { code: Char('a')"
         expect -exact "Matched action: Character('a')"
         expect eof
@@ -78,7 +88,7 @@ fn platform_primary_arrow_is_forwarded_through_the_real_pty_and_restores() {
         inspect_sequence(
             r"\x1b\[1;9B",
             "Down, modifiers: KeyModifiers(SUPER)",
-            "EditNavigation { editor_movement: DocumentEnd, board_movement: DocumentEnd }",
+            "EditNavigation { editor_movement: DocumentEnd, board_movement: VisualDown }",
         );
     } else {
         inspect_sequence(
@@ -135,16 +145,42 @@ fn macos_primary_shift_horizontal_arrows_have_exact_distinct_pty_encodings() {
 }
 
 #[test]
-fn control_shift_horizontal_arrow_keeps_word_selection_in_the_real_pty() {
+fn control_shift_horizontal_arrow_uses_platform_word_or_base_selection() {
+    let action = if cfg!(target_os = "macos") {
+        "Move { movement: GraphemeBack, extend_selection: true }"
+    } else {
+        "Move { movement: WordBack, extend_selection: true }"
+    };
     inspect_sequence(
         r"\x1b\[1;6D",
         "Left, modifiers: KeyModifiers(SHIFT | CONTROL)",
-        "Move { movement: WordBack, extend_selection: true }",
+        action,
     );
 }
 
 #[test]
-fn distinctly_shifted_primary_v_stays_available_in_the_real_pty() {
+fn macos_raw_control_v_is_not_a_second_primary_paste_chord() {
+    if cfg!(target_os = "macos") {
+        inspect_sequence(
+            r"\x16",
+            "Char('v'), modifiers: KeyModifiers(CONTROL)",
+            "none",
+        );
+        inspect_sequence(
+            r"\x1b\[118;5u",
+            "Char('v'), modifiers: KeyModifiers(CONTROL)",
+            "none",
+        );
+        inspect_sequence(
+            r"\x1b\[118;6u",
+            "Char('v'), modifiers: KeyModifiers(SHIFT | CONTROL)",
+            "none",
+        );
+    }
+}
+
+#[test]
+fn distinctly_shifted_primary_v_is_reflow_in_the_real_pty() {
     let (sequence, modifier) = if cfg!(target_os = "macos") {
         (r"\x1b\[118;10u", "SUPER")
     } else {
@@ -153,7 +189,7 @@ fn distinctly_shifted_primary_v_stays_available_in_the_real_pty() {
     inspect_sequence(
         sequence,
         &format!("Char('v'), modifiers: KeyModifiers(SHIFT | {modifier})"),
-        "PrimaryShiftCharacter('v')",
+        "PasteClipboardReflow",
     );
 }
 

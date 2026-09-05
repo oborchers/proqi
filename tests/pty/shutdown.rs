@@ -119,7 +119,7 @@ fn queued_quit_waits_for_the_preceding_paste_to_become_durable() {
         spawn $env(PROQI_TEST_BINARY) --state-dir $env(PROQI_TEST_STATE)
         expect -exact "\x1b\[?1049h"
         send -- "\x1b\[200~accepted pending work 界\x1b\[201~"
-        send -- "\x11"
+        send -- $env(PROQI_TEST_PRIMARY_Q)
         expect -exact "\x1b\[0 q"
         expect eof
         catch wait result
@@ -295,7 +295,7 @@ fn capture_exit_action(terminate: bool) -> &'static str {
         system /bin/kill -TERM $child
         "
     } else {
-        "send -- \"\\x11\""
+        "send -- $env(PROQI_TEST_PRIMARY_Q)"
     }
 }
 

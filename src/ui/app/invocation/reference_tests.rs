@@ -239,9 +239,9 @@ fn manual_picker_keeps_installed_entries_and_truthfully_groups_duplicate_agent_n
 #[test]
 fn automatic_selection_inserts_an_inert_location_and_readiness_is_display_only() {
     let cwd = tempfile::tempdir().expect("tempdir");
-    let (mut app, mut ids, clock) = app("Ask @", cwd.path());
+    let (mut app, mut ids, clock) = app("Ask @rv", cwd.path());
     install_catalog(&mut app, cwd.path(), Vec::new());
-    let discovery = app.handle(UiInput::Key(UiKey::Character('r')), &mut ids, &clock);
+    let discovery = app.handle(UiInput::Key(UiKey::Character('w')), &mut ids, &clock);
     complete_live(
         &mut app,
         &discovery,
@@ -280,7 +280,7 @@ fn automatic_selection_inserts_an_inert_location_and_readiness_is_display_only()
     );
 
     app.handle(UiInput::Key(UiKey::Undo), &mut ids, &clock);
-    assert_eq!(app.editor_snapshot().expect("editor").content, "Ask @");
+    assert_eq!(app.editor_snapshot().expect("editor").content, "Ask @rv");
     app.handle(UiInput::Key(UiKey::Redo), &mut ids, &clock);
     assert_eq!(app.editor_snapshot().expect("editor").content, inserted);
 }
@@ -461,6 +461,8 @@ fn fast_navigation_counts_live_entries_without_counting_the_group_heading() {
 mod lifecycle;
 #[path = "reference_tests/mentions.rs"]
 mod mentions;
+#[path = "reference_tests/ranking.rs"]
+mod ranking;
 #[path = "reference_tests/snapshots.rs"]
 mod snapshots;
 

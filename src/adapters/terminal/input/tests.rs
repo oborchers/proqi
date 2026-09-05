@@ -17,12 +17,28 @@ mod primary;
 #[path = "tests/watchdog.rs"]
 mod watchdog;
 
+fn current_primary() -> KeyModifiers {
+    if cfg!(target_os = "macos") {
+        KeyModifiers::SUPER
+    } else {
+        KeyModifiers::CONTROL
+    }
+}
+
+fn current_primary_spellings() -> Vec<KeyModifiers> {
+    if cfg!(target_os = "macos") {
+        vec![KeyModifiers::SUPER, KeyModifiers::META]
+    } else {
+        vec![KeyModifiers::CONTROL]
+    }
+}
+
 #[test]
 fn primary_shift_s_remains_an_unassigned_board_chord() {
     for character in ['s', 'S'] {
         let event = Event::Key(KeyEvent::new(
             KeyCode::Char(character),
-            KeyModifiers::SUPER | KeyModifiers::SHIFT,
+            current_primary() | KeyModifiers::SHIFT,
         ));
         assert_eq!(
             translate(event),
@@ -33,11 +49,7 @@ fn primary_shift_s_remains_an_unassigned_board_chord() {
 
 #[test]
 fn logical_line_and_sentence_deletion_keep_distinct_primary_chords() {
-    for modifier in [
-        KeyModifiers::CONTROL,
-        KeyModifiers::SUPER,
-        KeyModifiers::META,
-    ] {
+    for modifier in current_primary_spellings() {
         assert_eq!(
             translate(Event::Key(KeyEvent::new(KeyCode::Char('u'), modifier))),
             Some(UiInput::Key(UiKey::DeleteLogicalLine))
@@ -68,11 +80,7 @@ fn logical_line_and_sentence_deletion_keep_distinct_primary_chords() {
 
 #[test]
 fn distinctly_reported_primary_shift_z_is_redo_for_both_character_cases() {
-    for modifier in [
-        KeyModifiers::CONTROL,
-        KeyModifiers::SUPER,
-        KeyModifiers::META,
-    ] {
+    for modifier in current_primary_spellings() {
         for (character, modifiers) in [
             ('z', modifier | KeyModifiers::SHIFT),
             ('Z', modifier | KeyModifiers::SHIFT),
@@ -97,10 +105,7 @@ fn primary_clipboard_shortcuts_do_not_reuse_quit() {
         ('d', UiKey::Duplicate),
         ('q', UiKey::Quit),
     ] {
-        let event = Event::Key(KeyEvent::new(
-            KeyCode::Char(character),
-            KeyModifiers::CONTROL,
-        ));
+        let event = Event::Key(KeyEvent::new(KeyCode::Char(character), current_primary()));
         assert_eq!(translate(event), Some(UiInput::Key(expected)));
     }
 }
@@ -112,7 +117,7 @@ fn invocation_picker_keys_are_normalized_without_literal_editor_input() {
         (KeyCode::Char('n'), UiKey::PickerNext),
     ] {
         assert_eq!(
-            translate(Event::Key(KeyEvent::new(code, KeyModifiers::CONTROL))),
+            translate(Event::Key(KeyEvent::new(code, current_primary()))),
             Some(UiInput::Key(expected))
         );
     }
@@ -194,7 +199,7 @@ fn release_is_ignored_and_repeat_preserves_auto_repeat() {
 
     let repeated_reorder = Event::Key(KeyEvent::new_with_kind(
         KeyCode::Down,
-        KeyModifiers::SHIFT | KeyModifiers::SUPER,
+        KeyModifiers::SHIFT | current_primary(),
         KeyEventKind::Repeat,
     ));
     assert_eq!(
@@ -209,25 +214,25 @@ fn release_is_ignored_and_repeat_preserves_auto_repeat() {
 fn primary_shift_arrow_and_character_chords_remain_board_semantics() {
     let arrow = Event::Key(KeyEvent::new(
         KeyCode::Up,
-        KeyModifiers::SHIFT | KeyModifiers::CONTROL,
+        KeyModifiers::SHIFT | current_primary(),
     ));
     assert_eq!(
         translate(arrow),
         Some(UiInput::Key(UiKey::PrimaryShiftMove {
-            movement: CursorMovement::VisualUp,
+            movement: CursorMovement::DocumentStart,
         }))
     );
 
     let character = Event::Key(KeyEvent::new(
         KeyCode::Char('K'),
-        KeyModifiers::SHIFT | KeyModifiers::SUPER,
+        KeyModifiers::SHIFT | current_primary(),
     ));
     assert_eq!(
         translate(character),
         Some(UiInput::Key(UiKey::PrimaryShiftCharacter('K')))
     );
 
-    let alternate_report = Event::Key(KeyEvent::new(KeyCode::Char('K'), KeyModifiers::SUPER));
+    let alternate_report = Event::Key(KeyEvent::new(KeyCode::Char('K'), current_primary()));
     assert_eq!(
         translate(alternate_report),
         Some(UiInput::Key(UiKey::PrimaryShiftCharacter('K')))
@@ -236,7 +241,7 @@ fn primary_shift_arrow_and_character_chords_remain_board_semantics() {
     for character in ['k', 'j'] {
         let lowercase_shift_report = Event::Key(KeyEvent::new(
             KeyCode::Char(character),
-            KeyModifiers::SHIFT | KeyModifiers::SUPER,
+            KeyModifiers::SHIFT | current_primary(),
         ));
         assert_eq!(
             translate(lowercase_shift_report),
@@ -247,11 +252,7 @@ fn primary_shift_arrow_and_character_chords_remain_board_semantics() {
 
 #[test]
 fn unknown_primary_character_shortcuts_never_insert_text() {
-    for modifier in [
-        KeyModifiers::CONTROL,
-        KeyModifiers::SUPER,
-        KeyModifiers::META,
-    ] {
+    for modifier in current_primary_spellings() {
         let event = Event::Key(KeyEvent::new(KeyCode::Char('b'), modifier));
         assert_eq!(
             translate(event),
@@ -262,10 +263,12 @@ fn unknown_primary_character_shortcuts_never_insert_text() {
 
 #[test]
 fn shift_and_word_navigation_remain_semantic() {
-    let select = Event::Key(KeyEvent::new(
-        KeyCode::Left,
-        KeyModifiers::SHIFT | KeyModifiers::ALT,
-    ));
+    let word = if cfg!(target_os = "macos") {
+        KeyModifiers::ALT
+    } else {
+        KeyModifiers::CONTROL
+    };
+    let select = Event::Key(KeyEvent::new(KeyCode::Left, KeyModifiers::SHIFT | word));
     assert_eq!(
         translate(select),
         Some(UiInput::Key(UiKey::Move {
@@ -282,28 +285,18 @@ fn platform_primary_arrows_preserve_both_mode_intentions() {
     } else {
         KeyModifiers::CONTROL
     };
-    let board_up = if cfg!(target_os = "macos") {
-        CursorMovement::DocumentStart
-    } else {
-        CursorMovement::VisualUp
-    };
-    let board_down = if cfg!(target_os = "macos") {
-        CursorMovement::DocumentEnd
-    } else {
-        CursorMovement::VisualDown
-    };
     assert_eq!(
         translate(Event::Key(KeyEvent::new(KeyCode::Up, modifier))),
         Some(UiInput::Key(UiKey::EditNavigation {
             editor_movement: CursorMovement::DocumentStart,
-            board_movement: board_up,
+            board_movement: CursorMovement::VisualUp,
         }))
     );
     assert_eq!(
         translate(Event::Key(KeyEvent::new(KeyCode::Down, modifier))),
         Some(UiInput::Key(UiKey::EditNavigation {
             editor_movement: CursorMovement::DocumentEnd,
-            board_movement: board_down,
+            board_movement: CursorMovement::VisualDown,
         }))
     );
 }
@@ -335,11 +328,7 @@ fn enter_is_normalized_independently_from_exact_bracketed_paste() {
 
 #[test]
 fn primary_enter_chords_are_distinct_from_plain_multiline_enter() {
-    for modifier in [
-        KeyModifiers::CONTROL,
-        KeyModifiers::SUPER,
-        KeyModifiers::META,
-    ] {
+    for modifier in current_primary_spellings() {
         assert_eq!(
             translate(Event::Key(KeyEvent::new(KeyCode::Enter, modifier))),
             Some(UiInput::Key(UiKey::Submit))

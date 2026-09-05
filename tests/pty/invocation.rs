@@ -74,14 +74,14 @@ fn select_invocation(
 }
 
 #[test]
-fn large_discovered_invocation_completes_and_shuts_down_in_a_real_pty() {
+fn short_fuzzy_invocation_completes_exactly_and_shuts_down_in_a_real_pty() {
     let state = tempfile::tempdir().expect("temporary state");
     let home = tempfile::tempdir().expect("isolated home");
-    let external = home.path().join("catalog/aos-media-image");
+    let external = home.path().join("catalog/aos-communication-email");
     let skill = external.join("SKILL.md");
     std::fs::create_dir_all(&external).expect("external skill directory");
     let mut definition =
-        "---\nname: aos-media-image\ndescription: Erstellt Bilder für Grüße und 界\n---\n"
+        "---\nname: aos-communication-email\ndescription: Verfasst E-Mails für Grüße und 界\n---\n"
             .as_bytes()
             .to_vec();
     definition.resize(64 * 1024, 0xff);
@@ -90,9 +90,9 @@ fn large_discovered_invocation_completes_and_shuts_down_in_a_real_pty() {
     let claude_root = home.path().join(".claude/skills");
     std::fs::create_dir_all(&agent_root).expect("Agent Skills root");
     std::fs::create_dir_all(&claude_root).expect("Claude skills root");
-    let agent_alias = agent_root.join("aos-media-image");
+    let agent_alias = agent_root.join("aos-communication-email");
     std::os::unix::fs::symlink(&external, &agent_alias).expect("Agent Skills alias");
-    std::os::unix::fs::symlink(&agent_alias, claude_root.join("aos-media-image"))
+    std::os::unix::fs::symlink(&agent_alias, claude_root.join("aos-communication-email"))
         .expect("Claude skill alias");
     let binary = env!("CARGO_BIN_EXE_proqi");
     consume_first_run(binary, state.path());
@@ -104,7 +104,7 @@ fn large_discovered_invocation_completes_and_shuts_down_in_a_real_pty() {
         spawn $binary --state-dir $state
         expect -exact "\x1b\[?1049h"
         after 500
-        send -- "\x1b\[200~\$aos\x1b\[201~"
+        send -- "\x1b\[200~\$aos-ce\x1b\[201~"
         after 300
         send "\t"
         after 700
@@ -132,7 +132,7 @@ fn large_discovered_invocation_completes_and_shuts_down_in_a_real_pty() {
     let thoughts = json_command(binary, state.path(), &["thoughts", "list", session]);
     assert_eq!(
         thoughts["data"]["thoughts"][0]["content"],
-        "$aos-media-image "
+        "$aos-communication-email "
     );
 }
 
@@ -194,7 +194,7 @@ fn incomplete_depth_discovery_is_visible_in_a_real_pty() {
 fn result_beyond_twenty_is_selectable_by_keyboard_and_mouse_in_real_ptys() {
     let home = tempfile::tempdir().expect("isolated home");
     for index in 0..25 {
-        write_skill(home.path(), &format!("skill{index:02}"));
+        write_skill(home.path(), &format!("skill{index:02}-zoom"));
     }
     let binary = env!("CARGO_BIN_EXE_proqi");
     let keyboard_state = tempfile::tempdir().expect("keyboard state");
@@ -206,7 +206,7 @@ fn result_beyond_twenty_is_selectable_by_keyboard_and_mouse_in_real_ptys() {
         spawn $env(PROQI_TEST_BINARY) --state-dir $env(PROQI_TEST_STATE)
         expect -exact "\x1b\[?1049h"
         after 500
-        send -- "\x1b\[200~\$skill\x1b\[201~"
+        send -- "\x1b\[200~\$sz\x1b\[201~"
         expect -glob "*more results exist, refine query*"
         for {set i 0} {$i < 22} {incr i} {
             send -- "\x1b\[B"
@@ -230,7 +230,10 @@ fn result_beyond_twenty_is_selectable_by_keyboard_and_mouse_in_real_ptys() {
         .status()
         .expect("run keyboard invocation PTY workflow");
     assert!(keyboard_status.success());
-    assert_eq!(thought_content(binary, keyboard_state.path()), "$skill22 ");
+    assert_eq!(
+        thought_content(binary, keyboard_state.path()),
+        "$skill22-zoom "
+    );
 
     let mouse_state = tempfile::tempdir().expect("mouse state");
     consume_first_run(binary, mouse_state.path());
@@ -241,7 +244,7 @@ fn result_beyond_twenty_is_selectable_by_keyboard_and_mouse_in_real_ptys() {
         spawn $env(PROQI_TEST_BINARY) --state-dir $env(PROQI_TEST_STATE)
         expect -exact "\x1b\[?1049h"
         after 500
-        send -- "\x1b\[200~\$skill\x1b\[201~"
+        send -- "\x1b\[200~\$sz\x1b\[201~"
         expect -glob "*more results exist, refine query*"
         for {set i 0} {$i < 22} {incr i} {
             send -- "\x1b\[<65;8;8M"
@@ -266,7 +269,10 @@ fn result_beyond_twenty_is_selectable_by_keyboard_and_mouse_in_real_ptys() {
         .status()
         .expect("run mouse invocation PTY workflow");
     assert!(mouse_status.success());
-    assert_eq!(thought_content(binary, mouse_state.path()), "$skill22 ");
+    assert_eq!(
+        thought_content(binary, mouse_state.path()),
+        "$skill22-zoom "
+    );
 }
 
 #[test]

@@ -28,6 +28,18 @@ pub(super) enum ClipboardReadOwner {
     },
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum ClipboardPasteMode {
+    Exact,
+    Reflow,
+}
+
+#[derive(Clone, Copy)]
+pub(super) struct PendingClipboardRead {
+    pub(super) owner: ClipboardReadOwner,
+    pub(super) mode: ClipboardPasteMode,
+}
+
 pub(super) struct PendingEditorClipboard {
     pub(super) intent: ClipboardIntent,
     pub(super) thought_id: ThoughtId,

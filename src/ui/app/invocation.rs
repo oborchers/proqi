@@ -2,14 +2,14 @@
 
 use std::ops::Range;
 
+use unicode_normalization::char::is_combining_mark;
+
 use crate::{
     application::Effect,
     ports::{
         editor::EditCommand,
         environment::{Clock, IdGenerator},
-        invocation::{
-            InvocationDiscovery, InvocationDiscoveryRequest, InvocationEntry, InvocationForm,
-        },
+        invocation::{InvocationDiscovery, InvocationDiscoveryRequest},
         text_layout::{byte_for_position, position_for_byte},
     },
     ui::{PointerKind, UiInput, UiKey},
@@ -19,10 +19,14 @@ use super::BoardApp;
 
 #[path = "invocation/builtins.rs"]
 pub(in crate::ui::app) mod builtins;
+#[path = "invocation/choices.rs"]
+mod choices;
 #[path = "invocation/compatibility.rs"]
 mod compatibility;
 #[path = "invocation/highlight.rs"]
 mod highlight;
+#[path = "invocation/matcher.rs"]
+mod matcher;
 #[path = "invocation/navigation.rs"]
 mod navigation;
 #[path = "invocation/reference.rs"]
@@ -39,6 +43,7 @@ pub(super) struct InvocationPopup {
     manual: bool,
     selected: usize,
     scroll: usize,
+    choices: Vec<Choice>,
 }
 
 impl BoardApp {
@@ -83,39 +88,50 @@ impl BoardApp {
             .as_ref()
             .is_some_and(|popup| popup.manual)
         {
+            self.rebuild_invocation_choices();
             return;
         }
         self.invocation_popup = self.active_invocation_token().and_then(|(query, range)| {
-            let popup = InvocationPopup {
+            let mut popup = InvocationPopup {
                 query,
                 range: Some(range),
                 manual: false,
                 selected: 0,
                 scroll: 0,
+                choices: Vec::new(),
             };
-            (!self.invocation_choices(&popup).is_empty()).then_some(popup)
+            popup.choices = choices::build(self, &popup);
+            (!popup.choices.is_empty()).then_some(popup)
         });
+    }
+
+    pub(super) fn rebuild_invocation_choices(&mut self) {
+        let Some(mut popup) = self.invocation_popup.take() else {
+            return;
+        };
+        popup.choices = choices::build(self, &popup);
+        self.invocation_popup = Some(popup);
     }
 
     pub(super) fn invocation_view(&self) -> Option<(String, Vec<InvocationChoiceView>, usize)> {
         let popup = self.invocation_popup.as_ref()?;
-        let choices = self.invocation_choices(popup);
         let mut previous_group = None;
         Some((
             popup.query.clone(),
-            choices
-                .into_iter()
+            popup
+                .choices
+                .iter()
                 .skip(popup.scroll)
                 .map(|choice| {
-                    let group = choice.group.and_then(|group| {
+                    let group = choice.group.clone().and_then(|group| {
                         let begins_group = previous_group.as_deref() != Some(group.as_str());
                         previous_group = Some(group.clone());
                         begins_group.then_some(group)
                     });
                     InvocationChoiceView {
-                        token: choice.token,
-                        qualifier: choice.qualifier,
-                        qualifier_fallbacks: choice.qualifier_fallbacks,
+                        token: choice.token.clone(),
+                        qualifier: choice.qualifier.clone(),
+                        qualifier_fallbacks: choice.qualifier_fallbacks.clone(),
                         group,
                     }
                 })
@@ -127,7 +143,7 @@ impl BoardApp {
     pub(super) fn invocation_match_count(&self) -> usize {
         self.invocation_popup
             .as_ref()
-            .map_or(0, |popup| self.invocation_choices(popup).len())
+            .map_or(0, |popup| popup.choices.len())
     }
 
     pub(in crate::ui) fn invocation_notice(&self) -> Option<&'static str> {
@@ -146,7 +162,7 @@ impl BoardApp {
             .map_or((false, false), |popup| {
                 (
                     popup.scroll > 0,
-                    popup.scroll.saturating_add(visible) < self.invocation_choices(popup).len(),
+                    popup.scroll.saturating_add(visible) < popup.choices.len(),
                 )
             })
     }
@@ -235,16 +251,22 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
+        if matches!(
+            input,
+            UiInput::Resize { .. } | UiInput::HostFocusGained | UiInput::HostFocusLost
+        ) {
+            return Vec::new();
+        }
         let effects = match input {
             UiInput::Key(key) => self.handle_edit_key(*key, ids, clock),
             UiInput::Paste(value) => {
                 self.paste_payload(crate::ui::PastePayload::text(value.clone()), ids, clock)
             }
             UiInput::PasteAnnotated(payload) => self.paste_payload(payload.clone(), ids, clock),
-            UiInput::Resize { .. }
+            UiInput::Pointer(_)
+            | UiInput::Resize { .. }
             | UiInput::HostFocusGained
-            | UiInput::HostFocusLost
-            | UiInput::Pointer(_) => Vec::new(),
+            | UiInput::HostFocusLost => Vec::new(),
         };
         self.refresh_invocation_popup();
         effects
@@ -275,7 +297,7 @@ impl BoardApp {
         let selected = self
             .invocation_popup
             .as_ref()
-            .and_then(|popup| self.invocation_choices(popup).get(index).cloned());
+            .and_then(|popup| popup.choices.get(index).cloned());
         let Some(choice) = selected else {
             return;
         };
@@ -325,6 +347,7 @@ impl BoardApp {
             popup.selected = 0;
             popup.scroll = 0;
         }
+        self.rebuild_invocation_choices();
     }
 
     fn active_invocation_token(&self) -> Option<(String, Range<usize>)> {
@@ -355,87 +378,6 @@ impl BoardApp {
             .map_or(snapshot.content.len(), |byte| cursor + byte);
         Some((query.to_owned(), start..end))
     }
-
-    fn invocation_choices(&self, popup: &InvocationPopup) -> Vec<Choice> {
-        let query = popup.query.to_lowercase();
-        let built_ins = builtins::choices(self, popup);
-        let starts_prompt = builtins::starts_prompt(self, popup);
-        let live = reference::choices(self, popup, &query);
-        let mut candidates = self
-            .invocation_project
-            .iter()
-            .chain(&self.invocation_global)
-            .flat_map(|entry| entry.forms.iter().map(move |form| (entry, form)))
-            .filter(|(_, form)| compatibility::supports_form(self, form))
-            .filter(|(_, form)| !builtins::is_shared_starter(&form.token) || starts_prompt)
-            .filter(|(_, form)| {
-                !built_ins
-                    .iter()
-                    .any(|built_in| built_in.token == form.token)
-            })
-            .filter(|(entry, form)| choice_matches(entry, form, popup.manual, &query))
-            .collect::<Vec<_>>();
-        candidates.sort_by(|(left_entry, left_form), (right_entry, right_form)| {
-            left_form
-                .precedence
-                .cmp(&right_form.precedence)
-                .then_with(|| left_form.token.cmp(&right_form.token))
-                .then_with(|| left_entry.kind.cmp(&right_entry.kind))
-                .then_with(|| left_entry.source.cmp(&right_entry.source))
-                .then_with(|| left_entry.canonical_path.cmp(&right_entry.canonical_path))
-        });
-        let visible = candidates.clone();
-        built_ins
-            .into_iter()
-            .chain(candidates.drain(..).map(|(entry, form)| {
-                let duplicate_token = visible
-                    .iter()
-                    .filter(|(_, visible_form)| visible_form.token == form.token)
-                    .count()
-                    > 1;
-                Choice {
-                    token: form.token.clone(),
-                    insertion: form.token.clone(),
-                    annotation_display: None,
-                    separate_from_prefix: false,
-                    qualifier: choice_qualifier(entry, form, duplicate_token),
-                    qualifier_fallbacks: Vec::new(),
-                    group: None,
-                }
-            }))
-            .chain(live)
-            .collect()
-    }
-}
-
-fn choice_matches(
-    entry: &InvocationEntry,
-    form: &InvocationForm,
-    manual: bool,
-    query: &str,
-) -> bool {
-    if !manual {
-        return form.token.to_lowercase().starts_with(query);
-    }
-    form.token.to_lowercase().contains(query)
-        || entry.name.to_lowercase().contains(query)
-        || entry
-            .description
-            .as_ref()
-            .is_some_and(|description| description.to_lowercase().contains(query))
-}
-
-fn choice_qualifier(entry: &InvocationEntry, form: &InvocationForm, show_source: bool) -> String {
-    let base = format!("{} {}", entry.scope.label(), entry.kind.label());
-    if show_source {
-        let harness = match form.harness {
-            crate::ports::invocation::InvocationHarness::ClaudeCode => "Claude",
-            harness => harness.label(),
-        };
-        format!("{base} · {harness}")
-    } else {
-        base
-    }
 }
 
 fn plausible(query: &str) -> bool {
@@ -457,7 +399,9 @@ fn plausible(query: &str) -> bool {
         return false;
     }
     body.chars().all(|character| {
-        character.is_alphanumeric() || matches!(character, '-' | '_' | ':' | '/' | '.')
+        character.is_alphanumeric()
+            || is_combining_mark(character)
+            || matches!(character, '-' | '_' | ':' | '/' | '.')
     })
 }
 
@@ -476,6 +420,9 @@ mod discovery_tests;
 #[cfg(test)]
 #[path = "invocation/paging_tests.rs"]
 mod paging_tests;
+#[cfg(test)]
+#[path = "invocation/ranking_tests.rs"]
+mod ranking_tests;
 #[cfg(test)]
 #[path = "invocation/tests.rs"]
 mod tests;

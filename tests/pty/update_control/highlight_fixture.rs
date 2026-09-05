@@ -50,7 +50,7 @@ pub(super) fn run_dismissal(binary: &Path, state: &Path, session: &str) -> ExitS
         after 300
         send -- "\x1b"
         after 500
-        send -- "\x11"
+        send -- $env(PROQI_TEST_PRIMARY_Q)
         expect {
             eof {}
             timeout { exit 95 }
@@ -77,7 +77,7 @@ pub(super) fn run_quiet_resume(binary: &Path, state: &Path, session: &str) -> Ex
         after 300
         send -- "\x1b\[200~$env(PROQI_TEST_PROOF)\x1b\[201~"
         after 500
-        send -- "\x11"
+        send -- $env(PROQI_TEST_PRIMARY_Q)
         expect {
             eof {}
             timeout { exit 95 }
@@ -125,7 +125,7 @@ pub(super) fn spawn_quiet_restarting_peer(
         }
         send -- "\x1b\[200~$env(PROQI_TEST_PROOF)\x1b\[201~"
         after 500
-        send -- "\x11"
+        send -- $env(PROQI_TEST_PRIMARY_Q)
         expect -exact "\x1b\[0 q"
         expect {
             eof {}
@@ -168,7 +168,7 @@ pub(super) fn run_manual_reopen(binary: &Path, state: &Path, session: &str) -> E
         set timeout 20
         send -- "\x1b"
         after 200
-        send -- "\x11"
+        send -- $env(PROQI_TEST_PRIMARY_Q)
         expect {
             eof {}
             timeout { exit 95 }
