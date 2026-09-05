@@ -324,6 +324,43 @@ fn mouse_activation_and_shallow_resize_use_the_same_semantic_rows() {
 }
 
 #[test]
+fn target_rows_preserve_pane_identity_and_state_before_long_agent_names() {
+    let mut fixture = Fixture::new();
+    prepare(&mut fixture, "source");
+    let generation = open(&mut fixture);
+    fixture.app.complete_global_agent_discovery(
+        generation,
+        Ok(vec![
+            target(
+                "w2",
+                "w2:t1",
+                "w2:p8",
+                "A receiver name that cannot fit beside metadata",
+                AgentState::Working,
+                AgentAvailability::Available,
+            ),
+            target(
+                "w3",
+                "w3:t9",
+                "w3:p2",
+                "A receiver name that cannot fit beside metadata",
+                AgentState::Blocked,
+                AgentAvailability::Blocked,
+            ),
+        ]),
+    );
+
+    let narrow = text(draw(&mut fixture, 34, 8).backend().buffer());
+    assert!(narrow.contains("p8 · working"), "{narrow}");
+    assert!(narrow.contains("p2 · blocked"), "{narrow}");
+    assert!(!narrow.contains("cannot fit"), "{narrow}");
+
+    let extreme = text(draw(&mut fixture, 14, 8).backend().buffer());
+    assert!(extreme.contains("working"), "{extreme}");
+    assert!(extreme.contains("blocked"), "{extreme}");
+}
+
+#[test]
 fn discontiguous_selection_keeps_exact_board_order_for_global_delivery() {
     let mut fixture = Fixture::new();
     for content in ["first", "second", "third"] {

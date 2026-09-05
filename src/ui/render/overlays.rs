@@ -211,6 +211,7 @@ pub(super) struct PickerRow<'a> {
     primary: &'a str,
     secondary: Option<&'a str>,
     secondary_fallbacks: &'a [String],
+    protected_secondaries: &'a [String],
     group: Option<&'a str>,
     enabled: bool,
 }
@@ -221,6 +222,7 @@ impl<'a> PickerRow<'a> {
             primary,
             secondary: None,
             secondary_fallbacks: &[],
+            protected_secondaries: &[],
             group: None,
             enabled: true,
         }
@@ -232,6 +234,7 @@ impl<'a> PickerRow<'a> {
             primary,
             secondary: Some(secondary),
             secondary_fallbacks: &[],
+            protected_secondaries: &[],
             group: None,
             enabled: true,
         }
@@ -247,6 +250,7 @@ impl<'a> PickerRow<'a> {
             primary,
             secondary: Some(secondary),
             secondary_fallbacks,
+            protected_secondaries: &[],
             group,
             enabled: true,
         }
@@ -257,6 +261,24 @@ impl<'a> PickerRow<'a> {
             primary,
             secondary: Some(secondary),
             secondary_fallbacks: &[],
+            protected_secondaries: &[],
+            group: None,
+            enabled,
+        }
+    }
+
+    pub(super) const fn responsive_choice(
+        primary: &'a str,
+        secondary: &'a str,
+        secondary_fallbacks: &'a [String],
+        protected_secondaries: &'a [String],
+        enabled: bool,
+    ) -> Self {
+        Self {
+            primary,
+            secondary: Some(secondary),
+            secondary_fallbacks,
+            protected_secondaries,
             group: None,
             enabled,
         }
@@ -265,15 +287,12 @@ impl<'a> PickerRow<'a> {
 
 #[cfg(test)]
 fn picker_row(entry: PickerRow<'_>, width: u16) -> String {
-    let width = usize::from(width);
-    let primary = display(entry.primary);
-    let primary_width = cell_width(&primary);
-    if let Some(secondary) = fitting_secondary(entry, width) {
-        let secondary = display(secondary);
-        let gap = width.saturating_sub(primary_width + cell_width(&secondary));
-        return format!("{primary}{}{secondary}", " ".repeat(gap));
-    }
-    ellipsize(entry.primary, width)
+    let (primary, secondary) = picker_content(entry, usize::from(width));
+    let Some(secondary) = secondary else {
+        return primary;
+    };
+    let gap = usize::from(width).saturating_sub(cell_width(&primary) + cell_width(&secondary));
+    format!("{primary}{}{secondary}", " ".repeat(gap))
 }
 
 fn picker_line(entry: PickerRow<'_>, width: u16, selected: bool, theme: &Theme) -> Line<'static> {
@@ -295,7 +314,7 @@ fn picker_line(entry: PickerRow<'_>, width: u16, selected: bool, theme: &Theme) 
         return Line::from(Span::styled(content, style));
     }
     let width = usize::from(width);
-    let primary = ellipsize(entry.primary, width);
+    let (primary, secondary) = picker_content(entry, width);
     let base = if selected {
         theme.focused_style()
     } else {
@@ -308,7 +327,7 @@ fn picker_line(entry: PickerRow<'_>, width: u16, selected: bool, theme: &Theme) 
     } else {
         base.fg(theme.foreground)
     };
-    let Some(secondary) = fitting_secondary(entry, width).map(display) else {
+    let Some(secondary) = secondary else {
         let padding = " ".repeat(width.saturating_sub(cell_width(&primary)));
         return Line::from(vec![
             Span::styled(primary, primary_style),
@@ -329,12 +348,42 @@ fn fitting_secondary(entry: PickerRow<'_>, width: usize) -> Option<&str> {
         .secondary
         .into_iter()
         .chain(entry.secondary_fallbacks.iter().map(String::as_str))
+        .chain(entry.protected_secondaries.iter().map(String::as_str))
         .find(|secondary| {
             cell_width(entry.primary)
                 .saturating_add(minimum_gap)
                 .saturating_add(cell_width(secondary))
                 <= width
         })
+}
+
+fn picker_content(entry: PickerRow<'_>, width: usize) -> (String, Option<String>) {
+    let primary = display(entry.primary);
+    if let Some(secondary) = fitting_secondary(entry, width) {
+        return (primary, Some(display(secondary)));
+    }
+    let minimum_gap = usize::from(entry.group.is_none()) + 1;
+    for secondary in entry.protected_secondaries {
+        let secondary_width = cell_width(secondary);
+        if minimum_gap
+            .saturating_add(1)
+            .saturating_add(secondary_width)
+            <= width
+        {
+            let primary_width = width.saturating_sub(minimum_gap + secondary_width);
+            return (
+                ellipsize(entry.primary, primary_width),
+                Some(display(secondary)),
+            );
+        }
+        if secondary_width <= width {
+            return (String::new(), Some(display(secondary)));
+        }
+    }
+    if let Some(secondary) = entry.protected_secondaries.last() {
+        return (String::new(), Some(ellipsize(secondary, width)));
+    }
+    (ellipsize(entry.primary, width), None)
 }
 
 pub(super) fn ellipsize(value: &str, width: usize) -> String {

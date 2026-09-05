@@ -92,11 +92,15 @@ impl GlobalDeliveryState {
                     GlobalDeliveryChoiceView {
                         primary: "Submit".to_owned(),
                         secondary: "remove after accepted receipt".to_owned(),
+                        secondary_fallbacks: Vec::new(),
+                        protected_secondaries: Vec::new(),
                         enabled: true,
                     },
                     GlobalDeliveryChoiceView {
                         primary: "Submit and keep".to_owned(),
                         secondary: "keep after accepted receipt".to_owned(),
+                        secondary_fallbacks: Vec::new(),
+                        protected_secondaries: Vec::new(),
                         enabled: true,
                     },
                 ],
@@ -146,15 +150,29 @@ fn target_view(target: &AgentTarget) -> GlobalDeliveryChoiceView {
         .tab_label
         .as_deref()
         .unwrap_or_else(|| target.tab_id());
+    let pane = compact_child(target.workspace_id(), target.pane_id());
+    let state = target_live_state(target);
+    let location_and_pane = format!("{workspace} / {tab} · {pane}");
+    let location_without_harness = format!("{location_and_pane} · {state}");
+    let workspace_and_pane = format!("{workspace} · {pane} · {state}");
+    let pane_and_state = format!("{pane} · {state}");
     GlobalDeliveryChoiceView {
         primary: target.agent_name.clone(),
         secondary: format!(
-            "{workspace} / {tab} · {} · {}",
+            "{location_and_pane} · {} · {state}",
             target.agent_kind().as_str(),
-            target_live_state(target)
         ),
+        secondary_fallbacks: vec![location_without_harness, workspace_and_pane],
+        protected_secondaries: vec![pane_and_state, state.to_owned()],
         enabled: target.can_submit(),
     }
+}
+
+fn compact_child<'a>(workspace: &str, identity: &'a str) -> &'a str {
+    identity
+        .strip_prefix(workspace)
+        .and_then(|suffix| suffix.strip_prefix(':'))
+        .unwrap_or(identity)
 }
 
 const fn target_live_state(target: &AgentTarget) -> &'static str {
@@ -168,6 +186,8 @@ fn placeholder(value: &str) -> GlobalDeliveryChoiceView {
     GlobalDeliveryChoiceView {
         primary: value.to_owned(),
         secondary: String::new(),
+        secondary_fallbacks: Vec::new(),
+        protected_secondaries: Vec::new(),
         enabled: false,
     }
 }

@@ -17,7 +17,17 @@ pub(super) fn render(
         .choices
         .iter()
         .map(|choice| {
-            overlays::PickerRow::choice(&choice.primary, &choice.secondary, choice.enabled)
+            if choice.protected_secondaries.is_empty() {
+                overlays::PickerRow::choice(&choice.primary, &choice.secondary, choice.enabled)
+            } else {
+                overlays::PickerRow::responsive_choice(
+                    &choice.primary,
+                    &choice.secondary,
+                    &choice.secondary_fallbacks,
+                    &choice.protected_secondaries,
+                    choice.enabled,
+                )
+            }
         })
         .collect::<Vec<_>>();
     overlays::render_picker(

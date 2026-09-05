@@ -40,6 +40,8 @@ enum GlobalDeliveryStage {
 pub(in crate::ui) struct GlobalDeliveryChoiceView {
     pub(in crate::ui) primary: String,
     pub(in crate::ui) secondary: String,
+    pub(in crate::ui) secondary_fallbacks: Vec<String>,
+    pub(in crate::ui) protected_secondaries: Vec<String>,
     pub(in crate::ui) enabled: bool,
 }
 
