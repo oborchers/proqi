@@ -40,6 +40,10 @@ mod fairness;
 mod invocation;
 
 #[cfg(target_os = "macos")]
+#[path = "pty/input_pause.rs"]
+mod input_pause;
+
+#[cfg(target_os = "macos")]
 #[path = "pty/key_inspector.rs"]
 mod key_inspector;
 

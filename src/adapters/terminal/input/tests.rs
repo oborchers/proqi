@@ -1,22 +1,11 @@
-use std::{
-    collections::VecDeque,
-    io,
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-    },
-    time::{Duration, Instant},
-};
-
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 use crate::{
-    adapters::terminal::supervisor::ShutdownDeadline,
     ports::editor::CursorMovement,
     ui::{FastNavigation, UiInput, UiKey},
 };
 
-use super::{EventSource, InputFailure, InputLane, InputMessage, translate};
+use super::translate;
 
 #[path = "tests/paging.rs"]
 mod paging;
@@ -25,12 +14,8 @@ mod pointer;
 #[path = "tests/primary.rs"]
 mod primary;
 
-struct FakeSource {
-    polls: VecDeque<io::Result<bool>>,
-    reads: VecDeque<io::Result<Event>>,
-    delay: Duration,
-    entered: Option<Arc<AtomicBool>>,
-}
+#[path = "tests/watchdog.rs"]
+mod watchdog;
 
 fn current_primary() -> KeyModifiers {
     if cfg!(target_os = "macos") {
@@ -46,97 +31,6 @@ fn current_primary_spellings() -> Vec<KeyModifiers> {
     } else {
         vec![KeyModifiers::CONTROL]
     }
-}
-
-impl EventSource for FakeSource {
-    fn poll(&mut self, _timeout: Duration) -> io::Result<bool> {
-        if let Some(entered) = &self.entered {
-            entered.store(true, Ordering::Release);
-        }
-        if !self.delay.is_zero() {
-            std::thread::sleep(self.delay);
-        }
-        self.polls.pop_front().unwrap_or(Ok(false))
-    }
-
-    fn read(&mut self) -> io::Result<Event> {
-        self.reads
-            .pop_front()
-            .unwrap_or_else(|| Err(io::Error::other("missing fake event")))
-    }
-}
-
-fn source_with_poll(result: io::Result<bool>) -> Box<dyn EventSource> {
-    Box::new(FakeSource {
-        polls: VecDeque::from([result]),
-        reads: VecDeque::new(),
-        delay: Duration::ZERO,
-        entered: None,
-    })
-}
-
-#[test]
-fn eof_and_revoked_terminal_errors_remain_typed() {
-    for (error, expected) in [
-        (
-            io::Error::new(io::ErrorKind::UnexpectedEof, "closed"),
-            InputFailure::EndOfFile,
-        ),
-        (
-            io::Error::from_raw_os_error(5),
-            InputFailure::TerminalRevoked,
-        ),
-    ] {
-        let lane = InputLane::spawn_with_source(source_with_poll(Err(error)));
-        let InputMessage::Failed(actual) = lane
-            .receiver
-            .recv_timeout(Duration::from_secs(1))
-            .expect("typed input failure")
-        else {
-            panic!("expected a failure message");
-        };
-        assert_eq!(actual, expected);
-        lane.stop(ShutdownDeadline::after(Duration::from_secs(1)))
-            .expect("failed input lane stops");
-    }
-}
-
-#[test]
-fn nonresponsive_source_cannot_make_stop_wait_without_bound() {
-    let entered = Arc::new(AtomicBool::new(false));
-    let lane = InputLane::spawn_with_source(Box::new(FakeSource {
-        polls: VecDeque::new(),
-        reads: VecDeque::new(),
-        delay: Duration::from_millis(200),
-        entered: Some(Arc::clone(&entered)),
-    }));
-    while !entered.load(Ordering::Acquire) {
-        std::thread::yield_now();
-    }
-    let started = Instant::now();
-    let result = lane.stop(ShutdownDeadline::after(Duration::from_millis(10)));
-    assert!(result.is_err());
-    assert!(started.elapsed() < Duration::from_millis(100));
-}
-
-#[test]
-fn stalled_registry_event_source_becomes_a_typed_failure() {
-    let lane = InputLane::spawn_with_source(Box::new(FakeSource {
-        polls: VecDeque::new(),
-        reads: VecDeque::new(),
-        delay: Duration::from_secs(2),
-        entered: None,
-    }));
-    let InputMessage::Failed(failure) = lane
-        .receiver
-        .recv_timeout(Duration::from_secs(1))
-        .expect("stalled source failure")
-    else {
-        panic!("expected a failure message");
-    };
-    assert_eq!(failure, InputFailure::Unresponsive);
-    lane.stop(ShutdownDeadline::after(Duration::from_secs(1)))
-        .expect("input supervisor stops without the stalled reader");
 }
 
 #[test]
