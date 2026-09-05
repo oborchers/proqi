@@ -21,8 +21,20 @@ const OWNER_READINESS_TIMEOUT: std::time::Duration = std::time::Duration::from_s
 
 pub(super) fn expect_command() -> Command {
     let mut command = Command::new("/usr/bin/expect");
-    command.env("PROQI_DISABLE_HERDR", "1");
     command
+        .env("PROQI_DISABLE_HERDR", "1")
+        .env("PROQI_TEST_PRIMARY_A", primary_sequence('a', 0x01))
+        .env("PROQI_TEST_PRIMARY_Q", primary_sequence('q', 0x11))
+        .env("PROQI_TEST_PRIMARY_Z", primary_sequence('z', 0x1a));
+    command
+}
+
+fn primary_sequence(character: char, legacy_control: u8) -> String {
+    if cfg!(target_os = "macos") {
+        format!("\u{1b}[{};9u", u32::from(character))
+    } else {
+        char::from(legacy_control).to_string()
+    }
 }
 
 pub(super) fn wait_for_path(path: &std::path::Path) {

@@ -292,6 +292,25 @@ fn deliberate_capacity_backpressures_the_runner_while_passive_input_proceeds() {
 }
 
 #[test]
+fn reflow_clipboard_action_replays_after_the_capture_barrier() {
+    let (mut app, mut ids, clock, _) = app_with_thought();
+    app.screenshot_started(std::time::Duration::ZERO);
+    app.queue_screenshot_candidates([candidate(69)]);
+    let capture = next_commit(&mut app, &mut ids, &clock);
+
+    assert!(
+        app.handle(UiInput::Key(UiKey::PasteClipboardReflow), &mut ids, &clock)
+            .is_empty()
+    );
+    let effects = app.complete_screenshot_capture(Ok(created(&capture)), &mut ids, &clock);
+    assert!(
+        effects
+            .iter()
+            .any(|effect| matches!(effect, Effect::ReadClipboard { .. }))
+    );
+}
+
+#[test]
 fn board_key_and_board_pastes_replay_without_capture_mode_stealing() {
     let (mut app, mut ids, clock, _) = app_with_thought();
     app.screenshot_started(std::time::Duration::ZERO);

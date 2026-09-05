@@ -41,7 +41,7 @@ fn session_browser_searches_and_resumes_in_a_real_pty() {
         expect -re "Needle"
         send "\r"
         expect -exact "\x1b\[?1049l"; expect -exact "\x1b\[?1049h"
-        send -- "\x11"
+        send -- $env(PROQI_TEST_PRIMARY_Q)
         expect {
             eof {}
             timeout { exit 93 }

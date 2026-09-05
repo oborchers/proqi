@@ -27,7 +27,7 @@ fn primary_shift_arrow_reorders_one_thought_in_a_real_pty() {
         after 300
         send "\x1b"
         after 100
-        send -- "\x1b\[1;6A"
+        send -- "\x1b\[1;10A"
         after 1000
         send "q"
         expect eof

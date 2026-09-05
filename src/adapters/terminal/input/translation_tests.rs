@@ -28,14 +28,28 @@ fn only_unmodified_space_receives_the_placeholder_aware_identity() {
             "modifiers: {modifiers:?}"
         );
     }
-    for modifiers in [
-        KeyModifiers::CONTROL,
-        KeyModifiers::SUPER,
-        KeyModifiers::META,
-    ] {
+    let (accepted, rejected) = if cfg!(target_os = "macos") {
+        (
+            vec![KeyModifiers::SUPER, KeyModifiers::META],
+            vec![KeyModifiers::CONTROL],
+        )
+    } else {
+        (
+            vec![KeyModifiers::CONTROL],
+            vec![KeyModifiers::SUPER, KeyModifiers::META],
+        )
+    };
+    for modifiers in accepted {
         assert_eq!(
             translate(Event::Key(KeyEvent::new(KeyCode::Char(' '), modifiers))),
             Some(UiInput::Key(UiKey::PrimaryCharacter(' '))),
+            "modifiers: {modifiers:?}"
+        );
+    }
+    for modifiers in rejected {
+        assert_eq!(
+            translate(Event::Key(KeyEvent::new(KeyCode::Char(' '), modifiers))),
+            None,
             "modifiers: {modifiers:?}"
         );
     }
@@ -119,6 +133,33 @@ fn macos_option_word_and_ordinary_shift_horizontal_arrows_keep_existing_meanings
             Some(UiKey::Move {
                 movement: grapheme,
                 extend_selection: true,
+            })
+        );
+    }
+}
+
+#[test]
+fn non_primary_horizontal_modifiers_do_not_gain_another_platforms_meaning() {
+    for (platform, modifiers, extend_selection) in [
+        (ModifierPlatform::MacOs, KeyModifiers::CONTROL, false),
+        (
+            ModifierPlatform::MacOs,
+            KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+            true,
+        ),
+        (
+            ModifierPlatform::MacOs,
+            KeyModifiers::SUPER | KeyModifiers::CONTROL,
+            false,
+        ),
+        (ModifierPlatform::Other, KeyModifiers::SUPER, false),
+        (ModifierPlatform::Other, KeyModifiers::META, false),
+    ] {
+        assert_eq!(
+            translate_key_for_platform(KeyEvent::new(KeyCode::Left, modifiers), platform),
+            Some(UiKey::Move {
+                movement: CursorMovement::GraphemeBack,
+                extend_selection,
             })
         );
     }

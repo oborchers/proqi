@@ -115,6 +115,8 @@ pub struct KeyBindings {
     pub quit: char,
     /// Toggle the macOS screenshot inbox.
     pub screenshot_inbox: char,
+    /// Paste exactly in Board mode; its uppercase form pastes with reflow.
+    pub paste: char,
     /// Shifted Primary chord suffix for sentence deletion.
     pub delete_sentence: char,
     /// Shifted Primary chord suffix for selection to the visual-row start.
@@ -148,6 +150,7 @@ impl Default for KeyBindings {
             help: '?',
             quit: 'q',
             screenshot_inbox: 'i',
+            paste: 'p',
             delete_sentence: 'U',
             select_visual_row_start: 'H',
             select_visual_row_end: 'L',
@@ -179,6 +182,8 @@ pub(super) enum BoardCommand {
     Help,
     Quit,
     ScreenshotInbox,
+    PasteExact,
+    PasteReflow,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -190,6 +195,18 @@ pub(super) enum BoardNavigation {
 
 impl KeyBindings {
     pub(super) fn command(&self, character: char) -> Option<BoardCommand> {
+        self.explicit_command(character).or_else(|| {
+            if character == self.paste {
+                Some(BoardCommand::PasteExact)
+            } else if opposite_ascii_case(self.paste) == Some(character) {
+                Some(BoardCommand::PasteReflow)
+            } else {
+                None
+            }
+        })
+    }
+
+    fn explicit_command(&self, character: char) -> Option<BoardCommand> {
         let bindings = [
             (self.new, BoardCommand::New),
             (self.edit, BoardCommand::Edit),
@@ -217,6 +234,23 @@ impl KeyBindings {
         bindings
             .into_iter()
             .find_map(|(binding, command)| (binding == character).then_some(command))
+    }
+
+    pub(super) fn paste_exact_fallbacks(&self) -> Vec<char> {
+        self.paste_fallback(self.paste, BoardCommand::PasteExact)
+    }
+
+    pub(super) fn paste_reflow_fallbacks(&self) -> Vec<char> {
+        opposite_ascii_case(self.paste).map_or_else(Vec::new, |character| {
+            self.paste_fallback(character, BoardCommand::PasteReflow)
+        })
+    }
+
+    fn paste_fallback(&self, character: char, command: BoardCommand) -> Vec<char> {
+        (self.command(character) == Some(command))
+            .then_some(character)
+            .into_iter()
+            .collect()
     }
 
     /// Resolve a normalized key through the Board command map.
@@ -302,6 +336,9 @@ impl KeyBindings {
         if self.transform.is_control() {
             return Err("keybindings must be distinct printable characters");
         }
+        if !self.paste.is_ascii_lowercase() {
+            return Err("the paste binding must be one lowercase ASCII letter");
+        }
         if super::shortcut_metadata::reserved_unshifted_character(self.transform) {
             return Err("the transform binding conflicts with a reserved Primary shortcut");
         }
@@ -363,6 +400,16 @@ impl KeyBindings {
             }
         }
         Ok(())
+    }
+}
+
+fn opposite_ascii_case(character: char) -> Option<char> {
+    if character.is_ascii_lowercase() {
+        Some(character.to_ascii_uppercase())
+    } else if character.is_ascii_uppercase() {
+        Some(character.to_ascii_lowercase())
+    } else {
+        None
     }
 }
 

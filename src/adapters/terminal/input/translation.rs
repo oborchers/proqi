@@ -76,19 +76,17 @@ pub(super) fn translate_key_for_platform(
     key: KeyEvent,
     platform: ModifierPlatform,
 ) -> Option<UiKey> {
-    let primary = key
-        .modifiers
-        .intersects(KeyModifiers::CONTROL | KeyModifiers::SUPER | KeyModifiers::META);
+    let primary = platform_primary(key.modifiers, platform);
     if primary && let Some(command) = primary_key(&key) {
         return Some(command);
+    }
+    if has_command_modifier(key.modifiers) && primary_key(&key).is_some() {
+        return None;
     }
     let extend_selection = key.modifiers.contains(KeyModifiers::SHIFT);
     if let Some(horizontal) = horizontal_key(&key, platform, extend_selection) {
         return Some(horizontal);
     }
-    let document = key
-        .modifiers
-        .intersects(KeyModifiers::SUPER | KeyModifiers::META);
     match key.code {
         KeyCode::Char(' ') if key.modifiers.is_empty() => Some(UiKey::UnmodifiedSpace),
         KeyCode::Char(character) => Some(UiKey::Character(character)),
@@ -106,7 +104,6 @@ pub(super) fn translate_key_for_platform(
             CursorMovement::DocumentStart,
             key.modifiers,
             primary,
-            document,
             extend_selection,
         )),
         KeyCode::Down => Some(vertical_navigation(
@@ -115,7 +112,6 @@ pub(super) fn translate_key_for_platform(
             CursorMovement::DocumentEnd,
             key.modifiers,
             primary,
-            document,
             extend_selection,
         )),
         KeyCode::PageUp => Some(fast_navigation(FastNavigation::Previous, extend_selection)),
@@ -143,9 +139,10 @@ fn horizontal_key(
             UiKey::MoveVisualRow { edge }
         });
     }
-    let word = key
-        .modifiers
-        .intersects(KeyModifiers::ALT | KeyModifiers::CONTROL);
+    let word = match platform {
+        ModifierPlatform::MacOs => key.modifiers.contains(KeyModifiers::ALT),
+        ModifierPlatform::Other => key.modifiers.contains(KeyModifiers::CONTROL),
+    };
     let movement = match (edge, word) {
         (VisualRowEdge::Start, true) => CursorMovement::WordBack,
         (VisualRowEdge::Start, false) => CursorMovement::GraphemeBack,
@@ -160,9 +157,12 @@ fn primary_key(key: &KeyEvent) -> Option<UiKey> {
     match key.code {
         KeyCode::Enter if shifted => Some(UiKey::SubmitKeep),
         KeyCode::Enter => Some(UiKey::Submit),
-        KeyCode::Char(
-            character @ ('a' | 'A' | 'c' | 'C' | 'x' | 'X' | 'v' | 'V' | 'd' | 'D' | 'q' | 'Q'),
-        ) if shifted => Some(UiKey::PrimaryShiftCharacter(character)),
+        KeyCode::Char('v' | 'V') if shifted => Some(UiKey::PasteClipboardReflow),
+        KeyCode::Char(character @ ('a' | 'A' | 'c' | 'C' | 'x' | 'X' | 'd' | 'D' | 'q' | 'Q'))
+            if shifted =>
+        {
+            Some(UiKey::PrimaryShiftCharacter(character))
+        }
         KeyCode::Char('a' | 'A') => Some(UiKey::SelectAll),
         KeyCode::Char('c' | 'C') => Some(UiKey::Copy),
         KeyCode::Char('x' | 'X') => Some(UiKey::Cut),
@@ -192,12 +192,9 @@ fn vertical_navigation(
     boundary: CursorMovement,
     modifiers: KeyModifiers,
     primary: bool,
-    legacy_document: bool,
     extend_selection: bool,
 ) -> UiKey {
-    let legacy = if legacy_document { boundary } else { ordinary };
-    let platform_primary = platform_primary(modifiers, ModifierPlatform::current());
-    if modifiers.contains(KeyModifiers::ALT) && !platform_primary {
+    if modifiers.contains(KeyModifiers::ALT) && !primary {
         return fast_navigation(
             if accelerated == CursorMovement::VisualJumpUp {
                 FastNavigation::Previous
@@ -207,40 +204,46 @@ fn vertical_navigation(
             extend_selection,
         );
     }
-    if extend_selection {
-        return vertical_key(legacy, primary, true);
+    if primary && extend_selection {
+        return UiKey::PrimaryShiftMove { movement: boundary };
     }
-    let editor_movement = if platform_primary {
-        boundary
-    } else {
-        return vertical_key(legacy, primary, false);
-    };
+    if extend_selection {
+        return move_key(ordinary, true);
+    }
     UiKey::EditNavigation {
-        editor_movement,
-        board_movement: legacy,
+        editor_movement: if primary { boundary } else { ordinary },
+        board_movement: ordinary,
     }
 }
 
 fn platform_primary(modifiers: KeyModifiers, platform: ModifierPlatform) -> bool {
-    if platform == ModifierPlatform::MacOs {
-        modifiers.intersects(KeyModifiers::SUPER | KeyModifiers::META)
-    } else {
-        modifiers.contains(KeyModifiers::CONTROL)
-    }
+    let primary = match platform {
+        ModifierPlatform::MacOs => match modifiers & (KeyModifiers::SUPER | KeyModifiers::META) {
+            KeyModifiers::SUPER => Some(KeyModifiers::SUPER),
+            KeyModifiers::META => Some(KeyModifiers::META),
+            _ => None,
+        },
+        ModifierPlatform::Other => modifiers
+            .contains(KeyModifiers::CONTROL)
+            .then_some(KeyModifiers::CONTROL),
+    };
+    primary.is_some_and(|primary| {
+        modifiers
+            .difference(primary | KeyModifiers::SHIFT)
+            .is_empty()
+    })
+}
+
+fn has_command_modifier(modifiers: KeyModifiers) -> bool {
+    modifiers.intersects(
+        KeyModifiers::CONTROL | KeyModifiers::SUPER | KeyModifiers::META | KeyModifiers::HYPER,
+    )
 }
 
 const fn fast_navigation(direction: FastNavigation, extend_selection: bool) -> UiKey {
     UiKey::FastNavigation {
         direction,
         extend_selection,
-    }
-}
-
-const fn vertical_key(movement: CursorMovement, primary: bool, extend_selection: bool) -> UiKey {
-    if primary && extend_selection {
-        UiKey::PrimaryShiftMove { movement }
-    } else {
-        move_key(movement, extend_selection)
     }
 }
 

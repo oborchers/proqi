@@ -323,7 +323,7 @@ fn spawn_owner(binary: &str, state: &Path, session: &str, ready: &Path, done: &P
             }
             after 20
         }
-        send -- "\x11"
+        send -- $env(PROQI_TEST_PRIMARY_Q)
         expect eof
         catch wait result
         exit [lindex $result 3]
@@ -379,7 +379,7 @@ fn spawn_restarting_owner(
             }
             after 20
         }
-        send -- "\x11"
+        send -- $env(PROQI_TEST_PRIMARY_Q)
         expect -exact "\x1b\[0 q"
         expect eof
         catch wait result

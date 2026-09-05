@@ -122,7 +122,7 @@ impl TerminalControl for CrosstermControl {
     }
 }
 
-fn compatible_keyboard_flags() -> KeyboardEnhancementFlags {
+pub(super) fn compatible_keyboard_flags() -> KeyboardEnhancementFlags {
     keyboard_flags(&TerminalHost::detect())
 }
 
@@ -135,7 +135,7 @@ fn keyboard_flags(host: &TerminalHost) -> KeyboardEnhancementFlags {
     flags
 }
 
-fn reset_keyboard_reporting() -> io::Result<()> {
+pub(super) fn reset_keyboard_reporting() -> io::Result<()> {
     let mut output = stdout();
     output.write_all(b"\x1b[<u\x1b[>4;0m")?;
     output.flush()

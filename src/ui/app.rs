@@ -62,8 +62,7 @@ use super::{
 
 pub(in crate::ui) use invocation::InvocationChoiceView;
 use pending_types::{
-    ClipboardReadOwner, DeferredSubmissionIntent, PendingEditorClipboard, PendingSubmission,
-    SubmissionMode,
+    DeferredSubmissionIntent, PendingEditorClipboard, PendingSubmission, SubmissionMode,
 };
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -141,7 +140,7 @@ pub struct BoardApp {
     expanded_folds: BTreeSet<(ThoughtId, usize)>,
     pending_editor_clipboard: BTreeMap<RequestId, PendingEditorClipboard>,
     pending_session_clipboard: BTreeMap<RequestId, crate::application::ClipboardIntent>,
-    pending_clipboard_reads: BTreeMap<RequestId, ClipboardReadOwner>,
+    pending_clipboard_reads: BTreeMap<RequestId, pending_types::PendingClipboardRead>,
     pending_recovery_exports: BTreeSet<RequestId>,
     recovery_exported_for: Option<OperationSequence>,
     agent_targets: Vec<AgentTarget>,

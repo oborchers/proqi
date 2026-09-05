@@ -26,7 +26,8 @@ pub(in crate::ui::app) enum Command {
     Delete,
     Copy,
     Cut,
-    Paste,
+    PasteExact,
+    PasteReflow,
     Duplicate,
     SelectAll,
     SubmitRemove,
@@ -55,7 +56,7 @@ pub(in crate::ui::app) enum Command {
 }
 
 impl Command {
-    pub(super) const ALL: [(Self, &'static str); 50] = [
+    pub(super) const ALL: [(Self, &'static str); 51] = [
         (Self::New, "New thought"),
         (Self::RenameSession, "Rename session"),
         (Self::CopySessionId, "Copy session ID"),
@@ -90,7 +91,8 @@ impl Command {
         (Self::Delete, "Delete thought"),
         (Self::Copy, "Copy thought"),
         (Self::Cut, "Cut thought"),
-        (Self::Paste, "Paste native clipboard"),
+        (Self::PasteExact, "Paste exactly"),
+        (Self::PasteReflow, "Paste and reflow"),
         (Self::Duplicate, "Duplicate thought or selection"),
         (Self::SelectAll, "Select all thoughts"),
         (Self::SubmitRemove, "Submit"),

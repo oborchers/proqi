@@ -22,6 +22,7 @@ fn missing_config_uses_the_narrow_pane_default() {
     assert_eq!(settings.ui.keybindings.range_select, 'v');
     assert_eq!(settings.ui.keybindings.transform, 't');
     assert_eq!(settings.ui.keybindings.screenshot_inbox, 'i');
+    assert_eq!(settings.ui.keybindings.paste, 'p');
     assert_eq!(settings.ui.keybindings.delete_sentence, 'U');
     assert_eq!(settings.ui.keybindings.select_visual_row_start, 'H');
     assert_eq!(settings.ui.keybindings.select_visual_row_end, 'L');

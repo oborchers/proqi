@@ -23,7 +23,7 @@ fn batch_recognition_matches_canonical_editing_across_structural_contexts() {
             .map(|(index, line)| {
                 indentation_marker_at(content, &lines, index, width).map(|marker| {
                     let line_text = &content[line.start..line.content_end];
-                    line_text.len().saturating_sub(marker.content.len())
+                    line_text.len().saturating_sub(marker.content().len())
                 })
             })
             .collect::<Vec<_>>();

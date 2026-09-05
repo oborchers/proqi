@@ -6,27 +6,15 @@ use std::ops::Range;
 
 use crate::ports::{
     editor::TextChangeSet,
+    structured_text::{
+        FenceState, ListMarker, is_thematic_break, parse_list_marker, whitespace_prefix,
+    },
     text_layout::{LogicalLine, logical_lines},
 };
 
 use super::{RopeEditor, mutation::AppliedRange};
 
 pub(super) use scan::recognized_prefix_lengths;
-
-#[derive(Clone, Copy)]
-struct ListMarker<'a> {
-    indentation: &'a str,
-    marker: Marker<'a>,
-    spacing: &'a str,
-    task_spacing: Option<&'a str>,
-    content: &'a str,
-}
-
-#[derive(Clone, Copy)]
-enum Marker<'a> {
-    Bullet(char),
-    Ordered { number: &'a str, delimiter: char },
-}
 
 impl RopeEditor {
     pub(super) fn insert_smart_newline(&mut self, indent_width: u8) -> Option<AppliedRange> {
@@ -47,8 +35,8 @@ impl RopeEditor {
         let Some(marker) = indentation_marker_at(&content, &lines, line_index, indent_width) else {
             return self.replace_selection_or_insert(newline);
         };
-        if marker.content.trim_matches([' ', '\t']).is_empty() {
-            if marker.indentation.is_empty() {
+        if marker.content().trim_matches([' ', '\t']).is_empty() {
+            if marker.indentation().is_empty() {
                 return Some(self.replace_byte_range(line.start, cursor, ""));
             }
             if let Some(range) = outdent_range(&content, line, marker, indent_width) {
@@ -79,7 +67,7 @@ impl RopeEditor {
                 )]);
             };
             let insert = indentation_unit(marker, width);
-            let at = lines[line_index].start + marker.indentation.len();
+            let at = lines[line_index].start + marker.indentation().len();
             return self.replace_byte_ranges(&[(at..at, insert)]);
         }
         let replacements = touched
@@ -96,7 +84,7 @@ impl RopeEditor {
                         )
                     },
                     |marker| {
-                        let at = lines[line_index].start + marker.indentation.len();
+                        let at = lines[line_index].start + marker.indentation().len();
                         (at..at, indentation_unit(marker, width))
                     },
                 )
@@ -134,28 +122,6 @@ impl RopeEditor {
     }
 }
 
-impl ListMarker<'_> {
-    fn continuation(&self) -> String {
-        let marker = match self.marker {
-            Marker::Bullet(bullet) => bullet.to_string(),
-            Marker::Ordered { number, delimiter } => {
-                number
-                    .parse::<u64>()
-                    .map_or_else(|_| number.to_owned(), |number| (number + 1).to_string())
-                    + &delimiter.to_string()
-            }
-        };
-        let task = self
-            .task_spacing
-            .map_or_else(String::new, |spacing| format!("[ ]{spacing}"));
-        format!("{}{marker}{}{task}", self.indentation, self.spacing)
-    }
-
-    fn indentation_columns(&self) -> usize {
-        indentation_columns(self.indentation)
-    }
-}
-
 fn touched_lines(
     lines: &[LogicalLine],
     cursor: usize,
@@ -186,7 +152,7 @@ fn marker_at<'a>(
 ) -> Option<ListMarker<'a>> {
     let line = *lines.get(line_index)?;
     let line_text = &content[line.start..line.content_end];
-    let marker = parse_marker(line_text)?;
+    let marker = parse_list_marker(line_text)?;
     if is_thematic_break(line_text) || inside_fenced_code(content, line.start) {
         return None;
     }
@@ -208,12 +174,12 @@ fn indentation_marker_at<'a>(
     }
     let line = *lines.get(line_index)?;
     let line_text = &content[line.start..line.content_end];
-    let marker = parse_marker(line_text)?;
-    let indentation_end = line.start + marker.indentation.len();
+    let marker = parse_list_marker(line_text)?;
+    let indentation_end = line.start + marker.indentation().len();
     if is_thematic_break(line_text) || inside_fenced_code(content, line.start) {
         return None;
     }
-    let has_indentation_unit = marker.indentation.contains('\t')
+    let has_indentation_unit = marker.indentation().contains('\t')
         || whitespace_suffix_range(content, line.start, indentation_end, width).is_some();
     if !has_indentation_unit || !has_adjacent_list_context(content, lines, line_index) {
         return None;
@@ -232,12 +198,12 @@ fn outdent_marker_at<'a>(
     }
     let line = *lines.get(line_index)?;
     let line_text = &content[line.start..line.content_end];
-    let marker = parse_marker(line_text)?;
-    let indentation_end = line.start + marker.indentation.len();
+    let marker = parse_list_marker(line_text)?;
+    let indentation_end = line.start + marker.indentation().len();
     if is_thematic_break(line_text)
         || inside_fenced_code(content, line.start)
         || whitespace_suffix_range(content, line.start, indentation_end, width).is_none()
-        || !has_outdent_list_context(content, lines, line_index, marker.indentation, width)
+        || !has_outdent_list_context(content, lines, line_index, marker.indentation(), width)
     {
         return None;
     }
@@ -278,15 +244,15 @@ fn has_outdent_list_context(
         if marker_at(content, lines, index).is_some() {
             return true;
         }
-        if parse_marker(text).is_some_and(|peer| {
-            peer.indentation == indentation
+        if parse_list_marker(text).is_some_and(|peer| {
+            peer.indentation() == indentation
                 && !is_thematic_break(text)
                 && !inside_fenced_code(content, line.start)
-                && (peer.indentation.contains('\t')
+                && (peer.indentation().contains('\t')
                     || whitespace_suffix_range(
                         content,
                         line.start,
-                        line.start + peer.indentation.len(),
+                        line.start + peer.indentation().len(),
                         width,
                     )
                     .is_some())
@@ -302,7 +268,7 @@ fn has_outdent_list_context(
 }
 
 fn indentation_unit(marker: ListMarker<'_>, width: u8) -> String {
-    if marker.indentation.contains('\t') {
+    if marker.indentation().contains('\t') {
         "\t".to_owned()
     } else {
         " ".repeat(usize::from(width.max(1)))
@@ -316,7 +282,7 @@ fn outdent_range(
     width: u8,
 ) -> Option<Range<usize>> {
     let indentation_start = line.start;
-    let indentation_end = line.start + marker.indentation.len();
+    let indentation_end = line.start + marker.indentation().len();
     whitespace_suffix_range(content, indentation_start, indentation_end, width)
 }
 
@@ -344,137 +310,14 @@ fn whitespace_suffix_range(
     .then(|| end - spaces..end)
 }
 
-fn parse_marker(line: &str) -> Option<ListMarker<'_>> {
-    let indentation_end = line
-        .char_indices()
-        .find_map(|(index, character)| (!matches!(character, ' ' | '\t')).then_some(index))
-        .unwrap_or(line.len());
-    let indentation = &line[..indentation_end];
-    let rest = &line[indentation_end..];
-    let (marker, marker_end) = parse_base_marker(rest)?;
-    let spacing_end = marker_end + whitespace_prefix(&rest[marker_end..]);
-    if spacing_end == marker_end {
-        return None;
-    }
-    let spacing = &rest[marker_end..spacing_end];
-    let after_marker = &rest[spacing_end..];
-    let (task_spacing, content) =
-        parse_task(after_marker).map_or((None, after_marker), |parsed| (Some(parsed.0), parsed.1));
-    Some(ListMarker {
-        indentation,
-        marker,
-        spacing,
-        task_spacing,
-        content,
-    })
-}
-
-fn parse_base_marker(rest: &str) -> Option<(Marker<'_>, usize)> {
-    let first = rest.chars().next()?;
-    if matches!(first, '-' | '*' | '+') {
-        return Some((Marker::Bullet(first), first.len_utf8()));
-    }
-    let digit_end = rest.bytes().take(9).take_while(u8::is_ascii_digit).count();
-    if digit_end == 0
-        || rest
-            .as_bytes()
-            .get(digit_end)
-            .is_some_and(u8::is_ascii_digit)
-    {
-        return None;
-    }
-    let delimiter = rest[digit_end..].chars().next()?;
-    matches!(delimiter, '.' | ')').then_some((
-        Marker::Ordered {
-            number: &rest[..digit_end],
-            delimiter,
-        },
-        digit_end + delimiter.len_utf8(),
-    ))
-}
-
-fn parse_task(after_marker: &str) -> Option<(&str, &str)> {
-    let task = after_marker.get(..3)?;
-    if !matches!(task, "[ ]" | "[x]" | "[X]") {
-        return None;
-    }
-    let spacing_end = 3 + whitespace_prefix(&after_marker[3..]);
-    (spacing_end > 3).then_some((&after_marker[3..spacing_end], &after_marker[spacing_end..]))
-}
-
-fn whitespace_prefix(value: &str) -> usize {
-    value
-        .char_indices()
-        .find_map(|(index, character)| (!matches!(character, ' ' | '\t')).then_some(index))
-        .unwrap_or(value.len())
-}
-
-fn indentation_columns(indentation: &str) -> usize {
-    indentation.chars().fold(0, |column, character| {
-        let mut buffer = [0; 4];
-        column
-            + crate::ports::text_layout::grapheme_cell_width(
-                character.encode_utf8(&mut buffer),
-                column,
-            )
-    })
-}
-
-fn is_thematic_break(line: &str) -> bool {
-    let compact = line
-        .trim_matches([' ', '\t'])
-        .chars()
-        .filter(|character| !matches!(character, ' ' | '\t'))
-        .collect::<String>();
-    compact.len() >= 3
-        && compact.chars().next().is_some_and(|marker| {
-            matches!(marker, '-' | '*') && compact.chars().all(|c| c == marker)
-        })
-}
-
 fn inside_fenced_code(content: &str, current_start: usize) -> bool {
-    let mut open: Option<(char, usize)> = None;
+    let mut open = FenceState::closed();
     for line in logical_lines(content)
         .into_iter()
         .take_while(|line| line.start < current_start)
     {
         let text = &content[line.start..line.content_end];
-        update_fence(&mut open, text);
+        open.update(text);
     }
-    open.is_some()
-}
-
-fn update_fence(open: &mut Option<(char, usize)>, text: &str) {
-    let Some((marker, count, trailing)) = fence(text) else {
-        return;
-    };
-    match *open {
-        None => *open = Some((marker, count)),
-        Some((open_marker, minimum))
-            if marker == open_marker
-                && count >= minimum
-                && trailing.trim_matches([' ', '\t']).is_empty() =>
-        {
-            *open = None;
-        }
-        Some(_) => {}
-    }
-}
-
-fn fence(line: &str) -> Option<(char, usize, &str)> {
-    let indentation = whitespace_prefix(line);
-    let prefix = &line[..indentation];
-    if indentation_columns(prefix) > 3 {
-        return None;
-    }
-    let rest = &line[indentation..];
-    let marker = rest.chars().next()?;
-    if !matches!(marker, '`' | '~') {
-        return None;
-    }
-    let count = rest
-        .chars()
-        .take_while(|character| *character == marker)
-        .count();
-    (count >= 3).then_some((marker, count, &rest[count..]))
+    open.is_open()
 }

@@ -55,6 +55,7 @@ pub(super) fn command_for_key(
         | UiKey::Copy
         | UiKey::Cut
         | UiKey::PasteClipboard
+        | UiKey::PasteClipboardReflow
         | UiKey::Duplicate
         | UiKey::Tab
         | UiKey::BackTab
@@ -146,6 +147,7 @@ impl BoardApp {
                 return effects;
             }
             UiKey::PasteClipboard => return self.read_clipboard(ids),
+            UiKey::PasteClipboardReflow => return self.read_clipboard_reflow(ids),
             UiKey::Copy => return self.copy_selection(ids),
             UiKey::Cut => return self.cut_selection(ids),
             UiKey::Submit

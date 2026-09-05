@@ -320,6 +320,29 @@ Bracketed paste is treated as one semantic input event.
   new thought containing its complete payload, enters edit mode, and places the
   cursor after the pasted content.
 - Whitespace, blank lines, Unicode, and line endings are preserved.
+- `Primary+V`, the remappable Board fallback `p`, bracketed paste, and
+  `Paste exactly` preserve the complete payload byte for byte. Exact paste
+  remains the default.
+- `Primary+Shift+V`, the paired Board fallback `P`, and `Paste and reflow`
+  explicitly clean terminal-copied prose. The action joins single newlines,
+  collapses ASCII spaces and tabs, removes copied Markdown hard breaks, trims
+  outer whitespace, and reduces whitespace-only blank runs to one paragraph
+  separator in the source LF or CRLF family.
+- Explicit reflow preserves recognized Markdown list markers and nesting. It
+  joins only continuation lines aligned to their owning item content column. It
+  leaves fenced and indented code, tables, block quotes, paths, URLs,
+  controls other than tabs and line endings, and blocks containing durable
+  semantic annotations exact. Unmarked short lines are prose and are
+  intentionally flattened.
+- Reflow transforms a large-paste annotation as an envelope, then recomputes its
+  line and grapheme counts. The fold remains only when the transformed range is
+  still at least 12 lines or 1,200 graphemes. Attachments, invocation references,
+  shortcut emphasis, and verified path provenance retain their exact bytes and
+  ranges.
+- One reflow paste is one editor revision or board operation and one persistent
+  undo and redo step. Whitespace-only cleanup does not create a thought or
+  replace a selection. A failed transformation pastes the original payload
+  exactly and reports the fallback.
 - A large paste does not freeze rendering or briefly create one key event per
   character.
 - Dragging one or more files into Proqi inserts their absolute paths. In edit
@@ -796,7 +819,8 @@ bindings are:
 | Action | Keyboard | Mouse |
 |---|---|---|
 | Create thought | `n` | Click `+` or the insertion area |
-| Paste as new thought when none is selected | `Primary+V` or native paste | Use the terminal paste action |
+| Paste as new thought when none is selected | `Primary+V`, `p`, or native paste | Choose `Paste exactly` in Commands |
+| Paste and reflow copied prose | `Primary+Shift+V` or `P` | Choose `Paste and reflow` in Commands |
 | Edit thought | `Enter` or `e` | Click at the desired text position |
 | Copy thought | `Primary+C` or `y` | Click copy control |
 | Cut thought | `Primary+X` or `x` | Click cut control |
@@ -841,7 +865,12 @@ Board binding collision and Escape always closes it.
 Proqi supports familiar modifier shortcuts when the terminal reports them. The
 user-facing term is `Primary`, rendered as Cmd on macOS and Ctrl elsewhere.
 Internally this remains a logical modifier reported after the operating system
-and terminal. Proqi never interprets physical left or right modifier keys.
+and terminal. On macOS, only logical Super or Meta is Primary. Raw Control is
+not a second spelling. On other supported platforms, only logical Control is
+Primary. Mixed command modifiers on Primary-style character and Enter chords
+are rejected instead of triggering a command or leaking a printable suffix into
+text. Other modified navigation retains its documented base intention. Proqi
+never interprets physical left or right modifier keys.
 
 Initial editing shortcuts include:
 
@@ -881,13 +910,25 @@ terminal forwarding Primary successfully.
 Ghostty consumes configured keybindings before the child process by default.
 Its current macOS defaults include Cmd chords for copy, both paste forms,
 select all, undo, redo, duplicate, submission, quit, and several arrow actions.
-Proqi does not claim guaranteed delivery, modify host configuration, or repeat
-a paste already performed by the host. Portable Board aliases, command-palette
-actions, bracketed paste, and raw key diagnostics remain necessary fallbacks.
+To forward `Cmd+Shift+V` to Proqi on macOS, users may add
+`keybind = super+shift+v=csi:118;10u` to Ghostty's configuration. This explicitly
+sends the Kitty keyboard encoding for Super+Shift+V; merely removing the host
+binding is insufficient on Ghostty 1.3.1. Proqi does not claim guaranteed
+delivery, modify host configuration, or repeat a paste already performed by the
+host. The portable Board pair uses `p` for exact paste and `P` for reflow;
+command-palette actions, bracketed paste, and raw key diagnostics remain
+necessary fallbacks.
 Distinctly reported Shift remains meaningful. A shifted reserved character
 chord never silently becomes the unshifted copy, cut, paste, select-all,
 duplicate, or quit command. `Primary+Y` remains the unshifted alternate redo
-chord, while `Primary+Shift+V` remains unassigned for a future paste variant.
+chord. `Primary+Shift+V` is the explicit `Paste and reflow` action. An uppercase
+`V` report without a distinct Shift modifier remains exact paste.
+
+The configurable Board `paste` key must be one lowercase ASCII letter. That
+character pastes exactly and its uppercase counterpart reflows. Explicit
+configured commands keep precedence over either fallback. Help and footer
+labels list only the effective spellings, so a collision never advertises a
+shadowed route.
 
 ### Edit mode
 
@@ -897,7 +938,7 @@ Edit mode behaves like a focused multiline text editor. It supports:
 - Selection extension to the beginning or end of the current wrapped visual
   row, using current terminal-cell geometry and folded presentation.
 - Text selection by keyboard and mouse drag.
-- Native clipboard copy, cut, and paste.
+- Native clipboard copy, cut, exact paste, and explicit paste with prose reflow.
 - Insert, replace, delete, undo, and redo.
 - Horizontal content represented through wrapping, not a hidden horizontal
   scroll mode by default.
