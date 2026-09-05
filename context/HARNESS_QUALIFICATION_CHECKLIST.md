@@ -263,9 +263,10 @@ limitation explicitly.
 - [ ] Confirm later submissions use the established session identity.
 - [ ] An established target whose receipt loses or changes session identity
   fails closed.
-- [ ] Explicitly document any remaining replacement race. Under Herdr protocol
-  19, a same-pane, same-kind sessionless replacement cannot be detected without
-  a stable pre-session instance ID or an atomic expected-instance precondition.
+- [ ] Explicitly document any remaining replacement race. Under accepted Herdr
+  protocols 19 through 21, a same-pane, same-kind sessionless replacement cannot be
+  detected without a stable pre-session instance ID or an atomic
+  expected-instance precondition.
 
 ## 5. Switching, races, and failure safety
 
@@ -277,8 +278,8 @@ limitation explicitly.
   `target changed` and sends nothing.
 - [ ] A replacement after Proqi's revalidation but before Herdr accepts the
   prompt is treated as an integration race: a mismatched receipt preserves the
-  source, but protocol 19 cannot guarantee that the replacement received no
-  text without an atomic expected-instance precondition.
+  source, but protocols 19 through 21 cannot guarantee that the replacement received
+  no text without an atomic expected-instance precondition.
 - [ ] A different session in the receipt is rejected even when pane and harness
   kind still match.
 - [ ] A receipt for another submission ID, pane, tab, workspace, direction, or
@@ -289,7 +290,7 @@ limitation explicitly.
   recovery and is never auto-retried.
 - [ ] A crash after sending but before recording the outcome becomes
   `outcome_unknown` and is never auto-retried.
-- [ ] Concurrent submission limitations are documented: Herdr protocol 19 does
+- [ ] Concurrent submission limitations are documented: supported Herdr protocols do
   not guarantee a distinct turn boundary when senders overlap.
 
 ## 6. Privacy, durability, and process quality

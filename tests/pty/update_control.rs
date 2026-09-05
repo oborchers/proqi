@@ -51,9 +51,7 @@ fn real_owner_preflights_and_returns_to_use_after_one_fake_installation() {
     let done = state.path().join("update-owner-done");
     let mut owner = spawn_owner(binary, state.path(), session, &ready, &done);
     wait_for_path(&ready);
-    wait_for_control_owner(state.path(), session);
-
-    let participant = active_participant(state.path(), session);
+    let participant = wait_for_control_owner(state.path(), session);
     let installation = SystemInstallDetector::for_executable(binary.into())
         .detect()
         .expect("installation identity");
@@ -116,9 +114,7 @@ fn homebrew_owner_restores_and_replaces_itself_in_the_same_pty() {
     let mut owner =
         spawn_restarting_owner(&binary, state.path(), session, &ready, &restarted, &done);
     wait_for_path(&ready);
-    wait_for_control_owner(state.path(), session);
-
-    let before = active_participant(state.path(), session);
+    let before = wait_for_control_owner(state.path(), session);
     let installation = SystemInstallDetector::for_executable(binary.clone())
         .detect()
         .expect("Homebrew installation");
@@ -151,8 +147,7 @@ fn homebrew_owner_restores_and_replaces_itself_in_the_same_pty() {
     assert!(restart.accepted);
 
     wait_for_path(&restarted);
-    wait_for_control_owner(state.path(), session);
-    let after = active_participant(state.path(), session);
+    let after = wait_for_control_owner(state.path(), session);
     assert_eq!(
         after.pid, before.pid,
         "Unix exec must preserve the process ID"
@@ -186,15 +181,13 @@ fn in_app_restart_reopens_until_dismissed_then_remains_manual() {
         &peer_done,
     );
     wait_for_path(&peer_ready);
-    wait_for_control_owner(state.path(), peer_session);
+    let mut peer_participant = wait_for_control_owner(state.path(), peer_session);
     let ready = state.path().join("highlight-owner-ready");
     let mut owner = highlight_fixture::spawn_crash_owner(&binary, state.path(), session, &ready);
     wait_for_path(&ready);
-    wait_for_control_owner(state.path(), session);
-    rewrite_participant_version(state.path(), session, "0.3.0");
-    rewrite_participant_version(state.path(), peer_session, "0.3.0");
-
-    let before = active_participant(state.path(), session);
+    let mut before = wait_for_control_owner(state.path(), session);
+    rewrite_participant_version(state.path(), &mut before, "0.3.0");
+    rewrite_participant_version(state.path(), &mut peer_participant, "0.3.0");
     let (update_state, installation, target) =
         coordinate_highlight_restart(&binary, state.path(), &before);
     wait_for_path(&peer_restarted);
@@ -301,38 +294,14 @@ fn coordinate_highlight_restart(
     (update_state, installation.identity, target)
 }
 
-fn active_participant(state: &Path, session: &str) -> InstanceInfo {
-    active_participant_entry(state, session).1
-}
-
-fn active_participant_entry(state: &Path, session: &str) -> (std::path::PathBuf, InstanceInfo) {
-    let directory = state.join("runtime/instances");
-    fs::read_dir(directory)
-        .expect("instance directory")
-        .filter_map(Result::ok)
-        .filter_map(|entry| {
-            let path = entry.path();
-            let bytes = fs::read(&path).ok()?;
-            let info = serde_json::from_slice::<InstanceInfo>(&bytes).ok()?;
-            Some((path, info))
-        })
-        .find(|(_, info)| {
-            info.session_id.to_string() == session
-                && info.control_protocol == Some(proqi::ports::control::CONTROL_PROTOCOL_VERSION)
-                && info
-                    .control_endpoint
-                    .as_deref()
-                    .is_some_and(|endpoint| Path::new(endpoint).exists())
-        })
-        .expect("active participant")
-}
-
-fn rewrite_participant_version(state: &Path, session: &str, version: &str) {
-    let (path, mut info) = active_participant_entry(state, session);
-    version.clone_into(&mut info.version);
+fn rewrite_participant_version(state: &Path, participant: &mut InstanceInfo, version: &str) {
+    version.clone_into(&mut participant.version);
+    let path = state
+        .join("runtime/instances")
+        .join(format!("{}.json", participant.instance_id));
     fs::write(
         path,
-        serde_json::to_vec(&info).expect("serialize participant"),
+        serde_json::to_vec(participant).expect("serialize participant"),
     )
     .expect("rewrite participant version");
 }

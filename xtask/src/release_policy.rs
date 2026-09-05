@@ -1,6 +1,7 @@
 //! Executable CI, candidate, publication, and QA-image policy.
 
 use std::{fs, path::Path};
+use yaml_rust2::{Yaml, YamlLoader};
 
 const RELEASE_REQUIRED: [&str; 15] = [
     "environment: release",
@@ -52,12 +53,33 @@ const IMAGE_REQUIRED: [&str; 15] = [
     "Could not prove immutable tag",
 ];
 
+const HERDR_SENTINEL_PATH: &str = ".github/workflows/herdr-compatibility.yml";
+const HERDR_SENTINEL_REQUIRED: [&str; 15] = [
+    "schedule:",
+    "workflow_dispatch:",
+    "if: github.ref == 'refs/heads/main'",
+    "permissions: {}",
+    "contents: read",
+    "issues: write",
+    "persist-credentials: false",
+    "herdr-linux-x86_64",
+    "sha256sum --check --strict",
+    "HERDR_CONFIG_PATH=",
+    "env -u GH_TOKEN -u GITHUB_TOKEN -u GITHUB_OUTPUT",
+    "timeout --kill-after=2s 10s",
+    "cargo xtask herdr-compatibility",
+    "search/issues",
+    "herdr-compatibility:${TAG}:${SCHEMA_SHA256}",
+];
+
 pub(crate) fn check(root: &Path) -> Result<Vec<String>, String> {
     let release = read(root, ".github/workflows/release.yml")?;
     let candidate = read(root, ".github/workflows/release-candidate.yml")?;
     let ci = read(root, ".github/workflows/ci.yml")?;
     let image = read(root, ".github/workflows/ci-linux-image.yml")?;
+    let sentinel = read(root, HERDR_SENTINEL_PATH)?;
     let mut found = findings(&release, &candidate, &ci, &image);
+    found.extend(herdr_sentinel_findings(&sentinel));
     found.extend(image_repository_findings(root)?);
     found.extend(scheduled_workflow_findings(root)?);
     Ok(found)
@@ -182,9 +204,9 @@ fn scheduled_workflow_findings(root: &Path) -> Result<Vec<String>, String> {
         }
         let source = fs::read_to_string(&path)
             .map_err(|error| format!("read {}: {error}", path.display()))?;
-        if contains_schedule(&source) {
+        if schedule_is_forbidden(&path, &source)? {
             found.push(format!(
-                "{}: scheduled workflows are forbidden",
+                "{}: only the Herdr compatibility sentinel may be scheduled",
                 path.display()
             ));
         }
@@ -192,8 +214,58 @@ fn scheduled_workflow_findings(root: &Path) -> Result<Vec<String>, String> {
     Ok(found)
 }
 
-fn contains_schedule(source: &str) -> bool {
-    source.lines().any(|line| line.trim() == "schedule:")
+fn schedule_is_forbidden(path: &Path, source: &str) -> Result<bool, String> {
+    Ok(contains_schedule(source)?
+        && path.file_name().and_then(|name| name.to_str()) != Some("herdr-compatibility.yml"))
+}
+
+fn herdr_sentinel_findings(source: &str) -> Vec<String> {
+    let mut found = missing(HERDR_SENTINEL_PATH, source, &HERDR_SENTINEL_REQUIRED);
+    for forbidden in [
+        "contents: write",
+        "pull-requests: write",
+        "packages: write",
+        "id-token: write",
+        "persist-credentials: true",
+        "test -s \"$schema\"",
+    ] {
+        if source.contains(forbidden) {
+            found.push(format!("{HERDR_SENTINEL_PATH}: forbidden `{forbidden}`"));
+        }
+    }
+    let issue_job = source
+        .find("\n  issue:\n")
+        .map(|position| &source[position..]);
+    if issue_job.is_some_and(|job| job.contains("actions/checkout@")) {
+        found.push(format!(
+            "{HERDR_SENTINEL_PATH}: the issue job must not check out or execute repository code"
+        ));
+    }
+    found
+}
+
+fn contains_schedule(source: &str) -> Result<bool, String> {
+    let documents = YamlLoader::load_from_str(source)
+        .map_err(|error| format!("parse GitHub Actions workflow YAML: {error}"))?;
+    let [document] = documents.as_slice() else {
+        return Err("GitHub Actions workflow must contain one YAML document".to_owned());
+    };
+    let Some(root) = document.as_hash() else {
+        return Err("GitHub Actions workflow root must be a mapping".to_owned());
+    };
+    let trigger = root.get(&Yaml::String("on".to_owned()));
+    Ok(trigger.is_some_and(trigger_contains_schedule))
+}
+
+fn trigger_contains_schedule(trigger: &Yaml) -> bool {
+    match trigger {
+        Yaml::String(value) => value == "schedule",
+        Yaml::Array(values) => values
+            .iter()
+            .any(|value| value.as_str() == Some("schedule")),
+        Yaml::Hash(values) => values.contains_key(&Yaml::String("schedule".to_owned())),
+        _ => false,
+    }
 }
 
 fn enforce_order(source: &str, found: &mut Vec<String>) {
@@ -220,7 +292,8 @@ fn enforce_order(source: &str, found: &mut Vec<String>) {
 
 #[cfg(test)]
 mod tests {
-    use super::{contains_schedule, findings};
+    use super::{contains_schedule, findings, herdr_sentinel_findings, schedule_is_forbidden};
+    use std::path::Path;
 
     fn sources() -> (&'static str, &'static str, &'static str, &'static str) {
         (
@@ -272,8 +345,8 @@ mod tests {
                 .any(|item| item.contains("release-assets plan"))
         );
         assert!(found.iter().any(|item| item.contains("tools/ci-linux/**")));
-        assert!(contains_schedule("on:\n  schedule:\n    - cron: daily"));
-        assert!(!contains_schedule("on:\n  workflow_dispatch:"));
+        assert!(contains_schedule("on:\n  schedule:\n    - cron: daily").expect("valid YAML"));
+        assert!(!contains_schedule("on:\n  workflow_dispatch:").expect("valid YAML"));
     }
 
     #[test]
@@ -284,5 +357,46 @@ mod tests {
         let found = findings(release, candidate, &ci, &image);
         assert!(found.iter().any(|item| item.contains("ci-change-class")));
         assert!(found.iter().any(|item| item.contains("GITHUB_RUN_ATTEMPT")));
+    }
+
+    #[test]
+    fn scheduled_herdr_sentinel_is_narrowly_permissioned() {
+        let source = include_str!("../../.github/workflows/herdr-compatibility.yml");
+        assert!(herdr_sentinel_findings(source).is_empty());
+        let unsafe_source = source.replace("contents: read", "contents: write");
+        let found = herdr_sentinel_findings(&unsafe_source);
+        assert!(found.iter().any(|item| item.contains("contents: read")));
+        assert!(found.iter().any(|item| item.contains("contents: write")));
+        let checkout_issue = source.replace(
+            "steps:\n      - name: Create a deduplicated",
+            "steps:\n      - uses: actions/checkout@pin\n      - name: Create a deduplicated",
+        );
+        assert!(
+            herdr_sentinel_findings(&checkout_issue)
+                .iter()
+                .any(|item| item.contains("must not check out"))
+        );
+        assert!(
+            !schedule_is_forbidden(Path::new("herdr-compatibility.yml"), source)
+                .expect("sentinel YAML")
+        );
+        assert!(
+            schedule_is_forbidden(
+                Path::new("another.yml"),
+                "on:\n  schedule:\n    - cron: daily"
+            )
+            .expect("scheduled YAML")
+        );
+        for source in [
+            "on:\n  \"schedule\":\n    - cron: daily",
+            "on:\n  schedule :\n    - cron: daily",
+            "on: {schedule: [{cron: daily}]}",
+            "on: [push, schedule]",
+        ] {
+            assert!(
+                schedule_is_forbidden(Path::new("another.yml"), source)
+                    .expect("alternate scheduled YAML")
+            );
+        }
     }
 }
