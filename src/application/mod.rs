@@ -38,9 +38,7 @@ pub use model::{
     ScreenshotIntent, ScreenshotPauseReason, UpdateIntent,
 };
 pub use onboarding::{FirstRunEnvironment, first_run_board};
-pub(crate) use prompt::{
-    SHARED_PROMPT_STARTERS, SharedPromptStarter, join_prompt_for_target, supports_shared_starters,
-};
+pub(crate) use prompt::{SHARED_PROMPT_STARTERS, join_prompt_for_target, supports_shared_starters};
 pub use recovery::capture_recovery;
 pub use reducer::reduce;
 pub use release_highlights::{ReleaseHighlightPresentation, ReleaseHighlightSelection};

@@ -5,8 +5,7 @@ impl BoardApp {
         let Some(popup) = self.invocation_popup.as_ref() else {
             return;
         };
-        let choices = self.invocation_choices(popup);
-        let count = choices.len();
+        let count = popup.choices.len();
         let row_budget = self
             .layout
             .as_ref()
@@ -24,24 +23,24 @@ impl BoardApp {
         if popup.selected < popup.scroll {
             popup.scroll = popup.selected;
         } else {
-            popup.scroll =
-                view::scroll_for_selection(&choices, popup.selected, popup.scroll, row_budget);
+            popup.scroll = view::scroll_for_selection(
+                &popup.choices,
+                popup.selected,
+                popup.scroll,
+                row_budget,
+            );
         }
         self.layout = None;
     }
 
     pub(in crate::ui::app) fn ensure_invocation_visible(&mut self, row_budget: usize) {
-        let Some(popup) = self.invocation_popup.as_ref() else {
-            return;
-        };
-        let choices = self.invocation_choices(popup);
-        let count = choices.len();
         let Some(popup) = &mut self.invocation_popup else {
             return;
         };
+        let count = popup.choices.len();
         popup.selected = popup.selected.min(count.saturating_sub(1));
         popup.scroll =
-            view::scroll_for_selection(&choices, popup.selected, popup.scroll, row_budget);
+            view::scroll_for_selection(&popup.choices, popup.selected, popup.scroll, row_budget);
     }
 
     pub(super) fn clamp_invocation_popup(&mut self) {

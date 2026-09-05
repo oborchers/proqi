@@ -177,7 +177,7 @@ modifier on macOS.
 | `Enter`; `Tab`; `Shift+Tab` | Continue lists; nest; outdent |
 | `↑` / `↓` twice at a boundary | Focus the adjacent thought, or create at the top / bottom board edge |
 | `Primary+Enter`; `Primary+Shift+Enter` | Submit and remove after acceptance; submit and keep |
-| Type `$name`, `/name`, or supported `@name` | Complete a local invocation |
+| Type `$name`, `/name`, or supported `@name` | Fuzzy-find and complete a local invocation |
 | `↑` / `↓` or `Primary+P` / `Primary+N`; `Enter` / `Tab`; `Esc` | Navigate, insert, or close invocation results |
 
 Unmodified physical `Del` is an invariant Board alias. Remapping the `delete`
@@ -220,6 +220,11 @@ into compact annotations while their content stays intact. In Edit mode, an
 unmodified `Space` on one completely selected collapsed annotation inserts a
 space immediately before it without replacing it. See
 [invocation compatibility](docs/INVOCATIONS.md).
+
+Invocation lookup accepts compact ordered abbreviations such as `$aos-ce` for
+`$aos-communication-email`. Exact and prefix matches remain strongest, followed
+by contiguous and separator-aware fuzzy matches. The typed sigil remains a hard
+namespace boundary, so slash, dollar, and at forms never mix.
 
 Inside Herdr, opening the same invocation picker also discovers recognized live
 coding agents across the server. Selecting one inserts an inert collaborator

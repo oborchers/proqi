@@ -8,18 +8,11 @@ use crate::{
 #[derive(Clone, Copy)]
 pub(crate) struct SharedPromptStarter {
     pub(crate) token: &'static str,
-    pub(crate) search_name: &'static str,
 }
 
 pub(crate) const SHARED_PROMPT_STARTERS: [SharedPromptStarter; 2] = [
-    SharedPromptStarter {
-        token: "/goal",
-        search_name: "goal",
-    },
-    SharedPromptStarter {
-        token: "/plan",
-        search_name: "plan",
-    },
+    SharedPromptStarter { token: "/goal" },
+    SharedPromptStarter { token: "/plan" },
 ];
 
 pub(crate) const MULTI_THOUGHT_SEPARATOR: &str = "\n\n";

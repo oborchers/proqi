@@ -9,6 +9,7 @@ pub(super) struct Choice {
     pub(super) qualifier: String,
     pub(super) qualifier_fallbacks: Vec<String>,
     pub(super) group: Option<String>,
+    pub(super) rank: super::matcher::MatchRank,
 }
 
 /// One invocation result rendered as a responsive two-field row.

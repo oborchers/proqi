@@ -957,6 +957,25 @@ without relying on color. Enter, Tab, pointer selection, and terminal-safe
 keyboard navigation insert the exact canonical token plus a separator as one
 undoable edit.
 
+Automatic and manual invocation lookup use one deterministic token-first fuzzy
+ranking. A leading `$`, `/`, or `@` remains a hard form boundary. Canonically
+equivalent Unicode is normalized with NFKC and compared after Unicode lowercase;
+separators remain significant query characters and also define token boundaries.
+Exact matches precede prefixes, then contiguous fragments, then ordered
+subsequences. Fuzzy ties favor separator boundaries, fewer contiguous runs,
+compact spans, and fewer gaps before the existing discovery precedence and
+canonical order decide the result. `$aos-ce` therefore finds
+`$aos-communication-email` without treating reordered words as equivalent.
+
+The token is the primary searchable contract. Only the explicitly opened manual
+picker searches descriptions, and every description match remains below every
+token match. Scope and source labels do not participate. Live Herdr references
+reuse the same token ranking for their `@` name and keep topology or harness
+fields as subordinate manual-picker search fields within the distinct provider
+group. Automatic live-reference lookup also preserves the existing exact pane-ID
+alias as a primary compatibility form; choosing it still inserts the canonical
+named `@` token. Manual pane-ID lookup remains subordinate to name-token matches.
+
 Machine-global entries survive cwd changes. Project entries follow the cwd
 through the repository root, or through the naturally finite parent chain when
 there is no repository, with deterministic nearest-root and documented harness
