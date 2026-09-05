@@ -188,7 +188,7 @@ fn spawn_owner(fixture: OwnerFixture<'_>, exit: ExitScenario) -> std::process::C
         if {$env(PROQI_TEST_EXIT) eq "terminate"} {
             system /bin/kill -TERM [exp_pid]
         } else {
-            send -- "\x11"
+            send -- $env(PROQI_TEST_PRIMARY_Q)
         }
         expect -exact "\x1b\[0 q"
         expect eof

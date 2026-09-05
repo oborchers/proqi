@@ -44,7 +44,7 @@ pub(super) fn classify_lines(
         }
         let annotation_owned = protected
             .get(protected_index)
-            .is_some_and(|range| ranges_intersect(&(line.start..line.content_end), range));
+            .is_some_and(|range| ranges_intersect(&(line.start..line.end), range));
         let marker_owned = marker.is_some_and(|marker| {
             marker.indentation_columns() < 4 || list_content_column.is_some()
         });
@@ -126,12 +126,14 @@ fn classify_line(
     fenced: bool,
     list_owned: bool,
 ) -> LineKind {
+    if annotation_owned {
+        return LineKind::Protected;
+    }
     if text.trim_matches([' ', '\t']).is_empty() && !fenced {
         return LineKind::Separator;
     }
     let indentation = indentation_columns(&text[..whitespace_prefix(text)]);
     let structural = fenced
-        || annotation_owned
         || text.trim_start_matches([' ', '\t']).starts_with('>')
         || is_atx_heading(text)
         || text.contains('|')

@@ -243,4 +243,16 @@ mod tests {
     fn help_close_label_is_unambiguous_about_the_modal_close_action() {
         assert_eq!(help_close_label(), "Esc");
     }
+
+    #[test]
+    fn board_help_lists_only_effective_paste_reflow_fallbacks() {
+        let mut keys = super::super::settings::KeyBindings::default();
+        let paste = shortcut_metadata::board_label(ShortcutAction::PasteReflow, &keys);
+        assert_eq!(paste, format!("{}/p/P", primary("Shift+V")));
+
+        keys.paste_reflow = 'g';
+        keys.submit_keep = 'G';
+        let paste = shortcut_metadata::board_label(ShortcutAction::PasteReflow, &keys);
+        assert_eq!(paste, format!("{}/g", primary("Shift+V")));
+    }
 }

@@ -58,7 +58,7 @@ fn reflow_slice(
 ) -> Result<ReflowedText, ReflowError> {
     let lines = logical_lines(content);
     let kinds = classify::classify_lines(content, &lines, protected);
-    let replacements = plan_replacements(content, &lines, &kinds, newline);
+    let replacements = plan_replacements(content, &lines, &kinds, protected, newline);
     apply_replacements(content, replacements)
 }
 
@@ -90,9 +90,11 @@ fn plan_replacements(
     content: &str,
     lines: &[LogicalLine],
     kinds: &[LineKind],
+    protected: &[Range<usize>],
     newline: &str,
 ) -> Vec<Replacement> {
     let mut replacements = Vec::new();
+    let mut protected_index = 0;
     let mut index = 0;
     while index < lines.len() {
         let kind = kinds[index];
@@ -103,6 +105,18 @@ fn plan_replacements(
         }
         let range = replacement_range(content, lines, kinds, start, index, kind);
         if kind == LineKind::Protected {
+            continue;
+        }
+        while protected
+            .get(protected_index)
+            .is_some_and(|protected| protected.end <= range.start)
+        {
+            protected_index += 1;
+        }
+        if protected
+            .get(protected_index)
+            .is_some_and(|protected| ranges_intersect(&range, protected))
+        {
             continue;
         }
         let value = match kind {
@@ -118,6 +132,10 @@ fn plan_replacements(
         }
     }
     replacements
+}
+
+fn ranges_intersect(left: &Range<usize>, right: &Range<usize>) -> bool {
+    left.start < right.end && right.start < left.end
 }
 
 fn transform_indented_group(group: &str, _newline: &str) -> String {

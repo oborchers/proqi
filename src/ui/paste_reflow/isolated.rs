@@ -32,12 +32,11 @@ pub(super) fn reflow(
         }
         state.append_partition(content, partition, protected, newline, owner)?;
     }
-    state.finish(content)
+    state.finish(content, protected)
 }
 
 struct OwnedRange {
     range: Range<usize>,
-    owner: Option<usize>,
 }
 
 struct ReflowState {
@@ -74,9 +73,9 @@ impl ReflowState {
         let core = partition_core(&content[partition.clone()]);
         let old_base = partition.start + core.start;
         let old_end = partition.start + core.end;
-        self.queue_whitespace(partition.start..old_base, owner);
+        self.queue_whitespace(partition.start..old_base);
         if old_base < old_end {
-            self.flush_whitespace(content, newline, false);
+            self.flush_whitespace(content, protected, newline, false);
             let local =
                 local_protected_ranges(protected, &mut self.protected_index, old_base..old_end);
             let transformed = super::reflow_slice(&content[old_base..old_end], &local, newline)?;
@@ -91,14 +90,16 @@ impl ReflowState {
                     )
                 }));
             self.has_content = true;
+        } else {
+            self.note_owner(owner, self.output.len()..self.output.len());
         }
-        self.queue_whitespace(old_end..partition.end, owner);
+        self.queue_whitespace(old_end..partition.end);
         Ok(())
     }
 
-    fn queue_whitespace(&mut self, range: Range<usize>, owner: Option<usize>) {
+    fn queue_whitespace(&mut self, range: Range<usize>) {
         if !range.is_empty() {
-            self.pending_whitespace.push(OwnedRange { range, owner });
+            self.pending_whitespace.push(OwnedRange { range });
         }
     }
 
@@ -114,36 +115,40 @@ impl ReflowState {
         }
     }
 
-    fn flush_whitespace(&mut self, content: &str, newline: &str, trailing: bool) {
+    fn flush_whitespace(
+        &mut self,
+        content: &str,
+        protected: &[Range<usize>],
+        newline: &str,
+        trailing: bool,
+    ) {
         if self.pending_whitespace.is_empty() {
             return;
         }
-        let separator = if !self.has_content || trailing {
+        let pending = std::mem::take(&mut self.pending_whitespace);
+        let old = pending[0].range.start..pending[pending.len() - 1].range.end;
+        let separator = if intersects_protected(&old, protected) {
+            content[old.clone()].to_owned()
+        } else if !self.has_content || trailing {
             String::new()
-        } else if count_breaks(content, &self.pending_whitespace) >= 2 {
+        } else if count_breaks(content, &pending) >= 2 {
             newline.repeat(2)
         } else {
             " ".to_owned()
         };
         let new_start = self.output.len();
         self.output.push_str(&separator);
-        let pending = std::mem::take(&mut self.pending_whitespace);
-        let old = pending[0].range.start..pending[pending.len() - 1].range.end;
         if content[old.clone()] != separator {
             self.mapped.push((old, new_start..self.output.len()));
         }
-        for (index, owned) in pending.into_iter().enumerate() {
-            let new = if index == 0 {
-                new_start..self.output.len()
-            } else {
-                self.output.len()..self.output.len()
-            };
-            self.note_owner(owned.owner, new);
-        }
     }
 
-    fn finish(mut self, content: &str) -> Result<ReflowedText, ReflowError> {
-        self.flush_whitespace(content, super::preferred_newline(content), true);
+    fn finish(
+        mut self,
+        content: &str,
+        protected: &[Range<usize>],
+    ) -> Result<ReflowedText, ReflowError> {
+        self.flush_whitespace(content, protected, super::preferred_newline(content), true);
         self.mapped.sort_by_key(|(old, _)| old.start);
         let mapped = coalesce_mappings(self.mapped);
         let changes = mapped
@@ -163,6 +168,13 @@ impl ReflowState {
             isolated,
         })
     }
+}
+
+fn intersects_protected(range: &Range<usize>, protected: &[Range<usize>]) -> bool {
+    let index = protected.partition_point(|protected| protected.end <= range.start);
+    protected
+        .get(index)
+        .is_some_and(|protected| protected.start < range.end)
 }
 
 fn count_breaks(content: &str, pending: &[OwnedRange]) -> usize {

@@ -62,12 +62,28 @@ fn established_board_binding_precedes_compatible_transform_collision() {
 fn paste_reflow_has_a_configurable_board_fallback_without_breaking_old_collisions() {
     let defaults = KeyBindings::default();
     assert_eq!(defaults.command('p'), Some(BoardCommand::PasteReflow));
+    assert_eq!(defaults.command('P'), Some(BoardCommand::PasteReflow));
+    assert_eq!(defaults.paste_reflow_fallbacks(), vec!['p', 'P']);
     let remapped: KeyBindings = toml::from_str("paste_reflow = 'g'").expect("remap");
     assert_eq!(remapped.command('g'), Some(BoardCommand::PasteReflow));
+    assert_eq!(remapped.command('G'), Some(BoardCommand::PasteReflow));
+    assert_eq!(remapped.paste_reflow_fallbacks(), vec!['g', 'G']);
 
     let old_collision: KeyBindings = toml::from_str("new = 'p'").expect("old config");
     assert_eq!(old_collision.validate(), Ok(()));
     assert_eq!(old_collision.command('p'), Some(BoardCommand::New));
+    assert_eq!(old_collision.command('P'), Some(BoardCommand::PasteReflow));
+    assert_eq!(old_collision.paste_reflow_fallbacks(), vec!['P']);
+}
+
+#[test]
+fn explicit_opposite_case_binding_precedes_the_reflow_alias() {
+    let bindings: KeyBindings =
+        toml::from_str("paste_reflow = 'g'\nsubmit_keep = 'G'").expect("collision");
+    assert_eq!(bindings.validate(), Ok(()));
+    assert_eq!(bindings.command('g'), Some(BoardCommand::PasteReflow));
+    assert_eq!(bindings.command('G'), Some(BoardCommand::SubmitKeep));
+    assert_eq!(bindings.paste_reflow_fallbacks(), vec!['g']);
 }
 
 #[test]

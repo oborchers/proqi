@@ -322,7 +322,7 @@ Bracketed paste is treated as one semantic input event.
 - Whitespace, blank lines, Unicode, and line endings are preserved.
 - `Primary+V`, bracketed paste, and `Paste exactly` preserve the complete payload
   byte for byte. Exact paste remains the default.
-- `Primary+Shift+V`, the remappable Board fallback `p`, and `Paste and reflow`
+- `Primary+Shift+V`, the remappable Board fallbacks `p` and `P`, and `Paste and reflow`
   explicitly clean terminal-copied prose. The action joins single newlines,
   collapses ASCII spaces and tabs, removes copied Markdown hard breaks, trims
   outer whitespace, and reduces whitespace-only blank runs to one paragraph
@@ -819,7 +819,7 @@ bindings are:
 |---|---|---|
 | Create thought | `n` | Click `+` or the insertion area |
 | Paste as new thought when none is selected | `Primary+V` or native paste | Use the terminal paste action |
-| Paste and reflow copied prose | `Primary+Shift+V` or `p` | Choose `Paste and reflow` in Commands |
+| Paste and reflow copied prose | `Primary+Shift+V`, `p`, or `P` | Choose `Paste and reflow` in Commands |
 | Edit thought | `Enter` or `e` | Click at the desired text position |
 | Copy thought | `Primary+C` or `y` | Click copy control |
 | Cut thought | `Primary+X` or `x` | Click cut control |
@@ -864,7 +864,12 @@ Board binding collision and Escape always closes it.
 Proqi supports familiar modifier shortcuts when the terminal reports them. The
 user-facing term is `Primary`, rendered as Cmd on macOS and Ctrl elsewhere.
 Internally this remains a logical modifier reported after the operating system
-and terminal. Proqi never interprets physical left or right modifier keys.
+and terminal. On macOS, only logical Super or Meta is Primary. Raw Control is
+not a second spelling. On other supported platforms, only logical Control is
+Primary. Mixed command modifiers on Primary-style character and Enter chords
+are rejected instead of triggering a command or leaking a printable suffix into
+text. Other modified navigation retains its documented base intention. Proqi
+never interprets physical left or right modifier keys.
 
 Initial editing shortcuts include:
 
@@ -904,14 +909,21 @@ terminal forwarding Primary successfully.
 Ghostty consumes configured keybindings before the child process by default.
 Its current macOS defaults include Cmd chords for copy, both paste forms,
 select all, undo, redo, duplicate, submission, quit, and several arrow actions.
-Proqi does not claim guaranteed delivery, modify host configuration, or repeat
-a paste already performed by the host. Portable Board aliases, command-palette
+To forward `Cmd+Shift+V` to Proqi on macOS, users may add
+`keybind = super+shift+v=unbind` to Ghostty's configuration. Proqi does not
+claim guaranteed delivery, modify host configuration, or repeat a paste already
+performed by the host. Portable Board aliases `p` and `P`, command-palette
 actions, bracketed paste, and raw key diagnostics remain necessary fallbacks.
 Distinctly reported Shift remains meaningful. A shifted reserved character
 chord never silently becomes the unshifted copy, cut, paste, select-all,
 duplicate, or quit command. `Primary+Y` remains the unshifted alternate redo
 chord. `Primary+Shift+V` is the explicit `Paste and reflow` action. An uppercase
 `V` report without a distinct Shift modifier remains exact paste.
+
+The paste-reflow Board fallback also accepts its opposite ASCII case when that
+key is not explicitly assigned to another command. Explicit configured commands
+keep precedence. Help and footer labels list only the effective spellings, so a
+collision never advertises a shadowed alias.
 
 ### Edit mode
 

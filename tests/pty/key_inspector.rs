@@ -78,7 +78,7 @@ fn platform_primary_arrow_is_forwarded_through_the_real_pty_and_restores() {
         inspect_sequence(
             r"\x1b\[1;9B",
             "Down, modifiers: KeyModifiers(SUPER)",
-            "EditNavigation { editor_movement: DocumentEnd, board_movement: DocumentEnd }",
+            "EditNavigation { editor_movement: DocumentEnd, board_movement: VisualDown }",
         );
     } else {
         inspect_sequence(
@@ -135,12 +135,38 @@ fn macos_primary_shift_horizontal_arrows_have_exact_distinct_pty_encodings() {
 }
 
 #[test]
-fn control_shift_horizontal_arrow_keeps_word_selection_in_the_real_pty() {
+fn control_shift_horizontal_arrow_uses_platform_word_or_base_selection() {
+    let action = if cfg!(target_os = "macos") {
+        "Move { movement: GraphemeBack, extend_selection: true }"
+    } else {
+        "Move { movement: WordBack, extend_selection: true }"
+    };
     inspect_sequence(
         r"\x1b\[1;6D",
         "Left, modifiers: KeyModifiers(SHIFT | CONTROL)",
-        "Move { movement: WordBack, extend_selection: true }",
+        action,
     );
+}
+
+#[test]
+fn macos_raw_control_v_is_not_a_second_primary_paste_chord() {
+    if cfg!(target_os = "macos") {
+        inspect_sequence(
+            r"\x16",
+            "Char('v'), modifiers: KeyModifiers(CONTROL)",
+            "none",
+        );
+        inspect_sequence(
+            r"\x1b\[118;5u",
+            "Char('v'), modifiers: KeyModifiers(CONTROL)",
+            "none",
+        );
+        inspect_sequence(
+            r"\x1b\[118;6u",
+            "Char('v'), modifiers: KeyModifiers(SHIFT | CONTROL)",
+            "none",
+        );
+    }
 }
 
 #[test]

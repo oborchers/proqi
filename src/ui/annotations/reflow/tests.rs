@@ -119,6 +119,118 @@ fn protected_semantic_annotations_rebase_without_changing_their_bytes() {
 }
 
 #[test]
+fn protected_whitespace_and_line_delimiters_are_never_reflowed_away() {
+    for (content, start, end) in [
+        (" ", 0, 1),
+        ("\t", 0, 1),
+        ("first\nsecond", 5, 6),
+        ("first\r\nsecond", 5, 7),
+    ] {
+        let annotation = ContentAnnotation {
+            start,
+            end,
+            kind: ContentAnnotationKind::InvocationReference {
+                display_name: "@agent · codex".to_owned(),
+            },
+        };
+        let payload = PastePayload::preserved_clipboard(content.to_owned(), vec![annotation])
+            .expect("valid whitespace annotation");
+        assert!(
+            matches!(payload.reflow(), Ok(PasteReflow::Unchanged)),
+            "content {content:?}"
+        );
+    }
+}
+
+#[test]
+fn unchanged_text_still_recomputes_or_drops_stale_large_fold_metadata() {
+    for (content, expected) in [
+        ("a".repeat(1_200), Some((1, 1_200))),
+        ("short/path".to_owned(), None),
+    ] {
+        let payload = PastePayload {
+            annotations: vec![ContentAnnotation {
+                start: 0,
+                end: content.len(),
+                kind: ContentAnnotationKind::LargePaste {
+                    lines: 99,
+                    graphemes: 99,
+                },
+            }],
+            content: content.clone(),
+            verified_paths: Vec::new(),
+            preserve_owned_annotations: false,
+        };
+        let result = changed(&payload);
+        assert_eq!(result.content, content);
+        match expected {
+            Some((lines, graphemes)) => assert!(matches!(
+                result.annotations.as_slice(),
+                [ContentAnnotation {
+                    start: 0,
+                    end,
+                    kind: ContentAnnotationKind::LargePaste {
+                        lines: actual_lines,
+                        graphemes: actual_graphemes,
+                    },
+                }] if *end == result.content.len()
+                    && *actual_lines == lines
+                    && *actual_graphemes == graphemes
+            )),
+            None => assert!(result.annotations.is_empty()),
+        }
+    }
+}
+
+#[test]
+fn protected_boundary_whitespace_survives_next_to_an_isolated_large_fold() {
+    let prefix = " \t\r\n";
+    let large = "a".repeat(1_200);
+    let suffix = "\r\n \t";
+    let content = format!("{prefix}{large}{suffix}");
+    let large_start = prefix.len();
+    let large_end = large_start + large.len();
+    let payload = PastePayload {
+        content: content.clone(),
+        annotations: vec![
+            ContentAnnotation {
+                start: 0,
+                end: prefix.len(),
+                kind: ContentAnnotationKind::InvocationReference {
+                    display_name: "@prefix · codex".to_owned(),
+                },
+            },
+            ContentAnnotation {
+                start: large_start,
+                end: large_end,
+                kind: ContentAnnotationKind::LargePaste {
+                    lines: 99,
+                    graphemes: 99,
+                },
+            },
+            ContentAnnotation::shortcut(large_end, content.len()),
+        ],
+        verified_paths: Vec::new(),
+        preserve_owned_annotations: true,
+    };
+
+    let result = changed(&payload);
+    assert_eq!(result.content, content);
+    assert_eq!(&result.content[..prefix.len()], prefix);
+    assert_eq!(&result.content[large_start..large_end], large);
+    assert_eq!(&result.content[large_end..], suffix);
+    assert_eq!(result.annotations[0], payload.annotations[0]);
+    assert_eq!(result.annotations[2], payload.annotations[2]);
+    assert!(matches!(
+        result.annotations[1].kind,
+        ContentAnnotationKind::LargePaste {
+            lines: 1,
+            graphemes: 1_200
+        }
+    ));
+}
+
+#[test]
 fn protected_shortcut_emphasis_survives_reflow_and_invalid_metadata_fails_closed() {
     let content = "first\nparagraph\n\nCmd+Shift+V  remains".to_owned();
     let start = content.find("Cmd").expect("shortcut");
@@ -171,8 +283,9 @@ fn partial_large_fold_never_absorbs_neighboring_text() {
         panic!("expected one retained fold");
     };
     assert_eq!(fold.start, prefix.len());
-    assert_eq!(fold.end, result.content.len() - suffix.len());
+    assert_eq!(&result.content[fold.end..], format!(" {suffix}"));
     assert!(!result.content[fold.start..fold.end].contains('\n'));
+    assert!(!result.content[fold.start..fold.end].ends_with(' '));
 }
 
 #[test]
@@ -210,8 +323,12 @@ fn partial_large_fold_boundaries_receive_normal_whitespace_cleanup() {
     let [fold] = annotations.as_slice() else {
         panic!("expected one retained fold");
     };
-    assert!(!transformed.content[fold.start..fold.end].contains(prefix));
-    assert!(!transformed.content[fold.start..fold.end].contains(suffix));
+    assert_eq!(
+        &transformed.content[fold.start..fold.end],
+        format!("{} wrapped", "a".repeat(1_200))
+    );
+    assert_eq!(&transformed.content[..fold.start], format!("{prefix}\n\n"));
+    assert_eq!(&transformed.content[fold.end..], format!("\n\n{suffix}"));
 }
 
 #[test]

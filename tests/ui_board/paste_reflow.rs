@@ -211,22 +211,32 @@ fn transformed_large_paste_keeps_a_fold_through_narrow_shallow_rendering() {
 
 #[test]
 fn board_fallback_is_reflow_while_text_and_query_owners_keep_their_inputs() {
-    let mut compose = Fixture::new();
-    assert_eq!(
-        compose.effects(UiInput::Key(UiKey::Character('p'))).len(),
-        1
-    );
-    assert_eq!(compose.app.editor_snapshot().expect("compose").content, "p");
+    for character in ['p', 'P'] {
+        let mut compose = Fixture::new();
+        assert_eq!(
+            compose
+                .effects(UiInput::Key(UiKey::Character(character)))
+                .len(),
+            1
+        );
+        assert_eq!(
+            compose.app.editor_snapshot().expect("compose").content,
+            character.to_string()
+        );
+    }
+
+    for character in ['p', 'P'] {
+        let mut board = Fixture::new();
+        board.input(UiInput::Key(UiKey::Escape));
+        let request_id = request(&mut board, UiKey::Character(character));
+        complete(&mut board, request_id, "board\nreflow");
+        assert_eq!(
+            board.app.state.board.live_thoughts()[0].content,
+            "board reflow"
+        );
+    }
 
     let mut board = Fixture::new();
-    board.input(UiInput::Key(UiKey::Escape));
-    let request_id = request(&mut board, UiKey::Character('p'));
-    complete(&mut board, request_id, "board\nreflow");
-    assert_eq!(
-        board.app.state.board.live_thoughts()[0].content,
-        "board reflow"
-    );
-
     board.input(UiInput::Key(UiKey::Escape));
     board.input(UiInput::Key(UiKey::Character('/')));
     assert!(

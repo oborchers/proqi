@@ -84,7 +84,7 @@ fn type_space_before_selected_placeholder(binary: &str, state: &std::path::Path,
         expect -exact "\x1b\[?1049h"
         send "\r"
         after 100
-        send "\x01"
+        send -- $env(PROQI_TEST_PRIMARY_A)
         after 100
         send -- " "
         after 700
@@ -116,7 +116,7 @@ fn undo_after_restart(binary: &str, state: &std::path::Path, session: &str) {
         expect -exact "\x1b\[?1049h"
         send "\r"
         after 100
-        send "\x1a"
+        send -- $env(PROQI_TEST_PRIMARY_Z)
         after 700
         send "\x1b"
         after 100

@@ -39,10 +39,10 @@ impl PastePayload {
         if transformed.content.is_empty() {
             return Ok(PasteReflow::Empty);
         }
-        if transformed.changes.is_empty() {
+        let annotations = reflow_annotations(self, &transformed).map_err(|_| ())?;
+        if transformed.changes.is_empty() && annotations == self.annotations {
             return Ok(PasteReflow::Unchanged);
         }
-        let annotations = reflow_annotations(self, &transformed).map_err(|_| ())?;
         Ok(PasteReflow::Changed(Self {
             content: transformed.content,
             annotations,

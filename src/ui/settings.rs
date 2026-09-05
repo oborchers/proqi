@@ -194,6 +194,15 @@ pub(super) enum BoardNavigation {
 
 impl KeyBindings {
     pub(super) fn command(&self, character: char) -> Option<BoardCommand> {
+        self.explicit_command(character).or_else(|| {
+            (self.paste_reflow.is_ascii_alphabetic()
+                && character.is_ascii_alphabetic()
+                && character.eq_ignore_ascii_case(&self.paste_reflow))
+            .then_some(BoardCommand::PasteReflow)
+        })
+    }
+
+    fn explicit_command(&self, character: char) -> Option<BoardCommand> {
         let bindings = [
             (self.new, BoardCommand::New),
             (self.edit, BoardCommand::Edit),
@@ -222,6 +231,24 @@ impl KeyBindings {
         bindings
             .into_iter()
             .find_map(|(binding, command)| (binding == character).then_some(command))
+    }
+
+    pub(super) fn paste_reflow_fallbacks(&self) -> Vec<char> {
+        let mut fallbacks = Vec::with_capacity(2);
+        for character in [
+            Some(self.paste_reflow),
+            opposite_ascii_case(self.paste_reflow),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            if !fallbacks.contains(&character)
+                && self.command(character) == Some(BoardCommand::PasteReflow)
+            {
+                fallbacks.push(character);
+            }
+        }
+        fallbacks
     }
 
     /// Resolve a normalized key through the Board command map.
@@ -368,6 +395,16 @@ impl KeyBindings {
             }
         }
         Ok(())
+    }
+}
+
+fn opposite_ascii_case(character: char) -> Option<char> {
+    if character.is_ascii_lowercase() {
+        Some(character.to_ascii_uppercase())
+    } else if character.is_ascii_uppercase() {
+        Some(character.to_ascii_lowercase())
+    } else {
+        None
     }
 }
 

@@ -1015,10 +1015,15 @@ receives intentions such as `CreateThought`, `MoveCursor`, `CutThought`, or
 `ChooseDirection`, not raw keys. Mouse coordinates resolve through the latest
 layout snapshot into the same intentions.
 
-Raw modifiers are normalized into semantic modifiers. `Primary` maps to
-Cmd on macOS and Ctrl elsewhere. These are logical modifiers reported
-after operating-system and terminal handling, never physical left or right
-keys. Enhanced keyboard protocols
+Raw modifiers are normalized into semantic modifiers. `Primary` maps only to
+logical Super or Meta on macOS and only to logical Control elsewhere. A
+Primary-style character or Enter chord containing a platform-ineligible or
+mixed command modifier is discarded at this boundary. It cannot fall through
+to a printable character or an unmodified Enter action. Other modified
+navigation retains its documented base intention. These are logical modifiers
+reported after operating-system and terminal handling, never physical left or
+right keys.
+Enhanced keyboard protocols
 are enabled when supported so Super and Meta events can be distinguished, but
 every action retains a terminal-safe fallback and a configurable binding.
 
@@ -1102,6 +1107,9 @@ into presentation data. Distinct Shift reports for reserved character chords
 remain typed `PrimaryShiftCharacter` values unless an established shifted
 action owns them. Uppercase character reports without a Shift flag retain the
 compatible unshifted action where that is how the terminal encodes the chord.
+For the paste-reflow ASCII-letter Board fallback, the settings owner also
+exposes the opposite-case spelling unless an explicit command owns it. Dispatch
+and shortcut presentation consume that same collision-resolved list.
 
 Global `Primary+Q` is resolved before Help and Screenshot takeover navigation,
 but after a commit-first Screenshot save barrier has admitted or deferred the
