@@ -212,6 +212,7 @@ pub(super) struct PickerRow<'a> {
     secondary: Option<&'a str>,
     secondary_fallbacks: &'a [String],
     group: Option<&'a str>,
+    enabled: bool,
 }
 
 impl<'a> PickerRow<'a> {
@@ -221,6 +222,7 @@ impl<'a> PickerRow<'a> {
             secondary: None,
             secondary_fallbacks: &[],
             group: None,
+            enabled: true,
         }
     }
 
@@ -231,6 +233,7 @@ impl<'a> PickerRow<'a> {
             secondary: Some(secondary),
             secondary_fallbacks: &[],
             group: None,
+            enabled: true,
         }
     }
 
@@ -245,6 +248,17 @@ impl<'a> PickerRow<'a> {
             secondary: Some(secondary),
             secondary_fallbacks,
             group,
+            enabled: true,
+        }
+    }
+
+    pub(super) const fn choice(primary: &'a str, secondary: &'a str, enabled: bool) -> Self {
+        Self {
+            primary,
+            secondary: Some(secondary),
+            secondary_fallbacks: &[],
+            group: None,
+            enabled,
         }
     }
 }
@@ -264,13 +278,17 @@ fn picker_row(entry: PickerRow<'_>, width: u16) -> String {
 
 fn picker_line(entry: PickerRow<'_>, width: u16, selected: bool, theme: &Theme) -> Line<'static> {
     if entry.secondary.is_none() {
-        let style = if selected {
-            theme
-                .focused_style()
-                .fg(theme.accent)
-                .add_modifier(Modifier::BOLD)
+        let base = if selected {
+            theme.focused_style()
         } else {
             theme.base_style()
+        };
+        let style = if !entry.enabled {
+            base.fg(theme.muted)
+        } else if selected {
+            base.fg(theme.accent).add_modifier(Modifier::BOLD)
+        } else {
+            base
         };
         let mut content = ellipsize(entry.primary, usize::from(width));
         content.push_str(&" ".repeat(usize::from(width).saturating_sub(cell_width(&content))));
@@ -283,7 +301,9 @@ fn picker_line(entry: PickerRow<'_>, width: u16, selected: bool, theme: &Theme) 
     } else {
         theme.base_style()
     };
-    let primary_style = if selected {
+    let primary_style = if !entry.enabled {
+        base.fg(theme.muted)
+    } else if selected {
         base.fg(theme.accent).add_modifier(Modifier::BOLD)
     } else {
         base.fg(theme.foreground)

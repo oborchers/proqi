@@ -4,7 +4,7 @@ use crate::{
     application::{Effect, InteractionMode},
     domain::{Direction, ThoughtId},
     ports::{
-        agent::SubmissionDisposition,
+        agent::{AgentTarget, SubmissionDisposition},
         environment::{Clock, IdGenerator},
     },
 };
@@ -93,7 +93,7 @@ impl BoardApp {
             .agent_targets
             .iter()
             .filter(|target| target.delivery.supports())
-            .map(|target| target.direction)
+            .filter_map(AgentTarget::adjacent_direction)
             .collect::<Vec<_>>();
         match eligible.as_slice() {
             [] => {
@@ -166,7 +166,7 @@ impl BoardApp {
         let Some(target) = self
             .agent_targets
             .iter()
-            .find(|target| target.direction == direction)
+            .find(|target| target.adjacent_direction() == Some(direction))
             .cloned()
         else {
             self.set_warning(format!("no verified agent {}", direction.as_str()));

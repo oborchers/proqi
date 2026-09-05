@@ -10,7 +10,10 @@ use thiserror::Error;
 use tracing::Level;
 use tracing_subscriber::util::SubscriberInitExt as _;
 
-use crate::domain::{Direction, InstanceId, SubmissionId};
+use crate::{
+    domain::{Direction, InstanceId, SubmissionId},
+    ports::agent::SubmissionRouteKind,
+};
 
 pub use collect::{DiagnosticBundle, collect_bundle};
 use writer::RotatingMakeWriter;
@@ -112,8 +115,10 @@ pub enum SafeEvent<'a> {
         submission_id: SubmissionId,
         /// Durable submission state.
         state: &'a str,
-        /// Target direction without pane or workspace details.
-        direction: Direction,
+        /// Closed content-redacted route classification.
+        route_kind: SubmissionRouteKind,
+        /// Adjacent direction, absent for global delivery.
+        direction: Option<Direction>,
         /// Integration provider name.
         provider: &'a str,
         /// Optional stable result code.
@@ -264,6 +269,7 @@ pub fn record(event: SafeEvent<'_>) {
         SafeEvent::Submission {
             submission_id,
             state,
+            route_kind,
             direction,
             provider,
             outcome,
@@ -271,7 +277,8 @@ pub fn record(event: SafeEvent<'_>) {
             event = "submission_transition",
             submission_id = %submission_id,
             state,
-            direction = direction.as_str(),
+            route_kind = route_kind.as_str(),
+            direction = direction.map(Direction::as_str),
             provider,
             outcome
         ),

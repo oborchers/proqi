@@ -18,7 +18,7 @@ fn target_harnesses(app: &BoardApp) -> BTreeSet<InvocationHarness> {
     app.agent_targets()
         .iter()
         .filter(|target| target.delivery.supports())
-        .filter_map(|target| match target.agent_kind.as_str() {
+        .filter_map(|target| match target.agent_kind().as_str() {
             CODEX_AGENT_KIND => Some(InvocationHarness::Codex),
             CLAUDE_AGENT_KIND => Some(InvocationHarness::ClaudeCode),
             OPENCODE_AGENT_KIND => Some(InvocationHarness::OpenCode),

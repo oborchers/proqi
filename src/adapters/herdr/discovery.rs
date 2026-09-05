@@ -2,6 +2,8 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+#[path = "discovery/global.rs"]
+mod global;
 #[path = "discovery/topology.rs"]
 mod topology;
 
@@ -99,6 +101,12 @@ pub(super) fn adjacent_targets<R: ProcessRunner>(
         }
     }
     Ok(targets)
+}
+
+pub(super) fn global_targets<R: ProcessRunner>(
+    gateway: &mut HerdrGateway<R>,
+) -> Result<Vec<AgentTarget>, AgentError> {
+    global::targets(gateway)
 }
 
 pub(super) fn live_references<R: ProcessRunner>(
@@ -323,21 +331,25 @@ fn eligible_target(
         .name
         .clone()
         .unwrap_or_else(|| format!("{kind} {}", agent.pane_id));
-    Ok(AgentTarget {
-        provider: "herdr".to_owned(),
+    let address = crate::ports::agent::HerdrAgentAddress::new(
+        agent.workspace_id.clone(),
+        agent.tab_id.clone(),
+        agent.pane_id.clone(),
+        kind,
+        agent_session,
+    )
+    .ok_or_else(|| AgentError::Malformed("invalid adjacent agent address".to_owned()))?;
+    Ok(AgentTarget::adjacent(
+        "herdr".to_owned(),
         protocol,
         direction,
-        pane_id: agent.pane_id.clone(),
-        workspace_id: agent.workspace_id.clone(),
-        tab_id: agent.tab_id.clone(),
-        agent_kind: kind,
-        agent_name: name,
-        agent_session,
+        address,
+        name,
         readiness,
-        delivery: AgentDeliveryCapabilities::SUBMIT_ONLY,
+        AgentDeliveryCapabilities::SUBMIT_ONLY,
         rect,
-        source: source.clone(),
-    })
+        source.clone(),
+    ))
 }
 
 fn readiness(value: Option<RawReadiness>) -> Result<AgentState, AgentError> {

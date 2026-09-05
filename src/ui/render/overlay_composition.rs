@@ -5,8 +5,8 @@ use ratatui_core::terminal::Frame;
 use crate::ui::{BoardApp, LayoutSnapshot, Theme};
 
 use super::{
-    InvocationPickerView, PlainPickerView, overlays, release_highlights, render_invocation_picker,
-    render_plain_picker,
+    InvocationPickerView, PlainPickerView, global_delivery, overlays, release_highlights,
+    render_invocation_picker, render_plain_picker,
 };
 
 pub(super) fn render(
@@ -64,6 +64,10 @@ pub(super) fn render(
                 },
                 theme,
             );
+        }
+    } else if let Some(picker) = app.global_delivery_view() {
+        if let Some(overlay) = &layout.overlay {
+            global_delivery::render(frame, overlay, app, &picker, theme);
         }
     } else if let Some((query, entries, selected)) = app.palette_view() {
         if let Some(overlay) = &layout.overlay {

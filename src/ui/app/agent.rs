@@ -240,11 +240,16 @@ impl BoardApp {
         {
             *target = receipt.target.clone();
         }
-        let mut effects = vec![Effect::StoreIntegrationContext {
-            session_id: self.state.board.session.id,
-            target: receipt.target.clone(),
-            verified_at: pending.at,
-        }];
+        let mut effects = receipt
+            .target
+            .adjacent_direction()
+            .map(|_| Effect::StoreIntegrationContext {
+                session_id: self.state.board.session.id,
+                target: receipt.target.clone(),
+                verified_at: pending.at,
+            })
+            .into_iter()
+            .collect::<Vec<_>>();
         let removed = pending.removal_sequence.is_some();
         if removed {
             self.state.reconcile_empty_board(
@@ -272,12 +277,14 @@ impl BoardApp {
                 "thoughts changed during submission and were kept"
             }
         };
-        self.set_success(format!(
-            "submitted {} to {}, {outcome}",
-            receipt.target.direction.as_str(),
-            receipt.target.agent_name
-        ));
-        if receipt.target.agent_session.is_provisional() {
+        let destination = receipt.target.adjacent_direction().map_or_else(
+            || format!("to {}", receipt.target.agent_name),
+            |direction| format!("{} to {}", direction.as_str(), receipt.target.agent_name),
+        );
+        self.set_success(format!("submitted {destination}, {outcome}"));
+        if receipt.target.adjacent_direction().is_some()
+            && receipt.target.agent_session().is_provisional()
+        {
             effects.push(Effect::DiscoverAgents);
         }
         effects

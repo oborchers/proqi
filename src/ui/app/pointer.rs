@@ -219,6 +219,8 @@ impl BoardApp {
             self.execute_search_visible_index(index)
         } else if self.transfer.is_some() {
             self.choose_transfer_visible(index, ids)
+        } else if self.global_delivery.is_some() {
+            self.choose_global_delivery_visible(index, ids, clock)
         } else if self.execute_invocation_visible_index(index) {
             Vec::new()
         } else {

@@ -59,6 +59,25 @@ fn every_picker_secondary_uses_the_same_quiet_metadata_style() {
 }
 
 #[test]
+fn selected_disabled_choice_keeps_focus_surface_and_muted_text() {
+    let theme = Theme::resolve(ThemePreference::Dark, true);
+    let selected = picker_line(
+        PickerRow::choice("Blocked receiver", "blocked", false),
+        32,
+        true,
+        &theme,
+    );
+
+    assert!(
+        selected
+            .spans
+            .iter()
+            .all(|span| span.style.bg == theme.focused_surface)
+    );
+    assert_eq!(selected.spans[0].style.fg, Some(theme.muted));
+}
+
+#[test]
 fn overlong_token_ellipsizes_on_grapheme_and_cell_boundaries() {
     let rendered = picker_row(PickerRow::fields("$界界e\u{301}🙂", "Global Skill"), 5);
 

@@ -298,7 +298,7 @@ fn staged_submission_removal(
         payload_digest: [17; 32],
         source_sequence,
         disposition: SubmissionDisposition::RemoveAfterSuccess,
-        direction: Direction::Right,
+        route: crate::ports::store::SubmissionJournalRoute::legacy_adjacent(Direction::Right),
         provider: "herdr".to_owned(),
         protocol: 19,
         target_fingerprint: [18; 32],

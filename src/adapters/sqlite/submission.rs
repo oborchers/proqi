@@ -26,9 +26,10 @@ pub(super) fn prepare(
         .execute(
             "INSERT INTO submission_attempts(
                 id, session_id, thought_id, source_digest, source_sequence,
-                disposition, direction, provider, protocol, target_fingerprint,
-                pre_state, state, prepared_at, updated_at
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 'prepared', ?12, ?12)",
+                disposition, route_version, route_kind, direction, provider, protocol,
+                target_fingerprint, pre_state, state, prepared_at, updated_at
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13,
+                       'prepared', ?14, ?14)",
             params![
                 attempt.id.database_bytes().as_slice(),
                 attempt.session_id.database_bytes().as_slice(),
@@ -36,7 +37,12 @@ pub(super) fn prepare(
                 attempt.payload_digest.as_slice(),
                 i64::try_from(attempt.source_sequence.get()).unwrap_or(i64::MAX),
                 attempt.disposition.as_str(),
-                attempt.direction.as_str(),
+                i64::from(attempt.route.version()),
+                attempt.route.kind().as_str(),
+                attempt
+                    .route
+                    .adjacent_direction()
+                    .map(crate::domain::Direction::as_str),
                 attempt.provider,
                 i64::from(attempt.protocol),
                 attempt.target_fingerprint.as_slice(),

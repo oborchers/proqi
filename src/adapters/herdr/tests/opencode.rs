@@ -40,10 +40,11 @@ fn agents(name: &str) -> Value {
 
 fn opencode_target(context: &crate::ports::agent::PaneContext) -> crate::ports::agent::AgentTarget {
     let mut result = target(context);
-    result.agent_kind = HarnessKind::new(OPENCODE_AGENT_KIND).expect("fixture harness");
+    result.set_test_agent_kind(HarnessKind::new(OPENCODE_AGENT_KIND).expect("fixture harness"));
     result.agent_name = "opencode-fixture".to_owned();
-    result.agent_session =
-        AgentSessionBinding::established("opencode-session-alpha").expect("fixture session");
+    result.set_test_agent_session(
+        AgentSessionBinding::established("opencode-session-alpha").expect("fixture session"),
+    );
     result
 }
 
@@ -75,10 +76,13 @@ fn recorded_detection_requires_established_opencode_identity_and_readiness() {
             "{name}"
         );
         if let Some(target) = targets.first() {
-            assert_eq!(target.agent_kind.as_str(), OPENCODE_AGENT_KIND);
-            assert_eq!(target.agent_session.is_provisional(), provisional);
+            assert_eq!(target.agent_kind().as_str(), OPENCODE_AGENT_KIND);
+            assert_eq!(target.agent_session().is_provisional(), provisional);
             if !provisional {
-                assert_eq!(target.agent_session.as_id(), Some("opencode-session-alpha"));
+                assert_eq!(
+                    target.agent_session().as_id(),
+                    Some("opencode-session-alpha")
+                );
             }
         }
     }
@@ -118,9 +122,9 @@ fn recorded_receipt_accepts_exact_opencode_submission_as_one_argument() {
         })
         .expect("matching OpenCode receipt");
 
-    assert_eq!(receipt.target.agent_kind.as_str(), OPENCODE_AGENT_KIND);
+    assert_eq!(receipt.target.agent_kind().as_str(), OPENCODE_AGENT_KIND);
     assert_eq!(
-        receipt.target.agent_session.as_id(),
+        receipt.target.agent_session().as_id(),
         Some("opencode-session-alpha")
     );
     assert_eq!(receipt.post_state, Some(AgentState::Working));
@@ -141,7 +145,7 @@ fn first_opencode_prompt_is_exactly_once_and_establishes_the_recorded_session() 
     responses.push(success(recorded("accepted")));
     let (mut gateway, runner) = gateway(responses);
     let mut provisional = opencode_target(&context);
-    provisional.agent_session = AgentSessionBinding::provisional();
+    provisional.set_test_agent_session(AgentSessionBinding::provisional());
     let mut ids = FakeIdGenerator::new(1_725_200_000_000);
     let payload = "first OpenCode prompt\nwith Unicode e\u{301} 👩‍💻".to_owned();
     let receipt = gateway
@@ -153,7 +157,7 @@ fn first_opencode_prompt_is_exactly_once_and_establishes_the_recorded_session() 
         .expect("session-establishing OpenCode receipt");
 
     assert_eq!(
-        receipt.target.agent_session.as_id(),
+        receipt.target.agent_session().as_id(),
         Some("opencode-session-alpha")
     );
     let prompts = runner
@@ -178,7 +182,7 @@ fn first_opencode_receipt_may_precede_the_session_hook_without_resending() {
     responses.push(success(recorded("before_hook")));
     let (mut gateway, runner) = gateway(responses);
     let mut provisional = opencode_target(&context);
-    provisional.agent_session = AgentSessionBinding::provisional();
+    provisional.set_test_agent_session(AgentSessionBinding::provisional());
     let mut ids = FakeIdGenerator::new(1_725_200_000_000);
     let receipt = gateway
         .submit(SubmissionRequest {
@@ -188,7 +192,7 @@ fn first_opencode_receipt_may_precede_the_session_hook_without_resending() {
         })
         .expect("matching provisional OpenCode receipt");
 
-    assert!(receipt.target.agent_session.is_provisional());
+    assert!(receipt.target.agent_session().is_provisional());
     assert_eq!(
         runner
             .requests

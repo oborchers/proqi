@@ -32,6 +32,7 @@ pub(in crate::ui::app) enum Command {
     SelectAll,
     SubmitRemove,
     SubmitKeep,
+    SubmitToAgent,
     SubmitAllRemove,
     SubmitAllKeep,
     RefreshAgents,
@@ -56,7 +57,7 @@ pub(in crate::ui::app) enum Command {
 }
 
 impl Command {
-    pub(super) const ALL: [(Self, &'static str); 51] = [
+    pub(super) const ALL: [(Self, &'static str); 52] = [
         (Self::New, "New thought"),
         (Self::RenameSession, "Rename session"),
         (Self::CopySessionId, "Copy session ID"),
@@ -97,6 +98,7 @@ impl Command {
         (Self::SelectAll, "Select all thoughts"),
         (Self::SubmitRemove, "Submit"),
         (Self::SubmitKeep, "Submit and keep"),
+        (Self::SubmitToAgent, "Submit to agent..."),
         (Self::SubmitAllRemove, "Submit all"),
         (Self::SubmitAllKeep, "Submit all and keep"),
         (Self::SendSession, "Send to another Proqi session"),

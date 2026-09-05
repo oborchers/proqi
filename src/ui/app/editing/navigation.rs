@@ -56,6 +56,7 @@ impl BoardApp {
             || self.update_prompt.is_some()
             || self.release_highlights.is_some()
             || self.palette.is_some()
+            || self.global_delivery.is_some()
             || self.invocation_popup.is_some()
             || self.transfer.is_some()
             || self.rename.is_some()

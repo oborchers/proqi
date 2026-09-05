@@ -13,6 +13,7 @@ mod control;
 mod duplicate;
 mod editing;
 mod folds;
+pub(in crate::ui) mod global_delivery;
 mod help;
 pub(in crate::ui) mod highlights;
 mod input_dispatch;
@@ -145,6 +146,8 @@ pub struct BoardApp {
     recovery_exported_for: Option<OperationSequence>,
     agent_targets: Vec<AgentTarget>,
     agent_refresh_in_flight: bool,
+    global_delivery: Option<global_delivery::GlobalDeliveryState>,
+    global_delivery_generation: u64,
     submission_mode: Option<SubmissionMode>,
     deferred_submissions: BTreeMap<SubmissionId, DeferredSubmissionIntent>,
     preflight_submissions: BTreeMap<SubmissionId, DeferredSubmissionIntent>,
@@ -240,6 +243,8 @@ impl BoardApp {
             recovery_exported_for: None,
             agent_targets: Vec::new(),
             agent_refresh_in_flight: false,
+            global_delivery: None,
+            global_delivery_generation: 0,
             submission_mode: None,
             deferred_submissions: BTreeMap::new(),
             preflight_submissions: BTreeMap::new(),
@@ -325,6 +330,9 @@ impl BoardApp {
         if self.palette.is_some() {
             return self.handle_palette_input(&input, ids, clock);
         }
+        if self.global_delivery.is_some() {
+            return self.handle_global_delivery_input(&input, ids, clock);
+        }
         if self.invocation_popup.is_some() {
             return self.handle_invocation_input(&input, ids, clock);
         }
@@ -354,6 +362,7 @@ impl BoardApp {
             || self.update_prompt.is_some()
             || self.release_highlights.is_some()
             || self.palette.is_some()
+            || self.global_delivery.is_some()
             || self.invocation_popup.is_some()
             || self.transfer.is_some()
             || self.rename.is_some()

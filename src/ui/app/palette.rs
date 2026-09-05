@@ -168,6 +168,7 @@ impl BoardApp {
     pub(super) fn close_overlay(&mut self) {
         self.cancel_screenshot_takeover();
         self.palette = None;
+        self.global_delivery = None;
         self.search = None;
         self.transfer = None;
         self.close_invocation_picker();
@@ -389,6 +390,7 @@ impl BoardApp {
             Command::Duplicate => self.duplicate(ids, clock),
             Command::SubmitRemove
             | Command::SubmitKeep
+            | Command::SubmitToAgent
             | Command::SubmitAllRemove
             | Command::SubmitAllKeep
             | Command::PlainNewline

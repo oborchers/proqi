@@ -167,13 +167,19 @@ pub(super) fn configure_agent_controls(
     }
     let mut x = area.x;
     if let Some(disposition) = selection {
-        for target in targets.iter().filter(|target| target.delivery.supports()) {
+        for target in targets
+            .iter()
+            .filter(|target| target.delivery.supports() && target.adjacent_direction().is_some())
+        {
+            let Some(direction) = target.adjacent_direction() else {
+                continue;
+            };
             let label_width = crate::ui::control_labels::agent(target).width();
             push(
                 layout,
                 &mut x,
                 area,
-                HitTarget::Deliver(target.direction, disposition),
+                HitTarget::Deliver(direction, disposition),
                 label_width,
             );
         }
@@ -183,12 +189,15 @@ pub(super) fn configure_agent_controls(
         return;
     }
     for target in targets {
+        let Some(direction) = target.adjacent_direction() else {
+            continue;
+        };
         let label_width = crate::ui::control_labels::agent(target).width();
         push(
             layout,
             &mut x,
             area,
-            HitTarget::Agent(target.direction),
+            HitTarget::Agent(direction),
             label_width,
         );
     }
@@ -198,11 +207,16 @@ pub(super) fn configure_agent_controls(
     ] {
         let eligible = targets
             .iter()
-            .filter(|target| target.delivery.supports())
+            .filter(|target| target.delivery.supports() && target.adjacent_direction().is_some())
             .collect::<Vec<_>>();
         let target = match eligible.as_slice() {
             [] => continue,
-            [only] => HitTarget::Deliver(only.direction, disposition),
+            [only] => {
+                let Some(direction) = only.adjacent_direction() else {
+                    continue;
+                };
+                HitTarget::Deliver(direction, disposition)
+            }
             _ => HitTarget::BeginDelivery(disposition),
         };
         let label_width =

@@ -117,20 +117,23 @@ pub(super) fn adjacent_target(
             height: 20,
         },
     };
-    AgentTarget {
-        provider: "herdr".to_owned(),
-        protocol: 19,
+    let address = proqi::ports::agent::HerdrAgentAddress::new(
+        source.workspace_id.clone(),
+        source.tab_id.clone(),
+        pane_id.to_owned(),
+        HarnessKind::new(CODEX_AGENT_KIND).expect("fixture harness"),
+        AgentSessionBinding::established(format!("session-{pane_id}")).expect("fixture session"),
+    )
+    .expect("fixture address");
+    AgentTarget::adjacent(
+        "herdr".to_owned(),
+        19,
         direction,
-        pane_id: pane_id.to_owned(),
-        workspace_id: source.workspace_id.clone(),
-        tab_id: source.tab_id.clone(),
-        agent_kind: HarnessKind::new(CODEX_AGENT_KIND).expect("fixture harness"),
-        agent_name: format!("Codex {pane_id}"),
-        agent_session: AgentSessionBinding::established(format!("session-{pane_id}"))
-            .expect("fixture session"),
+        address,
+        format!("Codex {pane_id}"),
         readiness,
-        delivery: proqi::ports::agent::AgentDeliveryCapabilities::SUBMIT_ONLY,
-        rect: source.rect,
+        proqi::ports::agent::AgentDeliveryCapabilities::SUBMIT_ONLY,
+        source.rect,
         source,
-    }
+    )
 }

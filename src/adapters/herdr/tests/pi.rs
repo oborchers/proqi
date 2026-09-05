@@ -28,10 +28,11 @@ fn agents(name: &str) -> Value {
 
 fn pi_target() -> crate::ports::agent::AgentTarget {
     let mut target = target(&source());
-    target.agent_kind = HarnessKind::new("pi").expect("fixture harness");
+    target.set_test_agent_kind(HarnessKind::new("pi").expect("fixture harness"));
     target.agent_name = "pi-review".to_owned();
-    target.agent_session =
-        AgentSessionBinding::established("fixture/pi/session-a.jsonl").expect("fixture session");
+    target.set_test_agent_session(
+        AgentSessionBinding::established("fixture/pi/session-a.jsonl").expect("fixture session"),
+    );
     target
 }
 
@@ -49,9 +50,9 @@ fn recorded_pi_identity_readiness_and_exit_follow_the_established_session_path()
         ));
         let targets = gateway.adjacent_targets(&context).expect("recorded Pi");
         assert_eq!(targets.len(), 1);
-        assert_eq!(targets[0].agent_kind.as_str(), "pi");
+        assert_eq!(targets[0].agent_kind().as_str(), "pi");
         assert_eq!(
-            targets[0].agent_session.as_id(),
+            targets[0].agent_session().as_id(),
             Some("fixture/pi/session-a.jsonl")
         );
         assert_eq!(targets[0].readiness, expected);

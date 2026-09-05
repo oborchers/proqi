@@ -283,7 +283,7 @@ fn accessible_preflight_preserves_direct_herdr_submission_and_source_changes_fai
     );
 }
 
-fn submission_fixture() -> Fixture {
+pub(super) fn submission_fixture() -> Fixture {
     let mut fixture = Fixture::new();
     let path = "/private/TemporaryItems/expired.png";
     let effects = fixture.effects(UiInput::PasteAnnotated(attachment_payload(path, true)));
@@ -393,7 +393,7 @@ fn attachment_payload(path: &str, image: bool) -> PastePayload {
     .expect("valid attachment payload")
 }
 
-fn attachment_batch(effects: &[Effect]) -> AttachmentCheckBatch {
+pub(super) fn attachment_batch(effects: &[Effect]) -> AttachmentCheckBatch {
     effects
         .iter()
         .find_map(|effect| match effect {
@@ -403,7 +403,7 @@ fn attachment_batch(effects: &[Effect]) -> AttachmentCheckBatch {
         .unwrap_or_else(|| panic!("attachment batch missing: {effects:?}"))
 }
 
-fn complete(
+pub(super) fn complete(
     batch: AttachmentCheckBatch,
     result: Result<(), AttachmentAccessFailure>,
 ) -> AttachmentCheckBatchResult {

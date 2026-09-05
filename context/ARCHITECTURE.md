@@ -24,8 +24,8 @@ The architecture optimizes for five properties:
 - Committed content and undo history must survive process and machine failure.
 - Multiple application versions may temporarily run after a package-manager
   update without corrupting shared state.
-- Clipboard use works everywhere, while adjacent-agent submission remains an
-  optional, capability-gated enhancement.
+- Clipboard use works everywhere, while adjacent and Commands-only global agent
+  submission remain optional, capability-gated enhancements.
 - The core remains testable without a real terminal, clipboard, database, or
   Herdr process.
 
@@ -467,6 +467,7 @@ is the safety boundary.
 trait AgentGateway {
     fn capabilities(&mut self) -> Result<AgentCapabilities>;
     fn adjacent_targets(&mut self, context: PaneContext) -> Result<Vec<AgentTarget>>;
+    fn global_targets(&mut self) -> Result<Vec<AgentTarget>>;
     fn submit(&mut self, request: SubmissionRequest) -> Result<SubmissionReceipt>;
 }
 ```
@@ -690,7 +691,8 @@ event-sourced system.
   pristine schema starts eligible for version 1, while migration from every
   prior schema initializes version 1 as completed.
 - `submission_attempts`: one content-redacted semantic delivery and its
-  aggregate payload digest, target fingerprint, disposition, and state.
+  aggregate payload digest, target fingerprint, disposition, versioned route
+  kind, optional adjacent direction, and state.
 - `submission_attempt_items`: ordered source thought identities and per-source
   digests for one delivery. A partial unique index permits at most one active
   submission per thought.
@@ -771,6 +773,13 @@ is a compatibility boundary: a protocol 10 process must never be admitted as a
 compatible owner after protocol 11 payloads may exist. The separate schema 11
 onboarding migration remains protocol 10, and migration 12 preserves its
 completed or eligible marker exactly.
+
+Schema version 13 and storage protocol version 12 register the closed submission
+route journal. Migration preserves every legacy target fingerprint and decodes
+its required direction as route version 0 `adjacent_pane`. New route version 1
+rows store `adjacent_pane` with a direction or `herdr_agent` without one. Neither
+form stores workspace, tab, pane, session, labels, prompt content, or raw Herdr
+responses.
 
 ## Multiple running versions during an update
 
@@ -1304,6 +1313,8 @@ The adapter:
 
 - Detects Herdr and negotiates its client and server protocol.
 - Resolves neighboring panes in all four directions.
+- Discovers compatible coding agents across the current Herdr server from one
+  fresh, bounded, schema-validated snapshot.
 - Independently verifies pane identity, workspace, tab, geometry, agent type,
   optional session identity, and interactive state.
 - Invokes the semantic prompt command directly without a shell.
@@ -1314,6 +1325,21 @@ The adapter:
 - Projects recognized coding agents from one bounded snapshot for inert
   invocation-picker references, without exposing raw topology or terminal
   metadata above the adapter.
+
+`SubmissionRoute` is a closed discriminated address. `AdjacentPane` retains the
+verified direction, source context, target geometry, and target address.
+`HerdrAgent` retains only the verified current-server workspace, tab, pane,
+harness, and established or explicitly qualified provisional session address.
+It never fabricates geometry or a sentinel direction. Global discovery labels
+are presentation metadata and do not participate in receipt identity.
+
+The Commands-only global chooser is generation tagged. Its loading, filtering,
+selection, rendering, paging, and hit geometry derive from one semantic row
+owner. Discovery and prompt work run on the existing cancellable external lane.
+The reducer and render path perform no Herdr process or filesystem work. The
+chooser shows blocked, unknown, launching, and noninteractive targets but marks
+them ineligible. Submission obtains another fresh snapshot and requires one
+exact matching address before invoking `agent prompt`.
 
 The receiving harness decides whether a prompt sent to a working agent is
 queued, treated as steering, or rejected. The gateway reports that state and
@@ -1371,6 +1397,13 @@ identities, their SHA-256 digests, one aggregate payload digest, and a target
 identity fingerprint, never prompt content or raw pane and agent session
 identifiers.
 
+Schema version 13 and storage protocol version 12 replace the direction-only
+journal address with route encoding version 1, a closed route kind, and an
+optional adjacent direction. Current adjacent rows require a direction and
+global Herdr rows require none. Migration decodes every prior row as legacy
+route version 0 `adjacent_pane`, preserves its direction and exact existing
+fingerprint bytes, and retains conservative prepared and sending recovery.
+
 Attachment preflight precedes creation of this journal attempt. Successful
 preflight preserves the same direct Herdr request and journal transitions.
 External files remain caller-owned paths, so a file can disappear after the
@@ -1404,6 +1437,12 @@ provisional target immediately. When the receipt precedes the session hook,
 Proqi accepts the
 matching receipt and immediately rediscovers adjacent targets without retrying
 the prompt.
+
+For a global route, revalidation rejects disappearance, workspace or tab
+movement, session replacement, protocol disagreement, ambiguous duplicate
+identity, stale or incomplete snapshots, and receipt mismatch. Label renames
+are accepted because labels are not address fields. Invocation references use a
+separate presentation projection and never become submission routes.
 
 Accepted Herdr protocols 19 through 21 acknowledge accepted text entry but do not
 guarantee a distinct prompt boundary when another sender submits concurrently.

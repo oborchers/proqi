@@ -87,6 +87,7 @@ fn palette_submission_labels_use_one_concise_vocabulary() {
         vec![
             "Submit",
             "Submit and keep",
+            "Submit to agent...",
             "Submit all",
             "Submit all and keep",
         ]

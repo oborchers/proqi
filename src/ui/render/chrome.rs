@@ -40,7 +40,7 @@ fn render_control(
         HitTarget::Agent(direction) => app
             .agent_targets()
             .iter()
-            .find(|target| target.direction == direction)
+            .find(|target| target.adjacent_direction() == Some(direction))
             .map(crate::ui::control_labels::agent),
         _ => crate::ui::control_labels::action(target, false, app.interaction_mode(), keys)
             .filter(|label| label.width() <= area.width)

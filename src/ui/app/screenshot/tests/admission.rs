@@ -217,26 +217,30 @@ fn agent_target() -> AgentTarget {
             height: 20,
         },
     };
-    AgentTarget {
-        provider: "herdr".to_owned(),
-        protocol: 19,
-        direction: Direction::Right,
-        pane_id: "w1:p2".to_owned(),
-        workspace_id: source.workspace_id.clone(),
-        tab_id: source.tab_id.clone(),
-        agent_kind: HarnessKind::new(CODEX_AGENT_KIND).expect("agent kind"),
-        agent_name: "codex".to_owned(),
-        agent_session: AgentSessionBinding::established("session").expect("agent session"),
-        readiness: AgentState::Idle,
-        delivery: AgentDeliveryCapabilities::SUBMIT_ONLY,
-        rect: PaneRect {
+    let address = crate::ports::agent::HerdrAgentAddress::new(
+        source.workspace_id.clone(),
+        source.tab_id.clone(),
+        "w1:p2".to_owned(),
+        HarnessKind::new(CODEX_AGENT_KIND).expect("agent kind"),
+        AgentSessionBinding::established("session").expect("agent session"),
+    )
+    .expect("agent address");
+    AgentTarget::adjacent(
+        "herdr".to_owned(),
+        19,
+        Direction::Right,
+        address,
+        "codex".to_owned(),
+        AgentState::Idle,
+        AgentDeliveryCapabilities::SUBMIT_ONLY,
+        PaneRect {
             x: 20,
             y: 0,
             width: 20,
             height: 20,
         },
         source,
-    }
+    )
 }
 
 fn session_hit(id: crate::domain::SessionId) -> SessionHit {

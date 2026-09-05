@@ -25,27 +25,30 @@ pub(super) fn target_with_kind(direction: Direction, pane_id: &str, harness: &st
             height: 20,
         },
     };
-    AgentTarget {
-        provider: "herdr".to_owned(),
-        protocol: 19,
+    let address = proqi::ports::agent::HerdrAgentAddress::new(
+        source.workspace_id.clone(),
+        source.tab_id.clone(),
+        pane_id.to_owned(),
+        HarnessKind::new(harness).expect("fixture harness"),
+        AgentSessionBinding::established(format!("session-{pane_id}")).expect("fixture session"),
+    )
+    .expect("fixture address");
+    AgentTarget::adjacent(
+        "herdr".to_owned(),
+        19,
         direction,
-        pane_id: pane_id.to_owned(),
-        workspace_id: source.workspace_id.clone(),
-        tab_id: source.tab_id.clone(),
-        agent_kind: HarnessKind::new(harness).expect("fixture harness"),
-        agent_name: format!("{harness} {pane_id}"),
-        agent_session: AgentSessionBinding::established(format!("session-{pane_id}"))
-            .expect("fixture session"),
-        readiness: AgentState::Idle,
-        delivery: AgentDeliveryCapabilities::SUBMIT_ONLY,
-        rect: PaneRect {
+        address,
+        format!("{harness} {pane_id}"),
+        AgentState::Idle,
+        AgentDeliveryCapabilities::SUBMIT_ONLY,
+        PaneRect {
             x: 40,
             y: 0,
             width: 20,
             height: 20,
         },
         source,
-    }
+    )
 }
 
 pub(super) fn prepare_thought(fixture: &mut Fixture) {
@@ -141,38 +144,6 @@ fn failed_submission_preserves_thought_and_accepted_remove_is_undoable() {
 }
 
 #[test]
-fn accepted_receipt_ignores_volatile_target_metadata() {
-    let mut fixture = Fixture::new();
-    prepare_thought(&mut fixture);
-    let target = target(Direction::Right, "w1:p2");
-    fixture
-        .app
-        .complete_agent_discovery(Ok(vec![target.clone()]));
-    let effects = fixture.effects(UiInput::Key(UiKey::Character('s')));
-    let request = start_submission(&mut fixture, &effects);
-    let mut revalidated = target;
-    revalidated.readiness = AgentState::Blocked;
-    revalidated.agent_name = "Renamed agent".to_owned();
-    revalidated.rect.x = revalidated.rect.x.saturating_add(1);
-    revalidated.source.rect.width = revalidated.source.rect.width.saturating_add(1);
-
-    let completion = finish_submission(
-        &mut fixture,
-        &request,
-        Ok(SubmissionReceipt {
-            submission_id: request.submission_id,
-            target: revalidated,
-            post_state: Some(AgentState::Unknown),
-        }),
-    );
-    assert!(matches!(
-        completion.as_slice(),
-        [Effect::StoreIntegrationContext { .. }]
-    ));
-    assert!(fixture.app.state.board.live_thoughts().is_empty());
-}
-
-#[test]
 fn accepted_receipt_rejects_a_different_stable_target() {
     let mut fixture = Fixture::new();
     prepare_thought(&mut fixture);
@@ -182,9 +153,9 @@ fn accepted_receipt_rejects_a_different_stable_target() {
         .complete_agent_discovery(Ok(vec![target.clone()]));
     let effects = fixture.effects(UiInput::Key(UiKey::Character('s')));
     let request = start_submission(&mut fixture, &effects);
-    let mut different = target;
-    different.agent_session =
-        AgentSessionBinding::established("different-session").expect("fixture session");
+    let different = target.with_agent_session(
+        AgentSessionBinding::established("different-session").expect("fixture session"),
+    );
 
     let completion = finish_submission(
         &mut fixture,

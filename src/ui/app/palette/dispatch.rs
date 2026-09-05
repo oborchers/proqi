@@ -95,6 +95,7 @@ impl BoardApp {
     ) -> Option<Vec<Effect>> {
         use crate::ports::agent::SubmissionDisposition::{Keep, RemoveAfterSuccess};
         match command {
+            Command::SubmitToAgent => Some(self.begin_global_delivery(ids, clock)),
             Command::SubmitRemove => Some(self.begin_delivery(RemoveAfterSuccess, ids, clock)),
             Command::SubmitKeep => Some(self.begin_delivery(Keep, ids, clock)),
             Command::SubmitAllRemove => {

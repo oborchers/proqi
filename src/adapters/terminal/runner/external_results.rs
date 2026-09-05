@@ -92,6 +92,10 @@ fn complete(
             app.complete_agent_discovery(result);
             Vec::new()
         }
+        ExternalResult::GlobalAgentsDiscovered { generation, result } => {
+            app.complete_global_agent_discovery(generation, result);
+            Vec::new()
+        }
         ExternalResult::InvocationsDiscovered(result) => {
             let completeness = result.completeness.clone();
             if app.complete_invocation_discovery(result) {

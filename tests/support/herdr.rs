@@ -48,7 +48,7 @@ fn fixture_script(protocol: u32, prompt_log: &Path) -> String {
 if [ "$1 $2 $3" = "api schema --json" ]; then
   printf '%s\n' '__SCHEMA__'
 elif [ "$1 $2" = "api snapshot" ]; then
-  printf '%s\n' '{"result":{"snapshot":{"protocol":__PROTOCOL__,"version":"__VERSION__","workspaces":[{"workspace_id":"w1","label":"Fixture workspace"}],"tabs":[{"workspace_id":"w1","tab_id":"w1:t1","label":"Fixture tab"}],"agents":[{"pane_id":"w1:p2","workspace_id":"w1","tab_id":"w1:t1","agent":"codex","name":"fixture","agent_status":"idle","cwd":"/private/not-a-label","terminal_title":"private prompt","future_agent_field":true}],"future_snapshot_field":true}},"future_envelope_field":true}'
+  printf '%s\n' '{"result":{"snapshot":{"protocol":__PROTOCOL__,"version":"__VERSION__","workspaces":[{"workspace_id":"w1","label":"Fixture workspace"},{"workspace_id":"w2","label":"Global workspace"}],"tabs":[{"workspace_id":"w1","tab_id":"w1:t1","label":"Fixture tab"},{"workspace_id":"w2","tab_id":"w2:t4","label":"Global tab"}],"agents":[{"pane_id":"w1:p2","workspace_id":"w1","tab_id":"w1:t1","agent":"codex","name":"fixture","agent_status":"idle","cwd":"/private/not-a-label","terminal_title":"private prompt","future_agent_field":true},{"pane_id":"w2:p9","workspace_id":"w2","tab_id":"w2:t4","agent":"codex","name":"global fixture","agent_status":"done","agent_session":{"agent":"codex","kind":"id","source":"herdr:codex","value":"global-session"}}],"future_snapshot_field":true}},"future_envelope_field":true}'
 elif [ "$1 $2 $3" = "pane current --current" ]; then
   printf '%s\n' '{"result":{"pane":{"pane_id":"w1:p1","workspace_id":"w1","tab_id":"w1:t1"}}}'
 elif [ "$1 $2" = "pane layout" ]; then
@@ -64,6 +64,9 @@ elif [ "$1 $2" = "pane neighbor" ]; then
 elif [ "$1 $2 $3" = "agent prompt w1:p2" ]; then
   printf '%s' "$4" > "__PROMPT_LOG__"
   printf '%s\n' '{"result":{"type":"agent_prompted","agent":{"pane_id":"w1:p2","workspace_id":"w1","tab_id":"w1:t1","agent":"codex","name":"fixture","agent_status":"working","agent_session":{"agent":"codex","kind":"id","source":"herdr:codex","value":"fixture-session"}},"future_receipt_field":true}}'
+elif [ "$1 $2 $3" = "agent prompt w2:p9" ]; then
+  printf '%s' "$4" > "__PROMPT_LOG__"
+  printf '%s\n' '{"result":{"type":"agent_prompted","agent":{"pane_id":"w2:p9","workspace_id":"w2","tab_id":"w2:t4","agent":"codex","name":"global fixture","agent_status":"working","agent_session":{"agent":"codex","kind":"id","source":"herdr:codex","value":"global-session"}},"future_receipt_field":true}}'
 else
   printf '%s\n' '{"error":{"code":"fixture_unknown","message":"unexpected command"}}' >&2
   exit 1

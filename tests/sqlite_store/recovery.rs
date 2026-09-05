@@ -137,7 +137,7 @@ fn version_one_database_migrates_annotations_forward_without_reinterpretation() 
              DROP TABLE submission_attempts;
              ALTER TABLE thoughts DROP COLUMN presentation;
              ALTER TABLE thoughts DROP COLUMN annotations_json;
-             DELETE FROM migration_history WHERE version IN (2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
+             DELETE FROM migration_history WHERE version IN (2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13);
              UPDATE schema_meta SET schema_version = 1, storage_protocol = 1;",
         )
         .expect("downgrade fixture");
@@ -317,7 +317,7 @@ fn downgrade_collapsed_fixture(fixture: &DatabaseFixture) {
              DROP TABLE screenshot_capture_receipts;
              UPDATE thoughts SET collapsed = 1 WHERE id IS NOT NULL;
              ALTER TABLE thoughts DROP COLUMN presentation;
-             DELETE FROM migration_history WHERE version IN (6, 7, 8, 9, 10, 11, 12);
+             DELETE FROM migration_history WHERE version IN (6, 7, 8, 9, 10, 11, 12, 13);
              UPDATE schema_meta SET schema_version = 5, storage_protocol = 5;",
         )
         .expect("downgrade fixture");

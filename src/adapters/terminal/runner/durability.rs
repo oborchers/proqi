@@ -64,6 +64,7 @@ pub(super) fn enqueue_effects(
                 pending.update = pending.update.saturating_add(1);
             }
             Effect::DiscoverAgents
+            | Effect::DiscoverGlobalAgents { .. }
             | Effect::DiscoverInvocations(_)
             | Effect::DiscoverInvocationReferences(_)
             | Effect::SubmitAgent(_)
@@ -127,7 +128,7 @@ fn enqueue_persistence_effect(
             lanes.persistence.metadata(
                 crate::ports::store::OperationBatch::IntegrationContext {
                     session_id,
-                    context: Some(integration_context(&target, verified_at)),
+                    context: integration_context(&target, verified_at),
                 },
             )?;
         }
@@ -147,7 +148,8 @@ fn enqueue_persistence_effect(
                 crate::adapters::diagnostics::SafeEvent::Submission {
                     submission_id: attempt.id,
                     state: "preparing",
-                    direction: attempt.direction,
+                    route_kind: attempt.route.kind(),
+                    direction: attempt.route.adjacent_direction(),
                     provider: super::diagnostics::provider_name(&attempt.provider),
                     outcome: None,
                 },
