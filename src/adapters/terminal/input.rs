@@ -14,7 +14,7 @@ use std::{
 
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 use crossterm::{
-    event::{self, Event, KeyEventKind, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags},
+    event::{self, Event, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags},
     execute,
 };
 
@@ -26,7 +26,7 @@ use super::{
     supervisor::{ShutdownDeadline, join_before},
 };
 
-use translation::{translate, translate_key};
+use translation::translate;
 
 mod translation;
 
@@ -66,26 +66,30 @@ pub(crate) struct KeyInspection {
     pub(crate) matched_action: Option<String>,
 }
 
-pub(crate) fn inspect_keypress() -> Result<KeyInspection, TerminalError> {
+pub(crate) fn inspect_keypress(
+    shortcut_registry: &crate::ui::ShortcutRegistry,
+) -> Result<KeyInspection, TerminalError> {
     let guard = RawInputGuard::enter()?;
     eprintln!("Press one key to inspect its terminal event and Proqi action.");
-    let key = loop {
-        match event::read()? {
-            Event::Key(key) if matches!(key.kind, KeyEventKind::Press | KeyEventKind::Repeat) => {
-                break key;
-            }
-            Event::FocusGained
-            | Event::FocusLost
-            | Event::Key(_)
-            | Event::Mouse(_)
-            | Event::Paste(_)
-            | Event::Resize(_, _) => {}
+    let (raw_event, stroke) = loop {
+        let event = event::read()?;
+        let raw_event = match &event {
+            Event::Key(key) => format!("{key:?}"),
+            _ => format!("{event:?}"),
+        };
+        if let Some(UiInput::KeyStroke(stroke)) = translate(event) {
+            break (raw_event, stroke);
         }
     };
     guard.finish()?;
+    let contexts = crate::ui::ShortcutContextStack::new([crate::ui::ShortcutContext::Board]);
     Ok(KeyInspection {
-        raw_event: format!("{key:?}"),
-        matched_action: translate_key(key).map(|action| format!("{action:?}")),
+        raw_event,
+        matched_action: Some(
+            shortcut_registry
+                .diagnostics_id(&contexts, stroke)
+                .to_owned(),
+        ),
     })
 }
 

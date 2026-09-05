@@ -47,6 +47,12 @@ pub(super) struct InvocationPopup {
 }
 
 impl BoardApp {
+    pub(super) fn manual_invocation_query_active(&self) -> bool {
+        self.invocation_popup
+            .as_ref()
+            .is_some_and(|popup| popup.manual)
+    }
+
     /// Request one generation-tagged catalog refresh.
     pub fn refresh_invocations(&mut self) -> Vec<Effect> {
         self.invocation_generation = self.invocation_generation.wrapping_add(1);
@@ -239,6 +245,7 @@ impl BoardApp {
             UiInput::Resize { .. }
             | UiInput::HostFocusGained
             | UiInput::HostFocusLost
+            | UiInput::KeyStroke(_)
             | UiInput::Key(_)
             | UiInput::Pointer(_) => {}
         }
@@ -263,7 +270,8 @@ impl BoardApp {
                 self.paste_payload(crate::ui::PastePayload::text(value.clone()), ids, clock)
             }
             UiInput::PasteAnnotated(payload) => self.paste_payload(payload.clone(), ids, clock),
-            UiInput::Pointer(_)
+            UiInput::KeyStroke(_)
+            | UiInput::Pointer(_)
             | UiInput::Resize { .. }
             | UiInput::HostFocusGained
             | UiInput::HostFocusLost => Vec::new(),

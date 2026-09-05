@@ -136,6 +136,7 @@ pub struct BoardApp {
     rename: Option<String>,
     transfer: Option<transfer::TransferState>,
     settings: UiSettings,
+    shortcut_registry: crate::ui::ShortcutRegistry,
     selection: selection::BoardSelection,
     expanded_folds: BTreeSet<(ThoughtId, usize)>,
     pending_editor_clipboard: BTreeMap<RequestId, PendingEditorClipboard>,
@@ -191,6 +192,23 @@ impl BoardApp {
         invocation_cwd: PathBuf,
         editor_factory: impl EditorFactory + 'static,
     ) -> Self {
+        let shortcut_registry = crate::ui::ShortcutRegistry::from_validated(&settings.keybindings);
+        Self::with_resolved_shortcuts(
+            state,
+            settings,
+            invocation_cwd,
+            shortcut_registry,
+            editor_factory,
+        )
+    }
+
+    pub(crate) fn with_resolved_shortcuts(
+        state: AppState,
+        settings: UiSettings,
+        invocation_cwd: PathBuf,
+        shortcut_registry: crate::ui::ShortcutRegistry,
+        editor_factory: impl EditorFactory + 'static,
+    ) -> Self {
         let insertion_focus = InsertionFocus::Inactive;
         let editor_factory: Box<dyn EditorFactory> = Box::new(editor_factory);
         let editor = if matches!(state.mode, InteractionMode::Compose) {
@@ -231,6 +249,7 @@ impl BoardApp {
             rename: None,
             transfer: None,
             settings,
+            shortcut_registry,
             selection: selection::BoardSelection::default(),
             expanded_folds: BTreeSet::new(),
             pending_editor_clipboard: BTreeMap::new(),
@@ -269,19 +288,10 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        let input = self.resolve_edit_navigation(input);
-        self.reset_pointer_click_for_input(&input);
-        self.note_screenshot_interaction(&input);
-        self.reset_overlay_activation_for_input(&input, clock.now());
-        if matches!(input, UiInput::HostFocusLost) {
-            self.collapse_empty_compose();
-        }
-        if self.modal_owns_pointer() {
-            self.pointer_click = None;
-        }
-        if self.screenshot_save_in_flight() {
-            return self.handle_screenshot_commit_barrier(input, ids, clock);
-        }
+        let input = match self.prepare_input(input, ids, clock) {
+            Ok(input) => input,
+            Err(effects) => return effects,
+        };
         if let Some(effects) = self.handle_quit_input(&input, ids, clock) {
             return effects;
         }
@@ -305,6 +315,47 @@ impl BoardApp {
         {
             return Vec::new();
         }
+        self.handle_routable_input(input, ids, clock)
+    }
+
+    fn prepare_input(
+        &mut self,
+        input: UiInput,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Result<UiInput, Vec<Effect>> {
+        if self.screenshot_save_in_flight() && matches!(input, UiInput::KeyStroke(_)) {
+            self.note_screenshot_interaction(&input);
+            return Err(self.handle_screenshot_commit_barrier(input, ids, clock));
+        }
+        if self.update_barrier.is_some() && matches!(input, UiInput::KeyStroke(_)) {
+            return Err(Vec::new());
+        }
+        let Some(input) = self.resolve_shortcut_input(input) else {
+            return Err(Vec::new());
+        };
+        let input = self.resolve_edit_navigation(input);
+        self.reset_pointer_click_for_input(&input);
+        self.note_screenshot_interaction(&input);
+        self.reset_overlay_activation_for_input(&input, clock.now());
+        if matches!(input, UiInput::HostFocusLost) {
+            self.collapse_empty_compose();
+        }
+        if self.modal_owns_pointer() {
+            self.pointer_click = None;
+        }
+        if self.screenshot_save_in_flight() {
+            return Err(self.handle_screenshot_commit_barrier(input, ids, clock));
+        }
+        Ok(input)
+    }
+
+    fn handle_routable_input(
+        &mut self,
+        input: UiInput,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
         if !matches!(
             input,
             UiInput::Resize { .. } | UiInput::HostFocusGained | UiInput::HostFocusLost

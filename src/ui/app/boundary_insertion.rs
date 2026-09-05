@@ -15,10 +15,11 @@ use super::{BoardApp, BoundaryInsertion, InsertionConfirmation, InsertionFocus};
 impl BoardApp {
     pub(super) fn reset_insertion_confirmation(&mut self, input: &UiInput) {
         let boundary = match input {
-            UiInput::Key(key) => match self.settings.keybindings.navigation(*key) {
-                Some(crate::ui::settings::BoardNavigation::Focus(direction)) => {
-                    Some(BoundaryInsertion::for_direction(direction))
+            UiInput::Key(key) => match self.shortcut_registry.board_action_for_intention(*key) {
+                Some(crate::ui::ShortcutActionId::FocusPrevious) => {
+                    Some(BoundaryInsertion::BeforeFirst)
                 }
+                Some(crate::ui::ShortcutActionId::FocusNext) => Some(BoundaryInsertion::AfterLast),
                 _ => None,
             },
             _ => None,
@@ -164,14 +165,5 @@ impl BoardApp {
             _ => return None,
         };
         live.get(target).map(|thought| thought.id)
-    }
-}
-
-impl BoundaryInsertion {
-    const fn for_direction(direction: crate::ui::ListNavigation) -> Self {
-        match direction {
-            crate::ui::ListNavigation::Previous => Self::BeforeFirst,
-            crate::ui::ListNavigation::Next => Self::AfterLast,
-        }
     }
 }

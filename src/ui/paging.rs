@@ -55,14 +55,12 @@ impl FastNavigation {
 /// Canonical contextual-help key for fast navigation.
 pub(crate) const FAST_NAVIGATION_SHORTCUT_KEY: &str = "Alt+↑/↓";
 
-/// Canonical contextual-help description including the equal Page-key spelling.
-pub(crate) const FAST_NAVIGATION_SHORTCUT_LABEL: &str = "5-row · PgUp/PgDn";
-
 /// Canonical full spelling pair retained in public controls documentation.
 #[cfg(test)]
 pub(crate) const FAST_NAVIGATION_README_LABEL: &str = "Alt+↑ / ↓ or Page Up / Page Down";
 
 /// Canonical command-discovery label for one fast movement.
+#[cfg(test)]
 pub(crate) const fn command_label(direction: FastNavigation) -> &'static str {
     match direction {
         FastNavigation::Previous => "Jump cursor up 5 visual rows (Alt+↑ or Page Up)",

@@ -1,18 +1,19 @@
-//! Crossterm event translation into terminal-independent UI intentions.
+//! Crossterm event decoding into terminal-independent input values.
 
 use crossterm::event::{
-    Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
+    Event, KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers, MediaKeyCode,
+    ModifierKeyCode, MouseButton, MouseEvent, MouseEventKind,
 };
 
-use crate::{
-    ports::editor::CursorMovement,
-    ui::{FastNavigation, PointerButton, PointerInput, PointerKind, UiInput, UiKey, VisualRowEdge},
+use crate::ui::{
+    KeyPhase, KeyStroke, LogicalKey, LogicalKeyState, LogicalMediaKey, LogicalModifierKey,
+    LogicalModifiers, PointerButton, PointerInput, PointerKind, UiInput,
 };
 
 pub(super) fn translate(event: Event) -> Option<UiInput> {
     match event {
         Event::Key(key) if matches!(key.kind, KeyEventKind::Press | KeyEventKind::Repeat) => {
-            translate_key(key).map(UiInput::Key)
+            Some(UiInput::KeyStroke(decode_key(key)))
         }
         Event::Paste(content) => Some(
             super::super::path_import::annotate_existing_files(&content)
@@ -52,204 +53,119 @@ const fn pointer_button(button: MouseButton) -> PointerButton {
     }
 }
 
-pub(super) fn translate_key(key: KeyEvent) -> Option<UiKey> {
-    translate_key_for_platform(key, ModifierPlatform::current())
+pub(super) fn decode_key(key: KeyEvent) -> KeyStroke {
+    KeyStroke {
+        key: decode_code(key.code),
+        modifiers: decode_modifiers(key.modifiers),
+        phase: decode_phase(key.kind),
+        state: decode_state(key.state),
+    }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) enum ModifierPlatform {
-    MacOs,
-    Other,
+const fn decode_phase(kind: KeyEventKind) -> KeyPhase {
+    match kind {
+        KeyEventKind::Press => KeyPhase::Press,
+        KeyEventKind::Repeat => KeyPhase::Repeat,
+        KeyEventKind::Release => KeyPhase::Release,
+    }
 }
 
-impl ModifierPlatform {
-    const fn current() -> Self {
-        if cfg!(target_os = "macos") {
-            Self::MacOs
-        } else {
-            Self::Other
+fn decode_modifiers(modifiers: KeyModifiers) -> LogicalModifiers {
+    let mut decoded = LogicalModifiers::NONE;
+    for (source, target) in [
+        (KeyModifiers::SHIFT, LogicalModifiers::SHIFT),
+        (KeyModifiers::CONTROL, LogicalModifiers::CONTROL),
+        (KeyModifiers::ALT, LogicalModifiers::ALT),
+        (KeyModifiers::SUPER, LogicalModifiers::SUPER),
+        (KeyModifiers::META, LogicalModifiers::META),
+        (KeyModifiers::HYPER, LogicalModifiers::HYPER),
+    ] {
+        if modifiers.contains(source) {
+            decoded = decoded.union(target);
         }
     }
+    decoded
 }
 
-pub(super) fn translate_key_for_platform(
-    key: KeyEvent,
-    platform: ModifierPlatform,
-) -> Option<UiKey> {
-    let primary = platform_primary(key.modifiers, platform);
-    if primary && let Some(command) = primary_key(&key) {
-        return Some(command);
-    }
-    if has_command_modifier(key.modifiers) && primary_key(&key).is_some() {
-        return None;
-    }
-    let extend_selection = key.modifiers.contains(KeyModifiers::SHIFT);
-    if let Some(horizontal) = horizontal_key(&key, platform, extend_selection) {
-        return Some(horizontal);
-    }
-    match key.code {
-        KeyCode::Char(' ') if key.modifiers.is_empty() => Some(UiKey::UnmodifiedSpace),
-        KeyCode::Char(character) => Some(UiKey::Character(character)),
-        KeyCode::Enter => Some(UiKey::Enter),
-        KeyCode::BackTab => Some(UiKey::BackTab),
-        KeyCode::Tab if extend_selection => Some(UiKey::BackTab),
-        KeyCode::Tab => Some(UiKey::Tab),
-        KeyCode::Esc => Some(UiKey::Escape),
-        KeyCode::Backspace => Some(UiKey::Backspace),
-        KeyCode::Delete if key.modifiers.is_empty() => Some(UiKey::Delete),
-        KeyCode::Delete => Some(UiKey::ModifiedDelete),
-        KeyCode::Up => Some(vertical_navigation(
-            CursorMovement::VisualUp,
-            CursorMovement::VisualJumpUp,
-            CursorMovement::DocumentStart,
-            key.modifiers,
-            primary,
-            extend_selection,
-        )),
-        KeyCode::Down => Some(vertical_navigation(
-            CursorMovement::VisualDown,
-            CursorMovement::VisualJumpDown,
-            CursorMovement::DocumentEnd,
-            key.modifiers,
-            primary,
-            extend_selection,
-        )),
-        KeyCode::PageUp => Some(fast_navigation(FastNavigation::Previous, extend_selection)),
-        KeyCode::PageDown => Some(fast_navigation(FastNavigation::Next, extend_selection)),
-        KeyCode::Home => Some(move_key(CursorMovement::LineStart, extend_selection)),
-        KeyCode::End => Some(move_key(CursorMovement::LineEnd, extend_selection)),
-        _ => None,
-    }
-}
-
-fn horizontal_key(
-    key: &KeyEvent,
-    platform: ModifierPlatform,
-    extend_selection: bool,
-) -> Option<UiKey> {
-    let edge = match key.code {
-        KeyCode::Left => VisualRowEdge::Start,
-        KeyCode::Right => VisualRowEdge::End,
-        _ => return None,
-    };
-    if platform == ModifierPlatform::MacOs && platform_primary(key.modifiers, platform) {
-        return Some(if extend_selection {
-            UiKey::ExtendVisualRow { edge }
-        } else {
-            UiKey::MoveVisualRow { edge }
-        });
-    }
-    let word = match platform {
-        ModifierPlatform::MacOs => key.modifiers.contains(KeyModifiers::ALT),
-        ModifierPlatform::Other => key.modifiers.contains(KeyModifiers::CONTROL),
-    };
-    let movement = match (edge, word) {
-        (VisualRowEdge::Start, true) => CursorMovement::WordBack,
-        (VisualRowEdge::Start, false) => CursorMovement::GraphemeBack,
-        (VisualRowEdge::End, true) => CursorMovement::WordForward,
-        (VisualRowEdge::End, false) => CursorMovement::GraphemeForward,
-    };
-    Some(move_key(movement, extend_selection))
-}
-
-fn primary_key(key: &KeyEvent) -> Option<UiKey> {
-    let shifted = key.modifiers.contains(KeyModifiers::SHIFT);
-    match key.code {
-        KeyCode::Enter if shifted => Some(UiKey::SubmitKeep),
-        KeyCode::Enter => Some(UiKey::Submit),
-        KeyCode::Char('v' | 'V') if shifted => Some(UiKey::PasteClipboardReflow),
-        KeyCode::Char(character @ ('a' | 'A' | 'c' | 'C' | 'x' | 'X' | 'd' | 'D' | 'q' | 'Q'))
-            if shifted =>
-        {
-            Some(UiKey::PrimaryShiftCharacter(character))
+fn decode_state(state: KeyEventState) -> LogicalKeyState {
+    let mut decoded = LogicalKeyState::NONE;
+    for (source, target) in [
+        (KeyEventState::KEYPAD, LogicalKeyState::KEYPAD),
+        (KeyEventState::CAPS_LOCK, LogicalKeyState::CAPS_LOCK),
+        (KeyEventState::NUM_LOCK, LogicalKeyState::NUM_LOCK),
+    ] {
+        if state.contains(source) {
+            decoded = decoded.union(target);
         }
-        KeyCode::Char('a' | 'A') => Some(UiKey::SelectAll),
-        KeyCode::Char('c' | 'C') => Some(UiKey::Copy),
-        KeyCode::Char('x' | 'X') => Some(UiKey::Cut),
-        KeyCode::Char('v' | 'V') => Some(UiKey::PasteClipboard),
-        KeyCode::Char('d' | 'D') => Some(UiKey::Duplicate),
-        KeyCode::Char('q' | 'Q') => Some(UiKey::Quit),
-        KeyCode::Char('u' | 'U') if !shifted => Some(UiKey::DeleteLogicalLine),
-        KeyCode::Char('z' | 'Z') if shifted => Some(UiKey::Redo),
-        KeyCode::Char(character @ ('y' | 'Y')) if shifted => {
-            Some(UiKey::PrimaryShiftCharacter(character))
-        }
-        KeyCode::Char('y' | 'Y') => Some(UiKey::Redo),
-        KeyCode::Char('z' | 'Z') => Some(UiKey::Undo),
-        KeyCode::Char('p' | 'P') => Some(UiKey::PickerPrevious),
-        KeyCode::Char('n' | 'N') => Some(UiKey::PickerNext),
-        KeyCode::Char(character) if shifted || character.is_uppercase() => {
-            Some(UiKey::PrimaryShiftCharacter(character))
-        }
-        KeyCode::Char(character) => Some(UiKey::PrimaryCharacter(character)),
-        _ => None,
+    }
+    decoded
+}
+
+const fn decode_code(code: KeyCode) -> LogicalKey {
+    match code {
+        KeyCode::Backspace => LogicalKey::Backspace,
+        KeyCode::Enter => LogicalKey::Enter,
+        KeyCode::Left => LogicalKey::Left,
+        KeyCode::Right => LogicalKey::Right,
+        KeyCode::Up => LogicalKey::Up,
+        KeyCode::Down => LogicalKey::Down,
+        KeyCode::Home => LogicalKey::Home,
+        KeyCode::End => LogicalKey::End,
+        KeyCode::PageUp => LogicalKey::PageUp,
+        KeyCode::PageDown => LogicalKey::PageDown,
+        KeyCode::Tab => LogicalKey::Tab,
+        KeyCode::BackTab => LogicalKey::BackTab,
+        KeyCode::Delete => LogicalKey::Delete,
+        KeyCode::Insert => LogicalKey::Insert,
+        KeyCode::F(number) => LogicalKey::Function(number),
+        KeyCode::Char(character) => LogicalKey::Character(character),
+        KeyCode::Null => LogicalKey::Null,
+        KeyCode::Esc => LogicalKey::Escape,
+        KeyCode::CapsLock => LogicalKey::CapsLock,
+        KeyCode::ScrollLock => LogicalKey::ScrollLock,
+        KeyCode::NumLock => LogicalKey::NumLock,
+        KeyCode::PrintScreen => LogicalKey::PrintScreen,
+        KeyCode::Pause => LogicalKey::Pause,
+        KeyCode::Menu => LogicalKey::Menu,
+        KeyCode::KeypadBegin => LogicalKey::KeypadBegin,
+        KeyCode::Media(key) => LogicalKey::Media(decode_media_key(key)),
+        KeyCode::Modifier(key) => LogicalKey::Modifier(decode_modifier_key(key)),
     }
 }
 
-fn vertical_navigation(
-    ordinary: CursorMovement,
-    accelerated: CursorMovement,
-    boundary: CursorMovement,
-    modifiers: KeyModifiers,
-    primary: bool,
-    extend_selection: bool,
-) -> UiKey {
-    if modifiers.contains(KeyModifiers::ALT) && !primary {
-        return fast_navigation(
-            if accelerated == CursorMovement::VisualJumpUp {
-                FastNavigation::Previous
-            } else {
-                FastNavigation::Next
-            },
-            extend_selection,
-        );
-    }
-    if primary && extend_selection {
-        return UiKey::PrimaryShiftMove { movement: boundary };
-    }
-    if extend_selection {
-        return move_key(ordinary, true);
-    }
-    UiKey::EditNavigation {
-        editor_movement: if primary { boundary } else { ordinary },
-        board_movement: ordinary,
+const fn decode_media_key(key: MediaKeyCode) -> LogicalMediaKey {
+    match key {
+        MediaKeyCode::Play => LogicalMediaKey::Play,
+        MediaKeyCode::Pause => LogicalMediaKey::Pause,
+        MediaKeyCode::PlayPause => LogicalMediaKey::PlayPause,
+        MediaKeyCode::Reverse => LogicalMediaKey::Reverse,
+        MediaKeyCode::Stop => LogicalMediaKey::Stop,
+        MediaKeyCode::FastForward => LogicalMediaKey::FastForward,
+        MediaKeyCode::Rewind => LogicalMediaKey::Rewind,
+        MediaKeyCode::TrackNext => LogicalMediaKey::TrackNext,
+        MediaKeyCode::TrackPrevious => LogicalMediaKey::TrackPrevious,
+        MediaKeyCode::Record => LogicalMediaKey::Record,
+        MediaKeyCode::LowerVolume => LogicalMediaKey::LowerVolume,
+        MediaKeyCode::RaiseVolume => LogicalMediaKey::RaiseVolume,
+        MediaKeyCode::MuteVolume => LogicalMediaKey::MuteVolume,
     }
 }
 
-fn platform_primary(modifiers: KeyModifiers, platform: ModifierPlatform) -> bool {
-    let primary = match platform {
-        ModifierPlatform::MacOs => match modifiers & (KeyModifiers::SUPER | KeyModifiers::META) {
-            KeyModifiers::SUPER => Some(KeyModifiers::SUPER),
-            KeyModifiers::META => Some(KeyModifiers::META),
-            _ => None,
-        },
-        ModifierPlatform::Other => modifiers
-            .contains(KeyModifiers::CONTROL)
-            .then_some(KeyModifiers::CONTROL),
-    };
-    primary.is_some_and(|primary| {
-        modifiers
-            .difference(primary | KeyModifiers::SHIFT)
-            .is_empty()
-    })
-}
-
-fn has_command_modifier(modifiers: KeyModifiers) -> bool {
-    modifiers.intersects(
-        KeyModifiers::CONTROL | KeyModifiers::SUPER | KeyModifiers::META | KeyModifiers::HYPER,
-    )
-}
-
-const fn fast_navigation(direction: FastNavigation, extend_selection: bool) -> UiKey {
-    UiKey::FastNavigation {
-        direction,
-        extend_selection,
-    }
-}
-
-const fn move_key(movement: CursorMovement, extend_selection: bool) -> UiKey {
-    UiKey::Move {
-        movement,
-        extend_selection,
+const fn decode_modifier_key(key: ModifierKeyCode) -> LogicalModifierKey {
+    match key {
+        ModifierKeyCode::LeftShift => LogicalModifierKey::LeftShift,
+        ModifierKeyCode::LeftControl => LogicalModifierKey::LeftControl,
+        ModifierKeyCode::LeftAlt => LogicalModifierKey::LeftAlt,
+        ModifierKeyCode::LeftSuper => LogicalModifierKey::LeftSuper,
+        ModifierKeyCode::LeftHyper => LogicalModifierKey::LeftHyper,
+        ModifierKeyCode::LeftMeta => LogicalModifierKey::LeftMeta,
+        ModifierKeyCode::RightShift => LogicalModifierKey::RightShift,
+        ModifierKeyCode::RightControl => LogicalModifierKey::RightControl,
+        ModifierKeyCode::RightAlt => LogicalModifierKey::RightAlt,
+        ModifierKeyCode::RightSuper => LogicalModifierKey::RightSuper,
+        ModifierKeyCode::RightHyper => LogicalModifierKey::RightHyper,
+        ModifierKeyCode::RightMeta => LogicalModifierKey::RightMeta,
+        ModifierKeyCode::IsoLevel3Shift => LogicalModifierKey::IsoLevel3Shift,
+        ModifierKeyCode::IsoLevel5Shift => LogicalModifierKey::IsoLevel5Shift,
     }
 }

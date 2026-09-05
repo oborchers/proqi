@@ -33,7 +33,8 @@ pub(crate) fn pick_session(
     let termination = TerminationGuard::register()?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
     let input = InputLane::spawn();
-    let mut browser = SessionBrowser::new(items, now);
+    let mut browser =
+        SessionBrowser::with_shortcut_registry(items, now, settings.shortcut_registry.clone());
     let run_result = drive(&mut terminal, &mut browser, &input, &termination, &theme);
     input.request_stop();
     drop(terminal);

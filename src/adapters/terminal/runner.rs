@@ -147,8 +147,13 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
         &terminal_host,
     );
     let check_for_updates = settings.ui.check_for_updates;
-    let mut app =
-        BoardApp::with_settings_and_cwd(state, settings.ui, cwd.clone(), RopeEditorFactory);
+    let mut app = BoardApp::with_resolved_shortcuts(
+        state,
+        settings.ui,
+        cwd.clone(),
+        settings.shortcut_registry,
+        RopeEditorFactory,
+    );
     let control_ready = composition::publish_optional_control(
         &mut session_lease,
         &mut control,

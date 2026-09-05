@@ -35,6 +35,7 @@ impl BoardApp {
                     .is_some_and(|activation| activation.matches(*pointer, now))
             }
             crate::ui::UiInput::Key(_)
+            | crate::ui::UiInput::KeyStroke(_)
             | crate::ui::UiInput::Pointer(_)
             | crate::ui::UiInput::Paste(_)
             | crate::ui::UiInput::PasteAnnotated(_)

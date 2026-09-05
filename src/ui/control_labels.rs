@@ -6,8 +6,8 @@ use crate::{
     ports::agent::{AgentTarget, SubmissionDisposition},
 };
 
-use super::shortcut_metadata::{self, ShortcutAction};
-use super::{HitTarget, KeyBindings};
+use super::shortcut_registry::presentation;
+use super::{HitTarget, KeyBindings, ShortcutActionId as ShortcutAction};
 
 pub(crate) struct ControlLabel {
     pub(crate) key: String,
@@ -39,68 +39,12 @@ pub(crate) fn action(
     mode: InteractionMode,
     keys: &KeyBindings,
 ) -> Option<ControlLabel> {
-    let editor_mode = matches!(
-        mode,
-        InteractionMode::Compose | InteractionMode::Edit { .. }
-    );
-    let (key, text) = match target {
-        HitTarget::Insert => (super::settings::key_label(keys.new), " New"),
-        HitTarget::Copy => (
-            mode_key(editor_mode, compact, ShortcutAction::Copy, keys),
-            " Copy",
-        ),
-        HitTarget::Cut => (
-            mode_key(editor_mode, compact, ShortcutAction::Cut, keys),
-            " Cut",
-        ),
-        HitTarget::Delete => (keys.delete_label(), ""),
-        HitTarget::Select => (super::settings::key_label(keys.select), " Select"),
-        HitTarget::Undo => (
-            mode_key(editor_mode, compact, ShortcutAction::Undo, keys),
-            " Undo",
-        ),
-        HitTarget::Search => (super::settings::key_label(keys.search), " Search"),
-        HitTarget::Commands => (
-            super::settings::key_label(keys.commands),
-            if compact { " Menu" } else { " Commands" },
-        ),
-        HitTarget::Help => (
-            super::settings::key_label(keys.help),
-            if compact { " Help" } else { " Shortcuts" },
-        ),
-        HitTarget::Quit => (super::settings::key_label(keys.quit), " Quit"),
-        HitTarget::ExitEdit => ("Esc".to_owned(), if compact { "" } else { " Board" }),
-        HitTarget::Retry => ("r".to_owned(), " Retry"),
-        HitTarget::ExportRecovery => ("w".to_owned(), " Export"),
-        HitTarget::BeginDelivery(disposition) | HitTarget::Deliver(_, disposition) => {
-            return Some(submission(disposition, mode, keys));
-        }
-        HitTarget::Agent(_)
-        | HitTarget::Thought(_)
-        | HitTarget::DragHandle(_)
-        | HitTarget::Overflow(_)
-        | HitTarget::RenameSession
-        | HitTarget::CopySessionId
-        | HitTarget::PaletteItem(_)
-        | HitTarget::CloseOverlay => return None,
-    };
+    let action = target_action(target)?;
+    let projection = presentation::footer_projection(action, compact, mode, keys)?;
     Some(ControlLabel {
-        key,
-        text: text.to_owned(),
+        key: projection.key,
+        text: projection.text.to_owned(),
     })
-}
-
-fn mode_key(
-    editor_mode: bool,
-    compact: bool,
-    action: ShortcutAction,
-    keys: &KeyBindings,
-) -> String {
-    if editor_mode {
-        shortcut_metadata::canonical_label(action)
-    } else {
-        shortcut_metadata::board_control_label(action, keys, compact)
-    }
 }
 
 pub(crate) fn action_width(
@@ -109,39 +53,31 @@ pub(crate) fn action_width(
     mode: InteractionMode,
     keys: &KeyBindings,
 ) -> Option<u16> {
-    action(target, compact, mode, keys).map(|label| {
-        let minimum = match target {
-            HitTarget::Insert | HitTarget::Copy | HitTarget::Undo => 7,
-            HitTarget::Cut | HitTarget::Delete => 6,
-            HitTarget::Search => 9,
-            HitTarget::Select => 12,
-            HitTarget::Commands => {
-                if compact {
-                    6
-                } else {
-                    11
-                }
-            }
-            HitTarget::Help => {
-                if compact {
-                    6
-                } else {
-                    12
-                }
-            }
-            HitTarget::ExitEdit => {
-                if compact {
-                    3
-                } else {
-                    10
-                }
-            }
-            HitTarget::ExportRecovery => 10,
-            HitTarget::Retry => 8,
-            _ => 0,
-        };
-        label.width().max(minimum)
-    })
+    let action_id = target_action(target)?;
+    let projection = presentation::footer_projection(action_id, compact, mode, keys)?;
+    action(target, compact, mode, keys).map(|label| label.width().max(projection.minimum_width))
+}
+
+const fn target_action(target: HitTarget) -> Option<ShortcutAction> {
+    match target {
+        HitTarget::Insert => Some(ShortcutAction::New),
+        HitTarget::Copy => Some(ShortcutAction::Copy),
+        HitTarget::Cut => Some(ShortcutAction::Cut),
+        HitTarget::Delete => Some(ShortcutAction::Delete),
+        HitTarget::Select => Some(ShortcutAction::Select),
+        HitTarget::Undo => Some(ShortcutAction::Undo),
+        HitTarget::Search => Some(ShortcutAction::OpenSearch),
+        HitTarget::Commands => Some(ShortcutAction::OpenCommands),
+        HitTarget::Help => Some(ShortcutAction::Help),
+        HitTarget::Quit => Some(ShortcutAction::Quit),
+        HitTarget::ExitEdit => Some(ShortcutAction::Close),
+        HitTarget::Retry => Some(ShortcutAction::RetryStorage),
+        HitTarget::ExportRecovery => Some(ShortcutAction::ExportRecovery),
+        HitTarget::BeginDelivery(disposition) | HitTarget::Deliver(_, disposition) => {
+            Some(submission_action(disposition))
+        }
+        _ => None,
+    }
 }
 
 pub(crate) fn agent(target: &AgentTarget) -> ControlLabel {
@@ -155,41 +91,30 @@ pub(crate) fn submission(
     disposition: SubmissionDisposition,
     mode: InteractionMode,
     keys: &KeyBindings,
-) -> ControlLabel {
-    let editing = matches!(mode, InteractionMode::Edit { .. });
-    let (key, text) = match (disposition, editing) {
-        (SubmissionDisposition::RemoveAfterSuccess, true) => (
-            shortcut_metadata::primary_label(ShortcutAction::Submit),
-            " Submit",
-        ),
-        (SubmissionDisposition::Keep, true) => (
-            shortcut_metadata::canonical_label(ShortcutAction::SubmitKeep),
-            " Submit & keep",
-        ),
-        (SubmissionDisposition::RemoveAfterSuccess, false) => {
-            (super::settings::key_label(keys.submit_remove), " Submit")
-        }
-        (SubmissionDisposition::Keep, false) => (
-            super::settings::key_label(keys.submit_keep),
-            " Submit & keep",
-        ),
-    };
-    ControlLabel {
-        key,
-        text: text.to_owned(),
-    }
+) -> Option<ControlLabel> {
+    let action = submission_action(disposition);
+    let projection = presentation::footer_projection(action, false, mode, keys)?;
+    Some(ControlLabel {
+        key: projection.key,
+        text: projection.text.to_owned(),
+    })
 }
 
 pub(crate) fn submission_width(
     disposition: SubmissionDisposition,
     mode: InteractionMode,
     keys: &KeyBindings,
-) -> u16 {
-    let minimum = match disposition {
-        SubmissionDisposition::RemoveAfterSuccess => 9,
-        SubmissionDisposition::Keep => 16,
-    };
-    submission(disposition, mode, keys).width().max(minimum)
+) -> Option<u16> {
+    let action = submission_action(disposition);
+    let projection = presentation::footer_projection(action, false, mode, keys)?;
+    submission(disposition, mode, keys).map(|label| label.width().max(projection.minimum_width))
+}
+
+const fn submission_action(disposition: SubmissionDisposition) -> ShortcutAction {
+    match disposition {
+        SubmissionDisposition::RemoveAfterSuccess => ShortcutAction::SubmitRemove,
+        SubmissionDisposition::Keep => ShortcutAction::SubmitKeep,
+    }
 }
 
 fn compact_agent_name(kind: &str) -> String {

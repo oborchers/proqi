@@ -1,166 +1,70 @@
-//! Modifier-preserving translation contracts for ordinary Space input.
+//! Lossless Crossterm-to-logical-key translation contracts.
 
-use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
 
-use crate::{
-    ports::editor::CursorMovement,
-    ui::{UiInput, UiKey, VisualRowEdge},
-};
+use crate::ui::{KeyPhase, KeyStroke, LogicalKey, LogicalKeyState, LogicalModifiers, UiInput};
 
-use super::{
-    translate,
-    translation::{ModifierPlatform, translate_key_for_platform},
-};
+use super::{translate, translation::decode_key};
 
 #[test]
-fn only_unmodified_space_receives_the_placeholder_aware_identity() {
+fn ordinary_space_remains_a_neutral_character_at_the_terminal_boundary() {
     assert_eq!(
         translate(Event::Key(KeyEvent::new(
             KeyCode::Char(' '),
             KeyModifiers::NONE,
         ))),
-        Some(UiInput::Key(UiKey::UnmodifiedSpace))
+        Some(UiInput::KeyStroke(KeyStroke::press(LogicalKey::Character(
+            ' '
+        ))))
     );
-    for modifiers in [KeyModifiers::SHIFT, KeyModifiers::ALT] {
-        assert_eq!(
-            translate(Event::Key(KeyEvent::new(KeyCode::Char(' '), modifiers))),
-            Some(UiInput::Key(UiKey::Character(' '))),
-            "modifiers: {modifiers:?}"
-        );
-    }
-    let (accepted, rejected) = if cfg!(target_os = "macos") {
-        (
-            vec![KeyModifiers::SUPER, KeyModifiers::META],
-            vec![KeyModifiers::CONTROL],
-        )
-    } else {
-        (
-            vec![KeyModifiers::CONTROL],
-            vec![KeyModifiers::SUPER, KeyModifiers::META],
-        )
-    };
-    for modifiers in accepted {
-        assert_eq!(
-            translate(Event::Key(KeyEvent::new(KeyCode::Char(' '), modifiers))),
-            Some(UiInput::Key(UiKey::PrimaryCharacter(' '))),
-            "modifiers: {modifiers:?}"
-        );
-    }
-    for modifiers in rejected {
-        assert_eq!(
-            translate(Event::Key(KeyEvent::new(KeyCode::Char(' '), modifiers))),
-            None,
-            "modifiers: {modifiers:?}"
-        );
+}
+
+#[test]
+fn all_logical_modifiers_remain_individually_expressible() {
+    let modifiers = KeyModifiers::SHIFT
+        | KeyModifiers::CONTROL
+        | KeyModifiers::ALT
+        | KeyModifiers::SUPER
+        | KeyModifiers::META
+        | KeyModifiers::HYPER;
+    let decoded = decode_key(KeyEvent::new(KeyCode::Char('x'), modifiers));
+    for modifier in [
+        LogicalModifiers::SHIFT,
+        LogicalModifiers::CONTROL,
+        LogicalModifiers::ALT,
+        LogicalModifiers::SUPER,
+        LogicalModifiers::META,
+        LogicalModifiers::HYPER,
+    ] {
+        assert!(decoded.modifiers.contains(modifier), "missing {modifier:?}");
     }
 }
 
 #[test]
-fn macos_command_horizontal_arrows_use_wrapped_rows_with_and_without_shift() {
-    for (code, edge) in [
-        (KeyCode::Left, VisualRowEdge::Start),
-        (KeyCode::Right, VisualRowEdge::End),
-    ] {
-        assert_eq!(
-            translate_key_for_platform(
-                KeyEvent::new(code, KeyModifiers::SUPER),
-                ModifierPlatform::MacOs,
-            ),
-            Some(UiKey::MoveVisualRow { edge })
-        );
-        assert_eq!(
-            translate_key_for_platform(
-                KeyEvent::new(code, KeyModifiers::SUPER | KeyModifiers::SHIFT,),
-                ModifierPlatform::MacOs,
-            ),
-            Some(UiKey::ExtendVisualRow { edge })
-        );
-    }
+fn repeat_phase_and_enhanced_state_survive_decoding() {
+    let event = KeyEvent::new_with_kind_and_state(
+        KeyCode::Enter,
+        KeyModifiers::ALT,
+        KeyEventKind::Repeat,
+        KeyEventState::KEYPAD | KeyEventState::CAPS_LOCK | KeyEventState::NUM_LOCK,
+    );
+    let decoded = decode_key(event);
+    assert_eq!(decoded.phase, KeyPhase::Repeat);
+    assert_eq!(
+        decoded.state,
+        LogicalKeyState::KEYPAD
+            .union(LogicalKeyState::CAPS_LOCK)
+            .union(LogicalKeyState::NUM_LOCK)
+    );
 }
 
 #[test]
-fn non_macos_control_and_shift_control_horizontal_arrows_move_by_word() {
-    for (code, movement) in [
-        (KeyCode::Left, CursorMovement::WordBack),
-        (KeyCode::Right, CursorMovement::WordForward),
-    ] {
-        for extend_selection in [false, true] {
-            let modifiers = if extend_selection {
-                KeyModifiers::CONTROL | KeyModifiers::SHIFT
-            } else {
-                KeyModifiers::CONTROL
-            };
-            assert_eq!(
-                translate_key_for_platform(KeyEvent::new(code, modifiers), ModifierPlatform::Other,),
-                Some(UiKey::Move {
-                    movement,
-                    extend_selection,
-                })
-            );
-        }
-    }
-}
-
-#[test]
-fn macos_option_word_and_ordinary_shift_horizontal_arrows_keep_existing_meanings() {
-    for (code, word, grapheme) in [
-        (
-            KeyCode::Left,
-            CursorMovement::WordBack,
-            CursorMovement::GraphemeBack,
-        ),
-        (
-            KeyCode::Right,
-            CursorMovement::WordForward,
-            CursorMovement::GraphemeForward,
-        ),
-    ] {
-        assert_eq!(
-            translate_key_for_platform(
-                KeyEvent::new(code, KeyModifiers::ALT | KeyModifiers::SHIFT),
-                ModifierPlatform::MacOs,
-            ),
-            Some(UiKey::Move {
-                movement: word,
-                extend_selection: true,
-            })
-        );
-        assert_eq!(
-            translate_key_for_platform(
-                KeyEvent::new(code, KeyModifiers::SHIFT),
-                ModifierPlatform::MacOs,
-            ),
-            Some(UiKey::Move {
-                movement: grapheme,
-                extend_selection: true,
-            })
-        );
-    }
-}
-
-#[test]
-fn non_primary_horizontal_modifiers_do_not_gain_another_platforms_meaning() {
-    for (platform, modifiers, extend_selection) in [
-        (ModifierPlatform::MacOs, KeyModifiers::CONTROL, false),
-        (
-            ModifierPlatform::MacOs,
-            KeyModifiers::CONTROL | KeyModifiers::SHIFT,
-            true,
-        ),
-        (
-            ModifierPlatform::MacOs,
-            KeyModifiers::SUPER | KeyModifiers::CONTROL,
-            false,
-        ),
-        (ModifierPlatform::Other, KeyModifiers::SUPER, false),
-        (ModifierPlatform::Other, KeyModifiers::META, false),
-    ] {
-        assert_eq!(
-            translate_key_for_platform(KeyEvent::new(KeyCode::Left, modifiers), platform),
-            Some(UiKey::Move {
-                movement: CursorMovement::GraphemeBack,
-                extend_selection,
-            })
-        );
-    }
+fn release_events_can_be_decoded_but_are_not_delivered_as_input() {
+    let event = KeyEvent::new_with_kind(
+        KeyCode::Char('r'),
+        KeyModifiers::NONE,
+        KeyEventKind::Release,
+    );
+    assert_eq!(decode_key(event).phase, KeyPhase::Release);
+    assert_eq!(translate(Event::Key(event)), None);
 }

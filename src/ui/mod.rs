@@ -14,7 +14,7 @@ mod paste_reflow;
 mod projection;
 mod render;
 mod settings;
-mod shortcut_metadata;
+mod shortcut_registry;
 mod shortcuts;
 mod status;
 mod theme;
@@ -27,11 +27,20 @@ pub use browser::{
 };
 pub use browser_render::render_browser;
 pub(crate) use input::ListNavigation;
-pub use input::{PointerButton, PointerInput, PointerKind, UiInput, UiKey, VisualRowEdge};
+pub use input::{
+    KeyPhase, KeyStroke, LogicalKey, LogicalKeyState, LogicalMediaKey, LogicalModifierKey,
+    LogicalModifiers, PointerButton, PointerInput, PointerKind, UiInput, UiKey, VisualRowEdge,
+};
 pub use layout::{HitTarget, LayoutSnapshot, ThoughtLayout, compute as compute_layout};
 pub use paging::FastNavigation;
 pub use render::render;
 pub(crate) use render::render_with_outcome;
 pub use settings::{BoardDensity, KeyBindings, KeyboardEnhancement, UiSettings};
+pub(crate) use shortcut_registry::ShortcutRegistry;
+pub(crate) use shortcut_registry::{CommandAvailability, CommandLabel, CommandMetadata};
+pub use shortcut_registry::{
+    ShortcutActionId, ShortcutBinding, ShortcutBindingClaim, ShortcutContext, ShortcutContextStack,
+    ShortcutDescriptor, ShortcutIntention, ShortcutModifiers, ShortcutSafety,
+};
 pub use theme::{TerminalPalette, Theme, ThemePreference};
 pub(crate) use theme::{ThemeOverrides, ThemeRecipe};

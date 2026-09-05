@@ -2,7 +2,9 @@
 
 use proqi::{adapters::runtime::SystemIdGenerator, ports::environment::IdGenerator as _};
 
-use super::support::{expect_command, json_command, raw_input_command, wait_for_path};
+use super::support::{
+    expect_command, json_command, raw_input_command, wait_for_control_owner, wait_for_path,
+};
 
 #[derive(Clone, Copy)]
 enum ExitScenario {
@@ -62,6 +64,7 @@ fn run_fairness(exit: ExitScenario) {
         exit,
     );
     wait_for_path(&ready);
+    wait_for_control_owner(state.path(), session);
     std::fs::write(&start, b"start").expect("start owner input");
 
     let state_path = state.path();
@@ -87,7 +90,11 @@ fn run_fairness(exit: ExitScenario) {
     });
     let mut client_debug = Vec::new();
     let accepted = accepted_bodies(outcomes, &mut client_debug);
-    assert!(!accepted.is_empty(), "control flood accepted no requests");
+    assert!(
+        !accepted.is_empty(),
+        "control flood accepted no requests:\n{}",
+        client_debug.join("\n\n")
+    );
 
     std::fs::write(&done, b"done").expect("finish owner input");
     assert_owner_success(owner, &transcript, state.path(), &client_debug);

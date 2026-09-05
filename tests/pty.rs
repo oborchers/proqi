@@ -103,6 +103,10 @@ mod smoke;
 mod startup;
 
 #[cfg(target_os = "macos")]
+#[path = "pty/shortcut_startup.rs"]
+mod shortcut_startup;
+
+#[cfg(target_os = "macos")]
 #[path = "pty/update_control.rs"]
 mod update_control;
 

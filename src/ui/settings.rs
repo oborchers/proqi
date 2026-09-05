@@ -158,6 +158,7 @@ impl Default for KeyBindings {
     }
 }
 
+#[cfg(test)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum BoardCommand {
     New,
@@ -186,14 +187,8 @@ pub(super) enum BoardCommand {
     PasteReflow,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) enum BoardNavigation {
-    Focus(super::ListNavigation),
-    Extend(super::ListNavigation),
-    Reorder(super::ListNavigation),
-}
-
 impl KeyBindings {
+    #[cfg(test)]
     pub(super) fn command(&self, character: char) -> Option<BoardCommand> {
         self.explicit_command(character).or_else(|| {
             if character == self.paste {
@@ -206,6 +201,7 @@ impl KeyBindings {
         })
     }
 
+    #[cfg(test)]
     fn explicit_command(&self, character: char) -> Option<BoardCommand> {
         let bindings = [
             (self.new, BoardCommand::New),
@@ -236,16 +232,19 @@ impl KeyBindings {
             .find_map(|(binding, command)| (binding == character).then_some(command))
     }
 
+    #[cfg(test)]
     pub(super) fn paste_exact_fallbacks(&self) -> Vec<char> {
         self.paste_fallback(self.paste, BoardCommand::PasteExact)
     }
 
+    #[cfg(test)]
     pub(super) fn paste_reflow_fallbacks(&self) -> Vec<char> {
         opposite_ascii_case(self.paste).map_or_else(Vec::new, |character| {
             self.paste_fallback(character, BoardCommand::PasteReflow)
         })
     }
 
+    #[cfg(test)]
     fn paste_fallback(&self, character: char, command: BoardCommand) -> Vec<char> {
         (self.command(character) == Some(command))
             .then_some(character)
@@ -259,6 +258,7 @@ impl KeyBindings {
     /// delete command. The typed submission intentions are invariant aliases
     /// for the corresponding remappable Board submission commands. Modified
     /// Delete and Backspace remain unassigned in Board.
+    #[cfg(test)]
     pub(super) fn command_for_key(&self, key: super::UiKey) -> Option<BoardCommand> {
         match key {
             super::UiKey::Delete => Some(BoardCommand::Delete),
@@ -266,56 +266,6 @@ impl KeyBindings {
             super::UiKey::SubmitKeep => Some(BoardCommand::SubmitKeep),
             super::UiKey::UnmodifiedSpace => self.command(' '),
             super::UiKey::Character(character) => self.command(character),
-            _ => None,
-        }
-    }
-
-    pub(super) fn navigation(&self, key: super::UiKey) -> Option<BoardNavigation> {
-        use BoardNavigation::{Extend, Focus, Reorder};
-
-        match key {
-            super::UiKey::Move {
-                movement,
-                extend_selection,
-            } => super::input::list_movement(movement).map(if extend_selection {
-                Extend
-            } else {
-                Focus
-            }),
-            super::UiKey::EditNavigation { board_movement, .. } => {
-                super::input::list_movement(board_movement).map(Focus)
-            }
-            super::UiKey::PrimaryShiftMove { movement } => {
-                super::input::list_movement(movement).map(Reorder)
-            }
-            super::UiKey::Character(character) => {
-                Self::navigation_for_command(self.command(character), false)
-            }
-            super::UiKey::UnmodifiedSpace => Self::navigation_for_command(self.command(' '), false),
-            super::UiKey::PrimaryCharacter(character) => {
-                Self::navigation_for_command(self.command(character), true)
-            }
-            super::UiKey::PrimaryShiftCharacter(character) => {
-                Self::navigation_for_command(self.command(character.to_ascii_uppercase()), true)
-            }
-            _ => None,
-        }
-    }
-
-    fn navigation_for_command(
-        command: Option<BoardCommand>,
-        primary: bool,
-    ) -> Option<BoardNavigation> {
-        use super::ListNavigation::{Next, Previous};
-        use BoardNavigation::{Extend, Focus, Reorder};
-
-        match (command, primary) {
-            (Some(BoardCommand::FocusUp), _) => Some(Focus(Previous)),
-            (Some(BoardCommand::FocusDown), _) => Some(Focus(Next)),
-            (Some(BoardCommand::RangeUp), true) => Some(Reorder(Previous)),
-            (Some(BoardCommand::RangeDown), true) => Some(Reorder(Next)),
-            (Some(BoardCommand::RangeUp), false) => Some(Extend(Previous)),
-            (Some(BoardCommand::RangeDown), false) => Some(Extend(Next)),
             _ => None,
         }
     }
@@ -339,7 +289,7 @@ impl KeyBindings {
         if !self.paste.is_ascii_lowercase() {
             return Err("the paste binding must be one lowercase ASCII letter");
         }
-        if super::shortcut_metadata::reserved_unshifted_character(self.transform) {
+        if super::shortcut_registry::presentation::reserved_unshifted_character(self.transform) {
             return Err("the transform binding conflicts with a reserved Primary shortcut");
         }
         if !self.delete_sentence.is_ascii_uppercase() {
@@ -350,12 +300,14 @@ impl KeyBindings {
         {
             return Err("visual-row selection bindings must be uppercase ASCII letters");
         }
-        if super::shortcut_metadata::reserved_shifted_configuration_suffix(self.delete_sentence) {
+        if super::shortcut_registry::presentation::reserved_shifted_configuration_suffix(
+            self.delete_sentence,
+        ) {
             return Err("the sentence deletion binding conflicts with a reserved Primary chord");
         }
-        if super::shortcut_metadata::reserved_shifted_configuration_suffix(
+        if super::shortcut_registry::presentation::reserved_shifted_configuration_suffix(
             self.select_visual_row_start,
-        ) || super::shortcut_metadata::reserved_shifted_configuration_suffix(
+        ) || super::shortcut_registry::presentation::reserved_shifted_configuration_suffix(
             self.select_visual_row_end,
         ) {
             return Err("visual-row selection bindings conflict with a reserved Primary chord");
@@ -403,6 +355,7 @@ impl KeyBindings {
     }
 }
 
+#[cfg(test)]
 fn opposite_ascii_case(character: char) -> Option<char> {
     if character.is_ascii_lowercase() {
         Some(character.to_ascii_uppercase())

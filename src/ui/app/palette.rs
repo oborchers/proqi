@@ -13,10 +13,12 @@ use super::{
     BoardApp, UiInput, UiKey, palette_handoff::EditorSelectionHandoff, query::QueryEditor,
     screenshot::ScreenshotPaletteAction,
 };
+use crate::ui::{CommandAvailability, CommandLabel, CommandMetadata};
 
 use command::Command;
 
 pub(super) struct PaletteState {
+    commands: Vec<(Command, CommandMetadata)>,
     query: QueryEditor,
     selected: usize,
     scroll: usize,
@@ -30,6 +32,7 @@ pub(super) struct PaletteState {
 
 impl PaletteState {
     fn new(
+        commands: Vec<(Command, CommandMetadata)>,
         submit_supported: bool,
         plain_newline_supported: bool,
         screenshot_action: ScreenshotPaletteAction,
@@ -38,6 +41,7 @@ impl PaletteState {
         merge_handoff: Option<Vec<crate::domain::Thought>>,
     ) -> Self {
         Self {
+            commands,
             query: QueryEditor::default(),
             selected: 0,
             scroll: 0,
@@ -79,54 +83,47 @@ impl PaletteState {
 
     fn matches(&self) -> Vec<(Command, &'static str)> {
         let query = self.query.text().to_lowercase();
-        Command::ALL
-            .into_iter()
-            .filter(|(command, _)| self.available(*command))
-            .map(|(command, label)| {
-                let label = if command == Command::ScreenshotInbox {
-                    match self.screenshot_action {
-                        ScreenshotPaletteAction::Enable => label,
-                        ScreenshotPaletteAction::Disable => "Disable Screenshot Inbox",
-                        ScreenshotPaletteAction::Resume => "Resume Screenshot Inbox",
-                        ScreenshotPaletteAction::Unavailable => "Screenshot Inbox unavailable",
-                    }
-                } else {
-                    label
-                };
-                (command, label)
-            })
+        self.commands
+            .iter()
+            .copied()
+            .filter(|(_, metadata)| self.available(metadata.availability))
+            .map(|(command, metadata)| (command, self.command_label(metadata.label)))
             .filter(|(_, label)| label.to_lowercase().contains(&query))
             .collect()
     }
 
-    fn available(&self, command: Command) -> bool {
-        match command {
-            Command::SubmitRemove
-            | Command::SubmitKeep
-            | Command::SubmitAllRemove
-            | Command::SubmitAllKeep => self.submit_supported,
-            Command::PlainNewline
-            | Command::DeleteLogicalLine
-            | Command::DeleteSentence
-            | Command::JumpUp
-            | Command::JumpDown
-            | Command::SelectVisualRowStart
-            | Command::SelectVisualRowEnd
-            | Command::ThoughtStart
-            | Command::ThoughtEnd
-            | Command::Indent
-            | Command::Outdent => self.plain_newline_supported,
-            Command::RetryScreenshotCapture => self.screenshot_retry,
-            Command::SplitThought => self.selection_handoff.is_some(),
-            Command::ExtractSelection => self
+    fn available(&self, availability: CommandAvailability) -> bool {
+        match availability {
+            CommandAvailability::Always => true,
+            CommandAvailability::Submission => self.submit_supported,
+            CommandAvailability::Editor => self.plain_newline_supported,
+            CommandAvailability::ScreenshotRetry => self.screenshot_retry,
+            CommandAvailability::Split => self.selection_handoff.is_some(),
+            CommandAvailability::Extract => self
                 .selection_handoff
                 .as_ref()
                 .is_some_and(EditorSelectionHandoff::has_selection),
-            Command::MergeThoughts => self.merge_handoff.is_some(),
-            Command::ScreenshotInbox => {
+            CommandAvailability::Merge => self.merge_handoff.is_some(),
+            CommandAvailability::ScreenshotInbox => {
                 self.screenshot_action != ScreenshotPaletteAction::Unavailable
             }
-            _ => true,
+        }
+    }
+
+    const fn command_label(&self, label: CommandLabel) -> &'static str {
+        match label {
+            CommandLabel::Static(label) => label,
+            CommandLabel::ScreenshotInbox {
+                enable,
+                disable,
+                resume,
+                unavailable,
+            } => match self.screenshot_action {
+                ScreenshotPaletteAction::Enable => enable,
+                ScreenshotPaletteAction::Disable => disable,
+                ScreenshotPaletteAction::Resume => resume,
+                ScreenshotPaletteAction::Unavailable => unavailable,
+            },
         }
     }
 
@@ -155,7 +152,9 @@ impl BoardApp {
                 .filter_map(|id| self.state.board.thought(id).cloned())
                 .collect()
         });
+        let commands = self.shortcut_registry.commands();
         self.palette = Some(PaletteState::new(
+            commands,
             self.supports_submission(),
             !self.insertion_focused() && self.state.focused_thought.is_some(),
             self.screenshot_palette_action(),
@@ -244,6 +243,7 @@ impl BoardApp {
                 UiInput::Resize { .. }
                 | UiInput::HostFocusGained
                 | UiInput::HostFocusLost
+                | UiInput::KeyStroke(_)
                 | UiInput::Key(_) => Vec::new(),
             };
         };
@@ -387,40 +387,6 @@ impl BoardApp {
             Command::Copy => self.copy_active(ids),
             Command::Cut => self.cut_active(ids, clock),
             Command::Duplicate => self.duplicate(ids, clock),
-            Command::SubmitRemove
-            | Command::SubmitKeep
-            | Command::SubmitAllRemove
-            | Command::SubmitAllKeep
-            | Command::PlainNewline
-            | Command::DeleteLogicalLine
-            | Command::DeleteSentence
-            | Command::JumpUp
-            | Command::JumpDown
-            | Command::SelectVisualRowStart
-            | Command::SelectVisualRowEnd
-            | Command::ThoughtStart
-            | Command::ThoughtEnd
-            | Command::Indent
-            | Command::Outdent
-            | Command::SplitThought
-            | Command::ExtractSelection
-            | Command::MergeThoughts
-            | Command::PasteExact
-            | Command::PasteReflow
-            | Command::Edit
-            | Command::InsertInvocation
-            | Command::RefreshAgents
-            | Command::RefreshAttachments
-            | Command::RefreshInvocations
-            | Command::CheckUpdates
-            | Command::WhatsNew
-            | Command::ScreenshotInbox
-            | Command::RetryScreenshotCapture
-            | Command::RetryStorage
-            | Command::ExportRecovery
-            | Command::SelectAll
-            | Command::Select
-            | Command::RangeSelect => Vec::new(),
             Command::Undo => self.history(ids, clock, true),
             Command::Redo => self.history(ids, clock, false),
             Command::MoveUp => self.reorder(ids, clock, -1),
@@ -431,6 +397,7 @@ impl BoardApp {
                 Vec::new()
             }
             Command::Quit => self.request_quit_after_edit_flush(ids, clock),
+            _ => Vec::new(),
         }
     }
 }

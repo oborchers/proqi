@@ -36,7 +36,11 @@ pub(crate) fn check(root: &Path) -> Result<(), String> {
             .map_err(|error| format!("read {}: {error}", relative.display()))?;
         classify(relative, &mut layer_counts);
         violations.extend(check_source(relative, &source));
+        violations.extend(crate::shortcut_architecture::check_source(
+            relative, &source,
+        ));
     }
+    violations.extend(crate::shortcut_architecture::required_owner_findings(root));
     violations.extend(crate::instructions::check(root)?);
     violations.extend(crate::herdr_compatibility::policy_findings(root)?);
     violations.extend(crate::release_policy::check(root)?);

@@ -135,7 +135,9 @@ impl BoardApp {
             | UiInput::HostFocusGained
             | UiInput::HostFocusLost
             | UiInput::Pointer(_) => return None,
-            UiInput::Paste(_) | UiInput::PasteAnnotated(_) => return Some(Vec::new()),
+            UiInput::KeyStroke(_) | UiInput::Paste(_) | UiInput::PasteAnnotated(_) => {
+                return Some(Vec::new());
+            }
         };
         Some(self.deliver_to(direction, disposition, ids, clock))
     }

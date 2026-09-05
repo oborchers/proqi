@@ -10,8 +10,7 @@ use crate::{
 };
 
 use super::{BoardApp, EditorOwner, UiKey};
-use crate::ui::VisualRowEdge;
-use crate::ui::{annotations, settings::KeyBindings};
+use crate::ui::annotations;
 
 mod navigation;
 
@@ -40,6 +39,7 @@ pub(super) fn command_for_key(
         UiKey::DeleteLogicalLine => Some((EditCommand::DeleteLogicalLine, true)),
         UiKey::DeleteSentence => Some((EditCommand::DeleteSentence { list_indent_width }, true)),
         UiKey::Escape
+        | UiKey::Shortcut(_)
         | UiKey::Submit
         | UiKey::SubmitKeep
         | UiKey::FastNavigation { .. }
@@ -64,31 +64,12 @@ pub(super) fn command_for_key(
     }
 }
 
-pub(super) fn normalize_edit_key(key: UiKey, keybindings: &KeyBindings) -> Option<UiKey> {
+pub(super) fn normalize_edit_key(key: UiKey) -> Option<UiKey> {
     match key {
         UiKey::PrimaryShiftMove { movement } => Some(UiKey::Move {
             movement,
             extend_selection: true,
         }),
-        UiKey::PrimaryShiftCharacter(character)
-            if character.eq_ignore_ascii_case(&keybindings.select_visual_row_start) =>
-        {
-            Some(UiKey::ExtendVisualRow {
-                edge: VisualRowEdge::Start,
-            })
-        }
-        UiKey::PrimaryShiftCharacter(character)
-            if character.eq_ignore_ascii_case(&keybindings.select_visual_row_end) =>
-        {
-            Some(UiKey::ExtendVisualRow {
-                edge: VisualRowEdge::End,
-            })
-        }
-        UiKey::PrimaryShiftCharacter(character)
-            if character.eq_ignore_ascii_case(&keybindings.delete_sentence) =>
-        {
-            Some(UiKey::DeleteSentence)
-        }
         UiKey::PrimaryCharacter(_) | UiKey::PrimaryShiftCharacter(_) => None,
         key => Some(key),
     }
@@ -133,7 +114,7 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        let Some(key) = normalize_edit_key(key, &self.settings.keybindings) else {
+        let Some(key) = normalize_edit_key(key) else {
             return Vec::new();
         };
         match key {

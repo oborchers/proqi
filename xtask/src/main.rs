@@ -32,6 +32,7 @@ mod release_policy;
 mod release_publication;
 mod release_readiness;
 mod release_targets;
+mod shortcut_architecture;
 mod snapshots;
 mod source_limits;
 

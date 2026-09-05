@@ -132,6 +132,7 @@ impl BoardApp {
             }
             UiInput::HostFocusGained
             | UiInput::HostFocusLost
+            | UiInput::KeyStroke(_)
             | UiInput::Key(_)
             | UiInput::Pointer(_)
             | UiInput::Paste(_)
