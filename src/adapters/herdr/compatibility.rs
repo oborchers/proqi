@@ -7,9 +7,9 @@ use crate::ports::agent::AgentError;
 use super::contract::{SchemaDocument, Snapshot};
 
 const SUPPORTED_SCHEMA: u32 = 1;
-const FIRST_SUPPORTED_PROTOCOL: u32 = 19;
-const LAST_SUPPORTED_PROTOCOL: u32 = 20;
-const POLICY_DESCRIPTION: &str = "requires Herdr schema 1, protocol 19 or 20, and the compatible agent.prompt request and agent_prompted response contract";
+const FIRST_QUALIFIED_PROTOCOL: u32 = 19;
+const LAST_QUALIFIED_PROTOCOL: u32 = 20;
+const PROVISIONAL_PROTOCOL: u32 = LAST_QUALIFIED_PROTOCOL + 1;
 
 const PROMPT_PARAMS_REF: &str = "#/schemas/request/$defs/AgentPromptParams";
 const PROMPT_WAIT_REF: &str = "#/schemas/request/$defs/AgentPromptWaitOptions";
@@ -31,9 +31,27 @@ impl CompatibleProtocol {
 }
 
 /// The single compatibility owner for every semantic Herdr consumer.
-pub(super) struct HerdrCompatibilityPolicy;
+pub struct HerdrCompatibilityPolicy;
 
 impl HerdrCompatibilityPolicy {
+    /// Oldest Herdr protocol backed by an authoritative fixture.
+    #[must_use]
+    pub const fn qualified_from() -> u32 {
+        FIRST_QUALIFIED_PROTOCOL
+    }
+
+    /// Newest Herdr protocol backed by an authoritative fixture.
+    #[must_use]
+    pub const fn qualified_through() -> u32 {
+        LAST_QUALIFIED_PROTOCOL
+    }
+
+    /// Exactly one structurally compatible protocol beyond qualified support.
+    #[must_use]
+    pub const fn provisional_protocol() -> u32 {
+        PROVISIONAL_PROTOCOL
+    }
+
     pub(super) fn negotiate(
         schema: &SchemaDocument,
         live: &Snapshot,
@@ -44,8 +62,12 @@ impl HerdrCompatibilityPolicy {
         result.map_or_else(
             |reason| {
                 Err(AgentError::Unsupported(format!(
-                    "{POLICY_DESCRIPTION}; received schema {} and protocols {}/{} ({reason})",
-                    schema.schema_version, schema.protocol, live.protocol
+                    "requires Herdr schema {SUPPORTED_SCHEMA}, qualified protocols \
+                     {FIRST_QUALIFIED_PROTOCOL} through {LAST_QUALIFIED_PROTOCOL}, or provisional \
+                     protocol {PROVISIONAL_PROTOCOL}, and the compatible agent.prompt request and \
+                     agent_prompted response contract; received schema {} and protocols {}/{} \
+                     ({reason})",
+                    schema.schema_version, schema.protocol, live.protocol,
                 )))
             },
             |()| Ok(CompatibleProtocol(schema.protocol)),
@@ -56,7 +78,7 @@ impl HerdrCompatibilityPolicy {
         if schema.schema_version != SUPPORTED_SCHEMA {
             return Err("unsupported schema version");
         }
-        if !(FIRST_SUPPORTED_PROTOCOL..=LAST_SUPPORTED_PROTOCOL).contains(&schema.protocol) {
+        if !(FIRST_QUALIFIED_PROTOCOL..=PROVISIONAL_PROTOCOL).contains(&schema.protocol) {
             return Err("unsupported protocol version");
         }
         if live.protocol != schema.protocol {
@@ -70,30 +92,74 @@ impl HerdrCompatibilityPolicy {
 }
 
 fn validate_prompt_request(schemas: &Value) -> Result<(), &'static str> {
+    validate_request_root(schemas)?;
     let operation =
         unique_const_variant(schemas.pointer("/request/oneOf"), "method", "agent.prompt")?;
     require_object(operation, &["method", "params"])?;
+    require_allowed_keywords(operation, &["properties", "required", "type"])?;
     let fields = properties(operation)?;
-    require_string_const(fields.get("method"), "agent.prompt")?;
-    require_ref(fields.get("params"), PROMPT_PARAMS_REF)?;
+    require_request_string_const(fields.get("method"), "agent.prompt")?;
+    require_request_ref(fields.get("params"), PROMPT_PARAMS_REF)?;
 
     let params = required_value(schemas.pointer("/request/$defs/AgentPromptParams"))?;
     require_object(params, &["target", "text"])?;
+    require_allowed_keywords(params, &["properties", "required", "type"])?;
     let fields = properties(params)?;
-    require_string(fields.get("target"))?;
-    require_string(fields.get("text"))?;
-    require_nullable_ref(fields.get("wait"), PROMPT_WAIT_REF)?;
+    require_request_string(fields.get("target"))?;
+    require_request_string(fields.get("text"))?;
+    require_request_nullable_ref(fields.get("wait"), PROMPT_WAIT_REF)?;
     validate_prompt_wait(schemas)
+}
+
+fn validate_request_root(schemas: &Value) -> Result<(), &'static str> {
+    let request = required_value(schemas.pointer("/request"))?;
+    require_object(request, &["id"])?;
+    require_allowed_keywords(
+        request,
+        &[
+            "$defs",
+            "$schema",
+            "oneOf",
+            "properties",
+            "required",
+            "title",
+            "type",
+        ],
+    )?;
+    (request.get("$schema").and_then(Value::as_str)
+        == Some("https://json-schema.org/draft/2020-12/schema"))
+    .then_some(())
+    .ok_or("required request schema dialect changed")?;
+    let fields = properties(request)?;
+    require_request_string(fields.get("id"))?;
+    (!fields.contains_key("method") && !fields.contains_key("params"))
+        .then_some(())
+        .ok_or("shared request constraint changed")?;
+    require_const_disjoint_operations(request.get("oneOf"))
+}
+
+fn require_const_disjoint_operations(variants: Option<&Value>) -> Result<(), &'static str> {
+    let variants = variants
+        .and_then(Value::as_array)
+        .ok_or("required schema variant list is missing")?;
+    for variant in variants {
+        variant
+            .pointer("/properties/method/const")
+            .and_then(Value::as_str)
+            .ok_or("request operation variants are not const-disjoint")?;
+    }
+    Ok(())
 }
 
 fn validate_prompt_wait(schemas: &Value) -> Result<(), &'static str> {
     let wait = required_value(schemas.pointer("/request/$defs/AgentPromptWaitOptions"))?;
     require_object_type(wait)?;
     require_no_required_fields(wait)?;
+    require_allowed_keywords(wait, &["properties", "required", "type"])?;
     let fields = properties(wait)?;
     require_nullable_unsigned(fields.get("timeout_ms"))?;
-    require_array_ref(fields.get("until"), REQUEST_AGENT_STATUS_REF)?;
-    require_string_enum(
+    require_request_array_ref(fields.get("until"), REQUEST_AGENT_STATUS_REF)?;
+    require_request_string_enum(
         schemas.pointer("/request/$defs/AgentStatus"),
         &["idle", "working", "blocked", "done", "unknown"],
     )
@@ -245,6 +311,12 @@ fn require_string(value: Option<&Value>) -> Result<(), &'static str> {
     .ok_or("required string field changed")
 }
 
+fn require_request_string(value: Option<&Value>) -> Result<(), &'static str> {
+    let value = required_value(value)?;
+    require_string(Some(value))?;
+    require_allowed_keywords(value, &["type"])
+}
+
 fn require_nullable_string(value: Option<&Value>) -> Result<(), &'static str> {
     let types = value
         .and_then(|value| value.get("type"))
@@ -269,6 +341,12 @@ fn require_string_const(value: Option<&Value>, expected: &str) -> Result<(), &'s
     .ok_or("required operation constant changed")
 }
 
+fn require_request_string_const(value: Option<&Value>, expected: &str) -> Result<(), &'static str> {
+    let value = required_value(value)?;
+    require_string_const(Some(value), expected)?;
+    require_allowed_keywords(value, &["const", "type"])
+}
+
 fn require_ref(value: Option<&Value>, expected: &str) -> Result<(), &'static str> {
     (value
         .and_then(|value| value.get("$ref"))
@@ -276,6 +354,12 @@ fn require_ref(value: Option<&Value>, expected: &str) -> Result<(), &'static str
         == Some(expected))
     .then_some(())
     .ok_or("required schema reference changed")
+}
+
+fn require_request_ref(value: Option<&Value>, expected: &str) -> Result<(), &'static str> {
+    let value = required_value(value)?;
+    require_ref(Some(value), expected)?;
+    require_allowed_keywords(value, &["$ref"])
 }
 
 fn require_nullable_ref(value: Option<&Value>, expected: &str) -> Result<(), &'static str> {
@@ -294,8 +378,28 @@ fn require_nullable_ref(value: Option<&Value>, expected: &str) -> Result<(), &'s
         .ok_or("required nullable schema reference changed")
 }
 
+fn require_request_nullable_ref(value: Option<&Value>, expected: &str) -> Result<(), &'static str> {
+    let value = required_value(value)?;
+    require_nullable_ref(Some(value), expected)?;
+    require_allowed_keywords(value, &["anyOf"])?;
+    let variants = value
+        .get("anyOf")
+        .and_then(Value::as_array)
+        .ok_or("required nullable schema reference changed")?;
+    for variant in variants {
+        let allowed = if variant.get("$ref").is_some() {
+            &["$ref"][..]
+        } else {
+            &["type"][..]
+        };
+        require_allowed_keywords(variant, allowed)?;
+    }
+    Ok(())
+}
+
 fn require_nullable_unsigned(value: Option<&Value>) -> Result<(), &'static str> {
     let value = value.ok_or("required nullable integer field changed")?;
+    require_allowed_keywords(value, &["format", "minimum", "type"])?;
     let types = value
         .get("type")
         .and_then(Value::as_array)
@@ -311,12 +415,13 @@ fn require_nullable_unsigned(value: Option<&Value>) -> Result<(), &'static str> 
     .ok_or("required nullable integer field changed")
 }
 
-fn require_array_ref(value: Option<&Value>, expected: &str) -> Result<(), &'static str> {
+fn require_request_array_ref(value: Option<&Value>, expected: &str) -> Result<(), &'static str> {
     let value = value.ok_or("required array field changed")?;
+    require_allowed_keywords(value, &["items", "type"])?;
     (value.get("type").and_then(Value::as_str) == Some("array"))
         .then_some(())
         .ok_or("required array field changed")?;
-    require_ref(value.get("items"), expected)
+    require_request_ref(value.get("items"), expected)
 }
 
 fn require_string_enum(value: Option<&Value>, expected: &[&str]) -> Result<(), &'static str> {
@@ -332,4 +437,22 @@ fn require_string_enum(value: Option<&Value>, expected: &[&str]) -> Result<(), &
             .all(|expected| actual.iter().any(|value| value.as_str() == Some(expected))))
     .then_some(())
     .ok_or("required enum changed")
+}
+
+fn require_request_string_enum(
+    value: Option<&Value>,
+    expected: &[&str],
+) -> Result<(), &'static str> {
+    let value = required_value(value)?;
+    require_string_enum(Some(value), expected)?;
+    require_allowed_keywords(value, &["enum", "type"])
+}
+
+fn require_allowed_keywords(value: &Value, allowed: &[&str]) -> Result<(), &'static str> {
+    let object = value.as_object().ok_or("required request schema changed")?;
+    object
+        .keys()
+        .all(|key| allowed.contains(&key.as_str()))
+        .then_some(())
+        .ok_or("required request constraint changed")
 }

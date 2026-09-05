@@ -24,6 +24,7 @@ use crate::ports::{
 
 use contract::ErrorEnvelope;
 
+pub use compatibility::HerdrCompatibilityPolicy;
 pub(crate) use notification::{HerdrEnvironment, HerdrPauseNotifier};
 
 const DISCOVERY_TIMEOUT: Duration = Duration::from_secs(3);

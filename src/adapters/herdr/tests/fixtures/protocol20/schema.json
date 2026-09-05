@@ -3,6 +3,11 @@
   "schema_version": 1,
   "schemas": {
     "request": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "Request",
+      "type": "object",
+      "properties": { "id": { "type": "string" } },
+      "required": ["id"],
       "$defs": {
         "AgentPromptParams": {
           "properties": {

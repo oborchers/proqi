@@ -1,0 +1,185 @@
+name: Herdr compatibility sentinel
+
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: herdr-compatibility-sentinel
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    name: Inspect latest official Herdr schema
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      compatibility: ${{ steps.classify.outputs.compatibility }}
+      issue_required: ${{ steps.classify.outputs.issue_required }}
+      protocol: ${{ steps.classify.outputs.protocol }}
+      qualified_through: ${{ steps.classify.outputs.qualified_through }}
+      reason_code: ${{ steps.classify.outputs.reason_code }}
+      schema_sha256: ${{ steps.classify.outputs.schema_sha256 }}
+      schema_version: ${{ steps.classify.outputs.schema_version }}
+      tag: ${{ steps.fetch.outputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: fetch
+        name: Download checksum-declared Linux CLI from the latest release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          release="$RUNNER_TEMP/herdr-release.json"
+          gh api repos/herdrdev/herdr/releases/latest > "$release"
+          tag="$(jq -er '.tag_name | select(test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))' "$release")"
+          count="$(jq '[.assets[] | select(.name == "herdr-linux-x86_64")] | length' "$release")"
+          test "$count" = 1
+          url="$(jq -er '.assets[] | select(.name == "herdr-linux-x86_64") | .browser_download_url | select(startswith("https://github.com/herdrdev/herdr/releases/download/"))' "$release")"
+          declared="$(jq -er '.assets[] | select(.name == "herdr-linux-x86_64") | .digest | select(test("^sha256:[0-9a-f]{64}$"))' "$release")"
+          binary="$RUNNER_TEMP/herdr-linux-x86_64"
+          curl --fail --location --proto '=https' --tlsv1.2 --max-filesize 52428800 \
+            --output "$binary" "$url"
+          printf '%s  %s\n' "${declared#sha256:}" "$binary" | sha256sum --check --strict
+          chmod 500 "$binary"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      - id: classify
+        name: Validate through the production compatibility policy
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ steps.fetch.outputs.tag }}
+        run: |
+          set -euo pipefail
+          binary="$RUNNER_TEMP/herdr-linux-x86_64"
+          schema="$RUNNER_TEMP/herdr-schema.json"
+          config="$RUNNER_TEMP/herdr-isolated-config.json"
+          probe_directory="$RUNNER_TEMP/herdr-probe"
+          version_stderr="$RUNNER_TEMP/herdr-version.stderr"
+          version_stderr_pipe="$RUNNER_TEMP/herdr-version-stderr.pipe"
+          mkdir -m 700 "$probe_directory"
+          cd "$probe_directory"
+          mkfifo "$version_stderr_pipe"
+          head -c 129 < "$version_stderr_pipe" > "$version_stderr" &
+          version_stderr_pid=$!
+          set +e
+          env -u GH_TOKEN -u GITHUB_TOKEN -u GITHUB_OUTPUT -u GITHUB_WORKSPACE \
+            HERDR_CONFIG_PATH="$config" timeout --kill-after=2s 10s "$binary" --version \
+            2> "$version_stderr_pipe" \
+            | head -c 129 > "$RUNNER_TEMP/herdr-version.txt"
+          version_status=$?
+          wait "$version_stderr_pid"
+          version_stderr_status=$?
+          set -e
+          rm -f "$version_stderr_pipe"
+          test "$version_status" -eq 0
+          test "$version_stderr_status" -eq 0
+          test "$(wc -c < "$RUNNER_TEMP/herdr-version.txt")" -le 128
+          test "$(wc -c < "$version_stderr")" -le 128
+          version="$(tr -d '\r\n' < "$RUNNER_TEMP/herdr-version.txt")"
+          test "$version" = "herdr ${RELEASE_TAG#v}"
+          schema_stderr="$RUNNER_TEMP/herdr-schema.stderr"
+          schema_stderr_pipe="$RUNNER_TEMP/herdr-schema-stderr.pipe"
+          mkfifo "$schema_stderr_pipe"
+          head -c 1048577 < "$schema_stderr_pipe" > "$schema_stderr" &
+          schema_stderr_pid=$!
+          set +e
+          env -u GH_TOKEN -u GITHUB_TOKEN -u GITHUB_OUTPUT -u GITHUB_WORKSPACE \
+            HERDR_CONFIG_PATH="$config" timeout --kill-after=2s 10s "$binary" api schema --json \
+            2> "$schema_stderr_pipe" \
+            | head -c 2097153 > "$schema"
+          schema_status=$?
+          wait "$schema_stderr_pid"
+          schema_stderr_status=$?
+          set -e
+          rm -f "$schema_stderr_pipe"
+          test "$schema_stderr_status" -eq 0
+          schema_bytes="$(wc -c < "$schema")"
+          schema_stderr_bytes="$(wc -c < "$schema_stderr")"
+          if test "$schema_bytes" -le 2097152 && test "$schema_stderr_bytes" -le 1048576; then
+            test "$schema_status" -eq 0
+          fi
+          cd "$GITHUB_WORKSPACE"
+          CARGO_TARGET_DIR="$RUNNER_TEMP/cargo-target" \
+            cargo xtask herdr-compatibility "$schema" "$schema_stderr" \
+            > "$RUNNER_TEMP/herdr-compatibility.json"
+          report="$RUNNER_TEMP/herdr-compatibility.json"
+          compatibility="$(jq -er '.compatibility | select(test("^(qualified|provisional|incompatible|policy_drift)$"))' "$report")"
+          issue_required="$(jq -er '.issue_required | tostring | select(test("^(true|false)$"))' "$report")"
+          protocol="$(jq -er 'if .protocol == null then "unknown" else (.protocol | tostring | select(test("^[0-9]+$"))) end' "$report")"
+          qualified_through="$(jq -er '.qualified_through | tostring | select(test("^[0-9]+$"))' "$report")"
+          reason_code="$(jq -er 'if .reason_code == null then "none" else (.reason_code | select(test("^[a-z_]+$"))) end' "$report")"
+          schema_sha256="$(jq -er '.schema_sha256 | select(test("^[0-9a-f]{64}$"))' "$report")"
+          schema_version="$(jq -er 'if .schema_version == null then "unknown" else (.schema_version | tostring | select(test("^[0-9]+$"))) end' "$report")"
+          {
+            echo "compatibility=$compatibility"
+            echo "issue_required=$issue_required"
+            echo "protocol=$protocol"
+            echo "qualified_through=$qualified_through"
+            echo "reason_code=$reason_code"
+            echo "schema_sha256=$schema_sha256"
+            echo "schema_version=$schema_version"
+          } >> "$GITHUB_OUTPUT"
+
+  issue:
+    name: Open one qualification issue when needed
+    needs: probe
+    if: needs.probe.outputs.issue_required == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Create a deduplicated content-free qualification issue
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMPATIBILITY: ${{ needs.probe.outputs.compatibility }}
+          PROTOCOL: ${{ needs.probe.outputs.protocol }}
+          QUALIFIED_THROUGH: ${{ needs.probe.outputs.qualified_through }}
+          REASON_CODE: ${{ needs.probe.outputs.reason_code }}
+          SCHEMA_SHA256: ${{ needs.probe.outputs.schema_sha256 }}
+          SCHEMA_VERSION: ${{ needs.probe.outputs.schema_version }}
+          TAG: ${{ needs.probe.outputs.tag }}
+        run: |
+          set -euo pipefail
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$PROTOCOL" =~ ^([0-9]+|unknown)$ ]]
+          [[ "$QUALIFIED_THROUGH" =~ ^[0-9]+$ ]]
+          [[ "$COMPATIBILITY" =~ ^(provisional|incompatible|policy_drift)$ ]]
+          [[ "$REASON_CODE" =~ ^[a-z_]+$ ]]
+          [[ "$SCHEMA_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$SCHEMA_VERSION" =~ ^([0-9]+|unknown)$ ]]
+          marker="<!-- herdr-compatibility:${TAG}:${SCHEMA_SHA256} -->"
+          query="repo:${GITHUB_REPOSITORY} is:issue in:body \"${marker}\""
+          existing="$(gh api --method GET search/issues -f q="$query" --jq '.total_count')"
+          test "$existing" -ge 0
+          if test "$existing" -gt 0; then
+            exit 0
+          fi
+          title="Prepare Proqi for Herdr ${TAG} protocol ${PROTOCOL}"
+          body="$(printf '%s\n\n%s\n\n%s\n%s\n%s\n%s\n%s\n%s\n\n%s\n\n%s\n%s\n%s\n%s\n%s\n' \
+            "$marker" \
+            "The scheduled Herdr compatibility sentinel found a release that needs qualification." \
+            "Herdr release: ${TAG}" \
+            "Observed protocol: ${PROTOCOL}" \
+            "Observed schema version: ${SCHEMA_VERSION}" \
+            "Schema capture SHA-256: ${SCHEMA_SHA256}" \
+            "Compatibility result: ${COMPATIBILITY}" \
+            "Reason code: ${REASON_CODE}" \
+            "Proqi currently has authoritative fixtures through protocol ${QUALIFIED_THROUGH}." \
+            "1. Inspect the Herdr release notes and source schema diff." \
+            "2. Qualify the release against Proqi with sanitized fixtures and a live isolated daemon when available." \
+            "3. Promote the verified protocol to qualified support and advance the bounded provisional protocol by one." \
+            "4. Run the focused compatibility tests and the canonical Proqi gates." \
+            "5. Close this issue only after the released Proqi policy and documentation match the evidence.")"
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/issues" \
+            --field title="$title" --field body="$body" > /dev/null

@@ -1,5 +1,5 @@
 #![cfg(unix)]
-//! End-to-end Herdr 19 and 20 adapter contracts through real fake executables.
+//! End-to-end qualified and provisional Herdr contracts through fake executables.
 
 use proqi::{
     adapters::{herdr::HerdrGateway, memory::FakeIdGenerator, process::SystemProcessRunner},
@@ -14,8 +14,8 @@ use proqi::{
 mod herdr_fixture;
 
 #[test]
-fn recorded_fake_executables_prove_both_direct_semantic_cli_contracts() {
-    for protocol in [19, 20] {
+fn fake_executables_prove_qualified_and_provisional_semantic_cli_contracts() {
+    for protocol in [19, 20, 21] {
         prove_protocol(protocol);
     }
 }

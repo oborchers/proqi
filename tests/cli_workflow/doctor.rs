@@ -31,7 +31,7 @@ fn doctor_reports_fresh_state_without_initializing_it() {
 #[cfg(unix)]
 #[test]
 fn doctor_reports_supported_protocols_and_the_precise_compatibility_boundary() {
-    for protocol in [19, 20, 21] {
+    for protocol in [19, 20, 21, 22] {
         let fixture = herdr_fixture::HerdrFixture::new(protocol);
         let temporary = tempfile::tempdir().expect("temporary directory");
         let state_root = temporary.path().join("state");
@@ -77,7 +77,7 @@ fn doctor_reports_supported_protocols_and_the_precise_compatibility_boundary() {
             .iter()
             .find(|check| check["id"] == "herdr")
             .expect("Herdr check");
-        if protocol <= 20 {
+        if protocol <= 21 {
             assert_eq!(herdr["status"], "ok");
             assert_eq!(herdr["facts"]["protocol"], protocol);
             assert_eq!(herdr["facts"]["version"], fixture_version(protocol));
@@ -85,15 +85,22 @@ fn doctor_reports_supported_protocols_and_the_precise_compatibility_boundary() {
         } else {
             assert_eq!(herdr["status"], "warning");
             let remediation = herdr["remediation"].as_str().expect("remediation");
-            assert!(remediation.contains("schema 1, protocol 19 or 20"));
-            assert!(remediation.contains("protocols 21/21"));
+            assert!(
+                remediation
+                    .contains("qualified protocols 19 through 20, or provisional protocol 21")
+            );
+            assert!(remediation.contains("protocols 22/22"));
             assert!(remediation.contains("unsupported protocol version"));
         }
     }
 }
 
 const fn fixture_version(protocol: u32) -> &'static str {
-    if protocol == 19 { "0.8.0" } else { "0.8.2" }
+    match protocol {
+        19 => "0.8.0",
+        20 => "0.8.2",
+        _ => "provisional-fixture",
+    }
 }
 
 #[test]

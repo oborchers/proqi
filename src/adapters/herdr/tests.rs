@@ -95,8 +95,8 @@ fn source() -> PaneContext {
 
 fn schema(protocol: u32) -> Value {
     let recorded = match protocol {
-        20 => include_str!("tests/fixtures/protocol20/schema.json"),
-        _ => include_str!("tests/fixtures/protocol19/schema.json"),
+        19 => include_str!("tests/fixtures/protocol19/schema.json"),
+        _ => include_str!("tests/fixtures/protocol20/schema.json"),
     };
     let mut value: Value = serde_json::from_str(recorded).expect("recorded Herdr schema");
     value["protocol"] = json!(protocol);
@@ -104,7 +104,15 @@ fn schema(protocol: u32) -> Value {
 }
 
 fn snapshot(protocol: u32) -> Value {
-    json!({"result":{"snapshot":{"protocol":protocol,"version":"0.8.0"}}})
+    json!({"result":{"snapshot":{"protocol":protocol,"version":fixture_version(protocol)}}})
+}
+
+const fn fixture_version(protocol: u32) -> &'static str {
+    match protocol {
+        19 => "0.8.0",
+        20 => "0.8.2",
+        _ => "provisional-fixture",
+    }
 }
 
 fn current(context: &PaneContext) -> Value {

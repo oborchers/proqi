@@ -1,4 +1,4 @@
-//! Minimal Herdr protocol 19 and 20 response shapes consumed by Proqi.
+//! Minimal qualified and provisional Herdr response shapes consumed by Proqi.
 
 use serde::Deserialize;
 

@@ -17,6 +17,7 @@ mod crate_package;
 mod debian;
 mod debian_container;
 mod debian_verify;
+mod herdr_compatibility;
 mod homebrew;
 mod instructions;
 mod linux_ci;
@@ -104,6 +105,11 @@ fn execute() -> Result<(), String> {
             let head = required_argument("ci-change-class", 3, "head SHA")?;
             ci_changes::print(&root, &base, &head)
         }),
+        "herdr-compatibility" => {
+            let schema = required_path_argument("herdr-compatibility", 2, "schema JSON path")?;
+            let stderr = env::args().nth(3).map(PathBuf::from);
+            herdr_compatibility::run(&root, &schema, stderr.as_deref())
+        }
         "debian-package" => {
             let archive = required_path_argument("debian-package", 2, "Linux archive")?;
             let output = required_path_argument("debian-package", 3, "output directory")?;
@@ -208,6 +214,7 @@ fn print_help() {
          \n  cargo xtask crate-package\
          \n  cargo xtask crate-evidence\
          \n  cargo xtask ci-change-class <base-sha> <head-sha>\
+         \n  cargo xtask herdr-compatibility <schema.json> [stderr-capture]\
          \n  cargo xtask debian-package <linux-archive> <output-dir>\
          \n  cargo xtask verify-debian <linux-archive> <deb>\
          \n  cargo xtask release-plan [vX.Y.Z]\

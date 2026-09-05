@@ -43,7 +43,7 @@ fn make_executable(_path: &Path) {}
 
 fn fixture_script(protocol: u32, prompt_log: &Path) -> String {
     let schema = recorded_schema(protocol);
-    let version = if protocol == 19 { "0.8.0" } else { "0.8.2" };
+    let version = fixture_version(protocol);
     let template = r#"#!/bin/sh
 if [ "$1 $2 $3" = "api schema --json" ]; then
   printf '%s\n' '__SCHEMA__'
@@ -78,11 +78,19 @@ fi
 
 fn recorded_schema(protocol: u32) -> String {
     let recorded = match protocol {
-        20 => include_str!("../../src/adapters/herdr/tests/fixtures/protocol20/schema.json"),
-        _ => include_str!("../../src/adapters/herdr/tests/fixtures/protocol19/schema.json"),
+        19 => include_str!("../../src/adapters/herdr/tests/fixtures/protocol19/schema.json"),
+        _ => include_str!("../../src/adapters/herdr/tests/fixtures/protocol20/schema.json"),
     };
     let mut schema: serde_json::Value =
         serde_json::from_str(recorded).expect("recorded Herdr schema");
     schema["protocol"] = serde_json::json!(protocol);
     serde_json::to_string(&schema).expect("compact Herdr schema")
+}
+
+const fn fixture_version(protocol: u32) -> &'static str {
+    match protocol {
+        19 => "0.8.0",
+        20 => "0.8.2",
+        _ => "provisional-fixture",
+    }
 }

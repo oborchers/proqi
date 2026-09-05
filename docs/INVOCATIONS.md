@@ -105,8 +105,9 @@ target forms, and non-boundary occurrences remain plain.
 ## Live Herdr references
 
 In a Herdr-managed pane, the existing picker refreshes one bounded snapshot
-after the adapter validates Herdr schema 1, known-compatible protocol 19 or 20,
-and the semantic prompt contract. Its `Live in Herdr` group contains only recognized
+after the adapter validates Herdr schema 1, qualified protocol 19 or 20 or the
+single provisional protocol 21, and the semantic prompt contract. Its `Live in
+Herdr` group contains only recognized
 coding agents. Agent, workspace, and tab row exhaustion retains valid references
 with an explicit incomplete reason. A provider failure differs from a genuine
 empty collection and never removes healthy filesystem entries. Each row prefers

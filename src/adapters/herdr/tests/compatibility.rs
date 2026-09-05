@@ -1,8 +1,9 @@
-//! Herdr 0.8.0 protocol 19 and 0.8.2 protocol 20 compatibility contracts.
+//! Qualified Herdr protocol 19 and 20 and provisional protocol 21 contracts.
 //!
 //! The schema fixtures are sanitized projections recorded from the installed
 //! 0.8.0 binary and the checksum-verified official 0.8.2 release binary. They
-//! retain every schema node consumed by the adapter and no user state.
+//! retain every schema node consumed by the adapter and no user state. Protocol
+//! 21 is a synthetic projection of the protocol 20 schema, not a recording.
 
 use serde_json::{Value, json};
 
@@ -18,8 +19,8 @@ use super::{
 };
 
 #[test]
-fn protocols_19_and_20_pass_the_same_complete_adapter_contract() {
-    for protocol in [19, 20] {
+fn qualified_and_provisional_protocols_pass_the_same_complete_adapter_contract() {
+    for protocol in [19, 20, 21] {
         assert_complete_contract(protocol);
     }
 }
@@ -83,7 +84,7 @@ fn reference_snapshot(protocol: u32) -> Value {
     json!({
         "result": {"snapshot": {
             "protocol": protocol,
-            "version": if protocol == 19 { "0.8.0" } else { "0.8.2" },
+            "version": super::fixture_version(protocol),
             "workspaces": [{"workspace_id":"w1","label":"Fixture workspace"}],
             "tabs": [{"workspace_id":"w1","tab_id":"w1:t1","label":"Fixture tab"}],
             "agents": [{
@@ -101,7 +102,7 @@ fn reference_snapshot(protocol: u32) -> Value {
 fn protocol_schema_and_live_boundaries_fail_closed_with_precise_reasons() {
     for (schema_protocol, live_protocol, reason) in [
         (18, 18, "unsupported protocol version"),
-        (21, 21, "unsupported protocol version"),
+        (22, 22, "unsupported protocol version"),
         (19, 20, "schema and live snapshot protocols disagree"),
     ] {
         assert_unsupported(schema(schema_protocol), snapshot(live_protocol), reason);
@@ -128,10 +129,15 @@ fn protocol_schema_and_live_boundaries_fail_closed_with_precise_reasons() {
 fn changed_required_prompt_schema_entries_fail_closed() {
     for mutation in [
         SchemaMutation::RequestConstant,
+        SchemaMutation::RequestRootConstraint,
+        SchemaMutation::SharedRequestConstraint,
+        SchemaMutation::OverlappingRequestVariant,
         SchemaMutation::RequestRequired,
         SchemaMutation::TargetType,
+        SchemaMutation::TextConstraint,
         SchemaMutation::WaitDefinitionMissing,
         SchemaMutation::WaitDefinitionChanged,
+        SchemaMutation::WaitConstraint,
         SchemaMutation::ResponseBinding,
         SchemaMutation::ResponseConstant,
         SchemaMutation::ResponseRequired,
@@ -139,19 +145,24 @@ fn changed_required_prompt_schema_entries_fail_closed() {
         SchemaMutation::SessionShape,
         SchemaMutation::StatusValues,
     ] {
-        let mut changed = schema(20);
+        let mut changed = schema(21);
         mutation.apply(&mut changed);
-        assert_unsupported(changed, snapshot(20), mutation.reason());
+        assert_unsupported(changed, snapshot(21), mutation.reason());
     }
 }
 
 #[derive(Clone, Copy, Debug)]
 enum SchemaMutation {
     RequestConstant,
+    RequestRootConstraint,
+    SharedRequestConstraint,
+    OverlappingRequestVariant,
     RequestRequired,
     TargetType,
+    TextConstraint,
     WaitDefinitionMissing,
     WaitDefinitionChanged,
+    WaitConstraint,
     ResponseBinding,
     ResponseConstant,
     ResponseRequired,
@@ -162,15 +173,48 @@ enum SchemaMutation {
 
 impl SchemaMutation {
     fn apply(self, schema: &mut Value) {
+        match self {
+            Self::RequestRootConstraint => {
+                schema["schemas"]["request"]["maxProperties"] = json!(0);
+                return;
+            }
+            Self::OverlappingRequestVariant => {
+                schema["schemas"]["request"]["oneOf"]
+                    .as_array_mut()
+                    .expect("recorded request variants")
+                    .push(json!({"type": "object"}));
+                return;
+            }
+            Self::SharedRequestConstraint => {
+                schema["schemas"]["request"]["properties"]["method"] =
+                    json!({"const": "agent.list", "type": "string"});
+                return;
+            }
+            _ => {}
+        }
+        let (pointer, value) = self.replacement();
+        *schema
+            .pointer_mut(pointer)
+            .expect("recorded schema pointer") = value;
+    }
+
+    fn replacement(self) -> (&'static str, Value) {
         let (pointer, value) = match self {
             Self::RequestConstant => (
                 "/schemas/request/oneOf/0/properties/method/const",
                 json!("agent.send_text"),
             ),
+            Self::RequestRootConstraint
+            | Self::SharedRequestConstraint
+            | Self::OverlappingRequestVariant => ("/schemas/request/type", json!("object")),
             Self::RequestRequired => ("/schemas/request/oneOf/0/required", json!(["method"])),
             Self::TargetType => (
                 "/schemas/request/$defs/AgentPromptParams/properties/target/type",
                 json!("integer"),
+            ),
+            Self::TextConstraint => (
+                "/schemas/request/$defs/AgentPromptParams/properties/text",
+                json!({"type": "string", "maxLength": 1}),
             ),
             Self::WaitDefinitionMissing => {
                 ("/schemas/request/$defs/AgentPromptWaitOptions", Value::Null)
@@ -178,6 +222,14 @@ impl SchemaMutation {
             Self::WaitDefinitionChanged => (
                 "/schemas/request/$defs/AgentPromptWaitOptions/properties/until/items/$ref",
                 json!("#/schemas/success_response/$defs/AgentStatus"),
+            ),
+            Self::WaitConstraint => (
+                "/schemas/request/$defs/AgentPromptWaitOptions/properties/until",
+                json!({
+                    "items": {"$ref": "#/schemas/request/$defs/AgentStatus"},
+                    "type": "array",
+                    "maxItems": 1
+                }),
             ),
             Self::ResponseBinding => (
                 "/schemas/success_response/properties/result/$ref",
@@ -211,9 +263,7 @@ impl SchemaMutation {
                 json!(["idle", "working", "blocked", "done", "unknown", "paused"]),
             ),
         };
-        *schema
-            .pointer_mut(pointer)
-            .expect("recorded schema pointer") = value;
+        (pointer, value)
     }
 
     const fn reason(self) -> &'static str {
@@ -221,6 +271,11 @@ impl SchemaMutation {
             Self::RequestConstant | Self::ResponseConstant => {
                 "required schema operation is missing"
             }
+            Self::RequestRootConstraint | Self::TextConstraint | Self::WaitConstraint => {
+                "required request constraint changed"
+            }
+            Self::SharedRequestConstraint => "shared request constraint changed",
+            Self::OverlappingRequestVariant => "request operation variants are not const-disjoint",
             Self::RequestRequired
             | Self::ResponseRequired
             | Self::AgentIdentityRequired
@@ -247,9 +302,18 @@ fn malformed_timeout_and_additive_unknown_fields_are_handled_without_drift() {
     ));
 
     let context = source();
-    let mut additive = schema(20);
+    let mut additive = schema(21);
     additive["future_schema_field"] = json!({"retained_by_provider": true});
-    additive["schemas"]["request"]["future_operation"] = json!({"const": "future"});
+    additive["schemas"]["request"]["oneOf"]
+        .as_array_mut()
+        .expect("recorded request variants")
+        .push(json!({
+            "properties": {
+                "method": {"const": "future.operation", "type": "string"}
+            },
+            "required": ["method"],
+            "type": "object"
+        }));
     add_required_response_field(
         &mut additive["schemas"]["success_response"],
         "future_envelope_field",
@@ -266,8 +330,8 @@ fn malformed_timeout_and_additive_unknown_fields_are_handled_without_drift() {
         success(additive),
         success(json!({
             "result": {"snapshot": {
-                "protocol": 20,
-                "version": "0.8.2",
+                "protocol": 21,
+                "version": "provisional-fixture",
                 "future_snapshot_field": true
             }},
             "future_envelope_field": true
@@ -277,7 +341,7 @@ fn malformed_timeout_and_additive_unknown_fields_are_handled_without_drift() {
     ]);
     assert_eq!(
         compatible.capabilities().expect("additive fields").protocol,
-        20
+        21
     );
 }
 
@@ -295,6 +359,9 @@ fn assert_unsupported(schema: Value, snapshot: Value, reason: &str) {
     let AgentError::Unsupported(message) = error else {
         panic!("expected unsupported error, received {error:?}");
     };
-    assert!(message.contains("schema 1, protocol 19 or 20"), "{message}");
+    assert!(
+        message.contains("qualified protocols 19 through 20, or provisional protocol 21"),
+        "{message}"
+    );
     assert!(message.contains(reason), "{message}");
 }
