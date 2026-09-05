@@ -1454,7 +1454,7 @@ dependencies = [
 
 [[package]]
 name = "proqi"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "arboard",
  "base64",
@@ -2777,7 +2777,7 @@ dependencies = [
 
 [[package]]
 name = "xtask"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "flate2",
  "ignore",

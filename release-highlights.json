@@ -93,6 +93,15 @@
         "Discover globally symlinked Agent Skills and large Markdown invocation definitions through bounded frontmatter reads.",
         "Keep coordinated schema-changing upgrades open until every participating replacement restores its board and becomes ready."
       ]
+    },
+    {
+      "version": "0.8.0",
+      "highlights": [
+        "Walk project ancestors naturally and process Claude plugins without category-specific count ceilings, within one shared discovery work budget.",
+        "Navigate every matching invocation beyond the first visible page, with a refinement notice when more results exist.",
+        "Keep usable invocations when a bounded source is incomplete or a Herdr provider fails, with truthful picker status and content-redacted diagnostics.",
+        "Use Proqi with qualified Herdr protocols 19 and 20, including Herdr 0.8.2, plus provisional protocol 21 when its prompt contract remains compatible."
+      ]
     }
   ]
 }
