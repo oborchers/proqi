@@ -436,6 +436,7 @@ fn image_payload() -> PastePayload {
             start: 0,
             end: path.len(),
             kind: ContentAnnotationKind::Attachment {
+                ordinal: None,
                 image: true,
                 display_name: "fixture.png".to_owned(),
             },
