@@ -12,11 +12,11 @@ fn reflow(input: &str) -> String {
 }
 
 #[test]
-fn terminal_wrapped_prose_becomes_paragraphs() {
+fn authored_lines_and_one_paragraph_break_are_preserved() {
     let input = "The entire reflow-created thought disappears in one undo step. Press Command+Shift+V to\nredo it, and the same saved one-paragraph thought returns. This uses the existing\npersistent revision machinery rather than maintaining separate paste history.\n\n\nThe original system clipboard has already been restored.";
     assert_eq!(
         reflow(input),
-        "The entire reflow-created thought disappears in one undo step. Press Command+Shift+V to redo it, and the same saved one-paragraph thought returns. This uses the existing persistent revision machinery rather than maintaining separate paste history.\n\nThe original system clipboard has already been restored."
+        "The entire reflow-created thought disappears in one undo step. Press Command+Shift+V to\nredo it, and the same saved one-paragraph thought returns. This uses the existing\npersistent revision machinery rather than maintaining separate paste history.\n\nThe original system clipboard has already been restored."
     );
 }
 
@@ -40,7 +40,7 @@ fn prose_cleanup_is_width_independent_and_idempotent() {
 fn crlf_paragraph_family_is_retained() {
     assert_eq!(
         reflow("  first\r\nline\r\n\r\n\r\n second\r\nparagraph  \r\n"),
-        "first line\r\n\r\nsecond paragraph"
+        "first\r\nline\r\n\r\nsecond\r\nparagraph"
     );
 }
 
@@ -49,7 +49,7 @@ fn list_markers_and_nesting_survive_aligned_continuations() {
     let input = "- First  item\n  wraps here\n- [x] Second\titem\n      stays aligned\n  - Nested  item\n    wraps too\n1. Ordered  item\n   continuation\n2) Neighbor";
     assert_eq!(
         reflow(input),
-        "- First item wraps here\n- [x] Second item stays aligned\n  - Nested item wraps too\n1. Ordered item continuation\n2) Neighbor"
+        "- First item\n  wraps here\n- [x] Second item\n      stays aligned\n  - Nested item\n    wraps too\n1. Ordered item\n   continuation\n2) Neighbor"
     );
 }
 
@@ -65,7 +65,7 @@ fn unaligned_list_continuations_keep_their_line_boundary() {
 fn prose_next_to_lists_reflows_without_crossing_list_boundaries() {
     assert_eq!(
         reflow("Introductory  prose\nwraps here\n- item\nTrailing  prose\nwraps too"),
-        "Introductory prose wraps here\n- item\nTrailing prose wraps too"
+        "Introductory prose\nwraps here\n- item\nTrailing prose\nwraps too"
     );
 }
 
@@ -73,7 +73,7 @@ fn prose_next_to_lists_reflows_without_crossing_list_boundaries() {
 fn a_second_list_paragraph_keeps_its_owner_indent_and_reflows() {
     assert_eq!(
         reflow("- item\n\n  second  paragraph\n  wraps here\n\noutside\nwraps too"),
-        "- item\n\n  second paragraph wraps here\n\noutside wraps too"
+        "- item\n\n  second paragraph\n  wraps here\n\noutside\nwraps too"
     );
 }
 
@@ -123,8 +123,9 @@ fn blank_runs_inside_indented_code_are_exact() {
 }
 
 #[test]
-fn only_backslashes_followed_by_a_line_delimiter_are_hard_breaks() {
-    assert_eq!(reflow("joined\\\nline\\"), "joined line\\");
+fn backslashes_and_their_authored_line_boundaries_are_preserved() {
+    assert_eq!(reflow("joined\\\nline\\"), "joined\\\nline\\");
+    assert_eq!(reflow("alpha  \\\nbeta"), "alpha \\\nbeta");
     assert_eq!(reflow("literal\\"), "literal\\");
 }
 
@@ -153,7 +154,7 @@ fn a_protected_annotation_keeps_its_complete_block_exact() {
         reflow_text(input, std::slice::from_ref(&protected))
             .expect("reflow")
             .content,
-        "prefix  @agent\nwrapped  text\n\nordinary paragraph"
+        "prefix  @agent\nwrapped  text\n\nordinary\nparagraph"
     );
 }
 
@@ -171,6 +172,8 @@ fn multi_megabyte_reflow_uses_a_bounded_number_of_changes() {
     let result = reflow_text(&input, &[]).expect("large reflow");
     assert!(result.content.len() < input.len());
     assert!(result.changes.len() <= 2);
-    assert!(!result.content.contains('\n'));
+    assert_eq!(result.content.lines().count(), 32_768);
+    assert!(!result.content.ends_with('\n'));
+    assert!(!result.content.contains("  "));
     assert_eq!(reflow(&result.content), result.content);
 }

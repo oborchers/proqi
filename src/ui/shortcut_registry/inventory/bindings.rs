@@ -433,12 +433,13 @@ fn configured_action(
         if shifted && character.eq_ignore_ascii_case(&keys.select_visual_row_end) {
             return Some(Action::ExtendVisualRowEnd);
         }
-        if context == Context::Edit
-            && character.eq_ignore_ascii_case(&'f')
-            && !modifiers.contains(LogicalModifiers::SHIFT)
-        {
-            return Some(Action::ReflowThought);
-        }
+    }
+    if context == Context::Edit
+        && character.eq_ignore_ascii_case(&'f')
+        && (modifiers.contains(LogicalModifiers::SHIFT) || character.is_ascii_uppercase())
+        && modifiers.difference(LogicalModifiers::SHIFT) == LogicalModifiers::CONTROL
+    {
+        return Some(Action::ReflowThought);
     }
     if context == Context::Help && !command_modifiers(modifiers) && character == keys.help {
         return Some(Action::Close);

@@ -324,38 +324,36 @@ Bracketed paste is treated as one semantic input event.
 - `Primary+V`, the remappable Board fallback `p`, bracketed paste, and
   `Paste exactly` preserve the complete payload byte for byte. Exact paste
   remains the default.
-- `Primary+Shift+V`, the paired Board fallback `Shift+P`, and `Paste and reflow`
-  explicitly clean terminal-copied prose. The action joins single newlines,
-  collapses ASCII spaces and tabs, removes copied Markdown hard breaks, trims
-  outer whitespace, and reduces whitespace-only blank runs to one paragraph
-  separator in the source LF or CRLF family.
-- Explicit reflow preserves recognized Markdown list markers and nesting. It
-  joins only continuation lines aligned to their owning item content column. It
-  leaves fenced and indented code, tables, block quotes, paths, URLs,
-  controls other than tabs and line endings, and blocks containing durable
-  semantic annotations exact. Unmarked short lines are prose and are
-  intentionally flattened.
-- Reflow transforms a large-paste annotation as an envelope, then recomputes its
+- `Primary+Shift+V`, the paired Board fallback `Shift+P`, and `Paste and clean up`
+  explicitly clean copied spacing. The action preserves single authored line
+  breaks and one blank paragraph line, collapses longer blank runs, converts
+  horizontal whitespace runs to one ASCII space, and trims ordinary prose line
+  edges in the source LF or CRLF family.
+- Spacing cleanup preserves recognized Markdown list markers, nesting, and line
+  boundaries. It leaves fenced and indented code, tables, block quotes, paths,
+  URLs, unsupported controls, and blocks containing durable semantic annotations
+  exact. The action never guesses that an unmarked newline is visual wrapping.
+- Cleanup transforms a large-paste annotation as an envelope, then recomputes its
   line and grapheme counts. The fold remains only when the transformed range is
   still at least 12 lines or 1,200 graphemes. Attachments, invocation references,
   shortcut emphasis, and verified path provenance retain their exact bytes and
   ranges.
-- One reflow paste is one editor revision or board operation and one persistent
+- One cleanup paste is one editor revision or board operation and one persistent
   undo and redo step. Whitespace-only cleanup does not create a thought or
   replace a selection. A failed transformation pastes the original payload
   exactly and reports the fallback.
-- `Reflow thought in place` applies the same classifier to one existing thought.
-  Plain `f` targets the focused durable thought in Board; `Primary+F` targets
+- `Clean up spacing` applies the same classifier to one existing thought. Plain
+  `f` targets the focused durable thought in Board; `Control+Shift+F` targets
   the complete active thought in Edit, including content outside the selection
   and collapsed large-paste envelopes. Plain `f` remains editor text. Both
   bindings are independently replaceable or disableable in shortcut schema 1.
-- In-place reflow preserves unrelated Board selection and range state. Changed
+- In-place cleanup preserves unrelated Board selection and range state. Changed
   content is one Board operation or editor revision. Pending editor changes
   flush first as their own revision. Cursor and selection project through the
   transformation; retained folds preserve their expanded or collapsed state.
   Undo, redo, persistence failure and retry, and restart use ordinary history.
 - An unchanged in-place result creates no operation or revision and reports
-  that there is nothing to reflow. Empty results and failed transformations
+  that spacing is already clean. Empty results and failed transformations
   leave the thought intact with a truthful explanation. Commands and contextual
   Help expose the action and effective bindings without adding footer chrome.
 - A large paste does not freeze rendering or briefly create one key event per
@@ -862,8 +860,8 @@ bindings are:
 |---|---|---|
 | Create thought | `n` | Click `+` or the insertion area |
 | Paste as new thought when none is selected | `Primary+V`, `p`, or native paste | Choose `Paste exactly` in Commands |
-| Reflow focused thought in place | `f` | Choose `Reflow thought in place` in Commands |
-| Paste and reflow copied prose | `Primary+Shift+V` or `Shift+P` | Choose `Paste and reflow` in Commands |
+| Clean up spacing in focused thought | `f` | Choose `Clean up spacing` in Commands |
+| Paste and clean up spacing | `Primary+Shift+V` or `Shift+P` | Choose `Paste and clean up` in Commands |
 | Edit thought | `Enter` or `e` | Click at the desired text position |
 | Copy thought | `Primary+C` or `y` | Click copy control |
 | Cut thought | `Primary+X` or `x` | Click cut control |
@@ -967,7 +965,7 @@ For Ghostty, `keybind = super+shift+v=csi:118;10u` explicitly emits the
 CSI-u representation of logical Super+Shift+v. The example is validated using
 Ghostty and its bytes are tested through a real macOS PTY and Crossterm 0.29.
 This is not a promise for every layout or host mapping. Proqi never edits host
-configuration. The default Board pair uses p for exact paste and P for reflow.
+configuration. The default Board pair uses p for exact paste and P for cleanup.
 
 `proqi diagnostics keypress` captures one exact logical event using a bounded
 timeout and a selected context stack. It reports key, modifiers, phase, keypad
@@ -980,11 +978,11 @@ included. Terminal ownership is restored on every exit path.
 Distinctly reported Shift remains meaningful. A shifted reserved character
 chord never silently becomes the unshifted copy, cut, paste, select-all,
 duplicate, or quit command. `Primary+Y` remains the unshifted alternate redo
-chord. `Primary+Shift+V` is the explicit `Paste and reflow` action. An uppercase
+chord. `Primary+Shift+V` is the explicit `Paste and clean up` action. An uppercase
 `V` report without a distinct Shift modifier remains exact paste.
 
 The legacy configurable Board `paste` key must be one lowercase ASCII letter.
-That character pastes exactly and its uppercase counterpart reflows. Versioned
+That character pastes exactly and its uppercase counterpart cleans spacing. Versioned
 configuration expresses both semantic actions directly. Explicit configured
 commands keep precedence over either fallback. Help and footer labels list only
 the effective spellings, so a collision never advertises a shadowed route.
@@ -997,7 +995,7 @@ Edit mode behaves like a focused multiline text editor. It supports:
 - Selection extension to the beginning or end of the current wrapped visual
   row, using current terminal-cell geometry and folded presentation.
 - Text selection by keyboard and mouse drag.
-- Native clipboard copy, cut, exact paste, and explicit paste with prose reflow.
+- Native clipboard copy, cut, exact paste, and explicit paste with spacing cleanup.
 - Insert, replace, delete, undo, and redo.
 - Horizontal content represented through wrapping, not a hidden horizontal
   scroll mode by default.

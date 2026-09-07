@@ -9,15 +9,15 @@ use ratatui_core::layout::Rect;
 fn commands_keyboard_and_mouse_reflow_the_same_focused_thought() {
     for mouse in [false, true] {
         let mut fixture = Fixture::new();
-        fixture.paste("complete\nthought");
+        fixture.paste("complete  thought");
         fixture.input(key_input(UiKey::Escape));
         fixture.input(key_input(UiKey::Character(':')));
-        for character in "reflow thought".chars() {
+        for character in "clean up spacing".chars() {
             fixture.input(key_input(UiKey::Character(character)));
         }
         assert_eq!(
             fixture.app.palette_view().expect("commands").1,
-            ["Reflow thought in place"]
+            ["Clean up spacing"]
         );
         if mouse {
             let item = fixture
@@ -37,7 +37,7 @@ fn commands_keyboard_and_mouse_reflow_the_same_focused_thought() {
         fixture.input(key_input(UiKey::Undo));
         assert_eq!(
             fixture.app.state.board.live_thoughts()[0].content,
-            "complete\nthought"
+            "complete  thought"
         );
     }
 }
@@ -51,11 +51,11 @@ fn commands_mouse_from_edit_uses_editor_history_and_complete_content() {
         .expect("keymap"),
         ..proqi::ui::UiSettings::default()
     });
-    fixture.paste("complete\nthought");
+    fixture.paste("complete  thought");
     fixture.input(proqi::ui::UiInput::KeyStroke(proqi::ui::KeyStroke::press(
         proqi::ui::LogicalKey::Function(5),
     )));
-    for character in "reflow thought".chars() {
+    for character in "clean up spacing".chars() {
         fixture.input(key_input(UiKey::Character(character)));
     }
     let item = fixture
@@ -72,17 +72,17 @@ fn commands_mouse_from_edit_uses_editor_history_and_complete_content() {
     fixture.input(key_input(UiKey::Undo));
     assert_eq!(
         fixture.app.editor_snapshot().expect("editor").content,
-        "complete\nthought"
+        "complete  thought"
     );
 }
 
 #[test]
 fn reflow_commands_discovery_snapshot() {
     let mut fixture = Fixture::new();
-    fixture.paste("terminal copied\nprose");
+    fixture.paste("terminal  copied\nprose");
     fixture.input(key_input(UiKey::Escape));
     fixture.input(key_input(UiKey::Character(':')));
-    for character in "reflow".chars() {
+    for character in "clean up".chars() {
         fixture.input(key_input(UiKey::Character(character)));
     }
     let terminal = draw_theme(&mut fixture, 60, 12, ThemePreference::Dark);

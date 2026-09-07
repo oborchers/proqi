@@ -1,4 +1,4 @@
-//! Real Board f and Edit Primary+F transactions with restart and durable history.
+//! Real Board f and Edit Control+Shift+F transactions with durable history.
 
 use super::{
     support::{expect_command, json_command},
@@ -20,7 +20,7 @@ const WORKFLOW: &str = r#"
         spawn $binary --state-dir $state -r $env(PROQI_TEST_SESSION)
         register_watchdog_pid
         expect -exact "\x1b\[?1049h"
-        send -- "\x1b\[200~board\nwrapped prose\x1b\[201~"
+        send -- "\x1b\[200~board  text\nwrapped  prose\x1b\[201~"
         after 300
         send "\x1b"
         after 100
@@ -29,14 +29,14 @@ const WORKFLOW: &str = r#"
         send "uf"
         after 300
         send "n"
-        send -- "\x1b\[200~editor\r\nwrapped prose\x1b\[201~"
-        send -- "\x1b\[102;9u"
+        send -- "\x1b\[200~editor  text\r\nwrapped  prose\x1b\[201~"
+        send -- "\x1b\[70;5u"
         after 300
         send -- "\x1b\[122;9u"
         after 200
         send -- "\x1b\[122;10u"
         after 200
-        send -- "\x1b\[102;9u\x1b\[102;9u"
+        send -- "\x1b\[70;5u\x1b\[70;5u"
         send "\x1b"
         after 100
         send "q"
@@ -82,6 +82,6 @@ fn board_and_edit_reflow_chords_commit_exact_restart_safe_content() {
     let thoughts = json_command(binary, state.path(), &["thoughts", "list", session]);
     let thoughts = thoughts["data"]["thoughts"].as_array().expect("thoughts");
     assert_eq!(thoughts.len(), 2);
-    assert_eq!(thoughts[0]["content"], "board wrapped prose");
-    assert_eq!(thoughts[1]["content"], "editor wrapped prose");
+    assert_eq!(thoughts[0]["content"], "board text\nwrapped prose");
+    assert_eq!(thoughts[1]["content"], "editor text\r\nwrapped prose");
 }

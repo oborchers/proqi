@@ -79,7 +79,7 @@ schema_version = 1
 [bindings.edit]
 "submission.submit_remove" = [{key="F5"}]
 [macos.edit]
-"submission.submit_remove" = [{key="f", modifiers=["Primary", "Shift"]}]
+"submission.submit_remove" = [{key="p", modifiers=["Primary", "Shift"]}]
 [portable.edit]
 "submission.submit_remove" = [{key="g", modifiers=["Primary"]}]
 "#,
@@ -94,7 +94,7 @@ schema_version = 1
         ] {
             let (key, modifiers, expected) = if platform == ShortcutPlatform::MacOs {
                 (
-                    'f',
+                    'p',
                     modifier.union(LogicalModifiers::SHIFT),
                     modifier != LogicalModifiers::CONTROL,
                 )

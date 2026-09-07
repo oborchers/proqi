@@ -30,8 +30,8 @@ pub(in crate::ui) fn position_changes(
                 continue;
             }
             let start = (source, target);
-            source += layout_prefix(&before[source..old.end], true);
-            target += layout_prefix(&after[target..new.end], false);
+            source += layout_prefix(&before[source..old.end]);
+            target += layout_prefix(&after[target..new.end]);
             if start == (source, target) {
                 return Err(ReflowError::InvalidBoundary);
             }
@@ -45,18 +45,9 @@ pub(in crate::ui) fn position_changes(
     Ok(TextChangeSet::new(before, after, changes)?)
 }
 
-fn layout_prefix(value: &str, source: bool) -> usize {
+fn layout_prefix(value: &str) -> usize {
     value
         .bytes()
-        .enumerate()
-        .take_while(|(index, byte)| {
-            matches!(byte, b' ' | b'\t' | b'\r' | b'\n')
-                || (source && *byte == b'\\' && followed_by_line_break(&value[index + 1..]))
-        })
+        .take_while(|byte| matches!(byte, b' ' | b'\t' | b'\r' | b'\n'))
         .count()
-}
-
-fn followed_by_line_break(value: &str) -> bool {
-    let suffix = value.trim_start_matches([' ', '\t']);
-    suffix.starts_with('\n') || suffix.starts_with("\r\n")
 }

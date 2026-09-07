@@ -41,10 +41,8 @@ fn reflow(
 ) -> Vec<Effect> {
     let modifiers = if board {
         LogicalModifiers::NONE
-    } else if cfg!(target_os = "macos") {
-        LogicalModifiers::SUPER
     } else {
-        LogicalModifiers::CONTROL
+        LogicalModifiers::CONTROL.union(LogicalModifiers::SHIFT)
     };
     app.handle(
         UiInput::KeyStroke(KeyStroke::press(LogicalKey::Character('f')).with_modifiers(modifiers)),
@@ -66,7 +64,7 @@ fn reflow_failure_retry_restart_and_undo_redo_are_atomic_in_both_histories() {
             .commit(&OperationBatch::CreateSession(state.board.session.clone()))
             .expect("session");
         let mut app = BoardApp::new(state, RopeEditorFactory);
-        let source = "Grüße 日本語\r\nwith e\u{301} and 👩🏽‍💻";
+        let source = "Grüße  日本語\r\nwith e\u{301} and 👩🏽‍💻";
         let effects = app.handle(UiInput::Paste(source.to_owned()), &mut ids, &clock);
         commit(&mut app, &mut store, &effects);
         let thought_id = app.active_thought_id().expect("thought");
@@ -89,7 +87,7 @@ fn reflow_failure_retry_restart_and_undo_redo_are_atomic_in_both_histories() {
                 .thought(thought_id)
                 .expect("recoverable")
                 .content,
-            "Grüße 日本語 with e\u{301} and 👩🏽‍💻"
+            "Grüße 日本語\r\nwith e\u{301} and 👩🏽‍💻"
         );
         let retry = input(&mut app, &mut ids, &clock, UiKey::Character('r'));
         assert_eq!(retry, [Effect::RetryPersistence { sequence }]);
@@ -109,7 +107,7 @@ fn reflow_failure_retry_restart_and_undo_redo_are_atomic_in_both_histories() {
         let restored = store.load_session(session_id).expect("restart");
         assert_eq!(
             restored.board.thought(thought_id).expect("durable").content,
-            "Grüße 日本語 with e\u{301} and 👩🏽‍💻"
+            "Grüße 日本語\r\nwith e\u{301} and 👩🏽‍💻"
         );
         let mut app = BoardApp::new(
             AppState::from_snapshot(restored).expect("restored"),
@@ -128,7 +126,7 @@ fn reflow_failure_retry_restart_and_undo_redo_are_atomic_in_both_histories() {
             &mut store,
             session_id,
             thought_id,
-            "Grüße 日本語 with e\u{301} and 👩🏽‍💻",
+            "Grüße 日本語\r\nwith e\u{301} and 👩🏽‍💻",
         );
     }
 }

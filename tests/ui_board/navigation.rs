@@ -149,7 +149,7 @@ fn wide_help_uses_at_most_two_strictly_aligned_columns() {
         .app
         .complete_agent_discovery(Ok(vec![super::agent::target(Direction::Left, "w1:p2")]));
     fixture.input(crate::key_input(UiKey::Character('?')));
-    let terminal = draw(&mut fixture, 80, 16);
+    let terminal = draw(&mut fixture, 120, 20);
     let rendered = text(terminal.backend().buffer());
     assert!(rendered.contains("Submit & keep"));
     let quit = rendered

@@ -37,7 +37,7 @@ fn an_interior_caret_stays_with_retained_text_after_whitespace_cleanup() {
         fixture.input(key_input(UiKey::Character('X')));
         assert_eq!(
             fixture.app.editor_snapshot().expect("editor").content,
-            "alXpha beta"
+            format!("alXpha{newline}beta")
         );
     }
 }
@@ -56,7 +56,7 @@ fn partial_selections_keep_exact_unicode_words_in_both_directions_and_expanded_f
             String::new()
         };
         let source = format!("alpha{newline}界e\u{301}👩🏽‍💻 beta{tail}");
-        let expected = format!("alpha 界e\u{301}👩🏽‍💻 beta{tail}");
+        let expected = format!("alpha{newline}界e\u{301}👩🏽‍💻 beta{tail}");
         let mut fixture = Fixture::new();
         fixture.paste(&source);
         if expanded {
@@ -81,10 +81,15 @@ fn partial_selections_keep_exact_unicode_words_in_both_directions_and_expanded_f
         let snapshot = fixture.app.editor_snapshot().expect("editor");
         assert_eq!(snapshot.content, expected);
         let selected = snapshot.selection.expect("partial selection");
-        assert_eq!((selected.start.line, selected.end.line), (0, 0));
+        assert_eq!((selected.start.line, selected.end.line), (1, 1));
+        let selected_line = snapshot
+            .content
+            .split('\n')
+            .nth(selected.start.line)
+            .expect("selected logical line")
+            .trim_end_matches('\r');
         assert_eq!(
-            snapshot
-                .content
+            selected_line
                 .graphemes(true)
                 .skip(selected.start.grapheme)
                 .take(selected.end.grapheme - selected.start.grapheme)
@@ -112,9 +117,8 @@ fn retained_backslashes_and_word_boundaries_keep_exact_carets_and_selections() {
     for (source, after, start, length) in [
         ("alpha  \\\\", "alpha \\\\", 8, 0),
         ("alpha  \\\\", "alpha \\\\", 7, 1),
-        ("alpha\nbeta", "alpha beta", 0, 5),
-        ("alpha\r\nbeta", "alpha beta", 5, 0),
-        ("alpha\\\nbeta", "alpha beta", 0, 5),
+        ("alpha  \nbeta", "alpha\nbeta", 0, 5),
+        ("alpha  \r\nbeta", "alpha\r\nbeta", 5, 0),
     ] {
         for backwards in [false, true] {
             let mut fixture = Fixture::new();
@@ -131,7 +135,7 @@ fn retained_backslashes_and_word_boundaries_keep_exact_carets_and_selections() {
             reflow(&mut fixture);
             let snapshot = fixture.app.editor_snapshot().expect("editor");
             assert_eq!(snapshot.content, after);
-            let mapped = if source.starts_with("alpha  ") {
+            let mapped = if source.starts_with("alpha  ") && start > 5 {
                 start - 1
             } else {
                 start

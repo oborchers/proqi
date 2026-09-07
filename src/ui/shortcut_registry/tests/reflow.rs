@@ -21,7 +21,7 @@ fn resolve(
 }
 
 #[test]
-fn reflow_defaults_are_exact_contextual_primary_bindings() {
+fn cleanup_defaults_are_board_f_and_portable_control_shift_f() {
     for platform in [ShortcutPlatform::MacOs, ShortcutPlatform::Portable] {
         let registry =
             ShortcutRegistry::resolve(&KeyBindings::default(), platform).expect("registry");
@@ -34,28 +34,43 @@ fn reflow_defaults_are_exact_contextual_primary_bindings() {
             ),
             Some(Action::ReflowThought)
         );
-        for modifiers in [
-            LogicalModifiers::SUPER,
-            LogicalModifiers::META,
-            LogicalModifiers::CONTROL,
-            LogicalModifiers::ALT,
-            LogicalModifiers::SHIFT,
-            LogicalModifiers::NONE,
+        let shifted_control = LogicalModifiers::CONTROL.union(LogicalModifiers::SHIFT);
+        for (key, modifiers, expected) in [
+            ('f', shifted_control, true),
+            ('F', LogicalModifiers::CONTROL, true),
+            ('F', shifted_control, true),
+            ('f', LogicalModifiers::CONTROL, false),
+            ('f', LogicalModifiers::SUPER, false),
+            ('f', LogicalModifiers::META, false),
+            ('f', LogicalModifiers::ALT, false),
+            ('f', LogicalModifiers::SHIFT, false),
+            ('f', LogicalModifiers::NONE, false),
         ] {
-            let expected = match platform {
-                ShortcutPlatform::MacOs => {
-                    modifiers == LogicalModifiers::SUPER || modifiers == LogicalModifiers::META
-                }
-                ShortcutPlatform::Portable => modifiers == LogicalModifiers::CONTROL,
-            };
             assert_eq!(
                 resolve(
                     &registry,
                     Context::Edit,
-                    LogicalKey::Character('f'),
+                    LogicalKey::Character(key),
                     modifiers
                 ),
                 expected.then_some(Action::ReflowThought)
+            );
+        }
+        for modifiers in [
+            LogicalModifiers::SUPER,
+            LogicalModifiers::META,
+            LogicalModifiers::ALT,
+            LogicalModifiers::SHIFT,
+            LogicalModifiers::NONE,
+        ] {
+            assert_eq!(
+                resolve(
+                    &registry,
+                    Context::Edit,
+                    LogicalKey::Character('F'),
+                    modifiers
+                ),
+                None
             );
         }
         let literal = registry
@@ -71,11 +86,7 @@ fn reflow_defaults_are_exact_contextual_primary_bindings() {
         );
         assert_eq!(
             registry.labels(Context::Edit, Action::ReflowThought),
-            [if platform == ShortcutPlatform::MacOs {
-                "Cmd+F"
-            } else {
-                "Ctrl+F"
-            }]
+            ["Ctrl+Shift+F"]
         );
         assert_eq!(Action::ReflowThought.diagnostics_id(), "thought.reflow");
         let descriptor = registry

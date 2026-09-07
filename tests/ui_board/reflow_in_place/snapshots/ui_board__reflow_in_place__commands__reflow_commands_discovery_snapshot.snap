@@ -8,9 +8,9 @@ SIZE 60x12
 TEXT
 00││
 01│ ┌ commands ────────────────────────────────────────────[x]│
-02│ │:reflow                                                 ││
-03│ │Paste and reflow                                        ││
-04│ │Reflow thought in place                                 ││
+02│ │:clean up                                               ││
+03│ │Paste and clean up                                      ││
+04│ │Clean up spacing                                        ││
 05│ └────────────────────────────────────────────────────────┘│
 06││
 07││

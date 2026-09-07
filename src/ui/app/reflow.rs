@@ -1,4 +1,4 @@
-//! Whole-thought recovery through the existing annotation-safe paste reflow policy.
+//! Whole-thought spacing cleanup through the annotation-safe paste policy.
 
 use crate::{
     application::{Action, Effect, InteractionMode, OwnedThoughtEdit, OwnedThoughtReflow},
@@ -35,7 +35,7 @@ impl BoardApp {
             .and_then(|id| self.state.board.thought(id))
             .cloned()
         else {
-            self.set_warning("focus a thought before reflowing it");
+            self.set_warning("focus a thought before cleaning up its spacing");
             return effects;
         };
         let payload =
@@ -53,18 +53,18 @@ impl BoardApp {
                 outcome: PasteReflow::Unchanged,
                 ..
             }) => {
-                self.set_info("nothing to reflow");
+                self.set_info("spacing already clean");
                 return effects;
             }
             Ok(ReflowProjection {
                 outcome: PasteReflow::Empty,
                 ..
             }) => {
-                self.set_warning("nothing remained after reflow; thought kept unchanged");
+                self.set_warning("cleanup removed all content; thought kept unchanged");
                 return effects;
             }
             Err(()) => {
-                self.set_warning("could not reflow; thought kept unchanged");
+                self.set_warning("could not clean up spacing; thought kept unchanged");
                 return effects;
             }
         };
@@ -97,7 +97,7 @@ impl BoardApp {
             self.board_viewport = self.board_viewport.follow_focus();
             self.scroll_geometry = None;
             self.layout = None;
-            self.set_info("thought reflowed");
+            self.set_info("spacing cleaned up");
         }
         effects.extend(mutations);
         effects
@@ -116,7 +116,7 @@ impl BoardApp {
             return Vec::new();
         };
         let Ok((cursor, anchor)) = project_editor(&before, &payload, changes, expanded) else {
-            self.set_warning("could not reflow; thought kept unchanged");
+            self.set_warning("could not clean up spacing; thought kept unchanged");
             return Vec::new();
         };
         let effects = self.reduce(Action::EditOwnedThought(OwnedThoughtEdit::rebased(

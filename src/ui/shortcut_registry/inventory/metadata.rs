@@ -26,7 +26,7 @@ const HELP: &[(Action, HelpMetadata)] = &[
         help(
             HelpSurface::Board,
             27,
-            "Reflow thought",
+            "Clean up spacing",
             HelpAvailability::Always,
         ),
     ),
@@ -35,7 +35,7 @@ const HELP: &[(Action, HelpMetadata)] = &[
         help(
             HelpSurface::Editor,
             17,
-            "Reflow thought",
+            "Clean up spacing",
             HelpAvailability::Always,
         ),
     ),
@@ -164,7 +164,7 @@ const HELP: &[(Action, HelpMetadata)] = &[
         help(
             HelpSurface::Board,
             17,
-            "Paste reflow",
+            "Paste and clean up",
             HelpAvailability::Always,
         ),
     ),
@@ -258,7 +258,7 @@ const HELP: &[(Action, HelpMetadata)] = &[
         help(
             HelpSurface::Editor,
             6,
-            "Paste reflow",
+            "Paste and clean up",
             HelpAvailability::Always,
         ),
     ),

@@ -1220,7 +1220,7 @@ Bracketed paste is one payload and one undoable edit. When no thought is
 selected, paste creates and focuses a new thought. The application never tries
 to split a paste heuristically.
 
-Exact and reflow clipboard reads share one typed asynchronous owner record. The
+Exact and cleanup clipboard reads share one typed asynchronous owner record. The
 record retains `Exact` or `Reflow` through Compose materialization and rejects a
 completion after its Board, Compose generation, or thought editor owner changes.
 Raw bracketed paste always enters the exact path because a terminal host may
@@ -1229,10 +1229,12 @@ lowercase Board paste key selects the same exact path. Only the dedicated
 normalized `PasteClipboardReflow` intention, its uppercase Board counterpart,
 or the Commands action selects the reflow path.
 
-The reflow classifier makes a bounded number of linear passes over logical
+The cleanup classifier makes a bounded number of linear passes over logical
 lines. Shared terminal-independent Markdown structure recognition owns list
 markers, indentation columns, thematic breaks, and fence state for both editor
-smart lists and paste reflow. Reflow records ordered text replacements so
+smart lists and paste cleanup. Ordinary prose keeps each authored line and one
+blank paragraph line while horizontal whitespace and longer blank runs collapse.
+Cleanup records ordered text replacements so
 ordinary annotation offsets map through the same explicit `TextChangeSet`
 contract as editor mutations. Non-large annotations make their containing block
 exact. Large-paste annotations are transformable envelopes. Partitioned cleanup
@@ -1242,14 +1244,14 @@ derived counts again before insertion. The resulting payload is passed once to
 the existing paste transaction, preserving one durable undo unit and the
 ordinary persistence failure and retry contract.
 
-In-place thought reflow consumes the same validated annotation-safe payload
+In-place thought spacing cleanup consumes the same validated annotation-safe payload
 transformation and its `TextChangeSet`. The UI owns cursor/selection projection
 and retained annotation-index mapping for expanded folds. Position projection
-refines classified group replacements into whitespace and hard-break changes,
+refines classified group replacements into whitespace changes,
 using the formatter's existing range coalescer and `TextChangeSet` validation.
 Unchanged scalar spans retain interior carets and partial selections. Compact
 annotation mappings and the classifier output remain unchanged. Pending edits flush
-through the existing boundary before reflow. Edit uses `OwnedThoughtEdit` and
+through the existing boundary before cleanup. Edit uses `OwnedThoughtEdit` and
 revision history; Board uses a sealed `OwnedThoughtReflow` request and the
 existing validated content replacement, inverse mutation, and Board history
 owners. Neither path creates a durable entry for an unchanged result or deletes
@@ -1342,7 +1344,7 @@ testing consume that same projection. Clipboard, recovery, CLI, search,
 submission, and integration boundaries continue to consume canonical content.
 Edits rebase unaffected ranges and dissolve intersected ranges. Revisions
 persist both sides of the annotation change so undo and redo remain restart-safe.
-Explicit paste reflow protects every attachment, invocation-reference, and
+Explicit paste cleanup protects every attachment, invocation-reference, and
 shortcut-emphasis byte. Large-paste ranges are the one transformable annotation
 kind and are retained only when their transformed content still reaches the
 shared fold threshold.

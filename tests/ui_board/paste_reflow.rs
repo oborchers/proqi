@@ -62,9 +62,9 @@ fn reflow_paste_is_one_atomic_board_operation_with_persistent_history() {
     ));
     assert_eq!(
         fixture.app.state.board.live_thoughts()[0].content,
-        "first line wraps here\n\nsecond paragraph"
+        "first line\nwraps here\n\nsecond paragraph"
     );
-    assert_eq!(fixture.app.status_text(), Some("pasted and reflowed"));
+    assert_eq!(fixture.app.status_text(), Some("pasted and cleaned up"));
 
     fixture.input(crate::key_input(UiKey::Escape));
     fixture.input(crate::key_input(UiKey::Undo));
@@ -73,7 +73,7 @@ fn reflow_paste_is_one_atomic_board_operation_with_persistent_history() {
     fixture.input(crate::key_input(UiKey::Redo));
     assert_eq!(
         fixture.app.state.board.live_thoughts()[0].content,
-        "first line wraps here\n\nsecond paragraph"
+        "first line\nwraps here\n\nsecond paragraph"
     );
 }
 
@@ -94,7 +94,7 @@ fn reflow_replaces_one_editor_selection_and_undo_restores_it() {
         }));
     }
     let request_id = request(&mut fixture, UiKey::PasteClipboardReflow);
-    let effects = complete(&mut fixture, request_id, "new\n  words");
+    let effects = complete(&mut fixture, request_id, "new  words");
     assert!(matches!(effects.as_slice(), [Effect::CommitRevision(_)]));
     assert_eq!(
         fixture.app.editor_snapshot().expect("editor").content,
@@ -115,7 +115,7 @@ fn whitespace_only_reflow_does_not_delete_a_selection_or_create_a_thought() {
     assert!(compose.app.state.board.live_thoughts().is_empty());
     assert_eq!(
         compose.app.status_text(),
-        Some("nothing remained after reflow")
+        Some("nothing remained after cleanup")
     );
 
     let mut edit = Fixture::new();
@@ -158,7 +158,7 @@ fn protected_attachment_payload_pastes_exactly_with_truthful_status() {
     assert_eq!(thought.annotations.len(), 1);
     assert_eq!(
         fixture.app.status_text(),
-        Some("pasted exactly; nothing to reflow")
+        Some("pasted exactly; spacing already clean")
     );
 }
 
@@ -182,7 +182,7 @@ fn compose_materialization_preserves_reflow_kind_and_repeated_reads() {
     complete(&mut fixture, second, " second\npart");
     assert_eq!(
         fixture.app.editor_snapshot().expect("editor").content,
-        "xfirst partsecond part"
+        "xfirst\npartsecond\npart"
     );
 }
 
@@ -200,7 +200,7 @@ fn transformed_large_paste_keeps_a_fold_through_narrow_shallow_rendering() {
             .annotations
             .as_slice(),
         [ContentAnnotation {
-            kind: ContentAnnotationKind::LargePaste { lines: 1, .. },
+            kind: ContentAnnotationKind::LargePaste { lines: 2, .. },
             ..
         }]
     ));
@@ -237,7 +237,7 @@ fn board_paste_pair_is_exact_then_reflow_while_text_and_query_owners_keep_their_
     let mut reflow = Fixture::new();
     reflow.input(crate::key_input(UiKey::Escape));
     let request_id = request(&mut reflow, UiKey::Character('P'));
-    complete(&mut reflow, request_id, "board\nreflow");
+    complete(&mut reflow, request_id, "board  reflow");
     assert_eq!(
         reflow.app.state.board.live_thoughts()[0].content,
         "board reflow"
@@ -270,7 +270,7 @@ fn board_paste_pair_is_exact_then_reflow_while_text_and_query_owners_keep_their_
 fn reflow_content_survives_storage_failure_and_uses_the_existing_retry() {
     let mut fixture = Fixture::new();
     let request_id = request(&mut fixture, UiKey::PasteClipboardReflow);
-    let effects = complete(&mut fixture, request_id, "save\nthis");
+    let effects = complete(&mut fixture, request_id, "save  this");
     let sequence = effects
         .first()
         .and_then(Effect::persistence_batch)
@@ -331,7 +331,7 @@ fn command_palette_reflow_restores_the_editor_selection_handoff() {
     }
     fixture.input(crate::key_input(UiKey::Escape));
     fixture.input(crate::key_input(UiKey::Character(':')));
-    for character in "paste and reflow".chars() {
+    for character in "paste and clean up".chars() {
         fixture.input(crate::key_input(UiKey::Character(character)));
     }
     let request_id = fixture
@@ -342,7 +342,7 @@ fn command_palette_reflow_restores_the_editor_selection_handoff() {
             _ => None,
         })
         .expect("palette clipboard read");
-    complete(&mut fixture, request_id, "new\nwords");
+    complete(&mut fixture, request_id, "new  words");
     assert_eq!(
         fixture.app.editor_snapshot().expect("editor").content,
         "replace new words here"
@@ -359,11 +359,11 @@ fn paste_commands_are_discoverable_and_reflow_is_mouse_operable() {
     }
     let (_, entries, _) = fixture.app.palette_view().expect("palette");
     assert!(entries.iter().any(|entry| entry == "Paste exactly"));
-    assert!(entries.iter().any(|entry| entry == "Paste and reflow"));
+    assert!(entries.iter().any(|entry| entry == "Paste and clean up"));
 
     fixture.input(crate::key_input(UiKey::Escape));
     fixture.input(crate::key_input(UiKey::Character(':')));
-    for character in "paste and reflow".chars() {
+    for character in "paste and clean up".chars() {
         fixture.input(crate::key_input(UiKey::Character(character)));
     }
     let item = fixture
@@ -381,7 +381,7 @@ fn paste_commands_are_discoverable_and_reflow_is_mouse_operable() {
     let [Effect::ReadClipboard { request_id }] = effects.as_slice() else {
         panic!("mouse should request clipboard");
     };
-    complete(&mut fixture, *request_id, "mouse\npath");
+    complete(&mut fixture, *request_id, "mouse  path");
     assert_eq!(
         fixture.app.state.board.live_thoughts()[0].content,
         "mouse path"
@@ -395,7 +395,7 @@ fn stale_palette_handoff_requests_no_clipboard_read() {
     fixture.input(crate::key_input(UiKey::SelectAll));
     fixture.input(crate::key_input(UiKey::Escape));
     fixture.input(crate::key_input(UiKey::Character(':')));
-    for character in "paste and reflow".chars() {
+    for character in "paste and clean up".chars() {
         fixture.input(crate::key_input(UiKey::Character(character)));
     }
     let thought_id = fixture.app.state.board.live_thoughts()[0].id;

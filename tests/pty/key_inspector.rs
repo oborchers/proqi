@@ -279,9 +279,15 @@ fn current_capture_json_contract_matches_reviewed_fixtures() {
 }
 
 #[test]
-fn reflow_primary_chords_and_plain_editor_text_are_distinct() {
-    inspect("\x1b[102;9u", "U+0066", &["Super"], Some("thought.reflow"));
-    inspect("\x1b[102;33u", "U+0066", &["Meta"], Some("thought.reflow"));
+fn cleanup_control_shift_chords_and_plain_editor_text_are_distinct() {
+    inspect(
+        "\x1b[102;6u",
+        "U+0066",
+        &["Control", "Shift"],
+        Some("thought.reflow"),
+    );
+    inspect("\x1b[70;5u", "U+0046", &["Control"], Some("thought.reflow"));
+    inspect("\x1b[102;9u", "U+0066", &["Super"], None);
     inspect("\x1b[102;5u", "U+0066", &["Control"], None);
     inspect("f", "U+0066", &[], None);
 }

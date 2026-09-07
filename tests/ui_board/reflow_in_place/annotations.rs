@@ -37,8 +37,8 @@ fn semantic_annotations_rebase_exactly_beside_a_transformable_envelope() {
             .board
             .thought(thought_id)
             .expect("thought");
-        assert!(after.content.starts_with("before prose\n\n"));
-        assert!(after.content.ends_with("\n\nafter prose"));
+        assert!(after.content.starts_with("before\nprose\n\n"));
+        assert!(after.content.ends_with("\n\nafter\nprose"));
         assert_eq!(after.annotations.len(), 4);
         for (before, current) in annotations.iter().zip(&after.annotations).skip(1) {
             assert_eq!(
@@ -50,12 +50,12 @@ fn semantic_annotations_rebase_exactly_beside_a_transformable_envelope() {
         let fold = &after.annotations[0];
         assert_eq!(
             &after.content[fold.start..fold.end],
-            format!("{} wrap", "界".repeat(1200))
+            format!("{}\nwrap", "界".repeat(1200))
         );
         assert!(matches!(
             fold.kind,
             ContentAnnotationKind::LargePaste {
-                lines: 1,
+                lines: 2,
                 graphemes: 1205
             }
         ));
@@ -89,7 +89,7 @@ fn expanded_envelope_stays_expanded_after_reflow() {
     assert!(!text(draw(&mut fixture, 50, 10).backend().buffer()).contains("[Pasted text"));
     assert_eq!(
         fixture.app.editor_snapshot().expect("editor").content,
-        format!("{}continuation", "word ".repeat(300))
+        format!("{}\ncontinuation", "word ".repeat(300).trim_end())
     );
 }
 
@@ -103,7 +103,7 @@ fn failed_transform_keeps_the_exact_large_control_payload() {
     assert_eq!(fixture.app.state.board.live_thoughts()[0], &before);
     assert_eq!(
         fixture.app.status_text(),
-        Some("could not reflow; thought kept unchanged")
+        Some("could not clean up spacing; thought kept unchanged")
     );
     fixture.input(UiInput::Paste(" ordinary exact\n paste".to_owned()));
     assert!(

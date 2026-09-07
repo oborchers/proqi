@@ -131,10 +131,12 @@ impl ReflowState {
             content[old.clone()].to_owned()
         } else if !self.has_content || trailing {
             String::new()
-        } else if count_breaks(content, &pending) >= 2 {
-            newline.repeat(2)
         } else {
-            " ".to_owned()
+            match count_breaks(content, &pending) {
+                0 => " ".to_owned(),
+                1 => newline.to_owned(),
+                _ => newline.repeat(2),
+            }
         };
         let new_start = self.output.len();
         self.output.push_str(&separator);

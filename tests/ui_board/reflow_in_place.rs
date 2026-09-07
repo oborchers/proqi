@@ -10,11 +10,7 @@ use proqi::{
 
 fn reflow(fixture: &mut Fixture) -> Vec<Effect> {
     let modifiers = if matches!(fixture.app.interaction_mode(), InteractionMode::Edit { .. }) {
-        if cfg!(target_os = "macos") {
-            LogicalModifiers::SUPER
-        } else {
-            LogicalModifiers::CONTROL
-        }
+        LogicalModifiers::CONTROL.union(LogicalModifiers::SHIFT)
     } else {
         LogicalModifiers::NONE
     };
@@ -26,7 +22,7 @@ fn reflow(fixture: &mut Fixture) -> Vec<Effect> {
 #[test]
 fn board_reflows_only_focus_and_retains_neighbors_and_range() {
     let mut fixture = Fixture::new();
-    for content in ["neighbor\nexact", "focused\nprose", "other\nexact"] {
+    for content in ["neighbor\nexact", "focused  prose", "other\nexact"] {
         fixture.paste(content);
         fixture.input(key_input(UiKey::Escape));
     }
@@ -58,7 +54,7 @@ fn board_reflows_only_focus_and_retains_neighbors_and_range() {
     fixture.input(key_input(UiKey::Undo));
     assert_eq!(
         fixture.app.state.board.live_thoughts()[1].content,
-        "focused\nprose"
+        "focused  prose"
     );
     fixture.input(key_input(UiKey::Redo));
     assert_eq!(
@@ -66,13 +62,13 @@ fn board_reflows_only_focus_and_retains_neighbors_and_range() {
         "focused prose"
     );
     assert!(reflow(&mut fixture).is_empty());
-    assert_eq!(fixture.app.status_text(), Some("nothing to reflow"));
+    assert_eq!(fixture.app.status_text(), Some("spacing already clean"));
 }
 
 #[test]
 fn edit_reflows_complete_content_and_projects_selection() {
     let mut fixture = Fixture::new();
-    fixture.paste("first\nsecond");
+    fixture.paste("first  line\nsecond");
     fixture.input(key_input(UiKey::Character('!')));
     fixture.input(key_input(UiKey::Move {
         movement: CursorMovement::DocumentStart,
@@ -81,18 +77,18 @@ fn edit_reflows_complete_content_and_projects_selection() {
     let effects = reflow(&mut fixture);
     assert!(matches!(effects.as_slice(), [Effect::CommitRevision(_)]));
     let after = fixture.app.editor_snapshot().expect("editor");
-    assert_eq!(after.content, "first second!");
+    assert_eq!(after.content, "first line\nsecond!");
     assert_eq!(after.cursor, TextPosition::default());
     assert!(after.selection.is_some());
     fixture.input(key_input(UiKey::Undo));
     assert_eq!(
         fixture.app.editor_snapshot().expect("editor").content,
-        "first\nsecond!"
+        "first  line\nsecond!"
     );
     fixture.input(key_input(UiKey::Redo));
     assert_eq!(
         fixture.app.editor_snapshot().expect("editor").content,
-        "first second!"
+        "first line\nsecond!"
     );
     assert!(reflow(&mut fixture).is_empty());
     fixture.input(key_input(UiKey::Character('f')));
@@ -149,12 +145,12 @@ fn collapsed_large_paste_reflows_without_expansion_and_recounts() {
     let thought = fixture.app.state.board.live_thoughts()[0];
     assert_eq!(
         thought.content,
-        format!("{}tail", "界e\u{301}👩🏽‍💻 ".repeat(400))
+        format!("{}\ntail", "界e\u{301}👩🏽‍💻 ".repeat(400).trim_end())
     );
     assert!(matches!(
         thought.annotations[0].kind,
         ContentAnnotationKind::LargePaste {
-            lines: 1,
+            lines: 2,
             graphemes: 1604
         }
     ));
@@ -198,7 +194,7 @@ fn line_threshold_fold_dissolves_and_lists_keep_semantics_for_lf_and_crlf() {
         assert_eq!(
             thought.content,
             format!(
-                "prose wraps{newline}{newline}- item continuation{newline}- next{newline}{newline}tail"
+                "prose{newline}wraps{newline}{newline}- item{newline}  continuation{newline}- next{newline}{newline}tail"
             )
         );
         assert!(thought.annotations.is_empty());
@@ -209,7 +205,7 @@ fn line_threshold_fold_dissolves_and_lists_keep_semantics_for_lf_and_crlf() {
 #[test]
 fn pending_typing_flushes_before_one_reflow_revision() {
     let mut fixture = Fixture::new();
-    fixture.paste("first\nsecond");
+    fixture.paste("first  line\nsecond");
     fixture.input(key_input(UiKey::Character('!')));
     let effects = reflow(&mut fixture);
     assert!(matches!(
@@ -219,12 +215,12 @@ fn pending_typing_flushes_before_one_reflow_revision() {
     fixture.input(key_input(UiKey::Undo));
     assert_eq!(
         fixture.app.editor_snapshot().expect("editor").content,
-        "first\nsecond!"
+        "first  line\nsecond!"
     );
     fixture.input(key_input(UiKey::Undo));
     assert_eq!(
         fixture.app.editor_snapshot().expect("editor").content,
-        "first\nsecond"
+        "first  line\nsecond"
     );
 }
 

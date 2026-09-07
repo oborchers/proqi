@@ -294,8 +294,10 @@ A modified uppercase-only logical codepoint is displayed explicitly, for example
 `Ctrl+U+0044`, to distinguish it from the conventional `Ctrl+D` label for lowercase
 `d`. Equivalent case aliases for the same action share the conventional label.
 
-`thought.reflow` reflows exactly one existing thought in place. Its defaults are
-plain `f` in Board and `Primary+F` in Edit. Plain Edit `f` remains text. The
+`thought.reflow` cleans spacing in exactly one existing thought. Its defaults are
+plain `f` in Board and `Control+Shift+F` in Edit on every platform. Uppercase `F`
+reported with Control but without a distinct Shift bit is the compatibility
+spelling for terminals that encode Shift in the character. Plain Edit `f` remains text. The
 complete active thought is transformed regardless of text selection. The action
 has contextual Help and a Commands entry, with no permanent footer control.
 Versioned aliases replace or disable these defaults using the ordinary schema.
