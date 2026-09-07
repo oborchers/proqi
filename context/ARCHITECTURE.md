@@ -373,16 +373,18 @@ timeout and cancellation failures without waiting for a blocked filesystem
 call to return. Those reasons are content-free diagnostics only. Unknown and
 checking state remain visually neutral without becoming accessibility proof.
 
-On macOS, the same killable attachment worker first reads the public Foundation
-URL resource values for ubiquitous identity, downloading activity, downloading
-status, and downloading error. Only a complete, correctly typed, error-free
-ubiquitous result can establish an iCloud presentation. `NotDownloaded` with an
-explicitly inactive download becomes in iCloud. An explicitly active download
-becomes downloading. `Downloaded` and `Current` still pass through the exact
-readability proof. Missing, wrong-typed, unknown, contradictory, or failed
-metadata falls through to the generic filesystem classification without an
-iCloud claim. Other platforms do not link Foundation and preserve the generic
-behavior. The adapter never calls a materialization or download API.
+On macOS, a private platform module in the same killable attachment worker
+reads the public Foundation URL resource values for ubiquitous identity,
+downloading activity, downloading status, and downloading error. The raw
+metadata types and translation policy remain confined to that module. Only a
+complete, correctly typed, error-free ubiquitous result can establish an
+iCloud presentation. `NotDownloaded` with an explicitly inactive download
+becomes in iCloud. An explicitly active download becomes downloading.
+`Downloaded` and `Current` still pass through the exact readability proof.
+Missing, wrong-typed, unknown, contradictory, or failed metadata falls through
+to the generic filesystem classification without an iCloud claim. Other
+platforms compile no cloud probe, do not link Foundation, and preserve the
+generic behavior. The adapter never calls a materialization or download API.
 
 Application state owns the transient exact-key cache, its explicit unknown,
 checking, available, in iCloud, downloading, and inaccessible states, and the

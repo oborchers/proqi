@@ -11,72 +11,30 @@ use crate::ports::attachment_accessibility::{
 #[cfg(target_os = "macos")]
 mod macos;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum CloudDownloadStatus {
-    NotDownloaded,
-    Downloaded,
-    Current,
-    Unknown,
-}
-
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-struct CloudMetadata {
-    ubiquitous: Option<bool>,
-    downloading: Option<bool>,
-    status: Option<CloudDownloadStatus>,
-    has_download_error: bool,
-}
-
-trait CloudMetadataProbe {
-    fn metadata(&self, path: &Path) -> Option<CloudMetadata>;
-}
-
-#[cfg(not(target_os = "macos"))]
-struct PlatformCloudMetadata;
-
-#[cfg(not(target_os = "macos"))]
-impl CloudMetadataProbe for PlatformCloudMetadata {
-    fn metadata(&self, _path: &Path) -> Option<CloudMetadata> {
-        None
-    }
-}
-
-#[cfg(target_os = "macos")]
-use macos::PlatformCloudMetadata;
-
 /// System filesystem implementation of typed attachment availability.
 #[derive(Default)]
 pub struct FileAttachmentAccessibility;
 
 impl AttachmentAccessibility for FileAttachmentAccessibility {
     fn check(&mut self, path: &Path) -> Result<AttachmentAvailability, AttachmentAccessFailure> {
-        check_with_metadata(path, &PlatformCloudMetadata)
+        if !path.is_absolute() {
+            return Err(AttachmentAccessFailure::Unreadable);
+        }
+
+        #[cfg(target_os = "macos")]
+        let platform_availability = macos::availability(path);
+        #[cfg(not(target_os = "macos"))]
+        let platform_availability = None;
+
+        finish_with_platform_availability(path, platform_availability)
     }
 }
 
-fn check_with_metadata(
+fn finish_with_platform_availability(
     path: &Path,
-    cloud: &impl CloudMetadataProbe,
+    platform_availability: Option<AttachmentAvailability>,
 ) -> Result<AttachmentAvailability, AttachmentAccessFailure> {
-    if !path.is_absolute() {
-        return Err(AttachmentAccessFailure::Unreadable);
-    }
-    if let Some(metadata) = cloud.metadata(path)
-        && metadata.ubiquitous == Some(true)
-        && !metadata.has_download_error
-    {
-        match (metadata.downloading, metadata.status) {
-            (
-                Some(true),
-                Some(CloudDownloadStatus::NotDownloaded | CloudDownloadStatus::Downloaded),
-            ) => return Ok(AttachmentAvailability::Downloading),
-            (Some(false), Some(CloudDownloadStatus::NotDownloaded)) => {
-                return Ok(AttachmentAvailability::InCloud);
-            }
-            _ => {}
-        }
-    }
-    prove_exact_readability(path)
+    platform_availability.map_or_else(|| prove_exact_readability(path), Ok)
 }
 
 fn prove_exact_readability(path: &Path) -> Result<AttachmentAvailability, AttachmentAccessFailure> {
@@ -126,18 +84,7 @@ mod tests {
         AttachmentAccessFailure, AttachmentAccessibility as _, AttachmentAvailability,
     };
 
-    use super::{
-        CloudDownloadStatus, CloudMetadata, CloudMetadataProbe, FileAttachmentAccessibility,
-        check_with_metadata,
-    };
-
-    struct FixedMetadata(Option<CloudMetadata>);
-
-    impl CloudMetadataProbe for FixedMetadata {
-        fn metadata(&self, _path: &std::path::Path) -> Option<CloudMetadata> {
-            self.0
-        }
-    }
+    use super::FileAttachmentAccessibility;
 
     #[test]
     fn missing_directory_and_unicode_file_are_classified_without_rewriting_paths() {
@@ -190,108 +137,20 @@ mod tests {
         );
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
-    fn authoritative_ubiquitous_metadata_distinguishes_cloud_states() {
-        let missing = tempfile::tempdir()
-            .expect("temporary directory")
-            .path()
-            .join("evicted.txt");
-        let in_cloud = FixedMetadata(Some(CloudMetadata {
-            ubiquitous: Some(true),
-            downloading: Some(false),
-            status: Some(CloudDownloadStatus::NotDownloaded),
-            has_download_error: false,
-        }));
-        assert_eq!(
-            check_with_metadata(&missing, &in_cloud),
-            Ok(AttachmentAvailability::InCloud)
-        );
-
-        for status in [
-            CloudDownloadStatus::NotDownloaded,
-            CloudDownloadStatus::Downloaded,
-        ] {
-            let downloading = FixedMetadata(Some(CloudMetadata {
-                ubiquitous: Some(true),
-                downloading: Some(true),
-                status: Some(status),
-                has_download_error: false,
-            }));
-            assert_eq!(
-                check_with_metadata(&missing, &downloading),
-                Ok(AttachmentAvailability::Downloading)
-            );
-        }
-    }
-
-    #[test]
-    fn downloaded_and_current_metadata_still_require_exact_readability() {
+    fn non_macos_uses_only_exact_generic_readability() {
         let temporary = tempfile::tempdir().expect("temporary directory");
         let readable = temporary.path().join("local.txt");
         std::fs::write(&readable, b"content").expect("readable fixture");
-        for status in [
-            CloudDownloadStatus::Downloaded,
-            CloudDownloadStatus::Current,
-        ] {
-            let metadata = FixedMetadata(Some(CloudMetadata {
-                ubiquitous: Some(true),
-                downloading: Some(false),
-                status: Some(status),
-                has_download_error: false,
-            }));
-            assert_eq!(
-                check_with_metadata(&readable, &metadata),
-                Ok(AttachmentAvailability::Available)
-            );
-            assert_eq!(
-                check_with_metadata(&temporary.path().join("missing.txt"), &metadata),
-                Err(AttachmentAccessFailure::Missing)
-            );
-        }
-    }
-
-    #[test]
-    fn unavailable_contradictory_or_failed_metadata_never_claims_icloud() {
-        let temporary = tempfile::tempdir().expect("temporary directory");
-        let missing = temporary.path().join("missing.txt");
-        let cases = [
-            None,
-            Some(CloudMetadata {
-                ubiquitous: Some(false),
-                downloading: Some(true),
-                status: Some(CloudDownloadStatus::NotDownloaded),
-                has_download_error: false,
-            }),
-            Some(CloudMetadata {
-                ubiquitous: Some(true),
-                downloading: None,
-                status: Some(CloudDownloadStatus::NotDownloaded),
-                has_download_error: false,
-            }),
-            Some(CloudMetadata {
-                ubiquitous: Some(true),
-                downloading: Some(false),
-                status: Some(CloudDownloadStatus::Unknown),
-                has_download_error: false,
-            }),
-            Some(CloudMetadata {
-                ubiquitous: Some(true),
-                downloading: Some(true),
-                status: Some(CloudDownloadStatus::Current),
-                has_download_error: false,
-            }),
-            Some(CloudMetadata {
-                ubiquitous: Some(true),
-                downloading: Some(true),
-                status: Some(CloudDownloadStatus::NotDownloaded),
-                has_download_error: true,
-            }),
-        ];
-        for metadata in cases {
-            assert_eq!(
-                check_with_metadata(&missing, &FixedMetadata(metadata)),
-                Err(AttachmentAccessFailure::Missing)
-            );
-        }
+        let mut accessibility = FileAttachmentAccessibility;
+        assert_eq!(
+            accessibility.check(&readable),
+            Ok(AttachmentAvailability::Available)
+        );
+        assert_eq!(
+            accessibility.check(&temporary.path().join("missing.txt")),
+            Err(AttachmentAccessFailure::Missing)
+        );
     }
 }
