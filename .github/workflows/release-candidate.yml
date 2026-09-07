@@ -68,7 +68,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: taiki-e/install-action@6cd13508893c0e7eab5f273c2575d3859bd7229a # v2.86.6
+      - uses: taiki-e/install-action@1ed6d7be6168f6c9046541087ff549b6bc581fdf # v2.87.2
         with:
           tool: cargo-about@0.9.2
       - name: Generate one notice set for every release target
@@ -181,7 +181,7 @@ jobs:
           echo "DEB=target/package/proqi_amd64.deb" >> "$GITHUB_ENV"
           echo "DEB_SBOM=target/package/proqi_amd64.deb.spdx.json" >> "$GITHUB_ENV"
       - name: Generate SPDX 2.3 JSON SBOM
-        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         with:
           artifact-name: proqi-${{ matrix.target }}.spdx.json
           format: spdx-json
@@ -198,7 +198,7 @@ jobs:
           test "$(wc -l < archive-members.txt | tr -d ' ')" = 7
       - name: Generate Debian SPDX 2.3 JSON SBOM
         if: matrix.target == 'x86_64-unknown-linux-gnu'
-        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         with:
           artifact-name: proqi_amd64.deb.spdx.json
           format: spdx-json
