@@ -266,6 +266,7 @@ mod tests {
             id,
             purpose: AttachmentCheckPurpose::Background,
             checks: vec![AttachmentCheckKey {
+                ordinal: 1_u64.try_into().expect("fixture ordinal"),
                 thought_id: "tht_06g30t7dv5qv55n1ppn3clis3k"
                     .parse()
                     .expect("thought id"),

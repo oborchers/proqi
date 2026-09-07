@@ -143,7 +143,7 @@ fn matches_add(
             BoardMutation::AddThought { thought }
                 if thought.id == *thought_id
                     && thought.content == *content
-                    && thought.annotations == *annotations
+                    && same_creation_annotations(&thought.annotations, annotations)
                     && position.is_none_or(|value| {
                         u32::try_from(value).ok() == Some(thought.position.get())
                     })
@@ -284,3 +284,14 @@ fn matches_history(
 
 #[cfg(test)]
 mod tests;
+
+fn same_creation_annotations(
+    left: &[crate::domain::ContentAnnotation],
+    right: &[crate::domain::ContentAnnotation],
+) -> bool {
+    let mut left = left.to_vec();
+    let mut right = right.to_vec();
+    crate::domain::renew_attachment_occurrences(&mut left);
+    crate::domain::renew_attachment_occurrences(&mut right);
+    left == right
+}

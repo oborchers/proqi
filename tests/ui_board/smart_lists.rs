@@ -150,6 +150,7 @@ fn selected_line_indentation_excludes_a_column_zero_endpoint_and_preserves_annot
         start: annotation_start,
         end: annotation_start + path.len(),
         kind: ContentAnnotationKind::Attachment {
+            ordinal: Some(1_u64.try_into().expect("fixture ordinal")),
             image: false,
             display_name: "context.txt".to_owned(),
         },
@@ -259,6 +260,7 @@ fn paste_is_exact_and_smart_newlines_preserve_annotations_through_resize() {
         start: 0,
         end: path.len(),
         kind: ContentAnnotationKind::Attachment {
+            ordinal: Some(1_u64.try_into().expect("fixture ordinal")),
             image: false,
             display_name: "context.txt".to_owned(),
         },

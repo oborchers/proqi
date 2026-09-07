@@ -28,6 +28,8 @@ CREATE TABLE sessions (
     last_active_at INTEGER NOT NULL,
     last_durable_sequence INTEGER NOT NULL DEFAULT 0 CHECK (last_durable_sequence >= 0),
     board_history_cursor INTEGER NOT NULL DEFAULT 0 CHECK (board_history_cursor >= 0),
+    attachment_image_high INTEGER NOT NULL DEFAULT 0 CHECK (attachment_image_high >= 0),
+    attachment_file_high INTEGER NOT NULL DEFAULT 0 CHECK (attachment_file_high >= 0),
     deleted_at INTEGER
 ) STRICT;
 
@@ -164,6 +166,7 @@ INSERT INTO migration_history(version, applied_at) VALUES (10, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (11, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (12, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (13, 0);
+INSERT INTO migration_history(version, applied_at) VALUES (14, 0);
 ";
 
 pub(super) const MIGRATION_2: &str = r"
@@ -355,4 +358,10 @@ ON submission_attempt_items(thought_id)
 WHERE active = 1;
 UPDATE schema_meta SET schema_version = 13, storage_protocol = 12;
 INSERT INTO migration_history(version, applied_at) VALUES (13, 0);
+";
+
+pub(super) const MIGRATION_14: &str = r"
+ALTER TABLE sessions ADD COLUMN attachment_image_high INTEGER NOT NULL DEFAULT 0 CHECK (attachment_image_high >= 0);
+ALTER TABLE sessions ADD COLUMN attachment_file_high INTEGER NOT NULL DEFAULT 0 CHECK (attachment_file_high >= 0);
+INSERT INTO migration_history(version, applied_at) VALUES (14, 0);
 ";

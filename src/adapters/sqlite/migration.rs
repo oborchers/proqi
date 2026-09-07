@@ -18,6 +18,7 @@ use super::{
     schema::{
         MIGRATION_1, MIGRATION_2, MIGRATION_3, MIGRATION_4, MIGRATION_5, MIGRATION_6, MIGRATION_7,
         MIGRATION_8, MIGRATION_9, MIGRATION_10, MIGRATION_11, MIGRATION_12, MIGRATION_13,
+        MIGRATION_14,
     },
     support::{
         create_private_dir, map_sql_error, set_private_file_permissions, set_private_open_mode,
@@ -111,13 +112,14 @@ fn apply_migrations(connection: &Connection, found: u32) -> Result<(), StoreErro
         MIGRATION_11,
         MIGRATION_12,
         MIGRATION_13,
+        MIGRATION_14,
     ];
     let first = usize::try_from(found - 1)
         .map_err(|_| StoreError::Corrupt("invalid schema version".to_owned()))?;
     for migration in &forward[first..] {
         connection.execute_batch(migration).map_err(map_sql_error)?;
     }
-    Ok(())
+    super::attachment_migration::migrate(connection)
 }
 
 pub(super) fn create_backup(

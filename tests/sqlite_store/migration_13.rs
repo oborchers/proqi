@@ -93,7 +93,7 @@ fn physical_v12_route_migration_preserves_legacy_bytes_and_recovers_conservative
         SqliteStore::open(&refused),
         Err(StoreError::MigrationRequired {
             found: 12,
-            supported: 13
+            supported: SUPPORTED_SCHEMA_VERSION
         })
     ));
 
@@ -169,6 +169,7 @@ fn physical_v12_database() -> (DatabaseFixture, proqi::domain::SessionId) {
         .expect("mark sending");
     drop(store);
 
+    super::attachment_numbering::downgrade_to_legacy(&fixture);
     let connection = Connection::open(&fixture.config.database_path).expect("current database");
     connection
         .execute_batch(DOWNGRADE_TO_12)

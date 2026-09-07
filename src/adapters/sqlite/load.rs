@@ -22,8 +22,9 @@ pub(super) fn load_snapshot(
 ) -> Result<SessionSnapshot, StoreError> {
     let session = load_session_record(connection, session_id)?;
     let thoughts = load_thoughts(connection, session_id)?;
-    let board = SessionBoard::new(session, thoughts)
-        .map_err(|error| StoreError::Invariant(error.to_string()))?;
+    let mut board =
+        SessionBoard::new(session, thoughts).map_err(|error| board_load_error(&error))?;
+    super::attachment_numbering::restore(connection, &mut board)?;
     let board_history_cursor: i64 = connection
         .query_row(
             "SELECT board_history_cursor FROM sessions WHERE id = ?1",
@@ -33,6 +34,28 @@ pub(super) fn load_snapshot(
         .map_err(map_sql_error)?;
     let board_operations = load_board_operations(connection, session_id)?;
     let revisions = load_revisions(connection, session_id)?;
+    let mut counters = board.attachment_counters();
+    for operation in &board_operations {
+        counters
+            .observe_mutation(&operation.forward)
+            .map_err(|error| StoreError::Corrupt(error.to_string()))?;
+        counters
+            .observe_mutation(&operation.inverse)
+            .map_err(|error| StoreError::Corrupt(error.to_string()))?;
+    }
+    for revision in &revisions {
+        counters
+            .observe(&revision.before_annotations)
+            .map_err(|error| StoreError::Corrupt(error.to_string()))?;
+        counters
+            .observe(&revision.after_annotations)
+            .map_err(|error| StoreError::Corrupt(error.to_string()))?;
+    }
+    if counters != board.attachment_counters() {
+        return Err(StoreError::Corrupt(
+            "attachment counters precede retained history".to_owned(),
+        ));
+    }
     let editor_history_cursors = load_editor_cursors(connection, session_id)?;
     let integration_context = load_integration_context(connection, session_id)?;
     let cursor = i64_to_usize(board_history_cursor)?;
@@ -67,11 +90,13 @@ pub(super) fn load_board(
     connection: &Connection,
     session_id: SessionId,
 ) -> Result<SessionBoard, StoreError> {
-    SessionBoard::new(
+    let mut board = SessionBoard::new(
         load_session_record(connection, session_id)?,
         load_thoughts(connection, session_id)?,
     )
-    .map_err(|error| StoreError::Invariant(error.to_string()))
+    .map_err(|error| board_load_error(&error))?;
+    super::attachment_numbering::restore(connection, &mut board)?;
+    Ok(board)
 }
 
 pub(super) fn load_session_record(
@@ -316,4 +341,13 @@ pub(super) fn load_integration_context(
             serde_json::from_str(&payload).map_err(|error| StoreError::Corrupt(error.to_string()))
         })
         .transpose()
+}
+
+fn board_load_error(error: &crate::domain::DomainError) -> StoreError {
+    match error {
+        crate::domain::DomainError::InvalidContentAnnotation => {
+            StoreError::Corrupt(error.to_string())
+        }
+        _ => StoreError::Invariant(error.to_string()),
+    }
 }

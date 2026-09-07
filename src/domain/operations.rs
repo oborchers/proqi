@@ -255,6 +255,7 @@ pub struct SessionBoard {
     /// Session metadata.
     pub session: Session,
     thoughts: Vec<Thought>,
+    attachment_counters: super::AttachmentCounters,
 }
 
 impl SessionBoard {
@@ -264,9 +265,48 @@ impl SessionBoard {
     ///
     /// Returns a domain error when ownership, identity, or live positions are invalid.
     pub fn new(session: Session, thoughts: Vec<Thought>) -> Result<Self, DomainError> {
-        let board = Self { session, thoughts };
+        let mut board = Self {
+            session,
+            thoughts,
+            attachment_counters: super::AttachmentCounters::default(),
+        };
+        board.observe_attachments()?;
         board.validate()?;
         Ok(board)
+    }
+
+    /// Session attachment allocation high-water marks.
+    #[must_use]
+    pub const fn attachment_counters(&self) -> super::AttachmentCounters {
+        self.attachment_counters
+    }
+
+    /// Restore counters without losing any retained occurrence.
+    ///
+    /// # Errors
+    /// Rejects a counter below any already observed ordinal.
+    pub fn restore_attachment_counters(
+        &mut self,
+        counters: super::AttachmentCounters,
+    ) -> Result<(), DomainError> {
+        if counters.image() < self.attachment_counters.image()
+            || counters.file() < self.attachment_counters.file()
+        {
+            return Err(DomainError::InvalidContentAnnotation);
+        }
+        self.attachment_counters = counters;
+        Ok(())
+    }
+
+    /// Incorporate assigned annotations after an editor revision.
+    ///
+    /// # Errors
+    /// Rejects unassigned durable attachments.
+    pub fn observe_attachments(&mut self) -> Result<(), DomainError> {
+        for thought in &self.thoughts {
+            self.attachment_counters.observe(&thought.annotations)?;
+        }
+        Ok(())
     }
 
     /// All thoughts, including recoverably deleted records.
@@ -310,6 +350,7 @@ impl SessionBoard {
     ) -> Result<(), DomainError> {
         let mut candidate = self.clone();
         candidate.apply_mutation_in_place(mutation, at)?;
+        candidate.observe_attachments()?;
         candidate.validate()?;
         *self = candidate;
         Ok(())
@@ -418,7 +459,12 @@ impl SessionBoard {
             }
             validate_annotations(&thought.content, &thought.annotations)?;
         }
+        let mut attachment_ids = HashSet::new();
         for (expected, thought) in self.live_thoughts().into_iter().enumerate() {
+            super::attachment_numbering::validate_unique(
+                &thought.annotations,
+                &mut attachment_ids,
+            )?;
             if usize::try_from(thought.position.get()).ok() != Some(expected) {
                 return Err(DomainError::NonNormalizedPositions);
             }

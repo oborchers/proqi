@@ -13,7 +13,7 @@ use super::{
 };
 
 #[test]
-fn plain_and_legacy_annotations_keep_their_existing_minimum_protocols() {
+fn plain_text_keeps_legacy_protocol_while_attachments_require_session_numbering() {
     let mut ids = FakeIdGenerator::new(1_725_200_000_000);
     let plain = ControlRequest {
         protocol: 1,
@@ -41,6 +41,7 @@ fn plain_and_legacy_annotations_keep_their_existing_minimum_protocols() {
             start: 0,
             end: 10,
             kind: ContentAnnotationKind::Attachment {
+                ordinal: Some(1_u64.try_into().expect("fixture ordinal")),
                 image: true,
                 display_name: "a.png".to_owned(),
             },
@@ -48,7 +49,7 @@ fn plain_and_legacy_annotations_keep_their_existing_minimum_protocols() {
         position: None,
     };
     assert!(annotated.requires_protocol_two());
-    assert_eq!(annotated.minimum_protocol(), 2);
+    assert_eq!(annotated.minimum_protocol(), 8);
 }
 
 #[test]

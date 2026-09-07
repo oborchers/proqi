@@ -139,6 +139,7 @@ fn exact_duplicate_match_is_reserved_before_shifted_semantic_migration() {
                 start: 0,
                 end: path.len(),
                 kind: ContentAnnotationKind::Attachment {
+                    ordinal: Some(1_u64.try_into().expect("fixture ordinal")),
                     image: true,
                     display_name: "duplicate.png".to_owned(),
                 },
@@ -155,6 +156,7 @@ fn exact_duplicate_match_is_reserved_before_shifted_semantic_migration() {
                 start: path.len() + 1,
                 end: path.len() * 2 + 1,
                 kind: ContentAnnotationKind::Attachment {
+                    ordinal: Some(1_u64.try_into().expect("fixture ordinal")),
                     image: true,
                     display_name: "duplicate.png".to_owned(),
                 },
@@ -435,6 +437,12 @@ fn board_with_attachments(count: usize) -> (SessionBoard, Vec<crate::domain::Tho
                     start: 0,
                     end: path.len(),
                     kind: ContentAnnotationKind::Attachment {
+                        ordinal: Some(
+                            u64::try_from(index + 1)
+                                .expect("index")
+                                .try_into()
+                                .expect("fixture ordinal"),
+                        ),
                         image: true,
                         display_name: format!("Grüße-{index}.png"),
                     },

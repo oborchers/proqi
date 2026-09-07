@@ -13,6 +13,7 @@ fn attachment(content: &str, start: usize, end: usize, image: bool) -> ContentAn
         start,
         end,
         kind: ContentAnnotationKind::Attachment {
+            ordinal: Some(1_u64.try_into().expect("fixture ordinal")),
             image,
             display_name: content[start..end].to_owned(),
         },
@@ -35,10 +36,13 @@ fn whole_thought_copy_shifts_every_annotation_across_canonical_separators() {
     let repeated = "/offline/same.txt";
     let second = format!("{repeated} and {repeated}");
     let second_start = repeated.len() + " and ".len();
-    let second_annotations = vec![
+    let mut second_annotations = vec![
         attachment(&second, 0, repeated.len(), false),
         attachment(&second, second_start, second_start + repeated.len(), false),
     ];
+    if let ContentAnnotationKind::Attachment { ordinal, .. } = &mut second_annotations[1].kind {
+        *ordinal = Some(2_u64.try_into().expect("second file"));
+    }
     fixture.input(UiInput::PasteAnnotated(
         PastePayload::annotated(second.clone(), second_annotations.clone())
             .expect("second payload"),
