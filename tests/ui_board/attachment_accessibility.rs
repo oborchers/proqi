@@ -3,12 +3,14 @@ use super::*;
 use proqi::{
     domain::Direction,
     ports::attachment_accessibility::{
-        AttachmentAccessFailure, AttachmentCheckBatch, AttachmentCheckBatchResult,
-        AttachmentCheckResult,
+        AttachmentAccessFailure, AttachmentAvailability, AttachmentCheckBatch,
+        AttachmentCheckBatchResult, AttachmentCheckResult,
     },
 };
 use ratatui_core::style::Modifier;
 
+#[path = "attachment_accessibility/cloud_states.rs"]
+mod cloud_states;
 #[path = "attachment_accessibility/flicker_regressions.rs"]
 mod flicker_regressions;
 #[path = "attachment_accessibility/frame_presentation.rs"]
@@ -413,7 +415,28 @@ pub(super) fn complete(
         results: batch
             .checks
             .into_iter()
-            .map(|key| AttachmentCheckResult { key, result })
+            .map(|key| AttachmentCheckResult {
+                key,
+                result: result.map(|()| AttachmentAvailability::Available),
+            })
+            .collect(),
+    }
+}
+
+pub(super) fn complete_availability(
+    batch: AttachmentCheckBatch,
+    state: AttachmentAvailability,
+) -> AttachmentCheckBatchResult {
+    AttachmentCheckBatchResult {
+        id: batch.id,
+        purpose: batch.purpose,
+        results: batch
+            .checks
+            .into_iter()
+            .map(|key| AttachmentCheckResult {
+                key,
+                result: Ok(state),
+            })
             .collect(),
     }
 }

@@ -26,8 +26,8 @@ pub use action::Action;
 pub(crate) use action::{OwnedThoughtCreation, OwnedThoughtEdit};
 pub use admission::{PendingMutationIntent, PendingMutationIntents};
 pub use attachments::{
-    AttachmentAccessibilityState, AttachmentPreflightOutcome, AttachmentRefreshCause,
-    AttachmentRefreshOutcome, attachment_keys,
+    AttachmentAccessibilityState, AttachmentPreflightOutcome, AttachmentPresentationState,
+    AttachmentRefreshCause, AttachmentRefreshOutcome, attachment_keys,
 };
 pub use capture::{apply_capture, prepare_capture};
 pub(crate) use control::{ControlReplay, match_control_replay};

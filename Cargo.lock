@@ -1467,6 +1467,8 @@ dependencies = [
  "interprocess",
  "kqueue",
  "linkify",
+ "objc2",
+ "objc2-foundation",
  "png",
  "portable-pty",
  "proptest",

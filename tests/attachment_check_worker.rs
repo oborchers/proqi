@@ -13,7 +13,7 @@ fn hidden_worker_checks_unicode_and_missing_paths_without_runtime_state() {
     fs::write(&accessible, b"proof").expect("accessible fixture");
     let missing = temporary.path().join("missing.txt");
     let request = serde_json::to_vec(&serde_json::json!({
-        "version": 1,
+        "version": 2,
         "paths": [accessible, missing],
     }))
     .expect("worker request");
@@ -37,8 +37,9 @@ fn hidden_worker_checks_unicode_and_missing_paths_without_runtime_state() {
     assert!(output.status.success(), "stderr: {:?}", output.stderr);
     let response: serde_json::Value =
         serde_json::from_slice(&output.stdout).expect("response JSON");
-    assert_eq!(response["version"], 1);
-    assert_eq!(response["failures"][0], serde_json::Value::Null);
-    assert_eq!(response["failures"][1], "missing");
+    assert_eq!(response["version"], 2);
+    assert_eq!(response["outcomes"][0]["state"], "available");
+    assert_eq!(response["outcomes"][1]["state"], "inaccessible");
+    assert_eq!(response["outcomes"][1]["reason"], "missing");
     assert!(!temporary.path().join("worker-state").exists());
 }

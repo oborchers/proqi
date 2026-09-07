@@ -1,6 +1,7 @@
 //! Transient attachment health, bounded scheduling, and submission preflight policy.
 
 mod keys;
+mod presentation;
 #[cfg(test)]
 mod tests;
 
@@ -12,8 +13,9 @@ use std::{
 use crate::{
     domain::{SessionBoard, SubmissionId, ThoughtId},
     ports::attachment_accessibility::{
-        AttachmentAccessFailure, AttachmentCheckBatch, AttachmentCheckBatchResult,
-        AttachmentCheckKey, AttachmentCheckPurpose, AttachmentCheckResult,
+        AttachmentAccessFailure, AttachmentAvailability, AttachmentCheckBatch,
+        AttachmentCheckBatchResult, AttachmentCheckKey, AttachmentCheckPurpose,
+        AttachmentCheckResult,
     },
 };
 
@@ -21,6 +23,7 @@ use super::Effect;
 
 pub use keys::attachment_keys;
 use keys::attachment_keys_by_thought;
+pub use presentation::AttachmentPresentationState;
 
 const BACKGROUND_BATCH_SIZE: usize = 16;
 const PREFLIGHT_BATCH_SIZE: usize = 32;
@@ -32,7 +35,9 @@ const INACTIVE_REFRESH_AFTER: Duration = Duration::from_secs(5 * 60);
 enum AttachmentHealth {
     Unknown,
     Checking,
-    Accessible,
+    Available,
+    InCloud,
+    Downloading,
     Inaccessible(AttachmentAccessFailure),
 }
 
@@ -292,19 +297,6 @@ impl AttachmentAccessibilityState {
         (effects, preflight, refresh)
     }
 
-    /// Confirmed user-visible failure for one current attachment annotation.
-    #[must_use]
-    pub fn inaccessible(&self, thought_id: ThoughtId, annotation_index: usize) -> bool {
-        self.known
-            .get(&thought_id)
-            .and_then(|keys| {
-                keys.iter()
-                    .find(|key| key.annotation_index == annotation_index)
-            })
-            .and_then(|key| self.health.get(key))
-            .is_some_and(|health| matches!(health, AttachmentHealth::Inaccessible(_)))
-    }
-
     /// Exact current keys for source capture and fresh preflight.
     #[must_use]
     pub fn keys_for(&self, thought_ids: &[ThoughtId]) -> Option<Vec<AttachmentCheckKey>> {
@@ -326,7 +318,7 @@ impl AttachmentAccessibilityState {
                 .get(key)
                 .copied()
                 .unwrap_or(Err(AttachmentAccessFailure::Io));
-            if result.is_err() {
+            if result != Ok(AttachmentAvailability::Available) {
                 failures += 1;
             }
             let target = self.current_result_key(key);
@@ -362,7 +354,7 @@ impl AttachmentAccessibilityState {
             .known
             .values()
             .flatten()
-            .filter(|key| !matches!(self.health.get(*key), Some(AttachmentHealth::Accessible)))
+            .filter(|key| !matches!(self.health.get(*key), Some(AttachmentHealth::Available)))
             .count();
         let outcome = AttachmentRefreshOutcome {
             total,

@@ -1,5 +1,6 @@
 //! Exact paste payloads and folded board presentation.
 
+use crate::application::AttachmentPresentationState;
 use crate::domain::{
     AnnotationBehavior, ContentAnnotation, ContentAnnotationKind, InlineStyleKind,
 };
@@ -12,7 +13,6 @@ pub(in crate::ui) use reflow::PasteReflow;
 
 const LARGE_PASTE_LINES: usize = 12;
 const LARGE_PASTE_GRAPHEMES: usize = 1_200;
-const INACCESSIBLE_SUFFIX: &str = " [inaccessible]";
 
 /// Exact inserted text with optional durable presentation provenance.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -157,7 +157,7 @@ pub(super) struct PresentedSubstitution {
     pub(super) canonical_start: usize,
     pub(super) canonical_end: usize,
     pub(super) collapsed: bool,
-    pub(super) inaccessible: bool,
+    pub(super) health: AttachmentPresentationState,
 }
 
 /// Closed semantic style applied to a projected visible byte range.
@@ -204,18 +204,22 @@ pub(super) fn project_with_health(
     content: &str,
     annotations: &[ContentAnnotation],
     expanded: &[usize],
-    mut inaccessible: impl FnMut(usize) -> bool,
+    mut health: impl FnMut(usize) -> AttachmentPresentationState,
 ) -> Result<Presentation, ProjectionError> {
     let mut projection = ProjectionBuilder::default();
     for (annotation_index, annotation) in annotations.iter().enumerate() {
-        let is_inaccessible = matches!(annotation.kind, ContentAnnotationKind::Attachment { .. })
-            && inaccessible(annotation_index);
+        let attachment_health =
+            if matches!(annotation.kind, ContentAnnotationKind::Attachment { .. }) {
+                health(annotation_index)
+            } else {
+                AttachmentPresentationState::Available
+            };
         projection.push_annotation(
             content,
             annotation_index,
             annotation,
             expanded.contains(&annotation_index),
-            is_inaccessible,
+            attachment_health,
         )?;
     }
     projection.finish(content)
@@ -238,7 +242,7 @@ impl ProjectionBuilder {
         annotation_index: usize,
         annotation: &ContentAnnotation,
         expanded: bool,
-        inaccessible: bool,
+        health: AttachmentPresentationState,
     ) -> Result<(), ProjectionError> {
         let prefix = content
             .get(self.cursor..annotation.start)
@@ -250,10 +254,10 @@ impl ProjectionBuilder {
                 self.push_inline(content, annotation, start, kind)?;
             }
             AnnotationBehavior::Substitution if expanded => {
-                self.push_expanded(content, annotation_index, annotation, start, inaccessible)?;
+                self.push_expanded(content, annotation_index, annotation, start, health)?;
             }
             AnnotationBehavior::Substitution => {
-                self.push_collapsed(annotation_index, annotation, start, inaccessible);
+                self.push_collapsed(annotation_index, annotation, start, health);
             }
         }
         self.cursor = annotation.end;
@@ -287,7 +291,7 @@ impl ProjectionBuilder {
         annotation_index: usize,
         annotation: &ContentAnnotation,
         start: usize,
-        inaccessible: bool,
+        health: AttachmentPresentationState,
     ) -> Result<(), ProjectionError> {
         match &annotation.kind {
             ContentAnnotationKind::Attachment { image: true, .. } => self.image += 1,
@@ -299,9 +303,7 @@ impl ProjectionBuilder {
             .ok_or(ProjectionError::InvalidAnnotationRange)?;
         self.output.push_str(exact);
         let content_end = self.output.len();
-        if inaccessible {
-            self.output.push_str(INACCESSIBLE_SUFFIX);
-        }
+        push_expanded_health_suffix(&mut self.output, health);
         self.substitutions.push(substitution(
             annotation_index,
             start,
@@ -309,9 +311,9 @@ impl ProjectionBuilder {
             content_end,
             annotation,
             false,
-            inaccessible,
+            health,
         ));
-        if inaccessible {
+        if health != AttachmentPresentationState::Available {
             self.styles.push(PresentedStyle {
                 start,
                 end: self.output.len(),
@@ -326,14 +328,14 @@ impl ProjectionBuilder {
         annotation_index: usize,
         annotation: &ContentAnnotation,
         start: usize,
-        inaccessible: bool,
+        health: AttachmentPresentationState,
     ) {
         push_collapsed_label(
             &mut self.output,
             &annotation.kind,
             &mut self.image,
             &mut self.file,
-            inaccessible,
+            health,
         );
         self.substitutions.push(substitution(
             annotation_index,
@@ -342,15 +344,15 @@ impl ProjectionBuilder {
             self.output.len(),
             annotation,
             true,
-            inaccessible,
+            health,
         ));
         self.styles.push(PresentedStyle {
             start,
             end: self.output.len(),
-            kind: if inaccessible {
-                PresentedStyleKind::Warning
-            } else {
+            kind: if health == AttachmentPresentationState::Available {
                 PresentedStyleKind::Annotation
+            } else {
+                PresentedStyleKind::Warning
             },
         });
     }
@@ -373,7 +375,7 @@ fn push_collapsed_label(
     kind: &ContentAnnotationKind,
     image_count: &mut usize,
     file_count: &mut usize,
-    inaccessible: bool,
+    health: AttachmentPresentationState,
 ) {
     match kind {
         ContentAnnotationKind::Attachment { image, .. } => {
@@ -388,9 +390,7 @@ fn push_collapsed_label(
             output.push_str(label);
             output.push(' ');
             output.push_str(&number.to_string());
-            if inaccessible {
-                output.push_str(" · inaccessible");
-            }
+            push_collapsed_health_suffix(output, health);
             output.push(']');
         }
         ContentAnnotationKind::LargePaste { lines, graphemes } => {
@@ -414,7 +414,7 @@ fn substitution(
     content_end: usize,
     annotation: &ContentAnnotation,
     collapsed: bool,
-    inaccessible: bool,
+    health: AttachmentPresentationState,
 ) -> PresentedSubstitution {
     PresentedSubstitution {
         annotation_index,
@@ -424,7 +424,25 @@ fn substitution(
         canonical_start: annotation.start,
         canonical_end: annotation.end,
         collapsed,
-        inaccessible,
+        health,
+    }
+}
+
+fn push_collapsed_health_suffix(output: &mut String, health: AttachmentPresentationState) {
+    match health {
+        AttachmentPresentationState::Available => {}
+        AttachmentPresentationState::InCloud => output.push_str(" · in iCloud"),
+        AttachmentPresentationState::Downloading => output.push_str(" · downloading"),
+        AttachmentPresentationState::Inaccessible => output.push_str(" · inaccessible"),
+    }
+}
+
+fn push_expanded_health_suffix(output: &mut String, health: AttachmentPresentationState) {
+    match health {
+        AttachmentPresentationState::Available => {}
+        AttachmentPresentationState::InCloud => output.push_str(" [in iCloud]"),
+        AttachmentPresentationState::Downloading => output.push_str(" [downloading]"),
+        AttachmentPresentationState::Inaccessible => output.push_str(" [inaccessible]"),
     }
 }
 

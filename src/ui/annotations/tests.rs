@@ -225,7 +225,7 @@ fn invocation_reference_projects_without_placeholder_brackets() {
             },
         }],
         &[],
-        |_| false,
+        |_| crate::application::AttachmentPresentationState::Available,
     )
     .expect("valid invocation projection");
 
@@ -251,7 +251,7 @@ fn shortcut_emphasis_preserves_text_and_is_never_a_substitution() {
         content,
         &[ContentAnnotation::shortcut(start, end)],
         &[],
-        |_| false,
+        |_| crate::application::AttachmentPresentationState::Available,
     )
     .expect("valid shortcut projection");
 
@@ -271,7 +271,9 @@ fn shortcut_emphasis_preserves_text_and_is_never_a_substitution() {
 fn malformed_projection_fails_instead_of_discarding_metadata() {
     let malformed = ContentAnnotation::shortcut(1, 2);
     assert_eq!(
-        super::project_with_health("é", &[malformed], &[], |_| false),
+        super::project_with_health("é", &[malformed], &[], |_| {
+            crate::application::AttachmentPresentationState::Available
+        }),
         Err(super::ProjectionError::InvalidAnnotationRange)
     );
 }

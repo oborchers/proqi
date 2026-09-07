@@ -13,8 +13,8 @@ use crate::{
         process::{CancellationFlag, SystemProcessRunner},
     },
     ports::attachment_accessibility::{
-        AttachmentAccessFailure, AttachmentCheckBatch, AttachmentCheckBatchResult,
-        AttachmentCheckResult,
+        AttachmentAccessFailure, AttachmentAvailability, AttachmentCheckBatch,
+        AttachmentCheckBatchResult, AttachmentCheckResult,
     },
     ports::environment::{ProcessError, ProcessRequest, ProcessRunner},
 };
@@ -118,7 +118,7 @@ fn accessibility_loop(
 ) {
     while let Ok(batch) = requests.recv() {
         let check_results = executor.execute(&batch);
-        record_failures(&check_results);
+        record_health(&check_results);
         let completion = AttachmentCheckBatchResult {
             id: batch.id,
             purpose: batch.purpose,
@@ -179,14 +179,22 @@ fn process_failure(error: &ProcessError) -> AttachmentAccessFailure {
     }
 }
 
-fn record_failures(results: &[AttachmentCheckResult]) {
+fn record_health(results: &[AttachmentCheckResult]) {
     for result in results {
-        if let Err(reason) = result.result {
-            crate::adapters::diagnostics::record(
+        match result.result {
+            Err(reason) => crate::adapters::diagnostics::record(
                 crate::adapters::diagnostics::SafeEvent::AttachmentInaccessible {
                     reason: reason.diagnostic_code(),
                 },
-            );
+            ),
+            Ok(state @ (AttachmentAvailability::InCloud | AttachmentAvailability::Downloading)) => {
+                crate::adapters::diagnostics::record(
+                    crate::adapters::diagnostics::SafeEvent::AttachmentCloudState {
+                        state: state.diagnostic_code(),
+                    },
+                );
+            }
+            Ok(AttachmentAvailability::Available) => {}
         }
     }
 }
@@ -205,12 +213,13 @@ mod tests {
     use crate::{
         adapters::terminal::supervisor::ShutdownDeadline,
         ports::attachment_accessibility::{
-            AttachmentAccessFailure, AttachmentCheckBatch, AttachmentCheckKey,
-            AttachmentCheckPurpose, AttachmentCheckResult,
+            AttachmentAccessFailure, AttachmentAvailability, AttachmentCheckBatch,
+            AttachmentCheckKey, AttachmentCheckPurpose, AttachmentCheckResult,
         },
+        ports::environment::ProcessError,
     };
 
-    use super::{AccessibilityLane, BatchExecutor};
+    use super::{AccessibilityLane, BatchExecutor, process_failure};
 
     struct SequenceExecutor {
         outcomes: VecDeque<AttachmentAccessFailure>,
@@ -218,7 +227,10 @@ mod tests {
 
     impl BatchExecutor for SequenceExecutor {
         fn execute(&mut self, batch: &AttachmentCheckBatch) -> Vec<AttachmentCheckResult> {
-            let result = self.outcomes.pop_front().map_or(Ok(()), Err);
+            let result = self
+                .outcomes
+                .pop_front()
+                .map_or(Ok(AttachmentAvailability::Available), Err);
             batch
                 .checks
                 .iter()
@@ -259,6 +271,26 @@ mod tests {
         );
         lane.stop(ShutdownDeadline::after(Duration::from_millis(150)))
             .expect("recovered lane stops within its bound");
+    }
+
+    #[test]
+    fn process_timeout_cancellation_and_failures_stay_distinct_or_generic() {
+        assert_eq!(
+            process_failure(&ProcessError::TimedOut),
+            AttachmentAccessFailure::TimedOut
+        );
+        assert_eq!(
+            process_failure(&ProcessError::Cancelled),
+            AttachmentAccessFailure::Cancelled
+        );
+        assert_eq!(
+            process_failure(&ProcessError::Io("content-free fixture".to_owned())),
+            AttachmentAccessFailure::Io
+        );
+        assert_eq!(
+            process_failure(&ProcessError::OutputLimit),
+            AttachmentAccessFailure::Io
+        );
     }
 
     fn batch(id: u64, timeout: Duration) -> AttachmentCheckBatch {

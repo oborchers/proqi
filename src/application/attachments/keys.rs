@@ -11,14 +11,30 @@ use crate::{
 
 use super::{AttachmentAccessibilityState, AttachmentHealth};
 
-impl From<Result<(), crate::ports::attachment_accessibility::AttachmentAccessFailure>>
-    for AttachmentHealth
+impl
+    From<
+        Result<
+            crate::ports::attachment_accessibility::AttachmentAvailability,
+            crate::ports::attachment_accessibility::AttachmentAccessFailure,
+        >,
+    > for AttachmentHealth
 {
     fn from(
-        result: Result<(), crate::ports::attachment_accessibility::AttachmentAccessFailure>,
+        result: Result<
+            crate::ports::attachment_accessibility::AttachmentAvailability,
+            crate::ports::attachment_accessibility::AttachmentAccessFailure,
+        >,
     ) -> Self {
         match result {
-            Ok(()) => Self::Accessible,
+            Ok(crate::ports::attachment_accessibility::AttachmentAvailability::Available) => {
+                Self::Available
+            }
+            Ok(crate::ports::attachment_accessibility::AttachmentAvailability::InCloud) => {
+                Self::InCloud
+            }
+            Ok(crate::ports::attachment_accessibility::AttachmentAvailability::Downloading) => {
+                Self::Downloading
+            }
             Err(failure) => Self::Inaccessible(failure),
         }
     }
@@ -84,7 +100,12 @@ impl AttachmentAccessibilityState {
         for key in keys {
             if !matches!(
                 self.health.get(key),
-                Some(AttachmentHealth::Accessible | AttachmentHealth::Inaccessible(_))
+                Some(
+                    AttachmentHealth::Available
+                        | AttachmentHealth::InCloud
+                        | AttachmentHealth::Downloading
+                        | AttachmentHealth::Inaccessible(_)
+                )
             ) {
                 self.health.insert(key.clone(), AttachmentHealth::Checking);
             }
@@ -98,8 +119,7 @@ impl AttachmentAccessibilityState {
         };
         for key in keys {
             if paths.contains(&key.canonical_path) {
-                self.health
-                    .insert(key.clone(), AttachmentHealth::Accessible);
+                self.health.insert(key.clone(), AttachmentHealth::Available);
             }
         }
     }
@@ -110,15 +130,19 @@ impl AttachmentAccessibilityState {
             return;
         };
         for key in keys {
-            self.health
-                .insert(key.clone(), AttachmentHealth::Accessible);
+            self.health.insert(key.clone(), AttachmentHealth::Available);
         }
     }
 
     pub(super) fn has_result(&self, key: &AttachmentCheckKey) -> bool {
         matches!(
             self.health.get(key),
-            Some(AttachmentHealth::Accessible | AttachmentHealth::Inaccessible(_))
+            Some(
+                AttachmentHealth::Available
+                    | AttachmentHealth::InCloud
+                    | AttachmentHealth::Downloading
+                    | AttachmentHealth::Inaccessible(_)
+            )
         )
     }
 
