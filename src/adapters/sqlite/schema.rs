@@ -149,7 +149,7 @@ CREATE VIRTUAL TABLE session_search USING fts5(
 );
 
 INSERT INTO schema_meta(singleton, schema_version, storage_protocol, migrated_at)
-VALUES (1, 13, 12, 0);
+VALUES (1, 14, 13, 0);
 INSERT INTO onboarding_state(singleton, completed_version) VALUES (1, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (1, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (2, 0);
@@ -164,6 +164,7 @@ INSERT INTO migration_history(version, applied_at) VALUES (10, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (11, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (12, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (13, 0);
+INSERT INTO migration_history(version, applied_at) VALUES (14, 0);
 ";
 
 pub(super) const MIGRATION_2: &str = r"
@@ -355,4 +356,10 @@ ON submission_attempt_items(thought_id)
 WHERE active = 1;
 UPDATE schema_meta SET schema_version = 13, storage_protocol = 12;
 INSERT INTO migration_history(version, applied_at) VALUES (13, 0);
+";
+
+// Register the Reflow operation kind before any older reader can encounter it.
+pub(super) const MIGRATION_14: &str = r"
+UPDATE schema_meta SET schema_version = 14, storage_protocol = 13;
+INSERT INTO migration_history(version, applied_at) VALUES (14, 0);
 ";

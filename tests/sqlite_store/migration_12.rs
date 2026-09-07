@@ -27,7 +27,7 @@ fn schema_eleven_requires_lease_authorized_backup_before_transformation_protocol
     Connection::open(&fixture.config.database_path)
         .expect("schema eleven fixture")
         .execute_batch(
-            "DELETE FROM migration_history WHERE version IN (12, 13);
+            "DELETE FROM migration_history WHERE version >= 12;
              UPDATE schema_meta SET schema_version = 11, storage_protocol = 10;",
         )
         .expect("downgrade transformation protocol stamp");
@@ -38,7 +38,7 @@ fn schema_eleven_requires_lease_authorized_backup_before_transformation_protocol
         SqliteStore::open(&refused),
         Err(StoreError::MigrationRequired {
             found: 11,
-            supported: 13
+            supported: 14
         })
     ));
     let connection = Connection::open(&fixture.config.database_path).expect("unchanged fixture");

@@ -22,6 +22,24 @@ const fn help(
 
 const HELP: &[(Action, HelpMetadata)] = &[
     (
+        Action::ReflowThought,
+        help(
+            HelpSurface::Board,
+            27,
+            "Reflow thought",
+            HelpAvailability::Always,
+        ),
+    ),
+    (
+        Action::ReflowThought,
+        help(
+            HelpSurface::Editor,
+            17,
+            "Reflow thought",
+            HelpAvailability::Always,
+        ),
+    ),
+    (
         Action::RetryStorage,
         help(
             HelpSurface::Recovery,
@@ -382,7 +400,8 @@ pub(in crate::ui::shortcut_registry) fn command_metadata(
         | Action::SubmitKeep
         | Action::SubmitAllRemove
         | Action::SubmitAllKeep => CommandAvailability::Submission,
-        Action::PlainNewline
+        Action::ReflowThought
+        | Action::PlainNewline
         | Action::DeleteLogicalLine
         | Action::DeleteSentence
         | Action::JumpUp

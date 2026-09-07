@@ -1242,6 +1242,26 @@ derived counts again before insertion. The resulting payload is passed once to
 the existing paste transaction, preserving one durable undo unit and the
 ordinary persistence failure and retry contract.
 
+In-place thought reflow consumes the same validated annotation-safe payload
+transformation and its `TextChangeSet`. The UI owns cursor/selection projection
+and retained annotation-index mapping for expanded folds. Position projection
+refines classified group replacements into whitespace and hard-break changes,
+using the formatter's existing range coalescer and `TextChangeSet` validation.
+Unchanged scalar spans retain interior carets and partial selections. Compact
+annotation mappings and the classifier output remain unchanged. Pending edits flush
+through the existing boundary before reflow. Edit uses `OwnedThoughtEdit` and
+revision history; Board uses a sealed `OwnedThoughtReflow` request and the
+existing validated content replacement, inverse mutation, and Board history
+owners. Neither path creates a durable entry for an unchanged result or deletes
+a thought for an empty result. Shortcut registry identity `thought.reflow` owns
+bindings, dispatch, diagnostics, Help, and Commands.
+
+Schema version 14 and storage protocol version 13 register the new `Reflow`
+Board operation kind. Migration 14 updates compatibility metadata only; content,
+annotations, mutation payloads, and existing history encodings are unchanged.
+The protocol boundary prevents older readers from interpreting an unknown
+closed operation variant.
+
 Compose sends every character, paste, annotated paste, clipboard result,
 movement, selection, and supported composition intention through the existing
 editor. A content-changing outcome is snapshotted once and passed to the

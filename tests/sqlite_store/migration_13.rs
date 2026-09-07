@@ -55,7 +55,7 @@ DROP TABLE submission_attempts_v13;
 CREATE UNIQUE INDEX submission_attempt_items_active_thought
 ON submission_attempt_items(thought_id)
 WHERE active = 1;
-DELETE FROM migration_history WHERE version = 13;
+DELETE FROM migration_history WHERE version >= 13;
 UPDATE schema_meta SET schema_version = 12, storage_protocol = 11;
 COMMIT;
 PRAGMA foreign_keys = ON;
@@ -93,7 +93,7 @@ fn physical_v12_route_migration_preserves_legacy_bytes_and_recovers_conservative
         SqliteStore::open(&refused),
         Err(StoreError::MigrationRequired {
             found: 12,
-            supported: 13
+            supported: 14
         })
     ));
 

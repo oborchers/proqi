@@ -344,6 +344,20 @@ Bracketed paste is treated as one semantic input event.
   undo and redo step. Whitespace-only cleanup does not create a thought or
   replace a selection. A failed transformation pastes the original payload
   exactly and reports the fallback.
+- `Reflow thought in place` applies the same classifier to one existing thought.
+  Plain `f` targets the focused durable thought in Board; `Primary+F` targets
+  the complete active thought in Edit, including content outside the selection
+  and collapsed large-paste envelopes. Plain `f` remains editor text. Both
+  bindings are independently replaceable or disableable in shortcut schema 1.
+- In-place reflow preserves unrelated Board selection and range state. Changed
+  content is one Board operation or editor revision. Pending editor changes
+  flush first as their own revision. Cursor and selection project through the
+  transformation; retained folds preserve their expanded or collapsed state.
+  Undo, redo, persistence failure and retry, and restart use ordinary history.
+- An unchanged in-place result creates no operation or revision and reports
+  that there is nothing to reflow. Empty results and failed transformations
+  leave the thought intact with a truthful explanation. Commands and contextual
+  Help expose the action and effective bindings without adding footer chrome.
 - A large paste does not freeze rendering or briefly create one key event per
   character.
 - Dragging one or more files into Proqi inserts their absolute paths. In edit
@@ -848,6 +862,7 @@ bindings are:
 |---|---|---|
 | Create thought | `n` | Click `+` or the insertion area |
 | Paste as new thought when none is selected | `Primary+V`, `p`, or native paste | Choose `Paste exactly` in Commands |
+| Reflow focused thought in place | `f` | Choose `Reflow thought in place` in Commands |
 | Paste and reflow copied prose | `Primary+Shift+V` or `Shift+P` | Choose `Paste and reflow` in Commands |
 | Edit thought | `Enter` or `e` | Click at the desired text position |
 | Copy thought | `Primary+C` or `y` | Click copy control |

@@ -27,6 +27,7 @@ mod pointer_editor;
 mod presentation;
 mod query;
 mod recovery;
+mod reflow;
 mod reorder;
 mod screenshot;
 mod search;

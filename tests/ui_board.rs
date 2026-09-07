@@ -492,3 +492,6 @@ mod visual_row_selection;
 
 #[path = "ui_board/versioned_keymap.rs"]
 mod versioned_keymap;
+
+#[path = "ui_board/reflow_in_place.rs"]
+mod reflow_in_place;

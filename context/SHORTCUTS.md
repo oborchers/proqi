@@ -81,7 +81,7 @@ Every semantic action has one stable `ShortcutActionId`. Its descriptor owns:
 - one content-free diagnostics identity;
 - the mapping into an established typed UI intention or application action.
 
-The closed action inventory covers all 52 current Commands actions plus direct
+The closed action inventory covers all 53 current Commands actions plus direct
 close, confirm, text editing, navigation, selection, clipboard, history,
 submission, Board, Browser management, recovery, and direction actions. The
 source of truth is `ShortcutActionId::COMMANDS` plus the registry's
@@ -293,3 +293,9 @@ extension.
 A modified uppercase-only logical codepoint is displayed explicitly, for example
 `Ctrl+U+0044`, to distinguish it from the conventional `Ctrl+D` label for lowercase
 `d`. Equivalent case aliases for the same action share the conventional label.
+
+`thought.reflow` reflows exactly one existing thought in place. Its defaults are
+plain `f` in Board and `Primary+F` in Edit. Plain Edit `f` remains text. The
+complete active thought is transformed regardless of text selection. The action
+has contextual Help and a Commands entry, with no permanent footer control.
+Versioned aliases replace or disable these defaults using the ordinary schema.

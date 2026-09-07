@@ -19,27 +19,33 @@ pub(crate) fn reserved_shifted_configuration_suffix(character: char) -> bool {
 }
 
 fn unshifted_primary_characters() -> impl Iterator<Item = (Action, char)> {
-    legacy_descriptors().iter().flat_map(|descriptor| {
-        platform_defaults(descriptor, false)
-            .iter()
-            .filter_map(move |claim| {
-                if !matches!(claim.presentation, ShortcutBindingPresentation::Primary) {
-                    return None;
-                }
-                let ShortcutModifiers::Exact(modifiers) = claim.binding.modifiers else {
-                    return None;
-                };
-                match claim.binding.key {
-                    LogicalKey::Character(character)
-                        if super::ShortcutPlatform::Portable.is_primary(modifiers)
-                            && !modifiers.contains(LogicalModifiers::SHIFT) =>
-                    {
-                        Some((descriptor.action, character))
+    legacy_descriptors()
+        .iter()
+        .filter(|descriptor| {
+            // The new reflow alias yields to previously valid explicit legacy bindings.
+            descriptor.action != Action::ReflowThought
+        })
+        .flat_map(|descriptor| {
+            platform_defaults(descriptor, false)
+                .iter()
+                .filter_map(move |claim| {
+                    if !matches!(claim.presentation, ShortcutBindingPresentation::Primary) {
+                        return None;
                     }
-                    _ => None,
-                }
-            })
-    })
+                    let ShortcutModifiers::Exact(modifiers) = claim.binding.modifiers else {
+                        return None;
+                    };
+                    match claim.binding.key {
+                        LogicalKey::Character(character)
+                            if super::ShortcutPlatform::Portable.is_primary(modifiers)
+                                && !modifiers.contains(LogicalModifiers::SHIFT) =>
+                        {
+                            Some((descriptor.action, character))
+                        }
+                        _ => None,
+                    }
+                })
+        })
 }
 
 fn legacy_descriptors() -> &'static [ShortcutDescriptor] {

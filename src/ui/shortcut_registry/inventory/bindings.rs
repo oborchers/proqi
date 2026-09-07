@@ -52,6 +52,7 @@ pub(super) fn alias_claims(
         .map(LogicalKey::Character)
         .collect::<BTreeSet<_>>();
     for character in [
+        'f',
         keys.transform,
         keys.delete_sentence,
         keys.select_visual_row_start,
@@ -72,9 +73,17 @@ pub(super) fn alias_claims(
             None
         } else {
             configured_action(context, key, modifiers, macos, keys, &board)
-                .map(|action| (action, ShortcutBindingPresentation::DispatchOnly))
+                .map(|action| (action, alias_presentation(action, context)))
         }
     })
+}
+
+fn alias_presentation(action: Action, context: Context) -> ShortcutBindingPresentation {
+    if action == Action::ReflowThought && context == Context::Edit {
+        ShortcutBindingPresentation::Primary
+    } else {
+        ShortcutBindingPresentation::DispatchOnly
+    }
 }
 
 fn collect_claims(
@@ -380,6 +389,9 @@ fn configured_action(
     if matches!(context, Context::Board | Context::InsertionBoundary)
         && let Some(base) = board.get(&board_character).copied()
     {
+        if base == Action::ReflowThought {
+            return (context == Context::Board && modifiers.is_empty()).then_some(base);
+        }
         if matches!(
             base,
             Action::FocusPrevious | Action::FocusNext | Action::ExtendPrevious | Action::ExtendNext
@@ -420,6 +432,12 @@ fn configured_action(
         }
         if shifted && character.eq_ignore_ascii_case(&keys.select_visual_row_end) {
             return Some(Action::ExtendVisualRowEnd);
+        }
+        if context == Context::Edit
+            && character.eq_ignore_ascii_case(&'f')
+            && !modifiers.contains(LogicalModifiers::SHIFT)
+        {
+            return Some(Action::ReflowThought);
         }
     }
     if context == Context::Help && !command_modifiers(modifiers) && character == keys.help {

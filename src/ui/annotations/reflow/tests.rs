@@ -318,8 +318,12 @@ fn partial_large_fold_boundaries_receive_normal_whitespace_cleanup() {
     .expect("boundary reflow succeeds");
     let expected = format!("{prefix}\n\n{} wrapped\n\n{suffix}", "a".repeat(1_200));
     assert_eq!(transformed.content, expected);
-    let annotations = super::reflow_annotations(&payload, &transformed)
+    let super::ReflowedAnnotations {
+        annotations,
+        origins,
+    } = super::reflow_annotations(&payload, &transformed)
         .expect("boundary annotations remain valid");
+    assert_eq!(origins, [(0, 0)]);
     let [fold] = annotations.as_slice() else {
         panic!("expected one retained fold");
     };

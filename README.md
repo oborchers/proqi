@@ -161,6 +161,7 @@ configuration.
 | `Primary+Z` / `u` | Undo a board operation |
 | `Primary+Shift+Z` / `Primary+Y` | **Redo a board operation** |
 | `Primary+Shift+V` / `Shift+P` | Paste and reflow copied prose |
+| `f` | Reflow the focused thought in place |
 | `c`; `/`; `:`; `i`; `?` | Collapse; search; commands; Screenshot Inbox; help |
 | `Esc`; `Primary+Q` / `q` | Clear selection; exit after durable flush |
 
@@ -174,6 +175,7 @@ configuration.
 | `Primary+Z`; `Primary+Shift+Z` / `Primary+Y` | Undo; redo |
 | `Primary+C` / `X`; `Primary+V` | Native copy / safe cut; paste exactly |
 | `Primary+Shift+V` | Paste and reflow copied prose |
+| `Primary+F` | Reflow the complete active thought in place |
 | macOS: `Cmd+←` / `→` | Move to the current wrapped visual-row start / end |
 | macOS: `Option+←` / `→`; elsewhere: `Ctrl+←` / `→` | Move by word |
 | `Shift` + movement | Extend text selection |

@@ -99,6 +99,7 @@ factory labels without requiring another presentation table.
 | `clipboard.copy` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | Ordinary | yes |
 | `clipboard.cut` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | DestructiveUndoable | yes |
 | `clipboard.paste_exact` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | Ordinary | yes |
+| `thought.reflow` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | Ordinary | yes |
 | `clipboard.paste_reflow` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | Ordinary | yes |
 | `selection.select_all` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | Ordinary | yes |
 | `board.duplicate` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | Ordinary | yes |

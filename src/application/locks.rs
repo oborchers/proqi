@@ -35,6 +35,7 @@ pub(super) fn ensure_action_unlocked(state: &AppState, action: &Action) -> Appli
         | Action::PersistenceCommitted(_)
         | Action::PersistenceFailed { .. }
         | Action::RetryPersistence(_) => None,
+        Action::ReflowThought(reflow) => locked_one(state, reflow.thought_id),
         Action::EditOwnedThought(edit) => locked_one(state, edit.thought_id),
     };
     locked.map_or(Ok(()), |thought_id| {

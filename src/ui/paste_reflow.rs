@@ -10,6 +10,8 @@ use crate::ports::{
 
 mod classify;
 mod isolated;
+mod projection;
+pub(super) use projection::position_changes;
 #[cfg(test)]
 mod tests;
 

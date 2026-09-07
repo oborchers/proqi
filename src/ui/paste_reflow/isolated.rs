@@ -189,7 +189,7 @@ fn count_breaks(content: &str, pending: &[OwnedRange]) -> usize {
         .sum()
 }
 
-fn coalesce_mappings(
+pub(super) fn coalesce_mappings(
     mappings: Vec<(Range<usize>, Range<usize>)>,
 ) -> Vec<(Range<usize>, Range<usize>)> {
     let mut output: Vec<(Range<usize>, Range<usize>)> = Vec::new();

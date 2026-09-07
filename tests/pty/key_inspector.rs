@@ -277,3 +277,11 @@ fn current_capture_json_contract_matches_reviewed_fixtures() {
         serde_json::from_str(include_str!("../fixtures/cli/v1/key_capture.no_event.json")).unwrap();
     assert_eq!(capture("", "board", None, true), timeout);
 }
+
+#[test]
+fn reflow_primary_chords_and_plain_editor_text_are_distinct() {
+    inspect("\x1b[102;9u", "U+0066", &["Super"], Some("thought.reflow"));
+    inspect("\x1b[102;33u", "U+0066", &["Meta"], Some("thought.reflow"));
+    inspect("\x1b[102;5u", "U+0066", &["Control"], None);
+    inspect("f", "U+0066", &[], None);
+}

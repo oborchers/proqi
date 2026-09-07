@@ -1,6 +1,6 @@
 ---
 source: tests/ui_board/transformations.rs
-assertion_line: 380
+assertion_line: 386
 expression: "super::snapshot_support::snapshot_buffer(draw_theme(&mut fixture, 72, 16,\nThemePreference::Dark).backend().buffer())"
 ---
 SIZE 72x16
@@ -17,10 +17,10 @@ TEXT
 08││Delete thought                                                        ││
 09││Copy thought                                                          ││
 10││Cut thought                                                           ││
-11││Duplicate thought or selection                                        ││
-12││Select all thoughts                                                   ││
-13││Send to another Proqi session and remove thought                      ││
-14││Move thought up                                                       ↓│
+11││Reflow thought in place                                               ││
+12││Duplicate thought or selection                                        ││
+13││Select all thoughts                                                   ││
+14││Send to another Proqi session and remove thought                      ↓│
 15│└──────────────────────────────────────────────────────────────────────┘│
 
 STYLE RUNS

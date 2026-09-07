@@ -236,7 +236,7 @@ fn downgrade_to_schema_eleven(state: &Path) {
     Connection::open(state.join("data/proqi.sqlite3"))
         .expect("database")
         .execute_batch(
-            "DELETE FROM migration_history WHERE version IN (12, 13);
+            "DELETE FROM migration_history WHERE version >= 12;
              UPDATE schema_meta SET schema_version = 11, storage_protocol = 10;",
         )
         .expect("schema eleven fixture");

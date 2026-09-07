@@ -330,3 +330,38 @@ fn record_transform(
     }
     Ok(())
 }
+
+pub(in crate::application) fn reflow_thought(
+    state: &mut AppState,
+    reflow: crate::application::OwnedThoughtReflow,
+) -> ApplicationResult<Vec<Effect>> {
+    let source = state.live_thought(reflow.thought_id)?.clone();
+    if source.content != reflow.before_content || source.annotations != reflow.before_annotations {
+        return Err(ApplicationError::ContentConflict(source.id));
+    }
+    if source.content == reflow.after_content && source.annotations == reflow.after_annotations {
+        return Ok(Vec::new());
+    }
+    let forward = replacement(
+        &source,
+        reflow.after_content.clone(),
+        reflow.after_annotations.clone(),
+    );
+    let inverse = replacement_values(
+        source.id,
+        reflow.after_content,
+        reflow.after_annotations,
+        source.content,
+        source.annotations,
+    );
+    let operation = operation(
+        state,
+        reflow.operation_id,
+        BoardOperationKind::Reflow,
+        vec![forward],
+        vec![inverse],
+        reflow.at,
+    )?;
+    record_transform(state, &operation, &[source.id])?;
+    Ok(vec![Effect::CommitBoardOperation(operation)])
+}

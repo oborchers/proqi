@@ -5,7 +5,10 @@ use std::fmt::Write as _;
 use super::reflow_text;
 
 fn reflow(input: &str) -> String {
-    reflow_text(input, &[]).expect("fixture reflows").content
+    let result = reflow_text(input, &[]).expect("fixture reflows");
+    super::position_changes(input, &result.content, &result.changes)
+        .expect("precise positions describe the same classifier output");
+    result.content
 }
 
 #[test]
