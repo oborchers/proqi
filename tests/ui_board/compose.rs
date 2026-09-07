@@ -132,6 +132,7 @@ fn exact_and_annotated_paste_materialize_through_the_canonical_create() {
         start: 0,
         end: path.len(),
         kind: ContentAnnotationKind::Attachment {
+            ordinal: Some(1_u64.try_into().expect("fixture ordinal")),
             image: false,
             display_name: "context file.txt".to_owned(),
         },

@@ -180,6 +180,7 @@ fn cut_success_does_not_delete_an_intervening_annotated_edit() {
         start: 0,
         end: after.len(),
         kind: ContentAnnotationKind::Attachment {
+            ordinal: Some(1_u64.try_into().expect("fixture ordinal")),
             image: true,
             display_name: "replacement.png".to_owned(),
         },
@@ -231,6 +232,7 @@ fn annotated_cut_restores_exact_metadata_in_one_board_undo() {
         start: 0,
         end: path.len(),
         kind: ContentAnnotationKind::Attachment {
+            ordinal: Some(1_u64.try_into().expect("fixture ordinal")),
             image: true,
             display_name: "Grüße.png".to_owned(),
         },

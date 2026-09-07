@@ -65,6 +65,9 @@ pub struct ContentAnnotation {
 pub enum ContentAnnotationKind {
     /// One absolute local file path.
     Attachment {
+        /// Assigned occurrence identity; absent only in input awaiting destination allocation.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        ordinal: Option<super::AttachmentOrdinal>,
         /// Whether the file should receive image-specific presentation.
         image: bool,
         /// Safe basename shown instead of the complete path.
@@ -188,6 +191,7 @@ mod tests {
             start: 0,
             end: path.len(),
             kind: ContentAnnotationKind::Attachment {
+                ordinal: Some(1_u64.try_into().expect("fixture ordinal")),
                 image: true,
                 display_name: "Grüße 🖼️.png".to_owned(),
             },

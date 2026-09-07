@@ -11,6 +11,7 @@ fn expanded_inaccessible_attachment_keeps_a_plain_warning_snapshot() {
                 start: 0,
                 end: path.len(),
                 kind: ContentAnnotationKind::Attachment {
+                    ordinal: Some(1_u64.try_into().expect("fixture ordinal")),
                     image: true,
                     display_name: "missing.png".to_owned(),
                 },

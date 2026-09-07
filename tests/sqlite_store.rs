@@ -164,3 +164,6 @@ mod submission;
 mod top_boundary;
 #[path = "sqlite_store/transformations.rs"]
 mod transformations;
+
+#[path = "sqlite_store/attachment_numbering.rs"]
+mod attachment_numbering;

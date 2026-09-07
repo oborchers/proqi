@@ -127,6 +127,7 @@ fn migration_backup_succeeds_and_failure_preserves_source() {
 fn version_one_database_migrates_annotations_forward_without_reinterpretation() {
     let fixture = DatabaseFixture::new();
     drop(fixture.open());
+    super::attachment_numbering::downgrade_to_legacy(&fixture);
     let connection = Connection::open(&fixture.config.database_path).expect("version one DB");
     connection
         .execute_batch(
@@ -298,6 +299,7 @@ fn version_five_fixture() -> (
 }
 
 fn downgrade_collapsed_fixture(fixture: &DatabaseFixture) {
+    super::attachment_numbering::downgrade_to_legacy(fixture);
     let connection = Connection::open(&fixture.config.database_path).expect("version five DB");
     connection
         .execute(

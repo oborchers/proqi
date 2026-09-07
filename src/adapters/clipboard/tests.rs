@@ -157,6 +157,7 @@ fn attachment(content: &str) -> ClipboardText {
             start: 0,
             end: content.len(),
             kind: ContentAnnotationKind::Attachment {
+                ordinal: Some(1_u64.try_into().expect("fixture ordinal")),
                 image: true,
                 display_name: "Grüße 🖼️.png".to_owned(),
             },
