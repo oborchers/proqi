@@ -24,6 +24,7 @@ fn onboarding_completed_version(connection: &Connection) -> u32 {
 fn schema_eleven_requires_lease_authorized_backup_before_transformation_protocol_migration() {
     let fixture = DatabaseFixture::new();
     drop(fixture.open());
+    super::attachment_numbering::downgrade_to_legacy(&fixture);
     Connection::open(&fixture.config.database_path)
         .expect("schema eleven fixture")
         .execute_batch(
@@ -38,7 +39,7 @@ fn schema_eleven_requires_lease_authorized_backup_before_transformation_protocol
         SqliteStore::open(&refused),
         Err(StoreError::MigrationRequired {
             found: 11,
-            supported: 13
+            supported: SUPPORTED_SCHEMA_VERSION
         })
     ));
     let connection = Connection::open(&fixture.config.database_path).expect("unchanged fixture");

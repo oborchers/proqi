@@ -158,6 +158,7 @@ fn verified_clipboard_metadata_preserves_every_supported_kind_on_paste() {
             start: ranges[0].start,
             end: ranges[0].end,
             kind: ContentAnnotationKind::Attachment {
+                ordinal: Some(1_u64.try_into().expect("fixture ordinal")),
                 image: true,
                 display_name: "界.png".to_owned(),
             },

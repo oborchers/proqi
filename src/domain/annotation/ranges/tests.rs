@@ -17,6 +17,7 @@ fn attachment(start: usize, end: usize, display_name: &str) -> ContentAnnotation
         start,
         end,
         kind: ContentAnnotationKind::Attachment {
+            ordinal: Some(1_u64.try_into().expect("fixture ordinal")),
             image: std::path::Path::new(display_name)
                 .extension()
                 .is_some_and(|extension| extension.eq_ignore_ascii_case("png")),

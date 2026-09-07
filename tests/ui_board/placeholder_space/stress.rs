@@ -16,8 +16,8 @@ fn space_preserves_an_expanded_sibling_while_shifting_the_collapsed_target() {
     let mut fixture = Fixture::with_annotated_thought(
         &content,
         vec![
-            substitution(attachment(true), 0, expanded.len()),
-            substitution(attachment(false), second_start, content.len()),
+            substitution(attachment(true, 1), 0, expanded.len()),
+            substitution(attachment(false, 1), second_start, content.len()),
         ],
     );
     select_forward(&mut fixture, "");

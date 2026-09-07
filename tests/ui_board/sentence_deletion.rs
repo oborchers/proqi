@@ -161,6 +161,7 @@ fn sentence_deletion_rebases_unrelated_fold_annotations_exactly() {
         start,
         end: start + path.len(),
         kind: ContentAnnotationKind::Attachment {
+            ordinal: Some(1_u64.try_into().expect("fixture ordinal")),
             image: true,
             display_name: "image.png".to_owned(),
         },
@@ -200,6 +201,7 @@ fn sentence_with_a_fold_is_revealed_unchanged_then_deleted_on_repeat() {
                 start,
                 end: start + path.len(),
                 kind: ContentAnnotationKind::Attachment {
+                    ordinal: Some(1_u64.try_into().expect("fixture ordinal")),
                     image: true,
                     display_name: "image.png".to_owned(),
                 },
@@ -238,12 +240,19 @@ fn every_intersecting_fold_is_revealed_while_an_unrelated_fold_stays_collapsed()
     let content = "Use /tmp/a.png and /tmp/b.png now. Keep /tmp/c.png.";
     let annotations = ["/tmp/a.png", "/tmp/b.png", "/tmp/c.png"]
         .into_iter()
-        .map(|path| {
+        .enumerate()
+        .map(|(index, path)| {
             let start = content.find(path).expect("path");
             ContentAnnotation {
                 start,
                 end: start + path.len(),
                 kind: ContentAnnotationKind::Attachment {
+                    ordinal: Some(
+                        u64::try_from(index + 1)
+                            .expect("index")
+                            .try_into()
+                            .expect("fixture ordinal"),
+                    ),
                     image: true,
                     display_name: path.trim_start_matches("/tmp/").to_owned(),
                 },
@@ -276,12 +285,19 @@ fn selection_reveals_every_touched_fold_before_deleting_any_sentence() {
     let content = "Use /tmp/a.png now. Keep /tmp/b.png later.";
     let annotations = ["/tmp/a.png", "/tmp/b.png"]
         .into_iter()
-        .map(|path| {
+        .enumerate()
+        .map(|(index, path)| {
             let start = content.find(path).expect("path");
             ContentAnnotation {
                 start,
                 end: start + path.len(),
                 kind: ContentAnnotationKind::Attachment {
+                    ordinal: Some(
+                        u64::try_from(index + 1)
+                            .expect("index")
+                            .try_into()
+                            .expect("fixture ordinal"),
+                    ),
                     image: true,
                     display_name: path.trim_start_matches("/tmp/").to_owned(),
                 },

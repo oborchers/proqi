@@ -13,6 +13,8 @@ use proqi::{
 use super::snapshot_support::snapshot_buffer;
 #[path = "snapshots/attachment_accessibility.rs"]
 mod attachment_accessibility_snapshots;
+#[path = "snapshots/attachment_numbering.rs"]
+mod attachment_numbering;
 #[path = "snapshots/herdr.rs"]
 mod herdr_snapshots;
 #[path = "snapshots/platform.rs"]
@@ -46,24 +48,7 @@ fn engaged_empty_compose_editor() {
 
 #[test]
 fn populated_board_with_folded_attachment() {
-    let mut fixture = Fixture::new();
-    fixture.input(UiInput::Paste("first prompt".to_owned()));
-    fixture.input(crate::key_input(UiKey::Escape));
-    fixture.input(UiInput::PasteAnnotated(
-        PastePayload::annotated(
-            "/private/tmp/Bild (18).png".to_owned(),
-            vec![ContentAnnotation {
-                start: 0,
-                end: "/private/tmp/Bild (18).png".len(),
-                kind: ContentAnnotationKind::Attachment {
-                    image: true,
-                    display_name: "Bild (18).png".to_owned(),
-                },
-            }],
-        )
-        .expect("valid attachment payload"),
-    ));
-    fixture.input(crate::key_input(UiKey::Escape));
+    let mut fixture = attachment_numbering::populated_attachment_fixture();
     insta::assert_snapshot!(snapshot(&mut fixture, 60, 12, ThemePreference::Dark));
 }
 
@@ -78,6 +63,7 @@ fn inaccessible_attachment_has_a_plain_warning_snapshot() {
                 start: 0,
                 end: path.len(),
                 kind: ContentAnnotationKind::Attachment {
+                    ordinal: Some(1_u64.try_into().expect("fixture ordinal")),
                     image: true,
                     display_name: "Grüße 第一.png".to_owned(),
                 },

@@ -139,6 +139,7 @@ fn protected_attachment_payload_pastes_exactly_with_truthful_status() {
             start: 0,
             end: path.len(),
             kind: ContentAnnotationKind::Attachment {
+                ordinal: Some(1_u64.try_into().expect("fixture ordinal")),
                 image: true,
                 display_name: "Some File.png".to_owned(),
             },

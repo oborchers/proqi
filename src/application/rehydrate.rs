@@ -17,6 +17,18 @@ impl AppState {
     /// not belong to the board or a retained cursor is out of bounds.
     pub fn from_snapshot(snapshot: SessionSnapshot) -> ApplicationResult<Self> {
         let session_id = snapshot.board.session.id;
+        let mut counters = snapshot.board.attachment_counters();
+        for operation in &snapshot.board_operations {
+            counters.observe_mutation(&operation.forward)?;
+            counters.observe_mutation(&operation.inverse)?;
+        }
+        for revision in &snapshot.revisions {
+            counters.observe(&revision.before_annotations)?;
+            counters.observe(&revision.after_annotations)?;
+        }
+        if counters != snapshot.board.attachment_counters() {
+            return Err(ApplicationError::InvalidState);
+        }
         if snapshot.board_history_cursor > snapshot.board_operations.len()
             || snapshot
                 .board_operations
