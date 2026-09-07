@@ -78,6 +78,7 @@ impl BoardApp {
         );
         let final_height = self.focused_height(&layout);
         self.prepare_layout(TextViewport::new(layout.content_width, final_height));
+        self.attach_editor_presentation(&mut presentation);
         self.board_viewport = self.board_viewport.at(scroll.current);
         self.scroll_geometry = Some(scroll);
         self.frame_presentation = Some(presentation);

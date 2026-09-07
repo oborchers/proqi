@@ -85,6 +85,7 @@ pub(super) struct ThoughtRows {
     pub(super) overflow_row: Option<usize>,
     pub(super) end: usize,
     pub(super) presentation: ThoughtPresentation,
+    editing: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -378,6 +379,15 @@ impl BoardFlow {
         let Some(rows) = focused.and_then(|id| self.thought(id)) else {
             return offset;
         };
+        if rows.editing {
+            // Reveal the full editor allocation before clipping establishes its
+            // internal viewport. Its previous visible height is not a cap.
+            let end = rows.content_start + rows.content_rows.min(viewport_height);
+            return offset
+                .max(end.saturating_sub(viewport_height))
+                .min(rows.content_start)
+                .min(maximum);
+        }
         let visible = offset..offset.saturating_add(viewport_height);
         if visible.contains(&rows.content_start) {
             offset
@@ -438,6 +448,7 @@ fn measure_thought(
         overflow_row,
         end,
         presentation: thought.preference,
+        editing: active_editor.is_some(),
     }
 }
 

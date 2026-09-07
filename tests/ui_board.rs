@@ -429,6 +429,8 @@ mod delete_alias;
 mod direction_modifier_parity;
 #[path = "ui_board/durability.rs"]
 mod durability;
+#[path = "ui_board/editor_growth.rs"]
+mod editor_growth;
 #[path = "ui_board/fast_navigation.rs"]
 mod fast_navigation;
 #[path = "ui_board/first_run.rs"]
