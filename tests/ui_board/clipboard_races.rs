@@ -15,6 +15,7 @@ fn delayed_editor_cut_cannot_delete_an_identical_annotated_neighbor() {
         start: 0,
         end: content.len(),
         kind: ContentAnnotationKind::Attachment {
+            ordinal: Some(1_u64.try_into().expect("fixture ordinal")),
             image: true,
             display_name: "repeated.png".to_owned(),
         },
@@ -50,9 +51,25 @@ fn delayed_editor_cut_cannot_delete_an_identical_annotated_neighbor() {
 
     assert!(completion.is_empty());
     assert_eq!(fixture.app.state.board.live_thoughts().len(), 2);
-    for thought in fixture.app.state.board.live_thoughts() {
+    for (index, thought) in fixture
+        .app
+        .state
+        .board
+        .live_thoughts()
+        .into_iter()
+        .enumerate()
+    {
+        let mut expected = annotation.clone();
+        if let ContentAnnotationKind::Attachment { ordinal, .. } = &mut expected.kind {
+            *ordinal = Some(
+                u64::try_from(index + 1)
+                    .expect("index")
+                    .try_into()
+                    .expect("ordinal"),
+            );
+        }
         assert_eq!(thought.content, content);
-        assert_eq!(thought.annotations, vec![annotation.clone()]);
+        assert_eq!(thought.annotations, vec![expected]);
     }
     assert_eq!(
         fixture.app.status_text(),

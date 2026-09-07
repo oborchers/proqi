@@ -368,6 +368,6 @@ mod tests {
             Some(4)
         );
         assert_eq!(sync_protocol(Some(7)).expect("current owner"), Some(7));
-        assert!(sync_protocol(Some(8)).is_err());
+        assert!(sync_protocol(Some(crate::ports::control::CONTROL_PROTOCOL_VERSION + 1)).is_err());
     }
 }

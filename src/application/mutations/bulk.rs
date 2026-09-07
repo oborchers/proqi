@@ -146,12 +146,15 @@ pub(in crate::application) fn duplicate_thoughts(
     )
     .map_err(|_| ApplicationError::InvalidState)?
     .saturating_add(1);
+    let mut counters = state.board.attachment_counters();
     let duplicates = selected
         .iter()
         .zip(duplicate_ids)
         .enumerate()
         .map(|(offset, (source, duplicate_id))| {
             let mut duplicate = source.clone();
+            crate::domain::renew_attachment_occurrences(&mut duplicate.annotations);
+            counters.assign(&mut duplicate.annotations)?;
             duplicate.id = *duplicate_id;
             duplicate.position = ThoughtPosition::new(super::position_u32(insertion + offset)?);
             duplicate.created_at = at;

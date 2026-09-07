@@ -795,6 +795,45 @@ rows store `adjacent_pane` with a direction or `herdr_agent` without one. Neithe
 form stores workspace, tab, pane, session, labels, prompt content, or raw Herdr
 responses.
 
+### Stable session attachment ordinals
+
+Schema 14 and storage protocol 13 add separate session image and file allocation
+high-water marks and a positive typed ordinal on each durable attachment kind.
+Input payloads may be unassigned until the destination session prepares their
+mutation. Domain allocation reads no filesystem, clock or layout state. The
+canonical application creation paths renew copied occurrence identity, while
+range transformations and history replay preserve it. The single session lease,
+owner-control admission and operation sequence protect allocation; SQLite
+persists the high-water marks in the same transaction as the introducing
+mutation. Counters never roll back with an undo cursor and survive compaction.
+
+Rendering reads the ordinal directly through the existing shared annotation
+projection. Expanded and inaccessible presentations retain the same identity.
+There is no per-thought counting fallback. Canonical paths, clipboard plain text,
+submission content and annotation ranges remain exact.
+
+Migration assigns current live-board occurrences first in durable position and
+annotation byte order, separately by kind. It propagates retained snapshot and
+structural links and matches indistinguishable legacy occurrences by byte order.
+This is one-time deterministic synthesis, not reconstruction of unknowable
+original occurrence identity from coalesced legacy edits. History-only occurrences
+are allocated afterward by durable sequence and payload order. Every synthesized
+snapshot persists its ordinal, and counters cover dormant history as well as
+current content. Legacy compacted receipt hashes retain their original encoding;
+creation replay compares source metadata independently of destination allocation.
+Legacy snapshot matching is scoped to retained history steps. Equal text and
+annotation ranges at different steps do not by themselves establish occurrence
+identity: a split followed by reinserting the same path must retain two live
+identities. Structural snapshots and their inverse reuse the same step bindings;
+retained undo and redo receipts restore the corresponding active bindings before
+current snapshots are anchored. A dormant identical editor snapshot therefore
+cannot replace the occurrence expected by an undone structural operation.
+Only missing or indistinguishable legacy lineage uses the documented one-time
+deterministic matching fallback.
+
+Control protocol 8 is required for attachment-bearing destination creation, so
+older owners cannot silently drop the new identity contract.
+
 ## Multiple running versions during an update
 
 ### Installation-wide update boundary
@@ -1551,7 +1590,8 @@ bounded messages, protocol negotiation, idempotency keys, and timeouts are
 mandatory. If forwarding is unsupported or the owner cannot be verified, the
 CLI returns `session_busy`.
 
-Control protocol version 7 is current. Version 2 introduced legacy durable
+Control protocol version 8 is current. Attachment-bearing creation requires
+version 8 to retain destination occurrence numbering. Version 2 introduced legacy durable
 presentation annotations. Version 4 added session rename, owner synchronization,
 exact editor replacement, and durable collapse state. An add mutation carrying
 an invocation-reference annotation requires version 6, so an older active owner

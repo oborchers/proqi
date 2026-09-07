@@ -86,6 +86,7 @@ fn delayed_board_cut_success_keeps_an_intervening_edit() {
         start: 0,
         end: original.len(),
         kind: ContentAnnotationKind::Attachment {
+            ordinal: Some(1_u64.try_into().expect("fixture ordinal")),
             image: true,
             display_name: "original.png".to_owned(),
         },

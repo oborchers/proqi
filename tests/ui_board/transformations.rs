@@ -128,6 +128,7 @@ fn split_uses_annotations_rebased_by_the_edit_flushed_on_exit() {
                 start: 0,
                 end: 6,
                 kind: ContentAnnotationKind::Attachment {
+                    ordinal: Some(1_u64.try_into().expect("fixture ordinal")),
                     image: false,
                     display_name: "fold.txt".to_owned(),
                 },

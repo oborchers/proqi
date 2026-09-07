@@ -22,6 +22,7 @@ fn folded_provenance_and_editor_undo_survive_reopen() {
         start: 0,
         end: content.len(),
         kind: ContentAnnotationKind::Attachment {
+            ordinal: Some(1_u64.try_into().expect("fixture ordinal")),
             image: true,
             display_name: "screenshot.png".to_owned(),
         },
@@ -118,6 +119,7 @@ fn invocation_reference_projection_survives_protocol_nine_migration() {
         .expect("durable create");
     persist_effect(&mut store, create);
     drop(store);
+    super::attachment_numbering::downgrade_to_legacy(&fixture);
     Connection::open(&fixture.config.database_path)
         .expect("version eight database")
         .execute_batch(
@@ -166,6 +168,7 @@ fn protocol_ten_loads_structurally_valid_direct_shortcut_bytes_and_rejects_corru
     persist_effect(&mut store, &effects[0]);
     drop(store);
 
+    super::attachment_numbering::downgrade_to_legacy(&fixture);
     let connection = Connection::open(&fixture.config.database_path).expect("direct fixture");
     connection
         .execute(
@@ -347,6 +350,7 @@ fn placeholder_space_revision_undo_and_redo_survive_every_reopen() {
         start,
         end: start + value.len(),
         kind: ContentAnnotationKind::Attachment {
+            ordinal: Some(1_u64.try_into().expect("fixture ordinal")),
             image: true,
             display_name: "restart.png".to_owned(),
         },

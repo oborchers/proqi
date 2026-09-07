@@ -126,6 +126,7 @@ pub(super) fn commit_board(
     }
     require_next_sequence(transaction, operation.session_id, operation.sequence)?;
     let mut board = load_board(transaction, operation.session_id)?;
+    super::attachment_numbering::validate_creation(&board, operation)?;
     board
         .apply_mutation(&operation.forward, operation.created_at)
         .map_err(|error| StoreError::Invariant(error.to_string()))?;
@@ -253,6 +254,7 @@ fn commit_revision(
     }
     require_next_sequence(transaction, revision.session_id, revision.sequence)?;
     let cursor = revision_cursor(transaction, revision)?;
+    super::attachment_numbering::revision(transaction, revision)?;
     truncate_conflicting_board_redo(transaction, revision.session_id, revision.thought_id)?;
     persist_revision(transaction, revision, cursor, &request_json)?;
     insert_receipt(

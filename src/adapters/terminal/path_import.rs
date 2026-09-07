@@ -224,6 +224,7 @@ mod tests {
         assert!(matches!(
             &payload.annotations[0].kind,
             ContentAnnotationKind::Attachment {
+                ordinal: None,
                 image: true,
                 display_name,
             } if display_name == "Bild (18) [final] & notes #1.png"

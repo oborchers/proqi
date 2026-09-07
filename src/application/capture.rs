@@ -40,6 +40,7 @@ pub fn prepare_capture(
         start: 0,
         end: path.len(),
         kind: ContentAnnotationKind::Attachment {
+            ordinal: None,
             image: true,
             display_name,
         },
@@ -50,7 +51,9 @@ pub fn prepare_capture(
         .map(ThoughtPosition::new)
         .map_err(|_| ApplicationError::InvalidState)?;
     let mut thought = Thought::new(thought_id, state.board.session.id, content, position, at);
-    thought.set_annotations(vec![annotation])?;
+    let mut annotations = vec![annotation];
+    state.board.attachment_counters().assign(&mut annotations)?;
+    thought.set_annotations(annotations)?;
     let operation = BoardOperation {
         id: operation_id,
         session_id: state.board.session.id,
@@ -83,13 +86,27 @@ pub fn apply_capture(
     commit: &CaptureCommit,
     outcome: &CaptureCommitOutcome,
 ) -> ApplicationResult<Option<ThoughtId>> {
-    let CaptureCommitOutcome::Created { durable, capture } = outcome else {
-        return Ok(None);
+    let capture = match outcome {
+        CaptureCommitOutcome::Created { durable, capture } => {
+            if durable.sequence != commit.operation.sequence
+                || durable.identity
+                    != crate::ports::store::DurableIdentity::Operation(commit.operation.id)
+            {
+                return Err(ApplicationError::InvalidState);
+            }
+            capture
+        }
+        CaptureCommitOutcome::AlreadyCaptured(capture) => {
+            if capture.operation_id != commit.operation.id {
+                return Ok(None);
+            }
+            if state.board.session.last_durable_sequence >= commit.operation.sequence {
+                return Ok(None);
+            }
+            capture
+        }
     };
-    if durable.sequence != commit.operation.sequence
-        || durable.identity != crate::ports::store::DurableIdentity::Operation(commit.operation.id)
-        || capture.source != commit.source
-    {
+    if capture.source != commit.source || capture.session_id != commit.operation.session_id {
         return Err(ApplicationError::InvalidState);
     }
     let operation = &commit.operation;
@@ -97,6 +114,9 @@ pub fn apply_capture(
         BoardMutation::AddThought { thought } => thought.id,
         _ => return Err(ApplicationError::InvalidState),
     };
+    if capture.thought_id != thought_id {
+        return Err(ApplicationError::InvalidState);
+    }
     state.apply_durable_capture(operation)?;
     state.insertion_index = state.board.live_thoughts().len();
     Ok(Some(thought_id))

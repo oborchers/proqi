@@ -19,6 +19,8 @@ pub struct AttachmentCheckKey {
     pub annotation_end: usize,
     /// Whether presentation uses the image label.
     pub image: bool,
+    /// Stable session occurrence identity.
+    pub ordinal: crate::domain::AttachmentOrdinal,
     /// Exact presentation metadata participating in cache identity.
     pub display_name: String,
     /// Exact canonical path stored in prompt content.

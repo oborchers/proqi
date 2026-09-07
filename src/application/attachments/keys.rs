@@ -50,6 +50,7 @@ pub fn attachment_keys(thought: &Thought) -> Vec<AttachmentCheckKey> {
         .enumerate()
         .filter_map(|(annotation_index, annotation)| {
             let ContentAnnotationKind::Attachment {
+                ordinal,
                 image,
                 display_name,
             } = &annotation.kind
@@ -63,6 +64,7 @@ pub fn attachment_keys(thought: &Thought) -> Vec<AttachmentCheckKey> {
                 annotation_start: annotation.start,
                 annotation_end: annotation.end,
                 image: *image,
+                ordinal: (*ordinal)?,
                 display_name: display_name.clone(),
                 canonical_path: canonical_path.to_owned(),
                 content_revision: revision,
@@ -305,6 +307,7 @@ fn matching_index(
 fn same_attachment(left: &AttachmentCheckKey, right: &AttachmentCheckKey) -> bool {
     left.thought_id == right.thought_id
         && left.image == right.image
+        && left.ordinal == right.ordinal
         && left.display_name == right.display_name
         && left.canonical_path == right.canonical_path
 }

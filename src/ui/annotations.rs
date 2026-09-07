@@ -76,6 +76,7 @@ impl PastePayload {
                 start: range.start,
                 end: range.end,
                 kind: ContentAnnotationKind::Attachment {
+                    ordinal: None,
                     image,
                     display_name,
                 },
@@ -231,8 +232,6 @@ struct ProjectionBuilder {
     substitutions: Vec<PresentedSubstitution>,
     styles: Vec<PresentedStyle>,
     cursor: usize,
-    image: usize,
-    file: usize,
 }
 
 impl ProjectionBuilder {
@@ -257,7 +256,7 @@ impl ProjectionBuilder {
                 self.push_expanded(content, annotation_index, annotation, start, health)?;
             }
             AnnotationBehavior::Substitution => {
-                self.push_collapsed(annotation_index, annotation, start, health);
+                self.push_collapsed(annotation_index, annotation, start, health)?;
             }
         }
         self.cursor = annotation.end;
@@ -293,11 +292,6 @@ impl ProjectionBuilder {
         start: usize,
         health: AttachmentPresentationState,
     ) -> Result<(), ProjectionError> {
-        match &annotation.kind {
-            ContentAnnotationKind::Attachment { image: true, .. } => self.image += 1,
-            ContentAnnotationKind::Attachment { image: false, .. } => self.file += 1,
-            _ => {}
-        }
         let exact = content
             .get(annotation.start..annotation.end)
             .ok_or(ProjectionError::InvalidAnnotationRange)?;
@@ -329,14 +323,8 @@ impl ProjectionBuilder {
         annotation: &ContentAnnotation,
         start: usize,
         health: AttachmentPresentationState,
-    ) {
-        push_collapsed_label(
-            &mut self.output,
-            &annotation.kind,
-            &mut self.image,
-            &mut self.file,
-            health,
-        );
+    ) -> Result<(), ProjectionError> {
+        push_collapsed_label(&mut self.output, &annotation.kind, health)?;
         self.substitutions.push(substitution(
             annotation_index,
             start,
@@ -355,6 +343,7 @@ impl ProjectionBuilder {
                 PresentedStyleKind::Warning
             },
         });
+        Ok(())
     }
 
     fn finish(mut self, content: &str) -> Result<Presentation, ProjectionError> {
@@ -373,19 +362,14 @@ impl ProjectionBuilder {
 fn push_collapsed_label(
     output: &mut String,
     kind: &ContentAnnotationKind,
-    image_count: &mut usize,
-    file_count: &mut usize,
     health: AttachmentPresentationState,
-) {
+) -> Result<(), ProjectionError> {
     match kind {
-        ContentAnnotationKind::Attachment { image, .. } => {
-            let (label, number) = if *image {
-                *image_count += 1;
-                ("Image", *image_count)
-            } else {
-                *file_count += 1;
-                ("File", *file_count)
-            };
+        ContentAnnotationKind::Attachment { image, ordinal, .. } => {
+            let label = if *image { "Image" } else { "File" };
+            let number = ordinal
+                .ok_or(ProjectionError::InvalidAnnotationRange)?
+                .get();
             output.push('[');
             output.push_str(label);
             output.push(' ');
@@ -405,6 +389,7 @@ fn push_collapsed_label(
         }
         ContentAnnotationKind::ShortcutEmphasis(_) => {}
     }
+    Ok(())
 }
 
 fn substitution(

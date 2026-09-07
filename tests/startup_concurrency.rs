@@ -369,7 +369,9 @@ fn shared_schema_eleven_owner_blocks_migration_without_backup_then_release_recov
     Connection::open(&database)
         .expect("schema eleven fixture")
         .execute_batch(
-            "DELETE FROM migration_history WHERE version IN (12, 13);
+            "ALTER TABLE sessions DROP COLUMN attachment_image_high;
+             ALTER TABLE sessions DROP COLUMN attachment_file_high;
+             DELETE FROM migration_history WHERE version IN (12, 13, 14);
              UPDATE schema_meta SET schema_version = 11, storage_protocol = 10;",
         )
         .expect("downgrade transformation protocol stamp");

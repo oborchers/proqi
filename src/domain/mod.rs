@@ -1,6 +1,7 @@
 //! Entities, value objects, identifiers, and invariants.
 
 mod annotation;
+mod attachment_numbering;
 mod identifiers;
 mod model;
 mod operations;
@@ -12,6 +13,9 @@ pub use annotation::{
     AnnotationBehavior, AnnotationTextChange, ContentAnnotation, ContentAnnotationKind,
     InlineStyleKind, ShortcutEmphasis, extract_annotations, merge_annotations,
     partition_annotations, rebase_annotations, validate_annotations,
+};
+pub use attachment_numbering::{
+    AttachmentCounters, AttachmentOrdinal, renew_attachment_occurrences,
 };
 pub use identifiers::{
     InstanceId, OperationId, RequestId, RevisionId, SessionId, SubmissionId, ThoughtId,

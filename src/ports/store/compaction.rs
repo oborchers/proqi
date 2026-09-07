@@ -61,7 +61,9 @@ pub fn thought_payload_digest(
 ) -> Result<[u8; 32], StoreError> {
     use sha2::{Digest as _, Sha256};
 
-    let annotations = serde_json::to_vec(annotations)
+    let mut input_annotations = annotations.to_vec();
+    crate::domain::renew_attachment_occurrences(&mut input_annotations);
+    let annotations = serde_json::to_vec(&input_annotations)
         .map_err(|error| StoreError::Serialization(error.to_string()))?;
     let mut digest = Sha256::new();
     digest.update(
