@@ -112,6 +112,12 @@ impl BoardApp {
             Shortcut::FocusNext | Shortcut::ExtendNext | Shortcut::MoveDown => 1,
             _ => return Vec::new(),
         };
+        if matches!(action, Shortcut::FocusPrevious | Shortcut::FocusNext)
+            && !self.range_latched()
+            && self.scroll_focused_thought(delta)
+        {
+            return Vec::new();
+        }
         match action {
             Shortcut::FocusPrevious | Shortcut::FocusNext if self.range_latched() => {
                 self.extend_range_by(delta);
@@ -125,6 +131,21 @@ impl BoardApp {
             _ => {}
         }
         Vec::new()
+    }
+
+    fn scroll_focused_thought(&mut self, delta: isize) -> bool {
+        if self.layout.is_none() {
+            return false;
+        }
+        let Some(anchor) = self
+            .scroll_geometry
+            .and_then(|geometry| geometry.focused_neighbor(delta))
+        else {
+            return false;
+        };
+        self.insertion_confirmation = super::InsertionConfirmation::Idle;
+        self.scroll_board_to(anchor);
+        true
     }
 
     fn handle_board_registry_action(

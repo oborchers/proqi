@@ -431,6 +431,8 @@ mod direction_modifier_parity;
 mod durability;
 #[path = "ui_board/editor_growth.rs"]
 mod editor_growth;
+#[path = "ui_board/expanded_navigation.rs"]
+mod expanded_navigation;
 #[path = "ui_board/fast_navigation.rs"]
 mod fast_navigation;
 #[path = "ui_board/first_run.rs"]
@@ -463,6 +465,8 @@ mod placeholder_entry;
 mod placeholder_space;
 #[path = "ui_board/pointer_selection.rs"]
 mod pointer_selection;
+#[path = "ui_board/reflow_in_place.rs"]
+mod reflow_in_place;
 #[path = "ui_board/scroll_regressions.rs"]
 mod scroll_regressions;
 #[path = "ui_board/search.rs"]
@@ -489,11 +493,7 @@ mod submit_all;
 mod top_boundary_snapshots;
 #[path = "ui_board/transformations.rs"]
 mod transformations;
-#[path = "ui_board/visual_row_selection.rs"]
-mod visual_row_selection;
-
 #[path = "ui_board/versioned_keymap.rs"]
 mod versioned_keymap;
-
-#[path = "ui_board/reflow_in_place.rs"]
-mod reflow_in_place;
+#[path = "ui_board/visual_row_selection.rs"]
+mod visual_row_selection;
