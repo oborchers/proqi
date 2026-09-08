@@ -150,7 +150,7 @@ configuration.
 | `Primary+V` / `p` with no selection | Paste exactly as a new thought |
 | `j` / `k` or arrows | Focus next / previous; twice at a blocked bottom / top edge creates there |
 | `Ctrl+↓` / `↑` or `Ctrl+j` / `k` | Focus the last / first live thought without wrapping |
-| `Alt+↓` / `↑` or `Alt+j` / `k` (`Option` on macOS) | Insert a blank below / above the focused thought and edit it |
+| macOS `Ctrl+N` / `Ctrl+Shift+N`; elsewhere `Alt+↓` / `↑` or `Alt+j` / `k` | Insert a blank below / above the focused thought and edit it |
 | `Page Up` / `Page Down` | Move five thoughts previous / next |
 | `Enter` or `e` | Edit |
 | macOS `Option+Shift+↓` / `↑`; `Primary+J` / `Primary+K`, `Primary+Shift+↓` / `↑`, or drag | Reorder |

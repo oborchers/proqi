@@ -7,8 +7,8 @@ SIZE 42x8
 
 TEXT
 00│┌ proqi shortcuts ─────────────────────[x]│
-01││Option+↑              Insert above      ↑│
-02││Option+↓              Insert below      ││
+01││Ctrl+Shift+N          Insert above      ↑│
+02││Ctrl+N                Insert below      ││
 03││Ctrl+↑                First thought     ││
 04││Ctrl+↓                Last thought      ││
 05││Ctrl+Shift+↑          Extend to first   ││
@@ -17,8 +17,8 @@ TEXT
 
 STYLE RUNS
 0: 0-0 fg=Reset bg=Reset mod=NONE | 1-17 fg=Green bg=Reset mod=BOLD | 18-38 fg=Reset bg=Reset mod=NONE | 39-41 fg=Green bg=Reset mod=NONE
-1: 0-0 fg=Reset bg=Reset mod=NONE | 1-8 fg=Green bg=Reset mod=NONE | 9-40 fg=Reset bg=Reset mod=NONE | 41-41 fg=DarkGray bg=Reset mod=NONE
-2: 0-0 fg=Reset bg=Reset mod=NONE | 1-8 fg=Green bg=Reset mod=NONE | 9-41 fg=Reset bg=Reset mod=NONE
+1: 0-0 fg=Reset bg=Reset mod=NONE | 1-12 fg=Green bg=Reset mod=NONE | 13-40 fg=Reset bg=Reset mod=NONE | 41-41 fg=DarkGray bg=Reset mod=NONE
+2: 0-0 fg=Reset bg=Reset mod=NONE | 1-6 fg=Green bg=Reset mod=NONE | 7-41 fg=Reset bg=Reset mod=NONE
 3: 0-0 fg=Reset bg=Reset mod=NONE | 1-6 fg=Green bg=Reset mod=NONE | 7-41 fg=Reset bg=Reset mod=NONE
 4: 0-0 fg=Reset bg=Reset mod=NONE | 1-6 fg=Green bg=Reset mod=NONE | 7-41 fg=Reset bg=Reset mod=NONE
 5: 0-0 fg=Reset bg=Reset mod=NONE | 1-12 fg=Green bg=Reset mod=NONE | 13-41 fg=Reset bg=Reset mod=NONE

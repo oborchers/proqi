@@ -1147,13 +1147,16 @@ terminal-consumed Command binding does not remove keyboard reordering. Other
 modifiers resolve to the base focus intention unless the resolved graph owns an
 exact terminal-safe boundary action. Exact Control targets the first or last
 live thought. macOS Control+Shift extends the existing range anchor to that
-boundary, while portable Control+Shift retains Primary+Shift reordering. Exact
-Alt inserts relative to the focused live thought through the canonical create
-operation. That operation clears Board selection, focuses the new editor, and
-retains one operation, persistence, undo, redo, and restart contract. Locked or
-stale references fail before mutation. At the insertion row, range, reorder,
-and relative insertion are thought-only no-ops while focus retains the boundary policy. Page Up and Page
-Down are separate fast-navigation actions: they move five thoughts, and their
+boundary, while portable Control+Shift retains Primary+Shift reordering. macOS
+Control plus `n` inserts below, while Control plus Shift plus `n` inserts above
+and accepts the terminal-compatible uppercase-without-Shift report. Portable
+Alt plus vertical direction retains relative insertion. Both paths use the
+canonical create operation. That operation clears Board selection, focuses the
+new editor, and retains one operation, persistence, undo, redo, and restart
+contract. Locked or stale references fail before mutation. At the insertion
+row, range, reorder, and relative insertion are thought-only no-ops while focus
+retains the boundary policy. Page Up and Page Down are separate fast-navigation
+actions: they move five thoughts, and their
 Shift variants extend an anchored range by five. They clamp to real thoughts
 and never turn into Board reorder commands. The registry resolves exact platform
 and context bindings before UI routing.

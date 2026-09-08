@@ -290,14 +290,19 @@ no shifted Board boundary default is claimed there. While the Board range latch
 is active, either unshifted Control boundary spelling extends the anchored range
 instead of discarding it.
 
-Exact logical Alt plus Up or Down inserts one blank thought above or below the
-focused live thought and enters its editor. The configured `k` and `j`
-spellings are aliases when that exact logical character event arrives. These
-bindings exist only in Board and InsertionBoundary contexts. Text owners retain
-printable Option and Alt output as content. The insertion row, empty Board,
-locked focus, and stale focus cannot partially mutate the Board. Commands owns
-the modifier-independent fallback. Invocation completion retains its modal
-vertical navigation at every modifier level. The positional reference is the focused
+On macOS, exact logical Control plus lowercase `n` inserts one blank thought
+below the focused live thought. Control plus Shift plus lowercase `n` inserts
+above, and Control plus uppercase `N` without a distinct Shift report is a
+compatible spelling for the same action. This follows the existing plain `n`
+New mnemonic while preserving exact modifier identity. Portable platforms
+retain exact logical Alt plus Up or Down, with configured `k` and `j` spellings,
+because legacy terminals can collapse shifted Control letters and portable
+Control remains Primary. These bindings exist only in Board and
+InsertionBoundary contexts. Text owners retain printable input and do not
+acquire the Board insertion actions. The insertion row, empty Board, locked
+focus, and stale focus cannot partially mutate the Board. Commands owns the
+modifier-independent fallback. Invocation completion retains its modal vertical
+navigation at every modifier level. The positional reference is the focused
 thought even when another valid Board selection exists, and successful creation
 clears that selection through the canonical create path.
 

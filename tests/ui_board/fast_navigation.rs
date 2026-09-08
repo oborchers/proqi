@@ -214,14 +214,18 @@ fn mouse_reposition_sets_the_column_for_the_next_fast_jump() {
 }
 
 #[test]
-fn mode_aware_alt_navigation_inserts_on_board_and_keeps_editor_fast_movement() {
+fn platform_insertion_default_keeps_editor_alt_fast_movement() {
     let mut fixture = Fixture::new();
     for content in ["first", "second", "third"] {
         navigation::durable_thought(&mut fixture, content);
     }
-    fixture.input(UiInput::KeyStroke(
-        KeyStroke::press(LogicalKey::Up).with_modifiers(LogicalModifiers::ALT),
-    ));
+    let insertion = if cfg!(target_os = "macos") {
+        KeyStroke::press(LogicalKey::Character('n'))
+            .with_modifiers(LogicalModifiers::CONTROL.union(LogicalModifiers::SHIFT))
+    } else {
+        KeyStroke::press(LogicalKey::Up).with_modifiers(LogicalModifiers::ALT)
+    };
+    fixture.input(UiInput::KeyStroke(insertion));
     assert_eq!(fixture.app.state.board.live_thoughts()[2].content, "");
     assert_eq!(
         fixture

@@ -151,12 +151,20 @@ distinguish those physical sources after they collapse.
 
 The selected defaults consequently use only bounded single logical strokes.
 Exact Control plus vertical direction owns complete-thought movement in text
-editors and first or last live-thought focus on the Board. Exact Alt plus
-vertical direction inserts relative to Board focus. Logical-line movement uses
-Control plus horizontal direction on macOS and Alt plus horizontal direction on
-portable platforms. Named Home and End remain compatible aliases. Configured
-vertical `k` and `j` spellings join the Board actions without entering text
-owners. No simultaneous non-modifier chord or sequence state is introduced.
+editors and first or last live-thought focus on the Board. On the verified macOS
+input chain, diagnostics received no event for physical Option arrows, while
+Control plus lowercase `n` and Control plus uppercase `N` arrived distinctly.
+The macOS insertion defaults therefore follow the existing New mnemonic:
+Control plus `n` inserts below, and Control plus Shift plus `n` inserts above.
+The uppercase codepoint without a separate Shift bit remains a compatible
+spelling for insert above. Portable platforms retain Alt plus vertical
+direction because legacy terminals can collapse shifted Control letters and
+portable Control remains Primary. Logical-line movement uses Control plus
+horizontal direction on macOS and Alt plus horizontal direction on portable
+platforms. Named Home and End remain compatible aliases. Portable configured
+vertical `k` and `j` spellings join the Board insertion actions without
+entering text owners. No simultaneous non-modifier chord or sequence state is
+introduced.
 
 macOS Control+Shift can extend a Board range to the boundary because it has no
 prior Board owner. Portable Control+Shift remains the established

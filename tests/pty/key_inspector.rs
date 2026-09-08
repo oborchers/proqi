@@ -181,7 +181,7 @@ fn named_keys_and_navigation_keep_exact_kitty_or_legacy_identity() {
 }
 
 #[test]
-fn terminal_safe_boundary_family_reports_exact_logical_events() {
+fn terminal_safe_editor_boundary_family_reports_exact_logical_events() {
     for (bytes, key, modifiers, action) in [
         ("\x1b[1;5A", "Up", vec!["Control"], "editor.document_start"),
         ("\x1b[1;5B", "Down", vec!["Control"], "editor.document_end"),
@@ -206,7 +206,10 @@ fn terminal_safe_boundary_family_reports_exact_logical_events() {
     ] {
         inspect(bytes, key, &modifiers, Some(action));
     }
+}
 
+#[test]
+fn terminal_safe_board_boundary_and_insertion_family_reports_exact_logical_events() {
     for (bytes, key, modifiers, action) in [
         ("\x1b[1;5A", "Up", vec!["Control"], "board.first_thought"),
         ("\x1b[1;5:1A", "Up", vec!["Control"], "board.first_thought"),
@@ -223,8 +226,30 @@ fn terminal_safe_boundary_family_reports_exact_logical_events() {
             vec!["Control", "Shift"],
             "board.range_last_thought",
         ),
-        ("\x1b[1;3A", "Up", vec!["Alt"], "thought.insert_above"),
-        ("\x1b[1;3B", "Down", vec!["Alt"], "thought.insert_below"),
+        (
+            "\x1b[110;5u",
+            "U+006E",
+            vec!["Control"],
+            "thought.insert_below",
+        ),
+        (
+            "\x1b[110;6u",
+            "U+006E",
+            vec!["Control", "Shift"],
+            "thought.insert_above",
+        ),
+        (
+            "\x1b[78;5u",
+            "U+004E",
+            vec!["Control"],
+            "thought.insert_above",
+        ),
+        (
+            "\x1b[78;6u",
+            "U+004E",
+            vec!["Control", "Shift"],
+            "thought.insert_above",
+        ),
         (
             "\x1b[107;5u",
             "U+006B",
@@ -249,8 +274,6 @@ fn terminal_safe_boundary_family_reports_exact_logical_events() {
             vec!["Control"],
             "board.range_last_thought",
         ),
-        ("\x1b[107;3u", "U+006B", vec!["Alt"], "thought.insert_above"),
-        ("\x1b[106;3u", "U+006A", vec!["Alt"], "thought.insert_below"),
     ] {
         let data = capture(bytes, "board", None, true);
         assert_eq!(data["event"]["keystroke"]["key"], key);
@@ -283,12 +306,12 @@ fn repeat_is_resolved_release_is_reported_without_dispatch() {
         ),
         ("\x1b[1;5:3B", "release", "release_ignored", None),
         (
-            "\x1b[1;3:2A",
+            "\x1b[110;5:2u",
             "repeat",
             "resolved",
-            Some("thought.insert_above"),
+            Some("thought.insert_below"),
         ),
-        ("\x1b[1;3:3A", "release", "release_ignored", None),
+        ("\x1b[110;5:3u", "release", "release_ignored", None),
     ] {
         let data = capture(sequence, "board", None, true);
         assert_eq!(data["event"]["keystroke"]["phase"], phase);

@@ -888,7 +888,7 @@ bindings are:
 | Action | Keyboard | Mouse |
 |---|---|---|
 | Create thought | `n` | Click `+` or the insertion area |
-| Insert relative to focus | `Alt+↑` / `↓` or `Alt+k` / `j` (`Option` on macOS) | Choose `Insert thought above` or `Insert thought below` in Commands |
+| Insert relative to focus | macOS `Ctrl+Shift+N` / `Ctrl+N` for above / below; elsewhere `Alt+↑` / `↓` or `Alt+k` / `j` | Choose `Insert thought above` or `Insert thought below` in Commands |
 | Paste as new thought when none is selected | `Primary+V`, `p`, or native paste | Choose `Paste exactly` in Commands |
 | Clean up spacing in focused thought | `f` | Choose `Clean up spacing` in Commands |
 | Paste and clean up spacing | `Primary+Shift+V` or `Shift+P` | Choose `Paste and clean up` in Commands |
@@ -929,9 +929,12 @@ moves focus, Shift extends a range, and Primary+Shift reorders one thought.
 Exact Control moves to the first or last live thought. On macOS, Control+Shift
 extends the existing anchored range to that boundary. Portable Control+Shift
 retains its established Primary+Shift reorder meaning, so the shifted boundary
-form is deliberately unbound there. Exact Alt inserts one ordinary blank above
-or below the focused live thought. On macOS, exact Option+Shift remains an
-additional Board reorder alias for arrows and the configured vertical keys.
+form is deliberately unbound there. On macOS, exact Control plus `n` inserts
+below, and Control plus Shift plus `n` inserts above. An uppercase `N` report
+without a separate Shift bit retains insert-above compatibility. Portable exact
+Alt plus vertical direction retains relative insertion. On macOS, exact
+Option+Shift remains an additional Board reorder alias for arrows and the
+configured vertical keys.
 At the insertion row, boundary range, reorder, and relative insertion are
 thought-only no-ops. Base focus retains the ordinary boundary behavior. List-only overlays use `j` and `k` as
 exact Down and Up aliases, and

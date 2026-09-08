@@ -492,8 +492,8 @@ fn configured_board_boundary(
         {
             Action::ExtendLast
         }
-        (true, true, LogicalModifiers::ALT, _) => Action::InsertAbove,
-        (false, true, LogicalModifiers::ALT, _) => Action::InsertBelow,
+        (true, true, LogicalModifiers::ALT, false) => Action::InsertAbove,
+        (false, true, LogicalModifiers::ALT, false) => Action::InsertBelow,
         _ => return None,
     };
     Some(action)

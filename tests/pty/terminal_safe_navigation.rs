@@ -41,7 +41,7 @@ fn contents(binary: &str, state: &std::path::Path, session: &str) -> Vec<String>
 }
 
 #[test]
-fn control_boundaries_and_alt_insertions_survive_resize_undo_redo_and_restart() {
+fn control_boundaries_and_control_n_insertions_survive_resize_undo_redo_and_restart() {
     let state = tempfile::tempdir().expect("temporary state");
     let binary = env!("CARGO_BIN_EXE_proqi");
     let session = create_session(
@@ -57,14 +57,14 @@ fn control_boundaries_and_alt_insertions_survive_resize_undo_redo_and_restart() 
         expect -exact "\x1b\[?1049h"
         after 300
         send -- "\x1b\[1;5B"
-        send -- "\x1b\[1;3A\x1b\[1;3A"
+        send -- "\x1b\[78;5u\x1b\[78;5u"
         send -- "\x1b\[200~above last\x1b\[201~"
         after 300
         send "\x1b"
         stty rows 18 columns 76
         after 150
         send -- "\x1b\[107;5u"
-        send -- "\x1b\[106;3u"
+        send -- "\x1b\[110;5u"
         send -- "\x1b\[200~below first\x1b\[201~"
         after 300
         send "\x1b"

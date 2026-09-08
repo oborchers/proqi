@@ -244,6 +244,57 @@ fn release_is_ignored_and_repeat_preserves_auto_repeat() {
 }
 
 #[test]
+fn platform_relative_insertion_defaults_preserve_exact_logical_identity() {
+    let cases = if cfg!(target_os = "macos") {
+        vec![
+            (
+                KeyCode::Char('n'),
+                KeyModifiers::CONTROL,
+                crate::ui::ShortcutActionId::InsertBelow,
+            ),
+            (
+                KeyCode::Char('n'),
+                KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+                crate::ui::ShortcutActionId::InsertAbove,
+            ),
+            (
+                KeyCode::Char('N'),
+                KeyModifiers::CONTROL,
+                crate::ui::ShortcutActionId::InsertAbove,
+            ),
+        ]
+    } else {
+        vec![
+            (
+                KeyCode::Up,
+                KeyModifiers::ALT,
+                crate::ui::ShortcutActionId::InsertAbove,
+            ),
+            (
+                KeyCode::Down,
+                KeyModifiers::ALT,
+                crate::ui::ShortcutActionId::InsertBelow,
+            ),
+        ]
+    };
+    for (key, modifiers, action) in cases {
+        assert_eq!(
+            translate(Event::Key(KeyEvent::new(key, modifiers))),
+            Some(UiInput::Key(UiKey::Shortcut(action))),
+        );
+    }
+
+    if cfg!(target_os = "macos") {
+        for modifiers in [KeyModifiers::SUPER, KeyModifiers::META] {
+            assert_eq!(
+                translate(Event::Key(KeyEvent::new(KeyCode::Char('n'), modifiers,))),
+                None,
+            );
+        }
+    }
+}
+
+#[test]
 fn primary_shift_arrow_and_character_chords_remain_board_semantics() {
     let arrow = Event::Key(KeyEvent::new(
         KeyCode::Up,

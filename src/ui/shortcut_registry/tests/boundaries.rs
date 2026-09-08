@@ -2,7 +2,7 @@
 
 use crate::ui::{
     KeyBindings, KeyPhase, LogicalKey, LogicalModifiers, ShortcutActionId as Action,
-    ShortcutContext as Context, ShortcutContextStack, UiKey,
+    ShortcutContext as Context, ShortcutContextStack,
 };
 
 use super::super::{HelpSurface, ShortcutPlatform, ShortcutRegistry};
@@ -137,7 +137,7 @@ fn directional_line_defaults_are_platform_safe_and_home_end_remain_aliases() {
 }
 
 #[test]
-fn board_boundaries_insertions_and_configured_vertical_aliases_are_typed() {
+fn board_boundaries_and_configured_vertical_aliases_are_typed() {
     let remapped = KeyBindings {
         focus_up: 'b',
         focus_down: 'g',
@@ -168,18 +168,6 @@ fn board_boundaries_insertions_and_configured_vertical_aliases_are_typed() {
                     LogicalKey::Character('g'),
                     LogicalModifiers::CONTROL,
                     Action::FocusLast,
-                ),
-                (LogicalKey::Up, LogicalModifiers::ALT, Action::InsertAbove),
-                (
-                    LogicalKey::Character('b'),
-                    LogicalModifiers::ALT,
-                    Action::InsertAbove,
-                ),
-                (LogicalKey::Down, LogicalModifiers::ALT, Action::InsertBelow),
-                (
-                    LogicalKey::Character('g'),
-                    LogicalModifiers::ALT,
-                    Action::InsertBelow,
                 ),
             ] {
                 assert_eq!(
@@ -282,31 +270,6 @@ fn shifted_board_boundaries_have_platform_truthful_replaceable_help() {
     );
 }
 
-#[test]
-fn insert_aliases_never_intercept_text_entry_or_unicode_option_output() {
-    for platform in [ShortcutPlatform::MacOs, ShortcutPlatform::Portable] {
-        let registry =
-            ShortcutRegistry::resolve(&KeyBindings::default(), platform).expect("valid registry");
-        for context in [Context::Compose, Context::Edit, Context::Invocation] {
-            for (character, modifiers) in [
-                ('j', LogicalModifiers::ALT),
-                ('k', LogicalModifiers::ALT),
-                ('∆', LogicalModifiers::NONE),
-                ('˚', LogicalModifiers::NONE),
-            ] {
-                let resolved = dispatched(
-                    &registry,
-                    context,
-                    LogicalKey::Character(character),
-                    modifiers,
-                );
-                assert_eq!(resolved.action, None, "{platform:?}, {context:?}");
-                assert_eq!(resolved.intention, UiKey::Character(character));
-            }
-        }
-    }
-}
-
 fn replaced_and_disabled_registry() -> ShortcutRegistry {
     ShortcutRegistry::from_toml(
         r#"schema_version=1
@@ -341,12 +304,25 @@ fn new_actions_are_replaceable_with_multiple_aliases() {
         .action,
         Some(Action::InsertAbove),
     );
+    let removed_defaults = if cfg!(target_os = "macos") {
+        vec![
+            (LogicalKey::Character('n'), LogicalModifiers::CONTROL),
+            (LogicalKey::Character('n'), CONTROL_SHIFT),
+            (LogicalKey::Character('N'), LogicalModifiers::CONTROL),
+        ]
+    } else {
+        vec![
+            (LogicalKey::Up, LogicalModifiers::ALT),
+            (LogicalKey::Character('k'), LogicalModifiers::ALT),
+        ]
+    };
     for (key, modifiers) in [
         (LogicalKey::Up, LogicalModifiers::CONTROL),
         (LogicalKey::Character('k'), LogicalModifiers::CONTROL),
-        (LogicalKey::Up, LogicalModifiers::ALT),
-        (LogicalKey::Character('k'), LogicalModifiers::ALT),
-    ] {
+    ]
+    .into_iter()
+    .chain(removed_defaults)
+    {
         assert_eq!(
             registry
                 .dispatch(
@@ -381,12 +357,21 @@ fn new_actions_are_disableable_with_truthful_help() {
     assert!(visible_help.contains(&"First thought"));
     assert!(!visible_help.contains(&"Insert below"));
     assert!(!visible_help.contains(&"Last thought"));
+    let disabled_insert_defaults = if cfg!(target_os = "macos") {
+        vec![(LogicalKey::Character('n'), LogicalModifiers::CONTROL)]
+    } else {
+        vec![
+            (LogicalKey::Down, LogicalModifiers::ALT),
+            (LogicalKey::Character('j'), LogicalModifiers::ALT),
+        ]
+    };
     for (key, modifiers) in [
         (LogicalKey::Down, LogicalModifiers::CONTROL),
         (LogicalKey::Character('j'), LogicalModifiers::CONTROL),
-        (LogicalKey::Down, LogicalModifiers::ALT),
-        (LogicalKey::Character('j'), LogicalModifiers::ALT),
-    ] {
+    ]
+    .into_iter()
+    .chain(disabled_insert_defaults)
+    {
         assert_eq!(
             registry
                 .dispatch(
@@ -449,6 +434,19 @@ fn diagnostics_and_repeat_identity_are_stable_for_new_actions() {
         .expect("valid registry");
     let contexts = ShortcutContextStack::new([Context::Board]);
     let mut input = stroke(LogicalKey::Down, LogicalModifiers::ALT);
+    input.phase = KeyPhase::Repeat;
+    assert_eq!(
+        registry
+            .dispatch(&contexts, input)
+            .and_then(|resolved| resolved.action),
+        Some(Action::InsertBelow),
+    );
+    input.phase = KeyPhase::Release;
+    assert_eq!(registry.dispatch(&contexts, input), None);
+
+    let registry = ShortcutRegistry::resolve(&KeyBindings::default(), ShortcutPlatform::MacOs)
+        .expect("valid macOS registry");
+    let mut input = stroke(LogicalKey::Character('n'), LogicalModifiers::CONTROL);
     input.phase = KeyPhase::Repeat;
     assert_eq!(
         registry

@@ -26,6 +26,13 @@ fn shortcut(action: Shortcut) -> UiInput {
             LogicalKey::Down,
             LogicalModifiers::CONTROL.union(LogicalModifiers::SHIFT),
         ),
+        Shortcut::InsertAbove if cfg!(target_os = "macos") => (
+            LogicalKey::Character('n'),
+            LogicalModifiers::CONTROL.union(LogicalModifiers::SHIFT),
+        ),
+        Shortcut::InsertBelow if cfg!(target_os = "macos") => {
+            (LogicalKey::Character('n'), LogicalModifiers::CONTROL)
+        }
         Shortcut::InsertAbove => (LogicalKey::Up, LogicalModifiers::ALT),
         Shortcut::InsertBelow => (LogicalKey::Down, LogicalModifiers::ALT),
         _ => unreachable!("test helper only covers terminal-safe boundary actions"),

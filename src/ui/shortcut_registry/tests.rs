@@ -19,6 +19,7 @@ fn stroke(key: LogicalKey, modifiers: LogicalModifiers) -> KeyStroke {
     }
 }
 
+mod insertion_defaults;
 mod inspection;
 
 mod reflow;
