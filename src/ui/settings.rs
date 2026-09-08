@@ -16,6 +16,10 @@ pub enum KeyboardEnhancement {
 
 /// Complete UI configuration loaded from the platform config directory.
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent user-facing toggles with no shared state machine"
+)]
 pub struct UiSettings {
     /// Permit automatic stable-release checks on interactive release startup.
     pub check_for_updates: bool,
@@ -29,6 +33,8 @@ pub struct UiSettings {
     pub merge_separator: String,
     /// Keyboard protocol negotiation.
     pub keyboard_enhancement: KeyboardEnhancement,
+    /// Permanently hide the footer (session name and shortcut hints).
+    pub footer_hidden: bool,
     /// Fully resolved and validated contextual keyboard map.
     pub shortcuts: super::ShortcutRegistry,
     /// Vertical separation between thoughts.
@@ -44,6 +50,7 @@ impl Default for UiSettings {
             list_indent_width: 2,
             merge_separator: "\n\n".to_owned(),
             keyboard_enhancement: KeyboardEnhancement::default(),
+            footer_hidden: false,
             shortcuts: super::ShortcutRegistry::default(),
             density: BoardDensity::default(),
         }

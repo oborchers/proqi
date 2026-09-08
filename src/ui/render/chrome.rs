@@ -17,6 +17,9 @@ pub(super) fn render_footer(
     layout: &LayoutSnapshot,
     theme: &Theme,
 ) {
+    if !app.footer_visible {
+        return;
+    }
     render_context(frame, app, layout, theme);
     render_session_identity(frame, app, layout, theme);
     let keys = app.shortcut_registry();

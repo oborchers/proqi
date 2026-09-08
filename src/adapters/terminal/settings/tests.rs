@@ -60,6 +60,7 @@ fn missing_config_uses_the_narrow_pane_default() {
     );
     assert!(!settings.ui.show_session_id);
     assert!(settings.ui.smart_lists);
+    assert!(!settings.ui.footer_hidden);
     assert_eq!(settings.ui.list_indent_width, 2);
     assert_eq!(settings.ui.merge_separator, "\n\n");
     assert_eq!(settings.theme.base, ThemePreference::Auto);
@@ -244,6 +245,18 @@ fn smart_lists_can_be_disabled_without_changing_existing_config_defaults() {
     .expect("write config");
     let settings = load_settings(directory.path()).expect("settings");
     assert!(!settings.ui.smart_lists);
+}
+
+#[test]
+fn footer_hidden_can_be_enabled() {
+    let directory = tempfile::tempdir().expect("config directory");
+    fs::write(
+        directory.path().join("config.toml"),
+        "footer_hidden = true\n",
+    )
+    .expect("write config");
+    let settings = load_settings(directory.path()).expect("settings");
+    assert!(settings.ui.footer_hidden);
 }
 
 #[test]

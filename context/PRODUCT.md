@@ -181,7 +181,10 @@ count with mode and durability, labeled actions, and only the verified agent
 targets that currently exist. Empty optional bands consume no row. The session
 name remains a visible rename target at every supported height and truncates
 without covering status or board state. Narrow panes shorten secondary labels
-before any two regions can collide.
+before any two regions can collide. A config setting can hide the footer
+permanently, reclaiming its rows for thoughts when a user wants maximum
+vertical space; the board grows into exactly the freed rows without covering
+content.
 
 ### Revision and operation history
 
