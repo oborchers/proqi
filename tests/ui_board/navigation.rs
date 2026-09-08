@@ -69,9 +69,11 @@ fn shallow_help_scrolls_to_every_shortcut() {
         fixture.input(visual(CursorMovement::VisualDown, false));
     }
     let terminal = draw(&mut fixture, 42, 8);
-    assert!(text(terminal.backend().buffer()).contains("Quit"));
+    assert!(text(terminal.backend().buffer()).contains("Extend to last"));
 
-    fixture.pointer(1, 1, PointerKind::ScrollUp);
+    for _ in 0..7 {
+        fixture.pointer(1, 1, PointerKind::ScrollUp);
+    }
     let terminal = draw(&mut fixture, 42, 8);
     assert!(text(terminal.backend().buffer()).contains("Redo"));
 }

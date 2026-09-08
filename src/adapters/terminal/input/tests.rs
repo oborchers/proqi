@@ -318,23 +318,34 @@ fn shift_and_word_navigation_remain_semantic() {
 
 #[test]
 fn platform_primary_arrows_resolve_through_each_explicit_owner() {
-    let modifier = if cfg!(target_os = "macos") {
-        KeyModifiers::SUPER
+    let (modifier, up, down) = if cfg!(target_os = "macos") {
+        (
+            KeyModifiers::SUPER,
+            (
+                crate::ui::ShortcutActionId::FocusPrevious,
+                CursorMovement::VisualUp,
+            ),
+            (
+                crate::ui::ShortcutActionId::FocusNext,
+                CursorMovement::VisualDown,
+            ),
+        )
     } else {
-        KeyModifiers::CONTROL
+        (
+            KeyModifiers::CONTROL,
+            (
+                crate::ui::ShortcutActionId::FocusFirst,
+                CursorMovement::DocumentStart,
+            ),
+            (
+                crate::ui::ShortcutActionId::FocusLast,
+                CursorMovement::DocumentEnd,
+            ),
+        )
     };
-    for (code, board_action, editor_movement) in [
-        (
-            KeyCode::Up,
-            crate::ui::ShortcutActionId::FocusPrevious,
-            CursorMovement::DocumentStart,
-        ),
-        (
-            KeyCode::Down,
-            crate::ui::ShortcutActionId::FocusNext,
-            CursorMovement::DocumentEnd,
-        ),
-    ] {
+    for (code, board_action, editor_movement) in
+        [(KeyCode::Up, up.0, up.1), (KeyCode::Down, down.0, down.1)]
+    {
         let event = Event::Key(KeyEvent::new(code, modifier));
         assert_eq!(
             translate(event.clone()),

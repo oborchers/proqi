@@ -81,7 +81,7 @@ Every semantic action has one stable `ShortcutActionId`. Its descriptor owns:
 - one content-free diagnostics identity;
 - the mapping into an established typed UI intention or application action.
 
-The closed action inventory covers all 53 current Commands actions plus direct
+The closed action inventory covers all 57 current Commands actions plus direct
 close, confirm, text editing, navigation, selection, clipboard, history,
 submission, Board, Browser management, recovery, and direction actions. The
 source of truth is `ShortcutActionId::COMMANDS` plus the registry's
@@ -279,6 +279,33 @@ uppercase-without-Shift and lowercase-with-Shift terminal reports resolve to it.
 PageUp and PageDown keep distinct ordinary and Shift-extended action identities.
 On the Board they move or extend exactly five thoughts and clamp before the
 insertion boundary. Compose and Edit retain their five-visual-row behavior.
+
+Exact logical Control plus Up or Down owns terminal-safe complete-thought
+movement in Compose and Edit. Adding Shift extends the existing
+editor anchor to byte zero or the complete content end. On the Board, the same
+Control family focuses the first or last live thought. Its configured `k` and
+`j` spellings are aliases. On macOS, Control+Shift extends an anchored Board
+range to the boundary. Portable Control+Shift remains Primary+Shift reorder, so
+no shifted Board boundary default is claimed there. While the Board range latch
+is active, either unshifted Control boundary spelling extends the anchored range
+instead of discarding it.
+
+Exact logical Alt plus Up or Down inserts one blank thought above or below the
+focused live thought and enters its editor. The configured `k` and `j`
+spellings are aliases when that exact logical character event arrives. These
+bindings exist only in Board and InsertionBoundary contexts. Text owners retain
+printable Option and Alt output as content. The insertion row, empty Board,
+locked focus, and stale focus cannot partially mutate the Board. Commands owns
+the modifier-independent fallback. Invocation completion retains its modal
+vertical navigation at every modifier level. The positional reference is the focused
+thought even when another valid Board selection exists, and successful creation
+clears that selection through the canonical create path.
+
+Logical-line movement prefers Control plus Left or Right on macOS and Alt plus
+Left or Right on portable platforms. Shift extends to the same line endpoint.
+Named Home and End remain compatible aliases when the terminal delivers those
+events. Help prefers the directional defaults and never claims a physical key
+identity that was erased upstream.
 
 The macOS factory map adds exact `Option+Shift+Up` and
 `Option+Shift+Down` aliases for `thought.move_up` and `thought.move_down` in

@@ -45,7 +45,7 @@ pub(crate) fn key_input(key: UiKey) -> UiInput {
         UiKey::Move {
             movement,
             extend_selection,
-        } => movement_stroke(movement, extend_selection, primary),
+        } => movement_stroke(movement, extend_selection),
         UiKey::ExtendVisualRow { edge } => (
             LogicalKey::Character(match edge {
                 VisualRowEdge::Start => 'h',
@@ -61,7 +61,7 @@ pub(crate) fn key_input(key: UiKey) -> UiInput {
             primary,
         ),
         UiKey::PrimaryShiftMove { movement } => {
-            let (key, _) = movement_stroke(movement, false, primary);
+            let (key, _) = movement_stroke(movement, false);
             (key, primary.union(LogicalModifiers::SHIFT))
         }
         UiKey::SelectAll => (LogicalKey::Character('a'), primary),
@@ -90,7 +90,6 @@ pub(crate) fn key_input(key: UiKey) -> UiInput {
 fn movement_stroke(
     movement: CursorMovement,
     extend_selection: bool,
-    primary: LogicalModifiers,
 ) -> (LogicalKey, LogicalModifiers) {
     let (key, base_modifiers) = match movement {
         CursorMovement::GraphemeBack => (LogicalKey::Left, LogicalModifiers::NONE),
@@ -101,10 +100,10 @@ fn movement_stroke(
         CursorMovement::VisualDown => (LogicalKey::Down, LogicalModifiers::NONE),
         CursorMovement::VisualJumpUp => (LogicalKey::PageUp, LogicalModifiers::NONE),
         CursorMovement::VisualJumpDown => (LogicalKey::PageDown, LogicalModifiers::NONE),
-        CursorMovement::DocumentStart => (LogicalKey::Up, primary),
-        CursorMovement::DocumentEnd => (LogicalKey::Down, primary),
-        CursorMovement::LineStart => (LogicalKey::Home, LogicalModifiers::NONE),
-        CursorMovement::LineEnd => (LogicalKey::End, LogicalModifiers::NONE),
+        CursorMovement::DocumentStart => (LogicalKey::Up, LogicalModifiers::CONTROL),
+        CursorMovement::DocumentEnd => (LogicalKey::Down, LogicalModifiers::CONTROL),
+        CursorMovement::LineStart => (LogicalKey::Left, line_modifier()),
+        CursorMovement::LineEnd => (LogicalKey::Right, line_modifier()),
     };
     (key, base_modifiers.union(shift_if(extend_selection)))
 }
@@ -122,5 +121,13 @@ const fn word_modifier() -> LogicalModifiers {
         LogicalModifiers::ALT
     } else {
         LogicalModifiers::CONTROL
+    }
+}
+
+const fn line_modifier() -> LogicalModifiers {
+    if cfg!(target_os = "macos") {
+        LogicalModifiers::CONTROL
+    } else {
+        LogicalModifiers::ALT
     }
 }

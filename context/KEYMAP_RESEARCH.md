@@ -139,3 +139,27 @@ action or inspect session content. A timeout is a truthful no-event result.
 
 Configuration and capture errors identify stable context/action/binding
 positions without echoing arbitrary configuration or terminal payloads.
+
+## Terminal-safe boundary addendum
+
+The verified machine chain swaps physical left Control and left Command before
+macOS and Ghostty. Physical `mac-symbol|alt` therefore arrives as logical
+Control, while physical `opt|start` remains Option or Alt. Home and End are
+rewritten upstream to Command plus Left and Right, and Ghostty may then emit the
+same raw Ctrl+A and Ctrl+E used by its own Command-arrow handling. Proqi cannot
+distinguish those physical sources after they collapse.
+
+The selected defaults consequently use only bounded single logical strokes.
+Exact Control plus vertical direction owns complete-thought movement in text
+editors and first or last live-thought focus on the Board. Exact Alt plus
+vertical direction inserts relative to Board focus. Logical-line movement uses
+Control plus horizontal direction on macOS and Alt plus horizontal direction on
+portable platforms. Named Home and End remain compatible aliases. Configured
+vertical `k` and `j` spellings join the Board actions without entering text
+owners. No simultaneous non-modifier chord or sequence state is introduced.
+
+macOS Control+Shift can extend a Board range to the boundary because it has no
+prior Board owner. Portable Control+Shift remains the established
+Primary+Shift reorder family, so the shifted Board boundary action is
+deliberately unbound there. This preserves the existing selection and reorder
+contract instead of making platform Primary ambiguous.

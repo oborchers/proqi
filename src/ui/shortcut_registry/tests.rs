@@ -1,5 +1,6 @@
 //! Registry contract tests split by responsibility.
 
+mod boundaries;
 mod dispatch;
 mod edge_cases;
 mod inventory;

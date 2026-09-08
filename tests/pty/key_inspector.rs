@@ -141,7 +141,7 @@ fn named_keys_and_navigation_keep_exact_kitty_or_legacy_identity() {
             vec!["Shift"],
             "navigation.fast_extend_next",
         ),
-        ("\x1b[1;9B", "Down", vec!["Super"], "editor.document_end"),
+        ("\x1b[1;9B", "Down", vec!["Super"], "editor.visual_down"),
         (
             "\x1b[1;9D",
             "Left",
@@ -170,13 +170,93 @@ fn named_keys_and_navigation_keep_exact_kitty_or_legacy_identity() {
             "\x1b[1;6D",
             "Left",
             vec!["Control", "Shift"],
-            "editor.extend_grapheme_back",
+            "editor.extend_line_start",
         ),
         ("\x1b[3~", "Delete", vec![], "text.delete_forward"),
         ("\x1b[3;2~", "Delete", vec!["Shift"], "text.delete_forward"),
         ("\x7f", "Backspace", vec![], "text.backspace"),
     ] {
         inspect(bytes, key, &modifiers, Some(action));
+    }
+}
+
+#[test]
+fn terminal_safe_boundary_family_reports_exact_logical_events() {
+    for (bytes, key, modifiers, action) in [
+        ("\x1b[1;5A", "Up", vec!["Control"], "editor.document_start"),
+        ("\x1b[1;5B", "Down", vec!["Control"], "editor.document_end"),
+        (
+            "\x1b[1;6A",
+            "Up",
+            vec!["Control", "Shift"],
+            "editor.extend_document_start",
+        ),
+        (
+            "\x1b[1;6B",
+            "Down",
+            vec!["Control", "Shift"],
+            "editor.extend_document_end",
+        ),
+        ("\x1b[1;5D", "Left", vec!["Control"], "editor.line_start"),
+        ("\x1b[1;5C", "Right", vec!["Control"], "editor.line_end"),
+        ("\x1b[H", "Home", vec![], "editor.line_start"),
+        ("\x1b[F", "End", vec![], "editor.line_end"),
+        ("\x1b[1;9A", "Up", vec!["Super"], "editor.visual_up"),
+        ("\x1b[1;33B", "Down", vec!["Meta"], "editor.visual_down"),
+    ] {
+        inspect(bytes, key, &modifiers, Some(action));
+    }
+
+    for (bytes, key, modifiers, action) in [
+        ("\x1b[1;5A", "Up", vec!["Control"], "board.first_thought"),
+        ("\x1b[1;5:1A", "Up", vec!["Control"], "board.first_thought"),
+        ("\x1b[1;5B", "Down", vec!["Control"], "board.last_thought"),
+        (
+            "\x1b[1;6A",
+            "Up",
+            vec!["Control", "Shift"],
+            "board.range_first_thought",
+        ),
+        (
+            "\x1b[1;6B",
+            "Down",
+            vec!["Control", "Shift"],
+            "board.range_last_thought",
+        ),
+        ("\x1b[1;3A", "Up", vec!["Alt"], "thought.insert_above"),
+        ("\x1b[1;3B", "Down", vec!["Alt"], "thought.insert_below"),
+        (
+            "\x1b[107;5u",
+            "U+006B",
+            vec!["Control"],
+            "board.first_thought",
+        ),
+        (
+            "\x1b[106;5u",
+            "U+006A",
+            vec!["Control"],
+            "board.last_thought",
+        ),
+        (
+            "\x1b[75;5u",
+            "U+004B",
+            vec!["Control"],
+            "board.range_first_thought",
+        ),
+        (
+            "\x1b[74;5u",
+            "U+004A",
+            vec!["Control"],
+            "board.range_last_thought",
+        ),
+        ("\x1b[107;3u", "U+006B", vec!["Alt"], "thought.insert_above"),
+        ("\x1b[106;3u", "U+006A", vec!["Alt"], "thought.insert_below"),
+    ] {
+        let data = capture(bytes, "board", None, true);
+        assert_eq!(data["event"]["keystroke"]["key"], key);
+        assert_eq!(data["event"]["keystroke"]["modifiers"], json!(modifiers));
+        assert_eq!(data["event"]["action"], action);
+        assert_eq!(data["event"]["classification"], "resolved");
     }
 }
 
@@ -192,17 +272,28 @@ fn macos_option_shift_reorder_diagnostic_reports_exact_received_event_and_action
 
 #[test]
 fn repeat_is_resolved_release_is_reported_without_dispatch() {
-    for (sequence, phase, classification) in [
-        ("\x1b[106;1:2u", "repeat", "resolved"),
-        ("\x1b[106;1:3u", "release", "release_ignored"),
+    for (sequence, phase, classification, action) in [
+        ("\x1b[106;1:2u", "repeat", "resolved", Some("list.next")),
+        ("\x1b[106;1:3u", "release", "release_ignored", None),
+        (
+            "\x1b[1;5:2B",
+            "repeat",
+            "resolved",
+            Some("board.last_thought"),
+        ),
+        ("\x1b[1;5:3B", "release", "release_ignored", None),
+        (
+            "\x1b[1;3:2A",
+            "repeat",
+            "resolved",
+            Some("thought.insert_above"),
+        ),
+        ("\x1b[1;3:3A", "release", "release_ignored", None),
     ] {
         let data = capture(sequence, "board", None, true);
         assert_eq!(data["event"]["keystroke"]["phase"], phase);
         assert_eq!(data["event"]["classification"], classification);
-        assert_eq!(
-            data["event"]["action"].as_str(),
-            (phase == "repeat").then_some("list.next")
-        );
+        assert_eq!(data["event"]["action"].as_str(), action);
     }
 }
 

@@ -3,6 +3,7 @@ use super::BoardApp;
 use crate::{
     application::Effect,
     ports::environment::{Clock, IdGenerator},
+    ui::CommandAvailability,
 };
 
 impl BoardApp {
@@ -12,6 +13,19 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
+        let unavailable_board_thought = self
+            .settings
+            .shortcuts
+            .descriptor(action)
+            .and_then(|descriptor| descriptor.commands)
+            .is_some_and(|metadata| {
+                metadata.availability == CommandAvailability::BoardThought
+                    && !self.board_thought_command_available()
+            });
+        if unavailable_board_thought {
+            self.set_warning("command is unavailable in the current state");
+            return Vec::new();
+        }
         if self.editor_snapshot().is_some() {
             self.capture_palette_selection_handoff();
         }
