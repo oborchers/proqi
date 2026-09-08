@@ -69,9 +69,15 @@ fn shallow_help_scrolls_to_every_shortcut() {
         fixture.input(visual(CursorMovement::VisualDown, false));
     }
     let terminal = draw(&mut fixture, 42, 8);
-    assert!(text(terminal.backend().buffer()).contains("Quit"));
-
-    fixture.pointer(1, 1, PointerKind::ScrollUp);
+    let expected = if cfg!(target_os = "macos") {
+        "Extend to last"
+    } else {
+        "Last thought"
+    };
+    assert!(text(terminal.backend().buffer()).contains(expected));
+    for _ in 0..7 {
+        fixture.pointer(1, 1, PointerKind::ScrollUp);
+    }
     let terminal = draw(&mut fixture, 42, 8);
     assert!(text(terminal.backend().buffer()).contains("Redo"));
 }
@@ -91,7 +97,6 @@ fn help_list_uses_identical_arrow_and_jk_navigation() {
         text(draw(&mut arrow, 42, 8).backend().buffer()),
         text(draw(&mut vim, 42, 8).backend().buffer())
     );
-
     arrow.input(visual(CursorMovement::VisualUp, false));
     vim.input(crate::key_input(UiKey::Character('k')));
     assert_eq!(

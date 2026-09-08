@@ -310,15 +310,11 @@ fn vertical_action(
                 (false, false) => Action::FastNext,
             });
         }
-        return Some(match (previous, primary, shifted) {
-            (true, true, true) => Action::ExtendDocumentStart,
-            (false, true, true) => Action::ExtendDocumentEnd,
-            (true, true, false) => Action::MoveDocumentStart,
-            (false, true, false) => Action::MoveDocumentEnd,
-            (true, false, true) => Action::ExtendVisualUp,
-            (false, false, true) => Action::ExtendVisualDown,
-            (true, false, false) => Action::MoveVisualUp,
-            (false, false, false) => Action::MoveVisualDown,
+        return Some(match (previous, shifted) {
+            (true, true) => Action::ExtendVisualUp,
+            (false, true) => Action::ExtendVisualDown,
+            (true, false) => Action::MoveVisualUp,
+            (false, false) => Action::MoveVisualDown,
         });
     }
     None
@@ -399,6 +395,14 @@ fn configured_action(
             let previous = matches!(base, Action::FocusPrevious | Action::ExtendPrevious);
             let shifted = modifiers.contains(LogicalModifiers::SHIFT)
                 || matches!(base, Action::ExtendPrevious | Action::ExtendNext);
+            if let Some(action) = configured_board_boundary(
+                previous,
+                matches!(base, Action::FocusPrevious | Action::FocusNext),
+                modifiers,
+                macos,
+            ) {
+                return Some(action);
+            }
             return Some(
                 match (
                     previous,
@@ -419,20 +423,8 @@ fn configured_action(
             return Some(base);
         }
     }
-    if is_editor_context(context) && ShortcutPlatform::from_macos(macos).is_primary(modifiers) {
-        let shifted = modifiers.contains(LogicalModifiers::SHIFT) || character.is_ascii_uppercase();
-        if !shifted && character.eq_ignore_ascii_case(&keys.transform) {
-            return Some(Action::ContextualTransform);
-        }
-        if shifted && character.eq_ignore_ascii_case(&keys.delete_sentence) {
-            return Some(Action::DeleteSentence);
-        }
-        if shifted && character.eq_ignore_ascii_case(&keys.select_visual_row_start) {
-            return Some(Action::ExtendVisualRowStart);
-        }
-        if shifted && character.eq_ignore_ascii_case(&keys.select_visual_row_end) {
-            return Some(Action::ExtendVisualRowEnd);
-        }
+    if let Some(action) = configured_editor_character(context, character, modifiers, macos, keys) {
+        return Some(action);
     }
     if context == Context::Edit
         && character.eq_ignore_ascii_case(&'f')
@@ -451,4 +443,58 @@ fn configured_action(
         };
     }
     None
+}
+
+fn configured_editor_character(
+    context: Context,
+    character: char,
+    modifiers: LogicalModifiers,
+    macos: bool,
+    keys: &KeyBindings,
+) -> Option<Action> {
+    if !is_editor_context(context) || !ShortcutPlatform::from_macos(macos).is_primary(modifiers) {
+        return None;
+    }
+    let shifted = modifiers.contains(LogicalModifiers::SHIFT) || character.is_ascii_uppercase();
+    match (shifted, character) {
+        (false, value) if value.eq_ignore_ascii_case(&keys.transform) => {
+            Some(Action::ContextualTransform)
+        }
+        (true, value) if value.eq_ignore_ascii_case(&keys.delete_sentence) => {
+            Some(Action::DeleteSentence)
+        }
+        (true, value) if value.eq_ignore_ascii_case(&keys.select_visual_row_start) => {
+            Some(Action::ExtendVisualRowStart)
+        }
+        (true, value) if value.eq_ignore_ascii_case(&keys.select_visual_row_end) => {
+            Some(Action::ExtendVisualRowEnd)
+        }
+        _ => None,
+    }
+}
+
+fn configured_board_boundary(
+    previous: bool,
+    base_focus: bool,
+    modifiers: LogicalModifiers,
+    macos: bool,
+) -> Option<Action> {
+    let action = match (previous, base_focus, modifiers, macos) {
+        (true, true, LogicalModifiers::CONTROL, _) => Action::FocusFirst,
+        (false, true, LogicalModifiers::CONTROL, _) => Action::FocusLast,
+        (true, false, value, true)
+            if value.difference(LogicalModifiers::SHIFT) == LogicalModifiers::CONTROL =>
+        {
+            Action::ExtendFirst
+        }
+        (false, false, value, true)
+            if value.difference(LogicalModifiers::SHIFT) == LogicalModifiers::CONTROL =>
+        {
+            Action::ExtendLast
+        }
+        (true, true, LogicalModifiers::ALT, false) => Action::InsertAbove,
+        (false, true, LogicalModifiers::ALT, false) => Action::InsertBelow,
+        _ => return None,
+    };
+    Some(action)
 }

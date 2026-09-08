@@ -244,6 +244,57 @@ fn release_is_ignored_and_repeat_preserves_auto_repeat() {
 }
 
 #[test]
+fn platform_relative_insertion_defaults_preserve_exact_logical_identity() {
+    let cases = if cfg!(target_os = "macos") {
+        vec![
+            (
+                KeyCode::Char('n'),
+                KeyModifiers::CONTROL,
+                crate::ui::ShortcutActionId::InsertBelow,
+            ),
+            (
+                KeyCode::Char('n'),
+                KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+                crate::ui::ShortcutActionId::InsertAbove,
+            ),
+            (
+                KeyCode::Char('N'),
+                KeyModifiers::CONTROL,
+                crate::ui::ShortcutActionId::InsertAbove,
+            ),
+        ]
+    } else {
+        vec![
+            (
+                KeyCode::Up,
+                KeyModifiers::ALT,
+                crate::ui::ShortcutActionId::InsertAbove,
+            ),
+            (
+                KeyCode::Down,
+                KeyModifiers::ALT,
+                crate::ui::ShortcutActionId::InsertBelow,
+            ),
+        ]
+    };
+    for (key, modifiers, action) in cases {
+        assert_eq!(
+            translate(Event::Key(KeyEvent::new(key, modifiers))),
+            Some(UiInput::Key(UiKey::Shortcut(action))),
+        );
+    }
+
+    if cfg!(target_os = "macos") {
+        for modifiers in [KeyModifiers::SUPER, KeyModifiers::META] {
+            assert_eq!(
+                translate(Event::Key(KeyEvent::new(KeyCode::Char('n'), modifiers,))),
+                None,
+            );
+        }
+    }
+}
+
+#[test]
 fn primary_shift_arrow_and_character_chords_remain_board_semantics() {
     let arrow = Event::Key(KeyEvent::new(
         KeyCode::Up,
@@ -318,23 +369,34 @@ fn shift_and_word_navigation_remain_semantic() {
 
 #[test]
 fn platform_primary_arrows_resolve_through_each_explicit_owner() {
-    let modifier = if cfg!(target_os = "macos") {
-        KeyModifiers::SUPER
+    let (modifier, up, down) = if cfg!(target_os = "macos") {
+        (
+            KeyModifiers::SUPER,
+            (
+                crate::ui::ShortcutActionId::FocusPrevious,
+                CursorMovement::VisualUp,
+            ),
+            (
+                crate::ui::ShortcutActionId::FocusNext,
+                CursorMovement::VisualDown,
+            ),
+        )
     } else {
-        KeyModifiers::CONTROL
+        (
+            KeyModifiers::CONTROL,
+            (
+                crate::ui::ShortcutActionId::FocusFirst,
+                CursorMovement::DocumentStart,
+            ),
+            (
+                crate::ui::ShortcutActionId::FocusLast,
+                CursorMovement::DocumentEnd,
+            ),
+        )
     };
-    for (code, board_action, editor_movement) in [
-        (
-            KeyCode::Up,
-            crate::ui::ShortcutActionId::FocusPrevious,
-            CursorMovement::DocumentStart,
-        ),
-        (
-            KeyCode::Down,
-            crate::ui::ShortcutActionId::FocusNext,
-            CursorMovement::DocumentEnd,
-        ),
-    ] {
+    for (code, board_action, editor_movement) in
+        [(KeyCode::Up, up.0, up.1), (KeyCode::Down, down.0, down.1)]
+    {
         let event = Event::Key(KeyEvent::new(code, modifier));
         assert_eq!(
             translate(event.clone()),
