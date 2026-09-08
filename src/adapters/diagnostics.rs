@@ -104,6 +104,11 @@ pub enum SafeEvent<'a> {
         /// Typed content-free adapter failure.
         reason: &'a str,
     },
+    /// One attachment has a public-metadata cloud availability state.
+    AttachmentCloudState {
+        /// Stable content-free availability code.
+        state: &'a str,
+    },
     /// One invocation source returned retained but incomplete results.
     InvocationIncomplete {
         /// Typed reason containing only stable codes and aggregate counts.
@@ -262,9 +267,8 @@ pub fn record(event: SafeEvent<'_>) {
         SafeEvent::UpdateCheckFailed { mode, code } => {
             tracing::warn!(event = "update_check_failed", mode, code);
         }
-        SafeEvent::AttachmentInaccessible { reason } => {
-            tracing::warn!(event = "attachment_inaccessible", reason);
-        }
+        SafeEvent::AttachmentInaccessible { reason } => record_attachment_failure(reason),
+        SafeEvent::AttachmentCloudState { state } => record_attachment_cloud_state(state),
         SafeEvent::InvocationIncomplete { reason } => invocation::record(reason),
         SafeEvent::Submission {
             submission_id,
@@ -293,6 +297,14 @@ pub fn record(event: SafeEvent<'_>) {
             outcome
         ),
     }
+}
+
+fn record_attachment_failure(reason: &str) {
+    tracing::warn!(event = "attachment_inaccessible", reason);
+}
+
+fn record_attachment_cloud_state(state: &str) {
+    tracing::info!(event = "attachment_cloud_state", state);
 }
 
 /// Record one content-free input lease reset without widening the public event vocabulary.

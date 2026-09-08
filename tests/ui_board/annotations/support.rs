@@ -1,5 +1,7 @@
 use super::*;
-use proqi::ports::attachment_accessibility::{AttachmentCheckBatchResult, AttachmentCheckResult};
+use proqi::ports::attachment_accessibility::{
+    AttachmentAvailability, AttachmentCheckBatchResult, AttachmentCheckResult,
+};
 
 pub(super) fn insert_accessible(fixture: &mut Fixture, payload: PastePayload) {
     let effects = fixture.effects(UiInput::PasteAnnotated(payload));
@@ -20,7 +22,7 @@ pub(super) fn insert_accessible(fixture: &mut Fixture, payload: PastePayload) {
                 .into_iter()
                 .map(|key| AttachmentCheckResult {
                     key,
-                    result: Ok(()),
+                    result: Ok(AttachmentAvailability::Available),
                 })
                 .collect(),
         });

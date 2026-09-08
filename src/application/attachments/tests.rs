@@ -8,8 +8,8 @@ use crate::{
     },
     ports::{
         attachment_accessibility::{
-            AttachmentAccessFailure, AttachmentCheckBatch, AttachmentCheckBatchResult,
-            AttachmentCheckPurpose, AttachmentCheckResult,
+            AttachmentAccessFailure, AttachmentAvailability, AttachmentCheckBatch,
+            AttachmentCheckBatchResult, AttachmentCheckPurpose, AttachmentCheckResult,
         },
         environment::IdGenerator as _,
     },
@@ -18,6 +18,7 @@ use crate::{
 use super::{AttachmentAccessibilityState, AttachmentRefreshCause};
 use crate::application::test_support::TestIds;
 
+mod health_states;
 mod reconciliation;
 
 #[test]
@@ -396,25 +397,6 @@ fn focus_transition_reprioritizes_unknown_work_once() {
     assert!(state.prioritize_focus(ids[39]).is_empty());
 }
 
-#[test]
-fn every_typed_failure_has_the_same_binary_health() {
-    for failure in [
-        AttachmentAccessFailure::Missing,
-        AttachmentAccessFailure::PermissionDenied,
-        AttachmentAccessFailure::Unmounted,
-        AttachmentAccessFailure::Unreadable,
-        AttachmentAccessFailure::Io,
-        AttachmentAccessFailure::TimedOut,
-        AttachmentAccessFailure::Cancelled,
-    ] {
-        let (board, ids) = board_with_attachments(1);
-        let mut state = AttachmentAccessibilityState::default();
-        let batch = one_batch(state.start(&board, Some(ids[0]), Duration::ZERO));
-        assert!(state.complete(failed(batch, failure)).0.is_empty());
-        assert!(state.inaccessible(ids[0], 0), "failure: {failure:?}");
-    }
-}
-
 fn board_with_attachments(count: usize) -> (SessionBoard, Vec<crate::domain::ThoughtId>) {
     let mut ids = TestIds::new(1_725_000_000_000);
     let now = Timestamp::from_millis(1_725_000_000_000);
@@ -477,6 +459,24 @@ fn failed(
     completion(batch, |_| Err(failure))
 }
 
+fn availability(
+    batch: AttachmentCheckBatch,
+    state: AttachmentAvailability,
+) -> AttachmentCheckBatchResult {
+    AttachmentCheckBatchResult {
+        id: batch.id,
+        purpose: batch.purpose,
+        results: batch
+            .checks
+            .into_iter()
+            .map(|key| AttachmentCheckResult {
+                key,
+                result: Ok(state),
+            })
+            .collect(),
+    }
+}
+
 fn completion(
     batch: AttachmentCheckBatch,
     result: impl Fn(
@@ -490,7 +490,7 @@ fn completion(
             .checks
             .into_iter()
             .map(|key| AttachmentCheckResult {
-                result: result(&key),
+                result: result(&key).map(|()| AttachmentAvailability::Available),
                 key,
             })
             .collect(),

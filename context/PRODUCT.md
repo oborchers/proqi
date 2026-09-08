@@ -602,11 +602,20 @@ Attachment annotations keep an external absolute path as canonical prompt
 content. Proqi presents a readable or not-yet-resolved attachment as
 `[Image N]` or `[File N]`. Unknown and checking health are not accessibility
 proof and remain fail-closed for actions that require a readable file, but they
-do not show a false warning. Only a completed failed check changes the same
-annotation to `[Image N · inaccessible]` or `[File N · inaccessible]` and uses
-the warning visual role. Missing files, permissions, unavailable volumes,
-filesystem failures, and bounded check timeouts remain diagnostic details
-rather than additional user-visible states.
+do not show a false warning. On macOS, public Foundation URL resource metadata
+can prove that an iCloud item has no local copy or is currently downloading.
+Those states append `· in iCloud` or `· downloading` to the same numeric label.
+Once the exact file becomes locally readable, its normal label returns. Proqi
+never requests or initiates an iCloud download.
+
+Only authoritative ubiquitous-item metadata can produce either iCloud state.
+A failed open or read never implies iCloud. Missing files, permissions,
+unavailable volumes, unreadable entries, ordinary filesystem failures, bounded
+check timeouts, and cancellation retain the generic `[Image N · inaccessible]`
+or `[File N · inaccessible]` presentation and the warning visual role. Absent
+or contradictory cloud metadata, other File Provider placeholders, and
+non-macOS platforms cannot produce an iCloud claim. They use the same generic
+presentation whenever exact local readability also fails.
 
 Health is transient and never changes prompt content. Proqi checks new
 annotations immediately, checks a restored board with the focused thought
@@ -617,9 +626,11 @@ fallback. Proqi does not poll or watch external attachment directories.
 
 Every adjacent-agent submission freshly verifies every attachment in the exact
 captured source set after edits are durable. The sources remain locked during
-that bounded preflight. If any check fails or times out, Proqi creates no
-submission attempt, sends nothing, removes nothing, and reports one aggregate
-error. There is no bypass action for an annotated inaccessible asset.
+that bounded preflight. In iCloud, downloading, inaccessible, timed-out, and
+cancelled results are all fail-closed. Proqi creates no submission attempt,
+sends nothing, removes nothing, and reports one aggregate error until every
+exact source is locally readable. There is no bypass action for an annotated
+unavailable asset.
 
 The path remains an external reference. A file can still disappear after the
 last successful check and before the receiving agent opens it. Proqi neither
