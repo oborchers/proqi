@@ -463,6 +463,8 @@ mod placeholder_entry;
 mod placeholder_space;
 #[path = "ui_board/pointer_selection.rs"]
 mod pointer_selection;
+#[path = "ui_board/reflow_in_place.rs"]
+mod reflow_in_place;
 #[path = "ui_board/scroll_regressions.rs"]
 mod scroll_regressions;
 #[path = "ui_board/search.rs"]
@@ -485,15 +487,13 @@ mod snapshots;
 mod submission_locks;
 #[path = "ui_board/submit_all.rs"]
 mod submit_all;
+#[path = "ui_board/terminal_safe_navigation.rs"]
+mod terminal_safe_navigation;
 #[path = "ui_board/top_boundary_snapshots.rs"]
 mod top_boundary_snapshots;
 #[path = "ui_board/transformations.rs"]
 mod transformations;
-#[path = "ui_board/visual_row_selection.rs"]
-mod visual_row_selection;
-
 #[path = "ui_board/versioned_keymap.rs"]
 mod versioned_keymap;
-
-#[path = "ui_board/reflow_in_place.rs"]
-mod reflow_in_place;
+#[path = "ui_board/visual_row_selection.rs"]
+mod visual_row_selection;

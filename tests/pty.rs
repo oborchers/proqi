@@ -92,6 +92,10 @@ mod smart_lists;
 mod top_boundary;
 
 #[cfg(target_os = "macos")]
+#[path = "pty/terminal_safe_navigation.rs"]
+mod terminal_safe_navigation;
+
+#[cfg(target_os = "macos")]
 #[path = "pty/transformations.rs"]
 mod transformations;
 

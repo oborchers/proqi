@@ -32,12 +32,13 @@ fn assert_focus_up(input: UiInput) {
 #[test]
 fn unsupported_board_modifiers_keep_the_base_focus_intention() {
     for key in [
-        crate::key_input(UiKey::PrimaryCharacter('k')),
-        UiInput::KeyStroke(KeyStroke::press(LogicalKey::Up).with_modifiers(LogicalModifiers::ALT)),
-        crate::key_input(UiKey::Move {
-            movement: CursorMovement::DocumentStart,
-            extend_selection: false,
-        }),
+        UiInput::KeyStroke(
+            KeyStroke::press(LogicalKey::Up).with_modifiers(LogicalModifiers::HYPER),
+        ),
+        UiInput::KeyStroke(
+            KeyStroke::press(LogicalKey::Up).with_modifiers(LogicalModifiers::SUPER),
+        ),
+        UiInput::KeyStroke(KeyStroke::press(LogicalKey::Up).with_modifiers(LogicalModifiers::META)),
     ] {
         assert_focus_up(key);
     }
@@ -141,19 +142,15 @@ fn insertion_row_rejects_thought_only_range_and_reorder_intentions() {
 }
 
 #[test]
-fn insertion_boundary_accepts_mixed_unsupported_focus_modifiers() {
+fn insertion_boundary_rejects_relative_insert_actions_without_a_live_focus() {
     let mut fixture = populated();
     fixture.input(visual(CursorMovement::VisualDown, false));
-    fixture.input(crate::key_input(UiKey::PrimaryCharacter('j')));
     fixture.input(UiInput::KeyStroke(
         KeyStroke::press(LogicalKey::Down).with_modifiers(LogicalModifiers::ALT),
     ));
 
-    assert_eq!(fixture.app.state.board.live_thoughts().len(), 4);
-    assert!(matches!(
-        fixture.app.interaction_mode(),
-        proqi::application::InteractionMode::Edit { .. }
-    ));
+    assert_eq!(fixture.app.state.board.live_thoughts().len(), 3);
+    assert!(fixture.app.insertion_focused());
 }
 
 #[test]
@@ -175,7 +172,7 @@ fn remapped_vertical_bindings_share_the_same_modifier_ladder() {
         durable_thought(&mut fixture, content);
     }
 
-    fixture.input(crate::key_input(UiKey::PrimaryCharacter('i')));
+    fixture.input(crate::key_input(UiKey::Character('i')));
     assert_eq!(focus_content(&fixture), "second");
     fixture.input(crate::key_input(UiKey::Character('I')));
     assert_eq!(
