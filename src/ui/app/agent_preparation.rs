@@ -176,7 +176,7 @@ impl BoardApp {
             FailureCode::RecoveryCapacity => "press w to export recovery",
             _ => "press r to retry or w to export recovery",
         };
-        self.set_error(format!(
+        self.set_storage_failure(format!(
             "Submission not started because changes were not saved. {kept}; {recovery}"
         ));
     }

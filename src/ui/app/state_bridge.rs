@@ -71,6 +71,11 @@ impl BoardApp {
             }
         };
         let _effects = self.reduce(action);
+        if failure.is_some() {
+            self.enter_storage_failure_state();
+        } else {
+            self.clear_storage_failure_status();
+        }
         self.complete_deferred_submission_durability(failure)
     }
 
@@ -80,7 +85,7 @@ impl BoardApp {
             DurabilityState::Failed { failed, .. }
                 if self.recovery_exported_for != Some(failed)
         ) {
-            self.set_error("retry the save or export recovery before quitting");
+            self.set_storage_failure("retry the save or export recovery before quitting");
         } else {
             self.quit = true;
         }
@@ -161,7 +166,11 @@ impl BoardApp {
                 Some(effects)
             }
             Err(error) => {
-                self.set_error(error.to_string());
+                if matches!(self.state.durability, DurabilityState::Failed { .. }) {
+                    self.set_storage_failure(error.to_string());
+                } else {
+                    self.set_error(error.to_string());
+                }
                 None
             }
         }
