@@ -384,6 +384,11 @@ pub(super) fn persist_board(
     transaction: &Transaction<'_>,
     board: &SessionBoard,
 ) -> Result<(), StoreError> {
+    super::attachment_numbering::persist(
+        transaction,
+        board.session.id,
+        board.attachment_counters(),
+    )?;
     let maximum: Option<i64> = transaction
         .query_row(
             "SELECT max(position) FROM thoughts WHERE session_id = ?1 AND deleted_at IS NULL",

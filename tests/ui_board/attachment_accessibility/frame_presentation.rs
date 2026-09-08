@@ -291,6 +291,7 @@ fn embedded_attachment(content: String, range: std::ops::Range<usize>) -> PasteP
             start: range.start,
             end: range.end,
             kind: ContentAnnotationKind::Attachment {
+                ordinal: Some(1_u64.try_into().expect("fixture ordinal")),
                 image: true,
                 display_name: "fixture.png".to_owned(),
             },

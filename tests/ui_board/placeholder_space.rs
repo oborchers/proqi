@@ -23,8 +23,9 @@ fn substitution(kind: ContentAnnotationKind, start: usize, end: usize) -> Conten
     ContentAnnotation { start, end, kind }
 }
 
-fn attachment(image: bool) -> ContentAnnotationKind {
+fn attachment(image: bool, ordinal: u64) -> ContentAnnotationKind {
     ContentAnnotationKind::Attachment {
+        ordinal: Some(ordinal.try_into().expect("fixture ordinal")),
         image,
         display_name: if image { "image.png" } else { "context.txt" }.to_owned(),
     }
@@ -141,7 +142,7 @@ fn beginning_middle_end_and_reversed_placeholders_shift_exactly_once() {
     ] {
         let before = format!("{prefix}{value}{suffix}");
         let expected = format!("{prefix} {value}{suffix}");
-        let mut fixture = annotated(prefix, value, suffix, attachment(true));
+        let mut fixture = annotated(prefix, value, suffix, attachment(true, 1));
         if reverse {
             select_reverse(&mut fixture, suffix);
         } else {
@@ -155,8 +156,8 @@ fn beginning_middle_end_and_reversed_placeholders_shift_exactly_once() {
 #[test]
 fn every_substitution_kind_and_adjacent_placeholders_use_the_same_projection_rule() {
     let kinds = [
-        attachment(true),
-        attachment(false),
+        attachment(true, 1),
+        attachment(false, 1),
         ContentAnnotationKind::LargePaste {
             lines: 14,
             graphemes: 1_234,
@@ -179,8 +180,8 @@ fn every_substitution_kind_and_adjacent_placeholders_use_the_same_projection_rul
     let mut fixture = Fixture::with_annotated_thought(
         &content,
         vec![
-            substitution(attachment(true), 0, first.len()),
-            substitution(attachment(true), first.len(), content.len()),
+            substitution(attachment(true, 1), 0, first.len()),
+            substitution(attachment(true, 2), first.len(), content.len()),
         ],
     );
     select_reverse(&mut fixture, "");
@@ -193,7 +194,7 @@ fn every_substitution_kind_and_adjacent_placeholders_use_the_same_projection_rul
 #[test]
 fn repeated_space_keeps_the_placeholder_and_ordinary_followup_spaces() {
     let value = "/tmp/repeat.png";
-    let mut fixture = annotated("", value, "", attachment(true));
+    let mut fixture = annotated("", value, "", attachment(true, 1));
     select_forward(&mut fixture, "");
     let first = space_revision(&mut fixture);
     assert_eq!(first.after_content, format!(" {value}"));
@@ -224,7 +225,7 @@ fn repeated_space_keeps_the_placeholder_and_ordinary_followup_spaces() {
 #[test]
 fn delete_backspace_enter_replacement_and_paste_keep_existing_semantics() {
     for key in [UiKey::Delete, UiKey::Backspace] {
-        let mut fixture = annotated("a", "TOKEN", "z", attachment(false));
+        let mut fixture = annotated("a", "TOKEN", "z", attachment(false, 1));
         select_forward(&mut fixture, "a");
         fixture.input(crate::key_input(key));
         let effects = fixture
@@ -237,7 +238,7 @@ fn delete_backspace_enter_replacement_and_paste_keep_existing_semantics() {
         assert!(revision.after_annotations.is_empty());
     }
 
-    let mut entered = annotated("a", "TOKEN", "z", attachment(false));
+    let mut entered = annotated("a", "TOKEN", "z", attachment(false, 1));
     select_forward(&mut entered, "a");
     assert!(entered.effects(crate::key_input(UiKey::Enter)).is_empty());
     assert_eq!(
@@ -251,7 +252,7 @@ fn delete_backspace_enter_replacement_and_paste_keep_existing_semantics() {
         UiInput::Paste(" ".to_owned()),
         UiInput::Paste("first\r\nsecond".to_owned()),
     ] {
-        let mut fixture = annotated("a", "TOKEN", "z", attachment(false));
+        let mut fixture = annotated("a", "TOKEN", "z", attachment(false, 1));
         select_forward(&mut fixture, "a");
         let mut effects = fixture.effects(input);
         if effects.is_empty() {
@@ -276,7 +277,7 @@ fn delete_backspace_enter_replacement_and_paste_keep_existing_semantics() {
 
 #[test]
 fn partial_wide_multi_expanded_inline_and_plain_selections_are_not_eligible() {
-    let mut partial = annotated("", "TOKEN", "", attachment(false));
+    let mut partial = annotated("", "TOKEN", "", attachment(false, 1));
     partial.input(crate::key_input(UiKey::Enter));
     partial.input(move_key(CursorMovement::DocumentStart, false));
     partial.input(move_key(CursorMovement::GraphemeForward, true));
@@ -298,8 +299,8 @@ fn partial_wide_multi_expanded_inline_and_plain_selections_are_not_eligible() {
     let mut wide = Fixture::with_annotated_thought(
         "pONEmTWOs",
         vec![
-            substitution(attachment(false), 1, 1 + first.len()),
-            substitution(attachment(false), 5, 5 + second.len()),
+            substitution(attachment(false, 1), 1, 1 + first.len()),
+            substitution(attachment(false, 2), 5, 5 + second.len()),
         ],
     );
     wide.input(crate::key_input(UiKey::Enter));
@@ -308,7 +309,7 @@ fn partial_wide_multi_expanded_inline_and_plain_selections_are_not_eligible() {
     wide.input(crate::key_input(UiKey::UnmodifiedSpace));
     assert_eq!(wide.app.editor_snapshot().expect("editor").content, " ");
 
-    let mut expanded = annotated("", "TOKEN", "", attachment(false));
+    let mut expanded = annotated("", "TOKEN", "", attachment(false, 1));
     select_forward(&mut expanded, "");
     expanded.input(crate::key_input(UiKey::Enter));
     expanded.input(move_key(CursorMovement::DocumentStart, false));
@@ -336,7 +337,7 @@ fn partial_wide_multi_expanded_inline_and_plain_selections_are_not_eligible() {
 #[test]
 fn board_compose_and_search_retain_their_space_behavior() {
     let mut board =
-        Fixture::with_annotated_thought("TOKEN", vec![substitution(attachment(false), 0, 5)]);
+        Fixture::with_annotated_thought("TOKEN", vec![substitution(attachment(false, 1), 0, 5)]);
     assert!(
         board
             .effects(crate::key_input(UiKey::UnmodifiedSpace))
@@ -371,7 +372,7 @@ fn inaccessible_mouse_selection_survives_resize_and_shifts_without_recheck() {
     let insertion = fixture.effects(UiInput::PasteAnnotated(
         PastePayload::annotated(
             path.to_owned(),
-            vec![substitution(attachment(true), 0, path.len())],
+            vec![substitution(attachment(true, 1), 0, path.len())],
         )
         .expect("payload"),
     ));
@@ -421,7 +422,7 @@ fn inaccessible_mouse_selection_survives_resize_and_shifts_without_recheck() {
 #[test]
 fn failure_retry_undo_and_redo_keep_one_revision_and_exact_metadata() {
     let value = "/tmp/history.png";
-    let mut fixture = annotated("a", value, "z", attachment(true));
+    let mut fixture = annotated("a", value, "z", attachment(true, 1));
     select_forward(&mut fixture, "a");
     let revision = space_revision(&mut fixture);
     fixture
@@ -471,7 +472,7 @@ fn failure_retry_undo_and_redo_keep_one_revision_and_exact_metadata() {
 #[test]
 fn shifted_placeholder_has_a_reviewed_narrow_editor_snapshot() {
     let value = "/tmp/snapshot.png";
-    let mut fixture = annotated("before ", value, " after", attachment(true));
+    let mut fixture = annotated("before ", value, " after", attachment(true, 1));
     select_forward(&mut fixture, "before ");
     let _revision = space_revision(&mut fixture);
     let terminal = draw_theme(&mut fixture, 32, 7, ThemePreference::Dark);

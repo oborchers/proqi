@@ -3,9 +3,15 @@
 use std::{
     io::Write,
     process::{Command, Stdio},
+    time::Duration,
 };
 
-use super::support::{expect_command, json_command};
+use super::{
+    support::{expect_command, json_command},
+    watchdog,
+};
+
+const MIXED_WORKFLOW_LIMIT: Duration = Duration::from_secs(30);
 
 const COLLAPSED_ENTRY_WORKFLOW: &str = r#"
     log_user 0
@@ -76,7 +82,27 @@ const COLLAPSED_ENTRY_WORKFLOW: &str = r#"
 const MIXED_LONG_THOUGHT_SCROLL_WORKFLOW: &str = r#"
     log_user 0
     set timeout 15
+    proc register_watchdog_pid {pid} {
+        global env
+        set owned [open $env(PROQI_TEST_PIDS) a]
+        puts $owned $pid
+        close $owned
+    }
+    proc drain_output {} {
+        expect -timeout 0 {
+            -re ".+" { exp_continue }
+            timeout {}
+            eof { exit 92 }
+        }
+    }
+    proc send_scroll {sequence count} {
+        for {set i 0} {$i < $count} {incr i} {
+            send -- $sequence
+            drain_output
+        }
+    }
     spawn $env(PROQI_TEST_BINARY) --state-dir $env(PROQI_TEST_STATE) -r $env(PROQI_TEST_SESSION)
+    register_watchdog_pid [exp_pid]
     expect -exact "\x1b\[?1049h"
     stty rows 12 columns 36
     after 300
@@ -89,31 +115,25 @@ const MIXED_LONG_THOUGHT_SCROLL_WORKFLOW: &str = r#"
     send "j"
     send "j"
     send "c"
-    for {set i 0} {$i < 300} {incr i} {
-        send -- "\x1b\[<65;8;6M"
-    }
+    send_scroll "\x1b\[<65;8;6M" 300
     after 300
     stty rows 8 columns 28
     after 150
-    for {set i 0} {$i < 300} {incr i} {
-        send -- "\x1b\[<64;8;6M"
-    }
+    send_scroll "\x1b\[<64;8;6M" 300
     after 300
     stty rows 26 columns 80
     after 150
     send "c"
     send "c"
-    for {set i 0} {$i < 300} {incr i} {
-        send -- "\x1b\[<65;8;6M"
-    }
+    send_scroll "\x1b\[<65;8;6M" 300
     after 300
     stty rows 10 columns 34
     after 150
-    for {set i 0} {$i < 300} {incr i} {
-        send -- "\x1b\[<64;8;6M"
-    }
+    send_scroll "\x1b\[<64;8;6M" 300
     after 500
     send "q"
+    expect -exact "\x1b\[0 q"
+    expect -exact "\x1b\[?1049l"
     expect eof
     catch wait result
     exit [lindex $result 3]
@@ -190,14 +210,21 @@ fn mixed_long_thought_presentations_survive_mouse_scroll_boundaries_and_reflow()
         add_thought(binary, state.path(), &session, content);
     }
 
-    let status = expect_command()
+    let watchdog_pids = state.path().join("watchdog-pids");
+    let mut command = expect_command();
+    command
         .args(["-c", MIXED_LONG_THOUGHT_SCROLL_WORKFLOW])
         .env("PROQI_TEST_BINARY", binary)
         .env("PROQI_TEST_STATE", state.path())
         .env("PROQI_TEST_SESSION", &session)
-        .status()
-        .expect("run mixed long-thought PTY scroll workflow");
-    assert!(status.success());
+        .env("PROQI_TEST_PIDS", &watchdog_pids);
+    let status = watchdog::status_before(
+        &mut command,
+        MIXED_WORKFLOW_LIMIT,
+        &watchdog_pids,
+        "mixed long-thought PTY scroll workflow",
+    );
+    assert!(status.success(), "mixed scroll PTY exited with {status}");
 
     let thoughts = json_command(binary, state.path(), &["thoughts", "list", &session]);
     let actual = thoughts["data"]["thoughts"]

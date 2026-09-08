@@ -15,7 +15,7 @@ use super::update::{
 use super::{runtime::InstanceInfo, store::CommitReceipt};
 
 /// Current local owner-control protocol.
-pub const CONTROL_PROTOCOL_VERSION: u32 = 7;
+pub const CONTROL_PROTOCOL_VERSION: u32 = 8;
 /// Current compatible screenshot takeover protocol.
 pub const CAPTURE_CONTROL_PROTOCOL_VERSION: u32 = 1;
 /// Oldest owner-control protocol accepted for plain-text mutations.
@@ -268,7 +268,10 @@ impl ControlMutation {
     /// Oldest control protocol capable of representing this request.
     #[must_use]
     pub fn minimum_protocol(&self) -> u32 {
-        if self.requires_protocol_seven() {
+        if matches!(self, Self::Add { annotations, .. } | Self::PreserveAdd { annotations, .. } if annotations.iter().any(|annotation| matches!(annotation.kind, ContentAnnotationKind::Attachment { .. })))
+        {
+            8
+        } else if self.requires_protocol_seven() {
             7
         } else if self.requires_protocol_six() {
             6

@@ -364,6 +364,7 @@ fn version_seven_receipts_migrate_without_ownership_foreign_keys() {
     store.commit_capture(&capture).expect("capture");
     drop(store);
 
+    super::attachment_numbering::downgrade_to_legacy(&fixture);
     let connection = Connection::open(&fixture.config.database_path).expect("version seven DB");
     connection
         .execute_batch(

@@ -385,6 +385,7 @@ fn attachment_payload(path: &str, image: bool) -> PastePayload {
             start: 0,
             end: path.len(),
             kind: ContentAnnotationKind::Attachment {
+                ordinal: Some(1_u64.try_into().expect("fixture ordinal")),
                 image,
                 display_name: path.rsplit('/').next().unwrap_or(path).to_owned(),
             },

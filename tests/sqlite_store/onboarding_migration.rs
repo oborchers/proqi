@@ -78,6 +78,7 @@ fn every_pre_onboarding_schema_migrates_with_current_onboarding_completed() {
     for version in 1..11 {
         let fixture = DatabaseFixture::new();
         drop(fixture.open());
+        super::attachment_numbering::downgrade_to_legacy(&fixture);
         let connection = Connection::open(&fixture.config.database_path).expect("legacy database");
         downgrade_to(&connection, version);
         drop(connection);

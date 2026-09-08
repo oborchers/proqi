@@ -12,6 +12,7 @@ use crate::{
 use super::{BoardApp, EditorOwner, UiKey};
 use crate::ui::annotations;
 
+mod attachment_insertion;
 mod navigation;
 
 pub(super) fn command_for_key(
@@ -364,6 +365,12 @@ impl BoardApp {
         if self.edit_command_blocked(&command) {
             return;
         }
+        let Some((current_annotations, inserted_annotations)) =
+            self.prepare_attachment_insertion(inserted_annotations)
+        else {
+            return;
+        };
+        let inserted_annotations = inserted_annotations.as_slice();
         let edit = self.editor.as_mut().and_then(|(owner, editor)| {
             let EditorOwner::Thought(thought_id) = owner else {
                 return None;
@@ -381,19 +388,6 @@ impl BoardApp {
             return;
         };
         self.clear_expanded_folds(thought_id);
-        let current_annotations = self
-            .pending_edit
-            .as_ref()
-            .filter(|pending| pending.thought_id == thought_id)
-            .map_or_else(
-                || {
-                    self.state
-                        .board
-                        .thought(thought_id)
-                        .map_or_else(Vec::new, |thought| thought.annotations.clone())
-                },
-                |pending| pending.after_annotations.clone(),
-            );
         let after_annotations = if preserve_owned {
             annotations::rebase_preserved(
                 &before.content,

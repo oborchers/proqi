@@ -374,7 +374,25 @@ board and edit mode while their canonical text remains exact. Images appear as
 `[Image 1]`, other files as `[File 1]`, and context at or above 12 logical lines
 or 1,200 perceived Unicode characters as
 `[Pasted text · N lines · N characters]`. Thousands use comma grouping.
-Numbering restarts for each thought. The complete bracketed token uses the
+Each session has independent monotonically increasing Image and File sequences.
+An attachment occurrence receives its durable positive number when introduced.
+Reordering, editing around it, folding, health changes, split, extract, merge,
+restart, recovery, undo and redo preserve that number. Deleted numbers are never
+reused. Screenshot Inbox captures, clipboard images, pasted files, duplication
+and paste or transfer into a destination session create new occurrences and
+receive new destination-session numbers. Cut followed by paste is a new
+occurrence; structural movement within the session is not.
+
+Legacy databases receive these identities once during migration. Current live
+thoughts are numbered first in durable board position and annotation byte order,
+separately by kind. Retained history propagates provable lineage; indistinguishable
+legacy occurrences use deterministic byte-order matching rather than a claim of
+recovering original occurrence identity. Remaining history-only occurrences
+receive numbers afterward in durable history sequence and payload order. Counters
+advance beyond all assigned numbers, including dormant history. Exact historical
+text, ranges, cursors and undo/redo operations remain unchanged.
+
+The complete bracketed token uses the
 forest-green accent plus bold as a non-color cue, without exposing temporary
 paths or filenames.
 

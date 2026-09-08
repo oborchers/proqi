@@ -3,7 +3,7 @@
 # Former editor Primary+D was a dropped no-op, now unbound; explicit duplicate aliases execute Commands.
 # Board Shift+D is the terminal-safe Duplicate fallback; shifted lowercase reports share uppercase actions.
 # macOS Board Option+Shift Up/Down and k/j reports are terminal-safe reorder aliases.
-# Reflow adds plain Board f and Edit Primary f/F only; all other event graphs remain exact.
+# Reflow adds plain Board f and Edit Control+Shift+F, including Control+uppercase-F compatibility; all other event graphs remain exact.
 MacOs	Board	714	857e6b493a2b80825231e97e332d66d3b9b99b5eed6e0cbccb32e4789b0027b1
 MacOs	Browser	714	767fb9fac7a9cf03beefa55205dd9975cde32fb209ef870749484c7ed40da728
 MacOs	BrowserQuery	712	be11029194e2deb147788bf41ab3d8a22f6bdf794ea1cf9a0e3a5b09b881b97a

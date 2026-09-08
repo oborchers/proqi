@@ -37,7 +37,11 @@ fn semantic_annotations_rebase_exactly_beside_a_transformable_envelope() {
             .board
             .thought(thought_id)
             .expect("thought");
-        assert!(after.content.starts_with("before\nprose\n\n"));
+        assert!(
+            after.content.starts_with("before\nprose\n\n"),
+            "unexpected transformed content: {:?}",
+            after.content
+        );
         assert!(after.content.ends_with("\n\nafter\nprose"));
         assert_eq!(after.annotations.len(), 4);
         for (before, current) in annotations.iter().zip(&after.annotations).skip(1) {
@@ -129,6 +133,7 @@ fn semantic_annotations(source: &str, envelope: &str) -> Vec<ContentAnnotation> 
         (
             "/tmp/image.png",
             ContentAnnotationKind::Attachment {
+                ordinal: Some(1_u64.try_into().expect("fixture ordinal")),
                 image: true,
                 display_name: "image.png".to_owned(),
             },

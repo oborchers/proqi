@@ -168,5 +168,8 @@ mod transformations;
 #[path = "sqlite_store/reflow_in_place.rs"]
 mod reflow_in_place;
 
-#[path = "sqlite_store/migration_14.rs"]
-mod migration_14;
+#[path = "sqlite_store/migration_15.rs"]
+mod migration_15;
+
+#[path = "sqlite_store/attachment_numbering.rs"]
+mod attachment_numbering;

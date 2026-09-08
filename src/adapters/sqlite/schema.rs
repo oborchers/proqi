@@ -28,6 +28,8 @@ CREATE TABLE sessions (
     last_active_at INTEGER NOT NULL,
     last_durable_sequence INTEGER NOT NULL DEFAULT 0 CHECK (last_durable_sequence >= 0),
     board_history_cursor INTEGER NOT NULL DEFAULT 0 CHECK (board_history_cursor >= 0),
+    attachment_image_high INTEGER NOT NULL DEFAULT 0 CHECK (attachment_image_high >= 0),
+    attachment_file_high INTEGER NOT NULL DEFAULT 0 CHECK (attachment_file_high >= 0),
     deleted_at INTEGER
 ) STRICT;
 
@@ -149,7 +151,7 @@ CREATE VIRTUAL TABLE session_search USING fts5(
 );
 
 INSERT INTO schema_meta(singleton, schema_version, storage_protocol, migrated_at)
-VALUES (1, 14, 13, 0);
+VALUES (1, 13, 12, 0);
 INSERT INTO onboarding_state(singleton, completed_version) VALUES (1, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (1, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (2, 0);
@@ -165,6 +167,7 @@ INSERT INTO migration_history(version, applied_at) VALUES (11, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (12, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (13, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (14, 0);
+INSERT INTO migration_history(version, applied_at) VALUES (15, 0);
 ";
 
 pub(super) const MIGRATION_2: &str = r"
@@ -358,8 +361,14 @@ UPDATE schema_meta SET schema_version = 13, storage_protocol = 12;
 INSERT INTO migration_history(version, applied_at) VALUES (13, 0);
 ";
 
-// Register the Reflow operation kind before any older reader can encounter it.
 pub(super) const MIGRATION_14: &str = r"
-UPDATE schema_meta SET schema_version = 14, storage_protocol = 13;
+ALTER TABLE sessions ADD COLUMN attachment_image_high INTEGER NOT NULL DEFAULT 0 CHECK (attachment_image_high >= 0);
+ALTER TABLE sessions ADD COLUMN attachment_file_high INTEGER NOT NULL DEFAULT 0 CHECK (attachment_file_high >= 0);
 INSERT INTO migration_history(version, applied_at) VALUES (14, 0);
+";
+
+// Register the Reflow operation kind after the attachment numbering schema.
+pub(super) const MIGRATION_15: &str = r"
+UPDATE schema_meta SET schema_version = 15, storage_protocol = 14;
+INSERT INTO migration_history(version, applied_at) VALUES (15, 0);
 ";

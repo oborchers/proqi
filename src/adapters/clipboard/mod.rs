@@ -23,7 +23,7 @@ use provenance::{FileClipboardProvenance, ProvenanceRecord};
 
 const OSC52_MAX_BYTES: usize = 100_000;
 const METADATA_MAX_BYTES: usize = 512 * 1024;
-const WIRE_SCHEMA_VERSION: u8 = 1;
+const WIRE_SCHEMA_VERSION: u8 = 2;
 
 /// Native clipboard adapter with a bounded terminal fallback.
 pub struct PlatformClipboard {
@@ -314,7 +314,7 @@ fn decode_payload(content: &str, encoded: &str) -> Option<(ClipboardText, String
         return None;
     }
     let wire: WirePayload = serde_json::from_slice(&bytes).ok()?;
-    if wire.schema_version != WIRE_SCHEMA_VERSION {
+    if !(1..=WIRE_SCHEMA_VERSION).contains(&wire.schema_version) {
         return None;
     }
     let _: RequestId = wire.request_id.parse().ok()?;

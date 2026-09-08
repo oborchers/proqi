@@ -195,6 +195,7 @@ fn collapsed_substitutions_are_atomic_and_expanded_folds_use_exact_content_rows(
     let content = "canonical folded payload";
     for annotation in [
         substitution(ContentAnnotationKind::Attachment {
+            ordinal: Some(1_u64.try_into().expect("fixture ordinal")),
             image: false,
             display_name: "payload.txt".to_owned(),
         }),
