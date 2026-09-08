@@ -7,19 +7,19 @@ SIZE 42x8
 
 TEXT
 00│┌ proqi shortcuts ─────────────────────[x]│
-01││i                        Inbox          ↑│
-02││Ctrl+Enter/s             Submit         ││
-03││Ctrl+Shift+Enter/Shift+S Submit & keep  ││
-04││Ctrl+Q/q                 Quit           ││
-05││Esc                      Close          ││
-06││f                        Reflow thought ││
+01││i                     Inbox             ↑│
+02││Ctrl+Enter/s          Submit            ││
+03││Shift+S               Submit & keep     ││
+04││Ctrl+Q/q              Quit              ││
+05││Esc                   Close             ││
+06││f                     Clean up spacing  ││
 07│└────────────────────────────────────────┘│
 
 STYLE RUNS
 0: 0-0 fg=Reset bg=Reset mod=NONE | 1-17 fg=Green bg=Reset mod=BOLD | 18-38 fg=Reset bg=Reset mod=NONE | 39-41 fg=Green bg=Reset mod=NONE
 1: 0-0 fg=Reset bg=Reset mod=NONE | 1-1 fg=Green bg=Reset mod=NONE | 2-40 fg=Reset bg=Reset mod=NONE | 41-41 fg=DarkGray bg=Reset mod=NONE
 2: 0-0 fg=Reset bg=Reset mod=NONE | 1-12 fg=Green bg=Reset mod=NONE | 13-41 fg=Reset bg=Reset mod=NONE
-3: 0-0 fg=Reset bg=Reset mod=NONE | 1-24 fg=Green bg=Reset mod=NONE | 25-41 fg=Reset bg=Reset mod=NONE
+3: 0-0 fg=Reset bg=Reset mod=NONE | 1-7 fg=Green bg=Reset mod=NONE | 8-41 fg=Reset bg=Reset mod=NONE
 4: 0-0 fg=Reset bg=Reset mod=NONE | 1-8 fg=Green bg=Reset mod=NONE | 9-41 fg=Reset bg=Reset mod=NONE
 5: 0-0 fg=Reset bg=Reset mod=NONE | 1-3 fg=Green bg=Reset mod=NONE | 4-41 fg=Reset bg=Reset mod=NONE
 6: 0-0 fg=Reset bg=Reset mod=NONE | 1-1 fg=Green bg=Reset mod=NONE | 2-41 fg=Reset bg=Reset mod=NONE
