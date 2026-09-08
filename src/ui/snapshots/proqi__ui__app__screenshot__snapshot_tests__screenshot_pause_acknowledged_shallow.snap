@@ -1,0 +1,11 @@
+---
+source: src/ui/app/screenshot/tests.rs
+assertion_line: 191
+expression: "acknowledged_pause_snapshot(62, 6)"
+---
+00││
+01││
+02│                         + New thought│
+03│  screenshot-ui│
+04│  1 thought · board · saved · inbox paused · inactive│
+05│  n New   y Copy  x Cut  d/Del  Space Select u Undo│

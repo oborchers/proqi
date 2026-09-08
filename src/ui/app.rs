@@ -351,11 +351,10 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        if !matches!(
-            input,
-            UiInput::Resize { .. } | UiInput::HostFocusGained | UiInput::HostFocusLost
-        ) {
-            self.clear_status_for_interaction();
+        if input.is_deliberate_interaction() {
+            let acknowledges_auto_pause = owner.acknowledges_screenshot_auto_pause();
+            self.acknowledge_screenshot_auto_pause_warning(acknowledges_auto_pause);
+            self.clear_status_for_interaction(acknowledges_auto_pause);
             self.screenshot.notice_count = 0;
         }
         if !matches!(
