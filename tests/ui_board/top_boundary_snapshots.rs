@@ -3,7 +3,7 @@
 use super::navigation::{durable_thought, visual};
 use super::*;
 
-use super::snapshot_support::snapshot_buffer;
+use super::{platform_suffix, snapshot_support::snapshot_buffer};
 use proqi::{application::InteractionMode, domain::ThoughtId, ui::LayoutSnapshot};
 
 #[test]
@@ -154,48 +154,50 @@ fn top_creation_preserves_density_across_exact_fit_boundaries() {
 
 #[test]
 fn top_boundary_density_policy_has_representative_snapshots() {
-    let mut standard = inserted_nearly_full_board(UiSettings::default());
-    insta::assert_snapshot!(
-        "top_boundary_standard_density",
-        snapshot_buffer(
-            draw_theme(&mut standard, 60, 17, ThemePreference::Dark)
-                .backend()
-                .buffer()
-        )
-    );
+    insta::with_settings!({ snapshot_suffix => platform_suffix() }, {
+        let mut standard = inserted_nearly_full_board(UiSettings::default());
+        insta::assert_snapshot!(
+            "top_boundary_standard_density",
+            snapshot_buffer(
+                draw_theme(&mut standard, 60, 17, ThemePreference::Dark)
+                    .backend()
+                    .buffer()
+            )
+        );
 
-    let mut explicit_compact = inserted_nearly_full_board(UiSettings {
-        density: proqi::ui::BoardDensity::Compact,
-        ..UiSettings::default()
+        let mut explicit_compact = inserted_nearly_full_board(UiSettings {
+            density: proqi::ui::BoardDensity::Compact,
+            ..UiSettings::default()
+        });
+        insta::assert_snapshot!(
+            "top_boundary_explicit_compact_density",
+            snapshot_buffer(
+                draw_theme(&mut explicit_compact, 60, 17, ThemePreference::Dark)
+                    .backend()
+                    .buffer()
+            )
+        );
+
+        let mut narrow = inserted_nearly_full_board(UiSettings::default());
+        insta::assert_snapshot!(
+            "top_boundary_narrow_standard_density",
+            snapshot_buffer(
+                draw_theme(&mut narrow, 28, 17, ThemePreference::Dark)
+                    .backend()
+                    .buffer()
+            )
+        );
+
+        let mut shallow = inserted_nearly_full_board(UiSettings::default());
+        insta::assert_snapshot!(
+            "top_boundary_shallow_responsive_density",
+            snapshot_buffer(
+                draw_theme(&mut shallow, 60, 8, ThemePreference::Dark)
+                    .backend()
+                    .buffer()
+            )
+        );
     });
-    insta::assert_snapshot!(
-        "top_boundary_explicit_compact_density",
-        snapshot_buffer(
-            draw_theme(&mut explicit_compact, 60, 17, ThemePreference::Dark)
-                .backend()
-                .buffer()
-        )
-    );
-
-    let mut narrow = inserted_nearly_full_board(UiSettings::default());
-    insta::assert_snapshot!(
-        "top_boundary_narrow_standard_density",
-        snapshot_buffer(
-            draw_theme(&mut narrow, 28, 17, ThemePreference::Dark)
-                .backend()
-                .buffer()
-        )
-    );
-
-    let mut shallow = inserted_nearly_full_board(UiSettings::default());
-    insta::assert_snapshot!(
-        "top_boundary_shallow_responsive_density",
-        snapshot_buffer(
-            draw_theme(&mut shallow, 60, 8, ThemePreference::Dark)
-                .backend()
-                .buffer()
-        )
-    );
 }
 
 #[test]

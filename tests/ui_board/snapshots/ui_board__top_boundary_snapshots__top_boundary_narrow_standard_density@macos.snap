@@ -1,5 +1,6 @@
 ---
 source: tests/ui_board/top_boundary_snapshots.rs
+assertion_line: 182
 expression: "snapshot_buffer(draw_theme(&mut narrow, 28, 17,\nThemePreference::Dark).backend().buffer())"
 ---
 SIZE 28x17

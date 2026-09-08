@@ -179,7 +179,7 @@ impl BoardApp {
         } else {
             "press r to retry or w to export recovery"
         };
-        self.set_error(format!(
+        self.set_storage_failure(format!(
             "Submission accepted, but its outcome and removal were not saved. {kept}; {recovery}. {error}"
         ));
     }

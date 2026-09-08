@@ -72,6 +72,13 @@ impl ActiveInputOwner {
                 | Self::Help
         )
     }
+
+    pub(super) const fn acknowledges_screenshot_auto_pause(self) -> bool {
+        matches!(
+            self,
+            Self::Board | Self::Compose | Self::Edit | Self::InsertionBoundary
+        )
+    }
 }
 
 impl BoardApp {

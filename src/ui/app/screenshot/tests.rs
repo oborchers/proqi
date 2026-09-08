@@ -27,6 +27,10 @@ mod focus;
 mod lifecycle;
 #[path = "tests/paging.rs"]
 mod paging;
+#[path = "tests/warning.rs"]
+mod warning;
+#[path = "tests/warning_status.rs"]
+mod warning_status;
 
 #[test]
 fn takeover_overlay_has_a_complete_wide_snapshot() {
@@ -169,6 +173,27 @@ fn paused_inbox_has_a_persistent_shallow_snapshot() {
     });
 }
 
+#[test]
+fn acknowledged_pause_has_a_persistent_wide_snapshot() {
+    insta::with_settings!({snapshot_path => "../../snapshots"}, {
+        insta::assert_snapshot!("screenshot_pause_acknowledged_wide", acknowledged_pause_snapshot(82, 12));
+    });
+}
+
+#[test]
+fn acknowledged_pause_has_a_persistent_narrow_snapshot() {
+    insta::with_settings!({snapshot_path => "../../snapshots"}, {
+        insta::assert_snapshot!("screenshot_pause_acknowledged_narrow", acknowledged_pause_snapshot(38, 10));
+    });
+}
+
+#[test]
+fn acknowledged_pause_has_a_persistent_shallow_snapshot() {
+    insta::with_settings!({snapshot_path => "../../snapshots"}, {
+        insta::assert_snapshot!("screenshot_pause_acknowledged_shallow", acknowledged_pause_snapshot(62, 6));
+    });
+}
+
 fn takeover_snapshot(width: u16, height: u16) -> String {
     let (mut app, mut ids) = app_with_thought();
     let session_id = app.state.board.session.id;
@@ -191,6 +216,25 @@ fn paused_snapshot(width: u16, height: u16) -> String {
     app.screenshot_started(Duration::ZERO);
     app.advance_screenshot_activity(Duration::from_secs(20 * 60));
     app.screenshot_stopped();
+    render_snapshot(&mut app, width, height)
+}
+
+fn acknowledged_pause_snapshot(width: u16, height: u16) -> String {
+    let (mut app, mut ids) = app_with_thought();
+    app.configure_screenshot_activity(ScreenshotActivityPolicy::new(20, 10).expect("pause policy"));
+    app.screenshot_started(Duration::ZERO);
+    app.advance_screenshot_activity(Duration::from_secs(20 * 60));
+    app.screenshot_stopped();
+    let clock = crate::adapters::memory::FakeClock::new(Timestamp::from_millis(2));
+    app.handle(
+        UiInput::Key(crate::ui::UiKey::Move {
+            movement: crate::ports::editor::CursorMovement::VisualDown,
+            extend_selection: false,
+        }),
+        &mut ids,
+        &clock,
+    );
+    assert_eq!(app.status_text(), None);
     render_snapshot(&mut app, width, height)
 }
 

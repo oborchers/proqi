@@ -463,3 +463,11 @@ mod versioned_keymap;
 mod viewport_bounds;
 #[path = "ui_board/visual_row_selection.rs"]
 mod visual_row_selection;
+
+const fn platform_suffix() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "macos"
+    } else {
+        "portable"
+    }
+}

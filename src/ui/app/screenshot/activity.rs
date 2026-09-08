@@ -69,6 +69,27 @@ impl ScreenshotActivity {
 }
 
 impl BoardApp {
+    pub(crate) fn screenshot_started(&mut self, now: Duration) {
+        self.screenshot.state = ScreenshotState::Listening;
+        self.screenshot.takeover = None;
+        self.screenshot.pending_pause = None;
+        self.screenshot.pause_warning_acknowledged = false;
+        self.clear_screenshot_auto_pause_status();
+        self.clear_screenshot_failure_status();
+        self.screenshot.activity.start(now);
+        self.refresh_screenshot_palette_action();
+        self.set_info("Screenshot Inbox is listening");
+    }
+
+    pub(crate) fn acknowledge_screenshot_auto_pause_warning(&mut self, acknowledged: bool) {
+        if acknowledged
+            && (self.screenshot.pending_pause.is_some()
+                || matches!(self.screenshot.state, ScreenshotState::Paused(_)))
+        {
+            self.screenshot.pause_warning_acknowledged = true;
+        }
+    }
+
     pub(crate) const fn configure_screenshot_activity(&mut self, policy: ScreenshotActivityPolicy) {
         self.screenshot.activity.configure(policy);
     }
@@ -96,6 +117,7 @@ impl BoardApp {
         reason: ScreenshotPauseReason,
     ) -> Vec<Effect> {
         self.screenshot.pending_pause = Some(reason);
+        self.screenshot.pause_warning_acknowledged = false;
         self.screenshot.state = ScreenshotState::Stopping;
         self.refresh_screenshot_palette_action();
         vec![Effect::Screenshot(ScreenshotIntent::Disable)]
@@ -104,8 +126,9 @@ impl BoardApp {
     pub(super) fn enter_screenshot_paused(&mut self, reason: ScreenshotPauseReason) {
         self.screenshot.state = ScreenshotState::Paused(reason);
         self.refresh_screenshot_palette_action();
-        self.screenshot.pause_notice = Some(pause_notice(reason));
-        self.status = None;
+        if !self.screenshot.pause_warning_acknowledged {
+            self.set_screenshot_auto_pause_warning(pause_notice(reason));
+        }
     }
 }
 
