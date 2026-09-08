@@ -1,15 +1,15 @@
 ---
 source: tests/ui_board/editor_growth.rs
-assertion_line: 44
+assertion_line: 78
 expression: "super::snapshot_support::snapshot_buffer(terminal.backend().buffer())"
 ---
 SIZE 40x10
 
 TEXT
-00│  gamma│
-01│  ──────────────────────────────────────│
-02│  delta│
-03│  ──────────────────────────────────────│
+00││
+01│  delta│
+02│  ──────────────────────────────────────│
+03││
 04│⋮ Line 1│
 05│  Line 2│
 06││
@@ -18,10 +18,10 @@ TEXT
 09│  Esc Board│
 
 STYLE RUNS
-0: 0-0 fg=Green bg=Reset mod=NONE | 1-39 fg=Reset bg=Reset mod=NONE
-1: 0-1 fg=Reset bg=Reset mod=NONE | 2-39 fg=DarkGray bg=Reset mod=NONE
-2: 0-0 fg=Green bg=Reset mod=NONE | 1-39 fg=Reset bg=Reset mod=NONE
-3: 0-1 fg=Reset bg=Reset mod=NONE | 2-39 fg=DarkGray bg=Reset mod=NONE
+0: 0-39 fg=Reset bg=Reset mod=NONE
+1: 0-0 fg=Green bg=Reset mod=NONE | 1-39 fg=Reset bg=Reset mod=NONE
+2: 0-1 fg=Reset bg=Reset mod=NONE | 2-39 fg=DarkGray bg=Reset mod=NONE
+3: 0-39 fg=Reset bg=Reset mod=NONE
 4: 0-0 fg=Black bg=Green mod=BOLD | 1-39 fg=Reset bg=Reset mod=REVERSED
 5: 0-0 fg=Black bg=Green mod=BOLD | 1-39 fg=Reset bg=Reset mod=REVERSED
 6: 0-39 fg=Reset bg=Reset mod=NONE

@@ -28,6 +28,9 @@ pub(super) struct VisibleContent {
     pub(super) first_row_offset: usize,
     pub(super) max_first: usize,
     pub(super) scroll: scroll::ScrollGeometry,
+    pub(super) density: crate::ui::settings::BoardDensity,
+    pub(super) content_height: usize,
+    pub(super) viewport_offset: usize,
 }
 
 pub(super) fn visible_content(request: &ContentRequest<'_>) -> VisibleContent {
@@ -76,6 +79,9 @@ pub(super) fn visible_content(request: &ContentRequest<'_>) -> VisibleContent {
         first_row_offset: resolved.first_row_offset,
         max_first: resolved.max_first_index,
         scroll: resolved.geometry,
+        density: flow.density,
+        content_height: usize::from(flow.top_padding).saturating_add(flow.total_rows),
+        viewport_offset: resolved.offset,
     }
 }
 

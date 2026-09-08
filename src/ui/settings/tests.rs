@@ -1,6 +1,6 @@
 //! Keybinding validation and normalized Board command contracts.
 
-use super::KeyBindings;
+use super::{BoardDensity, KeyBindings};
 use crate::ui::shortcut_registry::{ShortcutPlatform, ShortcutRegistry};
 use crate::ui::{
     KeyStroke, LogicalKey, LogicalModifiers, ShortcutActionId as Action, ShortcutContext,
@@ -233,4 +233,18 @@ fn visual_row_fallbacks_do_not_invalidate_existing_board_remaps() {
         ..KeyBindings::default()
     };
     assert_eq!(bindings.validate(), Ok(()));
+}
+
+#[test]
+fn board_density_has_one_content_independent_responsive_breakpoint() {
+    assert_eq!(BoardDensity::Comfortable.resolve(4), BoardDensity::Compact);
+    assert_eq!(
+        BoardDensity::Comfortable.resolve(5),
+        BoardDensity::Comfortable
+    );
+    assert_eq!(BoardDensity::Compact.resolve(4), BoardDensity::Compact);
+    assert_eq!(
+        BoardDensity::Compact.resolve(u16::MAX),
+        BoardDensity::Compact
+    );
 }

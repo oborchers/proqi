@@ -1,11 +1,11 @@
 ---
 source: src/ui/app/screenshot/tests.rs
-assertion_line: 119
+assertion_line: 147
 expression: "releasing_snapshot(62, 6)"
 ---
-00││
-01│⋮ active│
-02││
+00│⋮ active│
+01││
+02│                         + New thought│
 03│  screenshot-ui│
 04│  1 thought · board · saved · inbox releasing│
 05│  n New   y Copy  x Cut  d/Del  Space Select u Undo│

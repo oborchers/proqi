@@ -354,9 +354,9 @@ fn mouse_drag_reorders_thoughts_through_the_visible_gutter() {
         fixture.paste(content);
         fixture.input(crate::key_input(UiKey::Escape));
     }
-    let board = draw(&mut fixture, 40, 10);
+    let board = draw(&mut fixture, 40, 14);
     let rendered = text(board.backend().buffer());
-    let layout = fixture.app.prepare_frame(Rect::new(0, 0, 40, 10));
+    let layout = fixture.app.prepare_frame(Rect::new(0, 0, 40, 14));
     let separator = layout.thoughts[1]
         .separator_before
         .expect("separator geometry");

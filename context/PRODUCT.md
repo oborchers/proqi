@@ -284,11 +284,13 @@ Short and medium thoughts therefore remain fully readable in the board. This
 preserves the useful quality of the current Sublime Text scratchpad, where the
 next prompts can be read without opening them one by one.
 
-Adjacent visible thoughts use a deliberate two-row cadence when the viewport
-has room: one quiet horizontal rule followed by one blank row. Shallow panes
-and the optional compact density use the rule alone. The rule belongs to the board
-presentation, is never a card border or mouse target, and is allocated only
-when the following thought can still receive a content row.
+Adjacent visible thoughts use a deliberate two-row cadence when the usable
+Board is at least five rows tall: one quiet horizontal rule followed by one
+blank row. A Board of four rows or fewer and the optional compact density use
+the rule alone. Thought quantity and content overflow never change density;
+the viewport scrolls while cadence remains stable. The rule belongs to the
+board presentation, is never a card border or mouse target, and is allocated
+only when the following thought can still receive a content row.
 
 ### Long thoughts
 

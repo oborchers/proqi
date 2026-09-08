@@ -243,8 +243,16 @@ fn range_survives_reflow_and_shift_click_uses_current_hit_geometry_with_unicode(
     fixture.input(crate::key_input(UiKey::Character('k')));
     fixture.input(crate::key_input(UiKey::Character('k')));
     let _wide = fixture.app.prepare_frame(Rect::new(0, 0, 60, 14));
-    let narrow = fixture.app.prepare_frame(Rect::new(0, 0, 24, 14));
-    let target = narrow.thoughts[3].text_area;
+    let area = Rect::new(0, 0, 24, 14);
+    let narrow = fixture.app.prepare_frame(area);
+    fixture.pointer(narrow.board.x, narrow.board.y, PointerKind::ScrollDown);
+    let scrolled = fixture.app.prepare_frame(area);
+    let target = scrolled
+        .thoughts
+        .iter()
+        .find(|thought| thought.index == 3 && thought.text_area.height > 0)
+        .expect("omega is visible after scrolling")
+        .text_area;
     fixture.input(UiInput::Pointer(PointerInput {
         column: target.x,
         row: target.y,

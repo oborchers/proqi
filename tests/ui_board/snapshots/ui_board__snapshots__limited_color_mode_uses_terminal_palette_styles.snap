@@ -1,13 +1,13 @@
 ---
 source: tests/ui_board/snapshots.rs
-assertion_line: 199
+assertion_line: 210
 expression: "snapshot(&mut fixture, 48, 8, ThemePreference::Limited)"
 ---
 SIZE 48x8
 
 TEXT
-00││
-01│⋮ selected prompt│
+00│⋮ selected prompt│
+01││
 02││
 03││
 04││
@@ -16,8 +16,8 @@ TEXT
 07│  Esc Board│
 
 STYLE RUNS
-0: 0-47 fg=Reset bg=Reset mod=NONE
-1: 0-0 fg=Black bg=Green mod=BOLD | 1-47 fg=Reset bg=Reset mod=REVERSED
+0: 0-0 fg=Black bg=Green mod=BOLD | 1-47 fg=Reset bg=Reset mod=REVERSED
+1: 0-47 fg=Reset bg=Reset mod=NONE
 2: 0-47 fg=Reset bg=Reset mod=NONE
 3: 0-47 fg=Reset bg=Reset mod=NONE
 4: 0-47 fg=Reset bg=Reset mod=NONE

@@ -425,7 +425,11 @@ fn overflowing_board_clamps_to_a_useful_last_page_and_resets_after_resize() {
     let last_page = draw(&mut fixture, 50, 9);
     let last_text = text(last_page.backend().buffer());
     assert!(last_text.contains("thought 7"));
-    assert!(last_text.contains("thought 6"));
+    assert!(last_text.contains("+ New thought"));
+    let last_layout = fixture.app.prepare_frame(Rect::new(0, 0, 50, 9));
+    let maximum = last_layout.maximum_viewport_offset;
+    assert_eq!(last_layout.viewport_offset, maximum);
+    assert!(last_layout.insert.is_some());
 
     let _large = draw(&mut fixture, 50, 40);
     let layout = fixture.app.prepare_frame(Rect::new(0, 0, 50, 40));

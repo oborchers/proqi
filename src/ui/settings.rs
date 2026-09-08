@@ -61,6 +61,17 @@ pub enum BoardDensity {
     Compact,
 }
 
+impl BoardDensity {
+    const COMFORTABLE_MIN_BOARD_ROWS: u16 = 5;
+
+    pub(crate) const fn resolve(self, board_height: u16) -> Self {
+        match self {
+            Self::Comfortable if board_height < Self::COMFORTABLE_MIN_BOARD_ROWS => Self::Compact,
+            density => density,
+        }
+    }
+}
+
 #[cfg(test)]
 #[path = "settings/tests.rs"]
 mod tests;
