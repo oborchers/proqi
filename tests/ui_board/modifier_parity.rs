@@ -172,7 +172,7 @@ fn remapped_vertical_bindings_share_the_same_modifier_ladder() {
         durable_thought(&mut fixture, content);
     }
 
-    fixture.input(crate::key_input(UiKey::PrimaryCharacter('i')));
+    fixture.input(crate::key_input(UiKey::Character('i')));
     assert_eq!(focus_content(&fixture), "second");
     fixture.input(crate::key_input(UiKey::Character('I')));
     assert_eq!(
