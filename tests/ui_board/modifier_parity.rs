@@ -145,7 +145,6 @@ fn insertion_row_rejects_thought_only_range_and_reorder_intentions() {
 fn insertion_boundary_rejects_relative_insert_actions_without_a_live_focus() {
     let mut fixture = populated();
     fixture.input(visual(CursorMovement::VisualDown, false));
-    fixture.input(crate::key_input(UiKey::PrimaryCharacter('j')));
     fixture.input(UiInput::KeyStroke(
         KeyStroke::press(LogicalKey::Down).with_modifiers(LogicalModifiers::ALT),
     ));
