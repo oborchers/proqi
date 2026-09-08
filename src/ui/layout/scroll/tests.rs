@@ -143,7 +143,7 @@ fn assert_flow_case(
         height,
     );
     let bottom = scroll_to_bottom(&flow, start, presentations, width, height, density);
-    assert_bottom_page(&flow, bottom, presentations, width, height, density);
+    assert_bottom_page(&flow, &bottom, presentations, width, height, density);
     let top = scroll_to_top(&flow, bottom, height);
     assert_eq!(top.offset, 0);
     assert_eq!(top.geometry.current, start.geometry.current);
@@ -175,7 +175,7 @@ fn scroll_to_bottom(
 
 fn assert_bottom_page(
     flow: &BoardFlow,
-    bottom: ResolvedScroll,
+    bottom: &ResolvedScroll,
     presentations: [ThoughtPresentation; 3],
     width: u16,
     height: u16,
@@ -364,4 +364,133 @@ fn missing_thought_anchor_reconciles_to_the_focused_live_thought() {
     ));
     assert_eq!(resolved.first_index, 1);
     assert_eq!(resolved.first_row_offset, 0);
+}
+
+#[test]
+fn focused_neighbors_exist_only_for_rows_hidden_inside_an_uncapped_thought() {
+    let cases = [(1, false), (5, false), (6, true), (20, true)];
+    for (rows, hidden_below) in cases {
+        let content = (0..rows)
+            .map(|row| format!("row {row}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let state = state(&[(&content, ThoughtPresentation::Expanded)]);
+        let flow = measure(
+            &state,
+            None,
+            40,
+            5,
+            crate::ui::settings::BoardDensity::Compact,
+        );
+        let top = flow.resolve(BoardViewport::default(), state.focused_thought, false, 5);
+        assert_eq!(top.geometry.focused_previous, None, "{rows} rows");
+        assert_eq!(
+            top.geometry.focused_next.is_some(),
+            hidden_below,
+            "{rows} rows"
+        );
+    }
+
+    for preference in [
+        ThoughtPresentation::Automatic,
+        ThoughtPresentation::Collapsed,
+    ] {
+        let content = (0..20)
+            .map(|row| format!("row {row}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let state = state(&[(&content, preference)]);
+        let flow = measure(
+            &state,
+            None,
+            40,
+            5,
+            crate::ui::settings::BoardDensity::Compact,
+        );
+        let resolved = flow.resolve(BoardViewport::default(), state.focused_thought, false, 5);
+        assert_eq!(resolved.geometry.focused_previous, None, "{preference:?}");
+        assert_eq!(resolved.geometry.focused_next, None, "{preference:?}");
+    }
+}
+
+#[test]
+fn manually_clipped_exact_fit_and_automatic_thoughts_do_not_own_navigation() {
+    for (rows, preference) in [
+        (5, ThoughtPresentation::Expanded),
+        (4, ThoughtPresentation::Automatic),
+    ] {
+        let content = (0..rows)
+            .map(|row| format!("row {row}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let state = state(&[(&content, preference)]);
+        let focused = state.focused_thought.expect("focused thought");
+        let flow = measure(
+            &state,
+            None,
+            40,
+            5,
+            crate::ui::settings::BoardDensity::Compact,
+        );
+        let top = flow.resolve(BoardViewport::default(), Some(focused), false, 5);
+        let clipped = flow.resolve(
+            BoardViewport::Manual(top.geometry.next.expect("manual clipping row")),
+            Some(focused),
+            false,
+            5,
+        );
+        assert_eq!(clipped.offset, top.offset + 1, "{preference:?}");
+        assert_eq!(clipped.geometry.focused_previous, None, "{preference:?}");
+        assert_eq!(clipped.geometry.focused_next, None, "{preference:?}");
+    }
+}
+
+#[test]
+fn focused_navigation_boundaries_follow_every_wrapped_content_shape() {
+    let variants = [
+        "LF one\nLF two\nLF three\nLF four\nLF five\nLF six".to_owned(),
+        "CRLF one\r\n\r\nCRLF three\r\nCRLF four\r\nCRLF five\r\nCRLF six".to_owned(),
+        "tabs\talign\tthrough\trows\nsecond\trow\nthird\trow".to_owned(),
+        "界界界界 e\u{301}e\u{301} 👩‍💻👩‍💻 controls \u{7}\u{1f}\nrepeated Unicode row\nfinal row"
+            .to_owned(),
+        "unbroken".repeat(40),
+    ];
+    for content in variants {
+        let mut state = state(&[
+            ("previous", ThoughtPresentation::Automatic),
+            (&content, ThoughtPresentation::Expanded),
+            ("next", ThoughtPresentation::Automatic),
+        ]);
+        let focused = state.board.live_thoughts()[1].id;
+        state.focused_thought = Some(focused);
+        let flow = measure(
+            &state,
+            None,
+            12,
+            5,
+            crate::ui::settings::BoardDensity::Compact,
+        );
+        let start = flow.resolve(BoardViewport::default(), Some(focused), false, 5);
+        let mut current = start;
+        let mut steps = 0;
+        while let Some(next) = current.geometry.focused_next {
+            let advanced = flow.resolve(BoardViewport::Manual(next), Some(focused), false, 5);
+            assert_eq!(advanced.offset, current.offset + 1);
+            current = advanced;
+            steps += 1;
+            assert!(steps <= flow.total_rows, "focused traversal must terminate");
+        }
+        assert!(steps > 0, "variant must exceed the viewport: {content:?}");
+        while let Some(previous) = current.geometry.focused_previous {
+            let reversed = flow.resolve(BoardViewport::Manual(previous), Some(focused), false, 5);
+            assert_eq!(reversed.offset + 1, current.offset);
+            current = reversed;
+        }
+        assert_eq!(
+            current.offset,
+            flow.thought(focused).expect("focused rows").content_start
+        );
+        assert_eq!(current.first_row_offset, 0);
+        assert_eq!(current.geometry.focused_previous, None);
+    }
 }

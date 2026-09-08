@@ -1,9 +1,14 @@
-//! Qualified Herdr protocol 19 and 20 and provisional protocol 21 contracts.
+//! Qualified Herdr protocol 19, 20, and 21 and provisional protocol 22
+//! contracts.
 //!
 //! The schema fixtures are sanitized projections recorded from the installed
 //! 0.8.0 binary and the checksum-verified official 0.8.2 release binary. They
-//! retain every schema node consumed by the adapter and no user state. Protocol
-//! 21 is a synthetic projection of the protocol 20 schema, not a recording.
+//! retain every schema node consumed by the adapter and no user state.
+//! Protocols 21 and 22 are synthetic projections of the protocol 20 schema,
+//! not recordings: Herdr never shipped an official release reporting protocol
+//! 21, and the checksum-verified official 0.9.0 release (protocol 22) was
+//! confirmed to carry the identical `agent.prompt`/`agent_prompted` contract
+//! consumed by this policy, which brackets protocol 21 with real evidence.
 
 use serde_json::{Value, json};
 
@@ -20,7 +25,7 @@ use super::{
 
 #[test]
 fn qualified_and_provisional_protocols_pass_the_same_complete_adapter_contract() {
-    for protocol in [19, 20, 21] {
+    for protocol in [19, 20, 21, 22] {
         assert_complete_contract(protocol);
     }
 }
@@ -102,7 +107,7 @@ fn reference_snapshot(protocol: u32) -> Value {
 fn protocol_schema_and_live_boundaries_fail_closed_with_precise_reasons() {
     for (schema_protocol, live_protocol, reason) in [
         (18, 18, "unsupported protocol version"),
-        (22, 22, "unsupported protocol version"),
+        (23, 23, "unsupported protocol version"),
         (19, 20, "schema and live snapshot protocols disagree"),
     ] {
         assert_unsupported(schema(schema_protocol), snapshot(live_protocol), reason);
@@ -145,9 +150,9 @@ fn changed_required_prompt_schema_entries_fail_closed() {
         SchemaMutation::SessionShape,
         SchemaMutation::StatusValues,
     ] {
-        let mut changed = schema(21);
+        let mut changed = schema(22);
         mutation.apply(&mut changed);
-        assert_unsupported(changed, snapshot(21), mutation.reason());
+        assert_unsupported(changed, snapshot(22), mutation.reason());
     }
 }
 
@@ -302,7 +307,7 @@ fn malformed_timeout_and_additive_unknown_fields_are_handled_without_drift() {
     ));
 
     let context = source();
-    let mut additive = schema(21);
+    let mut additive = schema(22);
     additive["future_schema_field"] = json!({"retained_by_provider": true});
     additive["schemas"]["request"]["oneOf"]
         .as_array_mut()
@@ -330,7 +335,7 @@ fn malformed_timeout_and_additive_unknown_fields_are_handled_without_drift() {
         success(additive),
         success(json!({
             "result": {"snapshot": {
-                "protocol": 21,
+                "protocol": 22,
                 "version": "provisional-fixture",
                 "future_snapshot_field": true
             }},
@@ -341,7 +346,7 @@ fn malformed_timeout_and_additive_unknown_fields_are_handled_without_drift() {
     ]);
     assert_eq!(
         compatible.capabilities().expect("additive fields").protocol,
-        21
+        22
     );
 }
 
@@ -360,7 +365,7 @@ fn assert_unsupported(schema: Value, snapshot: Value, reason: &str) {
         panic!("expected unsupported error, received {error:?}");
     };
     assert!(
-        message.contains("qualified protocols 19 through 20, or provisional protocol 21"),
+        message.contains("qualified protocols 19 through 21, or provisional protocol 22"),
         "{message}"
     );
     assert!(message.contains(reason), "{message}");

@@ -296,8 +296,9 @@ mod tests {
         for (protocol, compatibility, compatible, reason) in [
             (19, "qualified", true, Value::Null),
             (20, "qualified", true, Value::Null),
-            (21, "provisional", true, json!("qualify_provisional")),
-            (22, "incompatible", false, json!("unsupported")),
+            (21, "qualified", true, Value::Null),
+            (22, "provisional", true, json!("qualify_provisional")),
+            (23, "incompatible", false, json!("unsupported")),
         ] {
             let path = temporary.path().join(format!("schema-{protocol}.json"));
             write_schema(&path, protocol);
@@ -305,7 +306,7 @@ mod tests {
             assert_eq!(report["compatibility"], compatibility);
             assert_eq!(report["compatible"], compatible);
             assert_eq!(report["reason_code"], reason);
-            assert_eq!(report["issue_required"], protocol > 20);
+            assert_eq!(report["issue_required"], protocol > 21);
         }
     }
 
@@ -385,17 +386,17 @@ mod tests {
                 .expect("policy findings")
                 .is_empty()
         );
-        write_fixture(temporary.path(), 21);
+        write_fixture(temporary.path(), 22);
         let found = policy_findings(temporary.path()).expect("drift findings");
         assert!(
             found
                 .iter()
-                .any(|item| item.contains("fixtures cover 19 through 21"))
+                .any(|item| item.contains("fixtures cover 19 through 22"))
         );
     }
 
     fn seed_fixtures(root: &std::path::Path) {
-        for protocol in [19, 20] {
+        for protocol in [19, 20, 21] {
             write_fixture(root, protocol);
         }
     }

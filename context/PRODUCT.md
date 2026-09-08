@@ -796,7 +796,7 @@ becomes follow-up input. Proqi verifies at submission time that the target
 exposes Herdr's semantic request and receipt contract. It never substitutes raw
 key injection.
 
-Accepted Herdr protocols 19 through 21 do not guarantee a distinct user-turn
+Accepted Herdr protocols 19 through 22 do not guarantee a distinct user-turn
 boundary when another sender submits concurrently. Overlapping inputs can
 therefore merge at the receiving harness even though Herdr returns an accepted
 receipt. Proqi treats this as a known integration limitation and preserves its
@@ -888,6 +888,7 @@ bindings are:
 | Action | Keyboard | Mouse |
 |---|---|---|
 | Create thought | `n` | Click `+` or the insertion area |
+| Insert relative to focus | macOS `Ctrl+Shift+N` / `Ctrl+N` for above / below; elsewhere `Alt+↑` / `↓` or `Alt+k` / `j` | Choose `Insert thought above` or `Insert thought below` in Commands |
 | Paste as new thought when none is selected | `Primary+V`, `p`, or native paste | Choose `Paste exactly` in Commands |
 | Clean up spacing in focused thought | `f` | Choose `Clean up spacing` in Commands |
 | Paste and clean up spacing | `Primary+Shift+V` or `Shift+P` | Choose `Paste and clean up` in Commands |
@@ -899,6 +900,8 @@ bindings are:
 | Select or deselect thought | `Space` | Click the thought, then use the selection control |
 | Select all thoughts | `a` or `Primary+A` | Command palette |
 | Select contiguous range | `Shift+↑` / `Shift+↓`, `K` / `J`, or `v` then arrows or `j` / `k` | Shift-click a thought, or use `v` then click it |
+| Focus first or last live thought | `Ctrl+↑` / `↓` or `Ctrl+k` / `j`; the range latch extends to that boundary | Choose `Go to first thought` or `Go to last thought` in Commands |
+| Extend range to a Board boundary | macOS `Ctrl+Shift+↑` / `↓` or `Ctrl+Shift+K` / `J` | Use the range latch and choose the boundary thought elsewhere |
 | Move or extend by five thoughts | `Page Up` / `Page Down`; add `Shift` to extend | Scroll, then click or Shift-click the target thought |
 | Submit | `Primary+Enter` or `s`, when supported, then direction when needed | Click verified Submit control |
 | Submit and keep | `Primary+Shift+Enter` or `Shift+S`, when supported, then direction when needed | Click verified Submit & keep control |
@@ -923,10 +926,17 @@ management uses F2 and F8 while its query is empty; R and D enter search text.
 
 The default Board map has one spelling-independent modifier ladder: plain
 moves focus, Shift extends a range, and Primary+Shift reorders one thought.
-On macOS, exact Option+Shift is an additional Board reorder alias for arrows and
-the configured vertical keys. Other modifiers keep the base focus intention. At
-the insertion row, range and reorder are thought-only no-ops, while base focus
-retains the ordinary boundary behavior. List-only overlays use `j` and `k` as
+Exact Control moves to the first or last live thought. On macOS, Control+Shift
+extends the existing anchored range to that boundary. Portable Control+Shift
+retains its established Primary+Shift reorder meaning, so the shifted boundary
+form is deliberately unbound there. On macOS, exact Control plus `n` inserts
+below, and Control plus Shift plus `n` inserts above. An uppercase `N` report
+without a separate Shift bit retains insert-above compatibility. Portable exact
+Alt plus vertical direction retains relative insertion. On macOS, exact
+Option+Shift remains an additional Board reorder alias for arrows and the
+configured vertical keys.
+At the insertion row, boundary range, reorder, and relative insertion are
+thought-only no-ops. Base focus retains the ordinary boundary behavior. List-only overlays use `j` and `k` as
 exact Down and Up aliases, and
 four-way non-text direction choice uses `h`, `j`, `k`, and `l` as Left, Down,
 Up, and Right aliases. These non-text owners ignore irrelevant modifiers for
@@ -954,6 +964,9 @@ Initial editing shortcuts include:
 | Extend selection to a wrapped visual-row edge on macOS | `Cmd+Shift+←` / `→` | Command palette or configured shifted Primary binding |
 | Move by word | macOS `Option+←` / `→`; elsewhere `Ctrl+←` / `→` | Standard editor movement |
 | Extend selection by word | macOS `Option+Shift+←` / `→`; elsewhere `Ctrl+Shift+←` / `→` | Standard editor movement |
+| Move to complete thought start or end | `Ctrl+↑` / `↓` | Command palette |
+| Extend selection to complete thought start or end | `Ctrl+Shift+↑` / `↓` | Preserve the existing anchor |
+| Move to logical line start or end | macOS `Ctrl+←` / `→`; elsewhere `Alt+←` / `→` | Named `Home` / `End` remain aliases |
 | Delete the current logical line | `Primary+U` | Command palette |
 | Delete the containing sentence | `Primary+Shift+U` | Command palette or configured binding |
 | Submit active thought | `Primary+Enter` | Command palette |
@@ -986,9 +999,9 @@ history before the PTY. Its Cmd+Left and Cmd+Right defaults emit raw Ctrl+A and
 Ctrl+E. If a remapper also converts Home and End into those Command arrows, the
 physical sources have the same downstream identity. Proqi resolves only the
 logical event received and never assigns an origin to Ctrl+A, Ctrl+E, or an
-absent event. Distinct line-edge and wrapped-row behavior requires distinct
-upstream encodings. Users may also assign exact contextual Control aliases to
-one chosen meaning without redefining Primary.
+absent event. Logical-line movement prefers directional Control arrows on
+macOS and directional Alt arrows elsewhere. Named Home and End remain aliases
+only when those logical events reach Proqi.
 
 For Ghostty, `keybind = super+shift+v=csi:118;10u` explicitly emits the
 CSI-u representation of logical Super+Shift+v. The example is validated using

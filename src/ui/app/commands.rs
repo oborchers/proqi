@@ -80,10 +80,22 @@ impl BoardApp {
                 crate::ui::ShortcutActionId::FocusNext => {
                     self.confirm_boundary_creation(BoundaryInsertion::AfterLast, ids, clock)
                 }
+                crate::ui::ShortcutActionId::FocusFirst => {
+                    self.focus_thought_boundary(false);
+                    Vec::new()
+                }
+                crate::ui::ShortcutActionId::FocusLast => {
+                    self.focus_thought_boundary(true);
+                    Vec::new()
+                }
                 crate::ui::ShortcutActionId::ExtendPrevious
                 | crate::ui::ShortcutActionId::ExtendNext
+                | crate::ui::ShortcutActionId::ExtendFirst
+                | crate::ui::ShortcutActionId::ExtendLast
                 | crate::ui::ShortcutActionId::MoveUp
-                | crate::ui::ShortcutActionId::MoveDown => Vec::new(),
+                | crate::ui::ShortcutActionId::MoveDown
+                | crate::ui::ShortcutActionId::InsertAbove
+                | crate::ui::ShortcutActionId::InsertBelow => Vec::new(),
                 _ => self.handle_board_registry_action(action, ids, clock),
             };
         }
@@ -107,11 +119,20 @@ impl BoardApp {
         clock: &impl Clock,
     ) -> Vec<Effect> {
         use crate::ui::ShortcutActionId as Shortcut;
+        if self.apply_thought_boundary_action(action) {
+            return Vec::new();
+        }
         let delta = match action {
             Shortcut::FocusPrevious | Shortcut::ExtendPrevious | Shortcut::MoveUp => -1,
             Shortcut::FocusNext | Shortcut::ExtendNext | Shortcut::MoveDown => 1,
             _ => return Vec::new(),
         };
+        if matches!(action, Shortcut::FocusPrevious | Shortcut::FocusNext)
+            && !self.range_latched()
+            && self.scroll_focused_thought(delta)
+        {
+            return Vec::new();
+        }
         match action {
             Shortcut::FocusPrevious | Shortcut::FocusNext if self.range_latched() => {
                 self.extend_range_by(delta);
@@ -125,6 +146,21 @@ impl BoardApp {
             _ => {}
         }
         Vec::new()
+    }
+
+    fn scroll_focused_thought(&mut self, delta: isize) -> bool {
+        if self.layout.is_none() {
+            return false;
+        }
+        let Some(anchor) = self
+            .scroll_geometry
+            .and_then(|geometry| geometry.focused_neighbor(delta))
+        else {
+            return false;
+        };
+        self.insertion_confirmation = super::InsertionConfirmation::Idle;
+        self.scroll_board_to(anchor);
+        true
     }
 
     fn handle_board_registry_action(
@@ -141,7 +177,13 @@ impl BoardApp {
             | Action::ExtendPrevious
             | Action::ExtendNext
             | Action::MoveUp
-            | Action::MoveDown => self.handle_board_navigation(action, ids, clock),
+            | Action::MoveDown
+            | Action::FocusFirst
+            | Action::FocusLast
+            | Action::ExtendFirst
+            | Action::ExtendLast => self.handle_board_navigation(action, ids, clock),
+            Action::InsertAbove => self.insert_relative_to_focus(false, ids, clock),
+            Action::InsertBelow => self.insert_relative_to_focus(true, ids, clock),
             Action::New if self.insertion_focused() => self.begin_bottom_insertion(ids, clock),
             Action::New => self.begin_insertion(ids, clock),
             Action::Edit => self.expand_and_enter_edit(ids, clock),
@@ -208,7 +250,7 @@ impl BoardApp {
         let Some(key) = editing::normalize_edit_key(key) else {
             return Vec::new();
         };
-        if let Some((edge, extend_selection)) = visual_row_move(key) {
+        if let Some((edge, extend_selection)) = editing::visual_row_move(key) {
             let effects = self.flush_pending_edit(ids, clock);
             self.move_to_visual_row_edge(edge, extend_selection);
             return effects;
@@ -454,13 +496,5 @@ impl BoardApp {
         } else if self.state.focused_thought.is_some() {
             self.insertion_focus = super::InsertionFocus::Inactive;
         }
-    }
-}
-
-fn visual_row_move(key: UiKey) -> Option<(crate::ui::VisualRowEdge, bool)> {
-    match key {
-        UiKey::ExtendVisualRow { edge } => Some((edge, true)),
-        UiKey::MoveVisualRow { edge } => Some((edge, false)),
-        _ => None,
     }
 }
