@@ -63,6 +63,29 @@ pub enum AttachmentAccessFailure {
     Cancelled,
 }
 
+/// Proven transient availability of one exact external attachment path.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AttachmentAvailability {
+    /// The exact path currently names a locally readable regular file.
+    Available,
+    /// macOS public metadata proves the ubiquitous item is not downloaded.
+    InCloud,
+    /// macOS public metadata proves the ubiquitous item is downloading.
+    Downloading,
+}
+
+impl AttachmentAvailability {
+    /// Stable content-free worker and diagnostic spelling.
+    #[must_use]
+    pub const fn diagnostic_code(self) -> &'static str {
+        match self {
+            Self::Available => "available",
+            Self::InCloud => "in_cloud",
+            Self::Downloading => "downloading",
+        }
+    }
+}
+
 impl AttachmentAccessFailure {
     /// Stable content-free diagnostic spelling.
     #[must_use]
@@ -121,8 +144,8 @@ pub struct AttachmentCheckBatch {
 pub struct AttachmentCheckResult {
     /// Exact requested identity, used to reject stale results.
     pub key: AttachmentCheckKey,
-    /// Accessible on success, otherwise one diagnostic-only failure reason.
-    pub result: Result<(), AttachmentAccessFailure>,
+    /// Proven availability or one diagnostic-only generic failure reason.
+    pub result: Result<AttachmentAvailability, AttachmentAccessFailure>,
 }
 
 /// Ordered completion for one batch.
@@ -138,11 +161,11 @@ pub struct AttachmentCheckBatchResult {
 
 /// Filesystem-independent capability used by the bounded accessibility lane.
 pub trait AttachmentAccessibility: Send {
-    /// Prove that one exact path currently names a readable regular file.
+    /// Classify one exact path without initiating cloud materialization.
     ///
     /// # Errors
     ///
-    /// Returns a typed diagnostic reason. Every failure is user-visible only as
-    /// binary inaccessible health.
-    fn check(&mut self, path: &Path) -> Result<(), AttachmentAccessFailure>;
+    /// Returns a typed diagnostic reason. Every failure has the same generic
+    /// inaccessible presentation.
+    fn check(&mut self, path: &Path) -> Result<AttachmentAvailability, AttachmentAccessFailure>;
 }

@@ -71,7 +71,7 @@ fn collapsed_overflow_and_next_separator_use_health_aware_natural_rows() {
     let path = "/tmp/missing.png";
     let content = format!("one\ntwo\n{path}");
     let effects = fixture.effects(UiInput::PasteAnnotated(embedded_attachment(
-        content,
+        content.clone(),
         8..8 + path.len(),
     )));
     fixture.app.complete_attachment_checks(complete(
@@ -114,7 +114,7 @@ fn health_transitions_resize_reflow_and_preserve_scroll_selection() {
     let prefix = "Grüße 界\nbeta\n";
     let content = format!("{prefix}{path}\nomega\nlast");
     let effects = fixture.effects(UiInput::PasteAnnotated(embedded_attachment(
-        content,
+        content.clone(),
         prefix.len()..prefix.len() + path.len(),
     )));
     fixture
@@ -146,6 +146,20 @@ fn health_transitions_resize_reflow_and_preserve_scroll_selection() {
     assert!(before.first_row_offset > 0);
     assert!(fixture.app.thought_selected(thought_id));
 
+    for (state, label) in [
+        (AttachmentAvailability::InCloud, "in iCloud"),
+        (AttachmentAvailability::Downloading, "downloading"),
+    ] {
+        assert_cloud_transition_preserves_state(
+            &mut fixture,
+            narrow,
+            thought_id,
+            &content,
+            state,
+            label,
+        );
+    }
+
     complete_refresh(&mut fixture, Err(AttachmentAccessFailure::Missing));
     let failed = draw(&mut fixture, narrow.width, narrow.height);
     let failed_layout = fixture.app.prepare_frame(narrow);
@@ -168,6 +182,42 @@ fn health_transitions_resize_reflow_and_preserve_scroll_selection() {
     assert_eq!(recovered_layout.first_index, 0);
     assert!(recovered_layout.thought(thought_id).is_some());
     assert!(fixture.app.thought_selected(thought_id));
+}
+
+fn assert_cloud_transition_preserves_state(
+    fixture: &mut Fixture,
+    area: Rect,
+    thought_id: proqi::domain::ThoughtId,
+    content: &str,
+    state: AttachmentAvailability,
+    label: &str,
+) {
+    complete_refresh_availability(fixture, state);
+    let _cloud = draw(fixture, area.width, area.height);
+    let expected = if label == "in iCloud" {
+        proqi::application::AttachmentPresentationState::InCloud
+    } else {
+        proqi::application::AttachmentPresentationState::Downloading
+    };
+    assert_eq!(
+        fixture
+            .app
+            .state
+            .attachments
+            .presentation_state(thought_id, 0),
+        expected
+    );
+    assert!(fixture.app.thought_selected(thought_id));
+    assert_eq!(
+        fixture
+            .app
+            .state
+            .board
+            .thought(thought_id)
+            .expect("thought")
+            .content,
+        content
+    );
 }
 
 #[test]
@@ -319,6 +369,13 @@ fn complete_refresh(fixture: &mut Fixture, result: Result<(), AttachmentAccessFa
     fixture
         .app
         .complete_attachment_checks(complete(batch, result));
+}
+
+fn complete_refresh_availability(fixture: &mut Fixture, state: AttachmentAvailability) {
+    let batch = attachment_batch(&fixture.app.refresh_attachments(false));
+    fixture
+        .app
+        .complete_attachment_checks(complete_availability(batch, state));
 }
 
 fn assert_top_thought_row(fixture: &mut Fixture, area: Rect, expected: &str) {

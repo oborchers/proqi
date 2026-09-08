@@ -98,7 +98,9 @@ impl BoardApp {
                     &content,
                     &annotations,
                     &self.expanded_fold_indices(thought.id),
-                    |annotation_index| self.attachment_inaccessible(thought.id, annotation_index),
+                    |annotation_index| {
+                        self.attachment_presentation_state(thought.id, annotation_index)
+                    },
                 )
                 .unwrap_or_else(|_| {
                     crate::ui::annotations::Presentation::canonical(content.clone())

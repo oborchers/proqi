@@ -364,17 +364,31 @@ never read or copied automatically.
 
 ### `AttachmentAccessibility`
 
-External attachment health crosses a terminal-independent read-only port. The
-filesystem adapter opens the exact absolute path without rewriting it, proves
-that it is a readable regular file, and returns typed missing, permission,
-unmounted, unreadable, or I/O failures. The bounded lane adds timeout and
-cancellation failures without waiting for a blocked filesystem call to return.
-Those reasons are content-free diagnostics only. Application and UI consumers
-reduce every completed failure to binary inaccessible health. Unknown and
+External attachment health crosses a terminal-independent read-only port. Its
+typed outcome is available, in iCloud, downloading, or a typed generic failure.
+The filesystem adapter opens the exact absolute path without rewriting it,
+proves that it is a readable regular file, and returns typed missing,
+permission, unmounted, unreadable, or I/O failures. The bounded lane adds
+timeout and cancellation failures without waiting for a blocked filesystem
+call to return. Those reasons are content-free diagnostics only. Unknown and
 checking state remain visually neutral without becoming accessibility proof.
 
+On macOS, a private platform module in the same killable attachment worker
+reads the public Foundation URL resource values for ubiquitous identity,
+downloading activity, downloading status, and downloading error. The raw
+metadata types and translation policy remain confined to that module. Only a
+complete, correctly typed, error-free ubiquitous result can establish an
+iCloud presentation. `NotDownloaded` with an explicitly inactive download
+becomes in iCloud. An explicitly active download becomes downloading.
+`Downloaded` and `Current` still pass through the exact readability proof.
+Missing, wrong-typed, unknown, contradictory, or failed metadata falls through
+to the generic filesystem classification without an iCloud claim. Other
+platforms compile no cloud probe, do not link Foundation, and preserve the
+generic behavior. The adapter never calls a materialization or download API.
+
 Application state owns the transient exact-key cache, its explicit unknown,
-checking, accessible, and inaccessible states, and the scheduling policy.
+checking, available, in iCloud, downloading, and inaccessible states, and the
+scheduling policy.
 Keys include the thought, annotation index and range, presentation metadata,
 canonical path, and digest of the canonical content revision. Insertion and
 relink mutations invalidate affected work. Restoration schedules the focused
@@ -387,9 +401,9 @@ Submission captures exact source thoughts and attachment keys before waiting
 for durability. Once pending edits are durable, a fresh bounded preflight owns
 the accessibility lane ahead of background continuation. The locked sources
 must still match both their content digests and attachment keys when the check
-completes. Any inaccessible, timed-out, cancelled, incomplete, or stale result
-releases the source locks without preparing a journal attempt or invoking an
-agent gateway.
+completes. Any in iCloud, downloading, inaccessible, timed-out, cancelled,
+incomplete, or stale result releases the source locks without preparing a
+journal attempt or invoking an agent gateway.
 
 ### `ScreenshotWatcher`
 

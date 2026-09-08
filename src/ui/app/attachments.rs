@@ -4,8 +4,8 @@ use std::time::Duration;
 
 use crate::{
     application::{
-        AttachmentPreflightOutcome, AttachmentRefreshCause, AttachmentRefreshOutcome, Effect,
-        attachment_keys,
+        AttachmentPreflightOutcome, AttachmentPresentationState, AttachmentRefreshCause,
+        AttachmentRefreshOutcome, Effect, attachment_keys,
     },
     domain::ThoughtId,
     ports::attachment_accessibility::AttachmentCheckBatchResult,
@@ -105,8 +105,19 @@ impl BoardApp {
         effects
     }
 
-    /// Binary render state for one current annotation.
+    /// Visible render state for one current annotation.
     #[must_use]
+    pub(in crate::ui) fn attachment_presentation_state(
+        &self,
+        thought_id: ThoughtId,
+        annotation_index: usize,
+    ) -> AttachmentPresentationState {
+        self.state
+            .attachments
+            .presentation_state(thought_id, annotation_index)
+    }
+
+    #[cfg(test)]
     pub(in crate::ui) fn attachment_inaccessible(
         &self,
         thought_id: ThoughtId,

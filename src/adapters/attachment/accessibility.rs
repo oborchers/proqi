@@ -4,32 +4,54 @@ use std::{fs::File, io::Read as _, path::Path};
 
 use rustix::fs::{Mode, OFlags};
 
-use crate::ports::attachment_accessibility::{AttachmentAccessFailure, AttachmentAccessibility};
+use crate::ports::attachment_accessibility::{
+    AttachmentAccessFailure, AttachmentAccessibility, AttachmentAvailability,
+};
 
-/// System filesystem implementation of binary attachment accessibility.
+#[cfg(target_os = "macos")]
+mod macos;
+
+/// System filesystem implementation of typed attachment availability.
 #[derive(Default)]
 pub struct FileAttachmentAccessibility;
 
 impl AttachmentAccessibility for FileAttachmentAccessibility {
-    fn check(&mut self, path: &Path) -> Result<(), AttachmentAccessFailure> {
+    fn check(&mut self, path: &Path) -> Result<AttachmentAvailability, AttachmentAccessFailure> {
         if !path.is_absolute() {
             return Err(AttachmentAccessFailure::Unreadable);
         }
-        let descriptor = rustix::fs::open(
-            path,
-            OFlags::RDONLY | OFlags::CLOEXEC | OFlags::NONBLOCK,
-            Mode::empty(),
-        )
-        .map_err(map_errno)?;
-        let mut file = File::from(descriptor);
-        let metadata = file.metadata().map_err(|error| map_io(&error))?;
-        if !metadata.is_file() {
-            return Err(AttachmentAccessFailure::Unreadable);
-        }
-        let mut probe = [0_u8; 1];
-        let _bytes = file.read(&mut probe).map_err(|error| map_io(&error))?;
-        Ok(())
+
+        #[cfg(target_os = "macos")]
+        let platform_availability = macos::availability(path);
+        #[cfg(not(target_os = "macos"))]
+        let platform_availability = None;
+
+        finish_with_platform_availability(path, platform_availability)
     }
+}
+
+fn finish_with_platform_availability(
+    path: &Path,
+    platform_availability: Option<AttachmentAvailability>,
+) -> Result<AttachmentAvailability, AttachmentAccessFailure> {
+    platform_availability.map_or_else(|| prove_exact_readability(path), Ok)
+}
+
+fn prove_exact_readability(path: &Path) -> Result<AttachmentAvailability, AttachmentAccessFailure> {
+    let descriptor = rustix::fs::open(
+        path,
+        OFlags::RDONLY | OFlags::CLOEXEC | OFlags::NONBLOCK,
+        Mode::empty(),
+    )
+    .map_err(map_errno)?;
+    let mut file = File::from(descriptor);
+    let metadata = file.metadata().map_err(|error| map_io(&error))?;
+    if !metadata.is_file() {
+        return Err(AttachmentAccessFailure::Unreadable);
+    }
+    let mut probe = [0_u8; 1];
+    let _bytes = file.read(&mut probe).map_err(|error| map_io(&error))?;
+    Ok(AttachmentAvailability::Available)
 }
 
 fn map_errno(error: rustix::io::Errno) -> AttachmentAccessFailure {
@@ -59,7 +81,7 @@ fn map_io(error: &std::io::Error) -> AttachmentAccessFailure {
 #[cfg(test)]
 mod tests {
     use crate::ports::attachment_accessibility::{
-        AttachmentAccessFailure, AttachmentAccessibility as _,
+        AttachmentAccessFailure, AttachmentAccessibility as _, AttachmentAvailability,
     };
 
     use super::FileAttachmentAccessibility;
@@ -70,7 +92,10 @@ mod tests {
         let unicode = temporary.path().join("Grüße 第一.txt");
         std::fs::write(&unicode, b"available").expect("unicode fixture");
         let mut accessibility = FileAttachmentAccessibility;
-        assert_eq!(accessibility.check(&unicode), Ok(()));
+        assert_eq!(
+            accessibility.check(&unicode),
+            Ok(AttachmentAvailability::Available)
+        );
         assert_eq!(
             accessibility.check(&temporary.path().join("missing.txt")),
             Err(AttachmentAccessFailure::Missing)
@@ -109,6 +134,23 @@ mod tests {
         assert_eq!(
             super::map_errno(rustix::io::Errno::IO),
             AttachmentAccessFailure::Io
+        );
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn non_macos_uses_only_exact_generic_readability() {
+        let temporary = tempfile::tempdir().expect("temporary directory");
+        let readable = temporary.path().join("local.txt");
+        std::fs::write(&readable, b"content").expect("readable fixture");
+        let mut accessibility = FileAttachmentAccessibility;
+        assert_eq!(
+            accessibility.check(&readable),
+            Ok(AttachmentAvailability::Available)
+        );
+        assert_eq!(
+            accessibility.check(&temporary.path().join("missing.txt")),
+            Err(AttachmentAccessFailure::Missing)
         );
     }
 }
