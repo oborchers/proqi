@@ -44,6 +44,24 @@ ownership of scope, review, or merge authorization.
 - Derive a short unique topic branch, worktree label, and worker name from the
   ticket. Prefer `feature/`, `fix/`, or `docs/` according to the work.
 
+## Base drift and integration policy
+
+- Treat the recorded base SHA as the ticket's implementation base. After the
+  lane starts, never merge or rebase `main` into the topic merely because
+  `origin/main` advanced, GitHub reports `BEHIND`, or an earlier strict status
+  check policy would have required an update.
+- Fetch current remote state before final handoff and inspect the actual merge
+  result. A green pull request that remains `CLEAN` and `MERGEABLE` may be made
+  ready and handed back on its original base without another CI run.
+- Integrate current `main` only when GitHub or a local merge analysis proves an
+  actual conflict, when current-main behavior concretely invalidates a tested
+  ticket assumption, or when the user explicitly requests integration. File
+  overlap or base drift alone is not evidence of either condition.
+- When integration is necessary, record the prior base, integrated main SHA,
+  resulting parents, conflict resolutions, and proportional requalification in
+  the pull request and final handoff. Never rerun the complete gate solely to
+  refresh a behind marker.
+
 ## Create exactly one lane
 
 1. Create one Herdr-managed Git worktree/workspace from the recorded base with
@@ -202,6 +220,10 @@ Fix failures caused by the branch and rerun the required gates. One evidence-
 based retry is reasonable for an infrastructure flake; repeated unexplained
 failure is a blocker, not permission for indefinite retries. Never weaken a
 gate, threshold, test, or snapshot to obtain green status.
+
+Do not restart CI merely because `main` advanced after a green run. Refresh the
+pull request state, apply the base drift and integration policy above, and keep
+the existing green result when the pull request remains clean and mergeable.
 
 When the complete pull request is green and mergeable and no known defect or
 review issue remains, mark it ready for review without requesting another
