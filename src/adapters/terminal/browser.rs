@@ -28,7 +28,10 @@ pub(crate) fn pick_session(
     settings: &super::LoadedSettings,
 ) -> Result<BrowserAction, TerminalError> {
     let theme = super::palette::resolve(&settings.theme, supports_true_color())?;
-    let guard = TerminalGuard::enter(CrosstermControl::new(settings.ui.keyboard_enhancement))?;
+    let guard = TerminalGuard::enter(CrosstermControl::new(
+        settings.ui.keyboard_enhancement,
+        settings.ui.mouse_capture,
+    ))?;
     let panic_hook = PanicHookGuard::install();
     let termination = TerminationGuard::register()?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;

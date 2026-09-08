@@ -30,6 +30,7 @@ pub(super) trait TerminalControl {
 
 pub(super) struct CrosstermControl {
     preference: KeyboardEnhancement,
+    mouse_capture: bool,
     enabled: u8,
 }
 
@@ -37,11 +38,13 @@ const RAW_MODE: u8 = 1 << 0;
 const SCREEN_MODE: u8 = 1 << 1;
 const FOCUS_MODE: u8 = 1 << 2;
 const KEYBOARD_MODE: u8 = 1 << 3;
+const MOUSE_MODE: u8 = 1 << 4;
 
 impl CrosstermControl {
-    pub(super) const fn new(preference: KeyboardEnhancement) -> Self {
+    pub(super) const fn new(preference: KeyboardEnhancement, mouse_capture: bool) -> Self {
         Self {
             preference,
+            mouse_capture,
             enabled: 0,
         }
     }
@@ -66,12 +69,15 @@ impl TerminalControl for CrosstermControl {
         execute!(
             stdout(),
             EnterAlternateScreen,
-            EnableMouseCapture,
             EnableBracketedPaste,
             SetCursorStyle::BlinkingBlock,
             Hide
         )?;
         self.enable(SCREEN_MODE);
+        if self.mouse_capture {
+            execute!(stdout(), EnableMouseCapture)?;
+            self.enable(MOUSE_MODE);
+        }
         if execute!(stdout(), EnableFocusChange).is_ok() {
             self.enable(FOCUS_MODE);
         }
@@ -105,14 +111,13 @@ impl TerminalControl for CrosstermControl {
         if self.has(SCREEN_MODE) {
             record(
                 &mut first,
-                execute!(
-                    stdout(),
-                    DisableBracketedPaste,
-                    DisableMouseCapture,
-                    LeaveAlternateScreen
-                ),
+                execute!(stdout(), DisableBracketedPaste, LeaveAlternateScreen),
             );
             self.disable(SCREEN_MODE);
+        }
+        if self.has(MOUSE_MODE) {
+            record(&mut first, execute!(stdout(), DisableMouseCapture));
+            self.disable(MOUSE_MODE);
         }
         if self.has(RAW_MODE) {
             record(&mut first, disable_raw_mode());
