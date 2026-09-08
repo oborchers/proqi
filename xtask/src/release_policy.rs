@@ -54,7 +54,7 @@ const IMAGE_REQUIRED: [&str; 15] = [
 ];
 
 const HERDR_SENTINEL_PATH: &str = ".github/workflows/herdr-compatibility.yml";
-const HERDR_SENTINEL_REQUIRED: [&str; 15] = [
+const HERDR_SENTINEL_REQUIRED: [&str; 16] = [
     "schedule:",
     "workflow_dispatch:",
     "if: github.ref == 'refs/heads/main'",
@@ -69,6 +69,7 @@ const HERDR_SENTINEL_REQUIRED: [&str; 15] = [
     "timeout --kill-after=2s 10s",
     "cargo xtask herdr-compatibility",
     "search/issues",
+    "is:issue is:open in:body",
     "herdr-compatibility:${TAG}:${SCHEMA_SHA256}",
 ];
 
@@ -367,6 +368,12 @@ mod tests {
         let found = herdr_sentinel_findings(&unsafe_source);
         assert!(found.iter().any(|item| item.contains("contents: read")));
         assert!(found.iter().any(|item| item.contains("contents: write")));
+        let closed_issue_match = source.replace("is:issue is:open in:body", "is:issue in:body");
+        assert!(
+            herdr_sentinel_findings(&closed_issue_match)
+                .iter()
+                .any(|item| item.contains("is:issue is:open in:body"))
+        );
         let checkout_issue = source.replace(
             "steps:\n      - name: Create a deduplicated",
             "steps:\n      - uses: actions/checkout@pin\n      - name: Create a deduplicated",
