@@ -31,7 +31,7 @@ fn doctor_reports_fresh_state_without_initializing_it() {
 #[cfg(unix)]
 #[test]
 fn doctor_reports_supported_protocols_and_the_precise_compatibility_boundary() {
-    for protocol in [19, 20, 21, 22] {
+    for protocol in [19, 20, 21, 22, 23] {
         let fixture = herdr_fixture::HerdrFixture::new(protocol);
         let temporary = tempfile::tempdir().expect("temporary directory");
         let state_root = temporary.path().join("state");
@@ -77,7 +77,7 @@ fn doctor_reports_supported_protocols_and_the_precise_compatibility_boundary() {
             .iter()
             .find(|check| check["id"] == "herdr")
             .expect("Herdr check");
-        if protocol <= 21 {
+        if protocol <= 22 {
             assert_eq!(herdr["status"], "ok");
             assert_eq!(herdr["facts"]["protocol"], protocol);
             assert_eq!(herdr["facts"]["version"], fixture_version(protocol));
@@ -87,9 +87,9 @@ fn doctor_reports_supported_protocols_and_the_precise_compatibility_boundary() {
             let remediation = herdr["remediation"].as_str().expect("remediation");
             assert!(
                 remediation
-                    .contains("qualified protocols 19 through 20, or provisional protocol 21")
+                    .contains("qualified protocols 19 through 21, or provisional protocol 22")
             );
-            assert!(remediation.contains("protocols 22/22"));
+            assert!(remediation.contains("protocols 23/23"));
             assert!(remediation.contains("unsupported protocol version"));
         }
     }
