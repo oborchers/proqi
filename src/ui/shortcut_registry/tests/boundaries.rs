@@ -386,8 +386,6 @@ fn new_actions_are_disableable_with_truthful_help() {
         (LogicalKey::Character('j'), LogicalModifiers::CONTROL),
         (LogicalKey::Down, LogicalModifiers::ALT),
         (LogicalKey::Character('j'), LogicalModifiers::ALT),
-        (LogicalKey::Up, CONTROL_SHIFT),
-        (LogicalKey::Down, CONTROL_SHIFT),
     ] {
         assert_eq!(
             registry
@@ -398,6 +396,21 @@ fn new_actions_are_disableable_with_truthful_help() {
                 .and_then(|resolved| resolved.action),
             None,
             "disabled defaults and derived aliases must both disappear",
+        );
+    }
+    for (key, portable_action) in [
+        (LogicalKey::Up, Action::MoveUp),
+        (LogicalKey::Down, Action::MoveDown),
+    ] {
+        assert_eq!(
+            registry
+                .dispatch(
+                    &ShortcutContextStack::new([Context::Board]),
+                    stroke(key, CONTROL_SHIFT),
+                )
+                .and_then(|resolved| resolved.action),
+            (!cfg!(target_os = "macos")).then_some(portable_action),
+            "disabling macOS range actions must preserve portable Primary+Shift reorder",
         );
     }
 }
