@@ -159,7 +159,7 @@ jobs:
           [[ "$SCHEMA_SHA256" =~ ^[0-9a-f]{64}$ ]]
           [[ "$SCHEMA_VERSION" =~ ^([0-9]+|unknown)$ ]]
           marker="<!-- herdr-compatibility:${TAG}:${SCHEMA_SHA256} -->"
-          query="repo:${GITHUB_REPOSITORY} is:issue in:body \"${marker}\""
+          query="repo:${GITHUB_REPOSITORY} is:issue is:open in:body \"${marker}\""
           existing="$(gh api --method GET search/issues -f q="$query" --jq '.total_count')"
           test "$existing" -ge 0
           if test "$existing" -gt 0; then
