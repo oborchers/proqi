@@ -1896,11 +1896,10 @@ Cargo.lock is committed because Proqi ships an application. Dependabot checks
 Cargo dependencies, GitHub Actions, and the pinned Rust toolchain weekly, applies
 a routine update cooldown, and limits routine dependency work to one grouped
 pull request. Security updates remain exempt from cooldown. Dependency pull
-requests pass the same required gate as contributor pull requests. Automatic
-merging is limited to explicitly allowed low-risk patch updates after all
-required checks pass.
-Minor updates, all pre-1.0 compatibility changes, and security-sensitive crates
-receive human review.
+requests pass the same required gate as contributor pull requests. Verified
+Dependabot patch and minor updates may request squash auto-merge only after all
+required checks pass against current `main`. Major updates always receive human
+review. External contributors never receive merge authority from this policy.
 
 The default branch requires the aggregate `check` status and rejects force
 pushes while allowing direct owner pushes. Releases use a protected GitHub
