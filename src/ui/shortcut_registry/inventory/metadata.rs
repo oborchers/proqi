@@ -22,6 +22,24 @@ const fn help(
 
 const HELP: &[(Action, HelpMetadata)] = &[
     (
+        Action::ReflowThought,
+        help(
+            HelpSurface::Board,
+            27,
+            "Clean up spacing",
+            HelpAvailability::Always,
+        ),
+    ),
+    (
+        Action::ReflowThought,
+        help(
+            HelpSurface::Editor,
+            17,
+            "Clean up spacing",
+            HelpAvailability::Always,
+        ),
+    ),
+    (
         Action::RetryStorage,
         help(
             HelpSurface::Recovery,
@@ -146,7 +164,7 @@ const HELP: &[(Action, HelpMetadata)] = &[
         help(
             HelpSurface::Board,
             17,
-            "Paste reflow",
+            "Paste and clean up",
             HelpAvailability::Always,
         ),
     ),
@@ -240,7 +258,7 @@ const HELP: &[(Action, HelpMetadata)] = &[
         help(
             HelpSurface::Editor,
             6,
-            "Paste reflow",
+            "Paste and clean up",
             HelpAvailability::Always,
         ),
     ),
@@ -382,7 +400,8 @@ pub(in crate::ui::shortcut_registry) fn command_metadata(
         | Action::SubmitKeep
         | Action::SubmitAllRemove
         | Action::SubmitAllKeep => CommandAvailability::Submission,
-        Action::PlainNewline
+        Action::ReflowThought
+        | Action::PlainNewline
         | Action::DeleteLogicalLine
         | Action::DeleteSentence
         | Action::JumpUp

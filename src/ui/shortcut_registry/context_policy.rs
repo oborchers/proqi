@@ -67,5 +67,6 @@ pub(super) fn effective_board_bindings(keys: &KeyBindings) -> BTreeMap<char, Act
         bindings.entry(reflow).or_insert(Action::PasteReflow);
     }
     bindings.entry('D').or_insert(Action::Duplicate);
+    bindings.entry('f').or_insert(Action::ReflowThought);
     bindings
 }

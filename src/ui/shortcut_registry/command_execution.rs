@@ -12,6 +12,7 @@ pub(crate) enum CommandExecution {
     Selection(SelectionCommand),
     Submission(SubmissionCommand),
     Transformation(TransformationCommand),
+    ReflowThought,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -150,6 +151,7 @@ pub(crate) const fn execution_for(action: Action) -> Option<CommandExecution> {
         A::Copy => Some(E::Board(BoardCommand::Copy)),
         A::Cut => Some(E::Board(BoardCommand::Cut)),
         A::PasteExact => Some(E::Paste(PasteCommand::Exact)),
+        A::ReflowThought => Some(E::ReflowThought),
         A::PasteReflow => Some(E::Paste(PasteCommand::Reflow)),
         A::SelectAll => Some(E::Selection(SelectionCommand::SelectAll)),
         A::Duplicate => Some(E::Board(BoardCommand::Duplicate)),

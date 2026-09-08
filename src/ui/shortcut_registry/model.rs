@@ -194,6 +194,7 @@ pub enum ShortcutActionId {
     Cut,
     PasteExact,
     PasteReflow,
+    ReflowThought,
     SelectAll,
     Duplicate,
     Undo,
@@ -215,7 +216,7 @@ pub enum ShortcutActionId {
 
 impl ShortcutActionId {
     /// Complete visible Commands inventory in its established order.
-    pub(crate) const COMMANDS: [(Self, &'static str); 52] = [
+    pub(crate) const COMMANDS: [(Self, &'static str); 53] = [
         (Self::New, "New thought"),
         (Self::RenameSession, "Rename session"),
         (Self::CopySessionId, "Copy session ID"),
@@ -245,7 +246,8 @@ impl ShortcutActionId {
         (Self::Copy, "Copy thought"),
         (Self::Cut, "Cut thought"),
         (Self::PasteExact, "Paste exactly"),
-        (Self::PasteReflow, "Paste and reflow"),
+        (Self::PasteReflow, "Paste and clean up"),
+        (Self::ReflowThought, "Clean up spacing"),
         (Self::Duplicate, "Duplicate thought or selection"),
         (Self::SelectAll, "Select all thoughts"),
         (Self::SubmitRemove, "Submit"),
@@ -378,6 +380,7 @@ impl ShortcutActionId {
             Cut => "clipboard.cut",
             PasteExact => "clipboard.paste_exact",
             PasteReflow => "clipboard.paste_reflow",
+            ReflowThought => "thought.reflow",
             SelectAll => "selection.select_all",
             Duplicate => "board.duplicate",
             Undo => "history.undo",

@@ -286,6 +286,7 @@ impl BoardApp {
     ) -> Vec<Effect> {
         use CommandExecution as Execution;
         match execution {
+            Execution::ReflowThought => self.reflow_thought_in_place(ids, clock),
             Execution::Paste(command) => {
                 self.execute_palette_paste(command, selection_handoff, ids, clock)
             }

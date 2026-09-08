@@ -131,10 +131,12 @@ impl ReflowState {
             content[old.clone()].to_owned()
         } else if !self.has_content || trailing {
             String::new()
-        } else if count_breaks(content, &pending) >= 2 {
-            newline.repeat(2)
         } else {
-            " ".to_owned()
+            match count_breaks(content, &pending) {
+                0 => " ".to_owned(),
+                1 => newline.to_owned(),
+                _ => newline.repeat(2),
+            }
         };
         let new_start = self.output.len();
         self.output.push_str(&separator);
@@ -189,7 +191,7 @@ fn count_breaks(content: &str, pending: &[OwnedRange]) -> usize {
         .sum()
 }
 
-fn coalesce_mappings(
+pub(super) fn coalesce_mappings(
     mappings: Vec<(Range<usize>, Range<usize>)>,
 ) -> Vec<(Range<usize>, Range<usize>)> {
     let mut output: Vec<(Range<usize>, Range<usize>)> = Vec::new();

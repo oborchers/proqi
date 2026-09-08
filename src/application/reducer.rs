@@ -42,6 +42,7 @@ pub fn reduce(state: &mut AppState, action: Action) -> ApplicationResult<Vec<Eff
         | Action::PasteAsThought { .. }
         | Action::EditThought { .. }
         | Action::EditOwnedThought(_) => reduce_content(state, action),
+        Action::ReflowThought(reflow) => super::mutations::transform::reflow_thought(state, reflow),
         Action::SplitThought { .. } | Action::ExtractThought { .. } => {
             reduce_content_transform(state, action)
         }
@@ -81,6 +82,7 @@ const fn mutates_durable_state(action: &Action) -> bool {
             | Action::RenameSession { .. }
             | Action::PasteAsThought { .. }
             | Action::EditThought { .. }
+            | Action::ReflowThought(_)
             | Action::SplitThought { .. }
             | Action::ExtractThought { .. }
             | Action::MergeThoughts { .. }

@@ -238,7 +238,7 @@ fn downgrade_to_schema_eleven(state: &Path) {
         .execute_batch(
             "ALTER TABLE sessions DROP COLUMN attachment_image_high;
              ALTER TABLE sessions DROP COLUMN attachment_file_high;
-             DELETE FROM migration_history WHERE version IN (12, 13, 14);
+             DELETE FROM migration_history WHERE version >= 12;
              UPDATE schema_meta SET schema_version = 11, storage_protocol = 10;",
         )
         .expect("schema eleven fixture");

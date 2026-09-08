@@ -25,6 +25,7 @@ impl BoardApp {
                 | crate::application::Action::DeleteThought { .. }
                 | crate::application::Action::DeleteThoughts { .. }
                 | crate::application::Action::DuplicateThoughts { .. }
+                | crate::application::Action::ReflowThought(_)
                 | crate::application::Action::SplitThought { .. }
                 | crate::application::Action::ExtractThought { .. }
                 | crate::application::Action::MergeThoughts { .. }

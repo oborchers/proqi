@@ -1,6 +1,6 @@
 ---
 source: tests/ui_board/snapshots.rs
-assertion_line: 477
+assertion_line: 485
 expression: "snapshot(&mut fixture, 120, 14, ThemePreference::Dark)"
 ---
 SIZE 120x14
@@ -9,12 +9,12 @@ TEXT
 00│┌ proqi shortcuts ───────────────────────────────────────────────────────────────────────────────────────────────────[x]│
 01││Esc                        Close                           Cmd+C                      Copy                            ││
 02││Cmd+X                      Cut                             Cmd+V                      Paste exactly                   ││
-03││Cmd+Shift+V                Paste reflow                    Cmd+A                      Select all                      ││
+03││Cmd+Shift+V                Paste and clean up              Cmd+A                      Select all                      ││
 04││Cmd+U                      Delete logical line             Cmd+Shift+U                Delete sentence                 ││
 05││Cmd+Z                      Undo                            Cmd+Shift+Z/Cmd+Y          Redo                            ││
 06││Cmd+T                      Split/extract                   Option+↑/↓/PageUp/PageDown Move 5 rows                     ││
 07││Cmd+↑/↓                    Start/end                       Cmd+Shift+H/←/L/→          Select visual row               ││
-08││↑/↓                        Neighbor/new                                                                               ││
+08││↑/↓                        Neighbor/new                    Ctrl+Shift+F               Clean up spacing                ││
 09││                                                                                                                      ││
 10││                                                                                                                      ││
 11││                                                                                                                      ││
@@ -30,7 +30,7 @@ STYLE RUNS
 5: 0-0 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 1-5 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 6-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 60-76 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 77-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 6: 0-0 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 1-5 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 6-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 60-85 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 86-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 7: 0-0 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 1-7 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 8-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 60-76 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 77-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-8: 0-0 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 1-3 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 4-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+8: 0-0 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 1-3 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 4-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 60-71 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 72-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 9: 0-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 10: 0-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 11: 0-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE

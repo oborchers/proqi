@@ -271,6 +271,7 @@ impl AppState {
                     BoardOperationKind::Split
                         | BoardOperationKind::Extract
                         | BoardOperationKind::Merge
+                        | BoardOperationKind::Reflow
                 ) && operation.forward.addresses(thought_id)
             });
         if transformation.is_some_and(|operation| {
@@ -303,6 +304,7 @@ impl AppState {
                         BoardOperationKind::Split
                             | BoardOperationKind::Extract
                             | BoardOperationKind::Merge
+                            | BoardOperationKind::Reflow
                     ) && operation.forward.addresses(thought_id)
                 });
         if transformation.is_some_and(|operation| {

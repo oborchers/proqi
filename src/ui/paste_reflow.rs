@@ -10,6 +10,8 @@ use crate::ports::{
 
 mod classify;
 mod isolated;
+mod projection;
+pub(super) use projection::position_changes;
 #[cfg(test)]
 mod tests;
 
@@ -138,27 +140,22 @@ fn ranges_intersect(left: &Range<usize>, right: &Range<usize>) -> bool {
     left.start < right.end && right.start < left.end
 }
 
-fn transform_indented_group(group: &str, _newline: &str) -> String {
+fn transform_indented_group(group: &str, newline: &str) -> String {
     let lines = logical_lines(group);
-    let prefix_end = lines.first().map_or(0, |line| {
-        whitespace_prefix(&group[line.start..line.content_end])
-    });
-    let mut output = String::from(&group[..prefix_end]);
-    output.push_str(
-        &lines
-            .iter()
-            .map(|line| {
-                let text = &group[line.start..line.content_end];
-                collapse_inline(
-                    &text[whitespace_prefix(text)..],
-                    line.end > line.content_end,
-                )
-            })
-            .filter(|line| !line.is_empty())
-            .collect::<Vec<_>>()
-            .join(" "),
-    );
-    output
+    lines
+        .iter()
+        .filter_map(|line| {
+            let text = &group[line.start..line.content_end];
+            let prefix_end = whitespace_prefix(text);
+            let content = collapse_inline(&text[prefix_end..]);
+            if content.is_empty() {
+                None
+            } else {
+                Some(format!("{}{content}", &text[..prefix_end]))
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(newline)
 }
 
 fn replacement_range(
@@ -203,15 +200,10 @@ fn transform_group(group: &str, newline: &str) -> String {
     } else {
         lines
             .iter()
-            .map(|line| {
-                collapse_inline(
-                    &group[line.start..line.content_end],
-                    line.end > line.content_end,
-                )
-            })
+            .map(|line| collapse_inline(&group[line.start..line.content_end]))
             .filter(|line| !line.is_empty())
             .collect::<Vec<_>>()
-            .join(" ")
+            .join(newline)
     }
 }
 
@@ -230,48 +222,30 @@ fn transform_list_group(group: &str, lines: &[LogicalLine], newline: &str) -> St
             output.push(
                 lines[prose_start..index]
                     .iter()
-                    .map(|line| {
-                        collapse_inline(
-                            &group[line.start..line.content_end],
-                            line.end > line.content_end,
-                        )
-                    })
+                    .map(|line| collapse_inline(&group[line.start..line.content_end]))
                     .filter(|line| !line.is_empty())
                     .collect::<Vec<_>>()
-                    .join(" "),
+                    .join(newline),
             );
             continue;
         };
         let mut item = String::from(&text[..marker.prefix_len()]);
-        item.push_str(&collapse_inline(
-            marker.content(),
-            lines[index].end > lines[index].content_end,
-        ));
+        item.push_str(&collapse_inline(marker.content()));
+        output.push(item);
         index += 1;
         while index < lines.len()
             && is_aligned_continuation(group, lines[index], marker.content_column())
         {
             let continuation = &group[lines[index].start..lines[index].content_end];
-            let normalized = collapse_inline(
-                &continuation[whitespace_prefix(continuation)..],
-                lines[index].end > lines[index].content_end,
-            );
-            append_continuation(&mut item, &normalized);
+            let prefix_end = whitespace_prefix(continuation);
+            let normalized = collapse_inline(&continuation[prefix_end..]);
+            if !normalized.is_empty() {
+                output.push(format!("{}{normalized}", &continuation[..prefix_end]));
+            }
             index += 1;
         }
-        output.push(item);
     }
     output.join(newline)
-}
-
-fn append_continuation(item: &mut String, continuation: &str) {
-    if continuation.is_empty() {
-        return;
-    }
-    if !item.ends_with([' ', '\t']) {
-        item.push(' ');
-    }
-    item.push_str(continuation);
 }
 
 fn is_aligned_continuation(group: &str, line: LogicalLine, column: usize) -> bool {
@@ -281,16 +255,11 @@ fn is_aligned_continuation(group: &str, line: LogicalLine, column: usize) -> boo
         && indentation_columns(&text[..whitespace_prefix(text)]) == column
 }
 
-fn collapse_inline(line: &str, strip_hard_break: bool) -> String {
+fn collapse_inline(line: &str) -> String {
     let trimmed = line.trim_matches([' ', '\t']);
-    let without_hard_break = if strip_hard_break {
-        trimmed.strip_suffix('\\').unwrap_or(trimmed)
-    } else {
-        trimmed
-    };
-    let mut output = String::with_capacity(without_hard_break.len());
+    let mut output = String::with_capacity(trimmed.len());
     let mut pending_space = false;
-    for character in without_hard_break.chars() {
+    for character in trimmed.chars() {
         if matches!(character, ' ' | '\t') {
             pending_space = !output.is_empty();
         } else {

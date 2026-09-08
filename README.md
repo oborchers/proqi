@@ -160,7 +160,8 @@ configuration.
 | `Primary+Enter` / `s`; `Primary+Shift+Enter` / `Shift+S`; then arrows or `h` / `j` / `k` / `l` if needed | Submit and remove after acceptance; submit and keep |
 | `Primary+Z` / `u` | Undo a board operation |
 | `Primary+Shift+Z` / `Primary+Y` | **Redo a board operation** |
-| `Primary+Shift+V` / `Shift+P` | Paste and reflow copied prose |
+| `Primary+Shift+V` / `Shift+P` | Paste and clean up spacing |
+| `f` | Clean up spacing in the focused thought |
 | `c`; `/`; `:`; `i`; `?` | Collapse; search; commands; Screenshot Inbox; help |
 | `Esc`; `Primary+Q` / `q` | Clear selection; exit after durable flush |
 
@@ -173,7 +174,8 @@ configuration.
 | `Primary+Shift+U` | Delete containing sentence |
 | `Primary+Z`; `Primary+Shift+Z` / `Primary+Y` | Undo; redo |
 | `Primary+C` / `X`; `Primary+V` | Native copy / safe cut; paste exactly |
-| `Primary+Shift+V` | Paste and reflow copied prose |
+| `Primary+Shift+V` | Paste and clean up spacing |
+| `Ctrl+Shift+F` | Clean up spacing in the complete active thought |
 | macOS: `Cmd+←` / `→` | Move to the current wrapped visual-row start / end |
 | macOS: `Option+←` / `→`; elsewhere: `Ctrl+←` / `→` | Move by word |
 | `Shift` + movement | Extend text selection |
@@ -248,11 +250,11 @@ captured named-key or CSI-u spellings. Exact `Control` aliases can instead be
 configured for one chosen meaning because Control remains independent from
 Primary on macOS.
 
-Exact paste is always the default. Explicit paste and reflow joins copied prose
-lines, collapses repeated spaces and tabs, and reduces blank runs to one paragraph
-break. It preserves recognized lists and leaves code, tables, quotes, paths,
-URLs, controls, and annotated semantic ranges unchanged. Large-paste folds are
-recomputed from the transformed content.
+Exact paste is always the default. Explicit spacing cleanup preserves authored
+line breaks, collapses repeated spaces and tabs, and reduces multiple blank lines
+to one paragraph break. It preserves recognized list structure and leaves code,
+tables, quotes, paths, URLs, controls, and annotated semantic ranges unchanged.
+Large-paste folds are recomputed from the transformed content.
 
 Mouse input covers the same core workflow. Images, files, and large pastes fold
 into compact annotations while their content stays intact. In Edit mode, an

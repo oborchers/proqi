@@ -59,6 +59,8 @@ pub enum BoardOperationKind {
     Split,
     /// Extract one exact editor selection into a neighboring thought.
     Extract,
+    /// Reflow one existing thought in place.
+    Reflow,
     /// Merge a contiguous board selection into its first thought.
     Merge,
 }

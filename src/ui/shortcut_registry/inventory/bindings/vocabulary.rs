@@ -29,6 +29,8 @@ pub(in crate::ui::shortcut_registry) const KEYBOARD_CONTEXTS: &[Context] = &[
 ];
 
 pub(super) const FIXED_KEYS: &[LogicalKey] = &[
+    LogicalKey::Character('f'),
+    LogicalKey::Character('F'),
     LogicalKey::Character('a'),
     LogicalKey::Character('A'),
     LogicalKey::Character('c'),

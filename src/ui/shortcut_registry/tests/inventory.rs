@@ -74,7 +74,7 @@ fn compact_help_chooses_one_shortest_alias_per_action() {
 fn every_commands_entry_has_one_matching_registry_descriptor() {
     let registry = ShortcutRegistry::resolve(&KeyBindings::default(), ShortcutPlatform::Portable)
         .expect("valid registry");
-    assert_eq!(Action::COMMANDS.len(), 52);
+    assert_eq!(Action::COMMANDS.len(), 53);
     for (order, (action, label)) in Action::COMMANDS.into_iter().enumerate() {
         let descriptor = registry.descriptor(action).expect("Commands descriptor");
         assert_eq!(

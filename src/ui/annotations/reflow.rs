@@ -4,7 +4,7 @@ use unicode_segmentation::UnicodeSegmentation as _;
 
 use crate::{
     domain::{ContentAnnotation, ContentAnnotationKind},
-    ports::editor::{OffsetAffinity, TextChange},
+    ports::editor::{OffsetAffinity, TextChange, TextChangeSet},
 };
 
 use super::{LARGE_PASTE_GRAPHEMES, LARGE_PASTE_LINES, PastePayload};
@@ -18,8 +18,23 @@ pub(in crate::ui) enum PasteReflow {
     Empty,
 }
 
+pub(in crate::ui) struct ReflowProjection {
+    pub(in crate::ui) outcome: PasteReflow,
+    pub(in crate::ui) changes: TextChangeSet,
+    pub(in crate::ui) annotation_origins: Vec<(usize, usize)>,
+}
+
+struct ReflowedAnnotations {
+    annotations: Vec<ContentAnnotation>,
+    origins: Vec<(usize, usize)>,
+}
+
 impl PastePayload {
     pub(in crate::ui) fn reflow(&self) -> Result<PasteReflow, ()> {
+        self.reflow_with_changes().map(|result| result.outcome)
+    }
+
+    pub(in crate::ui) fn reflow_with_changes(&self) -> Result<ReflowProjection, ()> {
         crate::domain::validate_annotations(&self.content, &self.annotations).map_err(|_| ())?;
         let protected = self
             .annotations
@@ -37,29 +52,45 @@ impl PastePayload {
             crate::ui::paste_reflow::reflow_text_isolated(&self.content, &protected, &isolated)
                 .map_err(|_| ())?;
         if transformed.content.is_empty() {
-            return Ok(PasteReflow::Empty);
+            return Ok(ReflowProjection {
+                outcome: PasteReflow::Empty,
+                changes: transformed.changes,
+                annotation_origins: Vec::new(),
+            });
         }
-        let annotations = reflow_annotations(self, &transformed).map_err(|_| ())?;
-        if transformed.changes.is_empty() && annotations == self.annotations {
-            return Ok(PasteReflow::Unchanged);
-        }
-        Ok(PasteReflow::Changed(Self {
-            content: transformed.content,
+        let ReflowedAnnotations {
             annotations,
-            verified_paths: self.verified_paths.clone(),
-            preserve_owned_annotations: self.preserve_owned_annotations,
-        }))
+            origins,
+        } = reflow_annotations(self, &transformed).map_err(|_| ())?;
+        if transformed.changes.is_empty() && annotations == self.annotations {
+            return Ok(ReflowProjection {
+                outcome: PasteReflow::Unchanged,
+                changes: transformed.changes,
+                annotation_origins: origins,
+            });
+        }
+        Ok(ReflowProjection {
+            outcome: PasteReflow::Changed(Self {
+                content: transformed.content,
+                annotations,
+                verified_paths: self.verified_paths.clone(),
+                preserve_owned_annotations: self.preserve_owned_annotations,
+            }),
+            changes: transformed.changes,
+            annotation_origins: origins,
+        })
     }
 }
 
 fn reflow_annotations(
     payload: &PastePayload,
     transformed: &crate::ui::paste_reflow::ReflowedText,
-) -> Result<Vec<ContentAnnotation>, crate::domain::DomainError> {
+) -> Result<ReflowedAnnotations, crate::domain::DomainError> {
     let mut mapper = OffsetMapper::new(transformed.changes.as_slice());
     let mut annotations = Vec::with_capacity(payload.annotations.len());
+    let mut origins = Vec::with_capacity(payload.annotations.len());
     let mut isolated = transformed.isolated.iter();
-    for annotation in &payload.annotations {
+    for (index, annotation) in payload.annotations.iter().enumerate() {
         let large = is_large(annotation);
         let (start, end) = if large {
             let (old, new) = isolated
@@ -80,6 +111,7 @@ fn reflow_annotations(
         };
         if large {
             if let Some(annotation) = large_paste_annotation(&transformed.content, start, end) {
+                origins.push((index, annotations.len()));
                 annotations.push(annotation);
             }
         } else {
@@ -88,6 +120,7 @@ fn reflow_annotations(
             if before.is_none() || before != after {
                 return Err(crate::domain::DomainError::InvalidContentAnnotation);
             }
+            origins.push((index, annotations.len()));
             annotations.push(ContentAnnotation {
                 start,
                 end,
@@ -99,7 +132,10 @@ fn reflow_annotations(
         return Err(crate::domain::DomainError::InvalidContentAnnotation);
     }
     crate::domain::validate_annotations(&transformed.content, &annotations)?;
-    Ok(annotations)
+    Ok(ReflowedAnnotations {
+        annotations,
+        origins,
+    })
 }
 
 struct OffsetMapper<'a> {

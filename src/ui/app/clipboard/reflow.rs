@@ -1,4 +1,4 @@
-//! Explicit reflow paste policy layered over the exact clipboard transaction.
+//! Explicit spacing-cleanup paste policy layered over the exact clipboard transaction.
 
 use crate::{
     application::{Effect, InteractionMode},
@@ -55,25 +55,25 @@ impl BoardApp {
             Ok(PasteReflow::Changed(reflowed)) => {
                 let effects = self.paste_payload(reflowed, ids, clock);
                 if !effects.is_empty() {
-                    self.set_success("pasted and reflowed");
+                    self.set_success("pasted and cleaned up");
                 }
                 effects
             }
             Ok(PasteReflow::Unchanged) => {
                 let effects = self.paste_payload(payload, ids, clock);
                 if !effects.is_empty() {
-                    self.set_warning("pasted exactly; nothing to reflow");
+                    self.set_warning("pasted exactly; spacing already clean");
                 }
                 effects
             }
             Ok(PasteReflow::Empty) => {
-                self.set_warning("nothing remained after reflow");
+                self.set_warning("nothing remained after cleanup");
                 Vec::new()
             }
             Err(()) => {
                 let effects = self.paste_payload(payload, ids, clock);
                 if !effects.is_empty() {
-                    self.set_warning("could not reflow; pasted exactly");
+                    self.set_warning("could not clean up spacing; pasted exactly");
                 }
                 effects
             }

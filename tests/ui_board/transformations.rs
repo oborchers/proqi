@@ -381,7 +381,7 @@ fn thought_transformations_are_discoverable_from_an_editor_selection() {
     }));
     fixture.input(crate::key_input(UiKey::Escape));
     fixture.input(crate::key_input(UiKey::Character(':')));
-    for character in "thought".chars() {
+    for character in "clean up spacing".chars() {
         fixture.input(crate::key_input(UiKey::Character(character)));
     }
     insta::assert_snapshot!(super::snapshot_support::snapshot_buffer(

@@ -167,6 +167,7 @@ INSERT INTO migration_history(version, applied_at) VALUES (11, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (12, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (13, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (14, 0);
+INSERT INTO migration_history(version, applied_at) VALUES (15, 0);
 ";
 
 pub(super) const MIGRATION_2: &str = r"
@@ -364,4 +365,10 @@ pub(super) const MIGRATION_14: &str = r"
 ALTER TABLE sessions ADD COLUMN attachment_image_high INTEGER NOT NULL DEFAULT 0 CHECK (attachment_image_high >= 0);
 ALTER TABLE sessions ADD COLUMN attachment_file_high INTEGER NOT NULL DEFAULT 0 CHECK (attachment_file_high >= 0);
 INSERT INTO migration_history(version, applied_at) VALUES (14, 0);
+";
+
+// Register the Reflow operation kind after the attachment numbering schema.
+pub(super) const MIGRATION_15: &str = r"
+UPDATE schema_meta SET schema_version = 15, storage_protocol = 14;
+INSERT INTO migration_history(version, applied_at) VALUES (15, 0);
 ";

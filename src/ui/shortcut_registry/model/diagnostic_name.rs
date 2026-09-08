@@ -97,6 +97,7 @@ impl ShortcutActionId {
             Cut => "Cut",
             PasteExact => "PasteExact",
             PasteReflow => "PasteReflow",
+            ReflowThought => "ReflowThought",
             SelectAll => "SelectAll",
             Duplicate => "Duplicate",
             Undo => "Undo",

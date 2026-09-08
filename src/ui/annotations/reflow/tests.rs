@@ -19,10 +19,13 @@ fn changed(payload: &PastePayload) -> PastePayload {
 fn reflow_drops_a_large_fold_that_falls_below_both_thresholds() {
     let eleven_lines = (0..11).map(|_| "line").collect::<Vec<_>>().join("\n");
     assert!(PastePayload::text(eleven_lines).annotations.is_empty());
-    let content = (0..12)
-        .map(|index| format!("short line {index}"))
-        .collect::<Vec<_>>()
-        .join("\n");
+    let content = format!(
+        "\n\n{}",
+        (0..10)
+            .map(|index| format!("short line {index}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
     let payload = PastePayload::text(content);
     assert!(matches!(
         payload.annotations.as_slice(),
@@ -32,14 +35,14 @@ fn reflow_drops_a_large_fold_that_falls_below_both_thresholds() {
         }]
     ));
     let result = changed(&payload);
-    assert_eq!(result.content.lines().count(), 1);
+    assert_eq!(result.content.lines().count(), 10);
     assert!(result.annotations.is_empty());
 }
 
 #[test]
 fn verified_attachment_paths_survive_changes_in_a_neighboring_prose_block() {
     let path = "/tmp/verified image.png";
-    let content = format!("first\nparagraph\n\n{path}");
+    let content = format!("first  line\nparagraph\n\n{path}");
     let start = content.find(path).expect("path");
     let payload = PastePayload::attachments(
         content,
@@ -82,7 +85,7 @@ fn reflow_retains_and_recomputes_a_large_fold_at_the_grapheme_boundary() {
             assert!(matches!(
                 result.annotations[0].kind,
                 ContentAnnotationKind::LargePaste {
-                    lines: 1,
+                    lines: 2,
                     graphemes: 1_200
                 }
             ));
@@ -109,7 +112,7 @@ fn protected_semantic_annotations_rebase_without_changing_their_bytes() {
     let result = changed(&payload);
     assert_eq!(
         result.content,
-        "first line wraps here\n\n@agent  stays\nexact"
+        "first line\nwraps here\n\n@agent  stays\nexact"
     );
     assert_eq!(
         &result.content[result.annotations[0].start..result.annotations[0].end],
@@ -232,7 +235,7 @@ fn protected_boundary_whitespace_survives_next_to_an_isolated_large_fold() {
 
 #[test]
 fn protected_shortcut_emphasis_survives_reflow_and_invalid_metadata_fails_closed() {
-    let content = "first\nparagraph\n\nCmd+Shift+V  remains".to_owned();
+    let content = "first  line\nparagraph\n\nCmd+Shift+V  remains".to_owned();
     let start = content.find("Cmd").expect("shortcut");
     let valid = PastePayload {
         content: content.clone(),
@@ -284,8 +287,12 @@ fn partial_large_fold_never_absorbs_neighboring_text() {
     };
     assert_eq!(fold.start, prefix.len());
     assert_eq!(&result.content[fold.end..], format!(" {suffix}"));
-    assert!(!result.content[fold.start..fold.end].contains('\n'));
+    assert!(result.content[fold.start..fold.end].contains('\n'));
     assert!(!result.content[fold.start..fold.end].ends_with(' '));
+    assert!(matches!(
+        fold.kind,
+        ContentAnnotationKind::LargePaste { lines: 2, .. }
+    ));
 }
 
 #[test]
@@ -316,19 +323,67 @@ fn partial_large_fold_boundaries_receive_normal_whitespace_cleanup() {
         std::slice::from_ref(&(start..end)),
     )
     .expect("boundary reflow succeeds");
-    let expected = format!("{prefix}\n\n{} wrapped\n\n{suffix}", "a".repeat(1_200));
+    let expected = format!("{prefix}\n\n{}\nwrapped\n\n{suffix}", "a".repeat(1_200));
     assert_eq!(transformed.content, expected);
-    let annotations = super::reflow_annotations(&payload, &transformed)
+    let super::ReflowedAnnotations {
+        annotations,
+        origins,
+    } = super::reflow_annotations(&payload, &transformed)
         .expect("boundary annotations remain valid");
+    assert_eq!(origins, [(0, 0)]);
     let [fold] = annotations.as_slice() else {
         panic!("expected one retained fold");
     };
     assert_eq!(
         &transformed.content[fold.start..fold.end],
-        format!("{} wrapped", "a".repeat(1_200))
+        format!("{}\nwrapped", "a".repeat(1_200))
     );
     assert_eq!(&transformed.content[..fold.start], format!("{prefix}\n\n"));
     assert_eq!(&transformed.content[fold.end..], format!("\n\n{suffix}"));
+}
+
+#[test]
+fn partial_large_fold_preserves_one_lf_or_crlf_on_both_boundaries() {
+    for newline in ["\n", "\r\n"] {
+        let large = format!("{}{newline}wrapped", "a".repeat(1_200));
+        let content = format!("prefix{newline}{large}{newline}suffix");
+        let start = content.find(&large).expect("large start");
+        let end = start + large.len();
+        let payload = PastePayload {
+            content,
+            annotations: vec![ContentAnnotation {
+                start,
+                end,
+                kind: ContentAnnotationKind::LargePaste {
+                    lines: 2,
+                    graphemes: large.graphemes(true).count(),
+                },
+            }],
+            verified_paths: Vec::new(),
+            preserve_owned_annotations: false,
+        };
+
+        let transformed = crate::ui::paste_reflow::reflow_text_isolated(
+            &payload.content,
+            &[],
+            std::slice::from_ref(&(start..end)),
+        )
+        .expect("boundary cleanup succeeds");
+        assert_eq!(transformed.content, payload.content);
+        let annotations = super::reflow_annotations(&payload, &transformed)
+            .expect("boundary annotation remains valid")
+            .annotations;
+        let [fold] = annotations.as_slice() else {
+            panic!("expected one retained fold");
+        };
+        assert_eq!(
+            &transformed.content[..fold.start],
+            format!("prefix{newline}")
+        );
+        assert_eq!(&transformed.content[fold.end..], format!("{newline}suffix"));
+        assert_eq!(fold.start, start);
+        assert_eq!(fold.end, end);
+    }
 }
 
 #[test]
@@ -362,11 +417,11 @@ fn many_partial_large_folds_reflow_without_crossing_boundaries() {
     let result = changed(&payload);
     assert_eq!(result.annotations.len(), 64);
     for fold in &result.annotations {
-        assert!(!result.content[fold.start..fold.end].contains('\n'));
+        assert!(result.content[fold.start..fold.end].contains('\n'));
         assert!(matches!(
             fold.kind,
             ContentAnnotationKind::LargePaste {
-                lines: 1,
+                lines: 2,
                 graphemes: 1_201
             }
         ));

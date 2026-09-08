@@ -293,7 +293,7 @@ pub(super) fn downgrade_to_legacy(fixture: &DatabaseFixture) {
                 .expect("legacy payload");
         }
     }
-    connection.execute_batch("ALTER TABLE sessions DROP COLUMN attachment_image_high; ALTER TABLE sessions DROP COLUMN attachment_file_high; DELETE FROM migration_history WHERE version = 14; UPDATE schema_meta SET schema_version = 13, storage_protocol = 12;").expect("legacy schema");
+    connection.execute_batch("ALTER TABLE sessions DROP COLUMN attachment_image_high; ALTER TABLE sessions DROP COLUMN attachment_file_high; DELETE FROM migration_history WHERE version >= 14; UPDATE schema_meta SET schema_version = 13, storage_protocol = 12;").expect("legacy schema");
 }
 
 fn strip_ordinals(value: &mut serde_json::Value) {

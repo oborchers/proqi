@@ -23,7 +23,7 @@ mod update;
 mod update_coordination;
 
 pub use action::Action;
-pub(crate) use action::{OwnedThoughtCreation, OwnedThoughtEdit};
+pub(crate) use action::{OwnedThoughtCreation, OwnedThoughtEdit, OwnedThoughtReflow};
 pub use admission::{PendingMutationIntent, PendingMutationIntents};
 pub use attachments::{
     AttachmentAccessibilityState, AttachmentPreflightOutcome, AttachmentPresentationState,

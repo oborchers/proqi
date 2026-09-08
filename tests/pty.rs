@@ -125,3 +125,7 @@ mod watchdog;
 #[cfg(target_os = "macos")]
 #[path = "pty/versioned_keymap.rs"]
 mod versioned_keymap;
+
+#[cfg(target_os = "macos")]
+#[path = "pty/reflow_in_place.rs"]
+mod reflow_in_place;

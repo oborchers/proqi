@@ -77,6 +77,9 @@ pub enum Action {
         /// Event time.
         at: Timestamp,
     },
+    /// Apply a Proqi-owned reflow as one Board history operation.
+    #[doc(hidden)]
+    ReflowThought(OwnedThoughtReflow),
     /// Split one exact thought at a UTF-8 byte boundary.
     SplitThought {
         /// Source thought.
@@ -352,4 +355,16 @@ impl OwnedThoughtEdit {
             at,
         }
     }
+}
+
+/// Sealed exact replacement produced by the annotation-safe reflow owner.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct OwnedThoughtReflow {
+    pub(crate) thought_id: ThoughtId,
+    pub(crate) operation_id: OperationId,
+    pub(crate) before_content: String,
+    pub(crate) before_annotations: Vec<ContentAnnotation>,
+    pub(crate) after_content: String,
+    pub(crate) after_annotations: Vec<ContentAnnotation>,
+    pub(crate) at: Timestamp,
 }
