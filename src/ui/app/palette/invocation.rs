@@ -10,16 +10,26 @@ use super::super::{BoardApp, palette_handoff::EditorSelectionHandoff};
 pub(super) struct CommandInvocation {
     submit_supported: bool,
     plain_newline_supported: bool,
+    board_thought: BoardThoughtAvailability,
     screenshot_action: ScreenshotPaletteAction,
     screenshot_retry: bool,
     selection_handoff: Option<EditorSelectionHandoff>,
     merge_handoff: Option<Vec<Thought>>,
 }
 
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum BoardThoughtAvailability {
+    Available,
+    Unavailable,
+}
+
 impl CommandInvocation {
     pub(super) fn available(&self, availability: CommandAvailability) -> bool {
         match availability {
             CommandAvailability::Always => true,
+            CommandAvailability::BoardThought => {
+                self.board_thought == BoardThoughtAvailability::Available
+            }
             CommandAvailability::Submission => self.submit_supported,
             CommandAvailability::Editor => self.plain_newline_supported,
             CommandAvailability::ScreenshotRetry => self.screenshot_retry,
@@ -66,6 +76,12 @@ impl CommandInvocation {
 }
 
 impl BoardApp {
+    pub(super) fn board_thought_command_available(&self) -> bool {
+        matches!(self.state.mode, crate::application::InteractionMode::Board)
+            && !self.insertion_focused()
+            && self.state.focused_thought.is_some()
+    }
+
     pub(super) fn capture_command_invocation(&mut self) -> CommandInvocation {
         let merge_handoff = (self.selection_len() >= 2).then(|| {
             self.action_thought_ids()
@@ -77,6 +93,11 @@ impl BoardApp {
             submit_supported: self.supports_submission(),
             plain_newline_supported: !self.insertion_focused()
                 && self.state.focused_thought.is_some(),
+            board_thought: if self.board_thought_command_available() {
+                BoardThoughtAvailability::Available
+            } else {
+                BoardThoughtAvailability::Unavailable
+            },
             screenshot_action: self.screenshot_palette_action(),
             screenshot_retry: self.screenshot_retry_ready(),
             selection_handoff: self.palette_selection_handoff.take(),

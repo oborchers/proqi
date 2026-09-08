@@ -139,6 +139,43 @@ const MIXED_LONG_THOUGHT_SCROLL_WORKFLOW: &str = r#"
     exit [lindex $result 3]
 "#;
 
+const EXPANDED_UP_BOUNDARY_WORKFLOW: &str = r#"
+    log_user 0
+    set timeout 15
+    proc drain_output {} {
+        expect -timeout 0 {
+            -re ".+" { exp_continue }
+            timeout {}
+            eof { exit 92 }
+        }
+    }
+    spawn $env(PROQI_TEST_BINARY) --state-dir $env(PROQI_TEST_STATE) -r $env(PROQI_TEST_SESSION)
+    expect -exact "\x1b\[?1049h"
+    stty rows 12 columns 36
+    after 300
+    send "j"
+    send "c"
+    after 100
+    for {set i 0} {$i < 100} {incr i} {
+        send -- "\x1b\[<65;8;6M"
+        drain_output
+    }
+    after 200
+    send -- "\x1b\[A"
+    after 150
+    send "\r"
+    send "!"
+    after 200
+    send "\x1b"
+    after 200
+    send "q"
+    expect -exact "\x1b\[0 q"
+    expect -exact "\x1b\[?1049l"
+    expect eof
+    catch wait result
+    exit [lindex $result 3]
+"#;
+
 #[test]
 fn collapsed_long_thought_mouse_entry_survives_cycles_scroll_and_resize() {
     let state = tempfile::tempdir().expect("temporary state");
@@ -237,6 +274,61 @@ fn mixed_long_thought_presentations_survive_mouse_scroll_boundaries_and_reflow()
         actual,
         contents.iter().map(String::as_str).collect::<Vec<_>>()
     );
+}
+
+#[test]
+fn plain_up_stays_in_a_scrolled_expanded_thought_in_a_real_pty() {
+    let state = tempfile::tempdir().expect("temporary state");
+    let binary = env!("CARGO_BIN_EXE_proqi");
+    let created = json_command(binary, state.path(), &[]);
+    let session = created["data"]["session_id"]
+        .as_str()
+        .expect("session ID")
+        .to_owned();
+    let long = (0..10)
+        .map(|row| {
+            format!(
+                "ROW-{row:02} synthetic expanded navigation content wraps repeatedly at narrow width"
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    add_thought(binary, state.path(), &session, "previous synthetic thought");
+    add_thought(binary, state.path(), &session, &long);
+    let seeded = json_command(binary, state.path(), &["thoughts", "list", &session]);
+    let long_id = seeded["data"]["thoughts"][1]["id"]
+        .as_str()
+        .expect("long thought ID");
+    let _collapsed = json_command(
+        binary,
+        state.path(),
+        &[
+            "thoughts",
+            "collapse",
+            &session,
+            long_id,
+            "--collapsed",
+            "true",
+        ],
+    );
+
+    let status = expect_command()
+        .args(["-c", EXPANDED_UP_BOUNDARY_WORKFLOW])
+        .env("PROQI_TEST_BINARY", binary)
+        .env("PROQI_TEST_STATE", state.path())
+        .env("PROQI_TEST_SESSION", &session)
+        .status()
+        .expect("run expanded Up-boundary PTY workflow");
+    assert!(
+        status.success(),
+        "expanded Up-boundary PTY failed: {status}"
+    );
+
+    let thoughts = json_command(binary, state.path(), &["thoughts", "list", &session]);
+    let thoughts = thoughts["data"]["thoughts"].as_array().expect("thoughts");
+    assert_eq!(thoughts[1]["presentation"], "expanded");
+    assert_eq!(thoughts[0]["content"], "previous synthetic thought");
+    assert_eq!(thoughts[1]["content"], format!("{long}!"));
 }
 
 fn add_thought(binary: &str, state: &std::path::Path, session: &str, content: &str) {

@@ -15,7 +15,7 @@ mod herdr_fixture;
 
 #[test]
 fn fake_executables_prove_qualified_and_provisional_semantic_cli_contracts() {
-    for protocol in [19, 20, 21] {
+    for protocol in [19, 20, 21, 22] {
         prove_protocol(protocol);
     }
 }

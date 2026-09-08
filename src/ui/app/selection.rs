@@ -204,6 +204,46 @@ impl BoardApp {
         }
     }
 
+    pub(super) fn focus_thought_boundary(&mut self, last: bool) {
+        let live = self.state.board.live_thoughts();
+        let target = if last { live.last() } else { live.first() };
+        let Some(target) = target.map(|thought| thought.id) else {
+            return;
+        };
+        self.clear_range_for_focus_change();
+        self.insertion_focus = super::InsertionFocus::Inactive;
+        self.board_viewport = self.board_viewport.follow_focus();
+        self.scroll_geometry = None;
+        let _effects = self.reduce(Action::FocusThought(Some(target)));
+        self.hovered = None;
+        self.layout = None;
+    }
+
+    pub(super) fn extend_range_to_boundary(&mut self, last: bool) {
+        let live = self.state.board.live_thoughts();
+        let endpoint = if last { live.last() } else { live.first() };
+        if let Some(endpoint) = endpoint.map(|thought| thought.id) {
+            self.extend_range_to(endpoint);
+        }
+    }
+
+    pub(super) fn apply_thought_boundary_action(
+        &mut self,
+        action: crate::ui::ShortcutActionId,
+    ) -> bool {
+        use crate::ui::ShortcutActionId as Shortcut;
+        match action {
+            Shortcut::FocusFirst if self.range_latched() => self.extend_range_to_boundary(false),
+            Shortcut::FocusLast if self.range_latched() => self.extend_range_to_boundary(true),
+            Shortcut::FocusFirst => self.focus_thought_boundary(false),
+            Shortcut::FocusLast => self.focus_thought_boundary(true),
+            Shortcut::ExtendFirst => self.extend_range_to_boundary(false),
+            Shortcut::ExtendLast => self.extend_range_to_boundary(true),
+            _ => return false,
+        }
+        true
+    }
+
     pub(super) fn move_focus_outside_range(&mut self, delta: isize) {
         self.clear_range_for_focus_change();
         self.move_focus(delta);

@@ -8,6 +8,7 @@ use crate::{
 };
 
 mod anchor;
+mod focus;
 #[cfg(test)]
 mod tests;
 
@@ -69,6 +70,8 @@ pub(in crate::ui) struct ScrollGeometry {
     pub(in crate::ui) current: ScrollAnchor,
     pub(in crate::ui) previous: Option<ScrollAnchor>,
     pub(in crate::ui) next: Option<ScrollAnchor>,
+    focused_previous: Option<ScrollAnchor>,
+    focused_next: Option<ScrollAnchor>,
     pub(in crate::ui) maximum: ScrollAnchor,
     pub(in crate::ui) maximum_offset: usize,
 }
@@ -229,6 +232,8 @@ impl BoardFlow {
         let current = self.anchor_at(offset);
         let previous = (offset > 0).then(|| self.anchor_at(offset - 1));
         let next = (offset < maximum).then(|| self.anchor_at(offset + 1));
+        let (focused_previous, focused_next) =
+            focus::neighbors(self, offset, usize::from(viewport_height), maximum, focused);
         let max_anchor = self.anchor_at(maximum);
         let first = self.first_at(offset);
         let max_first = self.first_at(maximum);
@@ -241,6 +246,8 @@ impl BoardFlow {
                 current,
                 previous,
                 next,
+                focused_previous,
+                focused_next,
                 maximum: max_anchor,
                 maximum_offset: maximum,
             },

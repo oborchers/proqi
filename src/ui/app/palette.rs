@@ -319,6 +319,8 @@ impl BoardApp {
             BoardCommand::New => {
                 self.create(crate::ui::PastePayload::text(String::new()), ids, clock)
             }
+            BoardCommand::InsertAbove => self.insert_relative_to_focus(false, ids, clock),
+            BoardCommand::InsertBelow => self.insert_relative_to_focus(true, ids, clock),
             BoardCommand::RenameSession => {
                 self.begin_session_rename();
                 Vec::new()
@@ -335,6 +337,14 @@ impl BoardApp {
             BoardCommand::Redo => self.history(ids, clock, false),
             BoardCommand::MoveUp => self.reorder(ids, clock, -1),
             BoardCommand::MoveDown => self.reorder(ids, clock, 1),
+            BoardCommand::FocusFirst => {
+                self.focus_thought_boundary(false);
+                Vec::new()
+            }
+            BoardCommand::FocusLast => {
+                self.focus_thought_boundary(true);
+                Vec::new()
+            }
             BoardCommand::Collapse => self.collapse(ids, clock),
             BoardCommand::Help => {
                 self.help = true;
