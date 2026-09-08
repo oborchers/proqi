@@ -135,7 +135,7 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
         settings.ui.keyboard_enhancement,
         settings.ui.mouse_capture,
     )?;
-    let panic_hook = PanicHookGuard::install();
+    let panic_hook = PanicHookGuard::install(settings.ui.mouse_capture);
     let termination = TerminationGuard::register()?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
     let presentation_source = format!("proqi-{}", session_lease.info().instance_id);

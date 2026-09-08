@@ -32,7 +32,7 @@ pub(crate) fn pick_session(
         settings.ui.keyboard_enhancement,
         settings.ui.mouse_capture,
     ))?;
-    let panic_hook = PanicHookGuard::install();
+    let panic_hook = PanicHookGuard::install(settings.ui.mouse_capture);
     let termination = TerminationGuard::register()?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
     let input = InputLane::spawn();
