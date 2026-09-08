@@ -1536,7 +1536,7 @@ silently copy external files or rewrite canonical paths.
 
 `v0.1.0` implements this boundary against Herdr's structured schema
 and protocol discovery commands. One typed adapter policy accepts schema 1
-with the qualified protocols 19 and 20 plus the single provisional protocol 21,
+with the qualified protocols 19, 20, and 21 plus the single provisional protocol 22,
 requires the live snapshot to report the same protocol, and verifies the exact required `agent.prompt`
 request, parameters, `agent_prompted` receipt, agent identity, session, and
 state shapes. The policy tolerates additive unknown response fields but rejects
@@ -1568,7 +1568,7 @@ identity, stale or incomplete snapshots, and receipt mismatch. Label renames
 are accepted because labels are not address fields. Invocation references use a
 separate presentation projection and never become submission routes.
 
-Accepted Herdr protocols 19 through 21 acknowledge accepted text entry but do not
+Accepted Herdr protocols 19 through 22 acknowledge accepted text entry but do not
 guarantee a distinct prompt boundary when another sender submits concurrently.
 This is a known provider-contract limitation. Proqi retains target
 verification, receipt matching, durable journaling, and

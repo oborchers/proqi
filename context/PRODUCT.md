@@ -796,7 +796,7 @@ becomes follow-up input. Proqi verifies at submission time that the target
 exposes Herdr's semantic request and receipt contract. It never substitutes raw
 key injection.
 
-Accepted Herdr protocols 19 through 21 do not guarantee a distinct user-turn
+Accepted Herdr protocols 19 through 22 do not guarantee a distinct user-turn
 boundary when another sender submits concurrently. Overlapping inputs can
 therefore merge at the receiving harness even though Herdr returns an accepted
 receipt. Proqi treats this as a known integration limitation and preserves its
