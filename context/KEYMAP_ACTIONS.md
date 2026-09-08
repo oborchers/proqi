@@ -72,6 +72,10 @@ factory labels without requiring another presentation table.
 | `navigation.fast_next` | `board`, `compose`, `edit`, `help`, `commands`, `search`, `invocation`, `invocation_query`, `transfer`, `global_delivery_query`, `global_delivery_disposition`, `browser`, `browser_query`, `rename`, `browser_rename`, `update`, `screenshot`, `recovery`, `direction`, `release_highlights`, `insertion_boundary` | Ordinary |  |
 | `navigation.fast_extend_previous` | `board`, `compose`, `edit`, `help`, `commands`, `search`, `invocation`, `invocation_query`, `transfer`, `global_delivery_query`, `global_delivery_disposition`, `browser`, `browser_query`, `rename`, `browser_rename`, `update`, `screenshot`, `recovery`, `direction`, `release_highlights`, `insertion_boundary` | Ordinary |  |
 | `navigation.fast_extend_next` | `board`, `compose`, `edit`, `help`, `commands`, `search`, `invocation`, `invocation_query`, `transfer`, `global_delivery_query`, `global_delivery_disposition`, `browser`, `browser_query`, `rename`, `browser_rename`, `update`, `screenshot`, `recovery`, `direction`, `release_highlights`, `insertion_boundary` | Ordinary |  |
+| `board.first_thought` | `board`, `commands`, `insertion_boundary` | Ordinary | yes |
+| `board.last_thought` | `board`, `commands`, `insertion_boundary` | Ordinary | yes |
+| `board.range_first_thought` | `board`, `insertion_boundary` | Ordinary |  |
+| `board.range_last_thought` | `board`, `insertion_boundary` | Ordinary |  |
 | `editor.grapheme_back` | `compose`, `edit`, `commands`, `search`, `invocation`, `transfer`, `global_delivery_query` | Ordinary |  |
 | `editor.grapheme_forward` | `compose`, `edit`, `commands`, `search`, `invocation`, `transfer`, `global_delivery_query` | Ordinary |  |
 | `editor.word_back` | `compose`, `edit`, `commands`, `search`, `invocation`, `transfer`, `global_delivery_query` | Ordinary |  |
@@ -101,6 +105,8 @@ factory labels without requiring another presentation table.
 | `clipboard.paste_exact` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | Ordinary | yes |
 | `thought.reflow` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | Ordinary | yes |
 | `clipboard.paste_reflow` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | Ordinary | yes |
+| `thought.insert_above` | `board`, `commands`, `insertion_boundary` | Ordinary | yes |
+| `thought.insert_below` | `board`, `commands`, `insertion_boundary` | Ordinary | yes |
 | `selection.select_all` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | Ordinary | yes |
 | `board.duplicate` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | Ordinary | yes |
 | `history.undo` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | Ordinary | yes |

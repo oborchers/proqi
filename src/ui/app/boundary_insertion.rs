@@ -72,6 +72,37 @@ impl BoardApp {
         self.create_at(payload, insertion_index, ids, clock)
     }
 
+    pub(super) fn insert_relative_to_focus(
+        &mut self,
+        below: bool,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        if self.insertion_focused() {
+            self.set_warning("focus a thought before inserting above or below");
+            return Vec::new();
+        }
+        let Some(reference) = self.active_thought_id() else {
+            self.set_warning("focus a thought before inserting above or below");
+            return Vec::new();
+        };
+        if self.submission_locked(reference) {
+            self.set_warning("focused thought has a submission in progress");
+            return Vec::new();
+        }
+        let live = self.state.board.live_thoughts();
+        let Some(index) = live.iter().position(|thought| thought.id == reference) else {
+            self.set_warning("focused thought is no longer available");
+            return Vec::new();
+        };
+        self.create_at(
+            PastePayload::text(String::new()),
+            index.saturating_add(usize::from(below)),
+            ids,
+            clock,
+        )
+    }
+
     pub(super) fn at_first_thought(&self) -> bool {
         !self.insertion_focused()
             && self

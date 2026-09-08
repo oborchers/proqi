@@ -1,5 +1,6 @@
 //! Registry contract tests split by responsibility.
 
+mod boundaries;
 mod dispatch;
 mod edge_cases;
 mod inventory;
@@ -18,6 +19,7 @@ fn stroke(key: LogicalKey, modifiers: LogicalModifiers) -> KeyStroke {
     }
 }
 
+mod insertion_defaults;
 mod inspection;
 
 mod reflow;

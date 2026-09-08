@@ -1144,9 +1144,19 @@ configured character spellings: plain input moves focus, Shift extends an
 anchored range, and Primary+Shift reorders one thought. The macOS default graph
 also assigns exact Option+Shift to the same reorder actions so a
 terminal-consumed Command binding does not remove keyboard reordering. Other
-modifiers resolve to the base focus intention. At the insertion row, range and
-reorder are thought-only no-ops while focus retains the boundary policy. Page Up and Page
-Down are separate fast-navigation actions: they move five thoughts, and their
+modifiers resolve to the base focus intention unless the resolved graph owns an
+exact terminal-safe boundary action. Exact Control targets the first or last
+live thought. macOS Control+Shift extends the existing range anchor to that
+boundary, while portable Control+Shift retains Primary+Shift reordering. macOS
+Control plus `n` inserts below, while Control plus Shift plus `n` inserts above
+and accepts the terminal-compatible uppercase-without-Shift report. Portable
+Alt plus vertical direction retains relative insertion. Both paths use the
+canonical create operation. That operation clears Board selection, focuses the
+new editor, and retains one operation, persistence, undo, redo, and restart
+contract. Locked or stale references fail before mutation. At the insertion
+row, range, reorder, and relative insertion are thought-only no-ops while focus
+retains the boundary policy. Page Up and Page Down are separate fast-navigation
+actions: they move five thoughts, and their
 Shift variants extend an anchored range by five. They clamp to real thoughts
 and never turn into Board reorder commands. The registry resolves exact platform
 and context bindings before UI routing.
@@ -1193,6 +1203,15 @@ truthful fallback when a terminal does not forward the arrow chord distinctly.
 On macOS, Option plus horizontal arrows retains word movement. On other
 platforms, Ctrl plus horizontal arrows retains word movement, and adding
 Shift extends by word. Board navigation does not consume visual-row intentions.
+
+Complete-thought movement uses exact logical Control plus Up or Down on every
+platform. Adding Shift extends the existing editor selection anchor to byte zero
+or the complete content end. Logical-line movement prefers Control plus Left or
+Right on macOS and Alt plus Left or Right elsewhere. Adding Shift extends to the
+same logical-line endpoints. Named Home and End remain compatible aliases, but
+the terminal boundary never attributes a rewritten Command arrow to a physical
+Home or End key. Super and Meta remain macOS Primary spellings and do not
+impersonate these explicit Control defaults.
 
 One typed shortcut registry owns stable action identities, active contexts,
 macOS and portable defaults, compatible aliases, safety classification, Help
