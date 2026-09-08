@@ -203,7 +203,7 @@ impl BoardApp {
             self.layout = None;
         } else if let Some(highlights) = &mut self.release_highlights {
             highlights.acknowledgement_pending = false;
-            self.set_error("Proqi could not save the What's new acknowledgement.");
+            self.set_storage_failure("Proqi could not save the What's new acknowledgement.");
         }
     }
 

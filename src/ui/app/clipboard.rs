@@ -464,7 +464,7 @@ impl BoardApp {
             self.state.durability,
             crate::application::DurabilityState::Failed { .. }
         ) {
-            self.set_error("storage failed, selection was copied without deletion");
+            self.set_storage_failure("storage failed, selection was copied without deletion");
             return Vec::new();
         }
         let owner_is_current = matches!(

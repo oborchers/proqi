@@ -90,7 +90,7 @@ fn deliberate_input_renews_time_and_count_but_focus_and_resize_do_not() {
 }
 
 #[test]
-fn auto_pause_survives_final_reconcile_failure_and_is_resumable() {
+fn auto_pause_final_reconcile_failure_survives_interaction_and_is_resumable() {
     let (mut app, mut ids, clock) = app();
     configure(&mut app, 1, 10);
     app.screenshot_started(Duration::ZERO);
@@ -104,14 +104,16 @@ fn auto_pause_survives_final_reconcile_failure_and_is_resumable() {
             ScreenshotPauseReason::Inactivity { minutes: 1 }
         )]
     );
-    assert!(
-        app.status_text()
-            .is_some_and(|status| status.contains("final reconciliation failed"))
-    );
+    let failure = app
+        .status_text()
+        .expect("final reconciliation failure")
+        .to_owned();
+    assert!(failure.contains("final reconciliation failed"));
     app.handle(UiInput::Key(UiKey::Escape), &mut ids, &clock);
+    assert_eq!(app.status_text(), Some(failure.as_str()));
     assert_eq!(
-        app.status_text(),
-        Some("Screenshot Inbox paused after 1 minute without activity")
+        app.screenshot_footer_state(false).as_deref(),
+        Some("inbox paused · inactive")
     );
     app.open_palette();
     let (_, entries, _) = app.palette_view().expect("palette");

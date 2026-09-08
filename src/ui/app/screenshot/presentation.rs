@@ -20,10 +20,6 @@ impl BoardApp {
         }
     }
 
-    pub(in crate::ui) fn screenshot_pause_notice(&self) -> Option<&str> {
-        self.screenshot.pause_notice.as_deref()
-    }
-
     pub(in crate::ui::app) fn screenshot_footer_state(&self, compact: bool) -> Option<String> {
         match self.screenshot.state {
             ScreenshotState::Listening => Some(if compact {
