@@ -163,7 +163,7 @@ The output oracle was exit status zero plus `assets valid`. A separate live
 GitHub probe required run `34281581436` to report 14 job records and a successful
 aggregate check. Both probes passed. The final local `cargo xtask check`
 attempts and their phase timestamps are recorded in
-[Final qualification](#final-qualification).
+[Qualification evidence](#qualification-evidence).
 
 No hosted or local benchmark was run concurrently by this lane with another
 known full Proqi gate. This reduces, but cannot eliminate, background runner,
@@ -438,13 +438,14 @@ The first command implements this contract:
 - ask the same typed classifier used by CI for a plan;
 - print the base, head, detected classes, and every planned command before
   execution;
-- run formatting and structural policy checks plus focused tests owned by the
-  affected components;
+- select and run the exact Documentation, Fast, or Full plan described under
+  Implemented behavior;
 - fail closed to the full gate for unknown paths, classifier errors, empty or
   ambiguous history, workflow/policy changes, or an unavailable base;
 - finish with human-readable phase output and a machine-readable receipt listing
   the selection reason, planned work, omissions, outcome, and elapsed time;
-- never label itself final qualification.
+- mark only a successful Full plan as final qualification. Documentation and
+  Fast plans explicitly remain iterative.
 
 The canonical owner remains xtask. `ci_changes` is now the one typed
 change-policy module used by hosted classification and local planning. CI still
@@ -671,11 +672,51 @@ Evidence collected before the first implementation push:
 | Dependency policy | `cargo xtask audit` passed; cargo-deny reported only the repository's accepted duplicate-version warnings, cargo-audit found no vulnerability, and cargo-shear found no issue |
 | macOS package contract | passed with normal socket access; warm phases were notices 10.10s, build 0.26s, archive 3.75s, archive verification 0.24s, and installed-product contract 14.40s; the prior cold dist build took 89.93s |
 | Linux Docker parity, first cold attempt | quality passed; initial xtask build 3m33s, Clippy 148.07s, rustdoc 32.91s; nextest compiled and ran for 413.19s, then one unrelated process test failed because an emulated grandchild exited before its PID file was observed; the repository parity command stopped fail-closed before MSRV, audit, coverage, and package |
+| Exact-main macOS `check-full` | passed in 207.16s; the lock was immediate, Clippy took 18.16s, rustdoc 8.17s, all 1,720 nextest tests passed in 158.30s with 5 skips and 1 leak report, and the doctest phase took 19.48s |
+| Linux Docker parity, one warm retry | the cached image and complete stable `check-full` passed; Clippy 52.44s, rustdoc 18.59s, all 1,613 Linux nextest tests passed with 5 skips in 360.06s, doctests took 81.00s, and the stable gate took 518.25s; the later isolated Rust 1.88 full-test build was killed by signal 9 under x86 Docker emulation, so parity stopped fail-closed before audit, coverage, and package |
 
-The macOS shutdown failures are unchanged from the exact-base measurement and
-remain green on the required hosted macOS 15 runner. The Linux process failure
-is outside the changed ownership and occurred under local x86 emulation. Neither
-failure is hidden, excluded, or used to weaken a gate. Final qualification
-requires the native hosted Linux and macOS jobs, the new package and Debian
-topology, aggregate success, mergeability, a bounded native Codex review, and a
-warm Linux parity retry after the implementation snapshot is stable.
+The first native hosted implementation run was CI run `34331094007` at
+`ee7c76ed4bd45edd96a5ed38295f96cdd94f9b0b`. It completed successfully from
+2026-09-09 08:47:49 UTC through 08:58:34 UTC. Its 645-second wall time included
+3,718 positive job-seconds. The classifier selected product CI, logged schema 2
+shadow advice, required every product job, and skipped only the documentation
+job. The stable aggregate passed.
+
+| Native hosted path | Job or step time | Result |
+| --- | ---: | --- |
+| Classifier | 88s job, 82s command | passed; cold xtask compilation remained visible |
+| Linux package producer | 317s job | passed; archive build and verification 258s, Debian construction and static verification 31s, artifact upload 2s |
+| macOS package producer | 323s job | passed independently and no longer delayed Debian fan-out |
+| Debian Ubuntu 22.04 | 133s job, 104s verification step | passed; evidence 1.06s and image contract 29.46s after xtask compilation |
+| Debian Ubuntu 24.04 | 128s job, 104s verification step | passed; evidence 1.39s and image contract 28.63s after xtask compilation |
+| Debian bookworm | 118s job, 93s verification step | passed; evidence 1.08s and image contract 20.37s after xtask compilation |
+| Debian producer-to-last-consumer path | 453s from Linux producer start | passed; the three consumers ran concurrently and used 379 aggregate job-seconds |
+| Critical terminal job | 541s PTY job | passed; the required aggregate completed 3s later |
+
+The first matrix sample removed the baseline median 80-second wait for the
+unrelated macOS package leg. Its 453-second Linux-producer-to-consumer path was
+about 60 seconds below the baseline median Linux/macOS package dependency plus
+the 132-second Debian job. The isolated verification stage did not yet become
+faster: the slowest cold matrix cell was 133 seconds versus the 132-second
+baseline median, and three cells used 379 job-seconds. Each cell spent roughly
+70 seconds compiling xtask before the measured evidence and image phases.
+Therefore the matrix improves dependency topology and failure isolation, but
+its steady-state latency and compute case still depends on repeat-run cache
+evidence. If repeated native runs do not lower that compile overhead, the
+second-slice recommendation remains one sequential consumer without restoring
+the macOS dependency.
+
+Immediately after this run, the branch integrated exact current `main` once at
+`dd05c49bf3c1e8c1aa2cd707ed3f3b40ca2bc2b9`. The resulting merge commit was
+`7a2d365d8074fce742f7a2af7eff1ab8386700ca` before the final report update.
+
+The pre-integration macOS shutdown failures matched the exact-base measurement
+and remained green on the required hosted macOS 15 runner. After integrating
+current main, the complete local gate passed all three formerly failing
+shutdown tests and every other nextest test. The first Linux process failure
+also did not recur during the warm stable Linux gate. The later MSRV signal 9
+is a local x86 Docker resource failure, not a test assertion or changed package
+contract. None of these results is hidden, excluded, or used to weaken a gate.
+The first native hosted Linux, macOS, package, Debian matrix, and aggregate run
+is green. Final qualification still requires the bounded native Codex
+correction review, final hosted aggregate success, and mergeability.
