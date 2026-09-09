@@ -12,6 +12,40 @@ use proqi::ports::recovery::RecoveryDocument;
 
 use super::support::{consume_first_run, expect_command, json_command};
 
+const RECOVERY_WORKFLOW: &str = r#"
+    log_user 0
+    set timeout 10
+    set binary $env(PROQI_TEST_BINARY)
+    set state $env(PROQI_TEST_STATE)
+    set session $env(PROQI_TEST_SESSION)
+    spawn $binary --state-dir $state -r $session
+    expect -exact "\x1b\[?1049h"
+    set ready_marker [open "$state/terminal-ready" w]
+    close $ready_marker
+    while {![file exists "$state/immutable-ready"]} {
+        expect -timeout 0 {
+            -re ".+" { exp_continue }
+            timeout {}
+            eof { exit 123 }
+        }
+        after 25
+    }
+    send -- "\x1b\[200~recovery-quit-sentinel\x1b\[201~"
+    expect -re "storage I/O failed"
+    send "w"
+    expect -re "exporting recovery file"
+    expect -re "recovery exported"
+    send "q"
+    expect {
+        eof {}
+        timeout {
+            exit 124
+        }
+    }
+    catch wait result
+    exit [lindex $result 3]
+"#;
+
 #[test]
 fn exported_save_failure_accepts_the_raw_board_quit_key() {
     let state = tempfile::tempdir().expect("temporary state");
@@ -23,46 +57,21 @@ fn exported_save_failure_accepts_the_raw_board_quit_key() {
         .as_str()
         .expect("session ID");
     let database = state.path().join("data/proqi.sqlite3");
+    let terminal_ready = state.path().join("terminal-ready");
     let ready = state.path().join("immutable-ready");
-    let script = r#"
-        log_user 0
-        set timeout 10
-        set binary $env(PROQI_TEST_BINARY)
-        set state $env(PROQI_TEST_STATE)
-        set session $env(PROQI_TEST_SESSION)
-        spawn $binary --state-dir $state -r $session
-        while {![file exists "$state/immutable-ready"]} {
-            expect -timeout 0 {
-                -re ".+" { exp_continue }
-                timeout {}
-                eof { exit 123 }
-            }
-            after 25
-        }
-        send -- "\x1b\[200~recovery-quit-sentinel\x1b\[201~"
-        expect -re "storage I/O failed"
-        send "w"
-        expect -re "exporting recovery file"
-        expect -re "recovery exported"
-        send "q"
-        expect {
-            eof {}
-            timeout {
-                exit 124
-            }
-        }
-        catch wait result
-        exit [lindex $result 3]
-    "#;
     let mut child = expect_command()
-        .args(["-c", script])
+        .args(["-c", RECOVERY_WORKFLOW])
         .env("PROQI_TEST_BINARY", binary)
         .env("PROQI_TEST_STATE", state.path())
         .env("PROQI_TEST_SESSION", session)
         .env_remove("HERDR_ENV")
         .spawn()
         .expect("run recovery PTY workflow");
-    wait_for_path(&mut child, &database);
+    wait_for_ready_path(&mut child, &terminal_ready);
+    assert!(
+        database.exists(),
+        "database exists after terminal readiness"
+    );
     let immutable = ImmutableGuard::set(database);
     fs::write(ready, b"ready").expect("signal immutable database");
     let status = child.wait().expect("wait for recovery PTY workflow");
@@ -115,7 +124,7 @@ impl Drop for ImmutableGuard {
     }
 }
 
-fn wait_for_path(child: &mut Child, path: &std::path::Path) {
+fn wait_for_ready_path(child: &mut Child, path: &std::path::Path) {
     let deadline = Instant::now() + Duration::from_secs(5);
     while !path.exists() && Instant::now() < deadline {
         assert_eq!(child.try_wait().expect("inspect PTY child"), None);
@@ -123,9 +132,8 @@ fn wait_for_path(child: &mut Child, path: &std::path::Path) {
     }
     assert!(
         path.exists(),
-        "database was not created before the deadline"
+        "PTY did not become ready before the deadline"
     );
-    thread::sleep(Duration::from_millis(300));
 }
 
 fn create_empty_session(binary: &str, state: &std::path::Path) {

@@ -6,15 +6,15 @@ expression: "snapshot(FirstRunEnvironment::Standalone, 72, 18, 4,)"
 SIZE 72x18
 
 TEXT
-00│  Move focus between thoughts, select, delete, and undo using your│
-01│  current bindings. Open Shortcuts in the footer to see the resolved│
-02│  keys for this context. Commands provides additional actions.│
-03│  ──────────────────────────────────────────────────────────────────────│
-04│  Proqi works on its own. Herdr adds verified adjacent submission. Use│
-05│⋮ Submit to submit and remove, or Submit & keep to retain the thought.│
-06│  Current shortcuts appear in the footer and Help. Learn more at│
-07│  https://herdr.dev│
-08│  ──────────────────────────────────────────────────────────────────────│
+00││
+01│  ──────────────────────────────────────────────────────────────────────│
+02││
+03│  Proqi works on its own. Herdr adds verified adjacent submission. Use│
+04│⋮ Submit to submit and remove, or Submit & keep to retain the thought.│
+05│  Current shortcuts appear in the footer and Help. Learn more at│
+06│  https://herdr.dev│
+07│  ──────────────────────────────────────────────────────────────────────│
+08││
 09│  Use Select all, then Delete in board mode to delete this entire│
 10│  practice board. The footer and Help show your current bindings,│
 11│  including custom aliases.│
@@ -26,15 +26,15 @@ TEXT
 17│  n New   y Copy  x Cut  d/Del  Space Select u Undo  / Search│
 
 STYLE RUNS
-0: 0-0 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 1-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-1: 0-0 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 1-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-2: 0-0 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 1-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-3: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-71 fg=Rgb(42, 37, 32) bg=Rgb(15, 13, 10) mod=NONE
+0: 0-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+1: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-71 fg=Rgb(42, 37, 32) bg=Rgb(15, 13, 10) mod=NONE
+2: 0-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+3: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-71 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
 4: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-71 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
 5: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-71 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
-6: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-71 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
-7: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-1 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 2-18 fg=Rgb(112, 214, 155) bg=Rgb(39, 40, 48) mod=UNDERLINED | 19-71 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
-8: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-71 fg=Rgb(42, 37, 32) bg=Rgb(15, 13, 10) mod=NONE
+6: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-1 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 2-18 fg=Rgb(112, 214, 155) bg=Rgb(39, 40, 48) mod=UNDERLINED | 19-71 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
+7: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-71 fg=Rgb(42, 37, 32) bg=Rgb(15, 13, 10) mod=NONE
+8: 0-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 9: 0-0 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 1-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 10: 0-0 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 1-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 11: 0-0 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 1-71 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE

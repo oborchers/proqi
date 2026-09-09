@@ -102,6 +102,17 @@
         "Keep usable invocations when a bounded source is incomplete or a Herdr provider fails, with truthful picker status and content-redacted diagnostics.",
         "Use Proqi with qualified Herdr protocols 19 and 20, including Herdr 0.8.2, plus provisional protocol 21 when its prompt contract remains compatible."
       ]
+    },
+    {
+      "version": "0.9.0",
+      "highlights": [
+        "Use revised terminal-safe default shortcuts that avoid common collisions in the macOS, Ghostty, and Herdr delivery chain.",
+        "Replace every semantic shortcut and fallback through one contextual keymap with aliases, platform overrides, safe disabling, and matching Help and Commands guidance.",
+        "Find installed invocations through deterministic Unicode-aware fuzzy matching across the complete bounded result set.",
+        "Submit selected thoughts to an eligible agent pane anywhere on the current Herdr server through one verified Commands workflow.",
+        "Clean up pasted or existing thought spacing while preserving recognized structure, annotations, Unicode, undo, and large-paste folding.",
+        "Track files and screenshots with session-wide numbers and truthful macOS in iCloud or downloading states."
+      ]
     }
   ]
 }

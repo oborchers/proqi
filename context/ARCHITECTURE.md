@@ -1084,6 +1084,15 @@ context around it. The maximum board scroll position includes the insertion row
 as a terminal virtual item, so the final page always exposes `+ New thought`
 above the footer without permitting blank overscroll.
 
+One Board-density policy resolves the explicit preference against the final
+usable Board rectangle after footer reservation. Comfortable uses the standard
+two-row cadence at five or more Board rows. Four or fewer Board rows resolve to
+the responsive compact cadence, and explicit compact always remains compact.
+Thought count, natural content height, and whether the complete flow fits never
+participate in density selection. The resulting density, complete content
+height, viewport offset, and maximum offset are recorded in the final
+`LayoutSnapshot` consumed by rendering and hit testing.
+
 ### Resize
 
 A resize invalidates the layout snapshot, not the editor model. The next render
