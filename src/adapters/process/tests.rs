@@ -155,9 +155,12 @@ fn timeout_terminates_a_ready_grandchild_that_inherits_output_pipes() {
 fn read_ready_pid(path: &std::path::Path) -> rustix::process::Pid {
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
-        if let Ok(raw) = std::fs::read_to_string(path) {
-            let raw = raw.trim().parse::<i32>().expect("numeric grandchild pid");
-            return rustix::process::Pid::from_raw(raw).expect("positive grandchild pid");
+        if let Some(pid) = std::fs::read_to_string(path)
+            .ok()
+            .and_then(|raw| raw.trim().parse::<i32>().ok())
+            .and_then(rustix::process::Pid::from_raw)
+        {
+            return pid;
         }
         assert!(
             Instant::now() < deadline,
