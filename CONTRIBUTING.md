@@ -18,7 +18,7 @@ repository, enter its directory, and verify the baseline before editing:
 ```shell
 git clone https://github.com/oborchers/proqi.git
 cd proqi
-cargo xtask check
+cargo xtask check-full
 ```
 
 On a Docker host, including macOS, `cargo xtask ci-linux` runs the
@@ -85,10 +85,17 @@ cargo xtask test-pty
 ```
 
 Use `cargo test -- --list` or `cargo nextest list` to discover current tests.
-Run the smallest relevant test while iterating, then run the canonical gate:
+Run the smallest relevant test and the change-aware gate while iterating:
 
 ```shell
 cargo xtask check
+```
+
+`check` prints the selected plan and intentionally omitted work. Before the
+final qualification commit or handoff, run the serialized canonical gate:
+
+```shell
+cargo xtask check-full
 ```
 
 Milestone and release work also uses:
@@ -146,7 +153,7 @@ mix unrelated cleanup into a behavior change. Before opening a pull request:
 1. Rebase or merge the current `main` according to the repository's current
    contribution guidance.
 2. Run focused tests for the changed behavior.
-3. Run `cargo xtask check`.
+3. Run `cargo xtask check-full`.
 4. Update product, architecture, user, skill, or maintainer documentation when
    its contract changed.
 5. Inspect the complete diff and every snapshot.
@@ -159,7 +166,7 @@ Issue when one exists. Do not claim a platform or test result that was not run.
 
 - [ ] The change has one clear purpose.
 - [ ] Focused tests cover behavior and important failure paths.
-- [ ] `cargo xtask check` passes.
+- [ ] `cargo xtask check-full` passes.
 - [ ] Architecture and source-size rules pass.
 - [ ] Snapshot and golden-file changes were reviewed explicitly.
 - [ ] Public documentation and the Proqi skill remain accurate.

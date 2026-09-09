@@ -1751,6 +1751,7 @@ cargo xtask source-limits
 cargo xtask architecture
 cargo xtask quality
 cargo xtask check
+cargo xtask check-full
 cargo xtask test
 cargo xtask ci-linux
 cargo xtask test-pty
@@ -1779,8 +1780,13 @@ cargo xtask package
   unstaged, staged, and committed HEAD content, Clippy for all targets and
   features, source limits, reviewed-snapshot policy, and documentation warnings
   without rerunning the deterministic test suite.
-- `check` remains the canonical local and pre-push aggregate: it runs `quality`
-  followed by `test`.
+- `check` is the change-aware iterative gate. Ordinary code runs `quality`,
+  doctests, and every nextest binary except the real-PTY integration binary;
+  documentation receives its focused gate. Ambiguous, empty, policy,
+  dependency, package, and release classifications fail closed to the full
+  plan. Its receipt is never final qualification unless that escalation ran.
+- `check-full` is the canonical final local aggregate. It serializes across
+  worktrees and preserves the complete `quality` followed by `test` contract.
 - `test` runs the deterministic unit, contract, and integration suites.
 - `ci-linux` copies the current checkout without Git metadata or build output
   into an ephemeral `linux/amd64` Docker workspace and runs the Linux quality,
@@ -1827,9 +1833,10 @@ well-maintained language-native complexity lint before its first source file is
 merged. Every frontend source file is also subject to the repository-wide
 500-line ceiling.
 
-The checked-in pre-commit hook runs `cargo xtask check` after explicit local
+The checked-in pre-commit hook runs iterative `cargo xtask check` after explicit local
 installation through `cargo xtask install-hooks`. It is a convenience rather
-than an enforcement boundary, with CI remaining authoritative.
+than an enforcement boundary. One `cargo xtask check-full` remains mandatory
+before final qualification, with CI remaining authoritative.
 
 ### Continuous integration
 

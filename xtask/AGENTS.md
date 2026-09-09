@@ -9,9 +9,11 @@ command surface for development, CI, packaging, and release verification.
   repository policy. Do not add a shell script, Make target, or workflow-only
   implementation when `xtask` can own the operation portably.
 - `quality` is deliberately test-free. `test` owns the deterministic suite and
-  `check` is exactly the canonical aggregate of `quality` followed by `test`.
-  CI jobs may split these phases but must not redefine or redundantly rerun the
-  complete suite.
+  `check-full` is exactly the canonical final aggregate of `quality` followed
+  by `test`. `check` is the transparent iterative gate: ordinary code runs
+  quality, doctests, and every non-PTY nextest binary; high-risk or ambiguous
+  changes fail closed to `check-full`. CI jobs may split final phases but must
+  not redefine or redundantly rerun the complete suite.
 - A policy check reports actionable paths and reasons, has accepted and rejected
   fixture coverage, and scans the repository independently of developer machine
   state. Never weaken a policy to accommodate one implementation.

@@ -1,6 +1,8 @@
 # CI and local validation performance spike
 
-Status: analysis only. This report proposes changes but implements none.
+Status: implemented safe first slice on pull request 90. The implementation
+does not change required-check policy, strict latest-main freshness, product
+test selection in hosted CI, release policy, or repository settings.
 
 Measurement baseline: `8faf444cfa54cdf65f77a6f0f9cdb065a2aa32ea`.
 Hosted sample frozen after PR CI run `34281581436` completed on
@@ -13,21 +15,24 @@ machine-specific paths.
 Keep the stable, fail-closed `Required CI result` check and strict latest-main
 validation. Reduce cost inside that boundary rather than weakening it.
 
-The recommended first implementation slice is:
+The implemented first slice is:
 
 1. Split the platform package matrix into explicitly named Linux and macOS
-   jobs, then make Debian depend only on the Linux package artifact.
-2. Establish a trusted ownership control for the workflow, classifier, and
-   aggregate before conditional skipping can affect the required result. Until
-   then, keep the current full product tier.
-3. Extend the existing typed change classifier so package, Debian, PTY,
-   coverage, security, and full-MSRV work runs for the changes it can validate.
-   An unknown, empty, failed, or policy-changing classification must select the
-   full PR tier.
+   jobs. The Linux job builds and verifies the archive and Debian package once,
+   and three independent image jobs consume that exact checksummed artifact.
+2. Retain the current full hosted product tier. There is no expected trusted
+   second owner for this repository, so no new conditional job skipping depends
+   on review or another external trust control.
+3. Extend the typed change classifier with package, Debian, PTY, security,
+   persistence, release, and local-plan advice. CI logs this advice in shadow
+   mode only. An unknown, empty, failed, or policy-changing local classification
+   selects the full local gate.
 4. Keep the aggregate check unconditional and make it validate the exact
    expected success or intentional-skip state for every job.
-5. Add a transparent, change-aware local iteration command while preserving one
-   unchanged, serialized `cargo xtask check` as the final local qualification.
+5. Make `cargo xtask check` the transparent change-aware iteration command and
+   preserve the former complete gate as serialized `cargo xtask check-full`.
+6. Emit stable JSON timing lines for local quality, tests, packaging, Debian
+   construction, evidence validation, and container verification.
 
 This directly addresses the measured waste. A scheduled PR run consumed a
 median 3,238 job-seconds, or 53 minutes 58 seconds, while its median elapsed time
@@ -40,6 +45,58 @@ Do not immediately remove exact post-merge validation, adopt a merge queue, or
 split the test suite across more runners. Those choices need either a repository
 policy decision or evidence that the added topology will beat queue and build
 duplication.
+
+## Implemented behavior
+
+### Local commands
+
+By default, `cargo xtask check` resolves `HEAD` and `origin/main` without
+fetching, validates both as commits, and uses their merge base. `--base
+<revision>` supplies another validated comparison commit. The classifier sees
+committed branch changes plus staged, unstaged, deleted, renamed, and untracked
+paths.
+
+The selected plan is explicit:
+
+| Plan | Selection | Work |
+| --- | --- | --- |
+| Documentation | Every changed path is ordinary Markdown and no path owns policy | changed tracked Markdown whitespace, untracked Markdown trailing whitespace, public asset validation |
+| Fast | Known product or tooling paths with no high-risk class | complete `quality`, all nextest binaries except `binary(=pty)`, and doctests |
+| Full | Empty, unknown, classifier failure, policy, dependency, package, or release change | the complete `quality` plus `test` gate, including PTY |
+
+The documentation plan intentionally does not require a clean worktree. Its
+purpose is to validate the changed documentation, including untracked files,
+without rejecting unrelated local build outputs. Every invocation prints the
+base, head, classes, selection reason, commands, omissions, outcome, and elapsed
+time. It also writes the ignored local receipt
+`target/xtask/check-receipt.json`. A non-full receipt says `ITERATIVE GATE ONLY`.
+
+`cargo xtask check-full` is the explicit canonical final local command. A
+`check` invocation that fails closed to Full runs the same complete locked gate,
+and its successful receipt can also qualify. Both keep the former `quality`
+followed by complete `test` behavior and acquire one operating-system file lock
+inside the repository's trusted Git common directory. Linked worktrees
+therefore wait rather than compete for CPU and I/O. The lock records only
+schema, process ID, branch, and start time, reports waits, and is released by the
+operating system when the process exits.
+
+### Hosted package topology
+
+`Package contract (ubuntu-22.04)` builds and verifies the Linux archive,
+constructs and statically verifies the Debian package, and uploads the archive,
+package, checksum, and evidence manifest as one short-lived workflow artifact.
+`Package contract (macos-15)` remains independent. Debian verification is a
+three-cell, fail-fast-disabled matrix for Ubuntu 22.04, Ubuntu 24.04, and Debian
+bookworm. Every cell downloads the same producer artifact, verifies the archive,
+package, embedded binary, checksum, and evidence identities, then runs exactly
+one digest-pinned image contract.
+
+The required aggregate names both platform package jobs and the complete Debian
+matrix, so a failed or absent producer, artifact check, or image cell fails
+closed. The existing documentation-only and product conditions are unchanged.
+The new classifier fields are logged but never referenced by a workflow `if`.
+Workflow permissions, pinned actions, strict required-status freshness, admin
+bypass, and repository settings are unchanged.
 
 ## Scope and method
 
@@ -113,11 +170,12 @@ known full Proqi gate. This reduces, but cannot eliminate, background runner,
 network, filesystem, and machine-load variance. The sample supports topology
 and order-of-magnitude decisions, not a billing forecast.
 
-## Current behavior
+## Measured baseline behavior
 
 ### Workflow topology
 
-The `changes` job in `.github/workflows/ci.yml` is unconditional. It computes
+At the requested baseline, the `changes` job in `.github/workflows/ci.yml` is
+unconditional. It computes
 `docs_only`, `coverage`, and `full_msrv`, after which the current workflow
 behaves as follows:
 
@@ -155,8 +213,8 @@ decides what is required and the logic that reports the required context.
 In-workflow fail-closed defaults and unit tests are necessary, but they are not
 a trust boundary against the same PR.
 
-Before conditional skipping influences the required result, choose an external
-control:
+Before any future conditional skipping influences the required result, it would
+need an external control:
 
 | Alternative | Benefit | Cost or limit |
 | --- | --- | --- |
@@ -164,15 +222,17 @@ control:
 | Require a centrally managed or default-branch-owned workflow/check that the PR cannot replace | Strong automated workflow identity and consistent policy | Higher setup and repository-setting cost; untrusted PR code must never run with a write token |
 | Publish the aggregate from an independently operated GitHub App | Strongest separation from PR-controlled YAML | Highest operational and credential-management burden |
 
-Recommendation: make code-owner review plus one required non-author approval
-the prerequisite first step, while retaining full product CI for every change
-to the protected policy paths. Evaluate a centrally managed required workflow
-if contribution volume or threat exposure grows. This is a repository policy
-decision and is explicitly not implemented by this spike.
+Repository decision: no trusted second owner is expected in the foreseeable
+future. Retain the owner's existing admin bypass, but do not treat self-review
+or bypass as an external control. Keep full hosted product CI rather than
+granting the PR-controlled classifier authority to skip newly conditional jobs.
+Revisit a centrally managed required workflow or independently operated check
+only if the ownership model changes. No repository setting is changed here.
 
 ### Local gate ownership
 
-`cargo xtask check` is sequential and owns the canonical local gate:
+At the requested baseline, `cargo xtask check` was sequential and owned the
+canonical local gate:
 
 1. `quality` runs formatting, whitespace, source limits, snapshot checks,
    release highlights, assets, architecture and policy checks, Clippy, and
@@ -363,16 +423,16 @@ serialize only the heavy final gate, report who owns the lock and how long it
 has waited, and rely on operating-system lock release after process exit. It
 must not kill another lane or silently downgrade to a partial gate.
 
-### Proposed xtask UX and ownership
+### Implemented xtask UX and ownership
 
-Keep `cargo xtask check` unchanged as the complete final gate. Add a separate
-iterative command, for example:
+The repository decision favors the primary command agents already choose:
 
 ```text
-cargo xtask check-fast --base <commit>
+cargo xtask check [--base <commit>]
+cargo xtask check-full
 ```
 
-Its contract should be:
+The first command implements this contract:
 
 - compute the merge-aware diff from a required, validated base commit;
 - ask the same typed classifier used by CI for a plan;
@@ -382,16 +442,17 @@ Its contract should be:
   affected components;
 - fail closed to the full gate for unknown paths, classifier errors, empty or
   ambiguous history, workflow/policy changes, or an unavailable base;
-- finish with a human-readable and machine-readable receipt listing exactly
-  what ran, passed, failed, or was intentionally skipped, with reasons;
+- finish with human-readable phase output and a machine-readable receipt listing
+  the selection reason, planned work, omissions, outcome, and elapsed time;
 - never label itself final qualification.
 
-The canonical owner remains xtask. `ci_changes` should evolve into one typed
-change-policy module consumed by both CI planning and `check-fast`; the workflow
-must not duplicate path lists. Component owners should register focused test
-groups next to their xtask command definitions. Developers can still run a
-single named test while editing. Immediately before commit or handoff, one
-serialized `cargo xtask check` remains mandatory and prints a complete receipt.
+The canonical owner remains xtask. `ci_changes` is now the one typed
+change-policy module used by hosted classification and local planning. CI still
+uses only the pre-existing `docs_only`, `coverage`, and `full_msrv` decisions;
+the richer fields are shadow evidence. Developers can run a single named test
+while editing. Immediately before the final qualification commit or handoff,
+one serialized `cargo xtask check-full` remains mandatory and prints a complete
+receipt.
 
 ## Invariants and tier proposal
 
@@ -437,15 +498,15 @@ post-merge or nightly result before removing any PR execution.
 | Strategy | Expected effect from current evidence | Effort | Confidence | Regression risk | Decision |
 | --- | --- | ---: | ---: | ---: | --- |
 | Retain every product job on every PR | Baseline, median 53m58s job time and 11m20s wall | none | high | lowest | Keep as fallback and release tier, not the long-term default |
-| Risk-based jobs with stable aggregate | A typical non-package, non-terminal product PR can avoid about 28m40s of median job execution from PTY, registry, platform package, and Debian alone | medium | medium-high | medium | Second slice after external trust control and shadow validation |
-| Fast PR tier plus complete main/nightly tier | Removes low-signal PR work while retaining broad drift detection | medium | medium | medium | Second slice after classifier evidence |
+| Risk-based jobs with stable aggregate | A typical non-package, non-terminal product PR can avoid about 28m40s of median job execution from PTY, registry, platform package, and Debian alone | medium | medium-high | medium | Shadow classification only; defer while no external trust control exists |
+| Fast PR tier plus complete main/nightly tier | Removes low-signal PR work while retaining broad drift detection | medium | medium | medium | Defer while no external trust control exists |
 | Merge queue | Eliminates manual repeated latest-main integration and validates queued merge groups | high, includes ruleset policy | medium | medium | Defer until merge volume justifies it |
-| Build once, reuse checksummed or attested artifacts | Removes repeated compiles and establishes package identity; strongest for Linux package to Debian handoff | medium | high for checksummed reuse | low-medium | Immediate benchmark, then second slice |
+| Build once, reuse checksummed or attested artifacts | Removes repeated release builds and Debian construction while establishing package identity | medium | high for checksummed reuse | low-medium | Implemented for Linux archive and Debian verification; measure hosted result |
 | Cargo cache plus sccache | Can reduce repeated compilation across hosted jobs and local worktrees | medium | medium until hit-rate data exists | medium, especially cache trust | Pilot after cache threat model and benchmark |
 | Test partitioning with nextest | Could shorten a CPU-bound suite, but adds builds, artifact transfer, queueing, and runners | medium-high | low for this sample | medium | Defer; macOS queue and package topology are larger problems |
-| Change-aware local xtask command | Avoids a cold or warm full gate during iteration and makes omissions explicit | medium | high | low if never final | Immediate slice |
-| One final full local gate | Prevents partial evidence from being mistaken for qualification | low | high | lowest | Preserve unchanged |
-| Per-repository final-gate coordination | Avoids local CPU and I/O saturation across worktrees | low-medium | high | low | Immediate slice |
+| Change-aware local xtask command | Avoids a cold or warm full gate during iteration and makes omissions explicit | medium | high | low if never final | Implemented as `check` |
+| One final full local gate | Prevents partial evidence from being mistaken for qualification | low | high | lowest | Implemented as `check-full`, behavior preserved |
+| Per-repository final-gate coordination | Avoids local CPU and I/O saturation across worktrees | low-medium | high | low | Implemented for `check-full` |
 | Reusable workflows | Reduces YAML duplication, not measured runner time | medium | high | low-medium | Use only when it creates a clearer trusted boundary |
 | Prepared immutable CI image | Removes setup downloads but adds image supply-chain and refresh ownership | high | low-medium | medium-high | Explicitly defer |
 
@@ -458,39 +519,39 @@ and pricing are outside this measurement.
 
 ### Immediate slice
 
-1. Decide and establish the external trust boundary. The recommendation is
-   code-owner review plus one required non-author approval for CI policy paths.
-   Keep full product CI until that control is effective.
-2. Split the package matrix into stable Linux and macOS job identities. Make
-   Debian depend only on Linux. Preserve artifact checksum verification and the
-   aggregate's exact result checks.
-3. Add classifier unit tests for documentation, workflow, classifier, terminal,
-   persistence, dependency, package, release, and unknown-path examples. Unknown
-   inputs select the full tier. Run proposed conditions in advisory or shadow
-   mode only, without skipping required work.
-4. Add `check-fast --base`, its transparent receipt, and an advisory final-gate
-   lock. Keep `check` behavior and coverage unchanged.
-5. Instrument job queue, setup, compile, test, package, and verification phases
-   so the next review uses stable phase data rather than log inference.
+1. Complete: keep full hosted product CI because there is no expected trusted
+   second owner. The owner's admin bypass remains unchanged.
+2. Complete: split package jobs by stable platform identity, construct Debian
+   in the Linux producer, bind archive, package, binary, checksum, and evidence,
+   and require all three image cells in the aggregate.
+3. Complete: add typed classifier coverage for documentation, policy, terminal,
+   persistence, dependency, package, release, and unknown paths. New hosted
+   decisions remain advisory only.
+4. Complete: make `check` change-aware, add `check-full`, emit transparent
+   receipts, and serialize final gates across linked worktrees.
+5. Complete: emit stable phase timing records. Hosted before-and-after results
+   are recorded during final pull request qualification.
 
 ### Second slice
 
-1. Only after the external trust control is effective and a representative
-   shadow period is clean, move proven low-risk checks from every PR into
-   conditional PR plus complete main/nightly coverage.
-2. Reuse the Linux Cargo build for Debian construction and pass one checksummed
-   package to isolated verification jobs. Consider artifact attestation when
-   the package crosses a release trust boundary.
-3. Benchmark sequential versus parallel Debian image verification, including
-   runner queue and total job time, before choosing.
+1. Keep collecting shadow classifier decisions. Do not turn them into hosted
+   conditions unless a future external workflow identity or ownership model
+   supplies the missing trust boundary.
+2. Compare the implemented parallel Debian matrix with the 142-second baseline,
+   including critical path, runner queue, and total job time. Revert to one
+   sequential verifier if runner startup and repeated xtask compilation erase
+   the latency benefit.
+3. Consider artifact attestation only when a package crosses a release trust
+   boundary. The current same-workflow checksum and evidence contract is the
+   appropriate PR boundary.
 4. Pilot sccache with isolated Cargo target directories. Pin the integration,
    prevent untrusted cache writes, and publish hit-rate and wall-time evidence.
 
 ### Explicit deferrals
 
-- Do not enable conditional skipping while the PR revision controls both the
-  classifier and the required aggregate without an external review or workflow
-  identity boundary.
+- Do not enable new conditional skipping while the PR revision controls both
+  classifier and required aggregate. With no expected trusted second owner,
+  this is an indefinite deferral rather than an incomplete rollout step.
 - Do not change strict latest-main freshness or remove exact-main validation in
   this performance project.
 - Do not enable a merge queue until merge volume, `merge_group` workflow support,
@@ -545,7 +606,9 @@ and pricing are outside this measurement.
 - nextest, [Test partitioning](https://nexte.st/docs/ci-features/partitioning/): hash and slice partitioning plus archive-based build reuse.
 - sccache, [Rust usage](https://github.com/mozilla/sccache/blob/main/docs/Rust.md): `RUSTC_WRAPPER`, incremental compilation, and Rust-specific caveats.
 
-## Final qualification
+## Qualification evidence
+
+### Original spike baseline
 
 The branch integrated current `main` at
 `a00f55da09d8ff8922ea1cbf04ea00a0b9662acd` before final qualification. The
@@ -576,20 +639,43 @@ the shutdown deadline. This is a repeatable local macOS 26.6.1 compatibility or
 timing issue, not a report-caused diff. Exact current main passed hosted CI run
 `34282558047` on macOS 15 and Ubuntu before this report was committed.
 
-Focused qualification completed as follows:
+Original focused qualification completed as follows:
 
 - all 14 cited links returned HTTP 200 after redirects;
 - `cargo xtask quality` passed, including formatting, source limits, snapshots,
   assets, architecture and release policy, Clippy, and rustdoc;
 - staged Markdown whitespace validation passed;
-- a native Codex documentation review is required on the committed snapshot
-  before publication, with its result carried in the PR handoff;
-- hosted docs-only PR CI must pass before the draft can become ready;
-- `cargo xtask audit` and `cargo xtask package`: intentionally skipped because
-  this is neither a milestone nor release gate and no dependency, package,
-  release, workflow, or product path changed.
+- a native Codex documentation review covered the analysis-only snapshot;
+- hosted documentation-only CI passed before the original draft became ready;
+- `cargo xtask audit` and `cargo xtask package` were intentionally skipped for
+  the original analysis-only snapshot because it changed no dependency,
+  package, release, workflow, or product path.
 
 The local failure itself reinforces two recommendations in this report: final
 gate coordination must expose ambient load and environment, and PTY coverage
 must remain mandatory for relevant changes. It is not evidence for relaxing a
 PTY test or timeout.
+
+### Implementation qualification
+
+The implementation touches workflow, xtask, package, and dependency ownership,
+so it requires more than the original documentation-only qualification.
+Evidence collected before the first implementation push:
+
+| Check | Result and timing |
+| --- | --- |
+| xtask focused suite | 90 passed in 0.64s after a 4.48s build; classifier tests cover dirty, deleted, untracked, both sides of renamed paths, and full advice for high-risk input; lock tests cover linked-worktree identity, contention, release, and reacquisition |
+| Workflow syntax and security | `actionlint` passed; offline pedantic `zizmor` passed with no findings after matrix data was moved through a fixed environment variable |
+| macOS `check-full`, sandbox | quality passed; nextest stopped on 7 Unix socket binds denied by the sandbox; 29 passed, 7 failed, 5 skipped before fail-fast |
+| macOS `check-full`, normal system access | quality passed; nextest reproduced the baseline-only macOS 26.6 shutdown result, 1,013 passed, 3 failed, 5 skipped, and 697 not run after fail-fast; measured gate 119.53s, including Clippy 10.41s, rustdoc 3.11s, and nextest 102.50s |
+| Dependency policy | `cargo xtask audit` passed; cargo-deny reported only the repository's accepted duplicate-version warnings, cargo-audit found no vulnerability, and cargo-shear found no issue |
+| macOS package contract | passed with normal socket access; warm phases were notices 10.10s, build 0.26s, archive 3.75s, archive verification 0.24s, and installed-product contract 14.40s; the prior cold dist build took 89.93s |
+| Linux Docker parity, first cold attempt | quality passed; initial xtask build 3m33s, Clippy 148.07s, rustdoc 32.91s; nextest compiled and ran for 413.19s, then one unrelated process test failed because an emulated grandchild exited before its PID file was observed; the repository parity command stopped fail-closed before MSRV, audit, coverage, and package |
+
+The macOS shutdown failures are unchanged from the exact-base measurement and
+remain green on the required hosted macOS 15 runner. The Linux process failure
+is outside the changed ownership and occurred under local x86 emulation. Neither
+failure is hidden, excluded, or used to weaken a gate. Final qualification
+requires the native hosted Linux and macOS jobs, the new package and Debian
+topology, aggregate success, mergeability, a bounded native Codex review, and a
+warm Linux parity retry after the implementation snapshot is stable.

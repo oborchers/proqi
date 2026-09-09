@@ -6,7 +6,7 @@ Research draft, 2026-08-28. This file contains only work not yet shipped on
 ## How to read this document
 
 Effort assumes one contributor familiar with Proqi and includes focused tests,
-Insta review for visible changes, documentation, and `cargo xtask check`.
+Insta review for visible changes, documentation, and final `cargo xtask check-full`.
 Milestone and release work is additional.
 
 | Size | Expected effort |
@@ -610,7 +610,7 @@ modules.
   geometry and change across provider, pane, session, or address discriminant.
 - [ ] Run the focused UI agent/submission/submit-all and lock suites, SQLite
   submission contracts, Herdr executable/adapter tests, `cargo xtask
-  architecture`, and final `cargo xtask check`. Review snapshots explicitly;
+  architecture`, and final `cargo xtask check-full`. Review snapshots explicitly;
   this behavior-neutral prerequisite should not change them.
 
 ### Shared connection foundation — P1, L (8–12 days after prerequisite)

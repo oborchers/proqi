@@ -240,8 +240,7 @@ mod tests {
             );
         }
         for command in [
-            "cargo xtask quality",
-            "cargo xtask test",
+            "cargo xtask check-full",
             "cargo +1.88.0 xtask msrv-full",
             "cargo xtask audit",
             "cargo xtask coverage",
