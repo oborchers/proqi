@@ -118,11 +118,7 @@ fn top_creation_preserves_comfortable_cadence_and_scrolls_overflow() {
     assert_comfortable_cadence(&after);
     assert!(after.max_first_index > 0);
     let last = fixture.app.state.board.live_thoughts()[4].id;
-    assert!(
-        after
-            .thought(last)
-            .is_none_or(|thought| thought.area.height == 0)
-    );
+    assert!(after.thought(last).is_none());
 }
 
 #[test]

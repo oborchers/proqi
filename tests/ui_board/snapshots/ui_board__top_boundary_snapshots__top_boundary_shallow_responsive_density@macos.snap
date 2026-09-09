@@ -1,6 +1,6 @@
 ---
 source: tests/ui_board/top_boundary_snapshots.rs
-assertion_line: 192
+assertion_line: 188
 expression: "snapshot_buffer(draw_theme(&mut shallow, 60, 8,\nThemePreference::Dark).backend().buffer())"
 ---
 SIZE 60x8
@@ -9,7 +9,7 @@ TEXT
 00│⋮│
 01│  ──────────────────────────────────────────────────────────│
 02│  alpha│
-03│  ──────────────────────────────────────────────────────────│
+03││
 04││
 05│  proqi-ui-contract│
 06│  5 thoughts · edit · saving│
@@ -19,7 +19,7 @@ STYLE RUNS
 0: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-59 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
 1: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-59 fg=Rgb(42, 37, 32) bg=Rgb(15, 13, 10) mod=NONE
 2: 0-0 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 1-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-3: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-59 fg=Rgb(42, 37, 32) bg=Rgb(15, 13, 10) mod=NONE
+3: 0-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 4: 0-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 5: 0-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 6: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-57 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE | 58-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE

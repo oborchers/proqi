@@ -192,8 +192,7 @@ fn visible_rows(
     let overflow = thought
         .overflow_row
         .is_some_and(|row| row >= offset && row < viewport_end);
-    let gap = thought.gap_start < viewport_end && thought.content_start > offset;
-    if !gap && !content && !overflow {
+    if !content && !overflow {
         return None;
     }
     let first = if content {

@@ -14,7 +14,7 @@ TEXT
 05│  ──────────────────────────────────────────────────│
 06││
 07│  第 二 行│
-08│  ──────────────────────────────────────────────────│
+08││
 09││
 10││
 11│  proqi-ui-contract│
@@ -30,7 +30,7 @@ STYLE RUNS
 5: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-51 fg=Rgb(42, 37, 32) bg=Rgb(15, 13, 10) mod=NONE
 6: 0-51 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 7: 0-0 fg=Rgb(112, 214, 155) bg=Rgb(39, 40, 48) mod=NONE | 1-2 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 3-3 fg=Reset bg=Reset mod=NONE | 4-4 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 5-5 fg=Reset bg=Reset mod=NONE | 6-6 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 7-7 fg=Reset bg=Reset mod=NONE | 8-51 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
-8: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-51 fg=Rgb(42, 37, 32) bg=Rgb(15, 13, 10) mod=NONE
+8: 0-51 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 9: 0-51 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 10: 0-51 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 11: 0-51 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
