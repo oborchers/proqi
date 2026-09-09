@@ -72,6 +72,20 @@ const HERDR_SENTINEL_REQUIRED: [&str; 16] = [
     "is:issue is:open in:body",
     "herdr-compatibility:${TAG}:${SCHEMA_SHA256}",
 ];
+const DEPENDABOT_AUTOMERGE_PATH: &str = ".github/workflows/dependabot-auto-merge.yml";
+const DEPENDABOT_AUTOMERGE_REQUIRED: [&str; 11] = [
+    "pull_request:",
+    "contents: write",
+    "pull-requests: write",
+    "github.event.pull_request.user.login == 'dependabot[bot]'",
+    "github.repository == 'oborchers/proqi'",
+    "github.event.pull_request.draft == false",
+    "dependabot/fetch-metadata@d7267f607e9d3fb96fc2fbe83e0af444713e90b7 # v2.4.0",
+    "steps.metadata.outputs.update-type == 'version-update:semver-patch'",
+    "steps.metadata.outputs.update-type == 'version-update:semver-minor'",
+    "GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}",
+    "gh pr merge --auto --squash",
+];
 
 pub(crate) fn check(root: &Path) -> Result<Vec<String>, String> {
     let release = read(root, ".github/workflows/release.yml")?;
@@ -79,8 +93,10 @@ pub(crate) fn check(root: &Path) -> Result<Vec<String>, String> {
     let ci = read(root, ".github/workflows/ci.yml")?;
     let image = read(root, ".github/workflows/ci-linux-image.yml")?;
     let sentinel = read(root, HERDR_SENTINEL_PATH)?;
+    let dependabot = read(root, DEPENDABOT_AUTOMERGE_PATH)?;
     let mut found = findings(&release, &candidate, &ci, &image);
     found.extend(herdr_sentinel_findings(&sentinel));
+    found.extend(dependabot_automerge_findings(&dependabot));
     found.extend(image_repository_findings(root)?);
     found.extend(scheduled_workflow_findings(root)?);
     Ok(found)
@@ -245,6 +261,29 @@ fn herdr_sentinel_findings(source: &str) -> Vec<String> {
     found
 }
 
+fn dependabot_automerge_findings(source: &str) -> Vec<String> {
+    let mut found = missing(
+        DEPENDABOT_AUTOMERGE_PATH,
+        source,
+        &DEPENDABOT_AUTOMERGE_REQUIRED,
+    );
+    for forbidden in [
+        "pull_request_target:",
+        "actions/checkout@",
+        "version-update:semver-major",
+        "gh pr merge --admin",
+        "gh pr merge --auto --merge",
+        "gh pr merge --auto --rebase",
+    ] {
+        if source.contains(forbidden) {
+            found.push(format!(
+                "{DEPENDABOT_AUTOMERGE_PATH}: forbidden `{forbidden}`"
+            ));
+        }
+    }
+    found
+}
+
 fn contains_schedule(source: &str) -> Result<bool, String> {
     let documents = YamlLoader::load_from_str(source)
         .map_err(|error| format!("parse GitHub Actions workflow YAML: {error}"))?;
@@ -293,7 +332,10 @@ fn enforce_order(source: &str, found: &mut Vec<String>) {
 
 #[cfg(test)]
 mod tests {
-    use super::{contains_schedule, findings, herdr_sentinel_findings, schedule_is_forbidden};
+    use super::{
+        contains_schedule, dependabot_automerge_findings, findings, herdr_sentinel_findings,
+        schedule_is_forbidden,
+    };
     use std::path::Path;
 
     fn sources() -> (&'static str, &'static str, &'static str, &'static str) {
@@ -404,6 +446,22 @@ mod tests {
                 schedule_is_forbidden(Path::new("another.yml"), source)
                     .expect("alternate scheduled YAML")
             );
+        }
+    }
+
+    #[test]
+    fn dependabot_automerge_is_verified_bounded_and_squashed() {
+        let source = include_str!("../../.github/workflows/dependabot-auto-merge.yml");
+        assert!(dependabot_automerge_findings(source).is_empty());
+
+        for unsafe_change in [
+            source.replace("pull_request:", "pull_request_target:"),
+            format!("{source}\n      - uses: actions/checkout@pin"),
+            source.replace("semver-minor", "semver-major"),
+            source.replace("--auto --squash", "--auto --merge"),
+            source.replace("dependabot[bot]", "github-actions[bot]"),
+        ] {
+            assert!(!dependabot_automerge_findings(&unsafe_change).is_empty());
         }
     }
 }

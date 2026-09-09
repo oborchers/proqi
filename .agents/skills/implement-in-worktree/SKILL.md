@@ -44,6 +44,26 @@ ownership of scope, review, or merge authorization.
 - Derive a short unique topic branch, worktree label, and worker name from the
   ticket. Prefer `feature/`, `fix/`, or `docs/` according to the work.
 
+## Base drift and final integration policy
+
+- Treat the recorded base SHA as the ticket's implementation base. Do not
+  repeatedly merge or rebase `main` during exploration and implementation each
+  time `origin/main` advances. Finish the coherent topic work first.
+- Immediately before final canonical qualification, fetch `origin/main`. When
+  it advanced beyond the recorded or previously integrated base, merge the
+  exact current `main` into the topic with ordinary non-force history even when
+  Git reports no textual conflict. A clean merge is not proof that the combined
+  behavior remains semantically compatible.
+- Run the required focused, canonical, milestone, live, and CI qualification on
+  that integrated head. `CLEAN`, `MERGEABLE`, and a green result against an
+  older base do not satisfy the final gate.
+- Strict required-status freshness remains authoritative. If `main` advances
+  after the green run and GitHub requires another update, integrate the new tip
+  and requalify rather than bypassing or weakening the requirement.
+- Record the original base, each integrated main SHA, resulting parents,
+  conflict resolutions, semantic compatibility repairs, and final
+  requalification in the pull request and handoff.
+
 ## Create exactly one lane
 
 1. Create one Herdr-managed Git worktree/workspace from the recorded base with
@@ -202,6 +222,10 @@ Fix failures caused by the branch and rerun the required gates. One evidence-
 based retry is reasonable for an infrastructure flake; repeated unexplained
 failure is a blocker, not permission for indefinite retries. Never weaken a
 gate, threshold, test, or snapshot to obtain green status.
+
+When `main` advances after a green run, apply the final integration policy above
+and obtain a fresh complete CI result for the new integrated head. Do not treat
+an older green result or a conflict-free merge as current integration evidence.
 
 When the complete pull request is green and mergeable and no known defect or
 review issue remains, mark it ready for review without requesting another

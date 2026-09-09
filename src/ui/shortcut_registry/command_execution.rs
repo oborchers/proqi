@@ -103,6 +103,22 @@ pub(crate) enum TransformationCommand {
     MergeThoughts,
 }
 
+impl CommandExecution {
+    pub(crate) const fn acknowledges_screenshot_auto_pause(self) -> bool {
+        matches!(
+            self,
+            Self::Board(_)
+                | Self::Editor(_)
+                | Self::Entry(_)
+                | Self::Paste(_)
+                | Self::Selection(_)
+                | Self::Submission(_)
+                | Self::Transformation(_)
+                | Self::ReflowThought
+        )
+    }
+}
+
 #[expect(
     clippy::too_many_lines,
     reason = "one exhaustive action-to-executor mapping prevents hidden Commands fallthrough"
