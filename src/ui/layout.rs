@@ -113,6 +113,14 @@ pub struct LayoutSnapshot {
     pub area: Rect,
     /// Scrollable board area above the footer.
     pub board: Rect,
+    /// Density resolved from the explicit preference and final usable Board height.
+    pub density: crate::ui::settings::BoardDensity,
+    /// Complete natural Board flow height, including responsive top padding.
+    pub board_content_height: usize,
+    /// Current visual-row offset within the scrollable Board flow.
+    pub viewport_offset: usize,
+    /// Greatest valid visual-row offset for the current Board flow.
+    pub maximum_viewport_offset: usize,
     /// Quiet product and session identity row.
     pub header: Rect,
     /// Complete footer allocation.
@@ -409,6 +417,10 @@ fn compute_frame(
     let layout = LayoutSnapshot {
         area,
         board,
+        density: content.density,
+        board_content_height: content.content_height,
+        viewport_offset: content.viewport_offset,
+        maximum_viewport_offset: scroll.maximum_offset,
         header: chrome.header,
         footer: chrome.footer,
         footer_status: chrome.status,

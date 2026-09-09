@@ -7,7 +7,7 @@ use proqi::{
 };
 use ratatui_core::style::Modifier;
 
-use super::{Fixture, draw_theme, snapshot_support::snapshot_buffer};
+use super::{Fixture, draw_theme, platform_suffix, snapshot_support::snapshot_buffer};
 
 fn snapshot(
     environment: FirstRunEnvironment,
@@ -91,14 +91,6 @@ fn editing_thought_demonstrates_line_and_sentence_deletion_at_its_initial_cursor
             "{first_line}\n\n- Use Newline to continue this unordered list. Use Delete logical line to remove this line."
         )
     );
-}
-
-fn platform_suffix() -> &'static str {
-    if cfg!(target_os = "macos") {
-        "macos"
-    } else {
-        "portable"
-    }
 }
 
 #[test]

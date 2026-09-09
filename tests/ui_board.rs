@@ -459,5 +459,15 @@ mod top_boundary_snapshots;
 mod transformations;
 #[path = "ui_board/versioned_keymap.rs"]
 mod versioned_keymap;
+#[path = "ui_board/viewport_bounds.rs"]
+mod viewport_bounds;
 #[path = "ui_board/visual_row_selection.rs"]
 mod visual_row_selection;
+
+const fn platform_suffix() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "macos"
+    } else {
+        "portable"
+    }
+}
