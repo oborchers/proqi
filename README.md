@@ -216,15 +216,45 @@ symmetric arrow and Vim-style navigation.
 Primary chords and Board characters such as `y`, `x`, `u`, `s`, `Shift+S`, and `q`
 are ordinary aliases of the same configurable actions. A host can consume a
 chord before Proqi receives it. A host-performed bracketed paste stays exact.
-For Ghostty, this explicit binding emits logical Super+Shift+v for Smart Paste:
+
+### Ghostty shortcut delivery
+
+Ghostty resolves its own keybindings before bytes enter the terminal PTY.
+Herdr and Proqi therefore receive nothing when a Ghostty action consumes a
+chord, and they receive only replacement bytes when Ghostty rewrites one. Check
+the defaults of the installed Ghostty version with:
+
+```sh
+ghostty +list-keybinds --default
+```
+
+On macOS, Ghostty currently uses `Cmd+Enter` for fullscreen and
+`Cmd+Shift+Enter` for split zoom. It also rewrites `Cmd+Left` and `Cmd+Right`
+to raw `Ctrl+A` and `Ctrl+E`. Add only the overrides whose chords Proqi should
+receive:
 
 ```ini
+# Let Proqi receive its Primary submission aliases.
+keybind = super+enter=unbind
+keybind = super+shift+enter=unbind
+
+# Forward modified horizontal arrows instead of Ctrl+A and Ctrl+E.
+keybind = super+arrow_left=unbind
+keybind = super+arrow_right=unbind
+
+# Emit logical Super+Shift+v for Paste and clean up spacing.
 keybind = super+shift+v=csi:118;10u
 ```
 
-The example passes Ghostty's config validator and its emitted bytes are covered
-by real macOS PTY tests. It is not a guarantee for every keyboard layout or host
-mapping. Proqi never modifies host configuration. To inspect delivery:
+The arrow overrides have also been verified through a real remapped Ghostty,
+Herdr, and Proqi chain. Reload the configuration with `Cmd+Shift+,` or restart
+Ghostty. A remapper may change which physical key produces logical `Cmd`, so
+inspect the event Proqi actually receives rather than relying on a keycap.
+
+The CSI-u example passes Ghostty's config validator and its bytes are covered
+by real macOS PTY tests. These examples are not guarantees for every keyboard
+layout, Ghostty version, or host mapping. Proqi never modifies host
+configuration. Inspect delivery in the relevant context with:
 
 ```sh
 proqi diagnostics keypress --context board,edit --timeout-ms 5000
@@ -237,16 +267,14 @@ configuration. A timeout reports no key event received; Proqi cannot know which
 layer, if any, consumed the chord. It records no paste, session content or raw
 terminal responses. Use the Board fallback or Commands when delivery is blocked.
 
-Ghostty's macOS defaults assign application behavior to many Command chords,
-including `Cmd+Q`, `Cmd+A`, `Cmd+D`, `Cmd+J`, `Cmd+K`, Command plus vertical
-arrows, submission chords, and clipboard/history chords. Those bindings run
-before the PTY, so Herdr and Proqi receive no key event. `performable:` only
-passes through when the Ghostty action is unavailable and is not a general TUI
-fallthrough. See [Ghostty keybindings](https://ghostty.org/docs/config/keybind).
+Other macOS defaults assign application behavior to `Cmd+Q`, `Cmd+A`, `Cmd+D`,
+`Cmd+J`, `Cmd+K`, Command plus vertical arrows, and clipboard or history
+chords. `performable:` passes through only when its Ghostty action is unavailable
+and is not a general TUI fallthrough. See
+[Ghostty keybindings](https://ghostty.org/docs/config/keybind).
 
-Ghostty also maps `Cmd+Left` and `Cmd+Right` to raw `Ctrl+A` and `Ctrl+E` by
-default. If a keyboard remapper maps `Home` and `End` to those same Command
-arrows, both physical routes become identical downstream. Proqi does not guess
+If a keyboard remapper maps `Home` and `End` to `Cmd+Left` and `Cmd+Right`, both
+physical routes have the same downstream identity. Proqi cannot reconstruct
 their origin. Logical-line movement therefore prefers `Ctrl+Left` and
 `Ctrl+Right` on macOS, and `Alt+Left` and `Alt+Right` elsewhere. Named `Home`
 and `End` remain compatible aliases when those events actually arrive.
