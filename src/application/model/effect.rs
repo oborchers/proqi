@@ -34,15 +34,8 @@ pub enum Effect {
     DiscoverTransferSessions,
     /// Copy one exact thought to another session before optional source removal.
     TransferThought(SessionTransferRequest),
-    /// Persist an optimistic current-session rename.
-    RenameSession {
-        /// Owning session.
-        session_id: SessionId,
-        /// Previous name restored after failure.
-        previous_name: Option<String>,
-        /// Replacement name, or none to clear it.
-        name: Option<String>,
-    },
+    /// Persist one installation-wide Browser administration operation.
+    CommitBrowserOperation(crate::domain::BrowserOperation),
     /// Discover verified adjacent agents without blocking the reducer lane.
     DiscoverAgents,
     /// Discover compatible coding agents across the current Herdr server.

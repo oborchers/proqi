@@ -52,6 +52,8 @@ pub enum HitTarget {
     BeginDelivery(SubmissionDisposition),
     /// Board undo action.
     Undo,
+    /// Board redo action.
+    Redo,
     /// Contextual help action.
     Help,
     /// Clean exit action.
@@ -328,6 +330,10 @@ pub(super) fn compute_with_density(
     requested_row_offset: usize,
     keybindings: &crate::ui::ShortcutRegistry,
 ) -> LayoutSnapshot {
+    let history_available = (
+        state.history_scope(state.mode, true).is_some(),
+        state.history_scope(state.mode, false).is_some(),
+    );
     compute_frame(
         state,
         presentation,
@@ -339,6 +345,7 @@ pub(super) fn compute_with_density(
         density,
         requested_row_offset,
         keybindings,
+        history_available,
         None,
     )
     .0
@@ -357,6 +364,7 @@ pub(super) fn compute_for_app(
     has_status: bool,
     density: crate::ui::settings::BoardDensity,
     keybindings: &crate::ui::ShortcutRegistry,
+    history_available: (bool, bool),
     viewport: scroll::BoardViewport,
 ) -> (LayoutSnapshot, scroll::ScrollGeometry) {
     compute_frame(
@@ -370,6 +378,7 @@ pub(super) fn compute_for_app(
         density,
         0,
         keybindings,
+        history_available,
         Some(viewport),
     )
 }
@@ -389,6 +398,7 @@ fn compute_frame(
     density: crate::ui::settings::BoardDensity,
     requested_row_offset: usize,
     keybindings: &crate::ui::ShortcutRegistry,
+    history_available: (bool, bool),
     viewport: Option<scroll::BoardViewport>,
 ) -> (LayoutSnapshot, scroll::ScrollGeometry) {
     let chrome = chrome::compute(area, has_agents, has_status);
@@ -443,6 +453,7 @@ fn compute_frame(
                 }
             ),
             state.focused_thought.is_some(),
+            history_available,
             keybindings,
         ),
         content_width,

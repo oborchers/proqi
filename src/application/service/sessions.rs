@@ -4,11 +4,14 @@ use std::str::FromStr;
 
 use crate::{
     application::{AppState, FirstRunEnvironment, first_run_board},
-    domain::{Session, SessionId},
+    domain::{BrowserOperation, Session, SessionId},
     ports::{
         environment::{Clock, IdGenerator},
         runtime::{RuntimeCoordinator, RuntimeError},
-        store::{OperationBatch, SessionHit, SessionQuery, SessionSnapshot, Store},
+        store::{
+            BrowserCommitReceipt, BrowserHistoryEntry, BrowserHistoryStatus, OperationBatch,
+            SessionHit, SessionQuery, SessionSnapshot, Store,
+        },
     },
 };
 
@@ -163,10 +166,21 @@ where
         &mut self,
         id: SessionId,
         name: Option<&str>,
-    ) -> Result<(), SessionServiceError> {
+    ) -> Result<Option<BrowserCommitReceipt>, SessionServiceError> {
         let _lease = self.runtime.acquire_session(id)?;
-        self.store.rename_session(id, name)?;
-        Ok(())
+        let current = self.store.load_session(id)?.board.session.name;
+        let replacement = name.map(str::to_owned);
+        if current == replacement {
+            return Ok(None);
+        }
+        let operation = BrowserOperation::rename(
+            self.ids.operation_id(),
+            id,
+            current,
+            replacement,
+            self.clock.now(),
+        )?;
+        Ok(Some(self.store.commit_browser_operation(&operation)?))
     }
 
     /// Move one session to recoverable trash while holding its lease.
@@ -174,10 +188,23 @@ where
     /// # Errors
     ///
     /// Returns a typed lease, absence, or persistence failure.
-    pub fn trash_session(&mut self, id: SessionId) -> Result<(), SessionServiceError> {
+    pub fn trash_session(
+        &mut self,
+        id: SessionId,
+    ) -> Result<BrowserCommitReceipt, SessionServiceError> {
         let _lease = self.runtime.acquire_session(id)?;
-        self.store.trash_session(id, self.clock.now())?;
-        Ok(())
+        let snapshot = self.store.load_session(id)?;
+        if snapshot.board.session.deleted_at.is_some() {
+            return Err(SessionServiceError::SessionTrashed(id));
+        }
+        let at = self.clock.now();
+        let operation = BrowserOperation::trash(
+            self.ids.operation_id(),
+            id,
+            snapshot.board.session.last_active_at,
+            at,
+        );
+        Ok(self.store.commit_browser_operation(&operation)?)
     }
 
     /// Restore one recoverably trashed session while holding its lease.
@@ -185,10 +212,86 @@ where
     /// # Errors
     ///
     /// Returns a typed lease, absence, or persistence failure.
-    pub fn restore_session(&mut self, id: SessionId) -> Result<(), SessionServiceError> {
+    pub fn restore_session(
+        &mut self,
+        id: SessionId,
+    ) -> Result<BrowserCommitReceipt, SessionServiceError> {
         let _lease = self.runtime.acquire_session(id)?;
-        self.store.restore_session(id)?;
-        Ok(())
+        let session = self.store.load_session(id)?.board.session;
+        let deleted_at = session
+            .deleted_at
+            .ok_or(SessionServiceError::SessionNotTrashed(id))?;
+        let operation = BrowserOperation::restore(
+            self.ids.operation_id(),
+            id,
+            deleted_at,
+            session.last_active_at,
+            self.clock.now(),
+        );
+        Ok(self.store.commit_browser_operation(&operation)?)
+    }
+
+    /// Undo one installation-wide Browser administration operation.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed empty-history, conflict, or persistence failure.
+    pub fn undo_browser_history(&mut self) -> Result<BrowserCommitReceipt, SessionServiceError> {
+        self.move_browser_history(None, true)
+    }
+
+    /// Redo one installation-wide Browser administration operation.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed empty-history, conflict, or persistence failure.
+    pub fn redo_browser_history(&mut self) -> Result<BrowserCommitReceipt, SessionServiceError> {
+        self.move_browser_history(None, false)
+    }
+
+    /// Move the exact Browser entry presented to an interactive owner.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed stale-history, active-session, or persistence failure.
+    pub fn move_presented_browser_history(
+        &mut self,
+        target: BrowserHistoryEntry,
+        undo: bool,
+    ) -> Result<BrowserCommitReceipt, SessionServiceError> {
+        self.move_browser_history(Some(target), undo)
+    }
+
+    /// Inspect durable Browser history availability.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed corruption or persistence failure.
+    pub fn browser_history_status(&mut self) -> Result<BrowserHistoryStatus, SessionServiceError> {
+        Ok(self.store.browser_history_status()?)
+    }
+
+    fn move_browser_history(
+        &mut self,
+        presented: Option<BrowserHistoryEntry>,
+        undo: bool,
+    ) -> Result<BrowserCommitReceipt, SessionServiceError> {
+        let status = self.store.browser_history_status()?;
+        let target = if undo { status.undo } else { status.redo }
+            .ok_or(SessionServiceError::NoBrowserHistory { undo })?;
+        if presented.is_some_and(|presented| presented != target) {
+            return Err(crate::ports::store::StoreError::Conflict(
+                "Browser history changed while the action was visible".to_owned(),
+            )
+            .into());
+        }
+        let _lease = self.runtime.acquire_session(target.session_id)?;
+        Ok(self.store.move_browser_history(
+            self.ids.operation_id(),
+            target,
+            undo,
+            self.clock.now(),
+        )?)
     }
 
     /// Permanently prune one trashed session while holding its lease.

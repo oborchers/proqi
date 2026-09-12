@@ -46,6 +46,7 @@ fn move_board_history(state: &mut AppState, at: Timestamp, undo: bool) -> Applic
         &operation.forward
     };
     let focused_before = state.focused_thought;
+    let compose_handoff = operation.compose_handoff();
     let transform_source = undo.then(|| transform_source(&operation)).flatten();
     let mut board = state.board.clone();
     board.apply_mutation(mutation, at)?;
@@ -61,6 +62,16 @@ fn move_board_history(state: &mut AppState, at: Timestamp, undo: bool) -> Applic
             .is_none_or(|thought| !thought.is_live())
     });
     state.keep_focus_valid();
+    if let Some((thought_id, _, _)) = compose_handoff {
+        if undo {
+            state.mode = super::InteractionMode::Compose;
+            state.focused_thought = None;
+            state.insertion_index = state.board.live_thoughts().len();
+        } else {
+            state.mode = super::InteractionMode::Edit { thought_id };
+            state.focused_thought = Some(thought_id);
+        }
+    }
     if focus_was_removed
         && let Some(thought_id) = transform_source
         && state
@@ -88,6 +99,7 @@ fn replaced_thought(mutation: &BoardMutation) -> Option<ThoughtId> {
         BoardMutation::Batch { mutations } => mutations.iter().find_map(replaced_thought),
         BoardMutation::ReplaceContent { thought_id, .. } => Some(*thought_id),
         BoardMutation::AddThought { .. }
+        | BoardMutation::AddThoughtFromCompose { .. }
         | BoardMutation::SetDeletion { .. }
         | BoardMutation::SetDeletionExact { .. }
         | BoardMutation::MoveThought { .. }

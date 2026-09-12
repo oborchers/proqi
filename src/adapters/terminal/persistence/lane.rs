@@ -84,18 +84,16 @@ impl PersistenceLane {
         self.send(PersistenceRequest::Metadata(Box::new(batch)))
     }
 
-    pub(in crate::adapters::terminal) fn rename_session(
+    pub(in crate::adapters::terminal) fn browser_operation(
         &self,
         request_id: Option<RequestId>,
-        session_id: SessionId,
         previous_name: Option<String>,
-        name: Option<String>,
+        operation: crate::domain::BrowserOperation,
     ) -> Result<(), TerminalError> {
-        self.send(PersistenceRequest::RenameSession {
+        self.send(PersistenceRequest::BrowserOperation {
             request_id,
-            session_id,
             previous_name,
-            name,
+            operation: Box::new(operation),
         })
     }
 
@@ -121,6 +119,17 @@ impl PersistenceLane {
         self.send(PersistenceRequest::Lookup {
             request_id,
             identity,
+        })
+    }
+
+    pub(in crate::adapters::terminal) fn browser_lookup(
+        &self,
+        request_id: RequestId,
+        operation_id: crate::domain::OperationId,
+    ) -> Result<(), TerminalError> {
+        self.send(PersistenceRequest::BrowserLookup {
+            request_id,
+            operation_id,
         })
     }
 

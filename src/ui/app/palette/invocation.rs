@@ -32,6 +32,7 @@ impl CommandInvocation {
             CommandAvailability::ScreenshotInbox => {
                 self.screenshot_action != ScreenshotPaletteAction::Unavailable
             }
+            CommandAvailability::QueryUndo | CommandAvailability::QueryRedo => false,
         }
     }
 

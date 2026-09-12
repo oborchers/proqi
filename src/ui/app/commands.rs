@@ -1,7 +1,7 @@
 //! Keyboard commands and shared board intentions.
 
 use crate::{
-    application::{Action, Effect, InteractionMode},
+    application::{Action, Effect},
     domain::BoardOperationKind,
     ports::{
         editor::EditCommand,
@@ -380,19 +380,14 @@ impl BoardApp {
             EditFlush::Complete(effects) => effects,
             EditFlush::Blocked(effects) => return effects,
         };
-        let scope = if undo {
-            self.state.preferred_undo_scope(self.state.mode)
-        } else {
-            match self.state.mode {
-                InteractionMode::Compose => return effects,
-                InteractionMode::Board | InteractionMode::Edit { .. } => {
-                    self.state.preferred_redo_scope(self.state.mode)
-                }
-            }
-        };
-        if matches!(self.state.mode, InteractionMode::Compose) {
+        let Some(scope) = self.state.history_scope(self.state.mode, undo) else {
+            self.set_info(if undo {
+                "Nothing to undo"
+            } else {
+                "Nothing to redo"
+            });
             return effects;
-        }
+        };
         let action = if undo {
             Action::Undo {
                 operation_id: ids.operation_id(),

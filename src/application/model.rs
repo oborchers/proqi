@@ -2,13 +2,14 @@
 
 pub(super) mod clipboard;
 mod effect;
+mod history;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use super::error::{ApplicationError, ApplicationResult, FailureCode};
 use crate::domain::{
-    BoardOperation, BoardOperationKind, OperationSequence, RequestId, SessionBoard, StableVersion,
-    TextPosition, Thought, ThoughtId, ThoughtRevision, UndoScope,
+    BoardOperation, OperationSequence, RequestId, SessionBoard, StableVersion, TextPosition,
+    Thought, ThoughtId, ThoughtRevision,
 };
 
 use crate::ports::runtime::CaptureOwnerInfo;
@@ -230,90 +231,33 @@ impl AppState {
     /// Restore the logical cursor represented by the currently applied revision prefix.
     #[must_use]
     pub fn restored_editor_cursor(&self, thought_id: ThoughtId) -> Option<TextPosition> {
-        let history = self.editor_histories.get(&thought_id)?;
-        if history.cursor == 0 {
-            history
-                .revisions
-                .first()
-                .map(|revision| revision.before_cursor)
-        } else {
-            history
-                .revisions
-                .get(history.cursor - 1)
-                .map(|revision| revision.after_cursor)
-        }
+        self.restored_editor_state(thought_id)
+            .map(|(cursor, _)| cursor)
     }
 
-    /// Choose a transformation as the next undo unit when it is newer than the
-    /// active thought's latest editor revision and directly owns that thought.
+    /// Restore cursor head and directional selection anchor at the applied revision prefix.
     #[must_use]
-    pub fn preferred_undo_scope(&self, mode: InteractionMode) -> UndoScope {
-        let InteractionMode::Edit { thought_id } = mode else {
-            return UndoScope::Board;
-        };
-        let editor_sequence = self
-            .editor_histories
-            .get(&thought_id)
-            .and_then(|history| {
+    pub fn restored_editor_state(
+        &self,
+        thought_id: ThoughtId,
+    ) -> Option<(TextPosition, Option<TextPosition>)> {
+        if let Some(history) = self.editor_histories.get(&thought_id) {
+            let restored = if history.cursor == 0 {
                 history
-                    .cursor
-                    .checked_sub(1)
-                    .and_then(|index| history.revisions.get(index))
-            })
-            .map(|revision| revision.sequence);
-        let transformation = self
-            .board_history_cursor
-            .checked_sub(1)
-            .and_then(|index| self.board_history.get(index))
-            .filter(|operation| {
-                matches!(
-                    operation.kind,
-                    BoardOperationKind::Split
-                        | BoardOperationKind::Extract
-                        | BoardOperationKind::Merge
-                        | BoardOperationKind::Reflow
-                ) && operation.forward.addresses(thought_id)
-            });
-        if transformation.is_some_and(|operation| {
-            editor_sequence.is_none_or(|sequence| operation.sequence > sequence)
-        }) {
-            UndoScope::Board
-        } else {
-            UndoScope::Editor { thought_id }
+                    .revisions
+                    .first()
+                    .map(|revision| (revision.before_cursor, revision.before_selection_anchor))
+            } else {
+                history
+                    .revisions
+                    .get(history.cursor - 1)
+                    .map(|revision| (revision.after_cursor, revision.after_selection_anchor))
+            };
+            if restored.is_some() {
+                return restored;
+            }
         }
-    }
-
-    /// Choose a transformation as the next redo unit when it precedes the
-    /// active thought's next editor revision and directly owns that thought.
-    #[must_use]
-    pub fn preferred_redo_scope(&self, mode: InteractionMode) -> UndoScope {
-        let InteractionMode::Edit { thought_id } = mode else {
-            return UndoScope::Board;
-        };
-        let editor_sequence = self
-            .editor_histories
-            .get(&thought_id)
-            .and_then(|history| history.revisions.get(history.cursor))
-            .map(|revision| revision.sequence);
-        let transformation =
-            self.board_history
-                .get(self.board_history_cursor)
-                .filter(|operation| {
-                    matches!(
-                        operation.kind,
-                        BoardOperationKind::Split
-                            | BoardOperationKind::Extract
-                            | BoardOperationKind::Merge
-                            | BoardOperationKind::Reflow
-                    ) && operation.forward.addresses(thought_id)
-                });
-        if transformation.is_some_and(|operation| {
-            editor_sequence.is_none_or(|sequence| operation.sequence < sequence)
-        }) {
-            UndoScope::Board
-        } else {
-            UndoScope::Editor { thought_id }
-        }
+        self.applied_compose_handoff(thought_id)
     }
 
     pub(super) fn next_sequence(&self) -> ApplicationResult<OperationSequence> {

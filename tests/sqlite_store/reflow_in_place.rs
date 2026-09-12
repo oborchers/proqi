@@ -8,7 +8,7 @@ use proqi::{
         sqlite::{RetryPolicy, SqliteStore},
     },
     application::{AppState, Effect},
-    domain::Timestamp,
+    domain::{Timestamp, UndoScope},
     ports::store::{OperationBatch, Store, StoreError},
     ui::{BoardApp, KeyStroke, LogicalKey, LogicalModifiers, UiInput, UiKey},
 };
@@ -21,6 +21,82 @@ fn input(
     key: UiKey,
 ) -> Vec<Effect> {
     app.handle(key_input(key), ids, clock)
+}
+
+#[test]
+fn board_reflow_and_editor_revision_keep_sequence_order_across_restarts() {
+    let fixture = DatabaseFixture::new();
+    let mut store = fixture.open();
+    let mut ids = FakeIdGenerator::new(1_725_000_000_000);
+    let clock = FakeClock::new(Timestamp::from_millis(100));
+    let state = session_state(&mut ids, &test_path("reflow-interleaving"));
+    let session_id = state.board.session.id;
+    store
+        .commit(&OperationBatch::CreateSession(state.board.session.clone()))
+        .expect("session");
+    let mut app = BoardApp::new(state, RopeEditorFactory);
+    let effects = app.handle(UiInput::Paste("alpha".to_owned()), &mut ids, &clock);
+    commit(&mut app, &mut store, &effects);
+    let thought_id = app.active_thought_id().expect("thought");
+    let revision = app.handle(UiInput::Paste("  beta".to_owned()), &mut ids, &clock);
+    commit(&mut app, &mut store, &revision);
+    let exit = input(&mut app, &mut ids, &clock, UiKey::Escape);
+    assert!(exit.is_empty());
+    let board_reflow = reflow(&mut app, &mut ids, &clock, true);
+    commit(&mut app, &mut store, &board_reflow);
+    assert_durable(&mut store, session_id, thought_id, "alpha beta");
+
+    let (mut store, mut app) = reopen(&fixture, session_id);
+    input(&mut app, &mut ids, &clock, UiKey::Enter);
+    let undo_board = input(&mut app, &mut ids, &clock, UiKey::Undo);
+    assert_history_scope(&undo_board, UndoScope::Board, true);
+    commit(&mut app, &mut store, &undo_board);
+    assert_durable(&mut store, session_id, thought_id, "alpha  beta");
+
+    let (mut store, mut app) = reopen(&fixture, session_id);
+    input(&mut app, &mut ids, &clock, UiKey::Enter);
+    let undo_editor = input(&mut app, &mut ids, &clock, UiKey::Undo);
+    assert_history_scope(&undo_editor, UndoScope::Editor { thought_id }, true);
+    commit(&mut app, &mut store, &undo_editor);
+    assert_durable(&mut store, session_id, thought_id, "alpha");
+
+    let (mut store, mut app) = reopen(&fixture, session_id);
+    input(&mut app, &mut ids, &clock, UiKey::Enter);
+    let redo_editor = input(&mut app, &mut ids, &clock, UiKey::Redo);
+    assert_history_scope(&redo_editor, UndoScope::Editor { thought_id }, false);
+    commit(&mut app, &mut store, &redo_editor);
+    assert_durable(&mut store, session_id, thought_id, "alpha  beta");
+
+    let (mut store, mut app) = reopen(&fixture, session_id);
+    input(&mut app, &mut ids, &clock, UiKey::Enter);
+    let redo_board = input(&mut app, &mut ids, &clock, UiKey::Redo);
+    assert_history_scope(&redo_board, UndoScope::Board, false);
+    commit(&mut app, &mut store, &redo_board);
+    assert_durable(&mut store, session_id, thought_id, "alpha beta");
+}
+
+fn reopen(
+    fixture: &DatabaseFixture,
+    session_id: proqi::domain::SessionId,
+) -> (SqliteStore, BoardApp) {
+    let mut store = fixture.open();
+    let snapshot = store.load_session(session_id).expect("restart");
+    let app = BoardApp::new(
+        AppState::from_snapshot(snapshot).expect("restored"),
+        RopeEditorFactory,
+    );
+    (store, app)
+}
+
+fn assert_history_scope(effects: &[Effect], expected: UndoScope, undo: bool) {
+    assert!(matches!(
+        effects,
+        [Effect::CommitHistoryMove {
+            scope,
+            undo: actual_undo,
+            ..
+        }] if *scope == expected && *actual_undo == undo
+    ));
 }
 
 fn commit(app: &mut BoardApp, store: &mut SqliteStore, effects: &[Effect]) {

@@ -48,7 +48,7 @@ pub(super) fn enqueue_effects(
             | Effect::CommitHistoryMove { .. }
             | Effect::RetryPersistence { .. }
             | Effect::StoreIntegrationContext { .. }
-            | Effect::RenameSession { .. }
+            | Effect::CommitBrowserOperation(_)
             | Effect::DiscoverTransferSessions
             | Effect::TransferThought(_)
             | Effect::PrepareSubmission(_)
@@ -132,13 +132,15 @@ fn enqueue_persistence_effect(
                 },
             )?;
         }
-        Effect::RenameSession {
-            session_id,
-            previous_name,
-            name,
-        } => lanes
-            .persistence
-            .rename_session(None, session_id, previous_name, name)?,
+        Effect::CommitBrowserOperation(operation) => {
+            let previous_name = match operation.inverse() {
+                crate::domain::BrowserMutation::SetName { value, .. } => value.clone(),
+                crate::domain::BrowserMutation::SetDeletedAt { .. } => None,
+            };
+            lanes
+                .persistence
+                .browser_operation(None, previous_name, operation)?;
+        }
         Effect::DiscoverTransferSessions => lanes
             .persistence
             .discover_transfer_sessions(app.state.board.session.id)?,
@@ -252,6 +254,10 @@ fn complete_result(
         PersistenceResult::Lookup { request_id, result } => {
             pending.persistence = pending.persistence.saturating_sub(1);
             return owner_control::complete_lookup(app, lanes, pending, clock, request_id, result);
+        }
+        PersistenceResult::BrowserLookup { request_id, result } => {
+            pending.persistence = pending.persistence.saturating_sub(1);
+            owner_control::complete_browser_lookup(pending, request_id, result);
         }
         PersistenceResult::SubmissionPrepared {
             submission_id,

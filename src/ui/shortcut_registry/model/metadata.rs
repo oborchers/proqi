@@ -14,6 +14,8 @@ pub(crate) enum HelpAvailability {
     Always,
     Submission,
     EffectiveTransform,
+    Undo,
+    Redo,
 }
 
 /// One ordered Help projection attached to its semantic action.
@@ -45,6 +47,8 @@ pub(crate) enum CommandAvailability {
     Extract,
     Merge,
     ScreenshotInbox,
+    QueryUndo,
+    QueryRedo,
 }
 
 /// Stable or state-dependent Commands label policy.

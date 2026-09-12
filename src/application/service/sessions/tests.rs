@@ -4,12 +4,16 @@ use std::path::{Path, PathBuf};
 
 use crate::{
     application::test_support::{TestClock, TestIds},
-    domain::{OperationId, RevisionId, Session, SessionBoard, SessionId, Timestamp},
+    domain::{
+        BrowserOperationKind, OperationId, RevisionId, Session, SessionBoard, SessionId, Timestamp,
+    },
     ports::{
+        environment::IdGenerator,
         runtime::{Lease, RuntimeCoordinator, RuntimeError, RuntimeScan},
         store::{
-            CommitReceipt, FirstRunBoard, FirstRunOutcome, OperationBatch, SessionHit,
-            SessionQuery, SessionSnapshot, Store, StoreError, StoredOperationRequest,
+            BrowserCommitReceipt, BrowserHistoryEntry, BrowserHistoryStatus, CommitReceipt,
+            FirstRunBoard, FirstRunOutcome, OperationBatch, SessionHit, SessionQuery,
+            SessionSnapshot, Store, StoreError, StoredOperationRequest,
         },
     },
 };
@@ -20,6 +24,8 @@ use super::{SessionService, SessionServiceError};
 struct BusyCompactionStore {
     session: Option<Session>,
     compact_calls: usize,
+    browser_history: BrowserHistoryStatus,
+    browser_history_moves: usize,
 }
 
 impl Store for BusyCompactionStore {
@@ -101,6 +107,25 @@ impl Store for BusyCompactionStore {
         Err(unused_store_call())
     }
 
+    fn move_browser_history(
+        &mut self,
+        operation_id: OperationId,
+        _target: BrowserHistoryEntry,
+        _undo: bool,
+        _at: Timestamp,
+    ) -> Result<BrowserCommitReceipt, StoreError> {
+        self.browser_history_moves += 1;
+        Ok(BrowserCommitReceipt {
+            operation_id,
+            cursor: 0,
+            idempotent_replay: false,
+        })
+    }
+
+    fn browser_history_status(&mut self) -> Result<BrowserHistoryStatus, StoreError> {
+        Ok(self.browser_history)
+    }
+
     fn prune_session(&mut self, _id: SessionId) -> Result<(), StoreError> {
         Err(unused_store_call())
     }
@@ -124,6 +149,39 @@ impl RuntimeCoordinator for TestRuntime {
 
     fn acquire_session(&self, _session_id: SessionId) -> Result<TestLease, RuntimeError> {
         Ok(TestLease)
+    }
+
+    fn acquire_schema_shared(&self) -> Result<TestLease, RuntimeError> {
+        Ok(TestLease)
+    }
+
+    fn acquire_schema_exclusive(&self) -> Result<TestLease, RuntimeError> {
+        Ok(TestLease)
+    }
+
+    fn scan_runtime(&self) -> Result<RuntimeScan, RuntimeError> {
+        Ok(RuntimeScan::default())
+    }
+}
+
+struct RefusingRuntime {
+    busy: SessionId,
+}
+
+impl RuntimeCoordinator for RefusingRuntime {
+    type SessionLease = TestLease;
+    type SharedSchemaLease = TestLease;
+    type ExclusiveSchemaLease = TestLease;
+
+    fn acquire_session(&self, session_id: SessionId) -> Result<TestLease, RuntimeError> {
+        if session_id == self.busy {
+            Err(RuntimeError::SessionBusy {
+                session_id,
+                holder: None,
+            })
+        } else {
+            Ok(TestLease)
+        }
     }
 
     fn acquire_schema_shared(&self) -> Result<TestLease, RuntimeError> {
@@ -185,4 +243,37 @@ fn resumed_session_retains_history_compaction() {
         Err(SessionServiceError::Store(StoreError::Busy))
     ));
     assert_eq!(store.compact_calls, 1);
+}
+
+#[test]
+fn browser_history_acquires_the_target_session_lease_before_mutation() {
+    let mut ids = TestIds::new(1_725_000_000_000);
+    let target = BrowserHistoryEntry {
+        operation_id: ids.operation_id(),
+        session_id: ids.session_id(),
+        kind: BrowserOperationKind::Trash,
+    };
+    let mut store = BusyCompactionStore {
+        browser_history: BrowserHistoryStatus {
+            undo: Some(target),
+            redo: None,
+        },
+        ..BusyCompactionStore::default()
+    };
+    let runtime = RefusingRuntime {
+        busy: target.session_id,
+    };
+    let clock = TestClock(Timestamp::from_millis(1));
+    let result = SessionService::new(&mut store, &runtime, &clock, &mut ids, test_directory())
+        .expect("service")
+        .move_presented_browser_history(target, true);
+
+    assert!(matches!(
+        result,
+        Err(SessionServiceError::Runtime(RuntimeError::SessionBusy {
+            session_id,
+            ..
+        })) if session_id == runtime.busy
+    ));
+    assert_eq!(store.browser_history_moves, 0);
 }

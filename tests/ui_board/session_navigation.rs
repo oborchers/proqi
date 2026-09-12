@@ -27,7 +27,12 @@ fn current_session_can_be_renamed_from_the_palette_and_footer() {
     let effects = fixture.effects(crate::key_input(UiKey::Enter));
     assert!(matches!(
         effects.as_slice(),
-        [Effect::RenameSession { name: Some(name), .. }] if name == "Agent research"
+        [Effect::CommitBrowserOperation(operation)]
+            if matches!(
+                operation.forward(),
+                proqi::domain::BrowserMutation::SetName { value: Some(name), .. }
+                    if name == "Agent research"
+            )
     ));
     assert_eq!(
         fixture.app.state.board.session.name.as_deref(),

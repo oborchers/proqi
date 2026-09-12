@@ -1,29 +1,36 @@
 //! Persistence facade expressed in domain terms.
 
+mod browser_history;
 mod capture;
 mod compaction;
 mod error;
+mod migration;
 mod onboarding;
+mod receipt;
 mod submission_route;
 
 use serde::{Deserialize, Serialize};
 
 use crate::domain::{
-    BoardOperation, IntegrationContext, OperationId, OperationSequence, RevisionId, Session,
-    SessionBoard, SessionId, SubmissionId, ThoughtId, ThoughtRevision, Timestamp, UndoScope,
+    BoardOperation, BrowserOperation, IntegrationContext, OperationId, OperationSequence,
+    RevisionId, Session, SessionBoard, SessionId, SubmissionId, ThoughtId, ThoughtRevision,
+    Timestamp, UndoScope,
 };
 use crate::ports::agent::{AgentState, SubmissionDisposition};
 
+pub use browser_history::{BrowserCommitReceipt, BrowserHistoryEntry, BrowserHistoryStatus};
 pub use capture::{CaptureCommit, CaptureCommitOutcome, CaptureReceipt};
 pub use compaction::{CompactedOperationRequest, thought_payload_digest};
 pub use error::{StoreError, StoreFailureCode};
+pub use migration::MigrationMode;
 pub use onboarding::{FirstRunBoard, FirstRunOutcome, OnboardingVersion};
+pub use receipt::{CommitReceipt, DurableIdentity};
 pub use submission_route::{SUBMISSION_ROUTE_VERSION, SubmissionJournalRoute};
 
 /// Current storage schema understood by this binary.
-pub const SUPPORTED_SCHEMA_VERSION: u32 = 15;
+pub const SUPPORTED_SCHEMA_VERSION: u32 = 16;
 /// Current local storage protocol understood by this binary.
-pub const STORAGE_PROTOCOL_VERSION: u32 = 14;
+pub const STORAGE_PROTOCOL_VERSION: u32 = 15;
 
 /// One ordered, content-redacted source included in a submission.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -109,38 +116,6 @@ pub struct SubmissionOutcome {
     pub deletion_operation_id: Option<OperationId>,
     /// Transition time.
     pub at: Timestamp,
-}
-
-/// Whether this process proved it holds the exclusive schema lease.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum MigrationMode {
-    /// Migrations may run after backup and integrity checks.
-    Allow,
-    /// Opening an older schema fails without modifying it.
-    Refuse,
-}
-
-/// One commit accepted durably by the store.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct CommitReceipt {
-    /// Owning session.
-    pub session_id: SessionId,
-    /// Monotonic commit sequence.
-    pub sequence: OperationSequence,
-    /// Durable entity used for idempotency.
-    pub identity: DurableIdentity,
-    /// Whether this exact commit had already succeeded.
-    pub idempotent_replay: bool,
-}
-
-/// Typed identity of a durable commit.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case", tag = "kind", content = "id")]
-pub enum DurableIdentity {
-    /// Structural or history movement operation.
-    Operation(OperationId),
-    /// Editor revision.
-    Revision(RevisionId),
 }
 
 /// Previously committed request associated with a durable operation identity.
@@ -327,6 +302,58 @@ pub trait Store {
     ///
     /// Returns a typed absence, validation, or persistence failure.
     fn rename_session(&mut self, id: SessionId, name: Option<&str>) -> Result<(), StoreError>;
+
+    /// Atomically apply and retain one cross-session Browser operation.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed conflict, invariant, or persistence failure.
+    fn commit_browser_operation(
+        &mut self,
+        _operation: &BrowserOperation,
+    ) -> Result<BrowserCommitReceipt, StoreError> {
+        Err(StoreError::Integrity(
+            "browser history is unavailable".to_owned(),
+        ))
+    }
+
+    /// Atomically undo or redo one Browser operation.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed empty-history, conflict, or persistence failure.
+    fn move_browser_history(
+        &mut self,
+        _operation_id: OperationId,
+        _target: BrowserHistoryEntry,
+        _undo: bool,
+        _at: Timestamp,
+    ) -> Result<BrowserCommitReceipt, StoreError> {
+        Err(StoreError::Integrity(
+            "browser history is unavailable".to_owned(),
+        ))
+    }
+
+    /// Inspect Browser history without mutating it.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed corruption or persistence failure.
+    fn browser_history_status(&mut self) -> Result<BrowserHistoryStatus, StoreError> {
+        Ok(BrowserHistoryStatus::default())
+    }
+
+    /// Look up one retained Browser operation for owner-control replay.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed corruption or persistence failure.
+    fn browser_operation(
+        &mut self,
+        _operation_id: OperationId,
+    ) -> Result<Option<BrowserOperation>, StoreError> {
+        Ok(None)
+    }
 
     /// Look up a prior operation request for cross-process idempotency.
     ///

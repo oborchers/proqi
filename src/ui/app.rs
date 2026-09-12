@@ -25,7 +25,7 @@ mod pointer;
 mod pointer_activation;
 mod pointer_editor;
 mod presentation;
-mod query;
+pub(in crate::ui) mod query;
 mod recovery;
 mod reflow;
 mod reorder;
@@ -101,6 +101,19 @@ enum ComposePresentation {
     Editor,
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+enum SessionRenamePersistence {
+    #[default]
+    Idle,
+    Saving,
+}
+
+impl SessionRenamePersistence {
+    const fn is_saving(self) -> bool {
+        matches!(self, Self::Saving)
+    }
+}
+
 /// Mutable UI state around the pure application reducer.
 pub struct BoardApp {
     /// Reducer-owned application state rendered by the board.
@@ -136,7 +149,8 @@ pub struct BoardApp {
     palette: Option<palette::PaletteState>,
     invocation_popup: Option<invocation::InvocationPopup>,
     search: Option<search::SearchState>,
-    rename: Option<String>,
+    rename: Option<query::QueryEditor>,
+    session_rename_persistence: SessionRenamePersistence,
     transfer: Option<transfer::TransferState>,
     settings: UiSettings,
     selection: selection::BoardSelection,
@@ -234,6 +248,7 @@ impl BoardApp {
             invocation_popup: None,
             search: None,
             rename: None,
+            session_rename_persistence: SessionRenamePersistence::Idle,
             transfer: None,
             settings,
             selection: selection::BoardSelection::default(),
@@ -381,7 +396,7 @@ impl BoardApp {
                 self.handle_invocation_input(&input, ids, clock)
             }
             Owner::Transfer => self.handle_transfer_input(&input, ids, clock),
-            Owner::Rename => self.handle_session_rename(&input),
+            Owner::Rename => self.handle_session_rename(&input, ids, clock),
             Owner::Search => self.handle_search_input(&input, ids, clock),
             Owner::Direction => self
                 .handle_submission_input(&input, ids, clock)
@@ -428,19 +443,20 @@ impl BoardApp {
             return;
         };
         let content = thought.content.clone();
-        let restored_cursor = self.state.restored_editor_cursor(thought_id);
+        let restored_state = self.state.restored_editor_state(thought_id);
         if let Some((EditorOwner::Thought(current), editor)) = &mut self.editor
             && *current == thought_id
         {
             if self.pending_edit.is_none() && editor.snapshot().content != content {
-                let _outcome = editor.replace_content(content, restored_cursor.unwrap_or_default());
+                let (cursor, anchor) = restored_state.unwrap_or_default();
+                let _outcome = editor.replace_state(content, cursor, anchor);
             }
         } else {
             self.edit_owner_generation = self.edit_owner_generation.wrapping_add(1);
             let mut editor = self.editor_factory.create(&content);
             editor.set_viewport(self.viewport);
-            if let Some(cursor) = restored_cursor {
-                let _outcome = editor.replace_content(content, cursor);
+            if let Some((cursor, anchor)) = restored_state {
+                let _outcome = editor.replace_state(content, cursor, anchor);
             } else {
                 let _outcome = editor.apply(EditCommand::Move {
                     movement: CursorMovement::DocumentEnd,

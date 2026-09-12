@@ -37,7 +37,8 @@ pub(super) fn board_replay(
         (
             BoardOperationKind::Delete
             | BoardOperationKind::Cut
-            | BoardOperationKind::SubmitAndRemove,
+            | BoardOperationKind::SubmitAndRemove
+            | BoardOperationKind::TransferAndRemove,
             BoardMutation::SetDeletion {
                 thought_id,
                 deleted_at: Some(_),

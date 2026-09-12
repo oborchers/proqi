@@ -20,7 +20,7 @@ pub(in crate::ui) use named::fixed_character_binding;
 use named::{fixed_character_keys, named_action};
 use vocabulary::{
     FIXED_KEYS, KEYBOARD_CONTEXTS, command_modifiers, is_editor_context, is_list_context,
-    is_query_cursor_context, modifier_combinations,
+    is_query_cursor_context, is_text_context, modifier_combinations,
 };
 
 pub(super) fn default_claims(macos: bool) -> BTreeMap<Action, Vec<ShortcutBindingClaim>> {
@@ -197,6 +197,22 @@ fn primary_action(context: Context, key: LogicalKey, shifted: bool) -> Option<Ac
             _ => {}
         }
     }
+    let history_action = match key {
+        LogicalKey::Character('z' | 'Z') if shifted => Some(Action::Redo),
+        LogicalKey::Character('y' | 'Y') if !shifted => Some(Action::Redo),
+        LogicalKey::Character('z' | 'Z') if !shifted => Some(Action::Undo),
+        _ => None,
+    };
+    if let Some(action) = history_action {
+        // Reading the exhaustive policy here makes every Primary history
+        // binding registry-owned, including blocking contexts which must
+        // absorb the intention rather than expose hidden history.
+        let _ownership = context.undo_contract();
+        return Some(action);
+    }
+    if !shifted && matches!(key, LogicalKey::Character('a' | 'A')) && is_text_context(context) {
+        return Some(Action::SelectAll);
+    }
     let editor_backed = matches!(
         context,
         Context::Board
@@ -220,9 +236,6 @@ fn primary_action(context: Context, key: LogicalKey, shifted: bool) -> Option<Ac
                 Action::Duplicate
             }
             LogicalKey::Character('u' | 'U') if !shifted => Action::DeleteLogicalLine,
-            LogicalKey::Character('z' | 'Z') if shifted => Action::Redo,
-            LogicalKey::Character('y' | 'Y') if !shifted => Action::Redo,
-            LogicalKey::Character('z' | 'Z') if !shifted => Action::Undo,
             _ => return None,
         };
         return Some(action);
@@ -330,13 +343,6 @@ fn horizontal_action(
     modifiers: LogicalModifiers,
     macos: bool,
 ) -> Option<Action> {
-    if matches!(context, Context::Browser | Context::BrowserQuery) {
-        return Some(if back {
-            Action::FocusPrevious
-        } else {
-            Action::FocusNext
-        });
-    }
     if !is_editor_context(context) && !is_query_cursor_context(context) {
         return None;
     }

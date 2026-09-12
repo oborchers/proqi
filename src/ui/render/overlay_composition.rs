@@ -86,15 +86,37 @@ pub(super) fn render(
             );
         }
     } else if let Some(value) = app.session_rename_view() {
-        if let Some(overlay) = &layout.overlay {
-            overlays::render_text_prompt(frame, overlay, " rename session ", value, theme);
-        }
+        render_session_rename(frame, app, layout, theme, value);
     } else if app.help
         && let Some(overlay) = &layout.overlay
     {
         overlays::render_help(frame, app, overlay, theme);
     }
     false
+}
+
+fn render_session_rename(
+    frame: &mut Frame<'_>,
+    app: &BoardApp,
+    layout: &LayoutSnapshot,
+    theme: &Theme,
+    value: &str,
+) {
+    let Some(overlay) = &layout.overlay else {
+        return;
+    };
+    let (cursor, selection) = app
+        .session_rename_editor_view()
+        .unwrap_or((value.len(), None));
+    overlays::render_text_prompt(
+        frame,
+        overlay,
+        " rename session ",
+        value,
+        cursor,
+        selection,
+        theme,
+    );
 }
 
 fn render_decision(

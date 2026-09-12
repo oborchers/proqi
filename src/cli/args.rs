@@ -144,6 +144,10 @@ pub(super) enum SessionCommand {
     Trash { session: String },
     /// Restore a session from recoverable trash.
     Restore { session: String },
+    /// Undo the latest session rename, trash, or restore from Browser history.
+    Undo,
+    /// Redo the next session rename, trash, or restore from Browser history.
+    Redo,
     /// Permanently delete an already trashed session.
     Prune {
         session: String,

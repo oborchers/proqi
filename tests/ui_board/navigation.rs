@@ -60,8 +60,10 @@ fn help_is_modal_and_escape_closes_it_without_mutating_the_board() {
 }
 
 #[test]
-fn shallow_help_scrolls_to_every_shortcut() {
+fn shallow_help_scrolls_to_available_boundaries_without_hidden_history() {
     let mut fixture = Fixture::new();
+    durable_thought(&mut fixture, "redo candidate");
+    fixture.input(crate::key_input(UiKey::Undo));
     fixture.input(crate::key_input(UiKey::Escape));
     fixture.input(crate::key_input(UiKey::Character('?')));
     let _initial = draw(&mut fixture, 42, 8);
@@ -69,11 +71,14 @@ fn shallow_help_scrolls_to_every_shortcut() {
         fixture.input(visual(CursorMovement::VisualDown, false));
     }
     let terminal = draw(&mut fixture, 42, 8);
-    assert!(text(terminal.backend().buffer()).contains("Quit"));
-
+    let bottom = text(terminal.backend().buffer());
+    assert!(bottom.contains("Quit"));
+    assert!(!bottom.contains("Undo") && !bottom.contains("Redo"));
     fixture.pointer(1, 1, PointerKind::ScrollUp);
     let terminal = draw(&mut fixture, 42, 8);
-    assert!(text(terminal.backend().buffer()).contains("Redo"));
+    let scrolled = text(terminal.backend().buffer());
+    assert_ne!(scrolled, bottom);
+    assert!(!scrolled.contains("Undo") && !scrolled.contains("Redo"));
 }
 
 #[test]

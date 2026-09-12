@@ -134,12 +134,10 @@ impl BoardApp {
             UiKey::PasteClipboardReflow => return self.read_clipboard_reflow(ids),
             UiKey::Copy => return self.copy_selection(ids),
             UiKey::Cut => return self.cut_selection(ids),
-            UiKey::Submit
-            | UiKey::SubmitKeep
-            | UiKey::Undo
-            | UiKey::Redo
-            | UiKey::Duplicate
-            | UiKey::Quit => return Vec::new(),
+            UiKey::Submit | UiKey::SubmitKeep | UiKey::Undo | UiKey::Duplicate | UiKey::Quit => {
+                return Vec::new();
+            }
+            UiKey::Redo => return self.history(ids, clock, false),
             _ => {}
         }
         // Compose has no durable annotation owner. Accepted nonempty content
@@ -249,24 +247,15 @@ impl BoardApp {
         let thought_id = ids.thought_id();
         let operation_id = ids.operation_id();
         let at = clock.now();
-        let action = if preserve_owned {
-            Action::CreateOwnedThought(crate::application::OwnedThoughtCreation::preserved(
-                thought_id,
-                operation_id,
-                snapshot.content,
-                annotations,
-                None,
-                at,
-            ))
-        } else {
-            Action::CreateThought {
-                thought_id,
-                operation_id,
-                content: snapshot.content,
-                annotations,
-                insertion_index: None,
-                at,
-            }
+        let action = Action::CreateComposeThought {
+            thought_id,
+            operation_id,
+            content: snapshot.content,
+            annotations,
+            cursor: snapshot.cursor,
+            selection_anchor: snapshot.selection_anchor,
+            preserve_owned,
+            at,
         };
         let effects = self.reduce(action);
         if self.state.board.thought(thought_id).is_some()
@@ -443,7 +432,9 @@ impl BoardApp {
             pending.before_annotations.clone(),
             pending.after_annotations.clone(),
             pending.before.cursor,
+            pending.before.selection_anchor,
             pending.after.cursor,
+            pending.after.selection_anchor,
             clock.now(),
         ));
         match reduce(&mut self.state, action) {

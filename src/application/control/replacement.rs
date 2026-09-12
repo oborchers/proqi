@@ -62,7 +62,9 @@ mod tests {
             before_annotations: Vec::new(),
             after_annotations: Vec::new(),
             before_cursor: TextPosition::default(),
+            before_selection_anchor: None,
             after_cursor: TextPosition::default(),
+            after_selection_anchor: None,
             created_at: Timestamp::from_millis(2),
         };
         let existing = StoredOperationRequest::Revision {

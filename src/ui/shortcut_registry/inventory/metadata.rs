@@ -148,7 +148,7 @@ const HELP: &[(Action, HelpMetadata)] = &[
     ),
     (
         Action::Undo,
-        help(HelpSurface::Board, 15, "Undo", HelpAvailability::Always),
+        help(HelpSurface::Board, 15, "Undo", HelpAvailability::Undo),
     ),
     (
         Action::PasteExact,
@@ -170,7 +170,7 @@ const HELP: &[(Action, HelpMetadata)] = &[
     ),
     (
         Action::Redo,
-        help(HelpSurface::Board, 18, "Redo", HelpAvailability::Always),
+        help(HelpSurface::Board, 18, "Redo", HelpAvailability::Redo),
     ),
     (
         Action::Collapse,
@@ -291,11 +291,11 @@ const HELP: &[(Action, HelpMetadata)] = &[
     ),
     (
         Action::Undo,
-        help(HelpSurface::Editor, 10, "Undo", HelpAvailability::Always),
+        help(HelpSurface::Editor, 10, "Undo", HelpAvailability::Undo),
     ),
     (
         Action::Redo,
-        help(HelpSurface::Editor, 11, "Redo", HelpAvailability::Always),
+        help(HelpSurface::Editor, 11, "Redo", HelpAvailability::Redo),
     ),
     (
         Action::ContextualTransform,
@@ -371,6 +371,7 @@ pub(in crate::ui::shortcut_registry) const fn footer_metadata(
         Action::Delete => ("", "", 6, 6),
         Action::Select => (" Select", " Select", 12, 12),
         Action::Undo => (" Undo", " Undo", 7, 7),
+        Action::Redo => (" Redo", " Redo", 7, 7),
         Action::OpenSearch => (" Search", " Search", 9, 9),
         Action::OpenCommands => (" Commands", " Menu", 11, 6),
         Action::Help => (" Shortcuts", " Help", 12, 6),
@@ -412,6 +413,8 @@ pub(in crate::ui::shortcut_registry) fn command_metadata(
         | Action::ThoughtEnd
         | Action::Indent
         | Action::Outdent => CommandAvailability::Editor,
+        Action::Undo => CommandAvailability::QueryUndo,
+        Action::Redo => CommandAvailability::QueryRedo,
         Action::RetryScreenshotCapture => CommandAvailability::ScreenshotRetry,
         Action::SplitThought => CommandAvailability::Split,
         Action::ExtractSelection => CommandAvailability::Extract,

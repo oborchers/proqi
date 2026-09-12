@@ -14,8 +14,8 @@ use super::mutations::bulk::{
 };
 use super::mutations::transform::{ExactSource, extract_thought, merge_thoughts, split_thought};
 use super::mutations::{
-    create_thought, delete_thought, edit_thought, finish_clipboard, history_move, move_thought,
-    request_clipboard, set_presentation,
+    create_compose_thought, create_thought, delete_thought, edit_thought, finish_clipboard,
+    history_move, move_thought, rename_session, request_clipboard, set_presentation,
 };
 
 /// Reduce one action into current state and ordered effects.
@@ -25,19 +25,24 @@ use super::mutations::{
 /// Returns a typed error when an action violates current state or domain invariants.
 pub fn reduce(state: &mut AppState, action: Action) -> ApplicationResult<Vec<Effect>> {
     locks::ensure_action_unlocked(state, &action)?;
-    if matches!(state.durability, DurabilityState::Failed { .. }) && mutates_durable_state(&action)
+    if matches!(state.durability, DurabilityState::Failed { .. }) && action.mutates_durable_state()
     {
         return Err(ApplicationError::InvalidState);
     }
     let previous_focus = state.focused_thought;
     let mut effects = match action {
-        Action::RenameSession { name } => reduce_session_name(state, name),
+        Action::RenameSession {
+            operation_id,
+            name,
+            at,
+        } => rename_session(state, operation_id, name, at),
         Action::FocusThought(_)
         | Action::EnterEdit(_)
         | Action::EnterCompose
         | Action::ExitCompose
         | Action::ExitEdit => reduce_navigation(state, &action),
         Action::CreateThought { .. }
+        | Action::CreateComposeThought { .. }
         | Action::CreateOwnedThought(_)
         | Action::PasteAsThought { .. }
         | Action::EditThought { .. }
@@ -74,45 +79,6 @@ pub fn reduce(state: &mut AppState, action: Action) -> ApplicationResult<Vec<Eff
     Ok(effects)
 }
 
-const fn mutates_durable_state(action: &Action) -> bool {
-    matches!(
-        action,
-        Action::CreateThought { .. }
-            | Action::CreateOwnedThought(_)
-            | Action::RenameSession { .. }
-            | Action::PasteAsThought { .. }
-            | Action::EditThought { .. }
-            | Action::ReflowThought(_)
-            | Action::SplitThought { .. }
-            | Action::ExtractThought { .. }
-            | Action::MergeThoughts { .. }
-            | Action::EditOwnedThought(_)
-            | Action::CutThoughts { .. }
-            | Action::DeleteThought { .. }
-            | Action::DeleteThoughts { .. }
-            | Action::StageSubmissionRemoval { .. }
-            | Action::MoveThought { .. }
-            | Action::SetPresentation { .. }
-            | Action::SetPresentationMany { .. }
-            | Action::DuplicateThoughts { .. }
-            | Action::Undo { .. }
-            | Action::Redo { .. }
-    )
-}
-
-fn reduce_session_name(
-    state: &mut AppState,
-    name: Option<String>,
-) -> ApplicationResult<Vec<Effect>> {
-    let previous_name = state.board.session.name.clone();
-    state.board.session.rename(name.clone())?;
-    Ok(vec![Effect::RenameSession {
-        session_id: state.board.session.id,
-        previous_name,
-        name,
-    }])
-}
-
 fn reduce_navigation(state: &mut AppState, action: &Action) -> ApplicationResult<Vec<Effect>> {
     match action {
         Action::FocusThought(focus) => {
@@ -137,44 +103,6 @@ fn reduce_navigation(state: &mut AppState, action: &Action) -> ApplicationResult
 
 fn reduce_content(state: &mut AppState, action: Action) -> ApplicationResult<Vec<Effect>> {
     match action {
-        Action::CreateThought {
-            thought_id,
-            operation_id,
-            content,
-            annotations,
-            insertion_index,
-            at,
-        } => {
-            reject_new_shortcut_annotations(&annotations)?;
-            create_thought(
-                state,
-                thought_id,
-                operation_id,
-                content,
-                annotations,
-                insertion_index.unwrap_or(state.insertion_index),
-                at,
-            )
-        }
-        Action::CreateOwnedThought(creation) => create_owned_thought(state, creation),
-        Action::PasteAsThought {
-            thought_id,
-            operation_id,
-            content,
-            annotations,
-            at,
-        } => {
-            reject_new_shortcut_annotations(&annotations)?;
-            create_thought(
-                state,
-                thought_id,
-                operation_id,
-                content,
-                annotations,
-                state.insertion_index,
-                at,
-            )
-        }
         Action::EditThought {
             thought_id,
             revision_id,
@@ -196,11 +124,77 @@ fn reduce_content(state: &mut AppState, action: Action) -> ApplicationResult<Vec
                 before_annotations,
                 after_annotations,
                 before_cursor,
+                None,
                 after_cursor,
+                None,
                 at,
             )
         }
         Action::EditOwnedThought(edit) => edit_owned_thought(state, edit),
+        action => reduce_creation(state, action),
+    }
+}
+
+fn reduce_creation(state: &mut AppState, action: Action) -> ApplicationResult<Vec<Effect>> {
+    match action {
+        Action::CreateThought {
+            thought_id,
+            operation_id,
+            content,
+            annotations,
+            insertion_index,
+            at,
+        } => {
+            reject_new_shortcut_annotations(&annotations)?;
+            create_thought(
+                state,
+                thought_id,
+                operation_id,
+                content,
+                annotations,
+                insertion_index.unwrap_or(state.insertion_index),
+                at,
+            )
+        }
+        Action::CreateComposeThought {
+            thought_id,
+            operation_id,
+            content,
+            annotations,
+            cursor,
+            selection_anchor,
+            preserve_owned,
+            at,
+        } => create_compose_thought(
+            state,
+            thought_id,
+            operation_id,
+            content,
+            annotations,
+            cursor,
+            selection_anchor,
+            preserve_owned,
+            at,
+        ),
+        Action::CreateOwnedThought(creation) => create_owned_thought(state, creation),
+        Action::PasteAsThought {
+            thought_id,
+            operation_id,
+            content,
+            annotations,
+            at,
+        } => {
+            reject_new_shortcut_annotations(&annotations)?;
+            create_thought(
+                state,
+                thought_id,
+                operation_id,
+                content,
+                annotations,
+                state.insertion_index,
+                at,
+            )
+        }
         _ => Err(ApplicationError::InvalidState),
     }
 }
@@ -290,7 +284,9 @@ fn edit_owned_thought(
         edit.before_annotations,
         edit.after_annotations,
         edit.before_cursor,
+        edit.before_selection_anchor,
         edit.after_cursor,
+        edit.after_selection_anchor,
         edit.at,
     )
 }

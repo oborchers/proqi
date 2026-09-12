@@ -16,6 +16,7 @@ pub(super) fn outcome() -> Outcome {
             "exact_thought_replacement": true,
             "replacement_sha256_precondition": true,
             "durable_thought_collapse": true,
+            "durable_browser_history": true,
             "max_thought_stdin_bytes": MAX_THOUGHT_STDIN_BYTES,
             "herdr_submission": true,
             "herdr_managed_pane_required": true,

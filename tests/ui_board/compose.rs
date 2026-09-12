@@ -110,6 +110,52 @@ fn first_conflicting_character_is_one_exact_populated_create() {
 }
 
 #[test]
+fn first_compose_intention_undoes_to_empty_and_redoes_exact_editor_handoff() {
+    let mut fixture = Fixture::new();
+    let content = "Grüße 界 👩‍💻";
+    let create = fixture.effects(UiInput::Paste(content.to_owned()));
+    let [Effect::CommitBoardOperation(operation)] = create.as_slice() else {
+        panic!("Compose paste must materialize once");
+    };
+    let (thought_id, cursor, anchor) = operation.compose_handoff().expect("Compose handoff");
+    let operation_id = operation.id;
+    assert_eq!(
+        fixture
+            .app
+            .editor_snapshot()
+            .expect("created editor")
+            .cursor,
+        cursor
+    );
+
+    let undo = fixture.effects(crate::key_input(UiKey::Undo));
+    assert!(matches!(
+        undo.as_slice(),
+        [Effect::CommitHistoryMove { undo: true, .. }]
+    ));
+    assert_eq!(fixture.app.interaction_mode(), InteractionMode::Compose);
+    assert!(fixture.app.state.board.live_thoughts().is_empty());
+    let empty = fixture.app.editor_snapshot().expect("empty Compose editor");
+    assert_eq!(empty.content, "");
+    assert_eq!(empty.cursor, proqi::domain::TextPosition::default());
+
+    let redo = fixture.effects(crate::key_input(UiKey::Redo));
+    assert!(matches!(
+        redo.as_slice(),
+        [Effect::CommitHistoryMove { undo: false, .. }]
+    ));
+    assert_eq!(
+        fixture.app.interaction_mode(),
+        InteractionMode::Edit { thought_id }
+    );
+    let restored = fixture.app.editor_snapshot().expect("restored editor");
+    assert_eq!(restored.content, content);
+    assert_eq!(restored.cursor, cursor);
+    assert_eq!(restored.selection_anchor, anchor);
+    assert_eq!(fixture.app.state.board_history()[0].id, operation_id);
+}
+
+#[test]
 fn exact_and_annotated_paste_materialize_through_the_canonical_create() {
     let content = "nqs:?jk\tGrüße\r\n界\nעברית\0\u{1f469}\u{200d}\u{1f4bb}";
     let mut fixture = Fixture::new();
@@ -117,8 +163,9 @@ fn exact_and_annotated_paste_materialize_through_the_canonical_create() {
     let [Effect::CommitBoardOperation(operation)] = effects.as_slice() else {
         panic!("exact paste must be one create operation");
     };
-    let proqi::domain::BoardMutation::AddThought { thought } = &operation.forward else {
-        panic!("expected populated create payload");
+    let proqi::domain::BoardMutation::AddThoughtFromCompose { thought, .. } = &operation.forward
+    else {
+        panic!("expected Compose handoff payload");
     };
     assert_eq!(thought.content, content);
     assert_eq!(

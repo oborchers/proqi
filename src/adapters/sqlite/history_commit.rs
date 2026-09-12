@@ -52,6 +52,10 @@ pub(super) fn commit_history_move(
     )? {
         return Ok(receipt);
     }
+    super::browser_history::ensure_not_used_by_browser_history(
+        transaction,
+        operation_id.database_bytes(),
+    )?;
     require_next_sequence(transaction, session_id, sequence)?;
     let search_changed = match scope {
         UndoScope::Board => move_board_history(transaction, session_id, undo, at)?,
@@ -366,6 +370,7 @@ pub(super) fn update_session_sequence(
     sequence: OperationSequence,
     at: Timestamp,
 ) -> Result<(), StoreError> {
+    super::browser_history::invalidate_activity_conflicts(transaction, session_id, at)?;
     transaction
         .execute(
             "UPDATE sessions SET last_durable_sequence = ?2,

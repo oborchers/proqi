@@ -6,14 +6,15 @@ use proqi::ports::control::{
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::Value;
 
-const REQUEST: &str = include_str!("fixtures/control/v8/add.request.json");
-const ACCEPTED: &str = include_str!("fixtures/control/v8/add.accepted.json");
-const REJECTED: &str = include_str!("fixtures/control/v8/add.rejected.json");
-const PRESERVE: &str = include_str!("fixtures/control/v8/preserve_add.request.json");
-const UPDATE_PREPARE: &str = include_str!("fixtures/control/v8/update_prepare.request.json");
-const UPDATE_READY: &str = include_str!("fixtures/control/v8/update_prepare.ready.json");
-const CAPTURE_TAKEOVER: &str = include_str!("fixtures/control/v8/capture_takeover.request.json");
-const CAPTURE_SCHEDULED: &str = include_str!("fixtures/control/v8/capture_takeover.scheduled.json");
+const REQUEST: &str = include_str!("fixtures/control/v9/add.request.json");
+const ACCEPTED: &str = include_str!("fixtures/control/v9/add.accepted.json");
+const REJECTED: &str = include_str!("fixtures/control/v9/add.rejected.json");
+const PRESERVE: &str = include_str!("fixtures/control/v9/preserve_add.request.json");
+const UPDATE_PREPARE: &str = include_str!("fixtures/control/v9/update_prepare.request.json");
+const UPDATE_READY: &str = include_str!("fixtures/control/v9/update_prepare.ready.json");
+const CAPTURE_TAKEOVER: &str = include_str!("fixtures/control/v9/capture_takeover.request.json");
+const CAPTURE_SCHEDULED: &str = include_str!("fixtures/control/v9/capture_takeover.scheduled.json");
+const RENAME: &str = include_str!("fixtures/control/v9/rename.request.json");
 
 #[test]
 fn current_request_success_and_error_fixtures_round_trip_canonically() {
@@ -60,6 +61,16 @@ fn current_capture_takeover_fixtures_round_trip_canonically() {
         proqi::ports::control::ControlMutation::CaptureTakeover { .. }
     ));
     assert!(matches!(response.result, ControlResult::Capture(_)));
+}
+
+#[test]
+fn current_rename_fixture_carries_its_durable_browser_identity() {
+    let request: ControlRequest = assert_round_trip(RENAME);
+    assert!(matches!(
+        request.mutation,
+        proqi::ports::control::ControlMutation::RenameSession { .. }
+    ));
+    assert!(request.mutation.durable_operation_id().is_some());
 }
 
 #[test]

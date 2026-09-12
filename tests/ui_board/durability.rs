@@ -66,8 +66,9 @@ fn typing_coalesces_until_a_semantic_boundary() {
         panic!("expected initial thought persistence");
     };
     assert_eq!(operation.kind, proqi::domain::BoardOperationKind::Create);
-    let proqi::domain::BoardMutation::AddThought { thought } = &operation.forward else {
-        panic!("expected create payload");
+    let proqi::domain::BoardMutation::AddThoughtFromCompose { thought, .. } = &operation.forward
+    else {
+        panic!("expected Compose handoff payload");
     };
     assert_eq!(thought.content, "h");
     for character in "ello".chars() {

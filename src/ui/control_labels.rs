@@ -66,6 +66,7 @@ const fn target_action(target: HitTarget) -> Option<ShortcutAction> {
         HitTarget::Delete => Some(ShortcutAction::Delete),
         HitTarget::Select => Some(ShortcutAction::Select),
         HitTarget::Undo => Some(ShortcutAction::Undo),
+        HitTarget::Redo => Some(ShortcutAction::Redo),
         HitTarget::Search => Some(ShortcutAction::OpenSearch),
         HitTarget::Commands => Some(ShortcutAction::OpenCommands),
         HitTarget::Help => Some(ShortcutAction::Help),

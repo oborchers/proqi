@@ -63,12 +63,20 @@ pub(super) fn controls(
     context: ShortcutContext,
     retry_available: bool,
     has_focus: bool,
+    history_available: (bool, bool),
     keys: &ShortcutRegistry,
 ) -> Vec<(HitTarget, Rect)> {
     if area.height == 0 || area.width == 0 {
         return Vec::new();
     }
-    let candidates = control_candidates(area.width, context, retry_available, has_focus, keys);
+    let candidates = control_candidates(
+        area.width,
+        context,
+        retry_available,
+        has_focus,
+        history_available,
+        keys,
+    );
     let inset_width = area.width.saturating_sub(4);
     place(
         Rect::new(area.x.saturating_add(2), area.y, inset_width, area.height),
@@ -81,6 +89,7 @@ fn control_candidates(
     context: ShortcutContext,
     retry_available: bool,
     has_focus: bool,
+    history_available: (bool, bool),
     keys: &ShortcutRegistry,
 ) -> Vec<(HitTarget, u16)> {
     let compose_mode = context == ShortcutContext::Compose;
@@ -93,7 +102,18 @@ fn control_candidates(
     if let Some(unfocused) = unfocused_candidates(width, context, has_focus, keys) {
         return unfocused;
     }
-    if compose_mode || (width < 60 && edit_mode) {
+    if compose_mode {
+        history_candidates(
+            &[
+                (HitTarget::ExitEdit, width < 16),
+                (HitTarget::Undo, false),
+                (HitTarget::Redo, false),
+            ],
+            context,
+            history_available,
+            keys,
+        )
+    } else if width < 60 && edit_mode {
         candidates(&[(HitTarget::ExitEdit, width < 16)], context, keys)
     } else if width < 24 {
         candidates(
@@ -112,28 +132,31 @@ fn control_candidates(
             keys,
         )
     } else if edit_mode {
-        candidates(
+        history_candidates(
             &[
                 (HitTarget::ExitEdit, false),
                 (HitTarget::Copy, false),
                 (HitTarget::Cut, false),
                 (HitTarget::Undo, false),
+                (HitTarget::Redo, false),
             ],
             context,
+            history_available,
             keys,
         )
     } else {
-        board_action_candidates(width.saturating_sub(4), context, keys)
+        board_action_candidates(width.saturating_sub(4), context, history_available, keys)
     }
 }
 
 fn board_action_candidates(
     available_width: u16,
     context: ShortcutContext,
+    history_available: (bool, bool),
     keys: &ShortcutRegistry,
 ) -> Vec<(HitTarget, u16)> {
     let items = |compact| {
-        candidates(
+        history_candidates(
             &[
                 (HitTarget::Insert, false),
                 (HitTarget::Copy, compact),
@@ -141,11 +164,13 @@ fn board_action_candidates(
                 (HitTarget::Delete, false),
                 (HitTarget::Select, false),
                 (HitTarget::Undo, compact),
+                (HitTarget::Redo, compact),
                 (HitTarget::Search, false),
                 (HitTarget::Commands, false),
                 (HitTarget::Help, false),
             ],
             context,
+            history_available,
             keys,
         )
     };
@@ -155,6 +180,21 @@ fn board_action_candidates(
     } else {
         items(true)
     }
+}
+
+fn history_candidates(
+    items: &[(HitTarget, bool)],
+    context: ShortcutContext,
+    history_available: (bool, bool),
+    keys: &ShortcutRegistry,
+) -> Vec<(HitTarget, u16)> {
+    let mut result = candidates(items, context, keys);
+    result.retain(|(target, _)| match target {
+        HitTarget::Undo => history_available.0,
+        HitTarget::Redo => history_available.1,
+        _ => true,
+    });
+    result
 }
 
 fn placed_width(candidates: &[(HitTarget, u16)]) -> u16 {

@@ -6,6 +6,7 @@ mod attachments;
 mod capture;
 mod control;
 mod error;
+mod history_contract;
 mod instructional_text;
 mod locks;
 mod model;
@@ -32,6 +33,7 @@ pub use attachments::{
 pub use capture::{apply_capture, prepare_capture};
 pub(crate) use control::{ControlReplay, match_control_replay};
 pub use error::{ApplicationError, ApplicationResult, FailureCode};
+pub(crate) use history_contract::UndoContract;
 pub use model::{
     AppState, ClipboardIntent, DurabilityState, Effect, EmptyBoardTransition, InteractionMode,
     ScreenshotIntent, ScreenshotPauseReason, UpdateIntent,

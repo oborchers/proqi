@@ -62,6 +62,12 @@ impl From<SessionServiceError> for CliError {
                 Self::new("ambiguous_session", message, 4).with_details(json!({ "matches": ids }))
             }
             SessionServiceError::SessionTrashed(_) => Self::new("session_trashed", message, 7),
+            SessionServiceError::SessionNotTrashed(_) => {
+                Self::new("session_not_trashed", message, 7)
+            }
+            SessionServiceError::NoBrowserHistory { .. } => {
+                Self::new("history_unavailable", message, 7)
+            }
             SessionServiceError::IdempotencyConflict => {
                 Self::new("idempotency_conflict", message, 7)
             }

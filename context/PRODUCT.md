@@ -902,8 +902,8 @@ bindings are:
 | Move or extend by five thoughts | `Page Up` / `Page Down`; add `Shift` to extend | Scroll, then click or Shift-click the target thought |
 | Submit | `Primary+Enter` or `s`, when supported, then direction when needed | Click verified Submit control |
 | Submit and keep | `Primary+Shift+Enter` or `Shift+S`, when supported, then direction when needed | Click verified Submit & keep control |
-| Undo board action | `Primary+Z` or `u` | Click undo control when visible |
-| Redo board action | `Primary+Shift+Z` or `Primary+Y` | Command palette |
+| Undo the active owner | `Primary+Z`, or `u` on Board | Click undo control when available |
+| Redo the active owner | `Primary+Shift+Z` or `Primary+Y` | Click redo control when available |
 | Move thought | macOS `Option+Shift+↑` / `↓`; `Primary+Shift+↑` / `↓`, or `Primary+K` / `Primary+J` | Drag thought handle |
 | Expand or collapse | `c` | Click overflow indicator |
 | Search | `/` | Click search control |
@@ -1515,11 +1515,17 @@ reverse video sparingly.
 
 ## Undo and recovery
 
-There are two explicit undo contexts:
+Undo follows the active owner:
 
 - Editor undo restores coalesced text edits in the active thought.
 - Board undo restores structural operations such as create, cut, delete,
   duplicate, reorder, split, extract, and merge.
+- Each editable query or rename field owns transient text history for its
+  lifetime and absorbs unavailable history without reaching hidden content.
+- Browser undo restores installation-local Rename, Trash, and Restore
+  operations through its separate durable cross-session history.
+- Compose promotes its first content-producing intention into one durable
+  Board Create unit whose undo returns to empty Compose.
 
 Undo history is persisted with the session. Restarting the process does not
 turn a reversible deletion into permanent data loss.

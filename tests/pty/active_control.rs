@@ -103,6 +103,7 @@ fn exercise_live_metadata_and_editor(
         &["sessions", "rename", session, "Live owner"],
     );
     assert_eq!(renamed["data"]["status"], "renamed");
+    assert_active_rename_noop(binary, state, session);
     let listed = json_command(binary, state, &["thoughts", "list", session]);
     let digest = listed["data"]["thoughts"][0]["content_sha256"]
         .as_str()
@@ -176,6 +177,15 @@ fn exercise_live_metadata_and_editor(
             ],
         );
     }
+}
+
+fn assert_active_rename_noop(binary: &str, state: &std::path::Path, session: &str) {
+    let unchanged = json_command(
+        binary,
+        state,
+        &["sessions", "rename", session, "Live owner"],
+    );
+    assert_eq!(unchanged["data"]["status"], "renamed");
 }
 
 fn spawn_owner(

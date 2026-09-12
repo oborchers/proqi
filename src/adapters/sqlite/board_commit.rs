@@ -124,6 +124,10 @@ pub(super) fn commit_board(
     )? {
         return Ok(receipt);
     }
+    super::browser_history::ensure_not_used_by_browser_history(
+        transaction,
+        operation.id.database_bytes(),
+    )?;
     require_next_sequence(transaction, operation.session_id, operation.sequence)?;
     let mut board = load_board(transaction, operation.session_id)?;
     super::attachment_numbering::validate_creation(&board, operation)?;
@@ -149,6 +153,20 @@ pub(super) fn commit_board(
         .map_err(map_sql_error)?;
     truncate_editor_redo(transaction, &operation.forward)?;
     persist_board(transaction, &board)?;
+    finish_board_commit(transaction, operation, cursor, &request_json)
+}
+
+fn finish_board_commit(
+    transaction: &Transaction<'_>,
+    operation: &BoardOperation,
+    cursor: usize,
+    request_json: &str,
+) -> Result<CommitReceipt, StoreError> {
+    super::browser_history::invalidate_activity_conflicts(
+        transaction,
+        operation.session_id,
+        operation.created_at,
+    )?;
     transaction
         .execute(
             "INSERT INTO board_operations(id, session_id, history_index, sequence, payload_json, created_at)
@@ -169,7 +187,7 @@ pub(super) fn commit_board(
         operation.sequence,
         "operation",
         operation.id.database_bytes(),
-        &request_json,
+        request_json,
         operation.created_at,
     )?;
     transaction
@@ -199,6 +217,7 @@ pub(super) fn mutation_changes_search(mutation: &BoardMutation) -> bool {
     match mutation {
         BoardMutation::Batch { mutations } => mutations.iter().any(mutation_changes_search),
         BoardMutation::AddThought { .. }
+        | BoardMutation::AddThoughtFromCompose { .. }
         | BoardMutation::SetDeletion { .. }
         | BoardMutation::SetDeletionExact { .. }
         | BoardMutation::ReplaceContent { .. } => true,
@@ -229,6 +248,7 @@ fn truncate_editor_redo(
                 .map_err(map_sql_error)?;
         }
         BoardMutation::AddThought { .. }
+        | BoardMutation::AddThoughtFromCompose { .. }
         | BoardMutation::SetDeletion { .. }
         | BoardMutation::MoveThought { .. }
         | BoardMutation::SetPresentation { .. }
@@ -252,6 +272,10 @@ fn commit_revision(
     )? {
         return Ok(receipt);
     }
+    super::browser_history::ensure_not_used_by_browser_history(
+        transaction,
+        revision.id.database_bytes(),
+    )?;
     require_next_sequence(transaction, revision.session_id, revision.sequence)?;
     let cursor = revision_cursor(transaction, revision)?;
     super::attachment_numbering::revision(transaction, revision)?;

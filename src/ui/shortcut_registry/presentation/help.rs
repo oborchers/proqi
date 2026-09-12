@@ -21,8 +21,11 @@ pub(crate) fn help_items(app: &BoardApp) -> Vec<HelpItem> {
     registry
         .help(surface)
         .into_iter()
-        .filter(|(_, metadata)| {
-            metadata.availability != HelpAvailability::Submission || app.supports_submission()
+        .filter(|(_, metadata)| match metadata.availability {
+            HelpAvailability::Always | HelpAvailability::EffectiveTransform => true,
+            HelpAvailability::Submission => app.supports_submission(),
+            HelpAvailability::Undo => app.history_available(true),
+            HelpAvailability::Redo => app.history_available(false),
         })
         .filter_map(|(action, metadata)| {
             let actions = related_actions(action);

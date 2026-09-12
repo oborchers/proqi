@@ -2,7 +2,7 @@
 
 use crate::{
     application::ThoughtMutation,
-    domain::{OperationSequence, RequestId, SessionId, SubmissionId, Timestamp},
+    domain::{BrowserOperation, OperationSequence, RequestId, SessionId, SubmissionId, Timestamp},
     ports::{
         store::{
             CaptureCommit, CaptureCommitOutcome, CommitReceipt, OperationBatch, SessionHit,
@@ -37,6 +37,10 @@ pub(in crate::adapters::terminal) enum PersistenceResult {
         request_id: RequestId,
         result: Result<Option<StoredOperationRequest>, StoreError>,
     },
+    BrowserLookup {
+        request_id: RequestId,
+        result: Result<Option<BrowserOperation>, StoreError>,
+    },
     SubmissionPrepared {
         submission_id: SubmissionId,
         result: Result<(), StoreError>,
@@ -57,11 +61,10 @@ pub(super) enum PersistenceRequest {
     Capture(Box<CaptureCommit>),
     Commit(Box<OperationBatch>),
     Metadata(Box<OperationBatch>),
-    RenameSession {
+    BrowserOperation {
         request_id: Option<RequestId>,
-        session_id: SessionId,
         previous_name: Option<String>,
-        name: Option<String>,
+        operation: Box<BrowserOperation>,
     },
     DiscoverTransferSessions {
         current_session_id: SessionId,
@@ -71,6 +74,10 @@ pub(super) enum PersistenceRequest {
     Lookup {
         request_id: RequestId,
         identity: crate::ports::store::DurableIdentity,
+    },
+    BrowserLookup {
+        request_id: RequestId,
+        operation_id: crate::domain::OperationId,
     },
     PrepareSubmission(Box<SubmissionAttempt>),
     MarkSubmissionSending {

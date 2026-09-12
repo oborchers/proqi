@@ -12,8 +12,12 @@ use std::ops::Range;
 pub enum Action {
     /// Replace or clear the current session's optional name.
     RenameSession {
+        /// Durable Browser operation identity.
+        operation_id: OperationId,
         /// New validated name, or `None` to clear it.
         name: Option<String>,
+        /// Event time.
+        at: Timestamp,
     },
     /// Focus one live thought, or clear focus.
     FocusThought(Option<ThoughtId>),
@@ -37,6 +41,26 @@ pub enum Action {
         annotations: Vec<ContentAnnotation>,
         /// Explicit insertion point, or the current insertion point.
         insertion_index: Option<usize>,
+        /// Event time.
+        at: Timestamp,
+    },
+    /// Materialize the first content-producing Compose intention.
+    #[doc(hidden)]
+    CreateComposeThought {
+        /// New thought identity.
+        thought_id: ThoughtId,
+        /// Durable operation identity.
+        operation_id: OperationId,
+        /// Exact initial content.
+        content: String,
+        /// Durable presentation metadata over the exact initial content.
+        annotations: Vec<ContentAnnotation>,
+        /// Exact editor cursor after materialization.
+        cursor: TextPosition,
+        /// Directional selection anchor after materialization.
+        selection_anchor: Option<TextPosition>,
+        /// Preserve attachment occurrence identities produced by a trusted policy.
+        preserve_owned: bool,
         /// Event time.
         at: Timestamp,
     },
@@ -323,7 +347,9 @@ pub struct OwnedThoughtEdit {
     pub(crate) before_annotations: Vec<ContentAnnotation>,
     pub(crate) after_annotations: Vec<ContentAnnotation>,
     pub(crate) before_cursor: TextPosition,
+    pub(crate) before_selection_anchor: Option<TextPosition>,
     pub(crate) after_cursor: TextPosition,
+    pub(crate) after_selection_anchor: Option<TextPosition>,
     pub(crate) at: Timestamp,
 }
 
@@ -340,7 +366,9 @@ impl OwnedThoughtEdit {
         before_annotations: Vec<ContentAnnotation>,
         after_annotations: Vec<ContentAnnotation>,
         before_cursor: TextPosition,
+        before_selection_anchor: Option<TextPosition>,
         after_cursor: TextPosition,
+        after_selection_anchor: Option<TextPosition>,
         at: Timestamp,
     ) -> Self {
         Self {
@@ -351,7 +379,9 @@ impl OwnedThoughtEdit {
             before_annotations,
             after_annotations,
             before_cursor,
+            before_selection_anchor,
             after_cursor,
+            after_selection_anchor,
             at,
         }
     }

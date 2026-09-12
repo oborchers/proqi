@@ -9,7 +9,7 @@ use crate::{
 };
 use sha2::{Digest as _, Sha256};
 
-use super::BoardApp;
+use super::{BoardApp, SessionRenamePersistence};
 
 impl BoardApp {
     /// Apply one typed active-owner mutation and return its ordered persistence effect.
@@ -18,6 +18,11 @@ impl BoardApp {
         mutation: &ControlMutation,
         clock: &impl Clock,
     ) -> Result<Vec<Effect>, ApplicationError> {
+        if self.session_rename_persistence.is_saving()
+            && matches!(mutation, ControlMutation::RenameSession { .. })
+        {
+            return Err(ApplicationError::InvalidState);
+        }
         let previous_mode = self.state.mode;
         let previous_focus = self.state.focused_thought;
         let at = clock.now();
@@ -25,6 +30,13 @@ impl BoardApp {
             return Ok(Vec::new());
         };
         let effects = reduce(&mut self.state, action)?;
+        if matches!(mutation, ControlMutation::RenameSession { .. })
+            && effects
+                .iter()
+                .any(|effect| matches!(effect, Effect::CommitBrowserOperation(_)))
+        {
+            self.session_rename_persistence = SessionRenamePersistence::Saving;
+        }
         self.restore_live_interaction(previous_mode, previous_focus);
         self.sync_editor_from_state();
         Ok(effects)
@@ -36,7 +48,11 @@ impl BoardApp {
         at: Timestamp,
     ) -> Result<Option<Action>, ApplicationError> {
         let action = match mutation {
-            ControlMutation::RenameSession { name } => Action::RenameSession { name: name.clone() },
+            ControlMutation::RenameSession { operation_id, name } => Action::RenameSession {
+                operation_id: *operation_id,
+                name: name.clone(),
+                at,
+            },
             ControlMutation::Sync => return Ok(None),
             mutation @ (ControlMutation::Replace { .. }
             | ControlMutation::Add { .. }

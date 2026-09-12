@@ -109,13 +109,12 @@ fn process_unsequenced(
             });
             results.send(PersistenceResult::Metadata { result }).is_ok()
         }
-        PersistenceRequest::RenameSession {
+        PersistenceRequest::BrowserOperation {
             request_id,
-            session_id,
             previous_name,
-            name,
+            operation,
         } => {
-            let result = store.rename_session(session_id, name.as_deref());
+            let result = store.commit_browser_operation(&operation).map(|_| ());
             results
                 .send(PersistenceResult::SessionRenamed {
                     request_id,
@@ -154,6 +153,15 @@ fn process_unsequenced(
                 .send(PersistenceResult::Lookup { request_id, result })
                 .is_ok()
         }
+        PersistenceRequest::BrowserLookup {
+            request_id,
+            operation_id,
+        } => results
+            .send(PersistenceResult::BrowserLookup {
+                request_id,
+                result: store.browser_operation(operation_id),
+            })
+            .is_ok(),
         request @ (PersistenceRequest::PrepareSubmission(_)
         | PersistenceRequest::MarkSubmissionSending { .. }
         | PersistenceRequest::FinishSubmission { .. }) => {

@@ -29,7 +29,9 @@ use super::{
     storage_error_code,
 };
 
-pub(super) use metadata::{complete as complete_metadata, complete_sync};
+pub(super) use metadata::{
+    complete as complete_metadata, complete_lookup as complete_browser_lookup, complete_sync,
+};
 
 pub(super) fn drain(
     app: &mut BoardApp,

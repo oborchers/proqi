@@ -2,6 +2,7 @@
 
 mod annotation;
 mod attachment_numbering;
+mod browser_history;
 mod identifiers;
 mod model;
 mod operations;
@@ -17,6 +18,7 @@ pub use annotation::{
 pub use attachment_numbering::{
     AttachmentCounters, AttachmentOrdinal, renew_attachment_occurrences,
 };
+pub use browser_history::{BrowserMutation, BrowserOperation, BrowserOperationKind};
 pub use identifiers::{
     InstanceId, OperationId, RequestId, RevisionId, SessionId, SubmissionId, ThoughtId,
 };
