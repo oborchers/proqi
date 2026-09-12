@@ -48,6 +48,13 @@ pub(super) fn binding(
     modifiers: LogicalModifiers,
     macos: bool,
 ) -> Option<(Action, ShortcutBindingPresentation)> {
+    if macos
+        && key == LogicalKey::Enter
+        && matches!(modifiers, LogicalModifiers::CONTROL | CONTROL_SHIFT)
+    {
+        return super::primary_action(context, key, modifiers.contains(LogicalModifiers::SHIFT))
+            .map(|action| (action, ShortcutBindingPresentation::Explicit));
+    }
     if let Some(action) = editor_boundary(context, key, modifiers, macos) {
         return Some((action, ShortcutBindingPresentation::Explicit));
     }

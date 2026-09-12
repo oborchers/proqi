@@ -811,8 +811,11 @@ delivery is therefore not detectable by Proqi.
 Each verified adjacent target appears once in the integration row, without its
 readiness label. Board mode shows the compact `s Submit` and `S Submit & keep`
 controls; it also accepts `Primary+Enter` and `Primary+Shift+Enter` as keyboard
-aliases. Edit mode shows `Primary+Enter Submit` and the
-`Primary+Shift+Enter Submit & keep` control when width allows. Plain `Enter`
+aliases. On macOS, exact logical `Control+Enter` and
+`Control+Shift+Enter` are additional action-specific factory aliases in Board,
+Compose, Edit, Invocation, and InsertionBoundary. Direct editor controls prefer
+`Ctrl+Enter Submit` and `Ctrl+Shift+Enter Submit & keep` on macOS when width
+allows; portable controls retain their Primary labels. Plain `Enter`
 remains newline or smart-list continuation. The command palette is the portable
 fallback. If exactly one eligible target supports an
 action, that action is direct. If several support it, delivery enters a
@@ -971,8 +974,8 @@ Initial editing shortcuts include:
 | Move to logical line start or end | macOS `Ctrl+←` / `→`; elsewhere `Alt+←` / `→` | Named `Home` / `End` remain aliases |
 | Delete the current logical line | `Primary+U` | Command palette |
 | Delete the containing sentence | `Primary+Shift+U` | Command palette or configured binding |
-| Submit active thought | `Primary+Enter` | Command palette |
-| Submit active thought and keep | `Primary+Shift+Enter` | Command palette |
+| Submit active thought | macOS `Ctrl+Enter`; `Primary+Enter` remains an alias | Command palette |
+| Submit active thought and keep | macOS `Ctrl+Shift+Enter`; `Primary+Shift+Enter` remains an alias | Command palette |
 
 Select all is scoped to the current thought in edit mode and to every live
 thought in board mode. Delete logical line removes one newline-delimited logical line,

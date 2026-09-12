@@ -330,6 +330,12 @@ notify_terminal_on_auto_pause = false
   <img src="assets/proqi-herdr-workflow.png" width="1000" alt="A Herdr workspace with Codex working beside a Proqi board of prepared prompt thoughts">
 </p>
 
+On macOS, `Ctrl+Enter` and `Ctrl+Shift+Enter` are the terminal-safe submission
+defaults. They address the same actions as the retained `Primary+Enter` and
+`Primary+Shift+Enter` aliases. Plain Enter remains newline and smart-list
+continuation in the editor. These are logical events received from the terminal,
+not claims about physical modifier keys. Linux and Windows defaults are unchanged.
+
 In Herdr, Proqi finds verified adjacent agents. In Board mode, `s` or
 `Primary+Enter` submits the selected thought or selection in visible order and
 removes after acceptance; `Shift+S` or `Primary+Shift+Enter` keeps it. While editing,
