@@ -1,4 +1,8 @@
-use super::*;
+//! Direct editor submission, durability, and canonical failure barriers.
+
+use super::{Fixture, draw, text};
+use crate::submission_input::control_submit;
+use proqi::{application::Effect, domain::Timestamp, ports::environment::IdGenerator, ui::UiKey};
 
 use proqi::{
     domain::Direction,
@@ -49,7 +53,7 @@ fn direct_edit_chords_submit_only_the_active_thought_and_preserve_mode_on_failur
         .app
         .complete_agent_discovery(Ok(vec![target.clone()]));
 
-    let failed = fixture.effects(crate::key_input(UiKey::Submit));
+    let failed = fixture.effects(control_submit(false));
     let failed_request = super::agent::start_submission(&mut fixture, &failed);
     assert_eq!(failed_request.content, "exact prompt\nGrüße 第二行");
     assert!(
@@ -61,7 +65,7 @@ fn direct_edit_chords_submit_only_the_active_thought_and_preserve_mode_on_failur
         proqi::application::InteractionMode::Edit { thought_id }
     );
 
-    let keeping = fixture.effects(crate::key_input(UiKey::SubmitKeep));
+    let keeping = fixture.effects(control_submit(true));
     let request = super::agent::start_submission(&mut fixture, &keeping);
     let completion = super::agent::finish_submission(
         &mut fixture,
@@ -93,7 +97,7 @@ fn direct_submit_removal_waits_for_durability_and_retries_without_losing_edit_st
     fixture.app.complete_agent_discovery(Ok(vec![target]));
     let before = fixture.app.editor_snapshot().expect("editor");
 
-    let removing = fixture.effects(crate::key_input(UiKey::Submit));
+    let removing = fixture.effects(control_submit(false));
     let request = super::agent::start_submission(&mut fixture, &removing);
     let journal = fixture.app.complete_submission(
         request.submission_id,
@@ -173,7 +177,7 @@ fn accepted_removal_freezes_content_until_its_durable_acknowledgement() {
         panic!("expected clipboard read");
     };
     let clipboard_request = *request_id;
-    let removing = fixture.effects(crate::key_input(UiKey::Submit));
+    let removing = fixture.effects(control_submit(false));
     let request = super::agent::start_submission(&mut fixture, &removing);
     let journal = fixture.app.complete_submission(
         request.submission_id,
@@ -217,7 +221,7 @@ fn direct_edit_submission_without_a_verified_target_keeps_the_complete_draft() {
     fixture.input(crate::key_input(UiKey::Enter));
     let before = fixture.app.editor_snapshot().expect("editor");
 
-    let effects = fixture.effects(crate::key_input(UiKey::Submit));
+    let effects = fixture.effects(control_submit(false));
 
     assert!(matches!(effects.as_slice(), [Effect::DiscoverAgents]));
     assert_eq!(fixture.app.editor_snapshot(), Some(before));
@@ -237,7 +241,7 @@ fn escape_reaches_board_while_direct_submission_keeps_its_source_locked() {
     fixture
         .app
         .complete_agent_discovery(Ok(vec![super::agent::target(Direction::Right, "w1:p2")]));
-    let effects = fixture.effects(crate::key_input(UiKey::Submit));
+    let effects = fixture.effects(control_submit(false));
     let _request = super::agent::start_submission(&mut fixture, &effects);
 
     assert!(fixture.effects(crate::key_input(UiKey::Escape)).is_empty());
@@ -354,11 +358,98 @@ fn direct_submission_controls_follow_editor_controls_in_the_footer() {
 
     let terminal = draw(&mut fixture, 120, 12);
     let rendered = text(terminal.backend().buffer());
-    let primary = if cfg!(target_os = "macos") {
-        "Cmd+"
-    } else {
-        "Ctrl+"
-    };
+    let primary = "Ctrl+";
     assert!(rendered.contains(&format!("{primary}Enter Submit")));
     assert!(rendered.contains(&format!("{primary}Shift+Enter Submit & keep")));
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn control_submission_footer_and_help_have_reviewed_responsive_geometry() {
+    use std::fmt::Write as _;
+
+    let mut fixture = Fixture::new();
+    super::agent::prepare_thought(&mut fixture);
+    fixture.input(crate::key_input(UiKey::Enter));
+    fixture
+        .app
+        .complete_agent_discovery(Ok(vec![super::agent::target(Direction::Right, "w1:p2")]));
+    let mut evidence = String::new();
+    for (width, height) in [(120, 12), (48, 10), (32, 6)] {
+        let terminal = draw(&mut fixture, width, height);
+        writeln!(
+            evidence,
+            "Editor {width}x{height}\n{}",
+            crate::snapshot_support::snapshot_buffer(terminal.backend().buffer())
+        )
+        .expect("snapshot evidence");
+    }
+    fixture.input(crate::key_input(UiKey::Escape));
+    fixture.input(crate::key_input(UiKey::Character('?')));
+    for (width, height) in [(120, 32), (48, 12), (32, 6)] {
+        fixture.input(crate::key_input(UiKey::Escape));
+        fixture.input(crate::key_input(UiKey::Character('?')));
+        let terminal = draw(&mut fixture, width, height);
+        writeln!(
+            evidence,
+            "Help {width}x{height}\n{}",
+            crate::snapshot_support::snapshot_buffer(terminal.backend().buffer())
+        )
+        .expect("snapshot evidence");
+        if width >= 120 {
+            continue;
+        }
+        for _ in 0..100 {
+            let terminal = draw(&mut fixture, width, height);
+            let rendered = text(terminal.backend().buffer());
+            if rendered.contains("Ctrl+Shift+Enter") && rendered.contains("keep") {
+                break;
+            }
+            fixture.input(crate::key_input(UiKey::Character('j')));
+        }
+        let terminal = draw(&mut fixture, width, height);
+        assert!(
+            text(terminal.backend().buffer()).contains("Ctrl+Shift+Enter")
+                && text(terminal.backend().buffer()).contains("keep"),
+            "{width}x{height}: {}",
+            text(terminal.backend().buffer())
+        );
+        writeln!(
+            evidence,
+            "Submission Help {width}x{height}\n{}",
+            crate::snapshot_support::snapshot_buffer(terminal.backend().buffer())
+        )
+        .expect("snapshot evidence");
+    }
+    insta::assert_snapshot!(evidence);
+}
+
+#[test]
+fn control_submission_flushes_pending_invocation_text_without_accepting_completion() {
+    let mut fixture = Fixture::new();
+    fixture
+        .app
+        .complete_agent_discovery(Ok(vec![super::agent::target(Direction::Right, "w1:p2")]));
+    let sequence = fixture.paste("/pl");
+    fixture.app.acknowledge_persistence(sequence, true);
+    let screen = text(draw(&mut fixture, 80, 16).backend().buffer());
+    assert!(screen.contains("/plan"), "shared starter popup is active");
+    fixture.input(crate::key_input(UiKey::Character('a')));
+    let effects = fixture.effects(control_submit(true));
+    let [Effect::CommitRevision(revision)] = effects.as_slice() else {
+        panic!("pending invocation text must flush before submission: {effects:?}");
+    };
+    let ready = fixture.app.acknowledge_persistence(revision.sequence, true);
+    let request = super::agent::start_submission(&mut fixture, &ready);
+    assert_eq!(request.content, "/pla");
+    super::agent::finish_submission(
+        &mut fixture,
+        &request,
+        Ok(SubmissionReceipt {
+            submission_id: request.submission_id,
+            target: request.target.clone(),
+            post_state: Some(AgentState::Working),
+        }),
+    );
+    assert_eq!(fixture.app.state.board.live_thoughts()[0].content, "/pla");
 }

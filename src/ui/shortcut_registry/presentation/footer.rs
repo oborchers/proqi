@@ -20,7 +20,15 @@ pub(crate) fn footer_projection(
         || matches!(context, Context::Board | Context::InsertionBoundary)
             && matches!(action, Action::SubmitRemove | Action::SubmitKeep);
     Some(FooterProjection {
-        key: registry.action_label(context, action, compact_key),
+        key: if matches!(
+            context,
+            Context::Compose | Context::Edit | Context::Invocation
+        ) && matches!(action, Action::SubmitRemove | Action::SubmitKeep)
+        {
+            registry.compact_help_label(context, &[action])
+        } else {
+            registry.action_label(context, action, compact_key)
+        },
         text: if compact {
             metadata.compact_text
         } else {

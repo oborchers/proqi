@@ -106,7 +106,7 @@
     {
       "version": "0.9.0",
       "highlights": [
-        "Use revised terminal-safe default shortcuts that avoid common collisions in the macOS, Ghostty, and Herdr delivery chain.",
+        "Use terminal-safe macOS Control+Enter submission and revised defaults that avoid common Ghostty and Herdr shortcut collisions.",
         "Replace every semantic shortcut and fallback through one contextual keymap with aliases, platform overrides, safe disabling, and matching Help and Commands guidance.",
         "Find installed invocations through deterministic Unicode-aware fuzzy matching across the complete bounded result set.",
         "Submit selected thoughts to an eligible agent pane anywhere on the current Herdr server through one verified Commands workflow.",

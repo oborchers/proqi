@@ -1138,8 +1138,13 @@ from `Editor` to `Prompt`; it does not reduce an application action. `AppState`
 initializes an empty durable snapshot as Compose, while a nonempty snapshot keeps
 the existing Board focus contract.
 
-`Primary+Enter` and `Primary+Shift+Enter` normalize to distinct Submit and
-SubmitKeep intentions before plain Enter handling. Board resolves those typed
+`Primary+Enter` and `Primary+Shift+Enter` resolve to distinct Submit and
+SubmitKeep intentions before plain Enter handling. The factory registry adds
+exact macOS Control+Enter and Control+Shift+Enter for these same two actions
+using the same five-context resolver (Board, Compose, Edit, Invocation, and
+InsertionBoundary). Explicit presentation claims prefer the Control forms in
+direct editor controls and bounded Help. This does not redefine Primary, alter
+the terminal decoder, or change storage or submission protocols. Board resolves those typed
 intentions as resolved aliases of its configured submit-and-remove and
 submit-and-keep commands, so selection and insertion-row behavior stay identical
 to the configured character spellings. Edit routes them directly to its active
