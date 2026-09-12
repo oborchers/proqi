@@ -35,7 +35,7 @@ fn board_help_lists_both_spellings_while_the_footer_stays_compact() {
 }
 
 #[test]
-fn primary_enter_submits_the_focused_thought_and_removes_only_after_acceptance() {
+fn control_enter_submits_the_focused_thought_and_removes_only_after_acceptance() {
     let mut fixture = Fixture::new();
     super::agent::prepare_thought(&mut fixture);
     let target = super::agent::target(Direction::Right, "w1:p2");
@@ -43,7 +43,7 @@ fn primary_enter_submits_the_focused_thought_and_removes_only_after_acceptance()
         .app
         .complete_agent_discovery(Ok(vec![target.clone()]));
 
-    let effects = fixture.effects(crate::key_input(UiKey::Submit));
+    let effects = fixture.effects(crate::submission_input::control_submit(false));
     let request = super::agent::start_submission(&mut fixture, &effects);
     assert_eq!(request.content, "exact prompt\nGrüße 第二行");
     assert_eq!(fixture.app.state.board.live_thoughts().len(), 1);
@@ -80,7 +80,7 @@ fn primary_enter_submits_the_focused_thought_and_removes_only_after_acceptance()
 }
 
 #[test]
-fn primary_shift_enter_keeps_one_contiguous_selection_after_one_ordered_delivery() {
+fn control_shift_enter_keeps_one_contiguous_selection_after_one_ordered_delivery() {
     let mut fixture = Fixture::new();
     super::agent::prepare_thought(&mut fixture);
     fixture.paste("second thought with 👩‍💻 and e\u{301}");
@@ -92,7 +92,7 @@ fn primary_shift_enter_keeps_one_contiguous_selection_after_one_ordered_delivery
         .app
         .complete_agent_discovery(Ok(vec![target.clone()]));
 
-    let effects = fixture.effects(crate::key_input(UiKey::SubmitKeep));
+    let effects = fixture.effects(crate::submission_input::control_submit(true));
     let request = super::agent::start_submission(&mut fixture, &effects);
     assert_eq!(
         request.content,
@@ -124,7 +124,7 @@ fn insertion_row_alias_matches_the_board_command_and_failure_keeps_the_source() 
         .app
         .complete_agent_discovery(Ok(vec![super::agent::target(Direction::Right, "w1:p2")]));
 
-    let effects = fixture.effects(crate::key_input(UiKey::Submit));
+    let effects = fixture.effects(crate::submission_input::control_submit(false));
     let request = super::agent::start_submission(&mut fixture, &effects);
     assert_eq!(request.content, "exact prompt\nGrüße 第二行");
     assert!(
@@ -152,11 +152,11 @@ fn empty_board_and_duplicate_alias_input_do_not_create_extra_attempts() {
     fixture
         .app
         .complete_agent_discovery(Ok(vec![super::agent::target(Direction::Right, "w1:p2")]));
-    let first = fixture.effects(crate::key_input(UiKey::Submit));
+    let first = fixture.effects(crate::submission_input::control_submit(false));
     assert!(matches!(first.as_slice(), [Effect::PrepareSubmission(_)]));
     assert!(
         fixture
-            .effects(crate::key_input(UiKey::SubmitKeep))
+            .effects(crate::submission_input::control_submit(true))
             .is_empty()
     );
     assert_eq!(
@@ -166,7 +166,7 @@ fn empty_board_and_duplicate_alias_input_do_not_create_extra_attempts() {
 }
 
 #[test]
-fn primary_keep_alias_enters_the_existing_direction_and_mouse_path() {
+fn control_keep_alias_enters_the_existing_direction_and_mouse_path() {
     let mut fixture = Fixture::new();
     super::agent::prepare_thought(&mut fixture);
     let up = super::agent::target(Direction::Up, "w1:p2");
@@ -177,7 +177,7 @@ fn primary_keep_alias_enters_the_existing_direction_and_mouse_path() {
 
     assert!(
         fixture
-            .effects(crate::key_input(UiKey::SubmitKeep))
+            .effects(crate::submission_input::control_submit(true))
             .is_empty()
     );
     assert_eq!(

@@ -333,3 +333,26 @@ spelling for terminals that encode Shift in the character. Plain Edit `f` remain
 complete active thought is transformed regardless of text selection. The action
 has contextual Help and a Commands entry, with no permanent footer control.
 Versioned aliases replace or disable these defaults using the ordinary schema.
+
+## Terminal-safe macOS submission
+
+Exact logical `Control+Enter` submits and removes after accepted durable delivery;
+`Control+Shift+Enter` submits and keeps. These action-specific factory aliases
+apply in Board, Compose, Edit, Invocation, and InsertionBoundary. Primary+Enter
+and Primary+Shift+Enter remain compatible aliases, Board retains s and Shift+S,
+and Commands remains the modifier-independent fallback. Commands has configurable
+submission action identities but does not acquire these factory chords.
+
+Direct editor controls and compact Help prefer the explicit Control aliases on
+macOS. Full Help retains the effective compatibility aliases within its existing
+bounded layout. Plain Enter retains editor newline and smart-list continuation.
+Raw Control does not become macOS Primary or activate unrelated Primary actions.
+Linux and Windows factory defaults are unchanged because Primary is Control there.
+
+A supplied context/action list replaces the Control, Primary, and character
+aliases together; an empty list disables them and an omitted pair inherits the
+new defaults. Legacy translation retains the action-specific factory aliases.
+Logical event identity is the contract, regardless of a physical key label or
+upstream remapping. CSI-u `ESC [ 13 ; 5 u` and `ESC [ 13 ; 6 u` represent these
+Control events. Ghostty's installed macOS defaults consume Super+Enter for
+fullscreen and Super+Shift+Enter for split zoom before Proqi receives them.

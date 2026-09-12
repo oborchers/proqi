@@ -26,6 +26,8 @@ mod board_support;
 mod keyboard_support;
 #[path = "support/snapshots.rs"]
 mod snapshot_support;
+#[path = "support/submission_input.rs"]
+mod submission_input;
 
 use board_support::durable_thought;
 use keyboard_support::key_input;
