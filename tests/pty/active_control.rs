@@ -141,11 +141,7 @@ fn exercise_live_metadata_and_editor(
         "external replacement",
     );
     assert_eq!(replay["data"]["receipt"]["idempotent_replay"], true);
-    let inspected = json_command(binary, state, &["thoughts", "inspect", session, thought]);
-    assert_eq!(
-        inspected["data"]["thought"]["content"],
-        "external replacement"
-    );
+    assert_thought_content(binary, state, session, thought, "external replacement");
     json_command(
         binary,
         state,
@@ -159,8 +155,8 @@ fn exercise_live_metadata_and_editor(
             &operation_id(),
         ],
     );
-    let restored = json_command(binary, state, &["thoughts", "inspect", session, thought]);
-    assert_eq!(restored["data"]["thought"]["content"], original);
+    assert_thought_content(binary, state, session, thought, original);
+    move_editor_history(binary, state, session, thought, "redo");
     for collapsed in ["true", "false"] {
         json_command(
             binary,
@@ -177,6 +173,39 @@ fn exercise_live_metadata_and_editor(
             ],
         );
     }
+}
+
+fn assert_thought_content(
+    binary: &str,
+    state: &std::path::Path,
+    session: &str,
+    thought: &str,
+    expected: &str,
+) {
+    let inspected = json_command(binary, state, &["thoughts", "inspect", session, thought]);
+    assert_eq!(inspected["data"]["thought"]["content"], expected);
+}
+
+fn move_editor_history(
+    binary: &str,
+    state: &std::path::Path,
+    session: &str,
+    thought: &str,
+    direction: &str,
+) {
+    json_command(
+        binary,
+        state,
+        &[
+            "thoughts",
+            direction,
+            session,
+            "--thought",
+            thought,
+            "--operation-id",
+            &operation_id(),
+        ],
+    );
 }
 
 fn assert_active_rename_noop(binary: &str, state: &std::path::Path, session: &str) {

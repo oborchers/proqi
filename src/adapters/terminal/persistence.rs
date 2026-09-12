@@ -123,10 +123,13 @@ fn process_unsequenced(
                 })
                 .is_ok()
         }
-        PersistenceRequest::DiscoverTransferSessions { current_session_id } => {
+        PersistenceRequest::DiscoverTransferSessions {
+            current_session_id,
+            generation,
+        } => {
             let result = transfer::discover(store, current_session_id);
             results
-                .send(PersistenceResult::TransferSessions(result))
+                .send(PersistenceResult::TransferSessions { generation, result })
                 .is_ok()
         }
         PersistenceRequest::TransferThought(request) => {

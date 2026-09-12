@@ -1,5 +1,7 @@
 //! Keyboard commands and shared board intentions.
 
+mod history;
+
 use crate::{
     application::{Action, Effect},
     domain::BoardOperationKind,
@@ -408,46 +410,6 @@ impl BoardApp {
             crate::application::EmptyBoardTransition::ComposeAfterLocalRemoval,
         );
         self.clear_board_selection();
-        self.sync_empty_insertion_focus();
-        effects
-    }
-
-    pub(super) fn history(
-        &mut self,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-        undo: bool,
-    ) -> Vec<Effect> {
-        let mut effects = match self.flush_edit_boundary(ids, clock) {
-            EditFlush::Complete(effects) => effects,
-            EditFlush::Blocked(effects) => return effects,
-        };
-        let Some(scope) = self.state.history_scope(self.state.mode, undo) else {
-            self.set_info(if undo {
-                "Nothing to undo"
-            } else {
-                "Nothing to redo"
-            });
-            return effects;
-        };
-        let action = if undo {
-            Action::Undo {
-                operation_id: ids.operation_id(),
-                scope,
-                at: clock.now(),
-            }
-        } else {
-            Action::Redo {
-                operation_id: ids.operation_id(),
-                scope,
-                at: clock.now(),
-            }
-        };
-        effects.extend(self.reduce_with_empty_transition(
-            action,
-            crate::application::EmptyBoardTransition::ComposeAfterLocalRemoval,
-        ));
-        self.reload_editor();
         self.sync_empty_insertion_focus();
         effects
     }

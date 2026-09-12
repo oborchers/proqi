@@ -9,6 +9,7 @@ use super::{
     ThoughtPosition, ThoughtPresentation, Timestamp, validate_annotations,
 };
 
+mod addressing;
 mod mutation;
 mod operation_kind;
 
@@ -167,43 +168,6 @@ impl BoardMutation {
             | Self::LegacySetCollapsed { .. } => Ok(()),
         }
     }
-
-    /// Whether this mutation addresses one thought identity.
-    #[must_use]
-    pub fn addresses(&self, thought_id: ThoughtId) -> bool {
-        match self {
-            Self::Batch { mutations } => mutations
-                .iter()
-                .any(|mutation| mutation.addresses(thought_id)),
-            Self::AddThought { thought } | Self::AddThoughtFromCompose { thought, .. } => {
-                thought.id == thought_id
-            }
-            Self::SetDeletion {
-                thought_id: affected,
-                ..
-            }
-            | Self::SetDeletionExact {
-                thought_id: affected,
-                ..
-            }
-            | Self::MoveThought {
-                thought_id: affected,
-                ..
-            }
-            | Self::ReplaceContent {
-                thought_id: affected,
-                ..
-            }
-            | Self::SetPresentation {
-                thought_id: affected,
-                ..
-            }
-            | Self::LegacySetCollapsed {
-                thought_id: affected,
-                ..
-            } => *affected == thought_id,
-        }
-    }
 }
 
 /// Durable operation with a complete inverse payload.
@@ -230,6 +194,18 @@ impl BoardOperation {
     #[must_use]
     pub fn addresses_thought(&self, thought_id: ThoughtId) -> bool {
         self.forward.addresses(thought_id) || self.inverse.addresses(thought_id)
+    }
+
+    /// Thought identities whose content timeline participates in this operation.
+    #[must_use]
+    pub fn content_thought_ids(&self) -> Vec<ThoughtId> {
+        if !self.kind.belongs_to_thought_content() {
+            return Vec::new();
+        }
+        let mut thought_ids = Vec::new();
+        self.forward.collect_thought_ids(&mut thought_ids);
+        self.inverse.collect_thought_ids(&mut thought_ids);
+        thought_ids
     }
 
     /// Exact editor endpoint for a thought created from Compose.

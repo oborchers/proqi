@@ -160,7 +160,7 @@ pub(super) fn operation(
         )
         .optional()
         .map_err(map_sql_error)?;
-    stored
+    let operation = stored
         .map(|(target, payload)| {
             let operation = decode(&payload)?;
             if operation.id() != id
@@ -172,7 +172,11 @@ pub(super) fn operation(
             }
             Ok(operation)
         })
-        .transpose()
+        .transpose()?;
+    if operation.is_none() {
+        ensure_commit_id_unused(transaction, id)?;
+    }
+    Ok(operation)
 }
 
 fn apply_mutation(

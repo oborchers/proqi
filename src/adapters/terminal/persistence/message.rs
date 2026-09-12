@@ -28,7 +28,10 @@ pub(in crate::adapters::terminal) enum PersistenceResult {
         previous_name: Option<String>,
         result: Result<(), StoreError>,
     },
-    TransferSessions(Result<Vec<SessionHit>, StoreError>),
+    TransferSessions {
+        generation: u64,
+        result: Result<Vec<SessionHit>, StoreError>,
+    },
     ThoughtTransferred {
         request: SessionTransferRequest,
         result: Result<ThoughtMutation, String>,
@@ -68,6 +71,7 @@ pub(super) enum PersistenceRequest {
     },
     DiscoverTransferSessions {
         current_session_id: SessionId,
+        generation: u64,
     },
     TransferThought(SessionTransferRequest),
     Retry(OperationSequence),

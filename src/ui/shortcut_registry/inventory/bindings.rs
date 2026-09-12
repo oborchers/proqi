@@ -401,7 +401,7 @@ fn configured_action(
             let previous = matches!(base, Action::FocusPrevious | Action::ExtendPrevious);
             let shifted = modifiers.contains(LogicalModifiers::SHIFT)
                 || matches!(base, Action::ExtendPrevious | Action::ExtendNext);
-            if let Some(action) = configured_board_boundary(
+            if let Some(action) = platform_defaults::configured_board_boundary(
                 previous,
                 matches!(base, Action::FocusPrevious | Action::FocusNext),
                 modifiers,
@@ -477,30 +477,4 @@ fn configured_editor_character(
         }
         _ => None,
     }
-}
-
-fn configured_board_boundary(
-    previous: bool,
-    base_focus: bool,
-    modifiers: LogicalModifiers,
-    macos: bool,
-) -> Option<Action> {
-    let action = match (previous, base_focus, modifiers, macos) {
-        (true, true, LogicalModifiers::CONTROL, _) => Action::FocusFirst,
-        (false, true, LogicalModifiers::CONTROL, _) => Action::FocusLast,
-        (true, false, value, true)
-            if value.difference(LogicalModifiers::SHIFT) == LogicalModifiers::CONTROL =>
-        {
-            Action::ExtendFirst
-        }
-        (false, false, value, true)
-            if value.difference(LogicalModifiers::SHIFT) == LogicalModifiers::CONTROL =>
-        {
-            Action::ExtendLast
-        }
-        (true, true, LogicalModifiers::ALT, false) => Action::InsertAbove,
-        (false, true, LogicalModifiers::ALT, false) => Action::InsertBelow,
-        _ => return None,
-    };
-    Some(action)
 }

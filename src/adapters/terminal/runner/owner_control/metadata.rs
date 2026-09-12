@@ -88,11 +88,19 @@ pub(in crate::adapters::terminal::runner) fn complete_lookup(
         },
         Ok(None) => renamed(&envelope),
         Err(error) => ControlResult::Rejected {
-            code: super::storage_error_code(&error).to_owned(),
+            code: lookup_error_code(&error).to_owned(),
             message: error.to_string(),
         },
     };
     envelope.respond(response);
+}
+
+const fn lookup_error_code(error: &StoreError) -> &'static str {
+    if matches!(error, StoreError::Conflict(_)) {
+        ControlRejectionCode::IdempotencyConflict.as_str()
+    } else {
+        super::storage_error_code(error)
+    }
 }
 
 fn rename_matches(envelope: &ControlEnvelope, operation: &crate::domain::BrowserOperation) -> bool {
@@ -144,6 +152,49 @@ pub(in crate::adapters::terminal::runner) fn complete_sync(pending: &mut Pending
     while let Some(envelope) = pending.sync_controls.pop_front() {
         envelope.respond(ControlResult::Metadata(
             ControlMetadataReceipt::Synchronized,
+        ));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        adapters::{control::pending_for_test, memory::FakeIdGenerator},
+        ports::{
+            control::{CONTROL_PROTOCOL_VERSION, ControlRequest},
+            environment::IdGenerator as _,
+        },
+    };
+
+    #[test]
+    fn no_op_rename_identity_collision_is_an_idempotency_conflict() {
+        let mut ids = FakeIdGenerator::new(1_725_208_000_000);
+        let request_id = ids.request_id();
+        let request = ControlRequest {
+            protocol: CONTROL_PROTOCOL_VERSION,
+            request_id,
+            session_id: ids.session_id(),
+            mutation: ControlMutation::RenameSession {
+                operation_id: ids.operation_id(),
+                name: Some("unchanged".to_owned()),
+            },
+        };
+        let (envelope, response) = pending_for_test(request);
+        let mut pending = PendingWork::default();
+        pending.metadata_controls.insert(request_id, envelope);
+
+        complete_lookup(
+            &mut pending,
+            request_id,
+            Err(StoreError::Conflict("identity already used".to_owned())),
+        );
+
+        let response = response.recv().expect("owner response").response;
+        assert!(matches!(
+            response.result,
+            ControlResult::Rejected { code, .. }
+                if code == ControlRejectionCode::IdempotencyConflict.as_str()
         ));
     }
 }

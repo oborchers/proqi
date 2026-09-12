@@ -30,6 +30,25 @@ pub enum InteractionMode {
     },
 }
 
+/// Contextual resolution of one durable undo or redo request.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum HistoryResolution {
+    /// One owner may move its history cursor now.
+    Ready(crate::domain::UndoScope),
+    /// The active owner has no applicable history.
+    Empty,
+    /// A structural move must wait for an editor revision on an affected thought.
+    BlockedByEditor {
+        /// Thought whose local revision must move first.
+        thought_id: ThoughtId,
+    },
+    /// An editor revision must wait for a newer structural operation.
+    BlockedByBoard {
+        /// Thought whose editor snapshot no longer matches the revision endpoint.
+        thought_id: ThoughtId,
+    },
+}
+
 /// Canonical policy for a completed mutation that leaves no durable thoughts.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum EmptyBoardTransition {

@@ -43,10 +43,10 @@ fn transfer_preserves_annotations_and_removes_only_after_destination_receipt() {
     let mut app = BoardApp::new(AppState::new(board), RopeEditorFactory);
     assert_eq!(
         app.begin_session_transfer(true, &mut ids, &clock),
-        vec![Effect::DiscoverTransferSessions]
+        vec![Effect::DiscoverTransferSessions { generation: 1 }]
     );
     assert_loading_input_is_ignored(&mut app, &mut ids, &clock);
-    app.complete_transfer_discovery(Ok(vec![session_hit(destination)]));
+    app.complete_transfer_discovery(1, Ok(vec![session_hit(destination)]));
     assert_modified_delete_edits_query(&mut app, &mut ids, &clock);
     let effects = app.handle_transfer_input(&UiInput::Key(UiKey::Enter), &mut ids, &clock);
     let [Effect::TransferThought(request)] = effects.as_slice() else {
@@ -104,15 +104,74 @@ fn tutorial_shortcut_annotations_cross_the_session_transfer_boundary_exactly() {
 
     assert_eq!(
         app.begin_session_transfer(false, &mut ids, &clock),
-        vec![Effect::DiscoverTransferSessions]
+        vec![Effect::DiscoverTransferSessions { generation: 1 }]
     );
-    app.complete_transfer_discovery(Ok(vec![session_hit(ids.session_id())]));
+    app.complete_transfer_discovery(1, Ok(vec![session_hit(ids.session_id())]));
     let effects = app.handle_transfer_input(&UiInput::Key(UiKey::Enter), &mut ids, &clock);
     let [Effect::TransferThought(request)] = effects.as_slice() else {
         panic!("expected transfer request");
     };
     assert_eq!(request.content, thought.content);
     assert_eq!(request.annotations, thought.annotations);
+}
+
+#[test]
+fn stale_discovery_cannot_mutate_a_reopened_transfer_owner() {
+    let mut ids = FakeIdGenerator::new(1_725_207_000_000);
+    let clock = FakeClock::new(Timestamp::from_millis(3));
+    let source = Session::new(
+        ids.session_id(),
+        std::env::temp_dir().join("proqi-transfer-generation"),
+        Timestamp::from_millis(1),
+    )
+    .expect("source session");
+    let first = Thought::new(
+        ids.thought_id(),
+        source.id,
+        "first".to_owned(),
+        ThoughtPosition::new(0),
+        Timestamp::from_millis(1),
+    );
+    let second = Thought::new(
+        ids.thought_id(),
+        source.id,
+        "second".to_owned(),
+        ThoughtPosition::new(1),
+        Timestamp::from_millis(1),
+    );
+    let second_id = second.id;
+    let board = SessionBoard::new(source, vec![first, second]).expect("board");
+    let mut app = BoardApp::new(AppState::new(board), RopeEditorFactory);
+
+    assert!(matches!(
+        app.begin_session_transfer(false, &mut ids, &clock)
+            .as_slice(),
+        [Effect::DiscoverTransferSessions { generation: 1 }]
+    ));
+    app.handle_transfer_input(&UiInput::Key(UiKey::Character('o')), &mut ids, &clock);
+    app.handle_transfer_input(&UiInput::Key(UiKey::Escape), &mut ids, &clock);
+    app.state.focused_thought = Some(second_id);
+    assert!(matches!(
+        app.begin_session_transfer(true, &mut ids, &clock)
+            .as_slice(),
+        [Effect::DiscoverTransferSessions { generation: 2 }]
+    ));
+    app.handle_transfer_input(&UiInput::Key(UiKey::Character('n')), &mut ids, &clock);
+
+    app.complete_transfer_discovery(1, Ok(vec![session_hit(ids.session_id())]));
+    app.complete_transfer_discovery(1, Ok(Vec::new()));
+    app.complete_transfer_discovery(1, Err(crate::ports::store::StoreError::Busy));
+    let current = app.transfer.as_ref().expect("reopened transfer owner");
+    assert_eq!(current.generation, 2);
+    assert_eq!(current.source_thought_id, second_id);
+    assert!(current.remove_source);
+    assert!(current.loading);
+    assert_eq!(current.query.text(), "n");
+
+    app.complete_transfer_discovery(2, Ok(vec![session_hit(ids.session_id())]));
+    let current = app.transfer.as_ref().expect("current completion");
+    assert!(!current.loading);
+    assert_eq!(current.sessions.len(), 1);
 }
 
 fn assert_modified_delete_edits_query(

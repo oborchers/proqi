@@ -100,8 +100,12 @@ impl PersistenceLane {
     pub(in crate::adapters::terminal) fn discover_transfer_sessions(
         &self,
         current_session_id: SessionId,
+        generation: u64,
     ) -> Result<(), TerminalError> {
-        self.send(PersistenceRequest::DiscoverTransferSessions { current_session_id })
+        self.send(PersistenceRequest::DiscoverTransferSessions {
+            current_session_id,
+            generation,
+        })
     }
 
     pub(in crate::adapters::terminal) fn transfer_thought(

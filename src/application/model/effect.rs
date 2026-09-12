@@ -31,7 +31,10 @@ pub enum Effect {
     /// Execute one explicit installation-wide update decision outside the reducer lane.
     Update(UpdateIntent),
     /// Discover live destination sessions for an explicit transfer picker.
-    DiscoverTransferSessions,
+    DiscoverTransferSessions {
+        /// Picker generation used to discard a completion from an earlier owner.
+        generation: u64,
+    },
     /// Copy one exact thought to another session before optional source removal.
     TransferThought(SessionTransferRequest),
     /// Persist one installation-wide Browser administration operation.

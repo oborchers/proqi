@@ -18,6 +18,7 @@ mod view;
 use view::SessionHitLabel as _;
 
 pub(super) struct TransferState {
+    generation: u64,
     query: QueryEditor,
     sessions: Vec<SessionHit>,
     selected: usize,
@@ -43,7 +44,10 @@ impl BoardApp {
             EditFlush::Complete(effects) => effects,
             EditFlush::Blocked(effects) => return effects,
         };
+        self.transfer_generation = self.transfer_generation.wrapping_add(1);
+        let generation = self.transfer_generation;
         self.transfer = Some(TransferState {
+            generation,
             query: QueryEditor::default(),
             sessions: Vec::new(),
             selected: 0,
@@ -52,17 +56,21 @@ impl BoardApp {
             remove_source,
             loading: true,
         });
-        effects.push(Effect::DiscoverTransferSessions);
+        effects.push(Effect::DiscoverTransferSessions { generation });
         effects
     }
 
     pub(crate) fn complete_transfer_discovery(
         &mut self,
+        generation: u64,
         result: Result<Vec<SessionHit>, StoreError>,
     ) {
         let Some(state) = &mut self.transfer else {
             return;
         };
+        if state.generation != generation {
+            return;
+        }
         state.loading = false;
         match result {
             Ok(sessions) if sessions.is_empty() => {

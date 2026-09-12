@@ -57,6 +57,12 @@ redo compare the eligible Board operation with the active thought revision by
 durable sequence. Atomic multi-thought operations move only when they are nearest
 and applicable for every affected resource.
 
+When a Board undo or redo is causally blocked by an Editor revision on any
+affected thought, Board history stays unavailable and identifies which owner
+must move first. It does not undo hidden Editor content automatically. TUI,
+owner-control, and CLI history moves enforce the same ordering, so an explicit
+Board request cannot bypass the contextual availability contract.
+
 ### Compose handoff owner
 
 Compose is an ephemeral Editor resource until the first content-producing

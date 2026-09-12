@@ -49,7 +49,7 @@ pub(super) fn enqueue_effects(
             | Effect::RetryPersistence { .. }
             | Effect::StoreIntegrationContext { .. }
             | Effect::CommitBrowserOperation(_)
-            | Effect::DiscoverTransferSessions
+            | Effect::DiscoverTransferSessions { .. }
             | Effect::TransferThought(_)
             | Effect::PrepareSubmission(_)
             | Effect::MarkSubmissionSending { .. }
@@ -141,9 +141,9 @@ fn enqueue_persistence_effect(
                 .persistence
                 .browser_operation(None, previous_name, operation)?;
         }
-        Effect::DiscoverTransferSessions => lanes
+        Effect::DiscoverTransferSessions { generation } => lanes
             .persistence
-            .discover_transfer_sessions(app.state.board.session.id)?,
+            .discover_transfer_sessions(app.state.board.session.id, generation)?,
         Effect::TransferThought(request) => lanes.persistence.transfer_thought(request)?,
         Effect::PrepareSubmission(attempt) => {
             crate::adapters::diagnostics::record(
@@ -242,9 +242,9 @@ fn complete_result(
             owner_control::complete_metadata(pending, request_id, &result);
             app.complete_session_rename(previous_name, result);
         }
-        PersistenceResult::TransferSessions(result) => {
+        PersistenceResult::TransferSessions { generation, result } => {
             pending.persistence = pending.persistence.saturating_sub(1);
-            app.complete_transfer_discovery(result);
+            app.complete_transfer_discovery(generation, result);
         }
         PersistenceResult::ThoughtTransferred { request, result } => {
             pending.persistence = pending.persistence.saturating_sub(1);

@@ -140,3 +140,29 @@ fn board_boundary(
 pub(super) fn macos_reorder_modifiers(macos: bool, modifiers: LogicalModifiers) -> bool {
     macos && modifiers == OPTION_SHIFT
 }
+
+pub(super) fn configured_board_boundary(
+    previous: bool,
+    base_focus: bool,
+    modifiers: LogicalModifiers,
+    macos: bool,
+) -> Option<Action> {
+    let action = match (previous, base_focus, modifiers, macos) {
+        (true, true, LogicalModifiers::CONTROL, _) => Action::FocusFirst,
+        (false, true, LogicalModifiers::CONTROL, _) => Action::FocusLast,
+        (true, false, value, true)
+            if value.difference(LogicalModifiers::SHIFT) == LogicalModifiers::CONTROL =>
+        {
+            Action::ExtendFirst
+        }
+        (false, false, value, true)
+            if value.difference(LogicalModifiers::SHIFT) == LogicalModifiers::CONTROL =>
+        {
+            Action::ExtendLast
+        }
+        (true, true, LogicalModifiers::ALT, false) => Action::InsertAbove,
+        (false, true, LogicalModifiers::ALT, false) => Action::InsertBelow,
+        _ => return None,
+    };
+    Some(action)
+}

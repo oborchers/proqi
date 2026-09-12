@@ -69,6 +69,67 @@ fn browser_operation_and_history_request_ids_share_one_namespace() {
 }
 
 #[test]
+fn browser_lookup_rejects_ids_owned_by_session_or_history_move_receipts() {
+    let fixture = DatabaseFixture::new();
+    let mut store = fixture.open();
+    let mut ids = FakeIdGenerator::new(1_725_001_000_000);
+    let mut state = session_state(&mut ids, &test_path("proqi-browser-lookup-namespace"));
+    let session_id = state.board.session.id;
+    store
+        .commit(&OperationBatch::CreateSession(state.board.session.clone()))
+        .expect("session");
+
+    let session_operation_id = ids.operation_id();
+    let thought_id = ids.thought_id();
+    let effect = one_effect(
+        &mut state,
+        Action::CreateThought {
+            thought_id,
+            operation_id: session_operation_id,
+            content: "session history".to_owned(),
+            annotations: Vec::new(),
+            insertion_index: None,
+            at: Timestamp::from_millis(2),
+        },
+    );
+    persist_effect(&mut store, &effect);
+    assert!(matches!(
+        store.browser_operation(session_operation_id),
+        Err(StoreError::Conflict(message))
+            if message == "operation identity is already used by session history"
+    ));
+
+    let rename = BrowserOperation::rename(
+        ids.operation_id(),
+        session_id,
+        None,
+        Some("renamed".to_owned()),
+        Timestamp::from_millis(3),
+    )
+    .expect("rename");
+    store
+        .commit_browser_operation(&rename)
+        .expect("Browser rename");
+    let move_id = ids.operation_id();
+    move_history(&mut store, move_id, true, Timestamp::from_millis(4)).expect("Browser undo");
+    assert!(matches!(
+        store.browser_operation(move_id),
+        Err(StoreError::Conflict(message))
+            if message == "operation identity is already used by Browser history"
+    ));
+    assert_eq!(
+        store.browser_operation(rename.id()).expect("rename replay"),
+        Some(rename)
+    );
+    assert_eq!(
+        store
+            .browser_operation(ids.operation_id())
+            .expect("unused identity"),
+        None
+    );
+}
+
+#[test]
 fn browser_ids_cannot_be_reused_by_later_session_history() {
     let fixture = DatabaseFixture::new();
     let mut store = fixture.open();

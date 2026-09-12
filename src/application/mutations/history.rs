@@ -13,6 +13,7 @@ pub(in crate::application) fn history_move(
     at: Timestamp,
     undo: bool,
 ) -> ApplicationResult<Vec<Effect>> {
+    state.ensure_history_scope_ready(scope, undo)?;
     let sequence = state.next_sequence()?;
     match scope {
         UndoScope::Board => move_board_history(state, at, undo)?,
