@@ -386,6 +386,7 @@ check_for_updates = true
 theme = "auto" # auto, light, dark, limited, or a bounded local theme file
 density = "comfortable" # or compact
 merge_separator = "\n\n" # one blank line between merged thoughts
+mouse_capture = true # set false if your terminal/multiplexer mishandles mouse reporting
 
 [keymap]
 schema_version = 1

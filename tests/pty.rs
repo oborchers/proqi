@@ -48,6 +48,10 @@ mod input_pause;
 mod key_inspector;
 
 #[cfg(target_os = "macos")]
+#[path = "pty/mouse_capture.rs"]
+mod mouse_capture;
+
+#[cfg(target_os = "macos")]
 #[path = "pty/onboarding.rs"]
 mod onboarding;
 
