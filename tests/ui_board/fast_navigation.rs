@@ -51,7 +51,7 @@ fn command_palette_wheel_is_contained_and_retargets_the_visible_slice() {
     fixture.pointer(item.x, item.y, PointerKind::ScrollDown);
     let _ = draw(&mut fixture, 36, 7);
     let (_, visible, selected) = fixture.app.palette_view().expect("palette");
-    assert_eq!(visible[selected], "Rename session");
+    assert_eq!(visible[selected], "Insert thought above");
     fixture.input(crate::key_input(UiKey::Escape));
     assert_eq!(
         fixture
@@ -214,26 +214,38 @@ fn mouse_reposition_sets_the_column_for_the_next_fast_jump() {
 }
 
 #[test]
-fn mode_aware_alt_navigation_keeps_board_focus_movement_unchanged() {
+fn platform_insertion_default_keeps_editor_alt_fast_movement() {
     let mut fixture = Fixture::new();
     for content in ["first", "second", "third"] {
         navigation::durable_thought(&mut fixture, content);
     }
-    fixture.input(UiInput::KeyStroke(
-        KeyStroke::press(LogicalKey::Up).with_modifiers(LogicalModifiers::ALT),
-    ));
+    let insertion = if cfg!(target_os = "macos") {
+        KeyStroke::press(LogicalKey::Character('n'))
+            .with_modifiers(LogicalModifiers::CONTROL.union(LogicalModifiers::SHIFT))
+    } else {
+        KeyStroke::press(LogicalKey::Up).with_modifiers(LogicalModifiers::ALT)
+    };
+    fixture.input(UiInput::KeyStroke(insertion));
+    assert_eq!(fixture.app.state.board.live_thoughts()[2].content, "");
     assert_eq!(
-        fixture.app.state.focused_thought,
-        Some(fixture.app.state.board.live_thoughts()[1].id)
+        fixture
+            .app
+            .editor_snapshot()
+            .expect("inserted editor")
+            .content,
+        ""
     );
 
-    fixture.input(crate::key_input(UiKey::Enter));
-    fixture.input(UiInput::KeyStroke(
+    let mut editor = Fixture::new();
+    navigation::durable_thought(&mut editor, "zero\none\ntwo\nthree\nfour\nfive\nsix");
+    editor.input(crate::key_input(UiKey::Enter));
+    move_cursor(&mut editor, CursorMovement::DocumentStart);
+    editor.input(UiInput::KeyStroke(
         KeyStroke::press(LogicalKey::Down).with_modifiers(LogicalModifiers::ALT),
     ));
     assert_eq!(
-        fixture.app.editor_snapshot().expect("editor").cursor,
-        TextPosition::new(0, 6)
+        editor.app.editor_snapshot().expect("editor").cursor,
+        TextPosition::new(5, 0)
     );
 }
 
@@ -397,12 +409,7 @@ fn contextual_help_uses_platform_primary_labels_for_fast_navigation() {
         "Alt+↑/↓"
     }));
     assert!(rendered.contains("Move 5 rows"));
-    let primary = if cfg!(target_os = "macos") {
-        "Cmd+↑/↓"
-    } else {
-        "Ctrl+↑/↓"
-    };
-    assert!(rendered.contains(primary));
+    assert!(rendered.contains("Ctrl+↑/↓"));
     assert!(rendered.contains("Start/end"));
     let visual_row = if cfg!(target_os = "macos") {
         "Cmd+Shift+H/←/L/→"

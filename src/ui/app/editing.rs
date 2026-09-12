@@ -15,6 +15,14 @@ use crate::ui::annotations;
 mod attachment_insertion;
 mod navigation;
 
+pub(super) fn visual_row_move(key: UiKey) -> Option<(crate::ui::VisualRowEdge, bool)> {
+    match key {
+        UiKey::ExtendVisualRow { edge } => Some((edge, true)),
+        UiKey::MoveVisualRow { edge } => Some((edge, false)),
+        _ => None,
+    }
+}
+
 pub(super) fn command_for_key(
     key: UiKey,
     adjacent_fold: bool,

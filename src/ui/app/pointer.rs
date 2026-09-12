@@ -435,19 +435,13 @@ impl BoardApp {
         if self.layout.is_none() {
             return Vec::new();
         }
-        let anchor = self.scroll_geometry.and_then(|geometry| {
-            if delta > 0 {
-                geometry.next
-            } else {
-                geometry.previous
-            }
-        });
+        let anchor = self
+            .scroll_geometry
+            .and_then(|geometry| geometry.neighbor(delta));
         let Some(anchor) = anchor else {
             return Vec::new();
         };
-        self.board_viewport = crate::ui::layout::scroll::BoardViewport::Manual(anchor);
-        self.scroll_geometry = None;
-        self.layout = None;
+        self.scroll_board_to(anchor);
         Vec::new()
     }
 

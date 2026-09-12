@@ -10,7 +10,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::ui::settings::KeyBindings;
 
 use super::model::{
-    ShortcutActionId as Action, ShortcutContext as Context, ShortcutDescriptor, ShortcutSafety,
+    CommandAvailability, ShortcutActionId as Action, ShortcutContext as Context,
+    ShortcutDescriptor, ShortcutSafety,
 };
 use bindings::{alias_claims, default_claims};
 
@@ -32,6 +33,10 @@ pub(super) const DIRECT_ACTIONS: &[Action] = &[
     Action::FastNext,
     Action::FastExtendPrevious,
     Action::FastExtendNext,
+    Action::FocusFirst,
+    Action::FocusLast,
+    Action::ExtendFirst,
+    Action::ExtendLast,
     Action::MoveGraphemeBack,
     Action::MoveGraphemeForward,
     Action::MoveWordBack,
@@ -60,6 +65,8 @@ pub(super) const DIRECT_ACTIONS: &[Action] = &[
     Action::Cut,
     Action::PasteExact,
     Action::PasteReflow,
+    Action::InsertAbove,
+    Action::InsertBelow,
     Action::SelectAll,
     Action::Duplicate,
     Action::Undo,
@@ -159,15 +166,19 @@ fn descriptor(
         .flat_map(|claim| claim.contexts.iter().copied())
         .collect::<BTreeSet<_>>();
     contexts.extend(metadata::help_contexts(&help));
-    if command.is_some() {
-        contexts.extend([
-            Context::Commands,
-            Context::Board,
-            Context::InsertionBoundary,
-            Context::Compose,
-            Context::Edit,
-            Context::Invocation,
-        ]);
+    if let Some(metadata) = command {
+        contexts.insert(Context::Commands);
+        if metadata.availability == CommandAvailability::BoardThought {
+            contexts.extend([Context::Board, Context::InsertionBoundary]);
+        } else {
+            contexts.extend([
+                Context::Board,
+                Context::InsertionBoundary,
+                Context::Compose,
+                Context::Edit,
+                Context::Invocation,
+            ]);
+        }
     }
     if action == Action::Help {
         contexts.insert(Context::Recovery);

@@ -109,6 +109,12 @@ const fn is_board_typed_action(action: Action) -> bool {
             | Action::ExtendNext
             | Action::MoveUp
             | Action::MoveDown
+            | Action::FocusFirst
+            | Action::FocusLast
+            | Action::ExtendFirst
+            | Action::ExtendLast
+            | Action::InsertAbove
+            | Action::InsertBelow
             | Action::Collapse
             | Action::Select
             | Action::RangeSelect

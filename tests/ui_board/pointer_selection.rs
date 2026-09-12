@@ -232,3 +232,41 @@ fn triple_click_drag_extends_by_complete_logical_lines() {
         })
     );
 }
+
+#[test]
+fn mouse_drag_reorders_thoughts_through_the_visible_gutter() {
+    let mut fixture = Fixture::new();
+    for content in ["first", "second", "third"] {
+        fixture.paste(content);
+        fixture.input(crate::key_input(UiKey::Escape));
+    }
+    let board = draw(&mut fixture, 40, 14);
+    let rendered = text(board.backend().buffer());
+    let layout = fixture.app.prepare_frame(Rect::new(0, 0, 40, 14));
+    let separator = layout.thoughts[1]
+        .separator_before
+        .expect("separator geometry");
+    assert!(
+        rendered
+            .lines()
+            .nth(usize::from(separator.y))
+            .expect("separator row")
+            .starts_with("  ─")
+    );
+    assert_eq!(layout.hit_test(separator.x, separator.y), None);
+    let target_row = layout.thoughts[2].gutter.y;
+    let source_row = layout.thoughts[0].gutter.y;
+    fixture.pointer(0, source_row, PointerKind::Down(PointerButton::Left));
+    fixture.pointer(0, target_row, PointerKind::Drag(PointerButton::Left));
+    fixture.pointer(0, target_row, PointerKind::Up(PointerButton::Left));
+
+    let contents = fixture
+        .app
+        .state
+        .board
+        .live_thoughts()
+        .iter()
+        .map(|thought| thought.content.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(contents, ["second", "third", "first"]);
+}

@@ -10,8 +10,12 @@ independently edit instruction content in `CLAUDE.md`.
 
 ## Verification
 
-- `cargo xtask check` is the canonical local quality gate.
-- Run focused tests while developing, then the complete gate before committing.
+- `cargo xtask check` is the change-aware iterative gate. It reports every
+  command and omission and is never final qualification unless it fails closed
+  to the full plan.
+- `cargo xtask check-full` is the canonical final local quality gate. Run
+  focused tests and `check` while developing, then run one serialized
+  `check-full` immediately before the final qualification commit or handoff.
 - Behavior changes require tests that prove the behavior and important failure
   paths. Bug fixes require a regression test where practical.
 - Use `cargo xtask audit` and `cargo xtask package` at milestone and release

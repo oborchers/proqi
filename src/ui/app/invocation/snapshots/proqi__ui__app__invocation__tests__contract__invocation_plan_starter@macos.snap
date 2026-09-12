@@ -1,8 +1,9 @@
 ---
 source: src/ui/app/invocation/tests.rs
+assertion_line: 483
 expression: plan_completion_snapshot()
 ---
-00││
+00│⋮ /pl│
 01│┌ discovered invocations ────────────────────[x]│
 02││›/pl                                          ││
 03││/plan                           Shared Command││

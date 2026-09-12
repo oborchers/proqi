@@ -45,6 +45,7 @@ jobs:
           fi
 
           classification="$(cargo xtask ci-change-class "$base_sha" "$HEAD_SHA")"
+          jq . <<<"$classification"
           {
             echo "base_sha=$base_sha"
             echo "coverage=$(jq -r .coverage <<<"$classification")"
@@ -84,7 +85,7 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           key: ubuntu-24.04
-      - uses: taiki-e/install-action@6cd13508893c0e7eab5f273c2575d3859bd7229a # v2.86.6
+      - uses: taiki-e/install-action@0758d235715de2f3551eacc980d9ae8fce9342c3 # v2.87.3
         with:
           tool: cargo-nextest@0.9.143
       - run: cargo xtask quality
@@ -107,7 +108,7 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           key: ${{ matrix.os }}
-      - uses: taiki-e/install-action@6cd13508893c0e7eab5f273c2575d3859bd7229a # v2.86.6
+      - uses: taiki-e/install-action@0758d235715de2f3551eacc980d9ae8fce9342c3 # v2.87.3
         with:
           tool: cargo-nextest@0.9.143
       - run: cargo xtask test
@@ -154,12 +155,12 @@ jobs:
     needs: changes
     if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: taiki-e/install-action@6cd13508893c0e7eab5f273c2575d3859bd7229a # v2.86.6
+      - uses: taiki-e/install-action@0758d235715de2f3551eacc980d9ae8fce9342c3 # v2.87.3
         with:
           tool: cargo-deny@0.20.2,cargo-audit@0.22.2,cargo-shear@1.11.2
       - run: cargo xtask audit
@@ -194,21 +195,17 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           key: ubuntu-24.04
-      - uses: taiki-e/install-action@6cd13508893c0e7eab5f273c2575d3859bd7229a # v2.86.6
+      - uses: taiki-e/install-action@0758d235715de2f3551eacc980d9ae8fce9342c3 # v2.87.3
         with:
           tool: cargo-nextest@0.9.143,cargo-llvm-cov@0.9.0
       - run: cargo xtask coverage
       - run: cargo xtask clean-worktree
 
-  package:
-    name: Package contract (${{ matrix.os }})
+  package_linux:
+    name: Package contract (ubuntu-22.04)
     needs: changes
     if: needs.changes.outputs.docs_only != 'true'
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-15, ubuntu-22.04]
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-22.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -217,25 +214,60 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           cache-targets: false # Package output contains nested manifests that are not cache roots.
-          key: ${{ matrix.os }}
-      - uses: taiki-e/install-action@6cd13508893c0e7eab5f273c2575d3859bd7229a # v2.86.6
+          key: ubuntu-22.04-package
+      - uses: taiki-e/install-action@0758d235715de2f3551eacc980d9ae8fce9342c3 # v2.87.3
         with:
           tool: cargo-about@0.9.2
-      - run: cargo xtask package
-      - name: Preserve verified Linux archive for Debian packaging
-        if: runner.os == 'Linux'
+      - uses: ./.github/actions/install-nfpm
+      - name: Build and verify Linux archive
+        run: cargo xtask package
+      - name: Construct and statically verify Debian package
+        run: |
+          cargo xtask debian-package \
+            target/package/proqi-x86_64-unknown-linux-gnu.tar.gz \
+            target/debian-package
+      - name: Preserve verified Linux and Debian artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           if-no-files-found: error
-          name: ci-linux-package
-          path: target/package/proqi-x86_64-unknown-linux-gnu.tar.gz
+          name: ci-linux-packages
+          path: |
+            target/package/proqi-x86_64-unknown-linux-gnu.tar.gz
+            target/debian-package/proqi_amd64.deb
+            target/debian-package/proqi_amd64.deb.sha256
+            target/debian-package/debian-evidence.json
           retention-days: 1
       - run: cargo xtask clean-worktree
 
+  package_macos:
+    name: Package contract (macos-15)
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          cache-targets: false # Package output contains nested manifests that are not cache roots.
+          key: macos-15-package
+      - uses: taiki-e/install-action@0758d235715de2f3551eacc980d9ae8fce9342c3 # v2.87.3
+        with:
+          tool: cargo-about@0.9.2
+      - name: Build and verify macOS archive
+        run: cargo xtask package
+      - run: cargo xtask clean-worktree
+
   debian:
-    name: Debian package contract
-    needs: [changes, package]
-    if: needs.changes.outputs.docs_only != 'true' && needs.package.result == 'success'
+    name: Debian package contract (${{ matrix.profile }})
+    needs: [changes, package_linux]
+    if: needs.changes.outputs.docs_only != 'true' && needs.package_linux.result == 'success'
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [ubuntu-22.04, ubuntu-24.04, debian-bookworm]
     runs-on: ubuntu-22.04
     timeout-minutes: 25
     steps:
@@ -244,26 +276,26 @@ jobs:
           persist-credentials: false
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
-          key: ubuntu-22.04
-      - uses: ./.github/actions/install-nfpm
+          key: ubuntu-22.04-debian
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: ci-linux-package
-          path: target/package
-      - name: Build and verify Debian artifact
+          name: ci-linux-packages
+          path: target
+      - name: Verify Debian artifact on ${{ matrix.profile }}
+        env:
+          DEBIAN_PROFILE: ${{ matrix.profile }}
         run: |
-          cargo xtask debian-package \
+          cargo xtask verify-debian-image \
+            "$DEBIAN_PROFILE" \
             target/package/proqi-x86_64-unknown-linux-gnu.tar.gz \
+            target/debian-package/proqi_amd64.deb \
             target/debian-package
-          cargo xtask verify-debian \
-            target/package/proqi-x86_64-unknown-linux-gnu.tar.gz \
-            target/debian-package/proqi_amd64.deb
       - run: cargo xtask clean-worktree
 
   check:
     name: Required CI result
     if: always()
-    needs: [changes, docs, quality, test, msrv, crate, security, pty, coverage, package, debian]
+    needs: [changes, docs, quality, test, msrv, crate, security, pty, coverage, package_linux, package_macos, debian]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -275,7 +307,7 @@ jobs:
           test "$(jq -r '
             .changes.result == "success" and
             .docs.result == "success" and
-            ([.quality, .test, .msrv, .crate, .security, .pty, .coverage, .package, .debian]
+            ([.quality, .test, .msrv, .crate, .security, .pty, .coverage, .package_linux, .package_macos, .debian]
               | all(.result == "skipped"))
           ' <<<"$NEEDS")" = true
       - name: Require every product quality job
@@ -286,7 +318,7 @@ jobs:
           test "$(jq -r '
             .changes.result == "success" and
             .docs.result == "skipped" and
-            ([.quality, .test, .msrv, .crate, .security, .pty, .package, .debian]
+            ([.quality, .test, .msrv, .crate, .security, .pty, .package_linux, .package_macos, .debian]
               | all(.result == "success")) and
             (if .changes.outputs.coverage == "true" then
               .coverage.result == "success"

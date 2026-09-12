@@ -17,6 +17,8 @@ mod crate_package;
 mod debian;
 mod debian_container;
 mod debian_verify;
+mod dev_gates;
+mod gate_lock;
 mod herdr_compatibility;
 mod homebrew;
 mod instructions;
@@ -35,6 +37,7 @@ mod release_targets;
 mod shortcut_architecture;
 mod snapshots;
 mod source_limits;
+mod timing;
 
 use std::env;
 use std::ffi::OsStr;
@@ -67,9 +70,10 @@ fn execute() -> Result<(), String> {
         "architecture" => policy::check(&root),
         "assets" => public_assets::check(&root),
         "clean-worktree" => clean_worktree(&root),
-        "quality" => quality(&root),
-        "check" => check(&root),
-        "test" => test(&root),
+        "quality" => dev_gates::quality(&root),
+        "check" => dev_gates::check(&root, &env::args().skip(2).collect::<Vec<_>>()),
+        "check-full" => dev_gates::check_full(&root, &env::args().skip(2).collect::<Vec<_>>()),
+        "test" => dev_gates::test(&root),
         "ci-linux" => linux_ci::run_local(&root),
         "ci-linux-smoke" => {
             let image = required_argument("ci-linux-smoke", 2, "digest-pinned image")?;
@@ -121,6 +125,7 @@ fn execute() -> Result<(), String> {
             let package = required_path_argument("verify-debian", 3, "Debian package")?;
             debian_container::verify(&root, &archive, &package)
         }
+        "verify-debian-image" => verify_debian_image_command(&root),
         "msrv" => msrv(&root),
         "msrv-full" => msrv_full(&root),
         "help" | "--help" | "-h" => {
@@ -129,6 +134,14 @@ fn execute() -> Result<(), String> {
         }
         other => Err(format!("unknown command `{other}`; run `cargo xtask help`")),
     }
+}
+
+fn verify_debian_image_command(root: &Path) -> Result<(), String> {
+    let profile = required_argument("verify-debian-image", 2, "image profile")?;
+    let archive = required_path_argument("verify-debian-image", 3, "Linux archive")?;
+    let package = required_path_argument("verify-debian-image", 4, "Debian package")?;
+    let evidence = required_path_argument("verify-debian-image", 5, "evidence directory")?;
+    debian_container::verify_one(root, &profile, &archive, &package, &evidence)
 }
 
 fn release_command(root: &Path, command: &str) -> Option<Result<(), String>> {
@@ -203,7 +216,8 @@ fn print_help() {
          \n  cargo xtask assets\
          \n  cargo xtask clean-worktree\
          \n  cargo xtask quality\
-         \n  cargo xtask check\
+         \n  cargo xtask check [--base <revision>]\
+         \n  cargo xtask check-full\
          \n  cargo xtask test\
          \n  cargo xtask ci-linux\
          \n  cargo xtask ci-linux-smoke <image@sha256:digest>\
@@ -218,6 +232,7 @@ fn print_help() {
          \n  cargo xtask herdr-compatibility <schema.json> [stderr-capture]\
          \n  cargo xtask debian-package <linux-archive> <output-dir>\
          \n  cargo xtask verify-debian <linux-archive> <deb>\
+         \n  cargo xtask verify-debian-image <profile> <linux-archive> <deb> <evidence-dir>\
          \n  cargo xtask release-plan [vX.Y.Z]\
          \n  cargo xtask release-ready [source-sha]\
          \n  cargo xtask release-promotion-plan <vX.Y.Z>\
@@ -273,42 +288,6 @@ fn setup(root: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn check(root: &Path) -> Result<(), String> {
-    quality(root)?;
-    test(root)
-}
-
-fn quality(root: &Path) -> Result<(), String> {
-    run(root, "cargo", ["fmt", "--all", "--", "--check"])?;
-    check_whitespace(root)?;
-    source_limits::check(root)?;
-    snapshots::check(root)?;
-    release_highlights::validate(root, None)?;
-    public_assets::check(root)?;
-    policy::check(root)?;
-    run(
-        root,
-        "cargo",
-        [
-            "clippy",
-            "--locked",
-            "--workspace",
-            "--all-targets",
-            "--all-features",
-            "--",
-            "-D",
-            "warnings",
-        ],
-    )?;
-    check_docs(root)
-}
-
-fn check_whitespace(root: &Path) -> Result<(), String> {
-    run(root, "git", ["diff", "--check"])?;
-    run(root, "git", ["diff", "--cached", "--check"])?;
-    run(root, "git", ["show", "--check", "--format=", "HEAD"])
-}
-
 fn clean_worktree(root: &Path) -> Result<(), String> {
     let output = Command::new("git")
         .args(["status", "--porcelain", "--untracked-files=all"])
@@ -326,27 +305,6 @@ fn clean_worktree(root: &Path) -> Result<(), String> {
             changes.trim_end()
         )
     })
-}
-
-fn check_docs(root: &Path) -> Result<(), String> {
-    let arguments = [
-        "doc",
-        "--locked",
-        "--workspace",
-        "--all-features",
-        "--no-deps",
-    ];
-    println!("+ RUSTDOCFLAGS=-D warnings cargo {}", arguments.join(" "));
-    let status = Command::new("cargo")
-        .args(arguments)
-        .env("RUSTDOCFLAGS", "-D warnings")
-        .current_dir(root)
-        .status()
-        .map_err(|error| format!("start cargo doc: {error}"))?;
-    status
-        .success()
-        .then_some(())
-        .ok_or_else(|| format!("cargo doc exited with {status}"))
 }
 
 fn msrv(root: &Path) -> Result<(), String> {
@@ -369,25 +327,6 @@ fn msrv_full(root: &Path) -> Result<(), String> {
         root,
         "cargo",
         ["test", "--locked", "--workspace", "--all-features"],
-    )
-}
-
-fn test(root: &Path) -> Result<(), String> {
-    run(
-        root,
-        "cargo",
-        [
-            "nextest",
-            "run",
-            "--locked",
-            "--workspace",
-            "--all-features",
-        ],
-    )?;
-    run(
-        root,
-        "cargo",
-        ["test", "--locked", "--workspace", "--all-features", "--doc"],
     )
 }
 

@@ -11,6 +11,12 @@ use crate::{
 use super::{BoardApp, palette};
 
 impl BoardApp {
+    pub(super) fn scroll_board_to(&mut self, anchor: crate::ui::layout::scroll::ScrollAnchor) {
+        self.board_viewport = crate::ui::layout::scroll::BoardViewport::Manual(anchor);
+        self.scroll_geometry = None;
+        self.layout = None;
+    }
+
     /// Prepare current frame geometry without changing the logical cursor.
     pub fn prepare_layout(&mut self, viewport: TextViewport) {
         self.viewport = viewport;

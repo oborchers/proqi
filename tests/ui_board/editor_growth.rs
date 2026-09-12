@@ -73,7 +73,7 @@ fn final_editor_grows_in_one_frame_at_the_bottom() {
         .expect("cursor");
     assert_eq!(cursor.y, grown.text_area.y + 1);
     let separator = grown.separator_before.expect("separator");
-    assert_eq!(separator.bottom(), grown.text_area.y);
+    assert_eq!(separator.bottom() + 1, grown.text_area.y);
     assert_eq!(layout.hit_test(separator.x, separator.y), None);
     insta::assert_snapshot!(
         "bottom_editor_natural_growth",
@@ -110,8 +110,10 @@ fn assert_frame(fixture: &mut Fixture, area: Rect) -> proqi::ui::LayoutSnapshot 
     let thought = layout.thought(id).expect("visible editor");
     let editor = fixture.app.editor_snapshot().expect("editor");
     // These fixtures contain no substitutions, so canonical and visible rows agree.
-    let top_padding =
-        u16::from(area.height > 4 && fixture.app.state.board.live_thoughts().len() == 1);
+    let top_padding = u16::from(
+        layout.density == proqi::ui::BoardDensity::Comfortable
+            && !fixture.app.state.board.live_thoughts().is_empty(),
+    );
     let capacity = usize::from(layout.board.height.saturating_sub(top_padding).max(1));
     assert_eq!(
         usize::from(thought.text_area.height),
@@ -411,9 +413,10 @@ fn large_paste_fold_expands_to_real_cap_and_collapses_without_stale_height() {
     }));
     fixture.input(key_input(UiKey::Enter));
     let expanded = fixture.app.prepare_frame(area);
+    let top_padding = u16::from(expanded.density == proqi::ui::BoardDensity::Comfortable);
     assert_eq!(
         expanded.thought(id).expect("expanded").text_area.height,
-        expanded.board.height
+        expanded.board.height - top_padding
     );
     assert!(fixture.app.editor_snapshot().expect("editor").scroll_row > 0);
     assert_eq!(fixture.app.prepare_frame(area), expanded);

@@ -54,7 +54,7 @@ const IMAGE_REQUIRED: [&str; 15] = [
 ];
 
 const HERDR_SENTINEL_PATH: &str = ".github/workflows/herdr-compatibility.yml";
-const HERDR_SENTINEL_REQUIRED: [&str; 15] = [
+const HERDR_SENTINEL_REQUIRED: [&str; 16] = [
     "schedule:",
     "workflow_dispatch:",
     "if: github.ref == 'refs/heads/main'",
@@ -69,7 +69,22 @@ const HERDR_SENTINEL_REQUIRED: [&str; 15] = [
     "timeout --kill-after=2s 10s",
     "cargo xtask herdr-compatibility",
     "search/issues",
+    "is:issue is:open in:body",
     "herdr-compatibility:${TAG}:${SCHEMA_SHA256}",
+];
+const DEPENDABOT_AUTOMERGE_PATH: &str = ".github/workflows/dependabot-auto-merge.yml";
+const DEPENDABOT_AUTOMERGE_REQUIRED: [&str; 11] = [
+    "pull_request:",
+    "contents: write",
+    "pull-requests: write",
+    "github.event.pull_request.user.login == 'dependabot[bot]'",
+    "github.repository == 'oborchers/proqi'",
+    "github.event.pull_request.draft == false",
+    "dependabot/fetch-metadata@d7267f607e9d3fb96fc2fbe83e0af444713e90b7 # v2.4.0",
+    "steps.metadata.outputs.update-type == 'version-update:semver-patch'",
+    "steps.metadata.outputs.update-type == 'version-update:semver-minor'",
+    "GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}",
+    "gh pr merge --auto --squash",
 ];
 
 pub(crate) fn check(root: &Path) -> Result<Vec<String>, String> {
@@ -78,8 +93,10 @@ pub(crate) fn check(root: &Path) -> Result<Vec<String>, String> {
     let ci = read(root, ".github/workflows/ci.yml")?;
     let image = read(root, ".github/workflows/ci-linux-image.yml")?;
     let sentinel = read(root, HERDR_SENTINEL_PATH)?;
+    let dependabot = read(root, DEPENDABOT_AUTOMERGE_PATH)?;
     let mut found = findings(&release, &candidate, &ci, &image);
     found.extend(herdr_sentinel_findings(&sentinel));
+    found.extend(dependabot_automerge_findings(&dependabot));
     found.extend(image_repository_findings(root)?);
     found.extend(scheduled_workflow_findings(root)?);
     Ok(found)
@@ -139,6 +156,13 @@ fn findings(release: &str, candidate: &str, ci: &str, image: &str) -> Vec<String
         "name: Registry package contract",
         "cargo xtask crate-package",
         "cargo +1.88.0 xtask msrv-full",
+        "name: Package contract (ubuntu-22.04)",
+        "name: Package contract (macos-15)",
+        "name: Debian package contract (${{ matrix.profile }})",
+        "profile: [ubuntu-22.04, ubuntu-24.04, debian-bookworm]",
+        "needs: [changes, package_linux]",
+        "cargo xtask verify-debian-image",
+        ".package_linux, .package_macos, .debian",
         ".coverage.result == \"skipped\"",
         "name: Required CI result",
     ] {
@@ -244,6 +268,29 @@ fn herdr_sentinel_findings(source: &str) -> Vec<String> {
     found
 }
 
+fn dependabot_automerge_findings(source: &str) -> Vec<String> {
+    let mut found = missing(
+        DEPENDABOT_AUTOMERGE_PATH,
+        source,
+        &DEPENDABOT_AUTOMERGE_REQUIRED,
+    );
+    for forbidden in [
+        "pull_request_target:",
+        "actions/checkout@",
+        "version-update:semver-major",
+        "gh pr merge --admin",
+        "gh pr merge --auto --merge",
+        "gh pr merge --auto --rebase",
+    ] {
+        if source.contains(forbidden) {
+            found.push(format!(
+                "{DEPENDABOT_AUTOMERGE_PATH}: forbidden `{forbidden}`"
+            ));
+        }
+    }
+    found
+}
+
 fn contains_schedule(source: &str) -> Result<bool, String> {
     let documents = YamlLoader::load_from_str(source)
         .map_err(|error| format!("parse GitHub Actions workflow YAML: {error}"))?;
@@ -292,7 +339,10 @@ fn enforce_order(source: &str, found: &mut Vec<String>) {
 
 #[cfg(test)]
 mod tests {
-    use super::{contains_schedule, findings, herdr_sentinel_findings, schedule_is_forbidden};
+    use super::{
+        contains_schedule, dependabot_automerge_findings, findings, herdr_sentinel_findings,
+        schedule_is_forbidden,
+    };
     use std::path::Path;
 
     fn sources() -> (&'static str, &'static str, &'static str, &'static str) {
@@ -360,6 +410,16 @@ mod tests {
     }
 
     #[test]
+    fn advisory_classification_never_controls_required_jobs() {
+        let (_, _, ci, _) = sources();
+        assert!(!ci.contains("outputs.advisory"));
+        assert!(!ci.contains("outputs.pty"));
+        assert!(!ci.contains("outputs.package_linux"));
+        assert!(!ci.contains("outputs.debian"));
+        assert!(ci.contains("jq . <<<\"$classification\""));
+    }
+
+    #[test]
     fn scheduled_herdr_sentinel_is_narrowly_permissioned() {
         let source = include_str!("../../.github/workflows/herdr-compatibility.yml");
         assert!(herdr_sentinel_findings(source).is_empty());
@@ -367,6 +427,12 @@ mod tests {
         let found = herdr_sentinel_findings(&unsafe_source);
         assert!(found.iter().any(|item| item.contains("contents: read")));
         assert!(found.iter().any(|item| item.contains("contents: write")));
+        let closed_issue_match = source.replace("is:issue is:open in:body", "is:issue in:body");
+        assert!(
+            herdr_sentinel_findings(&closed_issue_match)
+                .iter()
+                .any(|item| item.contains("is:issue is:open in:body"))
+        );
         let checkout_issue = source.replace(
             "steps:\n      - name: Create a deduplicated",
             "steps:\n      - uses: actions/checkout@pin\n      - name: Create a deduplicated",
@@ -399,4 +465,24 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn dependabot_automerge_is_verified_bounded_and_squashed() {
+        let source = include_str!("../../.github/workflows/dependabot-auto-merge.yml");
+        assert!(dependabot_automerge_findings(source).is_empty());
+
+        for unsafe_change in [
+            source.replace("pull_request:", "pull_request_target:"),
+            format!("{source}\n      - uses: actions/checkout@pin"),
+            source.replace("semver-minor", "semver-major"),
+            source.replace("--auto --squash", "--auto --merge"),
+            source.replace("dependabot[bot]", "github-actions[bot]"),
+        ] {
+            assert!(!dependabot_automerge_findings(&unsafe_change).is_empty());
+        }
+    }
 }
+
+#[cfg(test)]
+#[path = "release_policy_matrix_tests.rs"]
+mod matrix_tests;

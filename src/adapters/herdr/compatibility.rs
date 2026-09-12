@@ -8,7 +8,7 @@ use super::contract::{SchemaDocument, Snapshot};
 
 const SUPPORTED_SCHEMA: u32 = 1;
 const FIRST_QUALIFIED_PROTOCOL: u32 = 19;
-const LAST_QUALIFIED_PROTOCOL: u32 = 20;
+const LAST_QUALIFIED_PROTOCOL: u32 = 21;
 const PROVISIONAL_PROTOCOL: u32 = LAST_QUALIFIED_PROTOCOL + 1;
 
 const PROMPT_PARAMS_REF: &str = "#/schemas/request/$defs/AgentPromptParams";

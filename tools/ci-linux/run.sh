@@ -33,15 +33,12 @@ use_target() {
 use_target stable
 
 if [ "$mode" = smoke ]; then
-  cargo xtask quality
-  cargo xtask test
+  cargo xtask check-full
   cargo xtask clean-worktree
   exit 0
 fi
 
-cargo xtask quality
-cargo xtask clean-worktree
-cargo xtask test
+cargo xtask check-full
 cargo xtask clean-worktree
 use_target msrv
 cargo +1.88.0 xtask msrv-full

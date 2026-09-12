@@ -106,7 +106,7 @@ impl BoardApp {
             thought.updated_at = exported_at;
         }
         self.pending_recovery_exports.insert(request_id);
-        self.set_info("exporting recovery file");
+        self.set_recovery_info("exporting recovery file");
         vec![Effect::ExportRecovery {
             request_id,
             document: Box::new(document),
@@ -128,9 +128,9 @@ impl BoardApp {
                     DurabilityState::Failed { failed, .. } => Some(failed),
                     DurabilityState::Durable { .. } | DurabilityState::Pending { .. } => None,
                 };
-                self.set_success(format!("recovery exported to {}", path.display()));
+                self.set_recovery_success(format!("recovery exported to {}", path.display()));
             }
-            Err(error) => self.set_error(format!("recovery export failed: {error}")),
+            Err(error) => self.set_storage_failure(format!("recovery export failed: {error}")),
         }
         Vec::new()
     }
@@ -140,7 +140,7 @@ impl BoardApp {
             return Vec::new();
         };
         if code == crate::application::FailureCode::RecoveryCapacity {
-            self.set_error("retry is unavailable; export recovery before quitting");
+            self.set_storage_failure("retry is unavailable; export recovery before quitting");
             return Vec::new();
         }
         self.reduce(Action::RetryPersistence(failed))

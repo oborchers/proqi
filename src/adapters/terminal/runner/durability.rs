@@ -389,10 +389,12 @@ fn complete_sequence(
                 },
             );
             if error == crate::ports::store::StoreError::RecoveryCapacity {
-                app.set_error(format!("{error}; press w to export recovery"));
+                app.set_storage_failure(format!("{error}; press w to export recovery"));
                 Err(crate::application::FailureCode::RecoveryCapacity)
             } else {
-                app.set_error(format!("{error}; press r to retry or w to export recovery"));
+                app.set_storage_failure(format!(
+                    "{error}; press r to retry or w to export recovery"
+                ));
                 Err(crate::application::FailureCode::StorageFailed)
             }
         }

@@ -18,6 +18,8 @@ pub(crate) enum CommandExecution {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum BoardCommand {
     New,
+    InsertAbove,
+    InsertBelow,
     RenameSession,
     CopySessionId,
     CopyResume,
@@ -31,6 +33,8 @@ pub(crate) enum BoardCommand {
     Redo,
     MoveUp,
     MoveDown,
+    FocusFirst,
+    FocusLast,
     Collapse,
     Help,
     Quit,
@@ -99,6 +103,22 @@ pub(crate) enum TransformationCommand {
     MergeThoughts,
 }
 
+impl CommandExecution {
+    pub(crate) const fn acknowledges_screenshot_auto_pause(self) -> bool {
+        matches!(
+            self,
+            Self::Board(_)
+                | Self::Editor(_)
+                | Self::Entry(_)
+                | Self::Paste(_)
+                | Self::Selection(_)
+                | Self::Submission(_)
+                | Self::Transformation(_)
+                | Self::ReflowThought
+        )
+    }
+}
+
 #[expect(
     clippy::too_many_lines,
     reason = "one exhaustive action-to-executor mapping prevents hidden Commands fallthrough"
@@ -108,6 +128,8 @@ pub(crate) const fn execution_for(action: Action) -> Option<CommandExecution> {
     use CommandExecution as E;
     match action {
         A::New => Some(E::Board(BoardCommand::New)),
+        A::InsertAbove => Some(E::Board(BoardCommand::InsertAbove)),
+        A::InsertBelow => Some(E::Board(BoardCommand::InsertBelow)),
         A::RenameSession => Some(E::Board(BoardCommand::RenameSession)),
         A::CopySessionId => Some(E::Board(BoardCommand::CopySessionId)),
         A::CopyResume => Some(E::Board(BoardCommand::CopyResume)),
@@ -143,6 +165,8 @@ pub(crate) const fn execution_for(action: Action) -> Option<CommandExecution> {
         A::ExportRecovery => Some(E::Runtime(RuntimeCommand::ExportRecovery)),
         A::MoveUp => Some(E::Board(BoardCommand::MoveUp)),
         A::MoveDown => Some(E::Board(BoardCommand::MoveDown)),
+        A::FocusFirst => Some(E::Board(BoardCommand::FocusFirst)),
+        A::FocusLast => Some(E::Board(BoardCommand::FocusLast)),
         A::Collapse => Some(E::Board(BoardCommand::Collapse)),
         A::Select => Some(E::Selection(SelectionCommand::Select)),
         A::RangeSelect => Some(E::Selection(SelectionCommand::RangeSelect)),
@@ -173,6 +197,8 @@ pub(crate) const fn execution_for(action: Action) -> Option<CommandExecution> {
         | A::FastPrevious
         | A::FastExtendPrevious
         | A::FastExtendNext
+        | A::ExtendFirst
+        | A::ExtendLast
         | A::FastNext
         | A::MoveGraphemeBack
         | A::MoveGraphemeForward

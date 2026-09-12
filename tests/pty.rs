@@ -48,6 +48,10 @@ mod input_pause;
 mod key_inspector;
 
 #[cfg(target_os = "macos")]
+#[path = "pty/mouse_capture.rs"]
+mod mouse_capture;
+
+#[cfg(target_os = "macos")]
 #[path = "pty/onboarding.rs"]
 mod onboarding;
 
@@ -90,6 +94,10 @@ mod smart_lists;
 #[cfg(target_os = "macos")]
 #[path = "pty/top_boundary.rs"]
 mod top_boundary;
+
+#[cfg(target_os = "macos")]
+#[path = "pty/terminal_safe_navigation.rs"]
+mod terminal_safe_navigation;
 
 #[cfg(target_os = "macos")]
 #[path = "pty/transformations.rs"]

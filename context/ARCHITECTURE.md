@@ -1106,6 +1106,15 @@ context around it. The maximum board scroll position includes the insertion row
 as a terminal virtual item, so the final page always exposes `+ New thought`
 above the footer without permitting blank overscroll.
 
+One Board-density policy resolves the explicit preference against the final
+usable Board rectangle after footer reservation. Comfortable uses the standard
+two-row cadence at five or more Board rows. Four or fewer Board rows resolve to
+the responsive compact cadence, and explicit compact always remains compact.
+Thought count, natural content height, and whether the complete flow fits never
+participate in density selection. The resulting density, complete content
+height, viewport offset, and maximum offset are recorded in the final
+`LayoutSnapshot` consumed by rendering and hit testing.
+
 ### Resize
 
 A resize invalidates the layout snapshot, not the editor model. The next render
@@ -1166,9 +1175,19 @@ configured character spellings: plain input moves focus, Shift extends an
 anchored range, and Primary+Shift reorders one thought. The macOS default graph
 also assigns exact Option+Shift to the same reorder actions so a
 terminal-consumed Command binding does not remove keyboard reordering. Other
-modifiers resolve to the base focus intention. At the insertion row, range and
-reorder are thought-only no-ops while focus retains the boundary policy. Page Up and Page
-Down are separate fast-navigation actions: they move five thoughts, and their
+modifiers resolve to the base focus intention unless the resolved graph owns an
+exact terminal-safe boundary action. Exact Control targets the first or last
+live thought. macOS Control+Shift extends the existing range anchor to that
+boundary, while portable Control+Shift retains Primary+Shift reordering. macOS
+Control plus `n` inserts below, while Control plus Shift plus `n` inserts above
+and accepts the terminal-compatible uppercase-without-Shift report. Portable
+Alt plus vertical direction retains relative insertion. Both paths use the
+canonical create operation. That operation clears Board selection, focuses the
+new editor, and retains one operation, persistence, undo, redo, and restart
+contract. Locked or stale references fail before mutation. At the insertion
+row, range, reorder, and relative insertion are thought-only no-ops while focus
+retains the boundary policy. Page Up and Page Down are separate fast-navigation
+actions: they move five thoughts, and their
 Shift variants extend an anchored range by five. They clamp to real thoughts
 and never turn into Board reorder commands. The registry resolves exact platform
 and context bindings before UI routing.
@@ -1215,6 +1234,15 @@ truthful fallback when a terminal does not forward the arrow chord distinctly.
 On macOS, Option plus horizontal arrows retains word movement. On other
 platforms, Ctrl plus horizontal arrows retains word movement, and adding
 Shift extends by word. Board navigation does not consume visual-row intentions.
+
+Complete-thought movement uses exact logical Control plus Up or Down on every
+platform. Adding Shift extends the existing editor selection anchor to byte zero
+or the complete content end. Logical-line movement prefers Control plus Left or
+Right on macOS and Alt plus Left or Right elsewhere. Adding Shift extends to the
+same logical-line endpoints. Named Home and End remain compatible aliases, but
+the terminal boundary never attributes a rewritten Command arrow to a physical
+Home or End key. Super and Meta remain macOS Primary spellings and do not
+impersonate these explicit Control defaults.
 
 One typed shortcut registry owns stable action identities, active contexts,
 macOS and portable defaults, compatible aliases, safety classification, Help
@@ -1580,7 +1608,7 @@ silently copy external files or rewrite canonical paths.
 
 `v0.1.0` implements this boundary against Herdr's structured schema
 and protocol discovery commands. One typed adapter policy accepts schema 1
-with the qualified protocols 19 and 20 plus the single provisional protocol 21,
+with the qualified protocols 19, 20, and 21 plus the single provisional protocol 22,
 requires the live snapshot to report the same protocol, and verifies the exact required `agent.prompt`
 request, parameters, `agent_prompted` receipt, agent identity, session, and
 state shapes. The policy tolerates additive unknown response fields but rejects
@@ -1612,7 +1640,7 @@ identity, stale or incomplete snapshots, and receipt mismatch. Label renames
 are accepted because labels are not address fields. Invocation references use a
 separate presentation projection and never become submission routes.
 
-Accepted Herdr protocols 19 through 21 acknowledge accepted text entry but do not
+Accepted Herdr protocols 19 through 22 acknowledge accepted text entry but do not
 guarantee a distinct prompt boundary when another sender submits concurrently.
 This is a known provider-contract limitation. Proqi retains target
 verification, receipt matching, durable journaling, and
@@ -1797,6 +1825,7 @@ cargo xtask source-limits
 cargo xtask architecture
 cargo xtask quality
 cargo xtask check
+cargo xtask check-full
 cargo xtask test
 cargo xtask ci-linux
 cargo xtask test-pty
@@ -1825,8 +1854,13 @@ cargo xtask package
   unstaged, staged, and committed HEAD content, Clippy for all targets and
   features, source limits, reviewed-snapshot policy, and documentation warnings
   without rerunning the deterministic test suite.
-- `check` remains the canonical local and pre-push aggregate: it runs `quality`
-  followed by `test`.
+- `check` is the change-aware iterative gate. Ordinary code runs `quality`,
+  doctests, and every nextest binary except the real-PTY integration binary;
+  documentation receives its focused gate. Ambiguous, empty, policy,
+  dependency, package, and release classifications fail closed to the full
+  plan. Its receipt is never final qualification unless that escalation ran.
+- `check-full` is the canonical final local aggregate. It serializes across
+  worktrees and preserves the complete `quality` followed by `test` contract.
 - `test` runs the deterministic unit, contract, and integration suites.
 - `ci-linux` copies the current checkout without Git metadata or build output
   into an ephemeral `linux/amd64` Docker workspace and runs the Linux quality,
@@ -1873,9 +1907,10 @@ well-maintained language-native complexity lint before its first source file is
 merged. Every frontend source file is also subject to the repository-wide
 500-line ceiling.
 
-The checked-in pre-commit hook runs `cargo xtask check` after explicit local
+The checked-in pre-commit hook runs iterative `cargo xtask check` after explicit local
 installation through `cargo xtask install-hooks`. It is a convenience rather
-than an enforcement boundary, with CI remaining authoritative.
+than an enforcement boundary. One `cargo xtask check-full` remains mandatory
+before final qualification, with CI remaining authoritative.
 
 ### Continuous integration
 
@@ -1942,11 +1977,10 @@ Cargo.lock is committed because Proqi ships an application. Dependabot checks
 Cargo dependencies, GitHub Actions, and the pinned Rust toolchain weekly, applies
 a routine update cooldown, and limits routine dependency work to one grouped
 pull request. Security updates remain exempt from cooldown. Dependency pull
-requests pass the same required gate as contributor pull requests. Automatic
-merging is limited to explicitly allowed low-risk patch updates after all
-required checks pass.
-Minor updates, all pre-1.0 compatibility changes, and security-sensitive crates
-receive human review.
+requests pass the same required gate as contributor pull requests. Verified
+Dependabot patch and minor updates may request squash auto-merge only after all
+required checks pass against current `main`. Major updates always receive human
+review. External contributors never receive merge authority from this policy.
 
 The default branch requires the aggregate `check` status and rejects force
 pushes while allowing direct owner pushes. Releases use a protected GitHub

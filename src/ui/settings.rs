@@ -16,6 +16,10 @@ pub enum KeyboardEnhancement {
 
 /// Complete UI configuration loaded from the platform config directory.
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent user-facing toggles with no shared state machine"
+)]
 pub struct UiSettings {
     /// Permit automatic stable-release checks on interactive release startup.
     pub check_for_updates: bool,
@@ -29,6 +33,8 @@ pub struct UiSettings {
     pub merge_separator: String,
     /// Keyboard protocol negotiation.
     pub keyboard_enhancement: KeyboardEnhancement,
+    /// Request terminal mouse capture (xterm SGR mouse reporting) on entry.
+    pub mouse_capture: bool,
     /// Fully resolved and validated contextual keyboard map.
     pub shortcuts: super::ShortcutRegistry,
     /// Vertical separation between thoughts.
@@ -44,6 +50,7 @@ impl Default for UiSettings {
             list_indent_width: 2,
             merge_separator: "\n\n".to_owned(),
             keyboard_enhancement: KeyboardEnhancement::default(),
+            mouse_capture: true,
             shortcuts: super::ShortcutRegistry::default(),
             density: BoardDensity::default(),
         }
@@ -59,6 +66,17 @@ pub enum BoardDensity {
     Comfortable,
     /// Minimize vertical separation in constrained panes.
     Compact,
+}
+
+impl BoardDensity {
+    const COMFORTABLE_MIN_BOARD_ROWS: u16 = 5;
+
+    pub(crate) const fn resolve(self, board_height: u16) -> Self {
+        match self {
+            Self::Comfortable if board_height < Self::COMFORTABLE_MIN_BOARD_ROWS => Self::Compact,
+            density => density,
+        }
+    }
 }
 
 #[cfg(test)]

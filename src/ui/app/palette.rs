@@ -336,6 +336,10 @@ impl BoardApp {
         clock: &impl Clock,
     ) -> Vec<Effect> {
         use CommandExecution as Execution;
+
+        let acknowledges_auto_pause = execution.acknowledges_screenshot_auto_pause();
+        self.acknowledge_screenshot_auto_pause_warning(acknowledges_auto_pause);
+        self.clear_status_for_interaction(acknowledges_auto_pause);
         match execution {
             Execution::ReflowThought => self.reflow_thought_in_place(ids, clock),
             Execution::Paste(command) => {
@@ -370,6 +374,8 @@ impl BoardApp {
             BoardCommand::New => {
                 self.create(crate::ui::PastePayload::text(String::new()), ids, clock)
             }
+            BoardCommand::InsertAbove => self.insert_relative_to_focus(false, ids, clock),
+            BoardCommand::InsertBelow => self.insert_relative_to_focus(true, ids, clock),
             BoardCommand::RenameSession => {
                 self.begin_session_rename();
                 Vec::new()
@@ -386,6 +392,14 @@ impl BoardApp {
             BoardCommand::Redo => self.history(ids, clock, false),
             BoardCommand::MoveUp => self.reorder(ids, clock, -1),
             BoardCommand::MoveDown => self.reorder(ids, clock, 1),
+            BoardCommand::FocusFirst => {
+                self.focus_thought_boundary(false);
+                Vec::new()
+            }
+            BoardCommand::FocusLast => {
+                self.focus_thought_boundary(true);
+                Vec::new()
+            }
             BoardCommand::Collapse => self.collapse(ids, clock),
             BoardCommand::Help => {
                 self.help = true;

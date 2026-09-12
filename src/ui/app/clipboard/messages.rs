@@ -23,6 +23,13 @@ impl BoardApp {
             FailureCode::RecoveryCapacity => "save failed; press w to export recovery".to_owned(),
             _ => code.as_str().to_owned(),
         };
-        self.set_error(message);
+        if matches!(
+            code,
+            FailureCode::StorageFailed | FailureCode::RecoveryCapacity
+        ) {
+            self.set_storage_failure(message);
+        } else {
+            self.set_error(message);
+        }
     }
 }

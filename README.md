@@ -149,6 +149,8 @@ configuration.
 | `n`, `Enter` on `+ New thought`, paste, or click | Create a thought |
 | `Primary+V` / `p` with no selection | Paste exactly as a new thought |
 | `j` / `k` or arrows | Focus next / previous; twice at a blocked bottom / top edge creates there |
+| `Ctrl+↓` / `↑` or `Ctrl+j` / `k` | Focus the last / first live thought without wrapping |
+| macOS `Ctrl+N` / `Ctrl+Shift+N`; elsewhere `Alt+↓` / `↑` or `Alt+j` / `k` | Insert a blank below / above the focused thought and edit it |
 | `Page Up` / `Page Down` | Move five thoughts previous / next |
 | `Enter` or `e` | Edit |
 | macOS `Option+Shift+↓` / `↑`; `Primary+J` / `Primary+K`, `Primary+Shift+↓` / `↑`, or drag | Reorder |
@@ -156,6 +158,7 @@ configuration.
 | `d` or `Del` (`Entf` on German keyboards) | Delete |
 | `Space`; `Primary+A` / `a` | Toggle selection; select all |
 | `Shift+↑` / `↓`, `K` / `J`, or `Shift+Page Up` / `Shift+Page Down`; `v` then move | Extend by one, extend by five, or latch a range |
+| macOS `Ctrl+Shift+↓` / `↑` or `Ctrl+Shift+J` / `K` | Extend the anchored range to the last / first live thought |
 | `Primary+D` / `Shift+D` | Duplicate thought or selection |
 | `Primary+Enter` / `s`; `Primary+Shift+Enter` / `Shift+S`; then arrows or `h` / `j` / `k` / `l` if needed | Submit and remove after acceptance; submit and keep |
 | `Primary+Z` / `u` | Undo a board operation |
@@ -178,10 +181,10 @@ configuration.
 | `Ctrl+Shift+F` | Clean up spacing in the complete active thought |
 | macOS: `Cmd+←` / `→` | Move to the current wrapped visual-row start / end |
 | macOS: `Option+←` / `→`; elsewhere: `Ctrl+←` / `→` | Move by word |
+| macOS: `Ctrl+←` / `→`; elsewhere: `Alt+←` / `→`; `Home` / `End` | Move to the logical line start / end |
 | `Shift` + movement | Extend text selection |
 | macOS: `Cmd+Shift+←` / `→` | Extend to the current wrapped visual-row start / end |
-| `Home` / `End` | Move to the logical line boundary |
-| `Alt+↑` / `↓` or `Page Up` / `Page Down`; `Primary+↑` / `↓` | Jump five rows; thought start / end |
+| `Alt+↑` / `↓` or `Page Up` / `Page Down`; `Ctrl+↑` / `↓` | Jump five rows; complete thought start / end |
 | `Enter`; `Tab`; `Shift+Tab` | Continue lists; nest a recognized list or insert spaces; outdent a recognized list while leaving ordinary text unchanged |
 | `↑` / `↓` twice at a boundary | Focus the adjacent thought, or create at the top / bottom board edge |
 | `Primary+Enter`; `Primary+Shift+Enter` | Submit and remove after acceptance; submit and keep |
@@ -244,11 +247,9 @@ fallthrough. See [Ghostty keybindings](https://ghostty.org/docs/config/keybind).
 Ghostty also maps `Cmd+Left` and `Cmd+Right` to raw `Ctrl+A` and `Ctrl+E` by
 default. If a keyboard remapper maps `Home` and `End` to those same Command
 arrows, both physical routes become identical downstream. Proqi does not guess
-their origin. Preserving both logical-line `Home` / `End` and wrapped-row
-Command-arrow behavior requires distinct upstream output, preferably separately
-captured named-key or CSI-u spellings. Exact `Control` aliases can instead be
-configured for one chosen meaning because Control remains independent from
-Primary on macOS.
+their origin. Logical-line movement therefore prefers `Ctrl+Left` and
+`Ctrl+Right` on macOS, and `Alt+Left` and `Alt+Right` elsewhere. Named `Home`
+and `End` remain compatible aliases when those events actually arrive.
 
 Exact paste is always the default. Explicit spacing cleanup preserves authored
 line breaks, collapses repeated spaces and tabs, and reduces multiple blank lines
@@ -385,6 +386,7 @@ check_for_updates = true
 theme = "auto" # auto, light, dark, limited, or a bounded local theme file
 density = "comfortable" # or compact
 merge_separator = "\n\n" # one blank line between merged thoughts
+mouse_capture = true # set false if your terminal/multiplexer mishandles mouse reporting
 
 [keymap]
 schema_version = 1
@@ -439,7 +441,8 @@ It is an MIT-licensed binary. Contributors: [CONTRIBUTING.md](CONTRIBUTING.md),
 ```shell
 cargo build --locked
 cargo run --bin proqi
-cargo xtask check # canonical local gate
+cargo xtask check      # iterative local gate
+cargo xtask check-full # canonical final gate
 ```
 
 The demos use the release binary; the assets gate checks dimensions, links, and

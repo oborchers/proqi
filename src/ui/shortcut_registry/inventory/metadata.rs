@@ -1,12 +1,14 @@
 //! Canonical presentation metadata attached to registry descriptors.
 
+mod boundary_help;
+
 use super::{Action, Context};
 use crate::ui::shortcut_registry::model::{
     CommandAvailability, CommandLabel, CommandMetadata, FooterMetadata, HelpAvailability,
     HelpMetadata, HelpSurface,
 };
 
-const fn help(
+pub(super) const fn help(
     surface: HelpSurface,
     order: u8,
     label: &'static str,
@@ -325,6 +327,15 @@ const HELP: &[(Action, HelpMetadata)] = &[
         ),
     ),
     (
+        Action::MoveLineStart,
+        help(
+            HelpSurface::Editor,
+            18,
+            "Line start/end",
+            HelpAvailability::Always,
+        ),
+    ),
+    (
         Action::ExtendVisualRowStart,
         help(
             HelpSurface::Editor,
@@ -345,7 +356,9 @@ const HELP: &[(Action, HelpMetadata)] = &[
 ];
 
 pub(in crate::ui::shortcut_registry) fn help_metadata(action: Action) -> Vec<HelpMetadata> {
-    HELP.iter()
+    boundary_help::HELP
+        .iter()
+        .chain(HELP)
         .filter_map(|(candidate, metadata)| (*candidate == action).then_some(*metadata))
         .collect()
 }
@@ -401,6 +414,9 @@ pub(in crate::ui::shortcut_registry) fn command_metadata(
         | Action::SubmitKeep
         | Action::SubmitAllRemove
         | Action::SubmitAllKeep => CommandAvailability::Submission,
+        Action::InsertAbove | Action::InsertBelow | Action::FocusFirst | Action::FocusLast => {
+            CommandAvailability::BoardThought
+        }
         Action::ReflowThought
         | Action::PlainNewline
         | Action::DeleteLogicalLine

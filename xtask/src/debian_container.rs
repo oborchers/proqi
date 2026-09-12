@@ -2,24 +2,67 @@
 
 use std::{path::Path, process::Command};
 
-const IMAGES: [&str; 3] = [
-    "ubuntu:22.04@sha256:2edbbc5dc405e9612ba3584ce95480277e3eb374407b5505fe26f17df77c7dbc",
-    "ubuntu:24.04@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517",
-    "debian:bookworm-slim@sha256:88200866dfff7ea7f5cbcb6ec7c8a701889efe6fe859fe64d6990e4b07ea4171",
+const IMAGES: [ImageProfile; 3] = [
+    ImageProfile {
+        name: "ubuntu-22.04",
+        image: "ubuntu:22.04@sha256:2edbbc5dc405e9612ba3584ce95480277e3eb374407b5505fe26f17df77c7dbc",
+    },
+    ImageProfile {
+        name: "ubuntu-24.04",
+        image: "ubuntu:24.04@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517",
+    },
+    ImageProfile {
+        name: "debian-bookworm",
+        image: "debian:bookworm-slim@sha256:88200866dfff7ea7f5cbcb6ec7c8a701889efe6fe859fe64d6990e4b07ea4171",
+    },
 ];
+
+#[derive(Clone, Copy)]
+struct ImageProfile {
+    name: &'static str,
+    image: &'static str,
+}
 
 pub(super) fn verify(root: &Path, archive: &Path, package: &Path) -> Result<(), String> {
     require_file(archive, "Linux archive")?;
     require_file(package, "Debian package")?;
     let expected_binary = archive_binary_digest(root, archive)?;
-    for image in IMAGES {
-        verify_image(root, package, image, &expected_binary)?;
+    for profile in IMAGES {
+        verify_profile(root, package, profile, &expected_binary)?;
     }
     println!(
         "verified Debian installation contract in {}",
-        IMAGES.join(", ")
+        IMAGES.map(|profile| profile.name).join(", ")
     );
     Ok(())
+}
+
+pub(super) fn verify_one(
+    root: &Path,
+    profile: &str,
+    archive: &Path,
+    package: &Path,
+    evidence_directory: &Path,
+) -> Result<(), String> {
+    require_file(archive, "Linux archive")?;
+    require_file(package, "Debian package")?;
+    let image = image_profile(profile)?;
+    let expected_binary = super::timing::phase("debian.evidence", || {
+        super::debian::verify_evidence(root, archive, package, evidence_directory)
+    })?;
+    verify_profile(root, package, image, &expected_binary)
+}
+
+fn image_profile(name: &str) -> Result<ImageProfile, String> {
+    IMAGES
+        .into_iter()
+        .find(|profile| profile.name == name)
+        .ok_or_else(|| {
+            format!(
+                "unknown Debian image profile `{name}`; expected {}",
+                IMAGES.map(|profile| profile.name).join(", ")
+            )
+        })
 }
 
 fn require_file(path: &Path, label: &str) -> Result<(), String> {
@@ -48,6 +91,17 @@ fn archive_binary_digest(root: &Path, archive: &Path) -> Result<String, String> 
         "proqi-{}/proqi",
         super::release_targets::LINUX_X86_64
     )))
+}
+
+fn verify_profile(
+    root: &Path,
+    package: &Path,
+    profile: ImageProfile,
+    digest: &str,
+) -> Result<(), String> {
+    super::timing::phase(&format!("debian.verify.{}", profile.name), || {
+        verify_image(root, package, profile.image, digest)
+    })
 }
 
 fn verify_image(root: &Path, package: &Path, image: &str, digest: &str) -> Result<(), String> {
@@ -122,7 +176,7 @@ dpkg-query -W -f='${{Status}}' proqi | grep -q 'install ok installed'
 
 #[cfg(test)]
 mod tests {
-    use super::container_script;
+    use super::{container_script, image_profile};
 
     #[test]
     fn install_contract_preserves_state_across_remove_and_reinstall() {
@@ -136,5 +190,17 @@ mod tests {
         assert!(script.contains("--json doctor"));
         assert!(script.contains("'\"id\":\"ses_'"));
         assert!(script.contains("abc123"));
+    }
+
+    #[test]
+    fn image_profiles_are_closed_and_immutable() {
+        assert!(
+            image_profile("ubuntu-22.04")
+                .expect("profile")
+                .image
+                .contains("@sha256:")
+        );
+        assert!(image_profile("ubuntu:latest").is_err());
+        assert!(image_profile("unknown").is_err());
     }
 }

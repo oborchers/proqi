@@ -30,7 +30,7 @@ than checking an item from memory.
   credentials supplied outside the repository.
 - [ ] No secret, transcript, local database, runtime file, or machine-specific
   path is committed as evidence.
-- [ ] `cargo xtask check` passes after the final implementation.
+- [ ] `cargo xtask check-full` passes after the final implementation.
 
 ## 1. Herdr agent contract
 
@@ -264,7 +264,7 @@ limitation explicitly.
 - [ ] An established target whose receipt loses or changes session identity
   fails closed.
 - [ ] Explicitly document any remaining replacement race. Under accepted Herdr
-  protocols 19 through 21, a same-pane, same-kind sessionless replacement cannot be
+  protocols 19 through 22, a same-pane, same-kind sessionless replacement cannot be
   detected without a stable pre-session instance ID or an atomic
   expected-instance precondition.
 
@@ -278,7 +278,7 @@ limitation explicitly.
   `target changed` and sends nothing.
 - [ ] A replacement after Proqi's revalidation but before Herdr accepts the
   prompt is treated as an integration race: a mismatched receipt preserves the
-  source, but protocols 19 through 21 cannot guarantee that the replacement received
+  source, but protocols 19 through 22 cannot guarantee that the replacement received
   no text without an atomic expected-instance precondition.
 - [ ] A different session in the receipt is rejected even when pane and harness
   kind still match.
@@ -329,7 +329,7 @@ limitation explicitly.
 - [ ] Review representative Insta snapshot diffs for any visible harness label
   or control change; leave no `.snap.new` files.
 - [ ] Run focused adapter and UI tests while developing.
-- [ ] Run `cargo xtask check` immediately before commit.
+- [ ] Run `cargo xtask check-full` immediately before the final qualification commit.
 - [ ] At a release milestone, run `cargo xtask audit` and
   `cargo xtask package` as required by the repository contract.
 

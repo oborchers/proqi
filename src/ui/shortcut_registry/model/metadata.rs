@@ -40,6 +40,7 @@ pub(crate) struct FooterMetadata {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum CommandAvailability {
     Always,
+    BoardThought,
     Submission,
     Editor,
     ScreenshotRetry,
