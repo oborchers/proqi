@@ -129,22 +129,9 @@ fn stale_transfer_receipt_keeps_newer_source_content_and_annotations() {
         edit_effects.as_slice(),
         [Effect::CommitRevision(_)]
     ));
-    let receipt = CommitReceipt {
-        session_id: destination,
-        sequence: OperationSequence::new(1),
-        identity: DurableIdentity::Operation(request.operation_id),
-        idempotent_replay: false,
-    };
+    let result = successful_transfer(destination, request.operation_id, &mut ids);
 
-    let completion = app.complete_session_transfer(
-        request,
-        Ok(ThoughtMutation {
-            thought_id: ids.thought_id(),
-            receipt,
-        }),
-        &mut ids,
-        &clock,
-    );
+    let completion = app.complete_session_transfer(request, Ok(result), &mut ids, &clock);
 
     assert!(completion.is_empty());
     let current = app
@@ -231,7 +218,7 @@ fn stale_transfer_receipt_keeps_an_annotation_only_source_change() {
 }
 
 #[test]
-fn stale_transfer_receipt_reports_a_recoverably_deleted_source_as_already_removed() {
+fn stale_transfer_receipt_reports_a_changed_then_deleted_source_as_already_removed() {
     let mut ids = FakeIdGenerator::new(1_725_204_000_000);
     let clock = FakeClock::new(Timestamp::from_millis(3));
     let source = Session::new(
@@ -264,32 +251,37 @@ fn stale_transfer_receipt_reports_a_recoverably_deleted_source_as_already_remove
     let [Effect::TransferThought(request)] = effects.as_slice() else {
         panic!("expected transfer request");
     };
+    let edit_effects = app.reduce(crate::application::Action::EditThought {
+        thought_id,
+        revision_id: ids.revision_id(),
+        before_content: request.content.clone(),
+        after_content: "changed before delete".to_owned(),
+        before_annotations: request.annotations.clone(),
+        after_annotations: Vec::new(),
+        before_cursor: crate::domain::TextPosition::new(0, request.content.len()),
+        after_cursor: crate::domain::TextPosition::new(0, 21),
+        at: Timestamp::from_millis(4),
+    });
+    let [Effect::CommitRevision(revision)] = edit_effects.as_slice() else {
+        panic!("expected editor revision");
+    };
+    assert!(
+        app.acknowledge_persistence(revision.sequence, true)
+            .is_empty()
+    );
     let deletion = app.reduce(crate::application::Action::DeleteThought {
         operation_id: ids.operation_id(),
         thought_id,
         kind: BoardOperationKind::Delete,
-        at: Timestamp::from_millis(4),
+        at: Timestamp::from_millis(5),
     });
     assert!(matches!(
         deletion.as_slice(),
         [Effect::CommitBoardOperation(_)]
     ));
-    let receipt = CommitReceipt {
-        session_id: destination,
-        sequence: OperationSequence::new(1),
-        identity: DurableIdentity::Operation(request.operation_id),
-        idempotent_replay: false,
-    };
+    let result = successful_transfer(destination, request.operation_id, &mut ids);
 
-    let completion = app.complete_session_transfer(
-        request,
-        Ok(ThoughtMutation {
-            thought_id: ids.thought_id(),
-            receipt,
-        }),
-        &mut ids,
-        &clock,
-    );
+    let completion = app.complete_session_transfer(request, Ok(result), &mut ids, &clock);
 
     assert!(completion.is_empty());
     assert!(
@@ -430,6 +422,22 @@ fn assert_thought_is_live(app: &BoardApp, thought_id: crate::domain::ThoughtId) 
             .thought(thought_id)
             .is_some_and(Thought::is_live)
     );
+}
+
+fn successful_transfer(
+    destination: crate::domain::SessionId,
+    operation_id: crate::domain::OperationId,
+    ids: &mut FakeIdGenerator,
+) -> ThoughtMutation {
+    ThoughtMutation {
+        thought_id: ids.thought_id(),
+        receipt: CommitReceipt {
+            session_id: destination,
+            sequence: OperationSequence::new(1),
+            identity: DurableIdentity::Operation(operation_id),
+            idempotent_replay: false,
+        },
+    }
 }
 
 fn session_hit(id: crate::domain::SessionId) -> SessionHit {

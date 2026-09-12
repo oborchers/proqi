@@ -113,12 +113,9 @@ impl BoardApp {
                     .state
                     .board
                     .thought(request.source_thought_id)
-                    .is_some_and(|thought| {
-                        thought.content != request.content
-                            || thought.annotations != request.annotations
-                    }) =>
+                    .is_none_or(|thought| !thought.is_live()) =>
             {
-                self.set_info("thought sent; source changed and was kept");
+                self.set_info("thought sent; source was already removed");
                 Vec::new()
             }
             Ok(_)
@@ -126,9 +123,12 @@ impl BoardApp {
                     .state
                     .board
                     .thought(request.source_thought_id)
-                    .is_none_or(|thought| !thought.is_live()) =>
+                    .is_some_and(|thought| {
+                        thought.content != request.content
+                            || thought.annotations != request.annotations
+                    }) =>
             {
-                self.set_info("thought sent; source was already removed");
+                self.set_info("thought sent; source changed and was kept");
                 Vec::new()
             }
             Ok(_) => {
