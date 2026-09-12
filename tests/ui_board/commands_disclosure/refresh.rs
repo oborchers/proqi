@@ -51,7 +51,7 @@ fn asynchronous_submission_refresh_preserves_the_selected_typed_command() {
 fn commands_show_bindings_and_scope_from_the_captured_invocation_mode() {
     let settings = UiSettings {
         shortcuts: proqi::ui::ShortcutRegistry::from_toml(
-            "schema_version=1\n[bindings.board]\n\"clipboard.copy\"=[{key='F5'}]\n\"clipboard.paste_exact\"=[{key='F6'}]\n[bindings.edit]\n\"clipboard.copy\"=[{key='F7'}]\n\"clipboard.paste_exact\"=[{key='F8'}]\n\"commands.open\"=[{key='F9'}]",
+            "schema_version=1\n[bindings.board]\n\"clipboard.copy\"=[{key='F5'}]\n\"clipboard.paste_exact\"=[{key='F6'}]\n\"selection.select_all\"=[{key='F10'}]\n[bindings.edit]\n\"clipboard.copy\"=[{key='F7'}]\n\"clipboard.paste_exact\"=[{key='F8'}]\n\"commands.open\"=[{key='F9'}]\n\"selection.select_all\"=[{key='F11'}]",
         )
         .expect("contextual Commands bindings"),
         ..UiSettings::default()
@@ -89,6 +89,13 @@ fn commands_show_bindings_and_scope_from_the_captured_invocation_mode() {
     ))));
     let (_, rendered) = searched_row(&mut fixture, "Paste exactly", 88);
     assert!(rendered.contains("F8 · edit"));
+    fixture.input(crate::key_input(UiKey::Escape));
+    fixture.input(UiInput::KeyStroke(KeyStroke::press(LogicalKey::Function(
+        9,
+    ))));
+    let (_, rendered) = searched_row(&mut fixture, "Select all thoughts", 88);
+    assert!(rendered.contains("F10 · selection"));
+    assert!(!rendered.contains("F11"));
 }
 
 #[test]

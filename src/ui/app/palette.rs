@@ -47,11 +47,11 @@ pub(super) struct PaletteState {
 
 impl PaletteState {
     fn new(registry: &crate::ui::ShortcutRegistry, context: CommandContext) -> Self {
-        let binding_context = context.shortcut_context();
         let commands = registry
             .commands()
             .into_iter()
             .map(|(action, metadata, execution)| {
+                let binding_context = context.command_binding_context(metadata.scope);
                 let shortcut = registry.compact_help_label(binding_context, &[action]);
                 CommandRecord {
                     action,

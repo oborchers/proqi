@@ -127,7 +127,6 @@ fn commands_descriptors_own_independent_disclosure_dimensions() {
         Action::Copy,
         Action::Cut,
         Action::PasteExact,
-        Action::SelectAll,
         Action::Undo,
         Action::SubmitKeep,
     ] {
@@ -137,6 +136,14 @@ fn commands_descriptors_own_independent_disclosure_dimensions() {
             .expect("contextual Commands descriptor");
         assert_eq!(metadata.scope, CommandScope::Contextual);
     }
+    assert_eq!(
+        registry
+            .descriptor(Action::SelectAll)
+            .and_then(|descriptor| descriptor.commands)
+            .expect("Select all descriptor")
+            .scope,
+        CommandScope::Selection
+    );
 
     for destructive in [
         Action::Delete,

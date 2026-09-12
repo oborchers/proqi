@@ -160,7 +160,6 @@ const fn command_scope(action: Action) -> CommandScope {
         | Action::Cut
         | Action::PasteExact
         | Action::PasteReflow
-        | Action::SelectAll
         | Action::SubmitRemove
         | Action::SubmitKeep
         | Action::SubmitToAgent
@@ -181,7 +180,9 @@ const fn command_scope(action: Action) -> CommandScope {
         | Action::ExtractSelection
         | Action::InsertInvocation
         | Action::RefreshInvocations => CommandScope::Editor,
-        Action::MergeThoughts | Action::Select | Action::RangeSelect => CommandScope::Selection,
+        Action::MergeThoughts | Action::SelectAll | Action::Select | Action::RangeSelect => {
+            CommandScope::Selection
+        }
         Action::RenameSession
         | Action::CopySessionId
         | Action::CopyResume

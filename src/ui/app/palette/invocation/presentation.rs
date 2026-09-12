@@ -8,12 +8,23 @@ use crate::{
 use super::CommandContext;
 
 impl CommandContext {
-    pub(in crate::ui::app::palette) fn shortcut_context(&self) -> ShortcutContext {
-        ShortcutContext::surface(
-            self.board.mode,
-            self.board.insertion_focused,
-            self.recovery.failed(),
-        )
+    pub(in crate::ui::app::palette) fn command_binding_context(
+        &self,
+        scope: CommandScope,
+    ) -> ShortcutContext {
+        if self.recovery.failed() {
+            return ShortcutContext::Recovery;
+        }
+        match scope {
+            CommandScope::Contextual => {
+                ShortcutContext::surface(self.board.mode, self.board.insertion_focused, false)
+            }
+            CommandScope::Editor => ShortcutContext::Edit,
+            CommandScope::Board
+            | CommandScope::Selection
+            | CommandScope::Session
+            | CommandScope::Application => ShortcutContext::Board,
+        }
     }
 
     pub(in crate::ui::app::palette) const fn command_scope_label(
