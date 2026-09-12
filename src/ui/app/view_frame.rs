@@ -112,6 +112,10 @@ impl BoardApp {
             .palette
             .as_ref()
             .map_or(0, palette::PaletteState::match_count);
+        let palette_rows = self.palette.as_ref().map_or_else(
+            || (Vec::new(), Vec::new()),
+            palette::PaletteState::visible_row_metadata,
+        );
         let global_delivery_items = self.global_delivery_match_count();
         let invocation_items = self.invocation_match_count();
         let invocation_groups = self
@@ -142,7 +146,9 @@ impl BoardApp {
                 .sum::<usize>()
                 .max(2)
         } else if self.palette.is_some() {
-            palette_items.max(2)
+            self.palette
+                .as_ref()
+                .map_or(2, palette::PaletteState::preferred_rows)
         } else if self.global_delivery.is_some() {
             global_delivery_items.max(2)
         } else if self.transfer.is_some() {
@@ -154,6 +160,8 @@ impl BoardApp {
         };
         if self.invocation_popup.is_some() {
             layout.configure_grouped_overlay(&invocation_groups, preferred_rows);
+        } else if self.palette.is_some() {
+            layout.configure_command_overlay(&palette_rows.0, &palette_rows.1, preferred_rows);
         } else {
             layout.configure_overlay(
                 screenshot_items

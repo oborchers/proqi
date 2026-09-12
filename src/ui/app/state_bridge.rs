@@ -72,6 +72,7 @@ impl BoardApp {
         };
         let _effects = self.reduce(action);
         if failure.is_some() {
+            self.invalidate_palette();
             self.enter_storage_failure_state();
         } else {
             self.clear_storage_failure_status();

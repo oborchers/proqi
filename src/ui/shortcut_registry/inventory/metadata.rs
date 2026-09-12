@@ -1,12 +1,14 @@
 //! Canonical presentation metadata attached to registry descriptors.
 
 mod boundary_help;
+mod commands;
 
 use super::{Action, Context};
 use crate::ui::shortcut_registry::model::{
-    CommandAvailability, CommandLabel, CommandMetadata, FooterMetadata, HelpAvailability,
-    HelpMetadata, HelpSurface,
+    FooterMetadata, HelpAvailability, HelpMetadata, HelpSurface,
 };
+
+pub(in crate::ui::shortcut_registry) use commands::command_metadata;
 
 pub(super) const fn help(
     surface: HelpSurface,
@@ -401,53 +403,4 @@ pub(in crate::ui::shortcut_registry) const fn footer_metadata(
         minimum_width,
         compact_minimum_width,
     })
-}
-
-pub(in crate::ui::shortcut_registry) fn command_metadata(
-    action: Action,
-    order: usize,
-    label: &'static str,
-) -> CommandMetadata {
-    let availability = match action {
-        Action::SubmitRemove
-        | Action::SubmitKeep
-        | Action::SubmitAllRemove
-        | Action::SubmitAllKeep => CommandAvailability::Submission,
-        Action::InsertAbove | Action::InsertBelow | Action::FocusFirst | Action::FocusLast => {
-            CommandAvailability::BoardThought
-        }
-        Action::ReflowThought
-        | Action::PlainNewline
-        | Action::DeleteLogicalLine
-        | Action::DeleteSentence
-        | Action::JumpUp
-        | Action::JumpDown
-        | Action::SelectVisualRowStart
-        | Action::SelectVisualRowEnd
-        | Action::ThoughtStart
-        | Action::ThoughtEnd
-        | Action::Indent
-        | Action::Outdent => CommandAvailability::Editor,
-        Action::RetryScreenshotCapture => CommandAvailability::ScreenshotRetry,
-        Action::SplitThought => CommandAvailability::Split,
-        Action::ExtractSelection => CommandAvailability::Extract,
-        Action::MergeThoughts => CommandAvailability::Merge,
-        Action::ScreenshotInbox => CommandAvailability::ScreenshotInbox,
-        _ => CommandAvailability::Always,
-    };
-    let label = if action == Action::ScreenshotInbox {
-        CommandLabel::ScreenshotInbox {
-            enable: label,
-            disable: "Disable Screenshot Inbox",
-            resume: "Resume Screenshot Inbox",
-            unavailable: "Screenshot Inbox unavailable",
-        }
-    } else {
-        CommandLabel::Static(label)
-    };
-    CommandMetadata {
-        order: u8::try_from(order).unwrap_or(u8::MAX),
-        label,
-        availability,
-    }
 }

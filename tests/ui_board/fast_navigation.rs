@@ -32,7 +32,7 @@ fn command_palette_fast_navigation_moves_five_entries_and_clamps() {
         fast(&mut fixture, FastNavigation::Next, false);
     }
     let (_, visible, selected) = fixture.app.palette_view().expect("palette");
-    assert_eq!(visible[selected], "Quit Proqi");
+    assert_eq!(visible[selected], "More commands...");
 }
 
 #[test]
@@ -51,7 +51,7 @@ fn command_palette_wheel_is_contained_and_retargets_the_visible_slice() {
     fixture.pointer(item.x, item.y, PointerKind::ScrollDown);
     let _ = draw(&mut fixture, 36, 7);
     let (_, visible, selected) = fixture.app.palette_view().expect("palette");
-    assert_eq!(visible[selected], "Insert thought above");
+    assert_eq!(visible[selected], "Undo board action");
     fixture.input(crate::key_input(UiKey::Escape));
     assert_eq!(
         fixture

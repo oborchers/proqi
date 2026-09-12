@@ -6,7 +6,7 @@ use crate::ui::{BoardApp, LayoutSnapshot, Theme};
 
 use super::{
     InvocationPickerView, PlainPickerView, global_delivery, overlays, release_highlights,
-    render_invocation_picker, render_plain_picker,
+    render_command_picker, render_invocation_picker, render_plain_picker,
 };
 
 pub(super) fn render(
@@ -69,21 +69,9 @@ pub(super) fn render(
         if let Some(overlay) = &layout.overlay {
             global_delivery::render(frame, overlay, app, &picker, theme);
         }
-    } else if let Some((query, entries, selected)) = app.palette_view() {
+    } else if let Some(picker) = app.command_palette_view() {
         if let Some(overlay) = &layout.overlay {
-            render_plain_picker(
-                frame,
-                overlay,
-                app,
-                PlainPickerView {
-                    title: " commands ",
-                    prompt: ':',
-                    query,
-                    entries,
-                    selected,
-                },
-                theme,
-            );
+            render_command_picker(frame, overlay, app, &picker, theme);
         }
     } else if let Some(value) = app.session_rename_view() {
         if let Some(overlay) = &layout.overlay {

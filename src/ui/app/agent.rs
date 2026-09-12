@@ -50,6 +50,7 @@ impl BoardApp {
             Err(_) => self.agent_targets.clear(),
         }
         self.refresh_invocation_popup();
+        self.refresh_palette_submission();
     }
 
     /// Persist the prepared intent before external delivery begins.

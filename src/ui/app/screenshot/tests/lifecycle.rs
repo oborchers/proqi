@@ -1,9 +1,56 @@
 use super::behavior::{app_with_thought, candidate, next_commit};
 use crate::{
-    application::{Effect, ScreenshotIntent},
+    application::{Effect, ScreenshotIntent, ScreenshotPauseReason},
     ports::store::StoreError,
     ui::{UiInput, UiKey},
 };
+
+#[test]
+fn commands_relevance_tracks_inactive_active_paused_and_failed_capture_states() {
+    let (mut app, _ids, _clock, _) = app_with_thought();
+    app.open_palette();
+    let (_, inactive, _) = app.palette_view().expect("inactive Commands");
+    assert!(!inactive.contains(&"Enable Screenshot Inbox".to_owned()));
+
+    app.close_overlay();
+    app.screenshot_started(std::time::Duration::ZERO);
+    app.open_palette();
+    let (_, active, _) = app.palette_view().expect("active Commands");
+    assert!(active.contains(&"Disable Screenshot Inbox".to_owned()));
+
+    app.close_overlay();
+    app.enter_screenshot_paused(ScreenshotPauseReason::Inactivity { minutes: 20 });
+    app.open_palette();
+    let (_, paused, _) = app.palette_view().expect("paused Commands");
+    assert!(paused.contains(&"Resume Screenshot Inbox".to_owned()));
+
+    let (mut failed_app, mut failed_ids, failed_clock, _) = app_with_thought();
+    failed_app.screenshot_started(std::time::Duration::ZERO);
+    failed_app.queue_screenshot_candidates([candidate(50)]);
+    next_commit(&mut failed_app, &mut failed_ids, &failed_clock);
+    failed_app.complete_screenshot_capture(Err(StoreError::Busy), &mut failed_ids, &failed_clock);
+    failed_app.open_palette();
+    let (_, failed, _) = failed_app.palette_view().expect("failed Commands");
+    assert!(failed.contains(&"Retry Screenshot Capture".to_owned()));
+}
+
+#[test]
+fn open_commands_learns_that_an_in_flight_capture_became_retryable() {
+    let (mut app, mut ids, clock, _) = app_with_thought();
+    app.screenshot_started(std::time::Duration::ZERO);
+    app.queue_screenshot_candidates([candidate(59)]);
+    next_commit(&mut app, &mut ids, &clock);
+    app.open_palette();
+    let (_, before, selected) = app.palette_view().expect("Commands during capture");
+    assert_eq!(before[selected], "New thought");
+    assert!(!before.contains(&"Retry Screenshot Capture".to_owned()));
+
+    app.complete_screenshot_capture(Err(StoreError::Busy), &mut ids, &clock);
+
+    let (_, after, selected) = app.palette_view().expect("Commands after capture failure");
+    assert_eq!(after[selected], "New thought");
+    assert!(after.contains(&"Retry Screenshot Capture".to_owned()));
+}
 
 #[test]
 fn disable_and_retry_are_distinct_truthful_public_actions() {

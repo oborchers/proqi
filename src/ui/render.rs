@@ -82,6 +82,43 @@ pub(super) fn render_plain_picker(
     );
 }
 
+pub(super) fn render_command_picker(
+    frame: &mut Frame<'_>,
+    overlay: &OverlayLayout,
+    app: &BoardApp,
+    picker: &crate::ui::app::CommandPaletteView,
+    theme: &Theme,
+) {
+    let rows = picker
+        .rows
+        .iter()
+        .map(|row| {
+            overlays::PickerRow::command(
+                &row.primary,
+                row.secondary.as_deref(),
+                &row.secondary_fallbacks,
+                &row.protected_secondaries,
+                row.group,
+                row.enabled,
+            )
+        })
+        .collect::<Vec<_>>();
+    overlays::render_picker(
+        frame,
+        overlay,
+        overlays::PickerView {
+            title: " commands ",
+            prompt: ':',
+            query: &picker.query,
+            cursor: app.overlay_query_cursor().unwrap_or(picker.query.len()),
+            entries: &rows,
+            selected: picker.selected,
+        },
+        app.picker_overflow(overlay.items.len()),
+        theme,
+    );
+}
+
 pub(super) struct InvocationPickerView {
     pub(super) query: String,
     pub(super) entries: Vec<InvocationChoiceView>,
@@ -455,21 +492,5 @@ fn visible_grapheme(grapheme: &str, column: usize) -> (String, usize) {
 }
 
 #[cfg(test)]
-mod tests {
-    use ratatui_core::{buffer::Buffer, layout::Rect, text::Line, widgets::Widget};
-    use ratatui_widgets::paragraph::Paragraph;
-
-    use crate::ports::text_layout::wrap_rows;
-    #[test]
-    fn multiline_thoughts_are_distinct_buffer_rows() {
-        let area = Rect::new(0, 0, 12, 2);
-        let mut buffer = Buffer::empty(area);
-        let lines = wrap_rows("first\n第二", 12)
-            .into_iter()
-            .map(|row| Line::raw(row.visual.text))
-            .collect::<Vec<_>>();
-        Paragraph::new(lines).render(area, &mut buffer);
-        assert_eq!(buffer[(0, 0)].symbol(), "f");
-        assert_eq!(buffer[(0, 1)].symbol(), "第");
-    }
-}
+#[path = "render/tests.rs"]
+mod tests;
