@@ -8,6 +8,8 @@ use std::fmt::Write as _;
 #[test]
 fn primary_enter_variants_reach_edit_submission_and_retain_an_unroutable_draft() {
     for (sequence, draft) in [
+        ("\u{1b}[13;5u", "control remove draft"),
+        ("\u{1b}[13;6u", "control keep draft"),
         ("\u{1b}[13;9u", "submit-remove draft"),
         ("\u{1b}[13;10u", "submit-keep draft"),
     ] {
@@ -18,6 +20,8 @@ fn primary_enter_variants_reach_edit_submission_and_retain_an_unroutable_draft()
 #[test]
 fn primary_enter_variants_reach_board_submission_and_retain_an_unroutable_thought() {
     for (sequence, draft) in [
+        ("\u{1b}[13;5u", "control remove Grüße 第二行"),
+        ("\u{1b}[13;6u", "control keep 第二行 e\u{301}"),
         ("\u{1b}[13;9u", "board remove Grüße 第二行"),
         ("\u{1b}[13;10u", "board keep 第二行 e\u{301}"),
     ] {
