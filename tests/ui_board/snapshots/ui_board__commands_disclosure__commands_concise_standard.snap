@@ -1,7 +1,7 @@
 ---
 source: tests/ui_board/commands_disclosure.rs
-assertion_line: 202
-expression: "text(draw(&mut concise, 72, 16).backend().buffer())"
+assertion_line: 250
+expression: "trim_snapshot_rows(&text(draw(&mut concise, 72, 16).backend().buffer()))"
 ---
 ┌ commands ──────────────────────────────────────────────────────────[x]
 │:                                                                     │
@@ -15,7 +15,7 @@ expression: "text(draw(&mut concise, 72, 16).backend().buffer())"
 │Rename session                                                 session│
 │More commands...                                                all 57│
 └──────────────────────────────────────────────────────────────────────┘
-                                                                        
-  proqi-ui-contract                                                     
-  1 thought · board · saved                                             
-  n New   y Copy  x Cut  d/Del  Space Select u Undo  / Search          
+
+  proqi-ui-contract
+  1 thought · board · saved
+  n New   y Copy  x Cut  d/Del  Space Select u Undo  / Search

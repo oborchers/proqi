@@ -21,6 +21,14 @@ fn type_query(fixture: &mut Fixture, query: &str) {
     }
 }
 
+fn trim_snapshot_rows(rendered: &str) -> String {
+    rendered
+        .lines()
+        .map(str::trim_end)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 fn move_down(fixture: &mut Fixture, count: usize) {
     for _ in 0..count {
         fixture.input(crate::key_input(UiKey::Move {
@@ -242,7 +250,7 @@ fn concise_and_expanded_views_have_representative_responsive_snapshots() {
     open(&mut concise);
     insta::assert_snapshot!(
         "commands_concise_standard",
-        text(draw(&mut concise, 72, 16).backend().buffer())
+        trim_snapshot_rows(&text(draw(&mut concise, 72, 16).backend().buffer()))
     );
 
     expand_by_keyboard(&mut concise);
