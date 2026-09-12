@@ -9,7 +9,7 @@ use std::time::Duration;
 const COMMANDS_WORKFLOW: &str = r#"
     log_user 0
     set timeout 15
-    set stty_init "rows 14 columns 60"
+    set stty_init "rows 12 columns 60"
     spawn /bin/sh -c {before=$(stty -g); "$PROQI_TEST_BINARY" --state-dir "$PROQI_TEST_STATE" -r "$PROQI_TEST_SESSION"; result=$?; after=$(stty -g); [ "$before" = "$after" ] || exit 90; exit "$result"}
     set output [open $env(PROQI_TEST_PIDS) a]
     puts $output [exp_pid]
@@ -25,39 +25,35 @@ const COMMANDS_WORKFLOW: &str = r#"
         -exact "Relevant now" {}
         timeout { exit 92 }
     }
-    expect {
-        -exact "More commands..." {}
-        timeout { exit 93 }
-    }
     send -- "clean up spacing"
     after 200
     send "\r"
     expect {
         -exact "spacing cleaned up" {}
-        timeout { exit 94 }
+        timeout { exit 93 }
     }
     send ":"
     expect {
         -exact "Relevant now" {}
-        timeout { exit 95 }
-    }
-    expect {
-        -exact "More commands..." {}
-        timeout { exit 96 }
+        timeout { exit 94 }
     }
     for {set index 0} {$index < 12} {incr index} {
         send -- "\x1b\[B"
     }
+    expect {
+        -exact "More commands..." {}
+        timeout { exit 95 }
+    }
     send "\r"
     expect {
         -exact "Thought" {}
-        timeout { exit 97 }
+        timeout { exit 96 }
     }
     send "\x1b\x1b"
     send "q"
     expect {
         eof {}
-        timeout { exit 98 }
+        timeout { exit 97 }
     }
     catch wait result
     exit [lindex $result 3]
