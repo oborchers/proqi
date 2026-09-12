@@ -6,6 +6,63 @@ use super::{
 };
 use std::time::Duration;
 
+const COMMANDS_WORKFLOW: &str = r#"
+    log_user 0
+    set timeout 15
+    set stty_init "rows 14 columns 60"
+    spawn /bin/sh -c {before=$(stty -g); "$PROQI_TEST_BINARY" --state-dir "$PROQI_TEST_STATE" -r "$PROQI_TEST_SESSION"; result=$?; after=$(stty -g); [ "$before" = "$after" ] || exit 90; exit "$result"}
+    set output [open $env(PROQI_TEST_PIDS) a]
+    puts $output [exp_pid]
+    close $output
+    expect {
+        -exact "\x1b\[?1049h" {}
+        timeout { exit 91 }
+    }
+    after 300
+    send "\x1b"
+    send ":"
+    expect {
+        -exact "Relevant now" {}
+        timeout { exit 92 }
+    }
+    expect {
+        -exact "More commands..." {}
+        timeout { exit 93 }
+    }
+    send -- "clean up spacing"
+    after 200
+    send "\r"
+    expect {
+        -exact "spacing cleaned up" {}
+        timeout { exit 94 }
+    }
+    send ":"
+    expect {
+        -exact "Relevant now" {}
+        timeout { exit 95 }
+    }
+    expect {
+        -exact "More commands..." {}
+        timeout { exit 96 }
+    }
+    for {set index 0} {$index < 12} {incr index} {
+        send -- "\x1b\[B"
+    }
+    send "\r"
+    expect {
+        -exact "Thought" {}
+        timeout { exit 97 }
+    }
+    send "\x1b\x1b"
+    send "q"
+    expect {
+        eof {}
+        timeout { exit 98 }
+    }
+    catch wait result
+    exit [lindex $result 3]
+"#;
+
 #[test]
 fn commands_search_bypasses_disclosure_and_expansion_restores_the_terminal() {
     let state = tempfile::tempdir().expect("temporary state");
@@ -19,54 +76,9 @@ fn commands_search_bypasses_disclosure_and_expansion_restores_the_terminal() {
         "alpha  Grüße\t界",
     );
     let cleanup_pids = state.path().join("commands-disclosure-watchdog-pids");
-    let workflow = r#"
-        log_user 0
-        set timeout 15
-        set stty_init "rows 14 columns 60"
-        spawn /bin/sh -c {before=$(stty -g); "$PROQI_TEST_BINARY" --state-dir "$PROQI_TEST_STATE" -r "$PROQI_TEST_SESSION"; result=$?; after=$(stty -g); [ "$before" = "$after" ] || exit 90; exit "$result"}
-        set output [open $env(PROQI_TEST_PIDS) a]
-        puts $output [exp_pid]
-        close $output
-        expect {
-            -exact "\x1b\[?1049h" {}
-            timeout { exit 91 }
-        }
-        after 300
-        send "\x1b"
-        send ":"
-        expect {
-            -exact "Relevant now" {}
-            timeout { exit 92 }
-        }
-        send -- "clean up spacing"
-        after 200
-        send "\r"
-        after 500
-        send ":"
-        expect {
-            -exact "More commands..." {}
-            timeout { exit 93 }
-        }
-        for {set index 0} {$index < 12} {incr index} {
-            send -- "\x1b\[B"
-        }
-        send "\r"
-        expect {
-            -exact "Thought" {}
-            timeout { exit 94 }
-        }
-        send "\x1b\x1b"
-        send "q"
-        expect {
-            eof {}
-            timeout { exit 95 }
-        }
-        catch wait result
-        exit [lindex $result 3]
-    "#;
     let mut command = expect_command();
     command
-        .args(["-c", workflow])
+        .args(["-c", COMMANDS_WORKFLOW])
         .env("PROQI_TEST_BINARY", binary)
         .env("PROQI_TEST_STATE", state.path())
         .env("PROQI_TEST_SESSION", session)

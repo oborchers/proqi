@@ -245,7 +245,14 @@ fn zero_results_and_shallow_expanded_scrolling_remain_truthful() {
 
 #[test]
 fn concise_and_expanded_views_have_representative_responsive_snapshots() {
-    let mut concise = Fixture::new();
+    let settings = UiSettings {
+        shortcuts: proqi::ui::ShortcutRegistry::from_toml(
+            "schema_version=1\n[bindings.board]\n\"thought.insert_above\"=[{key='F5'}]\n\"thought.insert_below\"=[{key='F6'}]",
+        )
+        .expect("platform-neutral snapshot keymap"),
+        ..UiSettings::default()
+    };
+    let mut concise = Fixture::with_settings(settings);
     saved_thought(&mut concise, "A calm contextual Commands source");
     open(&mut concise);
     insta::assert_snapshot!(

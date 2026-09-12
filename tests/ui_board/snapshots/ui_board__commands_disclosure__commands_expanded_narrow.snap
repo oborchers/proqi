@@ -1,14 +1,14 @@
 ---
 source: tests/ui_board/commands_disclosure.rs
-assertion_line: 222
+assertion_line: 264
 expression: "text(draw(&mut concise, 34, 12).backend().buffer())"
 ---
 ┌ commands ────────────────────[x]
 │:                               │
 │Thought                         │
 │New thought            n · board│
-│Insert thought above       board│
-│Insert thought below      Ctrl+N│
+│Insert thought above  F5 · board│
+│Insert thought below  F6 · board│
 │Edit thought           e · board│
 │Delete thought         d · board│
 │Copy thought           y · board│
