@@ -17,14 +17,20 @@ pub(super) struct ChromeLayout {
     pub(super) agents: Rect,
 }
 
-pub(super) fn compute(area: Rect, has_agents: bool, has_status: bool) -> ChromeLayout {
+pub(super) fn compute(
+    area: Rect,
+    has_agents: bool,
+    has_status: bool,
+    footer_visible: bool,
+) -> ChromeLayout {
     let header_height = 0;
     let available = area.height.saturating_sub(header_height);
-    let actions_height = u16::from(available >= 2);
-    let state_height = u16::from(available >= 3);
-    let name_height = u16::from(available >= 4);
-    let agents_height = u16::from(has_agents && available >= 5);
-    let status_height = u16::from(has_status && available >= 6);
+    let visible = u16::from(footer_visible);
+    let actions_height = visible * u16::from(available >= 2);
+    let state_height = visible * u16::from(available >= 3);
+    let name_height = visible * u16::from(available >= 4);
+    let agents_height = visible * u16::from(has_agents && available >= 5);
+    let status_height = visible * u16::from(has_status && available >= 6);
     let chrome_height = actions_height + state_height + name_height + agents_height + status_height;
     let gap_height = u16::from(available.saturating_sub(chrome_height) >= 4);
     let footer_height = chrome_height + gap_height;

@@ -312,6 +312,7 @@ pub fn compute(
         insertion_focused,
         has_agents,
         false,
+        true,
         crate::ui::settings::BoardDensity::Comfortable,
         0,
         &crate::ui::ShortcutRegistry::default(),
@@ -322,6 +323,7 @@ pub fn compute(
 #[must_use]
 #[expect(
     clippy::too_many_arguments,
+    clippy::fn_params_excessive_bools,
     reason = "layout inputs are independent viewport contracts"
 )]
 pub(super) fn compute_with_density(
@@ -332,6 +334,7 @@ pub(super) fn compute_with_density(
     insertion_focused: bool,
     has_agents: bool,
     has_status: bool,
+    footer_visible: bool,
     density: crate::ui::settings::BoardDensity,
     requested_row_offset: usize,
     keybindings: &crate::ui::ShortcutRegistry,
@@ -344,6 +347,7 @@ pub(super) fn compute_with_density(
         insertion_focused,
         has_agents,
         has_status,
+        footer_visible,
         density,
         requested_row_offset,
         keybindings,
@@ -354,6 +358,7 @@ pub(super) fn compute_with_density(
 
 #[expect(
     clippy::too_many_arguments,
+    clippy::fn_params_excessive_bools,
     reason = "layout inputs are independent viewport contracts"
 )]
 pub(super) fn compute_for_app(
@@ -363,6 +368,7 @@ pub(super) fn compute_for_app(
     insertion_focused: bool,
     has_agents: bool,
     has_status: bool,
+    footer_visible: bool,
     density: crate::ui::settings::BoardDensity,
     keybindings: &crate::ui::ShortcutRegistry,
     viewport: scroll::BoardViewport,
@@ -375,6 +381,7 @@ pub(super) fn compute_for_app(
         insertion_focused,
         has_agents,
         has_status,
+        footer_visible,
         density,
         0,
         keybindings,
@@ -384,6 +391,7 @@ pub(super) fn compute_for_app(
 
 #[expect(
     clippy::too_many_arguments,
+    clippy::fn_params_excessive_bools,
     reason = "layout inputs are independent viewport contracts"
 )]
 fn compute_frame(
@@ -394,12 +402,13 @@ fn compute_frame(
     insertion_focused: bool,
     has_agents: bool,
     has_status: bool,
+    footer_visible: bool,
     density: crate::ui::settings::BoardDensity,
     requested_row_offset: usize,
     keybindings: &crate::ui::ShortcutRegistry,
     viewport: Option<scroll::BoardViewport>,
 ) -> (LayoutSnapshot, scroll::ScrollGeometry) {
-    let chrome = chrome::compute(area, has_agents, has_status);
+    let chrome = chrome::compute(area, has_agents, has_status, footer_visible);
     let board = chrome.board;
     let content_width = board.width.saturating_sub(2).max(1);
     let content = content::visible_content(&content::ContentRequest {

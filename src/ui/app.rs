@@ -102,6 +102,10 @@ enum ComposePresentation {
 }
 
 /// Mutable UI state around the pure application reducer.
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent transient UI toggles with no shared state machine"
+)]
 pub struct BoardApp {
     /// Reducer-owned application state rendered by the board.
     pub state: AppState,
@@ -117,6 +121,11 @@ pub struct BoardApp {
     /// Whether contextual help is visible.
     pub help: bool,
     help_scroll: usize,
+    /// Whether the footer chrome (session band and shortcut hints) is visible.
+    ///
+    /// Derived once from `UiSettings::footer_hidden` at construction; never
+    /// mutated at runtime.
+    pub footer_visible: bool,
     /// Transient human-readable status.
     pub(in crate::ui) status: Option<crate::ui::status::UiStatus>,
     viewport: TextViewport,
@@ -203,6 +212,7 @@ impl BoardApp {
         } else {
             None
         };
+        let footer_visible = !settings.footer_hidden;
         Self {
             state,
             editor,
@@ -215,6 +225,7 @@ impl BoardApp {
             quit: false,
             help: false,
             help_scroll: 0,
+            footer_visible,
             status: None,
             viewport: TextViewport::default(),
             board_viewport: BoardViewport::default(),

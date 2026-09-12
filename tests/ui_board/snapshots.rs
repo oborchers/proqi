@@ -15,6 +15,8 @@ use super::snapshot_support::snapshot_buffer;
 mod attachment_accessibility_snapshots;
 #[path = "snapshots/attachment_numbering.rs"]
 mod attachment_numbering;
+#[path = "snapshots/footer_visibility.rs"]
+mod footer_visibility_snapshots;
 #[path = "snapshots/herdr.rs"]
 mod herdr_snapshots;
 #[path = "snapshots/platform.rs"]
