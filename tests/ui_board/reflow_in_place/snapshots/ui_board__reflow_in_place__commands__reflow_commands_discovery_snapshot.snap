@@ -1,6 +1,6 @@
 ---
 source: tests/ui_board/reflow_in_place/commands.rs
-assertion_line: 49
+assertion_line: 89
 expression: snapshot_buffer(terminal.backend().buffer())
 ---
 SIZE 60x12
@@ -9,8 +9,8 @@ TEXT
 00││
 01│ ┌ commands ────────────────────────────────────────────[x]│
 02│ │:clean up                                               ││
-03│ │Paste and clean up                                      ││
-04│ │Clean up spacing                                        ││
+03│ │Paste and clean up                       Shift+P · board││
+04│ │Clean up spacing                               f · board││
 05│ └────────────────────────────────────────────────────────┘│
 06││
 07││
@@ -23,8 +23,8 @@ STYLE RUNS
 0: 0-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 1: 0-0 fg=Reset bg=Reset mod=NONE | 1-55 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 56-58 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 59-59 fg=Reset bg=Reset mod=NONE
 2: 0-0 fg=Reset bg=Reset mod=NONE | 1-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-57 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 58-58 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 59-59 fg=Reset bg=Reset mod=NONE
-3: 0-0 fg=Reset bg=Reset mod=NONE | 1-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-57 fg=Rgb(112, 214, 155) bg=Rgb(39, 40, 48) mod=BOLD | 58-58 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 59-59 fg=Reset bg=Reset mod=NONE
-4: 0-0 fg=Reset bg=Reset mod=NONE | 1-58 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 59-59 fg=Reset bg=Reset mod=NONE
+3: 0-0 fg=Reset bg=Reset mod=NONE | 1-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-19 fg=Rgb(112, 214, 155) bg=Rgb(39, 40, 48) mod=BOLD | 20-42 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 43-57 fg=Rgb(176, 169, 160) bg=Rgb(39, 40, 48) mod=NONE | 58-58 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 59-59 fg=Reset bg=Reset mod=NONE
+4: 0-0 fg=Reset bg=Reset mod=NONE | 1-48 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 49-57 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE | 58-58 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 59-59 fg=Reset bg=Reset mod=NONE
 5: 0-0 fg=Reset bg=Reset mod=NONE | 1-58 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 59-59 fg=Reset bg=Reset mod=NONE
 6: 0-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 7: 0-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE

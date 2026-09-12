@@ -301,6 +301,12 @@ impl BoardApp {
         self.palette.as_ref().map(palette::PaletteState::view)
     }
 
+    pub(in crate::ui) fn command_palette_view(&self) -> Option<palette::CommandPaletteView> {
+        self.palette
+            .as_ref()
+            .map(palette::PaletteState::command_view)
+    }
+
     /// Filtered discovered invocations and current selection for rendering.
     #[must_use]
     pub(in crate::ui) fn discovered_invocation_view(

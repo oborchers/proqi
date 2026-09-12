@@ -88,9 +88,10 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        if request.remove_source {
-            self.pending_transfer_removals.remove(&request.operation_id);
-        }
+        let pending_source = request
+            .remove_source
+            .then(|| self.pending_transfer_removals.remove(&request.operation_id))
+            .flatten();
         match result {
             Err(error) => {
                 self.set_error(format!("thought was not sent: {error}"));
@@ -100,7 +101,18 @@ impl BoardApp {
                 self.set_success("thought sent to the destination session");
                 Vec::new()
             }
-            Ok(_) => {
+            Ok(_)
+                if pending_source == Some(request.source_thought_id)
+                    && self
+                        .state
+                        .board
+                        .thought(request.source_thought_id)
+                        .is_some_and(|thought| {
+                            thought.is_live()
+                                && thought.content == request.content
+                                && thought.annotations == request.annotations
+                        }) =>
+            {
                 self.set_info("thought sent; removing the source");
                 self.reduce_with_empty_transition(
                     Action::DeleteThought {
@@ -111,6 +123,10 @@ impl BoardApp {
                     },
                     crate::application::EmptyBoardTransition::ComposeAfterLocalRemoval,
                 )
+            }
+            Ok(_) => {
+                self.set_warning("thought changed after it was sent; source kept");
+                Vec::new()
             }
         }
     }
@@ -237,7 +253,8 @@ impl BoardApp {
         self.transfer = None;
         request.map_or_else(Vec::new, |request| {
             if request.remove_source {
-                self.pending_transfer_removals.insert(request.operation_id);
+                self.pending_transfer_removals
+                    .insert(request.operation_id, request.source_thought_id);
             }
             vec![Effect::TransferThought(request)]
         })
@@ -278,37 +295,13 @@ impl BoardApp {
     }
 }
 
-impl TransferState {
-    pub(super) const fn query_cursor(&self) -> usize {
-        self.query.cursor()
-    }
-
-    fn matches(&self) -> Vec<&SessionHit> {
-        let query = self.query.text().to_lowercase();
-        self.sessions
-            .iter()
-            .filter(|hit| {
-                query.is_empty()
-                    || hit
-                        .name
-                        .as_deref()
-                        .unwrap_or_default()
-                        .to_lowercase()
-                        .contains(&query)
-                    || hit
-                        .last_opened_cwd
-                        .to_string_lossy()
-                        .to_lowercase()
-                        .contains(&query)
-                    || hit.excerpt.to_lowercase().contains(&query)
-            })
-            .collect()
-    }
-}
-
 #[cfg(test)]
 #[path = "transfer/tests/paging.rs"]
 mod paging_tests;
+
+#[cfg(test)]
+#[path = "transfer/tests/stale_removal.rs"]
+mod stale_removal_tests;
 
 #[cfg(test)]
 mod tests {
@@ -369,14 +362,6 @@ mod tests {
         assert_eq!(request.content, thought.content);
         assert_eq!(request.annotations, thought.annotations);
         assert_eq!(request.source_thought_id, thought_id);
-        assert_thought_is_live(&app, thought_id);
-        let failed = app.complete_session_transfer(
-            request,
-            Err("destination unavailable".to_owned()),
-            &mut ids,
-            &clock,
-        );
-        assert!(failed.is_empty());
         assert_thought_is_live(&app, thought_id);
         let receipt = CommitReceipt {
             session_id: destination,

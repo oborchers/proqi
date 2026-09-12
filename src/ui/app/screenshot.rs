@@ -329,6 +329,7 @@ impl BoardApp {
             }
             Err(error) => self.capture_save_failed(candidate, &error),
         };
+        self.refresh_screenshot_palette_action();
         effects.extend(self.replay_screenshot_inputs(ids));
         effects
     }

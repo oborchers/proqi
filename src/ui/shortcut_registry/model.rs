@@ -6,8 +6,8 @@ mod diagnostic_name;
 mod metadata;
 
 pub(crate) use metadata::{
-    CommandAvailability, CommandLabel, CommandMetadata, FooterMetadata, HelpAvailability,
-    HelpMetadata, HelpSurface,
+    CommandApplicability, CommandCategory, CommandDiscoverability, CommandLabel, CommandMetadata,
+    CommandRelevance, CommandScope, FooterMetadata, HelpAvailability, HelpMetadata, HelpSurface,
 };
 
 /// Every active keyboard owner in the current terminal product.

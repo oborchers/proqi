@@ -103,6 +103,28 @@ fn a_save_failure_cancels_a_requested_exit() {
 }
 
 #[test]
+fn a_save_failure_invalidates_commands_and_reopens_with_recovery_context() {
+    let mut fixture = Fixture::new();
+    let sequence = fixture.paste("must survive");
+    fixture.input(crate::key_input(UiKey::Escape));
+    fixture.input(UiInput::KeyStroke(KeyStroke::press(LogicalKey::Character(
+        ':',
+    ))));
+    assert!(fixture.app.palette_view().is_some());
+
+    fixture.app.acknowledge_persistence(sequence, false);
+    assert!(fixture.app.palette_view().is_none());
+    fixture.input(UiInput::KeyStroke(KeyStroke::press(LogicalKey::Character(
+        ':',
+    ))));
+
+    let (_, rows, selected) = fixture.app.palette_view().expect("Recovery Commands");
+    assert!(rows.contains(&"Retry failed save".to_owned()));
+    assert!(rows.contains(&"Export recovery file".to_owned()));
+    assert_eq!(rows[selected], "Retry failed save");
+}
+
+#[test]
 fn successful_retry_rearms_an_unsaved_editor_buffer() {
     let mut fixture = Fixture::new();
     let sequence = fixture.paste("base");

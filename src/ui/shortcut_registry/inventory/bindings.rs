@@ -437,10 +437,9 @@ fn configured_action(
         return Some(Action::Close);
     }
     if context == Context::Recovery && !command_modifiers(modifiers) {
-        return match character {
-            value if value == keys.quit => Some(Action::Quit),
-            _ => None,
-        };
+        return (character == keys.commands)
+            .then_some(Action::OpenCommands)
+            .or_else(|| (character == keys.quit).then_some(Action::Quit));
     }
     None
 }

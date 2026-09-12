@@ -28,10 +28,12 @@ pub(super) fn overlay_layout(
         })
         .collect::<Vec<_>>();
     let item_headings = vec![None; items.len()];
+    let item_interactive = vec![true; items.len()];
     OverlayLayout {
         area: modal,
         items,
         item_headings,
+        item_interactive,
         close: Rect::new(modal.right().saturating_sub(3), modal.y, 3, 1),
     }
 }
@@ -42,12 +44,30 @@ pub(super) fn grouped_overlay_layout(
     preferred_rows: usize,
     cover_width: bool,
 ) -> OverlayLayout {
+    let item_interactive = vec![true; item_groups.len()];
+    grouped_overlay_layout_with_interactivity(
+        area,
+        item_groups,
+        &item_interactive,
+        preferred_rows,
+        cover_width,
+    )
+}
+
+pub(super) fn grouped_overlay_layout_with_interactivity(
+    area: Rect,
+    item_groups: &[bool],
+    item_interactive: &[bool],
+    preferred_rows: usize,
+    cover_width: bool,
+) -> OverlayLayout {
     let modal = modal_area(area, preferred_rows, cover_width);
     let mut item_y = modal.y.saturating_add(2);
     let bottom = modal.bottom().saturating_sub(1);
     let mut items = Vec::new();
     let mut item_headings = Vec::new();
-    for grouped in item_groups.iter().copied() {
+    let mut visible_interactive = Vec::new();
+    for (index, grouped) in item_groups.iter().copied().enumerate() {
         if item_y >= bottom {
             break;
         }
@@ -68,12 +88,14 @@ pub(super) fn grouped_overlay_layout(
             1,
         ));
         item_headings.push(heading);
+        visible_interactive.push(item_interactive.get(index).copied().unwrap_or(false));
         item_y = item_y.saturating_add(1);
     }
     OverlayLayout {
         area: modal,
         items,
         item_headings,
+        item_interactive: visible_interactive,
         close: Rect::new(modal.right().saturating_sub(3), modal.y, 3, 1),
     }
 }

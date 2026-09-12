@@ -86,6 +86,73 @@ fn every_commands_entry_has_one_matching_registry_descriptor() {
 }
 
 #[test]
+fn commands_descriptors_own_independent_disclosure_dimensions() {
+    use super::super::{
+        CommandApplicability, CommandCategory, CommandDiscoverability, CommandRelevance,
+        CommandScope,
+    };
+
+    let registry = ShortcutRegistry::resolve(&KeyBindings::default(), ShortcutPlatform::Portable)
+        .expect("valid registry");
+    let commands = registry.commands();
+    assert!(commands.iter().all(|(_, metadata, _)| {
+        metadata.discoverability == CommandDiscoverability::Discoverable
+    }));
+
+    let retry = registry
+        .descriptor(Action::RetryStorage)
+        .and_then(|descriptor| descriptor.commands)
+        .expect("retry descriptor");
+    assert_eq!(retry.applicability, CommandApplicability::RetryStorage);
+    assert_eq!(retry.relevance, CommandRelevance::StorageRecovery(0));
+    assert_eq!(retry.category, CommandCategory::ApplicationAndRecovery);
+    assert_eq!(
+        registry
+            .descriptor(Action::Copy)
+            .and_then(|descriptor| descriptor.commands)
+            .expect("copy descriptor")
+            .applicability,
+        CommandApplicability::Copy
+    );
+    assert_eq!(
+        registry
+            .descriptor(Action::Cut)
+            .and_then(|descriptor| descriptor.commands)
+            .expect("cut descriptor")
+            .applicability,
+        CommandApplicability::Cut
+    );
+
+    for contextual in [
+        Action::Copy,
+        Action::Cut,
+        Action::PasteExact,
+        Action::SelectAll,
+        Action::Undo,
+        Action::SubmitKeep,
+    ] {
+        let metadata = registry
+            .descriptor(contextual)
+            .and_then(|descriptor| descriptor.commands)
+            .expect("contextual Commands descriptor");
+        assert_eq!(metadata.scope, CommandScope::Contextual);
+    }
+
+    for destructive in [
+        Action::Delete,
+        Action::Cut,
+        Action::SubmitRemove,
+        Action::SendSessionRemove,
+    ] {
+        let metadata = registry
+            .descriptor(destructive)
+            .and_then(|descriptor| descriptor.commands)
+            .expect("destructive Commands descriptor");
+        assert_eq!(metadata.relevance, CommandRelevance::Never);
+    }
+}
+
+#[test]
 fn shortcut_inventory_document_tracks_contexts_and_commands_count() {
     let context_rows = SHORTCUTS_DOCUMENT
         .lines()
@@ -139,6 +206,23 @@ fn fixed_recovery_bindings_are_descriptor_owned_and_dispatchable() {
             assert_eq!(resolved.action, Some(action));
         }
     }
+}
+
+#[test]
+fn configured_commands_binding_opens_fresh_commands_from_recovery() {
+    let keys = KeyBindings {
+        commands: 'τ',
+        ..KeyBindings::default()
+    };
+    let registry =
+        ShortcutRegistry::resolve(&keys, ShortcutPlatform::Portable).expect("valid registry");
+    let resolved = registry
+        .dispatch(
+            &ShortcutContextStack::new([Context::Recovery]),
+            stroke(LogicalKey::Character('τ'), LogicalModifiers::NONE),
+        )
+        .expect("configured Commands binding dispatches in Recovery");
+    assert_eq!(resolved.action, Some(Action::OpenCommands));
 }
 
 #[test]

@@ -381,6 +381,8 @@ mod clipboard;
 mod clipboard_annotations;
 #[path = "ui_board/clipboard_races.rs"]
 mod clipboard_races;
+#[path = "ui_board/commands_disclosure.rs"]
+mod commands_disclosure;
 #[path = "ui_board/compose.rs"]
 mod compose;
 #[path = "ui_board/composition.rs"]

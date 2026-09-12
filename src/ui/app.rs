@@ -64,6 +64,7 @@ use super::{
 
 use input_dispatch::ActiveInputOwner as Owner;
 pub(in crate::ui) use invocation::InvocationChoiceView;
+pub(in crate::ui) use palette::CommandPaletteView;
 use pending_types::{
     DeferredSubmissionIntent, PendingEditorClipboard, PendingSubmission, SubmissionMode,
 };
@@ -154,7 +155,7 @@ pub struct BoardApp {
     deferred_submissions: BTreeMap<SubmissionId, DeferredSubmissionIntent>,
     preflight_submissions: BTreeMap<SubmissionId, DeferredSubmissionIntent>,
     pending_submissions: BTreeMap<SubmissionId, PendingSubmission>,
-    pending_transfer_removals: BTreeSet<OperationId>,
+    pending_transfer_removals: BTreeMap<OperationId, ThoughtId>,
     screenshot: screenshot::ScreenshotInbox,
     update_barrier: Option<update::UpdateBarrier>,
     update_restart: Option<crate::domain::StableVersion>,
@@ -251,7 +252,7 @@ impl BoardApp {
             deferred_submissions: BTreeMap::new(),
             preflight_submissions: BTreeMap::new(),
             pending_submissions: BTreeMap::new(),
-            pending_transfer_removals: BTreeSet::new(),
+            pending_transfer_removals: BTreeMap::new(),
             screenshot: screenshot::ScreenshotInbox::default(),
             update_barrier: None,
             update_restart: None,
