@@ -6,11 +6,11 @@ expression: "super::snapshot_support::snapshot_buffer(terminal.backend().buffer(
 SIZE 36x12
 
 TEXT
-00│  expanded row 01│
+00││
 01│  expanded row 02│
 02│  expanded row 03│
-03│⋮ expanded row 04│
-04│  expanded row 05│
+03│  expanded row 04│
+04│⋮ expanded row 05│
 05│  expanded row 06│
 06│  expanded row 07│
 07│  expanded row 08│
@@ -20,7 +20,7 @@ TEXT
 11│  n New   : Commands  ? Shortcuts│
 
 STYLE RUNS
-0: 0-0 fg=Black bg=Green mod=BOLD | 1-35 fg=Reset bg=Reset mod=REVERSED
+0: 0-35 fg=Reset bg=Reset mod=NONE
 1: 0-0 fg=Black bg=Green mod=BOLD | 1-35 fg=Reset bg=Reset mod=REVERSED
 2: 0-0 fg=Black bg=Green mod=BOLD | 1-35 fg=Reset bg=Reset mod=REVERSED
 3: 0-0 fg=Black bg=Green mod=BOLD | 1-35 fg=Reset bg=Reset mod=REVERSED

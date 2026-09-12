@@ -73,6 +73,7 @@ pub(in crate::ui) struct ScrollGeometry {
     focused_previous: Option<ScrollAnchor>,
     focused_next: Option<ScrollAnchor>,
     pub(in crate::ui) maximum: ScrollAnchor,
+    pub(in crate::ui) maximum_offset: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -98,7 +99,8 @@ pub(super) struct BoardFlow {
     pub(super) compose: Option<ComposeRows>,
     pub(super) insert_gap: Option<usize>,
     pub(super) insert_row: Option<usize>,
-    total_rows: usize,
+    pub(super) total_rows: usize,
+    pub(super) density: crate::ui::settings::BoardDensity,
 }
 
 #[derive(Clone, Debug)]
@@ -135,11 +137,8 @@ impl BoardFlow {
         density: crate::ui::settings::BoardDensity,
     ) -> Self {
         let live = presentation.thoughts();
-        let roomy = usize::from(board_height)
-            >= live
-                .len()
-                .saturating_add(live.len().saturating_sub(1).saturating_mul(3));
-        let comfortable = roomy && density == crate::ui::settings::BoardDensity::Comfortable;
+        let density = density.resolve(board_height);
+        let comfortable = density == crate::ui::settings::BoardDensity::Comfortable;
         let gap_rows = if comfortable { 2 } else { 1 };
         let top_padding = u16::from(comfortable && board_height >= 3 && !live.is_empty());
         let mut cursor = 0_usize;
@@ -193,6 +192,7 @@ impl BoardFlow {
             insert_gap,
             insert_row,
             total_rows: cursor,
+            density,
         }
     }
 
@@ -249,6 +249,7 @@ impl BoardFlow {
                 focused_previous,
                 focused_next,
                 maximum: max_anchor,
+                maximum_offset: maximum,
             },
         }
     }
