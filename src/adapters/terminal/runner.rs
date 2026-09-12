@@ -130,9 +130,12 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
     let release_highlight_selection =
         release_highlights::load(&cache_directory, installation.as_ref(), session_id);
     let (mut control, mut control_warning) = composition::start_optional_control(&session_lease);
-    let (theme, guard) =
-        composition::enter_terminal(&settings.theme, settings.ui.keyboard_enhancement)?;
-    let panic_hook = PanicHookGuard::install();
+    let (theme, guard) = composition::enter_terminal(
+        &settings.theme,
+        settings.ui.keyboard_enhancement,
+        settings.ui.mouse_capture,
+    )?;
+    let panic_hook = PanicHookGuard::install(settings.ui.mouse_capture);
     let termination = TerminationGuard::register()?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
     let presentation_source = format!("proqi-{}", session_lease.info().instance_id);

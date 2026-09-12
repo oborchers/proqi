@@ -80,9 +80,10 @@ pub(super) fn publish_optional_control(
 pub(super) fn enter_terminal(
     recipe: &crate::ui::ThemeRecipe,
     keyboard: crate::ui::KeyboardEnhancement,
+    mouse_capture: bool,
 ) -> Result<(crate::ui::Theme, TerminalGuard<CrosstermControl>), TerminalError> {
     let theme = super::super::palette::resolve(recipe, super::supports_true_color())?;
-    let guard = TerminalGuard::enter(CrosstermControl::new(keyboard))?;
+    let guard = TerminalGuard::enter(CrosstermControl::new(keyboard, mouse_capture))?;
     Ok((theme, guard))
 }
 

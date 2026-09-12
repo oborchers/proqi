@@ -30,6 +30,7 @@ pub(super) trait TerminalControl {
 
 pub(super) struct CrosstermControl {
     preference: KeyboardEnhancement,
+    mouse_capture: bool,
     enabled: u8,
 }
 
@@ -37,11 +38,13 @@ const RAW_MODE: u8 = 1 << 0;
 const SCREEN_MODE: u8 = 1 << 1;
 const FOCUS_MODE: u8 = 1 << 2;
 const KEYBOARD_MODE: u8 = 1 << 3;
+const MOUSE_MODE: u8 = 1 << 4;
 
 impl CrosstermControl {
-    pub(super) const fn new(preference: KeyboardEnhancement) -> Self {
+    pub(super) const fn new(preference: KeyboardEnhancement, mouse_capture: bool) -> Self {
         Self {
             preference,
+            mouse_capture,
             enabled: 0,
         }
     }
@@ -63,10 +66,13 @@ impl TerminalControl for CrosstermControl {
     fn enter(&mut self) -> io::Result<()> {
         enable_raw_mode()?;
         self.enable(RAW_MODE);
+        execute!(stdout(), EnterAlternateScreen)?;
+        if self.mouse_capture {
+            execute!(stdout(), EnableMouseCapture)?;
+            self.enable(MOUSE_MODE);
+        }
         execute!(
             stdout(),
-            EnterAlternateScreen,
-            EnableMouseCapture,
             EnableBracketedPaste,
             SetCursorStyle::BlinkingBlock,
             Hide
@@ -103,15 +109,14 @@ impl TerminalControl for CrosstermControl {
             self.disable(FOCUS_MODE);
         }
         if self.has(SCREEN_MODE) {
-            record(
-                &mut first,
-                execute!(
-                    stdout(),
-                    DisableBracketedPaste,
-                    DisableMouseCapture,
-                    LeaveAlternateScreen
-                ),
-            );
+            record(&mut first, execute!(stdout(), DisableBracketedPaste));
+        }
+        if self.has(MOUSE_MODE) {
+            record(&mut first, execute!(stdout(), DisableMouseCapture));
+            self.disable(MOUSE_MODE);
+        }
+        if self.has(SCREEN_MODE) {
+            record(&mut first, execute!(stdout(), LeaveAlternateScreen));
             self.disable(SCREEN_MODE);
         }
         if self.has(RAW_MODE) {
@@ -196,7 +201,10 @@ pub(super) struct PanicHookGuard {
 }
 
 impl PanicHookGuard {
-    pub(super) fn install() -> Self {
+    /// `mouse_capture_acquired` must reflect whether the terminal ownership
+    /// this guard protects actually enabled mouse capture, so an owner-thread
+    /// panic never restores a mode Proqi never acquired.
+    pub(super) fn install(mouse_capture_acquired: bool) -> Self {
         let owner = std::thread::current().id();
         let previous: Arc<PanicHook> = std::panic::take_hook().into();
         let chained: Arc<PanicHook> = Arc::clone(&previous);
@@ -208,7 +216,7 @@ impl PanicHookGuard {
                 },
             );
             if is_owner {
-                let _restored = emergency_restore();
+                let _restored = emergency_restore(&mut stdout(), mouse_capture_acquired);
             }
             if is_owner {
                 chained(information);
@@ -228,24 +236,20 @@ impl Drop for PanicHookGuard {
     }
 }
 
-fn emergency_restore() -> io::Result<()> {
+fn emergency_restore(out: &mut impl io::Write, mouse_capture_acquired: bool) -> io::Result<()> {
     let mut first = None;
     record(
         &mut first,
-        execute!(stdout(), Show, SetCursorStyle::DefaultUserShape),
+        execute!(out, Show, SetCursorStyle::DefaultUserShape),
     );
-    record(&mut first, execute!(stdout(), PopKeyboardEnhancementFlags));
+    record(&mut first, execute!(out, PopKeyboardEnhancementFlags));
     record(&mut first, reset_keyboard_reporting());
-    record(&mut first, execute!(stdout(), DisableFocusChange));
-    record(
-        &mut first,
-        execute!(
-            stdout(),
-            DisableBracketedPaste,
-            DisableMouseCapture,
-            LeaveAlternateScreen
-        ),
-    );
+    record(&mut first, execute!(out, DisableFocusChange));
+    record(&mut first, execute!(out, DisableBracketedPaste));
+    if mouse_capture_acquired {
+        record(&mut first, execute!(out, DisableMouseCapture));
+    }
+    record(&mut first, execute!(out, LeaveAlternateScreen));
     record(&mut first, disable_raw_mode());
     first.map_or(Ok(()), Err)
 }
@@ -304,7 +308,9 @@ mod tests {
 
     use crossterm::event::KeyboardEnhancementFlags;
 
-    use super::{TerminalControl, TerminalGuard, keyboard_flags};
+    use super::{
+        PanicHookGuard, TerminalControl, TerminalGuard, emergency_restore, keyboard_flags,
+    };
     use crate::adapters::terminal::host::TerminalHost;
 
     #[derive(Clone)]
@@ -383,6 +389,38 @@ mod tests {
             let flags = keyboard_flags(&TerminalHost::from_values(program, term));
             assert!(!flags.contains(KeyboardEnhancementFlags::REPORT_EVENT_TYPES));
             assert!(flags.contains(KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES));
+        }
+    }
+
+    #[test]
+    fn emergency_restore_skips_mouse_disable_when_never_acquired() {
+        let mut buffer = Vec::new();
+        emergency_restore(&mut buffer, false).expect("emergency restore");
+        let output = String::from_utf8(buffer).expect("escape sequences are valid UTF-8");
+        assert!(
+            !output.contains("\x1b[?1000l"),
+            "must not restore mouse capture it never acquired, got: {output:?}"
+        );
+    }
+
+    #[test]
+    fn emergency_restore_disables_mouse_capture_when_acquired() {
+        let mut buffer = Vec::new();
+        emergency_restore(&mut buffer, true).expect("emergency restore");
+        let output = String::from_utf8(buffer).expect("escape sequences are valid UTF-8");
+        assert!(
+            output.contains("\x1b[?1000l"),
+            "must restore mouse capture it acquired, got: {output:?}"
+        );
+    }
+
+    #[test]
+    fn panic_hook_guard_survives_owner_panic_regardless_of_mouse_capture() {
+        for mouse_capture_acquired in [true, false] {
+            let panic_hook = PanicHookGuard::install(mouse_capture_acquired);
+            let result = std::panic::catch_unwind(|| panic!("owner-thread panic under test"));
+            assert!(result.is_err());
+            drop(panic_hook);
         }
     }
 }

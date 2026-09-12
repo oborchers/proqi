@@ -52,6 +52,10 @@ enum ThemeSource {
 
 #[derive(Debug, Deserialize)]
 #[serde(default, deny_unknown_fields)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent user-facing toggles with no shared state machine"
+)]
 struct SettingsDocument {
     check_for_updates: bool,
     show_session_id: bool,
@@ -61,6 +65,7 @@ struct SettingsDocument {
     theme: String,
     theme_overrides: ThemeOverrides,
     keyboard_enhancement: KeyboardEnhancement,
+    mouse_capture: bool,
     keybindings: Option<KeyBindings>,
     keymap: Option<crate::ui::KeymapDocument>,
     density: BoardDensity,
@@ -79,6 +84,7 @@ impl Default for SettingsDocument {
             theme: "auto".to_owned(),
             theme_overrides: ThemeOverrides::default(),
             keyboard_enhancement: KeyboardEnhancement::default(),
+            mouse_capture: true,
             keybindings: None,
             keymap: None,
             density: BoardDensity::default(),
@@ -161,6 +167,7 @@ fn parse_settings(config_dir: &Path, content: &str) -> Result<LoadedSettings, Te
         list_indent_width: document.list_indent_width,
         merge_separator: document.merge_separator,
         keyboard_enhancement: document.keyboard_enhancement,
+        mouse_capture: document.mouse_capture,
         shortcuts: shortcut_registry,
         density: document.density,
     };
