@@ -126,7 +126,7 @@ impl BoardApp {
                     .state
                     .board
                     .thought(request.source_thought_id)
-                    .is_none() =>
+                    .is_none_or(|thought| !thought.is_live()) =>
             {
                 self.set_info("thought sent; source was already removed");
                 Vec::new()

@@ -6,8 +6,8 @@ use crate::{
     },
     application::{AppState, Effect, FirstRunEnvironment, ThoughtMutation, first_run_board},
     domain::{
-        ContentAnnotation, OperationSequence, Session, SessionBoard, Thought, ThoughtPosition,
-        Timestamp,
+        BoardOperationKind, ContentAnnotation, OperationSequence, Session, SessionBoard, Thought,
+        ThoughtPosition, Timestamp,
     },
     ports::{
         editor::CursorMovement,
@@ -228,6 +228,80 @@ fn stale_transfer_receipt_keeps_an_annotation_only_source_change() {
         .thought(thought_id)
         .expect("source retained");
     assert!(current.annotations.is_empty());
+}
+
+#[test]
+fn stale_transfer_receipt_reports_a_recoverably_deleted_source_as_already_removed() {
+    let mut ids = FakeIdGenerator::new(1_725_204_000_000);
+    let clock = FakeClock::new(Timestamp::from_millis(3));
+    let source = Session::new(
+        ids.session_id(),
+        std::env::temp_dir().join("proqi-transfer-stale-deletion"),
+        Timestamp::from_millis(1),
+    )
+    .expect("source session");
+    let destination = ids.session_id();
+    let thought = Thought::new(
+        ids.thought_id(),
+        source.id,
+        "sent version".to_owned(),
+        ThoughtPosition::new(0),
+        Timestamp::from_millis(1),
+    );
+    let thought_id = thought.id;
+    let survivor = Thought::new(
+        ids.thought_id(),
+        source.id,
+        "survivor".to_owned(),
+        ThoughtPosition::new(1),
+        Timestamp::from_millis(1),
+    );
+    let board = SessionBoard::new(source, vec![thought, survivor]).expect("board");
+    let mut app = BoardApp::new(AppState::new(board), RopeEditorFactory);
+    app.begin_session_transfer(true, &mut ids, &clock);
+    app.complete_transfer_discovery(1, Ok(vec![session_hit(destination)]));
+    let effects = app.handle_transfer_input(&UiInput::Key(UiKey::Enter), &mut ids, &clock);
+    let [Effect::TransferThought(request)] = effects.as_slice() else {
+        panic!("expected transfer request");
+    };
+    let deletion = app.reduce(crate::application::Action::DeleteThought {
+        operation_id: ids.operation_id(),
+        thought_id,
+        kind: BoardOperationKind::Delete,
+        at: Timestamp::from_millis(4),
+    });
+    assert!(matches!(
+        deletion.as_slice(),
+        [Effect::CommitBoardOperation(_)]
+    ));
+    let receipt = CommitReceipt {
+        session_id: destination,
+        sequence: OperationSequence::new(1),
+        identity: DurableIdentity::Operation(request.operation_id),
+        idempotent_replay: false,
+    };
+
+    let completion = app.complete_session_transfer(
+        request,
+        Ok(ThoughtMutation {
+            thought_id: ids.thought_id(),
+            receipt,
+        }),
+        &mut ids,
+        &clock,
+    );
+
+    assert!(completion.is_empty());
+    assert!(
+        app.state
+            .board
+            .thought(thought_id)
+            .is_some_and(|thought| !thought.is_live())
+    );
+    assert_eq!(
+        app.status_text(),
+        Some("thought sent; source was already removed")
+    );
 }
 
 #[test]
