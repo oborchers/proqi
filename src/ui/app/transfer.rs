@@ -108,6 +108,29 @@ impl BoardApp {
                 self.set_success("thought sent to the destination session");
                 Vec::new()
             }
+            Ok(_)
+                if self
+                    .state
+                    .board
+                    .thought(request.source_thought_id)
+                    .is_some_and(|thought| {
+                        thought.content != request.content
+                            || thought.annotations != request.annotations
+                    }) =>
+            {
+                self.set_info("thought sent; source changed and was kept");
+                Vec::new()
+            }
+            Ok(_)
+                if self
+                    .state
+                    .board
+                    .thought(request.source_thought_id)
+                    .is_none() =>
+            {
+                self.set_info("thought sent; source was already removed");
+                Vec::new()
+            }
             Ok(_) => {
                 self.set_info("thought sent; removing the source");
                 self.reduce_with_empty_transition(

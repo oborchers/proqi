@@ -370,7 +370,7 @@ pub(super) fn update_session_sequence(
     sequence: OperationSequence,
     at: Timestamp,
 ) -> Result<(), StoreError> {
-    super::browser_history::invalidate_activity_conflicts(transaction, session_id, at)?;
+    super::browser_history::invalidate_activity_conflicts(transaction, session_id)?;
     transaction
         .execute(
             "UPDATE sessions SET last_durable_sequence = ?2,

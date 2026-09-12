@@ -11,7 +11,7 @@ use crate::{
     ui::BoardApp,
 };
 
-use super::super::{PendingWork, WorkerLanes, storage_error_code};
+use super::super::{PendingWork, WorkerLanes};
 
 pub(super) fn queue(
     app: &mut BoardApp,
@@ -130,7 +130,7 @@ pub(in crate::adapters::terminal::runner) fn complete(
     let response = match result {
         Ok(()) => renamed(&envelope),
         Err(error) => ControlResult::Rejected {
-            code: storage_error_code(error).to_owned(),
+            code: lookup_error_code(error).to_owned(),
             message: error.to_string(),
         },
     };
@@ -188,6 +188,37 @@ mod tests {
             &mut pending,
             request_id,
             Err(StoreError::Conflict("identity already used".to_owned())),
+        );
+
+        let response = response.recv().expect("owner response").response;
+        assert!(matches!(
+            response.result,
+            ControlResult::Rejected { code, .. }
+                if code == ControlRejectionCode::IdempotencyConflict.as_str()
+        ));
+    }
+
+    #[test]
+    fn changed_rename_identity_collision_is_an_idempotency_conflict() {
+        let mut ids = FakeIdGenerator::new(1_725_208_100_000);
+        let request_id = ids.request_id();
+        let request = ControlRequest {
+            protocol: CONTROL_PROTOCOL_VERSION,
+            request_id,
+            session_id: ids.session_id(),
+            mutation: ControlMutation::RenameSession {
+                operation_id: ids.operation_id(),
+                name: Some("changed".to_owned()),
+            },
+        };
+        let (envelope, response) = pending_for_test(request);
+        let mut pending = PendingWork::default();
+        pending.metadata_controls.insert(request_id, envelope);
+
+        complete(
+            &mut pending,
+            Some(request_id),
+            &Err(StoreError::Conflict("identity already used".to_owned())),
         );
 
         let response = response.recv().expect("owner response").response;

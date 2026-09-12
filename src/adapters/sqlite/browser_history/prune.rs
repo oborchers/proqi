@@ -1,11 +1,8 @@
 //! Selective Browser-history cleanup for an irreversibly pruned session.
 
-use rusqlite::{OptionalExtension, Transaction, params};
+use rusqlite::{Transaction, params};
 
-use crate::{
-    domain::{SessionId, Timestamp},
-    ports::store::StoreError,
-};
+use crate::{domain::SessionId, ports::store::StoreError};
 
 use super::super::support::{i64_to_usize, map_sql_error, usize_to_i64};
 
@@ -57,20 +54,7 @@ pub(in crate::adapters::sqlite) fn remove_session(
 pub(in crate::adapters::sqlite) fn invalidate_activity_conflicts(
     transaction: &Transaction<'_>,
     session_id: SessionId,
-    at: Timestamp,
 ) -> Result<(), StoreError> {
-    let current: Option<i64> = transaction
-        .query_row(
-            "SELECT last_active_at FROM sessions WHERE id = ?1",
-            [session_id.database_bytes().as_slice()],
-            |row| row.get(0),
-        )
-        .optional()
-        .map_err(map_sql_error)?;
-    let current = current.ok_or_else(|| StoreError::NotFound(session_id.to_string()))?;
-    if at.as_millis() <= current {
-        return Ok(());
-    }
     let (cursor, count) = super::cursor_and_count(transaction)?;
     let removed = transaction
         .execute(

@@ -85,6 +85,23 @@ fn editor_activity_invalidates_a_conflicting_trash_redo() {
 }
 
 #[test]
+fn equal_timestamp_open_still_invalidates_a_conflicting_trash_redo() {
+    let fixture = DatabaseFixture::new();
+    let (mut store, state, _, _) = restored_session_with_trash_redo(&fixture);
+    let session_id = state.board.session.id;
+
+    store
+        .record_session_open(
+            session_id,
+            &test_path("proqi-browser-equal-activity"),
+            state.board.session.last_active_at,
+        )
+        .expect("same-millisecond activity");
+
+    assert_eq!(store.browser_history_status().expect("status").redo, None);
+}
+
+#[test]
 fn later_activity_preserves_nonconflicting_rename_redo() {
     let fixture = DatabaseFixture::new();
     let mut store = fixture.open();

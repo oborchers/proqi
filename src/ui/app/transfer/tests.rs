@@ -87,6 +87,150 @@ fn transfer_preserves_annotations_and_removes_only_after_destination_receipt() {
 }
 
 #[test]
+fn stale_transfer_receipt_keeps_newer_source_content_and_annotations() {
+    let mut ids = FakeIdGenerator::new(1_725_202_000_000);
+    let clock = FakeClock::new(Timestamp::from_millis(3));
+    let source = Session::new(
+        ids.session_id(),
+        std::env::temp_dir().join("proqi-transfer-stale-source"),
+        Timestamp::from_millis(1),
+    )
+    .expect("source session");
+    let destination = ids.session_id();
+    let thought = Thought::new(
+        ids.thought_id(),
+        source.id,
+        "sent version".to_owned(),
+        ThoughtPosition::new(0),
+        Timestamp::from_millis(1),
+    );
+    let thought_id = thought.id;
+    let board = SessionBoard::new(source, vec![thought]).expect("board");
+    let mut app = BoardApp::new(AppState::new(board), RopeEditorFactory);
+    app.begin_session_transfer(true, &mut ids, &clock);
+    app.complete_transfer_discovery(1, Ok(vec![session_hit(destination)]));
+    let effects = app.handle_transfer_input(&UiInput::Key(UiKey::Enter), &mut ids, &clock);
+    let [Effect::TransferThought(request)] = effects.as_slice() else {
+        panic!("expected transfer request");
+    };
+
+    let edit_effects = app.reduce(crate::application::Action::EditThought {
+        thought_id,
+        revision_id: ids.revision_id(),
+        before_content: request.content.clone(),
+        after_content: "newer local version".to_owned(),
+        before_annotations: request.annotations.clone(),
+        after_annotations: Vec::new(),
+        before_cursor: crate::domain::TextPosition::new(0, request.content.len()),
+        after_cursor: crate::domain::TextPosition::new(0, 19),
+        at: Timestamp::from_millis(4),
+    });
+    assert!(matches!(
+        edit_effects.as_slice(),
+        [Effect::CommitRevision(_)]
+    ));
+    let receipt = CommitReceipt {
+        session_id: destination,
+        sequence: OperationSequence::new(1),
+        identity: DurableIdentity::Operation(request.operation_id),
+        idempotent_replay: false,
+    };
+
+    let completion = app.complete_session_transfer(
+        request,
+        Ok(ThoughtMutation {
+            thought_id: ids.thought_id(),
+            receipt,
+        }),
+        &mut ids,
+        &clock,
+    );
+
+    assert!(completion.is_empty());
+    let current = app
+        .state
+        .board
+        .thought(thought_id)
+        .expect("source retained");
+    assert_eq!(current.content, "newer local version");
+    assert_eq!(
+        app.status_text(),
+        Some("thought sent; source changed and was kept")
+    );
+}
+
+#[test]
+fn stale_transfer_receipt_keeps_an_annotation_only_source_change() {
+    let mut ids = FakeIdGenerator::new(1_725_203_000_000);
+    let clock = FakeClock::new(Timestamp::from_millis(3));
+    let source = Session::new(
+        ids.session_id(),
+        std::env::temp_dir().join("proqi-transfer-stale-annotation"),
+        Timestamp::from_millis(1),
+    )
+    .expect("source session");
+    let destination = ids.session_id();
+    let mut thought = Thought::new(
+        ids.thought_id(),
+        source.id,
+        "Press Enter".to_owned(),
+        ThoughtPosition::new(0),
+        Timestamp::from_millis(1),
+    );
+    thought
+        .set_annotations(vec![ContentAnnotation::shortcut(6, 11)])
+        .expect("annotation");
+    let thought_id = thought.id;
+    let board = SessionBoard::new(source, vec![thought]).expect("board");
+    let mut app = BoardApp::new(AppState::new(board), RopeEditorFactory);
+    app.begin_session_transfer(true, &mut ids, &clock);
+    app.complete_transfer_discovery(1, Ok(vec![session_hit(destination)]));
+    let effects = app.handle_transfer_input(&UiInput::Key(UiKey::Enter), &mut ids, &clock);
+    let [Effect::TransferThought(request)] = effects.as_slice() else {
+        panic!("expected transfer request");
+    };
+    let edit_effects = app.reduce(crate::application::Action::EditThought {
+        thought_id,
+        revision_id: ids.revision_id(),
+        before_content: request.content.clone(),
+        after_content: request.content.clone(),
+        before_annotations: request.annotations.clone(),
+        after_annotations: Vec::new(),
+        before_cursor: crate::domain::TextPosition::new(0, request.content.len()),
+        after_cursor: crate::domain::TextPosition::new(0, request.content.len()),
+        at: Timestamp::from_millis(4),
+    });
+    assert!(matches!(
+        edit_effects.as_slice(),
+        [Effect::CommitRevision(_)]
+    ));
+    let receipt = CommitReceipt {
+        session_id: destination,
+        sequence: OperationSequence::new(1),
+        identity: DurableIdentity::Operation(request.operation_id),
+        idempotent_replay: false,
+    };
+
+    let completion = app.complete_session_transfer(
+        request,
+        Ok(ThoughtMutation {
+            thought_id: ids.thought_id(),
+            receipt,
+        }),
+        &mut ids,
+        &clock,
+    );
+
+    assert!(completion.is_empty());
+    let current = app
+        .state
+        .board
+        .thought(thought_id)
+        .expect("source retained");
+    assert!(current.annotations.is_empty());
+}
+
+#[test]
 fn tutorial_shortcut_annotations_cross_the_session_transfer_boundary_exactly() {
     let mut ids = FakeIdGenerator::new(1_725_205_000_000);
     let clock = FakeClock::new(Timestamp::from_millis(3));

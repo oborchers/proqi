@@ -162,11 +162,7 @@ fn finish_board_commit(
     cursor: usize,
     request_json: &str,
 ) -> Result<CommitReceipt, StoreError> {
-    super::browser_history::invalidate_activity_conflicts(
-        transaction,
-        operation.session_id,
-        operation.created_at,
-    )?;
+    super::browser_history::invalidate_activity_conflicts(transaction, operation.session_id)?;
     transaction
         .execute(
             "INSERT INTO board_operations(id, session_id, history_index, sequence, payload_json, created_at)

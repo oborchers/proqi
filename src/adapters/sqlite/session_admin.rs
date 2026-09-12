@@ -25,7 +25,7 @@ pub(super) fn record_open(
             "session directory must be absolute".to_owned(),
         ));
     }
-    super::browser_history::invalidate_activity_conflicts(transaction, id, at)?;
+    super::browser_history::invalidate_activity_conflicts(transaction, id)?;
     let changed = transaction
         .execute(
             "UPDATE sessions SET last_opened_cwd = ?2, last_opened_at = ?3,
