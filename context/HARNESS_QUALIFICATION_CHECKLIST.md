@@ -30,7 +30,7 @@ than checking an item from memory.
   credentials supplied outside the repository.
 - [ ] No secret, transcript, local database, runtime file, or machine-specific
   path is committed as evidence.
-- [ ] `cargo xtask check` passes after the final implementation.
+- [ ] `cargo xtask check-full` passes after the final implementation.
 
 ## 1. Herdr agent contract
 
@@ -329,7 +329,7 @@ limitation explicitly.
 - [ ] Review representative Insta snapshot diffs for any visible harness label
   or control change; leave no `.snap.new` files.
 - [ ] Run focused adapter and UI tests while developing.
-- [ ] Run `cargo xtask check` immediately before commit.
+- [ ] Run `cargo xtask check-full` immediately before the final qualification commit.
 - [ ] At a release milestone, run `cargo xtask audit` and
   `cargo xtask package` as required by the repository contract.
 

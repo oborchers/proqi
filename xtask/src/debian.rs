@@ -40,56 +40,140 @@ pub(super) const INSTALLED_PATHS: [(&str, &str, u32); 6] = [
 ];
 
 pub(super) fn package(root: &Path, archive: &Path, output: &Path) -> Result<(), String> {
-    require_linux()?;
+    super::timing::phase("debian.package.preflight", require_linux)?;
     let archive = absolute_from(root, archive);
     let output = absolute_from(root, output);
-    require_tool_version(root, "nfpm", NFPM_VERSION)?;
-    let inspected_digest = super::linux_compat::inspect_archive(&archive)?;
+    super::timing::phase("debian.package.nfpm", || {
+        require_tool_version(root, "nfpm", NFPM_VERSION)
+    })?;
+    let inspected_digest = super::timing::phase("debian.package.archive_inspect", || {
+        super::linux_compat::inspect_archive(&archive)
+    })?;
     let temporary = tempfile::Builder::new()
         .prefix("proqi-debian-")
         .tempdir()
         .map_err(|error| format!("create Debian package root: {error}"))?;
     let stage = temporary.path().join("stage");
     fs::create_dir_all(&stage).map_err(|error| format!("create Debian stage: {error}"))?;
-    extract_release_archive(&archive, temporary.path())?;
-    stage_contents(root, temporary.path(), &stage)?;
+    super::timing::phase("debian.package.stage", || {
+        extract_release_archive(&archive, temporary.path())?;
+        stage_contents(root, temporary.path(), &stage)
+    })?;
     let binary = stage.join("proqi");
-    let derived = derive_dependencies(temporary.path(), &binary)?;
-    let dependencies = enforce_support_floor(&derived)?;
+    let (derived, dependencies) = super::timing::phase("debian.package.dependencies", || {
+        let derived = derive_dependencies(temporary.path(), &binary)?;
+        let dependencies = enforce_support_floor(&derived)?;
+        Ok((derived, dependencies))
+    })?;
     let version = super::release::workspace_version(root)?;
     let config = temporary.path().join("nfpm.yaml");
     fs::write(&config, render_config(&version.to_string(), &dependencies)?)
         .map_err(|error| format!("write nFPM config: {error}"))?;
     fs::create_dir_all(&output).map_err(|error| format!("create Debian output: {error}"))?;
     let destination = output.join(PACKAGE_NAME);
-    run_status(
-        temporary.path(),
-        "nfpm",
-        ["package", "--packager", "deb", "--config"],
-        Some(&config),
-        ["--target"],
-        Some(&destination),
-    )?;
+    super::timing::phase("debian.package.construct", || {
+        run_status(
+            temporary.path(),
+            "nfpm",
+            ["package", "--packager", "deb", "--config"],
+            Some(&config),
+            ["--target"],
+            Some(&destination),
+        )
+    })?;
     let archive_binary = extracted_binary(temporary.path());
     if super::release::checksum(&archive_binary)? != inspected_digest {
         return Err("Linux archive changed between inspection and Debian staging".to_owned());
     }
-    super::debian_verify::package(
-        root,
-        &destination,
-        &archive_binary,
-        &version.to_string(),
-        &dependencies,
-    )?;
-    persist_evidence(
-        &output,
-        &destination,
-        &archive,
-        &archive_binary,
-        &derived,
-        &dependencies,
-    )?;
+    super::timing::phase("debian.package.static_verify", || {
+        super::debian_verify::package(
+            root,
+            &destination,
+            &archive_binary,
+            &version.to_string(),
+            &dependencies,
+        )
+    })?;
+    super::timing::phase("debian.package.evidence", || {
+        persist_evidence(
+            &output,
+            &destination,
+            &archive,
+            &archive_binary,
+            &derived,
+            &dependencies,
+        )
+    })?;
     println!("packaged {}", destination.display());
+    Ok(())
+}
+
+pub(super) fn verify_evidence(
+    root: &Path,
+    archive: &Path,
+    package: &Path,
+    evidence_directory: &Path,
+) -> Result<String, String> {
+    let archive = absolute_from(root, archive);
+    let package = absolute_from(root, package);
+    let evidence_directory = absolute_from(root, evidence_directory);
+    let package_digest = super::release::checksum(&package)?;
+    let archive_digest = super::release::checksum(&archive)?;
+    let temporary = tempfile::Builder::new()
+        .prefix("proqi-debian-evidence-")
+        .tempdir()
+        .map_err(|error| format!("create Debian evidence root: {error}"))?;
+    extract_release_archive(&archive, temporary.path())?;
+    let binary_digest = super::release::checksum(&extracted_binary(temporary.path()))?;
+    let checksum = fs::read_to_string(evidence_directory.join(format!("{PACKAGE_NAME}.sha256")))
+        .map_err(|error| format!("read Debian checksum evidence: {error}"))?;
+    let expected_checksum = format!("{package_digest}  {PACKAGE_NAME}\n");
+    if checksum != expected_checksum {
+        return Err("Debian checksum evidence does not match the package".to_owned());
+    }
+    let evidence_path = evidence_directory.join("debian-evidence.json");
+    let evidence: serde_json::Value = serde_json::from_slice(
+        &fs::read(&evidence_path)
+            .map_err(|error| format!("read {}: {error}", evidence_path.display()))?,
+    )
+    .map_err(|error| format!("parse Debian evidence: {error}"))?;
+    validate_evidence(
+        &evidence,
+        archive.file_name().and_then(|name| name.to_str()),
+        &archive_digest,
+        &package_digest,
+        &binary_digest,
+    )?;
+    println!("verified downloaded Debian package and source archive evidence");
+    Ok(binary_digest)
+}
+
+fn validate_evidence(
+    evidence: &serde_json::Value,
+    archive_name: Option<&str>,
+    archive_digest: &str,
+    package_digest: &str,
+    binary_digest: &str,
+) -> Result<(), String> {
+    let expected = [
+        ("package", Some(PACKAGE_NAME)),
+        ("source_archive", archive_name),
+        ("source_archive_sha256", Some(archive_digest)),
+        ("sha256", Some(package_digest)),
+        ("source_binary_sha256", Some(binary_digest)),
+    ];
+    if evidence
+        .get("schema_version")
+        .and_then(serde_json::Value::as_u64)
+        != Some(2)
+    {
+        return Err("Debian evidence requires schema_version 2".to_owned());
+    }
+    for (field, expected) in expected {
+        if evidence.get(field).and_then(serde_json::Value::as_str) != expected {
+            return Err(format!("Debian evidence field `{field}` does not match"));
+        }
+    }
     Ok(())
 }
 
@@ -287,10 +371,11 @@ fn persist_evidence(
     )
     .map_err(|error| format!("write Debian checksum: {error}"))?;
     let evidence = json!({
-        "schema_version": 1,
+        "schema_version": 2,
         "package": PACKAGE_NAME,
         "sha256": digest,
         "source_archive": archive.file_name().and_then(|name| name.to_str()),
+        "source_archive_sha256": super::release::checksum(archive)?,
         "source_binary_sha256": super::release::checksum(archive_binary)?,
         "derived_dependencies": derived,
         "installed_dependencies": installed,

@@ -1,4 +1,6 @@
-use super::{enforce_support_floor, parse_dependencies, render_config};
+use super::{enforce_support_floor, parse_dependencies, render_config, validate_evidence};
+
+use serde_json::json;
 
 #[test]
 fn derived_dependencies_receive_the_declared_support_floor() {
@@ -23,4 +25,40 @@ fn package_config_has_exact_paths_and_no_maintainer_scripts() {
     assert!(config.contains("dst: /usr/bin/proqi"));
     assert!(config.contains("dst: /usr/share/doc/proqi/copyright"));
     assert!(!config.contains("scripts:"));
+}
+
+#[test]
+fn downloaded_evidence_binds_every_artifact_identity() {
+    let evidence = json!({
+        "schema_version": 2,
+        "package": "proqi_amd64.deb",
+        "sha256": "package",
+        "source_archive": "proqi-linux.tar.gz",
+        "source_archive_sha256": "archive",
+        "source_binary_sha256": "binary",
+    });
+    assert!(
+        validate_evidence(
+            &evidence,
+            Some("proqi-linux.tar.gz"),
+            "archive",
+            "package",
+            "binary"
+        )
+        .is_ok()
+    );
+    for field in ["sha256", "source_archive_sha256", "source_binary_sha256"] {
+        let mut tampered = evidence.clone();
+        tampered[field] = json!("tampered");
+        assert!(
+            validate_evidence(
+                &tampered,
+                Some("proqi-linux.tar.gz"),
+                "archive",
+                "package",
+                "binary"
+            )
+            .is_err()
+        );
+    }
 }

@@ -50,7 +50,7 @@ The complete development and milestone gates remain available. Use the gates
 relevant to the changed boundary, then use all of them for pipeline changes:
 
 ```shell
-cargo xtask check
+cargo xtask check-full
 cargo xtask test-pty
 cargo xtask audit
 cargo xtask package

@@ -441,7 +441,8 @@ It is an MIT-licensed binary. Contributors: [CONTRIBUTING.md](CONTRIBUTING.md),
 ```shell
 cargo build --locked
 cargo run --bin proqi
-cargo xtask check # canonical local gate
+cargo xtask check      # iterative local gate
+cargo xtask check-full # canonical final gate
 ```
 
 The demos use the release binary; the assets gate checks dimensions, links, and

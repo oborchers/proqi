@@ -14,33 +14,44 @@ const INSTALL_MARKER: &[u8] =
     br#"{"schema_version":1,"product":"proqi","kind":"standalone_archive"}"#;
 
 pub(super) fn run(root: &Path, notices: Option<&Path>) -> Result<(), String> {
-    super::release_highlights::validate(root, None)?;
-    prepare_notices(root, notices)?;
-    super::run(
-        root,
-        "cargo",
-        [
-            "build",
-            "--locked",
-            "--workspace",
-            "--all-features",
-            "--profile",
-            "dist",
-        ],
-    )?;
+    super::timing::phase("package.release_highlights", || {
+        super::release_highlights::validate(root, None)
+    })?;
+    super::timing::phase("package.notices", || prepare_notices(root, notices))?;
+    super::timing::phase("package.rust_build", || {
+        super::run(
+            root,
+            "cargo",
+            [
+                "build",
+                "--locked",
+                "--workspace",
+                "--all-features",
+                "--profile",
+                "dist",
+            ],
+        )
+    })?;
     let temporary = tempfile::Builder::new()
         .prefix("proqi-package-")
         .tempdir()
         .map_err(|error| format!("create package root: {error}"))?;
-    let installed = install_binary(root, temporary.path())?;
+    let installed =
+        super::timing::phase("package.install", || install_binary(root, temporary.path()))?;
     let host = host_triple(root)?;
-    let archive = stage_archive(root, temporary.path(), &installed, &host)?;
-    verify_archive(&archive, &host)?;
+    let archive = super::timing::phase("package.archive", || {
+        stage_archive(root, temporary.path(), &installed, &host)
+    })?;
+    super::timing::phase("package.archive_verify", || verify_archive(&archive, &host))?;
     if host == super::release_targets::LINUX_X86_64 {
-        super::linux_compat::verify_archive(root, &archive)?;
+        super::timing::phase("package.linux_compat", || {
+            super::linux_compat::verify_archive(root, &archive)
+        })?;
     }
-    run_installed_contract(root, temporary.path(), &installed, &archive)?;
-    persist_archive(root, &archive)
+    super::timing::phase("package.installed_contract", || {
+        run_installed_contract(root, temporary.path(), &installed, &archive)
+    })?;
+    super::timing::phase("package.persist", || persist_archive(root, &archive))
 }
 
 fn install_binary(root: &Path, temporary: &Path) -> Result<PathBuf, String> {

@@ -2809,6 +2809,7 @@ name = "xtask"
 version = "0.9.0"
 dependencies = [
  "flate2",
+ "fs4",
  "ignore",
  "proc-macro2",
  "proqi",

@@ -156,6 +156,13 @@ fn findings(release: &str, candidate: &str, ci: &str, image: &str) -> Vec<String
         "name: Registry package contract",
         "cargo xtask crate-package",
         "cargo +1.88.0 xtask msrv-full",
+        "name: Package contract (ubuntu-22.04)",
+        "name: Package contract (macos-15)",
+        "name: Debian package contract (${{ matrix.profile }})",
+        "profile: [ubuntu-22.04, ubuntu-24.04, debian-bookworm]",
+        "needs: [changes, package_linux]",
+        "cargo xtask verify-debian-image",
+        ".package_linux, .package_macos, .debian",
         ".coverage.result == \"skipped\"",
         "name: Required CI result",
     ] {
@@ -403,6 +410,16 @@ mod tests {
     }
 
     #[test]
+    fn advisory_classification_never_controls_required_jobs() {
+        let (_, _, ci, _) = sources();
+        assert!(!ci.contains("outputs.advisory"));
+        assert!(!ci.contains("outputs.pty"));
+        assert!(!ci.contains("outputs.package_linux"));
+        assert!(!ci.contains("outputs.debian"));
+        assert!(ci.contains("jq . <<<\"$classification\""));
+    }
+
+    #[test]
     fn scheduled_herdr_sentinel_is_narrowly_permissioned() {
         let source = include_str!("../../.github/workflows/herdr-compatibility.yml");
         assert!(herdr_sentinel_findings(source).is_empty());
@@ -465,3 +482,7 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "release_policy_matrix_tests.rs"]
+mod matrix_tests;
