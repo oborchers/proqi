@@ -84,7 +84,9 @@ Browser history survives restart. Browser query and Browser Rename text owners
 take precedence while alive, including after local undo empties the query. A
 noneditable Browser overlay absorbs undo and redo as unavailable. CLI and
 owner-control mutations use the same Browser operation owner when they perform
-the same semantic action.
+the same semantic action. An owner-control rename to the already current name
+reserves its operation identity durably without creating an undo entry, so a
+matching retry remains idempotent after restart and divergent reuse is rejected.
 
 Permanent prune is not a history entry. It removes only operations and retained
 idempotency receipts for the pruned session, reindexes the remaining global

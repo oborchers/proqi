@@ -40,9 +40,9 @@ pub(in crate::adapters::terminal) enum PersistenceResult {
         request_id: RequestId,
         result: Result<Option<StoredOperationRequest>, StoreError>,
     },
-    BrowserLookup {
+    BrowserNoOpRename {
         request_id: RequestId,
-        result: Result<Option<BrowserOperation>, StoreError>,
+        result: Result<(), StoreError>,
     },
     SubmissionPrepared {
         submission_id: SubmissionId,
@@ -79,9 +79,12 @@ pub(super) enum PersistenceRequest {
         request_id: RequestId,
         identity: crate::ports::store::DurableIdentity,
     },
-    BrowserLookup {
+    BrowserNoOpRename {
         request_id: RequestId,
         operation_id: crate::domain::OperationId,
+        session_id: SessionId,
+        name: Option<String>,
+        at: Timestamp,
     },
     PrepareSubmission(Box<SubmissionAttempt>),
     MarkSubmissionSending {

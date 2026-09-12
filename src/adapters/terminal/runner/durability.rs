@@ -255,9 +255,9 @@ fn complete_result(
             pending.persistence = pending.persistence.saturating_sub(1);
             return owner_control::complete_lookup(app, lanes, pending, clock, request_id, result);
         }
-        PersistenceResult::BrowserLookup { request_id, result } => {
+        PersistenceResult::BrowserNoOpRename { request_id, result } => {
             pending.persistence = pending.persistence.saturating_sub(1);
-            owner_control::complete_browser_lookup(pending, request_id, result);
+            owner_control::complete_browser_noop_rename(pending, request_id, result);
         }
         PersistenceResult::SubmissionPrepared {
             submission_id,

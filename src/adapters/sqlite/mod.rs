@@ -429,6 +429,18 @@ impl Store for SqliteStore {
         Ok(status)
     }
 
+    fn commit_browser_noop_rename(
+        &mut self,
+        operation_id: crate::domain::OperationId,
+        session_id: SessionId,
+        name: Option<&str>,
+        at: Timestamp,
+    ) -> Result<BrowserCommitReceipt, StoreError> {
+        self.with_write_retry(|transaction| {
+            browser_history::commit_noop_rename(transaction, operation_id, session_id, name, at)
+        })
+    }
+
     fn browser_operation(
         &mut self,
         operation_id: crate::domain::OperationId,

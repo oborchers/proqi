@@ -80,8 +80,6 @@ fn board_help_discloses_standard_non_history_chords_and_portable_aliases() {
         format!("{}C/y", primary()),
         format!("{}X/x", primary()),
         format!("{}A/a", primary()),
-        format!("{}Enter/s", primary()),
-        format!("{}Shift+Enter/S", primary()),
         format!("{}Q/q", primary()),
         format!("{}V", primary()),
         format!("{}D", primary()),
@@ -90,6 +88,17 @@ fn board_help_discloses_standard_non_history_chords_and_portable_aliases() {
     ] {
         assert!(
             rendered.contains(&expected),
+            "missing {expected:?}: {rendered}"
+        );
+    }
+    let submission_labels = if cfg!(target_os = "macos") {
+        ["Ctrl+Enter", "Ctrl+Shift+Enter"]
+    } else {
+        ["Ctrl+Enter/s", "Ctrl+Shift+Enter/S"]
+    };
+    for expected in submission_labels {
+        assert!(
+            rendered.contains(expected),
             "missing {expected:?}: {rendered}"
         );
     }

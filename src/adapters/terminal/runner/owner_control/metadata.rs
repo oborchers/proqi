@@ -21,7 +21,7 @@ pub(super) fn queue(
     clock: &impl crate::ports::environment::Clock,
 ) -> Result<bool, TerminalError> {
     match app.handle_control(&envelope.request.mutation, clock) {
-        Ok(effects) => queue_rename(lanes, pending, envelope, &effects),
+        Ok(effects) => queue_rename(lanes, pending, envelope, &effects, clock),
         Err(error) => {
             envelope.respond(ControlResult::Rejected {
                 code: error.code().as_str().to_owned(),
@@ -37,13 +37,24 @@ fn queue_rename(
     pending: &mut PendingWork,
     envelope: ControlEnvelope,
     effects: &[Effect],
+    clock: &impl crate::ports::environment::Clock,
 ) -> Result<bool, TerminalError> {
     if effects.is_empty() {
-        let ControlMutation::RenameSession { operation_id, .. } = envelope.request.mutation else {
+        let ControlMutation::RenameSession {
+            operation_id,
+            ref name,
+        } = envelope.request.mutation
+        else {
             return Err(TerminalError::Worker("metadata control was not a rename"));
         };
         let request_id = envelope.request.request_id;
-        lanes.persistence.browser_lookup(request_id, operation_id)?;
+        lanes.persistence.browser_noop_rename(
+            request_id,
+            operation_id,
+            envelope.request.session_id,
+            name.clone(),
+            clock.now(),
+        )?;
         pending.persistence = pending.persistence.saturating_add(1);
         pending.metadata_controls.insert(request_id, envelope);
         return Ok(true);
@@ -70,23 +81,16 @@ fn queue_rename(
     Ok(true)
 }
 
-pub(in crate::adapters::terminal::runner) fn complete_lookup(
+pub(in crate::adapters::terminal::runner) fn complete_noop_rename(
     pending: &mut PendingWork,
     request_id: RequestId,
-    result: Result<Option<crate::domain::BrowserOperation>, StoreError>,
+    result: Result<(), StoreError>,
 ) {
     let Some(envelope) = pending.metadata_controls.remove(&request_id) else {
         return;
     };
     let response = match result {
-        Ok(Some(operation)) if rename_matches(&envelope, &operation) => renamed(&envelope),
-        Ok(Some(_)) => ControlResult::Rejected {
-            code: ControlRejectionCode::IdempotencyConflict
-                .as_str()
-                .to_owned(),
-            message: "operation identity belongs to another Browser request".to_owned(),
-        },
-        Ok(None) => renamed(&envelope),
+        Ok(()) => renamed(&envelope),
         Err(error) => ControlResult::Rejected {
             code: lookup_error_code(&error).to_owned(),
             message: error.to_string(),
@@ -101,19 +105,6 @@ const fn lookup_error_code(error: &StoreError) -> &'static str {
     } else {
         super::storage_error_code(error)
     }
-}
-
-fn rename_matches(envelope: &ControlEnvelope, operation: &crate::domain::BrowserOperation) -> bool {
-    let ControlMutation::RenameSession { operation_id, name } = &envelope.request.mutation else {
-        return false;
-    };
-    operation.id() == *operation_id
-        && operation.session_id() == envelope.request.session_id
-        && operation.kind() == crate::domain::BrowserOperationKind::Rename
-        && matches!(
-            operation.forward(),
-            crate::domain::BrowserMutation::SetName { value, .. } if value == name
-        )
 }
 
 pub(in crate::adapters::terminal::runner) fn complete(
@@ -184,7 +175,7 @@ mod tests {
         let mut pending = PendingWork::default();
         pending.metadata_controls.insert(request_id, envelope);
 
-        complete_lookup(
+        complete_noop_rename(
             &mut pending,
             request_id,
             Err(StoreError::Conflict("identity already used".to_owned())),

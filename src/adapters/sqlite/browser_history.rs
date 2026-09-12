@@ -14,9 +14,11 @@ use super::{
 
 mod codec;
 mod prune;
+mod receipts;
 
 use codec::{decode, encode, kind_str, parse_kind};
 pub(super) use prune::{invalidate_activity_conflicts, remove_session};
+pub(super) use receipts::commit_noop_rename;
 
 pub(super) fn commit(
     transaction: &Transaction<'_>,
@@ -162,6 +164,11 @@ pub(super) fn operation(
         .map_err(map_sql_error)?;
     let operation = stored
         .map(|(target, payload)| {
+            if receipts::is_noop_receipt(&payload, id, &target)? {
+                return Err(StoreError::Conflict(
+                    "operation identity is already used by Browser history".to_owned(),
+                ));
+            }
             let operation = decode(&payload)?;
             if operation.id() != id
                 || operation.session_id().database_bytes().as_slice() != target.as_slice()

@@ -126,14 +126,20 @@ impl PersistenceLane {
         })
     }
 
-    pub(in crate::adapters::terminal) fn browser_lookup(
+    pub(in crate::adapters::terminal) fn browser_noop_rename(
         &self,
         request_id: RequestId,
         operation_id: crate::domain::OperationId,
+        session_id: SessionId,
+        name: Option<String>,
+        at: crate::domain::Timestamp,
     ) -> Result<(), TerminalError> {
-        self.send(PersistenceRequest::BrowserLookup {
+        self.send(PersistenceRequest::BrowserNoOpRename {
             request_id,
             operation_id,
+            session_id,
+            name,
+            at,
         })
     }
 

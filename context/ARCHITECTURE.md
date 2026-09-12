@@ -271,6 +271,13 @@ trait Store {
     fn redo(&mut self, session: SessionId, scope: UndoScope) -> Result<CommitReceipt>;
     fn commit_browser_operation(&mut self, operation: &BrowserOperation)
         -> Result<BrowserCommitReceipt>;
+    fn commit_browser_noop_rename(
+        &mut self,
+        operation_id: OperationId,
+        session_id: SessionId,
+        name: Option<&str>,
+        at: Timestamp,
+    ) -> Result<BrowserCommitReceipt>;
     fn move_browser_history(
         &mut self,
         request_id: OperationId,
@@ -710,7 +717,8 @@ event-sourced system.
   persistent undo and redo.
 - `browser_operations`: installation-wide ordered rename, trash, and restore
   operations with exact forward and inverse metadata transitions.
-- `browser_operation_receipts`: idempotent Browser mutation receipts retained
+- `browser_operation_receipts`: idempotent Browser mutation receipts, including
+  same-name rename requests that intentionally create no history, retained
   independently of the active Browser cursor.
 - `browser_history_receipts`: idempotent, compare-and-set Browser undo and redo
   receipts tied to the exact operation that was presented to the caller.
@@ -761,6 +769,9 @@ ordinary session creation and neither seed nor advance the marker.
   presented operation identity before changing state. Later activity in a
   restored session invalidates only conflicting trash or restore redo entries;
   it does not discard unrelated or name-only Browser history.
+- A same-name owner-control rename atomically reserves its operation identity in
+  a Browser receipt without advancing or truncating Browser history. Matching
+  retries succeed after restart, while divergent reuse fails closed.
 - A multi-thought mutation is stored as one ordered batch with one inverse, so
   delete, duplicate, collapse, cut, and submit-and-remove remain one undo step.
 - Split, extract, and merge are board-history operations whose ordered batch
@@ -1710,7 +1721,8 @@ CLI returns `session_busy`.
 
 Control protocol version 9 is current. Version 9 carries the durable operation
 identity required for active-owner session rename, including idempotent replay
-and Browser history. Attachment-bearing creation requires version 8 to retain
+and Browser history. A same-name rename commits a durable no-op receipt so its
+identity cannot later name different content. Attachment-bearing creation requires version 8 to retain
 destination occurrence numbering. Version 2 introduced legacy durable
 presentation annotations. Version 4 added session rename, owner synchronization,
 exact editor replacement, and durable collapse state. An add mutation carrying

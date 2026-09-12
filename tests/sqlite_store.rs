@@ -26,9 +26,9 @@ use proqi::{
         agent::{AgentState, SubmissionDisposition},
         environment::IdGenerator,
         store::{
-            DurableIdentity, MigrationMode, OperationBatch, STORAGE_PROTOCOL_VERSION,
-            SUPPORTED_SCHEMA_VERSION, SessionQuery, Store, StoreError, SubmissionAttempt,
-            SubmissionAttemptState, SubmissionOutcome, SubmissionSource,
+            BrowserHistoryStatus, DurableIdentity, MigrationMode, OperationBatch,
+            STORAGE_PROTOCOL_VERSION, SUPPORTED_SCHEMA_VERSION, SessionQuery, Store, StoreError,
+            SubmissionAttempt, SubmissionAttemptState, SubmissionOutcome, SubmissionSource,
         },
     },
 };

@@ -30,7 +30,8 @@ use super::{
 };
 
 pub(super) use metadata::{
-    complete as complete_metadata, complete_lookup as complete_browser_lookup, complete_sync,
+    complete as complete_metadata, complete_noop_rename as complete_browser_noop_rename,
+    complete_sync,
 };
 
 pub(super) fn drain(

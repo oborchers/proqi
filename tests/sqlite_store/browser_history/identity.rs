@@ -25,6 +25,91 @@ fn corrupt_browser_metadata_is_rejected_before_history_moves() {
 }
 
 #[test]
+fn no_op_rename_receipt_survives_restart_and_reserves_its_identity() {
+    let fixture = DatabaseFixture::new();
+    let mut store = fixture.open();
+    let mut ids = FakeIdGenerator::new(1_725_000_500_000);
+    let session_id = create_session(&mut store, &mut ids, "stable");
+    let operation_id = ids.operation_id();
+    let first = store
+        .commit_browser_noop_rename(
+            operation_id,
+            session_id,
+            Some("stable"),
+            Timestamp::from_millis(2),
+        )
+        .expect("reserve no-op rename");
+    assert!(!first.idempotent_replay);
+    assert_eq!(
+        store.browser_history_status().expect("history status"),
+        BrowserHistoryStatus::default(),
+        "a no-op receipt must not create history"
+    );
+    drop(store);
+
+    let mut reopened = fixture.open();
+    let replay = reopened
+        .commit_browser_noop_rename(
+            operation_id,
+            session_id,
+            Some("stable"),
+            Timestamp::from_millis(3),
+        )
+        .expect("replay no-op rename after restart");
+    assert!(replay.idempotent_replay);
+    assert!(matches!(
+        reopened.browser_operation(operation_id),
+        Err(StoreError::Conflict(message))
+            if message == "operation identity is already used by Browser history"
+    ));
+    let changed = BrowserOperation::rename(
+        operation_id,
+        session_id,
+        Some("stable".to_owned()),
+        Some("changed".to_owned()),
+        Timestamp::from_millis(4),
+    )
+    .expect("changed rename");
+    assert!(matches!(
+        reopened.commit_browser_operation(&changed),
+        Err(StoreError::Conflict(message))
+            if message == "Browser operation identity was reused for different content"
+    ));
+}
+
+#[test]
+fn stale_no_op_rename_does_not_reserve_its_identity() {
+    let fixture = DatabaseFixture::new();
+    let mut store = fixture.open();
+    let mut ids = FakeIdGenerator::new(1_725_000_750_000);
+    let session_id = create_session(&mut store, &mut ids, "local");
+    store
+        .commit_browser_operation(&rename(&mut ids, session_id, "local", "durable"))
+        .expect("concurrent durable rename");
+    let operation_id = ids.operation_id();
+
+    assert!(matches!(
+        store.commit_browser_noop_rename(
+            operation_id,
+            session_id,
+            Some("local"),
+            Timestamp::from_millis(3),
+        ),
+        Err(StoreError::Conflict(message))
+            if message == "session name changed before Browser receipt commit"
+    ));
+    let receipt = store
+        .commit_browser_noop_rename(
+            operation_id,
+            session_id,
+            Some("durable"),
+            Timestamp::from_millis(4),
+        )
+        .expect("reserve identity after refreshing the durable name");
+    assert!(!receipt.idempotent_replay);
+}
+
+#[test]
 fn browser_operation_and_history_request_ids_share_one_namespace() {
     let fixture = DatabaseFixture::new();
     let mut store = fixture.open();
@@ -110,8 +195,19 @@ fn browser_lookup_rejects_ids_owned_by_session_or_history_move_receipts() {
     store
         .commit_browser_operation(&rename)
         .expect("Browser rename");
+    assert!(
+        store
+            .commit_browser_noop_rename(
+                rename.id(),
+                session_id,
+                Some("renamed"),
+                Timestamp::from_millis(4),
+            )
+            .expect("effectful rename replay through no-op owner path")
+            .idempotent_replay
+    );
     let move_id = ids.operation_id();
-    move_history(&mut store, move_id, true, Timestamp::from_millis(4)).expect("Browser undo");
+    move_history(&mut store, move_id, true, Timestamp::from_millis(5)).expect("Browser undo");
     assert!(matches!(
         store.browser_operation(move_id),
         Err(StoreError::Conflict(message))

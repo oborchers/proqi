@@ -156,15 +156,9 @@ fn process_unsequenced(
                 .send(PersistenceResult::Lookup { request_id, result })
                 .is_ok()
         }
-        PersistenceRequest::BrowserLookup {
-            request_id,
-            operation_id,
-        } => results
-            .send(PersistenceResult::BrowserLookup {
-                request_id,
-                result: store.browser_operation(operation_id),
-            })
-            .is_ok(),
+        request @ PersistenceRequest::BrowserNoOpRename { .. } => {
+            process_browser_noop_rename(store, request, results)
+        }
         request @ (PersistenceRequest::PrepareSubmission(_)
         | PersistenceRequest::MarkSubmissionSending { .. }
         | PersistenceRequest::FinishSubmission { .. }) => {
@@ -174,6 +168,29 @@ fn process_unsequenced(
         | PersistenceRequest::Commit(_)
         | PersistenceRequest::Retry(_) => false,
     }
+}
+
+fn process_browser_noop_rename(
+    store: &mut SqliteStore,
+    request: PersistenceRequest,
+    results: &SyncSender<PersistenceResult>,
+) -> bool {
+    let PersistenceRequest::BrowserNoOpRename {
+        request_id,
+        operation_id,
+        session_id,
+        name,
+        at,
+    } = request
+    else {
+        return false;
+    };
+    let result = store
+        .commit_browser_noop_rename(operation_id, session_id, name.as_deref(), at)
+        .map(|_| ());
+    results
+        .send(PersistenceResult::BrowserNoOpRename { request_id, result })
+        .is_ok()
 }
 
 fn process_submission(
