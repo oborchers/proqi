@@ -294,12 +294,12 @@ fn prepare_old_source(root: &Path) -> PathBuf {
         &source.join("src/ports/store.rs"),
         &[
             (
+                "SUPPORTED_SCHEMA_VERSION: u32 = 16",
                 "SUPPORTED_SCHEMA_VERSION: u32 = 15",
-                "SUPPORTED_SCHEMA_VERSION: u32 = 14",
             ),
             (
+                "STORAGE_PROTOCOL_VERSION: u32 = 15",
                 "STORAGE_PROTOCOL_VERSION: u32 = 14",
-                "STORAGE_PROTOCOL_VERSION: u32 = 13",
             ),
         ],
     );
@@ -307,22 +307,28 @@ fn prepare_old_source(root: &Path) -> PathBuf {
         &source.join("src/adapters/sqlite/migration.rs"),
         &[
             (
+                "        MIGRATION_14, MIGRATION_15, MIGRATION_16,",
                 "        MIGRATION_14, MIGRATION_15,",
-                "        MIGRATION_14,",
             ),
             (
+                "        MIGRATION_14,\n        MIGRATION_15,\n        MIGRATION_16,",
                 "        MIGRATION_14,\n        MIGRATION_15,",
-                "        MIGRATION_14,",
             ),
         ],
     );
     rewrite(
         &source.join("src/adapters/sqlite/schema.rs"),
         &[(
-            "INSERT INTO migration_history(version, applied_at) VALUES (15, 0);\n\";",
+            "INSERT INTO migration_history(version, applied_at) VALUES (16, 0);\n\";",
             "\";",
         )],
     );
+    remove_first_section(
+        &source.join("src/adapters/sqlite/schema.rs"),
+        "CREATE TABLE browser_history_state (",
+        "INSERT INTO browser_history_state(singleton, cursor) VALUES (1, 0);\n\n",
+    );
+    remove_browser_history_dependencies(&source);
     fs::write(
         source.join("src/bin/update_fixture.rs"),
         coordinator_source(),
@@ -391,6 +397,57 @@ fn rewrite(path: &Path, replacements: &[(&str, &str)]) {
         content = content.replacen(from, to, 1);
     }
     fs::write(path, content).expect("write fixture source");
+}
+
+fn remove_first_section(path: &Path, start: &str, end: &str) {
+    let mut content = fs::read_to_string(path).expect("read section source");
+    let start_index = content.find(start).expect("fixture section start");
+    let end_index = content[start_index..]
+        .find(end)
+        .map(|offset| start_index + offset + end.len())
+        .expect("fixture section end");
+    content.replace_range(start_index..end_index, "");
+    fs::write(path, content).expect("write section source");
+}
+
+fn remove_browser_history_dependencies(source: &Path) {
+    rewrite(
+        &source.join("src/adapters/sqlite/board_commit.rs"),
+        &[
+            (
+                "    super::browser_history::ensure_not_used_by_browser_history(\n        transaction,\n        operation.id.database_bytes(),\n    )?;\n",
+                "",
+            ),
+            (
+                "    super::browser_history::invalidate_activity_conflicts(transaction, operation.session_id)?;\n",
+                "",
+            ),
+            (
+                "    super::browser_history::ensure_not_used_by_browser_history(\n        transaction,\n        revision.id.database_bytes(),\n    )?;\n",
+                "",
+            ),
+        ],
+    );
+    rewrite(
+        &source.join("src/adapters/sqlite/history_commit.rs"),
+        &[
+            (
+                "    super::browser_history::ensure_not_used_by_browser_history(\n        transaction,\n        operation_id.database_bytes(),\n    )?;\n",
+                "",
+            ),
+            (
+                "    super::browser_history::invalidate_activity_conflicts(transaction, session_id)?;\n",
+                "",
+            ),
+        ],
+    );
+    rewrite(
+        &source.join("src/adapters/sqlite/session_admin.rs"),
+        &[(
+            "    super::browser_history::invalidate_activity_conflicts(transaction, id)?;\n",
+            "",
+        )],
+    );
 }
 
 const COORDINATOR_SOURCE: &str = r#"use std::{ffi::OsString, os::unix::fs::symlink, path::PathBuf, str::FromStr, thread, time::{Duration, Instant}};

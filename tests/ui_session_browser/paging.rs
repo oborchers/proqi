@@ -57,13 +57,19 @@ fn narrow_browser_input_keeps_sanitized_cursor_suffix_visible() {
     let mut browser = SessionBrowser::new(vec![entry], Timestamp::from_millis(20));
     browser.handle(UiInput::Paste("prefix\t界e\u{301}👩‍💻\u{7}tail".to_owned()));
 
-    let rendered = draw(&mut browser, 18, 6);
+    let mut rendered = draw(&mut browser, 18, 6);
     let header = text(rendered.backend().buffer())
         .lines()
         .nth(1)
         .expect("search header")
         .to_owned();
-    assert!(header.trim_end().ends_with('_'));
+    assert_eq!(
+        rendered
+            .backend_mut()
+            .get_cursor_position()
+            .expect("search cursor"),
+        ratatui_core::layout::Position::new(17, 1)
+    );
     assert!(!header.contains(['\t', '\u{7}']));
 
     let mut rename = SessionBrowser::new(Vec::new(), Timestamp::from_millis(20));
@@ -71,13 +77,19 @@ fn narrow_browser_input_keeps_sanitized_cursor_suffix_visible() {
         proqi::ui::LogicalKey::Function(2),
     )));
     rename.handle(UiInput::Paste("rename\t界👩‍💻\u{7}tail".to_owned()));
-    let rendered = draw(&mut rename, 18, 6);
+    let mut rendered = draw(&mut rename, 18, 6);
     let header = text(rendered.backend().buffer())
         .lines()
         .nth(1)
         .expect("rename header")
         .to_owned();
-    assert!(header.trim_end().ends_with('_'));
+    assert_eq!(
+        rendered
+            .backend_mut()
+            .get_cursor_position()
+            .expect("rename cursor"),
+        ratatui_core::layout::Position::new(16, 1)
+    );
     assert!(!header.contains(['\t', '\u{7}']));
 }
 

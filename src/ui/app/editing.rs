@@ -92,16 +92,6 @@ pub(super) struct PendingEdit {
 }
 
 impl BoardApp {
-    pub(super) fn engage_compose(&mut self) {
-        if !matches!(self.state.mode, InteractionMode::Compose) {
-            return;
-        }
-        self.compose_presentation = super::ComposePresentation::Editor;
-        self.board_viewport = self.board_viewport.follow_focus();
-        self.scroll_geometry = None;
-        self.layout = None;
-    }
-
     pub(super) fn collapse_empty_compose(&mut self) {
         if !matches!(self.state.mode, InteractionMode::Compose)
             || self
@@ -142,12 +132,10 @@ impl BoardApp {
             UiKey::PasteClipboardReflow => return self.read_clipboard_reflow(ids),
             UiKey::Copy => return self.copy_selection(ids),
             UiKey::Cut => return self.cut_selection(ids),
-            UiKey::Submit
-            | UiKey::SubmitKeep
-            | UiKey::Undo
-            | UiKey::Redo
-            | UiKey::Duplicate
-            | UiKey::Quit => return Vec::new(),
+            UiKey::Submit | UiKey::SubmitKeep | UiKey::Undo | UiKey::Duplicate | UiKey::Quit => {
+                return Vec::new();
+            }
+            UiKey::Redo => return self.history(ids, clock, false),
             _ => {}
         }
         // Compose has no durable annotation owner. Accepted nonempty content
@@ -257,25 +245,18 @@ impl BoardApp {
         let thought_id = ids.thought_id();
         let operation_id = ids.operation_id();
         let at = clock.now();
-        let action = if preserve_owned {
-            Action::CreateOwnedThought(crate::application::OwnedThoughtCreation::preserved(
-                thought_id,
-                operation_id,
-                snapshot.content,
-                annotations,
-                None,
-                at,
-            ))
-        } else {
-            Action::CreateThought {
-                thought_id,
-                operation_id,
-                content: snapshot.content,
-                annotations,
-                insertion_index: None,
-                at,
-            }
-        };
+        let action = super::creation::create_action(
+            thought_id,
+            operation_id,
+            snapshot.content,
+            annotations,
+            super::creation::CreationHistory::Compose {
+                cursor: snapshot.cursor,
+                selection_anchor: snapshot.selection_anchor,
+            },
+            at,
+            preserve_owned,
+        );
         let effects = self.reduce(action);
         if self.state.board.thought(thought_id).is_some()
             && let Some((owner, _)) = &mut self.editor
@@ -451,7 +432,9 @@ impl BoardApp {
             pending.before_annotations.clone(),
             pending.after_annotations.clone(),
             pending.before.cursor,
+            pending.before.selection_anchor,
             pending.after.cursor,
+            pending.after.selection_anchor,
             clock.now(),
         ));
         match reduce(&mut self.state, action) {

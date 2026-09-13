@@ -3,7 +3,7 @@
 use std::{fs, path::Path};
 use yaml_rust2::{Yaml, YamlLoader};
 
-const RELEASE_REQUIRED: [&str; 15] = [
+const RELEASE_REQUIRED: [&str; 19] = [
     "environment: release",
     "cargo xtask release-promotion-plan",
     "cargo xtask candidate-select",
@@ -19,6 +19,10 @@ const RELEASE_REQUIRED: [&str; 15] = [
     "name: Verify every public release byte",
     "name: Wake Homebrew tap synchronization",
     "source-ref \"$SOURCE_REF\"",
+    "cargo xtask release-tag-sbom",
+    "cargo xtask release-targets primary-files",
+    "sbom-path: ${{ runner.temp }}/release-tag.spdx.json",
+    "name: Verify tag-bound attestations",
 ];
 
 const CANDIDATE_REQUIRED: [&str; 11] = [
@@ -99,6 +103,7 @@ pub(crate) fn check(root: &Path) -> Result<Vec<String>, String> {
     found.extend(dependabot_automerge_findings(&dependabot));
     found.extend(image_repository_findings(root)?);
     found.extend(scheduled_workflow_findings(root)?);
+    found.extend(super::release_targets::policy_findings(root)?);
     Ok(found)
 }
 

@@ -4,7 +4,6 @@ use crate::{
     application::{Action, DurabilityState, Effect, EmptyBoardTransition, FailureCode, reduce},
     domain::OperationSequence,
     ports::environment::{Clock, IdGenerator},
-    ui::PastePayload,
 };
 
 use super::{BoardApp, ComposePresentation, InsertionFocus, pending_types::EditFlush};
@@ -88,22 +87,6 @@ impl BoardApp {
             self.set_storage_failure("retry the save or export recovery before quitting");
         } else {
             self.quit = true;
-        }
-    }
-
-    pub(super) fn begin_insertion(
-        &mut self,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-    ) -> Vec<Effect> {
-        if self.state.board.live_thoughts().is_empty() {
-            let effects = self.reduce(Action::EnterCompose);
-            self.sync_editor_from_state();
-            self.compose_presentation = ComposePresentation::Editor;
-            self.layout = None;
-            effects
-        } else {
-            self.create(PastePayload::text(String::new()), ids, clock)
         }
     }
 

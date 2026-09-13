@@ -75,6 +75,7 @@ fn empty_layout_distinguishes_passive_prompt_from_engaged_compose() {
     let snapshot = EditorSnapshot {
         content: String::new(),
         cursor: crate::domain::TextPosition::default(),
+        selection_anchor: None,
         selection: None,
         viewport: TextViewport::new(18, 1),
         scroll_row: 0,
@@ -152,6 +153,7 @@ fn editing_ignores_a_stale_collapsed_cap_and_uses_the_available_viewport() {
     let snapshot = EditorSnapshot {
         content: content.clone(),
         cursor: crate::domain::TextPosition::default(),
+        selection_anchor: None,
         selection: None,
         viewport: TextViewport::new(width, 1),
         scroll_row: 0,

@@ -24,6 +24,22 @@ impl BoardApp {
         )
     }
 
+    pub(in crate::ui) fn history_available(&self, undo: bool) -> bool {
+        if self.active_input_route().1.owns_modal_surface() {
+            return false;
+        }
+        if matches!(
+            self.state.durability,
+            crate::application::DurabilityState::Failed { .. }
+        ) {
+            return false;
+        }
+        if self.pending_edit.is_some() {
+            return undo;
+        }
+        self.state.history_scope(self.state.mode, undo).is_some()
+    }
+
     pub(super) fn current_content(&self, thought_id: ThoughtId) -> Option<String> {
         self.pending_edit
             .as_ref()
@@ -312,7 +328,15 @@ impl BoardApp {
     /// Current session-name input when the rename prompt is active.
     #[must_use]
     pub fn session_rename_view(&self) -> Option<&str> {
-        self.rename.as_deref()
+        self.rename.as_ref().map(super::query::QueryEditor::text)
+    }
+
+    pub(in crate::ui) fn session_rename_editor_view(
+        &self,
+    ) -> Option<(usize, Option<super::query::QuerySelection>)> {
+        self.rename
+            .as_ref()
+            .map(|rename| (rename.cursor(), rename.selection()))
     }
 
     /// Searchable destination sessions for explicit cross-session delivery.
@@ -338,6 +362,26 @@ impl BoardApp {
                 self.palette
                     .as_ref()
                     .map(palette::PaletteState::query_cursor)
+            })
+    }
+
+    /// Directional selection for the active searchable overlay query.
+    #[must_use]
+    pub(in crate::ui) fn overlay_query_selection(&self) -> Option<super::query::QuerySelection> {
+        self.search
+            .as_ref()
+            .and_then(search::SearchState::query_selection)
+            .or_else(|| {
+                self.transfer
+                    .as_ref()
+                    .and_then(transfer::TransferState::query_selection)
+            })
+            .or_else(|| self.invocation_query_selection())
+            .or_else(|| self.global_delivery_query_selection())
+            .or_else(|| {
+                self.palette
+                    .as_ref()
+                    .and_then(palette::PaletteState::query_selection)
             })
     }
 

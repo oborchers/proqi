@@ -2,7 +2,7 @@
 
 use crate::{
     application::ThoughtMutation,
-    domain::{OperationSequence, RequestId, SessionId, SubmissionId, Timestamp},
+    domain::{BrowserOperation, OperationSequence, RequestId, SessionId, SubmissionId, Timestamp},
     ports::{
         store::{
             CaptureCommit, CaptureCommitOutcome, CommitReceipt, OperationBatch, SessionHit,
@@ -28,7 +28,10 @@ pub(in crate::adapters::terminal) enum PersistenceResult {
         previous_name: Option<String>,
         result: Result<(), StoreError>,
     },
-    TransferSessions(Result<Vec<SessionHit>, StoreError>),
+    TransferSessions {
+        generation: u64,
+        result: Result<Vec<SessionHit>, StoreError>,
+    },
     ThoughtTransferred {
         request: SessionTransferRequest,
         result: Result<ThoughtMutation, String>,
@@ -36,6 +39,10 @@ pub(in crate::adapters::terminal) enum PersistenceResult {
     Lookup {
         request_id: RequestId,
         result: Result<Option<StoredOperationRequest>, StoreError>,
+    },
+    BrowserNoOpRename {
+        request_id: RequestId,
+        result: Result<(), StoreError>,
     },
     SubmissionPrepared {
         submission_id: SubmissionId,
@@ -57,20 +64,27 @@ pub(super) enum PersistenceRequest {
     Capture(Box<CaptureCommit>),
     Commit(Box<OperationBatch>),
     Metadata(Box<OperationBatch>),
-    RenameSession {
+    BrowserOperation {
         request_id: Option<RequestId>,
-        session_id: SessionId,
         previous_name: Option<String>,
-        name: Option<String>,
+        operation: Box<BrowserOperation>,
     },
     DiscoverTransferSessions {
         current_session_id: SessionId,
+        generation: u64,
     },
     TransferThought(SessionTransferRequest),
     Retry(OperationSequence),
     Lookup {
         request_id: RequestId,
         identity: crate::ports::store::DurableIdentity,
+    },
+    BrowserNoOpRename {
+        request_id: RequestId,
+        operation_id: crate::domain::OperationId,
+        session_id: SessionId,
+        name: Option<String>,
+        at: Timestamp,
     },
     PrepareSubmission(Box<SubmissionAttempt>),
     MarkSubmissionSending {

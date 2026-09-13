@@ -12,6 +12,7 @@ mod layout;
 mod paging;
 mod paste_reflow;
 mod projection;
+mod query_render;
 mod render;
 mod settings;
 mod shortcut_registry;

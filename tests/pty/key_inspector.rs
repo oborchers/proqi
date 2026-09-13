@@ -107,6 +107,24 @@ fn csi_u_super_meta_raw_control_shift_and_smart_paste_are_exact() {
             Some("history.redo"),
         ),
         (
+            "\x1b[122;5u",
+            "U+007A",
+            vec!["Control"],
+            Some("history.undo"),
+        ),
+        (
+            "\x1b[122;6u",
+            "U+007A",
+            vec!["Control", "Shift"],
+            Some("history.redo"),
+        ),
+        (
+            "\x1b[121;5u",
+            "U+0079",
+            vec!["Control"],
+            Some("history.redo"),
+        ),
+        (
             "\x1b[13;9u",
             "Enter",
             vec!["Super"],
@@ -404,4 +422,34 @@ fn cleanup_control_shift_chords_and_plain_editor_text_are_distinct() {
     inspect("\x1b[102;9u", "U+0066", &["Super"], None);
     inspect("\x1b[102;5u", "U+0066", &["Control"], None);
     inspect("f", "U+0066", &[], None);
+}
+
+#[test]
+fn macos_control_submission_bytes_contexts_phases_and_compatibility_are_exact() {
+    for context in [
+        "board",
+        "compose",
+        "edit",
+        "invocation",
+        "insertion_boundary",
+    ] {
+        for (modifier, modifiers, action) in [
+            (5, vec!["Control"], "submission.submit_remove"),
+            (6, vec!["Control", "Shift"], "submission.submit_keep"),
+            (9, vec!["Super"], "submission.submit_remove"),
+            (10, vec!["Shift", "Super"], "submission.submit_keep"),
+            (33, vec!["Meta"], "submission.submit_remove"),
+            (34, vec!["Shift", "Meta"], "submission.submit_keep"),
+        ] {
+            for (phase, name) in [(1, "press"), (2, "repeat"), (3, "release")] {
+                let data = capture(&format!("\x1b[13;{modifier}:{phase}u"), context, None, true);
+                let event = &data["event"];
+                assert_eq!(event["keystroke"]["key"], "Enter");
+                assert_eq!(event["keystroke"]["modifiers"], json!(modifiers));
+                assert_eq!(event["keystroke"]["phase"], name);
+                assert_eq!(event["active_context"], context);
+                assert_eq!(event["action"].as_str(), (phase != 3).then_some(action));
+            }
+        }
+    }
 }

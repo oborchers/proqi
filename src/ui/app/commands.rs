@@ -1,7 +1,9 @@
 //! Keyboard commands and shared board intentions.
 
+mod history;
+
 use crate::{
-    application::{Action, Effect, InteractionMode},
+    application::{Action, Effect},
     domain::BoardOperationKind,
     ports::{
         editor::EditCommand,
@@ -9,6 +11,7 @@ use crate::{
     },
 };
 
+use super::creation::NewThoughtPlacement;
 use super::{BoardApp, BoundaryInsertion, UiKey, editing, pending_types::EditFlush};
 
 impl BoardApp {
@@ -69,7 +72,7 @@ impl BoardApp {
         // that already supply the established semantic Enter intention. Raw
         // terminal input reaches this owner as the registry's typed `New`.
         if key == UiKey::Enter {
-            return self.begin_bottom_insertion(ids, clock);
+            return self.new_thought(NewThoughtPlacement::DurableTail, ids, clock);
         }
         if let Some(action) = self.settings.shortcuts.board_action_for_intention(key) {
             return match action {
@@ -184,8 +187,7 @@ impl BoardApp {
             | Action::ExtendLast => self.handle_board_navigation(action, ids, clock),
             Action::InsertAbove => self.insert_relative_to_focus(false, ids, clock),
             Action::InsertBelow => self.insert_relative_to_focus(true, ids, clock),
-            Action::New if self.insertion_focused() => self.begin_bottom_insertion(ids, clock),
-            Action::New => self.begin_insertion(ids, clock),
+            Action::New => self.new_thought(NewThoughtPlacement::Contextual, ids, clock),
             Action::Edit => self.expand_and_enter_edit(ids, clock),
             Action::Delete => self.delete(ids, clock),
             Action::Copy => self.copy_thought(ids),
@@ -408,51 +410,6 @@ impl BoardApp {
             crate::application::EmptyBoardTransition::ComposeAfterLocalRemoval,
         );
         self.clear_board_selection();
-        self.sync_empty_insertion_focus();
-        effects
-    }
-
-    pub(super) fn history(
-        &mut self,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-        undo: bool,
-    ) -> Vec<Effect> {
-        let mut effects = match self.flush_edit_boundary(ids, clock) {
-            EditFlush::Complete(effects) => effects,
-            EditFlush::Blocked(effects) => return effects,
-        };
-        let scope = if undo {
-            self.state.preferred_undo_scope(self.state.mode)
-        } else {
-            match self.state.mode {
-                InteractionMode::Compose => return effects,
-                InteractionMode::Board | InteractionMode::Edit { .. } => {
-                    self.state.preferred_redo_scope(self.state.mode)
-                }
-            }
-        };
-        if matches!(self.state.mode, InteractionMode::Compose) {
-            return effects;
-        }
-        let action = if undo {
-            Action::Undo {
-                operation_id: ids.operation_id(),
-                scope,
-                at: clock.now(),
-            }
-        } else {
-            Action::Redo {
-                operation_id: ids.operation_id(),
-                scope,
-                at: clock.now(),
-            }
-        };
-        effects.extend(self.reduce_with_empty_transition(
-            action,
-            crate::application::EmptyBoardTransition::ComposeAfterLocalRemoval,
-        ));
-        self.reload_editor();
         self.sync_empty_insertion_focus();
         effects
     }

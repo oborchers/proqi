@@ -1,6 +1,5 @@
 ---
 source: tests/ui_board/reflow_in_place/commands.rs
-assertion_line: 49
 expression: snapshot_buffer(terminal.backend().buffer())
 ---
 SIZE 60x12
@@ -17,12 +16,12 @@ TEXT
 08││
 09│  proqi-ui-contract│
 10│  1 thought · board · saving│
-11│  n New   y Copy  x Cut  d/Del  Space Select u Undo│
+11│  n New   y Copy  x Cut  d/Del  Space Select / Search│
 
 STYLE RUNS
 0: 0-59 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 1: 0-0 fg=Reset bg=Reset mod=NONE | 1-55 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 56-58 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 59-59 fg=Reset bg=Reset mod=NONE
-2: 0-0 fg=Reset bg=Reset mod=NONE | 1-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-57 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 58-58 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 59-59 fg=Reset bg=Reset mod=NONE
+2: 0-0 fg=Reset bg=Reset mod=NONE | 1-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-10 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 11-58 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 59-59 fg=Reset bg=Reset mod=NONE
 3: 0-0 fg=Reset bg=Reset mod=NONE | 1-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-57 fg=Rgb(112, 214, 155) bg=Rgb(39, 40, 48) mod=BOLD | 58-58 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 59-59 fg=Reset bg=Reset mod=NONE
 4: 0-0 fg=Reset bg=Reset mod=NONE | 1-58 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 59-59 fg=Reset bg=Reset mod=NONE
 5: 0-0 fg=Reset bg=Reset mod=NONE | 1-58 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 59-59 fg=Reset bg=Reset mod=NONE

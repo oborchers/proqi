@@ -219,6 +219,9 @@ pub(super) fn editor_presentation(
         start: project_position(&canonical.content, selection.start, &presentation),
         end: project_position(&canonical.content, selection.end, &presentation),
     });
+    let selection_anchor = canonical
+        .selection_anchor
+        .map(|anchor| project_position(&canonical.content, anchor, &presentation));
     let mut rows = wrap_rows(
         &presentation.content,
         usize::from(canonical.viewport.width.max(1)),
@@ -228,6 +231,7 @@ pub(super) fn editor_presentation(
     let snapshot = EditorSnapshot {
         content: presentation.content,
         cursor,
+        selection_anchor,
         selection,
         viewport: canonical.viewport,
         scroll_row,

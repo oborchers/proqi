@@ -26,6 +26,8 @@ mod board_support;
 mod keyboard_support;
 #[path = "support/snapshots.rs"]
 mod snapshot_support;
+#[path = "support/submission_input.rs"]
+mod submission_input;
 
 use board_support::durable_thought;
 use keyboard_support::key_input;
@@ -417,6 +419,8 @@ mod modifier_parity;
 mod movement_symmetry;
 #[path = "ui_board/navigation.rs"]
 mod navigation;
+#[path = "ui_board/new_thought.rs"]
+mod new_thought;
 #[path = "ui_board/palette.rs"]
 mod palette;
 #[path = "ui_board/paste_reflow.rs"]

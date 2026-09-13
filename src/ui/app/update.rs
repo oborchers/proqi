@@ -145,7 +145,7 @@ impl BoardApp {
     pub(in crate::ui) fn update_prompt_view(&self) -> Option<(String, Vec<String>, usize)> {
         self.update_prompt.as_ref().map(|prompt| {
             let primary = match prompt.installation {
-                InstallationKind::HomebrewFormula => format!(
+                InstallationKind::HomebrewFormula | InstallationKind::StandaloneArchive => format!(
                     "Update and restart all {} {}",
                     prompt.participants,
                     if prompt.participants == 1 {
@@ -154,9 +154,7 @@ impl BoardApp {
                         "sessions"
                     }
                 ),
-                InstallationKind::StandaloneArchive | InstallationKind::SourceOrUnknown => {
-                    "View update instructions".to_owned()
-                }
+                InstallationKind::SourceOrUnknown => "View update instructions".to_owned(),
             };
             (
                 format!(" update available · {} ", prompt.version),
@@ -189,7 +187,7 @@ impl BoardApp {
         };
         self.layout = None;
         let intent = match index {
-            0 if prompt.installation == InstallationKind::HomebrewFormula => {
+            0 if prompt.installation != InstallationKind::SourceOrUnknown => {
                 self.set_warning(format!(
                     "Preparing {} Proqi {} for update.",
                     prompt.participants,

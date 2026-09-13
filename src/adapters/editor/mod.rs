@@ -17,9 +17,9 @@ use crate::ports::editor::{
 };
 use crate::ports::text_layout::{
     WrappedRow, byte_at_cell, byte_for_position, cell_column_at_byte, logical_lines,
-    position_for_byte, wrap_rows, wrapped_row_index,
+    position_for_byte, word_back, word_forward, wrap_rows, wrapped_row_index,
 };
-use text::{next_boundary, previous_boundary, word_back, word_forward};
+use text::{next_boundary, previous_boundary};
 
 /// Factory used by outer composition to keep the UI implementation-independent.
 #[derive(Clone, Copy, Debug, Default)]
@@ -309,6 +309,10 @@ impl Editor for RopeEditor {
         let selected_bytes = self.selection_bytes();
         EditorSnapshot {
             cursor: position_for_byte(&content, self.state.cursor_byte),
+            selection_anchor: self
+                .state
+                .selection_anchor_byte
+                .map(|byte| position_for_byte(&content, byte)),
             selection: self.selection(&content),
             viewport: self.viewport,
             scroll_row: self.scroll_row,
@@ -332,13 +336,23 @@ impl Editor for RopeEditor {
     }
 
     fn replace_content(&mut self, text: String, cursor: TextPosition) -> EditOutcome {
+        self.replace_state(text, cursor, None)
+    }
+
+    fn replace_state(
+        &mut self,
+        text: String,
+        cursor: TextPosition,
+        selection_anchor: Option<TextPosition>,
+    ) -> EditOutcome {
         let before = self.content();
         let changes = TextChangeSet::replace_all(&before, &text);
         let byte = byte_for_position(&text, cursor);
+        let selection_anchor_byte = selection_anchor.map(|anchor| byte_for_position(&text, anchor));
         self.state = State {
             text: Rope::from_str(&text),
             cursor_byte: byte,
-            selection_anchor_byte: None,
+            selection_anchor_byte,
         };
         self.undo.clear();
         self.redo.clear();

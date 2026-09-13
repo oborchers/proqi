@@ -109,13 +109,12 @@ fn process_unsequenced(
             });
             results.send(PersistenceResult::Metadata { result }).is_ok()
         }
-        PersistenceRequest::RenameSession {
+        PersistenceRequest::BrowserOperation {
             request_id,
-            session_id,
             previous_name,
-            name,
+            operation,
         } => {
-            let result = store.rename_session(session_id, name.as_deref());
+            let result = store.commit_browser_operation(&operation).map(|_| ());
             results
                 .send(PersistenceResult::SessionRenamed {
                     request_id,
@@ -124,10 +123,13 @@ fn process_unsequenced(
                 })
                 .is_ok()
         }
-        PersistenceRequest::DiscoverTransferSessions { current_session_id } => {
+        PersistenceRequest::DiscoverTransferSessions {
+            current_session_id,
+            generation,
+        } => {
             let result = transfer::discover(store, current_session_id);
             results
-                .send(PersistenceResult::TransferSessions(result))
+                .send(PersistenceResult::TransferSessions { generation, result })
                 .is_ok()
         }
         PersistenceRequest::TransferThought(request) => {
@@ -154,6 +156,9 @@ fn process_unsequenced(
                 .send(PersistenceResult::Lookup { request_id, result })
                 .is_ok()
         }
+        request @ PersistenceRequest::BrowserNoOpRename { .. } => {
+            process_browser_noop_rename(store, request, results)
+        }
         request @ (PersistenceRequest::PrepareSubmission(_)
         | PersistenceRequest::MarkSubmissionSending { .. }
         | PersistenceRequest::FinishSubmission { .. }) => {
@@ -163,6 +168,29 @@ fn process_unsequenced(
         | PersistenceRequest::Commit(_)
         | PersistenceRequest::Retry(_) => false,
     }
+}
+
+fn process_browser_noop_rename(
+    store: &mut SqliteStore,
+    request: PersistenceRequest,
+    results: &SyncSender<PersistenceResult>,
+) -> bool {
+    let PersistenceRequest::BrowserNoOpRename {
+        request_id,
+        operation_id,
+        session_id,
+        name,
+        at,
+    } = request
+    else {
+        return false;
+    };
+    let result = store
+        .commit_browser_noop_rename(operation_id, session_id, name.as_deref(), at)
+        .map(|_| ());
+    results
+        .send(PersistenceResult::BrowserNoOpRename { request_id, result })
+        .is_ok()
 }
 
 fn process_submission(

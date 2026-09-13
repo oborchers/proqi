@@ -127,6 +127,10 @@ mod visual_row_selection;
 mod update_migration;
 
 #[cfg(target_os = "macos")]
+#[path = "pty/unified_history.rs"]
+mod unified_history;
+
+#[cfg(target_os = "macos")]
 #[path = "pty/watchdog.rs"]
 mod watchdog;
 

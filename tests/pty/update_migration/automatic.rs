@@ -51,6 +51,9 @@ fn assert_automatic_schema_update(fixture: &OldFixture, count: usize) {
     let follower_before = diagnostics_before
         .matches("\"stage\":\"follower_revalidated\"")
         .count();
+    let converged_before = diagnostics_before
+        .matches("\"stage\":\"board_ready\"")
+        .count();
 
     let execution = fixture.coordinate(
         state.path(),
@@ -76,10 +79,13 @@ fn assert_automatic_schema_update(fixture: &OldFixture, count: usize) {
         migration_completed_before,
         follower_before,
     );
-    let update_state = FileUpdateStateStore::new(&state.path().join("cache")).expect("cache");
-    let cache = update_state
-        .load(installation.identity)
-        .expect("update cache");
+    let cache = wait_for_final_convergence(
+        state.path(),
+        installation.identity,
+        initiating.session_id,
+        converged_before,
+    );
+    assert!(!cache.restart_needed);
     assert_eq!(
         cache
             .release_highlights
@@ -89,6 +95,35 @@ fn assert_automatic_schema_update(fixture: &OldFixture, count: usize) {
     );
     owners.stop();
     assert!(active_instances(state.path()).is_empty());
+}
+
+fn wait_for_final_convergence(
+    state: &Path,
+    installation: proqi::domain::InstallationIdentity,
+    initiating_session: proqi::domain::SessionId,
+    converged_before: usize,
+) -> proqi::domain::UpdateCacheState {
+    let update_state = FileUpdateStateStore::new(&state.join("cache")).expect("cache");
+    let deadline = Instant::now() + super::OWNER_TIMEOUT;
+    loop {
+        let cache = update_state.load(installation).expect("update cache");
+        let exact_highlight = cache
+            .release_highlights
+            .as_ref()
+            .is_some_and(|announcement| announcement.session_id() == initiating_session);
+        let converged = diagnostic_content(state)
+            .matches("\"stage\":\"board_ready\"")
+            .count()
+            == converged_before + 1;
+        if !cache.restart_needed && exact_highlight && converged {
+            return cache;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "initiating session {initiating_session} did not reach final convergence: {cache:?}"
+        );
+        thread::sleep(Duration::from_millis(20));
+    }
 }
 
 fn launch_plan(state: &Path, sessions: &[String]) -> Vec<(String, PathBuf)> {
@@ -131,19 +166,13 @@ fn assert_launch_directory_matrix(state: &Path, before: &[InstanceInfo], count: 
 }
 
 fn create_ambiguous_sessions(binary: &str, state: &Path, count: usize) -> Vec<String> {
-    (0..count)
+    let sessions = (0..count)
         .map(|_| {
             let created = super::json_command(binary, state, &[]);
             let session = created["data"]["session_id"]
                 .as_str()
                 .expect("session ID")
                 .to_owned();
-            let renamed = super::json_command(
-                binary,
-                state,
-                &["sessions", "rename", &session, "duplicate"],
-            );
-            assert_eq!(renamed["data"]["status"], "renamed");
             let added = super::json_input_command(
                 binary,
                 state,
@@ -153,7 +182,12 @@ fn create_ambiguous_sessions(binary: &str, state: &Path, count: usize) -> Vec<St
             assert_eq!(added["data"]["receipt"]["idempotent_replay"], false);
             session
         })
-        .collect()
+        .collect::<Vec<_>>();
+    Connection::open(state.join("data/proqi.sqlite3"))
+        .expect("database")
+        .execute("UPDATE sessions SET name = 'duplicate'", [])
+        .expect("duplicate names");
+    sessions
 }
 
 fn wait_for_exact_replacements(state: &Path, before: &[InstanceInfo]) -> Vec<InstanceInfo> {
@@ -221,14 +255,14 @@ fn assert_store_after_automatic_update(state: &Path, count: usize) {
         versions,
         (SUPPORTED_SCHEMA_VERSION, STORAGE_PROTOCOL_VERSION)
     );
-    let migration_fifteen: i64 = connection
+    let migration_sixteen: i64 = connection
         .query_row(
-            "SELECT count(*) FROM migration_history WHERE version = 15",
+            "SELECT count(*) FROM migration_history WHERE version = 16",
             [],
             |row| row.get(0),
         )
         .expect("migration history");
-    assert_eq!(migration_fifteen, 1);
+    assert_eq!(migration_sixteen, 1);
     let runtime_entries = fs::read_dir(state.join("runtime/instances"))
         .expect("runtime metadata")
         .count();

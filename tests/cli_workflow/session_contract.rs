@@ -75,6 +75,47 @@ fn names_can_be_ambiguous_and_identifier_prefixes_are_strict() {
 }
 
 #[test]
+fn session_administration_has_restart_safe_cli_undo_and_redo() {
+    let temporary = tempfile::tempdir().expect("temporary directory");
+    let root = temporary.path();
+    let session = create_session(root);
+    success(root, &["sessions", "rename", &session, "research"], None);
+    success(root, &["sessions", "trash", "research"], None);
+
+    let undo_trash = success(root, &["sessions", "undo"], None);
+    assert_eq!(undo_trash["operation"], "session trash");
+    let restored = success(root, &["sessions", "list", "--query", "research"], None);
+    assert_eq!(restored["sessions"][0]["id"], session);
+
+    let undo_rename = success(root, &["sessions", "undo"], None);
+    assert_eq!(undo_rename["operation"], "session rename");
+    let absent = success(root, &["sessions", "list", "--query", "research"], None);
+    assert!(absent["sessions"].as_array().is_some_and(Vec::is_empty));
+
+    let redo_rename = success(root, &["sessions", "redo"], None);
+    assert_eq!(redo_rename["operation"], "session rename");
+    let renamed = success(root, &["sessions", "list", "--query", "research"], None);
+    assert_eq!(renamed["sessions"][0]["id"], session);
+
+    success(root, &["sessions", "rename", &session, "divergent"], None);
+    let unavailable = run(root, &["sessions", "redo"], None);
+    assert!(!unavailable.status.success());
+    let error: Value = serde_json::from_slice(&unavailable.stdout).expect("error JSON");
+    assert_eq!(error["error"]["code"], "history_unavailable");
+}
+
+#[test]
+fn inactive_noop_session_rename_reports_the_same_success_as_an_active_owner() {
+    let temporary = tempfile::tempdir().expect("temporary directory");
+    let root = temporary.path();
+    let session = create_session(root);
+    let renamed = success(root, &["sessions", "rename", &session, "stable"], None);
+    assert_eq!(renamed["status"], "renamed");
+    let unchanged = success(root, &["sessions", "rename", &session, "stable"], None);
+    assert_eq!(unchanged["status"], "renamed");
+}
+
+#[test]
 fn active_session_conflict_is_structured_and_nonzero() {
     let temporary = tempfile::tempdir().expect("temporary directory");
     let root = temporary.path();

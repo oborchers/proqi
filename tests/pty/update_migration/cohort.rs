@@ -86,7 +86,7 @@ impl Owners {
             self.assert_running();
             assert!(
                 Instant::now() < deadline,
-                "owner did not become ready: {} active, {ready} control-ready, {} protocols, {} endpoints, {} existing endpoints, {} expected",
+                "owner did not become ready: {} active, {ready} control-ready, {} protocols, {} endpoints, {} existing endpoints, {} expected; diagnostics: {}",
                 active.len(),
                 active
                     .iter()
@@ -103,7 +103,8 @@ impl Owners {
                         .as_deref()
                         .is_some_and(|endpoint| Path::new(endpoint).exists()))
                     .count(),
-                self.expected
+                self.expected,
+                super::diagnostic_content(state)
             );
             thread::sleep(Duration::from_millis(20));
         }

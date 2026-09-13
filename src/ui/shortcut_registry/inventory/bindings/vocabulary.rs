@@ -99,7 +99,15 @@ pub(super) fn is_editor_context(context: Context) -> bool {
 pub(super) fn is_query_cursor_context(context: Context) -> bool {
     matches!(
         context,
-        Context::Commands | Context::Search | Context::Transfer | Context::GlobalDeliveryQuery
+        Context::Commands
+            | Context::Search
+            | Context::InvocationQuery
+            | Context::Transfer
+            | Context::GlobalDeliveryQuery
+            | Context::Browser
+            | Context::BrowserQuery
+            | Context::Rename
+            | Context::BrowserRename
     )
 }
 

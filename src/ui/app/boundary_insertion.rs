@@ -38,10 +38,8 @@ impl BoardApp {
     ) -> Vec<Effect> {
         if self.insertion_confirmation == InsertionConfirmation::Armed(boundary) {
             match boundary {
-                BoundaryInsertion::BeforeFirst => {
-                    self.create_at(PastePayload::text(String::new()), 0, ids, clock)
-                }
-                BoundaryInsertion::AfterLast => self.begin_bottom_insertion(ids, clock),
+                BoundaryInsertion::BeforeFirst => self.create_blank_at(0, ids, clock),
+                BoundaryInsertion::AfterLast => self.create_blank_at_bottom(ids, clock),
             }
         } else {
             self.insertion_confirmation = InsertionConfirmation::Armed(boundary);
@@ -49,16 +47,16 @@ impl BoardApp {
         }
     }
 
-    pub(super) fn begin_bottom_insertion(
+    pub(super) fn create_blank_at_bottom(
         &mut self,
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        let insertion_index = self.state.board.live_thoughts().len();
+        let insertion_index = self.bottom_insertion_index();
         if insertion_index == 0 {
-            self.begin_insertion(ids, clock)
+            self.enter_provisional_compose()
         } else {
-            self.create_at_bottom(PastePayload::text(String::new()), ids, clock)
+            self.create_blank_at(insertion_index, ids, clock)
         }
     }
 
@@ -68,8 +66,12 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        let insertion_index = self.state.board.live_thoughts().len();
+        let insertion_index = self.bottom_insertion_index();
         self.create_at(payload, insertion_index, ids, clock)
+    }
+
+    fn bottom_insertion_index(&self) -> usize {
+        self.state.board.live_thoughts().len()
     }
 
     pub(super) fn insert_relative_to_focus(
@@ -95,12 +97,7 @@ impl BoardApp {
             self.set_warning("focused thought is no longer available");
             return Vec::new();
         };
-        self.create_at(
-            PastePayload::text(String::new()),
-            index.saturating_add(usize::from(below)),
-            ids,
-            clock,
-        )
+        self.create_blank_at(index.saturating_add(usize::from(below)), ids, clock)
     }
 
     pub(super) fn at_first_thought(&self) -> bool {
@@ -175,10 +172,8 @@ impl BoardApp {
             effects.extend(self.reduce(Action::FocusThought(Some(target))));
         } else {
             let boundary_effects = match movement {
-                CursorMovement::VisualUp => {
-                    self.create_at(PastePayload::text(String::new()), 0, ids, clock)
-                }
-                CursorMovement::VisualDown => self.begin_bottom_insertion(ids, clock),
+                CursorMovement::VisualUp => self.create_blank_at(0, ids, clock),
+                CursorMovement::VisualDown => self.create_blank_at_bottom(ids, clock),
                 _ => return effects,
             };
             effects.extend(boundary_effects);

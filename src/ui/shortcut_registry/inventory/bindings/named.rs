@@ -83,14 +83,6 @@ fn text_named_action(
         {
             Some(Action::Delete)
         }
-        LogicalKey::Delete
-            if matches!(
-                context,
-                Context::Browser | Context::BrowserQuery | Context::BrowserRename
-            ) =>
-        {
-            Some(Action::Backspace)
-        }
         LogicalKey::Delete if is_editor_context(context) || is_query_cursor_context(context) => {
             Some(Action::DeleteForward)
         }
@@ -160,12 +152,6 @@ fn navigation_named_action(
             } else {
                 Action::MoveLineEnd
             })
-        }
-        LogicalKey::Home if matches!(context, Context::Browser | Context::BrowserQuery) => {
-            Some(Action::FocusPrevious)
-        }
-        LogicalKey::End if matches!(context, Context::Browser | Context::BrowserQuery) => {
-            Some(Action::FocusNext)
         }
         _ => None,
     }

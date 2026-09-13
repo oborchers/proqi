@@ -22,7 +22,7 @@ use proqi::{
         runtime::{InstanceInfo, RuntimeCoordinator as _},
         store::{STORAGE_PROTOCOL_VERSION, SUPPORTED_SCHEMA_VERSION},
         update::{
-            HomebrewInstaller, InstallDetector as _, UPDATE_CONTROL_PROTOCOL_VERSION, UpdateError,
+            InstallDetector as _, UPDATE_CONTROL_PROTOCOL_VERSION, UpdateError, UpdateInstaller,
             UpdateParticipantGateway, UpdatePrepareReply, UpdatePrepareRequest, UpdateQuiesceReply,
             UpdateQuiesceRequest, UpdateRestartReply, UpdateRestartRequest, UpdateStateStore as _,
         },
@@ -45,7 +45,7 @@ const FORWARDED_CONTENT: &str = "forwarded after follower convergence Grüße �
 
 struct FakeInstaller;
 
-impl HomebrewInstaller for FakeInstaller {
+impl UpdateInstaller for FakeInstaller {
     fn upgrade(&mut self, expected: &StableVersion) -> Result<StableVersion, UpdateError> {
         Ok(expected.clone())
     }
@@ -280,7 +280,11 @@ fn downgrade_to_schema_eleven(state: &Path) {
     Connection::open(state.join("data/proqi.sqlite3"))
         .expect("database")
         .execute_batch(
-            "ALTER TABLE sessions DROP COLUMN attachment_image_high;
+            "DROP TABLE browser_history_receipts;
+             DROP TABLE browser_operation_receipts;
+             DROP TABLE browser_operations;
+             DROP TABLE browser_history_state;
+             ALTER TABLE sessions DROP COLUMN attachment_image_high;
              ALTER TABLE sessions DROP COLUMN attachment_file_high;
              DELETE FROM migration_history WHERE version >= 12;
              UPDATE schema_meta SET schema_version = 11, storage_protocol = 10;",

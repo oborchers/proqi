@@ -37,6 +37,7 @@ impl BoardApp {
         let follow_insertion = self.insertion_focused() || self.compose_prompt_visible();
         let has_status = self.status_view().is_some()
             || matches!(self.state.durability, DurabilityState::Failed { .. });
+        let history_available = (self.history_available(true), self.history_available(false));
         let (first, first_scroll) = crate::ui::layout::compute_for_app(
             &self.state,
             &presentation,
@@ -46,6 +47,7 @@ impl BoardApp {
             has_status,
             self.settings.density,
             &self.settings.shortcuts,
+            history_available,
             self.board_viewport,
         );
         let height = self.focused_height(&first);
@@ -61,6 +63,7 @@ impl BoardApp {
             has_status,
             self.settings.density,
             &self.settings.shortcuts,
+            history_available,
             viewport,
         );
         self.configure_overlay(&mut layout);

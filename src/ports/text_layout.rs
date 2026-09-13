@@ -72,6 +72,7 @@ pub(crate) fn terminal_cell_width_u16(value: &str) -> u16 {
 pub(crate) struct VisibleCellWindow {
     pub(crate) text: String,
     pub(crate) cursor_cell: usize,
+    pub(crate) start_cell: usize,
 }
 
 /// Project a byte cursor to its terminal-cell column, clamping inside a grapheme backward.
@@ -87,6 +88,41 @@ pub(crate) fn cursor_cell(value: &str, cursor_byte: usize) -> usize {
     cells
 }
 
+/// Move to the preceding Unicode word start, or the start of the field.
+pub(crate) fn word_back(value: &str, cursor: usize) -> usize {
+    word_segments(value)
+        .into_iter()
+        .rev()
+        .find_map(|(start, _)| (start < cursor).then_some(start))
+        .unwrap_or(0)
+}
+
+/// Move to the end of the current Unicode word or start of the next word.
+pub(crate) fn word_forward(value: &str, cursor: usize) -> usize {
+    word_segments(value)
+        .into_iter()
+        .find_map(|(start, end)| {
+            if cursor < end {
+                Some(if cursor >= start { end } else { start })
+            } else {
+                None
+            }
+        })
+        .unwrap_or(value.len())
+}
+
+fn word_segments(value: &str) -> Vec<(usize, usize)> {
+    value
+        .split_word_bound_indices()
+        .filter_map(|(start, segment)| {
+            segment
+                .unicode_words()
+                .next()
+                .map(|_| (start, start + segment.len()))
+        })
+        .collect()
+}
+
 /// Keep the cursor visible in one sanitized terminal-cell-bounded text window.
 pub(crate) fn visible_cell_window(
     value: &str,
@@ -97,6 +133,7 @@ pub(crate) fn visible_cell_window(
         return VisibleCellWindow {
             text: String::new(),
             cursor_cell: 0,
+            start_cell: 0,
         };
     }
     let cursor = cursor_cell(value, cursor_byte);
@@ -119,6 +156,7 @@ pub(crate) fn visible_cell_window(
     VisibleCellWindow {
         text,
         cursor_cell: cursor.saturating_sub(start_cell).min(width),
+        start_cell,
     }
 }
 
@@ -358,6 +396,7 @@ mod tests {
             super::VisibleCellWindow {
                 text: "界e\u{301}👩‍💻�".to_owned(),
                 cursor_cell: 5,
+                start_cell: 4,
             }
         );
         assert_eq!(
@@ -365,6 +404,7 @@ mod tests {
             super::VisibleCellWindow {
                 text: "  界".to_owned(),
                 cursor_cell: 4,
+                start_cell: 2,
             }
         );
         assert_eq!(visible_cell_window(value, at_emoji, 0).cursor_cell, 0);

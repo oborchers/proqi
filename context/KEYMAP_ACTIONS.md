@@ -124,3 +124,9 @@ factory labels without requiring another presentation table.
 | `direction.down` | `direction` | Ordinary |  |
 | `direction.up` | `direction` | Ordinary |  |
 | `direction.right` | `direction` | Ordinary |  |
+
+Submission factory Enter chords apply only in `board`, `compose`, `edit`,
+`invocation`, and `insertion_boundary`. macOS adds exact Control and
+Control+Shift aliases for remove and keep, respectively, retaining Primary.
+The listed `commands` context supports configured submission actions but has
+no factory submission chord.

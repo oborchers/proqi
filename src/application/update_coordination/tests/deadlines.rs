@@ -15,7 +15,7 @@ struct SlowInstaller<'a> {
     installed: StableVersion,
 }
 
-impl HomebrewInstaller for SlowInstaller<'_> {
+impl UpdateInstaller for SlowInstaller<'_> {
     fn upgrade(&mut self, _: &StableVersion) -> Result<StableVersion, UpdateError> {
         self.clock.0.set(Timestamp::from_millis(1_800_000_660_000));
         Ok(self.installed.clone())
