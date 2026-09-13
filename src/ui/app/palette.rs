@@ -372,7 +372,7 @@ impl BoardApp {
         use crate::ui::shortcut_registry::PaletteBoardCommand as BoardCommand;
         match command {
             BoardCommand::New => {
-                self.create(crate::ui::PastePayload::text(String::new()), ids, clock)
+                self.new_thought(super::creation::NewThoughtPlacement::Contextual, ids, clock)
             }
             BoardCommand::InsertAbove => self.insert_relative_to_focus(false, ids, clock),
             BoardCommand::InsertBelow => self.insert_relative_to_focus(true, ids, clock),

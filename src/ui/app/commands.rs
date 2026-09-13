@@ -11,6 +11,7 @@ use crate::{
     },
 };
 
+use super::creation::NewThoughtPlacement;
 use super::{BoardApp, BoundaryInsertion, UiKey, editing, pending_types::EditFlush};
 
 impl BoardApp {
@@ -71,7 +72,7 @@ impl BoardApp {
         // that already supply the established semantic Enter intention. Raw
         // terminal input reaches this owner as the registry's typed `New`.
         if key == UiKey::Enter {
-            return self.begin_bottom_insertion(ids, clock);
+            return self.new_thought(NewThoughtPlacement::DurableTail, ids, clock);
         }
         if let Some(action) = self.settings.shortcuts.board_action_for_intention(key) {
             return match action {
@@ -186,8 +187,7 @@ impl BoardApp {
             | Action::ExtendLast => self.handle_board_navigation(action, ids, clock),
             Action::InsertAbove => self.insert_relative_to_focus(false, ids, clock),
             Action::InsertBelow => self.insert_relative_to_focus(true, ids, clock),
-            Action::New if self.insertion_focused() => self.begin_bottom_insertion(ids, clock),
-            Action::New => self.begin_insertion(ids, clock),
+            Action::New => self.new_thought(NewThoughtPlacement::Contextual, ids, clock),
             Action::Edit => self.expand_and_enter_edit(ids, clock),
             Action::Delete => self.delete(ids, clock),
             Action::Copy => self.copy_thought(ids),

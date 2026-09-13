@@ -10,6 +10,7 @@ mod boundary_insertion;
 mod clipboard;
 mod commands;
 mod control;
+mod creation;
 mod duplicate;
 mod editing;
 mod folds;

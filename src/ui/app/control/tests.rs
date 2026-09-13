@@ -12,6 +12,7 @@ use crate::{
 use super::BoardApp;
 
 mod compose;
+mod new_thought;
 mod rename;
 
 #[test]

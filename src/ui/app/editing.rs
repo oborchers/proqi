@@ -92,16 +92,6 @@ pub(super) struct PendingEdit {
 }
 
 impl BoardApp {
-    pub(super) fn engage_compose(&mut self) {
-        if !matches!(self.state.mode, InteractionMode::Compose) {
-            return;
-        }
-        self.compose_presentation = super::ComposePresentation::Editor;
-        self.board_viewport = self.board_viewport.follow_focus();
-        self.scroll_geometry = None;
-        self.layout = None;
-    }
-
     pub(super) fn collapse_empty_compose(&mut self) {
         if !matches!(self.state.mode, InteractionMode::Compose)
             || self
@@ -255,16 +245,18 @@ impl BoardApp {
         let thought_id = ids.thought_id();
         let operation_id = ids.operation_id();
         let at = clock.now();
-        let action = Action::CreateComposeThought {
+        let action = super::creation::create_action(
             thought_id,
             operation_id,
-            content: snapshot.content,
+            snapshot.content,
             annotations,
-            cursor: snapshot.cursor,
-            selection_anchor: snapshot.selection_anchor,
-            preserve_owned,
+            super::creation::CreationHistory::Compose {
+                cursor: snapshot.cursor,
+                selection_anchor: snapshot.selection_anchor,
+            },
             at,
-        };
+            preserve_owned,
+        );
         let effects = self.reduce(action);
         if self.state.board.thought(thought_id).is_some()
             && let Some((owner, _)) = &mut self.editor
