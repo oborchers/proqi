@@ -1,5 +1,7 @@
 //! Cursor-affinity contracts at shared and synthetic wrapped-row boundaries.
 
+#![cfg(target_os = "macos")]
+
 use super::{Fixture, draw};
 use proqi::{
     domain::TextPosition,

@@ -4,16 +4,20 @@ use super::{Fixture, draw, navigation};
 use proqi::{
     application::Effect,
     domain::{ContentAnnotation, ContentAnnotationKind, TextPosition},
-    ports::editor::{CursorMovement, TextSelection, VisualCursorAffinity, VisualLine},
+    ports::editor::{CursorMovement, TextSelection, VisualLine},
     ui::{HitTarget, PointerButton, PointerKind, UiKey, UiSettings, VisualRowEdge},
 };
 use ratatui_core::layout::Rect;
 use unicode_segmentation::UnicodeSegmentation as _;
 
+#[cfg(target_os = "macos")]
+use proqi::ports::editor::VisualCursorAffinity;
+
 fn extend(fixture: &mut Fixture, edge: VisualRowEdge) {
     fixture.input(crate::key_input(UiKey::ExtendVisualRow { edge }));
 }
 
+#[cfg(target_os = "macos")]
 fn move_to_edge(fixture: &mut Fixture, edge: VisualRowEdge) {
     fixture.input(crate::key_input(UiKey::MoveVisualRow { edge }));
 }
@@ -89,6 +93,7 @@ fn repeated_chords_extend_both_selection_directions_across_wrapped_unicode_rows(
 }
 
 #[test]
+#[cfg(target_os = "macos")]
 fn unshifted_row_edge_movement_uses_the_current_wrapped_row_without_selection() {
     let mut fixture = Fixture::new();
     fixture.paste("0123456789 abcdefghijklmnopqrstuvwxyz");
@@ -140,6 +145,7 @@ fn unshifted_row_edge_movement_uses_the_current_wrapped_row_without_selection() 
 }
 
 #[test]
+#[cfg(target_os = "macos")]
 fn unshifted_visual_row_end_renders_at_the_current_row_boundary() {
     use ratatui_core::backend::Backend as _;
 
@@ -175,6 +181,7 @@ fn unshifted_visual_row_end_renders_at_the_current_row_boundary() {
 }
 
 #[test]
+#[cfg(target_os = "macos")]
 fn exact_width_visual_row_end_uses_the_last_cell_without_advancing() {
     use ratatui_core::backend::Backend as _;
 
