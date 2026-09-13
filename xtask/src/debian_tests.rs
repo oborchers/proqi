@@ -69,7 +69,7 @@ fn downloaded_evidence_binds_every_artifact_identity() {
 }
 
 #[test]
-fn ci_packaging_passes_the_typed_gnu_target() {
+fn ci_debian_commands_pass_the_typed_gnu_target() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .expect("workspace root");
@@ -82,11 +82,19 @@ fn ci_packaging_passes_the_typed_gnu_target() {
                 && target.libc == LibcFamily::Gnu
         })
         .expect("default GNU/Linux release target");
-    let invocation = [
+    let package_invocation = [
         format!("target/package/{} \\", target.archive_name()),
         "            target/debian-package \\".to_owned(),
         format!("            {}", target.triple),
     ]
     .join("\n");
-    assert!(ci.contains(&invocation));
+    assert!(ci.contains(&package_invocation));
+
+    let verify_invocation = [
+        "            target/debian-package/proqi_amd64.deb \\".to_owned(),
+        "            target/debian-package \\".to_owned(),
+        format!("            {}", target.triple),
+    ]
+    .join("\n");
+    assert!(ci.contains(&verify_invocation));
 }

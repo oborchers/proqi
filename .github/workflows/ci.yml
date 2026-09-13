@@ -290,7 +290,8 @@ jobs:
             "$DEBIAN_PROFILE" \
             target/package/proqi-x86_64-unknown-linux-gnu.tar.gz \
             target/debian-package/proqi_amd64.deb \
-            target/debian-package
+            target/debian-package \
+            x86_64-unknown-linux-gnu
       - run: cargo xtask clean-worktree
 
   check:
