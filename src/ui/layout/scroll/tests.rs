@@ -259,6 +259,7 @@ fn active_editor_rows_replace_stale_durable_content_during_measurement() {
     let editor = EditorSnapshot {
         content,
         cursor: crate::domain::TextPosition::default(),
+        cursor_affinity: crate::ports::editor::VisualCursorAffinity::default(),
         selection: None,
         viewport: TextViewport::new(20, 8),
         scroll_row: 0,

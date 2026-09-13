@@ -47,9 +47,22 @@ pub(super) fn run_dismissal(binary: &Path, state: &Path, session: &str) -> ExitS
         spawn $env(PROQI_TEST_BINARY) --state-dir $env(PROQI_TEST_STATE) -r $env(PROQI_TEST_SESSION)
         expect -exact "\x1b\[?1049h"
         stty rows 18 columns 84
-        after 300
+        expect -exact "what's new"
         send -- "\x1b"
-        after 500
+        for {set attempt 0} {$attempt < 100} {incr attempt} {
+            set acknowledged 0
+            foreach path [glob -nocomplain "$env(PROQI_TEST_STATE)/cache/updates/*/state.json"] {
+                set input [open $path r]
+                set contents [read $input]
+                close $input
+                if {[string first {"acknowledged":true} $contents] >= 0} {
+                    set acknowledged 1
+                }
+            }
+            if {$acknowledged} { break }
+            after 20
+        }
+        if {!$acknowledged} { exit 96 }
         send -- $env(PROQI_TEST_PRIMARY_Q)
         expect {
             eof {}

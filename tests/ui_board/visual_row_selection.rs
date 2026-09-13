@@ -10,6 +10,9 @@ use proqi::{
 use ratatui_core::layout::Rect;
 use unicode_segmentation::UnicodeSegmentation as _;
 
+#[cfg(target_os = "macos")]
+use proqi::ports::editor::VisualCursorAffinity;
+
 fn extend(fixture: &mut Fixture, edge: VisualRowEdge) {
     fixture.input(crate::key_input(UiKey::ExtendVisualRow { edge }));
 }
@@ -97,34 +100,158 @@ fn unshifted_row_edge_movement_uses_the_current_wrapped_row_without_selection() 
     let _frame = draw(&mut fixture, 16, 8);
     let rows = fixture.app.editor_snapshot().expect("editor").visual_lines;
     assert!(rows.len() >= 3, "expected wrapping: {rows:?}");
-    move_to_grapheme(&mut fixture, rows[1].start_grapheme + 2);
+    for index in [0, 1, rows.len() - 1] {
+        let row = &rows[index];
+        move_to_grapheme(&mut fixture, row.start_grapheme + 1);
 
-    move_to_edge(&mut fixture, VisualRowEdge::Start);
-    let at_start = fixture.app.editor_snapshot().expect("row start");
-    assert_eq!(at_start.cursor, row_position(&rows[1], false));
-    assert_eq!(at_start.selection, None);
-    move_to_edge(&mut fixture, VisualRowEdge::Start);
+        move_to_edge(&mut fixture, VisualRowEdge::Start);
+        let at_start = fixture.app.editor_snapshot().expect("row start");
+        assert_eq!(at_start.cursor, row_position(row, false));
+        assert_eq!(at_start.selection, None);
+        move_to_edge(&mut fixture, VisualRowEdge::Start);
+        assert_eq!(
+            fixture
+                .app
+                .editor_snapshot()
+                .expect("stable row start")
+                .cursor,
+            row_position(row, false)
+        );
+
+        move_to_edge(&mut fixture, VisualRowEdge::End);
+        let at_end = fixture.app.editor_snapshot().expect("row end");
+        assert_eq!(at_end.cursor, row_position(row, true));
+        let expected_affinity = if row.start_byte < row.end_byte
+            && rows
+                .get(index + 1)
+                .is_some_and(|next| next.start_byte == row.end_byte)
+        {
+            VisualCursorAffinity::PreviousRow
+        } else {
+            VisualCursorAffinity::NextRow
+        };
+        assert_eq!(at_end.cursor_affinity, expected_affinity);
+        assert_eq!(at_end.selection, None);
+        move_to_edge(&mut fixture, VisualRowEdge::End);
+        assert_eq!(
+            fixture
+                .app
+                .editor_snapshot()
+                .expect("stable row end")
+                .cursor,
+            row_position(row, true)
+        );
+    }
+}
+
+#[test]
+#[cfg(target_os = "macos")]
+fn unshifted_visual_row_end_renders_at_the_current_row_boundary() {
+    use ratatui_core::backend::Backend as _;
+
+    let mut fixture = Fixture::new();
+    fixture.paste("alpha beta gamma delta epsilon zeta eta theta");
+    let _frame = draw(&mut fixture, 16, 8);
+    let rows = fixture.app.editor_snapshot().expect("editor").visual_lines;
+    let (row_index, row) = rows
+        .iter()
+        .enumerate()
+        .find(|(index, row)| *index > 0 && *index + 1 < rows.len() && row.cell_width < 14)
+        .expect("interior row ending before the wrap width");
+    move_to_grapheme(&mut fixture, row.start_grapheme + 1);
+
+    move_to_edge(&mut fixture, VisualRowEdge::End);
+
+    let canonical = fixture.app.editor_snapshot().expect("row end");
+    assert_eq!(canonical.cursor, row_position(row, true));
+    assert_eq!(canonical.cursor_affinity, VisualCursorAffinity::PreviousRow);
+    let area = fixture.app.prepare_frame(Rect::new(0, 0, 16, 8)).thoughts[0].text_area;
+    let mut terminal = draw(&mut fixture, 16, 8);
+    let rendered = terminal
+        .backend_mut()
+        .get_cursor_position()
+        .expect("rendered cursor");
     assert_eq!(
-        fixture
-            .app
-            .editor_snapshot()
-            .expect("stable row start")
-            .cursor,
-        row_position(&rows[1], false)
+        (rendered.x, rendered.y),
+        (
+            area.x + u16::try_from(row.cell_width).expect("row width"),
+            area.y + u16::try_from(row_index).expect("row index"),
+        )
     );
+}
+
+#[test]
+#[cfg(target_os = "macos")]
+fn exact_width_visual_row_end_uses_the_last_cell_without_advancing() {
+    use ratatui_core::backend::Backend as _;
+
+    let mut fixture = Fixture::new();
+    fixture.paste(&"x".repeat(56));
+    let _frame = draw(&mut fixture, 16, 8);
+    let rows = fixture.app.editor_snapshot().expect("editor").visual_lines;
+    let row = &rows[1];
+    assert_eq!(row.cell_width, 14);
+    move_to_grapheme(&mut fixture, row.start_grapheme + 1);
 
     move_to_edge(&mut fixture, VisualRowEdge::End);
-    let at_end = fixture.app.editor_snapshot().expect("row end");
-    assert_eq!(at_end.cursor, row_position(&rows[1], true));
-    assert_eq!(at_end.selection, None);
     move_to_edge(&mut fixture, VisualRowEdge::End);
+
+    let canonical = fixture.app.editor_snapshot().expect("exact-width end");
+    assert_eq!(canonical.cursor, row_position(row, true));
+    assert_eq!(canonical.cursor_affinity, VisualCursorAffinity::PreviousRow);
+    let area = fixture.app.prepare_frame(Rect::new(0, 0, 16, 8)).thoughts[0].text_area;
+    let mut terminal = draw(&mut fixture, 16, 8);
+    let rendered = terminal
+        .backend_mut()
+        .get_cursor_position()
+        .expect("rendered exact-width cursor");
+    assert_eq!((rendered.x, rendered.y), (area.right() - 1, area.y + 1));
+
+    fixture.input(crate::key_input(UiKey::Move {
+        movement: CursorMovement::VisualDown,
+        extend_selection: false,
+    }));
+    let moved = fixture.app.editor_snapshot().expect("next exact-width row");
+    assert_eq!(moved.cursor, row_position(&rows[2], true));
+    assert_eq!(moved.cursor_affinity, VisualCursorAffinity::PreviousRow);
+}
+
+#[test]
+fn shifted_visual_row_edges_reverse_around_one_stable_anchor() {
+    let mut fixture = Fixture::new();
+    fixture.paste("alpha beta gamma delta epsilon zeta eta theta");
+    let _frame = draw(&mut fixture, 16, 8);
+    let rows = fixture.app.editor_snapshot().expect("editor").visual_lines;
+    let anchor = rows[1].start_grapheme + 2;
+    move_to_grapheme(&mut fixture, anchor);
+
+    extend(&mut fixture, VisualRowEdge::End);
+    assert_eq!(
+        fixture.app.editor_snapshot().expect("forward").selection,
+        Some(TextSelection {
+            start: TextPosition::new(0, anchor),
+            end: row_position(&rows[1], true),
+        })
+    );
+    extend(&mut fixture, VisualRowEdge::Start);
+    assert_eq!(
+        fixture.app.editor_snapshot().expect("reversed").selection,
+        Some(TextSelection {
+            start: row_position(&rows[1], false),
+            end: TextPosition::new(0, anchor),
+        })
+    );
+    extend(&mut fixture, VisualRowEdge::Start);
     assert_eq!(
         fixture
             .app
             .editor_snapshot()
-            .expect("stable row end")
-            .cursor,
-        row_position(&rows[2], true)
+            .expect("past anchor")
+            .selection,
+        Some(TextSelection {
+            start: row_position(&rows[0], false),
+            end: TextPosition::new(0, anchor),
+        })
     );
 }
 

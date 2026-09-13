@@ -208,6 +208,7 @@ impl BoardApp {
                 | EditCommand::SelectAll
                 | EditCommand::ClearSelection
                 | EditCommand::SetCursor { .. }
+                | EditCommand::SetVisualCursor { .. }
                 | EditCommand::PointerStart { .. }
                 | EditCommand::PointerDrag { .. }
                 | EditCommand::PointerEnd

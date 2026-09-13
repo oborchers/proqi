@@ -1,14 +1,18 @@
 //! Canonical-to-visible mapping for folded editor ranges.
 
+#[cfg(test)]
+#[path = "projection/tests.rs"]
+mod tests;
+
 use super::annotations::{Presentation, PresentedStyle, PresentedSubstitution};
 use crate::{
     application::AppState,
     domain::{TextPosition, ThoughtId, ThoughtPresentation},
     ports::{
-        editor::{CellRange, EditorSnapshot, TextSelection},
+        editor::{CellRange, EditorSnapshot, TextSelection, VisualCursorAffinity},
         text_layout::{
             WrappedRow, byte_at_cell, byte_for_position, cell_column_at_byte, position_for_byte,
-            wrap_rows, wrapped_row_index,
+            wrap_rows, wrapped_row_index_with_affinity,
         },
     },
     ui::VisualRowEdge,
@@ -100,6 +104,12 @@ pub(super) enum BoardCellTarget {
     },
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) struct VisualRowTarget {
+    pub(super) position: TextPosition,
+    pub(super) affinity: VisualCursorAffinity,
+}
+
 pub(super) fn board_cell_target(
     canonical: &str,
     presentation: &Presentation,
@@ -131,21 +141,44 @@ impl EditorPresentation {
         &self,
         edge: VisualRowEdge,
         advance_across_rows: bool,
-    ) -> TextPosition {
+    ) -> VisualRowTarget {
         let row_index = if advance_across_rows {
-            directional_row_index(&self.rows, self.cursor_display_byte, edge)
+            directional_row_index(
+                &self.rows,
+                self.cursor_display_byte,
+                self.snapshot.cursor_affinity,
+                edge,
+            )
         } else {
-            wrapped_row_index(&self.rows, self.cursor_display_byte)
+            wrapped_row_index_with_affinity(
+                &self.rows,
+                self.cursor_display_byte,
+                self.snapshot.cursor_affinity,
+            )
         };
         let row = &self.rows[row_index];
         let display_byte = match edge {
             VisualRowEdge::Start => row.start_byte,
             VisualRowEdge::End => row.end_byte,
         };
-        position_for_byte(
+        let position = position_for_byte(
             &self.canonical_content,
             unproject_boundary(display_byte, &self.substitutions, edge),
-        )
+        );
+        let shared_end = edge == VisualRowEdge::End
+            && row.start_byte < row.end_byte
+            && self
+                .rows
+                .get(row_index + 1)
+                .is_some_and(|next| next.start_byte == row.end_byte);
+        VisualRowTarget {
+            position,
+            affinity: if shared_end {
+                VisualCursorAffinity::PreviousRow
+            } else {
+                VisualCursorAffinity::NextRow
+            },
+        }
     }
 
     pub(super) fn cell_target(&self, row: u16, column: u16) -> BoardCellTarget {
@@ -186,18 +219,27 @@ impl EditorPresentation {
 
     pub(super) fn cursor_viewport_cell(&self) -> Option<(usize, usize)> {
         let cursor = self.cursor_display_byte;
-        let row = wrapped_row_index(&self.rows, cursor);
+        let row =
+            wrapped_row_index_with_affinity(&self.rows, cursor, self.snapshot.cursor_affinity);
         let viewport_row = row.checked_sub(self.snapshot.scroll_row)?;
         let wrapped = self.rows.get(row)?;
-        Some((
-            cell_column_at_byte(&self.snapshot.content, wrapped, cursor),
-            viewport_row,
-        ))
+        let column = cell_column_at_byte(&self.snapshot.content, wrapped, cursor);
+        let column = if self.snapshot.cursor_affinity == VisualCursorAffinity::PreviousRow {
+            column.min(usize::from(self.snapshot.viewport.width).saturating_sub(1))
+        } else {
+            column
+        };
+        Some((column, viewport_row))
     }
 }
 
-fn directional_row_index(rows: &[WrappedRow], cursor: usize, edge: VisualRowEdge) -> usize {
-    let index = wrapped_row_index(rows, cursor);
+fn directional_row_index(
+    rows: &[WrappedRow],
+    cursor: usize,
+    affinity: VisualCursorAffinity,
+    edge: VisualRowEdge,
+) -> usize {
+    let index = wrapped_row_index_with_affinity(rows, cursor, affinity);
     let row = &rows[index];
     match edge {
         VisualRowEdge::Start if cursor == row.start_byte && index > 0 => index - 1,
@@ -228,6 +270,7 @@ pub(super) fn editor_presentation(
     let snapshot = EditorSnapshot {
         content: presentation.content,
         cursor,
+        cursor_affinity: canonical.cursor_affinity,
         selection,
         viewport: canonical.viewport,
         scroll_row,
@@ -339,7 +382,7 @@ fn apply_selection(content: &str, rows: &mut [WrappedRow], selection: Option<Tex
 }
 
 fn visible_scroll(canonical: &EditorSnapshot, rows: &[WrappedRow], cursor: usize) -> usize {
-    let cursor_row = wrapped_row_index(rows, cursor);
+    let cursor_row = wrapped_row_index_with_affinity(rows, cursor, canonical.cursor_affinity);
     let height = usize::from(canonical.viewport.height).max(1);
     let mut scroll = canonical.scroll_row.min(rows.len().saturating_sub(height));
     if cursor_row < scroll {

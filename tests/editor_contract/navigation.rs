@@ -1,7 +1,10 @@
 use proqi::{
     adapters::editor::RopeEditor,
     domain::TextPosition,
-    ports::editor::{CursorMovement, EditCommand, Editor, FAST_NAVIGATION_ROWS, TextViewport},
+    ports::editor::{
+        CursorMovement, EditCommand, Editor, FAST_NAVIGATION_ROWS, TextViewport,
+        VisualCursorAffinity,
+    },
 };
 
 fn move_cursor(editor: &mut impl Editor, movement: CursorMovement, extend_selection: bool) {
@@ -135,4 +138,34 @@ fn pointer_reposition_replaces_a_stale_vertical_preferred_column() {
     move_cursor(&mut editor, CursorMovement::VisualJumpDown, false);
 
     assert_eq!(editor.snapshot().cursor, TextPosition::new(7, 4));
+}
+
+#[test]
+fn mutation_history_and_noop_keep_visual_boundary_affinity_truthful() {
+    let mut editor = RopeEditor::new("abcdefgh");
+    editor.set_viewport(TextViewport::new(4, 3));
+    let boundary = TextPosition::new(0, 4);
+    let _positioned = editor.apply(EditCommand::SetVisualCursor {
+        position: boundary,
+        affinity: VisualCursorAffinity::PreviousRow,
+        extend_selection: false,
+    });
+
+    let inserted = editor.apply(EditCommand::InsertChar('!'));
+    assert!(!inserted.changes.is_empty());
+    let undone = editor.apply(EditCommand::Undo).snapshot;
+    assert_eq!(undone.cursor, boundary);
+    assert_eq!(undone.cursor_affinity, VisualCursorAffinity::PreviousRow);
+
+    let _positioned = editor.apply(EditCommand::SetVisualCursor {
+        position: TextPosition::new(0, 8),
+        affinity: VisualCursorAffinity::PreviousRow,
+        extend_selection: false,
+    });
+    let deleted = editor.apply(EditCommand::DeleteForward);
+    assert!(deleted.changes.is_empty());
+    assert_eq!(
+        deleted.snapshot.cursor_affinity,
+        VisualCursorAffinity::PreviousRow
+    );
 }
