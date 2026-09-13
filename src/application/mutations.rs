@@ -2,8 +2,10 @@
 
 pub(super) mod bulk;
 mod history;
+mod session_metadata;
 pub(super) mod transform;
 pub(super) use history::history_move;
+pub(super) use session_metadata::rename_session;
 
 use super::error::{ApplicationError, ApplicationResult, FailureCode};
 use super::{mutations::bulk::delete_thoughts, prompt::MULTI_THOUGHT_SEPARATOR};
@@ -28,10 +30,68 @@ pub(super) fn create_thought(
     insertion_index: usize,
     at: Timestamp,
 ) -> ApplicationResult<Vec<Effect>> {
+    create_thought_with_handoff(
+        state,
+        thought_id,
+        operation_id,
+        content,
+        annotations,
+        insertion_index,
+        None,
+        false,
+        at,
+    )
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Compose materialization carries one exact editor endpoint"
+)]
+pub(super) fn create_compose_thought(
+    state: &mut AppState,
+    thought_id: ThoughtId,
+    operation_id: OperationId,
+    content: String,
+    annotations: Vec<ContentAnnotation>,
+    cursor: TextPosition,
+    selection_anchor: Option<TextPosition>,
+    preserve_owned: bool,
+    at: Timestamp,
+) -> ApplicationResult<Vec<Effect>> {
+    create_thought_with_handoff(
+        state,
+        thought_id,
+        operation_id,
+        content,
+        annotations,
+        state.insertion_index,
+        Some((cursor, selection_anchor)),
+        preserve_owned,
+        at,
+    )
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "canonical creation accepts an optional Compose editor endpoint"
+)]
+fn create_thought_with_handoff(
+    state: &mut AppState,
+    thought_id: ThoughtId,
+    operation_id: OperationId,
+    content: String,
+    annotations: Vec<ContentAnnotation>,
+    insertion_index: usize,
+    handoff: Option<(TextPosition, Option<TextPosition>)>,
+    preserve_owned: bool,
+    at: Timestamp,
+) -> ApplicationResult<Vec<Effect>> {
     let sequence = state.next_sequence()?;
     validate_annotations(&content, &annotations)?;
     let mut annotations = annotations;
-    crate::domain::renew_attachment_occurrences(&mut annotations);
+    if !preserve_owned {
+        crate::domain::renew_attachment_occurrences(&mut annotations);
+    }
     state.board.attachment_counters().assign(&mut annotations)?;
     let mut thought = Thought::new(
         thought_id,
@@ -46,9 +106,16 @@ pub(super) fn create_thought(
         session_id: state.board.session.id,
         sequence,
         kind: BoardOperationKind::Create,
-        forward: BoardMutation::AddThought {
-            thought: thought.clone(),
-        },
+        forward: handoff.map_or_else(
+            || BoardMutation::AddThought {
+                thought: thought.clone(),
+            },
+            |(cursor, selection_anchor)| BoardMutation::AddThoughtFromCompose {
+                thought: thought.clone(),
+                cursor,
+                selection_anchor,
+            },
+        ),
         inverse: BoardMutation::SetDeletion {
             thought_id,
             deleted_at: Some(at),
@@ -76,7 +143,9 @@ pub(super) fn edit_thought(
     before_annotations: Vec<ContentAnnotation>,
     after_annotations: Vec<ContentAnnotation>,
     before_cursor: TextPosition,
+    before_selection_anchor: Option<TextPosition>,
     after_cursor: TextPosition,
+    after_selection_anchor: Option<TextPosition>,
     at: Timestamp,
 ) -> ApplicationResult<Vec<Effect>> {
     let current = state.live_thought(thought_id)?;
@@ -114,7 +183,9 @@ pub(super) fn edit_thought(
         before_annotations,
         after_annotations: after_annotations.clone(),
         before_cursor,
+        before_selection_anchor,
         after_cursor,
+        after_selection_anchor,
         created_at: at,
     };
     let mut board = state.board.clone();
@@ -275,7 +346,10 @@ pub(super) fn build_delete_thought_operation(
 ) -> ApplicationResult<BoardOperation> {
     if !matches!(
         kind,
-        BoardOperationKind::Delete | BoardOperationKind::Cut | BoardOperationKind::SubmitAndRemove
+        BoardOperationKind::Delete
+            | BoardOperationKind::Cut
+            | BoardOperationKind::SubmitAndRemove
+            | BoardOperationKind::TransferAndRemove
     ) {
         return Err(ApplicationError::InvalidState);
     }

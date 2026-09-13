@@ -3,6 +3,7 @@
 mod attachment_migration;
 mod attachment_numbering;
 mod board_commit;
+mod browser_history;
 mod capture;
 mod compaction;
 mod config;
@@ -34,10 +35,11 @@ use rusqlite::{
 use crate::{
     domain::{SessionId, Timestamp},
     ports::store::{
-        CaptureCommit, CaptureCommitOutcome, CommitReceipt, FirstRunBoard, FirstRunOutcome,
-        MigrationMode, OperationBatch, STORAGE_PROTOCOL_VERSION, SUPPORTED_SCHEMA_VERSION,
-        SessionHit, SessionQuery, SessionSnapshot, Store, StoreError, StoredOperationRequest,
-        SubmissionAttempt, SubmissionOutcome,
+        BrowserCommitReceipt, BrowserHistoryStatus, CaptureCommit, CaptureCommitOutcome,
+        CommitReceipt, FirstRunBoard, FirstRunOutcome, MigrationMode, OperationBatch,
+        STORAGE_PROTOCOL_VERSION, SUPPORTED_SCHEMA_VERSION, SessionHit, SessionQuery,
+        SessionSnapshot, Store, StoreError, StoredOperationRequest, SubmissionAttempt,
+        SubmissionOutcome,
     },
 };
 
@@ -401,6 +403,54 @@ impl Store for SqliteStore {
         })
     }
 
+    fn commit_browser_operation(
+        &mut self,
+        operation: &crate::domain::BrowserOperation,
+    ) -> Result<BrowserCommitReceipt, StoreError> {
+        self.with_write_retry(|transaction| browser_history::commit(transaction, operation))
+    }
+
+    fn move_browser_history(
+        &mut self,
+        operation_id: crate::domain::OperationId,
+        target: crate::ports::store::BrowserHistoryEntry,
+        undo: bool,
+        at: Timestamp,
+    ) -> Result<BrowserCommitReceipt, StoreError> {
+        self.with_write_retry(|transaction| {
+            browser_history::move_history(transaction, operation_id, target, undo, at)
+        })
+    }
+
+    fn browser_history_status(&mut self) -> Result<BrowserHistoryStatus, StoreError> {
+        let transaction = self.connection.transaction().map_err(map_sql_error)?;
+        let status = browser_history::status(&transaction)?;
+        transaction.commit().map_err(map_sql_error)?;
+        Ok(status)
+    }
+
+    fn commit_browser_noop_rename(
+        &mut self,
+        operation_id: crate::domain::OperationId,
+        session_id: SessionId,
+        name: Option<&str>,
+        at: Timestamp,
+    ) -> Result<BrowserCommitReceipt, StoreError> {
+        self.with_write_retry(|transaction| {
+            browser_history::commit_noop_rename(transaction, operation_id, session_id, name, at)
+        })
+    }
+
+    fn browser_operation(
+        &mut self,
+        operation_id: crate::domain::OperationId,
+    ) -> Result<Option<crate::domain::BrowserOperation>, StoreError> {
+        let transaction = self.connection.transaction().map_err(map_sql_error)?;
+        let operation = browser_history::operation(&transaction, operation_id)?;
+        transaction.commit().map_err(map_sql_error)?;
+        Ok(operation)
+    }
+
     fn prune_session(&mut self, id: SessionId) -> Result<(), StoreError> {
         self.with_write_retry(|transaction| {
             let deleted: Option<Option<i64>> = transaction
@@ -426,6 +476,7 @@ impl Store for SqliteStore {
                     [id.to_string()],
                 )
                 .map_err(map_sql_error)?;
+            browser_history::remove_session(transaction, id)?;
             transaction
                 .execute(
                     "DELETE FROM sessions WHERE id = ?1",

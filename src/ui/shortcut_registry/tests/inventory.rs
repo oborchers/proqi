@@ -7,6 +7,7 @@ use crate::ui::{
 
 use super::super::{ShortcutPlatform, ShortcutRegistry, inventory};
 use super::stroke;
+use crate::{application::UndoContract, ports::editor::CursorMovement, ui::UiKey};
 
 const SHORTCUTS_DOCUMENT: &str = include_str!("../../../../context/SHORTCUTS.md");
 
@@ -186,6 +187,179 @@ fn every_discovered_keyboard_owner_is_qualified_by_a_descriptor() {
         Context::InsertionBoundary,
     ]);
     assert_eq!(covered, expected);
+}
+
+#[test]
+fn every_keyboard_owner_has_one_explicit_undo_policy_and_absorbs_primary_history() {
+    use UndoContract as Owner;
+
+    let expected = [
+        (Context::Board, Owner::DurableBoard),
+        (Context::Compose, Owner::ComposeHandoff),
+        (Context::Edit, Owner::DurableEditor),
+        (Context::Help, Owner::Unavailable),
+        (Context::Commands, Owner::LocalText),
+        (Context::Search, Owner::LocalText),
+        (Context::Invocation, Owner::DurableEditor),
+        (Context::InvocationQuery, Owner::LocalText),
+        (Context::Transfer, Owner::LocalText),
+        (Context::GlobalDeliveryQuery, Owner::LocalText),
+        (Context::GlobalDeliveryDisposition, Owner::Unavailable),
+        (Context::Browser, Owner::BrowserTextThenDurable),
+        (Context::BrowserQuery, Owner::LocalText),
+        (Context::Rename, Owner::LocalText),
+        (Context::BrowserRename, Owner::LocalText),
+        (Context::Update, Owner::Unavailable),
+        (Context::Screenshot, Owner::Unavailable),
+        (Context::Recovery, Owner::Unavailable),
+        (Context::Direction, Owner::Unavailable),
+        (Context::ReleaseHighlights, Owner::Unavailable),
+        (Context::InsertionBoundary, Owner::DurableBoard),
+    ];
+    assert_eq!(
+        expected.len(),
+        inventory::bindings::vocabulary::KEYBOARD_CONTEXTS.len()
+    );
+    for (context, owner) in expected {
+        assert_eq!(context.undo_contract(), owner, "owner for {context:?}");
+        for (platform, primary) in [
+            (ShortcutPlatform::MacOs, LogicalModifiers::SUPER),
+            (ShortcutPlatform::Portable, LogicalModifiers::CONTROL),
+        ] {
+            let registry = ShortcutRegistry::resolve(&KeyBindings::default(), platform)
+                .expect("valid registry");
+            for (key, modifiers, action) in [
+                (LogicalKey::Character('z'), primary, Action::Undo),
+                (
+                    LogicalKey::Character('z'),
+                    primary.union(LogicalModifiers::SHIFT),
+                    Action::Redo,
+                ),
+                (LogicalKey::Character('y'), primary, Action::Redo),
+            ] {
+                let resolved = registry
+                    .dispatch(
+                        &ShortcutContextStack::new([context]),
+                        stroke(key, modifiers),
+                    )
+                    .expect("history binding");
+                assert_eq!(
+                    resolved.action,
+                    Some(action),
+                    "{platform:?} {context:?} must absorb {action:?}",
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn every_query_cursor_owner_receives_complete_editor_navigation() {
+    let contexts = [
+        Context::Commands,
+        Context::Search,
+        Context::InvocationQuery,
+        Context::Transfer,
+        Context::GlobalDeliveryQuery,
+        Context::Browser,
+        Context::BrowserQuery,
+        Context::Rename,
+        Context::BrowserRename,
+    ];
+    for (platform, primary, word) in [
+        (
+            ShortcutPlatform::MacOs,
+            LogicalModifiers::SUPER,
+            LogicalModifiers::ALT,
+        ),
+        (
+            ShortcutPlatform::Portable,
+            LogicalModifiers::CONTROL,
+            LogicalModifiers::CONTROL,
+        ),
+    ] {
+        let registry =
+            ShortcutRegistry::resolve(&KeyBindings::default(), platform).expect("valid registry");
+        for context in contexts {
+            for (key, modifiers, action, intention) in query_navigation_cases(primary, word) {
+                let resolved = registry
+                    .dispatch(
+                        &ShortcutContextStack::new([context]),
+                        stroke(key, modifiers),
+                    )
+                    .expect("query cursor binding");
+                assert_eq!(resolved.action, Some(action), "{platform:?} {context:?}");
+                assert_eq!(resolved.intention, intention, "{platform:?} {context:?}");
+            }
+        }
+    }
+}
+
+type NavigationCase = (LogicalKey, LogicalModifiers, Action, UiKey);
+
+fn query_navigation_cases(
+    primary: LogicalModifiers,
+    word: LogicalModifiers,
+) -> [NavigationCase; 7] {
+    [
+        (
+            LogicalKey::Left,
+            LogicalModifiers::NONE,
+            Action::MoveGraphemeBack,
+            UiKey::Move {
+                movement: CursorMovement::GraphemeBack,
+                extend_selection: false,
+            },
+        ),
+        (
+            LogicalKey::Right,
+            LogicalModifiers::SHIFT,
+            Action::ExtendGraphemeForward,
+            UiKey::Move {
+                movement: CursorMovement::GraphemeForward,
+                extend_selection: true,
+            },
+        ),
+        (
+            LogicalKey::Left,
+            word,
+            Action::MoveWordBack,
+            UiKey::Move {
+                movement: CursorMovement::WordBack,
+                extend_selection: false,
+            },
+        ),
+        (
+            LogicalKey::Home,
+            LogicalModifiers::NONE,
+            Action::MoveLineStart,
+            UiKey::Move {
+                movement: CursorMovement::LineStart,
+                extend_selection: false,
+            },
+        ),
+        (
+            LogicalKey::End,
+            LogicalModifiers::SHIFT,
+            Action::ExtendLineEnd,
+            UiKey::Move {
+                movement: CursorMovement::LineEnd,
+                extend_selection: true,
+            },
+        ),
+        (
+            LogicalKey::Delete,
+            LogicalModifiers::NONE,
+            Action::DeleteForward,
+            UiKey::Delete,
+        ),
+        (
+            LogicalKey::Character('a'),
+            primary,
+            Action::SelectAll,
+            UiKey::SelectAll,
+        ),
+    ]
 }
 
 #[test]

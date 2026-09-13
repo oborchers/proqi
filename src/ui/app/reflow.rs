@@ -4,7 +4,7 @@ use crate::{
     application::{Action, Effect, InteractionMode, OwnedThoughtEdit, OwnedThoughtReflow},
     domain::{ContentAnnotation, TextPosition},
     ports::{
-        editor::{EditCommand, EditorSnapshot, OffsetAffinity, TextChangeSet},
+        editor::{EditorSnapshot, OffsetAffinity, TextChangeSet},
         environment::{Clock, IdGenerator},
         text_layout::{byte_for_position, position_for_byte},
     },
@@ -127,19 +127,15 @@ impl BoardApp {
             self.current_annotations(thought_id),
             payload.annotations,
             before.cursor,
+            before.selection_anchor,
             cursor,
+            anchor,
             clock.now(),
         )));
         if !effects.is_empty()
             && let Some((_, editor)) = &mut self.editor
         {
-            editor.replace_content(payload.content, anchor.unwrap_or(cursor));
-            if anchor.is_some() {
-                editor.apply(EditCommand::SetCursor {
-                    position: cursor,
-                    extend_selection: true,
-                });
-            }
+            editor.replace_state(payload.content, cursor, anchor);
         }
         effects
     }

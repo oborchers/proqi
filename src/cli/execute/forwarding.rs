@@ -24,7 +24,10 @@ pub(super) fn rename_session(
     let Some(owner) = owner(context, session_id)? else {
         return Ok(false);
     };
-    let mutation = ControlMutation::RenameSession { name };
+    let mutation = ControlMutation::RenameSession {
+        operation_id: context.ids.operation_id(),
+        name,
+    };
     let protocol = required_protocol(&owner, &mutation)?;
     let request = ControlRequest {
         protocol,

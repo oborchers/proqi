@@ -36,7 +36,21 @@ fn first_populated_create_round_trips_as_one_restart_safe_undo_unit() {
     store
         .commit(&OperationBatch::CreateSession(state.board.session.clone()))
         .expect("create session");
-    let thought_id = create_thought(&mut store, &mut state, &mut ids, "nqs:?jk界", 2);
+    let thought_id = ids.thought_id();
+    let create = one_effect(
+        &mut state,
+        Action::CreateComposeThought {
+            thought_id,
+            operation_id: ids.operation_id(),
+            content: "nqs:?jk界".to_owned(),
+            annotations: Vec::new(),
+            cursor: TextPosition::new(0, 8),
+            selection_anchor: Some(TextPosition::new(0, 2)),
+            preserve_owned: false,
+            at: Timestamp::from_millis(2),
+        },
+    );
+    persist_effect(&mut store, &create);
     drop(store);
 
     let mut reopened = fixture.open();
@@ -77,6 +91,14 @@ fn first_populated_create_round_trips_as_one_restart_safe_undo_unit() {
         },
     );
     persist_effect(&mut reopened, &redo);
+    assert_eq!(
+        restored.mode,
+        proqi::application::InteractionMode::Edit { thought_id }
+    );
+    assert_eq!(
+        restored.restored_editor_state(thought_id),
+        Some((TextPosition::new(0, 8), Some(TextPosition::new(0, 2))))
+    );
     let resumed = reopened
         .load_session(session_id)
         .expect("resume redone session");

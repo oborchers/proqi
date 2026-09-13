@@ -113,6 +113,8 @@ pub(super) enum BrowserHit {
     Item(usize),
     Rename,
     Trash,
+    Undo,
+    Redo,
     Confirm,
     Cancel,
     None,
@@ -122,28 +124,38 @@ pub(super) enum BrowserHit {
 pub(super) struct BrowserFooterControl {
     pub(super) hit: BrowserHit,
     pub(super) key: String,
-    pub(super) label: &'static str,
+    pub(super) label: String,
     pub(super) area: Rect,
 }
 
 pub(super) fn browser_footer_controls(
     area: Rect,
-    registry: &crate::ui::ShortcutRegistry,
-    context: crate::ui::ShortcutContext,
+    browser: &SessionBrowser,
 ) -> Vec<BrowserFooterControl> {
     if area.width == 0 || area.height == 0 {
         return Vec::new();
     }
     let mut x = area.x.saturating_add(1);
+    let context = browser.shortcut_context();
+    let destructive_label = browser
+        .selected_item()
+        .filter(|(_, item)| matches!(item.availability, BrowserAvailability::Trashed))
+        .map_or("Trash", |_| "Restore");
+    let (undo_label, redo_label) = browser.footer_history_labels();
     crate::ui::shortcut_registry::presentation::browser_footer_projection(
-        registry, area.width, context,
+        &browser.shortcut_registry,
+        area.width,
+        context,
+        destructive_label,
+        undo_label,
+        redo_label,
     )
     .into_iter()
     .filter_map(|projection| {
         let width = crate::ports::text_layout::terminal_cell_width(&projection.key)
             .saturating_add(1)
             .saturating_add(crate::ports::text_layout::terminal_cell_width(
-                projection.label,
+                &projection.label,
             ));
         let width = u16::try_from(width).unwrap_or(u16::MAX);
         if x.saturating_add(width) > area.right() {
@@ -166,6 +178,10 @@ fn browser_hit(actions: &[crate::ui::ShortcutActionId]) -> BrowserHit {
         BrowserHit::Rename
     } else if actions.contains(&crate::ui::ShortcutActionId::BrowserTrash) {
         BrowserHit::Trash
+    } else if actions.contains(&crate::ui::ShortcutActionId::Undo) {
+        BrowserHit::Undo
+    } else if actions.contains(&crate::ui::ShortcutActionId::Redo) {
+        BrowserHit::Redo
     } else if actions.contains(&crate::ui::ShortcutActionId::Close) {
         BrowserHit::Cancel
     } else if actions.contains(&crate::ui::ShortcutActionId::Confirm) {
@@ -191,6 +207,15 @@ pub enum BrowserAction {
     },
     /// Move this session into recoverable trash.
     Trash(SessionId),
+    /// Restore this session from recoverable trash.
+    Restore(SessionId),
+    /// Move the durable installation-wide Browser history.
+    History {
+        /// Undo when true, redo otherwise.
+        undo: bool,
+        /// Exact entry that was visible when the user chose the action.
+        target: crate::ports::store::BrowserHistoryEntry,
+    },
     /// Leave without opening a session.
     Cancel,
 }
@@ -199,7 +224,7 @@ pub enum BrowserAction {
 pub struct SessionBrowser {
     items: Vec<SessionBrowserItem>,
     filtered: Vec<usize>,
-    query: String,
+    query: crate::ui::app::query::QueryEditor,
     selected: usize,
     first_visible: usize,
     now: Timestamp,
@@ -207,6 +232,7 @@ pub struct SessionBrowser {
     pub(super) footer_controls: Vec<BrowserFooterControl>,
     rename: Option<management::RenameState>,
     pub(super) shortcut_registry: crate::ui::ShortcutRegistry,
+    history: crate::ports::store::BrowserHistoryStatus,
     /// Visible explanation for blocked or ambiguous actions.
     pub status: Option<String>,
 }
@@ -219,7 +245,7 @@ impl SessionBrowser {
         Self {
             items,
             filtered,
-            query: String::new(),
+            query: crate::ui::app::query::QueryEditor::default(),
             selected: 0,
             first_visible: 0,
             now,
@@ -227,6 +253,7 @@ impl SessionBrowser {
             footer_controls: Vec::new(),
             rename: None,
             shortcut_registry: crate::ui::ShortcutRegistry::default(),
+            history: crate::ports::store::BrowserHistoryStatus::default(),
             status: None,
         }
     }
@@ -235,22 +262,78 @@ impl SessionBrowser {
         items: Vec<SessionBrowserItem>,
         now: Timestamp,
         shortcut_registry: crate::ui::ShortcutRegistry,
+        history: crate::ports::store::BrowserHistoryStatus,
     ) -> Self {
         let mut browser = Self::new(items, now);
         browser.shortcut_registry = shortcut_registry;
+        browser.history = history.without_active_targets(&browser.items);
         browser
+    }
+
+    /// Durable Browser history available outside local query ownership.
+    #[must_use]
+    pub const fn history_status(&self) -> crate::ports::store::BrowserHistoryStatus {
+        self.history
+    }
+
+    fn footer_history_labels(&self) -> (Option<&'static str>, Option<&'static str>) {
+        if let Some(rename) = &self.rename {
+            return (
+                rename.value.can_undo().then_some("text"),
+                rename.value.can_redo().then_some("text"),
+            );
+        }
+        if !self.query.text().is_empty() || self.query.can_undo() || self.query.can_redo() {
+            return (
+                self.query.can_undo().then_some("text"),
+                self.query.can_redo().then_some("text"),
+            );
+        }
+        (
+            self.history.undo.map(|entry| entry.kind.label()),
+            self.history.redo.map(|entry| entry.kind.label()),
+        )
+    }
+
+    fn history_target(&self, undo: bool) -> Option<crate::ports::store::BrowserHistoryEntry> {
+        if undo {
+            self.history.undo
+        } else {
+            self.history.redo
+        }
     }
 
     /// Current case-insensitive search text.
     #[must_use]
     pub fn query(&self) -> &str {
-        &self.query
+        self.query.text()
     }
 
     /// Active rename input, when the browser is editing a session name.
     #[must_use]
     pub fn rename_value(&self) -> Option<&str> {
-        self.rename.as_ref().map(|rename| rename.value.as_str())
+        self.rename.as_ref().map(|rename| rename.value.text())
+    }
+
+    pub(in crate::ui) fn text_input_view(
+        &self,
+    ) -> (&str, usize, Option<crate::ui::app::query::QuerySelection>) {
+        self.rename.as_ref().map_or_else(
+            || {
+                (
+                    self.query.text(),
+                    self.query.cursor(),
+                    self.query.selection(),
+                )
+            },
+            |rename| {
+                (
+                    rename.value.text(),
+                    rename.value.cursor(),
+                    rename.value.selection(),
+                )
+            },
+        )
     }
 
     /// Search results in their storage-defined ranking order.
@@ -322,14 +405,32 @@ impl SessionBrowser {
         }
         self.layout = Some(layout.clone());
         self.footer_controls = if self.status.is_none() {
-            browser_footer_controls(
-                layout.footer,
-                &self.shortcut_registry,
-                self.shortcut_context(),
-            )
+            browser_footer_controls(layout.footer, self)
         } else {
             Vec::new()
         };
         layout
+    }
+}
+
+trait BrowserHistoryAvailability {
+    fn without_active_targets(self, items: &[SessionBrowserItem]) -> Self;
+}
+
+impl BrowserHistoryAvailability for crate::ports::store::BrowserHistoryStatus {
+    fn without_active_targets(mut self, items: &[SessionBrowserItem]) -> Self {
+        let is_active = |target: crate::ports::store::BrowserHistoryEntry| {
+            items.iter().any(|item| {
+                item.hit.id == target.session_id
+                    && matches!(item.availability, BrowserAvailability::Active(_))
+            })
+        };
+        if self.undo.is_some_and(is_active) {
+            self.undo = None;
+        }
+        if self.redo.is_some_and(is_active) {
+            self.redo = None;
+        }
+        self
     }
 }

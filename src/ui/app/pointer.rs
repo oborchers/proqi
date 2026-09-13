@@ -182,6 +182,7 @@ impl BoardApp {
                 self.begin_delivery(disposition, ids, clock)
             }
             Some(HitTarget::Undo) => self.history(ids, clock, true),
+            Some(HitTarget::Redo) => self.history(ids, clock, false),
             Some(HitTarget::Help) => self.toggle_help(),
             Some(HitTarget::Quit) => {
                 self.request_quit();

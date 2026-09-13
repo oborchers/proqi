@@ -48,6 +48,9 @@ pub(super) fn binding(
     modifiers: LogicalModifiers,
     macos: bool,
 ) -> Option<(Action, ShortcutBindingPresentation)> {
+    if let Some(binding) = macos_history(context, key, modifiers, macos) {
+        return Some(binding);
+    }
     if macos
         && key == LogicalKey::Enter
         && matches!(modifiers, LogicalModifiers::CONTROL | CONTROL_SHIFT)
@@ -71,6 +74,35 @@ pub(super) fn binding(
             })
     })
     .flatten()
+}
+
+fn macos_history(
+    context: Context,
+    key: LogicalKey,
+    modifiers: LogicalModifiers,
+    macos: bool,
+) -> Option<(Action, ShortcutBindingPresentation)> {
+    if !macos {
+        return None;
+    }
+    let (action, presentation) = match (key, modifiers) {
+        (LogicalKey::Character('z'), LogicalModifiers::CONTROL) => {
+            (Action::Undo, ShortcutBindingPresentation::Explicit)
+        }
+        (LogicalKey::Character('z' | 'Z'), CONTROL_SHIFT) => {
+            (Action::Redo, ShortcutBindingPresentation::Explicit)
+        }
+        // Some terminal paths encode Shift in the uppercase codepoint without
+        // retaining a distinct modifier bit.
+        (LogicalKey::Character('Z' | 'y' | 'Y'), LogicalModifiers::CONTROL) => {
+            (Action::Redo, ShortcutBindingPresentation::DispatchOnly)
+        }
+        _ => return None,
+    };
+    // Every active keyboard context must absorb history at its own owner,
+    // including blocking surfaces whose answer is explicitly unavailable.
+    let _ownership = context.undo_contract();
+    Some((action, presentation))
 }
 
 fn editor_boundary(
@@ -146,4 +178,30 @@ fn board_boundary(
 
 pub(super) fn macos_reorder_modifiers(macos: bool, modifiers: LogicalModifiers) -> bool {
     macos && modifiers == OPTION_SHIFT
+}
+
+pub(super) fn configured_board_boundary(
+    previous: bool,
+    base_focus: bool,
+    modifiers: LogicalModifiers,
+    macos: bool,
+) -> Option<Action> {
+    let action = match (previous, base_focus, modifiers, macos) {
+        (true, true, LogicalModifiers::CONTROL, _) => Action::FocusFirst,
+        (false, true, LogicalModifiers::CONTROL, _) => Action::FocusLast,
+        (true, false, value, true)
+            if value.difference(LogicalModifiers::SHIFT) == LogicalModifiers::CONTROL =>
+        {
+            Action::ExtendFirst
+        }
+        (false, false, value, true)
+            if value.difference(LogicalModifiers::SHIFT) == LogicalModifiers::CONTROL =>
+        {
+            Action::ExtendLast
+        }
+        (true, true, LogicalModifiers::ALT, false) => Action::InsertAbove,
+        (false, true, LogicalModifiers::ALT, false) => Action::InsertBelow,
+        _ => return None,
+    };
+    Some(action)
 }

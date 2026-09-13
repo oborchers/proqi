@@ -80,6 +80,53 @@ fn dirty_primary_transform_emits_one_board_operation_and_undoes_the_edit_with_it
 }
 
 #[test]
+fn transform_undo_reports_the_newer_edit_that_must_move_first() {
+    let mut fixture = Fixture::new();
+    let sequence = fixture.paste("left right");
+    fixture.app.acknowledge_persistence(sequence, true);
+    for _ in 0..6 {
+        fixture.input(crate::key_input(UiKey::Move {
+            movement: CursorMovement::GraphemeBack,
+            extend_selection: false,
+        }));
+    }
+    let split = fixture.effects(crate::key_input(UiKey::PrimaryCharacter('t')));
+    let split_sequence = board_operation(&split).sequence;
+    fixture.app.acknowledge_persistence(split_sequence, true);
+    fixture.input(crate::key_input(UiKey::Character('!')));
+    let revision = fixture.effects(crate::key_input(UiKey::Escape));
+    let revision_sequence = revision
+        .first()
+        .and_then(Effect::persistence_batch)
+        .and_then(|batch| batch.sequence())
+        .expect("newer editor revision");
+    fixture.app.acknowledge_persistence(revision_sequence, true);
+    fixture.input(crate::key_input(UiKey::Move {
+        movement: CursorMovement::VisualUp,
+        extend_selection: false,
+    }));
+    fixture.input(crate::key_input(UiKey::Enter));
+
+    let effects = fixture.effects(crate::key_input(UiKey::Undo));
+    assert!(effects.is_empty());
+    assert_eq!(
+        fixture.app.status_text(),
+        Some("Undo unavailable: undo the newer edit in the affected thought first")
+    );
+    assert_eq!(
+        fixture
+            .app
+            .state
+            .board
+            .live_thoughts()
+            .iter()
+            .map(|thought| thought.content.as_str())
+            .collect::<Vec<_>>(),
+        ["left", "! right"]
+    );
+}
+
+#[test]
 fn mouse_commands_preserves_the_exact_selection_captured_on_edit_exit() {
     let mut fixture = Fixture::new();
     let sequence = fixture.paste("exact selection");

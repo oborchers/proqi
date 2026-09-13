@@ -202,6 +202,8 @@ pub struct EditorSnapshot {
     pub content: String,
     /// Logical cursor position.
     pub cursor: TextPosition,
+    /// Fixed directional selection endpoint, when a selection is active.
+    pub selection_anchor: Option<TextPosition>,
     /// Normalized active selection, if any.
     pub selection: Option<TextSelection>,
     /// Current viewport.
@@ -237,6 +239,14 @@ pub trait Editor {
 
     /// Replace all content, report that reset explicitly, and restore the nearest valid cursor.
     fn replace_content(&mut self, text: String, cursor: TextPosition) -> EditOutcome;
+
+    /// Replace all content and restore the exact cursor head and optional selection anchor.
+    fn replace_state(
+        &mut self,
+        text: String,
+        cursor: TextPosition,
+        selection_anchor: Option<TextPosition>,
+    ) -> EditOutcome;
 
     /// Resolve a visible viewport cell to a logical text position.
     fn position_at_cell(&self, row: u16, column: u16) -> TextPosition;

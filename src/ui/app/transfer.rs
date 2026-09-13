@@ -18,6 +18,7 @@ mod view;
 use view::SessionHitLabel as _;
 
 pub(super) struct TransferState {
+    generation: u64,
     query: QueryEditor,
     sessions: Vec<SessionHit>,
     selected: usize,
@@ -43,7 +44,10 @@ impl BoardApp {
             EditFlush::Complete(effects) => effects,
             EditFlush::Blocked(effects) => return effects,
         };
+        self.transfer_generation = self.transfer_generation.wrapping_add(1);
+        let generation = self.transfer_generation;
         self.transfer = Some(TransferState {
+            generation,
             query: QueryEditor::default(),
             sessions: Vec::new(),
             selected: 0,
@@ -52,17 +56,21 @@ impl BoardApp {
             remove_source,
             loading: true,
         });
-        effects.push(Effect::DiscoverTransferSessions);
+        effects.push(Effect::DiscoverTransferSessions { generation });
         effects
     }
 
     pub(crate) fn complete_transfer_discovery(
         &mut self,
+        generation: u64,
         result: Result<Vec<SessionHit>, StoreError>,
     ) {
         let Some(state) = &mut self.transfer else {
             return;
         };
+        if state.generation != generation {
+            return;
+        }
         state.loading = false;
         match result {
             Ok(sessions) if sessions.is_empty() => {
@@ -100,13 +108,36 @@ impl BoardApp {
                 self.set_success("thought sent to the destination session");
                 Vec::new()
             }
+            Ok(_)
+                if self
+                    .state
+                    .board
+                    .thought(request.source_thought_id)
+                    .is_none_or(|thought| !thought.is_live()) =>
+            {
+                self.set_info("thought sent; source was already removed");
+                Vec::new()
+            }
+            Ok(_)
+                if self
+                    .state
+                    .board
+                    .thought(request.source_thought_id)
+                    .is_some_and(|thought| {
+                        thought.content != request.content
+                            || thought.annotations != request.annotations
+                    }) =>
+            {
+                self.set_info("thought sent; source changed and was kept");
+                Vec::new()
+            }
             Ok(_) => {
                 self.set_info("thought sent; removing the source");
                 self.reduce_with_empty_transition(
                     Action::DeleteThought {
                         operation_id: ids.operation_id(),
                         thought_id: request.source_thought_id,
-                        kind: BoardOperationKind::Delete,
+                        kind: BoardOperationKind::TransferAndRemove,
                         at: clock.now(),
                     },
                     crate::application::EmptyBoardTransition::ComposeAfterLocalRemoval,
@@ -190,8 +221,13 @@ impl BoardApp {
                 movement: CursorMovement::VisualDown,
                 ..
             } => self.move_transfer(1),
-            UiKey::Move { movement, .. } => {
-                self.update_transfer_query(|query| query.move_cursor(movement));
+            UiKey::Move {
+                movement,
+                extend_selection,
+            } => {
+                self.update_transfer_query(|query| {
+                    query.move_cursor_with_selection(movement, extend_selection);
+                });
             }
             UiKey::Delete | UiKey::ModifiedDelete => {
                 self.update_transfer_query(QueryEditor::delete);
@@ -201,6 +237,19 @@ impl BoardApp {
             }
             UiKey::UnmodifiedSpace => {
                 self.update_transfer_query(|query| query.insert_char(' '));
+            }
+            UiKey::SelectAll => {
+                self.update_transfer_query(QueryEditor::select_all);
+            }
+            UiKey::Undo => {
+                self.update_transfer_query(|query| {
+                    query.undo();
+                });
+            }
+            UiKey::Redo => {
+                self.update_transfer_query(|query| {
+                    query.redo();
+                });
             }
             _ => {}
         }
@@ -283,6 +332,10 @@ impl TransferState {
         self.query.cursor()
     }
 
+    pub(super) const fn query_selection(&self) -> Option<super::query::QuerySelection> {
+        self.query.selection()
+    }
+
     fn matches(&self) -> Vec<&SessionHit> {
         let query = self.query.text().to_lowercase();
         self.sessions
@@ -311,178 +364,5 @@ impl TransferState {
 mod paging_tests;
 
 #[cfg(test)]
-mod tests {
-    use crate::ui::input::RoutedInput as UiInput;
-    use crate::{
-        adapters::{
-            editor::RopeEditorFactory,
-            memory::{FakeClock, FakeIdGenerator},
-        },
-        application::{AppState, Effect, FirstRunEnvironment, ThoughtMutation, first_run_board},
-        domain::{
-            ContentAnnotation, OperationSequence, Session, SessionBoard, Thought, ThoughtPosition,
-            Timestamp,
-        },
-        ports::{
-            editor::CursorMovement,
-            environment::IdGenerator,
-            store::{CommitReceipt, DurableIdentity, SessionHit},
-        },
-        ui::{BoardApp, UiKey},
-    };
-
-    #[test]
-    fn transfer_preserves_annotations_and_removes_only_after_destination_receipt() {
-        let mut ids = FakeIdGenerator::new(1_725_200_000_000);
-        let clock = FakeClock::new(Timestamp::from_millis(3));
-        let source = Session::new(
-            ids.session_id(),
-            std::env::temp_dir().join("proqi-transfer-source"),
-            Timestamp::from_millis(1),
-        )
-        .expect("source session");
-        let destination = ids.session_id();
-        let mut thought = Thought::new(
-            ids.thought_id(),
-            source.id,
-            "Press Enter".to_owned(),
-            ThoughtPosition::new(0),
-            Timestamp::from_millis(1),
-        );
-        thought
-            .set_annotations(vec![ContentAnnotation::shortcut(6, 11)])
-            .expect("annotation");
-        let thought_id = thought.id;
-        let board = SessionBoard::new(source, vec![thought.clone()]).expect("board");
-        let mut app = BoardApp::new(AppState::new(board), RopeEditorFactory);
-        assert_eq!(
-            app.begin_session_transfer(true, &mut ids, &clock),
-            vec![Effect::DiscoverTransferSessions]
-        );
-        assert_loading_input_is_ignored(&mut app, &mut ids, &clock);
-        app.complete_transfer_discovery(Ok(vec![session_hit(destination)]));
-        assert_modified_delete_edits_query(&mut app, &mut ids, &clock);
-        let effects = app.handle_transfer_input(&UiInput::Key(UiKey::Enter), &mut ids, &clock);
-        let [Effect::TransferThought(request)] = effects.as_slice() else {
-            panic!("expected transfer request");
-        };
-        assert_eq!(request.content, thought.content);
-        assert_eq!(request.annotations, thought.annotations);
-        assert_eq!(request.source_thought_id, thought_id);
-        assert_thought_is_live(&app, thought_id);
-        let failed = app.complete_session_transfer(
-            request,
-            Err("destination unavailable".to_owned()),
-            &mut ids,
-            &clock,
-        );
-        assert!(failed.is_empty());
-        assert_thought_is_live(&app, thought_id);
-        let receipt = CommitReceipt {
-            session_id: destination,
-            sequence: OperationSequence::new(1),
-            identity: DurableIdentity::Operation(request.operation_id),
-            idempotent_replay: false,
-        };
-        let completion = app.complete_session_transfer(
-            request,
-            Ok(ThoughtMutation {
-                thought_id: ids.thought_id(),
-                receipt,
-            }),
-            &mut ids,
-            &clock,
-        );
-        assert!(matches!(
-            completion.as_slice(),
-            [Effect::CommitBoardOperation(_)]
-        ));
-        assert!(app.state.board.live_thoughts().is_empty());
-    }
-
-    #[test]
-    fn tutorial_shortcut_annotations_cross_the_session_transfer_boundary_exactly() {
-        let mut ids = FakeIdGenerator::new(1_725_205_000_000);
-        let clock = FakeClock::new(Timestamp::from_millis(3));
-        let source = Session::new(
-            ids.session_id(),
-            std::env::temp_dir().join("proqi-tutorial-transfer-source"),
-            Timestamp::from_millis(1),
-        )
-        .expect("source session");
-        let board = first_run_board(source, &mut ids, FirstRunEnvironment::Standalone)
-            .expect("practice board");
-        let thought = board.board().live_thoughts()[1].clone();
-        let mut app = BoardApp::new(AppState::new(board.board().clone()), RopeEditorFactory);
-        app.state.focused_thought = Some(thought.id);
-
-        assert_eq!(
-            app.begin_session_transfer(false, &mut ids, &clock),
-            vec![Effect::DiscoverTransferSessions]
-        );
-        app.complete_transfer_discovery(Ok(vec![session_hit(ids.session_id())]));
-        let effects = app.handle_transfer_input(&UiInput::Key(UiKey::Enter), &mut ids, &clock);
-        let [Effect::TransferThought(request)] = effects.as_slice() else {
-            panic!("expected transfer request");
-        };
-        assert_eq!(request.content, thought.content);
-        assert_eq!(request.annotations, thought.annotations);
-    }
-
-    fn assert_modified_delete_edits_query(
-        app: &mut BoardApp,
-        ids: &mut FakeIdGenerator,
-        clock: &FakeClock,
-    ) {
-        for character in "hx".chars() {
-            app.handle_transfer_input(&UiInput::Key(UiKey::Character(character)), ids, clock);
-        }
-        app.handle_transfer_input(
-            &UiInput::Key(UiKey::Move {
-                movement: CursorMovement::GraphemeBack,
-                extend_selection: false,
-            }),
-            ids,
-            clock,
-        );
-        app.handle_transfer_input(&UiInput::Key(UiKey::ModifiedDelete), ids, clock);
-        assert_eq!(app.transfer_view().expect("transfer").0, "h");
-        app.handle_transfer_input(&UiInput::Key(UiKey::Backspace), ids, clock);
-    }
-
-    fn assert_loading_input_is_ignored(
-        app: &mut BoardApp,
-        ids: &mut FakeIdGenerator,
-        clock: &FakeClock,
-    ) {
-        let effects = app.handle_transfer_input(&UiInput::Key(UiKey::Enter), ids, clock);
-        assert!(effects.is_empty());
-        assert!(app.transfer_view().is_some());
-    }
-
-    fn assert_thought_is_live(app: &BoardApp, thought_id: crate::domain::ThoughtId) {
-        assert!(
-            app.state
-                .board
-                .thought(thought_id)
-                .is_some_and(Thought::is_live)
-        );
-    }
-
-    fn session_hit(id: crate::domain::SessionId) -> SessionHit {
-        SessionHit {
-            id,
-            name: Some("destination".to_owned()),
-            origin_cwd: std::env::temp_dir(),
-            last_opened_cwd: std::env::temp_dir(),
-            last_opened_at: Timestamp::from_millis(1),
-            last_active_at: Timestamp::from_millis(1),
-            thought_count: 0,
-            excerpt: String::new(),
-            previews: Vec::new(),
-            search_content: String::new(),
-            integration_context: None,
-            trashed: false,
-        }
-    }
-}
+#[path = "transfer/tests.rs"]
+mod tests;

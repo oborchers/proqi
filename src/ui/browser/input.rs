@@ -1,7 +1,5 @@
 //! Shortcut-registry dispatch, query editing, selection, and pointer activation.
 
-use unicode_segmentation::UnicodeSegmentation as _;
-
 use crate::ui::input::{RoutedInput as UiInput, UiKey};
 use crate::ui::{PointerButton, PointerInput, PointerKind, UiInput as ExternalInput};
 
@@ -24,7 +22,7 @@ impl SessionBrowser {
     pub(in crate::ui) fn shortcut_context(&self) -> crate::ui::ShortcutContext {
         if self.rename.is_some() {
             crate::ui::ShortcutContext::BrowserRename
-        } else if self.query.is_empty() {
+        } else if self.query.text().is_empty() {
             crate::ui::ShortcutContext::Browser
         } else {
             crate::ui::ShortcutContext::BrowserQuery
@@ -52,53 +50,29 @@ impl SessionBrowser {
                 self.layout = None;
                 BrowserAction::Continue
             }
-            UiInput::Key(UiKey::Backspace | UiKey::Delete | UiKey::ModifiedDelete) => {
-                if let Some((index, _)) = self.query.grapheme_indices(true).next_back() {
-                    self.query.truncate(index);
-                }
-                self.refilter();
-                BrowserAction::Continue
-            }
-            UiInput::Key(UiKey::Move { movement, .. }) => {
-                use crate::ports::editor::CursorMovement;
-                match movement {
-                    CursorMovement::VisualUp
-                    | CursorMovement::GraphemeBack
-                    | CursorMovement::WordBack
-                    | CursorMovement::LineStart
-                    | CursorMovement::DocumentStart => self.move_selection(-1),
-                    _ => self.move_selection(1),
-                }
-                BrowserAction::Continue
-            }
-            UiInput::Key(UiKey::Character(character)) => {
-                self.query.push(character);
-                self.refilter();
-                BrowserAction::Continue
-            }
+            UiInput::Key(UiKey::Move {
+                movement,
+                extend_selection,
+            }) => self.handle_movement(movement, extend_selection),
             UiInput::Key(UiKey::Shortcut(crate::ui::ShortcutActionId::RenameSession)) => {
                 self.begin_rename()
             }
             UiInput::Key(UiKey::Shortcut(crate::ui::ShortcutActionId::BrowserTrash)) => {
                 self.trash_selected()
             }
-            UiInput::Key(UiKey::UnmodifiedSpace) => {
-                self.query.push(' ');
-                self.refilter();
-                BrowserAction::Continue
-            }
-            UiInput::Paste(text) => {
-                self.query.push_str(&text.replace(['\r', '\n'], " "));
-                self.refilter();
-                BrowserAction::Continue
-            }
-            UiInput::PasteAnnotated(payload) => {
-                self.query
-                    .push_str(&payload.content.replace(['\r', '\n'], " "));
-                self.refilter();
-                BrowserAction::Continue
-            }
+            UiInput::Key(UiKey::Undo) => self.handle_history(true),
+            UiInput::Key(UiKey::Redo) => self.handle_history(false),
             UiInput::Pointer(pointer) => self.handle_pointer(pointer),
+            input @ (UiInput::Key(
+                UiKey::Backspace
+                | UiKey::Delete
+                | UiKey::ModifiedDelete
+                | UiKey::Character(_)
+                | UiKey::UnmodifiedSpace
+                | UiKey::SelectAll,
+            )
+            | UiInput::Paste(_)
+            | UiInput::PasteAnnotated(_)) => self.edit_query(input),
             UiInput::Resize { .. }
             | UiInput::HostFocusGained
             | UiInput::HostFocusLost
@@ -107,8 +81,81 @@ impl SessionBrowser {
         }
     }
 
+    fn handle_movement(
+        &mut self,
+        movement: crate::ports::editor::CursorMovement,
+        extend_selection: bool,
+    ) -> BrowserAction {
+        use crate::ports::editor::CursorMovement;
+        match movement {
+            CursorMovement::VisualUp | CursorMovement::VisualJumpUp => self.move_selection(-1),
+            CursorMovement::VisualDown | CursorMovement::VisualJumpDown => self.move_selection(1),
+            _ => self
+                .query
+                .move_cursor_with_selection(movement, extend_selection),
+        }
+        BrowserAction::Continue
+    }
+
+    fn handle_history(&mut self, undo: bool) -> BrowserAction {
+        if self.query.can_undo() || self.query.can_redo() {
+            if undo {
+                self.query.undo();
+            } else {
+                self.query.redo();
+            }
+            self.refilter();
+            return BrowserAction::Continue;
+        }
+        if let Some(target) = self.history_target(undo) {
+            BrowserAction::History { undo, target }
+        } else {
+            let direction = if undo { "undo" } else { "redo" };
+            self.status = Some(format!("Nothing to {direction} in Browser history"));
+            BrowserAction::Continue
+        }
+    }
+
+    fn edit_query(&mut self, input: UiInput) -> BrowserAction {
+        let content_changed = match input {
+            UiInput::Key(UiKey::Backspace) => {
+                self.query.backspace();
+                true
+            }
+            UiInput::Key(UiKey::Delete | UiKey::ModifiedDelete) => {
+                self.query.delete();
+                true
+            }
+            UiInput::Key(UiKey::Character(character)) => {
+                self.query.insert_char(character);
+                true
+            }
+            UiInput::Key(UiKey::UnmodifiedSpace) => {
+                self.query.insert_char(' ');
+                true
+            }
+            UiInput::Paste(text) => {
+                self.query.paste(&text);
+                true
+            }
+            UiInput::PasteAnnotated(payload) => {
+                self.query.paste(&payload.content);
+                true
+            }
+            UiInput::Key(UiKey::SelectAll) => {
+                self.query.select_all();
+                false
+            }
+            _ => false,
+        };
+        if content_changed {
+            self.refilter();
+        }
+        BrowserAction::Continue
+    }
+
     fn refilter(&mut self) {
-        let query = self.query.to_lowercase();
+        let query = self.query.text().to_lowercase();
         self.filtered = self
             .items
             .iter()
@@ -154,6 +201,8 @@ impl SessionBrowser {
             BrowserHit::Cancel => BrowserAction::Cancel,
             BrowserHit::Rename => self.begin_rename(),
             BrowserHit::Trash => self.trash_selected(),
+            BrowserHit::Undo => self.handle_resolved_input(UiInput::Key(UiKey::Undo)),
+            BrowserHit::Redo => self.handle_resolved_input(UiInput::Key(UiKey::Redo)),
             BrowserHit::Confirm => self.activate(),
             BrowserHit::Item(item_index) => {
                 let Some(position) = self.filtered.iter().position(|index| *index == item_index)

@@ -18,7 +18,7 @@ pub(super) fn choices(app: &BoardApp, popup: &InvocationPopup) -> Vec<Choice> {
         .iter()
         .copied()
         .filter_map(|starter| {
-            matcher::token(starter.token, &popup.query).map(|rank| (starter, rank))
+            matcher::token(starter.token, popup.query.text()).map(|rank| (starter, rank))
         })
         .map(|(starter, rank)| Choice {
             token: starter.token.to_owned(),

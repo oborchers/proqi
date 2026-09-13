@@ -1,6 +1,6 @@
 ---
 source: tests/ui_board/agent_direct.rs
-assertion_line: 428
+assertion_line: 424
 expression: evidence
 ---
 Editor 120x12
@@ -17,7 +17,7 @@ TEXT
 07││
 08│  proqi-ui-contract│
 09│  1 thought · edit · saved│
-10│  Esc Board  Cmd+C Copy Cmd+X Cut Cmd+Z Undo│
+10│  Esc Board  Cmd+C Copy Cmd+X Cut Ctrl+Z Undo│
 11│  → Codex   Ctrl+Enter Submit   Ctrl+Shift+Enter Submit & keep│
 
 STYLE RUNS
@@ -31,7 +31,7 @@ STYLE RUNS
 7: 0-119 fg=Reset bg=Reset mod=NONE
 8: 0-119 fg=Reset bg=Reset mod=NONE
 9: 0-1 fg=Reset bg=Reset mod=NONE | 2-117 fg=DarkGray bg=Reset mod=NONE | 118-119 fg=Reset bg=Reset mod=NONE
-10: 0-1 fg=Reset bg=Reset mod=NONE | 2-4 fg=Green bg=Reset mod=NONE | 5-12 fg=Reset bg=Reset mod=NONE | 13-17 fg=Green bg=Reset mod=NONE | 18-23 fg=Reset bg=Reset mod=NONE | 24-28 fg=Green bg=Reset mod=NONE | 29-33 fg=Reset bg=Reset mod=NONE | 34-38 fg=Green bg=Reset mod=NONE | 39-119 fg=Reset bg=Reset mod=NONE
+10: 0-1 fg=Reset bg=Reset mod=NONE | 2-4 fg=Green bg=Reset mod=NONE | 5-12 fg=Reset bg=Reset mod=NONE | 13-17 fg=Green bg=Reset mod=NONE | 18-23 fg=Reset bg=Reset mod=NONE | 24-28 fg=Green bg=Reset mod=NONE | 29-33 fg=Reset bg=Reset mod=NONE | 34-39 fg=Green bg=Reset mod=NONE | 40-119 fg=Reset bg=Reset mod=NONE
 11: 0-1 fg=Reset bg=Reset mod=NONE | 2-2 fg=Green bg=Reset mod=NONE | 3-11 fg=Reset bg=Reset mod=NONE | 12-21 fg=Green bg=Reset mod=NONE | 22-31 fg=Reset bg=Reset mod=NONE | 32-47 fg=Green bg=Reset mod=NONE | 48-119 fg=Reset bg=Reset mod=NONE
 Editor 48x10
 SIZE 48x10
@@ -89,16 +89,16 @@ TEXT
 05││Cmd+X/x                                  Cut               d/Del                                    Delete            ││
 06││Cmd+D/Shift+D                            Duplicate         Space                                    Select            ││
 07││t                                        Transform         Cmd+A/a                                  Select all        ││
-08││v                                        Latch             Cmd+Z/u                                  Undo              ││
-09││Cmd+V/p                                  Paste exactly     Cmd+Shift+V/Shift+P                      Paste and clean up││
-10││Cmd+Shift+Z/Cmd+Y                        Redo              c                                        Collapse          ││
-11││/                                        Search            :                                        Commands          ││
-12││i                                        Inbox             Ctrl+Enter/Cmd+Enter/s                   Submit            ││
-13││Ctrl+Shift+Enter/Cmd+Shift+Enter/Shift+S Submit & keep     Cmd+Q/q                                  Quit              ││
-14││Esc                                      Close             f                                        Clean up spacing  ││
-15││Ctrl+Shift+N                             Insert above      Ctrl+N                                   Insert below      ││
-16││Ctrl+↑                                   First thought     Ctrl+↓                                   Last thought      ││
-17││Ctrl+Shift+↑                             Extend to first   Ctrl+Shift+↓                             Extend to last    ││
+08││v                                        Latch             Cmd+V/p                                  Paste exactly     ││
+09││Cmd+Shift+V/Shift+P                      Paste and clean upc                                        Collapse          ││
+10││/                                        Search            :                                        Commands          ││
+11││i                                        Inbox             Ctrl+Enter/Cmd+Enter/s                   Submit            ││
+12││Ctrl+Shift+Enter/Cmd+Shift+Enter/Shift+S Submit & keep     Cmd+Q/q                                  Quit              ││
+13││Esc                                      Close             f                                        Clean up spacing  ││
+14││Ctrl+Shift+N                             Insert above      Ctrl+N                                   Insert below      ││
+15││Ctrl+↑                                   First thought     Ctrl+↓                                   Last thought      ││
+16││Ctrl+Shift+↑                             Extend to first   Ctrl+Shift+↓                             Extend to last    ││
+17││                                                                                                                      ││
 18││                                                                                                                      ││
 19││                                                                                                                      ││
 20││                                                                                                                      ││
@@ -124,15 +124,15 @@ STYLE RUNS
 6: 0-0 fg=Reset bg=Reset mod=NONE | 1-13 fg=Green bg=Reset mod=NONE | 14-59 fg=Reset bg=Reset mod=NONE | 60-64 fg=Green bg=Reset mod=NONE | 65-119 fg=Reset bg=Reset mod=NONE
 7: 0-0 fg=Reset bg=Reset mod=NONE | 1-1 fg=Green bg=Reset mod=NONE | 2-59 fg=Reset bg=Reset mod=NONE | 60-66 fg=Green bg=Reset mod=NONE | 67-119 fg=Reset bg=Reset mod=NONE
 8: 0-0 fg=Reset bg=Reset mod=NONE | 1-1 fg=Green bg=Reset mod=NONE | 2-59 fg=Reset bg=Reset mod=NONE | 60-66 fg=Green bg=Reset mod=NONE | 67-119 fg=Reset bg=Reset mod=NONE
-9: 0-0 fg=Reset bg=Reset mod=NONE | 1-7 fg=Green bg=Reset mod=NONE | 8-59 fg=Reset bg=Reset mod=NONE | 60-78 fg=Green bg=Reset mod=NONE | 79-119 fg=Reset bg=Reset mod=NONE
-10: 0-0 fg=Reset bg=Reset mod=NONE | 1-17 fg=Green bg=Reset mod=NONE | 18-59 fg=Reset bg=Reset mod=NONE | 60-60 fg=Green bg=Reset mod=NONE | 61-119 fg=Reset bg=Reset mod=NONE
-11: 0-0 fg=Reset bg=Reset mod=NONE | 1-1 fg=Green bg=Reset mod=NONE | 2-59 fg=Reset bg=Reset mod=NONE | 60-60 fg=Green bg=Reset mod=NONE | 61-119 fg=Reset bg=Reset mod=NONE
-12: 0-0 fg=Reset bg=Reset mod=NONE | 1-1 fg=Green bg=Reset mod=NONE | 2-59 fg=Reset bg=Reset mod=NONE | 60-81 fg=Green bg=Reset mod=NONE | 82-119 fg=Reset bg=Reset mod=NONE
-13: 0-0 fg=Reset bg=Reset mod=NONE | 1-40 fg=Green bg=Reset mod=NONE | 41-59 fg=Reset bg=Reset mod=NONE | 60-66 fg=Green bg=Reset mod=NONE | 67-119 fg=Reset bg=Reset mod=NONE
-14: 0-0 fg=Reset bg=Reset mod=NONE | 1-3 fg=Green bg=Reset mod=NONE | 4-59 fg=Reset bg=Reset mod=NONE | 60-60 fg=Green bg=Reset mod=NONE | 61-119 fg=Reset bg=Reset mod=NONE
-15: 0-0 fg=Reset bg=Reset mod=NONE | 1-12 fg=Green bg=Reset mod=NONE | 13-59 fg=Reset bg=Reset mod=NONE | 60-65 fg=Green bg=Reset mod=NONE | 66-119 fg=Reset bg=Reset mod=NONE
-16: 0-0 fg=Reset bg=Reset mod=NONE | 1-6 fg=Green bg=Reset mod=NONE | 7-59 fg=Reset bg=Reset mod=NONE | 60-65 fg=Green bg=Reset mod=NONE | 66-119 fg=Reset bg=Reset mod=NONE
-17: 0-0 fg=Reset bg=Reset mod=NONE | 1-12 fg=Green bg=Reset mod=NONE | 13-59 fg=Reset bg=Reset mod=NONE | 60-71 fg=Green bg=Reset mod=NONE | 72-119 fg=Reset bg=Reset mod=NONE
+9: 0-0 fg=Reset bg=Reset mod=NONE | 1-19 fg=Green bg=Reset mod=NONE | 20-59 fg=Reset bg=Reset mod=NONE | 60-60 fg=Green bg=Reset mod=NONE | 61-119 fg=Reset bg=Reset mod=NONE
+10: 0-0 fg=Reset bg=Reset mod=NONE | 1-1 fg=Green bg=Reset mod=NONE | 2-59 fg=Reset bg=Reset mod=NONE | 60-60 fg=Green bg=Reset mod=NONE | 61-119 fg=Reset bg=Reset mod=NONE
+11: 0-0 fg=Reset bg=Reset mod=NONE | 1-1 fg=Green bg=Reset mod=NONE | 2-59 fg=Reset bg=Reset mod=NONE | 60-81 fg=Green bg=Reset mod=NONE | 82-119 fg=Reset bg=Reset mod=NONE
+12: 0-0 fg=Reset bg=Reset mod=NONE | 1-40 fg=Green bg=Reset mod=NONE | 41-59 fg=Reset bg=Reset mod=NONE | 60-66 fg=Green bg=Reset mod=NONE | 67-119 fg=Reset bg=Reset mod=NONE
+13: 0-0 fg=Reset bg=Reset mod=NONE | 1-3 fg=Green bg=Reset mod=NONE | 4-59 fg=Reset bg=Reset mod=NONE | 60-60 fg=Green bg=Reset mod=NONE | 61-119 fg=Reset bg=Reset mod=NONE
+14: 0-0 fg=Reset bg=Reset mod=NONE | 1-12 fg=Green bg=Reset mod=NONE | 13-59 fg=Reset bg=Reset mod=NONE | 60-65 fg=Green bg=Reset mod=NONE | 66-119 fg=Reset bg=Reset mod=NONE
+15: 0-0 fg=Reset bg=Reset mod=NONE | 1-6 fg=Green bg=Reset mod=NONE | 7-59 fg=Reset bg=Reset mod=NONE | 60-65 fg=Green bg=Reset mod=NONE | 66-119 fg=Reset bg=Reset mod=NONE
+16: 0-0 fg=Reset bg=Reset mod=NONE | 1-12 fg=Green bg=Reset mod=NONE | 13-59 fg=Reset bg=Reset mod=NONE | 60-71 fg=Green bg=Reset mod=NONE | 72-119 fg=Reset bg=Reset mod=NONE
+17: 0-119 fg=Reset bg=Reset mod=NONE
 18: 0-119 fg=Reset bg=Reset mod=NONE
 19: 0-119 fg=Reset bg=Reset mod=NONE
 20: 0-119 fg=Reset bg=Reset mod=NONE
@@ -182,10 +182,10 @@ SIZE 48x12
 
 TEXT
 00│┌ proqi shortcuts ───────────────────────────[x]│
-01││Cmd+Z/u                Undo                   ↑│
-02││Cmd+V/p                Paste exactly          ││
-03││Cmd+Shift+V/Shift+P    Paste and clean up     ││
-04││Cmd+Shift+Z/Cmd+Y      Redo                   ││
+01││Cmd+A/a                Select all             ↑│
+02││v                      Latch                  ││
+03││Cmd+V/p                Paste exactly          ││
+04││Cmd+Shift+V/Shift+P    Paste and clean up     ││
 05││c                      Collapse               ││
 06││/                      Search                 ││
 07││:                      Commands               ││
@@ -197,9 +197,9 @@ TEXT
 STYLE RUNS
 0: 0-0 fg=Reset bg=Reset mod=NONE | 1-17 fg=Green bg=Reset mod=BOLD | 18-44 fg=Reset bg=Reset mod=NONE | 45-47 fg=Green bg=Reset mod=NONE
 1: 0-0 fg=Reset bg=Reset mod=NONE | 1-7 fg=Green bg=Reset mod=NONE | 8-46 fg=Reset bg=Reset mod=NONE | 47-47 fg=DarkGray bg=Reset mod=NONE
-2: 0-0 fg=Reset bg=Reset mod=NONE | 1-7 fg=Green bg=Reset mod=NONE | 8-47 fg=Reset bg=Reset mod=NONE
-3: 0-0 fg=Reset bg=Reset mod=NONE | 1-19 fg=Green bg=Reset mod=NONE | 20-47 fg=Reset bg=Reset mod=NONE
-4: 0-0 fg=Reset bg=Reset mod=NONE | 1-17 fg=Green bg=Reset mod=NONE | 18-47 fg=Reset bg=Reset mod=NONE
+2: 0-0 fg=Reset bg=Reset mod=NONE | 1-1 fg=Green bg=Reset mod=NONE | 2-47 fg=Reset bg=Reset mod=NONE
+3: 0-0 fg=Reset bg=Reset mod=NONE | 1-7 fg=Green bg=Reset mod=NONE | 8-47 fg=Reset bg=Reset mod=NONE
+4: 0-0 fg=Reset bg=Reset mod=NONE | 1-19 fg=Green bg=Reset mod=NONE | 20-47 fg=Reset bg=Reset mod=NONE
 5: 0-0 fg=Reset bg=Reset mod=NONE | 1-1 fg=Green bg=Reset mod=NONE | 2-47 fg=Reset bg=Reset mod=NONE
 6: 0-0 fg=Reset bg=Reset mod=NONE | 1-1 fg=Green bg=Reset mod=NONE | 2-47 fg=Reset bg=Reset mod=NONE
 7: 0-0 fg=Reset bg=Reset mod=NONE | 1-1 fg=Green bg=Reset mod=NONE | 2-47 fg=Reset bg=Reset mod=NONE

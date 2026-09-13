@@ -14,6 +14,21 @@ use super::{
 };
 use crate::ui::{LogicalKey, LogicalModifiers};
 
+fn compact_action_label(
+    registry: &ShortcutRegistry,
+    context: Context,
+    action: Action,
+    compact: bool,
+) -> String {
+    if registry.platform() == ShortcutPlatform::MacOs
+        && matches!(action, Action::Undo | Action::Redo)
+    {
+        registry.compact_help_label(context, &[action])
+    } else {
+        registry.action_label(context, action, compact)
+    }
+}
+
 impl ShortcutRegistry {
     pub(super) fn project_bindings(
         &self,

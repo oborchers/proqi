@@ -35,7 +35,7 @@ TEXT
 26││
 27│  proqi-ui-first-run│
 28│  6 thoughts · board · saved│
-29│  n New   Ctrl+C/y Copy Ctrl+X/x Cut d/Del  Space Select Ctrl+Z/u Undo / Search  : Commands  ? Shortcuts│
+29│  n New   Ctrl+C/y Copy Ctrl+X/x Cut d/Del  Space Select / Search  : Commands  ? Shortcuts│
 
 STYLE RUNS
 0: 0-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
@@ -67,4 +67,4 @@ STYLE RUNS
 26: 0-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 27: 0-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 28: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-117 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE | 118-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-29: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-2 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 3-9 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 10-17 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 18-23 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 24-31 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 32-36 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 37-41 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 42-43 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 44-48 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 49-56 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 57-64 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 65-70 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 71-71 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 72-80 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 81-81 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 82-92 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 93-93 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 94-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+29: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-2 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 3-9 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 10-17 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 18-23 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 24-31 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 32-36 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 37-41 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 42-43 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 44-48 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 49-56 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 57-57 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 58-66 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 67-67 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 68-78 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 79-79 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 80-119 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE

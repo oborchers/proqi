@@ -86,6 +86,38 @@ CREATE TABLE commit_receipts (
     UNIQUE(entity_kind, external_id)
 ) STRICT;
 
+CREATE TABLE browser_history_state (
+    singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+    cursor INTEGER NOT NULL DEFAULT 0 CHECK (cursor >= 0)
+) STRICT;
+
+CREATE TABLE browser_operations (
+    id BLOB PRIMARY KEY CHECK (length(id) = 16),
+    history_index INTEGER NOT NULL UNIQUE CHECK (history_index >= 0),
+    kind TEXT NOT NULL CHECK (kind IN ('rename', 'trash', 'restore')),
+    target_session_id BLOB NOT NULL CHECK (length(target_session_id) = 16),
+    payload_json TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+) STRICT;
+
+CREATE TABLE browser_operation_receipts (
+    id BLOB PRIMARY KEY CHECK (length(id) = 16),
+    target_session_id BLOB NOT NULL CHECK (length(target_session_id) = 16),
+    payload_json TEXT NOT NULL,
+    cursor INTEGER NOT NULL CHECK (cursor >= 0),
+    created_at INTEGER NOT NULL
+) STRICT;
+
+CREATE TABLE browser_history_receipts (
+    id BLOB PRIMARY KEY CHECK (length(id) = 16),
+    target_operation_id BLOB NOT NULL CHECK (length(target_operation_id) = 16),
+    undo INTEGER NOT NULL CHECK (undo IN (0, 1)),
+    cursor INTEGER NOT NULL CHECK (cursor >= 0),
+    created_at INTEGER NOT NULL
+) STRICT;
+
+INSERT INTO browser_history_state(singleton, cursor) VALUES (1, 0);
+
 CREATE TABLE integration_context (
     session_id BLOB PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,
     payload_json TEXT NOT NULL
@@ -168,6 +200,7 @@ INSERT INTO migration_history(version, applied_at) VALUES (12, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (13, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (14, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (15, 0);
+INSERT INTO migration_history(version, applied_at) VALUES (16, 0);
 ";
 
 pub(super) const MIGRATION_2: &str = r"
@@ -371,4 +404,37 @@ INSERT INTO migration_history(version, applied_at) VALUES (14, 0);
 pub(super) const MIGRATION_15: &str = r"
 UPDATE schema_meta SET schema_version = 15, storage_protocol = 14;
 INSERT INTO migration_history(version, applied_at) VALUES (15, 0);
+";
+
+// Add the installation-wide session Browser history after Reflow's schema.
+pub(super) const MIGRATION_16: &str = r"
+CREATE TABLE browser_history_state (
+    singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+    cursor INTEGER NOT NULL DEFAULT 0 CHECK (cursor >= 0)
+) STRICT;
+CREATE TABLE browser_operations (
+    id BLOB PRIMARY KEY CHECK (length(id) = 16),
+    history_index INTEGER NOT NULL UNIQUE CHECK (history_index >= 0),
+    kind TEXT NOT NULL CHECK (kind IN ('rename', 'trash', 'restore')),
+    target_session_id BLOB NOT NULL CHECK (length(target_session_id) = 16),
+    payload_json TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+) STRICT;
+CREATE TABLE browser_operation_receipts (
+    id BLOB PRIMARY KEY CHECK (length(id) = 16),
+    target_session_id BLOB NOT NULL CHECK (length(target_session_id) = 16),
+    payload_json TEXT NOT NULL,
+    cursor INTEGER NOT NULL CHECK (cursor >= 0),
+    created_at INTEGER NOT NULL
+) STRICT;
+CREATE TABLE browser_history_receipts (
+    id BLOB PRIMARY KEY CHECK (length(id) = 16),
+    target_operation_id BLOB NOT NULL CHECK (length(target_operation_id) = 16),
+    undo INTEGER NOT NULL CHECK (undo IN (0, 1)),
+    cursor INTEGER NOT NULL CHECK (cursor >= 0),
+    created_at INTEGER NOT NULL
+) STRICT;
+INSERT INTO browser_history_state(singleton, cursor) VALUES (1, 0);
+UPDATE schema_meta SET schema_version = 16, storage_protocol = 15;
+INSERT INTO migration_history(version, applied_at) VALUES (16, 0);
 ";

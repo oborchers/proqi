@@ -7,6 +7,7 @@ use ratatui_crossterm::CrosstermBackend;
 
 use crate::{
     domain::Timestamp,
+    ports::store::BrowserHistoryStatus,
     ui::{BrowserAction, SessionBrowser, SessionBrowserItem, Theme, render_browser},
 };
 
@@ -26,6 +27,7 @@ pub(crate) fn pick_session(
     items: Vec<SessionBrowserItem>,
     now: Timestamp,
     settings: &super::LoadedSettings,
+    history: BrowserHistoryStatus,
 ) -> Result<BrowserAction, TerminalError> {
     let theme = super::palette::resolve(&settings.theme, supports_true_color())?;
     let guard = TerminalGuard::enter(CrosstermControl::new(
@@ -37,7 +39,7 @@ pub(crate) fn pick_session(
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
     let input = InputLane::spawn();
     let mut browser =
-        SessionBrowser::with_shortcut_registry(items, now, settings.ui.shortcuts.clone());
+        SessionBrowser::with_shortcut_registry(items, now, settings.ui.shortcuts.clone(), history);
     let run_result = drive(&mut terminal, &mut browser, &input, &termination, &theme);
     input.request_stop();
     drop(terminal);

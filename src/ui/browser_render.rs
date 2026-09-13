@@ -89,26 +89,36 @@ fn render_header(
     );
     if layout.header.height > 1 {
         let rename = browser.rename_value();
-        let (label, value) =
-            rename.map_or((" Search: ", browser.query()), |value| (" Rename: ", value));
+        let label = if rename.is_some() {
+            " Rename: "
+        } else {
+            " Search: "
+        };
+        let (value, cursor, selection) = browser.text_input_view();
         let available = usize::from(layout.header.width)
             .saturating_sub(crate::ports::text_layout::terminal_cell_width(label))
             .saturating_sub(1);
-        let value = crate::ports::text_layout::visible_cell_window(value, value.len(), available);
-        let style = if rename.is_some() {
-            theme.focused_style()
-        } else {
-            theme.base_style()
-        };
+        let value = crate::ports::text_layout::visible_cell_window(value, cursor, available);
         frame.render_widget(
-            Paragraph::new(Line::from(vec![
-                Span::styled(label, Style::default().fg(theme.muted)),
-                Span::raw(value.text),
-                Span::styled("_", Style::default().fg(theme.accent)),
-            ]))
-            .style(style),
+            Paragraph::new(crate::ui::query_render::input_line(
+                label,
+                browser.text_input_view().0,
+                &value,
+                selection,
+                theme,
+            )),
             crate::ui::geometry::row(layout.header, 1),
         );
+        let cursor = u16::try_from(value.cursor_cell).unwrap_or(u16::MAX);
+        let label_width = crate::ports::text_layout::terminal_cell_width_u16(label);
+        frame.set_cursor_position((
+            layout
+                .header
+                .x
+                .saturating_add(label_width)
+                .saturating_add(cursor),
+            layout.header.y.saturating_add(1),
+        ));
     }
 }
 

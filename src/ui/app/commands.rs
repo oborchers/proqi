@@ -1,7 +1,9 @@
 //! Keyboard commands and shared board intentions.
 
+mod history;
+
 use crate::{
-    application::{Action, Effect, InteractionMode},
+    application::{Action, Effect},
     domain::BoardOperationKind,
     ports::{
         editor::EditCommand,
@@ -408,51 +410,6 @@ impl BoardApp {
             crate::application::EmptyBoardTransition::ComposeAfterLocalRemoval,
         );
         self.clear_board_selection();
-        self.sync_empty_insertion_focus();
-        effects
-    }
-
-    pub(super) fn history(
-        &mut self,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-        undo: bool,
-    ) -> Vec<Effect> {
-        let mut effects = match self.flush_edit_boundary(ids, clock) {
-            EditFlush::Complete(effects) => effects,
-            EditFlush::Blocked(effects) => return effects,
-        };
-        let scope = if undo {
-            self.state.preferred_undo_scope(self.state.mode)
-        } else {
-            match self.state.mode {
-                InteractionMode::Compose => return effects,
-                InteractionMode::Board | InteractionMode::Edit { .. } => {
-                    self.state.preferred_redo_scope(self.state.mode)
-                }
-            }
-        };
-        if matches!(self.state.mode, InteractionMode::Compose) {
-            return effects;
-        }
-        let action = if undo {
-            Action::Undo {
-                operation_id: ids.operation_id(),
-                scope,
-                at: clock.now(),
-            }
-        } else {
-            Action::Redo {
-                operation_id: ids.operation_id(),
-                scope,
-                at: clock.now(),
-            }
-        };
-        effects.extend(self.reduce_with_empty_transition(
-            action,
-            crate::application::EmptyBoardTransition::ComposeAfterLocalRemoval,
-        ));
-        self.reload_editor();
         self.sync_empty_insertion_focus();
         effects
     }

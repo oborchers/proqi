@@ -38,6 +38,7 @@ pub(super) fn render(
             prompt: '›',
             query: &picker.query,
             cursor: app.overlay_query_cursor().unwrap_or(picker.query.len()),
+            selection: app.overlay_query_selection(),
             entries: &rows,
             selected: picker.selected,
         },

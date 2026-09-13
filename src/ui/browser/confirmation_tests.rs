@@ -3,10 +3,13 @@
 use super::{BrowserAction, BrowserAvailability, SessionBrowser, SessionBrowserItem};
 use crate::{
     domain::Timestamp,
-    ports::store::SessionHit,
+    ports::{
+        runtime::InstanceInfo,
+        store::{BrowserHistoryEntry, BrowserHistoryStatus, SessionHit},
+    },
     ui::{
-        KeyStroke, KeymapDocument, LogicalKey, PointerButton, PointerInput, PointerKind,
-        ShortcutPlatform, Theme, ThemePreference, UiInput, render_browser,
+        KeyStroke, KeymapDocument, LogicalKey, LogicalModifiers, PointerButton, PointerInput,
+        PointerKind, ShortcutPlatform, Theme, ThemePreference, UiInput, render_browser,
     },
 };
 use ratatui_core::{backend::TestBackend, terminal::Terminal};
@@ -43,8 +46,35 @@ fn browser(name: &str, remapped: bool) -> SessionBrowser {
     browser
 }
 
+fn history_entry(
+    browser: &SessionBrowser,
+    kind: crate::domain::BrowserOperationKind,
+) -> BrowserHistoryEntry {
+    BrowserHistoryEntry {
+        operation_id: "op_06g30t8fudrq55fdkjqr6mpe44"
+            .parse()
+            .expect("operation ID"),
+        session_id: browser.items[0].hit.id,
+        kind,
+    }
+}
+
 fn key(key: LogicalKey) -> UiInput {
     UiInput::KeyStroke(KeyStroke::press(key))
+}
+
+fn primary_key(character: char, shift: bool) -> UiInput {
+    let primary = if cfg!(target_os = "macos") {
+        LogicalModifiers::SUPER
+    } else {
+        LogicalModifiers::CONTROL
+    };
+    let modifiers = if shift {
+        primary.union(LogicalModifiers::SHIFT)
+    } else {
+        primary
+    };
+    UiInput::KeyStroke(KeyStroke::press(LogicalKey::Character(character)).with_modifiers(modifiers))
 }
 
 fn click(column: u16, row: u16) -> UiInput {
@@ -183,4 +213,109 @@ fn rename_transition_and_status_frame_have_no_stale_confirm_target() {
         browser.rename_value().is_none(),
         "hidden Rename cannot be clicked"
     );
+}
+
+#[test]
+fn browser_query_and_rename_history_absorb_underlying_browser_history() {
+    let mut browser = browser("session", false);
+    let underlying = history_entry(&browser, crate::domain::BrowserOperationKind::Trash);
+    browser.history = BrowserHistoryStatus {
+        undo: Some(underlying),
+        redo: None,
+    };
+    browser.handle(key(LogicalKey::Character('界')));
+    assert_eq!(browser.query(), "界");
+    assert_eq!(
+        browser.handle(primary_key('z', false)),
+        BrowserAction::Continue
+    );
+    assert_eq!(browser.query(), "");
+    assert_eq!(
+        browser.handle(primary_key('z', false)),
+        BrowserAction::Continue
+    );
+    assert_eq!(
+        browser.handle(primary_key('z', true)),
+        BrowserAction::Continue
+    );
+    assert_eq!(browser.query(), "界");
+
+    let mut rename_browser = self::browser("session", false);
+    rename_browser.history = browser.history_status();
+    rename_browser.handle(key(LogicalKey::Function(2)));
+    rename_browser.handle(key(LogicalKey::Character('x')));
+    assert_eq!(
+        rename_browser.handle(primary_key('z', false)),
+        BrowserAction::Continue
+    );
+    assert_eq!(rename_browser.rename_value(), Some("session"));
+    rename_browser.handle(key(LogicalKey::Escape));
+
+    let mut reopened = self::browser("session", false);
+    reopened.history = browser.history_status();
+    assert_eq!(
+        reopened.handle(primary_key('z', false)),
+        BrowserAction::History {
+            undo: true,
+            target: underlying,
+        }
+    );
+}
+
+#[test]
+fn browser_history_footer_label_and_pointer_share_the_same_owner() {
+    let mut browser = browser("session", false);
+    let underlying = history_entry(&browser, crate::domain::BrowserOperationKind::Rename);
+    browser.history = BrowserHistoryStatus {
+        undo: Some(underlying),
+        redo: None,
+    };
+    let terminal = draw(&mut browser, 120, 7);
+    let line = footer(&terminal);
+    assert!(line.contains("Undo session rename"), "{line}");
+    let column = label_column(&line, "Undo session rename");
+    assert_eq!(
+        browser.handle(click(column, 6)),
+        BrowserAction::History {
+            undo: true,
+            target: underlying,
+        }
+    );
+}
+
+#[test]
+fn active_session_history_is_unavailable_in_keys_and_footer() {
+    let mut source = browser("active", false);
+    let target = history_entry(&source, crate::domain::BrowserOperationKind::Trash);
+    source.items[0].availability = BrowserAvailability::Active(InstanceInfo {
+        instance_id: "ins_06g3cnfeelq3707alnmfsvn1vo"
+            .parse()
+            .expect("instance ID"),
+        session_id: target.session_id,
+        pid: 419,
+        version: "0.8.0".to_owned(),
+        storage_protocol: 14,
+        control_protocol: Some(9),
+        control_endpoint: Some("synthetic-control-endpoint".to_owned()),
+        update: None,
+        launch_directory: "synthetic-launch-directory".to_owned(),
+        started_at: Timestamp::from_millis(10),
+    });
+    let mut browser = SessionBrowser::with_shortcut_registry(
+        source.items,
+        Timestamp::from_millis(20),
+        crate::ui::ShortcutRegistry::default(),
+        BrowserHistoryStatus {
+            undo: Some(target),
+            redo: None,
+        },
+    );
+
+    assert_eq!(browser.history_status().undo, None);
+    assert_eq!(
+        browser.handle(primary_key('z', false)),
+        BrowserAction::Continue
+    );
+    let terminal = draw(&mut browser, 120, 7);
+    assert!(!footer(&terminal).contains("Undo"));
 }

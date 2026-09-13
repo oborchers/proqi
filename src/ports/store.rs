@@ -1,29 +1,37 @@
 //! Persistence facade expressed in domain terms.
 
+mod browser_history;
 mod capture;
 mod compaction;
 mod error;
+mod migration;
 mod onboarding;
+mod receipt;
+mod session;
 mod submission_route;
 
 use serde::{Deserialize, Serialize};
 
 use crate::domain::{
-    BoardOperation, IntegrationContext, OperationId, OperationSequence, RevisionId, Session,
-    SessionBoard, SessionId, SubmissionId, ThoughtId, ThoughtRevision, Timestamp, UndoScope,
+    BoardOperation, BrowserOperation, IntegrationContext, OperationId, OperationSequence,
+    RevisionId, Session, SessionId, SubmissionId, ThoughtId, ThoughtRevision, Timestamp, UndoScope,
 };
 use crate::ports::agent::{AgentState, SubmissionDisposition};
 
+pub use browser_history::{BrowserCommitReceipt, BrowserHistoryEntry, BrowserHistoryStatus};
 pub use capture::{CaptureCommit, CaptureCommitOutcome, CaptureReceipt};
 pub use compaction::{CompactedOperationRequest, thought_payload_digest};
 pub use error::{StoreError, StoreFailureCode};
+pub use migration::MigrationMode;
 pub use onboarding::{FirstRunBoard, FirstRunOutcome, OnboardingVersion};
+pub use receipt::{CommitReceipt, DurableIdentity};
+pub use session::{SessionHit, SessionQuery, SessionSnapshot};
 pub use submission_route::{SUBMISSION_ROUTE_VERSION, SubmissionJournalRoute};
 
 /// Current storage schema understood by this binary.
-pub const SUPPORTED_SCHEMA_VERSION: u32 = 15;
+pub const SUPPORTED_SCHEMA_VERSION: u32 = 16;
 /// Current local storage protocol understood by this binary.
-pub const STORAGE_PROTOCOL_VERSION: u32 = 14;
+pub const STORAGE_PROTOCOL_VERSION: u32 = 15;
 
 /// One ordered, content-redacted source included in a submission.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -111,38 +119,6 @@ pub struct SubmissionOutcome {
     pub at: Timestamp,
 }
 
-/// Whether this process proved it holds the exclusive schema lease.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum MigrationMode {
-    /// Migrations may run after backup and integrity checks.
-    Allow,
-    /// Opening an older schema fails without modifying it.
-    Refuse,
-}
-
-/// One commit accepted durably by the store.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct CommitReceipt {
-    /// Owning session.
-    pub session_id: SessionId,
-    /// Monotonic commit sequence.
-    pub sequence: OperationSequence,
-    /// Durable entity used for idempotency.
-    pub identity: DurableIdentity,
-    /// Whether this exact commit had already succeeded.
-    pub idempotent_replay: bool,
-}
-
-/// Typed identity of a durable commit.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case", tag = "kind", content = "id")]
-pub enum DurableIdentity {
-    /// Structural or history movement operation.
-    Operation(OperationId),
-    /// Editor revision.
-    Revision(RevisionId),
-}
-
 /// Previously committed request associated with a durable operation identity.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum StoredOperationRequest {
@@ -226,64 +202,6 @@ impl OperationBatch {
     }
 }
 
-/// Complete persisted session state and reversible history.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct SessionSnapshot {
-    /// Current validated board.
-    pub board: SessionBoard,
-    /// Structural history in application order.
-    pub board_operations: Vec<BoardOperation>,
-    /// Applied prefix length of structural history.
-    pub board_history_cursor: usize,
-    /// Editor revisions retained for every thought.
-    pub revisions: Vec<ThoughtRevision>,
-    /// Applied editor prefix length for every thought.
-    pub editor_history_cursors: Vec<(ThoughtId, usize)>,
-    /// Last verified recognition-only integration context.
-    pub integration_context: Option<IntegrationContext>,
-}
-
-/// Search options for the session browser and CLI.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct SessionQuery {
-    /// Optional words matched across names, paths, and current thought content.
-    pub text: Option<String>,
-    /// Whether recoverably trashed sessions are included.
-    pub include_trashed: bool,
-    /// Optional current directory used only for ranking.
-    pub current_directory: Option<std::path::PathBuf>,
-}
-
-/// Lightweight session search result.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct SessionHit {
-    /// Stable session identity.
-    pub id: SessionId,
-    /// Optional session name.
-    pub name: Option<String>,
-    /// Directory in which the session was first created.
-    pub origin_cwd: std::path::PathBuf,
-    /// Directory from which it was last opened.
-    pub last_opened_cwd: std::path::PathBuf,
-    /// Latest successful opening time.
-    pub last_opened_at: Timestamp,
-    /// Latest activity time.
-    pub last_active_at: Timestamp,
-    /// Number of live thoughts.
-    pub thought_count: usize,
-    /// Derived first useful content excerpt.
-    pub excerpt: String,
-    /// First two useful exact-content previews, each independently bounded.
-    pub previews: Vec<String>,
-    /// Complete live thought corpus used only by the in-memory browser filter.
-    #[serde(skip)]
-    pub search_content: String,
-    /// Last verified adjacent-agent recognition context.
-    pub integration_context: Option<IntegrationContext>,
-    /// Whether the session is in recoverable trash.
-    pub trashed: bool,
-}
-
 /// Local durable store used by the TUI and CLI.
 pub trait Store {
     /// Load a complete session snapshot.
@@ -327,6 +245,75 @@ pub trait Store {
     ///
     /// Returns a typed absence, validation, or persistence failure.
     fn rename_session(&mut self, id: SessionId, name: Option<&str>) -> Result<(), StoreError>;
+
+    /// Atomically apply and retain one cross-session Browser operation.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed conflict, invariant, or persistence failure.
+    fn commit_browser_operation(
+        &mut self,
+        _operation: &BrowserOperation,
+    ) -> Result<BrowserCommitReceipt, StoreError> {
+        Err(StoreError::Integrity(
+            "browser history is unavailable".to_owned(),
+        ))
+    }
+
+    /// Atomically undo or redo one Browser operation.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed empty-history, conflict, or persistence failure.
+    fn move_browser_history(
+        &mut self,
+        _operation_id: OperationId,
+        _target: BrowserHistoryEntry,
+        _undo: bool,
+        _at: Timestamp,
+    ) -> Result<BrowserCommitReceipt, StoreError> {
+        Err(StoreError::Integrity(
+            "browser history is unavailable".to_owned(),
+        ))
+    }
+
+    /// Inspect Browser history without mutating it.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed corruption or persistence failure.
+    fn browser_history_status(&mut self) -> Result<BrowserHistoryStatus, StoreError> {
+        Ok(BrowserHistoryStatus::default())
+    }
+
+    /// Durably reserve or replay one no-op Browser rename request.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed corruption or persistence failure.
+    fn commit_browser_noop_rename(
+        &mut self,
+        _operation_id: OperationId,
+        _session_id: SessionId,
+        _name: Option<&str>,
+        _at: Timestamp,
+    ) -> Result<BrowserCommitReceipt, StoreError> {
+        Err(StoreError::Integrity(
+            "browser history is unavailable".to_owned(),
+        ))
+    }
+
+    /// Look up one retained Browser operation for validation and recovery.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed corruption or persistence failure.
+    fn browser_operation(
+        &mut self,
+        _operation_id: OperationId,
+    ) -> Result<Option<BrowserOperation>, StoreError> {
+        Ok(None)
+    }
 
     /// Look up a prior operation request for cross-process idempotency.
     ///

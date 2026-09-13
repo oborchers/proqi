@@ -39,7 +39,7 @@ fn transfer_picker_fast_navigation_counts_only_destination_entries() {
         })
         .collect::<Vec<_>>();
     let expected = hits[5].label();
-    app.complete_transfer_discovery(Ok(std::mem::take(&mut hits)));
+    app.complete_transfer_discovery(1, Ok(std::mem::take(&mut hits)));
     app.handle_transfer_input(
         &UiInput::Key(UiKey::FastNavigation {
             direction: FastNavigation::Next,
@@ -58,7 +58,7 @@ fn transfer_picker_fast_navigation_counts_only_destination_entries() {
             hit
         })
         .collect();
-    app.complete_transfer_discovery(Ok(replacement));
+    app.complete_transfer_discovery(1, Ok(replacement));
     let (_, visible, selected) = app.transfer_view().expect("replacement picker");
     assert_eq!(selected, 0);
     assert!(visible[selected].starts_with("replacement 1"));

@@ -25,6 +25,7 @@ pub(super) fn literal(intention: UiKey) -> ResolvedShortcut {
 pub(super) fn action_intention(action: Action, context: Context, stroke: KeyStroke) -> UiKey {
     if context == Context::Commands
         && action != Action::Quit
+        && !matches!(action, Action::SelectAll | Action::Undo | Action::Redo)
         && super::command_execution::execution_for(action).is_some()
     {
         return UiKey::Shortcut(action);

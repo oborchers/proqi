@@ -360,8 +360,14 @@ pub struct ThoughtRevision {
     pub after_annotations: Vec<ContentAnnotation>,
     /// Cursor before the edit.
     pub before_cursor: TextPosition,
+    /// Fixed selection endpoint before the edit, or `None` without a selection.
+    #[serde(default)]
+    pub before_selection_anchor: Option<TextPosition>,
     /// Cursor after the edit.
     pub after_cursor: TextPosition,
+    /// Fixed selection endpoint after the edit, or `None` without a selection.
+    #[serde(default)]
+    pub after_selection_anchor: Option<TextPosition>,
     /// Revision time.
     pub created_at: Timestamp,
 }
@@ -408,6 +414,9 @@ pub enum DomainError {
     /// Session names cannot be whitespace-only.
     #[error("session name cannot be blank")]
     BlankSessionName,
+    /// Browser history endpoints must be exact inverses on one session.
+    #[error("invalid Browser history operation")]
+    InvalidBrowserOperation,
     /// Session paths must be absolute before entering the domain.
     #[error("session directory must be absolute: {0}")]
     RelativeDirectory(PathBuf),

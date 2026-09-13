@@ -17,18 +17,18 @@ use proqi::{
     },
     application::{Action, AppState, Effect, reduce},
     domain::{
-        BoardMutation, BoardOperation, BoardOperationKind, ContentAnnotation,
-        ContentAnnotationKind, Direction, IntegrationContext, OperationSequence, Session,
-        SessionBoard, TextPosition, ThoughtId, ThoughtPosition, ThoughtPresentation, Timestamp,
-        UndoScope,
+        BoardMutation, BoardOperation, BoardOperationKind, BrowserOperation, BrowserOperationKind,
+        ContentAnnotation, ContentAnnotationKind, Direction, IntegrationContext, OperationSequence,
+        Session, SessionBoard, TextPosition, ThoughtId, ThoughtPosition, ThoughtPresentation,
+        Timestamp, UndoScope,
     },
     ports::{
         agent::{AgentState, SubmissionDisposition},
         environment::IdGenerator,
         store::{
-            DurableIdentity, MigrationMode, OperationBatch, STORAGE_PROTOCOL_VERSION,
-            SUPPORTED_SCHEMA_VERSION, SessionQuery, Store, StoreError, SubmissionAttempt,
-            SubmissionAttemptState, SubmissionOutcome, SubmissionSource,
+            BrowserHistoryStatus, DurableIdentity, MigrationMode, OperationBatch,
+            STORAGE_PROTOCOL_VERSION, SUPPORTED_SCHEMA_VERSION, SessionQuery, Store, StoreError,
+            SubmissionAttempt, SubmissionAttemptState, SubmissionOutcome, SubmissionSource,
         },
     },
 };
@@ -132,6 +132,8 @@ fn create_thought(
 
 #[path = "sqlite_store/annotations.rs"]
 mod annotations;
+#[path = "sqlite_store/browser_history.rs"]
+mod browser_history;
 #[path = "sqlite_store/bulk.rs"]
 mod bulk;
 #[path = "sqlite_store/clipboard_annotations.rs"]

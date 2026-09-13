@@ -54,7 +54,10 @@ impl AttachmentCounters {
                     self.observe_mutation(mutation)?;
                 }
             }
-            BoardMutation::AddThought { thought } => self.observe(&thought.annotations)?,
+            BoardMutation::AddThought { thought }
+            | BoardMutation::AddThoughtFromCompose { thought, .. } => {
+                self.observe(&thought.annotations)?;
+            }
             BoardMutation::ReplaceContent {
                 before_annotations,
                 after_annotations,

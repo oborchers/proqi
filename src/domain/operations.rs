@@ -9,7 +9,11 @@ use super::{
     ThoughtPosition, ThoughtPresentation, Timestamp, validate_annotations,
 };
 
+mod addressing;
 mod mutation;
+mod operation_kind;
+
+pub use operation_kind::BoardOperationKind;
 
 /// Durable structural operation record.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -37,34 +41,6 @@ pub enum UndoScope {
     },
 }
 
-/// Kind of structural operation shown in history and diagnostics.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum BoardOperationKind {
-    /// Created a thought, including paste-to-create.
-    Create,
-    /// Deleted a thought without touching the clipboard.
-    Delete,
-    /// Deleted a thought after a successful clipboard write.
-    Cut,
-    /// Reordered one thought.
-    Reorder,
-    /// Changed the explicit collapse preference.
-    Collapse,
-    /// Duplicated one or more thoughts as one operation.
-    Duplicate,
-    /// Deleted after an accepted adjacent-agent submission.
-    SubmitAndRemove,
-    /// Split one thought at an exact logical cursor.
-    Split,
-    /// Extract one exact editor selection into a neighboring thought.
-    Extract,
-    /// Reflow one existing thought in place.
-    Reflow,
-    /// Merge a contiguous board selection into its first thought.
-    Merge,
-}
-
 /// One reversible change to current board state.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "mutation")]
@@ -78,6 +54,15 @@ pub enum BoardMutation {
     AddThought {
         /// Complete thought snapshot.
         thought: Thought,
+    },
+    /// Add or restore a thought created by the first Compose content intention.
+    AddThoughtFromCompose {
+        /// Complete thought snapshot.
+        thought: Thought,
+        /// Exact editor cursor after materialization.
+        cursor: super::TextPosition,
+        /// Directional selection anchor after materialization.
+        selection_anchor: Option<super::TextPosition>,
     },
     /// Change recoverable deletion state and restore position when needed.
     SetDeletion {
@@ -159,7 +144,7 @@ impl BoardMutation {
                 }
                 Ok(())
             }
-            Self::AddThought { thought } => {
+            Self::AddThought { thought } | Self::AddThoughtFromCompose { thought, .. } => {
                 validate_annotations(&thought.content, &thought.annotations)
             }
             Self::ReplaceContent {
@@ -181,41 +166,6 @@ impl BoardMutation {
             | Self::MoveThought { .. }
             | Self::SetPresentation { .. }
             | Self::LegacySetCollapsed { .. } => Ok(()),
-        }
-    }
-
-    /// Whether this mutation addresses one thought identity.
-    #[must_use]
-    pub fn addresses(&self, thought_id: ThoughtId) -> bool {
-        match self {
-            Self::Batch { mutations } => mutations
-                .iter()
-                .any(|mutation| mutation.addresses(thought_id)),
-            Self::AddThought { thought } => thought.id == thought_id,
-            Self::SetDeletion {
-                thought_id: affected,
-                ..
-            }
-            | Self::SetDeletionExact {
-                thought_id: affected,
-                ..
-            }
-            | Self::MoveThought {
-                thought_id: affected,
-                ..
-            }
-            | Self::ReplaceContent {
-                thought_id: affected,
-                ..
-            }
-            | Self::SetPresentation {
-                thought_id: affected,
-                ..
-            }
-            | Self::LegacySetCollapsed {
-                thought_id: affected,
-                ..
-            } => *affected == thought_id,
         }
     }
 }
@@ -240,6 +190,39 @@ pub struct BoardOperation {
 }
 
 impl BoardOperation {
+    /// Whether either exact history direction addresses one thought.
+    #[must_use]
+    pub fn addresses_thought(&self, thought_id: ThoughtId) -> bool {
+        self.forward.addresses(thought_id) || self.inverse.addresses(thought_id)
+    }
+
+    /// Thought identities whose content timeline participates in this operation.
+    #[must_use]
+    pub fn content_thought_ids(&self) -> Vec<ThoughtId> {
+        if !self.kind.belongs_to_thought_content() {
+            return Vec::new();
+        }
+        let mut thought_ids = Vec::new();
+        self.forward.collect_thought_ids(&mut thought_ids);
+        self.inverse.collect_thought_ids(&mut thought_ids);
+        thought_ids
+    }
+
+    /// Exact editor endpoint for a thought created from Compose.
+    #[must_use]
+    pub const fn compose_handoff(
+        &self,
+    ) -> Option<(ThoughtId, super::TextPosition, Option<super::TextPosition>)> {
+        match &self.forward {
+            BoardMutation::AddThoughtFromCompose {
+                thought,
+                cursor,
+                selection_anchor,
+            } => Some((thought.id, *cursor, *selection_anchor)),
+            _ => None,
+        }
+    }
+
     /// Validate annotation-bearing forward and inverse history payloads.
     ///
     /// # Errors
@@ -369,7 +352,10 @@ impl SessionBoard {
                     self.apply_mutation_in_place(mutation, at)?;
                 }
             }
-            BoardMutation::AddThought { thought } => self.add_or_restore(thought.clone(), at)?,
+            BoardMutation::AddThought { thought }
+            | BoardMutation::AddThoughtFromCompose { thought, .. } => {
+                self.add_or_restore(thought.clone(), at)?;
+            }
             BoardMutation::SetDeletion {
                 thought_id,
                 deleted_at,

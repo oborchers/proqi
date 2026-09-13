@@ -34,7 +34,7 @@ pub(super) fn next_boundary(content: &str, cursor: usize) -> Option<usize> {
     (position.line + 1 < lines.len()).then_some(lines[position.line + 1].start)
 }
 
-fn word_segments(content: &str) -> Vec<(usize, usize)> {
+pub(super) fn word_range(content: &str, cursor: usize) -> Option<(usize, usize)> {
     content
         .split_word_bound_indices()
         .filter_map(|(start, segment)| {
@@ -43,12 +43,6 @@ fn word_segments(content: &str) -> Vec<(usize, usize)> {
                 .next()
                 .map(|_| (start, start + segment.len()))
         })
-        .collect()
-}
-
-pub(super) fn word_range(content: &str, cursor: usize) -> Option<(usize, usize)> {
-    word_segments(content)
-        .into_iter()
         .find(|(start, end)| *start <= cursor && cursor < *end)
 }
 
@@ -56,27 +50,6 @@ pub(super) fn grapheme_range(content: &str, cursor: usize) -> (usize, usize) {
     let start = cursor.min(content.len());
     let end = next_boundary(content, start).unwrap_or(start);
     (start, end)
-}
-
-pub(super) fn word_back(content: &str, cursor: usize) -> usize {
-    word_segments(content)
-        .into_iter()
-        .rev()
-        .find_map(|(start, _)| (start < cursor).then_some(start))
-        .unwrap_or(0)
-}
-
-pub(super) fn word_forward(content: &str, cursor: usize) -> usize {
-    word_segments(content)
-        .into_iter()
-        .find_map(|(start, end)| {
-            if cursor < end {
-                Some(if cursor >= start { end } else { start })
-            } else {
-                None
-            }
-        })
-        .unwrap_or(content.len())
 }
 
 pub(super) fn preferred_newline(content: &str, cursor: usize) -> &'static str {

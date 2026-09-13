@@ -29,7 +29,10 @@ use super::{
     storage_error_code,
 };
 
-pub(super) use metadata::{complete as complete_metadata, complete_sync};
+pub(super) use metadata::{
+    complete as complete_metadata, complete_noop_rename as complete_browser_noop_rename,
+    complete_sync,
+};
 
 pub(super) fn drain(
     app: &mut BoardApp,

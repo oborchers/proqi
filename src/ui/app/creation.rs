@@ -2,7 +2,7 @@
 
 use crate::{
     application::{Action, Effect, InteractionMode},
-    domain::{ContentAnnotation, OperationId, ThoughtId, Timestamp},
+    domain::{ContentAnnotation, OperationId, TextPosition, ThoughtId, Timestamp},
     ports::environment::{Clock, IdGenerator},
     ui::PastePayload,
 };
@@ -13,6 +13,17 @@ use super::{BoardApp, ComposePresentation, InsertionConfirmation, InsertionFocus
 pub(super) enum NewThoughtPlacement {
     Contextual,
     DurableTail,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum CreationHistory {
+    Board {
+        insertion_index: Option<usize>,
+    },
+    Compose {
+        cursor: TextPosition,
+        selection_anchor: Option<TextPosition>,
+    },
 }
 
 impl BoardApp {
@@ -112,7 +123,7 @@ impl BoardApp {
             ids.operation_id(),
             content,
             annotations,
-            insertion_index,
+            CreationHistory::Board { insertion_index },
             clock.now(),
             preserve_owned,
         );
@@ -140,27 +151,41 @@ pub(super) fn create_action(
     operation_id: OperationId,
     content: String,
     annotations: Vec<ContentAnnotation>,
-    insertion_index: Option<usize>,
+    history: CreationHistory,
     at: Timestamp,
     preserve_owned: bool,
 ) -> Action {
-    if preserve_owned {
-        Action::CreateOwnedThought(crate::application::OwnedThoughtCreation::preserved(
+    match history {
+        CreationHistory::Compose {
+            cursor,
+            selection_anchor,
+        } => Action::CreateComposeThought {
             thought_id,
             operation_id,
             content,
             annotations,
-            insertion_index,
+            cursor,
+            selection_anchor,
+            preserve_owned,
             at,
-        ))
-    } else {
-        Action::CreateThought {
-            thought_id,
-            operation_id,
-            content,
-            annotations,
-            insertion_index,
-            at,
+        },
+        CreationHistory::Board { insertion_index } if preserve_owned => {
+            Action::CreateOwnedThought(crate::application::OwnedThoughtCreation::preserved(
+                thought_id,
+                operation_id,
+                content,
+                annotations,
+                insertion_index,
+                at,
+            ))
         }
+        CreationHistory::Board { insertion_index } => Action::CreateThought {
+            thought_id,
+            operation_id,
+            content,
+            annotations,
+            insertion_index,
+            at,
+        },
     }
 }

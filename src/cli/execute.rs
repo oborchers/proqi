@@ -20,10 +20,7 @@ use crate::{
     adapters::terminal,
     application::{FirstRunEnvironment, SessionService},
     domain::{ThoughtId, UndoScope},
-    ports::{
-        environment::Clock,
-        store::{CommitReceipt, DurableIdentity},
-    },
+    ports::store::{CommitReceipt, DurableIdentity},
 };
 
 use super::{
@@ -35,7 +32,9 @@ use super::{
 use helpers::{
     content_digest_hex, excerpt, parse_operation_id, parse_thought_id, read_standard_input,
 };
-use sessions::{browser_items, cancelled_browser, execute_sessions, list_sessions, opened_session};
+use sessions::{
+    browse_for_session, cancelled_browser, execute_sessions, list_sessions, opened_session,
+};
 
 pub(super) struct Outcome {
     data: Value,
@@ -165,41 +164,6 @@ fn execute_launch(
         let _closed = terminal::run(resources)?;
     }
     Ok(opened_session(id))
-}
-
-fn browse_for_session(
-    context: &mut RuntimeContext,
-    settings: &crate::adapters::terminal::LoadedSettings,
-) -> Result<
-    Option<crate::application::LeasedSession<crate::adapters::runtime::FileSessionLease>>,
-    CliError,
-> {
-    loop {
-        let items = browser_items(context)?;
-        let now = context.clock.now();
-        match terminal::pick_session(items, now, settings)? {
-            crate::ui::BrowserAction::Open(id) => {
-                return session_service(context)?
-                    .resume(id)
-                    .map(Some)
-                    .map_err(Into::into);
-            }
-            crate::ui::BrowserAction::Rename { session_id, name } => {
-                session_service(context)?.rename_session(session_id, name.as_deref())?;
-            }
-            crate::ui::BrowserAction::Trash(id) => {
-                session_service(context)?.trash_session(id)?;
-            }
-            crate::ui::BrowserAction::Cancel => return Ok(None),
-            crate::ui::BrowserAction::Continue => {
-                return Err(CliError::new(
-                    "terminal_failed",
-                    "session browser returned an incomplete action".to_owned(),
-                    1,
-                ));
-            }
-        }
-    }
 }
 
 fn execute_thoughts(
