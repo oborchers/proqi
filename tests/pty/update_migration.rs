@@ -22,7 +22,7 @@ use proqi::{
         runtime::{InstanceInfo, RuntimeCoordinator as _},
         store::{STORAGE_PROTOCOL_VERSION, SUPPORTED_SCHEMA_VERSION},
         update::{
-            HomebrewInstaller, InstallDetector as _, UPDATE_CONTROL_PROTOCOL_VERSION, UpdateError,
+            InstallDetector as _, UPDATE_CONTROL_PROTOCOL_VERSION, UpdateError, UpdateInstaller,
             UpdateParticipantGateway, UpdatePrepareReply, UpdatePrepareRequest, UpdateRestartReply,
             UpdateRestartRequest, UpdateStateStore as _,
         },
@@ -40,7 +40,7 @@ const STRESS_COHORT: usize = 26;
 const FORWARDED_CONTENT: &str = "forwarded after follower convergence Grüße 界";
 struct FakeInstaller;
 
-impl HomebrewInstaller for FakeInstaller {
+impl UpdateInstaller for FakeInstaller {
     fn upgrade(&mut self, expected: &StableVersion) -> Result<StableVersion, UpdateError> {
         Ok(expected.clone())
     }

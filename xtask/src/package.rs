@@ -10,42 +10,47 @@ use std::{
 use flate2::{Compression, read::GzDecoder, write::GzEncoder};
 use tar::{Archive, Builder};
 
-const INSTALL_MARKER: &[u8] =
+pub(super) const INSTALL_MARKER: &[u8] =
     br#"{"schema_version":1,"product":"proqi","kind":"standalone_archive"}"#;
 
-pub(super) fn run(root: &Path, notices: Option<&Path>) -> Result<(), String> {
+pub(super) fn run(
+    root: &Path,
+    notices: Option<&Path>,
+    requested: Option<&str>,
+) -> Result<(), String> {
+    let host = host_triple(root)?;
+    let target = requested.map_or_else(
+        || super::release_targets::find(&host),
+        super::release_targets::find,
+    )?;
+    if target.expected_host() != host {
+        return Err(format!(
+            "target {} requires native host {}, found {host}",
+            target.triple,
+            target.expected_host()
+        ));
+    }
     super::timing::phase("package.release_highlights", || {
         super::release_highlights::validate(root, None)
     })?;
     super::timing::phase("package.notices", || prepare_notices(root, notices))?;
-    super::timing::phase("package.rust_build", || {
-        super::run(
-            root,
-            "cargo",
-            [
-                "build",
-                "--locked",
-                "--workspace",
-                "--all-features",
-                "--profile",
-                "dist",
-            ],
-        )
-    })?;
+    super::timing::phase("package.rust_build", || build(root, target))?;
     let temporary = tempfile::Builder::new()
         .prefix("proqi-package-")
         .tempdir()
         .map_err(|error| format!("create package root: {error}"))?;
-    let installed =
-        super::timing::phase("package.install", || install_binary(root, temporary.path()))?;
-    let host = host_triple(root)?;
-    let archive = super::timing::phase("package.archive", || {
-        stage_archive(root, temporary.path(), &installed, &host)
+    let installed = super::timing::phase("package.install", || {
+        install_binary(root, temporary.path(), target)
     })?;
-    super::timing::phase("package.archive_verify", || verify_archive(&archive, &host))?;
-    if host == super::release_targets::LINUX_X86_64 {
+    let archive = super::timing::phase("package.archive", || {
+        stage_archive(root, temporary.path(), &installed, target.triple)
+    })?;
+    super::timing::phase("package.archive_verify", || {
+        verify_archive(&archive, target.triple)
+    })?;
+    if target.os == super::release_targets::OperatingSystem::Linux {
         super::timing::phase("package.linux_compat", || {
-            super::linux_compat::verify_archive(root, &archive)
+            super::linux_compat::verify_archive(root, &archive, target)
         })?;
     }
     super::timing::phase("package.installed_contract", || {
@@ -54,9 +59,36 @@ pub(super) fn run(root: &Path, notices: Option<&Path>) -> Result<(), String> {
     super::timing::phase("package.persist", || persist_archive(root, &archive))
 }
 
-fn install_binary(root: &Path, temporary: &Path) -> Result<PathBuf, String> {
+fn build(root: &Path, target: super::release_targets::ReleaseTarget) -> Result<(), String> {
+    let mut arguments = Vec::new();
+    if target.build_tool == super::release_targets::BuildTool::Zig {
+        arguments.push("zigbuild");
+    } else {
+        arguments.push("build");
+    }
+    arguments.extend([
+        "--locked",
+        "--workspace",
+        "--all-features",
+        "--profile",
+        "dist",
+        "--target",
+        target.triple,
+    ]);
+    super::run(root, "cargo", arguments)
+}
+
+fn install_binary(
+    root: &Path,
+    temporary: &Path,
+    target: super::release_targets::ReleaseTarget,
+) -> Result<PathBuf, String> {
     let executable = executable_name();
-    let source = root.join("target/dist").join(executable);
+    let source = root
+        .join("target")
+        .join(target.triple)
+        .join("dist")
+        .join(executable);
     let bin = temporary.join("install/bin");
     fs::create_dir_all(&bin).map_err(|error| format!("create install prefix: {error}"))?;
     let installed = bin.join(executable);
@@ -273,19 +305,22 @@ fn prepare_notices(root: &Path, source: Option<&Path>) -> Result<(), String> {
         })?;
         return Ok(());
     }
-    super::run(
-        root,
-        "cargo",
-        [
-            "about",
-            "generate",
-            "about.hbs",
-            "--output-file",
-            output
-                .to_str()
-                .ok_or_else(|| "notice path is not UTF-8".to_owned())?,
-        ],
-    )
+    let mut arguments = vec![
+        "about".to_owned(),
+        "generate".to_owned(),
+        "about.hbs".to_owned(),
+    ];
+    for target in super::release_targets::ALL {
+        arguments.extend(["--target".to_owned(), target.triple.to_owned()]);
+    }
+    arguments.extend([
+        "--output-file".to_owned(),
+        output
+            .to_str()
+            .ok_or_else(|| "notice path is not UTF-8".to_owned())?
+            .to_owned(),
+    ]);
+    super::run(root, "cargo", arguments)
 }
 
 fn command_output<I, S>(program: &Path, arguments: I) -> Result<Vec<u8>, String>

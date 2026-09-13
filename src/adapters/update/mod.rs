@@ -6,6 +6,7 @@ mod github;
 mod highlights;
 mod installation;
 mod installer;
+mod standalone;
 
 pub use cache::FileUpdateStateStore;
 pub use github::GitHubReleaseSource;
@@ -13,3 +14,4 @@ pub use highlights::packaged as packaged_release_highlights;
 pub use installation::SystemInstallDetector;
 pub use installer::HomebrewFormulaInstaller;
 pub(crate) use installer::verify_installed_version;
+pub use standalone::{GitHubStandaloneInstallerSource, StandaloneArchiveInstaller};

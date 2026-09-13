@@ -1,4 +1,4 @@
-//! Convergent all-session Homebrew readiness and restart coordination.
+//! Convergent all-session installation readiness and restart coordination.
 
 use std::time::Duration;
 
@@ -13,7 +13,7 @@ use crate::{
         runtime::InstanceInfo,
         store::STORAGE_PROTOCOL_VERSION,
         update::{
-            HomebrewInstaller, UPDATE_CONTROL_PROTOCOL_VERSION, UpdateCancellation, UpdateError,
+            UPDATE_CONTROL_PROTOCOL_VERSION, UpdateCancellation, UpdateError, UpdateInstaller,
             UpdateInstanceRegistry, UpdateLockKind, UpdateParticipantGateway, UpdatePrepareRequest,
             UpdateReplacementExpectation, UpdateStateStore,
         },
@@ -74,14 +74,14 @@ pub struct UpdateExecution {
 pub enum UpdateExecutionStatus {
     /// Another process owns the one installer attempt.
     AlreadyInProgress,
-    /// Preflight aborted before Homebrew ran.
+    /// Preflight aborted before the verified installer ran.
     Aborted {
         /// Participant that blocked, when one was identifiable.
         blocker: Option<InstanceId>,
         /// Stable content-free reason.
         code: String,
     },
-    /// Homebrew succeeded and restart requests were broadcast.
+    /// Installation succeeded and restart requests were broadcast.
     Installed {
         /// Version independently reported by the installed binary.
         version: StableVersion,
@@ -117,7 +117,7 @@ where
     S: UpdateStateStore,
     R: UpdateInstanceRegistry,
     G: UpdateParticipantGateway,
-    I: HomebrewInstaller,
+    I: UpdateInstaller,
 {
     /// Bind one coordinator to the installation-wide boundaries.
     #[must_use]
@@ -140,7 +140,7 @@ where
     /// # Errors
     ///
     /// Returns only registry, lock, installer, or convergence-state failures. Participant
-    /// refusal is an ordinary aborted result and never invokes Homebrew.
+    /// refusal is an ordinary aborted result and never invokes an installer.
     pub fn execute(
         &mut self,
         operation_id: RequestId,

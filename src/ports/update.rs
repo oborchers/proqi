@@ -348,14 +348,24 @@ pub trait UpdateParticipantGateway {
     ) -> Result<UpdateRestartReply, UpdateError>;
 }
 
-/// Sole typed authority for the exact supported Homebrew upgrade command.
-pub trait HomebrewInstaller {
-    /// Run one direct formula upgrade without a shell.
+/// Sole typed authority for one verified installation-method-aware upgrade.
+pub trait UpdateInstaller {
+    /// Install one exact release through the verified owner of this installation.
     ///
     /// # Errors
     ///
     /// Returns a process, exit-status, or installed-version verification failure.
     fn upgrade(&mut self, expected: &StableVersion) -> Result<StableVersion, UpdateError>;
+}
+
+/// Fetches and authenticates the exact release-attached standalone installer.
+pub trait StandaloneInstallerSource {
+    /// Return the installer bytes only after its exact release checksum verifies.
+    ///
+    /// # Errors
+    ///
+    /// Returns bounded transport, response, checksum, or size failures.
+    fn verified_installer(&mut self, expected: &StableVersion) -> Result<Vec<u8>, UpdateError>;
 }
 
 /// Replaces the current Unix process after all terminal-owned resources are released.
@@ -394,7 +404,7 @@ pub enum UpdateError {
     /// Verified participant discovery or local coordination failed.
     #[error("update coordination failed: {0}")]
     Coordination(String),
-    /// Exact Homebrew formula upgrade failed or returned an ambiguous status.
-    #[error("Homebrew update failed")]
+    /// The verified installation owner failed or returned an ambiguous status.
+    #[error("update installation failed")]
     InstallerFailed,
 }

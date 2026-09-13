@@ -12,8 +12,8 @@ use crate::{
         process::{CancellationFlag, SystemProcessRunner},
         runtime::{FileRuntimeCoordinator, SystemClock, SystemIdGenerator},
         update::{
-            FileUpdateStateStore, GitHubReleaseSource, HomebrewFormulaInstaller,
-            SystemInstallDetector,
+            FileUpdateStateStore, GitHubReleaseSource, GitHubStandaloneInstallerSource,
+            HomebrewFormulaInstaller, StandaloneArchiveInstaller, SystemInstallDetector,
         },
     },
     application::{
@@ -23,7 +23,9 @@ use crate::{
     ports::{
         environment::{Clock as _, IdGenerator as _},
         runtime::InstanceInfo,
-        update::{UpdateError, UpdateLease, UpdateLockKind, UpdateStateStore as _},
+        update::{
+            UpdateError, UpdateInstaller, UpdateLease, UpdateLockKind, UpdateStateStore as _,
+        },
     },
 };
 
@@ -402,30 +404,69 @@ fn install(
     version: &StableVersion,
     process: &mut SystemProcessRunner,
 ) -> Result<UpdateActionResult, UpdateError> {
-    if installation.kind != InstallationKind::HomebrewFormula {
-        return Err(UpdateError::Installation(
-            "automatic installation requires Homebrew".to_owned(),
-        ));
-    }
     let active = installation
         .restart_executable
         .clone()
-        .ok_or_else(|| UpdateError::Installation("active Homebrew path is absent".to_owned()))?;
+        .ok_or_else(|| UpdateError::Installation("active update path is absent".to_owned()))?;
     let cancellation = process.cancellation();
-    let mut installer = HomebrewFormulaInstaller::new(process, active);
+    match installation.kind {
+        InstallationKind::HomebrewFormula => {
+            let mut installer = HomebrewFormulaInstaller::new(process, active);
+            coordinate_install(
+                state,
+                installation,
+                coordinator,
+                initiating_instance,
+                version,
+                &cancellation,
+                &mut installer,
+            )
+        }
+        InstallationKind::StandaloneArchive => {
+            let root = installation.executable.parent().ok_or_else(|| {
+                UpdateError::Installation("standalone installation root is absent".to_owned())
+            })?;
+            let mut source = GitHubStandaloneInstallerSource::new();
+            let mut installer =
+                StandaloneArchiveInstaller::new(process, &mut source, root.to_path_buf(), active);
+            coordinate_install(
+                state,
+                installation,
+                coordinator,
+                initiating_instance,
+                version,
+                &cancellation,
+                &mut installer,
+            )
+        }
+        InstallationKind::SourceOrUnknown => Err(UpdateError::Installation(
+            "automatic installation requires a verified installation owner".to_owned(),
+        )),
+    }
+}
+
+fn coordinate_install<I: UpdateInstaller>(
+    state: &FileUpdateStateStore,
+    installation: &Installation,
+    coordinator: &FileRuntimeCoordinator,
+    initiating_instance: InstanceId,
+    version: &StableVersion,
+    cancellation: &CancellationFlag,
+    installer: &mut I,
+) -> Result<UpdateActionResult, UpdateError> {
     let mut gateway =
         LocalUpdateControlClient::cancellable(SystemIdGenerator, cancellation.clone());
     let now = SystemClock.now();
     let deadline = Timestamp::from_millis(now.as_millis().saturating_add(UPDATE_DEADLINE_MILLIS));
     let mut ids = SystemIdGenerator;
-    let execution = UpdateRestartCoordinator::new(state, coordinator, &mut gateway, &mut installer)
+    let execution = UpdateRestartCoordinator::new(state, coordinator, &mut gateway, installer)
         .execute(
             ids.request_id(),
             initiating_instance,
             installation.identity,
             version,
             deadline,
-            &cancellation,
+            cancellation,
         );
     match &execution {
         Ok(execution) => crate::adapters::diagnostics::record_update_execution(execution),
