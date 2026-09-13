@@ -143,6 +143,15 @@ pub enum EditCommand {
         /// Whether to extend the selection from its anchor.
         extend_selection: bool,
     },
+    /// Place the cursor at a wrapped-row boundary with explicit visual affinity.
+    SetVisualCursor {
+        /// Requested canonical position, clamped to valid content.
+        position: TextPosition,
+        /// Wrapped row that owns a position shared by two visual rows.
+        affinity: VisualCursorAffinity,
+        /// Whether to extend the selection from its anchor.
+        extend_selection: bool,
+    },
     /// Begin a pointer selection at a viewport cell.
     PointerStart {
         /// Canonical logical position under the pointer.
@@ -195,6 +204,16 @@ pub struct CellRange {
     pub end: usize,
 }
 
+/// Visual ownership of a canonical cursor at a shared soft-wrap boundary.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum VisualCursorAffinity {
+    /// Render the cursor at the end of the preceding wrapped row.
+    PreviousRow,
+    /// Render the cursor at the start of the following wrapped row.
+    #[default]
+    NextRow,
+}
+
 /// Serializable application-facing view of transient editor state.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EditorSnapshot {
@@ -202,6 +221,8 @@ pub struct EditorSnapshot {
     pub content: String,
     /// Logical cursor position.
     pub cursor: TextPosition,
+    /// Visual ownership when the logical cursor is shared by two wrapped rows.
+    pub cursor_affinity: VisualCursorAffinity,
     /// Normalized active selection, if any.
     pub selection: Option<TextSelection>,
     /// Current viewport.

@@ -463,6 +463,8 @@ mod transformations;
 mod versioned_keymap;
 #[path = "ui_board/viewport_bounds.rs"]
 mod viewport_bounds;
+#[path = "ui_board/visual_row_affinity.rs"]
+mod visual_row_affinity;
 #[path = "ui_board/visual_row_selection.rs"]
 mod visual_row_selection;
 

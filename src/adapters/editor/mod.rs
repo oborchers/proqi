@@ -13,11 +13,11 @@ use ropey::Rope;
 use crate::domain::TextPosition;
 use crate::ports::editor::{
     CellRange, CursorMovement, EditCommand, EditOutcome, Editor, EditorFactory, EditorSnapshot,
-    FAST_NAVIGATION_ROWS, TextChangeSet, TextSelection, TextViewport,
+    FAST_NAVIGATION_ROWS, TextChangeSet, TextSelection, TextViewport, VisualCursorAffinity,
 };
 use crate::ports::text_layout::{
     WrappedRow, byte_at_cell, byte_for_position, cell_column_at_byte, logical_lines,
-    position_for_byte, wrap_rows, wrapped_row_index,
+    position_for_byte, wrap_rows, wrapped_row_index_with_affinity,
 };
 use text::{next_boundary, previous_boundary, word_back, word_forward};
 
@@ -35,6 +35,7 @@ impl EditorFactory for RopeEditorFactory {
 struct State {
     text: Rope,
     cursor_byte: usize,
+    cursor_affinity: VisualCursorAffinity,
     selection_anchor_byte: Option<usize>,
 }
 
@@ -43,6 +44,7 @@ impl State {
         Self {
             text: Rope::new(),
             cursor_byte: 0,
+            cursor_affinity: VisualCursorAffinity::default(),
             selection_anchor_byte: None,
         }
     }
@@ -81,6 +83,7 @@ impl RopeEditor {
             state: State {
                 text: Rope::from_str(text),
                 cursor_byte: 0,
+                cursor_affinity: VisualCursorAffinity::default(),
                 selection_anchor_byte: None,
             },
             ..Self::default()
@@ -103,7 +106,12 @@ impl RopeEditor {
         })
     }
 
-    fn set_cursor_byte(&mut self, byte: usize, extend_selection: bool) {
+    fn set_cursor_byte_with_affinity(
+        &mut self,
+        byte: usize,
+        affinity: VisualCursorAffinity,
+        extend_selection: bool,
+    ) {
         if extend_selection {
             self.state
                 .selection_anchor_byte
@@ -112,30 +120,45 @@ impl RopeEditor {
             self.state.selection_anchor_byte = None;
         }
         self.state.cursor_byte = byte.min(self.state.text.len_bytes());
+        self.state.cursor_affinity = affinity;
         self.ensure_cursor_visible();
     }
 
     fn move_cursor(&mut self, movement: CursorMovement, extend_selection: bool) {
         let content = self.content();
-        let target = match movement {
+        let (target, affinity) = match movement {
             CursorMovement::GraphemeBack => {
-                previous_boundary(&content, self.state.cursor_byte).unwrap_or(0)
+                let byte = previous_boundary(&content, self.state.cursor_byte).unwrap_or(0);
+                (byte, VisualCursorAffinity::default())
             }
             CursorMovement::GraphemeForward => {
-                next_boundary(&content, self.state.cursor_byte).unwrap_or(content.len())
+                let byte = next_boundary(&content, self.state.cursor_byte).unwrap_or(content.len());
+                (byte, VisualCursorAffinity::default())
             }
-            CursorMovement::WordBack => word_back(&content, self.state.cursor_byte),
-            CursorMovement::WordForward => word_forward(&content, self.state.cursor_byte),
+            CursorMovement::WordBack => (
+                word_back(&content, self.state.cursor_byte),
+                VisualCursorAffinity::default(),
+            ),
+            CursorMovement::WordForward => (
+                word_forward(&content, self.state.cursor_byte),
+                VisualCursorAffinity::default(),
+            ),
             CursorMovement::LineStart => {
                 let lines = logical_lines(&content);
-                lines[position_for_byte(&content, self.state.cursor_byte).line].start
+                (
+                    lines[position_for_byte(&content, self.state.cursor_byte).line].start,
+                    VisualCursorAffinity::default(),
+                )
             }
             CursorMovement::LineEnd => {
                 let lines = logical_lines(&content);
-                lines[position_for_byte(&content, self.state.cursor_byte).line].content_end
+                (
+                    lines[position_for_byte(&content, self.state.cursor_byte).line].content_end,
+                    VisualCursorAffinity::default(),
+                )
             }
-            CursorMovement::DocumentStart => 0,
-            CursorMovement::DocumentEnd => content.len(),
+            CursorMovement::DocumentStart => (0, VisualCursorAffinity::default()),
+            CursorMovement::DocumentEnd => (content.len(), VisualCursorAffinity::default()),
             CursorMovement::VisualUp => self.vertical_target(-1),
             CursorMovement::VisualDown => self.vertical_target(1),
             CursorMovement::VisualJumpUp => {
@@ -154,19 +177,33 @@ impl RopeEditor {
         ) {
             self.preferred_column = None;
         }
-        self.set_cursor_byte(target, extend_selection);
+        self.set_cursor_byte_with_affinity(target, affinity, extend_selection);
     }
 
-    fn vertical_target(&mut self, rows: isize) -> usize {
+    fn vertical_target(&mut self, rows: isize) -> (usize, VisualCursorAffinity) {
         let wrapped = self.wrapped_lines();
-        let current_index = wrapped_row_index(&wrapped, self.state.cursor_byte);
+        let current_index = wrapped_row_index_with_affinity(
+            &wrapped,
+            self.state.cursor_byte,
+            self.state.cursor_affinity,
+        );
         let current = &wrapped[current_index];
         let current_column = cell_column_at_byte(&self.content(), current, self.state.cursor_byte);
         let preferred = *self.preferred_column.get_or_insert(current_column);
         let target_index = current_index
             .saturating_add_signed(rows)
             .min(wrapped.len().saturating_sub(1));
-        byte_at_cell(&self.content(), &wrapped[target_index], preferred)
+        let target = byte_at_cell(&self.content(), &wrapped[target_index], preferred);
+        let affinity = if wrapped[target_index].end_byte == target
+            && wrapped
+                .get(target_index + 1)
+                .is_some_and(|next| next.start_byte == target)
+        {
+            VisualCursorAffinity::PreviousRow
+        } else {
+            VisualCursorAffinity::default()
+        };
+        (target, affinity)
     }
 
     fn wrapped_lines(&self) -> Vec<WrappedRow> {
@@ -175,7 +212,11 @@ impl RopeEditor {
 
     fn ensure_cursor_visible(&mut self) {
         let wrapped = self.wrapped_lines();
-        let cursor_row = wrapped_row_index(&wrapped, self.state.cursor_byte);
+        let cursor_row = wrapped_row_index_with_affinity(
+            &wrapped,
+            self.state.cursor_byte,
+            self.state.cursor_affinity,
+        );
         let height = usize::from(self.viewport.height);
         if cursor_row < self.scroll_row {
             self.scroll_row = cursor_row;
@@ -197,6 +238,41 @@ impl RopeEditor {
 
     fn apply_sentence_deletion(&mut self, list_indent_width: u8) -> TextChangeSet {
         self.mutate_many(|editor| editor.delete_sentence(list_indent_width))
+    }
+
+    fn apply_cursor_position(
+        &mut self,
+        position: TextPosition,
+        affinity: VisualCursorAffinity,
+        extend_selection: bool,
+    ) -> TextChangeSet {
+        self.pointer_selection = None;
+        self.preferred_column = None;
+        let byte = byte_for_position(&self.content(), position);
+        self.set_cursor_byte_with_affinity(byte, affinity, extend_selection);
+        TextChangeSet::unchanged(self.state.text.len_bytes())
+    }
+
+    fn apply_select_all(&mut self) -> TextChangeSet {
+        self.pointer_selection = None;
+        self.preferred_column = None;
+        self.state.selection_anchor_byte = Some(0);
+        self.state.cursor_byte = self.state.text.len_bytes();
+        self.state.cursor_affinity = VisualCursorAffinity::default();
+        self.ensure_cursor_visible();
+        TextChangeSet::unchanged(self.state.text.len_bytes())
+    }
+
+    fn apply_pointer_start(
+        &mut self,
+        position: TextPosition,
+        granularity: crate::ports::editor::SelectionGranularity,
+        extend_selection: bool,
+    ) -> TextChangeSet {
+        self.preferred_column = None;
+        self.state.cursor_affinity = VisualCursorAffinity::default();
+        self.begin_pointer_selection(position, granularity, extend_selection);
+        TextChangeSet::unchanged(self.state.text.len_bytes())
     }
 
     fn outcome(&self, changes: TextChangeSet) -> EditOutcome {
@@ -243,14 +319,7 @@ impl Editor for RopeEditor {
                 self.move_cursor(movement, extend_selection);
                 TextChangeSet::unchanged(self.state.text.len_bytes())
             }
-            EditCommand::SelectAll => {
-                self.pointer_selection = None;
-                self.preferred_column = None;
-                self.state.selection_anchor_byte = Some(0);
-                self.state.cursor_byte = self.state.text.len_bytes();
-                self.ensure_cursor_visible();
-                TextChangeSet::unchanged(self.state.text.len_bytes())
-            }
+            EditCommand::SelectAll => self.apply_select_all(),
             EditCommand::ClearSelection => {
                 self.pointer_selection = None;
                 self.preferred_column = None;
@@ -260,22 +329,21 @@ impl Editor for RopeEditor {
             EditCommand::SetCursor {
                 position,
                 extend_selection,
-            } => {
-                self.pointer_selection = None;
-                self.preferred_column = None;
-                let byte = byte_for_position(&self.content(), position);
-                self.set_cursor_byte(byte, extend_selection);
-                TextChangeSet::unchanged(self.state.text.len_bytes())
-            }
+            } => self.apply_cursor_position(
+                position,
+                VisualCursorAffinity::default(),
+                extend_selection,
+            ),
+            EditCommand::SetVisualCursor {
+                position,
+                affinity,
+                extend_selection,
+            } => self.apply_cursor_position(position, affinity, extend_selection),
             EditCommand::PointerStart {
                 position,
                 granularity,
                 extend_selection,
-            } => {
-                self.preferred_column = None;
-                self.begin_pointer_selection(position, granularity, extend_selection);
-                TextChangeSet::unchanged(self.state.text.len_bytes())
-            }
+            } => self.apply_pointer_start(position, granularity, extend_selection),
             EditCommand::PointerDrag { position } => {
                 self.extend_pointer_selection(position);
                 TextChangeSet::unchanged(self.state.text.len_bytes())
@@ -309,6 +377,7 @@ impl Editor for RopeEditor {
         let selected_bytes = self.selection_bytes();
         EditorSnapshot {
             cursor: position_for_byte(&content, self.state.cursor_byte),
+            cursor_affinity: self.state.cursor_affinity,
             selection: self.selection(&content),
             viewport: self.viewport,
             scroll_row: self.scroll_row,
@@ -338,6 +407,7 @@ impl Editor for RopeEditor {
         self.state = State {
             text: Rope::from_str(&text),
             cursor_byte: byte,
+            cursor_affinity: VisualCursorAffinity::default(),
             selection_anchor_byte: None,
         };
         self.undo.clear();

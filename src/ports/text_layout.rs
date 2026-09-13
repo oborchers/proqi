@@ -4,7 +4,7 @@ use crate::domain::TextPosition;
 use unicode_segmentation::UnicodeSegmentation as _;
 use unicode_width::UnicodeWidthStr as _;
 
-use super::editor::VisualLine;
+use super::editor::{VisualCursorAffinity, VisualLine};
 
 const TAB_WIDTH: usize = 4;
 
@@ -218,6 +218,23 @@ pub(crate) fn wrapped_row_index(rows: &[WrappedRow], byte: usize) -> usize {
         })
         .or_else(|| rows.iter().rposition(|row| row.start_byte <= byte))
         .unwrap_or(0)
+}
+
+pub(crate) fn wrapped_row_index_with_affinity(
+    rows: &[WrappedRow],
+    byte: usize,
+    affinity: VisualCursorAffinity,
+) -> usize {
+    let index = wrapped_row_index(rows, byte);
+    if affinity == VisualCursorAffinity::PreviousRow
+        && index > 0
+        && rows[index].start_byte == byte
+        && rows[index - 1].end_byte == byte
+    {
+        index - 1
+    } else {
+        index
+    }
 }
 
 pub(crate) fn byte_for_position(content: &str, position: TextPosition) -> usize {
