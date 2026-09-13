@@ -22,6 +22,7 @@ mod theme;
 
 pub use annotations::PastePayload;
 pub use app::BoardApp;
+pub(crate) use app::ScreenshotUpdateReadiness;
 pub use browser::{
     BrowserAction, BrowserAvailability, BrowserEntryLayout, BrowserLayout, RecencyGroup,
     SessionBrowser, SessionBrowserItem,

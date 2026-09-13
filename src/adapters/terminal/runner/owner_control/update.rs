@@ -13,7 +13,7 @@ use crate::{
         environment::Clock as _,
         update::{UpdatePrepareReply, UpdateQuiesceReply, UpdateRestartReply},
     },
-    ui::BoardApp,
+    ui::{BoardApp, ScreenshotUpdateReadiness},
 };
 
 use super::super::{
@@ -204,7 +204,24 @@ pub(super) fn complete_prepares(
             continue;
         }
         if prepare.phase == UpdatePreparePhase::AwaitingAdmission {
-            if app.screenshot_sequence_reserved() || !app.pending_mutation_intents().is_empty() {
+            match app.screenshot_update_readiness() {
+                ScreenshotUpdateReadiness::CommitInFlight => {
+                    pending.update_prepares.insert(request_id, prepare);
+                    continue;
+                }
+                ScreenshotUpdateReadiness::Blocked => {
+                    prepare.envelope.respond(ControlResult::Update(
+                        ControlUpdateReceipt::Prepared(UpdatePrepareReply::Blocked {
+                            instance_id: lanes.instance.instance_id,
+                            code: "screenshot_not_quiescent".to_owned(),
+                        }),
+                    ));
+                    changed = true;
+                    continue;
+                }
+                ScreenshotUpdateReadiness::Ready => {}
+            }
+            if !app.pending_mutation_intents().is_empty() {
                 pending.update_prepares.insert(request_id, prepare);
                 continue;
             }

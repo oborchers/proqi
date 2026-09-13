@@ -29,6 +29,8 @@ use super::support::{
 
 #[path = "update_control/highlight_fixture.rs"]
 mod highlight_fixture;
+#[path = "update_control/screenshot.rs"]
+mod screenshot;
 #[path = "update_control/standalone.rs"]
 mod standalone;
 

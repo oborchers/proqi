@@ -2,8 +2,34 @@ use super::behavior::{app_with_thought, candidate, next_commit};
 use crate::{
     application::{Effect, ScreenshotIntent},
     ports::store::StoreError,
-    ui::{UiInput, UiKey},
+    ui::{ScreenshotUpdateReadiness, UiInput, UiKey},
 };
+
+#[test]
+fn update_readiness_blocks_live_queued_and_retryable_capture_state() {
+    let (mut app, mut ids, clock, _) = app_with_thought();
+    assert_eq!(
+        app.screenshot_update_readiness(),
+        ScreenshotUpdateReadiness::Ready
+    );
+
+    app.screenshot_started(std::time::Duration::ZERO);
+    assert_eq!(
+        app.screenshot_update_readiness(),
+        ScreenshotUpdateReadiness::Blocked
+    );
+    app.queue_screenshot_candidates([candidate(50)]);
+    next_commit(&mut app, &mut ids, &clock);
+    assert_eq!(
+        app.screenshot_update_readiness(),
+        ScreenshotUpdateReadiness::CommitInFlight
+    );
+    app.complete_screenshot_capture(Err(StoreError::Busy), &mut ids, &clock);
+    assert_eq!(
+        app.screenshot_update_readiness(),
+        ScreenshotUpdateReadiness::Blocked
+    );
+}
 
 #[test]
 fn disable_and_retry_are_distinct_truthful_public_actions() {

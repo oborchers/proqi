@@ -68,6 +68,7 @@ pub(in crate::ui) use invocation::InvocationChoiceView;
 use pending_types::{
     DeferredSubmissionIntent, PendingEditorClipboard, PendingSubmission, SubmissionMode,
 };
+pub(crate) use screenshot::ScreenshotUpdateReadiness;
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 enum InsertionFocus {

@@ -1337,6 +1337,9 @@ bounded deadline, rescans, and prepares the complete current cohort. A live
 owner that cannot publish owner control retains its startup admission for its
 lifetime. It stays usable with a warning, but blocks automatic installation
 because no coordinator could safely prepare or attribute it.
+Preparation also rejects a live, draining, queued, or retryable Screenshot
+Inbox. The user can finish or retry that capture, disable the inbox, and then
+retry the update without losing accepted screenshot work.
 
 The coordinator then asks every exact prepared participant to
 enter irreversible schema quiescence. A quiescence acknowledgement identifies

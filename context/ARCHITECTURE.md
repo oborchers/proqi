@@ -955,6 +955,13 @@ return to their prior session after a bounded timeout. The shared cache records
 only the minimal state a later process needs to compare installed and running
 versions.
 
+Update preparation is admitted only when the Screenshot Inbox is inactive and
+has no queued or retained capture. One already accepted commit-first save may
+finish before the owner replies. A live watcher, a draining watcher, a queued
+candidate, or an explicitly retryable failed save rejects preparation before
+the update barrier exists, so no later watcher result can cross into
+quiescence and no retained capture is abandoned implicitly.
+
 ### Verified installation and Unix process replacement
 
 For a Homebrew installation, Homebrew remains the sole owner of installed-file

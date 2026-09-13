@@ -85,9 +85,21 @@ fn quiescence_requires_the_prepared_target_and_never_releases_back_to_writes() {
     assert!(app.begin_update_barrier(operation, target.clone(), Timestamp::from_millis(10)));
     assert!(!app.commit_update_quiescence(operation, &wrong));
     assert!(app.commit_update_quiescence(operation, &target));
+    assert!(!app.begin_update_barrier(operation, target.clone(), Timestamp::from_millis(20)));
     assert!(!app.release_update_barrier(operation));
     assert!(!app.reserve_update_restart(operation, wrong));
     assert!(app.reserve_update_restart(operation, target));
+}
+
+#[test]
+fn same_operation_prepare_is_idempotent_without_extending_its_barrier() {
+    let (mut app, mut ids, _) = app();
+    let operation = ids.request_id();
+    let target = version();
+    assert!(app.begin_update_barrier(operation, target.clone(), Timestamp::from_millis(10)));
+    assert!(app.begin_update_barrier(operation, target, Timestamp::from_millis(20)));
+    assert!(app.expire_update_barrier(Timestamp::from_millis(10)));
+    assert_eq!(app.update_barrier_operation(), None);
 }
 
 #[test]

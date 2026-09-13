@@ -212,12 +212,11 @@ impl BoardApp {
         target_version: StableVersion,
         deadline: Timestamp,
     ) -> bool {
-        if self
-            .update_barrier
-            .as_ref()
-            .is_some_and(|barrier| barrier.operation_id != operation_id)
-        {
-            return false;
+        if let Some(barrier) = self.update_barrier.as_ref() {
+            return barrier.operation_id == operation_id
+                && barrier.target_version == target_version
+                && !barrier.quiesced
+                && barrier.reserved_restart.is_none();
         }
         self.update_barrier = Some(UpdateBarrier {
             operation_id,
