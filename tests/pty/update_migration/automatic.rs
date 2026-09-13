@@ -289,11 +289,10 @@ fn assert_cross_version_diagnostics(
         .matches("\"stage\":\"follower_revalidated\"")
         .count()
         .saturating_sub(follower_before);
-    if count >= 15 {
-        assert!(
-            follower_revalidations > 0,
-            "large cohort produced no follower revalidation"
-        );
-    }
+    assert_eq!(
+        follower_revalidations,
+        count.saturating_sub(1),
+        "every non-migrating replacement must revalidate as a follower"
+    );
     assert!(!content.contains("schema_busy"));
 }

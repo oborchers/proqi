@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use crate::{
     adapters::{
+        diagnostics::{SafeEvent, SchemaLifecycleStage},
         runtime::{
             FileRuntimeCoordinator, FileSchemaLease, NativePaths, SystemClock, SystemEnvironment,
             SystemIdGenerator,
@@ -92,21 +93,24 @@ impl RuntimeContext {
             clock.now(),
             env!("CARGO_PKG_VERSION"),
         )?;
+        let (replacement, follows_schema_change) =
+            crate::adapters::process::replacement_startup_context();
         let coordinator = installation
             .as_ref()
             .map_or(coordinator.clone(), |installation| {
                 coordinator.clone().with_update_context(
                     installation.identity,
                     UPDATE_CONTROL_PROTOCOL_VERSION,
-                    crate::adapters::process::replacement_context(),
+                    replacement,
                 )
             });
-        let (store, schema_lease) = open_store(&coordinator, &paths.data_dir, clock.now())?;
-        crate::adapters::diagnostics::record(
-            crate::adapters::diagnostics::SafeEvent::SchemaLifecycle {
-                stage: crate::adapters::diagnostics::SchemaLifecycleStage::Ready,
-            },
-        );
+        let (store, schema_lease) = open_store(
+            &coordinator,
+            &paths.data_dir,
+            clock.now(),
+            follows_schema_change,
+        )?;
+        record_schema_stage(SchemaLifecycleStage::Ready);
         Ok(Self {
             store,
             coordinator,
@@ -240,6 +244,7 @@ fn open_store(
     coordinator: &FileRuntimeCoordinator,
     data_dir: &Path,
     now: Timestamp,
+    follows_schema_change: bool,
 ) -> Result<(SqliteStore, FileSchemaLease), CliError> {
     let database = data_dir.join("proqi.sqlite3");
     let backups = data_dir.join("backups");
@@ -251,13 +256,14 @@ fn open_store(
         now,
     );
     match SqliteStore::open(&refuse) {
-        Ok(store) => Ok((store, shared)),
+        Ok(store) => {
+            if follows_schema_change {
+                record_schema_stage(SchemaLifecycleStage::FollowerRevalidated);
+            }
+            Ok((store, shared))
+        }
         Err(StoreError::MigrationRequired { .. }) => {
-            crate::adapters::diagnostics::record(
-                crate::adapters::diagnostics::SafeEvent::SchemaLifecycle {
-                    stage: crate::adapters::diagnostics::SchemaLifecycleStage::MigrationRequired,
-                },
-            );
+            record_schema_stage(SchemaLifecycleStage::MigrationRequired);
             drop(shared);
             finish_required_migration(coordinator, database, backups, &refuse, now)
         }
@@ -282,11 +288,7 @@ fn finish_required_migration(
     match SqliteStore::open(refuse) {
         Ok(current) => {
             drop(current);
-            crate::adapters::diagnostics::record(
-                crate::adapters::diagnostics::SafeEvent::SchemaLifecycle {
-                    stage: crate::adapters::diagnostics::SchemaLifecycleStage::FollowerRevalidated,
-                },
-            );
+            record_schema_stage(SchemaLifecycleStage::FollowerRevalidated);
             drop(exclusive);
             let shared = coordinator.acquire_schema_shared()?;
             let store = SqliteStore::open(refuse)?;
@@ -295,18 +297,10 @@ fn finish_required_migration(
         Err(StoreError::MigrationRequired { .. }) => {}
         Err(error) => return Err(error.into()),
     }
-    crate::adapters::diagnostics::record(
-        crate::adapters::diagnostics::SafeEvent::SchemaLifecycle {
-            stage: crate::adapters::diagnostics::SchemaLifecycleStage::MigrationStarted,
-        },
-    );
+    record_schema_stage(SchemaLifecycleStage::MigrationStarted);
     let migrate = StoreConfig::new(database, backups, MigrationMode::Allow, now);
     let _revalidated = SqliteStore::open(&migrate)?;
-    crate::adapters::diagnostics::record(
-        crate::adapters::diagnostics::SafeEvent::SchemaLifecycle {
-            stage: crate::adapters::diagnostics::SchemaLifecycleStage::MigrationCompleted,
-        },
-    );
+    record_schema_stage(SchemaLifecycleStage::MigrationCompleted);
     drop(exclusive);
     let shared = coordinator.acquire_schema_shared()?;
     let store = SqliteStore::open(refuse)?;
@@ -322,11 +316,7 @@ fn revalidate_completed_migration(
     };
     match SqliteStore::open(refuse) {
         Ok(store) => {
-            crate::adapters::diagnostics::record(
-                crate::adapters::diagnostics::SafeEvent::SchemaLifecycle {
-                    stage: crate::adapters::diagnostics::SchemaLifecycleStage::FollowerRevalidated,
-                },
-            );
+            record_schema_stage(SchemaLifecycleStage::FollowerRevalidated);
             Ok((store, shared))
         }
         Err(StoreError::MigrationRequired { .. }) => {
@@ -334,6 +324,10 @@ fn revalidate_completed_migration(
         }
         Err(error) => Err(error.into()),
     }
+}
+
+fn record_schema_stage(stage: SchemaLifecycleStage) {
+    crate::adapters::diagnostics::record(SafeEvent::SchemaLifecycle { stage });
 }
 
 #[cfg(test)]
