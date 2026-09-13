@@ -4,7 +4,7 @@ use std::{collections::BTreeMap, fs, path::Path};
 
 use semver::Version;
 
-use super::release_targets::{ALL as TARGETS, ARM_MACOS, INTEL_MACOS, LINUX_X86_64, archive_name};
+use super::release_targets::{ALL as TARGETS, Architecture, OperatingSystem, ReleaseTarget};
 const PLACEHOLDER: &str = "0000000000000000000000000000000000000000000000000000000000000000";
 
 pub(super) fn generate(root: &Path, artifacts: &Path, output: &Path) -> Result<(), String> {
@@ -23,13 +23,14 @@ pub(super) fn write_rehearsal(
 ) -> Result<(), String> {
     let mut checksums = TARGETS
         .iter()
-        .map(|target| ((*target).to_owned(), PLACEHOLDER.to_owned()))
+        .filter(|target| target.homebrew)
+        .map(|target| (target.triple.to_owned(), PLACEHOLDER.to_owned()))
         .collect::<BTreeMap<_, _>>();
     if let Some(target) = TARGETS
         .iter()
-        .find(|target| host_archive == archive_name(target))
+        .find(|target| target.homebrew && host_archive == target.archive_name())
     {
-        checksums.insert((*target).to_owned(), host_digest.to_owned());
+        checksums.insert(target.triple.to_owned(), host_digest.to_owned());
     }
     write_formula(
         &output.join("proqi.rb.rehearsal"),
@@ -42,13 +43,14 @@ pub(super) fn write_rehearsal(
 fn load_checksums(artifacts: &Path) -> Result<BTreeMap<String, String>, String> {
     TARGETS
         .iter()
+        .filter(|target| target.homebrew)
         .map(|target| {
-            let archive = archive_name(target);
+            let archive = target.archive_name();
             let checksum_file = artifacts.join(format!("{archive}.sha256"));
             let contents = fs::read_to_string(&checksum_file)
                 .map_err(|error| format!("read {}: {error}", checksum_file.display()))?;
             let digest = parse_checksum(&contents, &archive)?;
-            Ok(((*target).to_owned(), digest))
+            Ok((target.triple.to_owned(), digest))
         })
         .collect()
 }
@@ -77,9 +79,12 @@ fn write_formula(
     checksums: &BTreeMap<String, String>,
     rehearsal: bool,
 ) -> Result<(), String> {
-    let arm = checksum(checksums, ARM_MACOS)?;
-    let intel = checksum(checksums, INTEL_MACOS)?;
-    let linux = checksum(checksums, LINUX_X86_64)?;
+    let arm = formula_target(OperatingSystem::MacOs, Architecture::Arm64)?;
+    let intel = formula_target(OperatingSystem::MacOs, Architecture::X86_64)?;
+    let linux = formula_target(OperatingSystem::Linux, Architecture::X86_64)?;
+    let arm_digest = checksum(checksums, arm.triple)?;
+    let intel_digest = checksum(checksums, intel.triple)?;
+    let linux_digest = checksum(checksums, linux.triple)?;
     let warning = if rehearsal {
         "# Rehearsal only. CI replaces zero checksums with verified target digests.\n"
     } else {
@@ -89,17 +94,17 @@ fn write_formula(
         r##"{warning}class Proqi < Formula
   desc "Agent-optimized terminal scratchpad for follow-up prompts"
   homepage "https://github.com/oborchers/proqi"
-  url "{base}/proqi-x86_64-unknown-linux-gnu.tar.gz"
-  sha256 "{linux}"
+  url "{base}/{linux_archive}"
+  sha256 "{linux_digest}"
   license "MIT"
 
   on_macos do
     if Hardware::CPU.arm?
-      url "{base}/proqi-aarch64-apple-darwin.tar.gz"
-      sha256 "{arm}"
+      url "{base}/{arm_archive}"
+      sha256 "{arm_digest}"
     else
-      url "{base}/proqi-x86_64-apple-darwin.tar.gz"
-      sha256 "{intel}"
+      url "{base}/{intel_archive}"
+      sha256 "{intel_digest}"
     end
   end
 
@@ -120,12 +125,26 @@ fn write_formula(
   end
 end
 "##,
-        base = format!("https://github.com/oborchers/proqi/releases/download/v{version}")
+        base = format!("https://github.com/oborchers/proqi/releases/download/v{version}"),
+        linux_archive = linux.archive_name(),
+        arm_archive = arm.archive_name(),
+        intel_archive = intel.archive_name(),
     );
     if let Some(parent) = output.parent() {
         fs::create_dir_all(parent).map_err(|error| format!("create formula directory: {error}"))?;
     }
     fs::write(output, formula).map_err(|error| format!("write {}: {error}", output.display()))
+}
+
+fn formula_target(
+    os: OperatingSystem,
+    architecture: Architecture,
+) -> Result<ReleaseTarget, String> {
+    TARGETS
+        .iter()
+        .copied()
+        .find(|target| target.homebrew && target.os == os && target.architecture == architecture)
+        .ok_or_else(|| "Homebrew target metadata is incomplete".to_owned())
 }
 
 fn checksum<'a>(checksums: &'a BTreeMap<String, String>, target: &str) -> Result<&'a str, String> {
@@ -145,15 +164,15 @@ fn resolve(root: &Path, path: &Path) -> std::path::PathBuf {
 
 #[cfg(test)]
 mod tests {
-    use super::{TARGETS, archive_name, generate, parse_checksum};
+    use super::{TARGETS, generate, parse_checksum};
     use std::fs;
 
     #[test]
     fn checksum_parser_requires_exact_archive_identity() {
-        let name = archive_name(TARGETS[0]);
+        let name = TARGETS[0].archive_name();
         let valid = format!("{}  {name}\n", "a".repeat(64));
         assert_eq!(parse_checksum(&valid, &name), Ok("a".repeat(64)));
-        assert!(parse_checksum(&valid, &archive_name(TARGETS[1])).is_err());
+        assert!(parse_checksum(&valid, &TARGETS[1].archive_name()).is_err());
         assert!(parse_checksum("xyz  file\n", "file").is_err());
     }
 
@@ -167,8 +186,8 @@ mod tests {
         .expect("workspace manifest");
         let artifacts = root.path().join("artifacts");
         fs::create_dir(&artifacts).expect("artifacts directory");
-        for (index, target) in TARGETS.iter().enumerate() {
-            let name = archive_name(target);
+        for (index, target) in TARGETS.iter().filter(|target| target.homebrew).enumerate() {
+            let name = target.archive_name();
             fs::write(
                 artifacts.join(format!("{name}.sha256")),
                 format!("{}  {name}\n", format!("{index:x}").repeat(64)),

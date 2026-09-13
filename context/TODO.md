@@ -25,6 +25,10 @@ undo remain non-negotiable.
 
 ## Proposed order
 
+- [x] **Portable installation and updates:** ship one checksum-verifying command
+  for macOS and common Linux targets, then reuse the verified release installer
+  for standalone in-app updates without changing Homebrew, Debian, Cargo, or
+  source ownership.
 - [ ] **Public documentation:** turn shipped interaction workstream handoffs
   into concise GitHub-facing feature guides, beginning with range selection.
 - [ ] **Fast paging and command discovery:** reuse the editor's five-row jump

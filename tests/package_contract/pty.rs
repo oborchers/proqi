@@ -21,10 +21,10 @@ use proqi::{
         environment::{Clock as _, IdGenerator as _},
         runtime::InstanceInfo,
         update::{
-            HomebrewInstaller, InstallDetector as _, ReleaseObservation, ReleaseSource,
-            UPDATE_CONTROL_PROTOCOL_VERSION, UpdateError, UpdateInstanceRegistry as _,
-            UpdateParticipantGateway as _, UpdatePrepareReply, UpdatePrepareRequest,
-            UpdateRestartRequest,
+            InstallDetector as _, ReleaseObservation, ReleaseSource,
+            UPDATE_CONTROL_PROTOCOL_VERSION, UpdateError, UpdateInstaller,
+            UpdateInstanceRegistry as _, UpdateParticipantGateway as _, UpdatePrepareReply,
+            UpdatePrepareRequest, UpdateRestartRequest,
         },
     },
 };
@@ -152,7 +152,7 @@ struct FakeInstaller {
     calls: usize,
 }
 
-impl HomebrewInstaller for FakeInstaller {
+impl UpdateInstaller for FakeInstaller {
     fn upgrade(&mut self, expected: &StableVersion) -> Result<StableVersion, UpdateError> {
         self.calls = self.calls.saturating_add(1);
         if self.fail {

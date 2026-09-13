@@ -68,12 +68,13 @@ large multi-crate abstraction hierarchy before one is needed.
 - A checked-in `rust-toolchain.toml` defines the supported compiler version.
 - The minimum supported Rust version follows the highest minimum required by a
   direct dependency. It is tested in CI rather than merely documented.
-- Cargo owns dependency resolution. A reviewed pinned `cargo-dist` release tool
-  produces platform archives and metadata without becoming a second local
-  development command surface.
+- Cargo owns dependency resolution. The narrow `xtask` release surface derives
+  platform archives and metadata from one typed target registry without
+  becoming a second local development command surface.
 
-The `v0.1.0` release targets are Apple silicon macOS, Intel macOS, and x86-64
-Linux using GNU libc 2.35 or newer.
+Supported release targets are Apple silicon and Intel macOS, x86-64 and ARM64
+Linux using GNU libc 2.35 or newer, and statically linked x86-64 and ARM64 musl
+fallbacks.
 
 Rust provides a single native executable, predictable resource use, strong
 cross-platform support, and a mature terminal ecosystem. It also makes it
@@ -921,10 +922,10 @@ return to their prior session after a bounded timeout. The shared cache records
 only the minimal state a later process needs to compare installed and running
 versions.
 
-### Homebrew installation and Unix process replacement
+### Verified installation and Unix process replacement
 
-Homebrew is the sole owner of installed-file replacement. On macOS and Linux,
-one coordinator directly executes exactly:
+For a Homebrew installation, Homebrew remains the sole owner of installed-file
+replacement. On macOS and Linux, one coordinator directly executes exactly:
 
 ```text
 program: brew
@@ -934,6 +935,18 @@ arguments: upgrade, --formula, oborchers/tap/proqi
 No shell is involved and Proqi never overwrites a Homebrew-managed executable.
 If installation fails or the result is ambiguous, no participant calls `exec`.
 Every old process returns to normal use after a bounded wait.
+
+For a verified standalone installation, the same coordinator downloads only
+the exact target release's `proqi-installer.sh` and its checksum through an
+HTTPS-only bounded adapter. The adapter requires one exact checksum record and
+returns the installer bytes only after SHA-256 verification. It writes those
+bytes with create-new semantics below the verified user-owned installation
+root, invokes `sh` directly with the exact target version and prefix, removes
+the temporary script through an ownership guard, and independently runs the
+installed executable's `--version` before allowing any restart. The verified
+installer owns OS, CPU, libc, archive selection, archive checksum verification,
+safe-member extraction, and same-directory atomic replacement. It never uses
+`sudo` or a package manager.
 
 After success, the coordinator rescans active instances and publishes the
 installed version. It addresses peer participants first and its own process
@@ -974,7 +987,7 @@ successful-looking update path from losing its required durable target.
 
 Each participant then independently restores terminal modes, stops worker
 threads, closes control transport, releases session and schema leases, applies
-an explicit descriptor policy, resolves and verifies the active Homebrew Proqi
+an explicit descriptor policy, resolves and verifies the active installation's Proqi
 path, and calls Unix `exec` with its ordinary resume arguments. Cleanup is
 explicit because successful `CommandExt::exec` does not run Rust destructors.
 Standard input, output, error, and the inherited PTY remain attached, so no
@@ -1013,18 +1026,12 @@ current schema. If migration is still required, or an exclusive owner is still
 active, it returns the ordinary bounded `schema_busy` result. This follower
 revalidation never weakens shared and exclusive compatibility.
 
-### Standalone, Debian, Cargo, and unknown installations
+### Debian, Cargo, and unknown installations
 
-Standalone archives share version checking, prompt election, global dismissal,
-checkpointing, and ordinary resumable sessions. `v0.1.0` does not replace an
-archive executable or guarantee same-pane restart. It provides a verified stable
-release URL and external replacement instructions, then resumes on the next
-normal start. `SourceOrUnknown` installations receive accurate non-destructive
-guidance or no action.
-
-Automatic standalone replacement remains behind a future updater port. It must
-not be approximated by writing over the running executable, invoking `curl`, or
-assuming a package manager.
+`SourceOrUnknown` installations receive accurate non-destructive guidance or no
+action. A standalone install is recognized only through the canonical
+executable path and strict bounded archive marker. Its release-attached updater
+uses the same all-session barrier and restart convergence as Homebrew.
 
 Debian and Cargo installations use their external package managers only through
 documented user commands. The Debian artifact is a directly downloaded local
@@ -1812,8 +1819,8 @@ cargo xtask package
   reports from the same tests used in CI.
 - `audit` runs dependency advisory, license, source, and duplicate-dependency
   policy through `cargo-audit` and `cargo-deny`.
-- `package` builds the host release executable, stages the exact standalone
-  archive layout, generates Bash, Zsh, and Fish completions from the installed
+- `package` builds one registry-selected release executable, stages the exact
+  standalone archive layout, generates Bash, Zsh, and Fish completions from the installed
   executable, and runs the copied binary from isolated config, data, cache,
   runtime, and working directories. Its installed-product contract covers exact
   version and JSON behavior, Unicode and whitespace fidelity, process-to-process
@@ -1828,11 +1835,12 @@ cargo xtask package
   verifies an exact source-only member allowlist and normalized manifest,
   installs from the extracted package into isolated Cargo state, and records
   the `.crate` checksum and evidence without publishing.
-- `debian-package` consumes the verified x86-64 GNU/Linux archive and produces
-  `proqi_amd64.deb` from the identical executable. `verify-debian` proves its
-  metadata, derived dependencies, contents, permissions, lack of maintainer
-  scripts, and disposable install, remove, state-preservation, and reinstall
-  behavior on pinned Ubuntu 22.04, Ubuntu 24.04, and Debian bookworm images.
+- `debian-package` consumes a verified GNU/Linux archive and produces the typed
+  `proqi_amd64.deb` or `proqi_arm64.deb` from the identical executable.
+  `verify-debian` proves its metadata, derived dependencies, contents,
+  permissions, lack of maintainer scripts, and disposable install, remove,
+  state-preservation, and reinstall behavior on pinned Ubuntu 22.04, Ubuntu
+  24.04, and Debian bookworm images.
 
 The commands remain thin orchestrators around standard Cargo tools. They print
 the commands they run, propagate exit codes, avoid network access unless the
@@ -1955,20 +1963,22 @@ PTY, coverage, audit, packaging, rehearsal, full MSRV, and Linux container
 parity without making them prerequisites of metadata preparation.
 
 For an exact release-ready main SHA, the candidate workflow runs alongside
-ordinary CI and has no publication credentials. It builds only Apple silicon
-macOS, Intel macOS, and x86-64 GNU Linux artifacts on native runners. Each native
-binary is built once. The Linux binary is reused byte for byte in the Debian
-package. The GNU/Linux candidate is built on Ubuntu 22.04, must not require a
-glibc symbol newer than `GLIBC_2.35`, and is started from its final archive on
-Ubuntu 22.04, Debian bookworm, and Ubuntu 24.04. One Linux job generates a union
-third-party notice file for all targets, so Intel macOS never compiles the
-packaging tool.
+ordinary CI and has no publication credentials. One typed metadata registry
+expands Apple silicon macOS, Intel macOS, x86-64 and ARM64 GNU Linux, plus
+x86-64 and ARM64 musl Linux onto native GitHub runners. Each binary is built
+once. GNU Linux binaries are reused byte for byte in their matching Debian
+packages. GNU candidates are built on Ubuntu 22.04, must not require a glibc
+symbol newer than `GLIBC_2.35`, and start from final archives on Ubuntu 22.04,
+Debian bookworm, and Ubuntu 24.04. Musl candidates are statically linked and
+start from final archives on Alpine and Ubuntu 20.04, proving truthful fallback
+for native musl and pre-floor glibc environments. One job generates a union
+third-party notice file for every registry target.
 
-A reviewed pinned `cargo-dist` configuration or equivalent narrow Rust tool
-stages archives containing one executable, MIT license, required notices, and
-shell completions. Jobs create and verify SHA-256 manifests, SPDX JSON SBOMs,
-and GitHub OIDC Sigstore provenance attestations. Every third-party Action is
-pinned by full commit SHA and ordinary CI remains read-only.
+The narrow Rust release tool stages archives containing one executable, MIT
+license, required notices, and shell completions. Jobs create and verify SHA-256
+manifests, SPDX JSON SBOMs, and GitHub OIDC Sigstore provenance attestations.
+Every third-party Action is pinned by full commit SHA and ordinary CI remains
+read-only.
 
 The checked-in release manifest is packaged with the crate and embedded in the
 binary. One shared xtask validator compares its exact versions with GitHub note
@@ -1977,9 +1987,9 @@ release planning, standalone packaging, and crate packaging all fail closed on
 missing, corrupt, unreviewed, or mismatched highlights.
 
 The candidate workflow creates a 30-day immutable artifact only after every
-target, installed smoke, crate dry run, Debian package contract, checksum, SBOM,
-attestation, formula, and manifest step succeeds. The Debian package reuses the
-verified Linux archive executable byte for byte. The manifest separates public
+target, installed smoke, crate dry run, Debian package contract, installer,
+checksum, SBOM, attestation, formula, and manifest step succeeds. Each Debian
+package reuses its verified Linux archive executable byte for byte. The manifest separates public
 release files from private crate and Debian evidence and binds the future tag,
 source commit, source ref, build run and attempt, exact workflow, filenames, and
 file digests. A protected stable tag remains the explicit publication authority.
@@ -1991,9 +2001,11 @@ verifies every internal hash and candidate attestation. Missing, expired,
 duplicate, mismatched, conflicting, or unattested candidates fail closed.
 Promotion checks the immutable tag commit, not the moving main tip. A later
 main commit therefore does not invalidate an authorized prepared candidate.
-Promotion adds tag-bound attestations and publishes the same bytes. It never
-rebuilds a successful native candidate. A manual candidate dispatch provides a
-non-publishing recovery path at main or at the exact protected tag.
+Promotion adds tag-bound provenance plus a release-wide SPDX attestation whose
+subject checksums derive from the typed primary-artifact registry, then
+publishes the same bytes. It never rebuilds a successful native candidate. A
+manual candidate dispatch provides a non-publishing recovery path at main or at
+the exact protected tag.
 Release creation is idempotent for absent releases, empty or partially uploaded
 matching drafts, complete drafts, and already published identical assets. The
 workflow creates an empty verified draft, reconciles exact candidate bytes,
@@ -2025,7 +2037,7 @@ formula before committing it, and performs exact-version no-ops. Proqi stores no
 cross-repository credential. Homebrew Core remains outside scope.
 
 Package publication has no hidden local step. A credential-free rehearsal plans
-all three targets, builds and smokes the host artifact, and generates host
+all six targets, builds and smokes the host artifact, and generates host
 checksums, completions, notices, SPDX output, and formula metadata under
 `target`. It reports platform work that only CI can verify. No paid platform
 signing or notarization is performed.
@@ -2098,7 +2110,8 @@ as architecture.
 The architecture leaves only later product expansion open:
 
 - Additional multiplexer and coding-agent adapters.
-- A separately reviewed standalone self-replacement mechanism after `v0.1.0`.
+- Automatic package-manager updates for Debian, Cargo, or other unknown
+  installation owners.
 - Cloud sync, shared editing, and a public plugin API.
 - Homebrew Core submission after the project independently meets its policy.
 

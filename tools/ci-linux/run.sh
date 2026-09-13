@@ -52,7 +52,9 @@ use_target package
 cargo xtask package
 cargo xtask crate-package
 cargo xtask clean-worktree
+release_target=$(rustc -vV | sed -n 's/^host: //p')
 cargo xtask debian-package \
-  target/package/proqi-x86_64-unknown-linux-gnu.tar.gz \
-  target/debian-package
+  "target/package/proqi-${release_target}.tar.gz" \
+  target/debian-package \
+  "$release_target"
 cargo xtask clean-worktree
