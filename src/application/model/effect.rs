@@ -31,18 +31,14 @@ pub enum Effect {
     /// Execute one explicit installation-wide update decision outside the reducer lane.
     Update(UpdateIntent),
     /// Discover live destination sessions for an explicit transfer picker.
-    DiscoverTransferSessions,
+    DiscoverTransferSessions {
+        /// Picker generation used to discard a completion from an earlier owner.
+        generation: u64,
+    },
     /// Copy one exact thought to another session before optional source removal.
     TransferThought(SessionTransferRequest),
-    /// Persist an optimistic current-session rename.
-    RenameSession {
-        /// Owning session.
-        session_id: SessionId,
-        /// Previous name restored after failure.
-        previous_name: Option<String>,
-        /// Replacement name, or none to clear it.
-        name: Option<String>,
-    },
+    /// Persist one installation-wide Browser administration operation.
+    CommitBrowserOperation(crate::domain::BrowserOperation),
     /// Discover verified adjacent agents without blocking the reducer lane.
     DiscoverAgents,
     /// Discover compatible coding agents across the current Herdr server.

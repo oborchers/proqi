@@ -236,7 +236,11 @@ fn downgrade_to_schema_eleven(state: &Path) {
     Connection::open(state.join("data/proqi.sqlite3"))
         .expect("database")
         .execute_batch(
-            "ALTER TABLE sessions DROP COLUMN attachment_image_high;
+            "DROP TABLE browser_history_receipts;
+             DROP TABLE browser_operation_receipts;
+             DROP TABLE browser_operations;
+             DROP TABLE browser_history_state;
+             ALTER TABLE sessions DROP COLUMN attachment_image_high;
              ALTER TABLE sessions DROP COLUMN attachment_file_high;
              DELETE FROM migration_history WHERE version >= 12;
              UPDATE schema_meta SET schema_version = 11, storage_protocol = 10;",

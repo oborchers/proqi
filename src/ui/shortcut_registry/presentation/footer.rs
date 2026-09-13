@@ -27,7 +27,7 @@ pub(crate) fn footer_projection(
         {
             registry.compact_help_label(context, &[action])
         } else {
-            registry.action_label(context, action, compact_key)
+            super::compact_action_label(registry, context, action, compact_key)
         },
         text: if compact {
             metadata.compact_text
@@ -40,4 +40,41 @@ pub(crate) fn footer_projection(
             metadata.minimum_width
         },
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ui::{KeyBindings, ShortcutPlatform};
+
+    #[test]
+    fn macos_history_footer_prefers_terminal_safe_control_labels() {
+        let registry = ShortcutRegistry::resolve(&KeyBindings::default(), ShortcutPlatform::MacOs)
+            .expect("factory keymap is valid");
+        assert_eq!(
+            footer_projection(Action::Undo, false, Context::Board, &registry)
+                .expect("undo has footer metadata")
+                .key,
+            "Ctrl+Z"
+        );
+        assert_eq!(
+            footer_projection(Action::Redo, false, Context::Edit, &registry)
+                .expect("redo has footer metadata")
+                .key,
+            "Ctrl+Shift+Z"
+        );
+    }
+
+    #[test]
+    fn portable_history_footer_keeps_primary_and_board_aliases() {
+        let registry =
+            ShortcutRegistry::resolve(&KeyBindings::default(), ShortcutPlatform::Portable)
+                .expect("factory keymap is valid");
+        assert_eq!(
+            footer_projection(Action::Undo, false, Context::Board, &registry)
+                .expect("undo has footer metadata")
+                .key,
+            "Ctrl+Z/u"
+        );
+    }
 }

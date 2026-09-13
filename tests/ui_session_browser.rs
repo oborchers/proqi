@@ -6,14 +6,19 @@ use proqi::{
     adapters::memory::FakeIdGenerator,
     domain::{Direction, IntegrationContext, Timestamp},
     ports::{
-        agent::CODEX_AGENT_KIND, environment::IdGenerator, runtime::InstanceInfo, store::SessionHit,
+        agent::CODEX_AGENT_KIND, editor::CursorMovement, environment::IdGenerator,
+        runtime::InstanceInfo, store::SessionHit,
     },
     ui::{
         BrowserAction, BrowserAvailability, PointerButton, PointerInput, PointerKind,
         SessionBrowser, SessionBrowserItem, Theme, ThemePreference, UiInput, UiKey, render_browser,
     },
 };
-use ratatui_core::{backend::TestBackend, buffer::Buffer, terminal::Terminal};
+use ratatui_core::{
+    backend::{Backend as _, TestBackend},
+    buffer::Buffer,
+    terminal::Terminal,
+};
 
 #[path = "support/keyboard.rs"]
 mod keyboard_support;
@@ -21,7 +26,6 @@ mod keyboard_support;
 mod snapshot_support;
 
 use keyboard_support::key_input;
-
 use snapshot_support::snapshot_buffer;
 
 fn item(
@@ -237,6 +241,13 @@ fn searchable_browser_keeps_vim_letters_literal_and_delete_edits_the_query() {
             );
         }
         assert_eq!(browser.query(), "hjklx");
+        assert_eq!(
+            browser.handle(crate::key_input(UiKey::Move {
+                movement: CursorMovement::GraphemeBack,
+                extend_selection: false,
+            })),
+            BrowserAction::Continue
+        );
         assert_eq!(
             browser.handle(crate::key_input(delete)),
             BrowserAction::Continue

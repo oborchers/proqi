@@ -84,26 +84,28 @@ impl PersistenceLane {
         self.send(PersistenceRequest::Metadata(Box::new(batch)))
     }
 
-    pub(in crate::adapters::terminal) fn rename_session(
+    pub(in crate::adapters::terminal) fn browser_operation(
         &self,
         request_id: Option<RequestId>,
-        session_id: SessionId,
         previous_name: Option<String>,
-        name: Option<String>,
+        operation: crate::domain::BrowserOperation,
     ) -> Result<(), TerminalError> {
-        self.send(PersistenceRequest::RenameSession {
+        self.send(PersistenceRequest::BrowserOperation {
             request_id,
-            session_id,
             previous_name,
-            name,
+            operation: Box::new(operation),
         })
     }
 
     pub(in crate::adapters::terminal) fn discover_transfer_sessions(
         &self,
         current_session_id: SessionId,
+        generation: u64,
     ) -> Result<(), TerminalError> {
-        self.send(PersistenceRequest::DiscoverTransferSessions { current_session_id })
+        self.send(PersistenceRequest::DiscoverTransferSessions {
+            current_session_id,
+            generation,
+        })
     }
 
     pub(in crate::adapters::terminal) fn transfer_thought(
@@ -121,6 +123,23 @@ impl PersistenceLane {
         self.send(PersistenceRequest::Lookup {
             request_id,
             identity,
+        })
+    }
+
+    pub(in crate::adapters::terminal) fn browser_noop_rename(
+        &self,
+        request_id: RequestId,
+        operation_id: crate::domain::OperationId,
+        session_id: SessionId,
+        name: Option<String>,
+        at: crate::domain::Timestamp,
+    ) -> Result<(), TerminalError> {
+        self.send(PersistenceRequest::BrowserNoOpRename {
+            request_id,
+            operation_id,
+            session_id,
+            name,
+            at,
         })
     }
 

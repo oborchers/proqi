@@ -62,6 +62,9 @@ pub enum ApplicationError {
         "thought changed since this editor revision; exit edit to undo newer board operations first: {0}"
     )]
     RevisionConflict(ThoughtId),
+    /// Another durable owner must move before this history scope is safe.
+    #[error("history ordering requires another owner to move first for thought {0}")]
+    HistoryDependency(ThoughtId),
     /// Exact replacement digest no longer matches current content.
     #[error("content precondition failed for thought {0}")]
     ContentConflict(ThoughtId),
@@ -88,6 +91,7 @@ impl ApplicationError {
             Self::ContentConflict(_) => FailureCode::ContentConflict,
             Self::ThoughtLocked(_) => FailureCode::ThoughtLocked,
             Self::RevisionConflict(_)
+            | Self::HistoryDependency(_)
             | Self::NoncontiguousSelection
             | Self::InvalidState
             | Self::SequenceExhausted => FailureCode::InvalidState,

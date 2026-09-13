@@ -64,12 +64,12 @@ fn choice_rank(
     form: &InvocationForm,
     popup: &InvocationPopup,
 ) -> Option<matcher::MatchRank> {
-    matcher::token(&form.token, &popup.query).or_else(|| {
+    matcher::token(&form.token, popup.query.text()).or_else(|| {
         popup
             .manual
             .then_some(entry.description.as_deref())
             .flatten()
-            .and_then(|description| matcher::secondary(description, &popup.query))
+            .and_then(|description| matcher::secondary(description, popup.query.text()))
     })
 }
 

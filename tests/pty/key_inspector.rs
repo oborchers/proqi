@@ -107,6 +107,24 @@ fn csi_u_super_meta_raw_control_shift_and_smart_paste_are_exact() {
             Some("history.redo"),
         ),
         (
+            "\x1b[122;5u",
+            "U+007A",
+            vec!["Control"],
+            Some("history.undo"),
+        ),
+        (
+            "\x1b[122;6u",
+            "U+007A",
+            vec!["Control", "Shift"],
+            Some("history.redo"),
+        ),
+        (
+            "\x1b[121;5u",
+            "U+0079",
+            vec!["Control"],
+            Some("history.redo"),
+        ),
+        (
             "\x1b[13;9u",
             "Enter",
             vec!["Super"],

@@ -28,6 +28,10 @@ impl SearchState {
     pub(super) const fn query_cursor(&self) -> usize {
         self.query.cursor()
     }
+
+    pub(super) const fn query_selection(&self) -> Option<super::query::QuerySelection> {
+        self.query.selection()
+    }
 }
 
 impl BoardApp {
@@ -77,40 +81,17 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        let UiInput::Key(key) = input else {
-            return match input {
-                UiInput::Pointer(pointer) => match pointer.kind {
-                    crate::ui::PointerKind::ScrollUp => {
-                        self.move_search(-1);
-                        Vec::new()
-                    }
-                    crate::ui::PointerKind::ScrollDown => {
-                        self.move_search(1);
-                        Vec::new()
-                    }
-                    _ => self.handle_pointer(*pointer, ids, clock),
-                },
-                UiInput::Paste(value) => self.update_search_query(|query| query.paste(value)),
-                UiInput::PasteAnnotated(payload) => {
-                    self.update_search_query(|query| query.paste(&payload.content))
-                }
-                UiInput::Resize { .. }
-                | UiInput::HostFocusGained
-                | UiInput::HostFocusLost
-                | UiInput::KeyStroke(_)
-                | UiInput::Key(_) => Vec::new(),
-            };
-        };
-        match *key {
+        match input {
+            UiInput::Key(key) => self.handle_search_key(*key),
+            input => self.handle_search_non_key(input, ids, clock),
+        }
+    }
+
+    fn handle_search_key(&mut self, key: UiKey) -> Vec<Effect> {
+        match key {
             UiKey::Escape => self.close_overlay(),
             UiKey::Enter => return self.execute_search_selected(),
-            UiKey::Backspace => {
-                if let Some(search) = &mut self.search {
-                    search.query.backspace();
-                    search.selected = 0;
-                    search.scroll = 0;
-                }
-            }
+            UiKey::Backspace => return self.update_search_query(QueryEditor::backspace),
             UiKey::FastNavigation { direction, .. } => self.move_search(direction.delta()),
             UiKey::Move {
                 movement: crate::ports::editor::CursorMovement::VisualUp,
@@ -120,33 +101,59 @@ impl BoardApp {
                 movement: crate::ports::editor::CursorMovement::VisualDown,
                 ..
             } => self.move_search(1),
-            UiKey::Move { movement, .. } => {
-                if let Some(search) = &mut self.search {
-                    search.query.move_cursor(movement);
-                }
+            UiKey::Move {
+                movement,
+                extend_selection,
+            } => {
+                return self.update_search_query(|query| {
+                    query.move_cursor_with_selection(movement, extend_selection);
+                });
             }
             UiKey::Delete | UiKey::ModifiedDelete => {
-                if let Some(search) = &mut self.search {
-                    search.query.delete();
-                }
+                return self.update_search_query(QueryEditor::delete);
             }
             UiKey::Character(character) if !character.is_control() => {
-                if let Some(search) = &mut self.search {
-                    search.query.insert_char(character);
-                    search.selected = 0;
-                    search.scroll = 0;
-                }
+                return self.update_search_query(|query| query.insert_char(character));
             }
             UiKey::UnmodifiedSpace => {
-                if let Some(search) = &mut self.search {
-                    search.query.insert_char(' ');
-                    search.selected = 0;
-                    search.scroll = 0;
-                }
+                return self.update_search_query(|query| query.insert_char(' '));
             }
+            UiKey::SelectAll => return self.update_search_query(QueryEditor::select_all),
+            UiKey::Undo => return self.update_search_query(|query| move_history(query, true)),
+            UiKey::Redo => return self.update_search_query(|query| move_history(query, false)),
             _ => {}
         }
         Vec::new()
+    }
+
+    fn handle_search_non_key(
+        &mut self,
+        input: &UiInput,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        match input {
+            UiInput::Pointer(pointer) => match pointer.kind {
+                crate::ui::PointerKind::ScrollUp => {
+                    self.move_search(-1);
+                    Vec::new()
+                }
+                crate::ui::PointerKind::ScrollDown => {
+                    self.move_search(1);
+                    Vec::new()
+                }
+                _ => self.handle_pointer(*pointer, ids, clock),
+            },
+            UiInput::Paste(value) => self.update_search_query(|query| query.paste(value)),
+            UiInput::PasteAnnotated(payload) => {
+                self.update_search_query(|query| query.paste(&payload.content))
+            }
+            UiInput::Resize { .. }
+            | UiInput::HostFocusGained
+            | UiInput::HostFocusLost
+            | UiInput::KeyStroke(_)
+            | UiInput::Key(_) => Vec::new(),
+        }
     }
 
     pub(super) fn execute_search_visible_index(&mut self, index: usize) -> Vec<Effect> {
@@ -231,6 +238,14 @@ impl BoardApp {
             search.scroll = 0;
         }
         Vec::new()
+    }
+}
+
+fn move_history(query: &mut QueryEditor, undo: bool) {
+    if undo {
+        query.undo();
+    } else {
+        query.redo();
     }
 }
 

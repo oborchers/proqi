@@ -3,8 +3,8 @@
 use proqi::{
     adapters::memory::FakeIdGenerator,
     application::{
-        Action, AppState, ClipboardIntent, DurabilityState, Effect, FailureCode, InteractionMode,
-        reduce,
+        Action, AppState, ClipboardIntent, DurabilityState, Effect, FailureCode, HistoryResolution,
+        InteractionMode, reduce,
     },
     domain::{
         BoardMutation, BoardOperationKind, ContentAnnotation, ContentAnnotationKind,

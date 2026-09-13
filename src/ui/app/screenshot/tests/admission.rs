@@ -107,7 +107,7 @@ fn transfer_remove_and_capture_use_distinct_sequences_in_both_orderings() {
     let (mut app, mut ids, clock, thought_id) = app_with_thought();
     let destination = ids.session_id();
     app.begin_session_transfer(true, &mut ids, &clock);
-    app.complete_transfer_discovery(Ok(vec![session_hit(destination)]));
+    app.complete_transfer_discovery(1, Ok(vec![session_hit(destination)]));
     let transfer_input = crate::ui::input::RoutedInput::Key(UiKey::Enter);
     let transfer_effects = app.handle_transfer_input(&transfer_input, &mut ids, &clock);
     let [Effect::TransferThought(request)] = transfer_effects.as_slice() else {
@@ -126,7 +126,7 @@ fn transfer_remove_and_capture_use_distinct_sequences_in_both_orderings() {
     let (mut app, mut ids, clock, _) = app_with_thought();
     let destination = ids.session_id();
     app.begin_session_transfer(true, &mut ids, &clock);
-    app.complete_transfer_discovery(Ok(vec![session_hit(destination)]));
+    app.complete_transfer_discovery(1, Ok(vec![session_hit(destination)]));
     app.screenshot_started(std::time::Duration::ZERO);
     app.queue_screenshot_candidates([candidate(65)]);
     let capture = next_commit(&mut app, &mut ids, &clock);

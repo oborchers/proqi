@@ -56,7 +56,7 @@ fn macos_control_submission_is_not_primary_and_overlays_keep_ownership() {
     let registry =
         ShortcutRegistry::resolve(&KeyBindings::default(), ShortcutPlatform::MacOs).unwrap();
     for context in CONTEXTS {
-        for character in ['a', 'c', 'v', 'x', 'z', 'q', 'd'] {
+        for character in ['a', 'c', 'v', 'x', 'q', 'd'] {
             let event = registry.inspect(
                 &ShortcutContextStack::new([context]),
                 stroke(LogicalKey::Character(character), M::CONTROL),

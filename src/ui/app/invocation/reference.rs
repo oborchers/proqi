@@ -28,7 +28,7 @@ impl BoardApp {
             return Vec::new();
         }
         let mut popup = InvocationPopup {
-            query: String::new(),
+            query: super::QueryEditor::with_character_limit(128),
             range: None,
             manual: true,
             selected: 0,
@@ -317,9 +317,9 @@ fn match_rank(
     let token = format!("@{}", primary.trim_start_matches('@'));
     let pane_token = format!("@{}", reference.pane_id().trim_start_matches('@'));
     let automatic_pane = (!popup.manual)
-        .then(|| matcher::token(&pane_token, &popup.query))
+        .then(|| matcher::token(&pane_token, popup.query.text()))
         .flatten();
-    matcher::token(&token, &popup.query)
+    matcher::token(&token, popup.query.text())
         .into_iter()
         .chain(automatic_pane)
         .min()
@@ -336,7 +336,7 @@ fn match_rank(
                 .copied()
                 .chain(reference.workspace_label())
                 .chain(reference.tab_label())
-                .filter_map(|value| matcher::secondary(value, &popup.query))
+                .filter_map(|value| matcher::secondary(value, popup.query.text()))
                 .min()
             })
         })

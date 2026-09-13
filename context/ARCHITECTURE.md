@@ -250,10 +250,10 @@ This is the application facade used by both the TUI and the CLI.
 
 Responsibilities:
 
-- Start, continue, resume, search, rename, and delete sessions.
+- Start, continue, resume, search, rename, trash, and restore sessions.
 - Acquire a session lease before returning an editable session.
 - Create, update, move, copy, cut, delete, restore, and search thoughts.
-- Coordinate persistent editor and board undo.
+- Coordinate persistent Editor, Board, and installation-wide Browser undo.
 - Enforce command preconditions and return structured application errors.
 - Produce read models suited to the board and session browser.
 
@@ -270,6 +270,22 @@ trait Store {
     fn commit(&mut self, batch: OperationBatch) -> Result<CommitReceipt>;
     fn undo(&mut self, session: SessionId, scope: UndoScope) -> Result<CommitReceipt>;
     fn redo(&mut self, session: SessionId, scope: UndoScope) -> Result<CommitReceipt>;
+    fn commit_browser_operation(&mut self, operation: &BrowserOperation)
+        -> Result<BrowserCommitReceipt>;
+    fn commit_browser_noop_rename(
+        &mut self,
+        operation_id: OperationId,
+        session_id: SessionId,
+        name: Option<&str>,
+        at: Timestamp,
+    ) -> Result<BrowserCommitReceipt>;
+    fn move_browser_history(
+        &mut self,
+        request_id: OperationId,
+        target: BrowserHistoryEntry,
+        undo: bool,
+        at: Timestamp,
+    ) -> Result<BrowserCommitReceipt>;
 }
 ```
 
@@ -700,6 +716,15 @@ event-sourced system.
   previous and next content, annotations, and cursor state.
 - `operations`: ordered structural operations and their inverse payloads for
   persistent undo and redo.
+- `browser_operations`: installation-wide ordered rename, trash, and restore
+  operations with exact forward and inverse metadata transitions.
+- `browser_operation_receipts`: idempotent Browser mutation receipts, including
+  same-name rename requests that intentionally create no history, retained
+  independently of the active Browser cursor.
+- `browser_history_receipts`: idempotent, compare-and-set Browser undo and redo
+  receipts tied to the exact operation that was presented to the caller.
+- `browser_history_state`: the single applied-prefix cursor for Browser
+  administration across every session.
 - `integration_context`: optional last-known terminal and verified agent
   metadata. Pane IDs are hints, never durable identity.
 - `onboarding_state`: one versioned installation-local completion marker. A
@@ -740,6 +765,14 @@ ordinary session creation and neither seed nor advance the marker.
 - Operation sequences increase monotonically within a session.
 - Undo and redo commit new current state and move the operation cursor
   atomically.
+- Browser rename, trash, and restore use one installation-wide applied-prefix
+  cursor. Every movement acquires the addressed session lease and compares the
+  presented operation identity before changing state. Later activity in a
+  restored session invalidates only conflicting trash or restore redo entries;
+  it does not discard unrelated or name-only Browser history.
+- A same-name owner-control rename atomically reserves its operation identity in
+  a Browser receipt without advancing or truncating Browser history. Matching
+  retries succeed after restart, while divergent reuse fails closed.
 - A multi-thought mutation is stored as one ordered batch with one inverse, so
   delete, duplicate, collapse, cut, and submit-and-remove remain one undo step.
 - Split, extract, and merge are board-history operations whose ordered batch
@@ -1266,6 +1299,40 @@ and owns raw mode/reporting with an RAII guard before reporting setup begins.
 No-event results make no claim about which upstream host consumed a chord.
 See [the complete versioned contract](SHORTCUTS.md).
 
+### Contextual undo ownership
+
+Undo and redo resolve from the same typed active-context stack as every other
+shortcut. The topmost editable owner receives the intention first. Search,
+Commands, manual Invocation, Transfer, Global Delivery, Rename, Browser query,
+and Browser Rename each own an in-memory text history for that field's lifetime.
+Their snapshots retain Unicode text, cursor, directional selection, typing
+groups, paste units, and redo invalidation. Closing a field destroys that local
+history, and reopening creates a fresh owner. A blocking overlay without an
+editable field absorbs unavailable history instead of reaching the hidden Board
+or Editor.
+
+Durable Edit mode chooses between the addressed thought's Editor revisions and
+resource-affecting Board operations by their shared session sequence. Board mode
+uses Board history. Browser mode uses the installation-wide Browser cursor when
+its query is empty and inactive. Compose owns no durable history before content,
+but it can redo the immediately undone compose handoff. One exhaustive
+`UndoContract` classifies every application action, while the shortcut registry
+owns bindings, Commands, Help, footer presentation, and pointer geometry. Empty
+history is a quiet typed unavailable result, never a generic invalid-state
+failure.
+
+The macOS factory graph adds exact Control+Z, Control+Shift+Z, and Control+Y as
+action-specific terminal-safe history aliases for every active owner. Compact
+presentation prefers those Control spellings while retaining conventional
+Primary aliases. This does not redefine raw Control as Primary, and the portable
+factory graph remains unchanged.
+
+External delivery, clipboard writes, exports, installed updates, and external
+file changes are not reversible. A local source removal admitted after an
+accepted submission or transfer remains an ordinary Board operation, but its
+feedback names only the local restoration or removal and never claims that the
+external effect was recalled.
+
 The Quit action, whose default Primary+Q alias is separately owned in each
 context, executes before Help and Screenshot takeover navigation,
 but after a commit-first Screenshot save barrier has admitted or deferred the
@@ -1357,14 +1424,27 @@ annotations, mutation payloads, and existing history encodings are unchanged.
 The protocol boundary prevents older readers from interpreting an unknown
 closed operation variant.
 
+Schema version 16 and storage protocol version 15 add the installation-wide
+Browser history tables and cursor after Reflow. Migration 16 creates empty
+Browser history for an upgraded database and records migration row 16 without
+rewriting rows 1 through 15. Rename, trash, and restore retain exact operation
+and request identities for restart-safe replay. New Board or Editor activity
+advances session activity in the same transaction and invalidates only a redo
+whose deletion-state precondition became stale.
+
 Compose sends every character, paste, annotated paste, clipboard result,
 movement, selection, and supported composition intention through the existing
 editor. A content-changing outcome is snapshotted once and passed to the
-canonical `CreateThought` action with exact content and annotations. That action
-allocates the first durable identity and sequence, records one board history
-entry, and produces the existing persistence batch. Content-free editor events
-produce no action. This avoids a create-then-revise gap and makes crash, retry,
-restart, undo, and redo use the existing atomic operation contract.
+canonical `CreateComposeThought` action with exact content, annotations, cursor,
+and directional selection anchor. That action allocates the first durable
+identity and sequence, records one `AddThoughtFromCompose` Board history entry,
+and produces the existing persistence batch. The live editor changes owner in
+place only after the create is admitted, so the first input is never split into
+a create-then-revise gap. Undoing that handoff removes the durable thought and
+returns its exact snapshot to ephemeral Compose. Redo reuses the same thought
+and operation identity. Content-free editor events produce no action, and
+crash, retry, restart, undo, and redo retain the existing atomic operation
+contract.
 
 Native clipboard reads are asynchronous UI intentions stored with a typed
 initiating owner. Board results remain Board-owned, durable editor results must
@@ -1652,8 +1732,11 @@ bounded messages, protocol negotiation, idempotency keys, and timeouts are
 mandatory. If forwarding is unsupported or the owner cannot be verified, the
 CLI returns `session_busy`.
 
-Control protocol version 8 is current. Attachment-bearing creation requires
-version 8 to retain destination occurrence numbering. Version 2 introduced legacy durable
+Control protocol version 9 is current. Version 9 carries the durable operation
+identity required for active-owner session rename, including idempotent replay
+and Browser history. A same-name rename commits a durable no-op receipt so its
+identity cannot later name different content. Attachment-bearing creation requires version 8 to retain
+destination occurrence numbering. Version 2 introduced legacy durable
 presentation annotations. Version 4 added session rename, owner synchronization,
 exact editor replacement, and durable collapse state. An add mutation carrying
 an invocation-reference annotation requires version 6, so an older active owner
