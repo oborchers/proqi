@@ -63,7 +63,7 @@ fn cloud_attachment_states_have_plain_warning_snapshots() {
     fixture.input(crate::key_input(UiKey::Escape));
 
     insta::with_settings!({ snapshot_path => "." }, {
-        insta::assert_snapshot!(snapshot(&mut fixture, 60, 8, ThemePreference::Dark));
+        assert_platform_snapshot!(snapshot(&mut fixture, 60, 8, ThemePreference::Dark));
     });
 }
 
