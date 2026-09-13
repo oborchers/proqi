@@ -174,6 +174,12 @@ a typed unavailable reason. It never emits a generic invalid-state error for an
 empty history. Commands, Help, footer controls, and pointer hit geometry consume
 that same result. A hidden action is not assigned clickable geometry.
 
+On macOS, exact logical Control+Z is the terminal-safe Undo default;
+Control+Shift+Z and Control+Y are terminal-safe Redo defaults. Help and compact
+controls prefer the Control spellings. The conventional Primary aliases and
+Board `u` remain available when their logical events reach Proqi. These are
+action-specific aliases and do not redefine raw Control as macOS Primary.
+
 Successful feedback names only the local result. Examples include `Restored
 source thought` after undoing submission removal and `Removed source thought`
 after redoing it. It never claims to retract a delivered prompt, destination

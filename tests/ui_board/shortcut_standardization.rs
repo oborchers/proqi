@@ -140,7 +140,11 @@ fn full_board_footer_labels_and_mouse_targets_use_the_same_chord_projection() {
     for expected in [
         format!("{}C/y Copy", primary()),
         format!("{}X/x Cut", primary()),
-        format!("{}Z/u Undo", primary()),
+        if cfg!(target_os = "macos") {
+            "Ctrl+Z Undo".to_owned()
+        } else {
+            format!("{}Z/u Undo", primary())
+        },
     ] {
         assert!(
             rendered.contains(&expected),

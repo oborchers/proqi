@@ -72,7 +72,7 @@ pub(crate) fn browser_footer_projection(
         let Some(target) = label else {
             continue;
         };
-        let key = registry.action_label(context, actions[0], true);
+        let key = super::compact_action_label(registry, context, actions[0], true);
         if !key.is_empty() {
             items.insert(
                 items.len().saturating_sub(1),
@@ -90,7 +90,7 @@ pub(crate) fn browser_footer_projection(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ui::KeyBindings;
+    use crate::ui::{KeyBindings, ShortcutPlatform};
 
     #[test]
     fn established_responsive_browser_footer_is_registry_projected() {
@@ -133,5 +133,25 @@ mod tests {
                 .label,
             "Name"
         );
+    }
+
+    #[test]
+    fn macos_browser_history_prefers_terminal_safe_control_labels() {
+        let registry = ShortcutRegistry::resolve(&KeyBindings::default(), ShortcutPlatform::MacOs)
+            .expect("factory keymap is valid");
+        let items = browser_footer_projection(
+            &registry,
+            80,
+            ShortcutContext::Browser,
+            "Trash",
+            Some("Rename"),
+            Some("Rename"),
+        );
+        let history = items
+            .iter()
+            .filter(|item| item.actions == UNDO || item.actions == REDO)
+            .map(|item| item.key.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(history, ["Ctrl+Z", "Ctrl+Shift+Z"]);
     }
 }

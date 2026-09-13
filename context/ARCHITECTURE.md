@@ -1314,6 +1314,12 @@ owns bindings, Commands, Help, footer presentation, and pointer geometry. Empty
 history is a quiet typed unavailable result, never a generic invalid-state
 failure.
 
+The macOS factory graph adds exact Control+Z, Control+Shift+Z, and Control+Y as
+action-specific terminal-safe history aliases for every active owner. Compact
+presentation prefers those Control spellings while retaining conventional
+Primary aliases. This does not redefine raw Control as Primary, and the portable
+factory graph remains unchanged.
+
 External delivery, clipboard writes, exports, installed updates, and external
 file changes are not reversible. A local source removal admitted after an
 accepted submission or transfer remains an ordinary Board operation, but its

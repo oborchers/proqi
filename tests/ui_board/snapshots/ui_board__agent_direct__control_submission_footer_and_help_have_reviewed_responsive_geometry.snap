@@ -17,7 +17,7 @@ TEXT
 07││
 08│  proqi-ui-contract│
 09│  1 thought · edit · saved│
-10│  Esc Board  Cmd+C Copy Cmd+X Cut Cmd+Z Undo│
+10│  Esc Board  Cmd+C Copy Cmd+X Cut Ctrl+Z Undo│
 11│  → Codex   Ctrl+Enter Submit   Ctrl+Shift+Enter Submit & keep│
 
 STYLE RUNS
@@ -31,7 +31,7 @@ STYLE RUNS
 7: 0-119 fg=Reset bg=Reset mod=NONE
 8: 0-119 fg=Reset bg=Reset mod=NONE
 9: 0-1 fg=Reset bg=Reset mod=NONE | 2-117 fg=DarkGray bg=Reset mod=NONE | 118-119 fg=Reset bg=Reset mod=NONE
-10: 0-1 fg=Reset bg=Reset mod=NONE | 2-4 fg=Green bg=Reset mod=NONE | 5-12 fg=Reset bg=Reset mod=NONE | 13-17 fg=Green bg=Reset mod=NONE | 18-23 fg=Reset bg=Reset mod=NONE | 24-28 fg=Green bg=Reset mod=NONE | 29-33 fg=Reset bg=Reset mod=NONE | 34-38 fg=Green bg=Reset mod=NONE | 39-119 fg=Reset bg=Reset mod=NONE
+10: 0-1 fg=Reset bg=Reset mod=NONE | 2-4 fg=Green bg=Reset mod=NONE | 5-12 fg=Reset bg=Reset mod=NONE | 13-17 fg=Green bg=Reset mod=NONE | 18-23 fg=Reset bg=Reset mod=NONE | 24-28 fg=Green bg=Reset mod=NONE | 29-33 fg=Reset bg=Reset mod=NONE | 34-39 fg=Green bg=Reset mod=NONE | 40-119 fg=Reset bg=Reset mod=NONE
 11: 0-1 fg=Reset bg=Reset mod=NONE | 2-2 fg=Green bg=Reset mod=NONE | 3-11 fg=Reset bg=Reset mod=NONE | 12-21 fg=Green bg=Reset mod=NONE | 22-31 fg=Reset bg=Reset mod=NONE | 32-47 fg=Green bg=Reset mod=NONE | 48-119 fg=Reset bg=Reset mod=NONE
 Editor 48x10
 SIZE 48x10

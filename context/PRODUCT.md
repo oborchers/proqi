@@ -910,8 +910,8 @@ bindings are:
 | Move or extend by five thoughts | `Page Up` / `Page Down`; add `Shift` to extend | Scroll, then click or Shift-click the target thought |
 | Submit | `Primary+Enter` or `s`, when supported, then direction when needed | Click verified Submit control |
 | Submit and keep | `Primary+Shift+Enter` or `Shift+S`, when supported, then direction when needed | Click verified Submit & keep control |
-| Undo the active owner | `Primary+Z`, or `u` on Board | Click undo control when available |
-| Redo the active owner | `Primary+Shift+Z` or `Primary+Y` | Click redo control when available |
+| Undo the active owner | macOS `Ctrl+Z`; `Primary+Z`, or `u` on Board | Click undo control when available |
+| Redo the active owner | macOS `Ctrl+Shift+Z` or `Ctrl+Y`; `Primary+Shift+Z` or `Primary+Y` | Click redo control when available |
 | Move thought | macOS `Option+Shift+↑` / `↓`; `Primary+Shift+↑` / `↓`, or `Primary+K` / `Primary+J` | Drag thought handle |
 | Expand or collapse | `c` | Click overflow indicator |
 | Search | `/` | Click search control |
@@ -974,6 +974,8 @@ Initial editing shortcuts include:
 | Move to logical line start or end | macOS `Ctrl+←` / `→`; elsewhere `Alt+←` / `→` | Named `Home` / `End` remain aliases |
 | Delete the current logical line | `Primary+U` | Command palette |
 | Delete the containing sentence | `Primary+Shift+U` | Command palette or configured binding |
+| Undo | macOS `Ctrl+Z`; `Primary+Z` remains an alias | Board `u`, Commands, or pointer control |
+| Redo | macOS `Ctrl+Shift+Z` or `Ctrl+Y`; Primary aliases remain | Commands or pointer control |
 | Submit active thought | macOS `Ctrl+Enter`; `Primary+Enter` remains an alias | Command palette |
 | Submit active thought and keep | macOS `Ctrl+Shift+Enter`; `Primary+Shift+Enter` remains an alias | Command palette |
 
@@ -1022,7 +1024,10 @@ No event before the deadline is reported as no event received; Proqi cannot
 identify whether the OS, Karabiner, Ghostty, Herdr or another layer consumed it.
 No arbitrary terminal response, paste, session content or private topology is
 included. Terminal ownership is restored on every exit path.
-Distinctly reported Shift remains meaningful. A shifted reserved character
+Distinctly reported Shift remains meaningful. On macOS, exact logical
+`Control+Z`, `Control+Shift+Z`, and `Control+Y` are action-specific terminal-safe
+history aliases in every active context. They do not make raw Control a second
+Primary modifier. A shifted reserved character
 chord never silently becomes the unshifted copy, cut, paste, select-all,
 duplicate, or quit command. `Primary+Y` remains the unshifted alternate redo
 chord. `Primary+Shift+V` is the explicit `Paste and clean up` action. An uppercase
@@ -1544,6 +1549,10 @@ Undo follows the active owner:
   operations through its separate durable cross-session history.
 - Compose promotes its first content-producing intention into one durable
   Board Create unit whose undo returns to empty Compose.
+
+On macOS, Help and controls prefer the terminal-safe `Ctrl+Z` and
+`Ctrl+Shift+Z` history spellings while retaining the conventional Cmd aliases.
+Linux and Windows retain their existing Primary-as-Control defaults.
 
 Undo history is persisted with the session. Restarting the process does not
 turn a reversible deletion into permanent data loss.

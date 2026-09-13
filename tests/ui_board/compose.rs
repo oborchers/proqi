@@ -271,7 +271,11 @@ fn edit_footer_uses_only_truthful_native_chords() {
     for label in [
         format!("{primary}C Copy"),
         format!("{primary}X Cut"),
-        format!("{primary}Z Undo"),
+        if cfg!(target_os = "macos") {
+            "Ctrl+Z Undo".to_owned()
+        } else {
+            format!("{primary}Z Undo")
+        },
     ] {
         assert!(rendered.contains(&label), "missing {label:?}: {rendered:?}");
     }

@@ -150,14 +150,27 @@ mod tests {
         } else {
             "Ctrl+"
         };
-        for (target, suffix, fallback, text) in [
-            (HitTarget::Copy, "C", "y", " Copy"),
-            (HitTarget::Cut, "X", "x", " Cut"),
-            (HitTarget::Undo, "Z", "u", " Undo"),
+        for (target, full_key, compact_key, text) in [
+            (HitTarget::Copy, format!("{primary}C/y"), "y", " Copy"),
+            (HitTarget::Cut, format!("{primary}X/x"), "x", " Cut"),
+            (
+                HitTarget::Undo,
+                if cfg!(target_os = "macos") {
+                    "Ctrl+Z".to_owned()
+                } else {
+                    format!("{primary}Z/u")
+                },
+                if cfg!(target_os = "macos") {
+                    "Ctrl+Z"
+                } else {
+                    "u"
+                },
+                " Undo",
+            ),
         ] {
             let full = action(target, false, super::super::ShortcutContext::Board, &keys)
                 .expect("full label");
-            assert_eq!(full.key, format!("{primary}{suffix}/{fallback}"));
+            assert_eq!(full.key, full_key);
             assert_eq!(full.text, text);
             assert_eq!(
                 action_width(target, false, super::super::ShortcutContext::Board, &keys),
@@ -166,7 +179,7 @@ mod tests {
 
             let compact = action(target, true, super::super::ShortcutContext::Board, &keys)
                 .expect("compact label");
-            assert_eq!(compact.key, fallback);
+            assert_eq!(compact.key, compact_key);
             assert_eq!(compact.text, text);
             assert!(compact.width() <= full.width());
         }

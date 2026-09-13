@@ -109,6 +109,29 @@ fn distinctly_reported_primary_shift_z_is_redo_for_both_character_cases() {
     }
 }
 
+#[cfg(target_os = "macos")]
+#[test]
+fn raw_control_history_is_a_terminal_safe_action_alias() {
+    for (character, modifiers, expected) in [
+        ('z', KeyModifiers::CONTROL, UiKey::Undo),
+        (
+            'z',
+            KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+            UiKey::Redo,
+        ),
+        ('Z', KeyModifiers::CONTROL, UiKey::Redo),
+        ('y', KeyModifiers::CONTROL, UiKey::Redo),
+    ] {
+        assert_eq!(
+            translate(Event::Key(KeyEvent::new(
+                KeyCode::Char(character),
+                modifiers,
+            ))),
+            Some(UiInput::Key(expected)),
+        );
+    }
+}
+
 #[test]
 fn primary_clipboard_shortcuts_do_not_reuse_quit() {
     for (character, expected) in [

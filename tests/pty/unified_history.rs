@@ -33,6 +33,18 @@ fn compose_and_query_history_use_exact_primary_chords_without_punching_through()
 
         # Command+Y is the second registry-owned redo spelling.
         send -- "\x1b\[121;9u"
+        after 300
+
+        # Raw Control is an action-specific terminal-safe macOS alias. It is
+        # not a second spelling of Primary for unrelated commands.
+        send -- "\x1b\[122;5u"
+        send -- "\x1b\[122;5u"
+        after 300
+        send -- "\x1b\[122;6u"
+        after 300
+        send -- "\x1b\[122;5u"
+        after 300
+        send -- "\x1b\[121;5u"
         send "\x1b"
         after 200
 
@@ -40,8 +52,8 @@ fn compose_and_query_history_use_exact_primary_chords_without_punching_through()
         # the durable Board Create underneath it.
         send "/"
         send -- "absent"
-        send -- "\x1b\[122;9u"
-        send -- "\x1b\[122;9u"
+        send -- "\x1b\[122;5u"
+        send -- "\x1b\[122;5u"
         send "\x1b"
         after 300
         send "q"
