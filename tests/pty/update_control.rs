@@ -219,6 +219,28 @@ fn standalone_owner_restores_and_replaces_itself_in_the_same_pty() {
         )
         .expect("prepare standalone owner");
     assert!(matches!(reply, UpdatePrepareReply::Ready { .. }));
+    let quiesced = gateway
+        .quiesce(
+            &before,
+            &UpdateQuiesceRequest {
+                operation_id,
+                installed_version: version.clone(),
+            },
+        )
+        .expect("quiesce standalone owner");
+    assert_eq!(quiesced.session_id, before.session_id);
+    let verifier = FileRuntimeCoordinator::new(
+        state.path().join("runtime"),
+        ids.instance_id(),
+        std::env::current_dir().expect("current directory"),
+        SystemClock.now(),
+        env!("CARGO_PKG_VERSION"),
+    )
+    .expect("schema verifier");
+    let exclusive = verifier
+        .acquire_schema_exclusive()
+        .expect("standalone quiescence proves shared schema lease release");
+    drop(exclusive);
     let restart = gateway
         .restart(
             &before,
