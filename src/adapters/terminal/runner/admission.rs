@@ -1,6 +1,7 @@
 //! Canonical admission for session-sequence producers.
 
 use crate::ports::control::{ControlMutation, ControlRejectionCode, ControlResult};
+use crate::ports::update::UpdateLease;
 use crate::ui::BoardApp;
 
 use super::PendingWork;
@@ -11,6 +12,15 @@ pub(super) enum MutationBlocker {
     ControlLookup,
     AsyncIntention,
     UpdatePrepare,
+    UpdateBarrier,
+}
+
+/// Keep an owner that cannot publish control visible to convergence through its lock.
+pub(super) fn retain_unpublished_startup_admission(
+    admission: Option<Box<dyn UpdateLease>>,
+    control_ready: bool,
+) -> Option<Box<dyn UpdateLease>> {
+    if control_ready { None } else { admission }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -19,12 +29,15 @@ struct MutationAdmission {
     unresolved_control_lookups: usize,
     asynchronous_intentions: usize,
     update_prepares: usize,
+    update_barrier: bool,
 }
 
 impl MutationAdmission {
     const fn owner_control(self) -> Result<(), MutationBlocker> {
         if self.capture_reserved {
             Err(MutationBlocker::CaptureCommit)
+        } else if self.update_barrier {
+            Err(MutationBlocker::UpdateBarrier)
         } else {
             Ok(())
         }
@@ -33,6 +46,8 @@ impl MutationAdmission {
     const fn capture(self) -> Result<(), MutationBlocker> {
         if self.capture_reserved {
             Err(MutationBlocker::CaptureCommit)
+        } else if self.update_barrier {
+            Err(MutationBlocker::UpdateBarrier)
         } else if self.unresolved_control_lookups == 0 {
             if self.asynchronous_intentions > 0 {
                 Err(MutationBlocker::AsyncIntention)
@@ -53,6 +68,7 @@ pub(super) fn owner_control(app: &BoardApp) -> Result<(), MutationBlocker> {
         unresolved_control_lookups: 0,
         asynchronous_intentions: 0,
         update_prepares: 0,
+        update_barrier: app.update_barrier_operation().is_some(),
     }
     .owner_control()
 }
@@ -61,6 +77,14 @@ pub(super) fn owner_control_rejection(
     app: &BoardApp,
     mutation: &ControlMutation,
 ) -> Option<ControlResult> {
+    if control_may_produce_sequence(mutation) && app.update_barrier_operation().is_some() {
+        return Some(ControlResult::Rejected {
+            code: ControlRejectionCode::AnotherUpdateIsPreparing
+                .as_str()
+                .to_owned(),
+            message: "active owner is quiesced for an update".to_owned(),
+        });
+    }
     (control_may_produce_sequence(mutation)
         && !matches!(mutation, ControlMutation::UpdatePrepare { .. })
         && owner_control(app).is_err())
@@ -75,6 +99,7 @@ pub(super) const fn control_may_produce_sequence(mutation: &ControlMutation) -> 
         mutation,
         ControlMutation::CaptureTakeover { .. }
             | ControlMutation::UpdateRelease { .. }
+            | ControlMutation::UpdateQuiesce { .. }
             | ControlMutation::UpdateRestart { .. }
     )
 }
@@ -85,6 +110,7 @@ pub(super) fn capture(app: &BoardApp, pending: &PendingWork) -> Result<(), Mutat
         unresolved_control_lookups: pending.control_lookups.len(),
         asynchronous_intentions: app.pending_mutation_intents().total(),
         update_prepares: pending.update_prepares.len(),
+        update_barrier: app.update_barrier_operation().is_some(),
     }
     .capture()
 }
@@ -134,6 +160,7 @@ mod tests {
                 unresolved_control_lookups: 1,
                 asynchronous_intentions: 0,
                 update_prepares: 0,
+                update_barrier: false,
             }
             .capture(),
             Err(MutationBlocker::ControlLookup)
@@ -191,6 +218,7 @@ mod tests {
                 unresolved_control_lookups: 0,
                 asynchronous_intentions: 0,
                 update_prepares: 1,
+                update_barrier: false,
             }
             .capture(),
             Err(MutationBlocker::UpdatePrepare)
@@ -213,6 +241,7 @@ mod tests {
                 unresolved_control_lookups: 1,
                 asynchronous_intentions: 0,
                 update_prepares: 0,
+                update_barrier: false,
             }
             .capture(),
             Err(MutationBlocker::ControlLookup)

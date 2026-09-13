@@ -5,7 +5,7 @@ Status: v0.1.0 product contract
 Product name: Proqi
 
 Command: `proqi`
-Last updated: 2026-09-01
+Last updated: 2026-09-12
 
 ## Vision
 
@@ -1311,13 +1311,31 @@ brew upgrade --formula oborchers/tap/proqi
 ```
 
 If Homebrew fails, every old process remains usable and no restart is attempted.
-After success, the coordinator rescans active instances. Each macOS or Linux
-participant completes durable flushing, terminal restoration, lease release,
-and resource cleanup, then uses Unix process replacement to resume the same
-session in the existing pane. A failed replacement never rolls back successful
-peers. It is reported truthfully, leaves that session resumable, and offers a
-direct retry. Proqi never claims that all sessions restarted while an old
-process remains.
+Before its first registry scan, the coordinator closes schema-startup admission.
+A process already entering the schema makes the update stop before installation.
+A later startup receives an explicit, content-free convergence error before it
+can take a schema lease. Preparation before Homebrew is reversible and is
+released while the installer runs, but startup admission remains closed. After
+success, the coordinator gives the post-install phase a fresh bounded deadline,
+rescans, and prepares the complete current cohort. A live owner that cannot
+publish owner control retains its startup admission for its lifetime. It stays
+usable with a warning, but blocks automatic installation because no coordinator
+could safely prepare or attribute it.
+
+The coordinator then asks every exact prepared participant to
+enter irreversible schema quiescence. A quiescence acknowledgement identifies
+the stable session and old process and proves that its shared schema lease was
+released. Once acknowledged, that old process admits no ordinary mutation and
+can only replace itself with the verified target or exit while leaving the exact
+SessionId resumable. Peers replace first and the initiating process replaces
+last. Each replacement completes terminal restoration, session-lease release,
+and bounded resource cleanup before Unix process replacement resumes that exact
+session in the inherited pane and state root. A failed replacement never rolls
+back successful peers and never makes an old quiesced process writable again.
+Replacement readiness additionally requires the retained operating-system
+process, matching update attempt and prior process proof, and a live verified
+owner-control endpoint. A manual exact-session resume in another pane and stale
+runtime metadata remain explicit incomplete replacements.
 
 Existing shared schema leases remain the compatibility barrier. A new process
 does not migrate while an old process still holds a conflicting lease. It waits
@@ -1345,14 +1363,15 @@ such a dismissal, so a crash before dismissal shows it again. Missing, corrupt,
 ambiguous, failed, cancelled, partial, externally installed, and
 version-mismatched state stays quiet.
 
-If any peer replacement is missing or failed, the initiating board is released
-and remains usable. Proqi retains `restart_needed`, creates no automatic
-highlight announcement, reports the incomplete session count, and does not
-replace the initiating process. Complete convergence clears `restart_needed`
-only after the exact initiating replacement has restored its board and
-published owner control. The automatic highlights remain hidden until that
-atomic completion succeeds. A control or cache finalization failure stays
-quiet and is retained as a stable, content-free diagnostic code.
+If any peer replacement is missing or failed, Proqi retains `restart_needed`,
+creates no automatic highlight announcement, and reports the incomplete exact
+participants. A quiesced initiating owner still replaces itself without an
+automatic announcement because it may not resume ordinary writes. Complete
+convergence clears `restart_needed` only after the exact initiating replacement
+has restored its board and published owner control. The automatic highlights
+remain hidden until that atomic completion succeeds. A control or cache
+finalization failure stays quiet and is retained as a stable, content-free
+diagnostic code.
 
 The command palette always offers `What's new`. It reopens the installed
 version's packaged highlights and never changes automatic acknowledgement.

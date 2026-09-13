@@ -103,6 +103,45 @@ fn submit_remove_and_capture_use_distinct_sequences_in_both_orderings() {
 }
 
 #[test]
+fn submit_keep_remains_a_schema_mutation_intent_until_its_journal_is_durable() {
+    let (mut app, mut ids, clock, thought_id) = app_with_thought();
+    let target = agent_target();
+    let effects = app.queue_submission(
+        &target,
+        SubmissionDisposition::Keep,
+        &[thought_id],
+        &mut ids,
+        &clock,
+    );
+    let [Effect::PrepareSubmission(attempt)] = effects.as_slice() else {
+        panic!("submission intent");
+    };
+    let submission_id = attempt.id;
+    assert_eq!(app.pending_mutation_intents().total(), 1);
+    app.complete_submission_prepared(submission_id, Ok(()));
+    let delivery = app.complete_submission_sending(submission_id, Ok(()));
+    let [Effect::SubmitAgent(request)] = delivery.as_slice() else {
+        panic!("submission delivery");
+    };
+    let journal = app.complete_submission(
+        submission_id,
+        Ok(SubmissionReceipt {
+            submission_id,
+            target,
+            post_state: Some(AgentState::Working),
+        }),
+    );
+    assert!(matches!(
+        journal.as_slice(),
+        [Effect::FinishSubmission { removal: None, .. }]
+    ));
+    assert_eq!(app.pending_mutation_intents().total(), 1);
+    app.complete_submission_journaled(submission_id, Ok(()));
+    assert!(app.pending_mutation_intents().is_empty());
+    assert_eq!(request.submission_id, submission_id);
+}
+
+#[test]
 fn transfer_remove_and_capture_use_distinct_sequences_in_both_orderings() {
     let (mut app, mut ids, clock, thought_id) = app_with_thought();
     let destination = ids.session_id();

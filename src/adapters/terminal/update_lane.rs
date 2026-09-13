@@ -418,15 +418,21 @@ fn install(
     let now = SystemClock.now();
     let deadline = Timestamp::from_millis(now.as_millis().saturating_add(UPDATE_DEADLINE_MILLIS));
     let mut ids = SystemIdGenerator;
-    let execution = UpdateRestartCoordinator::new(state, coordinator, &mut gateway, &mut installer)
-        .execute(
-            ids.request_id(),
-            initiating_instance,
-            installation.identity,
-            version,
-            deadline,
-            &cancellation,
-        );
+    let execution = UpdateRestartCoordinator::new(
+        state,
+        coordinator,
+        &mut gateway,
+        &mut installer,
+        &SystemClock,
+    )
+    .execute(
+        ids.request_id(),
+        initiating_instance,
+        installation.identity,
+        version,
+        deadline,
+        &cancellation,
+    );
     match &execution {
         Ok(execution) => crate::adapters::diagnostics::record_update_execution(execution),
         Err(error) => crate::adapters::diagnostics::record_update_error(error),

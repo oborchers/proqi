@@ -81,6 +81,7 @@ impl BoardApp {
             } => history_action(*operation_id, *scope, *undo, at),
             ControlMutation::UpdatePrepare { .. }
             | ControlMutation::UpdateRelease { .. }
+            | ControlMutation::UpdateQuiesce { .. }
             | ControlMutation::UpdateRestart { .. }
             | ControlMutation::CaptureTakeover { .. } => {
                 return Err(ApplicationError::InvalidState);

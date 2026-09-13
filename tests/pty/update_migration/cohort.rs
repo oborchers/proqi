@@ -30,14 +30,28 @@ pub(super) struct Owners {
 
 impl Owners {
     pub(super) fn spawn(binary: &str, state: &Path, sessions: &[String]) -> Self {
+        let cwd = std::env::current_dir().expect("cohort working directory");
+        let launches = sessions
+            .iter()
+            .cloned()
+            .map(|session| (session, cwd.clone()))
+            .collect::<Vec<_>>();
+        Self::spawn_in_directories(binary, state, &launches)
+    }
+
+    pub(super) fn spawn_in_directories(
+        binary: &str,
+        state: &Path,
+        launches: &[(String, PathBuf)],
+    ) -> Self {
         let done = state.join("cohort.done");
         let group = state.join("cohort.group");
-        let child = spawn_owners(binary, state, sessions, &done, &group);
+        let child = spawn_owners(binary, state, launches, &done, &group);
         Self {
             child: Some(child),
             done,
             group,
-            expected: sessions.len(),
+            expected: launches.len(),
         }
     }
 
@@ -198,7 +212,7 @@ fn process_group_absent(path: &Path) -> bool {
 fn spawn_owners(
     binary: &str,
     state: &Path,
-    sessions: &[String],
+    launches: &[(String, PathBuf)],
     done: &Path,
     group: &Path,
 ) -> Child {
@@ -210,8 +224,12 @@ fn spawn_owners(
             print $$ > "$PROQI_TEST_GROUP"
             exec {terminal_input}<&0
             typeset -a pids
-            for session in ${(s: :)PROQI_TEST_SESSIONS}; do
-                "$PROQI_TEST_BINARY" --state-dir "$PROQI_TEST_STATE" -r "$session" <&$terminal_input &
+            typeset -a sessions=(${(s: :)PROQI_TEST_SESSIONS})
+            typeset -a directories=(${(s: :)PROQI_TEST_DIRECTORIES})
+            for (( index = 1; index <= ${#sessions}; index++ )); do
+                session=$sessions[$index]
+                directory=$directories[$index]
+                (cd "$directory" && exec "$PROQI_TEST_BINARY" --state-dir "$PROQI_TEST_STATE" -r "$session" <&$terminal_input) &
                 pids+=($!)
             done
             while [[ ! -e "$PROQI_TEST_DONE" ]]; do sleep 0.02; done
@@ -236,7 +254,22 @@ fn spawn_owners(
         .args(["-c", script])
         .env("PROQI_TEST_BINARY", binary)
         .env("PROQI_TEST_STATE", state)
-        .env("PROQI_TEST_SESSIONS", sessions.join(" "))
+        .env(
+            "PROQI_TEST_SESSIONS",
+            launches
+                .iter()
+                .map(|(session, _)| session.as_str())
+                .collect::<Vec<_>>()
+                .join(" "),
+        )
+        .env(
+            "PROQI_TEST_DIRECTORIES",
+            launches
+                .iter()
+                .map(|(_, directory)| directory.to_string_lossy())
+                .collect::<Vec<_>>()
+                .join(" "),
+        )
         .env("PROQI_TEST_DONE", done)
         .env("PROQI_TEST_GROUP", group)
         .spawn()

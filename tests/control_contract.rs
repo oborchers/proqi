@@ -12,6 +12,8 @@ const REJECTED: &str = include_str!("fixtures/control/v8/add.rejected.json");
 const PRESERVE: &str = include_str!("fixtures/control/v8/preserve_add.request.json");
 const UPDATE_PREPARE: &str = include_str!("fixtures/control/v8/update_prepare.request.json");
 const UPDATE_READY: &str = include_str!("fixtures/control/v8/update_prepare.ready.json");
+const UPDATE_QUIESCE: &str = include_str!("fixtures/control/v8/update_quiesce.request.json");
+const UPDATE_QUIESCED: &str = include_str!("fixtures/control/v8/update_quiesce.ready.json");
 const CAPTURE_TAKEOVER: &str = include_str!("fixtures/control/v8/capture_takeover.request.json");
 const CAPTURE_SCHEDULED: &str = include_str!("fixtures/control/v8/capture_takeover.scheduled.json");
 
@@ -45,6 +47,20 @@ fn current_update_readiness_fixtures_round_trip_canonically() {
 
     assert_eq!(request.protocol, CONTROL_PROTOCOL_VERSION);
     assert_eq!(response.protocol, CONTROL_PROTOCOL_VERSION);
+    assert!(matches!(response.result, ControlResult::Update(_)));
+}
+
+#[test]
+fn current_update_quiescence_fixtures_round_trip_canonically() {
+    let request: ControlRequest = assert_round_trip(UPDATE_QUIESCE);
+    let response: ControlResponse = assert_round_trip(UPDATE_QUIESCED);
+
+    assert_eq!(request.protocol, CONTROL_PROTOCOL_VERSION);
+    assert_eq!(response.protocol, CONTROL_PROTOCOL_VERSION);
+    assert!(matches!(
+        request.mutation,
+        proqi::ports::control::ControlMutation::UpdateQuiesce { .. }
+    ));
     assert!(matches!(response.result, ControlResult::Update(_)));
 }
 

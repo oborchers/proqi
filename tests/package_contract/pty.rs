@@ -24,7 +24,7 @@ use proqi::{
             HomebrewInstaller, InstallDetector as _, ReleaseObservation, ReleaseSource,
             UPDATE_CONTROL_PROTOCOL_VERSION, UpdateError, UpdateInstanceRegistry as _,
             UpdateParticipantGateway as _, UpdatePrepareReply, UpdatePrepareRequest,
-            UpdateRestartRequest,
+            UpdateQuiesceRequest, UpdateRestartRequest,
         },
     },
 };
@@ -194,6 +194,15 @@ fn assert_update_contract(product: &InstalledProduct) {
         )
         .expect("prepare installed owner");
     assert!(matches!(ready, UpdatePrepareReply::Ready { .. }));
+    gateway
+        .quiesce(
+            &before,
+            &UpdateQuiesceRequest {
+                operation_id: operation,
+                installed_version: version.clone(),
+            },
+        )
+        .expect("quiesce installed owner");
     assert!(
         gateway
             .restart(
@@ -244,15 +253,16 @@ fn assert_fake_update_services(
         fail: true,
         calls: 0,
     };
-    let failure = UpdateRestartCoordinator::new(&state, &registry, &mut gateway, &mut failing)
-        .execute(
-            ids.request_id(),
-            initiating,
-            installation,
-            &version,
-            deadline,
-            &(),
-        );
+    let failure =
+        UpdateRestartCoordinator::new(&state, &registry, &mut gateway, &mut failing, &SystemClock)
+            .execute(
+                ids.request_id(),
+                initiating,
+                installation,
+                &version,
+                deadline,
+                &(),
+            );
     assert!(matches!(failure, Err(UpdateError::InstallerFailed)));
     assert_eq!(failing.calls, 1);
     let usable = homebrew.json_input(
@@ -264,16 +274,22 @@ fn assert_fake_update_services(
         fail: false,
         calls: 0,
     };
-    let installed = UpdateRestartCoordinator::new(&state, &registry, &mut gateway, &mut succeeding)
-        .execute(
-            ids.request_id(),
-            initiating,
-            installation,
-            &version,
-            deadline,
-            &(),
-        )
-        .expect("coordinate one fake installation");
+    let installed = UpdateRestartCoordinator::new(
+        &state,
+        &registry,
+        &mut gateway,
+        &mut succeeding,
+        &SystemClock,
+    )
+    .execute(
+        ids.request_id(),
+        initiating,
+        installation,
+        &version,
+        deadline,
+        &(),
+    )
+    .expect("coordinate one fake installation");
     assert_eq!(succeeding.calls, 1);
     assert_eq!(installed.prepared_participants, 1);
     assert_eq!(installed.restart_requests, 0);
@@ -309,6 +325,15 @@ fn assert_failed_exec_is_recoverable(product: &InstalledProduct) {
         )
         .expect("prepare failed-exec owner");
     assert!(matches!(ready, UpdatePrepareReply::Ready { .. }));
+    gateway
+        .quiesce(
+            &before,
+            &UpdateQuiesceRequest {
+                operation_id: operation,
+                installed_version: version.clone(),
+            },
+        )
+        .expect("quiesce failed-exec owner");
     fs::remove_file(
         homebrew
             .binary
@@ -343,8 +368,21 @@ fn assert_failed_exec_is_recoverable(product: &InstalledProduct) {
         "injected Unix exec failure unexpectedly succeeded"
     );
     assert_terminal_restored(&output);
+    assert_failed_replacement_guidance(&output, session);
     let resumed = homebrew.json(&["-r", session]);
     assert_eq!(resumed["data"]["session_id"], session);
+}
+
+fn assert_failed_replacement_guidance(output: &[u8], session: &str) {
+    let output = String::from_utf8_lossy(output);
+    assert!(
+        output.contains(session),
+        "missing exact recovery identity: {output}"
+    );
+    assert!(
+        output.contains("same state root"),
+        "missing state-root recovery guidance: {output}"
+    );
 }
 
 fn fake_homebrew_product(product: &InstalledProduct, name: &str) -> InstalledProduct {
@@ -389,7 +427,7 @@ fn update_registry(
         env!("CARGO_PKG_VERSION"),
     )
     .expect("package update registry")
-    .with_update_context(installation, UPDATE_CONTROL_PROTOCOL_VERSION)
+    .with_update_context(installation, UPDATE_CONTROL_PROTOCOL_VERSION, None)
 }
 
 fn active_participant(registry: &FileRuntimeCoordinator, session: &str) -> Option<InstanceInfo> {
