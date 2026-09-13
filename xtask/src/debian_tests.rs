@@ -1,6 +1,8 @@
 use super::{enforce_support_floor, parse_dependencies, render_config, validate_evidence};
+use crate::release_targets::{ALL, Architecture, LibcFamily, OperatingSystem};
 
 use serde_json::json;
+use std::{fs, path::Path};
 
 #[test]
 fn derived_dependencies_receive_the_declared_support_floor() {
@@ -64,4 +66,27 @@ fn downloaded_evidence_binds_every_artifact_identity() {
             .is_err()
         );
     }
+}
+
+#[test]
+fn ci_packaging_passes_the_typed_gnu_target() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("workspace root");
+    let ci = fs::read_to_string(root.join(".github/workflows/ci.yml")).expect("read CI workflow");
+    let target = ALL
+        .iter()
+        .find(|target| {
+            target.os == OperatingSystem::Linux
+                && target.architecture == Architecture::X86_64
+                && target.libc == LibcFamily::Gnu
+        })
+        .expect("default GNU/Linux release target");
+    let invocation = [
+        format!("target/package/{} \\", target.archive_name()),
+        "            target/debian-package \\".to_owned(),
+        format!("            {}", target.triple),
+    ]
+    .join("\n");
+    assert!(ci.contains(&invocation));
 }
