@@ -12,11 +12,7 @@ use flate2::read::GzDecoder;
 use serde_json::json;
 use tar::Archive;
 
-use super::release_targets::LINUX_X86_64;
-
-pub(super) const PACKAGE_NAME: &str = "proqi_amd64.deb";
 const NFPM_VERSION: &str = "2.47.0";
-const MINIMUM_LIBC: &str = "2.35";
 const MAINTAINER: &str = "Oliver Borchers <oliver-borchers@gmx.net>";
 pub(super) const INSTALLED_PATHS: [(&str, &str, u32); 6] = [
     ("proqi", "/usr/bin/proqi", 0o755),
@@ -39,15 +35,24 @@ pub(super) const INSTALLED_PATHS: [(&str, &str, u32); 6] = [
     ),
 ];
 
-pub(super) fn package(root: &Path, archive: &Path, output: &Path) -> Result<(), String> {
+pub(super) fn package(
+    root: &Path,
+    archive: &Path,
+    output: &Path,
+    triple: &str,
+) -> Result<(), String> {
     super::timing::phase("debian.package.preflight", require_linux)?;
+    let target = super::release_targets::find(triple)?;
+    let package = target
+        .debian
+        .ok_or_else(|| format!("target `{triple}` has no Debian artifact"))?;
     let archive = absolute_from(root, archive);
     let output = absolute_from(root, output);
     super::timing::phase("debian.package.nfpm", || {
         require_tool_version(root, "nfpm", NFPM_VERSION)
     })?;
     let inspected_digest = super::timing::phase("debian.package.archive_inspect", || {
-        super::linux_compat::inspect_archive(&archive)
+        super::linux_compat::inspect_archive(&archive, target)
     })?;
     let temporary = tempfile::Builder::new()
         .prefix("proqi-debian-")
@@ -57,20 +62,23 @@ pub(super) fn package(root: &Path, archive: &Path, output: &Path) -> Result<(), 
     fs::create_dir_all(&stage).map_err(|error| format!("create Debian stage: {error}"))?;
     super::timing::phase("debian.package.stage", || {
         extract_release_archive(&archive, temporary.path())?;
-        stage_contents(root, temporary.path(), &stage)
+        stage_contents(root, temporary.path(), &stage, target)
     })?;
     let binary = stage.join("proqi");
     let (derived, dependencies) = super::timing::phase("debian.package.dependencies", || {
-        let derived = derive_dependencies(temporary.path(), &binary)?;
+        let derived = derive_dependencies(temporary.path(), &binary, package.architecture)?;
         let dependencies = enforce_support_floor(&derived)?;
         Ok((derived, dependencies))
     })?;
     let version = super::release::workspace_version(root)?;
     let config = temporary.path().join("nfpm.yaml");
-    fs::write(&config, render_config(&version.to_string(), &dependencies)?)
-        .map_err(|error| format!("write nFPM config: {error}"))?;
+    fs::write(
+        &config,
+        render_config(&version.to_string(), &dependencies, package.architecture)?,
+    )
+    .map_err(|error| format!("write nFPM config: {error}"))?;
     fs::create_dir_all(&output).map_err(|error| format!("create Debian output: {error}"))?;
-    let destination = output.join(PACKAGE_NAME);
+    let destination = output.join(package.filename);
     super::timing::phase("debian.package.construct", || {
         run_status(
             temporary.path(),
@@ -81,7 +89,7 @@ pub(super) fn package(root: &Path, archive: &Path, output: &Path) -> Result<(), 
             Some(&destination),
         )
     })?;
-    let archive_binary = extracted_binary(temporary.path());
+    let archive_binary = extracted_binary(temporary.path(), target);
     if super::release::checksum(&archive_binary)? != inspected_digest {
         return Err("Linux archive changed between inspection and Debian staging".to_owned());
     }
@@ -92,6 +100,7 @@ pub(super) fn package(root: &Path, archive: &Path, output: &Path) -> Result<(), 
             &archive_binary,
             &version.to_string(),
             &dependencies,
+            package,
         )
     })?;
     super::timing::phase("debian.package.evidence", || {
@@ -102,6 +111,7 @@ pub(super) fn package(root: &Path, archive: &Path, output: &Path) -> Result<(), 
             &archive_binary,
             &derived,
             &dependencies,
+            target,
         )
     })?;
     println!("packaged {}", destination.display());
@@ -113,7 +123,12 @@ pub(super) fn verify_evidence(
     archive: &Path,
     package: &Path,
     evidence_directory: &Path,
+    triple: &str,
 ) -> Result<String, String> {
+    let target = super::release_targets::find(triple)?;
+    let package_metadata = target
+        .debian
+        .ok_or_else(|| format!("target `{triple}` has no Debian artifact"))?;
     let archive = absolute_from(root, archive);
     let package = absolute_from(root, package);
     let evidence_directory = absolute_from(root, evidence_directory);
@@ -124,10 +139,12 @@ pub(super) fn verify_evidence(
         .tempdir()
         .map_err(|error| format!("create Debian evidence root: {error}"))?;
     extract_release_archive(&archive, temporary.path())?;
-    let binary_digest = super::release::checksum(&extracted_binary(temporary.path()))?;
-    let checksum = fs::read_to_string(evidence_directory.join(format!("{PACKAGE_NAME}.sha256")))
-        .map_err(|error| format!("read Debian checksum evidence: {error}"))?;
-    let expected_checksum = format!("{package_digest}  {PACKAGE_NAME}\n");
+    let binary_digest = super::release::checksum(&extracted_binary(temporary.path(), target))?;
+    let checksum = fs::read_to_string(
+        evidence_directory.join(format!("{}.sha256", package_metadata.filename)),
+    )
+    .map_err(|error| format!("read Debian checksum evidence: {error}"))?;
+    let expected_checksum = format!("{package_digest}  {}\n", package_metadata.filename);
     if checksum != expected_checksum {
         return Err("Debian checksum evidence does not match the package".to_owned());
     }
@@ -143,6 +160,7 @@ pub(super) fn verify_evidence(
         &archive_digest,
         &package_digest,
         &binary_digest,
+        package_metadata.filename,
     )?;
     println!("verified downloaded Debian package and source archive evidence");
     Ok(binary_digest)
@@ -154,9 +172,10 @@ fn validate_evidence(
     archive_digest: &str,
     package_digest: &str,
     binary_digest: &str,
+    package_name: &str,
 ) -> Result<(), String> {
     let expected = [
-        ("package", Some(PACKAGE_NAME)),
+        ("package", Some(package_name)),
         ("source_archive", archive_name),
         ("source_archive_sha256", Some(archive_digest)),
         ("sha256", Some(package_digest)),
@@ -225,16 +244,21 @@ fn extract_release_archive(archive: &Path, output: &Path) -> Result<(), String> 
     Ok(())
 }
 
-fn extracted_root(root: &Path) -> PathBuf {
-    root.join(format!("proqi-{LINUX_X86_64}"))
+fn extracted_root(root: &Path, target: super::release_targets::ReleaseTarget) -> PathBuf {
+    root.join(format!("proqi-{}", target.triple))
 }
 
-fn extracted_binary(root: &Path) -> PathBuf {
-    extracted_root(root).join("proqi")
+fn extracted_binary(root: &Path, target: super::release_targets::ReleaseTarget) -> PathBuf {
+    extracted_root(root, target).join("proqi")
 }
 
-fn stage_contents(root: &Path, extracted: &Path, stage: &Path) -> Result<(), String> {
-    let source = extracted_root(extracted);
+fn stage_contents(
+    root: &Path,
+    extracted: &Path,
+    stage: &Path,
+    target: super::release_targets::ReleaseTarget,
+) -> Result<(), String> {
+    let source = extracted_root(extracted, target);
     for (from, to) in [
         (source.join("proqi"), stage.join("proqi")),
         (
@@ -277,12 +301,16 @@ fn debian_copyright(root: &Path) -> Result<String, String> {
     ))
 }
 
-fn derive_dependencies(root: &Path, binary: &Path) -> Result<Vec<String>, String> {
+fn derive_dependencies(
+    root: &Path,
+    binary: &Path,
+    architecture: &str,
+) -> Result<Vec<String>, String> {
     let debian = root.join("debian");
     fs::create_dir_all(&debian).map_err(|error| format!("create Debian metadata root: {error}"))?;
     fs::write(
         debian.join("control"),
-        "Source: proqi\nSection: utils\nPriority: optional\nMaintainer: Oliver Borchers <oliver-borchers@gmx.net>\nStandards-Version: 4.7.2\n\nPackage: proqi\nArchitecture: amd64\nDescription: thoughtpad for humans working with agents\n",
+        format!("Source: proqi\nSection: utils\nPriority: optional\nMaintainer: Oliver Borchers <oliver-borchers@gmx.net>\nStandards-Version: 4.7.2\n\nPackage: proqi\nArchitecture: {architecture}\nDescription: thoughtpad for humans working with agents\n"),
     )
     .map_err(|error| format!("write dependency derivation control file: {error}"))?;
     let output = Command::new("dpkg-shlibdeps")
@@ -332,13 +360,20 @@ fn enforce_support_floor(derived: &[String]) -> Result<Vec<String>, String> {
     if !by_name.contains_key("libc6") || !by_name.contains_key("libgcc-s1") {
         return Err(format!("incomplete runtime dependencies: {derived:?}"));
     }
-    by_name.insert("libc6".to_owned(), format!("libc6 (>= {MINIMUM_LIBC})"));
+    by_name.insert(
+        "libc6".to_owned(),
+        format!("libc6 (>= {})", super::release_targets::GLIBC_FLOOR),
+    );
     Ok(by_name.into_values().collect())
 }
 
-fn render_config(version: &str, dependencies: &[String]) -> Result<String, String> {
+fn render_config(
+    version: &str,
+    dependencies: &[String],
+    architecture: &str,
+) -> Result<String, String> {
     let mut config = format!(
-        "name: proqi\narch: amd64\nplatform: linux\nversion: {version}\nrelease: 1\nsection: utils\npriority: optional\nmaintainer: \"{MAINTAINER}\"\ndescription: \"A thoughtpad for humans working with agents\"\nhomepage: https://github.com/oborchers/proqi\nlicense: MIT\n"
+        "name: proqi\narch: {architecture}\nplatform: linux\nversion: {version}\nrelease: 1\nsection: utils\npriority: optional\nmaintainer: \"{MAINTAINER}\"\ndescription: \"A thoughtpad for humans working with agents\"\nhomepage: https://github.com/oborchers/proqi\nlicense: MIT\n"
     );
     config.push_str("depends:\n");
     for dependency in dependencies {
@@ -363,16 +398,22 @@ fn persist_evidence(
     archive_binary: &Path,
     derived: &[String],
     installed: &[String],
+    target: super::release_targets::ReleaseTarget,
 ) -> Result<(), String> {
+    let package_name = target
+        .debian
+        .ok_or_else(|| "Debian target metadata is missing".to_owned())?
+        .filename;
     let digest = super::release::checksum(package)?;
     fs::write(
-        output.join(format!("{PACKAGE_NAME}.sha256")),
-        format!("{digest}  {PACKAGE_NAME}\n"),
+        output.join(format!("{package_name}.sha256")),
+        format!("{digest}  {package_name}\n"),
     )
     .map_err(|error| format!("write Debian checksum: {error}"))?;
     let evidence = json!({
         "schema_version": 2,
-        "package": PACKAGE_NAME,
+        "package": package_name,
+        "target": target.triple,
         "sha256": digest,
         "source_archive": archive.file_name().and_then(|name| name.to_str()),
         "source_archive_sha256": super::release::checksum(archive)?,

@@ -87,7 +87,48 @@ agents, or multiplexers.
 
 ## Install
 
-Homebrew is recommended:
+Install the latest supported release with one command. This downloads the
+release-attached installer and its checksum separately, verifies the installer,
+then lets that verified installer select and verify the exact native archive:
+
+```shell
+sh -c 'set -eu
+version=${1:-latest}
+case "$version" in
+  latest) release=latest/download ;;
+  v*)
+    numbers=${version#v}; case "$numbers" in *[!0-9.]*|.*|*.|*..*) printf "invalid Proqi version\n" >&2; exit 1 ;; esac
+    saved_ifs=$IFS; IFS=.; set -- $numbers; IFS=$saved_ifs; test "$#" = 3 || { printf "invalid Proqi version\n" >&2; exit 1; }
+    for component in "$@"; do case "$component" in ""|*[!0-9]*|0[0-9]*) printf "invalid Proqi version\n" >&2; exit 1 ;; esac; done
+    release="download/$version"
+    ;;
+  *) printf "invalid Proqi version\n" >&2; exit 1 ;;
+esac
+temporary=$(mktemp -d "${TMPDIR:-/tmp}/proqi-bootstrap.XXXXXX")
+trap '\''rm -rf "$temporary"'\'' EXIT HUP INT TERM
+base="https://github.com/oborchers/proqi/releases/$release"
+for file in proqi-installer.sh.sha256 proqi-installer.sh; do
+  case "$file" in *.sha256) maximum=512 ;; *) maximum=131072 ;; esac
+  curl --fail --silent --show-error --location --proto "=https" --proto-redir "=https" --tlsv1.2 --connect-timeout 10 --max-time 60 --max-redirs 3 --retry 2 --max-filesize "$maximum" --output "$temporary/$file" "$base/$file"
+done
+test "$(wc -l < "$temporary/proqi-installer.sh.sha256" | tr -d " ")" = 1
+record=$(cat "$temporary/proqi-installer.sh.sha256")
+set -f; set -- $record; set +f
+test "$#" = 2 && test "$2" = proqi-installer.sh && test "${#1}" = 64
+case "$1" in *[!0-9a-f]*) printf "invalid installer checksum\n" >&2; exit 1 ;; esac
+expected=$1
+if command -v sha256sum >/dev/null 2>&1; then output=$(sha256sum "$temporary/proqi-installer.sh"); elif command -v shasum >/dev/null 2>&1; then output=$(shasum -a 256 "$temporary/proqi-installer.sh"); else printf "sha256sum or shasum is required\n" >&2; exit 1; fi
+actual=${output%% *}; test "$actual" = "$expected" || { printf "installer checksum verification failed\n" >&2; exit 1; }
+sh "$temporary/proqi-installer.sh" --version "$version"' sh latest
+```
+
+Replace the final `latest` with an exact stable tag from the Releases page to
+require that version. The default destination is `$HOME/.local/bin`; set
+`PROQI_INSTALL_DIR` to another absolute directory below `$HOME`. The installer
+never uses `sudo` or modifies `PATH`. If the destination is not already on
+`PATH`, it prints the required addition.
+
+Homebrew remains supported:
 
 ```shell
 brew install oborchers/tap/proqi
@@ -106,9 +147,24 @@ Or use Rust 1.88+:
 cargo install proqi --locked
 ```
 
-The [latest release](https://github.com/oborchers/proqi/releases/latest) has
-checksummed macOS/Linux archives and an `amd64` Debian package. Proqi never runs
-`sudo`, package managers, or updates implicitly. Uninstalling preserves data.
+The [latest release](https://github.com/oborchers/proqi/releases/latest) has the
+following checked, attested artifacts:
+
+<!-- release-targets:start -->
+| OS | CPU | libc | Archive | Debian |
+|---|---|---|---|---|
+| macOS | ARM64 | system | `proqi-aarch64-apple-darwin.tar.gz` | `-` |
+| macOS | x86-64 | system | `proqi-x86_64-apple-darwin.tar.gz` | `-` |
+| Linux | x86-64 | glibc >= 2.35 | `proqi-x86_64-unknown-linux-gnu.tar.gz` | `proqi_amd64.deb` |
+| Linux | ARM64 | glibc >= 2.35 | `proqi-aarch64-unknown-linux-gnu.tar.gz` | `proqi_arm64.deb` |
+| Linux | x86-64 | musl/static fallback | `proqi-x86_64-unknown-linux-musl.tar.gz` | `-` |
+| Linux | ARM64 | musl/static fallback | `proqi-aarch64-unknown-linux-musl.tar.gz` | `-` |
+<!-- release-targets:end -->
+
+Linux selection uses runtime CPU and libc evidence, not distribution names.
+glibc 2.35 or newer receives the GNU build. musl systems and older glibc
+receive the statically linked musl fallback. Ambiguous environments stop with
+an explanation. Uninstalling preserves data.
 
 ## Start and resume
 
@@ -468,7 +524,8 @@ versioned `editor.extend_visual_row_start` and `editor.extend_visual_row_end` al
 
 ## Compatibility and contributing
 
-Proqi supports macOS and x86-64 GNU/Linux; only the latest `0.x` is supported.
+Proqi supports the macOS and Linux targets listed under Install; only the latest
+`0.x` is supported.
 It is an MIT-licensed binary. Contributors: [CONTRIBUTING.md](CONTRIBUTING.md),
 [PRODUCT.md](context/PRODUCT.md), [ARCHITECTURE.md](context/ARCHITECTURE.md).
 

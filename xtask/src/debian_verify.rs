@@ -11,6 +11,7 @@ use std::{
 use tar::Archive;
 
 use super::debian::INSTALLED_PATHS;
+use super::release_targets::DebianArtifact;
 
 pub(super) fn package(
     root: &Path,
@@ -18,8 +19,9 @@ pub(super) fn package(
     archive_binary: &Path,
     version: &str,
     dependencies: &[String],
+    metadata: DebianArtifact,
 ) -> Result<(), String> {
-    verify_control(root, package, version, dependencies)?;
+    verify_control(root, package, version, dependencies, metadata)?;
     verify_members(root, package)?;
     verify_no_hooks(root, package)?;
     let extracted = tempfile::Builder::new()
@@ -40,6 +42,7 @@ fn verify_control(
     package: &Path,
     version: &str,
     dependencies: &[String],
+    metadata: DebianArtifact,
 ) -> Result<(), String> {
     let output = Command::new("dpkg-deb")
         .arg("--field")
@@ -60,7 +63,7 @@ fn verify_control(
     let expected = [
         "Package: proqi".to_owned(),
         format!("Version: {version}-1"),
-        "Architecture: amd64".to_owned(),
+        format!("Architecture: {}", metadata.architecture),
         format!("Depends: {}", dependencies.join(", ")),
     ];
     for field in expected {

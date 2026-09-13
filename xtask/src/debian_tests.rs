@@ -20,6 +20,7 @@ fn package_config_has_exact_paths_and_no_maintainer_scripts() {
             "libc6 (>= 2.35)".to_owned(),
             "libgcc-s1 (>= 4.2)".to_owned(),
         ],
+        "amd64",
     )
     .expect("config");
     assert!(config.contains("dst: /usr/bin/proqi"));
@@ -43,7 +44,8 @@ fn downloaded_evidence_binds_every_artifact_identity() {
             Some("proqi-linux.tar.gz"),
             "archive",
             "package",
-            "binary"
+            "binary",
+            "proqi_amd64.deb",
         )
         .is_ok()
     );
@@ -56,7 +58,8 @@ fn downloaded_evidence_binds_every_artifact_identity() {
                 Some("proqi-linux.tar.gz"),
                 "archive",
                 "package",
-                "binary"
+                "binary",
+                "proqi_amd64.deb",
             )
             .is_err()
         );

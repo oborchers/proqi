@@ -118,6 +118,21 @@ fn keyboard_choices_emit_one_explicit_update_intent() {
     );
 
     app.present_update(version(), InstallationKind::StandaloneArchive, 1);
+    app.handle(
+        UiInput::Key(UiKey::FastNavigation {
+            direction: FastNavigation::Previous,
+            extend_selection: false,
+        }),
+        &mut ids,
+        &clock,
+    );
+    let effects = app.handle(UiInput::Key(UiKey::Enter), &mut ids, &clock);
+    assert_eq!(
+        effects,
+        vec![Effect::Update(UpdateIntent::Install(version()))]
+    );
+
+    app.present_update(version(), InstallationKind::StandaloneArchive, 1);
     let effects = app.handle(UiInput::Key(UiKey::Escape), &mut ids, &clock);
     assert_eq!(
         effects,

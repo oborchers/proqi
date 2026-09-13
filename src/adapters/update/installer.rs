@@ -4,7 +4,7 @@ use std::{ffi::OsString, path::PathBuf, time::Duration};
 
 use crate::ports::{
     environment::{ProcessRequest, ProcessRunner},
-    update::{HomebrewInstaller, UpdateError},
+    update::{UpdateError, UpdateInstaller},
 };
 
 const INSTALL_TIMEOUT: Duration = Duration::from_secs(10 * 60);
@@ -26,7 +26,7 @@ impl<'a, R> HomebrewFormulaInstaller<'a, R> {
     }
 }
 
-impl<R: ProcessRunner> HomebrewInstaller for HomebrewFormulaInstaller<'_, R> {
+impl<R: ProcessRunner> UpdateInstaller for HomebrewFormulaInstaller<'_, R> {
     fn upgrade(
         &mut self,
         expected: &crate::domain::StableVersion,
@@ -86,11 +86,11 @@ mod tests {
         adapters::memory::FakeProcessRunner,
         ports::{
             environment::ProcessOutput,
-            update::{HomebrewInstaller as _, UpdateError},
+            update::{UpdateError, UpdateInstaller as _},
         },
     };
 
-    use super::HomebrewFormulaInstaller;
+    use super::{HomebrewFormulaInstaller, verify_installed_version};
 
     #[test]
     fn executes_only_the_exact_formula_upgrade_without_a_shell() {
@@ -143,5 +143,25 @@ mod tests {
                 Err(UpdateError::InstallerFailed)
             );
         }
+    }
+
+    #[test]
+    fn installed_version_verification_rejects_a_different_release() {
+        let mut runner = FakeProcessRunner {
+            requests: Vec::new(),
+            results: VecDeque::from([Ok(ProcessOutput {
+                exit_code: Some(0),
+                stdout: b"proqi 0.2.1\n".to_vec(),
+                stderr: Vec::new(),
+            })]),
+        };
+        assert_eq!(
+            verify_installed_version(
+                &mut runner,
+                std::path::Path::new("/opt/proqi"),
+                &crate::domain::StableVersion::parse("0.2.0").expect("version")
+            ),
+            Err(UpdateError::InstallerFailed)
+        );
     }
 }

@@ -10,18 +10,25 @@ authority by itself.
 - Every `.github/release-notes/vX.Y.Z.md` has one exact matching version in
   `release-highlights.json`, with three to six jointly reviewed user-facing
   highlights. Release planning and package assembly fail when they diverge.
-- Release artifacts exist only for Apple silicon macOS, Intel macOS, and
-  x86-64 GNU Linux.
+- Release archives exist only for the six targets printed by `cargo xtask
+  release-targets triples`: Apple silicon and Intel macOS, x86-64 and ARM64 GNU
+  Linux, and x86-64 and ARM64 musl Linux.
 - The crates.io package is an installable binary package, is restricted to the
   `crates-io` registry, and does not define a supported Rust library API.
-- The Debian asset is exactly `proqi_amd64.deb`, has Debian revision `-1`, and
-  reuses the verified x86-64 GNU/Linux archive binary byte for byte.
-- The GNU/Linux archive supports glibc 2.35 or newer. It is built on an Ubuntu
-  22.04 native runner and must pass the repository-owned ELF symbol ceiling.
+- Debian assets are exactly `proqi_amd64.deb` and `proqi_arm64.deb`, have Debian
+  revision `-1`, and reuse their matching verified GNU/Linux archive binaries
+  byte for byte.
+- GNU/Linux archives support glibc 2.35 or newer, build on matching native
+  Ubuntu 22.04 runners, and pass the repository-owned ELF symbol ceiling. The
+  statically linked musl archives are the verified fallback for musl systems
+  and glibc older than 2.35.
 - Every archive includes the executable, MIT license, third-party notices,
   standalone installation marker, and Bash, Zsh, and Fish completions.
-- Every archive and the Debian package have a SHA-256 file, SPDX 2.3 JSON SBOM,
-  provenance attestation, and SBOM attestation.
+- Every archive, Debian package, and release-attached installer has a SHA-256
+  file, SPDX 2.3 JSON SBOM, provenance attestation, and SBOM attestation.
+- Promotion derives one release-wide SPDX document and exact subject checksum
+  set from the typed primary-artifact registry, then binds both provenance and
+  SBOM attestations to the protected tag without rebuilding candidate bytes.
 - The release workflow has no dependency cache and every Action is pinned by
   full commit SHA.
 - A `release` environment accepts only `v*.*.*` tags and records the
@@ -54,6 +61,7 @@ cargo xtask check-full
 cargo xtask test-pty
 cargo xtask audit
 cargo xtask package
+cargo xtask installer-package target/installer
 cargo xtask crate-package
 cargo xtask release-rehearsal
 cargo xtask ci-linux-smoke <image-repository@sha256:digest>
@@ -68,6 +76,38 @@ changes, and is manually available through `Full MSRV diagnostic`. The explicit
 amd64 container command is diagnostic because it can use emulation on a non-x86
 host. Routine release preparation runs neither container path.
 
+The candidate matrix adds three archive jobs and one small installer job to the
+former three-archive topology. At 20 to 35 minutes per new archive job, the
+expected added billed Linux work is about 60 to 105 runner-minutes per release
+candidate, plus at most 10 runner-minutes for the installer. Parallel wall time
+remains bounded by the existing 35-minute archive timeout. This is a
+runner-minute estimate, not a currency estimate, because GitHub pricing and
+repository allowances are external and may change.
+
+### Target and dependency evidence
+
+The six-target registry is the source for Cargo triples, runners, archive and
+Debian names, libc policy, Homebrew inclusion, installer cases, candidate files,
+and release documentation. Candidate jobs use native `ubuntu-22.04-arm` for
+ARM64. Musl jobs use pinned Zig 0.14.1 and cargo-zigbuild 0.23.3, then require a
+static ELF with no interpreter or `NEEDED` entries before runtime tests.
+
+The resolved Linux dependency graph has no OpenSSL or system SQLite boundary.
+`ureq` uses rustls with ring, and ring 0.17.14 supports both selected Linux
+architectures through its `cc` build path. `rusqlite` enables `bundled`, so its
+`libsqlite3-sys` source is compiled for the selected target instead of linking a
+host SQLite. Clipboard support is `arboard` 3.6.1 with both X11 through `x11rb`
+and Wayland data-control through `wl-clipboard-rs`; those selected paths do not
+require a host `libxcb` or `libwayland` link. Final archive inspection and
+native or matching-platform container startup remain the authority. A target
+that fails either check is not promotable.
+
+No new credential is required. Candidate builds retain read-only contents plus
+the existing GitHub OIDC attestation permissions. Promotion retains the current
+workflow token, existing crates.io trusted publishing exchange, and scoped
+Homebrew tap notification app. Archives, installers, checksums, SBOMs, and
+attestations remain GitHub Release bytes and claims.
+
 `cargo xtask crate-package` runs `cargo package --locked` and `cargo publish
 --dry-run --locked` without a token. It checks the exact crate member allowlist,
 normalized manifest, clean VCS metadata, registry-only dependencies, private
@@ -77,16 +117,17 @@ capabilities, and disposable state. Ordinary CI owns this dry run once in
 `cargo xtask crate-evidence`, which performs the necessary locked packaging and
 installed-source checks without repeating the publication dry run.
 
-Debian assembly is authoritative only on native x86-64 GNU/Linux. The candidate
-job runs:
+Debian assembly is authoritative on matching native GNU/Linux runners. For
+each target emitted with Debian metadata by the registry, the candidate job
+runs:
 
 ```shell
 cargo xtask debian-package \
   target/package/proqi-x86_64-unknown-linux-gnu.tar.gz \
-  target/package
+  target/package x86_64-unknown-linux-gnu
 cargo xtask verify-debian \
   target/package/proqi-x86_64-unknown-linux-gnu.tar.gz \
-  target/package/proqi_amd64.deb
+  target/package/proqi_amd64.deb x86_64-unknown-linux-gnu
 ```
 
 The verifier inspects metadata, members, modes, absence of maintainer scripts,
@@ -302,11 +343,16 @@ gh attestation verify proqi-aarch64-apple-darwin.tar.gz \
   --signer-workflow github.com/oborchers/proqi/.github/workflows/release.yml
 ```
 
-Repeat for Intel macOS, x86-64 GNU Linux, and `proqi_amd64.deb`. Verify that
+Repeat for Intel macOS, both GNU Linux archives and Debian packages, both musl
+archives, and `proqi-installer.sh`. Verify that
 every SBOM attestation uses `https://spdx.dev/Document/v2.3`. Download the
 Debian checksum from the Release, run `sha256sum --check`, and repeat the
 container install, remove, state-preservation, and reinstall contract against
-the public bytes.
+the public bytes. Run the public installer in fresh user-owned prefixes on each
+native OS and CPU pair, including Alpine and a pre-2.35 glibc image for musl
+fallback, then exercise its in-app standalone update route from the preceding
+release. Confirm checksum tampering and a failed download preserve the old
+binary.
 
 Install the exact published crate version into a fresh Cargo root and verify
 its version and JSON capabilities. Install through the public tap, run `brew

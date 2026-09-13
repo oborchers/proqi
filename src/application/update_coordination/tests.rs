@@ -20,11 +20,11 @@ use crate::{
         runtime::{InstanceInfo, UpdateInstanceContext},
         store::STORAGE_PROTOCOL_VERSION,
         update::{
-            HomebrewInstaller, ReleaseObservation, RestartCompletion,
-            UPDATE_CONTROL_PROTOCOL_VERSION, UpdateCancellation, UpdateError,
-            UpdateInstanceRegistry, UpdateLease, UpdateLockKind, UpdateParticipantGateway,
-            UpdatePrepareReply, UpdatePrepareRequest, UpdateReplacementExpectation,
-            UpdateRestartReply, UpdateRestartRequest, UpdateStateStore,
+            ReleaseObservation, RestartCompletion, UPDATE_CONTROL_PROTOCOL_VERSION,
+            UpdateCancellation, UpdateError, UpdateInstaller, UpdateInstanceRegistry, UpdateLease,
+            UpdateLockKind, UpdateParticipantGateway, UpdatePrepareReply, UpdatePrepareRequest,
+            UpdateReplacementExpectation, UpdateRestartReply, UpdateRestartRequest,
+            UpdateStateStore,
         },
     },
 };
@@ -283,7 +283,7 @@ struct Installer {
     result: Result<StableVersion, UpdateError>,
 }
 
-impl HomebrewInstaller for Installer {
+impl UpdateInstaller for Installer {
     fn upgrade(&mut self, _: &StableVersion) -> Result<StableVersion, UpdateError> {
         self.calls += 1;
         self.result.clone()

@@ -10,13 +10,7 @@ use std::{
 use flate2::read::GzDecoder;
 use tar::Archive;
 
-use super::release_targets::LINUX_X86_64;
-
-const MAX_GLIBC: GlibcVersion = GlibcVersion {
-    major: 2,
-    minor: 35,
-    patch: 0,
-};
+use super::release_targets::{Architecture, LibcFamily, ReleaseTarget};
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 struct GlibcVersion {
@@ -35,15 +29,19 @@ impl std::fmt::Display for GlibcVersion {
     }
 }
 
-pub(super) fn verify_archive(root: &Path, archive: &Path) -> Result<(), String> {
+pub(super) fn verify_archive(
+    root: &Path,
+    archive: &Path,
+    target: ReleaseTarget,
+) -> Result<(), String> {
     let temporary = verification_root()?;
-    let binary = inspect_at(archive, temporary.path())?;
+    let binary = inspect_at(archive, temporary.path(), target)?;
     verify_version(root, &binary)
 }
 
-pub(super) fn inspect_archive(archive: &Path) -> Result<String, String> {
+pub(super) fn inspect_archive(archive: &Path, target: ReleaseTarget) -> Result<String, String> {
     let temporary = verification_root()?;
-    let binary = inspect_at(archive, temporary.path())?;
+    let binary = inspect_at(archive, temporary.path(), target)?;
     super::release::checksum(&binary)
 }
 
@@ -54,9 +52,9 @@ fn verification_root() -> Result<tempfile::TempDir, String> {
         .map_err(|error| format!("create Linux verification root: {error}"))
 }
 
-fn inspect_at(archive: &Path, output: &Path) -> Result<PathBuf, String> {
+fn inspect_at(archive: &Path, output: &Path, target: ReleaseTarget) -> Result<PathBuf, String> {
     extract_archive(archive, output)?;
-    let binary = extracted_binary(output);
+    let binary = extracted_binary(output, target);
     let metadata = binary
         .metadata()
         .map_err(|error| format!("inspect extracted {}: {error}", binary.display()))?;
@@ -66,8 +64,47 @@ fn inspect_at(archive: &Path, output: &Path) -> Result<PathBuf, String> {
             binary.display()
         ));
     }
-    verify_symbol_ceiling(&binary)?;
+    verify_elf_architecture(&binary, target.architecture)?;
+    match target.libc {
+        LibcFamily::Gnu => verify_symbol_ceiling(&binary)?,
+        LibcFamily::Musl => verify_static_elf(&binary)?,
+        LibcFamily::None => {
+            return Err("Linux compatibility verifier requires a Linux libc target".to_owned());
+        }
+    }
     Ok(binary)
+}
+
+fn verify_elf_architecture(binary: &Path, architecture: Architecture) -> Result<(), String> {
+    let output = Command::new("readelf")
+        .arg("--file-header")
+        .arg(binary)
+        .output()
+        .map_err(|error| format!("start readelf: {error}"))?;
+    if !output.status.success() {
+        return Err(format!("readelf exited with {}", output.status));
+    }
+    let header = String::from_utf8(output.stdout)
+        .map_err(|error| format!("readelf header is not UTF-8: {error}"))?;
+    if !elf_header_matches(&header, architecture) {
+        return Err(format!(
+            "ELF architecture does not match expected {}",
+            match architecture {
+                Architecture::X86_64 => "x86-64",
+                Architecture::Arm64 => "ARM64",
+            }
+        ));
+    }
+    Ok(())
+}
+
+fn elf_header_matches(header: &str, architecture: Architecture) -> bool {
+    let machine = match architecture {
+        Architecture::X86_64 => "Advanced Micro Devices X86-64",
+        Architecture::Arm64 => "AArch64",
+    };
+    header.contains("Class:                             ELF64")
+        && header.contains(&format!("Machine:                           {machine}"))
 }
 
 fn extract_archive(archive: &Path, output: &Path) -> Result<(), String> {
@@ -88,11 +125,35 @@ fn extract_archive(archive: &Path, output: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn extracted_binary(root: &Path) -> PathBuf {
-    root.join(format!("proqi-{LINUX_X86_64}/proqi"))
+fn extracted_binary(root: &Path, target: ReleaseTarget) -> PathBuf {
+    root.join(format!("proqi-{}/proqi", target.triple))
+}
+
+fn verify_static_elf(binary: &Path) -> Result<(), String> {
+    for arguments in [["--program-headers"], ["--dynamic"]] {
+        let output = Command::new("readelf")
+            .args(arguments)
+            .arg(binary)
+            .output()
+            .map_err(|error| format!("start readelf: {error}"))?;
+        if !output.status.success() {
+            return Err(format!(
+                "readelf exited with {}: {}",
+                output.status,
+                String::from_utf8_lossy(&output.stderr)
+            ));
+        }
+        let text = String::from_utf8_lossy(&output.stdout);
+        if text.contains("Requesting program interpreter") || text.contains("(NEEDED)") {
+            return Err("musl fallback executable is dynamically linked".to_owned());
+        }
+    }
+    println!("verified statically linked musl fallback");
+    Ok(())
 }
 
 fn verify_symbol_ceiling(binary: &Path) -> Result<(), String> {
+    let maximum = parse_version(super::release_targets::GLIBC_FLOOR)?;
     let output = Command::new("readelf")
         .args(["--version-info"])
         .arg(binary)
@@ -112,12 +173,12 @@ fn verify_symbol_ceiling(binary: &Path) -> Result<(), String> {
         .last()
         .copied()
         .ok_or_else(|| "ELF has no versioned glibc requirements".to_owned())?;
-    if highest > MAX_GLIBC {
+    if highest > maximum {
         return Err(format!(
-            "ELF requires GLIBC_{highest}, exceeding supported ceiling GLIBC_{MAX_GLIBC}"
+            "ELF requires GLIBC_{highest}, exceeding supported ceiling GLIBC_{maximum}"
         ));
     }
-    println!("verified glibc symbol ceiling: GLIBC_{highest} <= GLIBC_{MAX_GLIBC}");
+    println!("verified glibc symbol ceiling: GLIBC_{highest} <= GLIBC_{maximum}");
     Ok(())
 }
 
@@ -182,6 +243,7 @@ mod tests {
 
     #[test]
     fn parses_and_orders_two_and_three_component_glibc_versions() {
+        let maximum = parse_version(crate::release_targets::GLIBC_FLOOR).expect("floor");
         let versions =
             required_versions("Name: GLIBC_2.2.5 Flags: none\nName: GLIBC_2.35 Flags: none\n")
                 .expect("versions");
@@ -193,10 +255,26 @@ mod tests {
                     minor: 2,
                     patch: 5,
                 },
-                MAX_GLIBC,
+                maximum,
             ]
         );
-        assert!(parse_version("2.39").expect("version") > MAX_GLIBC);
+        assert!(parse_version("2.39").expect("version") > maximum);
         assert!(parse_version("2").is_err());
+    }
+
+    #[test]
+    fn elf_header_architecture_must_match_exactly() {
+        let x86 = "Class:                             ELF64\n\
+                   Machine:                           Advanced Micro Devices X86-64\n";
+        let arm = "Class:                             ELF64\n\
+                   Machine:                           AArch64\n";
+        assert!(elf_header_matches(x86, Architecture::X86_64));
+        assert!(elf_header_matches(arm, Architecture::Arm64));
+        assert!(!elf_header_matches(x86, Architecture::Arm64));
+        assert!(!elf_header_matches(arm, Architecture::X86_64));
+        assert!(!elf_header_matches(
+            "Class:                             ELF32\nMachine:                           AArch64\n",
+            Architecture::Arm64
+        ));
     }
 }

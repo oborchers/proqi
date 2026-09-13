@@ -27,6 +27,7 @@ jobs:
       source-ref: ${{ steps.plan.outputs.source-ref }}
       tag: ${{ steps.plan.outputs.tag }}
       source-sha: ${{ steps.plan.outputs.source-sha }}
+      target-matrix: ${{ steps.plan.outputs.target-matrix }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -56,6 +57,7 @@ jobs:
             echo "source-ref=$GITHUB_REF"
             echo "tag=$tag"
             echo "source-sha=$GITHUB_SHA"
+            echo "target-matrix=$(cargo xtask release-targets github-matrix)"
           } >> "$GITHUB_OUTPUT"
 
   notices:
@@ -74,11 +76,11 @@ jobs:
       - name: Generate one notice set for every release target
         run: |
           mkdir -p target/release-notices
+          mapfile -t targets < <(cargo xtask release-targets triples)
+          target_args=()
+          for target in "${targets[@]}"; do target_args+=(--target "$target"); done
           cargo about generate about.hbs --locked --workspace --all-features \
-            --target aarch64-apple-darwin \
-            --target x86_64-apple-darwin \
-            --target x86_64-unknown-linux-gnu \
-            --output-file target/release-notices/THIRD-PARTY-NOTICES.md
+            "${target_args[@]}" --output-file target/release-notices/THIRD-PARTY-NOTICES.md
           test -s target/release-notices/THIRD-PARTY-NOTICES.md
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -105,6 +107,53 @@ jobs:
           path: target/crate-package
           retention-days: 30
 
+  installer:
+    name: Build verified shell installer
+    needs: plan
+    if: needs.plan.outputs.ready == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      artifact-metadata: write # Register the installer for attestations.
+      attestations: write # Publish installer provenance and SBOM attestations.
+      contents: read
+      id-token: write # Sign installer attestations with GitHub OIDC.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: cargo xtask installer-package target/installer
+      - name: Generate installer SPDX 2.3 JSON SBOM
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        with:
+          artifact-name: proqi-installer.sh.spdx.json
+          file: target/installer/proqi-installer.sh
+          format: spdx-json
+          output-file: target/installer/proqi-installer.sh.spdx.json
+          syft-version: v1.51.0
+          upload-artifact: false
+          upload-release-assets: false
+      - name: Validate installer files
+        run: |
+          (cd target/installer && shasum -a 256 -c proqi-installer.sh.sha256)
+          jq -e '.spdxVersion == "SPDX-2.3"' target/installer/proqi-installer.sh.spdx.json
+          sh -n target/installer/proqi-installer.sh
+      - name: Attest candidate installer provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: target/installer/proqi-installer.sh
+      - name: Attest candidate installer SBOM
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          sbom-path: target/installer/proqi-installer.sh.spdx.json
+          subject-path: target/installer/proqi-installer.sh
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          if-no-files-found: error
+          name: candidate-installer
+          path: target/installer
+          retention-days: 30
+
   build:
     name: Build candidate (${{ matrix.target }})
     needs: [plan, notices]
@@ -112,13 +161,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - runner: macos-15
-            target: aarch64-apple-darwin
-          - runner: macos-15-intel
-            target: x86_64-apple-darwin
-          - runner: ubuntu-22.04
-            target: x86_64-unknown-linux-gnu
+        include: ${{ fromJSON(needs.plan.outputs.target-matrix) }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 35
     permissions:
@@ -135,15 +178,30 @@ jobs:
           name: release-notices
           path: target/release-notices
       - name: Install pinned Debian packager
-        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        if: matrix.debian_package != null
         uses: ./.github/actions/install-nfpm
+      - name: Install pinned musl cross-build tools
+        if: matrix.build_tool == 'zig'
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: 0.14.1
+      - name: Install pinned cargo-zigbuild
+        if: matrix.build_tool == 'zig'
+        uses: taiki-e/install-action@0758d235715de2f3551eacc980d9ae8fce9342c3 # v2.87.3
+        with:
+          fallback: none
+          tool: cargo-zigbuild@0.23.3
       - name: Verify native runner and build installable archive
         env:
+          BUILD_TOOL: ${{ matrix.build_tool }}
           EXPECTED_TARGET: ${{ matrix.target }}
+          EXPECTED_HOST: ${{ matrix.expected_host }}
         run: |
           actual="$(rustc -vV | sed -n 's/^host: //p')"
-          test "$actual" = "$EXPECTED_TARGET"
-          cargo xtask package --notices target/release-notices/THIRD-PARTY-NOTICES.md
+          test "$actual" = "$EXPECTED_HOST"
+          if [[ "$BUILD_TOOL" = zig ]]; then rustup target add "$EXPECTED_TARGET"; fi
+          cargo xtask package --target "$EXPECTED_TARGET" \
+            --notices target/release-notices/THIRD-PARTY-NOTICES.md
           archive="target/package/proqi-${EXPECTED_TARGET}.tar.gz"
           test -f "$archive"
           echo "ARCHIVE=$archive" >> "$GITHUB_ENV"
@@ -153,33 +211,50 @@ jobs:
           cargo xtask release-checksum "$ARCHIVE" > "$ARCHIVE.sha256"
           cd target/package
           shasum -a 256 -c "$(basename "$ARCHIVE").sha256"
-      - name: Verify GNU/Linux runtime compatibility
-        if: matrix.target == 'x86_64-unknown-linux-gnu'
+      - name: Verify Linux runtime compatibility
+        if: matrix.libc != 'none'
         env:
+          ALPINE_IMAGE: alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d
           DEBIAN_BOOKWORM_IMAGE: debian:bookworm-slim@sha256:88200866dfff7ea7f5cbcb6ec7c8a701889efe6fe859fe64d6990e4b07ea4171
+          DOCKER_PLATFORM: ${{ matrix.docker_platform }}
           EXPECTED_TARGET: ${{ matrix.target }}
-          UBUNTU_2204_IMAGE: ubuntu:22.04@sha256:2edbbc5dc405e9612ba3584ce95480277e3eb374407b5505fe26f17df77c7dbc
-          UBUNTU_2404_IMAGE: ubuntu:24.04@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517
+          LIBC: ${{ matrix.libc }}
+          UBUNTU_2004_IMAGE: ubuntu:20.04@sha256:8feb4d8ca5354def3d8fce243717141ce31e2c428701f6682bd2fafe15388214
+          UBUNTU_2204_IMAGE: ubuntu:22.04@sha256:829f6df217bcbae2b371026e81711d1a787c61b2967ad09d015063663ebafbf7
+          UBUNTU_2404_IMAGE: ubuntu:24.04@sha256:224a1869083a311ef3f13648a154ba79832fbef6364d31493642ca03082da254
         run: |
-          cargo xtask verify-linux-archive "$ARCHIVE"
+          cargo xtask verify-linux-archive "$ARCHIVE" "$EXPECTED_TARGET"
           extracted="$RUNNER_TEMP/proqi-linux-runtime"
           mkdir -p "$extracted"
           tar -xzf "$ARCHIVE" -C "$extracted"
           binary="$extracted/proqi-$EXPECTED_TARGET/proqi"
           expected="proqi $(cargo metadata --locked --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "proqi") | .version')"
-          for image in "$UBUNTU_2204_IMAGE" "$DEBIAN_BOOKWORM_IMAGE" "$UBUNTU_2404_IMAGE"; do
-            actual="$(docker run --rm --platform linux/amd64 \
+          if [[ "$LIBC" = gnu ]]; then
+            images=("$UBUNTU_2204_IMAGE" "$DEBIAN_BOOKWORM_IMAGE" "$UBUNTU_2404_IMAGE")
+          else
+            images=("$ALPINE_IMAGE" "$UBUNTU_2004_IMAGE")
+          fi
+          for image in "${images[@]}"; do
+            actual="$(docker run --rm --platform "$DOCKER_PLATFORM" \
               --mount "type=bind,src=$binary,dst=/opt/proqi,readonly" \
               "$image" /opt/proqi --version)"
             test "$actual" = "$expected"
           done
       - name: Build and verify Debian artifact from the archive binary
-        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        if: matrix.debian_package != null
+        env:
+          DEBIAN_ARCH: ${{ matrix.debian_arch }}
+          DEBIAN_PACKAGE: ${{ matrix.debian_package }}
+          EXPECTED_TARGET: ${{ matrix.target }}
         run: |
-          cargo xtask debian-package "$ARCHIVE" target/package
-          cargo xtask verify-debian "$ARCHIVE" target/package/proqi_amd64.deb
-          echo "DEB=target/package/proqi_amd64.deb" >> "$GITHUB_ENV"
-          echo "DEB_SBOM=target/package/proqi_amd64.deb.spdx.json" >> "$GITHUB_ENV"
+          output="target/debian/$DEBIAN_ARCH"
+          cargo xtask debian-package "$ARCHIVE" "$output" "$EXPECTED_TARGET"
+          cargo xtask verify-debian "$ARCHIVE" "$output/$DEBIAN_PACKAGE" "$EXPECTED_TARGET"
+          mkdir -p "target/package/evidence/debian/$DEBIAN_ARCH"
+          cp "$output/$DEBIAN_PACKAGE" "$output/$DEBIAN_PACKAGE.sha256" target/package/
+          cp "$output/debian-evidence.json" "target/package/evidence/debian/$DEBIAN_ARCH/"
+          echo "DEB=target/package/$DEBIAN_PACKAGE" >> "$GITHUB_ENV"
+          echo "DEB_SBOM=target/package/$DEBIAN_PACKAGE.spdx.json" >> "$GITHUB_ENV"
       - name: Generate SPDX 2.3 JSON SBOM
         uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         with:
@@ -197,10 +272,10 @@ jobs:
           tar -tzf "$ARCHIVE" | sort > archive-members.txt
           test "$(wc -l < archive-members.txt | tr -d ' ')" = 7
       - name: Generate Debian SPDX 2.3 JSON SBOM
-        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        if: matrix.debian_package != null
         uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         with:
-          artifact-name: proqi_amd64.deb.spdx.json
+          artifact-name: ${{ matrix.debian_package }}.spdx.json
           format: spdx-json
           output-file: ${{ env.DEB_SBOM }}
           file: ${{ env.DEB }}
@@ -208,12 +283,13 @@ jobs:
           upload-artifact: false
           upload-release-assets: false
       - name: Validate Debian SBOM and checksum
-        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        if: matrix.debian_package != null
+        env:
+          DEBIAN_PACKAGE: ${{ matrix.debian_package }}
         run: |
           jq -e '.spdxVersion == "SPDX-2.3"' "$DEB_SBOM"
           if rg -n '/Users/|/home/runner|Code\.nosync|TemporaryItems' "$DEB_SBOM"; then exit 1; fi
-          cd target/package
-          shasum -a 256 -c proqi_amd64.deb.sha256
+          (cd target/package && shasum -a 256 -c "$DEBIAN_PACKAGE.sha256")
       - name: Attest candidate build provenance
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
@@ -224,12 +300,12 @@ jobs:
           sbom-path: ${{ env.SBOM }}
           subject-path: ${{ env.ARCHIVE }}
       - name: Attest candidate Debian provenance
-        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        if: matrix.debian_package != null
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: ${{ env.DEB }}
       - name: Attest candidate Debian SBOM
-        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        if: matrix.debian_package != null
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           sbom-path: ${{ env.DEB_SBOM }}
@@ -244,21 +320,21 @@ jobs:
             ${{ env.SBOM }}
           retention-days: 30
       - name: Upload Debian candidate files
-        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        if: matrix.debian_package != null
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           if-no-files-found: error
-          name: candidate-debian
+          name: candidate-debian-${{ matrix.debian_arch }}
           path: |
             ${{ env.DEB }}
             ${{ env.DEB }}.sha256
             ${{ env.DEB_SBOM }}
-            target/package/debian-evidence.json
+            target/package/evidence/debian/${{ matrix.debian_arch }}/debian-evidence.json
           retention-days: 30
 
   assemble:
     name: Assemble immutable candidate
-    needs: [plan, build, crate]
+    needs: [plan, build, crate, installer]
     if: needs.plan.outputs.ready == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -283,20 +359,9 @@ jobs:
           TAG: ${{ needs.plan.outputs.tag }}
         run: |
           cd target/release-assets
-          mkdir -p evidence/debian
-          mv debian-evidence.json evidence/debian/debian-evidence.json
           expected="$RUNNER_TEMP/proqi-expected-assets.txt"
           actual="$RUNNER_TEMP/proqi-actual-assets.txt"
-          {
-            for target in aarch64-apple-darwin x86_64-apple-darwin x86_64-unknown-linux-gnu; do
-              echo "proqi-${target}.tar.gz"
-              echo "proqi-${target}.tar.gz.sha256"
-              echo "proqi-${target}.tar.gz.spdx.json"
-            done
-            echo "proqi_amd64.deb"
-            echo "proqi_amd64.deb.sha256"
-            echo "proqi_amd64.deb.spdx.json"
-          } | sort > "$expected"
+          cargo xtask release-files | rg -v '^(SHA256SUMS|proqi\.rb)$' > "$expected"
           find . -maxdepth 1 -type f -printf '%f\n' | sort > "$actual"
           diff -u "$expected" "$actual"
           for checksum in ./*.sha256; do shasum -a 256 -c "$checksum"; done
@@ -306,24 +371,23 @@ jobs:
           jq -e --arg tag "$TAG" \
             '.schema_version == 1 and ("v" + .version) == $tag and .registry == "crates-io"' \
             evidence/crate/crate-evidence.json
-          jq -e \
-            '.schema_version == 1 and .package == "proqi_amd64.deb" and .maintainer_scripts == [] and (.installed_dependencies | index("libc6 (>= 2.35)"))' \
-            evidence/debian/debian-evidence.json
+          cargo xtask verify-debian-evidence-set "$GITHUB_WORKSPACE/target/release-assets"
       - name: Verify candidate attestations
         env:
           SOURCE_REF: ${{ needs.plan.outputs.source-ref }}
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ needs.plan.outputs.source-sha }}
         run: |
-          for artifact in target/release-assets/*.tar.gz target/release-assets/proqi_amd64.deb; do
-            gh attestation verify "$artifact" --repo "$GITHUB_REPOSITORY" \
+          while IFS= read -r artifact; do
+            path="target/release-assets/$artifact"
+            gh attestation verify "$path" --repo "$GITHUB_REPOSITORY" \
               --signer-workflow "github.com/${GITHUB_REPOSITORY}/.github/workflows/release-candidate.yml" \
               --source-ref "$SOURCE_REF" --source-digest "$SOURCE_SHA"
-            gh attestation verify "$artifact" --repo "$GITHUB_REPOSITORY" \
+            gh attestation verify "$path" --repo "$GITHUB_REPOSITORY" \
               --signer-workflow "github.com/${GITHUB_REPOSITORY}/.github/workflows/release-candidate.yml" \
               --source-ref "$SOURCE_REF" --source-digest "$SOURCE_SHA" \
               --predicate-type https://spdx.dev/Document/v2.3
-          done
+          done < <(cargo xtask release-targets primary-files)
       - name: Generate formula and candidate manifest
         env:
           SOURCE_REF: ${{ needs.plan.outputs.source-ref }}
