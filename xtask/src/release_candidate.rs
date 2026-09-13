@@ -146,7 +146,7 @@ fn create_manifest(
         "build_run_attempt": run_attempt,
         "workflow": WORKFLOW,
         "candidate_artifact": artifact_name(tag, sha),
-        "targets": super::release_targets::ALL,
+        "targets": super::release_targets::triples(),
         "release_files": release_files,
         "evidence_files": evidence_files,
     });
@@ -173,7 +173,7 @@ fn verify_manifest(
         &fs::read(&path).map_err(|error| format!("read {}: {error}", path.display()))?,
     )
     .map_err(|error| format!("parse candidate manifest: {error}"))?;
-    let expected_targets = json!(super::release_targets::ALL);
+    let expected_targets = json!(super::release_targets::triples());
     let valid_header = value.get("schema_version").and_then(Value::as_u64) == Some(4)
         && string(&value, "version") == tag.strip_prefix('v')
         && string(&value, "tag") == Some(tag)
@@ -276,23 +276,13 @@ fn collect_files<'a>(
     Ok(())
 }
 
-fn release_file_names() -> Vec<String> {
-    let mut names = super::release_targets::ALL
-        .iter()
-        .flat_map(|target| {
-            let archive = super::release_targets::archive_name(target);
-            [
-                archive.clone(),
-                format!("{archive}.sha256"),
-                format!("{archive}.spdx.json"),
-            ]
-        })
-        .collect::<Vec<_>>();
+pub(super) fn release_file_names() -> Vec<String> {
+    let mut names = super::release_targets::target_release_files();
     names.extend(
         [
-            "proqi_amd64.deb",
-            "proqi_amd64.deb.sha256",
-            "proqi_amd64.deb.spdx.json",
+            super::installer::INSTALLER_NAME,
+            super::installer::INSTALLER_CHECKSUM,
+            super::installer::INSTALLER_SBOM,
             "SHA256SUMS",
             "proqi.rb",
         ]
@@ -306,12 +296,20 @@ fn evidence_file_names(tag: &str) -> Result<Vec<String>, String> {
     let version = tag
         .strip_prefix('v')
         .ok_or_else(|| "candidate tag has no v prefix".to_owned())?;
-    Ok(vec![
+    let mut names = vec![
         "evidence/crate/crate-evidence.json".to_owned(),
         format!("evidence/crate/proqi-{version}.crate"),
         format!("evidence/crate/proqi-{version}.crate.sha256"),
-        "evidence/debian/debian-evidence.json".to_owned(),
-    ])
+    ];
+    names.extend(super::release_targets::ALL.iter().filter_map(|target| {
+        target.debian.map(|package| {
+            format!(
+                "evidence/debian/{}/debian-evidence.json",
+                package.architecture
+            )
+        })
+    }));
+    Ok(names)
 }
 
 fn artifact_name(tag: &str, sha: &str) -> String {

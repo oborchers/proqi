@@ -110,7 +110,7 @@ impl ClipboardIntent {
 pub enum UpdateIntent {
     /// Perform one explicit background lookup from the command palette.
     CheckNow,
-    /// Coordinate one verified Homebrew upgrade and restart all compatible sessions.
+    /// Coordinate one verified installation-method-aware upgrade and restart all sessions.
     Install(StableVersion),
     /// Defer this exact version until the next successful startup refresh.
     Dismiss(StableVersion),

@@ -100,7 +100,7 @@ fn update_error(error: &UpdateError) -> CliError {
         ),
         UpdateError::InstallerFailed => (
             "update_installation_failed",
-            "Homebrew could not install the verified release",
+            "the verified installation method could not install the release",
             1,
         ),
     };

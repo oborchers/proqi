@@ -55,8 +55,13 @@ impl InstallDetector for SystemInstallDetector {
         let (kind, identity_path, restart_executable) = homebrew_context(&executable)
             .map(|(root, active)| (InstallationKind::HomebrewFormula, root, Some(active)))
             .or_else(|| {
-                standalone_root(&executable)
-                    .map(|root| (InstallationKind::StandaloneArchive, root, None))
+                standalone_root(&executable).map(|root| {
+                    (
+                        InstallationKind::StandaloneArchive,
+                        root,
+                        Some(executable.clone()),
+                    )
+                })
             })
             .unwrap_or_else(|| (InstallationKind::SourceOrUnknown, executable.clone(), None));
         let identity = identity(kind, &identity_path);
@@ -196,5 +201,6 @@ mod tests {
             .detect()
             .expect("archive install");
         assert_eq!(archive.kind, InstallationKind::StandaloneArchive);
+        assert_eq!(archive.restart_executable, Some(archive.executable.clone()));
     }
 }
