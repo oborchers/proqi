@@ -419,6 +419,8 @@ mod modifier_parity;
 mod movement_symmetry;
 #[path = "ui_board/navigation.rs"]
 mod navigation;
+#[path = "ui_board/new_thought.rs"]
+mod new_thought;
 #[path = "ui_board/palette.rs"]
 mod palette;
 #[path = "ui_board/paste_reflow.rs"]

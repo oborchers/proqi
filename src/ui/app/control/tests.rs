@@ -8,6 +8,8 @@ use crate::{
 
 use super::BoardApp;
 
+mod new_thought;
+
 #[test]
 fn generic_control_add_cannot_author_shortcut_emphasis_but_preservation_can_retain_it() {
     let mut ids = FakeIdGenerator::new(1_725_190_000_000);
