@@ -262,6 +262,8 @@ impl ThoughtPresentation {
 }
 
 /// One independently editable body of plain text.
+///
+/// Exact-empty content is valid durable authored content.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Thought {
     /// Stable identity.
