@@ -17,7 +17,6 @@ impl BoardApp {
     pub(crate) fn screenshot_update_readiness(&self) -> ScreenshotUpdateReadiness {
         match &self.screenshot.save {
             Some(ScreenshotSave::InFlight { .. }) => ScreenshotUpdateReadiness::CommitInFlight,
-            Some(ScreenshotSave::Ready(_)) => ScreenshotUpdateReadiness::Blocked,
             None if self.screenshot.candidates.is_empty()
                 && matches!(
                     self.screenshot.state,
@@ -26,7 +25,7 @@ impl BoardApp {
             {
                 ScreenshotUpdateReadiness::Ready
             }
-            None => ScreenshotUpdateReadiness::Blocked,
+            Some(ScreenshotSave::Ready(_)) | None => ScreenshotUpdateReadiness::Blocked,
         }
     }
 }
