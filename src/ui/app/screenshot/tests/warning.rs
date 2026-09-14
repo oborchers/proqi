@@ -234,10 +234,7 @@ fn warning_created_by_the_acknowledging_action_wins() {
         &mut ids,
         &clock,
     );
-    assert_eq!(
-        app.status_text(),
-        Some("command is unavailable in the current state")
-    );
+    assert_eq!(app.status_text(), Some("No failed capture to retry"));
     assert!(!app.screenshot_listening());
 }
 

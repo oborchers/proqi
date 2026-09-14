@@ -411,3 +411,7 @@ const fn unavailable_message(availability: AgentAvailability) -> &'static str {
         AgentAvailability::Available => "agent delivery is unavailable",
     }
 }
+
+#[cfg(test)]
+#[path = "global_delivery/tests.rs"]
+mod tests;

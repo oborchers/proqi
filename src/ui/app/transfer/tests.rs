@@ -64,14 +64,25 @@ fn transfer_preserves_annotations_and_removes_only_after_destination_receipt() {
     );
     assert!(failed.is_empty());
     assert_thought_is_live(&app, thought_id);
+
+    assert_eq!(
+        app.begin_session_transfer(true, &mut ids, &clock),
+        vec![Effect::DiscoverTransferSessions { generation: 2 }]
+    );
+    app.complete_transfer_discovery(2, Ok(vec![session_hit(destination)]));
+    let retry_effects = app.handle_transfer_input(&UiInput::Key(UiKey::Enter), &mut ids, &clock);
+    let [Effect::TransferThought(retry_request)] = retry_effects.as_slice() else {
+        panic!("expected retry transfer request");
+    };
+    assert_ne!(retry_request.operation_id, request.operation_id);
     let receipt = CommitReceipt {
         session_id: destination,
         sequence: OperationSequence::new(1),
-        identity: DurableIdentity::Operation(request.operation_id),
+        identity: DurableIdentity::Operation(retry_request.operation_id),
         idempotent_replay: false,
     };
     let completion = app.complete_session_transfer(
-        request,
+        retry_request,
         Ok(ThoughtMutation {
             thought_id: ids.thought_id(),
             receipt,

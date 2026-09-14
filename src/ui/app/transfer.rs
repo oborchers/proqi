@@ -96,9 +96,10 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        if request.remove_source {
-            self.pending_transfer_removals.remove(&request.operation_id);
-        }
+        let pending_source = request
+            .remove_source
+            .then(|| self.pending_transfer_removals.remove(&request.operation_id))
+            .flatten();
         match result {
             Err(error) => {
                 self.set_error(format!("thought was not sent: {error}"));
@@ -106,6 +107,10 @@ impl BoardApp {
             }
             Ok(_) if !request.remove_source => {
                 self.set_success("thought sent to the destination session");
+                Vec::new()
+            }
+            Ok(_) if pending_source != Some(request.source_thought_id) => {
+                self.set_warning("thought was sent, but source removal was no longer pending");
                 Vec::new()
             }
             Ok(_)
@@ -286,7 +291,8 @@ impl BoardApp {
         self.transfer = None;
         request.map_or_else(Vec::new, |request| {
             if request.remove_source {
-                self.pending_transfer_removals.insert(request.operation_id);
+                self.pending_transfer_removals
+                    .insert(request.operation_id, request.source_thought_id);
             }
             vec![Effect::TransferThought(request)]
         })
@@ -324,38 +330,6 @@ impl BoardApp {
         };
         state.selected = state.selected.min(state.matches().len().saturating_sub(1));
         state.scroll = crate::ui::paging::first_visible(state.selected, state.scroll, visible);
-    }
-}
-
-impl TransferState {
-    pub(super) const fn query_cursor(&self) -> usize {
-        self.query.cursor()
-    }
-
-    pub(super) const fn query_selection(&self) -> Option<super::query::QuerySelection> {
-        self.query.selection()
-    }
-
-    fn matches(&self) -> Vec<&SessionHit> {
-        let query = self.query.text().to_lowercase();
-        self.sessions
-            .iter()
-            .filter(|hit| {
-                query.is_empty()
-                    || hit
-                        .name
-                        .as_deref()
-                        .unwrap_or_default()
-                        .to_lowercase()
-                        .contains(&query)
-                    || hit
-                        .last_opened_cwd
-                        .to_string_lossy()
-                        .to_lowercase()
-                        .contains(&query)
-                    || hit.excerpt.to_lowercase().contains(&query)
-            })
-            .collect()
     }
 }
 

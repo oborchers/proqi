@@ -3,7 +3,10 @@
 mod chrome;
 mod content;
 mod controls;
+mod overlay;
 pub(super) mod scroll;
+
+pub use overlay::OverlayLayout;
 
 use ratatui_core::layout::Rect;
 
@@ -163,19 +166,6 @@ pub struct LayoutSnapshot {
     pub overlay: Option<OverlayLayout>,
 }
 
-/// Geometry for a centered modal overlay.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct OverlayLayout {
-    /// Complete bordered overlay.
-    pub area: Rect,
-    /// Visible command rows.
-    pub items: Vec<Rect>,
-    /// Optional passive heading row immediately above each visible item.
-    pub item_headings: Vec<Option<Rect>>,
-    /// Stable close target in the upper-right corner.
-    pub close: Rect,
-}
-
 impl LayoutSnapshot {
     /// Store the rendered footer summary and register its visible session-name target.
     pub fn configure_footer_summary(
@@ -195,8 +185,13 @@ impl LayoutSnapshot {
                 return Some(HitTarget::CloseOverlay);
             }
             return overlay.items.iter().enumerate().find_map(|(index, area)| {
-                crate::ui::geometry::contains(*area, column, row)
-                    .then_some(HitTarget::PaletteItem(index))
+                (overlay
+                    .item_interactive
+                    .get(index)
+                    .copied()
+                    .unwrap_or(false)
+                    && crate::ui::geometry::contains(*area, column, row))
+                .then_some(HitTarget::PaletteItem(index))
             });
         }
         for thought in &self.thoughts {
@@ -247,26 +242,6 @@ impl LayoutSnapshot {
             .find(|layout| row < layout.area.bottom())
             .map(|layout| layout.index)
             .or_else(|| self.thoughts.last().map(|layout| layout.index))
-    }
-
-    /// Attach modal geometry after application overlays are known.
-    pub fn configure_overlay(&mut self, item_count: usize, preferred_rows: usize) {
-        self.overlay = (preferred_rows > 0).then(|| {
-            let required = controls::overlay_height(preferred_rows);
-            let covers_chrome = self.board.height < required;
-            let bounds = if covers_chrome { self.area } else { self.board };
-            controls::overlay_layout(bounds, item_count, preferred_rows, covers_chrome)
-        });
-    }
-
-    /// Attach invocation geometry with passive headings separate from item hit targets.
-    pub fn configure_grouped_overlay(&mut self, item_groups: &[bool], preferred_rows: usize) {
-        self.overlay = (preferred_rows > 0).then(|| {
-            let required = controls::overlay_height(preferred_rows);
-            let covers_chrome = self.board.height < required;
-            let bounds = if covers_chrome { self.area } else { self.board };
-            controls::grouped_overlay_layout(bounds, item_groups, preferred_rows, covers_chrome)
-        });
     }
 
     /// Add only currently verified agent controls where footer width permits.

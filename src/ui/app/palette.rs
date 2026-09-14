@@ -1,10 +1,13 @@
 //! Searchable command discovery and execution.
 
 mod binding;
-pub(super) mod command;
 mod dispatch;
 mod editor;
+mod input;
 mod invocation;
+mod projection;
+mod ranking;
+mod refresh;
 
 use crate::{
     application::Effect,
@@ -14,31 +17,82 @@ use crate::{
 use super::{
     BoardApp, UiInput, UiKey, palette_handoff::EditorSelectionHandoff, query::QueryEditor,
 };
-use crate::ui::{CommandMetadata, shortcut_registry::CommandExecution};
+use crate::ui::shortcut_registry::CommandExecution;
 
-use command::Command;
-use invocation::CommandInvocation;
+use invocation::CommandContext;
+use projection::{CommandRecord, ProjectedRow, RowAction};
+
+#[derive(Clone, Copy)]
+struct PaletteHistoryContext {
+    can_undo: bool,
+    can_redo: bool,
+}
+
+impl PaletteHistoryContext {
+    const EMPTY: Self = Self {
+        can_undo: false,
+        can_redo: false,
+    };
+}
+
+pub(in crate::ui) struct PaletteRowView {
+    pub(in crate::ui) primary: String,
+    pub(in crate::ui) secondary: Option<String>,
+    pub(in crate::ui) secondary_fallbacks: Vec<String>,
+    pub(in crate::ui) protected_secondaries: Vec<String>,
+    pub(in crate::ui) group: Option<&'static str>,
+    pub(in crate::ui) enabled: bool,
+}
+
+pub(in crate::ui) struct CommandPaletteView {
+    pub(in crate::ui) query: String,
+    pub(in crate::ui) rows: Vec<PaletteRowView>,
+    pub(in crate::ui) selected: usize,
+}
 
 pub(super) struct PaletteState {
-    commands: Vec<(Command, CommandMetadata, CommandExecution)>,
+    commands: Vec<CommandRecord>,
     query: QueryEditor,
     selected: usize,
     scroll: usize,
-    invocation: CommandInvocation,
+    expanded: bool,
+    context: CommandContext,
+    rendered_scroll: usize,
+    rendered_interactivity: Option<Vec<bool>>,
 }
 
 impl PaletteState {
-    fn new(
-        commands: Vec<(Command, CommandMetadata, CommandExecution)>,
-        invocation: CommandInvocation,
-    ) -> Self {
-        Self {
+    fn new(registry: &crate::ui::ShortcutRegistry, context: CommandContext) -> Self {
+        let commands = registry
+            .commands()
+            .into_iter()
+            .map(|(action, metadata, execution)| {
+                let shortcut = context
+                    .command_binding_context(action, metadata)
+                    .map(|binding_context| {
+                        registry.compact_help_label(binding_context, &[metadata.shortcut_owner])
+                    })
+                    .unwrap_or_default();
+                CommandRecord {
+                    action,
+                    metadata,
+                    execution,
+                    shortcut: (!shortcut.is_empty()).then_some(shortcut),
+                }
+            })
+            .collect();
+        let mut state = Self {
             commands,
             query: QueryEditor::default(),
             selected: 0,
             scroll: 0,
-            invocation,
-        }
+            expanded: false,
+            context,
+            rendered_scroll: 0,
+            rendered_interactivity: None,
+        };
+        state.clamp();
+        state
     }
 
     pub(super) const fn query_cursor(&self) -> usize {
@@ -50,19 +104,59 @@ impl PaletteState {
     }
 
     pub(super) fn view(&self) -> (String, Vec<String>, usize) {
+        let rows = self.projected();
         (
             self.query.text().to_owned(),
-            self.matches()
-                .into_iter()
+            rows.into_iter()
                 .skip(self.scroll)
-                .map(|(_, label, _)| label.to_owned())
+                .map(|row| row.primary)
                 .collect(),
             self.selected.saturating_sub(self.scroll),
         )
     }
 
+    pub(super) fn command_view(&self) -> CommandPaletteView {
+        let rows = self
+            .projected()
+            .into_iter()
+            .skip(self.scroll)
+            .map(|row| PaletteRowView {
+                primary: row.primary,
+                secondary: row.secondary,
+                secondary_fallbacks: row.secondary_fallbacks,
+                protected_secondaries: row.protected_secondaries,
+                group: row.group,
+                enabled: row.enabled,
+            })
+            .collect();
+        CommandPaletteView {
+            query: self.query.text().to_owned(),
+            rows,
+            selected: self.selected.saturating_sub(self.scroll),
+        }
+    }
+
     pub(super) fn match_count(&self) -> usize {
-        self.matches().len()
+        self.projected().len()
+    }
+
+    pub(super) fn visible_row_metadata(&self) -> (Vec<bool>, Vec<bool>) {
+        let rows = self.projected();
+        let visible = rows.into_iter().skip(self.scroll);
+        let pairs = visible
+            .map(|row| (row.group.is_some(), row.selectable()))
+            .collect::<Vec<_>>();
+        (
+            pairs.iter().map(|(group, _)| *group).collect(),
+            pairs.iter().map(|(_, interactive)| *interactive).collect(),
+        )
+    }
+
+    pub(super) fn preferred_rows(&self) -> usize {
+        let rows = self.projected();
+        rows.len()
+            .saturating_add(rows.iter().filter(|row| row.group.is_some()).count())
+            .max(2)
     }
 
     pub(super) fn overflow(&self, visible: usize) -> (bool, bool) {
@@ -72,49 +166,109 @@ impl PaletteState {
         )
     }
 
-    fn matches(&self) -> Vec<(Command, &'static str, CommandExecution)> {
-        let query = self.query.text().to_lowercase();
-        self.commands
-            .iter()
-            .copied()
-            .filter(|(_, metadata, _)| match metadata.availability {
-                crate::ui::CommandAvailability::QueryUndo => self.query.can_undo(),
-                crate::ui::CommandAvailability::QueryRedo => self.query.can_redo(),
-                other => self.invocation.available(other),
-            })
-            .map(|(command, metadata, execution)| {
-                (
-                    command,
-                    self.invocation.command_label(metadata.label),
-                    execution,
-                )
-            })
-            .filter(|(_, label, _)| label.to_lowercase().contains(&query))
-            .collect()
+    fn projected(&self) -> Vec<ProjectedRow> {
+        let history = PaletteHistoryContext {
+            can_undo: self.query.can_undo(),
+            can_redo: self.query.can_redo(),
+        };
+        projection::rows(
+            &self.commands,
+            &self.context,
+            self.query.text(),
+            history,
+            self.expanded,
+        )
     }
 
     fn clamp(&mut self) {
-        self.selected = self.selected.min(self.match_count().saturating_sub(1));
+        let rows = self.projected();
+        self.selected = self.selected.min(rows.len().saturating_sub(1));
+        if !rows
+            .get(self.selected)
+            .is_some_and(ProjectedRow::selectable)
+        {
+            self.selected = rows.iter().position(ProjectedRow::selectable).unwrap_or(0);
+        }
         self.scroll = self.scroll.min(self.selected);
+    }
+
+    fn refresh_context(&mut self, update: impl FnOnce(&mut CommandContext)) {
+        let selected_action = self.projected().get(self.selected).map(|row| row.action);
+        let selected_offset = self.selected.saturating_sub(self.scroll);
+        update(&mut self.context);
+        self.invalidate_rendered_geometry();
+        let rows = self.projected();
+        if let Some(index) = selected_action.and_then(|action| {
+            rows.iter()
+                .position(|row| row.action == action && row.selectable())
+        }) {
+            self.selected = index;
+            self.scroll = index.saturating_sub(selected_offset);
+            return;
+        }
+        self.selected = 0;
+        self.scroll = 0;
+        self.clamp();
+    }
+
+    fn move_selection(&mut self, delta: isize) {
+        let rows = self.projected();
+        if rows.iter().all(|row| !row.selectable()) {
+            self.selected = 0;
+            return;
+        }
+        let direction = delta.signum();
+        let mut remaining = delta.unsigned_abs();
+        let mut candidate = self.selected;
+        while remaining > 0 {
+            let next = candidate.saturating_add_signed(direction);
+            if next == candidate || next >= rows.len() {
+                break;
+            }
+            candidate = next;
+            if rows[candidate].selectable() {
+                remaining = remaining.saturating_sub(1);
+            }
+        }
+        if rows[candidate].selectable() {
+            self.selected = candidate;
+        }
+    }
+
+    fn record_rendered_geometry(&mut self, interactivity: Vec<bool>) {
+        self.rendered_scroll = self.scroll;
+        self.rendered_interactivity = Some(interactivity);
+    }
+
+    fn invalidate_rendered_geometry(&mut self) {
+        if self.rendered_interactivity.is_some() {
+            self.rendered_interactivity = Some(Vec::new());
+        }
+    }
+
+    fn selected_has_rendered_geometry(&self) -> bool {
+        let Some(interactivity) = &self.rendered_interactivity else {
+            return true;
+        };
+        let visible = self.selected.saturating_sub(self.rendered_scroll);
+        interactivity.get(visible).copied().unwrap_or(false)
     }
 }
 
 impl BoardApp {
-    pub(super) fn refresh_screenshot_palette_action(&mut self) {
-        let action = self.screenshot_palette_action();
-        if let Some(palette) = &mut self.palette {
-            palette.invocation.set_screenshot_action(action);
-            palette.clamp();
-        }
-    }
-
     pub(super) fn open_palette(&mut self) {
         self.deactivate_range_latch();
         self.help = false;
         self.search = None;
-        let commands = self.settings.shortcuts.commands();
-        let invocation = self.capture_command_invocation();
-        self.palette = Some(PaletteState::new(commands, invocation));
+        let context = self.capture_command_context();
+        self.palette = Some(PaletteState::new(&self.settings.shortcuts, context));
+        self.layout = None;
+    }
+
+    pub(super) fn invalidate_palette(&mut self) {
+        if self.palette.take().is_some() {
+            self.layout = None;
+        }
     }
 
     pub(super) fn close_overlay(&mut self) {
@@ -133,32 +287,54 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        let command = self
+        let action = self
             .palette
             .as_ref()
-            .and_then(|palette| palette.matches().get(index).copied())
-            .map(|(_, _, execution)| execution);
-        if let Some(undo) = palette_query_history(command) {
+            .and_then(|palette| palette.projected().get(index).map(|row| row.action));
+        if action == Some(RowAction::Expand) {
+            if let Some(palette) = &mut self.palette {
+                palette.expanded = true;
+                palette.selected = 0;
+                palette.scroll = 0;
+                palette.invalidate_rendered_geometry();
+                palette.clamp();
+            }
+            self.layout = None;
+            return Vec::new();
+        }
+        let Some(RowAction::Command {
+            execution: command, ..
+        }) = action
+        else {
+            return Vec::new();
+        };
+        let enabled = self
+            .palette
+            .as_ref()
+            .and_then(|palette| palette.projected().get(index).map(ProjectedRow::selectable))
+            .unwrap_or(false);
+        if !enabled {
+            return Vec::new();
+        }
+        if let Some(undo) = palette_query_history(Some(command)) {
             return self.update_palette_query(|query| move_query_history(query, undo));
         }
         let selection_handoff = self
             .palette
             .as_mut()
-            .and_then(|palette| palette.invocation.take_selection_handoff());
+            .and_then(|palette| palette.context.take_selection_handoff());
         let merge_handoff = self
             .palette
             .as_mut()
-            .and_then(|palette| palette.invocation.take_merge_handoff());
+            .and_then(|palette| palette.context.take_merge_handoff());
         self.palette = None;
-        command.map_or_else(Vec::new, |execution| {
-            self.execute_command(
-                execution,
-                selection_handoff,
-                merge_handoff.as_deref(),
-                ids,
-                clock,
-            )
-        })
+        self.execute_command(
+            command,
+            selection_handoff,
+            merge_handoff.as_deref(),
+            ids,
+            clock,
+        )
     }
 
     pub(super) fn execute_palette_visible_index(
@@ -172,159 +348,6 @@ impl BoardApp {
             .as_ref()
             .map_or(index, |palette| palette.scroll.saturating_add(index));
         self.execute_palette_index(absolute, ids, clock)
-    }
-
-    pub(super) fn handle_palette_input(
-        &mut self,
-        input: &UiInput,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-    ) -> Vec<Effect> {
-        match input {
-            UiInput::Key(key) => self.handle_palette_key(*key, ids, clock),
-            input => self.handle_palette_non_key(input, ids, clock),
-        }
-    }
-
-    fn handle_palette_key(
-        &mut self,
-        key: UiKey,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-    ) -> Vec<Effect> {
-        match key {
-            UiKey::Shortcut(action) => return self.execute_bound_command(action, ids, clock),
-            UiKey::Escape => self.close_overlay(),
-            UiKey::Enter => {
-                let selected = self.palette.as_ref().map_or(0, |palette| palette.selected);
-                return self.execute_palette_index(selected, ids, clock);
-            }
-            UiKey::Backspace => {
-                if let Some(palette) = &mut self.palette {
-                    palette.query.backspace();
-                    palette.clamp();
-                }
-            }
-            UiKey::FastNavigation { direction, .. } => self.move_palette(direction.delta()),
-            UiKey::Move {
-                movement: crate::ports::editor::CursorMovement::VisualUp,
-                ..
-            } => self.move_palette(-1),
-            UiKey::Move {
-                movement: crate::ports::editor::CursorMovement::VisualDown,
-                ..
-            } => self.move_palette(1),
-            UiKey::Move {
-                movement,
-                extend_selection,
-            } => {
-                if let Some(palette) = &mut self.palette {
-                    palette
-                        .query
-                        .move_cursor_with_selection(movement, extend_selection);
-                }
-            }
-            UiKey::Delete | UiKey::ModifiedDelete => {
-                if let Some(palette) = &mut self.palette {
-                    palette.query.delete();
-                    palette.clamp();
-                }
-            }
-            UiKey::Character(character) if !character.is_control() => {
-                return self.update_palette_query(|query| query.insert_char(character));
-            }
-            UiKey::UnmodifiedSpace => {
-                return self.update_palette_query(|query| query.insert_char(' '));
-            }
-            UiKey::SelectAll => {
-                if let Some(palette) = &mut self.palette {
-                    palette.query.select_all();
-                }
-            }
-            UiKey::Undo => {
-                if let Some(palette) = &mut self.palette {
-                    palette.query.undo();
-                    palette.clamp();
-                }
-            }
-            UiKey::Redo => {
-                if let Some(palette) = &mut self.palette {
-                    palette.query.redo();
-                    palette.clamp();
-                }
-            }
-            _ => {}
-        }
-        Vec::new()
-    }
-
-    fn handle_palette_non_key(
-        &mut self,
-        input: &UiInput,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-    ) -> Vec<Effect> {
-        match input {
-            UiInput::Pointer(pointer) => match pointer.kind {
-                crate::ui::PointerKind::ScrollUp => {
-                    self.move_palette(-1);
-                    Vec::new()
-                }
-                crate::ui::PointerKind::ScrollDown => {
-                    self.move_palette(1);
-                    Vec::new()
-                }
-                _ => self.handle_pointer(*pointer, ids, clock),
-            },
-            UiInput::Paste(value) => self.update_palette_query(|query| query.paste(value)),
-            UiInput::PasteAnnotated(payload) => {
-                self.update_palette_query(|query| query.paste(&payload.content))
-            }
-            UiInput::Resize { .. }
-            | UiInput::HostFocusGained
-            | UiInput::HostFocusLost
-            | UiInput::KeyStroke(_)
-            | UiInput::Key(_) => Vec::new(),
-        }
-    }
-
-    fn update_palette_query(&mut self, update: impl FnOnce(&mut QueryEditor)) -> Vec<Effect> {
-        if let Some(palette) = &mut self.palette {
-            update(&mut palette.query);
-            palette.selected = 0;
-            palette.scroll = 0;
-            palette.clamp();
-        }
-        Vec::new()
-    }
-
-    fn move_palette(&mut self, delta: isize) {
-        let visible = self
-            .layout
-            .as_ref()
-            .and_then(|layout| layout.overlay.as_ref())
-            .map_or(1, |overlay| overlay.items.len().max(1));
-        let Some(palette) = &mut self.palette else {
-            return;
-        };
-        palette.selected = palette
-            .selected
-            .saturating_add_signed(delta)
-            .min(palette.match_count().saturating_sub(1));
-        palette.scroll =
-            crate::ui::paging::first_visible(palette.selected, palette.scroll, visible);
-        self.layout = None;
-    }
-
-    pub(super) fn ensure_palette_visible(&mut self, visible: usize) {
-        let Some(palette) = &mut self.palette else {
-            return;
-        };
-        palette.selected = palette
-            .selected
-            .min(palette.match_count().saturating_sub(1));
-        palette.scroll =
-            crate::ui::paging::first_visible(palette.selected, palette.scroll, visible);
     }
 
     fn execute_command(

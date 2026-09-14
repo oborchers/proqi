@@ -9,8 +9,8 @@ mod metadata;
 pub use context::{ShortcutContext, ShortcutContextStack};
 
 pub(crate) use metadata::{
-    CommandAvailability, CommandLabel, CommandMetadata, FooterMetadata, HelpAvailability,
-    HelpMetadata, HelpSurface,
+    CommandApplicability, CommandCategory, CommandDiscoverability, CommandLabel, CommandMetadata,
+    CommandRelevance, CommandScope, FooterMetadata, HelpAvailability, HelpMetadata, HelpSurface,
 };
 
 /// Stable content-free identity for every current semantic keyboard action.

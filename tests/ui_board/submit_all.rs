@@ -86,10 +86,10 @@ fn palette_submission_labels_use_one_concise_vocabulary() {
         entries,
         vec![
             "Submit",
-            "Submit and keep",
             "Submit to agent...",
             "Submit all",
             "Submit all and keep",
+            "Submit and keep",
         ]
     );
     assert_eq!(selected, 0);
@@ -327,10 +327,8 @@ fn all_submit_failures_and_empty_boards_are_non_destructive() {
         .app
         .complete_agent_discovery(Ok(vec![super::agent::target(Direction::Left, "w1:p2")]));
     assert!(execute_palette(&mut empty, "submit all and keep").is_empty());
-    assert_eq!(
-        empty.app.status_text(),
-        Some("board is empty; nothing submitted")
-    );
+    assert!(empty.app.palette_view().is_some());
+    assert!(text(draw(&mut empty, 72, 10).backend().buffer()).contains("Board has no thoughts"));
 
     let mut fixture = Fixture::new();
     for content in ["first", "second"] {

@@ -20,6 +20,10 @@ mod bottom_boundary;
 mod collapsed_entry;
 
 #[cfg(target_os = "macos")]
+#[path = "pty/commands_disclosure.rs"]
+mod commands_disclosure;
+
+#[cfg(target_os = "macos")]
 #[path = "pty/delete_alias.rs"]
 mod delete_alias;
 

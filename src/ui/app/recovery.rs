@@ -75,6 +75,10 @@ impl BoardApp {
             UiInput::Key(UiKey::Shortcut(crate::ui::ShortcutActionId::ExportRecovery)) => {
                 Some(self.export_recovery(ids, clock))
             }
+            UiInput::Key(UiKey::Shortcut(crate::ui::ShortcutActionId::OpenCommands)) => {
+                self.open_palette();
+                Some(Vec::new())
+            }
             UiInput::Pointer(pointer) => Some(self.handle_recovery_pointer(*pointer, ids, clock)),
             UiInput::Resize { .. } | UiInput::HostFocusGained | UiInput::HostFocusLost => None,
             UiInput::KeyStroke(_)
@@ -132,6 +136,7 @@ impl BoardApp {
             }
             Err(error) => self.set_storage_failure(format!("recovery export failed: {error}")),
         }
+        self.refresh_palette_recovery();
         Vec::new()
     }
 

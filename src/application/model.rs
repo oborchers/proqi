@@ -278,7 +278,6 @@ impl AppState {
         }
         self.applied_compose_handoff(thought_id)
     }
-
     pub(super) fn next_sequence(&self) -> ApplicationResult<OperationSequence> {
         if !self.deferred_board_operations.is_empty() {
             return Err(ApplicationError::InvalidState);

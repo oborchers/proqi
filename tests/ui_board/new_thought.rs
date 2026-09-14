@@ -22,7 +22,8 @@ fn query_new_thought_command(fixture: &mut Fixture) {
         fixture.input(crate::key_input(UiKey::Character(character)));
     }
     let (_, entries, selected) = fixture.app.palette_view().expect("commands overlay");
-    assert_eq!(entries, vec!["New thought"]);
+    assert_eq!(entries.first().map(String::as_str), Some("New thought"));
+    assert!(entries.contains(&"Extract selection as new thought".to_owned()));
     assert_eq!(selected, 0);
 }
 

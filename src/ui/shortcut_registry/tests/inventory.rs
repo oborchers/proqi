@@ -11,6 +11,9 @@ use crate::{application::UndoContract, ports::editor::CursorMovement, ui::UiKey}
 
 const SHORTCUTS_DOCUMENT: &str = include_str!("../../../../context/SHORTCUTS.md");
 
+#[path = "inventory/commands.rs"]
+mod commands;
+
 #[test]
 fn duplicate_presentation_includes_the_terminal_safe_board_alias() {
     for (platform, primary) in [
@@ -72,21 +75,6 @@ fn compact_help_chooses_one_shortest_alias_per_action() {
 }
 
 #[test]
-fn every_commands_entry_has_one_matching_registry_descriptor() {
-    let registry = ShortcutRegistry::resolve(&KeyBindings::default(), ShortcutPlatform::Portable)
-        .expect("valid registry");
-    assert_eq!(Action::COMMANDS.len(), 57);
-    for (order, (action, label)) in Action::COMMANDS.into_iter().enumerate() {
-        let descriptor = registry.descriptor(action).expect("Commands descriptor");
-        assert_eq!(
-            descriptor.commands,
-            Some(inventory::metadata::command_metadata(action, order, label))
-        );
-        assert!(descriptor.contexts.contains(&Context::Commands));
-    }
-}
-
-#[test]
 fn shortcut_inventory_document_tracks_contexts_and_commands_count() {
     let context_rows = SHORTCUTS_DOCUMENT
         .lines()
@@ -140,6 +128,23 @@ fn fixed_recovery_bindings_are_descriptor_owned_and_dispatchable() {
             assert_eq!(resolved.action, Some(action));
         }
     }
+}
+
+#[test]
+fn configured_commands_binding_opens_fresh_commands_from_recovery() {
+    let keys = KeyBindings {
+        commands: 'τ',
+        ..KeyBindings::default()
+    };
+    let registry =
+        ShortcutRegistry::resolve(&keys, ShortcutPlatform::Portable).expect("valid registry");
+    let resolved = registry
+        .dispatch(
+            &ShortcutContextStack::new([Context::Recovery]),
+            stroke(LogicalKey::Character('τ'), LogicalModifiers::NONE),
+        )
+        .expect("configured Commands binding dispatches in Recovery");
+    assert_eq!(resolved.action, Some(Action::OpenCommands));
 }
 
 #[test]

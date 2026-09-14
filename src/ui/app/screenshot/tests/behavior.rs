@@ -340,24 +340,22 @@ fn passive_pointer_focus_and_resize_keep_auto_ready_but_a_click_invalidates_it()
 
 #[test]
 fn palette_names_are_exact_in_both_states() {
-    let (mut app, _, _, _) = app_with_thought();
+    let (mut app, mut ids, clock, _) = app_with_thought();
     app.open_palette();
+    for character in "enable screenshot inbox".chars() {
+        app.handle(UiInput::Key(UiKey::Character(character)), &mut ids, &clock);
+    }
     let (_, entries, _) = app.palette_view().expect("palette");
-    assert!(
-        entries
-            .iter()
-            .any(|entry| entry == "Enable Screenshot Inbox")
-    );
+    assert_eq!(entries, ["Enable Screenshot Inbox"]);
     app.close_overlay();
 
     app.screenshot_started(Duration::ZERO);
     app.open_palette();
+    for character in "disable screenshot inbox".chars() {
+        app.handle(UiInput::Key(UiKey::Character(character)), &mut ids, &clock);
+    }
     let (_, entries, _) = app.palette_view().expect("palette");
-    assert!(
-        entries
-            .iter()
-            .any(|entry| entry == "Disable Screenshot Inbox")
-    );
+    assert_eq!(entries, ["Disable Screenshot Inbox"]);
 }
 
 #[test]

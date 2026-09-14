@@ -97,6 +97,7 @@ impl BoardApp {
         completion: AttachmentCheckBatchResult,
     ) -> Vec<Effect> {
         let (mut effects, preflight, refresh) = self.state.attachments.complete(completion);
+        self.refresh_palette_attachments();
         if let Some(outcome) = preflight {
             effects.extend(self.complete_attachment_preflight(outcome));
         }

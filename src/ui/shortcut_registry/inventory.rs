@@ -10,7 +10,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::ui::settings::KeyBindings;
 
 use super::model::{
-    CommandAvailability, ShortcutActionId as Action, ShortcutContext as Context,
+    CommandApplicability, ShortcutActionId as Action, ShortcutContext as Context,
     ShortcutDescriptor, ShortcutSafety,
 };
 use bindings::{alias_claims, default_claims};
@@ -168,7 +168,7 @@ fn descriptor(
     contexts.extend(metadata::help_contexts(&help));
     if let Some(metadata) = command {
         contexts.insert(Context::Commands);
-        if metadata.availability == CommandAvailability::BoardThought {
+        if metadata.applicability == CommandApplicability::BoardThought {
             contexts.extend([Context::Board, Context::InsertionBoundary]);
         } else {
             contexts.extend([

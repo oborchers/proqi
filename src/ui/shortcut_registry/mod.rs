@@ -30,8 +30,11 @@ pub use dispatch::ShortcutRegistry;
 pub use errors::ShortcutRegistryError;
 pub(crate) use inspection::{ShortcutInspection, ShortcutStrokeInspection};
 pub(super) use inventory::fixed_character_binding;
+#[cfg(test)]
+pub(crate) use model::CommandCategory;
 pub(crate) use model::{
-    CommandAvailability, CommandLabel, CommandMetadata, HelpAvailability, HelpSurface,
+    CommandApplicability, CommandDiscoverability, CommandLabel, CommandMetadata, CommandRelevance,
+    CommandScope, HelpAvailability, HelpSurface,
 };
 pub use model::{
     ShortcutActionId, ShortcutBinding, ShortcutBindingClaim, ShortcutContext, ShortcutContextStack,

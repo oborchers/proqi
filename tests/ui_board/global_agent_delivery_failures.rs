@@ -62,16 +62,18 @@ fn cancellation_failures_and_repeated_activation_preserve_sources_without_resubm
         let prepared = fixture.effects(crate::key_input(UiKey::Enter));
         let request = super::agent::start_submission(&mut fixture, &prepared);
 
-        let repeated_generation = super::global_agent_delivery::open(&mut fixture);
-        fixture
-            .app
-            .complete_global_agent_discovery(repeated_generation, Ok(vec![destination]));
-        fixture.input(crate::key_input(UiKey::Enter));
+        fixture.input(crate::key_input(UiKey::Character(':')));
+        for character in "submit to agent".chars() {
+            fixture.input(crate::key_input(UiKey::Character(character)));
+        }
+        let layout = fixture.app.prepare_frame(Rect::new(0, 0, 72, 10));
+        assert_eq!(layout.overlay.expect("Commands").item_interactive, [false]);
         assert!(fixture.effects(crate::key_input(UiKey::Enter)).is_empty());
-        assert_eq!(
-            fixture.app.status_text(),
-            Some("a selected thought already has a submission in progress")
+        assert!(
+            text(draw(&mut fixture, 72, 10).backend().buffer())
+                .contains("Thought has an operation in progress")
         );
+        fixture.input(crate::key_input(UiKey::Escape));
 
         super::agent::finish_submission(&mut fixture, &request, Err(error));
         assert_eq!(fixture.app.state.board.live_thoughts().len(), 1);
