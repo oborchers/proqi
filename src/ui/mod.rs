@@ -12,6 +12,7 @@ mod layout;
 mod paging;
 mod paste_reflow;
 mod projection;
+mod query_render;
 mod render;
 mod settings;
 mod shortcut_registry;
@@ -21,6 +22,7 @@ mod theme;
 
 pub use annotations::PastePayload;
 pub use app::BoardApp;
+pub(crate) use app::ScreenshotUpdateReadiness;
 pub use browser::{
     BrowserAction, BrowserAvailability, BrowserEntryLayout, BrowserLayout, RecencyGroup,
     SessionBrowser, SessionBrowserItem,

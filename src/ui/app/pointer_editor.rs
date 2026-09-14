@@ -18,13 +18,20 @@ impl BoardApp {
     ) -> Vec<Effect> {
         if matches!(self.state.mode, InteractionMode::Compose) {
             if self.compose_prompt_visible() {
-                self.engage_compose();
-                return Vec::new();
+                return self.new_thought(
+                    super::creation::NewThoughtPlacement::Contextual,
+                    ids,
+                    clock,
+                );
             }
             self.place_compose_cursor(pointer);
             Vec::new()
         } else {
-            self.begin_bottom_insertion(ids, clock)
+            self.new_thought(
+                super::creation::NewThoughtPlacement::DurableTail,
+                ids,
+                clock,
+            )
         }
     }
 

@@ -117,6 +117,199 @@ fn undoing_a_split_returns_focus_to_its_retained_source_instead_of_board_start()
 }
 
 #[test]
+fn split_waits_for_newer_editor_history_on_every_affected_thought() {
+    let mut fixture = Fixture::new();
+    let (source, new_thought) = split_then_edit_new_thought(&mut fixture);
+
+    assert_eq!(
+        fixture.state.history_resolution(fixture.state.mode, true),
+        HistoryResolution::BlockedByEditor {
+            thought_id: new_thought
+        }
+    );
+    let before = fixture.state.clone();
+    let operation_id = fixture.operation_id();
+    let at = fixture.time();
+    assert_eq!(
+        reduce(
+            &mut fixture.state,
+            Action::Undo {
+                operation_id,
+                scope: UndoScope::Board,
+                at,
+            },
+        ),
+        Err(proqi::application::ApplicationError::HistoryDependency(
+            new_thought
+        ))
+    );
+    assert_eq!(fixture.state, before);
+
+    reduce(&mut fixture.state, Action::EnterEdit(new_thought)).expect("edit newer thought");
+    move_history(
+        &mut fixture,
+        UndoScope::Editor {
+            thought_id: new_thought,
+        },
+        true,
+    );
+    reduce(&mut fixture.state, Action::EnterEdit(source)).expect("return to source");
+    assert_eq!(
+        fixture.state.history_resolution(fixture.state.mode, true),
+        HistoryResolution::Ready(UndoScope::Board)
+    );
+    move_history(&mut fixture, UndoScope::Board, true);
+    assert_eq!(fixture.state.board.live_thoughts().len(), 1);
+
+    move_history(&mut fixture, UndoScope::Board, false);
+    reduce(&mut fixture.state, Action::EnterEdit(new_thought)).expect("redo newer thought");
+    assert_eq!(
+        fixture.state.history_resolution(fixture.state.mode, false),
+        HistoryResolution::Ready(UndoScope::Editor {
+            thought_id: new_thought,
+        })
+    );
+    move_history(
+        &mut fixture,
+        UndoScope::Editor {
+            thought_id: new_thought,
+        },
+        false,
+    );
+    assert_eq!(
+        fixture
+            .state
+            .board
+            .thought(new_thought)
+            .expect("restored split thought")
+            .content,
+        " updated"
+    );
+}
+
+fn split_then_edit_new_thought(fixture: &mut Fixture) -> (ThoughtId, ThoughtId) {
+    let source = fixture.create("left right");
+    let operation_id = fixture.operation_id();
+    let new_thought = fixture.ids.thought_id();
+    let at = fixture.time();
+    reduce(
+        &mut fixture.state,
+        Action::SplitThought {
+            thought_id: source,
+            new_thought_id: new_thought,
+            operation_id,
+            expected_content: "left right".to_owned(),
+            expected_annotations: Vec::new(),
+            source_content: "left right".to_owned(),
+            source_annotations: Vec::new(),
+            at_byte: 4,
+            at,
+        },
+    )
+    .expect("split");
+    let revision_id = fixture.ids.revision_id();
+    let at = fixture.time();
+    reduce(
+        &mut fixture.state,
+        Action::EditThought {
+            thought_id: new_thought,
+            revision_id,
+            before_content: " right".to_owned(),
+            after_content: " updated".to_owned(),
+            before_annotations: Vec::new(),
+            after_annotations: Vec::new(),
+            before_cursor: TextPosition::new(0, 6),
+            after_cursor: TextPosition::new(0, 8),
+            at,
+        },
+    )
+    .expect("newer edit");
+    reduce(&mut fixture.state, Action::EnterEdit(source)).expect("edit retained source");
+    (source, new_thought)
+}
+
+#[test]
+fn split_redo_waits_for_earlier_editor_history_on_its_source() {
+    let mut fixture = Fixture::new();
+    let source = fixture.create("before");
+    let revision_id = fixture.ids.revision_id();
+    let at = fixture.time();
+    reduce(
+        &mut fixture.state,
+        Action::EditThought {
+            thought_id: source,
+            revision_id,
+            before_content: "before".to_owned(),
+            after_content: "left right".to_owned(),
+            before_annotations: Vec::new(),
+            after_annotations: Vec::new(),
+            before_cursor: TextPosition::new(0, 6),
+            after_cursor: TextPosition::new(0, 10),
+            at,
+        },
+    )
+    .expect("earlier edit");
+    let new_thought = fixture.ids.thought_id();
+    let operation_id = fixture.operation_id();
+    let at = fixture.time();
+    reduce(
+        &mut fixture.state,
+        Action::SplitThought {
+            thought_id: source,
+            new_thought_id: new_thought,
+            operation_id,
+            expected_content: "left right".to_owned(),
+            expected_annotations: Vec::new(),
+            source_content: "left right".to_owned(),
+            source_annotations: Vec::new(),
+            at_byte: 4,
+            at,
+        },
+    )
+    .expect("split");
+    move_history(&mut fixture, UndoScope::Board, true);
+    move_history(&mut fixture, UndoScope::Editor { thought_id: source }, true);
+
+    assert_eq!(
+        fixture
+            .state
+            .history_resolution(InteractionMode::Board, false),
+        HistoryResolution::BlockedByEditor { thought_id: source }
+    );
+    let before = fixture.state.clone();
+    let operation_id = fixture.operation_id();
+    let at = fixture.time();
+    assert_eq!(
+        reduce(
+            &mut fixture.state,
+            Action::Redo {
+                operation_id,
+                scope: UndoScope::Board,
+                at,
+            },
+        ),
+        Err(proqi::application::ApplicationError::HistoryDependency(
+            source
+        ))
+    );
+    assert_eq!(fixture.state, before);
+
+    move_history(
+        &mut fixture,
+        UndoScope::Editor { thought_id: source },
+        false,
+    );
+    assert_eq!(
+        fixture
+            .state
+            .history_resolution(InteractionMode::Board, false),
+        HistoryResolution::Ready(UndoScope::Board)
+    );
+    move_history(&mut fixture, UndoScope::Board, false);
+    assert_eq!(fixture.state.board.live_thoughts().len(), 2);
+}
+
+#[test]
 fn incompatible_editor_undo_after_a_newer_board_change_is_actionable_and_exact() {
     let mut fixture = Fixture::new();
     let source = fixture.create("before");

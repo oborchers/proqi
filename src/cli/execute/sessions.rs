@@ -5,10 +5,54 @@ use std::collections::{HashMap, HashSet};
 use serde_json::json;
 
 use crate::{
+    adapters::terminal,
     domain::SessionId,
-    ports::{runtime::RuntimeCoordinator, store::SessionHit},
+    ports::{environment::Clock, runtime::RuntimeCoordinator, store::SessionHit},
     ui::{BrowserAvailability, SessionBrowserItem},
 };
+
+pub(super) fn browse_for_session(
+    context: &mut RuntimeContext,
+    settings: &terminal::LoadedSettings,
+) -> Result<
+    Option<crate::application::LeasedSession<crate::adapters::runtime::FileSessionLease>>,
+    CliError,
+> {
+    loop {
+        let items = browser_items(context)?;
+        let now = context.clock.now();
+        let history = session_service(context)?.browser_history_status()?;
+        match terminal::pick_session(items, now, settings, history)? {
+            crate::ui::BrowserAction::Open(id) => {
+                return session_service(context)?
+                    .resume(id)
+                    .map(Some)
+                    .map_err(Into::into);
+            }
+            crate::ui::BrowserAction::Rename { session_id, name } => {
+                session_service(context)?.rename_session(session_id, name.as_deref())?;
+            }
+            crate::ui::BrowserAction::Trash(id) => {
+                session_service(context)?.trash_session(id)?;
+            }
+            crate::ui::BrowserAction::Restore(id) => {
+                session_service(context)?.restore_session(id)?;
+            }
+            crate::ui::BrowserAction::History { undo, target } => {
+                let mut service = session_service(context)?;
+                service.move_presented_browser_history(target, undo)?;
+            }
+            crate::ui::BrowserAction::Cancel => return Ok(None),
+            crate::ui::BrowserAction::Continue => {
+                return Err(CliError::new(
+                    "terminal_failed",
+                    "session browser returned an incomplete action".to_owned(),
+                    1,
+                ));
+            }
+        }
+    }
+}
 
 use super::{
     super::{args::SessionCommand, output::CliError, runtime::RuntimeContext},
@@ -44,6 +88,8 @@ pub(super) fn execute_sessions(
         SessionCommand::Restore { session } => {
             manage_session(context, &session, SessionManagement::Restore)
         }
+        SessionCommand::Undo => move_browser_history(context, true),
+        SessionCommand::Redo => move_browser_history(context, false),
         SessionCommand::Prune { session, yes } => {
             if !yes {
                 return Err(CliError::arguments(
@@ -53,6 +99,23 @@ pub(super) fn execute_sessions(
             manage_session(context, &session, SessionManagement::Prune)
         }
     }
+}
+
+fn move_browser_history(context: &mut RuntimeContext, undo: bool) -> Result<Outcome, CliError> {
+    let mut service = session_service(context)?;
+    let before = service.browser_history_status()?;
+    let target = if undo { before.undo } else { before.redo }
+        .ok_or(crate::application::SessionServiceError::NoBrowserHistory { undo })?;
+    let receipt = service.move_presented_browser_history(target, undo)?;
+    let action = if undo { "undid" } else { "redid" };
+    Ok(Outcome {
+        data: json!({
+            "history": if undo { "undo" } else { "redo" },
+            "operation": target.kind.label(),
+            "cursor": receipt.cursor,
+        }),
+        human: format!("{action} {}", target.kind.label()),
+    })
 }
 
 pub(super) fn cancelled_browser() -> Outcome {
@@ -78,8 +141,12 @@ fn manage_session(
     let mut service = session_service(context)?;
     let id = service.resolve_session(reference, true)?;
     match action {
-        SessionManagement::Trash => service.trash_session(id)?,
-        SessionManagement::Restore => service.restore_session(id)?,
+        SessionManagement::Trash => {
+            service.trash_session(id)?;
+        }
+        SessionManagement::Restore => {
+            service.restore_session(id)?;
+        }
         SessionManagement::Prune => service.prune_session(id)?,
     }
     Ok(simple_session_outcome(id, action.label()))

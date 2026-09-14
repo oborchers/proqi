@@ -13,7 +13,7 @@ use crate::{
 };
 
 use super::{
-    BoardApp, ComposePresentation, EditorOwner, InsertionConfirmation, InsertionFocus,
+    BoardApp, EditorOwner,
     pending_types::{
         ClipboardPasteMode, ClipboardReadOwner, EditFlush, PendingClipboardRead,
         PendingEditorClipboard,
@@ -75,77 +75,6 @@ impl BoardApp {
             }
             effects
         }
-    }
-
-    pub(super) fn create(
-        &mut self,
-        payload: PastePayload,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-    ) -> Vec<Effect> {
-        self.create_with_insertion_index(payload, None, ids, clock)
-    }
-
-    pub(super) fn create_at(
-        &mut self,
-        payload: PastePayload,
-        insertion_index: usize,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-    ) -> Vec<Effect> {
-        self.create_with_insertion_index(payload, Some(insertion_index), ids, clock)
-    }
-
-    fn create_with_insertion_index(
-        &mut self,
-        payload: PastePayload,
-        insertion_index: Option<usize>,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-    ) -> Vec<Effect> {
-        self.clear_board_selection();
-        self.compose_presentation = ComposePresentation::Prompt;
-        self.insertion_focus = InsertionFocus::Inactive;
-        self.insertion_confirmation = InsertionConfirmation::Idle;
-        let thought_id = ids.thought_id();
-        let (content, annotations, verified_paths, preserve_owned) = payload.into_parts();
-        let operation_id = ids.operation_id();
-        let at = clock.now();
-        let action = if preserve_owned {
-            Action::CreateOwnedThought(crate::application::OwnedThoughtCreation::preserved(
-                thought_id,
-                operation_id,
-                content,
-                annotations,
-                insertion_index,
-                at,
-            ))
-        } else {
-            Action::CreateThought {
-                thought_id,
-                operation_id,
-                content,
-                annotations,
-                insertion_index,
-                at,
-            }
-        };
-        let effects = self.reduce(action);
-        if matches!(
-            self.state.mode,
-            InteractionMode::Edit {
-                thought_id: active
-            } if active == thought_id
-        ) {
-            self.board_viewport = self.board_viewport.follow_focus();
-            self.scroll_geometry = None;
-            self.layout = None;
-        }
-        self.state
-            .attachments
-            .mark_paths_accessible(thought_id, &verified_paths);
-        self.sync_editor_from_state();
-        effects
     }
 
     pub(super) fn copy_active(&mut self, ids: &mut impl IdGenerator) -> Vec<Effect> {

@@ -29,6 +29,7 @@ pub(in crate::ui::shortcut_registry) fn command_metadata(
         relevance: command_relevance(action),
         category: command_category(action),
         scope: command_scope(action),
+        shortcut_owner: command_shortcut_owner(action),
     }
 }
 
@@ -63,8 +64,8 @@ const fn command_applicability(action: Action) -> CommandApplicability {
         Action::RetryStorage => CommandApplicability::RetryStorage,
         Action::ExportRecovery => CommandApplicability::ExportRecovery,
         Action::Quit => CommandApplicability::Quit,
-        Action::Undo => CommandApplicability::Undo,
-        Action::Redo => CommandApplicability::Redo,
+        Action::Undo => CommandApplicability::QueryUndo,
+        Action::Redo => CommandApplicability::QueryRedo,
         Action::RefreshAttachments => CommandApplicability::Attachments,
         Action::WhatsNew => CommandApplicability::InstalledHighlights,
         Action::Copy => CommandApplicability::Copy,
@@ -88,20 +89,29 @@ const fn command_relevance(action: Action) -> CommandRelevance {
         Action::RetryStorage | Action::ExportRecovery => CommandRelevance::StorageRecovery(0),
         Action::RetryScreenshotCapture => CommandRelevance::ScreenshotRetry(1),
         Action::ScreenshotInbox => CommandRelevance::ScreenshotActive(2),
-        Action::Undo => CommandRelevance::Undo(3),
-        Action::Redo => CommandRelevance::Redo(4),
+        Action::Undo => CommandRelevance::QueryUndo(3),
+        Action::Redo => CommandRelevance::QueryRedo(4),
         Action::MergeThoughts => CommandRelevance::Selection(5),
         Action::ExtractSelection | Action::SplitThought => CommandRelevance::Editor(6),
         Action::SubmitKeep => CommandRelevance::Submission(7),
         Action::New => CommandRelevance::Always(0),
         Action::Edit => CommandRelevance::FocusedThought(20),
+        Action::ReflowThought => CommandRelevance::FocusedThought(25),
         Action::Copy => CommandRelevance::FocusedThought(30),
         Action::PasteExact => CommandRelevance::Always(40),
-        Action::RenameSession => CommandRelevance::Always(50),
-        Action::CopyResume => CommandRelevance::Always(60),
+        Action::PasteReflow => CommandRelevance::Always(45),
         Action::Help => CommandRelevance::Always(80),
         Action::Quit => CommandRelevance::Always(90),
         _ => CommandRelevance::Never,
+    }
+}
+
+const fn command_shortcut_owner(action: Action) -> Action {
+    match action {
+        Action::SplitThought | Action::ExtractSelection | Action::MergeThoughts => {
+            Action::ContextualTransform
+        }
+        _ => action,
     }
 }
 

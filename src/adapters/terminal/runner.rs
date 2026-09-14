@@ -19,6 +19,7 @@ mod restart;
 mod screenshot_results;
 mod termination;
 mod update_results;
+mod worker_results;
 
 use std::{
     io::{Stdout, stdout},
@@ -61,7 +62,7 @@ use super::{
 };
 
 use capture_runtime::CaptureRuntime;
-use durability::{drain_persistence, enqueue_effects, storage_error_code};
+use durability::{enqueue_effects, storage_error_code};
 use finish::CleanupStage::{Control, TerminalRestoration};
 use heartbeat::PaneHeartbeat;
 use owned_lanes::OwnedLanes;
@@ -84,6 +85,7 @@ pub(crate) struct TerminalResources {
     pub(crate) cache_directory: PathBuf,
     pub(crate) state_root: Option<PathBuf>,
     pub(crate) executable: PathBuf,
+    pub(crate) startup_admission: Option<Box<dyn crate::ports::update::UpdateLease>>,
 }
 
 pub(super) struct WorkerLanes<'a> {
@@ -124,7 +126,9 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
         cache_directory,
         state_root,
         executable,
+        startup_admission,
     } = resources;
+    let mut schema_lease = Some(schema_lease);
     let session_id = state.board.session.id;
     store.recover_submissions(session_id, clock.now())?;
     let release_highlight_selection =
@@ -157,6 +161,8 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
         &mut control,
         &mut control_warning,
     );
+    let startup_admission =
+        admission::retain_unpublished_startup_admission(startup_admission, control_ready);
     let mut owned = composition::spawn_lanes(
         control,
         store,
@@ -173,6 +179,7 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
         session_lease.info().clone(),
         terminal_host_label,
         executable,
+        state_root.as_deref(),
     );
     let mut pane_heartbeat = None;
     let shutdown = super::supervisor::ShutdownCoordinator::default();
@@ -221,9 +228,14 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
             theme,
             &mut pane_heartbeat,
             &shutdown,
+            &mut schema_lease,
         )
     });
-    let requested_restart = app.update_restart().cloned();
+    let requested_restart = app
+        .update_restart()
+        .cloned()
+        .zip(app.update_restart_operation());
+    let previous_instance_id = session_lease.info().instance_id;
     if let Some(heartbeat) = pane_heartbeat.as_mut() {
         let _cleared = heartbeat.clear(&owned.external);
     }
@@ -233,7 +245,7 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
     let restoration_result = guard.finish();
     drop(panic_hook);
     let control_result = owned.stop_control(shutdown_deadline);
-    drop((session_lease, schema_lease));
+    drop((session_lease, schema_lease, startup_admission));
     let lane_results = owned.stop_workers(shutdown_deadline);
     finish::runtime(
         run_result,
@@ -248,6 +260,7 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
         requested_restart.as_ref(),
         session_id,
         state_root.as_deref(),
+        previous_instance_id,
     )
 }
 
@@ -265,6 +278,7 @@ fn drive(
     theme: Theme,
     pane_heartbeat: &mut Option<PaneHeartbeat>,
     shutdown: &super::supervisor::ShutdownCoordinator,
+    schema_lease: &mut Option<FileSchemaLease>,
 ) -> Result<(), TerminalError> {
     let mut pending = PendingWork::default();
     let mut capture = CaptureRuntime::default();
@@ -292,15 +306,10 @@ fn drive(
             let effects = app.advance_screenshot_activity(lanes.monotonic.now());
             enqueue_effects(app, lanes, effects, &mut pending)?;
         }
-        let (workers_changed, worker_backlog) = drain_workers(
-            app,
-            lanes,
-            &mut pending,
-            &mut capture,
-            ids,
-            clock,
-            pane_heartbeat,
-        )?;
+        let mut drain_context =
+            worker_results::DrainContext::new(ids, clock, pane_heartbeat, schema_lease);
+        let (workers_changed, worker_backlog) =
+            worker_results::drain(app, lanes, &mut pending, &mut capture, &mut drain_context)?;
         redraw |= workers_changed || app.expire_update_barrier(clock.now());
         if app.quit && app.screenshot_retry_ready() && !termination.is_admitted() {
             app.retain_failed_capture_after_quit();
@@ -449,37 +458,6 @@ fn drive(
             }
         }
     }
-}
-
-fn drain_workers(
-    app: &mut BoardApp,
-    lanes: &WorkerLanes<'_>,
-    pending: &mut PendingWork,
-    capture: &mut CaptureRuntime,
-    ids: &mut SystemIdGenerator,
-    clock: SystemClock,
-    pane_heartbeat: &mut Option<PaneHeartbeat>,
-) -> Result<(bool, bool), TerminalError> {
-    let persistence = drain_persistence(app, lanes, pending, ids, &clock)?;
-    let accessibility = accessibility_results::drain(app, lanes, pending)?;
-    let external = external_results::drain(app, lanes, pending, ids, clock, pane_heartbeat)?;
-    let control = owner_control::drain(app, lanes, pending, capture, ids, clock)?;
-    let update = update_results::drain(app, lanes, pending)?;
-    let screenshot =
-        screenshot_results::drain(app, lanes, pending, capture, lanes.monotonic.now())?;
-    let changed = persistence.changed
-        || accessibility.changed
-        || external.changed
-        || control.changed
-        || update.changed
-        || screenshot.changed;
-    let backlog = persistence.budget_exhausted
-        || accessibility.budget_exhausted
-        || external.budget_exhausted
-        || control.budget_exhausted
-        || update.budget_exhausted
-        || screenshot.budget_exhausted;
-    Ok((changed, backlog))
 }
 
 pub(super) fn supports_true_color() -> bool {

@@ -2,7 +2,7 @@
 
 use crate::{
     application::InteractionMode,
-    ui::{CommandScope, ShortcutContext},
+    ui::{CommandMetadata, CommandScope, ShortcutActionId, ShortcutContext},
 };
 
 use super::CommandContext;
@@ -10,12 +10,15 @@ use super::CommandContext;
 impl CommandContext {
     pub(in crate::ui::app::palette) fn command_binding_context(
         &self,
-        scope: CommandScope,
+        metadata: CommandMetadata,
     ) -> ShortcutContext {
         if self.recovery.failed() {
             return ShortcutContext::Recovery;
         }
-        match scope {
+        if metadata.shortcut_owner == ShortcutActionId::ContextualTransform {
+            return ShortcutContext::Board;
+        }
+        match metadata.scope {
             CommandScope::Contextual => {
                 ShortcutContext::surface(self.board.mode, self.board.insertion_focused, false)
             }

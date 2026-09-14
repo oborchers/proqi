@@ -1,13 +1,12 @@
 ---
 source: tests/ui_session_browser.rs
-assertion_line: 477
 expression: snapshot_buffer(terminal.backend().buffer())
 ---
 SIZE 100x20
 
 TEXT
 00│ Resume a Proqi session│
-01│ Search: _│
+01│ Search:│
 02│ Today                                                      │ ses_068q40p201o010000000000000│
 03││ Live agent  [active]                                      │ owner: pid 419 from /work/agent│
 04│  2 thoughts  now  /work/proqi                              │ origin: /work/proqi│
@@ -29,7 +28,7 @@ TEXT
 
 STYLE RUNS
 0: 0-99 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=BOLD
-1: 0-8 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE | 9-9 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 10-99 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+1: 0-8 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 9-99 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 2: 0-59 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=BOLD | 60-99 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE
 3: 0-59 fg=Rgb(112, 214, 155) bg=Rgb(39, 40, 48) mod=BOLD | 60-99 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE
 4: 0-99 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE

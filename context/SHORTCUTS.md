@@ -334,7 +334,19 @@ complete active thought is transformed regardless of text selection. The action
 has contextual Help and a Commands entry, with no permanent footer control.
 Versioned aliases replace or disable these defaults using the ordinary schema.
 
-## Terminal-safe macOS submission
+## Terminal-safe macOS action aliases
+
+Exact logical `Control+Z` undoes the active owner. `Control+Shift+Z` and
+`Control+Y` redo it. These action-specific factory aliases apply in every active
+context, including blocking owners which absorb unavailable history. Primary+Z,
+Primary+Shift+Z, and Primary+Y remain compatibility aliases, and Board retains
+its configurable `u` alias. Compact macOS presentation prefers Control+Z and
+Control+Shift+Z. Full Help retains every effective compatibility alias.
+
+An uppercase `Z` received with Control but without a distinct Shift bit is the
+compatibility spelling for Redo. Press and repeat execute identically; release
+does not execute. Mixed command modifiers do not match. Raw Control remains
+separate from Primary and does not activate unrelated Primary actions.
 
 Exact logical `Control+Enter` submits and removes after accepted durable delivery;
 `Control+Shift+Enter` submits and keeps. These action-specific factory aliases
@@ -353,6 +365,8 @@ A supplied context/action list replaces the Control, Primary, and character
 aliases together; an empty list disables them and an omitted pair inherits the
 new defaults. Legacy translation retains the action-specific factory aliases.
 Logical event identity is the contract, regardless of a physical key label or
-upstream remapping. CSI-u `ESC [ 13 ; 5 u` and `ESC [ 13 ; 6 u` represent these
-Control events. Ghostty's installed macOS defaults consume Super+Enter for
-fullscreen and Super+Shift+Enter for split zoom before Proqi receives them.
+upstream remapping. CSI-u `ESC [ 122 ; 5 u`, `ESC [ 122 ; 6 u`, and
+`ESC [ 121 ; 5 u` represent the lowercase Control history events. CSI-u
+`ESC [ 13 ; 5 u` and `ESC [ 13 ; 6 u` represent the Control submission events.
+Ghostty's installed macOS defaults consume Super+Enter for fullscreen and
+Super+Shift+Enter for split zoom before Proqi receives them.

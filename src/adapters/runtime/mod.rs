@@ -26,7 +26,7 @@ use crate::{
     ports::{
         runtime::{
             InstanceInfo, Lease, RuntimeCoordinator, RuntimeError, RuntimeScan,
-            UpdateInstanceContext,
+            UpdateInstanceContext, UpdateReplacementContext,
         },
         store::STORAGE_PROTOCOL_VERSION,
     },
@@ -89,10 +89,12 @@ impl FileRuntimeCoordinator {
         mut self,
         installation_identity: crate::domain::InstallationIdentity,
         protocol: u32,
+        replacement: Option<UpdateReplacementContext>,
     ) -> Self {
         self.update = Some(UpdateInstanceContext {
             installation_identity,
             protocol,
+            replacement: replacement.map(Box::new),
         });
         self
     }

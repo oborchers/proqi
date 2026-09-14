@@ -5,7 +5,7 @@ Status: v0.1.0 product contract
 Product name: Proqi
 
 Command: `proqi`
-Last updated: 2026-09-01
+Last updated: 2026-09-12
 
 ## Vision
 
@@ -910,8 +910,8 @@ bindings are:
 | Move or extend by five thoughts | `Page Up` / `Page Down`; add `Shift` to extend | Scroll, then click or Shift-click the target thought |
 | Submit | `Primary+Enter` or `s`, when supported, then direction when needed | Click verified Submit control |
 | Submit and keep | `Primary+Shift+Enter` or `Shift+S`, when supported, then direction when needed | Click verified Submit & keep control |
-| Undo board action | `Primary+Z` or `u` | Click undo control when visible |
-| Redo board action | `Primary+Shift+Z` or `Primary+Y` | Command palette |
+| Undo the active owner | macOS `Ctrl+Z`; `Primary+Z`, or `u` on Board | Click undo control when available |
+| Redo the active owner | macOS `Ctrl+Shift+Z` or `Ctrl+Y`; `Primary+Shift+Z` or `Primary+Y` | Click redo control when available |
 | Move thought | macOS `Option+Shift+↑` / `↓`; `Primary+Shift+↑` / `↓`, or `Primary+K` / `Primary+J` | Drag thought handle |
 | Expand or collapse | `c` | Click overflow indicator |
 | Search | `/` | Click search control |
@@ -974,6 +974,8 @@ Initial editing shortcuts include:
 | Move to logical line start or end | macOS `Ctrl+←` / `→`; elsewhere `Alt+←` / `→` | Named `Home` / `End` remain aliases |
 | Delete the current logical line | `Primary+U` | Command palette |
 | Delete the containing sentence | `Primary+Shift+U` | Command palette or configured binding |
+| Undo | macOS `Ctrl+Z`; `Primary+Z` remains an alias | Board `u`, Commands, or pointer control |
+| Redo | macOS `Ctrl+Shift+Z` or `Ctrl+Y`; Primary aliases remain | Commands or pointer control |
 | Submit active thought | macOS `Ctrl+Enter`; `Primary+Enter` remains an alias | Command palette |
 | Submit active thought and keep | macOS `Ctrl+Shift+Enter`; `Primary+Shift+Enter` remains an alias | Command palette |
 
@@ -1022,7 +1024,10 @@ No event before the deadline is reported as no event received; Proqi cannot
 identify whether the OS, Karabiner, Ghostty, Herdr or another layer consumed it.
 No arbitrary terminal response, paste, session content or private topology is
 included. Terminal ownership is restored on every exit path.
-Distinctly reported Shift remains meaningful. A shifted reserved character
+Distinctly reported Shift remains meaningful. On macOS, exact logical
+`Control+Z`, `Control+Shift+Z`, and `Control+Y` are action-specific terminal-safe
+history aliases in every active context. They do not make raw Control a second
+Primary modifier. A shifted reserved character
 chord never silently becomes the unshifted copy, cut, paste, select-all,
 duplicate, or quit command. `Primary+Y` remains the unshifted alternate redo
 chord. `Primary+Shift+V` is the explicit `Paste and clean up` action. An uppercase
@@ -1288,11 +1293,11 @@ offers an explicit `Check for updates` action. JSON commands, the Proqi skill,
 and noninteractive commands never check unless the user explicitly runs
 `proqi update check --json`.
 
-### Homebrew update and restart
+### Verified installation update and restart
 
-The supported automatic action is available only for a verified installation
-from the `oborchers/tap/proqi` Homebrew formula on macOS or Linux. The prompt
-offers:
+The supported automatic action is available for a verified installation from
+the `oborchers/tap/proqi` Homebrew formula or the release-attached standalone
+installer on macOS or Linux. The prompt offers:
 
 - `Update and restart all sessions`.
 - `Not now`.
@@ -1303,7 +1308,7 @@ keyboard and mouse operation. Before installation, one elected coordinator
 asks every live Proqi process from the same installation and compatibility
 domain to flush durable work and acknowledge readiness. A save failure,
 negative acknowledgement, verified live timeout, or lost coordinator cancels
-the operation before Homebrew runs and returns every participant to ordinary
+the operation before the installation owner runs and returns every participant to ordinary
 use.
 
 After all participants are ready, Proqi runs exactly one direct process with no
@@ -1313,14 +1318,43 @@ shell interpolation:
 brew upgrade --formula oborchers/tap/proqi
 ```
 
-If Homebrew fails, every old process remains usable and no restart is attempted.
-After success, the coordinator rescans active instances. Each macOS or Linux
-participant completes durable flushing, terminal restoration, lease release,
-and resource cleanup, then uses Unix process replacement to resume the same
-session in the existing pane. A failed replacement never rolls back successful
-peers. It is reported truthfully, leaves that session resumable, and offers a
-direct retry. Proqi never claims that all sessions restarted while an old
-process remains.
+For standalone installations, Proqi downloads the exact release-attached shell
+installer and its checksum over bounded HTTPS, verifies the installer before
+invoking it, and passes the exact target version and the already verified
+user-owned installation directory. That installer derives OS, CPU, and libc
+from runtime evidence, verifies the selected archive checksum, rejects unsafe
+archive members, and atomically replaces the executable without `sudo` or a
+package manager. If either installation method fails, every old process remains
+usable and no restart is attempted.
+
+Before its first registry scan, the coordinator closes schema-startup admission.
+A process already entering the schema makes the update stop before installation.
+A later startup receives an explicit, content-free convergence error before it
+can take a schema lease. Preparation before installation is reversible and is
+released while the verified installer runs, but startup admission remains
+closed. After success, the coordinator gives the post-install phase a fresh
+bounded deadline, rescans, and prepares the complete current cohort. A live
+owner that cannot publish owner control retains its startup admission for its
+lifetime. It stays usable with a warning, but blocks automatic installation
+because no coordinator could safely prepare or attribute it.
+Preparation also rejects a live, draining, queued, or retryable Screenshot
+Inbox. The user can finish or retry that capture, disable the inbox, and then
+retry the update without losing accepted screenshot work.
+
+The coordinator then asks every exact prepared participant to
+enter irreversible schema quiescence. A quiescence acknowledgement identifies
+the stable session and old process and proves that its shared schema lease was
+released. Once acknowledged, that old process admits no ordinary mutation and
+can only replace itself with the verified target or exit while leaving the exact
+SessionId resumable. Peers replace first and the initiating process replaces
+last. Each replacement completes terminal restoration, session-lease release,
+and bounded resource cleanup before Unix process replacement resumes that exact
+session in the inherited pane and state root. A failed replacement never rolls
+back successful peers and never makes an old quiesced process writable again.
+Replacement readiness additionally requires the retained operating-system
+process, matching update attempt and prior process proof, and a live verified
+owner-control endpoint. A manual exact-session resume in another pane and stale
+runtime metadata remain explicit incomplete replacements.
 
 Existing shared schema leases remain the compatibility barrier. A new process
 does not migrate while an old process still holds a conflicting lease. It waits
@@ -1348,35 +1382,30 @@ such a dismissal, so a crash before dismissal shows it again. Missing, corrupt,
 ambiguous, failed, cancelled, partial, externally installed, and
 version-mismatched state stays quiet.
 
-If any peer replacement is missing or failed, the initiating board is released
-and remains usable. Proqi retains `restart_needed`, creates no automatic
-highlight announcement, reports the incomplete session count, and does not
-replace the initiating process. Complete convergence clears `restart_needed`
-only after the exact initiating replacement has restored its board and
-published owner control. The automatic highlights remain hidden until that
-atomic completion succeeds. A control or cache finalization failure stays
-quiet and is retained as a stable, content-free diagnostic code.
+If any peer replacement is missing or failed, Proqi retains `restart_needed`,
+creates no automatic highlight announcement, and reports the incomplete exact
+participants. A quiesced initiating owner still replaces itself without an
+automatic announcement because it may not resume ordinary writes. Complete
+convergence clears `restart_needed` only after the exact initiating replacement
+has restored its board and published owner control. The automatic highlights
+remain hidden until that atomic completion succeeds. A control or cache
+finalization failure stays quiet and is retained as a stable, content-free
+diagnostic code.
 
 The command palette always offers `What's new`. It reopens the installed
 version's packaged highlights and never changes automatic acknowledgement.
 
-### Archive, Debian, Cargo, and unknown installations
-
-Standalone archive users receive the verified release URL and external
-replacement instructions. Proqi does not overwrite a standalone executable and
-does not promise same-pane restart for archive installations. Durable sessions
-resume on the next normal start after the user replaces the binary.
+### Debian, Cargo, and unknown installations
 
 Debian package and Cargo installations never invoke their package manager from
 Proqi and do not receive an implicit package-manager update. Debian users
-download and verify the newest `proqi_amd64.deb`, then install that local file
-again. Cargo users rerun the documented Cargo installation command. Source and
-other unknown installations receive accurate non-destructive guidance or no
-action.
+download and verify the `proqi_amd64.deb` or `proqi_arm64.deb` asset for their
+runtime CPU, then install that local file again. Cargo users rerun the
+documented Cargo installation command. Source and other unknown installations
+receive accurate non-destructive guidance or no action.
 
 No installer action is automatic. Update installation always requires an
-explicit user choice. A future standalone updater may implement a separately
-reviewed replacement boundary, but it is outside `v0.1.0`.
+explicit user choice.
 
 ## Responsive terminal layout
 
@@ -1533,11 +1562,21 @@ reverse video sparingly.
 
 ## Undo and recovery
 
-There are two explicit undo contexts:
+Undo follows the active owner:
 
 - Editor undo restores coalesced text edits in the active thought.
 - Board undo restores structural operations such as create, cut, delete,
   duplicate, reorder, split, extract, and merge.
+- Each editable query or rename field owns transient text history for its
+  lifetime and absorbs unavailable history without reaching hidden content.
+- Browser undo restores installation-local Rename, Trash, and Restore
+  operations through its separate durable cross-session history.
+- Compose promotes its first content-producing intention into one durable
+  Board Create unit whose undo returns to empty Compose.
+
+On macOS, Help and controls prefer the terminal-safe `Ctrl+Z` and
+`Ctrl+Shift+Z` history spellings while retaining the conventional Cmd aliases.
+Linux and Windows retain their existing Primary-as-Control defaults.
 
 Undo history is persisted with the session. Restarting the process does not
 turn a reversible deletion into permanent data loss.
@@ -1647,23 +1686,25 @@ versioned. Database integrity, forward migration, backup, newer-schema refusal,
 typed identifiers, and mixed-version safety are mandatory regardless of the
 pre-`1.0` compatibility policy.
 
-The first public version is `v0.1.0`. Release targets are:
+Supported release targets are:
 
 - Apple silicon macOS.
 - Intel macOS.
 - x86-64 Linux using GNU libc 2.35 or newer.
+- ARM64 Linux using GNU libc 2.35 or newer.
+- x86-64 and ARM64 Linux using a static musl fallback.
 
-Distribution is limited to immutable GitHub Release archives and the
-`oborchers/homebrew-tap` personal tap. The tap provides one prebuilt Homebrew
-formula, installed with:
+Binary distribution is limited to immutable GitHub Release assets, a crates.io
+binary package, and the `oborchers/homebrew-tap` personal tap. The tap provides
+one prebuilt Homebrew formula, installed with:
 
 ```text
 brew install oborchers/tap/proqi
 ```
 
-There is no crates.io, npm, PyPI, Docker, Homebrew Core, shell installer, or
-binary cask in `v0.1.0`. The prepared next release adds a crates.io binary
-package and one x86-64 Debian package without adding an APT repository. The
+There is no npm, PyPI, Docker, Homebrew Core, binary cask, APT repository, RPM,
+AUR, or COPR distribution. Releases include a crates.io binary package, a
+checksum-verifying shell installer, and x86-64 plus ARM64 Debian packages. The
 crate requires Rust 1.88 or newer and does not establish a supported Rust
 library API. The Debian asset is installed as a verified local file and
 preserves user state on removal. Release archives contain the
@@ -1752,7 +1793,6 @@ The current direction is grounded in these public primary sources:
 - Bazel, JavaScript package wrappers, or multi-language launchers.
 - Telemetry, update-check analytics, installation identifiers, or usage events.
 - Automatic update installation without explicit confirmation.
-- Standalone executable self-replacement in `v0.1.0`.
 - Public repository changes, tap creation, credentials, or tags without
   Oliver's explicit approval. Creating an allowed stable tag explicitly
   approves the corresponding release publication.
@@ -1807,11 +1847,12 @@ Specifically:
 - One installation-wide update request and one prompt serve 10 to 15
   simultaneous startups without transmitting user content, while a later
   startup checks again.
-- A confirmed Homebrew update either checkpoints every verified participant
-  before one installer runs or aborts before installation.
-- Successful Homebrew updates resume macOS and Linux sessions through ordinary
-  durable state and same-pane Unix process replacement, with partial failures
-  reported accurately.
-- Standalone archives provide external replacement guidance and next-start
-  resume without claiming automatic self-replacement.
+- A confirmed Homebrew or standalone update either checkpoints every verified
+  participant before one installer runs or aborts before installation.
+- Successful Homebrew and standalone updates resume macOS and Linux sessions
+  through ordinary durable state and same-pane Unix process replacement, with
+  partial failures reported accurately.
+- Standalone updates verify the release-attached installer and selected archive
+  before replacement, preserve the prior executable on failure, and restart
+  sessions only after the exact installed version is independently confirmed.
 - The interface remains visually quiet after hours of continuous use.

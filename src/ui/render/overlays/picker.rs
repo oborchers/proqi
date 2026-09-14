@@ -13,6 +13,7 @@ pub(in crate::ui::render) struct PickerView<'a> {
     pub(in crate::ui::render) prompt: char,
     pub(in crate::ui::render) query: &'a str,
     pub(in crate::ui::render) cursor: usize,
+    pub(in crate::ui::render) selection: Option<crate::ui::app::query::QuerySelection>,
     pub(in crate::ui::render) entries: &'a [PickerRow<'a>],
     pub(in crate::ui::render) selected: usize,
 }

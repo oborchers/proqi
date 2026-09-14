@@ -338,6 +338,12 @@ pub fn record_update_execution(execution: &crate::application::UpdateExecution) 
         accepted = execution.restart_accepted
     );
     tracing::info!(
+        event = "update_quiescence",
+        requested = execution.quiescence_requests,
+        confirmed = execution.quiesced_participants,
+        failed = execution.quiescence_failed.len()
+    );
+    tracing::info!(
         event = "update_replacements",
         ready = execution.replacement_ready,
         missing = execution.replacement_missing
@@ -358,6 +364,8 @@ fn update_execution_complete(execution: &crate::application::UpdateExecution) ->
         execution.status,
         crate::application::UpdateExecutionStatus::Installed { .. }
     ) && execution.restart_failed.is_empty()
+        && execution.quiescence_failed.is_empty()
+        && execution.quiescence_requests == execution.quiesced_participants
         && execution.replacement_missing == 0
         && execution.restart_requests == execution.restart_accepted
         && execution.convergence_state_recorded
@@ -383,6 +391,11 @@ fn update_execution_failure(
     match &execution.status {
         crate::application::UpdateExecutionStatus::Aborted { code, .. } => {
             Some(("preparation", safe_abort_code(code)))
+        }
+        crate::application::UpdateExecutionStatus::Installed { .. }
+            if !execution.quiescence_failed.is_empty() =>
+        {
+            Some(("quiescence", "incomplete_quiescence"))
         }
         crate::application::UpdateExecutionStatus::Installed { .. }
             if !execution.restart_failed.is_empty() || execution.replacement_missing > 0 =>
@@ -433,10 +446,14 @@ mod tests {
             selected_participants: 2,
             prepared_participants: 2,
             restart_requests: 2,
+            quiescence_requests: 2,
+            quiesced_participants: 2,
+            quiescence_failed: Vec::new(),
             restart_accepted: 2,
             replacement_ready: 1,
             replacement_missing: 0,
             restart_failed: Vec::new(),
+            resumable_sessions: Vec::new(),
             convergence_state_recorded: true,
             status: UpdateExecutionStatus::Installed {
                 version: StableVersion::parse("1.2.0").expect("version"),

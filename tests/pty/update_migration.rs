@@ -22,25 +22,30 @@ use proqi::{
         runtime::{InstanceInfo, RuntimeCoordinator as _},
         store::{STORAGE_PROTOCOL_VERSION, SUPPORTED_SCHEMA_VERSION},
         update::{
-            HomebrewInstaller, InstallDetector as _, UPDATE_CONTROL_PROTOCOL_VERSION, UpdateError,
-            UpdateParticipantGateway, UpdatePrepareReply, UpdatePrepareRequest, UpdateRestartReply,
-            UpdateRestartRequest, UpdateStateStore as _,
+            InstallDetector as _, UPDATE_CONTROL_PROTOCOL_VERSION, UpdateError, UpdateInstaller,
+            UpdateParticipantGateway, UpdatePrepareReply, UpdatePrepareRequest, UpdateQuiesceReply,
+            UpdateQuiesceRequest, UpdateRestartReply, UpdateRestartRequest, UpdateStateStore as _,
         },
     },
 };
 use rusqlite::Connection;
 
+#[path = "update_migration/automatic.rs"]
+mod automatic;
 #[path = "update_migration/cohort.rs"]
 mod cohort;
+#[path = "update_migration/old_fixture.rs"]
+mod old_fixture;
 
 use cohort::{OWNER_TIMEOUT, Owners, active_instances, control_ready};
 
 const INCIDENT_COHORT: usize = 21;
 const STRESS_COHORT: usize = 26;
 const FORWARDED_CONTENT: &str = "forwarded after follower convergence Grüße 界";
+
 struct FakeInstaller;
 
-impl HomebrewInstaller for FakeInstaller {
+impl UpdateInstaller for FakeInstaller {
     fn upgrade(&mut self, expected: &StableVersion) -> Result<StableVersion, UpdateError> {
         Ok(expected.clone())
     }
@@ -66,6 +71,14 @@ impl UpdateParticipantGateway for RejectPeer {
         operation_id: RequestId,
     ) -> Result<(), UpdateError> {
         self.inner.release(participant, operation_id)
+    }
+
+    fn quiesce(
+        &mut self,
+        participant: &InstanceInfo,
+        request: &UpdateQuiesceRequest,
+    ) -> Result<UpdateQuiesceReply, UpdateError> {
+        self.inner.quiesce(participant, request)
     }
 
     fn restart(
@@ -138,17 +151,19 @@ fn assert_schema_changing_cohort(count: usize) {
 }
 
 #[test]
-fn rejected_peer_restart_releases_and_preserves_the_real_initiator() {
+fn rejected_peer_restart_still_replaces_the_quiesced_exact_initiator() {
     let state = isolated_state("proqi-partial-restart");
-    let binary = env!("CARGO_BIN_EXE_proqi");
-    let sessions = create_sessions(binary, state.path(), 2);
-    let mut owners = Owners::spawn(binary, state.path(), &sessions);
+    let original = env!("CARGO_BIN_EXE_proqi");
+    let homebrew_binary = super::update_control::fake_homebrew_binary(state.path());
+    let owner_binary = homebrew_binary.to_str().expect("UTF-8 fixture path");
+    let sessions = create_sessions(original, state.path(), 2);
+    let mut owners = Owners::spawn(owner_binary, state.path(), &sessions);
     owners.wait_ready(state.path());
     rewrite_versions(state.path(), "0.5.0");
     let participants = active_instances(state.path());
     let initiating = participants[0].clone();
     let peer = participants[1].clone();
-    let installation = SystemInstallDetector::for_executable(binary.into())
+    let installation = SystemInstallDetector::for_executable(homebrew_binary)
         .detect()
         .expect("installation identity");
     let registry = registry(state.path(), installation.identity);
@@ -162,22 +177,27 @@ fn rejected_peer_restart_releases_and_preserves_the_real_initiator() {
     let deadline = Timestamp::from_millis(SystemClock.now().as_millis().saturating_add(10_000));
     let mut ids = SystemIdGenerator;
 
-    let result =
-        UpdateRestartCoordinator::new(&update_state, &registry, &mut gateway, &mut installer)
-            .execute(
-                ids.request_id(),
-                initiating.instance_id,
-                installation.identity,
-                &target,
-                deadline,
-                &(),
-            )
-            .expect("partial restart result");
+    let result = UpdateRestartCoordinator::new(
+        &update_state,
+        &registry,
+        &mut gateway,
+        &mut installer,
+        &SystemClock,
+    )
+    .execute(
+        ids.request_id(),
+        initiating.instance_id,
+        installation.identity,
+        &target,
+        deadline,
+        &(),
+    )
+    .expect("partial restart result");
 
-    assert_eq!(result.restart_requests, 1);
-    assert_eq!(result.restart_accepted, 0);
+    assert_eq!(result.restart_requests, 2);
+    assert_eq!(result.restart_accepted, 1);
     assert!(result.restart_failed.contains(&peer.instance_id));
-    assert!(result.restart_failed.contains(&initiating.instance_id));
+    assert!(!result.restart_failed.contains(&initiating.instance_id));
     assert!(
         update_state
             .load(installation.identity)
@@ -191,18 +211,42 @@ fn rejected_peer_restart_releases_and_preserves_the_real_initiator() {
             .release_highlights
             .is_none()
     );
-    let still_active = active_instances(state.path());
-    assert!(still_active.iter().any(|instance| {
-        instance.instance_id == initiating.instance_id && control_ready(instance)
-    }));
+    wait_for_initiating_replacement(state.path(), &mut owners, &initiating, &target);
     let usable = json_input_command(
-        binary,
+        original,
         state.path(),
         &["thoughts", "add", &initiating.session_id.to_string()],
-        "initiator stayed usable after incomplete convergence",
+        "exact initiator resumed after incomplete convergence",
     );
     assert_eq!(usable["data"]["receipt"]["idempotent_replay"], false);
     owners.stop();
+}
+
+fn wait_for_initiating_replacement(
+    state: &Path,
+    owners: &mut Owners,
+    initiating: &InstanceInfo,
+    target: &StableVersion,
+) {
+    let replacement_deadline = Instant::now() + OWNER_TIMEOUT;
+    loop {
+        let active = active_instances(state);
+        let replacement_ready = active.iter().any(|instance| {
+            instance.session_id == initiating.session_id
+                && instance.instance_id != initiating.instance_id
+                && instance.version == target.to_string()
+                && control_ready(instance)
+        });
+        if replacement_ready {
+            break;
+        }
+        owners.assert_running();
+        assert!(
+            Instant::now() < replacement_deadline,
+            "exact initiating session did not become ready under a replacement instance: {active:#?}"
+        );
+        thread::sleep(Duration::from_millis(20));
+    }
 }
 
 fn create_sessions(binary: &str, state: &Path, count: usize) -> Vec<String> {
@@ -236,7 +280,11 @@ fn downgrade_to_schema_eleven(state: &Path) {
     Connection::open(state.join("data/proqi.sqlite3"))
         .expect("database")
         .execute_batch(
-            "ALTER TABLE sessions DROP COLUMN attachment_image_high;
+            "DROP TABLE browser_history_receipts;
+             DROP TABLE browser_operation_receipts;
+             DROP TABLE browser_operations;
+             DROP TABLE browser_history_state;
+             ALTER TABLE sessions DROP COLUMN attachment_image_high;
              ALTER TABLE sessions DROP COLUMN attachment_file_high;
              DELETE FROM migration_history WHERE version >= 12;
              UPDATE schema_meta SET schema_version = 11, storage_protocol = 10;",
@@ -257,7 +305,7 @@ fn registry(
         env!("CARGO_PKG_VERSION"),
     )
     .expect("registry")
-    .with_update_context(installation, UPDATE_CONTROL_PROTOCOL_VERSION)
+    .with_update_context(installation, UPDATE_CONTROL_PROTOCOL_VERSION, None)
 }
 
 fn rewrite_versions(state: &Path, version: &str) {

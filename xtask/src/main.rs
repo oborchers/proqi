@@ -21,6 +21,7 @@ mod dev_gates;
 mod gate_lock;
 mod herdr_compatibility;
 mod homebrew;
+mod installer;
 mod instructions;
 mod linux_ci;
 mod linux_compat;
@@ -28,6 +29,7 @@ mod package;
 mod policy;
 mod public_assets;
 mod release;
+mod release_attestation;
 mod release_candidate;
 mod release_highlights;
 mod release_policy;
@@ -83,29 +85,19 @@ fn execute() -> Result<(), String> {
             let image = required_argument("ci-linux-amd64", 2, "digest-pinned image")?;
             linux_ci::run_prebuilt(&root, &image, Some("linux/amd64"), "parity")
         }
-        // Real PTY fixtures own process-wide terminal resources. Keep this
-        // dedicated runner serial while each test still exercises concurrency.
-        "test-pty" => run(
-            &root,
-            "cargo",
-            [
-                "test",
-                "--workspace",
-                "--all-features",
-                "--test",
-                "pty",
-                "--",
-                "--test-threads=1",
-            ],
-        ),
+        "test-pty" => test_pty(&root),
         "coverage" => coverage(&root),
         "audit" => audit(&root),
         "package" => {
-            let notices = package_notices_argument()?;
-            package::run(&root, notices.as_deref())
+            let (notices, target) = package_arguments()?;
+            package::run(&root, notices.as_deref(), target.as_deref())
         }
         "crate-package" => crate_package::run(&root),
         "crate-evidence" => crate_package::evidence(&root),
+        "installer-package" => {
+            let output = required_path_argument("installer-package", 2, "output directory")?;
+            installer::package(&root, &output)
+        }
         "ci-change-class" => required_argument("ci-change-class", 2, "base SHA").and_then(|base| {
             let head = required_argument("ci-change-class", 3, "head SHA")?;
             ci_changes::print(&root, &base, &head)
@@ -118,12 +110,14 @@ fn execute() -> Result<(), String> {
         "debian-package" => {
             let archive = required_path_argument("debian-package", 2, "Linux archive")?;
             let output = required_path_argument("debian-package", 3, "output directory")?;
-            debian::package(&root, &archive, &output)
+            let target = required_argument("debian-package", 4, "GNU/Linux target")?;
+            debian::package(&root, &archive, &output, &target)
         }
         "verify-debian" => {
             let archive = required_path_argument("verify-debian", 2, "Linux archive")?;
             let package = required_path_argument("verify-debian", 3, "Debian package")?;
-            debian_container::verify(&root, &archive, &package)
+            let target = required_argument("verify-debian", 4, "GNU/Linux target")?;
+            debian_container::verify_target(&root, &archive, &package, &target)
         }
         "verify-debian-image" => verify_debian_image_command(&root),
         "msrv" => msrv(&root),
@@ -141,7 +135,8 @@ fn verify_debian_image_command(root: &Path) -> Result<(), String> {
     let archive = required_path_argument("verify-debian-image", 3, "Linux archive")?;
     let package = required_path_argument("verify-debian-image", 4, "Debian package")?;
     let evidence = required_path_argument("verify-debian-image", 5, "evidence directory")?;
-    debian_container::verify_one(root, &profile, &archive, &package, &evidence)
+    let target = required_argument("verify-debian-image", 6, "GNU/Linux target")?;
+    debian_container::verify_one(root, &profile, &archive, &package, &evidence, &target)
 }
 
 fn release_command(root: &Path, command: &str) -> Option<Result<(), String>> {
@@ -178,7 +173,32 @@ fn release_command(root: &Path, command: &str) -> Option<Result<(), String>> {
         "release-checksum" => required_path_argument("release-checksum", 2, "archive path")
             .and_then(|path| release::print_checksum(root, &path)),
         "verify-linux-archive" => required_path_argument("verify-linux-archive", 2, "archive path")
-            .and_then(|path| linux_compat::verify_archive(root, &path)),
+            .and_then(|path| required_argument("verify-linux-archive", 3, "release target").and_then(|triple| release_targets::find(&triple).and_then(|target| linux_compat::verify_archive(root, &path, target)))),
+        "release-targets" => required_argument("release-targets", 2, "operation")
+            .and_then(|operation| release_targets::print(&operation)),
+        "release-tag-sbom" => required_path_argument(
+            "release-tag-sbom",
+            2,
+            "candidate directory",
+        )
+        .and_then(|directory| {
+            let output = required_path_argument("release-tag-sbom", 3, "output path")?;
+            let tag = required_argument("release-tag-sbom", 4, "release tag")?;
+            let created = required_argument("release-tag-sbom", 5, "SPDX timestamp")?;
+            release_attestation::write_tag_sbom(root, &directory, &output, &tag, &created)
+        }),
+        "release-files" => {
+            for name in release_candidate::release_file_names() {
+                println!("{name}");
+            }
+            Ok(())
+        }
+        "verify-debian-evidence-set" => required_path_argument(
+            "verify-debian-evidence-set",
+            2,
+            "candidate directory",
+        )
+        .and_then(|directory| release_targets::validate_debian_evidence(root, &directory)),
         "homebrew-formula" => required_path_argument("homebrew-formula", 2, "artifacts directory")
             .and_then(|artifacts| {
                 let output = required_path_argument("homebrew-formula", 3, "output path")?;
@@ -189,13 +209,41 @@ fn release_command(root: &Path, command: &str) -> Option<Result<(), String>> {
     Some(result)
 }
 
-fn package_notices_argument() -> Result<Option<PathBuf>, String> {
+// Real PTY fixtures own process-wide terminal resources. Keep this dedicated
+// runner serial while each test still exercises concurrency.
+fn test_pty(root: &Path) -> Result<(), String> {
+    run(
+        root,
+        "cargo",
+        [
+            "test",
+            "--workspace",
+            "--all-features",
+            "--test",
+            "pty",
+            "--",
+            "--test-threads=1",
+        ],
+    )
+}
+
+fn package_arguments() -> Result<(Option<PathBuf>, Option<String>), String> {
     let arguments = env::args().skip(2).collect::<Vec<_>>();
-    match arguments.as_slice() {
-        [] => Ok(None),
-        [flag, path] if flag == "--notices" => Ok(Some(PathBuf::from(path))),
-        _ => Err("package accepts only `--notices <path>`".to_owned()),
+    let mut notices = None;
+    let mut target = None;
+    let mut index = 0;
+    while index < arguments.len() {
+        let value = arguments
+            .get(index + 1)
+            .ok_or_else(|| format!("{} requires a value", arguments[index]))?;
+        match arguments[index].as_str() {
+            "--notices" if notices.is_none() => notices = Some(PathBuf::from(value)),
+            "--target" if target.is_none() => target = Some(value.to_owned()),
+            flag => return Err(format!("unsupported or repeated package option `{flag}`")),
+        }
+        index += 2;
     }
+    Ok((notices, target))
 }
 
 fn workspace_root() -> Result<PathBuf, String> {
@@ -225,14 +273,15 @@ fn print_help() {
          \n  cargo xtask test-pty\
          \n  cargo xtask coverage\
          \n  cargo xtask audit\
-         \n  cargo xtask package\
+         \n  cargo xtask package [--notices <path>] [--target <triple>]\
          \n  cargo xtask crate-package\
          \n  cargo xtask crate-evidence\
+         \n  cargo xtask installer-package <output-dir>\
          \n  cargo xtask ci-change-class <base-sha> <head-sha>\
          \n  cargo xtask herdr-compatibility <schema.json> [stderr-capture]\
-         \n  cargo xtask debian-package <linux-archive> <output-dir>\
-         \n  cargo xtask verify-debian <linux-archive> <deb>\
-         \n  cargo xtask verify-debian-image <profile> <linux-archive> <deb> <evidence-dir>\
+         \n  cargo xtask debian-package <linux-archive> <output-dir> <gnu-target>\
+         \n  cargo xtask verify-debian <linux-archive> <deb> <gnu-target>\
+         \n  cargo xtask verify-debian-image <profile> <linux-archive> <deb> <evidence-dir> <gnu-target>\
          \n  cargo xtask release-plan [vX.Y.Z]\
          \n  cargo xtask release-ready [source-sha]\
          \n  cargo xtask release-promotion-plan <vX.Y.Z>\
@@ -241,7 +290,11 @@ fn print_help() {
          \n  cargo xtask release-assets plan <candidate-dir> <existing-dir> <release-state.json>\
          \n  cargo xtask release-rehearsal\
          \n  cargo xtask release-checksum <archive>\
-         \n  cargo xtask verify-linux-archive <archive>\
+         \n  cargo xtask verify-linux-archive <archive> <target>\
+         \n  cargo xtask release-targets <github-matrix|triples|target-files|primary-files|docs>\
+         \n  cargo xtask release-tag-sbom <candidate-dir> <output> <vX.Y.Z> <created>\
+         \n  cargo xtask release-files\
+         \n  cargo xtask verify-debian-evidence-set <candidate-dir>\
          \n  cargo xtask homebrew-formula <artifacts-dir> <output>\
          \n  cargo xtask msrv\
          \n  cargo xtask msrv-full"

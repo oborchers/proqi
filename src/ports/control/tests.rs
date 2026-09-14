@@ -4,7 +4,9 @@ use crate::{
         ContentAnnotation, ContentAnnotationKind, InstallationIdentity, StableVersion, Timestamp,
     },
     ports::environment::IdGenerator,
-    ports::update::{UpdatePrepareReply, UpdatePrepareRequest},
+    ports::update::{
+        UpdatePrepareReply, UpdatePrepareRequest, UpdateQuiesceReply, UpdateQuiesceRequest,
+    },
 };
 
 use super::{
@@ -116,6 +118,41 @@ fn update_prepare_request_and_receipt_round_trip_over_json() {
         result: ControlResult::Update(ControlUpdateReceipt::Prepared(UpdatePrepareReply::Ready {
             instance_id: ids.instance_id(),
             session_id: request.session_id,
+        })),
+    };
+    let encoded = serde_json::to_vec(&response).expect("serialize response");
+    assert_eq!(
+        serde_json::from_slice::<ControlResponse>(&encoded).expect("deserialize response"),
+        response
+    );
+}
+
+#[test]
+fn irreversible_update_quiescence_round_trips_with_exact_session_identity() {
+    let mut ids = FakeIdGenerator::new(1_725_200_000_000);
+    let session_id = ids.session_id();
+    let request = ControlRequest {
+        protocol: CONTROL_PROTOCOL_VERSION,
+        request_id: ids.request_id(),
+        session_id,
+        mutation: ControlMutation::UpdateQuiesce {
+            request: UpdateQuiesceRequest {
+                operation_id: ids.request_id(),
+                installed_version: StableVersion::parse("1.2.3").expect("version"),
+            },
+        },
+    };
+    let encoded = serde_json::to_vec(&request).expect("serialize request");
+    assert_eq!(
+        serde_json::from_slice::<ControlRequest>(&encoded).expect("deserialize request"),
+        request
+    );
+    let response = ControlResponse {
+        protocol: request.protocol,
+        request_id: request.request_id,
+        result: ControlResult::Update(ControlUpdateReceipt::Quiesced(UpdateQuiesceReply {
+            instance_id: ids.instance_id(),
+            session_id,
         })),
     };
     let encoded = serde_json::to_vec(&response).expect("serialize response");

@@ -87,7 +87,48 @@ agents, or multiplexers.
 
 ## Install
 
-Homebrew is recommended:
+Install the latest supported release with one command. This downloads the
+release-attached installer and its checksum separately, verifies the installer,
+then lets that verified installer select and verify the exact native archive:
+
+```shell
+sh -c 'set -eu
+version=${1:-latest}
+case "$version" in
+  latest) release=latest/download ;;
+  v*)
+    numbers=${version#v}; case "$numbers" in *[!0-9.]*|.*|*.|*..*) printf "invalid Proqi version\n" >&2; exit 1 ;; esac
+    saved_ifs=$IFS; IFS=.; set -- $numbers; IFS=$saved_ifs; test "$#" = 3 || { printf "invalid Proqi version\n" >&2; exit 1; }
+    for component in "$@"; do case "$component" in ""|*[!0-9]*|0[0-9]*) printf "invalid Proqi version\n" >&2; exit 1 ;; esac; done
+    release="download/$version"
+    ;;
+  *) printf "invalid Proqi version\n" >&2; exit 1 ;;
+esac
+temporary=$(mktemp -d "${TMPDIR:-/tmp}/proqi-bootstrap.XXXXXX")
+trap '\''rm -rf "$temporary"'\'' EXIT HUP INT TERM
+base="https://github.com/oborchers/proqi/releases/$release"
+for file in proqi-installer.sh.sha256 proqi-installer.sh; do
+  case "$file" in *.sha256) maximum=512 ;; *) maximum=131072 ;; esac
+  curl --fail --silent --show-error --location --proto "=https" --proto-redir "=https" --tlsv1.2 --connect-timeout 10 --max-time 60 --max-redirs 3 --retry 2 --max-filesize "$maximum" --output "$temporary/$file" "$base/$file"
+done
+test "$(wc -l < "$temporary/proqi-installer.sh.sha256" | tr -d " ")" = 1
+record=$(cat "$temporary/proqi-installer.sh.sha256")
+set -f; set -- $record; set +f
+test "$#" = 2 && test "$2" = proqi-installer.sh && test "${#1}" = 64
+case "$1" in *[!0-9a-f]*) printf "invalid installer checksum\n" >&2; exit 1 ;; esac
+expected=$1
+if command -v sha256sum >/dev/null 2>&1; then output=$(sha256sum "$temporary/proqi-installer.sh"); elif command -v shasum >/dev/null 2>&1; then output=$(shasum -a 256 "$temporary/proqi-installer.sh"); else printf "sha256sum or shasum is required\n" >&2; exit 1; fi
+actual=${output%% *}; test "$actual" = "$expected" || { printf "installer checksum verification failed\n" >&2; exit 1; }
+sh "$temporary/proqi-installer.sh" --version "$version"' sh latest
+```
+
+Replace the final `latest` with an exact stable tag from the Releases page to
+require that version. The default destination is `$HOME/.local/bin`; set
+`PROQI_INSTALL_DIR` to another absolute directory below `$HOME`. The installer
+never uses `sudo` or modifies `PATH`. If the destination is not already on
+`PATH`, it prints the required addition.
+
+Homebrew remains supported:
 
 ```shell
 brew install oborchers/tap/proqi
@@ -106,9 +147,24 @@ Or use Rust 1.88+:
 cargo install proqi --locked
 ```
 
-The [latest release](https://github.com/oborchers/proqi/releases/latest) has
-checksummed macOS/Linux archives and an `amd64` Debian package. Proqi never runs
-`sudo`, package managers, or updates implicitly. Uninstalling preserves data.
+The [latest release](https://github.com/oborchers/proqi/releases/latest) has the
+following checked, attested artifacts:
+
+<!-- release-targets:start -->
+| OS | CPU | libc | Archive | Debian |
+|---|---|---|---|---|
+| macOS | ARM64 | system | `proqi-aarch64-apple-darwin.tar.gz` | `-` |
+| macOS | x86-64 | system | `proqi-x86_64-apple-darwin.tar.gz` | `-` |
+| Linux | x86-64 | glibc >= 2.35 | `proqi-x86_64-unknown-linux-gnu.tar.gz` | `proqi_amd64.deb` |
+| Linux | ARM64 | glibc >= 2.35 | `proqi-aarch64-unknown-linux-gnu.tar.gz` | `proqi_arm64.deb` |
+| Linux | x86-64 | musl/static fallback | `proqi-x86_64-unknown-linux-musl.tar.gz` | `-` |
+| Linux | ARM64 | musl/static fallback | `proqi-aarch64-unknown-linux-musl.tar.gz` | `-` |
+<!-- release-targets:end -->
+
+Linux selection uses runtime CPU and libc evidence, not distribution names.
+glibc 2.35 or newer receives the GNU build. musl systems and older glibc
+receive the statically linked musl fallback. Ambiguous environments stop with
+an explanation. Uninstalling preserves data.
 
 ## Start and resume
 
@@ -161,8 +217,8 @@ configuration.
 | macOS `Ctrl+Shift+↓` / `↑` or `Ctrl+Shift+J` / `K` | Extend the anchored range to the last / first live thought |
 | `Primary+D` / `Shift+D` | Duplicate thought or selection |
 | `Primary+Enter` / `s`; `Primary+Shift+Enter` / `Shift+S`; then arrows or `h` / `j` / `k` / `l` if needed | Submit and remove after acceptance; submit and keep |
-| `Primary+Z` / `u` | Undo a board operation |
-| `Primary+Shift+Z` / `Primary+Y` | **Redo a board operation** |
+| macOS `Ctrl+Z`; `Primary+Z` / `u` | Undo a board operation |
+| macOS `Ctrl+Shift+Z` / `Ctrl+Y`; `Primary+Shift+Z` / `Primary+Y` | **Redo a board operation** |
 | `Primary+Shift+V` / `Shift+P` | Paste and clean up spacing |
 | `f` | Clean up spacing in the focused thought |
 | `c`; `/`; `:`; `i`; `?` | Collapse; search; commands; Screenshot Inbox; help |
@@ -175,7 +231,7 @@ configuration.
 | `Esc` | Return to the board |
 | `Primary+A`; `Primary+U` | Select all; delete logical line |
 | `Primary+Shift+U` | Delete containing sentence |
-| `Primary+Z`; `Primary+Shift+Z` / `Primary+Y` | Undo; redo |
+| macOS `Ctrl+Z`; `Ctrl+Shift+Z` / `Ctrl+Y`; retained Primary aliases elsewhere | Undo; redo |
 | `Primary+C` / `X`; `Primary+V` | Native copy / safe cut; paste exactly |
 | `Primary+Shift+V` | Paste and clean up spacing |
 | `Ctrl+Shift+F` | Clean up spacing in the complete active thought |
@@ -214,8 +270,11 @@ uppercase R and D remain search text. List and direction defaults preserve
 symmetric arrow and Vim-style navigation.
 
 Primary chords and Board characters such as `y`, `x`, `u`, `s`, `Shift+S`, and `q`
-are ordinary aliases of the same configurable actions. A host can consume a
-chord before Proqi receives it. A host-performed bracketed paste stays exact.
+are ordinary aliases of the same configurable actions. macOS additionally uses
+raw `Ctrl+Z`, `Ctrl+Shift+Z`, and `Ctrl+Y` as terminal-safe history aliases. Raw
+Control remains distinct from Primary for every unrelated action. A host can
+consume a chord before Proqi receives it. A host-performed bracketed paste stays
+exact.
 
 ### Ghostty shortcut delivery
 
@@ -265,7 +324,8 @@ Capture reports the logical key, exact modifiers, phase, state, selected context
 and configured action. Escape cancels. `--defaults` works even with invalid
 configuration. A timeout reports no key event received; Proqi cannot know which
 layer, if any, consumed the chord. It records no paste, session content or raw
-terminal responses. Use the Board fallback or Commands when delivery is blocked.
+terminal responses. On macOS, use the terminal-safe Control history aliases,
+the Board `u` fallback, or Commands when a Primary history chord is blocked.
 
 Other macOS defaults assign application behavior to `Cmd+Q`, `Cmd+A`, `Cmd+D`,
 `Cmd+J`, `Cmd+K`, Command plus vertical arrows, and clipboard or history
@@ -468,7 +528,8 @@ versioned `editor.extend_visual_row_start` and `editor.extend_visual_row_end` al
 
 ## Compatibility and contributing
 
-Proqi supports macOS and x86-64 GNU/Linux; only the latest `0.x` is supported.
+Proqi supports the macOS and Linux targets listed under Install; only the latest
+`0.x` is supported.
 It is an MIT-licensed binary. Contributors: [CONTRIBUTING.md](CONTRIBUTING.md),
 [PRODUCT.md](context/PRODUCT.md), [ARCHITECTURE.md](context/ARCHITECTURE.md).
 

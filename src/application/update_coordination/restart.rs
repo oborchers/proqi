@@ -1,6 +1,7 @@
 //! Peer-first update restart sequencing.
 
 use crate::{
+    application::{UpdateExecution, UpdateExecutionStatus},
     domain::{
         InstallationIdentity, InstanceId, ReleaseHighlightAnnouncement, RequestId, SessionId,
         StableVersion,
@@ -8,11 +9,13 @@ use crate::{
     ports::{
         runtime::InstanceInfo,
         update::{
-            UpdateParticipantGateway, UpdateReplacementExpectation, UpdateRestartRequest,
-            UpdateStateStore,
+            UpdateCancellation, UpdateParticipantGateway, UpdateReplacementExpectation,
+            UpdateRestartRequest, UpdateStateStore,
         },
     },
 };
+
+use super::UpdateRequest;
 
 pub(super) struct RestartProgress {
     pub(super) initiating: Option<InstanceInfo>,
@@ -27,10 +30,48 @@ pub(super) struct PendingHighlights {
     pub(super) announcement: Option<ReleaseHighlightAnnouncement>,
 }
 
+pub(super) fn installed_without_restart<G: UpdateParticipantGateway>(
+    gateway: &mut G,
+    participants: &[InstanceInfo],
+    operation_id: RequestId,
+    installed: StableVersion,
+    state_recorded: bool,
+) -> UpdateExecution {
+    super::preflight::release_all(gateway, participants, operation_id);
+    UpdateExecution {
+        operation_id,
+        selected_participants: participants.len(),
+        prepared_participants: participants.len(),
+        restart_requests: 0,
+        quiescence_requests: 0,
+        quiesced_participants: 0,
+        quiescence_failed: Vec::new(),
+        restart_accepted: 0,
+        replacement_ready: 0,
+        replacement_missing: 0,
+        restart_failed: participants
+            .iter()
+            .map(|participant| participant.instance_id)
+            .collect(),
+        resumable_sessions: participants
+            .iter()
+            .map(|participant| participant.session_id)
+            .collect(),
+        convergence_state_recorded: state_recorded,
+        status: UpdateExecutionStatus::Installed { version: installed },
+    }
+}
+
+pub(super) fn participant_needs_restart(
+    participant: Option<&InstanceInfo>,
+    installed: &StableVersion,
+) -> bool {
+    participant.is_some_and(|participant| participant.version != installed.to_string())
+}
+
 pub(super) fn restart_peers<G: UpdateParticipantGateway>(
     gateway: &mut G,
     mut participants: Vec<InstanceInfo>,
-    prepared: &[InstanceInfo],
     operation_id: RequestId,
     initiating_instance: InstanceId,
     installed: &StableVersion,
@@ -49,7 +90,6 @@ pub(super) fn restart_peers<G: UpdateParticipantGateway>(
     let mut replacements = Vec::new();
     for participant in &participants {
         if participant.version == installed.to_string() {
-            release_if_prepared(gateway, participant, prepared, operation_id);
             continue;
         }
         requested = requested.saturating_add(1);
@@ -58,9 +98,10 @@ pub(super) fn restart_peers<G: UpdateParticipantGateway>(
             replacements.push(UpdateReplacementExpectation {
                 session_id: participant.session_id,
                 previous_instance_id: participant.instance_id,
+                previous_pid: participant.pid,
+                operation_id,
             });
         } else {
-            release_if_prepared(gateway, participant, prepared, operation_id);
             failed.push(participant.instance_id);
         }
     }
@@ -80,7 +121,6 @@ pub(super) fn restart_peers<G: UpdateParticipantGateway>(
 pub(super) fn restart_initiating<G: UpdateParticipantGateway>(
     gateway: &mut G,
     participant: Option<&InstanceInfo>,
-    prepared: &[InstanceInfo],
     operation_id: RequestId,
     initiating_instance: InstanceId,
     installed: &StableVersion,
@@ -90,15 +130,15 @@ pub(super) fn restart_initiating<G: UpdateParticipantGateway>(
     failed: &mut Vec<InstanceId>,
 ) {
     let Some(participant) = participant else {
-        failed.push(initiating_instance);
+        if !failed.contains(&initiating_instance) {
+            failed.push(initiating_instance);
+        }
         return;
     };
     if participant.version == installed.to_string() {
-        release_if_prepared(gateway, participant, prepared, operation_id);
         return;
     }
     if !restart_allowed {
-        let _released = gateway.release(participant, operation_id);
         failed.push(participant.instance_id);
         return;
     }
@@ -110,7 +150,6 @@ pub(super) fn restart_initiating<G: UpdateParticipantGateway>(
     if restart_accepted(gateway, participant, &restart) {
         *accepted = accepted.saturating_add(1);
     } else {
-        release_if_prepared(gateway, participant, prepared, operation_id);
         failed.push(participant.instance_id);
     }
 }
@@ -160,18 +199,59 @@ pub(super) fn record_pending_highlights<S: UpdateStateStore>(
     })
 }
 
-fn release_if_prepared<G: UpdateParticipantGateway>(
-    gateway: &mut G,
-    participant: &InstanceInfo,
-    prepared: &[InstanceInfo],
-    operation_id: RequestId,
-) {
-    if prepared
-        .iter()
-        .any(|ready| ready.instance_id == participant.instance_id)
-    {
-        let _released = gateway.release(participant, operation_id);
+pub(super) fn record_final_restart_state<S: UpdateStateStore>(
+    state: &S,
+    installation: InstallationIdentity,
+    installed: &StableVersion,
+    restart_needed: bool,
+    initiating_restart_accepted: bool,
+) -> bool {
+    initiating_restart_accepted
+        || state
+            .record_restart_state(installation, installed.clone(), restart_needed)
+            .is_ok()
+}
+
+pub(super) fn record_converged_highlights<S: UpdateStateStore>(
+    state: &S,
+    request: &UpdateRequest,
+    progress: &RestartProgress,
+    cancellation: &dyn UpdateCancellation,
+    initiating_session: Option<SessionId>,
+    previous: &StableVersion,
+    installed: &StableVersion,
+) -> Option<PendingHighlights> {
+    if !progress.failed.is_empty() || progress.initiating.is_none() || cancellation.is_cancelled() {
+        return None;
     }
+    record_pending_highlights(
+        state,
+        request.installation,
+        initiating_session,
+        previous,
+        installed,
+    )
+}
+
+pub(super) fn discard_rejected_announcement<S: UpdateStateStore>(
+    state: &S,
+    installation: InstallationIdentity,
+    pending: Option<&PendingHighlights>,
+    initiating_restart_requested: bool,
+    initiating_restart_accepted: bool,
+) -> bool {
+    let Some(pending) = pending else {
+        return true;
+    };
+    if !pending.recorded {
+        return false;
+    }
+    if !initiating_restart_requested || initiating_restart_accepted {
+        return true;
+    }
+    pending.announcement.as_ref().is_none_or(|announcement| {
+        state.discard_release_highlights(installation, announcement) == Ok(true)
+    })
 }
 
 fn restart_accepted<G: UpdateParticipantGateway>(

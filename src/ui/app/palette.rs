@@ -21,6 +21,19 @@ use crate::ui::shortcut_registry::CommandExecution;
 use invocation::CommandContext;
 use projection::{CommandRecord, ProjectedRow, RowAction};
 
+#[derive(Clone, Copy)]
+struct PaletteHistoryContext {
+    can_undo: bool,
+    can_redo: bool,
+}
+
+impl PaletteHistoryContext {
+    const EMPTY: Self = Self {
+        can_undo: false,
+        can_redo: false,
+    };
+}
+
 pub(in crate::ui) struct PaletteRowView {
     pub(in crate::ui) primary: String,
     pub(in crate::ui) secondary: Option<String>,
@@ -51,8 +64,9 @@ impl PaletteState {
             .commands()
             .into_iter()
             .map(|(action, metadata, execution)| {
-                let binding_context = context.command_binding_context(metadata.scope);
-                let shortcut = registry.compact_help_label(binding_context, &[action]);
+                let binding_context = context.command_binding_context(metadata);
+                let shortcut =
+                    registry.compact_help_label(binding_context, &[metadata.shortcut_owner]);
                 CommandRecord {
                     action,
                     metadata,
@@ -75,6 +89,10 @@ impl PaletteState {
 
     pub(super) const fn query_cursor(&self) -> usize {
         self.query.cursor()
+    }
+
+    pub(super) const fn query_selection(&self) -> Option<super::query::QuerySelection> {
+        self.query.selection()
     }
 
     pub(super) fn view(&self) -> (String, Vec<String>, usize) {
@@ -141,10 +159,15 @@ impl PaletteState {
     }
 
     fn projected(&self) -> Vec<ProjectedRow> {
+        let history = PaletteHistoryContext {
+            can_undo: self.query.can_undo(),
+            can_redo: self.query.can_redo(),
+        };
         projection::rows(
             &self.commands,
             &self.context,
             self.query.text(),
+            history,
             self.expanded,
         )
     }
@@ -263,6 +286,9 @@ impl BoardApp {
         if !enabled {
             return Vec::new();
         }
+        if let Some(undo) = palette_query_history(Some(command)) {
+            return self.update_palette_query(|query| move_query_history(query, undo));
+        }
         let selection_handoff = self
             .palette
             .as_mut()
@@ -300,31 +326,19 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        let UiInput::Key(key) = input else {
-            return match input {
-                UiInput::Pointer(pointer) => match pointer.kind {
-                    crate::ui::PointerKind::ScrollUp => {
-                        self.move_palette(-1);
-                        Vec::new()
-                    }
-                    crate::ui::PointerKind::ScrollDown => {
-                        self.move_palette(1);
-                        Vec::new()
-                    }
-                    _ => self.handle_pointer(*pointer, ids, clock),
-                },
-                UiInput::Paste(value) => self.update_palette_query(|query| query.paste(value)),
-                UiInput::PasteAnnotated(payload) => {
-                    self.update_palette_query(|query| query.paste(&payload.content))
-                }
-                UiInput::Resize { .. }
-                | UiInput::HostFocusGained
-                | UiInput::HostFocusLost
-                | UiInput::KeyStroke(_)
-                | UiInput::Key(_) => Vec::new(),
-            };
-        };
-        match *key {
+        match input {
+            UiInput::Key(key) => self.handle_palette_key(*key, ids, clock),
+            input => self.handle_palette_non_key(input, ids, clock),
+        }
+    }
+
+    fn handle_palette_key(
+        &mut self,
+        key: UiKey,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        match key {
             UiKey::Shortcut(action) => return self.execute_bound_command(action, ids, clock),
             UiKey::Escape => self.close_overlay(),
             UiKey::Enter => {
@@ -346,9 +360,14 @@ impl BoardApp {
                 movement: crate::ports::editor::CursorMovement::VisualDown,
                 ..
             } => self.move_palette(1),
-            UiKey::Move { movement, .. } => {
+            UiKey::Move {
+                movement,
+                extend_selection,
+            } => {
                 if let Some(palette) = &mut self.palette {
-                    palette.query.move_cursor(movement);
+                    palette
+                        .query
+                        .move_cursor_with_selection(movement, extend_selection);
                 }
             }
             UiKey::Delete | UiKey::ModifiedDelete => {
@@ -363,9 +382,56 @@ impl BoardApp {
             UiKey::UnmodifiedSpace => {
                 return self.update_palette_query(|query| query.insert_char(' '));
             }
+            UiKey::SelectAll => {
+                if let Some(palette) = &mut self.palette {
+                    palette.query.select_all();
+                }
+            }
+            UiKey::Undo => {
+                if let Some(palette) = &mut self.palette {
+                    palette.query.undo();
+                    palette.clamp();
+                }
+            }
+            UiKey::Redo => {
+                if let Some(palette) = &mut self.palette {
+                    palette.query.redo();
+                    palette.clamp();
+                }
+            }
             _ => {}
         }
         Vec::new()
+    }
+
+    fn handle_palette_non_key(
+        &mut self,
+        input: &UiInput,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        match input {
+            UiInput::Pointer(pointer) => match pointer.kind {
+                crate::ui::PointerKind::ScrollUp => {
+                    self.move_palette(-1);
+                    Vec::new()
+                }
+                crate::ui::PointerKind::ScrollDown => {
+                    self.move_palette(1);
+                    Vec::new()
+                }
+                _ => self.handle_pointer(*pointer, ids, clock),
+            },
+            UiInput::Paste(value) => self.update_palette_query(|query| query.paste(value)),
+            UiInput::PasteAnnotated(payload) => {
+                self.update_palette_query(|query| query.paste(&payload.content))
+            }
+            UiInput::Resize { .. }
+            | UiInput::HostFocusGained
+            | UiInput::HostFocusLost
+            | UiInput::KeyStroke(_)
+            | UiInput::Key(_) => Vec::new(),
+        }
     }
 
     fn update_palette_query(&mut self, update: impl FnOnce(&mut QueryEditor)) -> Vec<Effect> {
@@ -447,7 +513,7 @@ impl BoardApp {
         use crate::ui::shortcut_registry::PaletteBoardCommand as BoardCommand;
         match command {
             BoardCommand::New => {
-                self.create(crate::ui::PastePayload::text(String::new()), ids, clock)
+                self.new_thought(super::creation::NewThoughtPlacement::Contextual, ids, clock)
             }
             BoardCommand::InsertAbove => self.insert_relative_to_focus(false, ids, clock),
             BoardCommand::InsertBelow => self.insert_relative_to_focus(true, ids, clock),
@@ -482,5 +548,23 @@ impl BoardApp {
             }
             BoardCommand::Quit => self.request_quit_after_edit_flush(ids, clock),
         }
+    }
+}
+
+fn palette_query_history(command: Option<CommandExecution>) -> Option<bool> {
+    use crate::ui::shortcut_registry::PaletteBoardCommand;
+
+    match command {
+        Some(CommandExecution::Board(PaletteBoardCommand::Undo)) => Some(true),
+        Some(CommandExecution::Board(PaletteBoardCommand::Redo)) => Some(false),
+        _ => None,
+    }
+}
+
+fn move_query_history(query: &mut QueryEditor, undo: bool) {
+    if undo {
+        query.undo();
+    } else {
+        query.redo();
     }
 }

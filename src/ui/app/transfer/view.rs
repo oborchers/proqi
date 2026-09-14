@@ -5,6 +5,12 @@ impl super::TransferState {
         self.query.cursor()
     }
 
+    pub(in crate::ui::app) const fn query_selection(
+        &self,
+    ) -> Option<super::super::query::QuerySelection> {
+        self.query.selection()
+    }
+
     pub(super) fn matches(&self) -> Vec<&SessionHit> {
         let query = self.query.text().to_lowercase();
         self.sessions

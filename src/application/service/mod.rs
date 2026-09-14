@@ -156,6 +156,15 @@ pub enum SessionServiceError {
     /// A recoverably deleted session cannot be edited until restored.
     #[error("session is in trash: {0}")]
     SessionTrashed(SessionId),
+    /// A live session cannot be restored because it is not in recoverable trash.
+    #[error("session is not in trash: {0}")]
+    SessionNotTrashed(SessionId),
+    /// The installation-wide Browser history has no entry in this direction.
+    #[error("nothing to {action} in Browser history", action = if *undo { "undo" } else { "redo" })]
+    NoBrowserHistory {
+        /// Undo when true, redo when false.
+        undo: bool,
+    },
     /// Supplied operation identity belongs to another semantic request.
     #[error("operation identity was already used for another request")]
     IdempotencyConflict,

@@ -13,7 +13,10 @@ use crate::{
     },
 };
 
-use super::super::{BoardApp, palette_handoff::EditorSelectionHandoff};
+use super::{
+    super::{BoardApp, palette_handoff::EditorSelectionHandoff},
+    PaletteHistoryContext,
+};
 use recovery::RecoveryContext;
 use selection::selection_is_contiguous;
 
@@ -41,7 +44,6 @@ pub(super) struct CommandContext {
     board: BoardContext,
     mutation: MutationContext,
     features: FeatureContext,
-    history: HistoryContext,
     recovery: RecoveryContext,
     attachments: AttachmentContext,
     screenshot: ScreenshotContext,
@@ -66,11 +68,6 @@ struct FeatureContext {
     installed_highlights: bool,
 }
 
-struct HistoryContext {
-    can_undo: bool,
-    can_redo: bool,
-}
-
 struct AttachmentContext {
     present: bool,
     refreshing: bool,
@@ -90,6 +87,14 @@ struct SelectionContext {
 
 impl CommandContext {
     pub(super) fn applicability(&self, metadata: CommandMetadata) -> Applicability {
+        self.applicability_with_history(metadata, PaletteHistoryContext::EMPTY)
+    }
+
+    pub(super) fn applicability_with_history(
+        &self,
+        metadata: CommandMetadata,
+        history: PaletteHistoryContext,
+    ) -> Applicability {
         use CommandApplicability as A;
         match metadata.applicability {
             A::Always => Applicability::ENABLED,
@@ -114,8 +119,8 @@ impl CommandContext {
             A::RetryStorage => self.recovery.retry_applicability(),
             A::ExportRecovery => self.recovery.export_applicability(),
             A::Quit => self.recovery.quit_applicability(),
-            A::Undo => self.history_applicability(self.history.can_undo, "Nothing to undo"),
-            A::Redo => self.history_applicability(self.history.can_redo, "Nothing to redo"),
+            A::QueryUndo => Self::when(history.can_undo, "Nothing to undo in the query"),
+            A::QueryRedo => Self::when(history.can_redo, "Nothing to redo in the query"),
             A::Attachments => self.attachments_applicability(),
             A::InstalledHighlights => Self::when(
                 self.features.installed_highlights,
@@ -124,8 +129,12 @@ impl CommandContext {
         }
     }
 
-    pub(super) fn relevance(&self, metadata: CommandMetadata) -> Option<u8> {
-        if !self.applicability(metadata).enabled {
+    pub(super) fn relevance(
+        &self,
+        metadata: CommandMetadata,
+        history: PaletteHistoryContext,
+    ) -> Option<u8> {
+        if !self.applicability_with_history(metadata, history).enabled {
             return None;
         }
         match metadata.relevance {
@@ -138,8 +147,8 @@ impl CommandContext {
             CommandRelevance::Submission(priority) if self.features.submit_supported => {
                 Some(priority)
             }
-            CommandRelevance::Undo(priority) if self.history.can_undo => Some(priority),
-            CommandRelevance::Redo(priority) if self.history.can_redo => Some(priority),
+            CommandRelevance::QueryUndo(priority) if history.can_undo => Some(priority),
+            CommandRelevance::QueryRedo(priority) if history.can_redo => Some(priority),
             CommandRelevance::StorageRecovery(priority) if self.recovery.failed() => Some(priority),
             CommandRelevance::ScreenshotActive(priority)
                 if matches!(
@@ -155,8 +164,8 @@ impl CommandContext {
             | CommandRelevance::Selection(_)
             | CommandRelevance::Editor(_)
             | CommandRelevance::Submission(_)
-            | CommandRelevance::Undo(_)
-            | CommandRelevance::Redo(_)
+            | CommandRelevance::QueryUndo(_)
+            | CommandRelevance::QueryRedo(_)
             | CommandRelevance::StorageRecovery(_)
             | CommandRelevance::ScreenshotActive(_)
             | CommandRelevance::ScreenshotRetry(_) => None,
@@ -278,20 +287,6 @@ impl CommandContext {
         }
     }
 
-    const fn history_applicability(
-        &self,
-        available: bool,
-        empty_reason: &'static str,
-    ) -> Applicability {
-        if self.recovery.failed() {
-            Applicability::disabled("Resolve the failed save first")
-        } else if self.board.operation_pending {
-            Applicability::disabled("A board operation is still being saved")
-        } else {
-            Self::when(available, empty_reason)
-        }
-    }
-
     const fn attachments_applicability(&self) -> Applicability {
         if !self.attachments.present {
             Applicability::disabled("No attachments to refresh")
@@ -403,10 +398,6 @@ impl BoardApp {
                 submit_supported: self.supports_submission(),
                 installed_highlights: self.installed_highlights.is_some(),
             },
-            history: HistoryContext {
-                can_undo: self.state.can_undo(self.state.mode),
-                can_redo: self.state.can_redo(self.state.mode),
-            },
             recovery: self.capture_recovery_command_context(),
             attachments: AttachmentContext {
                 present: has_attachments,
@@ -491,8 +482,11 @@ mod tests {
         assert_eq!(failed.applicability(export), Applicability::ENABLED);
         assert_eq!(
             failed.applicability(undo),
-            Applicability::disabled("Resolve the failed save first")
+            Applicability::disabled("Nothing to undo in the query")
         );
-        assert_eq!(failed.relevance(retry), Some(0));
+        assert_eq!(
+            failed.relevance(retry, PaletteHistoryContext::EMPTY),
+            Some(0)
+        );
     }
 }

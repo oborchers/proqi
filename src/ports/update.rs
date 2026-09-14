@@ -13,7 +13,7 @@ use crate::domain::{
 use super::runtime::InstanceInfo;
 
 /// Current ephemeral all-session update protocol.
-pub const UPDATE_CONTROL_PROTOCOL_VERSION: u32 = 1;
+pub const UPDATE_CONTROL_PROTOCOL_VERSION: u32 = 2;
 
 /// One bounded response from the canonical stable-release source.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -38,6 +38,8 @@ pub enum UpdateLockKind {
     Prompt,
     /// Own the one approved installer invocation.
     Installer,
+    /// Exclude schema entrants while one installed cohort becomes quiescent.
+    Convergence,
 }
 
 /// RAII installation lock released on drop or process exit.
@@ -86,6 +88,24 @@ pub trait UpdateStateStore {
         installation: InstallationIdentity,
         kind: UpdateLockKind,
     ) -> Result<Option<Box<dyn UpdateLease>>, UpdateError>;
+
+    /// Try to enter the schema-startup side of the convergence admission gate.
+    ///
+    /// Production implementations permit concurrent startup readers and exclude them against
+    /// one `Convergence` owner. An interactive process releases the lease after publishing its
+    /// owner-control endpoint. Without a published endpoint it retains the lease for its lifetime,
+    /// so coordination cannot install behind an owner it cannot prepare. A non-interactive command
+    /// holds the lease until completion.
+    ///
+    /// # Errors
+    ///
+    /// Returns a filesystem or lock failure.
+    fn try_startup_lock(
+        &self,
+        installation: InstallationIdentity,
+    ) -> Result<Option<Box<dyn UpdateLease>>, UpdateError> {
+        self.try_lock(installation, UpdateLockKind::Convergence)
+    }
 
     /// Atomically begin a refresh when the caller still represents the observed generation.
     ///
@@ -246,6 +266,24 @@ pub enum UpdatePrepareReply {
     },
 }
 
+/// Irreversible post-install request to stop schema use before any replacement starts.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct UpdateQuiesceRequest {
+    /// Attempt previously acknowledged during preparation.
+    pub operation_id: RequestId,
+    /// Exact installed release every participant must enter next.
+    pub installed_version: StableVersion,
+}
+
+/// Proof that one exact prepared session released its shared schema lease.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct UpdateQuiesceReply {
+    /// Exact old process that became irreversibly quiescent.
+    pub instance_id: InstanceId,
+    /// Stable session that must be resumed by replacement or manually.
+    pub session_id: SessionId,
+}
+
 /// One post-install restart request.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct UpdateRestartRequest {
@@ -271,6 +309,10 @@ pub struct UpdateReplacementExpectation {
     pub session_id: SessionId,
     /// Old process identity that must be replaced rather than rediscovered.
     pub previous_instance_id: InstanceId,
+    /// Operating-system process retained by same-pane Unix `exec`.
+    pub previous_pid: u32,
+    /// Update attempt that authorized the exact replacement.
+    pub operation_id: RequestId,
 }
 
 /// Read-only cancellation observed by bounded update coordination waits.
@@ -294,7 +336,8 @@ pub trait UpdateInstanceRegistry {
     /// Returns a typed registry or process-verification failure.
     fn active_instances(&self) -> Result<Vec<InstanceInfo>, UpdateError>;
 
-    /// Wait a bounded interval for every peer session to reappear under the exact target.
+    /// Wait a bounded interval for every peer session to reappear through its accepted same-process
+    /// replacement under the exact target and a live owner-control endpoint.
     ///
     /// Returns the previous instance identities that did not converge. Expectations are
     /// ephemeral coordinator memory and are never persisted.
@@ -336,6 +379,18 @@ pub trait UpdateParticipantGateway {
         operation_id: RequestId,
     ) -> Result<(), UpdateError>;
 
+    /// Irreversibly stop schema-dependent work and release one shared schema lease.
+    ///
+    /// # Errors
+    ///
+    /// Returns a verified transport, timeout, or participant failure. A transport failure is
+    /// ambiguous, so the coordinator must never assume that the participant is still writable.
+    fn quiesce(
+        &mut self,
+        participant: &InstanceInfo,
+        request: &UpdateQuiesceRequest,
+    ) -> Result<UpdateQuiesceReply, UpdateError>;
+
     /// Ask one post-install participant to clean up and replace itself.
     ///
     /// # Errors
@@ -348,14 +403,24 @@ pub trait UpdateParticipantGateway {
     ) -> Result<UpdateRestartReply, UpdateError>;
 }
 
-/// Sole typed authority for the exact supported Homebrew upgrade command.
-pub trait HomebrewInstaller {
-    /// Run one direct formula upgrade without a shell.
+/// Sole typed authority for one verified installation-method-aware upgrade.
+pub trait UpdateInstaller {
+    /// Install one exact release through the verified owner of this installation.
     ///
     /// # Errors
     ///
     /// Returns a process, exit-status, or installed-version verification failure.
     fn upgrade(&mut self, expected: &StableVersion) -> Result<StableVersion, UpdateError>;
+}
+
+/// Fetches and authenticates the exact release-attached standalone installer.
+pub trait StandaloneInstallerSource {
+    /// Return the installer bytes only after its exact release checksum verifies.
+    ///
+    /// # Errors
+    ///
+    /// Returns bounded transport, response, checksum, or size failures.
+    fn verified_installer(&mut self, expected: &StableVersion) -> Result<Vec<u8>, UpdateError>;
 }
 
 /// Replaces the current Unix process after all terminal-owned resources are released.
@@ -370,6 +435,9 @@ pub trait ProcessReplacer {
         executable: &std::path::Path,
         session_id: SessionId,
         state_root: Option<&std::path::Path>,
+        operation_id: RequestId,
+        previous_instance_id: InstanceId,
+        target_version: &StableVersion,
     ) -> Result<(), UpdateError>;
 }
 
@@ -394,7 +462,7 @@ pub enum UpdateError {
     /// Verified participant discovery or local coordination failed.
     #[error("update coordination failed: {0}")]
     Coordination(String),
-    /// Exact Homebrew formula upgrade failed or returned an ambiguous status.
-    #[error("Homebrew update failed")]
+    /// The verified installation owner failed or returned an ambiguous status.
+    #[error("update installation failed")]
     InstallerFailed,
 }

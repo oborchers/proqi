@@ -8,13 +8,13 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use super::error::{ApplicationError, ApplicationResult, FailureCode};
 use crate::domain::{
-    BoardOperation, OperationSequence, RequestId, SessionBoard, StableVersion, Thought, ThoughtId,
+    BoardOperation, OperationSequence, RequestId, SessionBoard, StableVersion, TextPosition,
+    Thought, ThoughtId, ThoughtRevision,
 };
 
 use crate::ports::runtime::CaptureOwnerInfo;
 
 pub use effect::Effect;
-pub(super) use history::EditorHistory;
 
 /// Active interaction context.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -26,6 +26,25 @@ pub enum InteractionMode {
     /// Edit the focused thought.
     Edit {
         /// Thought being edited.
+        thought_id: ThoughtId,
+    },
+}
+
+/// Contextual resolution of one durable undo or redo request.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum HistoryResolution {
+    /// One owner may move its history cursor now.
+    Ready(crate::domain::UndoScope),
+    /// The active owner has no applicable history.
+    Empty,
+    /// A structural move must wait for an editor revision on an affected thought.
+    BlockedByEditor {
+        /// Thought whose local revision must move first.
+        thought_id: ThoughtId,
+    },
+    /// An editor revision must wait for a newer structural operation.
+    BlockedByBoard {
+        /// Thought whose editor snapshot no longer matches the revision endpoint.
         thought_id: ThoughtId,
     },
 }
@@ -91,7 +110,7 @@ impl ClipboardIntent {
 pub enum UpdateIntent {
     /// Perform one explicit background lookup from the command palette.
     CheckNow,
-    /// Coordinate one verified Homebrew upgrade and restart all compatible sessions.
+    /// Coordinate one verified installation-method-aware upgrade and restart all sessions.
     Install(StableVersion),
     /// Defer this exact version until the next successful startup refresh.
     Dismiss(StableVersion),
@@ -145,6 +164,12 @@ impl ScreenshotPauseReason {
             Self::CaptureLimit { captures } => format!("{captures} unattended captures"),
         }
     }
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub(super) struct EditorHistory {
+    pub(super) revisions: Vec<ThoughtRevision>,
+    pub(super) cursor: usize,
 }
 
 /// Complete mutable state owned by the reducer lane.
@@ -202,6 +227,57 @@ impl AppState {
         }
     }
 
+    /// Board history entries retained for undo and redo.
+    #[must_use]
+    pub fn board_history(&self) -> &[BoardOperation] {
+        &self.board_history
+    }
+
+    /// Number of currently applied board history entries.
+    #[must_use]
+    pub const fn board_history_cursor(&self) -> usize {
+        self.board_history_cursor
+    }
+
+    /// Number of currently applied revisions for one thought.
+    #[must_use]
+    pub fn editor_history_cursor(&self, thought_id: ThoughtId) -> usize {
+        self.editor_histories
+            .get(&thought_id)
+            .map_or(0, |history| history.cursor)
+    }
+
+    /// Restore the logical cursor represented by the currently applied revision prefix.
+    #[must_use]
+    pub fn restored_editor_cursor(&self, thought_id: ThoughtId) -> Option<TextPosition> {
+        self.restored_editor_state(thought_id)
+            .map(|(cursor, _)| cursor)
+    }
+
+    /// Restore cursor head and directional selection anchor at the applied revision prefix.
+    #[must_use]
+    pub fn restored_editor_state(
+        &self,
+        thought_id: ThoughtId,
+    ) -> Option<(TextPosition, Option<TextPosition>)> {
+        if let Some(history) = self.editor_histories.get(&thought_id) {
+            let restored = if history.cursor == 0 {
+                history
+                    .revisions
+                    .first()
+                    .map(|revision| (revision.before_cursor, revision.before_selection_anchor))
+            } else {
+                history
+                    .revisions
+                    .get(history.cursor - 1)
+                    .map(|revision| (revision.after_cursor, revision.after_selection_anchor))
+            };
+            if restored.is_some() {
+                return restored;
+            }
+        }
+        self.applied_compose_handoff(thought_id)
+    }
     pub(super) fn next_sequence(&self) -> ApplicationResult<OperationSequence> {
         if !self.deferred_board_operations.is_empty() {
             return Err(ApplicationError::InvalidState);

@@ -12,7 +12,6 @@ use semver::Version;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
-const DIST_VERSION: &str = "0.32.0";
 use super::release_targets::ALL as TARGETS;
 
 pub(super) fn plan(root: &Path, requested_tag: Option<&str>) -> Result<(), String> {
@@ -26,14 +25,14 @@ pub(super) fn rehearse(root: &Path) -> Result<(), String> {
     let tag = format!("v{version}");
     let plan = plan_output(root, Some(&tag))?;
     let manifest: Value =
-        serde_json::from_slice(&plan).map_err(|error| format!("parse cargo-dist plan: {error}"))?;
+        serde_json::from_slice(&plan).map_err(|error| format!("parse target plan: {error}"))?;
     validate_planned_targets(&manifest)?;
-    super::package::run(root, None)?;
+    super::package::run(root, None, None)?;
 
     let output = root.join("target/release-rehearsal");
     recreate_output(root, &output)?;
-    fs::write(output.join("dist-plan.json"), &plan)
-        .map_err(|error| format!("write dist plan: {error}"))?;
+    fs::write(output.join("target-plan.json"), &plan)
+        .map_err(|error| format!("write target plan: {error}"))?;
     let archive = super::package::host_archive_path(root)?;
     let digest = checksum(&archive)?;
     let archive_name = filename(&archive)?;
@@ -69,39 +68,16 @@ pub(super) fn print_checksum(root: &Path, path: &Path) -> Result<(), String> {
 }
 
 fn plan_output(root: &Path, requested_tag: Option<&str>) -> Result<Vec<u8>, String> {
-    verify_dist(root)?;
     let version = workspace_version(root)?;
     let tag = requested_tag.map_or_else(|| format!("v{version}"), str::to_owned);
     validate_tag(&tag, &version)?;
     super::release_readiness::validate_release_content(root, &tag)?;
-    let output = Command::new("dist")
-        .args(["plan", "--tag", &tag, "--output-format", "json"])
-        .current_dir(root)
-        .output()
-        .map_err(|error| format!("start cargo-dist plan: {error}"))?;
-    if output.status.success() {
-        Ok(output.stdout)
-    } else {
-        Err(format!(
-            "cargo-dist plan exited with {}: {}",
-            output.status,
-            String::from_utf8_lossy(&output.stderr)
-        ))
-    }
-}
-
-fn verify_dist(root: &Path) -> Result<(), String> {
-    let output = Command::new("dist")
-        .arg("--version")
-        .current_dir(root)
-        .output()
-        .map_err(|error| format!("start cargo-dist: {error}"))?;
-    let version = String::from_utf8(output.stdout)
-        .map_err(|error| format!("cargo-dist version is not UTF-8: {error}"))?;
-    let expected = format!("cargo-dist {DIST_VERSION}");
-    (output.status.success() && version.trim() == expected)
-        .then_some(())
-        .ok_or_else(|| format!("expected `{expected}`, found `{}`", version.trim()))
+    serde_json::to_vec_pretty(&json!({
+        "schema_version": 1,
+        "tag": tag,
+        "targets": super::release_targets::github_matrix(),
+    }))
+    .map_err(|error| format!("render target plan: {error}"))
 }
 
 pub(super) fn workspace_version(root: &Path) -> Result<Version, String> {
@@ -135,25 +111,23 @@ fn validate_tag(tag: &str, version: &Version) -> Result<(), String> {
 }
 
 fn validate_planned_targets(manifest: &Value) -> Result<(), String> {
-    let artifacts = manifest
-        .get("artifacts")
-        .and_then(Value::as_object)
-        .ok_or_else(|| "cargo-dist plan has no artifacts map".to_owned())?;
-    let actual = artifacts
-        .values()
-        .filter_map(|artifact| artifact.get("target_triples"))
-        .filter_map(Value::as_array)
-        .flatten()
+    let targets = manifest
+        .get("targets")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "target plan has no target array".to_owned())?;
+    let actual = targets
+        .iter()
+        .filter_map(|target| target.get("target"))
         .filter_map(Value::as_str)
         .map(str::to_owned)
         .collect::<BTreeSet<_>>();
     let expected = TARGETS
         .iter()
-        .map(|target| (*target).to_owned())
+        .map(|target| target.triple.to_owned())
         .collect::<BTreeSet<_>>();
-    (actual == expected).then_some(()).ok_or_else(|| {
-        format!("cargo-dist targets differ: found {actual:?}, expected {expected:?}")
-    })
+    (targets.len() == expected.len() && actual == expected)
+        .then_some(())
+        .ok_or_else(|| format!("target plan differs: found {actual:?}, expected {expected:?}"))
 }
 
 fn recreate_output(root: &Path, output: &Path) -> Result<(), String> {
@@ -231,12 +205,12 @@ fn write_summary(
         "schema_version": 1,
         "version": version.to_string(),
         "tag": tag,
-        "cargo_dist_version": DIST_VERSION,
-        "release_targets": TARGETS,
+        "target_registry": "xtask::release_targets",
+        "release_targets": super::release_targets::triples(),
         "host_archive": archive,
         "host_sha256": digest,
         "reproducibility": "Source, lockfile, tool versions, and artifact layout are pinned; byte-for-byte reproduction is not claimed across operating systems or toolchain builds.",
-        "ci_only": TARGETS.iter().filter(|target| !archive.contains(**target)).collect::<Vec<_>>(),
+        "ci_only": TARGETS.iter().map(|target| target.triple).filter(|target| !archive.contains(target)).collect::<Vec<_>>(),
     });
     let mut file = File::create(output.join("rehearsal.json"))
         .map_err(|error| format!("create rehearsal summary: {error}"))?;

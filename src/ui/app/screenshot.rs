@@ -4,6 +4,7 @@ mod activity;
 mod barrier;
 mod presentation;
 mod takeover;
+mod update;
 
 use std::collections::VecDeque;
 
@@ -23,6 +24,7 @@ use crate::{
 use super::{BoardApp, UiInput, UiKey};
 use activity::ScreenshotActivity;
 use barrier::DeferredInput;
+pub(crate) use update::ScreenshotUpdateReadiness;
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(super) enum ScreenshotState {

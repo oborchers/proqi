@@ -30,12 +30,7 @@ pub(super) fn run_local(root: &Path) -> Result<(), String> {
         "run Linux CI parity",
     )?;
 
-    let artifacts = cache.join("target/package");
-    super::debian_container::verify(
-        &root,
-        &artifacts.join("package/proqi-x86_64-unknown-linux-gnu.tar.gz"),
-        &artifacts.join("debian-package/proqi_amd64.deb"),
-    )
+    verify_debian_artifacts(&root, &cache.join("target/package"))
 }
 
 pub(super) fn run_prebuilt(
@@ -68,14 +63,28 @@ pub(super) fn run_prebuilt(
     ]);
     run_container(&root, arguments, "run prebuilt Linux CI image")?;
     if mode == "parity" {
-        let artifacts = cache.join("target/package");
-        super::debian_container::verify(
-            &root,
-            &artifacts.join("package/proqi-x86_64-unknown-linux-gnu.tar.gz"),
-            &artifacts.join("debian-package/proqi_amd64.deb"),
-        )?;
+        verify_debian_artifacts(&root, &cache.join("target/package"))?;
     }
     Ok(())
+}
+
+fn verify_debian_artifacts(root: &Path, artifacts: &Path) -> Result<(), String> {
+    let matches = super::release_targets::ALL
+        .iter()
+        .filter_map(|target| {
+            let package = target.debian?;
+            let archive = artifacts.join("package").join(target.archive_name());
+            let deb = artifacts.join("debian-package").join(package.filename);
+            (archive.is_file() && deb.is_file()).then_some((*target, archive, deb))
+        })
+        .collect::<Vec<_>>();
+    let [(target, archive, package)] = matches.as_slice() else {
+        return Err(format!(
+            "expected exactly one typed Debian artifact pair, found {}",
+            matches.len()
+        ));
+    };
+    super::debian_container::verify_target(root, archive, package, target.triple)
 }
 
 fn validate_image(root: &Path, image: &str) -> Result<(), String> {
@@ -188,6 +197,7 @@ mod tests {
 
     const DOCKERFILE: &str = include_str!("../../tools/ci-linux/Dockerfile");
     const IMAGE_WORKFLOW: &str = include_str!("../../.github/workflows/ci-linux-image.yml");
+    const NFPM_ACTION: &str = include_str!("../../.github/actions/install-nfpm/action.yml");
     const HOST_RUNNER_SCRIPT: &str = include_str!("../../tools/ci-linux/host-run.sh");
     const RUNNER: &str = include_str!("../../tools/ci-linux/run.sh");
 
@@ -223,6 +233,15 @@ mod tests {
             "NFPM_ARM64_SHA256=1c0f5f2999b9a974bfb04fdb0cc3306096de530a",
         ] {
             assert!(DOCKERFILE.contains(contract), "missing {contract}");
+        }
+        for contract in [
+            "nfpm_${NFPM_VERSION}_Linux_${nfpm_arch}.tar.gz",
+            "NFPM_AMD64_SHA256: 0660ca602b2d2d2ae4781a06c692b3eeb9d437ff",
+            "NFPM_ARM64_SHA256: 1c0f5f2999b9a974bfb04fdb0cc3306096de530a",
+            "arm64|aarch64)",
+            "x86_64|amd64)",
+        ] {
+            assert!(NFPM_ACTION.contains(contract), "missing {contract}");
         }
         for contract in [
             "cargo install --list",

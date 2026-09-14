@@ -10,7 +10,9 @@ use super::{BoardApp, UiInput, UiKey};
 
 pub(super) struct UpdateBarrier {
     operation_id: RequestId,
+    target_version: StableVersion,
     deadline: Timestamp,
+    quiesced: bool,
     reserved_restart: Option<StableVersion>,
 }
 
@@ -143,7 +145,7 @@ impl BoardApp {
     pub(in crate::ui) fn update_prompt_view(&self) -> Option<(String, Vec<String>, usize)> {
         self.update_prompt.as_ref().map(|prompt| {
             let primary = match prompt.installation {
-                InstallationKind::HomebrewFormula => format!(
+                InstallationKind::HomebrewFormula | InstallationKind::StandaloneArchive => format!(
                     "Update and restart all {} {}",
                     prompt.participants,
                     if prompt.participants == 1 {
@@ -152,9 +154,7 @@ impl BoardApp {
                         "sessions"
                     }
                 ),
-                InstallationKind::StandaloneArchive | InstallationKind::SourceOrUnknown => {
-                    "View update instructions".to_owned()
-                }
+                InstallationKind::SourceOrUnknown => "View update instructions".to_owned(),
             };
             (
                 format!(" update available · {} ", prompt.version),
@@ -187,7 +187,7 @@ impl BoardApp {
         };
         self.layout = None;
         let intent = match index {
-            0 if prompt.installation == InstallationKind::HomebrewFormula => {
+            0 if prompt.installation != InstallationKind::SourceOrUnknown => {
                 self.set_warning(format!(
                     "Preparing {} Proqi {} for update.",
                     prompt.participants,
@@ -209,18 +209,20 @@ impl BoardApp {
     pub(crate) fn begin_update_barrier(
         &mut self,
         operation_id: RequestId,
+        target_version: StableVersion,
         deadline: Timestamp,
     ) -> bool {
-        if self
-            .update_barrier
-            .as_ref()
-            .is_some_and(|barrier| barrier.operation_id != operation_id)
-        {
-            return false;
+        if let Some(barrier) = self.update_barrier.as_ref() {
+            return barrier.operation_id == operation_id
+                && barrier.target_version == target_version
+                && !barrier.quiesced
+                && barrier.reserved_restart.is_none();
         }
         self.update_barrier = Some(UpdateBarrier {
             operation_id,
+            target_version,
             deadline,
+            quiesced: false,
             reserved_restart: None,
         });
         self.set_warning("Ready for Proqi update. Waiting for all sessions.");
@@ -229,7 +231,9 @@ impl BoardApp {
 
     pub(crate) fn release_update_barrier(&mut self, operation_id: RequestId) -> bool {
         if self.update_barrier.as_ref().is_none_or(|barrier| {
-            barrier.operation_id != operation_id || barrier.reserved_restart.is_some()
+            barrier.operation_id != operation_id
+                || barrier.quiesced
+                || barrier.reserved_restart.is_some()
         }) {
             return false;
         }
@@ -239,15 +243,38 @@ impl BoardApp {
     }
 
     pub(crate) fn expire_update_barrier(&mut self, now: Timestamp) -> bool {
-        if self
-            .update_barrier
-            .as_ref()
-            .is_none_or(|barrier| barrier.reserved_restart.is_some() || now < barrier.deadline)
-        {
+        let Some(barrier) = self.update_barrier.as_ref() else {
             return false;
+        };
+        if barrier.reserved_restart.is_some() || now < barrier.deadline {
+            return false;
+        }
+        if barrier.quiesced {
+            self.quit = true;
+            self.set_warning("Update coordination ended. Resume this exact session to continue.");
+            return true;
         }
         self.update_barrier = None;
         self.set_warning("Update coordinator timed out. Session is ready.");
+        true
+    }
+
+    pub(crate) fn commit_update_quiescence(
+        &mut self,
+        operation_id: RequestId,
+        installed: &StableVersion,
+    ) -> bool {
+        let Some(barrier) = self.update_barrier.as_mut() else {
+            return false;
+        };
+        if barrier.operation_id != operation_id
+            || &barrier.target_version != installed
+            || barrier.reserved_restart.is_some()
+        {
+            return false;
+        }
+        barrier.quiesced = true;
+        self.set_warning("Proqi updated. Waiting for exact session replacement.");
         true
     }
 
@@ -259,7 +286,11 @@ impl BoardApp {
         let Some(barrier) = self.update_barrier.as_mut() else {
             return false;
         };
-        if barrier.operation_id != operation_id || barrier.reserved_restart.is_some() {
+        if barrier.operation_id != operation_id
+            || barrier.target_version != installed
+            || !barrier.quiesced
+            || barrier.reserved_restart.is_some()
+        {
             return false;
         }
         barrier.reserved_restart = Some(installed);
@@ -283,6 +314,8 @@ impl BoardApp {
         if delivered {
             self.update_restart = Some(installed);
             self.quit = true;
+        } else if barrier.quiesced {
+            self.quit = true;
         } else {
             self.update_barrier = None;
         }
@@ -293,7 +326,14 @@ impl BoardApp {
         self.update_restart.as_ref()
     }
 
-    #[cfg(test)]
+    pub(crate) fn update_restart_operation(&self) -> Option<RequestId> {
+        self.update_restart.as_ref().and(
+            self.update_barrier
+                .as_ref()
+                .map(|barrier| barrier.operation_id),
+        )
+    }
+
     pub(crate) fn update_barrier_operation(&self) -> Option<RequestId> {
         self.update_barrier
             .as_ref()

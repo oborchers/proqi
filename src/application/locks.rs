@@ -25,6 +25,7 @@ pub(super) fn ensure_action_unlocked(state: &AppState, action: &Action) -> Appli
         | Action::ExitCompose
         | Action::ExitEdit
         | Action::CreateThought { .. }
+        | Action::CreateComposeThought { .. }
         | Action::CreateOwnedThought(_)
         | Action::PasteAsThought { .. }
         | Action::CopyThoughts { .. }
@@ -105,7 +106,8 @@ fn locked_mutation(state: &AppState, mutation: &BoardMutation) -> Option<Thought
         BoardMutation::Batch { mutations } => mutations
             .iter()
             .find_map(|mutation| locked_mutation(state, mutation)),
-        BoardMutation::AddThought { thought } => locked_one(state, thought.id),
+        BoardMutation::AddThought { thought }
+        | BoardMutation::AddThoughtFromCompose { thought, .. } => locked_one(state, thought.id),
         BoardMutation::SetDeletion { thought_id, .. }
         | BoardMutation::SetDeletionExact { thought_id, .. }
         | BoardMutation::MoveThought { thought_id, .. }

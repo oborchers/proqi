@@ -2,6 +2,8 @@
 
 use super::*;
 
+#[path = "commands_disclosure/feedback.rs"]
+mod feedback;
 #[path = "commands_disclosure/refresh.rs"]
 mod refresh;
 
@@ -77,8 +79,7 @@ fn concise_projection_is_stable_semantic_and_never_selects_a_destructive_action(
         [
             "New thought",
             "Paste exactly",
-            "Rename session",
-            "Copy resume command",
+            "Paste and clean up",
             "Open contextual help",
             "Quit Proqi",
             "More commands...",
@@ -90,7 +91,19 @@ fn concise_projection_is_stable_semantic_and_never_selects_a_destructive_action(
     saved_thought(&mut ordinary, "ordinary saved thought");
     open(&mut ordinary);
     let (_, rows, selected) = ordinary.app.palette_view().expect("ordinary Commands");
-    assert_eq!(rows.len(), 8);
+    assert_eq!(
+        rows,
+        [
+            "New thought",
+            "Split thought at cursor",
+            "Edit thought",
+            "Clean up spacing",
+            "Copy thought",
+            "Paste exactly",
+            "Paste and clean up",
+            "More commands...",
+        ]
+    );
     assert_eq!(rows[selected], "New thought");
     assert!(
         !matches!(
@@ -315,7 +328,7 @@ fn empty_insertion_and_editor_selection_contexts_report_exact_capabilities() {
 }
 
 #[test]
-fn selection_submission_and_history_change_relevance_without_changing_inventory() {
+fn selection_submission_and_query_history_change_relevance_without_changing_inventory() {
     let mut selection = Fixture::new();
     for thought in ["one", "two", "three"] {
         saved_thought(&mut selection, thought);
@@ -378,9 +391,19 @@ fn selection_submission_and_history_change_relevance_without_changing_inventory(
     let mut history = Fixture::new();
     saved_thought(&mut history, "history source");
     open(&mut history);
-    assert!(searched_row(&mut history, "Undo board action", 72).0);
+    type_query(&mut history, "undo");
+    let (_, rows, _) = history.app.palette_view().expect("query history");
+    assert_eq!(rows, ["Undo"]);
     history.input(crate::key_input(UiKey::Enter));
-    assert!(history.app.state.board.live_thoughts().is_empty());
+    assert!(
+        history
+            .app
+            .palette_view()
+            .expect("query undone")
+            .0
+            .is_empty()
+    );
+    assert_eq!(history.app.state.board.live_thoughts().len(), 1);
 }
 
 #[test]

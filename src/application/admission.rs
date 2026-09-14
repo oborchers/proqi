@@ -7,8 +7,8 @@ pub enum PendingMutationIntent {
     ClipboardCut,
     /// A pending clipboard read may create a thought or edit the active thought.
     ClipboardPaste,
-    /// A successful durable submission outcome may remove its source thoughts.
-    SubmissionRemove,
+    /// A submission completion may persist integration context or remove source thoughts.
+    SubmissionCompletion,
     /// A successful cross-session transfer may remove its source thought.
     TransferRemove,
 }
@@ -18,7 +18,7 @@ pub enum PendingMutationIntent {
 pub struct PendingMutationIntents {
     clipboard_cuts: usize,
     clipboard_pastes: usize,
-    submission_removals: usize,
+    submission_completions: usize,
     transfer_removals: usize,
 }
 
@@ -28,7 +28,7 @@ impl PendingMutationIntents {
         let target = match intent {
             PendingMutationIntent::ClipboardCut => &mut self.clipboard_cuts,
             PendingMutationIntent::ClipboardPaste => &mut self.clipboard_pastes,
-            PendingMutationIntent::SubmissionRemove => &mut self.submission_removals,
+            PendingMutationIntent::SubmissionCompletion => &mut self.submission_completions,
             PendingMutationIntent::TransferRemove => &mut self.transfer_removals,
         };
         *target = target.saturating_add(count);
@@ -39,7 +39,7 @@ impl PendingMutationIntents {
     pub const fn total(self) -> usize {
         self.clipboard_cuts
             .saturating_add(self.clipboard_pastes)
-            .saturating_add(self.submission_removals)
+            .saturating_add(self.submission_completions)
             .saturating_add(self.transfer_removals)
     }
 

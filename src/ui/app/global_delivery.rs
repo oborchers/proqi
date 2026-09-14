@@ -209,8 +209,13 @@ impl BoardApp {
                 movement: CursorMovement::VisualDown,
                 ..
             } => self.move_global_delivery(1),
-            UiKey::Move { movement, .. } => {
-                self.update_global_query(|query| query.move_cursor(movement));
+            UiKey::Move {
+                movement,
+                extend_selection,
+            } => {
+                self.update_global_query(|query| {
+                    query.move_cursor_with_selection(movement, extend_selection);
+                });
             }
             UiKey::Character(character) if !character.is_control() => {
                 self.update_global_query(|query| query.insert_char(character));
@@ -218,6 +223,13 @@ impl BoardApp {
             UiKey::UnmodifiedSpace => {
                 self.update_global_query(|query| query.insert_char(' '));
             }
+            UiKey::SelectAll => self.update_global_query(QueryEditor::select_all),
+            UiKey::Undo => self.update_global_query(|query| {
+                query.undo();
+            }),
+            UiKey::Redo => self.update_global_query(|query| {
+                query.redo();
+            }),
             _ => {}
         }
         Vec::new()
@@ -360,6 +372,12 @@ impl BoardApp {
         self.global_delivery
             .as_ref()
             .map(|state| state.query.cursor())
+    }
+
+    pub(super) fn global_delivery_query_selection(&self) -> Option<super::query::QuerySelection> {
+        self.global_delivery
+            .as_ref()
+            .and_then(|state| state.query.selection())
     }
 
     pub(super) fn global_delivery_overflow(&self, visible: usize) -> (bool, bool) {

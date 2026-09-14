@@ -421,6 +421,8 @@ mod modifier_parity;
 mod movement_symmetry;
 #[path = "ui_board/navigation.rs"]
 mod navigation;
+#[path = "ui_board/new_thought.rs"]
+mod new_thought;
 #[path = "ui_board/palette.rs"]
 mod palette;
 #[path = "ui_board/paste_reflow.rs"]
@@ -465,6 +467,8 @@ mod transformations;
 mod versioned_keymap;
 #[path = "ui_board/viewport_bounds.rs"]
 mod viewport_bounds;
+#[path = "ui_board/visual_row_affinity.rs"]
+mod visual_row_affinity;
 #[path = "ui_board/visual_row_selection.rs"]
 mod visual_row_selection;
 

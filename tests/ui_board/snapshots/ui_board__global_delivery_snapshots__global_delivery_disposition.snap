@@ -1,6 +1,5 @@
 ---
 source: tests/ui_board/global_delivery_snapshots.rs
-assertion_line: 56
 expression: "screen(&mut fixture, 50, 6)"
 ---
 SIZE 50x6
@@ -15,7 +14,7 @@ TEXT
 
 STYLE RUNS
 0: 0-46 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 47-49 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE
-1: 0-0 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 1-48 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 49-49 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+1: 0-0 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 1-1 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 2-49 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 2: 0-0 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 1-6 fg=Rgb(112, 214, 155) bg=Rgb(39, 40, 48) mod=BOLD | 7-19 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 20-48 fg=Rgb(176, 169, 160) bg=Rgb(39, 40, 48) mod=NONE | 49-49 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 3: 0-21 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 22-48 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE | 49-49 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 4: 0-49 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE

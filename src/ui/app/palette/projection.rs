@@ -1,6 +1,6 @@
 //! One semantic projection for concise, expanded, and searched Commands rows.
 
-use super::{CommandContext, ranking};
+use super::{CommandContext, PaletteHistoryContext, ranking};
 #[cfg(test)]
 use crate::ui::shortcut_registry::CommandCategory;
 use crate::ui::{
@@ -46,24 +46,29 @@ pub(super) fn rows(
     commands: &[CommandRecord],
     context: &CommandContext,
     query: &str,
+    history: PaletteHistoryContext,
     expanded: bool,
 ) -> Vec<ProjectedRow> {
     if !query.is_empty() {
-        return searched(commands, context, query);
+        return searched(commands, context, query, history);
     }
     if expanded {
-        return expanded_rows(commands, context);
+        return expanded_rows(commands, context, history);
     }
-    concise(commands, context)
+    concise(commands, context, history)
 }
 
-fn concise(commands: &[CommandRecord], context: &CommandContext) -> Vec<ProjectedRow> {
+fn concise(
+    commands: &[CommandRecord],
+    context: &CommandContext,
+    history: PaletteHistoryContext,
+) -> Vec<ProjectedRow> {
     let mut relevant = commands
         .iter()
         .filter_map(|command| {
             discoverable(command).then(|| {
                 context
-                    .relevance(command.metadata)
+                    .relevance(command.metadata, history)
                     .map(|priority| (priority, command.metadata.order, command.action, command))
             })?
         })
@@ -74,7 +79,12 @@ fn concise(commands: &[CommandRecord], context: &CommandContext) -> Vec<Projecte
         .take(CONCISE_COMMAND_LIMIT)
         .enumerate()
         .map(|(index, (_, _, _, command))| {
-            command_row(command, context, (index == 0).then_some("Relevant now"))
+            command_row(
+                command,
+                context,
+                history,
+                (index == 0).then_some("Relevant now"),
+            )
         })
         .collect::<Vec<_>>();
     rows.push(ProjectedRow {
@@ -95,7 +105,11 @@ fn concise(commands: &[CommandRecord], context: &CommandContext) -> Vec<Projecte
     rows
 }
 
-fn expanded_rows(commands: &[CommandRecord], context: &CommandContext) -> Vec<ProjectedRow> {
+fn expanded_rows(
+    commands: &[CommandRecord],
+    context: &CommandContext,
+    history: PaletteHistoryContext,
+) -> Vec<ProjectedRow> {
     let mut commands = commands
         .iter()
         .filter(|command| discoverable(command))
@@ -114,7 +128,7 @@ fn expanded_rows(commands: &[CommandRecord], context: &CommandContext) -> Vec<Pr
             let category = command.metadata.category;
             let group = (previous != Some(category)).then(|| category.label());
             previous = Some(category);
-            command_row(command, context, group)
+            command_row(command, context, history, group)
         })
         .collect()
 }
@@ -123,6 +137,7 @@ fn searched(
     commands: &[CommandRecord],
     context: &CommandContext,
     query: &str,
+    history: PaletteHistoryContext,
 ) -> Vec<ProjectedRow> {
     let mut ranked = commands
         .iter()
@@ -135,7 +150,7 @@ fn searched(
     ranked.sort_unstable_by_key(|(rank, action, order, _)| (*rank, *action, *order));
     let rows = ranked
         .into_iter()
-        .map(|(_, _, _, command)| command_row(command, context, None))
+        .map(|(_, _, _, command)| command_row(command, context, history, None))
         .collect::<Vec<_>>();
     if rows.is_empty() {
         vec![ProjectedRow {
@@ -155,9 +170,10 @@ fn searched(
 fn command_row(
     command: &CommandRecord,
     context: &CommandContext,
+    history: PaletteHistoryContext,
     group: Option<&'static str>,
 ) -> ProjectedRow {
-    let applicability = context.applicability(command.metadata);
+    let applicability = context.applicability_with_history(command.metadata, history);
     let scope = context
         .command_scope_label(command.metadata.scope)
         .to_owned();

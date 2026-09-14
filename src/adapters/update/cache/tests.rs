@@ -114,6 +114,7 @@ fn refresh_prompt_and_installer_elections_are_independent() {
         UpdateLockKind::Refresh,
         UpdateLockKind::Prompt,
         UpdateLockKind::Installer,
+        UpdateLockKind::Convergence,
     ] {
         let lease = store.try_lock(identity(), kind).expect("first lock");
         assert!(lease.is_some());
@@ -131,6 +132,38 @@ fn refresh_prompt_and_installer_elections_are_independent() {
                 .is_some()
         );
     }
+}
+
+#[test]
+fn concurrent_startups_share_one_gate_that_excludes_convergence() {
+    let temporary = tempfile::tempdir().expect("cache root");
+    let store = FileUpdateStateStore::new(temporary.path()).expect("store");
+    let first = store
+        .try_startup_lock(identity())
+        .expect("first startup lock")
+        .expect("first startup lease");
+    let second = store
+        .try_startup_lock(identity())
+        .expect("second startup lock")
+        .expect("second startup lease");
+    assert!(
+        store
+            .try_lock(identity(), UpdateLockKind::Convergence)
+            .expect("blocked convergence")
+            .is_none()
+    );
+    drop((first, second));
+    let convergence = store
+        .try_lock(identity(), UpdateLockKind::Convergence)
+        .expect("convergence lock")
+        .expect("convergence lease");
+    assert!(
+        store
+            .try_startup_lock(identity())
+            .expect("blocked startup")
+            .is_none()
+    );
+    drop(convergence);
 }
 
 #[test]

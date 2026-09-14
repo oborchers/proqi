@@ -1,5 +1,7 @@
 //! Typed presentation and visibility policy owned by action descriptors.
 
+use super::ShortcutActionId;
+
 /// Underlying surface whose contextual Help includes an action.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum HelpSurface {
@@ -14,6 +16,8 @@ pub(crate) enum HelpAvailability {
     Always,
     Submission,
     EffectiveTransform,
+    Undo,
+    Redo,
 }
 
 /// One ordered Help projection attached to its semantic action.
@@ -63,8 +67,8 @@ pub(crate) enum CommandApplicability {
     RetryStorage,
     ExportRecovery,
     Quit,
-    Undo,
-    Redo,
+    QueryUndo,
+    QueryRedo,
     Attachments,
     InstalledHighlights,
 }
@@ -78,8 +82,8 @@ pub(crate) enum CommandRelevance {
     Selection(u8),
     Editor(u8),
     Submission(u8),
-    Undo(u8),
-    Redo(u8),
+    QueryUndo(u8),
+    QueryRedo(u8),
     StorageRecovery(u8),
     ScreenshotActive(u8),
     ScreenshotRetry(u8),
@@ -157,4 +161,5 @@ pub(crate) struct CommandMetadata {
     pub(crate) relevance: CommandRelevance,
     pub(crate) category: CommandCategory,
     pub(crate) scope: CommandScope,
+    pub(crate) shortcut_owner: ShortcutActionId,
 }

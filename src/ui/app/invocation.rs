@@ -15,7 +15,7 @@ use crate::{
     ui::PointerKind,
 };
 
-use super::{BoardApp, UiInput, UiKey};
+use super::{BoardApp, UiInput, UiKey, query::QueryEditor};
 
 #[path = "invocation/builtins.rs"]
 pub(in crate::ui::app) mod builtins;
@@ -38,7 +38,7 @@ use view::Choice;
 pub(in crate::ui) use view::InvocationChoiceView;
 
 pub(super) struct InvocationPopup {
-    query: String,
+    query: QueryEditor,
     range: Option<Range<usize>>,
     manual: bool,
     selected: usize,
@@ -99,7 +99,7 @@ impl BoardApp {
         }
         self.invocation_popup = self.active_invocation_token().and_then(|(query, range)| {
             let mut popup = InvocationPopup {
-                query,
+                query: QueryEditor::from_text_with_character_limit(&query, 128),
                 range: Some(range),
                 manual: false,
                 selected: 0,
@@ -123,7 +123,7 @@ impl BoardApp {
         let popup = self.invocation_popup.as_ref()?;
         let mut previous_group = None;
         Some((
-            popup.query.clone(),
+            popup.query.text().to_owned(),
             popup
                 .choices
                 .iter()
@@ -176,7 +176,13 @@ impl BoardApp {
     pub(super) fn invocation_query_cursor(&self) -> Option<usize> {
         self.invocation_popup
             .as_ref()
-            .map(|popup| popup.query.len())
+            .map(|popup| popup.query.cursor())
+    }
+
+    pub(super) fn invocation_query_selection(&self) -> Option<super::query::QuerySelection> {
+        self.invocation_popup
+            .as_ref()
+            .and_then(|popup| popup.query.selection())
     }
 
     pub(super) fn handle_invocation_input(
@@ -234,14 +240,36 @@ impl BoardApp {
     fn handle_manual_input(&mut self, input: &UiInput) -> Vec<Effect> {
         match input {
             UiInput::Key(UiKey::Character(character)) if !character.is_control() => {
-                self.update_manual_query(|query| query.push(*character));
+                self.update_manual_query(|query| query.insert_char(*character));
             }
             UiInput::Key(UiKey::UnmodifiedSpace) => {
-                self.update_manual_query(|query| query.push(' '));
+                self.update_manual_query(|query| query.insert_char(' '));
             }
-            UiInput::Key(UiKey::Backspace) => self.pop_manual_query(),
-            UiInput::Paste(value) => self.extend_manual_query(value),
-            UiInput::PasteAnnotated(payload) => self.extend_manual_query(&payload.content),
+            UiInput::Key(UiKey::Backspace) => {
+                self.update_manual_query(QueryEditor::backspace);
+            }
+            UiInput::Key(UiKey::Delete | UiKey::ModifiedDelete) => {
+                self.update_manual_query(QueryEditor::delete);
+            }
+            UiInput::Key(UiKey::Move {
+                movement,
+                extend_selection,
+            }) => self.update_manual_query(|query| {
+                query.move_cursor_with_selection(*movement, *extend_selection);
+            }),
+            UiInput::Key(UiKey::SelectAll) => {
+                self.update_manual_query(QueryEditor::select_all);
+            }
+            UiInput::Key(UiKey::Undo) => self.update_manual_query(|query| {
+                query.undo();
+            }),
+            UiInput::Key(UiKey::Redo) => self.update_manual_query(|query| {
+                query.redo();
+            }),
+            UiInput::Paste(value) => self.update_manual_query(|query| query.paste(value)),
+            UiInput::PasteAnnotated(payload) => {
+                self.update_manual_query(|query| query.paste(&payload.content));
+            }
             UiInput::Resize { .. }
             | UiInput::HostFocusGained
             | UiInput::HostFocusLost
@@ -278,18 +306,6 @@ impl BoardApp {
         };
         self.refresh_invocation_popup();
         effects
-    }
-
-    fn pop_manual_query(&mut self) {
-        self.update_manual_query(|query| {
-            query.pop();
-        });
-    }
-
-    fn extend_manual_query(&mut self, value: &str) {
-        self.update_manual_query(|query| {
-            query.extend(value.chars().filter(|character| !character.is_control()));
-        });
     }
 
     pub(super) fn execute_invocation_visible_index(&mut self, index: usize) -> bool {
@@ -346,12 +362,9 @@ impl BoardApp {
         self.close_invocation_picker();
     }
 
-    fn update_manual_query(&mut self, update: impl FnOnce(&mut String)) {
+    fn update_manual_query(&mut self, update: impl FnOnce(&mut QueryEditor)) {
         if let Some(popup) = &mut self.invocation_popup {
             update(&mut popup.query);
-            if let Some((byte, _)) = popup.query.char_indices().nth(128) {
-                popup.query.truncate(byte);
-            }
             popup.selected = 0;
             popup.scroll = 0;
         }

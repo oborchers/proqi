@@ -69,11 +69,51 @@ fn update_snapshot(width: u16, height: u16) -> String {
 fn barrier_blocks_competing_attempts_and_expires_safely() {
     let (mut app, mut ids, _) = app();
     let operation = ids.request_id();
-    assert!(app.begin_update_barrier(operation, Timestamp::from_millis(10)));
-    assert!(!app.begin_update_barrier(ids.request_id(), Timestamp::from_millis(11)));
+    assert!(app.begin_update_barrier(operation, version(), Timestamp::from_millis(10)));
+    assert!(!app.begin_update_barrier(ids.request_id(), version(), Timestamp::from_millis(11)));
     assert!(!app.expire_update_barrier(Timestamp::from_millis(9)));
     assert!(app.expire_update_barrier(Timestamp::from_millis(10)));
     assert_eq!(app.update_barrier_operation(), None);
+}
+
+#[test]
+fn quiescence_requires_the_prepared_target_and_never_releases_back_to_writes() {
+    let (mut app, mut ids, _) = app();
+    let operation = ids.request_id();
+    let target = version();
+    let wrong = StableVersion::parse("1.2.4").expect("wrong target");
+    assert!(app.begin_update_barrier(operation, target.clone(), Timestamp::from_millis(10)));
+    assert!(!app.commit_update_quiescence(operation, &wrong));
+    assert!(app.commit_update_quiescence(operation, &target));
+    assert!(!app.begin_update_barrier(operation, target.clone(), Timestamp::from_millis(20)));
+    assert!(!app.release_update_barrier(operation));
+    assert!(!app.reserve_update_restart(operation, wrong));
+    assert!(app.reserve_update_restart(operation, target));
+}
+
+#[test]
+fn same_operation_prepare_is_idempotent_without_extending_its_barrier() {
+    let (mut app, mut ids, _) = app();
+    let operation = ids.request_id();
+    let target = version();
+    assert!(app.begin_update_barrier(operation, target.clone(), Timestamp::from_millis(10)));
+    assert!(app.begin_update_barrier(operation, target, Timestamp::from_millis(20)));
+    assert!(app.expire_update_barrier(Timestamp::from_millis(10)));
+    assert_eq!(app.update_barrier_operation(), None);
+}
+
+#[test]
+fn quiesced_owner_exits_at_the_prepared_deadline_when_coordination_is_lost() {
+    let (mut app, mut ids, _) = app();
+    let operation = ids.request_id();
+    let target = version();
+    assert!(app.begin_update_barrier(operation, target.clone(), Timestamp::from_millis(10)));
+    assert!(app.commit_update_quiescence(operation, &target));
+    assert!(!app.expire_update_barrier(Timestamp::from_millis(9)));
+    assert!(app.expire_update_barrier(Timestamp::from_millis(10)));
+    assert!(app.quit);
+    assert_eq!(app.update_restart(), None);
+    assert_eq!(app.update_barrier_operation(), Some(operation));
 }
 
 #[test]
@@ -81,7 +121,8 @@ fn restart_waits_for_confirmed_receipt_delivery() {
     let (mut app, mut ids, _) = app();
     let operation = ids.request_id();
     let installed = version();
-    assert!(app.begin_update_barrier(operation, Timestamp::from_millis(10)));
+    assert!(app.begin_update_barrier(operation, installed.clone(), Timestamp::from_millis(10)));
+    assert!(app.commit_update_quiescence(operation, &installed));
     assert!(app.reserve_update_restart(operation, installed.clone()));
     assert!(!app.quit);
     assert_eq!(app.update_restart(), None);
@@ -93,16 +134,18 @@ fn restart_waits_for_confirmed_receipt_delivery() {
 }
 
 #[test]
-fn failed_restart_delivery_keeps_the_owner_running() {
+fn failed_restart_delivery_stops_the_quiesced_owner_without_exec() {
     let (mut app, mut ids, _) = app();
     let operation = ids.request_id();
-    assert!(app.begin_update_barrier(operation, Timestamp::from_millis(10)));
-    assert!(app.reserve_update_restart(operation, version()));
+    let installed = version();
+    assert!(app.begin_update_barrier(operation, installed.clone(), Timestamp::from_millis(10)));
+    assert!(app.commit_update_quiescence(operation, &installed));
+    assert!(app.reserve_update_restart(operation, installed));
 
     assert!(app.finish_update_restart_delivery(operation, false));
-    assert!(!app.quit);
+    assert!(app.quit);
     assert_eq!(app.update_restart(), None);
-    assert_eq!(app.update_barrier_operation(), None);
+    assert_eq!(app.update_barrier_operation(), Some(operation));
 }
 
 #[test]
@@ -115,6 +158,21 @@ fn keyboard_choices_emit_one_explicit_update_intent() {
     assert_eq!(
         effects,
         vec![Effect::Update(UpdateIntent::Dismiss(version()))]
+    );
+
+    app.present_update(version(), InstallationKind::StandaloneArchive, 1);
+    app.handle(
+        UiInput::Key(UiKey::FastNavigation {
+            direction: FastNavigation::Previous,
+            extend_selection: false,
+        }),
+        &mut ids,
+        &clock,
+    );
+    let effects = app.handle(UiInput::Key(UiKey::Enter), &mut ids, &clock);
+    assert_eq!(
+        effects,
+        vec![Effect::Update(UpdateIntent::Install(version()))]
     );
 
     app.present_update(version(), InstallationKind::StandaloneArchive, 1);

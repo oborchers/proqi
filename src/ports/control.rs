@@ -10,12 +10,13 @@ use crate::domain::{
 
 use super::store::DurableIdentity;
 use super::update::{
-    UpdatePrepareReply, UpdatePrepareRequest, UpdateRestartReply, UpdateRestartRequest,
+    UpdatePrepareReply, UpdatePrepareRequest, UpdateQuiesceReply, UpdateQuiesceRequest,
+    UpdateRestartReply, UpdateRestartRequest,
 };
 use super::{runtime::InstanceInfo, store::CommitReceipt};
 
 /// Current local owner-control protocol.
-pub const CONTROL_PROTOCOL_VERSION: u32 = 8;
+pub const CONTROL_PROTOCOL_VERSION: u32 = 9;
 /// Current compatible screenshot takeover protocol.
 pub const CAPTURE_CONTROL_PROTOCOL_VERSION: u32 = 1;
 /// Oldest owner-control protocol accepted for plain-text mutations.
@@ -88,6 +89,8 @@ impl ControlRejectionCode {
 pub enum ControlMutation {
     /// Rename or clear the active session through its owner.
     RenameSession {
+        /// Durable Browser operation identity.
+        operation_id: OperationId,
         /// Replacement name, or `None` to clear it.
         name: Option<String>,
     },
@@ -175,6 +178,11 @@ pub enum ControlMutation {
         /// Shared attempt identity.
         operation_id: RequestId,
     },
+    /// Commit one prepared owner to irreversible schema quiescence.
+    UpdateQuiesce {
+        /// Exact installed target and shared attempt identity.
+        request: UpdateQuiesceRequest,
+    },
     /// Ask one prepared owner to clean up and replace itself.
     UpdateRestart {
         /// Verified installed version and shared attempt identity.
@@ -196,17 +204,18 @@ impl ControlMutation {
     #[must_use]
     pub const fn durable_operation_id(&self) -> Option<OperationId> {
         match self {
-            Self::Add { operation_id, .. }
+            Self::RenameSession { operation_id, .. }
+            | Self::Add { operation_id, .. }
             | Self::PreserveAdd { operation_id, .. }
             | Self::Delete { operation_id, .. }
             | Self::Move { operation_id, .. }
             | Self::History { operation_id, .. }
             | Self::SetCollapsed { operation_id, .. } => Some(*operation_id),
             Self::UpdatePrepare { .. }
-            | Self::RenameSession { .. }
             | Self::Sync
             | Self::Replace { .. }
             | Self::UpdateRelease { .. }
+            | Self::UpdateQuiesce { .. }
             | Self::UpdateRestart { .. }
             | Self::CaptureTakeover { .. } => None,
         }
@@ -240,6 +249,7 @@ impl ControlMutation {
             | Self::Sync
             | Self::UpdatePrepare { .. }
             | Self::UpdateRelease { .. }
+            | Self::UpdateQuiesce { .. }
             | Self::UpdateRestart { .. }
             | Self::CaptureTakeover { .. } => None,
         }
@@ -268,7 +278,9 @@ impl ControlMutation {
     /// Oldest control protocol capable of representing this request.
     #[must_use]
     pub fn minimum_protocol(&self) -> u32 {
-        if matches!(self, Self::Add { annotations, .. } | Self::PreserveAdd { annotations, .. } if annotations.iter().any(|annotation| matches!(annotation.kind, ContentAnnotationKind::Attachment { .. })))
+        if matches!(self, Self::RenameSession { .. }) {
+            9
+        } else if matches!(self, Self::Add { annotations, .. } | Self::PreserveAdd { annotations, .. } if annotations.iter().any(|annotation| matches!(annotation.kind, ContentAnnotationKind::Attachment { .. })))
         {
             8
         } else if self.requires_protocol_seven() {
@@ -279,15 +291,15 @@ impl ControlMutation {
             5
         } else if matches!(
             self,
-            Self::RenameSession { .. }
-                | Self::Replace { .. }
-                | Self::SetCollapsed { .. }
-                | Self::Sync
+            Self::Replace { .. } | Self::SetCollapsed { .. } | Self::Sync
         ) {
             4
         } else if matches!(
             self,
-            Self::UpdatePrepare { .. } | Self::UpdateRelease { .. } | Self::UpdateRestart { .. }
+            Self::UpdatePrepare { .. }
+                | Self::UpdateRelease { .. }
+                | Self::UpdateQuiesce { .. }
+                | Self::UpdateRestart { .. }
         ) {
             3
         } else if self.requires_protocol_two() {
@@ -387,6 +399,8 @@ pub enum ControlUpdateReceipt {
         /// Participant acknowledging release.
         instance_id: crate::domain::InstanceId,
     },
+    /// Prepared participant stopped schema use and released its shared lease.
+    Quiesced(UpdateQuiesceReply),
     /// Participant accepted or rejected replacement responsibility.
     Restart(UpdateRestartReply),
 }

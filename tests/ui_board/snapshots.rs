@@ -49,7 +49,7 @@ fn engaged_empty_compose_editor() {
 #[test]
 fn populated_board_with_folded_attachment() {
     let mut fixture = attachment_numbering::populated_attachment_fixture();
-    insta::assert_snapshot!(snapshot(&mut fixture, 60, 12, ThemePreference::Dark));
+    assert_platform_snapshot!(snapshot(&mut fixture, 60, 12, ThemePreference::Dark));
 }
 
 #[test]
@@ -265,7 +265,7 @@ fn mixed_claude_and_hermes_targets_have_equal_directional_controls() {
     right = right.with_agent_kind(HarnessKind::new("hermes").expect("fixture harness"));
     right.agent_name = "Hermes qualifier".to_owned();
     fixture.app.complete_agent_discovery(Ok(vec![left, right]));
-    insta::assert_snapshot!(snapshot(&mut fixture, 88, 9, ThemePreference::Dark));
+    assert_platform_snapshot!(snapshot(&mut fixture, 88, 9, ThemePreference::Dark));
 }
 
 #[test]
@@ -287,7 +287,7 @@ fn drag_preview_uses_the_existing_separator_without_reflow() {
         layout.thoughts[2].gutter.y,
         PointerKind::Drag(PointerButton::Left),
     );
-    insta::assert_snapshot!(snapshot(&mut fixture, 60, 14, ThemePreference::Dark));
+    assert_platform_snapshot!(snapshot(&mut fixture, 60, 14, ThemePreference::Dark));
 }
 
 #[test]

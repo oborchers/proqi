@@ -5,7 +5,7 @@ Status: v0.1.0 architecture contract
 Project: Proqi
 
 Command: `proqi`
-Last updated: 2026-09-01
+Last updated: 2026-09-12
 
 ## Purpose
 
@@ -68,12 +68,13 @@ large multi-crate abstraction hierarchy before one is needed.
 - A checked-in `rust-toolchain.toml` defines the supported compiler version.
 - The minimum supported Rust version follows the highest minimum required by a
   direct dependency. It is tested in CI rather than merely documented.
-- Cargo owns dependency resolution. A reviewed pinned `cargo-dist` release tool
-  produces platform archives and metadata without becoming a second local
-  development command surface.
+- Cargo owns dependency resolution. The narrow `xtask` release surface derives
+  platform archives and metadata from one typed target registry without
+  becoming a second local development command surface.
 
-The `v0.1.0` release targets are Apple silicon macOS, Intel macOS, and x86-64
-Linux using GNU libc 2.35 or newer.
+Supported release targets are Apple silicon and Intel macOS, x86-64 and ARM64
+Linux using GNU libc 2.35 or newer, and statically linked x86-64 and ARM64 musl
+fallbacks.
 
 Rust provides a single native executable, predictable resource use, strong
 cross-platform support, and a mature terminal ecosystem. It also makes it
@@ -249,10 +250,10 @@ This is the application facade used by both the TUI and the CLI.
 
 Responsibilities:
 
-- Start, continue, resume, search, rename, and delete sessions.
+- Start, continue, resume, search, rename, trash, and restore sessions.
 - Acquire a session lease before returning an editable session.
 - Create, update, move, copy, cut, delete, restore, and search thoughts.
-- Coordinate persistent editor and board undo.
+- Coordinate persistent Editor, Board, and installation-wide Browser undo.
 - Enforce command preconditions and return structured application errors.
 - Produce read models suited to the board and session browser.
 
@@ -269,6 +270,22 @@ trait Store {
     fn commit(&mut self, batch: OperationBatch) -> Result<CommitReceipt>;
     fn undo(&mut self, session: SessionId, scope: UndoScope) -> Result<CommitReceipt>;
     fn redo(&mut self, session: SessionId, scope: UndoScope) -> Result<CommitReceipt>;
+    fn commit_browser_operation(&mut self, operation: &BrowserOperation)
+        -> Result<BrowserCommitReceipt>;
+    fn commit_browser_noop_rename(
+        &mut self,
+        operation_id: OperationId,
+        session_id: SessionId,
+        name: Option<&str>,
+        at: Timestamp,
+    ) -> Result<BrowserCommitReceipt>;
+    fn move_browser_history(
+        &mut self,
+        request_id: OperationId,
+        target: BrowserHistoryEntry,
+        undo: bool,
+        at: Timestamp,
+    ) -> Result<BrowserCommitReceipt>;
 }
 ```
 
@@ -699,6 +716,15 @@ event-sourced system.
   previous and next content, annotations, and cursor state.
 - `operations`: ordered structural operations and their inverse payloads for
   persistent undo and redo.
+- `browser_operations`: installation-wide ordered rename, trash, and restore
+  operations with exact forward and inverse metadata transitions.
+- `browser_operation_receipts`: idempotent Browser mutation receipts, including
+  same-name rename requests that intentionally create no history, retained
+  independently of the active Browser cursor.
+- `browser_history_receipts`: idempotent, compare-and-set Browser undo and redo
+  receipts tied to the exact operation that was presented to the caller.
+- `browser_history_state`: the single applied-prefix cursor for Browser
+  administration across every session.
 - `integration_context`: optional last-known terminal and verified agent
   metadata. Pane IDs are hints, never durable identity.
 - `onboarding_state`: one versioned installation-local completion marker. A
@@ -739,6 +765,14 @@ ordinary session creation and neither seed nor advance the marker.
 - Operation sequences increase monotonically within a session.
 - Undo and redo commit new current state and move the operation cursor
   atomically.
+- Browser rename, trash, and restore use one installation-wide applied-prefix
+  cursor. Every movement acquires the addressed session lease and compares the
+  presented operation identity before changing state. Later activity in a
+  restored session invalidates only conflicting trash or restore redo entries;
+  it does not discard unrelated or name-only Browser history.
+- A same-name owner-control rename atomically reserves its operation identity in
+  a Browser receipt without advancing or truncating Browser history. Matching
+  retries succeed after restart, while divergent reuse fails closed.
 - A multi-thought mutation is stored as one ordered batch with one inverse, so
   delete, duplicate, collapse, cut, and submit-and-remove remain one undo step.
 - Split, extract, and merge are board-history operations whose ordered batch
@@ -904,7 +938,7 @@ the standalone archive marker into `/usr`; doing so would misidentify its owner.
 The existing current-user runtime registry and owner-control transport gain a
 small ephemeral update protocol. A coordination message includes a typed
 operation ID, target version, installation identity, participant identity,
-deadline, and one of prepare, ready, blocked, installation-result, or restart
+deadline, and one of prepare, ready, blocked, quiesce, quiesced, or restart
 requests. Messages are bounded and contain no prompt text, arbitrary command,
 terminal content, secret, or raw environment data.
 
@@ -921,10 +955,17 @@ return to their prior session after a bounded timeout. The shared cache records
 only the minimal state a later process needs to compare installed and running
 versions.
 
-### Homebrew installation and Unix process replacement
+Update preparation is admitted only when the Screenshot Inbox is inactive and
+has no queued or retained capture. One already accepted commit-first save may
+finish before the owner replies. A live watcher, a draining watcher, a queued
+candidate, or an explicitly retryable failed save rejects preparation before
+the update barrier exists, so no later watcher result can cross into
+quiescence and no retained capture is abandoned implicitly.
 
-Homebrew is the sole owner of installed-file replacement. On macOS and Linux,
-one coordinator directly executes exactly:
+### Verified installation and Unix process replacement
+
+For a Homebrew installation, Homebrew remains the sole owner of installed-file
+replacement. On macOS and Linux, one coordinator directly executes exactly:
 
 ```text
 program: brew
@@ -935,24 +976,68 @@ No shell is involved and Proqi never overwrites a Homebrew-managed executable.
 If installation fails or the result is ambiguous, no participant calls `exec`.
 Every old process returns to normal use after a bounded wait.
 
-After success, the coordinator rescans active instances and publishes the
-installed version. It addresses peer participants first and its own process
+For a verified standalone installation, the same coordinator downloads only
+the exact target release's `proqi-installer.sh` and its checksum through an
+HTTPS-only bounded adapter. The adapter requires one exact checksum record and
+returns the installer bytes only after SHA-256 verification. It writes those
+bytes with create-new semantics below the verified user-owned installation
+root, invokes `sh` directly with the exact target version and prefix, removes
+the temporary script through an ownership guard, and independently runs the
+installed executable's `--version` before allowing any restart. The verified
+installer owns OS, CPU, libc, archive selection, archive checksum verification,
+safe-member extraction, and same-directory atomic replacement. It never uses
+`sudo` or a package manager.
+
+Initial preparation is a reversible safety check, not a lease held across an
+installer operation. The coordinator releases that first barrier before the
+verified installer runs. After success, it measures a fresh bounded preparation
+deadline, rescans active instances, and prepares the complete current cohort
+again. A slow installer therefore cannot consume the post-install safety window.
+
+Every process startup takes a shared convergence-admission lease before opening
+the schema and holds it through owner-control publication, browser selection,
+or completion of a non-interactive command. An interactive owner releases this
+lease only after its control endpoint is published. Bind or metadata-publication
+failure leaves the shared lease attached to that owner until shutdown, so the
+exclusive coordinator stops before installation rather than omitting an
+unaddressable schema writer. The elected coordinator takes the exclusive side
+before its first registry scan and holds it until the prepared cohort has
+quiesced. A startup that loses this admission race fails explicitly before
+schema entry. A startup that wins makes the update attempt stop before
+installation, so an unregistered shared schema holder cannot appear between
+the final scan and quiescence.
+
+The coordinator then sends each exact prepared owner the installed target in
+an irreversible quiesce request. The owner first commits its update barrier,
+blocks every ordinary UI, screenshot, and owner-control mutation, releases its
+shared schema lease, and only then returns a receipt containing its exact
+InstanceId and SessionId. The coordinator restarts only participants whose
+quiescence receipt matches both identities. A missing or ambiguous receipt is
+an attributable failure and is never retried automatically.
+
+After quiescence, the coordinator addresses peers first and its own process
 last, so local shutdown cannot interrupt remaining restart requests. A
-participant reserves the matching restart, closes new control admission, and
-commits to shutdown only after the accepted receipt frame has been written to
-the verified local socket. A failed delivery leaves that participant running
-and records restart convergence as incomplete.
+participant reserves only the matching operation and installed target and
+commits to shutdown after the accepted receipt frame has been written to the
+verified local socket. Failed receipt delivery or expiry after quiescence exits
+the old owner without `exec`; it never releases the barrier back to ordinary
+writes. Durable content remains manually resumable through the exact SessionId.
 
 Restart acceptance is not replacement evidence. After each peer accepts, the
 coordinator performs a fresh bounded, cancellation-aware registry wait. A peer
-converges only when the same session appears under a different instance ID,
-the same installation identity, the exact target version, and a published
-control endpoint. The endpoint is published only after board restoration. The
+converges only when the same session appears under a different instance ID in
+the same operating-system PID, the same installation identity, the exact target
+version, and the matching operation and prior-instance proof carried across
+Unix `exec`. A live peer-credential-checked connection must also succeed against
+the published control endpoint. Metadata alone, an exact manual resume in
+another terminal, or an endpoint lost after publication is never replacement
+readiness. The endpoint is published only after board restoration. The
 coordinator writes the initiating session's content-free pending announcement
 only after every peer converges, then requests the initiating restart. Peer
-failure creates no announcement and releases the initiating process without an
-`exec` request. Initiating restart rejection atomically discards its exact
-pending announcement and releases the preparation barrier. A delayed accepted
+failure creates no announcement, but a quiesced initiating process still
+receives its exact restart request so it cannot resume incompatible writes.
+Initiating restart rejection atomically discards its exact pending announcement
+and leaves the durable SessionId explicitly resumable. A delayed accepted
 initiating resume retains the pending record and may show it later under the
 exact target. `restart_needed` is cleared only when the
 exact target announcement selects the initiating session after board
@@ -962,19 +1047,21 @@ already completed. Control unavailability, cache failure, and stale cache state
 suppress presentation and emit closed finalization failure codes.
 
 If replacement discovery itself fails after peer restart requests, the
-coordinator releases the initiating process immediately, retains
-`restart_needed`, and creates no announcement. It does not leave the initiating
-board blocked until the prepare deadline.
+coordinator records every missing old InstanceId, retains `restart_needed`,
+creates no announcement, and still requests exact replacement of a quiesced
+initiating owner. Cancellation is reversible before quiescence. After any
+quiescence acknowledgement it is a bounded incomplete result, never permission
+for the old participant to write again.
 
 The pending announcement write is part of initiating restart admission. If its
-private atomic write fails, the coordinator releases the initiating process
-without asking it to restart, records restart convergence as incomplete, and
-shows no announcement. This keeps the old session usable and prevents a
-successful-looking update path from losing its required durable target.
+private atomic write fails, the coordinator records restart convergence as
+incomplete and shows no announcement. A quiesced initiating owner still
+replaces itself by exact SessionId, while an owner that never acknowledged
+quiescence remains protected by its old shared schema lease.
 
 Each participant then independently restores terminal modes, stops worker
 threads, closes control transport, releases session and schema leases, applies
-an explicit descriptor policy, resolves and verifies the active Homebrew Proqi
+an explicit descriptor policy, resolves and verifies the active installation's Proqi
 path, and calls Unix `exec` with its ordinary resume arguments. Cleanup is
 explicit because successful `CommandExt::exec` does not run Rust destructors.
 Standard input, output, error, and the inherited PTY remain attached, so no
@@ -983,12 +1070,15 @@ shell, terminal multiplexer, Herdr, or parent agent must recreate the pane.
 The replacement invocation preserves the ordinary resume identity and any
 explicit state-root argument. This keeps package tests and portable invocations
 on the same data paths instead of silently falling back to platform defaults.
+It also carries only the typed update operation, prior instance, and verified
+target version as process-local replacement proof. Those values are descriptive
+until the registry correlates them with the exact SessionId, retained PID,
+installation, runtime lease, and live owner-control endpoint.
 
-A failed `exec` does not undo successful peers. Where safe, the old process
-re-enters its session; otherwise its durable state remains normally resumable.
-Runtime metadata marks it as an old-version participant and the UI offers a
-direct retry. The system never reports complete restart while such an instance
-remains.
+A failed `exec` does not undo successful peers. A quiesced old process exits
+instead of re-entering its session; its durable state remains normally
+resumable by exact SessionId. The system never reports complete restart while
+such an instance remains and never performs an ambiguous automatic retry.
 
 ### Schema compatibility during convergence
 
@@ -998,11 +1088,13 @@ only when release tests prove compatible payload interpretation. A process that
 requires migration must obtain the exclusive schema lease, create a verified
 backup, migrate transactionally, and pass integrity checking.
 
-An old process holding a shared lease prevents an incompatible migration. A new
-process waits within the update convergence window or reports a bounded
-restart-pending state and retries after the old process leaves. It never migrates
-behind an older writer. This conservative barrier remains mandatory even though
-the public CLI has no compatibility guarantee before `1.0`.
+An old process holding a shared lease prevents an incompatible migration. For
+an automatic update, every prepared old participant becomes mutation-free and
+releases that lease before any replacement request is sent. A genuinely active
+incompatible writer or a participant that never acknowledges quiescence keeps
+its lease and therefore blocks migration. No coordinator drops that barrier,
+selects a replacement by cwd or recency, or asks the new binary to migrate
+behind it.
 
 Concurrent replacements may all first observe `MigrationRequired`, release
 their shared leases, and contend for the exclusive lease. The winner performs
@@ -1013,18 +1105,12 @@ current schema. If migration is still required, or an exclusive owner is still
 active, it returns the ordinary bounded `schema_busy` result. This follower
 revalidation never weakens shared and exclusive compatibility.
 
-### Standalone, Debian, Cargo, and unknown installations
+### Debian, Cargo, and unknown installations
 
-Standalone archives share version checking, prompt election, global dismissal,
-checkpointing, and ordinary resumable sessions. `v0.1.0` does not replace an
-archive executable or guarantee same-pane restart. It provides a verified stable
-release URL and external replacement instructions, then resumes on the next
-normal start. `SourceOrUnknown` installations receive accurate non-destructive
-guidance or no action.
-
-Automatic standalone replacement remains behind a future updater port. It must
-not be approximated by writing over the running executable, invoking `curl`, or
-assuming a package manager.
+`SourceOrUnknown` installations receive accurate non-destructive guidance or no
+action. A standalone install is recognized only through the canonical
+executable path and strict bounded archive marker. Its release-attached updater
+uses the same all-session barrier and restart convergence as Homebrew.
 
 Debian and Cargo installations use their external package managers only through
 documented user commands. The Debian artifact is a directly downloaded local
@@ -1259,6 +1345,40 @@ and owns raw mode/reporting with an RAII guard before reporting setup begins.
 No-event results make no claim about which upstream host consumed a chord.
 See [the complete versioned contract](SHORTCUTS.md).
 
+### Contextual undo ownership
+
+Undo and redo resolve from the same typed active-context stack as every other
+shortcut. The topmost editable owner receives the intention first. Search,
+Commands, manual Invocation, Transfer, Global Delivery, Rename, Browser query,
+and Browser Rename each own an in-memory text history for that field's lifetime.
+Their snapshots retain Unicode text, cursor, directional selection, typing
+groups, paste units, and redo invalidation. Closing a field destroys that local
+history, and reopening creates a fresh owner. A blocking overlay without an
+editable field absorbs unavailable history instead of reaching the hidden Board
+or Editor.
+
+Durable Edit mode chooses between the addressed thought's Editor revisions and
+resource-affecting Board operations by their shared session sequence. Board mode
+uses Board history. Browser mode uses the installation-wide Browser cursor when
+its query is empty and inactive. Compose owns no durable history before content,
+but it can redo the immediately undone compose handoff. One exhaustive
+`UndoContract` classifies every application action, while the shortcut registry
+owns bindings, Commands, Help, footer presentation, and pointer geometry. Empty
+history is a quiet typed unavailable result, never a generic invalid-state
+failure.
+
+The macOS factory graph adds exact Control+Z, Control+Shift+Z, and Control+Y as
+action-specific terminal-safe history aliases for every active owner. Compact
+presentation prefers those Control spellings while retaining conventional
+Primary aliases. This does not redefine raw Control as Primary, and the portable
+factory graph remains unchanged.
+
+External delivery, clipboard writes, exports, installed updates, and external
+file changes are not reversible. A local source removal admitted after an
+accepted submission or transfer remains an ordinary Board operation, but its
+feedback names only the local restoration or removal and never claims that the
+external effect was recalled.
+
 The Quit action, whose default Primary+Q alias is separately owned in each
 context, executes before Help and Screenshot takeover navigation,
 but after a commit-first Screenshot save barrier has admitted or deferred the
@@ -1350,14 +1470,27 @@ annotations, mutation payloads, and existing history encodings are unchanged.
 The protocol boundary prevents older readers from interpreting an unknown
 closed operation variant.
 
+Schema version 16 and storage protocol version 15 add the installation-wide
+Browser history tables and cursor after Reflow. Migration 16 creates empty
+Browser history for an upgraded database and records migration row 16 without
+rewriting rows 1 through 15. Rename, trash, and restore retain exact operation
+and request identities for restart-safe replay. New Board or Editor activity
+advances session activity in the same transaction and invalidates only a redo
+whose deletion-state precondition became stale.
+
 Compose sends every character, paste, annotated paste, clipboard result,
 movement, selection, and supported composition intention through the existing
 editor. A content-changing outcome is snapshotted once and passed to the
-canonical `CreateThought` action with exact content and annotations. That action
-allocates the first durable identity and sequence, records one board history
-entry, and produces the existing persistence batch. Content-free editor events
-produce no action. This avoids a create-then-revise gap and makes crash, retry,
-restart, undo, and redo use the existing atomic operation contract.
+canonical `CreateComposeThought` action with exact content, annotations, cursor,
+and directional selection anchor. That action allocates the first durable
+identity and sequence, records one `AddThoughtFromCompose` Board history entry,
+and produces the existing persistence batch. The live editor changes owner in
+place only after the create is admitted, so the first input is never split into
+a create-then-revise gap. Undoing that handoff removes the durable thought and
+returns its exact snapshot to ephemeral Compose. Redo reuses the same thought
+and operation identity. Content-free editor events produce no action, and
+crash, retry, restart, undo, and redo retain the existing atomic operation
+contract.
 
 Native clipboard reads are asynchronous UI intentions stored with a typed
 initiating owner. Board results remain Board-owned, durable editor results must
@@ -1645,8 +1778,11 @@ bounded messages, protocol negotiation, idempotency keys, and timeouts are
 mandatory. If forwarding is unsupported or the owner cannot be verified, the
 CLI returns `session_busy`.
 
-Control protocol version 8 is current. Attachment-bearing creation requires
-version 8 to retain destination occurrence numbering. Version 2 introduced legacy durable
+Control protocol version 9 is current. Version 9 carries the durable operation
+identity required for active-owner session rename, including idempotent replay
+and Browser history. A same-name rename commits a durable no-op receipt so its
+identity cannot later name different content. Attachment-bearing creation requires version 8 to retain
+destination occurrence numbering. Version 2 introduced legacy durable
 presentation annotations. Version 4 added session rename, owner synchronization,
 exact editor replacement, and durable collapse state. An add mutation carrying
 an invocation-reference annotation requires version 6, so an older active owner
@@ -1676,7 +1812,7 @@ or automatic scratchpad reads.
 - Diagnostic logs exclude thought content, clipboard content, session names,
   workspace paths, pane identifiers, and raw external responses.
 - Update lifecycle events contain closed schema stages, aggregate participant,
-  restart, and replacement counts, stable failure stage and code pairs, and
+  quiescence, restart, and replacement counts, stable failure stage and code pairs, and
   final convergence. They contain no durable distributed update phase record.
 - Each instance owns a locked JSONL stream with five 1 MiB segments. Startup
   prunes inactive streams toward a 20 MiB installation-wide ceiling without
@@ -1812,8 +1948,8 @@ cargo xtask package
   reports from the same tests used in CI.
 - `audit` runs dependency advisory, license, source, and duplicate-dependency
   policy through `cargo-audit` and `cargo-deny`.
-- `package` builds the host release executable, stages the exact standalone
-  archive layout, generates Bash, Zsh, and Fish completions from the installed
+- `package` builds one registry-selected release executable, stages the exact
+  standalone archive layout, generates Bash, Zsh, and Fish completions from the installed
   executable, and runs the copied binary from isolated config, data, cache,
   runtime, and working directories. Its installed-product contract covers exact
   version and JSON behavior, Unicode and whitespace fidelity, process-to-process
@@ -1828,11 +1964,12 @@ cargo xtask package
   verifies an exact source-only member allowlist and normalized manifest,
   installs from the extracted package into isolated Cargo state, and records
   the `.crate` checksum and evidence without publishing.
-- `debian-package` consumes the verified x86-64 GNU/Linux archive and produces
-  `proqi_amd64.deb` from the identical executable. `verify-debian` proves its
-  metadata, derived dependencies, contents, permissions, lack of maintainer
-  scripts, and disposable install, remove, state-preservation, and reinstall
-  behavior on pinned Ubuntu 22.04, Ubuntu 24.04, and Debian bookworm images.
+- `debian-package` consumes a verified GNU/Linux archive and produces the typed
+  `proqi_amd64.deb` or `proqi_arm64.deb` from the identical executable.
+  `verify-debian` proves its metadata, derived dependencies, contents,
+  permissions, lack of maintainer scripts, and disposable install, remove,
+  state-preservation, and reinstall behavior on pinned Ubuntu 22.04, Ubuntu
+  24.04, and Debian bookworm images.
 
 The commands remain thin orchestrators around standard Cargo tools. They print
 the commands they run, propagate exit codes, avoid network access unless the
@@ -1955,20 +2092,22 @@ PTY, coverage, audit, packaging, rehearsal, full MSRV, and Linux container
 parity without making them prerequisites of metadata preparation.
 
 For an exact release-ready main SHA, the candidate workflow runs alongside
-ordinary CI and has no publication credentials. It builds only Apple silicon
-macOS, Intel macOS, and x86-64 GNU Linux artifacts on native runners. Each native
-binary is built once. The Linux binary is reused byte for byte in the Debian
-package. The GNU/Linux candidate is built on Ubuntu 22.04, must not require a
-glibc symbol newer than `GLIBC_2.35`, and is started from its final archive on
-Ubuntu 22.04, Debian bookworm, and Ubuntu 24.04. One Linux job generates a union
-third-party notice file for all targets, so Intel macOS never compiles the
-packaging tool.
+ordinary CI and has no publication credentials. One typed metadata registry
+expands Apple silicon macOS, Intel macOS, x86-64 and ARM64 GNU Linux, plus
+x86-64 and ARM64 musl Linux onto native GitHub runners. Each binary is built
+once. GNU Linux binaries are reused byte for byte in their matching Debian
+packages. GNU candidates are built on Ubuntu 22.04, must not require a glibc
+symbol newer than `GLIBC_2.35`, and start from final archives on Ubuntu 22.04,
+Debian bookworm, and Ubuntu 24.04. Musl candidates are statically linked and
+start from final archives on Alpine and Ubuntu 20.04, proving truthful fallback
+for native musl and pre-floor glibc environments. One job generates a union
+third-party notice file for every registry target.
 
-A reviewed pinned `cargo-dist` configuration or equivalent narrow Rust tool
-stages archives containing one executable, MIT license, required notices, and
-shell completions. Jobs create and verify SHA-256 manifests, SPDX JSON SBOMs,
-and GitHub OIDC Sigstore provenance attestations. Every third-party Action is
-pinned by full commit SHA and ordinary CI remains read-only.
+The narrow Rust release tool stages archives containing one executable, MIT
+license, required notices, and shell completions. Jobs create and verify SHA-256
+manifests, SPDX JSON SBOMs, and GitHub OIDC Sigstore provenance attestations.
+Every third-party Action is pinned by full commit SHA and ordinary CI remains
+read-only.
 
 The checked-in release manifest is packaged with the crate and embedded in the
 binary. One shared xtask validator compares its exact versions with GitHub note
@@ -1977,9 +2116,9 @@ release planning, standalone packaging, and crate packaging all fail closed on
 missing, corrupt, unreviewed, or mismatched highlights.
 
 The candidate workflow creates a 30-day immutable artifact only after every
-target, installed smoke, crate dry run, Debian package contract, checksum, SBOM,
-attestation, formula, and manifest step succeeds. The Debian package reuses the
-verified Linux archive executable byte for byte. The manifest separates public
+target, installed smoke, crate dry run, Debian package contract, installer,
+checksum, SBOM, attestation, formula, and manifest step succeeds. Each Debian
+package reuses its verified Linux archive executable byte for byte. The manifest separates public
 release files from private crate and Debian evidence and binds the future tag,
 source commit, source ref, build run and attempt, exact workflow, filenames, and
 file digests. A protected stable tag remains the explicit publication authority.
@@ -1991,9 +2130,11 @@ verifies every internal hash and candidate attestation. Missing, expired,
 duplicate, mismatched, conflicting, or unattested candidates fail closed.
 Promotion checks the immutable tag commit, not the moving main tip. A later
 main commit therefore does not invalidate an authorized prepared candidate.
-Promotion adds tag-bound attestations and publishes the same bytes. It never
-rebuilds a successful native candidate. A manual candidate dispatch provides a
-non-publishing recovery path at main or at the exact protected tag.
+Promotion adds tag-bound provenance plus a release-wide SPDX attestation whose
+subject checksums derive from the typed primary-artifact registry, then
+publishes the same bytes. It never rebuilds a successful native candidate. A
+manual candidate dispatch provides a non-publishing recovery path at main or at
+the exact protected tag.
 Release creation is idempotent for absent releases, empty or partially uploaded
 matching drafts, complete drafts, and already published identical assets. The
 workflow creates an empty verified draft, reconciles exact candidate bytes,
@@ -2025,7 +2166,7 @@ formula before committing it, and performs exact-version no-ops. Proqi stores no
 cross-repository credential. Homebrew Core remains outside scope.
 
 Package publication has no hidden local step. A credential-free rehearsal plans
-all three targets, builds and smokes the host artifact, and generates host
+all six targets, builds and smokes the host artifact, and generates host
 checksums, completions, notices, SPDX output, and formula metadata under
 `target`. It reports platform work that only CI can verify. No paid platform
 signing or notarization is performed.
@@ -2098,7 +2239,8 @@ as architecture.
 The architecture leaves only later product expansion open:
 
 - Additional multiplexer and coding-agent adapters.
-- A separately reviewed standalone self-replacement mechanism after `v0.1.0`.
+- Automatic package-manager updates for Debian, Cargo, or other unknown
+  installation owners.
 - Cloud sync, shared editing, and a public plugin API.
 - Homebrew Core submission after the project independently meets its policy.
 
