@@ -1,6 +1,7 @@
 use super::behavior::{app_with_thought, candidate, next_commit};
 use crate::{
-    application::{Effect, ScreenshotIntent, ScreenshotPauseReason},
+    application::{DurabilityState, Effect, FailureCode, ScreenshotIntent, ScreenshotPauseReason},
+    domain::OperationSequence,
     ports::store::StoreError,
     ui::{ScreenshotUpdateReadiness, UiInput, UiKey},
 };
@@ -106,6 +107,71 @@ fn disable_and_retry_are_distinct_truthful_public_actions() {
         app.retry_screenshot_capture(&mut ids, &clock).as_slice(),
         [Effect::CommitCapture(_)]
     ));
+}
+
+#[test]
+fn failed_durability_disables_retained_capture_retry_in_commands_and_execution() {
+    let (mut app, mut ids, clock, _) = app_with_thought();
+    app.screenshot_started(std::time::Duration::ZERO);
+    app.queue_screenshot_candidates([candidate(73)]);
+    next_commit(&mut app, &mut ids, &clock);
+    app.complete_screenshot_capture(Err(StoreError::Busy), &mut ids, &clock);
+    assert!(app.screenshot_retry_ready());
+    app.state.durability = DurabilityState::Failed {
+        durable: OperationSequence::ZERO,
+        failed: OperationSequence::new(1),
+        code: FailureCode::StorageFailed,
+    };
+
+    app.open_palette();
+    for character in "retry screenshot capture".chars() {
+        app.handle(UiInput::Key(UiKey::Character(character)), &mut ids, &clock);
+    }
+    let picker = app.command_palette_view().expect("Commands");
+    assert_eq!(picker.rows.len(), 1);
+    assert!(!picker.rows[0].enabled);
+    assert_eq!(
+        picker.rows[0].secondary.as_deref(),
+        Some("Resolve the failed save first")
+    );
+    let thought_count = app.state.board.live_thoughts().len();
+    assert!(
+        app.handle(UiInput::Key(UiKey::Enter), &mut ids, &clock)
+            .is_empty()
+    );
+    assert_eq!(app.state.board.live_thoughts().len(), thought_count);
+    app.close_overlay();
+    assert!(app.retry_screenshot_capture(&mut ids, &clock).is_empty());
+    assert_eq!(app.state.board.live_thoughts().len(), thought_count);
+
+    let (mut paused, mut paused_ids, paused_clock, _) = app_with_thought();
+    paused.enter_screenshot_paused(ScreenshotPauseReason::Inactivity { minutes: 20 });
+    paused.state.durability = DurabilityState::Failed {
+        durable: OperationSequence::ZERO,
+        failed: OperationSequence::new(1),
+        code: FailureCode::StorageFailed,
+    };
+    paused.open_palette();
+    for character in "resume screenshot inbox".chars() {
+        paused.handle(
+            UiInput::Key(UiKey::Character(character)),
+            &mut paused_ids,
+            &paused_clock,
+        );
+    }
+    let picker = paused.command_palette_view().expect("Commands");
+    assert_eq!(picker.rows.len(), 1);
+    assert!(!picker.rows[0].enabled);
+    assert_eq!(
+        picker.rows[0].secondary.as_deref(),
+        Some("Resolve the failed save first")
+    );
+    paused.close_overlay();
+    assert!(
+        paused
+            .toggle_screenshot_inbox(&mut paused_ids, &paused_clock)
+            .is_empty()
+    );
 }
 
 #[test]

@@ -4,6 +4,8 @@ use super::*;
 
 #[path = "commands_disclosure/feedback.rs"]
 mod feedback;
+#[path = "commands_disclosure/geometry.rs"]
+mod geometry;
 #[path = "commands_disclosure/refresh.rs"]
 mod refresh;
 
@@ -217,6 +219,7 @@ fn disabled_rows_and_category_headings_are_not_pointer_targets() {
     for _ in 0.."delete thought".chars().count() {
         fixture.input(crate::key_input(UiKey::Backspace));
     }
+    let _ = draw(&mut fixture, 72, 20);
     expand_by_keyboard(&mut fixture);
     let layout = fixture.app.prepare_frame(Rect::new(0, 0, 72, 20));
     let overlay = layout.overlay.as_ref().expect("expanded Commands geometry");

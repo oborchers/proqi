@@ -26,4 +26,12 @@ impl BoardApp {
             self.layout = None;
         }
     }
+
+    pub(in crate::ui::app) fn refresh_palette_attachments(&mut self) {
+        let refreshing = self.state.attachments.manual_refresh_active();
+        if let Some(palette) = &mut self.palette {
+            palette.refresh_context(|context| context.set_attachments_refreshing(refreshing));
+            self.layout = None;
+        }
+    }
 }

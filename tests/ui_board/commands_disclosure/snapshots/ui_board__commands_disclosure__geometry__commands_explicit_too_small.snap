@@ -1,0 +1,8 @@
+---
+source: tests/ui_board/commands_disclosure/geometry.rs
+assertion_line: 16
+expression: trim_snapshot_rows(&rendered)
+---
+┌ commands ────────────────[x]
+│Pane too small              │
+└────────────────────────────┘

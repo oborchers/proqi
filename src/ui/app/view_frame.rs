@@ -69,6 +69,12 @@ impl BoardApp {
         self.configure_overlay(&mut layout);
         self.keep_overlay_selection_visible(&layout);
         self.configure_overlay(&mut layout);
+        self.record_palette_rendered_geometry(
+            layout
+                .overlay
+                .as_ref()
+                .map_or_else(Vec::new, |overlay| overlay.item_interactive.clone()),
+        );
         layout.configure_agent_controls_with_keys(
             &self.agent_targets,
             self.submission_mode(),

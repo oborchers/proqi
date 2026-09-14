@@ -173,8 +173,8 @@ const fn command_scope(action: Action) -> CommandScope {
         | Action::SubmitRemove
         | Action::SubmitKeep
         | Action::SubmitToAgent
-        | Action::Undo
-        | Action::Redo => CommandScope::Contextual,
+        | Action::ReflowThought => CommandScope::Contextual,
+        Action::Undo | Action::Redo => CommandScope::Commands,
         Action::PlainNewline
         | Action::DeleteLogicalLine
         | Action::DeleteSentence

@@ -3,6 +3,7 @@
 mod activity;
 mod barrier;
 mod presentation;
+mod retry;
 mod takeover;
 mod update;
 
@@ -77,6 +78,16 @@ impl BoardApp {
         _ids: &mut impl IdGenerator,
         _clock: &impl Clock,
     ) -> Vec<Effect> {
+        if matches!(
+            self.state.durability,
+            crate::application::DurabilityState::Failed { .. }
+        ) && matches!(
+            self.screenshot.state,
+            ScreenshotState::Off | ScreenshotState::Paused(_)
+        ) {
+            self.set_warning("resolve the failed save before enabling Screenshot Inbox");
+            return Vec::new();
+        }
         match self.screenshot.state {
             ScreenshotState::Off | ScreenshotState::Paused(_) => {
                 self.screenshot.pending_pause = None;
@@ -92,18 +103,6 @@ impl BoardApp {
             }
             ScreenshotState::Stopping | ScreenshotState::Releasing => Vec::new(),
         }
-    }
-
-    pub(super) fn retry_screenshot_capture(
-        &mut self,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-    ) -> Vec<Effect> {
-        let Some(ScreenshotSave::Ready(candidate)) = self.screenshot.save.clone() else {
-            self.set_warning("Screenshot Inbox has no failed capture to retry");
-            return Vec::new();
-        };
-        self.prepare_screenshot_save(candidate, ids, clock, true)
     }
 
     pub(super) fn handle_ready_capture_quit(

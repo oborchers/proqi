@@ -1,4 +1,7 @@
 use super::*;
+use proqi::ports::attachment_accessibility::{
+    AttachmentAvailability, AttachmentCheckBatch, AttachmentCheckBatchResult, AttachmentCheckResult,
+};
 
 #[test]
 fn asynchronous_submission_refresh_preserves_the_selected_typed_command() {
@@ -96,6 +99,73 @@ fn commands_show_bindings_and_scope_from_the_captured_invocation_mode() {
     let (_, rendered) = searched_row(&mut fixture, "Select all thoughts", 88);
     assert!(rendered.contains("F10 · selection"));
     assert!(!rendered.contains("F11"));
+}
+
+#[test]
+fn completed_manual_attachment_refresh_updates_open_commands_in_place() {
+    let mut fixture = Fixture::new();
+    let path = "/private/tmp/proqi-commands-refresh.txt";
+    let effects = fixture.effects(UiInput::PasteAnnotated(
+        PastePayload::annotated(
+            path.to_owned(),
+            vec![ContentAnnotation {
+                start: 0,
+                end: path.len(),
+                kind: ContentAnnotationKind::Attachment {
+                    ordinal: Some(1_u64.try_into().expect("attachment ordinal")),
+                    image: false,
+                    display_name: "proqi-commands-refresh.txt".to_owned(),
+                },
+            }],
+        )
+        .expect("valid attachment payload"),
+    ));
+    let initial = attachment_batch(&effects);
+    fixture
+        .app
+        .complete_attachment_checks(complete_available(initial));
+    fixture.input(crate::key_input(UiKey::Escape));
+
+    let refresh = fixture.app.refresh_attachments(true);
+    let refresh = attachment_batch(&refresh);
+    open(&mut fixture);
+    let (enabled, rendered) = searched_row(&mut fixture, "Refresh attachments", 82);
+    assert!(!enabled);
+    assert!(rendered.contains("Attachment refresh is in progress"));
+
+    fixture
+        .app
+        .complete_attachment_checks(complete_available(refresh));
+    let layout = fixture.app.prepare_frame(Rect::new(0, 0, 82, 12));
+    assert_eq!(
+        layout.overlay.expect("refreshed Commands").item_interactive,
+        [true]
+    );
+}
+
+fn attachment_batch(effects: &[Effect]) -> AttachmentCheckBatch {
+    effects
+        .iter()
+        .find_map(|effect| match effect {
+            Effect::CheckAttachments(batch) => Some(batch.clone()),
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("attachment batch missing: {effects:?}"))
+}
+
+fn complete_available(batch: AttachmentCheckBatch) -> AttachmentCheckBatchResult {
+    AttachmentCheckBatchResult {
+        id: batch.id,
+        purpose: batch.purpose,
+        results: batch
+            .checks
+            .into_iter()
+            .map(|key| AttachmentCheckResult {
+                key,
+                result: Ok(AttachmentAvailability::Available),
+            })
+            .collect(),
+    }
 }
 
 #[test]

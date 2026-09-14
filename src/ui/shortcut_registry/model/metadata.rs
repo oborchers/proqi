@@ -119,6 +119,7 @@ impl CommandCategory {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum CommandScope {
     Contextual,
+    Commands,
     Board,
     Editor,
     Selection,
@@ -130,6 +131,7 @@ impl CommandScope {
     pub(crate) const fn label(self) -> &'static str {
         match self {
             Self::Contextual => "current",
+            Self::Commands => "commands",
             Self::Board => "board",
             Self::Editor => "edit",
             Self::Selection => "selection",

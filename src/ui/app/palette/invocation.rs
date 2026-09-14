@@ -108,14 +108,11 @@ impl CommandContext {
             A::BoardThought => Self::when(self.board_thought(), "Available from Board focus"),
             A::Submission => self.submission_applicability(),
             A::SubmissionAll => self.all_submission_applicability(),
-            A::ScreenshotRetry => Self::when(self.screenshot.retry, "No failed capture to retry"),
+            A::ScreenshotRetry => self.screenshot_retry_applicability(),
             A::Split => self.when_handoff(false),
             A::Extract => self.when_handoff(true),
             A::Merge => self.merge_applicability(),
-            A::ScreenshotInbox => Self::when(
-                self.screenshot.action != ScreenshotPaletteAction::Unavailable,
-                "Screenshot Inbox is stopping",
-            ),
+            A::ScreenshotInbox => self.screenshot_inbox_applicability(),
             A::RetryStorage => self.recovery.retry_applicability(),
             A::ExportRecovery => self.recovery.export_applicability(),
             A::Quit => self.recovery.quit_applicability(),
@@ -201,6 +198,10 @@ impl CommandContext {
         self.recovery = recovery;
     }
 
+    pub(super) fn set_attachments_refreshing(&mut self, refreshing: bool) {
+        self.attachments.refreshing = refreshing;
+    }
+
     pub(super) fn take_selection_handoff(&mut self) -> Option<EditorSelectionHandoff> {
         self.selection.editor_handoff.take()
     }
@@ -248,6 +249,29 @@ impl CommandContext {
             self.features.submit_supported,
             "No verified agent is available",
         )
+    }
+
+    const fn screenshot_retry_applicability(&self) -> Applicability {
+        if self.recovery.failed() {
+            Applicability::disabled("Resolve the failed save first")
+        } else {
+            Self::when(self.screenshot.retry, "No failed capture to retry")
+        }
+    }
+
+    const fn screenshot_inbox_applicability(&self) -> Applicability {
+        if matches!(self.screenshot.action, ScreenshotPaletteAction::Unavailable) {
+            Applicability::disabled("Screenshot Inbox is stopping")
+        } else if self.recovery.failed()
+            && matches!(
+                self.screenshot.action,
+                ScreenshotPaletteAction::Enable | ScreenshotPaletteAction::Resume
+            )
+        {
+            Applicability::disabled("Resolve the failed save first")
+        } else {
+            Applicability::ENABLED
+        }
     }
 
     fn all_submission_applicability(&self) -> Applicability {
@@ -415,78 +439,4 @@ impl BoardApp {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::{
-        adapters::{editor::RopeEditorFactory, memory::FakeIdGenerator},
-        application::{AppState, DurabilityState, FailureCode},
-        domain::{OperationSequence, Session, SessionBoard, Timestamp},
-        ports::environment::IdGenerator as _,
-        ui::{ShortcutActionId, UiSettings},
-    };
-
-    fn empty_app() -> BoardApp {
-        let mut ids = FakeIdGenerator::new(1_725_000_000_000);
-        let session = Session::new(
-            ids.session_id(),
-            std::env::temp_dir().join("proqi-commands-context"),
-            Timestamp::from_millis(1),
-        )
-        .expect("session");
-        let board = SessionBoard::new(session, Vec::new()).expect("board");
-        BoardApp::with_settings(
-            AppState::new(board),
-            UiSettings::default(),
-            RopeEditorFactory,
-        )
-    }
-
-    fn metadata(app: &BoardApp, action: ShortcutActionId) -> CommandMetadata {
-        app.settings
-            .shortcuts
-            .descriptor(action)
-            .and_then(|descriptor| descriptor.commands)
-            .expect("Commands metadata")
-    }
-
-    #[test]
-    fn recovery_actions_follow_durable_pending_and_failed_state_exactly() {
-        let mut app = empty_app();
-        let retry = metadata(&app, ShortcutActionId::RetryStorage);
-        let export = metadata(&app, ShortcutActionId::ExportRecovery);
-        let undo = metadata(&app, ShortcutActionId::Undo);
-
-        let durable = app.capture_command_context();
-        assert_eq!(
-            durable.applicability(retry),
-            Applicability::disabled("Available after a save failure")
-        );
-
-        app.state.durability = DurabilityState::Pending {
-            durable: OperationSequence::ZERO,
-            latest: OperationSequence::new(1),
-        };
-        let pending = app.capture_command_context();
-        assert_eq!(
-            pending.applicability(export),
-            Applicability::disabled("Available after a save failure")
-        );
-
-        app.state.durability = DurabilityState::Failed {
-            durable: OperationSequence::ZERO,
-            failed: OperationSequence::new(1),
-            code: FailureCode::StorageFailed,
-        };
-        let failed = app.capture_command_context();
-        assert_eq!(failed.applicability(retry), Applicability::ENABLED);
-        assert_eq!(failed.applicability(export), Applicability::ENABLED);
-        assert_eq!(
-            failed.applicability(undo),
-            Applicability::disabled("Nothing to undo in the query")
-        );
-        assert_eq!(
-            failed.relevance(retry, PaletteHistoryContext::EMPTY),
-            Some(0)
-        );
-    }
-}
+mod tests;

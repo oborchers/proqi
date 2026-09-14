@@ -69,6 +69,11 @@ pub(super) fn render_picker(
             .borders(Borders::ALL),
         overlay.area,
     );
+    if overlay.items.is_empty() {
+        render_too_small(frame, overlay, theme);
+        render_close(frame, overlay, theme);
+        return;
+    }
     let input = input_area(overlay);
     let available = input.width.saturating_sub(2);
     let query = crate::ports::text_layout::visible_cell_window(
@@ -115,6 +120,24 @@ pub(super) fn render_picker(
     }
     render_overflow_cues(frame, overlay, overflow, theme);
     render_close(frame, overlay, theme);
+}
+
+fn render_too_small(frame: &mut Frame<'_>, overlay: &OverlayLayout, theme: &Theme) {
+    let (x, y, width) = if overlay.area.height > 2 {
+        (
+            overlay.area.x.saturating_add(1),
+            overlay.area.y.saturating_add(1),
+            overlay.area.width.saturating_sub(2),
+        )
+    } else {
+        (overlay.area.x, overlay.area.y, overlay.area.width)
+    };
+    let area = ratatui_core::layout::Rect::new(x, y, width, 1);
+    frame.render_widget(
+        Paragraph::new(ellipsize("Pane too small", usize::from(area.width)))
+            .style(theme.base_style().fg(theme.muted)),
+        area,
+    );
 }
 
 pub(super) fn render_update(
