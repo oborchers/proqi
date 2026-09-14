@@ -9,7 +9,7 @@ use std::{
 };
 
 use crate::{
-    application::test_support::TestIds,
+    application::test_support::{TestClock, TestIds},
     domain::{
         InstallationIdentity, InstanceId, ReleaseHighlightAnnouncement, RequestId, StableVersion,
         Timestamp, UpdateCacheState,
@@ -23,15 +23,20 @@ use crate::{
             ReleaseObservation, RestartCompletion, UPDATE_CONTROL_PROTOCOL_VERSION,
             UpdateCancellation, UpdateError, UpdateInstaller, UpdateInstanceRegistry, UpdateLease,
             UpdateLockKind, UpdateParticipantGateway, UpdatePrepareReply, UpdatePrepareRequest,
-            UpdateReplacementExpectation, UpdateRestartReply, UpdateRestartRequest,
-            UpdateStateStore,
+            UpdateQuiesceReply, UpdateQuiesceRequest, UpdateReplacementExpectation,
+            UpdateRestartReply, UpdateRestartRequest, UpdateStateStore,
         },
     },
 };
 
 use super::{UpdateExecutionStatus, UpdateRestartCoordinator};
 
+fn clock() -> TestClock {
+    TestClock(Timestamp::from_millis(1_800_000_000_000))
+}
+
 mod additional;
+mod deadlines;
 
 struct Lease(Option<Arc<AtomicBool>>);
 impl UpdateLease for Lease {}
@@ -227,10 +232,13 @@ impl UpdateInstanceRegistry for Registry {
 #[derive(Default)]
 struct Gateway {
     prepared: Vec<InstanceId>,
+    prepare_deadlines: Vec<Timestamp>,
     released: Vec<InstanceId>,
+    quiesced: Vec<InstanceId>,
     restarted: Vec<InstanceId>,
     block_at: Option<usize>,
     fail_prepare_at: Option<usize>,
+    fail_quiesce: Option<InstanceId>,
     fail_restart: Option<InstanceId>,
 }
 
@@ -238,10 +246,11 @@ impl UpdateParticipantGateway for Gateway {
     fn prepare(
         &mut self,
         participant: &InstanceInfo,
-        _: &UpdatePrepareRequest,
+        request: &UpdatePrepareRequest,
     ) -> Result<UpdatePrepareReply, UpdateError> {
         let index = self.prepared.len();
         self.prepared.push(participant.instance_id);
+        self.prepare_deadlines.push(request.deadline);
         if self.fail_prepare_at == Some(index) {
             return Err(UpdateError::Coordination(
                 "participant unavailable".to_owned(),
@@ -263,6 +272,23 @@ impl UpdateParticipantGateway for Gateway {
     fn release(&mut self, participant: &InstanceInfo, _: RequestId) -> Result<(), UpdateError> {
         self.released.push(participant.instance_id);
         Ok(())
+    }
+
+    fn quiesce(
+        &mut self,
+        participant: &InstanceInfo,
+        _: &UpdateQuiesceRequest,
+    ) -> Result<UpdateQuiesceReply, UpdateError> {
+        self.quiesced.push(participant.instance_id);
+        if self.fail_quiesce == Some(participant.instance_id) {
+            return Err(UpdateError::Coordination(
+                "participant quiescence unavailable".to_owned(),
+            ));
+        }
+        Ok(UpdateQuiesceReply {
+            instance_id: participant.instance_id,
+            session_id: participant.session_id,
+        })
     }
 
     fn restart(
@@ -302,16 +328,22 @@ fn one_ten_and_fifteen_participants_install_and_restart_once() {
         let mut gateway = Gateway::default();
         let mut installer = successful_installer();
         let operation_id = ids.request_id();
-        let result = UpdateRestartCoordinator::new(&state, &registry, &mut gateway, &mut installer)
-            .execute(
-                operation_id,
-                initiating,
-                identity,
-                &version("0.2.0"),
-                Timestamp::from_millis(1_800_000_030_000),
-                &(),
-            )
-            .expect("coordinate");
+        let result = UpdateRestartCoordinator::new(
+            &state,
+            &registry,
+            &mut gateway,
+            &mut installer,
+            &clock(),
+        )
+        .execute(
+            operation_id,
+            initiating,
+            identity,
+            &version("0.2.0"),
+            Timestamp::from_millis(1_800_000_030_000),
+            &(),
+        )
+        .expect("coordinate");
         assert_eq!(result.prepared_participants, count);
         assert_eq!(result.selected_participants, count);
         assert_eq!(result.restart_requests, count);
@@ -320,7 +352,8 @@ fn one_ten_and_fifteen_participants_install_and_restart_once() {
         assert_eq!(result.replacement_missing, 0);
         assert!(result.restart_failed.is_empty());
         assert_eq!(installer.calls, 1);
-        assert_eq!(gateway.prepared.len(), count);
+        assert_eq!(gateway.prepared.len(), count.saturating_mul(2));
+        assert_eq!(gateway.released.len(), count);
         assert_eq!(gateway.restarted.len(), count);
         assert_eq!(gateway.restarted.last(), Some(&initiating));
         assert!(state.cache.borrow().restart_needed);
@@ -345,58 +378,23 @@ fn blocked_preflight_releases_ready_peers_before_installation() {
         ..Gateway::default()
     };
     let mut installer = successful_installer();
-    let result = UpdateRestartCoordinator::new(&state, &registry, &mut gateway, &mut installer)
-        .execute(
-            ids.request_id(),
-            initiating,
-            identity,
-            &version("0.2.0"),
-            Timestamp::from_millis(1_800_000_030_000),
-            &(),
-        )
-        .expect("abort");
+    let result =
+        UpdateRestartCoordinator::new(&state, &registry, &mut gateway, &mut installer, &clock())
+            .execute(
+                ids.request_id(),
+                initiating,
+                identity,
+                &version("0.2.0"),
+                Timestamp::from_millis(1_800_000_030_000),
+                &(),
+            )
+            .expect("abort");
     assert!(matches!(
         result.status,
         UpdateExecutionStatus::Aborted { ref code, .. } if code == "save_failed"
     ));
     assert_eq!(gateway.released.len(), 2);
     assert_eq!(installer.calls, 0);
-}
-
-#[test]
-fn post_install_rescan_includes_new_sessions_and_records_partial_restart() {
-    let mut ids = TestIds::new(1_800_000_000_000);
-    let identity = InstallationIdentity::from_digest([33; 32]);
-    let before = participants(&mut ids, identity, 2);
-    let initiating = before[0].instance_id;
-    let mut after = before.clone();
-    after.extend(participants(&mut ids, identity, 1));
-    let failed = after[1].instance_id;
-    let registry = registry(before, after);
-    let state = State::default();
-    let mut gateway = Gateway {
-        fail_restart: Some(failed),
-        ..Gateway::default()
-    };
-    let mut installer = successful_installer();
-    let result = UpdateRestartCoordinator::new(&state, &registry, &mut gateway, &mut installer)
-        .execute(
-            ids.request_id(),
-            initiating,
-            identity,
-            &version("0.2.0"),
-            Timestamp::from_millis(1_800_000_030_000),
-            &(),
-        )
-        .expect("partial restart");
-    assert_eq!(result.prepared_participants, 2);
-    assert_eq!(result.restart_requests, 2);
-    assert_eq!(result.restart_accepted, 1);
-    assert_eq!(result.replacement_ready, 1);
-    assert_eq!(result.restart_failed, vec![failed, initiating]);
-    assert_eq!(gateway.released, vec![failed, initiating]);
-    assert!(state.cache.borrow().restart_needed);
-    assert!(state.cache.borrow().release_highlights.is_none());
 }
 
 #[test]
@@ -417,16 +415,17 @@ fn unavailable_participant_aborts_and_releases_ready_peers() {
     };
     let mut installer = successful_installer();
 
-    let result = UpdateRestartCoordinator::new(&state, &registry, &mut gateway, &mut installer)
-        .execute(
-            ids.request_id(),
-            initiating,
-            identity,
-            &version("0.2.0"),
-            Timestamp::from_millis(1_800_000_030_000),
-            &(),
-        )
-        .expect("abort unavailable participant");
+    let result =
+        UpdateRestartCoordinator::new(&state, &registry, &mut gateway, &mut installer, &clock())
+            .execute(
+                ids.request_id(),
+                initiating,
+                identity,
+                &version("0.2.0"),
+                Timestamp::from_millis(1_800_000_030_000),
+                &(),
+            )
+            .expect("abort unavailable participant");
 
     assert!(matches!(
         result.status,
@@ -461,6 +460,7 @@ fn participants(
             update: Some(UpdateInstanceContext {
                 installation_identity: identity,
                 protocol: UPDATE_CONTROL_PROTOCOL_VERSION,
+                replacement: None,
             }),
             launch_directory: "/workspace".to_owned(),
             started_at: Timestamp::from_millis(1_800_000_000_000),

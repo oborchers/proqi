@@ -4,21 +4,25 @@ use std::path::{Path, PathBuf};
 
 use crate::{
     adapters::{
+        diagnostics::{SafeEvent, SchemaLifecycleStage},
         runtime::{
             FileRuntimeCoordinator, FileSchemaLease, NativePaths, SystemClock, SystemEnvironment,
             SystemIdGenerator,
         },
         sqlite::{SqliteStore, StoreConfig},
         terminal::TerminalResources,
-        update::SystemInstallDetector,
+        update::{FileUpdateStateStore, SystemInstallDetector},
     },
     application::LeasedSession,
-    domain::Timestamp,
+    domain::{InstallationIdentity, SessionId, StableVersion, Timestamp},
     ports::{
         environment::{AppPaths, Clock, Environment, IdGenerator, Paths},
         runtime::RuntimeCoordinator,
         store::{MigrationMode, StoreError},
-        update::{InstallDetector as _, UPDATE_CONTROL_PROTOCOL_VERSION},
+        update::{
+            InstallDetector as _, UPDATE_CONTROL_PROTOCOL_VERSION, UpdateLease,
+            UpdateStateStore as _,
+        },
     },
 };
 
@@ -38,10 +42,15 @@ pub(super) struct RuntimeContext {
     executable: PathBuf,
     installation: Option<crate::domain::Installation>,
     schema_lease: FileSchemaLease,
+    startup_admission: Option<Box<dyn UpdateLease>>,
 }
 
 impl RuntimeContext {
-    pub(super) fn open(state_root: Option<&Path>) -> Result<Self, CliError> {
+    pub(super) fn open(
+        state_root: Option<&Path>,
+        resume_reference: Option<&str>,
+    ) -> Result<Self, CliError> {
+        let exact_resume = resume_reference.and_then(|reference| reference.parse().ok());
         let cwd = SystemEnvironment
             .current_directory()
             .map_err(|error| CliError::new("environment_failed", error.to_string(), 1))?;
@@ -64,6 +73,19 @@ impl RuntimeContext {
         let cache_dir = paths.cache_dir.clone();
         let state_root = state_root.map(Path::to_path_buf);
         let installation = SystemInstallDetector::current().detect().ok();
+        let startup_admission = installation
+            .as_ref()
+            .map(|installation| {
+                admit_update_start(
+                    &cache_dir,
+                    installation.identity,
+                    exact_resume,
+                    &StableVersion::parse(env!("CARGO_PKG_VERSION")).map_err(|error| {
+                        CliError::new("invalid_build_version", error.to_string(), 1)
+                    })?,
+                )
+            })
+            .transpose()?;
         let coordinator = FileRuntimeCoordinator::new(
             paths.runtime_dir,
             instance_id,
@@ -71,19 +93,24 @@ impl RuntimeContext {
             clock.now(),
             env!("CARGO_PKG_VERSION"),
         )?;
+        let (replacement, follows_schema_change) =
+            crate::adapters::process::replacement_startup_context();
         let coordinator = installation
             .as_ref()
             .map_or(coordinator.clone(), |installation| {
-                coordinator
-                    .clone()
-                    .with_update_context(installation.identity, UPDATE_CONTROL_PROTOCOL_VERSION)
+                coordinator.clone().with_update_context(
+                    installation.identity,
+                    UPDATE_CONTROL_PROTOCOL_VERSION,
+                    replacement,
+                )
             });
-        let (store, schema_lease) = open_store(&coordinator, &paths.data_dir, clock.now())?;
-        crate::adapters::diagnostics::record(
-            crate::adapters::diagnostics::SafeEvent::SchemaLifecycle {
-                stage: crate::adapters::diagnostics::SchemaLifecycleStage::Ready,
-            },
-        );
+        let (store, schema_lease) = open_store(
+            &coordinator,
+            &paths.data_dir,
+            clock.now(),
+            follows_schema_change,
+        )?;
+        record_schema_stage(SchemaLifecycleStage::Ready);
         Ok(Self {
             store,
             coordinator,
@@ -98,6 +125,7 @@ impl RuntimeContext {
             executable,
             installation,
             schema_lease,
+            startup_admission: startup_admission.flatten(),
         })
     }
 
@@ -131,8 +159,45 @@ impl RuntimeContext {
             cache_directory: self.cache_dir,
             state_root: self.state_root,
             executable: self.executable,
+            startup_admission: self.startup_admission,
         }
     }
+}
+
+fn admit_update_start(
+    cache_dir: &Path,
+    installation: InstallationIdentity,
+    exact_resume: Option<SessionId>,
+    current: &StableVersion,
+) -> Result<Option<Box<dyn UpdateLease>>, CliError> {
+    let state = FileUpdateStateStore::new(cache_dir)
+        .map_err(|error| CliError::new("update_state_failed", error.to_string(), 1))?;
+    let lease = state
+        .try_startup_lock(installation)
+        .map_err(|error| CliError::new("update_state_failed", error.to_string(), 1))?;
+    let cache = state
+        .load(installation)
+        .map_err(|error| CliError::new("update_state_failed", error.to_string(), 1))?;
+    let target_matches = cache.observed_installed_version.as_ref() == Some(current);
+    let obsolete_after_update = cache.restart_needed && !target_matches;
+    if obsolete_after_update || lease.is_none() {
+        let recovery = exact_resume.map_or_else(
+            || "start the active Proqi executable and resume by exact SessionId".to_owned(),
+            |session_id| {
+                format!(
+                    "start the active Proqi executable and run `proqi -r {session_id}` with the same state root"
+                )
+            },
+        );
+        return Err(CliError::new(
+            "update_convergence_active",
+            format!(
+                "this Proqi executable cannot open the schema during update convergence; {recovery}"
+            ),
+            1,
+        ));
+    }
+    Ok(lease)
 }
 
 fn prepare_state_paths(paths: &AppPaths, state_root: Option<&Path>) -> Result<(), CliError> {
@@ -179,6 +244,7 @@ fn open_store(
     coordinator: &FileRuntimeCoordinator,
     data_dir: &Path,
     now: Timestamp,
+    follows_schema_change: bool,
 ) -> Result<(SqliteStore, FileSchemaLease), CliError> {
     let database = data_dir.join("proqi.sqlite3");
     let backups = data_dir.join("backups");
@@ -190,13 +256,14 @@ fn open_store(
         now,
     );
     match SqliteStore::open(&refuse) {
-        Ok(store) => Ok((store, shared)),
+        Ok(store) => {
+            if follows_schema_change {
+                record_schema_stage(SchemaLifecycleStage::FollowerRevalidated);
+            }
+            Ok((store, shared))
+        }
         Err(StoreError::MigrationRequired { .. }) => {
-            crate::adapters::diagnostics::record(
-                crate::adapters::diagnostics::SafeEvent::SchemaLifecycle {
-                    stage: crate::adapters::diagnostics::SchemaLifecycleStage::MigrationRequired,
-                },
-            );
+            record_schema_stage(SchemaLifecycleStage::MigrationRequired);
             drop(shared);
             finish_required_migration(coordinator, database, backups, &refuse, now)
         }
@@ -221,11 +288,7 @@ fn finish_required_migration(
     match SqliteStore::open(refuse) {
         Ok(current) => {
             drop(current);
-            crate::adapters::diagnostics::record(
-                crate::adapters::diagnostics::SafeEvent::SchemaLifecycle {
-                    stage: crate::adapters::diagnostics::SchemaLifecycleStage::FollowerRevalidated,
-                },
-            );
+            record_schema_stage(SchemaLifecycleStage::FollowerRevalidated);
             drop(exclusive);
             let shared = coordinator.acquire_schema_shared()?;
             let store = SqliteStore::open(refuse)?;
@@ -234,18 +297,10 @@ fn finish_required_migration(
         Err(StoreError::MigrationRequired { .. }) => {}
         Err(error) => return Err(error.into()),
     }
-    crate::adapters::diagnostics::record(
-        crate::adapters::diagnostics::SafeEvent::SchemaLifecycle {
-            stage: crate::adapters::diagnostics::SchemaLifecycleStage::MigrationStarted,
-        },
-    );
+    record_schema_stage(SchemaLifecycleStage::MigrationStarted);
     let migrate = StoreConfig::new(database, backups, MigrationMode::Allow, now);
     let _revalidated = SqliteStore::open(&migrate)?;
-    crate::adapters::diagnostics::record(
-        crate::adapters::diagnostics::SafeEvent::SchemaLifecycle {
-            stage: crate::adapters::diagnostics::SchemaLifecycleStage::MigrationCompleted,
-        },
-    );
+    record_schema_stage(SchemaLifecycleStage::MigrationCompleted);
     drop(exclusive);
     let shared = coordinator.acquire_schema_shared()?;
     let store = SqliteStore::open(refuse)?;
@@ -261,11 +316,7 @@ fn revalidate_completed_migration(
     };
     match SqliteStore::open(refuse) {
         Ok(store) => {
-            crate::adapters::diagnostics::record(
-                crate::adapters::diagnostics::SafeEvent::SchemaLifecycle {
-                    stage: crate::adapters::diagnostics::SchemaLifecycleStage::FollowerRevalidated,
-                },
-            );
+            record_schema_stage(SchemaLifecycleStage::FollowerRevalidated);
             Ok((store, shared))
         }
         Err(StoreError::MigrationRequired { .. }) => {
@@ -273,6 +324,10 @@ fn revalidate_completed_migration(
         }
         Err(error) => Err(error.into()),
     }
+}
+
+fn record_schema_stage(stage: SchemaLifecycleStage) {
+    crate::adapters::diagnostics::record(SafeEvent::SchemaLifecycle { stage });
 }
 
 #[cfg(test)]
@@ -284,8 +339,49 @@ mod tests {
     use super::*;
     use crate::{
         adapters::{memory::FakeIdGenerator, runtime::SchemaLockPolicy},
-        ports::store::SUPPORTED_SCHEMA_VERSION,
+        ports::{store::SUPPORTED_SCHEMA_VERSION, update::UpdateLockKind},
     };
+
+    #[test]
+    fn update_start_admission_closes_obsolete_schema_entry_and_allows_exact_target() {
+        let temporary = tempfile::tempdir().expect("temporary directory");
+        let cache = temporary.path().join("cache");
+        let installation = InstallationIdentity::from_digest([91; 32]);
+        let old = StableVersion::parse("0.8.99").expect("old version");
+        let target = StableVersion::parse("0.9.0").expect("target version");
+        let mut ids = FakeIdGenerator::new(1_800_000_000_000);
+        let session_id = ids.session_id();
+        let state = FileUpdateStateStore::new(&cache).expect("update state");
+        let convergence = state
+            .try_lock(installation, UpdateLockKind::Convergence)
+            .expect("installer lock")
+            .expect("installer lease");
+
+        let Err(blocked) = admit_update_start(&cache, installation, Some(session_id), &old) else {
+            panic!("obsolete start entered during convergence");
+        };
+        let blocked = format!("{blocked:?}");
+        assert!(blocked.contains("update_convergence_active"));
+        assert!(blocked.contains(&session_id.to_string()));
+
+        state
+            .record_restart_state(installation, target.clone(), true)
+            .expect("record target");
+        assert!(
+            admit_update_start(&cache, installation, Some(session_id), &target).is_err(),
+            "target waits until every old schema lease is quiescent"
+        );
+        drop(convergence);
+        assert!(
+            admit_update_start(&cache, installation, Some(session_id), &old).is_err(),
+            "obsolete executable stays barred after coordinator loss"
+        );
+        assert!(
+            admit_update_start(&cache, installation, Some(session_id), &target)
+                .expect("target start owns admission")
+                .is_some()
+        );
+    }
 
     #[test]
     fn stale_migration_contender_revalidates_after_another_process_wins() {

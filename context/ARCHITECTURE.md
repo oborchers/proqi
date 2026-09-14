@@ -5,7 +5,7 @@ Status: v0.1.0 architecture contract
 Project: Proqi
 
 Command: `proqi`
-Last updated: 2026-09-01
+Last updated: 2026-09-12
 
 ## Purpose
 
@@ -938,7 +938,7 @@ the standalone archive marker into `/usr`; doing so would misidentify its owner.
 The existing current-user runtime registry and owner-control transport gain a
 small ephemeral update protocol. A coordination message includes a typed
 operation ID, target version, installation identity, participant identity,
-deadline, and one of prepare, ready, blocked, installation-result, or restart
+deadline, and one of prepare, ready, blocked, quiesce, quiesced, or restart
 requests. Messages are bounded and contain no prompt text, arbitrary command,
 terminal content, secret, or raw environment data.
 
@@ -954,6 +954,13 @@ timeout, or lost coordinator aborts before installation. Ready participants
 return to their prior session after a bounded timeout. The shared cache records
 only the minimal state a later process needs to compare installed and running
 versions.
+
+Update preparation is admitted only when the Screenshot Inbox is inactive and
+has no queued or retained capture. One already accepted commit-first save may
+finish before the owner replies. A live watcher, a draining watcher, a queued
+candidate, or an explicitly retryable failed save rejects preparation before
+the update barrier exists, so no later watcher result can cross into
+quiescence and no retained capture is abandoned implicitly.
 
 ### Verified installation and Unix process replacement
 
@@ -981,24 +988,56 @@ installer owns OS, CPU, libc, archive selection, archive checksum verification,
 safe-member extraction, and same-directory atomic replacement. It never uses
 `sudo` or a package manager.
 
-After success, the coordinator rescans active instances and publishes the
-installed version. It addresses peer participants first and its own process
+Initial preparation is a reversible safety check, not a lease held across an
+installer operation. The coordinator releases that first barrier before the
+verified installer runs. After success, it measures a fresh bounded preparation
+deadline, rescans active instances, and prepares the complete current cohort
+again. A slow installer therefore cannot consume the post-install safety window.
+
+Every process startup takes a shared convergence-admission lease before opening
+the schema and holds it through owner-control publication, browser selection,
+or completion of a non-interactive command. An interactive owner releases this
+lease only after its control endpoint is published. Bind or metadata-publication
+failure leaves the shared lease attached to that owner until shutdown, so the
+exclusive coordinator stops before installation rather than omitting an
+unaddressable schema writer. The elected coordinator takes the exclusive side
+before its first registry scan and holds it until the prepared cohort has
+quiesced. A startup that loses this admission race fails explicitly before
+schema entry. A startup that wins makes the update attempt stop before
+installation, so an unregistered shared schema holder cannot appear between
+the final scan and quiescence.
+
+The coordinator then sends each exact prepared owner the installed target in
+an irreversible quiesce request. The owner first commits its update barrier,
+blocks every ordinary UI, screenshot, and owner-control mutation, releases its
+shared schema lease, and only then returns a receipt containing its exact
+InstanceId and SessionId. The coordinator restarts only participants whose
+quiescence receipt matches both identities. A missing or ambiguous receipt is
+an attributable failure and is never retried automatically.
+
+After quiescence, the coordinator addresses peers first and its own process
 last, so local shutdown cannot interrupt remaining restart requests. A
-participant reserves the matching restart, closes new control admission, and
-commits to shutdown only after the accepted receipt frame has been written to
-the verified local socket. A failed delivery leaves that participant running
-and records restart convergence as incomplete.
+participant reserves only the matching operation and installed target and
+commits to shutdown after the accepted receipt frame has been written to the
+verified local socket. Failed receipt delivery or expiry after quiescence exits
+the old owner without `exec`; it never releases the barrier back to ordinary
+writes. Durable content remains manually resumable through the exact SessionId.
 
 Restart acceptance is not replacement evidence. After each peer accepts, the
 coordinator performs a fresh bounded, cancellation-aware registry wait. A peer
-converges only when the same session appears under a different instance ID,
-the same installation identity, the exact target version, and a published
-control endpoint. The endpoint is published only after board restoration. The
+converges only when the same session appears under a different instance ID in
+the same operating-system PID, the same installation identity, the exact target
+version, and the matching operation and prior-instance proof carried across
+Unix `exec`. A live peer-credential-checked connection must also succeed against
+the published control endpoint. Metadata alone, an exact manual resume in
+another terminal, or an endpoint lost after publication is never replacement
+readiness. The endpoint is published only after board restoration. The
 coordinator writes the initiating session's content-free pending announcement
 only after every peer converges, then requests the initiating restart. Peer
-failure creates no announcement and releases the initiating process without an
-`exec` request. Initiating restart rejection atomically discards its exact
-pending announcement and releases the preparation barrier. A delayed accepted
+failure creates no announcement, but a quiesced initiating process still
+receives its exact restart request so it cannot resume incompatible writes.
+Initiating restart rejection atomically discards its exact pending announcement
+and leaves the durable SessionId explicitly resumable. A delayed accepted
 initiating resume retains the pending record and may show it later under the
 exact target. `restart_needed` is cleared only when the
 exact target announcement selects the initiating session after board
@@ -1008,15 +1047,17 @@ already completed. Control unavailability, cache failure, and stale cache state
 suppress presentation and emit closed finalization failure codes.
 
 If replacement discovery itself fails after peer restart requests, the
-coordinator releases the initiating process immediately, retains
-`restart_needed`, and creates no announcement. It does not leave the initiating
-board blocked until the prepare deadline.
+coordinator records every missing old InstanceId, retains `restart_needed`,
+creates no announcement, and still requests exact replacement of a quiesced
+initiating owner. Cancellation is reversible before quiescence. After any
+quiescence acknowledgement it is a bounded incomplete result, never permission
+for the old participant to write again.
 
 The pending announcement write is part of initiating restart admission. If its
-private atomic write fails, the coordinator releases the initiating process
-without asking it to restart, records restart convergence as incomplete, and
-shows no announcement. This keeps the old session usable and prevents a
-successful-looking update path from losing its required durable target.
+private atomic write fails, the coordinator records restart convergence as
+incomplete and shows no announcement. A quiesced initiating owner still
+replaces itself by exact SessionId, while an owner that never acknowledged
+quiescence remains protected by its old shared schema lease.
 
 Each participant then independently restores terminal modes, stops worker
 threads, closes control transport, releases session and schema leases, applies
@@ -1029,12 +1070,15 @@ shell, terminal multiplexer, Herdr, or parent agent must recreate the pane.
 The replacement invocation preserves the ordinary resume identity and any
 explicit state-root argument. This keeps package tests and portable invocations
 on the same data paths instead of silently falling back to platform defaults.
+It also carries only the typed update operation, prior instance, and verified
+target version as process-local replacement proof. Those values are descriptive
+until the registry correlates them with the exact SessionId, retained PID,
+installation, runtime lease, and live owner-control endpoint.
 
-A failed `exec` does not undo successful peers. Where safe, the old process
-re-enters its session; otherwise its durable state remains normally resumable.
-Runtime metadata marks it as an old-version participant and the UI offers a
-direct retry. The system never reports complete restart while such an instance
-remains.
+A failed `exec` does not undo successful peers. A quiesced old process exits
+instead of re-entering its session; its durable state remains normally
+resumable by exact SessionId. The system never reports complete restart while
+such an instance remains and never performs an ambiguous automatic retry.
 
 ### Schema compatibility during convergence
 
@@ -1044,11 +1088,13 @@ only when release tests prove compatible payload interpretation. A process that
 requires migration must obtain the exclusive schema lease, create a verified
 backup, migrate transactionally, and pass integrity checking.
 
-An old process holding a shared lease prevents an incompatible migration. A new
-process waits within the update convergence window or reports a bounded
-restart-pending state and retries after the old process leaves. It never migrates
-behind an older writer. This conservative barrier remains mandatory even though
-the public CLI has no compatibility guarantee before `1.0`.
+An old process holding a shared lease prevents an incompatible migration. For
+an automatic update, every prepared old participant becomes mutation-free and
+releases that lease before any replacement request is sent. A genuinely active
+incompatible writer or a participant that never acknowledges quiescence keeps
+its lease and therefore blocks migration. No coordinator drops that barrier,
+selects a replacement by cwd or recency, or asks the new binary to migrate
+behind it.
 
 Concurrent replacements may all first observe `MigrationRequired`, release
 their shared leases, and contend for the exclusive lease. The winner performs
@@ -1766,7 +1812,7 @@ or automatic scratchpad reads.
 - Diagnostic logs exclude thought content, clipboard content, session names,
   workspace paths, pane identifiers, and raw external responses.
 - Update lifecycle events contain closed schema stages, aggregate participant,
-  restart, and replacement counts, stable failure stage and code pairs, and
+  quiescence, restart, and replacement counts, stable failure stage and code pairs, and
   final convergence. They contain no durable distributed update phase record.
 - Each instance owns a locked JSONL stream with five 1 MiB segments. Startup
   prunes inactive streams toward a 20 MiB installation-wide ceiling without

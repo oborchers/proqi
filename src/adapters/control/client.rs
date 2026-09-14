@@ -12,7 +12,7 @@ use crate::{
         runtime::InstanceInfo,
         update::{
             UpdateError, UpdateParticipantGateway, UpdatePrepareReply, UpdatePrepareRequest,
-            UpdateRestartReply, UpdateRestartRequest,
+            UpdateQuiesceReply, UpdateQuiesceRequest, UpdateRestartReply, UpdateRestartRequest,
         },
     },
 };
@@ -240,6 +240,30 @@ impl<I: IdGenerator> UpdateParticipantGateway for LocalUpdateControlClient<I> {
             ControlUpdateReceipt::Restart(reply) => Ok(reply),
             _ => Err(coordination_error(
                 "owner returned the wrong restart receipt",
+            )),
+        }
+    }
+
+    fn quiesce(
+        &mut self,
+        participant: &InstanceInfo,
+        request: &UpdateQuiesceRequest,
+    ) -> Result<UpdateQuiesceReply, UpdateError> {
+        let result = self.send_update(
+            participant,
+            ControlMutation::UpdateQuiesce {
+                request: request.clone(),
+            },
+        )?;
+        match result {
+            ControlUpdateReceipt::Quiesced(reply)
+                if reply.instance_id == participant.instance_id
+                    && reply.session_id == participant.session_id =>
+            {
+                Ok(reply)
+            }
+            _ => Err(coordination_error(
+                "owner returned the wrong quiescence receipt",
             )),
         }
     }

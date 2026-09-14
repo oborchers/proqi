@@ -6,6 +6,7 @@ mod doctor;
 mod external_thoughts;
 mod forwarding;
 mod helpers;
+mod runtime_open;
 mod sessions;
 mod transfer;
 mod update;
@@ -32,6 +33,7 @@ use super::{
 use helpers::{
     content_digest_hex, excerpt, parse_operation_id, parse_thought_id, read_standard_input,
 };
+use runtime_open::ResumeRequest;
 use sessions::{
     browse_for_session, cancelled_browser, execute_sessions, list_sessions, opened_session,
 };
@@ -39,12 +41,6 @@ use sessions::{
 pub(super) struct Outcome {
     data: Value,
     human: String,
-}
-
-enum ResumeRequest {
-    Fresh,
-    Picker,
-    Target(String),
 }
 
 pub(super) fn execute(cli: Cli) -> ExitCode {
@@ -77,7 +73,7 @@ fn execute_inner(cli: Cli) -> Result<Outcome, CliError> {
     if let Some(outcome) = diagnostics::early_outcome(&cli)? {
         return Ok(outcome);
     }
-    let context = RuntimeContext::open(cli.state_dir.as_deref())?;
+    let context = runtime_open::open(&cli)?;
     match cli.command {
         Some(Command::Sessions(arguments)) => {
             let mut context = context;

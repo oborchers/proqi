@@ -11,6 +11,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+use std::str::FromStr as _;
+
 use crate::ports::environment::{ProcessError, ProcessOutput, ProcessRequest, ProcessRunner};
 
 pub(crate) use cancellation::CancellationFlag;
@@ -19,6 +21,34 @@ use owned_child::OwnedChild;
 /// Maximum bytes captured independently from child-process stdout or stderr.
 pub const MAX_CAPTURE_BYTES: u64 = 1024 * 1024;
 const TERMINATION_GRACE: Duration = Duration::from_millis(250);
+const REPLACEMENT_OPERATION_ENV: &str = "PROQI_UPDATE_REPLACEMENT_OPERATION";
+const REPLACEMENT_INSTANCE_ENV: &str = "PROQI_UPDATE_REPLACEMENT_INSTANCE";
+const REPLACEMENT_VERSION_ENV: &str = "PROQI_UPDATE_REPLACEMENT_VERSION";
+const REPLACEMENT_STORAGE_PROTOCOL_ENV: &str = "PROQI_UPDATE_REPLACEMENT_STORAGE_PROTOCOL";
+
+fn replacement_context() -> Option<crate::ports::runtime::UpdateReplacementContext> {
+    let operation_id = std::env::var(REPLACEMENT_OPERATION_ENV).ok()?;
+    let previous_instance_id = std::env::var(REPLACEMENT_INSTANCE_ENV).ok()?;
+    let target_version = std::env::var(REPLACEMENT_VERSION_ENV).ok()?;
+    Some(crate::ports::runtime::UpdateReplacementContext {
+        operation_id: crate::domain::RequestId::from_str(&operation_id).ok()?,
+        previous_instance_id: crate::domain::InstanceId::from_str(&previous_instance_id).ok()?,
+        target_version: crate::domain::StableVersion::parse(&target_version).ok()?,
+    })
+}
+
+pub(crate) fn replacement_startup_context() -> (
+    Option<crate::ports::runtime::UpdateReplacementContext>,
+    bool,
+) {
+    let context = replacement_context();
+    let previous = std::env::var(REPLACEMENT_STORAGE_PROTOCOL_ENV)
+        .ok()
+        .and_then(|value| value.parse::<u32>().ok());
+    let follows_schema_change = context.is_some()
+        && previous.is_some_and(|value| value < crate::ports::store::STORAGE_PROTOCOL_VERSION);
+    (context, follows_schema_change)
+}
 
 /// Operating-system process runner with bounded output and a hard deadline.
 #[derive(Debug, Default)]
@@ -59,11 +89,22 @@ impl crate::ports::update::ProcessReplacer for SystemProcessReplacer {
         executable: &std::path::Path,
         session_id: crate::domain::SessionId,
         state_root: Option<&std::path::Path>,
+        operation_id: crate::domain::RequestId,
+        previous_instance_id: crate::domain::InstanceId,
+        target_version: &crate::domain::StableVersion,
     ) -> Result<(), crate::ports::update::UpdateError> {
         use std::os::unix::process::CommandExt as _;
 
         let mut command = Command::new(executable);
-        command.args(resume_args(session_id, state_root));
+        command
+            .args(resume_args(session_id, state_root))
+            .env(REPLACEMENT_OPERATION_ENV, operation_id.to_string())
+            .env(REPLACEMENT_INSTANCE_ENV, previous_instance_id.to_string())
+            .env(REPLACEMENT_VERSION_ENV, target_version.to_string())
+            .env(
+                REPLACEMENT_STORAGE_PROTOCOL_ENV,
+                crate::ports::store::STORAGE_PROTOCOL_VERSION.to_string(),
+            );
         let error = command.exec();
         Err(crate::ports::update::UpdateError::Coordination(format!(
             "process replacement failed: {error}"

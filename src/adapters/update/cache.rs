@@ -90,9 +90,26 @@ impl UpdateStateStore for FileUpdateStateStore {
             UpdateLockKind::Refresh => "refresh.lock",
             UpdateLockKind::Prompt => "prompt.lock",
             UpdateLockKind::Installer => "installer.lock",
+            UpdateLockKind::Convergence => "convergence.lock",
         };
         let file = open_private_file(&self.installation_dir(installation)?.join(name))?;
         match FileExt::try_lock(&file) {
+            Ok(()) => Ok(Some(Box::new(FileUpdateLease { file }))),
+            Err(TryLockError::WouldBlock) => Ok(None),
+            Err(TryLockError::Error(error)) => Err(state_error(error)),
+        }
+    }
+
+    fn try_startup_lock(
+        &self,
+        installation: InstallationIdentity,
+    ) -> Result<Option<Box<dyn UpdateLease>>, UpdateError> {
+        let file = open_private_file(
+            &self
+                .installation_dir(installation)?
+                .join("convergence.lock"),
+        )?;
+        match FileExt::try_lock_shared(&file) {
             Ok(()) => Ok(Some(Box::new(FileUpdateLease { file }))),
             Err(TryLockError::WouldBlock) => Ok(None),
             Err(TryLockError::Error(error)) => Err(state_error(error)),

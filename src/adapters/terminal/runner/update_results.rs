@@ -125,10 +125,18 @@ fn execution_message(execution: &UpdateExecution) -> Result<String, String> {
                 execution.restart_requests
             ))
         }
-        UpdateExecutionStatus::Installed { version } => Err(format!(
-            "Proqi {version} installed, but restart is incomplete for {} session(s). This session stayed open; restart affected sessions with their normal resume commands.",
-            execution.restart_failed.len()
-        )),
+        UpdateExecutionStatus::Installed { version } => {
+            let sessions = execution
+                .resumable_sessions
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ");
+            Err(format!(
+                "Proqi {version} installed, but restart is incomplete for {} session(s). Start the active Proqi executable and resume these exact SessionIds with `proqi -r <SessionId>`: {sessions}.",
+                execution.restart_failed.len()
+            ))
+        }
         UpdateExecutionStatus::AlreadyInProgress => {
             Ok("Another Proqi session is already updating this installation.".to_owned())
         }
@@ -157,10 +165,14 @@ mod tests {
             selected_participants: 2,
             prepared_participants: 2,
             restart_requests: 2,
+            quiescence_requests: 2,
+            quiesced_participants: 2,
+            quiescence_failed: Vec::new(),
             restart_accepted: 1,
             replacement_ready: 0,
             replacement_missing: 1,
             restart_failed: vec![ids.instance_id()],
+            resumable_sessions: vec![ids.session_id()],
             convergence_state_recorded: true,
             status: UpdateExecutionStatus::Installed {
                 version: StableVersion::parse("1.2.3").expect("valid version"),
@@ -169,7 +181,7 @@ mod tests {
 
         let message = execution_message(&execution).expect_err("partial restart must warn");
         assert!(message.contains("restart is incomplete for 1 session(s)"));
-        assert!(message.contains("This session stayed open"));
-        assert!(message.contains("normal resume commands"));
+        assert!(message.contains("resume these exact SessionIds"));
+        assert!(message.contains(&execution.resumable_sessions[0].to_string()));
     }
 }

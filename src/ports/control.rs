@@ -10,7 +10,8 @@ use crate::domain::{
 
 use super::store::DurableIdentity;
 use super::update::{
-    UpdatePrepareReply, UpdatePrepareRequest, UpdateRestartReply, UpdateRestartRequest,
+    UpdatePrepareReply, UpdatePrepareRequest, UpdateQuiesceReply, UpdateQuiesceRequest,
+    UpdateRestartReply, UpdateRestartRequest,
 };
 use super::{runtime::InstanceInfo, store::CommitReceipt};
 
@@ -177,6 +178,11 @@ pub enum ControlMutation {
         /// Shared attempt identity.
         operation_id: RequestId,
     },
+    /// Commit one prepared owner to irreversible schema quiescence.
+    UpdateQuiesce {
+        /// Exact installed target and shared attempt identity.
+        request: UpdateQuiesceRequest,
+    },
     /// Ask one prepared owner to clean up and replace itself.
     UpdateRestart {
         /// Verified installed version and shared attempt identity.
@@ -209,6 +215,7 @@ impl ControlMutation {
             | Self::Sync
             | Self::Replace { .. }
             | Self::UpdateRelease { .. }
+            | Self::UpdateQuiesce { .. }
             | Self::UpdateRestart { .. }
             | Self::CaptureTakeover { .. } => None,
         }
@@ -242,6 +249,7 @@ impl ControlMutation {
             | Self::Sync
             | Self::UpdatePrepare { .. }
             | Self::UpdateRelease { .. }
+            | Self::UpdateQuiesce { .. }
             | Self::UpdateRestart { .. }
             | Self::CaptureTakeover { .. } => None,
         }
@@ -288,7 +296,10 @@ impl ControlMutation {
             4
         } else if matches!(
             self,
-            Self::UpdatePrepare { .. } | Self::UpdateRelease { .. } | Self::UpdateRestart { .. }
+            Self::UpdatePrepare { .. }
+                | Self::UpdateRelease { .. }
+                | Self::UpdateQuiesce { .. }
+                | Self::UpdateRestart { .. }
         ) {
             3
         } else if self.requires_protocol_two() {
@@ -388,6 +399,8 @@ pub enum ControlUpdateReceipt {
         /// Participant acknowledging release.
         instance_id: crate::domain::InstanceId,
     },
+    /// Prepared participant stopped schema use and released its shared lease.
+    Quiesced(UpdateQuiesceReply),
     /// Participant accepted or rejected replacement responsibility.
     Restart(UpdateRestartReply),
 }

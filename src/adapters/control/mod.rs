@@ -34,6 +34,13 @@ use crate::ports::control::{
 use rejection::rejected;
 use transport::{LocalListener, accept, read_request, write_response};
 
+pub(crate) fn endpoint_is_live(owner: &crate::ports::runtime::InstanceInfo) -> bool {
+    owner
+        .control_endpoint
+        .as_deref()
+        .is_some_and(|endpoint| transport::connect(endpoint, owner.pid).is_ok())
+}
+
 const RESPONSE_TIMEOUT: Duration = Duration::from_secs(2);
 const MAX_CACHED_REQUESTS: usize = 64;
 

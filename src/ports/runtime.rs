@@ -3,7 +3,20 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::domain::{InstallationIdentity, InstanceId, SessionId, Timestamp};
+use crate::domain::{
+    InstallationIdentity, InstanceId, RequestId, SessionId, StableVersion, Timestamp,
+};
+
+/// Process-local proof that this runtime was created by one accepted Unix replacement.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct UpdateReplacementContext {
+    /// Update attempt that authorized replacement.
+    pub operation_id: RequestId,
+    /// Exact old process image replaced in place.
+    pub previous_instance_id: InstanceId,
+    /// Target executable version verified immediately before `exec`.
+    pub target_version: StableVersion,
+}
 
 /// Update-coordination capability advertised by a live process.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -12,6 +25,9 @@ pub struct UpdateInstanceContext {
     pub installation_identity: InstallationIdentity,
     /// Ephemeral update-control protocol supported by this process.
     pub protocol: u32,
+    /// Present only when this process image was entered through an accepted update replacement.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub replacement: Option<Box<UpdateReplacementContext>>,
 }
 
 /// Descriptive metadata for one process holding a session lease.

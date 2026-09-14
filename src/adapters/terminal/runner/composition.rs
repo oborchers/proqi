@@ -144,3 +144,85 @@ pub(super) fn spawn_lanes(
         cancellation,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+
+    use crate::{
+        adapters::{
+            runtime::{FileRuntimeCoordinator, SystemIdGenerator},
+            update::FileUpdateStateStore,
+        },
+        domain::{InstallationIdentity, Timestamp},
+        ports::{
+            environment::IdGenerator as _,
+            runtime::RuntimeCoordinator as _,
+            update::{UpdateLockKind, UpdateStateStore as _},
+        },
+    };
+
+    use super::{publish_optional_control, start_optional_control};
+
+    #[test]
+    fn failed_control_publication_retains_convergence_admission_for_owner_lifetime() {
+        let temporary = tempfile::tempdir().expect("temporary state");
+        let runtime = temporary.path().join("runtime");
+        let cache = temporary.path().join("cache");
+        let installation = InstallationIdentity::from_digest([73; 32]);
+        let update_state = FileUpdateStateStore::new(&cache).expect("update state");
+        let admission = update_state
+            .try_startup_lock(installation)
+            .expect("startup admission")
+            .expect("startup lease");
+        let mut ids = SystemIdGenerator;
+        let coordinator = FileRuntimeCoordinator::new(
+            runtime.clone(),
+            ids.instance_id(),
+            temporary.path().to_path_buf(),
+            Timestamp::from_millis(1),
+            "0.9.0",
+        )
+        .expect("runtime coordinator");
+        let mut session = coordinator
+            .acquire_session(ids.session_id())
+            .expect("session lease");
+        let (mut control, mut warning) = start_optional_control(&session);
+        assert!(
+            control.is_some(),
+            "control must bind before publication fails: endpoint={:?}, warning={warning:?}",
+            session.control_endpoint()
+        );
+
+        let metadata = runtime
+            .join("instances")
+            .join(format!("{}.json", session.info().instance_id));
+        fs::remove_file(metadata).expect("remove initial metadata");
+        fs::remove_dir(runtime.join("instances")).expect("remove metadata directory");
+        fs::write(runtime.join("instances"), b"publication blocked")
+            .expect("block metadata publication");
+
+        let control_ready = publish_optional_control(&mut session, &mut control, &mut warning);
+        assert!(!control_ready);
+        assert!(control.is_none());
+        assert!(warning.is_some());
+        let retained = super::super::admission::retain_unpublished_startup_admission(
+            Some(admission),
+            control_ready,
+        );
+        assert!(
+            update_state
+                .try_lock(installation, UpdateLockKind::Convergence)
+                .expect("contended convergence")
+                .is_none(),
+            "an unpublished live owner must exclude installation"
+        );
+        drop((session, retained));
+        assert!(
+            update_state
+                .try_lock(installation, UpdateLockKind::Convergence)
+                .expect("released convergence")
+                .is_some()
+        );
+    }
+}

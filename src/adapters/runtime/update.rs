@@ -33,7 +33,13 @@ impl UpdateInstanceRegistry for FileRuntimeCoordinator {
         let deadline = std::time::Instant::now() + timeout;
         loop {
             let active = UpdateInstanceRegistry::active_instances(self)?;
-            let missing = missing_replacements(&active, installation, target, expected);
+            let missing = missing_replacements(
+                &active,
+                installation,
+                target,
+                expected,
+                crate::adapters::control::endpoint_is_live,
+            );
             if missing.is_empty()
                 || cancellation.is_cancelled()
                 || std::time::Instant::now() >= deadline
@@ -53,6 +59,7 @@ fn missing_replacements(
     installation: InstallationIdentity,
     target: &StableVersion,
     expected: &[UpdateReplacementExpectation],
+    endpoint_is_live: impl Fn(&InstanceInfo) -> bool,
 ) -> Vec<InstanceId> {
     expected
         .iter()
@@ -60,16 +67,31 @@ fn missing_replacements(
             !active.iter().any(|instance| {
                 instance.session_id == replacement.session_id
                     && instance.instance_id != replacement.previous_instance_id
+                    && instance.pid == replacement.previous_pid
                     && instance.version == target.to_string()
                     && instance.control_endpoint.is_some()
-                    && instance
-                        .update
-                        .as_ref()
-                        .is_some_and(|context| context.installation_identity == installation)
+                    && instance.update.as_ref().is_some_and(|context| {
+                        replacement_context_matches(context, replacement, installation, target)
+                    })
+                    && endpoint_is_live(instance)
             })
         })
         .map(|replacement| replacement.previous_instance_id)
         .collect()
+}
+
+fn replacement_context_matches(
+    context: &crate::ports::runtime::UpdateInstanceContext,
+    expected: &UpdateReplacementExpectation,
+    installation: InstallationIdentity,
+    target: &StableVersion,
+) -> bool {
+    context.installation_identity == installation
+        && context.replacement.as_deref().is_some_and(|proof| {
+            proof.operation_id == expected.operation_id
+                && proof.previous_instance_id == expected.previous_instance_id
+                && &proof.target_version == target
+        })
 }
 
 #[cfg(test)]
@@ -81,7 +103,7 @@ mod tests {
         domain::{InstallationIdentity, StableVersion, Timestamp},
         ports::{
             environment::IdGenerator as _,
-            runtime::{InstanceInfo, UpdateInstanceContext},
+            runtime::{InstanceInfo, UpdateInstanceContext, UpdateReplacementContext},
             store::STORAGE_PROTOCOL_VERSION,
             update::{
                 UPDATE_CONTROL_PROTOCOL_VERSION, UpdateCancellation, UpdateInstanceRegistry as _,
@@ -100,14 +122,21 @@ mod tests {
         }
     }
 
-    #[test]
-    fn replacement_requires_same_session_new_instance_exact_target_and_readiness() {
+    struct ReplacementFixture {
+        instance: InstanceInfo,
+        installation: InstallationIdentity,
+        target: StableVersion,
+        expected: UpdateReplacementExpectation,
+        old: crate::domain::InstanceId,
+    }
+
+    fn replacement_fixture() -> ReplacementFixture {
         let mut ids = FakeIdGenerator::new(1_800_000_000_000);
         let old = ids.instance_id();
         let session = ids.session_id();
         let installation = InstallationIdentity::from_digest([7; 32]);
         let target = StableVersion::parse("1.2.3").expect("target");
-        let mut instance = InstanceInfo {
+        let instance = InstanceInfo {
             instance_id: ids.instance_id(),
             session_id: session,
             pid: 42,
@@ -118,55 +147,99 @@ mod tests {
             update: Some(UpdateInstanceContext {
                 installation_identity: installation,
                 protocol: UPDATE_CONTROL_PROTOCOL_VERSION,
+                replacement: Some(Box::new(UpdateReplacementContext {
+                    operation_id: ids.request_id(),
+                    previous_instance_id: old,
+                    target_version: target.clone(),
+                })),
             }),
             launch_directory: "/private".to_owned(),
             started_at: Timestamp::from_millis(1),
         };
-        let expected = [UpdateReplacementExpectation {
+        let expected = UpdateReplacementExpectation {
             session_id: session,
             previous_instance_id: old,
-        }];
-        assert!(
-            missing_replacements(&[instance.clone()], installation, &target, &expected).is_empty()
-        );
-        instance.control_endpoint = None;
-        assert_eq!(
-            missing_replacements(&[instance.clone()], installation, &target, &expected),
-            [old]
-        );
-        instance.control_endpoint = Some("/private/proqi.sock".to_owned());
-        instance
+            previous_pid: 42,
+            operation_id: instance
+                .update
+                .as_ref()
+                .and_then(|context| context.replacement.as_ref())
+                .map(|proof| proof.operation_id)
+                .expect("replacement proof"),
+        };
+        ReplacementFixture {
+            instance,
+            installation,
+            target,
+            expected,
+            old,
+        }
+    }
+
+    fn replacement_ready(fixture: &ReplacementFixture, endpoint_live: bool) -> bool {
+        missing_replacements(
+            std::slice::from_ref(&fixture.instance),
+            fixture.installation,
+            &fixture.target,
+            std::slice::from_ref(&fixture.expected),
+            |_| endpoint_live,
+        )
+        .is_empty()
+    }
+
+    #[test]
+    fn replacement_requires_live_control_same_pid_and_accepted_lineage() {
+        let mut fixture = replacement_fixture();
+        assert!(replacement_ready(&fixture, true));
+        assert!(!replacement_ready(&fixture, false));
+        fixture.instance.pid = 43;
+        assert!(!replacement_ready(&fixture, true));
+        fixture.instance.pid = fixture.expected.previous_pid;
+        fixture
+            .instance
+            .update
+            .as_mut()
+            .expect("update context")
+            .replacement = None;
+        assert!(!replacement_ready(&fixture, true));
+    }
+
+    #[test]
+    fn replacement_rejects_wrong_endpoint_installation_version_or_instance() {
+        let mut fixture = replacement_fixture();
+        fixture.instance.control_endpoint = None;
+        assert!(!replacement_ready(&fixture, true));
+        fixture.instance.control_endpoint = Some("/private/proqi.sock".to_owned());
+        fixture
+            .instance
             .update
             .as_mut()
             .expect("update context")
             .installation_identity = InstallationIdentity::from_digest([8; 32]);
-        assert_eq!(
-            missing_replacements(&[instance.clone()], installation, &target, &expected),
-            [old]
-        );
-        instance
+        assert!(!replacement_ready(&fixture, true));
+        fixture
+            .instance
             .update
             .as_mut()
             .expect("update context")
-            .installation_identity = installation;
-        instance.version = "1.2.2".to_owned();
-        assert_eq!(
-            missing_replacements(&[instance.clone()], installation, &target, &expected),
-            [old]
-        );
-        instance.version = target.to_string();
-        instance.storage_protocol = 999;
-        instance.control_protocol = Some(999);
-        instance.update.as_mut().expect("update context").protocol = 999;
+            .installation_identity = fixture.installation;
+        fixture.instance.version = "1.2.2".to_owned();
+        assert!(!replacement_ready(&fixture, true));
+        fixture.instance.version = fixture.target.to_string();
+        fixture.instance.storage_protocol = 999;
+        fixture.instance.control_protocol = Some(999);
+        fixture
+            .instance
+            .update
+            .as_mut()
+            .expect("update context")
+            .protocol = 999;
         assert!(
-            missing_replacements(&[instance.clone()], installation, &target, &expected).is_empty(),
+            replacement_ready(&fixture, true),
             "the target release may advance ephemeral protocols"
         );
-        instance.instance_id = old;
-        assert_eq!(
-            missing_replacements(&[instance], installation, &target, &expected),
-            [old]
-        );
+        fixture.instance.instance_id = fixture.old;
+        assert!(!replacement_ready(&fixture, true));
     }
 
     #[test]
@@ -185,6 +258,8 @@ mod tests {
         let expected = [UpdateReplacementExpectation {
             session_id: ids.session_id(),
             previous_instance_id: previous,
+            previous_pid: 42,
+            operation_id: ids.request_id(),
         }];
 
         let missing = coordinator

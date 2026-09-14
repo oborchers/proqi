@@ -1,9 +1,6 @@
 //! Canonical view of asynchronous UI intentions that may still allocate a sequence.
 
-use crate::{
-    application::{PendingMutationIntent, PendingMutationIntents},
-    ports::agent::SubmissionDisposition,
-};
+use crate::application::{PendingMutationIntent, PendingMutationIntents};
 
 use super::BoardApp;
 
@@ -25,25 +22,11 @@ impl BoardApp {
             self.pending_clipboard_reads.len(),
         );
         pending.add(
-            PendingMutationIntent::SubmissionRemove,
+            PendingMutationIntent::SubmissionCompletion,
             self.pending_submissions
-                .values()
-                .filter(|item| item.disposition == SubmissionDisposition::RemoveAfterSuccess)
-                .count()
-                + self
-                    .deferred_submissions
-                    .values()
-                    .filter(|item| {
-                        item.pending.disposition == SubmissionDisposition::RemoveAfterSuccess
-                    })
-                    .count()
-                + self
-                    .preflight_submissions
-                    .values()
-                    .filter(|item| {
-                        item.pending.disposition == SubmissionDisposition::RemoveAfterSuccess
-                    })
-                    .count(),
+                .len()
+                .saturating_add(self.deferred_submissions.len())
+                .saturating_add(self.preflight_submissions.len()),
         );
         pending.add(
             PendingMutationIntent::TransferRemove,
