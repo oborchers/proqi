@@ -48,6 +48,18 @@ mod invocation;
 mod input_pause;
 
 #[cfg(target_os = "macos")]
+#[path = "pty/input_stall_continuity.rs"]
+mod input_stall_continuity;
+
+#[cfg(target_os = "macos")]
+#[path = "pty/input_stall_failures.rs"]
+mod input_stall_failures;
+
+#[cfg(target_os = "macos")]
+#[path = "pty/input_stall_modes.rs"]
+mod input_stall_modes;
+
+#[cfg(target_os = "macos")]
 #[path = "pty/key_inspector.rs"]
 mod key_inspector;
 

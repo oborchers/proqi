@@ -9,6 +9,7 @@ mod attachments;
 mod boundary_insertion;
 mod clipboard;
 mod commands;
+mod continuity;
 mod control;
 mod creation;
 mod duplicate;
@@ -125,6 +126,7 @@ pub struct BoardApp {
     editor_factory: Box<dyn EditorFactory>,
     compose_presentation: ComposePresentation,
     pending_edit: Option<editing::PendingEdit>,
+    pending_recovery_editor: Option<crate::ports::runtime::InputRecoveryEditorState>,
     edit_generation: u64,
     edit_owner_generation: u64,
     compose_generation: u64,
@@ -164,6 +166,7 @@ pub struct BoardApp {
     pending_clipboard_reads: BTreeMap<RequestId, pending_types::PendingClipboardRead>,
     pending_recovery_exports: BTreeSet<RequestId>,
     recovery_exported_for: Option<OperationSequence>,
+    recovery_export_path: Option<PathBuf>,
     agent_targets: Vec<AgentTarget>,
     agent_refresh_in_flight: bool,
     global_delivery: Option<global_delivery::GlobalDeliveryState>,
@@ -227,6 +230,7 @@ impl BoardApp {
             editor_factory,
             compose_presentation: ComposePresentation::Prompt,
             pending_edit: None,
+            pending_recovery_editor: None,
             edit_generation: 0,
             edit_owner_generation: 0,
             compose_generation: 0,
@@ -263,6 +267,7 @@ impl BoardApp {
             pending_clipboard_reads: BTreeMap::new(),
             pending_recovery_exports: BTreeSet::new(),
             recovery_exported_for: None,
+            recovery_export_path: None,
             agent_targets: Vec::new(),
             agent_refresh_in_flight: false,
             global_delivery: None,

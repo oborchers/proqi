@@ -28,6 +28,10 @@ impl BoardApp {
     /// Recompute one authoritative frame layout and reflow the active editor.
     pub fn prepare_frame(&mut self, area: Rect) -> LayoutSnapshot {
         self.reset_overlay_activation_for_geometry(area);
+        if self.pending_recovery_editor.is_some() {
+            self.prepare_layout(TextViewport::new(area.width.saturating_sub(2).max(1), 1));
+            self.apply_pending_recovery_editor();
+        }
         self.prepare_layout(TextViewport::new(
             area.width.saturating_sub(2).max(1),
             self.viewport.height,

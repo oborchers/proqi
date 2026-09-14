@@ -107,13 +107,13 @@ pub(super) fn spawn_lanes(
     instance: InstanceInfo,
     terminal_host: String,
     executable: PathBuf,
-    state_root: Option<&std::path::Path>,
+    runtime_directory: &std::path::Path,
 ) -> OwnedLanes {
     let cancellation = crate::adapters::process::CancellationFlag::default();
     OwnedLanes {
         accessibility: AccessibilityLane::spawn(executable, cancellation.clone()),
         control,
-        input: InputLane::spawn_with_test_acceptance(state_root),
+        input: InputLane::spawn_with_test_acceptance(runtime_directory),
         persistence: PersistenceLane::spawn_with_runtime(
             store,
             coordinator.clone(),
@@ -122,6 +122,7 @@ pub(super) fn spawn_lanes(
         ),
         external: ExternalLane::spawn_with_invocation_roots(
             recovery_directory,
+            runtime_directory.join("recovery-fallback"),
             attachment_directory,
             cache_directory.clone(),
             presentation_source,

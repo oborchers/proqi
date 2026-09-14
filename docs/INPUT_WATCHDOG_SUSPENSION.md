@@ -12,10 +12,12 @@ itself being scheduled. A process-wide pause can make both timestamps old, so
 the first supervisor turn after the pause cannot attribute the silence to the
 reader alone.
 
-This policy does not solve the detached reader tracked by
-[Proqi issue 52](https://github.com/oborchers/proqi/issues/52). Crossterm pull
-request 1067 remains open and unreleased. The nested reader and its existing
-bounded join behavior remain unchanged.
+This lease policy is also the false-positive guard for the bounded continuity
+fallback documented in
+[INPUT_STALL_CONTINUITY.md](INPUT_STALL_CONTINUITY.md). It does not solve the
+detached reader tracked by [Proqi issue 52](https://github.com/oborchers/proqi/issues/52).
+Crossterm pull request 1067 remains open and unreleased. The nested reader and
+its existing bounded join behavior remain unchanged.
 
 ## Clock semantics
 

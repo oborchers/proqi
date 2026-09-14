@@ -1,6 +1,7 @@
 //! Private, bounded, structured, content-redacted diagnostics.
 
 mod collect;
+mod input_recovery;
 mod invocation;
 mod writer;
 
@@ -56,6 +57,17 @@ pub enum SafeEvent<'a> {
     RuntimeReady {
         /// Whether verified owner control was published at this boundary.
         control_ready: bool,
+    },
+    /// One content-free exact-session input recovery transition occurred.
+    InputRecovery {
+        /// Stable lifecycle stage.
+        stage: &'a str,
+        /// Optional stable failure reason.
+        reason: Option<&'a str>,
+        /// Attempts retained in the rolling per-session window.
+        attempt_count: usize,
+        /// Optional stable transition outcome.
+        outcome: Option<&'a str>,
     },
     /// The exact initiating replacement reached the final convergence boundary.
     UpdateConverged,
@@ -219,6 +231,10 @@ pub fn initialize(data_dir: &Path, instance_id: InstanceId) -> Result<(), Diagno
 }
 
 /// Record one typed event without accepting arbitrary user data.
+#[expect(
+    clippy::too_many_lines,
+    reason = "one exhaustive projection keeps every diagnostic field content-redacted"
+)]
 pub fn record(event: SafeEvent<'_>) {
     match event {
         SafeEvent::Initialized { instance_id } => tracing::info!(
@@ -235,6 +251,12 @@ pub fn record(event: SafeEvent<'_>) {
         SafeEvent::RuntimeReady { control_ready } => {
             tracing::info!(event = "runtime_ready", control_ready);
         }
+        SafeEvent::InputRecovery {
+            stage,
+            reason,
+            attempt_count,
+            outcome,
+        } => input_recovery::record(stage, reason, attempt_count, outcome),
         SafeEvent::UpdateConverged => {
             tracing::info!(
                 event = "update_convergence",
