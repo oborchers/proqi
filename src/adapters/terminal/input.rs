@@ -1,7 +1,9 @@
 //! Crossterm event normalization and lossless input delivery.
 
 use std::{
-    fmt, io,
+    fmt, fs, io,
+    io::Write as _,
+    path::{Path, PathBuf},
     sync::{
         Arc,
         atomic::{AtomicBool, AtomicU64, Ordering},
@@ -76,15 +78,25 @@ pub(super) struct InputLane {
     pub(super) receiver: Receiver<InputMessage>,
     stop: Arc<AtomicBool>,
     latest_sequence: Arc<AtomicU64>,
+    test_acceptance_path: Option<PathBuf>,
     handle: Option<JoinHandle<()>>,
 }
 
 impl InputLane {
     pub(super) fn spawn() -> Self {
-        Self::spawn_with_source(Box::new(CrosstermEventSource))
+        Self::spawn_with_state_root(Box::new(CrosstermEventSource), None)
     }
 
+    pub(super) fn spawn_with_test_acceptance(state_root: Option<&Path>) -> Self {
+        Self::spawn_with_state_root(Box::new(CrosstermEventSource), state_root)
+    }
+
+    #[cfg(test)]
     fn spawn_with_source(source: Box<dyn EventSource>) -> Self {
+        Self::spawn_with_state_root(source, None)
+    }
+
+    fn spawn_with_state_root(source: Box<dyn EventSource>, state_root: Option<&Path>) -> Self {
         let (sender, receiver) = sync_channel(64);
         let stop = Arc::new(AtomicBool::new(false));
         let latest_sequence = Arc::new(AtomicU64::new(0));
@@ -97,6 +109,8 @@ impl InputLane {
             receiver,
             stop,
             latest_sequence,
+            test_acceptance_path: std::env::var_os("PROQI_TEST_INPUT_ACCEPTANCE")
+                .and_then(|_| state_root.map(|root| root.join("runtime/input-accepted"))),
             handle: Some(handle),
         }
     }
@@ -117,6 +131,21 @@ impl InputLane {
 
     pub(super) fn latest_sequence(&self) -> u64 {
         self.latest_sequence.load(Ordering::Acquire)
+    }
+
+    pub(super) fn record_test_acceptance(&self, sequence: u64, mode: &str) {
+        let Some(path) = &self.test_acceptance_path else {
+            return;
+        };
+        let result = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+            .and_then(|mut output| writeln!(output, "{sequence} mode={mode}"));
+        debug_assert!(
+            result.is_ok(),
+            "test input-acceptance probe must be writable"
+        );
     }
 }
 

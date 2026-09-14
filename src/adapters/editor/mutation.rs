@@ -54,7 +54,6 @@ impl RopeEditor {
     ) -> TextChangeSet {
         self.preferred_column = None;
         self.pointer_selection = None;
-        self.ensure_cursor_visible();
         let Some(changes) = changes.filter(|changes| !changes.is_empty()) else {
             if before_content != self.content() {
                 self.state = before_state;
@@ -62,6 +61,8 @@ impl RopeEditor {
             }
             return TextChangeSet::unchanged(before_content.len());
         };
+        self.state.cursor_affinity = crate::ports::editor::VisualCursorAffinity::default();
+        self.ensure_cursor_visible();
         self.undo.push(HistoryEntry {
             before: before_state,
             after: self.state.clone(),
@@ -127,6 +128,7 @@ impl RopeEditor {
         self.state.text = ropey::Rope::from_str(&after);
         self.state.cursor_byte = cursor;
         self.state.selection_anchor_byte = anchor;
+        self.state.cursor_affinity = crate::ports::editor::VisualCursorAffinity::default();
         Some(changes)
     }
 
@@ -234,6 +236,7 @@ impl RopeEditor {
         self.state.text.insert(start_char, replacement);
         self.state.cursor_byte = start + replacement.len();
         self.state.selection_anchor_byte = None;
+        self.state.cursor_affinity = crate::ports::editor::VisualCursorAffinity::default();
         AppliedRange {
             old: start..end,
             new: start..start + replacement.len(),

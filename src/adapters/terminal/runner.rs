@@ -173,6 +173,7 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
         session_lease.info().clone(),
         terminal_host_label,
         executable,
+        state_root.as_deref(),
     );
     let mut pane_heartbeat = None;
     let shutdown = super::supervisor::ShutdownCoordinator::default();
