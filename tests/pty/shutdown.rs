@@ -3,7 +3,7 @@
 use std::{fs, os::unix::fs::PermissionsExt as _, path::Path, time::Duration};
 
 use super::{
-    support::{consume_first_run, expect_command, json_command},
+    support::{consume_first_run, expect_command, json_command, json_input_command},
     watchdog,
 };
 
@@ -230,8 +230,9 @@ fn delayed_capture_shutdown(
     fs::write(&staged, png_bytes()).expect("staged screenshot");
     let target = watched.path().join("delayed.png");
     let watchdog_pids = state.path().join("watchdog-pids");
+    let input_acceptance = state.path().join("runtime/input-accepted");
     let binary = env!("CARGO_BIN_EXE_proqi");
-    consume_first_run(binary, state.path());
+    let session = seed_editor(binary, state.path());
     let exit_action = capture_exit_action(terminate);
     let capture_barrier = if persistent_failure {
         r#"
@@ -281,6 +282,9 @@ fn delayed_capture_shutdown(
         .args(["-c", &workflow])
         .env("PROQI_TEST_BINARY", binary)
         .env("PROQI_TEST_STATE", state.path())
+        .env("PROQI_TEST_SESSION", &session)
+        .env("PROQI_TEST_INPUT_ACCEPTANCE", "1")
+        .env("PROQI_TEST_INPUT_ACCEPTANCE_PATH", &input_acceptance)
         .env(
             "PROQI_TEST_DATABASE",
             state.path().join("data/proqi.sqlite3"),
@@ -294,6 +298,21 @@ fn delayed_capture_shutdown(
         "delayed capture shutdown PTY workflow",
     );
     assert_capture_shutdown_result(status, state.path(), binary, &target, persistent_failure);
+}
+
+fn seed_editor(binary: &str, state: &Path) -> String {
+    let created = json_command(binary, state, &[]);
+    let session = created["data"]["session_id"]
+        .as_str()
+        .expect("session ID")
+        .to_owned();
+    let _added = json_input_command(
+        binary,
+        state,
+        &["thoughts", "add", &session],
+        "durable editor",
+    );
+    session
 }
 
 fn capture_exit_action(terminate: bool) -> &'static str {
@@ -325,17 +344,39 @@ fn capture_shutdown_workflow(
             puts $owned $pid
             close $owned
         }}
-        spawn $env(PROQI_TEST_BINARY) --state-dir $env(PROQI_TEST_STATE)
+        proc wait_for_input_acceptance {{failure expected_mode}} {{
+            global env
+            for {{set attempt 0}} {{$attempt < 250}} {{incr attempt}} {{
+                if {{[file exists $env(PROQI_TEST_INPUT_ACCEPTANCE_PATH)]}} {{
+                    set input [open $env(PROQI_TEST_INPUT_ACCEPTANCE_PATH) r]
+                    set receipt [read $input]
+                    close $input
+                    if {{[string first "mode=$expected_mode" $receipt] >= 0}} {{ return }}
+                }}
+                after 20
+            }}
+            exit $failure
+        }}
+        proc clear_input_acceptance {{}} {{
+            global env
+            file delete $env(PROQI_TEST_INPUT_ACCEPTANCE_PATH)
+        }}
+        spawn $env(PROQI_TEST_BINARY) --state-dir $env(PROQI_TEST_STATE) -r $env(PROQI_TEST_SESSION)
         stty rows 24 columns 80
         set proqi $spawn_id
         set child [exp_pid]
         register_watchdog_pid $child
         expect -exact "\x1b\[?1049h"
         expect -exact "\x1b\[1 q"
-        after 1000
-        send -- "\x1b"
-        after 50
-        send -- "i"
+        send -- "\x1b\[27u"
+        wait_for_input_acceptance 81 board
+        clear_input_acceptance
+        send -- "\x1b\[A"
+        wait_for_input_acceptance 82 board
+        clear_input_acceptance
+        send -- "\x1b\[105u"
+        wait_for_input_acceptance 83 board
+        clear_input_acceptance
         set capture_lock "$env(PROQI_TEST_STATE)/runtime/screenshot-capture.json"
         for {{set attempt 0}} {{$attempt < 100 && ![file exists $capture_lock]}} {{incr attempt}} {{
             after 50
@@ -351,9 +392,8 @@ fn capture_shutdown_workflow(
             exit 93
         }}
         send -- "\r"
-        after 50
-        send -- "\x1b\[200~durable editor\x1b\[201~"
-        after 700
+        wait_for_input_acceptance 86 edit
+        clear_input_acceptance
         spawn /usr/bin/sqlite3 $env(PROQI_TEST_DATABASE)
         set sqlite $spawn_id
         register_watchdog_pid [exp_pid]
@@ -364,6 +404,7 @@ fn capture_shutdown_workflow(
         set spawn_id $proqi
         {capture_barrier}
         send -- "!"
+        wait_for_input_acceptance 87 edit
         set shutdown_started [clock milliseconds]
         {exit_action}
         {finish_action}

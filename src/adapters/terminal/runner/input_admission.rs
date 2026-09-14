@@ -65,12 +65,22 @@ pub(super) fn apply(
     }
     schedule_attachment_focus_refresh(&event, Instant::now(), &mut deadlines.attachment);
     app.note_screenshot_activity(&event, lanes.monotonic.now());
-    if event.is_deliberate_interaction() {
+    let deliberate = event.is_deliberate_interaction();
+    if deliberate {
         let effects = app.note_attachment_interaction(lanes.monotonic.now());
         enqueue_effects(app, lanes, effects, pending)?;
     }
     let effects = app.handle(event, ids, &clock);
-    enqueue_effects(app, lanes, effects, pending)
+    enqueue_effects(app, lanes, effects, pending)?;
+    if deliberate {
+        let mode = match app.interaction_mode() {
+            crate::application::InteractionMode::Board => "board",
+            crate::application::InteractionMode::Compose => "compose",
+            crate::application::InteractionMode::Edit { .. } => "edit",
+        };
+        lanes.input.record_test_acceptance(sequence, mode);
+    }
+    Ok(())
 }
 
 fn schedule_attachment_focus_refresh(

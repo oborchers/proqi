@@ -14,7 +14,7 @@ impl BoardApp {
     pub(super) fn move_to_visual_row_edge(&mut self, edge: VisualRowEdge, extend_selection: bool) {
         let mut frame = self.build_frame_presentation();
         self.attach_editor_presentation(&mut frame);
-        let Some(position) = frame
+        let Some(target) = frame
             .editor()
             .map(|editor| editor.visual_row_edge(edge, extend_selection))
         else {
@@ -23,8 +23,9 @@ impl BoardApp {
         let Some((_, editor)) = &mut self.editor else {
             return;
         };
-        let _outcome = editor.apply(EditCommand::SetCursor {
-            position,
+        let _outcome = editor.apply(EditCommand::SetVisualCursor {
+            position: target.position,
+            affinity: target.affinity,
             extend_selection,
         });
         self.edit_boundary = None;
