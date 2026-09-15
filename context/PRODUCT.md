@@ -113,6 +113,9 @@ never uploads the bundle and never overwrites an existing output file.
 Update diagnostics add only reviewed schema stages, aggregate selected and
 prepared counts, restart request and acceptance counts, replacement ready and
 missing counts, stable failure stage and code pairs, and final convergence.
+Input recovery diagnostics add only a stable lifecycle stage, stable reason,
+per-session attempt count, and outcome. They do not record session identity,
+process identity, paths, terminal bytes, pane topology, or thought content.
 
 ## Core concepts
 
@@ -1292,6 +1295,53 @@ startup checks again. Other sessions continue normally. The command palette
 offers an explicit `Check for updates` action. JSON commands, the Proqi skill,
 and noninteractive commands never check unless the user explicitly runs
 `proqi update check --json`.
+
+### Confirmed input stall continuity
+
+The existing input watchdog distinguishes a reader-only stall from a whole
+process scheduling gap. A scheduling or sleep gap followed by reader progress
+renews the input lease and does not start recovery. EOF, terminal revocation,
+ordinary terminal I/O errors, and sessionless Browser launches retain their
+existing fail-closed behavior.
+
+On macOS and Linux, a confirmed reader-only stall in an active Board, Compose,
+or Edit session starts one automatic recovery attempt for that incident. Proqi
+stops admitting new mutation, drains accepted persistence and every owned
+asynchronous producer through the ordinary bounded shutdown boundary, restores
+terminal modes, releases the exact session and runtime resources, and then
+replaces itself with the verified current executable. Unix `exec` preserves the
+PID, working directory, standard streams, inherited PTY, exact SessionId, and
+explicit or default state root. The replacement restores content-free focus,
+mode, cursor, selection, scroll, insertion, and fold presentation state after
+the durable board is reopened.
+
+If accepted work has reached a persistence failure, exact replacement is not
+safe. Proqi automatically runs the existing private recovery export through its
+owned external lane, drains that export, and exits without `exec`. The terminal
+failure names both the exact durable-session resume command and the recovery
+file that contains the optimistic board state. A retained failed write remains
+eligible for the ordinary retry path before any later independent stall. If the
+primary recovery directory is unavailable, the same exporter makes one bounded
+attempt under the already-private runtime root.
+
+Startup alone is not recovery. The replacement remains on probation until the
+canonical input owner completes three bounded Crossterm polls or delivers an
+event. A stall during probation exits after terminal restoration with the
+existing terminal I/O failure and an exact resume command. It never performs a
+second automatic replacement for that incident.
+
+Each exact session has an independent rolling circuit. At most two automatic
+recoveries may begin in any ten-minute window. A third confirmed stall in that
+window fails closed. Older incidents expire naturally, so a healthy session
+remains eligible for a later independent recovery. The recovery record is
+content-free, bounded, private to the current user, and scoped to the exact
+session, PID, executable identity, and replacement lineage. It is runtime
+coordination state, not durable user history, and makes no storage schema or
+protocol change.
+
+This bounded continuity fallback complements the upstream input-worker work in
+issue 52. It does not replace the detached Crossterm reader, recover a revoked
+PTY, or claim that issue is solved.
 
 ### Verified installation update and restart
 

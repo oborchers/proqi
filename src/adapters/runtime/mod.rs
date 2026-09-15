@@ -2,6 +2,7 @@
 
 mod capture;
 mod control_endpoint;
+pub(crate) mod input_recovery;
 mod schema_lock;
 mod system;
 mod update;
@@ -103,6 +104,10 @@ impl FileRuntimeCoordinator {
         &self,
     ) -> Result<Option<FileSchemaLease>, RuntimeError> {
         schema_lock::try_acquire(&self.runtime_dir.join("schema.lock"), false)
+    }
+
+    pub(crate) fn runtime_directory(&self) -> &Path {
+        &self.runtime_dir
     }
 
     fn session_lock_path(&self, session_id: SessionId) -> PathBuf {

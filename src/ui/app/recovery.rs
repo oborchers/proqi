@@ -99,6 +99,7 @@ impl BoardApp {
         }
         let request_id = ids.request_id();
         let exported_at = clock.now();
+        self.recovery_export_path = None;
         let mut document = capture_recovery(&self.state, exported_at);
         if let Some((thought_id, snapshot)) = self.pending_edit_snapshot()
             && let Some(thought) = document
@@ -132,12 +133,34 @@ impl BoardApp {
                     DurabilityState::Failed { failed, .. } => Some(failed),
                     DurabilityState::Durable { .. } | DurabilityState::Pending { .. } => None,
                 };
+                self.recovery_export_path = Some(path.clone());
                 self.set_recovery_success(format!("recovery exported to {}", path.display()));
             }
-            Err(error) => self.set_storage_failure(format!("recovery export failed: {error}")),
+            Err(error) => {
+                self.recovery_export_path = None;
+                self.set_storage_failure(format!("recovery export failed: {error}"));
+            }
         }
         self.refresh_palette_recovery();
         Vec::new()
+    }
+
+    pub(crate) fn export_failed_state_for_shutdown(
+        &mut self,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Option<Vec<Effect>> {
+        matches!(self.state.durability, DurabilityState::Failed { .. })
+            .then(|| self.export_recovery(ids, clock))
+    }
+
+    pub(crate) fn recovery_export_path(&self) -> Option<&std::path::Path> {
+        let DurabilityState::Failed { failed, .. } = self.state.durability else {
+            return None;
+        };
+        (self.recovery_exported_for == Some(failed))
+            .then_some(self.recovery_export_path.as_deref())
+            .flatten()
     }
 
     pub(super) fn retry_persistence(&mut self) -> Vec<Effect> {

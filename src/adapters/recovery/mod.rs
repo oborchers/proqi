@@ -14,13 +14,24 @@ use crate::{
 /// Filesystem-backed recovery writer rooted in Proqi's data directory.
 pub struct FileRecoveryExporter {
     directory: PathBuf,
+    fallback_directory: Option<PathBuf>,
 }
 
 impl FileRecoveryExporter {
     /// Construct an exporter for one absolute directory.
     #[must_use]
     pub fn new(directory: PathBuf) -> Self {
-        Self { directory }
+        Self {
+            directory,
+            fallback_directory: None,
+        }
+    }
+
+    pub(crate) fn with_fallback(directory: PathBuf, fallback_directory: PathBuf) -> Self {
+        Self {
+            directory,
+            fallback_directory: Some(fallback_directory),
+        }
     }
 }
 
@@ -30,18 +41,38 @@ impl RecoveryExporter for FileRecoveryExporter {
         request_id: RequestId,
         document: &RecoveryDocument,
     ) -> Result<PathBuf, RecoveryError> {
-        prepare_directory(&self.directory)?;
-        let stem = format!("recovery-{}-{request_id}", document.session.id);
-        let temporary = self.directory.join(format!(".{stem}.tmp"));
-        let destination = self.directory.join(format!("{stem}.json"));
-        refuse_existing(&temporary)?;
-        refuse_existing(&destination)?;
-        let result = write_and_install(document, &temporary, &destination, &self.directory);
-        if result.is_err() {
-            let _cleanup = fs::remove_file(&temporary);
+        match export_to(&self.directory, request_id, document) {
+            Ok(path) => Ok(path),
+            Err(primary) => {
+                let Some(fallback) = self.fallback_directory.as_ref() else {
+                    return Err(primary);
+                };
+                export_to(fallback, request_id, document).map_err(|secondary| {
+                    RecoveryError::Io(format!(
+                        "primary recovery export failed: {primary}; private fallback failed: {secondary}"
+                    ))
+                })
+            }
         }
-        result.map(|()| destination)
     }
+}
+
+fn export_to(
+    directory: &Path,
+    request_id: RequestId,
+    document: &RecoveryDocument,
+) -> Result<PathBuf, RecoveryError> {
+    prepare_directory(directory)?;
+    let stem = format!("recovery-{}-{request_id}", document.session.id);
+    let temporary = directory.join(format!(".{stem}.tmp"));
+    let destination = directory.join(format!("{stem}.json"));
+    refuse_existing(&temporary)?;
+    refuse_existing(&destination)?;
+    let result = write_and_install(document, &temporary, &destination, directory);
+    if result.is_err() {
+        let _cleanup = fs::remove_file(&temporary);
+    }
+    result.map(|()| destination)
 }
 
 fn prepare_directory(path: &Path) -> Result<(), RecoveryError> {

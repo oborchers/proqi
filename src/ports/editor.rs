@@ -269,6 +269,15 @@ pub trait Editor {
         selection_anchor: Option<TextPosition>,
     ) -> EditOutcome;
 
+    /// Restore content-free cursor, selection, affinity, and scroll after exact process replacement.
+    fn restore_recovery_view(
+        &mut self,
+        cursor: TextPosition,
+        selection_anchor: Option<TextPosition>,
+        cursor_affinity: VisualCursorAffinity,
+        scroll_row: usize,
+    );
+
     /// Resolve a visible viewport cell to a logical text position.
     fn position_at_cell(&self, row: u16, column: u16) -> TextPosition;
 

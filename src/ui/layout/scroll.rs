@@ -12,7 +12,8 @@ mod focus;
 #[cfg(test)]
 mod tests;
 
-use anchor::{ContentAnchor, content_row_anchors, content_row_for_anchor};
+pub(in crate::ui) use anchor::ContentAnchor;
+use anchor::{content_row_anchors, content_row_for_anchor};
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(in crate::ui) enum ScrollAnchor {

@@ -435,6 +435,24 @@ impl Editor for RopeEditor {
         }
     }
 
+    fn restore_recovery_view(
+        &mut self,
+        cursor: TextPosition,
+        selection_anchor: Option<TextPosition>,
+        cursor_affinity: VisualCursorAffinity,
+        scroll_row: usize,
+    ) {
+        let content = self.content();
+        self.state.cursor_byte = byte_for_position(&content, cursor);
+        self.state.selection_anchor_byte =
+            selection_anchor.map(|anchor| byte_for_position(&content, anchor));
+        self.state.cursor_affinity = cursor_affinity;
+        self.preferred_column = None;
+        self.pointer_selection = None;
+        self.scroll_row = scroll_row;
+        self.ensure_cursor_visible();
+    }
+
     fn position_at_cell(&self, row: u16, column: u16) -> TextPosition {
         let content = self.content();
         let lines = self.wrapped_lines();

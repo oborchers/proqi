@@ -4,8 +4,120 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::domain::{
-    InstallationIdentity, InstanceId, RequestId, SessionId, StableVersion, Timestamp,
+    InstallationIdentity, InstanceId, RequestId, SessionId, StableVersion, TextPosition, ThoughtId,
+    Timestamp,
 };
+
+/// Content-free interaction checkpoint carried only across input recovery replacement.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct InputRecoveryUiState {
+    /// Exact non-modal interaction owner.
+    pub mode: InputRecoveryMode,
+    /// Focused thought when one exists.
+    pub focused_thought: Option<ThoughtId>,
+    /// Current logical insertion position.
+    pub insertion_index: usize,
+    /// Whether the insertion row owns Board focus.
+    pub insertion_focused: bool,
+    /// Whether Compose is showing its active editor rather than its passive prompt.
+    pub compose_editor_visible: bool,
+    /// Active editor geometry, without editor content.
+    pub editor: Option<InputRecoveryEditorState>,
+    /// Exact Board thought selection.
+    pub selection: InputRecoverySelection,
+    /// Expanded presentation folds by thought and annotation index.
+    pub expanded_folds: Vec<(ThoughtId, usize)>,
+    /// Projection-stable Board scroll position.
+    pub board_viewport: InputRecoveryBoardViewport,
+}
+
+/// Supported non-modal interaction owner.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "mode")]
+pub enum InputRecoveryMode {
+    /// Whole-thought Board interaction.
+    Board,
+    /// Empty transient insertion editor.
+    Compose,
+    /// Existing thought editor.
+    Edit {
+        /// Thought owning the editor.
+        thought_id: ThoughtId,
+    },
+}
+
+/// Content-free editor position retained across replacement.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct InputRecoveryEditorState {
+    /// Logical cursor head.
+    pub cursor: TextPosition,
+    /// Optional fixed directional selection endpoint.
+    pub selection_anchor: Option<TextPosition>,
+    /// Whether a soft-wrap boundary belongs to the previous row.
+    pub previous_row_affinity: bool,
+    /// First visible wrapped editor row.
+    pub scroll_row: usize,
+}
+
+/// Exact content-free Board selection state.
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+pub struct InputRecoverySelection {
+    /// Selected thoughts.
+    pub selected: Vec<ThoughtId>,
+    /// Optional contiguous range endpoints.
+    pub range: Option<(ThoughtId, ThoughtId)>,
+    /// Whether the keyboard range latch is active.
+    pub latched: bool,
+}
+
+/// Board viewport ownership and semantic anchor.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct InputRecoveryBoardViewport {
+    /// Whether focus movement owns subsequent scrolling.
+    pub follows_focus: bool,
+    /// Current projection-stable anchor.
+    pub anchor: InputRecoveryScrollAnchor,
+}
+
+/// Content-free Board scroll anchor.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "kind")]
+pub enum InputRecoveryScrollAnchor {
+    /// Beginning of the Board.
+    Start,
+    /// Gap preceding a thought.
+    GapBefore {
+        /// Thought following the gap.
+        thought_id: ThoughtId,
+        /// Row within the gap.
+        row: usize,
+    },
+    /// Canonical or projected row within thought content.
+    Content {
+        /// Thought owning the content row.
+        thought_id: ThoughtId,
+        /// Nearest canonical UTF-8 byte boundary.
+        canonical_byte: usize,
+        /// Annotation owning a projected-only row.
+        annotation_index: Option<usize>,
+        /// Row within that annotation projection.
+        projection_row: Option<usize>,
+    },
+    /// Tall-thought overflow marker.
+    Overflow {
+        /// Tall thought owning the overflow marker.
+        thought_id: ThoughtId,
+    },
+    /// Compose editor content row.
+    Compose {
+        /// Canonical UTF-8 byte at the first visible Compose row.
+        byte: usize,
+    },
+    /// Gap before the insertion row.
+    InsertGap,
+    /// Insertion row.
+    Insert,
+}
 
 /// Process-local proof that this runtime was created by one accepted Unix replacement.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

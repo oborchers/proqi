@@ -7,7 +7,10 @@ mod transfer;
 
 use std::{
     collections::BTreeMap,
-    sync::mpsc::{Receiver, SyncSender, sync_channel},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc::{Receiver, SyncSender, sync_channel},
+    },
     thread::{self, JoinHandle},
 };
 
@@ -72,6 +75,7 @@ fn process_request(
             let Some(sequence) = batch.sequence() else {
                 return true;
             };
+            delay_test_commit();
             (sequence, batch)
         }
         PersistenceRequest::Retry(sequence) => {
@@ -87,6 +91,39 @@ fn process_request(
         results,
         false,
     )
+}
+
+fn delay_test_commit() {
+    if std::env::var_os("PROQI_TEST_INPUT_STALL").is_none() {
+        return;
+    }
+    let Some(delay) = std::env::var("PROQI_TEST_PERSISTENCE_DELAY_MS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .filter(|value| *value > 0 && *value <= 1_500)
+    else {
+        return;
+    };
+    if let Some(path) = std::env::var_os("PROQI_TEST_PERSISTENCE_BUSY") {
+        let _created = std::fs::write(path, b"busy");
+    }
+    std::thread::sleep(std::time::Duration::from_millis(delay));
+}
+
+fn fail_first_test_commit() -> Option<StoreError> {
+    static FAILED: AtomicBool = AtomicBool::new(false);
+    let marker = std::env::var_os("PROQI_TEST_PERSISTENCE_FAILED").map(std::path::PathBuf::from);
+    if std::env::var_os("PROQI_TEST_INPUT_STALL").is_none()
+        || std::env::var_os("PROQI_TEST_PERSISTENCE_FAIL_ONCE").is_none()
+        || marker.as_ref().is_some_and(|path| path.exists())
+        || FAILED.swap(true, Ordering::AcqRel)
+    {
+        return None;
+    }
+    if let Some(path) = marker {
+        let _created = std::fs::write(path, b"failed");
+    }
+    Some(StoreError::Busy)
 }
 
 fn process_unsequenced(
@@ -315,10 +352,13 @@ fn commit_batch(
     let RetainedCommit::Batch(batch) = &commit else {
         return false;
     };
-    let result = store.commit(batch).and_then(|receipt| {
-        receipt
-            .ok_or_else(|| StoreError::Integrity("mutable operation lacked a receipt".to_owned()))
-    });
+    let result = fail_first_test_commit()
+        .map_or_else(|| store.commit(batch), Err)
+        .and_then(|receipt| {
+            receipt.ok_or_else(|| {
+                StoreError::Integrity("mutable operation lacked a receipt".to_owned())
+            })
+        });
     let result = if result.is_err() && !retention::can_retain(retained, sequence, &commit) {
         Err(StoreError::RecoveryCapacity)
     } else {

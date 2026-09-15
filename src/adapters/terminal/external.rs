@@ -122,6 +122,7 @@ pub(super) struct ExternalLane {
 
 struct ExternalDirectories {
     recovery: PathBuf,
+    recovery_fallback: PathBuf,
     attachment: PathBuf,
     cache: PathBuf,
 }
@@ -129,6 +130,7 @@ struct ExternalDirectories {
 impl ExternalLane {
     pub(super) fn spawn_with_invocation_roots(
         recovery_directory: PathBuf,
+        recovery_fallback_directory: PathBuf,
         attachment_directory: PathBuf,
         cache_directory: PathBuf,
         presentation_source: String,
@@ -141,6 +143,7 @@ impl ExternalLane {
         let worker_lifecycle = lifecycle.clone();
         let directories = ExternalDirectories {
             recovery: recovery_directory,
+            recovery_fallback: recovery_fallback_directory,
             attachment: attachment_directory,
             cache: cache_directory,
         };
@@ -298,12 +301,13 @@ fn external_loop(
 ) {
     let ExternalDirectories {
         recovery,
+        recovery_fallback,
         attachment,
         cache,
     } = directories;
     let runner = SystemProcessRunner::cancellable(cancellation.clone());
     let mut clipboard = PlatformClipboard::new(&cache, Box::new(runner.clone()));
-    let mut recovery = FileRecoveryExporter::new(recovery);
+    let mut recovery = FileRecoveryExporter::with_fallback(recovery, recovery_fallback);
     let mut attachments = FileAttachmentStore::new(attachment);
     let mut notifications = HerdrPauseNotifier::from_environment_with_runner(runner.clone());
     let mut agents = HerdrGateway::from_environment_with_runner(presentation_source, runner);

@@ -20,6 +20,34 @@ pub(super) struct BoardSelection {
 }
 
 impl BoardSelection {
+    pub(super) fn recovery_state(&self) -> crate::ports::runtime::InputRecoverySelection {
+        crate::ports::runtime::InputRecoverySelection {
+            selected: self.selected.iter().copied().collect(),
+            range: self.range.map(|range| (range.anchor, range.endpoint)),
+            latched: self.latched,
+        }
+    }
+
+    pub(super) fn restore_recovery_state(
+        &mut self,
+        state: crate::ports::runtime::InputRecoverySelection,
+        order: &[ThoughtId],
+    ) -> bool {
+        if state.selected.iter().any(|id| !order.contains(id))
+            || state.range.is_some_and(|(anchor, endpoint)| {
+                !order.contains(&anchor) || !order.contains(&endpoint)
+            })
+        {
+            return false;
+        }
+        self.selected = state.selected.into_iter().collect();
+        self.range = state
+            .range
+            .map(|(anchor, endpoint)| BoardRange { anchor, endpoint });
+        self.latched = state.latched;
+        true
+    }
+
     pub(super) fn contains(&self, thought_id: ThoughtId) -> bool {
         self.selected.contains(&thought_id)
     }
@@ -256,7 +284,7 @@ impl BoardApp {
         }
     }
 
-    fn live_thought_ids(&self) -> Vec<ThoughtId> {
+    pub(super) fn live_thought_ids(&self) -> Vec<ThoughtId> {
         self.state
             .board
             .live_thoughts()

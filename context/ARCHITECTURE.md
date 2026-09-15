@@ -113,6 +113,77 @@ this bounded path. `SIGHUP` retains its operating-system default until a future
 design can guarantee restoration after terminal revocation without keeping a
 revoked input descriptor alive.
 
+### Exact-session input stall continuity
+
+The input supervisor retains the lease policy from PR 62. A normally scheduled
+supervisor confirms a reader-only stall after 500 milliseconds without reader
+progress. A supervisor gap at least that long grants one fresh reader lease, so
+host sleep or scheduler suspension followed by input progress does not enter
+recovery. EOF, terminal revocation, and other typed I/O failures bypass this
+path and fail closed.
+
+The exact-session recovery owner uses the typed lifecycle `Healthy`,
+`ConfirmedStall`, `RecoveryPrepared`, `Probation`, then `Healthy`. Confirmation
+admits one attempt for the current incident. Preparation occurs only after the
+main runner has stopped mutation admission, flushed or rejected pending edits,
+drained persistence, owner control, Screenshot Inbox, attachment, external,
+update, and notification work through the existing shutdown boundary, restored
+terminal modes, and stopped workers within the shared deadline while retaining
+the session and schema leases. Only after every owned worker has stopped does it
+validate the aggregate cleanup result, release those leases, and prepare the
+replacement record. A cleanup failure retains the leases until the terminal
+runner returns the aggregate failure. Any preparation or cleanup failure leaves
+the durable session exactly resumable and returns the terminal I/O failure with
+an exact resume command.
+
+A persistence failure makes the durable UI checkpoint ineligible for `exec`.
+During recovery shutdown, the runner admits exactly one existing
+`ExportRecovery` effect, drains it through the external lane, and reports its
+private path with the exact durable resume command. The failed retained batch
+can still follow the ordinary retry path if it succeeds before the stall. The
+exporter makes one bounded fallback attempt under the private runtime root when
+the primary recovery directory is unavailable. It never overwrites either
+destination.
+
+The Unix replacement reuses the update convergence process owner. It resolves
+and hashes the current executable at startup, verifies the same byte length and
+SHA-256 digest immediately before `exec`, applies the ordinary exact-session
+resume arguments, restores the launch working directory, and inherits the
+existing standard streams and PTY. Input and update replacement proofs are
+mutually removed at their process boundary, and ordinary child processes inherit
+neither proof. This prevents one lifecycle from being mistaken for the other.
+
+The replacement proof and record bind the exact SessionId, retained PID,
+lineage request, attempt request, previous InstanceId, and executable identity.
+The record is strict JSON below the existing runtime root, limited to 16 KiB,
+written through a private create-new temporary file and atomic rename, owned by
+the current user, and mode 0600 inside a mode 0700 directory. It contains only
+attempt timestamps, typed lifecycle identity, and a bounded content-free UI
+checkpoint. An ordinary launch removes a valid abandoned record. Malformed,
+oversized, public, symlinked, mismatched, or incomplete state disables automatic
+recovery for that launch. Failure to read the current executable identity or
+prepare the private record directory also disables only automatic recovery on
+an ordinary healthy launch. A replacement launch treats either failure as an
+exact-lineage violation and fails closed.
+
+The probation policy is named `PROBATION_PROGRESS_POLLS` and requires three
+completed bounded polls through the canonical input source. Process startup,
+board restoration, control publication, and elapsed time are not health
+evidence. A confirmed stall during probation fails closed without another
+`exec`. After probation succeeds, the incident is cleared for lifecycle
+purposes while its timestamp remains in the rolling circuit. Each SessionId has
+its own record and may start at most two automatic recoveries in a rolling ten
+minutes. A third incident fails closed, while timestamps older than the window
+expire before the next decision.
+
+Only non-modal Board, Compose, and Edit owners can produce a checkpoint. The
+checkpoint contains logical cursor and selection positions, editor wrap affinity
+and scroll row, Board selection and insertion focus, expanded annotation indexes,
+and semantic viewport anchors. Durable content, annotations, operations,
+submissions, transfers, captures, updates, and Browser history remain owned by
+SQLite and their existing idempotent protocols. Browser has no active SessionId
+owner, so it retains fail-closed behavior instead of inventing one.
+
 Application subprocesses start in dedicated Unix process groups. Deadline or
 I/O failure sends `SIGTERM` to the group, waits 250 milliseconds, then sends
 `SIGKILL`, reaps the direct child, closes its pipes, and joins bounded I/O

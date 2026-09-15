@@ -69,6 +69,48 @@ impl EventSource for CrosstermEventSource {
     }
 }
 
+struct StallInjectingEventSource {
+    inner: CrosstermEventSource,
+    trigger: Option<PathBuf>,
+    stall_on_first_poll: bool,
+}
+
+impl StallInjectingEventSource {
+    fn new(runtime_directory: Option<&Path>) -> Self {
+        let trigger = std::env::var_os("PROQI_TEST_INPUT_STALL").and_then(|_| {
+            std::env::var_os("PROQI_TEST_INPUT_STALL_TRIGGER")
+                .map(PathBuf::from)
+                .or_else(|| runtime_directory.map(|root| root.join("input-stall-trigger")))
+        });
+        Self {
+            inner: CrosstermEventSource,
+            trigger,
+            stall_on_first_poll: std::env::var_os("PROQI_TEST_INPUT_STALL_PROBATION").is_some()
+                && std::env::var_os("PROQI_INPUT_RECOVERY_SESSION").is_some(),
+        }
+    }
+}
+
+impl EventSource for StallInjectingEventSource {
+    fn poll(&mut self, timeout: Duration) -> io::Result<bool> {
+        if std::mem::take(&mut self.stall_on_first_poll)
+            || self
+                .trigger
+                .as_ref()
+                .is_some_and(|path| fs::remove_file(path).is_ok())
+        {
+            loop {
+                thread::park();
+            }
+        }
+        self.inner.poll(timeout)
+    }
+
+    fn read(&mut self) -> io::Result<Event> {
+        self.inner.read()
+    }
+}
+
 pub(super) enum InputMessage {
     Event { sequence: u64, input: UiInput },
     Failed(InputFailure),
@@ -78,39 +120,52 @@ pub(super) struct InputLane {
     pub(super) receiver: Receiver<InputMessage>,
     stop: Arc<AtomicBool>,
     latest_sequence: Arc<AtomicU64>,
+    completed_polls: Arc<AtomicU64>,
     test_acceptance_path: Option<PathBuf>,
     handle: Option<JoinHandle<()>>,
 }
 
 impl InputLane {
     pub(super) fn spawn() -> Self {
-        Self::spawn_with_state_root(Box::new(CrosstermEventSource), None)
+        Self::spawn_source(Box::new(StallInjectingEventSource::new(None)), None)
     }
 
-    pub(super) fn spawn_with_test_acceptance(state_root: Option<&Path>) -> Self {
-        Self::spawn_with_state_root(Box::new(CrosstermEventSource), state_root)
+    pub(super) fn spawn_with_test_acceptance(runtime_directory: &Path) -> Self {
+        Self::spawn_source(
+            Box::new(StallInjectingEventSource::new(Some(runtime_directory))),
+            Some(runtime_directory),
+        )
     }
 
     #[cfg(test)]
     fn spawn_with_source(source: Box<dyn EventSource>) -> Self {
-        Self::spawn_with_state_root(source, None)
+        Self::spawn_source(source, None)
     }
 
-    fn spawn_with_state_root(source: Box<dyn EventSource>, state_root: Option<&Path>) -> Self {
+    fn spawn_source(source: Box<dyn EventSource>, runtime_directory: Option<&Path>) -> Self {
         let (sender, receiver) = sync_channel(64);
         let stop = Arc::new(AtomicBool::new(false));
         let latest_sequence = Arc::new(AtomicU64::new(0));
+        let completed_polls = Arc::new(AtomicU64::new(0));
         let worker_stop = Arc::clone(&stop);
         let worker_sequence = Arc::clone(&latest_sequence);
+        let worker_polls = Arc::clone(&completed_polls);
         let handle = thread::spawn(move || {
-            supervise_input(source, &sender, &worker_stop, &worker_sequence);
+            supervise_input(
+                source,
+                &sender,
+                &worker_stop,
+                &worker_sequence,
+                &worker_polls,
+            );
         });
         Self {
             receiver,
             stop,
             latest_sequence,
+            completed_polls,
             test_acceptance_path: std::env::var_os("PROQI_TEST_INPUT_ACCEPTANCE")
-                .and_then(|_| state_root.map(|root| root.join("runtime/input-accepted"))),
+                .and_then(|_| runtime_directory.map(|root| root.join("input-accepted"))),
             handle: Some(handle),
         }
     }
@@ -131,6 +186,10 @@ impl InputLane {
 
     pub(super) fn latest_sequence(&self) -> u64 {
         self.latest_sequence.load(Ordering::Acquire)
+    }
+
+    pub(super) fn completed_polls(&self) -> u64 {
+        self.completed_polls.load(Ordering::Acquire)
     }
 
     pub(super) fn record_test_acceptance(&self, sequence: u64, mode: &str) {
@@ -207,6 +266,7 @@ fn supervise_input(
     sender: &SyncSender<InputMessage>,
     stop: &AtomicBool,
     latest_sequence: &AtomicU64,
+    completed_polls: &AtomicU64,
 ) {
     let (source_sender, source_receiver) = sync_channel(64);
     let source_stop = Arc::new(AtomicBool::new(false));
@@ -220,9 +280,11 @@ fn supervise_input(
         flush_resize(sender, &mut pending_resize);
         match source_receiver.recv_timeout(MONITOR_INTERVAL) {
             Ok(SourceMessage::Responsive) => {
+                completed_polls.fetch_add(1, Ordering::AcqRel);
                 let _decision = lease.observe(Instant::now(), true);
             }
             Ok(SourceMessage::Event(event)) => {
+                completed_polls.fetch_add(1, Ordering::AcqRel);
                 let _decision = lease.observe(Instant::now(), true);
                 deliver(event, sender, stop, &mut pending_resize, latest_sequence);
             }

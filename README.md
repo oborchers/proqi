@@ -438,6 +438,18 @@ cloud sync, collaboration service, or upload.
 The footer reports durability. Failures block destructive exit and remain
 retryable/exportable. Editor and board history survive restart.
 
+If the terminal watchdog confirms that only the Crossterm input lane has
+stopped making progress while the pane is still usable, Proqi first drains
+accepted work and restores the terminal. On macOS and Linux it then makes one
+same-pane replacement attempt for the exact session. Board, Compose, and Edit
+state resume in the inherited PTY. A replacement that cannot prove fresh input
+progress exits with an exact manual resume command. The per-session circuit
+allows at most two automatic recoveries in any rolling ten-minute window.
+If persistence has already failed, Proqi does not replace the process. It first
+writes the existing private recovery export, with a bounded fallback under the
+private runtime root if the primary recovery directory is unavailable. It then
+exits with both the exact resume command and the optimistic-state recovery path.
+
 ```shell
 proqi doctor
 proqi diagnostics collect --output proqi-diagnostics.json
@@ -450,6 +462,9 @@ Collected update diagnostics include only closed lifecycle stages, aggregate
 participant and replacement counts, stable failure codes, and convergence.
 Finalization diagnostics distinguish unavailable control, unavailable private
 cache state, and an exact-state mismatch without recording local identifiers.
+Input recovery diagnostics contain only a stable stage, reason, attempt count,
+and outcome. They never contain session identity, paths, pane identity, terminal
+bytes, or thought content.
 
 ## Configuration
 

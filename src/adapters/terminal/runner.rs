@@ -4,7 +4,9 @@ mod accessibility_results;
 mod admission;
 mod capture_runtime;
 pub(crate) mod composition;
+mod continuity;
 mod diagnostics;
+mod drive;
 mod durability;
 mod external_results;
 mod fairness;
@@ -21,12 +23,7 @@ mod termination;
 mod update_results;
 mod worker_results;
 
-use std::{
-    io::{Stdout, stdout},
-    path::PathBuf,
-    thread,
-    time::{Duration, Instant},
-};
+use std::{io::stdout, path::PathBuf};
 
 use ratatui_core::terminal::Terminal;
 use ratatui_crossterm::CrosstermBackend;
@@ -38,6 +35,7 @@ use crate::{
         runtime::{
             FileRuntimeCoordinator, FileSchemaLease, FileSessionLease, SystemClock,
             SystemIdGenerator, SystemMonotonicClock,
+            input_recovery::{ExecutableIdentity, InputRecovery, RecoveryStage},
         },
         sqlite::SqliteStore,
     },
@@ -48,7 +46,7 @@ use crate::{
         runtime::InstanceInfo,
         store::Store as _,
     },
-    ui::{BoardApp, Theme, render_with_outcome},
+    ui::BoardApp,
 };
 
 use super::{
@@ -56,7 +54,7 @@ use super::{
     accessibility_lane::AccessibilityLane,
     control::{PanicHookGuard, TerminationGuard},
     external::ExternalLane,
-    input::{InputLane, InputMessage},
+    input::InputLane,
     persistence::PersistenceLane,
     screenshot_lane::ScreenshotLane,
 };
@@ -67,7 +65,7 @@ use finish::CleanupStage::{Control, TerminalRestoration};
 use heartbeat::PaneHeartbeat;
 use owned_lanes::OwnedLanes;
 use pending::{PendingControl, PendingWork};
-use termination::{TerminationAdmission, admit_requested};
+use termination::TerminationAdmission;
 
 pub(crate) struct TerminalResources {
     pub(crate) state: AppState,
@@ -130,6 +128,26 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
     } = resources;
     let mut schema_lease = Some(schema_lease);
     let session_id = state.board.session.id;
+    let executable_identity = ExecutableIdentity::read(&executable);
+    let runtime_directory = coordinator.runtime_directory().to_path_buf();
+    let mut input_recovery = InputRecovery::open(
+        coordinator.runtime_directory(),
+        session_id,
+        session_lease.info().instance_id,
+        executable_identity.clone(),
+        crate::adapters::process::input_recovery_startup_context(),
+    )
+    .map_err(|error| {
+        continuity::unavailable(error, &executable, state_root.as_deref(), session_id)
+    })?;
+    if input_recovery.stage() == RecoveryStage::Probation {
+        continuity::record(
+            "probation",
+            None,
+            input_recovery.attempt_count(),
+            Some("started"),
+        );
+    }
     store.recover_submissions(session_id, clock.now())?;
     let release_highlight_selection =
         release_highlights::load(&cache_directory, installation.as_ref(), session_id);
@@ -156,6 +174,16 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
     let check_for_updates = settings.ui.check_for_updates;
     let mut app =
         BoardApp::with_settings_and_cwd(state, settings.ui, cwd.clone(), RopeEditorFactory);
+    if let Some(recovery_state) = input_recovery.ui_state().cloned()
+        && !app.restore_input_recovery_state(recovery_state)
+    {
+        return Err(continuity::stalled(
+            crate::adapters::runtime::input_recovery::RecoveryFailure::StateUnsupported,
+            &executable,
+            state_root.as_deref(),
+            session_id,
+        ));
+    }
     let control_ready = composition::publish_optional_control(
         &mut session_lease,
         &mut control,
@@ -178,8 +206,8 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
         screenshot_settings,
         session_lease.info().clone(),
         terminal_host_label,
-        executable,
-        state_root.as_deref(),
+        executable.clone(),
+        &runtime_directory,
     );
     let mut pane_heartbeat = None;
     let shutdown = super::supervisor::ShutdownCoordinator::default();
@@ -218,8 +246,9 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
         instance: session_lease.info(),
         cancellation: &owned.cancellation,
     };
+    let mut recovery_disposition = continuity::RecoveryDisposition::None;
     let run_result = owned.update.check(check_for_updates).and_then(|()| {
-        drive(
+        drive::run(
             &mut terminal,
             &mut app,
             &lanes,
@@ -229,6 +258,11 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
             &mut pane_heartbeat,
             &shutdown,
             &mut schema_lease,
+            &mut input_recovery,
+            &mut recovery_disposition,
+            &executable,
+            state_root.as_deref(),
+            session_id,
         )
     });
     let requested_restart = app
@@ -236,6 +270,7 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
         .cloned()
         .zip(app.update_restart_operation());
     let previous_instance_id = session_lease.info().instance_id;
+    let mut lifecycle_resources = Some((session_lease, schema_lease, startup_admission));
     if let Some(heartbeat) = pane_heartbeat.as_mut() {
         let _cleared = heartbeat.clear(&owned.external);
     }
@@ -245,218 +280,66 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
     let restoration_result = guard.finish();
     drop(panic_hook);
     let control_result = owned.stop_control(shutdown_deadline);
-    drop((session_lease, schema_lease, startup_admission));
+    if !recovery_disposition.is_recovery_shutdown() {
+        drop(lifecycle_resources.take());
+    }
     let lane_results = owned.stop_workers(shutdown_deadline);
-    finish::runtime(
+    let finish_result = finish::runtime(
         run_result,
         lane_results.into_iter().chain([
             (Control, control_result),
             (TerminalRestoration, restoration_result),
         ]),
         shutdown_deadline.elapsed(),
-    )?;
-    restart::resume_after_update(
-        installation.as_ref(),
-        requested_restart.as_ref(),
-        session_id,
-        state_root.as_deref(),
-        previous_instance_id,
-    )
-}
-
-#[expect(
-    clippy::too_many_arguments,
-    clippy::too_many_lines,
-    reason = "the terminal event loop keeps its injected runtime boundaries explicit"
-)]
-fn drive(
-    terminal: &mut Terminal<CrosstermBackend<Stdout>>,
-    app: &mut BoardApp,
-    lanes: &WorkerLanes<'_>,
-    ids: &mut SystemIdGenerator,
-    clock: SystemClock,
-    theme: Theme,
-    pane_heartbeat: &mut Option<PaneHeartbeat>,
-    shutdown: &super::supervisor::ShutdownCoordinator,
-    schema_lease: &mut Option<FileSchemaLease>,
-) -> Result<(), TerminalError> {
-    let mut pending = PendingWork::default();
-    let mut capture = CaptureRuntime::default();
-    let mut edit_generation = app.edit_generation();
-    let mut edit_deadline = None;
-    let mut refresh_deadlines = input_admission::RefreshDeadlines::default();
-    let mut termination = TerminationAdmission::default();
-    let mut held_input = None;
-    enqueue_effects(app, lanes, BoardApp::discover_agents(), &mut pending)?;
-    accessibility_results::start(app, lanes, &mut pending)?;
-    let invocation_effects = app.refresh_invocations();
-    enqueue_effects(app, lanes, invocation_effects, &mut pending)?;
-    let mut redraw = true;
-    loop {
-        admit_requested(
-            &mut termination,
-            app,
-            lanes,
-            ids,
-            clock,
-            shutdown,
-            &mut pending,
-        )?;
-        if !termination.is_admitted() {
-            let effects = app.advance_screenshot_activity(lanes.monotonic.now());
-            enqueue_effects(app, lanes, effects, &mut pending)?;
+    );
+    if let Err(error) = finish_result {
+        if recovery_disposition.is_recovery_shutdown() {
+            let reason = recovery_disposition.failure_reason();
+            continuity::record(
+                "recovery_prepared",
+                Some(reason),
+                input_recovery.attempt_count(),
+                Some("failed_closed"),
+            );
+            return Err(continuity::preparation_failed(
+                &error,
+                reason,
+                &executable,
+                state_root.as_deref(),
+                session_id,
+                app.recovery_export_path(),
+            ));
         }
-        let mut drain_context =
-            worker_results::DrainContext::new(ids, clock, pane_heartbeat, schema_lease);
-        let (workers_changed, worker_backlog) =
-            worker_results::drain(app, lanes, &mut pending, &mut capture, &mut drain_context)?;
-        redraw |= workers_changed || app.expire_update_barrier(clock.now());
-        if app.quit && app.screenshot_retry_ready() && !termination.is_admitted() {
-            app.retain_failed_capture_after_quit();
-            redraw = true;
-        }
-        if termination.is_admitted() && app.screenshot_retry_ready() {
-            let effects = app.handle_termination_request(ids, &clock);
-            enqueue_effects(app, lanes, effects, &mut pending)?;
-            redraw = true;
-        }
-        if termination.is_admitted() && !app.screenshot_commit_pending() {
-            let effects = app.flush_pending_edit(ids, &clock);
-            if !effects.is_empty() {
-                enqueue_effects(app, lanes, effects, &mut pending)?;
-                edit_deadline = None;
-                redraw = true;
-            }
-        }
-        let release_effects = screenshot_results::release_if_drained(app, &mut capture);
-        if !release_effects.is_empty() {
-            enqueue_effects(app, lanes, release_effects, &mut pending)?;
-            redraw = true;
-        }
-        let capture_effects = if admission::capture(app, &pending).is_ok()
-            && (!app.quit || capture.shutdown_requested)
-        {
-            app.advance_screenshot_capture(ids, &clock)
-        } else {
-            Vec::new()
-        };
-        if !capture_effects.is_empty() {
-            enqueue_effects(app, lanes, capture_effects, &mut pending)?;
-            redraw = true;
-        }
-        if app.edit_generation() != edit_generation {
-            edit_generation = app.edit_generation();
-            edit_deadline = app
-                .has_pending_edit()
-                .then(|| Instant::now() + Duration::from_millis(250));
-        }
-        if edit_deadline.is_some_and(|deadline| Instant::now() >= deadline)
-            && !app.screenshot_commit_pending()
-        {
-            let effects = app.flush_pending_edit(ids, &clock);
-            enqueue_effects(app, lanes, effects, &mut pending)?;
-            edit_deadline = None;
-            redraw = true;
-        }
-        input_admission::refresh_if_due(app, lanes, &mut pending, &mut refresh_deadlines)?;
-        if let Some(heartbeat) = pane_heartbeat.as_mut() {
-            let _refreshed = heartbeat.refresh_if_due(lanes.external);
-        }
-        if redraw {
-            let mut release_highlights_visible = false;
-            terminal.draw(|frame| {
-                let layout = app.prepare_frame(frame.area());
-                release_highlights_visible = render_with_outcome(frame, app, &layout, &theme);
+        return Err(error);
+    }
+    drop(lifecycle_resources.take());
+    match recovery_disposition {
+        continuity::RecoveryDisposition::Replace => {
+            let identity = executable_identity.as_ref().map_err(|error| {
+                continuity::unavailable(*error, &executable, state_root.as_deref(), session_id)
             })?;
-            app.arm_update_prompt();
-            let input_boundary = lanes.input.latest_sequence();
-            app.note_release_highlights_rendered(release_highlights_visible, input_boundary);
-            redraw = false;
+            continuity::replace(
+                &mut input_recovery,
+                &executable,
+                identity,
+                &cwd,
+                state_root.as_deref(),
+                session_id,
+            )
         }
-        if let Some((sequence, event)) = held_input.take() {
-            if app.screenshot_barrier_accepts(&event) {
-                input_admission::apply(
-                    app,
-                    lanes,
-                    ids,
-                    clock,
-                    &mut pending,
-                    &mut refresh_deadlines,
-                    sequence,
-                    event,
-                )?;
-                redraw = true;
-            } else {
-                held_input = Some((sequence, event));
-            }
-        }
-        if termination.shutdown_requested(app.quit) {
-            let deadline = shutdown.request();
-            if !capture.shutdown_requested && capture.lease.is_some() {
-                lanes.screenshot.shutdown(deadline)?;
-                pending.screenshot = pending.screenshot.saturating_add(1);
-                capture.shutdown_requested = true;
-                capture.release_deadline = Some(deadline.instant());
-            }
-            if app.update_restart().is_none() {
-                lanes.cancellation.cancel();
-            }
-            if let Some(control) = lanes.control {
-                control.request_stop();
-            }
-            let control_quiescent = lanes.control.is_none_or(ControlServer::is_quiescent);
-            let screenshot_quiescent = capture.lease.is_none()
-                && (!capture.shutdown_requested || capture.watcher_stopped)
-                && app.screenshot_shutdown_drained();
-            if pending.is_empty() && control_quiescent && screenshot_quiescent {
-                return termination.outcome(&app.state.durability);
-            }
-            if deadline.expired() {
-                return Err(TerminalError::Worker(
-                    "runtime shutdown exceeded its shared deadline",
-                ));
-            }
-            thread::sleep(Duration::from_millis(5));
-            continue;
-        }
-        if held_input.is_some() {
-            thread::sleep(Duration::from_millis(5));
-            continue;
-        }
-        let input_wait = if worker_backlog {
-            Duration::ZERO
-        } else {
-            Duration::from_millis(30)
-        };
-        match lanes.input.receiver.recv_timeout(input_wait) {
-            Ok(InputMessage::Event {
-                sequence,
-                input: event,
-            }) => {
-                if !app.screenshot_barrier_accepts(&event) {
-                    held_input = Some((sequence, event));
-                    continue;
-                }
-                input_admission::apply(
-                    app,
-                    lanes,
-                    ids,
-                    clock,
-                    &mut pending,
-                    &mut refresh_deadlines,
-                    sequence,
-                    event,
-                )?;
-                redraw = true;
-            }
-            Ok(InputMessage::Failed(failure)) => {
-                return Err(TerminalError::Io(failure.to_string()));
-            }
-            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
-            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
-                return Err(TerminalError::Worker("input lane disconnected"));
-            }
-        }
+        continuity::RecoveryDisposition::FailClosed(reason) => Err(continuity::stalled(
+            reason,
+            &executable,
+            state_root.as_deref(),
+            session_id,
+        )),
+        continuity::RecoveryDisposition::None => restart::resume_after_update(
+            installation.as_ref(),
+            requested_restart.as_ref(),
+            session_id,
+            state_root.as_deref(),
+            previous_instance_id,
+        ),
     }
 }
 
