@@ -106,12 +106,23 @@
     {
       "version": "0.9.0",
       "highlights": [
-        "Use terminal-safe macOS Control+Enter submission and revised defaults that avoid common Ghostty and Herdr shortcut collisions.",
+        "Use revised terminal-safe default shortcuts that avoid common collisions in the macOS, Ghostty, and Herdr delivery chain.",
         "Replace every semantic shortcut and fallback through one contextual keymap with aliases, platform overrides, safe disabling, and matching Help and Commands guidance.",
         "Find installed invocations through deterministic Unicode-aware fuzzy matching across the complete bounded result set.",
         "Submit selected thoughts to an eligible agent pane anywhere on the current Herdr server through one verified Commands workflow.",
         "Clean up pasted or existing thought spacing while preserving recognized structure, annotations, Unicode, undo, and large-paste folding.",
         "Track files and screenshots with session-wide numbers and truthful macOS in iCloud or downloading states."
+      ]
+    },
+    {
+      "version": "0.10.0",
+      "highlights": [
+        "Undo and redo through the active text field, thought editor, Board, or session Browser, with durable local history surviving restart.",
+        "Open Commands to see the actions relevant now, expand the categorized inventory, or search all 57 commands with truthful availability.",
+        "Install through one verified script on six macOS and Linux target combinations, including ARM64, static musl, and Debian arm64.",
+        "Update verified standalone installations in app and restore every active process by its exact session through schema-changing restarts.",
+        "Recover an exact active Board, Compose, or Edit session after a confirmed terminal input stall without entering a restart loop.",
+        "Use terminal-safe macOS Control submission aliases, precise wrapped-row boundaries, and an optional mouse-capture handshake."
       ]
     }
   ]

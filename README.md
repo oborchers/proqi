@@ -102,7 +102,7 @@ brew upgrade --formula oborchers/tap/proqi
 
 ### Linux and macOS without Homebrew
 
-The standalone installer will be included in the next release after v0.9.0:
+Proqi 0.10.0 and newer releases include the standalone installer:
 
 ```shell
 curl -LsSf https://github.com/oborchers/proqi/releases/latest/download/proqi-installer.sh | sh
