@@ -286,11 +286,13 @@ fn prepare_old_source(root: &Path) -> PathBuf {
     ] {
         fs::copy(repo().join(file), source.join(file)).expect("copy source file");
     }
+    let current_version = format!("version = \"{}\"", env!("CARGO_PKG_VERSION"));
+    let old_version = format!("version = \"{OLD_VERSION}\"");
     rewrite(
         &source.join("Cargo.toml"),
         &[
             ("members = [\".\", \"xtask\"]", "members = [\".\"]"),
-            ("version = \"0.9.0\"", "version = \"0.8.99\""),
+            (&current_version, &old_version),
         ],
     );
     rewrite(

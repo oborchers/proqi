@@ -359,9 +359,11 @@ jobs:
           TAG: ${{ needs.plan.outputs.tag }}
         run: |
           cd target/release-assets
+          all_expected="$RUNNER_TEMP/proqi-all-expected-assets.txt"
           expected="$RUNNER_TEMP/proqi-expected-assets.txt"
           actual="$RUNNER_TEMP/proqi-actual-assets.txt"
-          cargo xtask release-files | rg -v '^(SHA256SUMS|proqi\.rb)$' > "$expected"
+          cargo xtask release-files > "$all_expected"
+          grep -Ev '^(SHA256SUMS|proqi\.rb)$' "$all_expected" > "$expected"
           find . -maxdepth 1 -type f -printf '%f\n' | sort > "$actual"
           diff -u "$expected" "$actual"
           for checksum in ./*.sha256; do shasum -a 256 -c "$checksum"; done
