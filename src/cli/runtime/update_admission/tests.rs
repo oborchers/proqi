@@ -1,9 +1,4 @@
-use std::{
-    fs,
-    path::Path,
-    sync::{Arc, Barrier},
-    time::Duration,
-};
+use std::{fs, path::Path, time::Duration};
 
 use crate::{
     adapters::{
@@ -23,9 +18,10 @@ use crate::{
     },
 };
 
-use super::{StartupAdmission, admit_with_authority};
+use super::{StartupAdmission, admit_with_authority, reconcile_newer};
 
 mod authority;
+mod concurrency;
 mod deferred;
 mod locks;
 mod replacements;
@@ -359,61 +355,6 @@ fn stale_runtime_metadata_is_not_a_live_blocker() {
         .expect("store-ready cache reconciliation");
     drop(admission);
     assert!(!stale_path.exists());
-}
-
-#[test]
-fn concurrent_new_starters_follow_one_external_adoption() {
-    let temporary = tempfile::tempdir().expect("temporary directory");
-    let cache = temporary.path().join("cache");
-    let runtime_root = temporary.path().to_path_buf();
-    let installation = InstallationIdentity::from_digest([96; 32]);
-    let observed = StableVersion::parse("0.9.0").expect("observed version");
-    let current = StableVersion::parse("0.10.0").expect("current version");
-    let state = FileUpdateStateStore::new(&cache).expect("update state");
-    state
-        .record_restart_state(installation, observed, true)
-        .expect("stale observation");
-    let start = Arc::new(Barrier::new(8));
-    let mut starters = Vec::new();
-    for offset in 0..8_u64 {
-        let cache = cache.clone();
-        let runtime_root = runtime_root.clone();
-        let current = current.clone();
-        let start = Arc::clone(&start);
-        starters.push(std::thread::spawn(move || {
-            let mut ids = FakeIdGenerator::new(1_800_400_000_000 + offset * 10_000);
-            let runtime = coordinator(
-                &runtime_root,
-                &mut ids,
-                "0.10.0",
-                installation,
-                UPDATE_CONTROL_PROTOCOL_VERSION,
-            );
-            start.wait();
-            let mut admission = admit_with_timeout(
-                &cache,
-                &runtime,
-                installation,
-                None,
-                &current,
-                None,
-                &mut ids,
-                Timestamp::from_millis(2),
-                Duration::from_secs(2),
-            )
-            .expect("concurrent follower admission");
-            admission
-                .finish_after_store_ready()
-                .expect("concurrent store-ready reconciliation");
-            drop(admission);
-        }));
-    }
-    for starter in starters {
-        starter.join().expect("starter thread");
-    }
-    let reconciled = state.load(installation).expect("reconciled state");
-    assert_eq!(reconciled.observed_installed_version, Some(current));
-    assert!(!reconciled.restart_needed);
 }
 
 #[test]
