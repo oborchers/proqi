@@ -124,6 +124,15 @@
         "Recover an exact active Board, Compose, or Edit session after a confirmed terminal input stall without entering a restart loop.",
         "Use terminal-safe macOS Control submission aliases, precise wrapped-row boundaries, and an optional mouse-capture handshake."
       ]
+    },
+    {
+      "version": "0.10.1",
+      "highlights": [
+        "Recover safely after Homebrew or a verified standalone installer replaces Proqi while cached installation state still names the previous version.",
+        "Resume exact sessions after stale installation state is reconciled automatically, without requiring a separate update check.",
+        "See exact blocking SessionIds and versions when an older live process must close before migration can continue.",
+        "Fail closed if a hidden writer, installation race, cache-write failure, or concurrent starter makes external upgrade ownership uncertain."
+      ]
     }
   ]
 }
