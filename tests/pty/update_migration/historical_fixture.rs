@@ -10,7 +10,7 @@ use std::{
 
 use proqi::{domain::InstallationIdentity, ports::update::InstallDetector as _};
 
-use super::old_fixture::{BUILD_TIMEOUT, run_bounded};
+use super::old_fixture::{BUILD_TIMEOUT, run_bounded, shared_fixture_target};
 
 const HISTORICAL_TAG: &str = "v0.9.0";
 const HISTORICAL_COMMIT: &str = "dd05c49bf3c1e8c1aa2cd707ed3f3b40ca2bc2b9";
@@ -55,7 +55,8 @@ impl HistoricalFixture {
         );
         assert_success(&output, "historical source extraction");
         use_cached_rustls(&source);
-        let target = root.path().join("target");
+        use_distinct_binary_name(&source);
+        let target = shared_fixture_target();
         let mut build = Command::new("cargo");
         build
             .args([
@@ -65,13 +66,13 @@ impl HistoricalFixture {
                 "--package",
                 "proqi",
                 "--bin",
-                "proqi",
+                "proqi_v0_9_fixture",
             ])
             .current_dir(&source)
             .env("CARGO_TARGET_DIR", &target);
         let output = run_bounded(&mut build, BUILD_TIMEOUT, "historical v0.9.0 build");
         assert_success(&output, "historical v0.9.0 build");
-        let binary = target.join("debug/proqi");
+        let binary = target.join("debug/proqi_v0_9_fixture");
         assert_ne!(
             fs::read(&binary).expect("historical executable bytes"),
             fs::read(env!("CARGO_BIN_EXE_proqi")).expect("current executable bytes")
@@ -118,6 +119,17 @@ fn use_cached_rustls(source: &Path) {
     let contents = fs::read_to_string(&lock).expect("historical lockfile");
     assert_eq!(contents.matches(HISTORICAL).count(), 1);
     fs::write(lock, contents.replace(HISTORICAL, CURRENT)).expect("cached historical lockfile");
+}
+
+fn use_distinct_binary_name(source: &Path) {
+    const PACKAGE: &str = "[package]\nname = \"proqi\"";
+    let manifest = source.join("Cargo.toml");
+    let contents = fs::read_to_string(&manifest).expect("historical manifest");
+    assert_eq!(contents.matches(PACKAGE).count(), 1);
+    let mut contents =
+        contents.replacen(PACKAGE, "[package]\nname = \"proqi\"\nautobins = false", 1);
+    contents.push_str("\n[[bin]]\nname = \"proqi_v0_9_fixture\"\npath = \"src/bin/proqi.rs\"\n");
+    fs::write(manifest, contents).expect("write historical manifest");
 }
 
 impl HistoricalInstallation {

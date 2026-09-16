@@ -166,7 +166,7 @@ impl OldFixture {
             .tempdir_in("/private/tmp")
             .expect("old source root");
         let source = prepare_old_source(root.path());
-        let (old_binary, coordinator) = build_old_binaries(&source, root.path());
+        let (old_binary, coordinator) = build_old_binaries(&source);
         Self {
             _root: root,
             old_binary,
@@ -308,6 +308,10 @@ fn prepare_old_source(root: &Path) -> PathBuf {
         &[
             ("members = [\".\", \"xtask\"]", "members = [\".\"]"),
             (&current_version, &old_version),
+            (
+                "[package]\nname = \"proqi\"",
+                "[package]\nname = \"proqi\"\nautobins = false",
+            ),
         ],
     );
     rewrite(
@@ -354,11 +358,17 @@ fn prepare_old_source(root: &Path) -> PathBuf {
         coordinator::SOURCE,
     )
     .expect("write coordinator fixture");
+    let manifest = source.join("Cargo.toml");
+    let mut content = fs::read_to_string(&manifest).expect("fixture manifest");
+    content.push_str(
+        "\n[[bin]]\nname = \"proqi_old_fixture\"\npath = \"src/bin/proqi.rs\"\n\n[[bin]]\nname = \"update_fixture\"\npath = \"src/bin/update_fixture.rs\"\n",
+    );
+    fs::write(manifest, content).expect("write fixture manifest");
     source
 }
 
-fn build_old_binaries(source: &Path, fixture_root: &Path) -> (PathBuf, PathBuf) {
-    let target = fixture_root.join("target");
+fn build_old_binaries(source: &Path) -> (PathBuf, PathBuf) {
+    let target = shared_fixture_target();
     let mut command = Command::new("cargo");
     command
         .args([
@@ -367,7 +377,7 @@ fn build_old_binaries(source: &Path, fixture_root: &Path) -> (PathBuf, PathBuf) 
             "--package",
             "proqi",
             "--bin",
-            "proqi",
+            "proqi_old_fixture",
             "--bin",
             "update_fixture",
         ])
@@ -379,7 +389,7 @@ fn build_old_binaries(source: &Path, fixture_root: &Path) -> (PathBuf, PathBuf) 
         "old fixture build failed: {}",
         String::from_utf8_lossy(&output.stderr)
     );
-    let old_binary = target.join("debug/proqi");
+    let old_binary = target.join("debug/proqi_old_fixture");
     let coordinator = target.join("debug/update_fixture");
     assert_ne!(
         fs::read(&old_binary).expect("old bytes"),
@@ -390,6 +400,14 @@ fn build_old_binaries(source: &Path, fixture_root: &Path) -> (PathBuf, PathBuf) 
 
 fn repo() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+}
+
+pub(super) fn shared_fixture_target() -> PathBuf {
+    Path::new(env!("CARGO_BIN_EXE_proqi"))
+        .parent()
+        .and_then(Path::parent)
+        .expect("Cargo target directory")
+        .to_path_buf()
 }
 
 fn copy_tree(source: &Path, target: &Path) {
