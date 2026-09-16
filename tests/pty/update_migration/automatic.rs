@@ -16,9 +16,10 @@ use std::{
 
 #[test]
 fn old_coordinator_converges_real_schema_changing_replacements() {
+    let _fixture_guard = super::fixture_lock::acquire();
     let fixture = OldFixture::build();
     for count in [3, 15] {
-        assert_automatic_schema_update(&fixture, count);
+        assert_automatic_schema_update(fixture, count);
     }
 }
 
@@ -126,7 +127,7 @@ fn wait_for_final_convergence(
     }
 }
 
-fn launch_plan(state: &Path, sessions: &[String]) -> Vec<(String, PathBuf)> {
+pub(super) fn launch_plan(state: &Path, sessions: &[String]) -> Vec<(String, PathBuf)> {
     let shared = state.join("cwd-shared");
     let mixed_a = state.join("cwd-mixed-a");
     let mixed_b = state.join("cwd-mixed-b");
@@ -165,7 +166,7 @@ fn assert_launch_directory_matrix(state: &Path, before: &[InstanceInfo], count: 
     }
 }
 
-fn create_ambiguous_sessions(binary: &str, state: &Path, count: usize) -> Vec<String> {
+pub(super) fn create_ambiguous_sessions(binary: &str, state: &Path, count: usize) -> Vec<String> {
     let sessions = (0..count)
         .map(|_| {
             let created = super::json_command(binary, state, &[]);
@@ -190,7 +191,10 @@ fn create_ambiguous_sessions(binary: &str, state: &Path, count: usize) -> Vec<St
     sessions
 }
 
-fn wait_for_exact_replacements(state: &Path, before: &[InstanceInfo]) -> Vec<InstanceInfo> {
+pub(super) fn wait_for_exact_replacements(
+    state: &Path,
+    before: &[InstanceInfo],
+) -> Vec<InstanceInfo> {
     let deadline = Instant::now() + super::OWNER_TIMEOUT;
     loop {
         let active = active_instances(state);
@@ -214,7 +218,11 @@ fn wait_for_exact_replacements(state: &Path, before: &[InstanceInfo]) -> Vec<Ins
     }
 }
 
-fn assert_exact_replacements(before: &[InstanceInfo], after: &[InstanceInfo], sessions: &[String]) {
+pub(super) fn assert_exact_replacements(
+    before: &[InstanceInfo],
+    after: &[InstanceInfo],
+    sessions: &[String],
+) {
     assert_eq!(after.len(), sessions.len());
     let expected = sessions.iter().cloned().collect::<BTreeSet<_>>();
     let restored = after
@@ -238,7 +246,7 @@ fn assert_exact_replacements(before: &[InstanceInfo], after: &[InstanceInfo], se
     }
 }
 
-fn assert_store_after_automatic_update(state: &Path, count: usize) {
+pub(super) fn assert_store_after_automatic_update(state: &Path, count: usize) {
     let connection = Connection::open(state.join("data/proqi.sqlite3")).expect("database");
     let integrity: String = connection
         .query_row("PRAGMA quick_check", [], |row| row.get(0))
@@ -269,7 +277,7 @@ fn assert_store_after_automatic_update(state: &Path, count: usize) {
     assert_eq!(runtime_entries, count);
 }
 
-fn assert_cross_version_diagnostics(
+pub(super) fn assert_cross_version_diagnostics(
     state: &Path,
     count: usize,
     started_before: usize,

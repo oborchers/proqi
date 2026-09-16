@@ -11,8 +11,9 @@ use std::{
 use crate::{
     application::test_support::{TestClock, TestIds},
     domain::{
-        InstallationIdentity, InstanceId, ReleaseHighlightAnnouncement, RequestId, StableVersion,
-        Timestamp, UpdateCacheState,
+        ExternalRestartExpectation, ExternalRestartPending, InstallationIdentity, InstanceId,
+        ReleaseHighlightAnnouncement, RequestId, SessionId, StableVersion, Timestamp,
+        UpdateCacheState,
     },
     ports::{
         control::CONTROL_PROTOCOL_VERSION,
@@ -20,11 +21,12 @@ use crate::{
         runtime::{InstanceInfo, UpdateInstanceContext},
         store::STORAGE_PROTOCOL_VERSION,
         update::{
-            ReleaseObservation, RestartCompletion, UPDATE_CONTROL_PROTOCOL_VERSION,
-            UpdateCancellation, UpdateError, UpdateInstaller, UpdateInstanceRegistry, UpdateLease,
-            UpdateLockKind, UpdateParticipantGateway, UpdatePrepareReply, UpdatePrepareRequest,
-            UpdateQuiesceReply, UpdateQuiesceRequest, UpdateReplacementExpectation,
-            UpdateRestartReply, UpdateRestartRequest, UpdateStateStore,
+            ExternalCacheTransition, ReleaseObservation, RestartCompletion,
+            UPDATE_CONTROL_PROTOCOL_VERSION, UpdateCancellation, UpdateError, UpdateInstaller,
+            UpdateInstanceRegistry, UpdateLease, UpdateLockKind, UpdateParticipantGateway,
+            UpdatePrepareReply, UpdatePrepareRequest, UpdateQuiesceReply, UpdateQuiesceRequest,
+            UpdateReplacementExpectation, UpdateRestartReply, UpdateRestartRequest,
+            UpdateStateStore,
         },
     },
 };
@@ -37,8 +39,9 @@ fn clock() -> TestClock {
 
 mod additional;
 mod deadlines;
+mod execution;
 
-struct Lease(Option<Arc<AtomicBool>>);
+pub(super) struct Lease(pub(super) Option<Arc<AtomicBool>>);
 impl UpdateLease for Lease {}
 
 impl Drop for Lease {
@@ -50,11 +53,13 @@ impl Drop for Lease {
 }
 
 #[derive(Default)]
-struct State {
+pub(super) struct State {
     installer_owned: Arc<AtomicBool>,
     cache: RefCell<UpdateCacheState>,
     restart_writes: RefCell<Vec<bool>>,
     fail_release_highlights: bool,
+    pub(super) fail_external_reconcile: bool,
+    pub(super) fail_external_completion: bool,
 }
 
 impl UpdateStateStore for State {
@@ -123,11 +128,102 @@ impl UpdateStateStore for State {
         installed: StableVersion,
         restart_needed: bool,
     ) -> Result<UpdateCacheState, UpdateError> {
+        if self.cache.borrow().external_restart.is_some() {
+            return Err(UpdateError::State(
+                "in-app restart state conflicts with pending external restart".to_owned(),
+            ));
+        }
         self.restart_writes.borrow_mut().push(restart_needed);
         let mut cache = self.cache.borrow_mut();
         cache.observed_installed_version = Some(installed);
         cache.restart_needed = restart_needed;
+        cache.external_restart = None;
         Ok(cache.clone())
+    }
+
+    fn reconcile_external_upgrade(
+        &self,
+        _: InstallationIdentity,
+        expected_observed: &StableVersion,
+        installed: &StableVersion,
+        pending: Option<&ExternalRestartPending>,
+    ) -> Result<ExternalCacheTransition, UpdateError> {
+        if self.fail_external_reconcile {
+            return Err(UpdateError::State(
+                "injected external reconciliation failure".to_owned(),
+            ));
+        }
+        let mut cache = self.cache.borrow_mut();
+        if cache.observed_installed_version.as_ref() == Some(installed)
+            && cache.restart_needed == pending.is_some()
+            && cache.external_restart.as_ref() == pending
+        {
+            return Ok(ExternalCacheTransition::AlreadyApplied);
+        }
+        if cache.observed_installed_version.as_ref() != Some(expected_observed)
+            || installed <= expected_observed
+        {
+            return Ok(ExternalCacheTransition::Conflict);
+        }
+        cache.observed_installed_version = Some(installed.clone());
+        cache.restart_needed = pending.is_some();
+        cache.external_restart = pending.cloned();
+        Ok(ExternalCacheTransition::Applied)
+    }
+
+    fn complete_external_restart(
+        &self,
+        _: InstallationIdentity,
+        installed: &StableVersion,
+        pending: &ExternalRestartPending,
+    ) -> Result<ExternalCacheTransition, UpdateError> {
+        if self.fail_external_completion {
+            return Err(UpdateError::State(
+                "injected external completion failure".to_owned(),
+            ));
+        }
+        let mut cache = self.cache.borrow_mut();
+        if cache.observed_installed_version.as_ref() != Some(installed)
+            || pending.target_version() != installed
+        {
+            return Ok(ExternalCacheTransition::Conflict);
+        }
+        if !cache.restart_needed && cache.external_restart.is_none() {
+            return Ok(ExternalCacheTransition::AlreadyApplied);
+        }
+        if cache.external_restart.as_ref() != Some(pending) {
+            return Ok(ExternalCacheTransition::Conflict);
+        }
+        cache.restart_needed = false;
+        cache.external_restart = None;
+        Ok(ExternalCacheTransition::Applied)
+    }
+
+    fn acknowledge_external_resume(
+        &self,
+        _: InstallationIdentity,
+        installed: &StableVersion,
+        pending: &ExternalRestartPending,
+        session_id: SessionId,
+    ) -> Result<ExternalCacheTransition, UpdateError> {
+        let mut cache = self.cache.borrow_mut();
+        let after = pending
+            .after_manual_resume(session_id)
+            .map_err(|error| UpdateError::State(error.to_string()))?;
+        if cache.observed_installed_version.as_ref() != Some(installed) {
+            return Ok(ExternalCacheTransition::Conflict);
+        }
+        if cache.restart_needed == after.is_some()
+            && cache.external_restart.as_ref() == after.as_ref()
+        {
+            return Ok(ExternalCacheTransition::AlreadyApplied);
+        }
+        if !cache.restart_needed || cache.external_restart.as_ref() != Some(pending) {
+            return Ok(ExternalCacheTransition::Conflict);
+        }
+        cache.external_restart = after;
+        cache.restart_needed = cache.external_restart.is_some();
+        Ok(ExternalCacheTransition::Applied)
     }
 
     fn complete_restart(
@@ -198,9 +294,9 @@ impl UpdateStateStore for State {
     }
 }
 
-struct Registry {
+pub(super) struct Registry {
     scans: RefCell<VecDeque<Vec<InstanceInfo>>>,
-    replacement_failures: RefCell<Vec<InstanceId>>,
+    pub(super) replacement_failures: RefCell<Vec<InstanceId>>,
     fail_replacement_wait: bool,
 }
 
@@ -230,16 +326,17 @@ impl UpdateInstanceRegistry for Registry {
 }
 
 #[derive(Default)]
-struct Gateway {
-    prepared: Vec<InstanceId>,
+pub(super) struct Gateway {
+    pub(super) prepared: Vec<InstanceId>,
     prepare_deadlines: Vec<Timestamp>,
-    released: Vec<InstanceId>,
-    quiesced: Vec<InstanceId>,
-    restarted: Vec<InstanceId>,
+    pub(super) released: Vec<InstanceId>,
+    pub(super) quiesced: Vec<InstanceId>,
+    pub(super) restarted: Vec<InstanceId>,
     block_at: Option<usize>,
-    fail_prepare_at: Option<usize>,
-    fail_quiesce: Option<InstanceId>,
-    fail_restart: Option<InstanceId>,
+    pub(super) fail_prepare_at: Option<usize>,
+    pub(super) fail_quiesce: Option<InstanceId>,
+    pub(super) fail_restart: Option<InstanceId>,
+    pub(super) cancel_after_quiesce: Option<Arc<AtomicBool>>,
 }
 
 impl UpdateParticipantGateway for Gateway {
@@ -280,6 +377,9 @@ impl UpdateParticipantGateway for Gateway {
         _: &UpdateQuiesceRequest,
     ) -> Result<UpdateQuiesceReply, UpdateError> {
         self.quiesced.push(participant.instance_id);
+        if let Some(cancellation) = &self.cancel_after_quiesce {
+            cancellation.store(true, Ordering::Release);
+        }
         if self.fail_quiesce == Some(participant.instance_id) {
             return Err(UpdateError::Coordination(
                 "participant quiescence unavailable".to_owned(),
@@ -316,126 +416,7 @@ impl UpdateInstaller for Installer {
     }
 }
 
-#[test]
-fn one_ten_and_fifteen_participants_install_and_restart_once() {
-    for count in [1_usize, 10, 15] {
-        let mut ids = TestIds::new(1_800_000_000_000);
-        let identity = InstallationIdentity::from_digest([31; 32]);
-        let participants = participants(&mut ids, identity, count);
-        let initiating = participants[count / 2].instance_id;
-        let registry = registry(participants.clone(), participants);
-        let state = State::default();
-        let mut gateway = Gateway::default();
-        let mut installer = successful_installer();
-        let operation_id = ids.request_id();
-        let result = UpdateRestartCoordinator::new(
-            &state,
-            &registry,
-            &mut gateway,
-            &mut installer,
-            &clock(),
-        )
-        .execute(
-            operation_id,
-            initiating,
-            identity,
-            &version("0.2.0"),
-            Timestamp::from_millis(1_800_000_030_000),
-            &(),
-        )
-        .expect("coordinate");
-        assert_eq!(result.prepared_participants, count);
-        assert_eq!(result.selected_participants, count);
-        assert_eq!(result.restart_requests, count);
-        assert_eq!(result.restart_accepted, count);
-        assert_eq!(result.replacement_ready, count.saturating_sub(1));
-        assert_eq!(result.replacement_missing, 0);
-        assert!(result.restart_failed.is_empty());
-        assert_eq!(installer.calls, 1);
-        assert_eq!(gateway.prepared.len(), count.saturating_mul(2));
-        assert_eq!(gateway.released.len(), count);
-        assert_eq!(gateway.restarted.len(), count);
-        assert_eq!(gateway.restarted.last(), Some(&initiating));
-        assert!(state.cache.borrow().restart_needed);
-        assert_eq!(&*state.restart_writes.borrow(), &[true]);
-    }
-}
-
-#[test]
-fn blocked_preflight_releases_ready_peers_before_installation() {
-    let mut ids = TestIds::new(1_800_000_000_000);
-    let identity = InstallationIdentity::from_digest([32; 32]);
-    let participants = participants(&mut ids, identity, 4);
-    let initiating = participants[0].instance_id;
-    let registry = Registry {
-        scans: RefCell::new(VecDeque::from([participants])),
-        replacement_failures: RefCell::new(Vec::new()),
-        fail_replacement_wait: false,
-    };
-    let state = State::default();
-    let mut gateway = Gateway {
-        block_at: Some(2),
-        ..Gateway::default()
-    };
-    let mut installer = successful_installer();
-    let result =
-        UpdateRestartCoordinator::new(&state, &registry, &mut gateway, &mut installer, &clock())
-            .execute(
-                ids.request_id(),
-                initiating,
-                identity,
-                &version("0.2.0"),
-                Timestamp::from_millis(1_800_000_030_000),
-                &(),
-            )
-            .expect("abort");
-    assert!(matches!(
-        result.status,
-        UpdateExecutionStatus::Aborted { ref code, .. } if code == "save_failed"
-    ));
-    assert_eq!(gateway.released.len(), 2);
-    assert_eq!(installer.calls, 0);
-}
-
-#[test]
-fn unavailable_participant_aborts_and_releases_ready_peers() {
-    let mut ids = TestIds::new(1_800_000_000_000);
-    let identity = InstallationIdentity::from_digest([35; 32]);
-    let participants = participants(&mut ids, identity, 3);
-    let initiating = participants[0].instance_id;
-    let registry = Registry {
-        scans: RefCell::new(VecDeque::from([participants])),
-        replacement_failures: RefCell::new(Vec::new()),
-        fail_replacement_wait: false,
-    };
-    let state = State::default();
-    let mut gateway = Gateway {
-        fail_prepare_at: Some(1),
-        ..Gateway::default()
-    };
-    let mut installer = successful_installer();
-
-    let result =
-        UpdateRestartCoordinator::new(&state, &registry, &mut gateway, &mut installer, &clock())
-            .execute(
-                ids.request_id(),
-                initiating,
-                identity,
-                &version("0.2.0"),
-                Timestamp::from_millis(1_800_000_030_000),
-                &(),
-            )
-            .expect("abort unavailable participant");
-
-    assert!(matches!(
-        result.status,
-        UpdateExecutionStatus::Aborted { ref code, .. } if code == "participant_unavailable"
-    ));
-    assert_eq!(gateway.released.len(), 1);
-    assert_eq!(installer.calls, 0);
-}
-
-fn registry(before: Vec<InstanceInfo>, after: Vec<InstanceInfo>) -> Registry {
+pub(super) fn registry(before: Vec<InstanceInfo>, after: Vec<InstanceInfo>) -> Registry {
     Registry {
         scans: RefCell::new(VecDeque::from([before, after])),
         replacement_failures: RefCell::new(Vec::new()),
@@ -443,7 +424,7 @@ fn registry(before: Vec<InstanceInfo>, after: Vec<InstanceInfo>) -> Registry {
     }
 }
 
-fn participants(
+pub(super) fn participants(
     ids: &mut TestIds,
     identity: InstallationIdentity,
     count: usize,
@@ -487,6 +468,6 @@ fn successful_installer() -> Installer {
     }
 }
 
-fn version(value: &str) -> StableVersion {
+pub(super) fn version(value: &str) -> StableVersion {
     StableVersion::parse(value).expect("stable version")
 }

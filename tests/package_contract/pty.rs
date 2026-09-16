@@ -334,22 +334,20 @@ fn assert_failed_exec_is_recoverable(product: &InstalledProduct) {
             },
         )
         .expect("quiesce failed-exec owner");
-    fs::remove_file(
-        homebrew
-            .binary
-            .parent()
-            .expect("keg bin")
-            .parent()
-            .expect("keg")
-            .parent()
-            .expect("formula")
-            .parent()
-            .expect("Cellar")
-            .parent()
-            .expect("prefix")
-            .join("opt/proqi/bin/proqi"),
-    )
-    .expect("remove test-owned active link");
+    let active = homebrew
+        .binary
+        .parent()
+        .expect("keg bin")
+        .parent()
+        .expect("keg")
+        .parent()
+        .expect("formula")
+        .parent()
+        .expect("Cellar")
+        .parent()
+        .expect("prefix")
+        .join("opt/proqi/bin/proqi");
+    fs::remove_file(&active).expect("remove test-owned active link");
     assert!(
         gateway
             .restart(
@@ -369,6 +367,7 @@ fn assert_failed_exec_is_recoverable(product: &InstalledProduct) {
     );
     assert_terminal_restored(&output);
     assert_failed_replacement_guidance(&output, session);
+    symlink(&homebrew.binary, &active).expect("restore test-owned active link");
     let resumed = homebrew.json(&["-r", session]);
     assert_eq!(resumed["data"]["session_id"], session);
 }

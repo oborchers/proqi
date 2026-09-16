@@ -4,9 +4,16 @@ use std::time::Duration;
 
 use serde::Serialize;
 
+mod external;
 mod preflight;
 mod quiescence;
 mod restart;
+
+pub use external::{
+    ExternalUpgradeAdmission, ExternalUpgradeBlocker, ExternalUpgradeBlockerReason,
+    ExternalUpgradeCacheStatus, ExternalUpgradeCoordinator, ExternalUpgradeFailure,
+    admit_pending_external_resume,
+};
 
 use crate::{
     domain::{InstallationIdentity, InstanceId, RequestId, SessionId, StableVersion, Timestamp},
@@ -185,6 +192,15 @@ where
                 UpdateExecutionStatus::AlreadyInProgress,
             ));
         };
+        if self.state.load(installation)?.external_restart.is_some() {
+            return Ok(execution(
+                operation_id,
+                UpdateExecutionStatus::Aborted {
+                    blocker: None,
+                    code: "external_restart_pending".to_owned(),
+                },
+            ));
+        }
         let preparation_window_millis = deadline
             .as_millis()
             .saturating_sub(self.clock.now().as_millis())

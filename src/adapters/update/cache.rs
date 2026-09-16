@@ -2,7 +2,6 @@
 
 use std::{
     fs::{self, File, OpenOptions},
-    io::Write as _,
     path::{Path, PathBuf},
     thread,
     time::Duration,
@@ -10,16 +9,22 @@ use std::{
 
 use fs4::{FileExt, TryLockError};
 
-use super::etag::valid as valid_etag;
+mod external;
+mod lease;
+mod persistence;
+mod validation;
+
+use lease::FileUpdateLease;
+use validation::{classify_restart_completion, merge_latest, valid_loaded_state};
 
 use crate::{
     domain::{
-        InstallationIdentity, ReleaseHighlightAnnouncement, StableVersion, Timestamp,
-        UpdateCacheState,
+        ExternalRestartPending, InstallationIdentity, InstalledVersionRelation,
+        ReleaseHighlightAnnouncement, SessionId, StableVersion, Timestamp, UpdateCacheState,
     },
     ports::update::{
-        ReleaseObservation, RestartCompletion, UpdateError, UpdateLease, UpdateLockKind,
-        UpdateStateStore,
+        ExternalCacheTransition, ReleaseObservation, RestartCompletion, UpdateError, UpdateLease,
+        UpdateLockKind, UpdateStateStore,
     },
 };
 
@@ -70,9 +75,49 @@ impl FileUpdateStateStore {
         let state_path = directory.join("state.json");
         let mut state = load_path(&state_path)?;
         change(&mut state)?;
-        write_atomic(&directory, &state_path, &state)?;
+        self.write_atomic(&directory, &state_path, &state)?;
         drop(lock);
         Ok(state)
+    }
+
+    fn transition<T>(
+        &self,
+        installation: InstallationIdentity,
+        change: impl FnOnce(&mut UpdateCacheState) -> Result<(T, bool), UpdateError>,
+    ) -> Result<T, UpdateError> {
+        let directory = self.installation_dir(installation)?;
+        let lock = lock_state(&directory.join("state.lock"))?;
+        let state_path = directory.join("state.json");
+        let mut state = load_path(&state_path)?;
+        let (result, changed) = change(&mut state)?;
+        if changed {
+            self.write_atomic(&directory, &state_path, &state)?;
+        }
+        drop(lock);
+        Ok(result)
+    }
+
+    fn write_atomic(
+        &self,
+        directory: &Path,
+        destination: &Path,
+        state: &UpdateCacheState,
+    ) -> Result<(), UpdateError> {
+        if !directory.starts_with(&self.root) {
+            return Err(UpdateError::State(
+                "update state destination escaped its cache root".to_owned(),
+            ));
+        }
+        #[cfg(test)]
+        let fail_after_rename = fs::remove_file(self.root.join("test-fail-after-rename")).is_ok();
+        #[cfg(not(test))]
+        let fail_after_rename = false;
+        persistence::write_atomic(directory, destination, state, fail_after_rename)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn fail_next_write_after_rename(&self) {
+        fs::write(self.root.join("test-fail-after-rename"), []).expect("write test failure marker");
     }
 }
 
@@ -116,6 +161,24 @@ impl UpdateStateStore for FileUpdateStateStore {
         }
     }
 
+    fn wait_for_startup_lock(
+        &self,
+        installation: InstallationIdentity,
+        timeout: Duration,
+    ) -> Result<Option<Box<dyn UpdateLease>>, UpdateError> {
+        let deadline = std::time::Instant::now() + timeout;
+        loop {
+            if let Some(lease) = self.try_startup_lock(installation)? {
+                return Ok(Some(lease));
+            }
+            let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+            if remaining.is_zero() {
+                return Ok(None);
+            }
+            thread::sleep(Duration::from_millis(10).min(remaining));
+        }
+    }
+
     fn begin_refresh(
         &self,
         installation: InstallationIdentity,
@@ -145,6 +208,15 @@ impl UpdateStateStore for FileUpdateStateStore {
         checked_at: Timestamp,
     ) -> Result<UpdateCacheState, UpdateError> {
         self.mutate(installation, |state| {
+            if state
+                .external_restart
+                .as_ref()
+                .is_some_and(|pending| pending.target_version() != &installed)
+            {
+                return Err(UpdateError::State(
+                    "update refresh conflicts with pending external restart".to_owned(),
+                ));
+            }
             match observed {
                 ReleaseObservation::Latest { version, etag } => {
                     merge_latest(state, version, etag);
@@ -156,7 +228,13 @@ impl UpdateStateStore for FileUpdateStateStore {
             }
             state.last_checked_at = Some(checked_at);
             state.dismissed_version = None;
-            state.observed_installed_version = Some(installed);
+            match state.observed_installed_version.as_ref() {
+                None => state.observed_installed_version = Some(installed),
+                Some(observed)
+                    if installed.relation_to_observed(observed)
+                        == InstalledVersionRelation::Equal => {}
+                Some(_stale_or_newer_authority) => {}
+            }
             Ok(())
         })
     }
@@ -190,10 +268,44 @@ impl UpdateStateStore for FileUpdateStateStore {
         restart_needed: bool,
     ) -> Result<UpdateCacheState, UpdateError> {
         self.mutate(installation, |state| {
+            if state.external_restart.is_some() {
+                return Err(UpdateError::State(
+                    "in-app restart state conflicts with pending external restart".to_owned(),
+                ));
+            }
             state.observed_installed_version = Some(installed);
             state.restart_needed = restart_needed;
             Ok(())
         })
+    }
+
+    fn reconcile_external_upgrade(
+        &self,
+        installation: InstallationIdentity,
+        expected_observed: &StableVersion,
+        installed: &StableVersion,
+        pending: Option<&ExternalRestartPending>,
+    ) -> Result<ExternalCacheTransition, UpdateError> {
+        external::reconcile(self, installation, expected_observed, installed, pending)
+    }
+
+    fn complete_external_restart(
+        &self,
+        installation: InstallationIdentity,
+        installed: &StableVersion,
+        pending: &ExternalRestartPending,
+    ) -> Result<ExternalCacheTransition, UpdateError> {
+        external::complete(self, installation, installed, pending)
+    }
+
+    fn acknowledge_external_resume(
+        &self,
+        installation: InstallationIdentity,
+        installed: &StableVersion,
+        pending: &ExternalRestartPending,
+        session_id: SessionId,
+    ) -> Result<ExternalCacheTransition, UpdateError> {
+        external::acknowledge_resume(self, installation, installed, pending, session_id)
     }
 
     fn complete_restart(
@@ -259,46 +371,6 @@ impl UpdateStateStore for FileUpdateStateStore {
     }
 }
 
-fn classify_restart_completion(
-    state: &mut UpdateCacheState,
-    announcement: &ReleaseHighlightAnnouncement,
-) -> RestartCompletion {
-    let exact_target =
-        state.observed_installed_version.as_ref() == Some(announcement.target_version());
-    let exact_announcement = state
-        .release_highlights
-        .as_ref()
-        .is_some_and(|current| !current.acknowledged() && current.same_upgrade(announcement));
-    if !exact_target || !exact_announcement {
-        return RestartCompletion::Mismatch;
-    }
-    if !state.restart_needed {
-        return RestartCompletion::AlreadyComplete;
-    }
-    state.restart_needed = false;
-    RestartCompletion::Completed
-}
-
-fn merge_latest(state: &mut UpdateCacheState, version: StableVersion, etag: Option<String>) {
-    if state.skipped_version.as_ref() != Some(&version) {
-        state.skipped_version = None;
-    }
-    state.latest_stable = Some(version);
-    state.etag = etag.filter(|value| valid_etag(value));
-}
-
-struct FileUpdateLease {
-    file: File,
-}
-
-impl UpdateLease for FileUpdateLease {}
-
-impl Drop for FileUpdateLease {
-    fn drop(&mut self) {
-        let _ = FileExt::unlock(&self.file);
-    }
-}
-
 fn load_path(path: &Path) -> Result<UpdateCacheState, UpdateError> {
     let metadata = match fs::symlink_metadata(path) {
         Ok(metadata) => metadata,
@@ -321,7 +393,7 @@ fn load_path(path: &Path) -> Result<UpdateCacheState, UpdateError> {
         Ok(state) => state,
         Err(_) => return Ok(UpdateCacheState::default()),
     };
-    if state.etag.as_deref().is_some_and(|etag| !valid_etag(etag)) {
+    if !valid_loaded_state(&state) {
         return Ok(UpdateCacheState::default());
     }
     Ok(state)
@@ -338,49 +410,6 @@ fn lock_state(path: &Path) -> Result<FileUpdateLease, UpdateError> {
     }
     Err(UpdateError::State(
         "update state lock remained busy".to_owned(),
-    ))
-}
-
-fn write_atomic(
-    directory: &Path,
-    destination: &Path,
-    state: &UpdateCacheState,
-) -> Result<(), UpdateError> {
-    let bytes = serde_json::to_vec(state).map_err(|error| state_error(error.to_string()))?;
-    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > MAX_STATE_BYTES {
-        return Err(UpdateError::State(
-            "encoded update state exceeds its limit".to_owned(),
-        ));
-    }
-    let (temporary, mut file) = reserve_temporary(directory)?;
-    let result = (|| {
-        file.write_all(&bytes).map_err(state_error)?;
-        file.sync_all().map_err(state_error)?;
-        fs::rename(&temporary, destination).map_err(state_error)?;
-        set_private_file_permissions(destination).map_err(state_error)?;
-        sync_directory(directory)?;
-        Ok(())
-    })();
-    if result.is_err() {
-        let _ = fs::remove_file(&temporary);
-    }
-    result
-}
-
-fn reserve_temporary(directory: &Path) -> Result<(PathBuf, File), UpdateError> {
-    for suffix in 0..128_u16 {
-        let path = directory.join(format!("state-{}-{suffix}.tmp", std::process::id()));
-        let mut options = OpenOptions::new();
-        options.write(true).create_new(true);
-        set_private_open_mode(&mut options);
-        match options.open(&path) {
-            Ok(file) => return Ok((path, file)),
-            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
-            Err(error) => return Err(state_error(error)),
-        }
-    }
-    Err(UpdateError::State(
-        "could not reserve atomic update state".to_owned(),
     ))
 }
 

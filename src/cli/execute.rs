@@ -155,6 +155,7 @@ fn execute_launch(
         }
     };
     let id = session.state.board.session.id;
+    context.finish_exact_resume(id)?;
     if interactive {
         let resources = context.into_terminal(session, settings.unwrap_or_default());
         let _closed = terminal::run(resources)?;

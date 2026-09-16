@@ -15,13 +15,15 @@ use crate::{
     ports::{
         environment::{Clock, IdGenerator as _},
         update::{
-            InstallDetector, ReleaseObservation, ReleaseSource, UpdateError, UpdateLockKind,
-            UpdateStateStore as _,
+            ExternalCacheTransition, InstallDetector, ReleaseObservation, ReleaseSource,
+            UpdateError, UpdateLockKind, UpdateStateStore as _,
         },
     },
 };
 
 use super::FileUpdateStateStore;
+
+mod external;
 
 fn identity() -> InstallationIdentity {
     InstallationIdentity::from_digest([19; 32])
@@ -103,6 +105,20 @@ fn corrupt_and_oversized_state_are_safe_cache_misses() {
         serde_json::to_vec(&invalid).expect("serialize invalid state"),
     )
     .expect("invalid announcement state");
+    assert_eq!(store.load(identity()), Ok(UpdateCacheState::default()));
+
+    let target = StableVersion::parse("0.10.0").expect("target");
+    fs::write(
+        &state,
+        serde_json::to_vec(&UpdateCacheState {
+            observed_installed_version: Some(target.clone()),
+            restart_needed: false,
+            external_restart: Some(external::pending(&target)),
+            ..UpdateCacheState::default()
+        })
+        .expect("serialize inconsistent external restart"),
+    )
+    .expect("inconsistent external restart state");
     assert_eq!(store.load(identity()), Ok(UpdateCacheState::default()));
 }
 

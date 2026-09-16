@@ -48,4 +48,9 @@ pub use update::{
     UpdateAvailability, UpdateCheckMode, UpdateCheckResult, UpdateRefresh, UpdateService,
 };
 pub(crate) use update_coordination::is_compatible_update_participant;
-pub use update_coordination::{UpdateExecution, UpdateExecutionStatus, UpdateRestartCoordinator};
+pub use update_coordination::{
+    ExternalUpgradeAdmission, ExternalUpgradeBlocker, ExternalUpgradeBlockerReason,
+    ExternalUpgradeCacheStatus, ExternalUpgradeCoordinator, ExternalUpgradeFailure,
+    UpdateExecution, UpdateExecutionStatus, UpdateRestartCoordinator,
+    admit_pending_external_resume,
+};

@@ -36,6 +36,7 @@ pub use release_highlights::{
 };
 pub use text::TextPosition;
 pub use update::{
-    Installation, InstallationIdentity, InstallationKind, StableVersion, UpdateCacheState,
-    UpdateValueError,
+    EXTERNAL_RESTART_MAX_EXPECTATIONS, ExternalRestartExpectation, ExternalRestartPending,
+    Installation, InstallationIdentity, InstallationKind, InstalledVersionRelation, StableVersion,
+    UpdateCacheState, UpdateValueError,
 };
