@@ -21,7 +21,7 @@ const OWNER_COUNT: usize = 5;
 
 #[test]
 fn compatible_live_owners_automatically_converge_after_external_replacement() {
-    let _fixture_guard = super::cross_version_fixture_guard();
+    let _fixture_guard = super::fixture_lock::acquire();
     let fixture = OldFixture::build();
     let state = isolated_state("proqi-ext-compatible");
     let installation = fixture.installation(state.path());

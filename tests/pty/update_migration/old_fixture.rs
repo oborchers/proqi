@@ -9,6 +9,7 @@ use std::{
     os::unix::fs::symlink,
     path::{Path, PathBuf},
     process::{Child, Command, Output, Stdio},
+    sync::OnceLock,
     thread::{self, JoinHandle},
     time::{Duration, Instant},
 };
@@ -154,7 +155,12 @@ impl InstallationFixture {
 }
 
 impl OldFixture {
-    pub(super) fn build() -> Self {
+    pub(super) fn build() -> &'static Self {
+        static FIXTURE: OnceLock<OldFixture> = OnceLock::new();
+        FIXTURE.get_or_init(Self::build_uncached)
+    }
+
+    fn build_uncached() -> Self {
         let root = tempfile::Builder::new()
             .prefix("proqi-old-schema-source")
             .tempdir_in("/private/tmp")

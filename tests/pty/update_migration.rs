@@ -4,7 +4,6 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
     path::Path,
-    sync::{Mutex, MutexGuard},
     thread,
     time::{Duration, Instant},
 };
@@ -43,6 +42,8 @@ mod external_recovery;
 mod external_source;
 #[path = "update_migration/external_upgrade.rs"]
 mod external_upgrade;
+#[path = "update_migration/fixture_lock.rs"]
+mod fixture_lock;
 #[path = "update_migration/historical_fixture.rs"]
 mod historical_fixture;
 #[path = "update_migration/old_fixture.rs"]
@@ -53,13 +54,6 @@ use cohort::{OWNER_TIMEOUT, Owners, active_instances, control_ready};
 const INCIDENT_COHORT: usize = 21;
 const STRESS_COHORT: usize = 26;
 const FORWARDED_CONTENT: &str = "forwarded after follower convergence Grüße 界";
-static CROSS_VERSION_FIXTURE: Mutex<()> = Mutex::new(());
-
-fn cross_version_fixture_guard() -> MutexGuard<'static, ()> {
-    CROSS_VERSION_FIXTURE
-        .lock()
-        .expect("cross-version fixture lock")
-}
 
 struct FakeInstaller;
 

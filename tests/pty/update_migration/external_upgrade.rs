@@ -30,7 +30,7 @@ const OWNER_COUNT: usize = 5;
 
 #[test]
 fn external_homebrew_replacement_converges_real_v0_9_owners_without_refresh() {
-    let _fixture_guard = super::cross_version_fixture_guard();
+    let _fixture_guard = super::fixture_lock::acquire();
     let fixture = HistoricalFixture::build();
     let state = isolated_state("proqi-external-v0.9-convergence");
     let installation = fixture.install(state.path());

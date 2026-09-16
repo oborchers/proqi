@@ -16,10 +16,10 @@ use std::{
 
 #[test]
 fn old_coordinator_converges_real_schema_changing_replacements() {
-    let _fixture_guard = super::cross_version_fixture_guard();
+    let _fixture_guard = super::fixture_lock::acquire();
     let fixture = OldFixture::build();
     for count in [3, 15] {
-        assert_automatic_schema_update(&fixture, count);
+        assert_automatic_schema_update(fixture, count);
     }
 }
 
