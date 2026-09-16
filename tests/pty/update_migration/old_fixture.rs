@@ -20,11 +20,11 @@ use proqi::{
     ports::update::InstallDetector as _,
 };
 
-const OLD_VERSION: &str = "0.8.99";
+pub(super) const OLD_VERSION: &str = "0.8.99";
 const COMMAND_OUTPUT_LIMIT: u64 = 4 * 1024 * 1024;
 const COORDINATOR_TIMEOUT: Duration = Duration::from_secs(90);
 const PROBE_TIMEOUT: Duration = Duration::from_secs(10);
-const BUILD_TIMEOUT: Duration = Duration::from_secs(10 * 60);
+pub(super) const BUILD_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 
 struct CapturedChild {
     child: Option<Child>,
@@ -127,7 +127,7 @@ fn join_output(
     output
 }
 
-fn run_bounded(command: &mut Command, timeout: Duration, label: &str) -> Output {
+pub(super) fn run_bounded(command: &mut Command, timeout: Duration, label: &str) -> Output {
     CapturedChild::spawn(command, label).finish(timeout, label)
 }
 
@@ -142,6 +142,15 @@ pub(super) struct InstallationFixture {
     pub(super) active_binary: PathBuf,
     pub(super) new_binary: PathBuf,
     pub(super) identity: InstallationIdentity,
+}
+
+impl InstallationFixture {
+    pub(super) fn replace_externally(&self) {
+        fs::remove_file(&self.active_binary).expect("remove old active link");
+        symlink(&self.new_binary, &self.active_binary).expect("activate new external binary");
+        fs::remove_file(&self.old_binary).expect("remove old Cellar executable");
+        assert!(!self.old_binary.exists());
+    }
 }
 
 impl OldFixture {
@@ -237,18 +246,18 @@ impl OldFixture {
                 "-r",
             ])
             .arg(&initiating_session);
-        let late = run_bounded(&mut late_command, PROBE_TIMEOUT, "obsolete start probe");
+        let late = run_bounded(&mut late_command, PROBE_TIMEOUT, "inactive keg start probe");
         let late_output = format!(
             "{}{}",
             String::from_utf8_lossy(&late.stdout),
             String::from_utf8_lossy(&late.stderr)
         );
-        assert!(!late.status.success(), "obsolete start entered the schema");
+        assert!(!late.status.success(), "inactive keg entered the schema");
+        assert!(late_output.contains("installation_failed"), "{late_output}");
         assert!(
-            late_output.contains("update_convergence_active"),
+            late_output.contains("does not match the active Homebrew installation"),
             "{late_output}"
         );
-        assert!(late_output.contains(&initiating_session), "{late_output}");
         fs::write(&late_start_observed, b"continue").expect("release installer fixture");
         let output = child.finish(COORDINATOR_TIMEOUT, "old coordinator");
         assert!(

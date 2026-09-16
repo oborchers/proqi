@@ -1078,6 +1078,82 @@ schema entry. A startup that wins makes the update attempt stop before
 installation, so an unregistered shared schema holder cannot appear between
 the final scan and quiescence.
 
+Startup classifies the running stable version against the cached installed
+observation with a typed ordered relation. Equality uses normal shared
+admission. A lower running version is an obsolete executable and cannot enter
+the schema, independent of `restart_needed`. A higher running version is only
+a candidate external package-manager replacement. Homebrew detection first
+requires the canonical running executable to equal the canonical `opt` target,
+so an inactive keg or an active-link race fails closed. Before preparing any
+live owner, external adoption retains the exact executable byte length and
+SHA-256 identity. Verified standalone startup captures that identity during its
+initial installation check, before external convergence can establish a later
+baseline. Every later adoption proof re-reads the same identity, which makes an
+atomic same-path standalone replacement fail closed before preparation, during
+quiescence, or before cache adoption. Homebrew and source ordinary startup do
+not pay that hash cost.
+
+A candidate external replacement takes the existing exclusive convergence
+lock and reloads the cache before acting. It scans the authoritative live
+session-lock owners, which also removes metadata without a live owner lock.
+Protocol-incompatible or schema-incompatible owners become content-free typed
+blockers containing exact InstanceId, SessionId, canonical version when valid,
+and a closed reason. Absence from that registry is not sufficient authority for
+a pre-v0.10 process, because those binaries did not participate in convergence
+startup admission. With no registered participant, the candidate therefore
+retains exclusive convergence ownership and acquires the exclusive schema
+lease before the migration protocol opens the real store. This proves absence
+of a hidden same-schema writer as well as a pre-v0.10 migration blocker. Only
+after store readiness and another active-installation verification does the
+cache adapter compare and atomically replace the exact stale observation while
+clearing stale restart state. A schema conflict, installation race, write
+failure, or compare conflict leaves the old cache observation intact.
+Concurrent candidates wait a bounded interval for the exclusive owner and
+revalidate the cache under their acquired shared lease.
+Release refresh is independent evidence. It may initialize a missing installed
+observation or confirm equality, but it never replaces a different existing
+observation. Therefore an obsolete executable cannot downgrade startup
+authority, and a refresh racing external adoption cannot turn the candidate
+into an uncoordinated equal-version startup. A pending external cohort also
+suppresses another actionable release prompt, and the in-app coordinator reads
+that state under convergence ownership before invoking any installer. Exact
+automatic replacements wait boundedly for shared startup admission when an
+unrelated current process briefly owns convergence; user-launched ordinary
+starters retain the fail-fast retry diagnostic.
+
+An older live owner advertising the current external convergence protocol is
+not handled by a parallel coordinator. The same preflight, irreversible
+quiescence, restart request, process-lineage proof, exact SessionId, retained
+PID, installation identity, target version, and live owner-control checks apply.
+External convergence requires update-control protocol 3. Published v0.10.0
+processes advertise protocol 2, which predates the durable external-restart
+cohort and therefore remains an exact, safe blocker rather than being asked to
+interpret state it cannot preserve. A patched or later process advertising
+protocol 3 can participate in the existing replacement protocol.
+Only Homebrew and verified standalone installations can enter that automatic
+replacement path. Cargo, Debian, source, and otherwise unknown installations
+report their exact live owners as `restart_unsupported` blockers before any
+prepare or quiesce request. The exact durable replacement cohort is limited to
+32 owners. A larger compatible cohort fails before preparation with a typed
+capacity diagnostic, exact total and limit, and at most 33 exact blocker
+identities so the public diagnostic remains bounded.
+The external path obtains an exclusive schema lease and revalidates the active
+installation after every selected owner proves schema quiescence. While that
+proof remains held, it records the new observation with `restart_needed = true`
+and one bounded exact replacement cohort. A failed schema or installation proof
+leaves the old observation unchanged and requests reversible recovery of every
+already-quiesced exact owner. The durable cohort binds operation, target,
+SessionId, prior InstanceId, retained PID, and prior version. Only a matching
+replacement may enter while it is pending, and recovery clears the flag only
+after every exact replacement is live and ready and the active installation is
+revalidated again. A later external candidate with a newer target cannot
+replace or clear this pending cohort. It fails with the exact pending
+SessionIds until the recorded target finishes recovery. Owners from v0.9.0 use
+the preceding protocol and therefore block with exact recovery guidance until
+they exit cleanly. Once they are gone, the no-participant path admits one
+migration winner and ordinary follower revalidation, then commits the cache
+compare-and-set without an explicit update refresh.
+
 The coordinator then sends each exact prepared owner the installed target in
 an irreversible quiesce request. The owner first commits its update barrier,
 blocks every ordinary UI, screenshot, and owner-control mutation, releases its
@@ -1101,8 +1177,17 @@ the same operating-system PID, the same installation identity, the exact target
 version, and the matching operation and prior-instance proof carried across
 Unix `exec`. A live peer-credential-checked connection must also succeed against
 the published control endpoint. Metadata alone, an exact manual resume in
-another terminal, or an endpoint lost after publication is never replacement
-readiness. The endpoint is published only after board restoration. The
+another terminal, or an endpoint lost after publication is never automatic
+replacement readiness. After a failed `exec` has released the old session
+owner, however, startup may admit an explicitly requested pending SessionId
+under the convergence lock. It opens the store through normal schema admission,
+acquires that exact session lease, and then atomically removes only that
+expectation. If peers remain, the same bounded record retains the acknowledged
+expectation separately from the unfinished set. An error reported after the
+atomic rename is therefore exactly retryable by the same admission, and a fresh
+process can reenter only that acknowledged SessionId. A failure before commit
+retains the complete unfinished state. The endpoint is published only after
+board restoration. The
 coordinator writes the initiating session's content-free pending announcement
 only after every peer converges, then requests the initiating restart. Peer
 failure creates no announcement, but a quiesced initiating process still

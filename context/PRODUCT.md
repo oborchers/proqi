@@ -1403,8 +1403,15 @@ session in the inherited pane and state root. A failed replacement never rolls
 back successful peers and never makes an old quiesced process writable again.
 Replacement readiness additionally requires the retained operating-system
 process, matching update attempt and prior process proof, and a live verified
-owner-control endpoint. A manual exact-session resume in another pane and stale
-runtime metadata remain explicit incomplete replacements.
+owner-control endpoint. A manual exact-session resume in another pane is not
+automatic replacement evidence. If an accepted `exec` fails and the old owner
+is no longer live, an explicit resume of that exact pending SessionId may enter
+under exclusive convergence. Proqi removes only that expectation after the new
+process owns the exact session lease, retaining every unfinished peer. Stale
+runtime metadata never proves either readiness or ownership. While peers remain
+unfinished, the bounded pending record also retains exact manually acknowledged
+membership. A retry after an atomic cache rename can therefore recognize the
+committed result, and that exact session can reenter without erasing its peers.
 
 Existing shared schema leases remain the compatibility barrier. A new process
 does not migrate while an old process still holds a conflicting lease. It waits
@@ -1412,6 +1419,59 @@ for bounded restart convergence or reports that restart remains pending. When
 one replacement completes the migration, followers that lost the exclusive
 lease race revalidate the current schema under a shared lease and resume. A
 genuinely old writer still prevents migration for the existing bounded wait.
+
+An executable installed by an external package-manager action is admitted by
+the same convergence boundary. The canonical active installation and the
+running executable's version are authoritative. A cached installed-version
+observation is evidence that can lag behind the package manager. Equal
+versions follow ordinary startup. A running version older than the cached
+observation is rejected as obsolete. A running version newer than the cached
+observation must first own exclusive convergence and rescan the exact live
+runtime registry. Incompatible older owners block admission with their exact
+SessionIds and canonical versions plus instructions to close or update those
+sessions. Proqi never instructs the user to start the removed old executable.
+Homebrew and verified standalone owners can use automatic exact replacement.
+Cargo, Debian, source, and unknown installations instead remain live and block
+before preparation because Proqi cannot safely restart them in place. Their
+exact SessionIds and versions identify what the user must close before retrying.
+Automatic cohorts are bounded at 32 exact replacements. Larger cohorts fail
+before preparation with the exact observed count, supported limit, and bounded
+content-free blocker details.
+
+When no registered owner remains, Proqi keeps exclusive convergence ownership
+and must acquire the exclusive schema lease before opening the real store. This
+proves quiescence even for a same-schema writer whose runtime metadata is
+missing. Only after store readiness and another active-installation
+verification does Proqi atomically replace the exact stale observation and
+clear stale restart state, without requiring an update check. Compatible
+owners advertising external convergence protocol 3 reuse the existing prepare,
+irreversible quiescence, restart, and exact replacement proof. Published
+v0.10.0 owners advertise protocol 2 and remain exact blockers because they
+cannot preserve the durable replacement cohort. After compatible owners'
+acknowledgements,
+the coordinator obtains the same exclusive schema proof and revalidates the
+active installation immediately before cache adoption. Their pending cache
+state retains a bounded exact cohort,
+including operation, target, SessionId, prior InstanceId, retained PID, and
+prior version, until every replacement is verified. Missing replacement proof
+retains `restart_needed`. A later externally installed version cannot overwrite
+that unfinished cohort. It reports the exact pending sessions and requires the
+recorded target cohort to finish first. Release refresh updates release metadata
+but can only initialize a missing installation observation or confirm an equal
+one, so an older process and a concurrent refresh cannot downgrade or bypass
+startup authority. While an external cohort is pending, release discovery may
+refresh its metadata but suppresses another actionable update, and the in-app
+coordinator refuses before invoking the installer. An exact automatic
+replacement waits boundedly for a transient convergence owner so an unrelated
+fresh starter cannot turn successful same-process replacement into manual
+recovery. Missing or malformed cache state remains a cache miss,
+while an active-executable mismatch, schema conflict, cache conflict, failed
+cache write, or lost convergence owner fails without adopting the stale cache.
+Verified standalone startup captures the active executable's byte length and
+SHA-256 identity during initial installation verification. External adoption
+also establishes that identity before preparing a live owner. Replacing a
+standalone executable at the same canonical path before preparation, during
+quiescence, or immediately before cache adoption therefore fails closed.
 
 ### Release highlights after an in-app upgrade
 
