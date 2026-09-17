@@ -133,6 +133,14 @@
         "See exact blocking SessionIds and versions when an older live process must close before migration can continue.",
         "Fail closed if a hidden writer, installation race, cache-write failure, or concurrent starter makes external upgrade ownership uncertain."
       ]
+    },
+    {
+      "version": "0.10.2",
+      "highlights": [
+        "Reopen existing sessions with numbered attachments after an upgrade without the erroneous ordinal in legacy schema failure.",
+        "Keep existing attachment numbers, numbering counters, thought content, and undo history intact during migration.",
+        "Preserve the recorded dates of earlier database migrations when applying a new migration."
+      ]
     }
   ]
 }
