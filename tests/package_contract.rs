@@ -17,6 +17,11 @@ mod pty;
 #[path = "package_contract/sandbox.rs"]
 mod sandbox;
 
+#[path = "support/ordinal_migration.rs"]
+mod ordinal_fixture;
+#[path = "migration_ordinals/cli_contract.rs"]
+mod ordinal_migration;
+
 use sandbox::PackageSandbox;
 
 struct InstalledProduct {
@@ -86,6 +91,7 @@ fn installed_product_contract() {
     let (session, thought, content) = assert_json_workflow(&product);
     assert_reopen_and_resume(&product, &session, &thought, &content);
     assert_migration_and_newer_schema_contract(&product);
+    ordinal_migration::assert_cli_migrations(|| product.command(), &product.state);
     assert_archive_and_runtime_independence(&product);
     #[cfg(unix)]
     pty::assert_active_owner_and_terminal_restoration(&product, &session);

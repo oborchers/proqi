@@ -307,22 +307,9 @@ pub(super) fn downgrade_to_legacy(fixture: &DatabaseFixture) {
         .expect("legacy schema");
 }
 
-fn strip_ordinals(value: &mut serde_json::Value) {
-    match value {
-        serde_json::Value::Object(object) => {
-            object.remove("ordinal");
-            for child in object.values_mut() {
-                strip_ordinals(child);
-            }
-        }
-        serde_json::Value::Array(values) => {
-            for child in values {
-                strip_ordinals(child);
-            }
-        }
-        _ => {}
-    }
-}
+#[path = "../support/legacy_ordinals.rs"]
+mod legacy_ordinals;
+use legacy_ordinals::strip_ordinals;
 
 #[path = "attachment_numbering/capture.rs"]
 mod capture;
