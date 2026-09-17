@@ -252,3 +252,20 @@ pub(super) fn project_bases(cwd: &Path) -> Vec<PathBuf> {
     }
     bases
 }
+
+pub(super) fn global_owns_project_path_at_home(
+    spec: &CompatibilityRoot,
+    base: &Path,
+    global_home: Option<&Path>,
+) -> bool {
+    spec.scope == InvocationScope::Project
+        && global_home == Some(base)
+        && COMPATIBILITY_ROOTS.iter().any(|candidate| {
+            candidate.scope == InvocationScope::Global
+                && candidate.relative == spec.relative
+                && candidate.harness == spec.harness
+                && candidate.kind == spec.kind
+                && candidate.shape == spec.shape
+                && candidate.insertable == spec.insertable
+        })
+}

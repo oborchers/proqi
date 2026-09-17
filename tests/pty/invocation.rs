@@ -77,6 +77,8 @@ fn select_invocation(
 fn short_fuzzy_invocation_completes_exactly_and_shuts_down_in_a_real_pty() {
     let state = tempfile::tempdir().expect("temporary state");
     let home = tempfile::tempdir().expect("isolated home");
+    let cwd = home.path().join("projects/non-git/nested");
+    std::fs::create_dir_all(&cwd).expect("nested non-Git cwd");
     let external = home.path().join("catalog/aos-communication-email");
     let skill = external.join("SKILL.md");
     std::fs::create_dir_all(&external).expect("external skill directory");
@@ -101,6 +103,7 @@ fn short_fuzzy_invocation_completes_exactly_and_shuts_down_in_a_real_pty() {
         set timeout 10
         set binary $env(PROQI_TEST_BINARY)
         set state $env(PROQI_TEST_STATE)
+        cd $env(PROQI_TEST_CWD)
         spawn $binary --state-dir $state
         expect -exact "\x1b\[?1049h"
         after 500
@@ -119,6 +122,7 @@ fn short_fuzzy_invocation_completes_exactly_and_shuts_down_in_a_real_pty() {
         .args(["-c", interact])
         .env("PROQI_TEST_BINARY", binary)
         .env("PROQI_TEST_STATE", state.path())
+        .env("PROQI_TEST_CWD", &cwd)
         .env("HOME", home.path())
         .env_remove("HERDR_ENV")
         .status()
