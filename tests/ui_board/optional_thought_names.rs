@@ -1,15 +1,15 @@
 //! Optional thought-name interaction, payload separation, and responsive rendering.
 
+#[path = "optional_thought_names/views.rs"]
+mod views;
+
 use super::*;
 
 use proqi::{
     application::{DurabilityState, InteractionMode},
-    domain::{BoardOperationKind, ThoughtName, ThoughtPresentation},
-    ui::BoardDensity,
+    domain::{BoardOperationKind, ThoughtName},
 };
 use ratatui_core::style::Modifier;
-
-use super::snapshot_support::snapshot_buffer;
 
 fn control_r() -> UiInput {
     UiInput::KeyStroke(
@@ -433,114 +433,10 @@ fn rapid_name_changes_are_ordered_and_stale_acknowledgements_are_ignored() {
 
 #[test]
 fn named_thoughts_have_reviewed_comfortable_compact_collapsed_and_clipped_views() {
-    assert_comfortable_snapshot();
-    assert_compact_collapsed_and_shallow_snapshots();
-    assert_narrow_editing_snapshot();
-}
-
-fn assert_comfortable_snapshot() {
-    let mut comfortable = named_fixture(
-        UiSettings::default(),
-        "A body that remains visually separate from organizational metadata.",
-        "Release 計画",
-    );
-    comfortable.input(crate::key_input(UiKey::Escape));
-    insta::assert_snapshot!(
-        "thought_name_comfortable",
-        snapshot_buffer(
-            draw_theme(&mut comfortable, 58, 9, ThemePreference::Dark)
-                .backend()
-                .buffer()
-        )
-    );
-}
-
-fn assert_compact_collapsed_and_shallow_snapshots() {
-    let compact_settings = UiSettings {
-        density: BoardDensity::Compact,
-        ..UiSettings::default()
-    };
-    let mut compact = named_fixture(
-        compact_settings,
-        "Compact body line one\nline two",
-        "Compact title",
-    );
-    compact.input(crate::key_input(UiKey::Escape));
-    insta::assert_snapshot!(
-        "thought_name_compact",
-        snapshot_buffer(
-            draw_theme(&mut compact, 42, 7, ThemePreference::Dark)
-                .backend()
-                .buffer()
-        )
-    );
-
-    let thought_id = compact.app.state.board.live_thoughts()[0].id;
-    compact
-        .app
-        .state
-        .board
-        .thought_mut(thought_id)
-        .expect("thought")
-        .presentation = ThoughtPresentation::Collapsed;
-    insta::assert_snapshot!(
-        "thought_name_collapsed_narrow",
-        snapshot_buffer(
-            draw_theme(&mut compact, 24, 5, ThemePreference::Dark)
-                .backend()
-                .buffer()
-        )
-    );
-    insta::assert_snapshot!(
-        "thought_name_shallow",
-        snapshot_buffer(
-            draw_theme(&mut compact, 18, 4, ThemePreference::Dark)
-                .backend()
-                .buffer()
-        )
-    );
-    compact.input(crate::key_input(UiKey::Enter));
-    let mut shallow_editor = draw_theme(&mut compact, 18, 4, ThemePreference::Dark);
-    let shallow_layout = compact.app.prepare_frame(Rect::new(0, 0, 18, 4));
-    let shallow_body = shallow_layout
-        .thought(thought_id)
-        .expect("shallow body layout")
-        .text_area;
-    assert_eq!(shallow_body.height, 1);
-    assert_eq!(
-        shallow_editor
-            .backend_mut()
-            .get_cursor_position()
-            .expect("visible shallow body cursor")
-            .y,
-        shallow_body.y
-    );
-    compact.input(crate::key_input(UiKey::Escape));
-}
-
-fn assert_narrow_editing_snapshot() {
-    let long = "界".repeat(100);
-    let mut editing = named_fixture(UiSettings::default(), "body stays separate", &long);
-    assert_eq!(
-        editing.app.state.board.live_thoughts()[0]
-            .name
-            .as_ref()
-            .expect("bounded name")
-            .as_str()
-            .chars()
-            .count(),
-        80
-    );
-    editing.input(control_r());
-    let mut editing_terminal = draw_theme(&mut editing, 24, 5, ThemePreference::Dark);
-    let title_cursor = editing_terminal
-        .backend_mut()
-        .get_cursor_position()
-        .expect("title cursor");
-    assert_eq!(title_cursor.y, 0);
-    assert!(title_cursor.x < 24);
-    insta::assert_snapshot!(
-        "thought_name_editing_narrow",
-        snapshot_buffer(editing_terminal.backend().buffer())
-    );
+    insta::assert_snapshot!("thought_name_comfortable", views::comfortable());
+    let (compact, collapsed) = views::compact_and_collapsed();
+    insta::assert_snapshot!("thought_name_compact", compact);
+    insta::assert_snapshot!("thought_name_collapsed_narrow", collapsed);
+    insta::assert_snapshot!("thought_name_shallow", views::shallow());
+    insta::assert_snapshot!("thought_name_editing_narrow", views::editing_narrow());
 }
