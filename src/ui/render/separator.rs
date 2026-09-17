@@ -51,9 +51,8 @@ pub(super) fn render(
     );
     let dragging = app.dragged_item() == Some(item_id);
     let surface_style = match (focused || selected, body_hovered) {
-        (true, true) => Some(theme.focused_hovered_style()),
+        (_, true) => Some(theme.hovered_style()),
         (true, false) => Some(theme.focused_style()),
-        (false, true) => Some(theme.hovered_style()),
         (false, false) => None,
     };
     if let Some(style) = surface_style {
@@ -67,7 +66,9 @@ pub(super) fn render(
             || dragging
             || app.drag_target() == Some(layout.index);
         let style = Style::default()
-            .fg(if emphasized {
+            .fg(if body_hovered && (focused || selected) {
+                theme.foreground
+            } else if emphasized {
                 theme.accent
             } else {
                 theme.muted
@@ -88,19 +89,23 @@ pub(super) fn render(
         " "
     };
     let padding = usize::from(layout.gutter.height.saturating_sub(1) / 2);
-    let style = if focused {
-        let modifier = if dragging {
-            Modifier::DIM
-        } else if gutter_hovered {
-            Modifier::BOLD | Modifier::ITALIC
-        } else {
-            Modifier::BOLD
-        };
+    let style = if focused && dragging {
         Style::default()
             .fg(theme.on_accent)
             .bg(theme.accent_surface)
             .remove_modifier(Modifier::REVERSED | Modifier::ITALIC)
-            .add_modifier(modifier)
+            .add_modifier(Modifier::DIM)
+    } else if focused && gutter_hovered {
+        theme
+            .hovered_style()
+            .fg(theme.accent)
+            .remove_modifier(Modifier::REVERSED | Modifier::ITALIC)
+    } else if focused {
+        Style::default()
+            .fg(theme.on_accent)
+            .bg(theme.accent_surface)
+            .remove_modifier(Modifier::REVERSED | Modifier::ITALIC)
+            .add_modifier(Modifier::BOLD)
     } else if gutter_hovered {
         theme.hovered_style().fg(theme.accent)
     } else {

@@ -95,17 +95,23 @@ fn every_picker_secondary_uses_the_same_quiet_metadata_style() {
     assert_eq!(selected.spans[2].style.fg, Some(theme.muted));
     assert_eq!(selected.spans[2].style.bg, theme.focused_surface);
     let hovered_selected = picker_line(row, 24, true, true, &theme);
+    assert_ne!(hovered_selected, selected);
+    assert_eq!(hovered_selected.spans[0].style.fg, Some(theme.on_accent));
+    assert_eq!(
+        hovered_selected.spans[0].style.bg,
+        Some(theme.accent_surface)
+    );
     assert!(
         hovered_selected.spans[0]
             .style
             .add_modifier
-            .contains(Modifier::BOLD | Modifier::ITALIC)
+            .contains(Modifier::BOLD)
     );
     assert!(
         !hovered_selected.spans[0]
             .style
             .add_modifier
-            .contains(Modifier::UNDERLINED)
+            .intersects(Modifier::ITALIC | Modifier::UNDERLINED)
     );
     insta::with_settings!({ snapshot_path => "../snapshots" }, {
         insta::assert_debug_snapshot!("picker_metadata_styles", (ordinary, selected));
@@ -115,14 +121,11 @@ fn every_picker_secondary_uses_the_same_quiet_metadata_style() {
 #[test]
 fn selected_disabled_choice_keeps_focus_surface_and_muted_text() {
     let theme = Theme::resolve(ThemePreference::Dark, true);
-    let selected = picker_line(
-        PickerRow::choice("Blocked receiver", "blocked", false),
-        32,
-        true,
-        false,
-        &theme,
-    );
+    let row = PickerRow::choice("Blocked receiver", "blocked", false);
+    let selected = picker_line(row, 32, true, false, &theme);
+    let hovered = picker_line(row, 32, true, true, &theme);
 
+    assert_eq!(hovered, selected);
     assert!(
         selected
             .spans

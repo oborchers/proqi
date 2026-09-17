@@ -262,9 +262,8 @@ fn render_board_thought(
         theme,
     );
     let surface_style = match (focused || selected, hovered) {
-        (true, true) => Some(theme.focused_hovered_style()),
+        (_, true) => Some(theme.hovered_style()),
         (true, false) => Some(theme.focused_style()),
-        (false, true) => Some(theme.hovered_style()),
         (false, false) => None,
     };
     if let Some(style) = surface_style {
@@ -333,19 +332,23 @@ fn render_gutter(
 ) {
     let symbol = if focused || hovered { "⋮" } else { " " };
     let padding = usize::from(layout.gutter.height.saturating_sub(1) / 2);
-    let surface_style = if focused {
-        let modifier = if dragging {
-            Modifier::DIM
-        } else if hovered {
-            Modifier::BOLD | Modifier::ITALIC
-        } else {
-            Modifier::BOLD
-        };
+    let surface_style = if focused && dragging {
         Style::default()
             .fg(theme.on_accent)
             .bg(theme.accent_surface)
             .remove_modifier(Modifier::REVERSED | Modifier::ITALIC)
-            .add_modifier(modifier)
+            .add_modifier(Modifier::DIM)
+    } else if focused && hovered {
+        theme
+            .hovered_style()
+            .fg(theme.accent)
+            .remove_modifier(Modifier::REVERSED | Modifier::ITALIC)
+    } else if focused {
+        Style::default()
+            .fg(theme.on_accent)
+            .bg(theme.accent_surface)
+            .remove_modifier(Modifier::REVERSED | Modifier::ITALIC)
+            .add_modifier(Modifier::BOLD)
     } else if hovered {
         theme.hovered_style().fg(theme.accent)
     } else {

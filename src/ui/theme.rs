@@ -151,10 +151,13 @@ impl Theme {
         self.focused_style().add_modifier(Modifier::BOLD)
     }
 
-    /// Combined keyboard-focus and pointer-hover emphasis without an underline.
+    /// Combined discrete-control focus and hover without changing type style.
     #[must_use]
     pub fn focused_hovered_style(self) -> Style {
-        self.hovered_style().add_modifier(Modifier::ITALIC)
+        Style::new()
+            .fg(self.on_accent)
+            .bg(self.accent_surface)
+            .add_modifier(Modifier::BOLD)
     }
 
     const fn limited() -> Self {

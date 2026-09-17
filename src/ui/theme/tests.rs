@@ -86,6 +86,25 @@ fn limited_and_failed_auto_detection_keep_a_non_color_focus_cue() {
 }
 
 #[test]
+fn hover_never_changes_type_style() {
+    for preference in [
+        ThemePreference::Dark,
+        ThemePreference::Light,
+        ThemePreference::Limited,
+    ] {
+        let theme = Theme::resolve(preference, true);
+        for style in [theme.hovered_style(), theme.focused_hovered_style()] {
+            assert!(style.add_modifier.contains(Modifier::BOLD));
+            assert!(
+                !style
+                    .add_modifier
+                    .intersects(Modifier::ITALIC | Modifier::UNDERLINED)
+            );
+        }
+    }
+}
+
+#[test]
 fn explicit_theme_text_pairs_meet_aa_contrast() {
     let dark = Theme::resolve(ThemePreference::Dark, true);
     assert!(contrast((232, 228, 223), (15, 13, 10)) >= 4.5);

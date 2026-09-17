@@ -59,7 +59,7 @@ pub(super) fn styled_line(
                 style = style.add_modifier(Modifier::BOLD);
             }
             if hovered {
-                style = style.add_modifier(Modifier::ITALIC);
+                style = style.add_modifier(Modifier::REVERSED);
             }
             if linked {
                 style = style.add_modifier(Modifier::UNDERLINED);

@@ -138,21 +138,24 @@ pub(super) fn picker_line(
     hovered: bool,
     theme: &Theme,
 ) -> Line<'static> {
+    let enabled_hovered = hovered && entry.enabled;
     if entry.secondary.is_none() {
-        let base = if hovered && selected {
+        let base = if enabled_hovered && selected {
             theme.focused_hovered_style()
-        } else if hovered {
+        } else if enabled_hovered {
             theme.hovered_style()
         } else if selected {
             theme.focused_style()
         } else {
             theme.base_style()
         };
-        let style = if !entry.enabled {
+        let style = if enabled_hovered && selected {
+            base
+        } else if !entry.enabled {
             base.fg(theme.muted)
         } else if selected {
             base.fg(theme.accent).add_modifier(Modifier::BOLD)
-        } else if hovered {
+        } else if enabled_hovered {
             base.fg(theme.accent)
         } else {
             base
@@ -163,20 +166,22 @@ pub(super) fn picker_line(
     }
     let width = usize::from(width);
     let (primary, secondary) = picker_content(entry, width);
-    let base = if hovered && selected {
+    let base = if enabled_hovered && selected {
         theme.focused_hovered_style()
-    } else if hovered {
+    } else if enabled_hovered {
         theme.hovered_style()
     } else if selected {
         theme.focused_style()
     } else {
         theme.base_style()
     };
-    let primary_style = if !entry.enabled {
+    let primary_style = if enabled_hovered && selected {
+        base
+    } else if !entry.enabled {
         base.fg(theme.muted)
     } else if selected {
         base.fg(theme.accent).add_modifier(Modifier::BOLD)
-    } else if hovered {
+    } else if enabled_hovered {
         base.fg(theme.accent)
     } else {
         base.fg(theme.foreground)
@@ -192,7 +197,14 @@ pub(super) fn picker_line(
     Line::from(vec![
         Span::styled(primary, primary_style),
         Span::styled(" ".repeat(gap), base),
-        Span::styled(secondary, base.fg(theme.muted)),
+        Span::styled(
+            secondary,
+            if enabled_hovered && selected {
+                base
+            } else {
+                base.fg(theme.muted)
+            },
+        ),
     ])
 }
 

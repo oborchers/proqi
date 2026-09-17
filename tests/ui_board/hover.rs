@@ -77,8 +77,8 @@ fn footer_hover_tracks_edges_crossings_repeats_and_focus_without_actions() {
         "focused body hover must be visible"
     );
     let modifier = hovered_body.add_modifier;
-    assert!(modifier.contains(Modifier::BOLD | Modifier::ITALIC));
-    assert!(!modifier.contains(Modifier::UNDERLINED));
+    assert!(modifier.contains(Modifier::BOLD));
+    assert!(!modifier.intersects(Modifier::ITALIC | Modifier::UNDERLINED));
     assert_eq!(
         body_terminal.backend().buffer()[(gutter_area.x, gutter_area.y)].style(),
         resting
@@ -103,16 +103,10 @@ fn footer_hover_tracks_edges_crossings_repeats_and_focus_without_actions() {
         "direct gutter hover should preserve the established focus weight"
     );
     assert!(
-        gutter
-            .modifier
-            .contains(ratatui_core::style::Modifier::ITALIC),
-        "direct hover over an already-focused gutter should add a distinct cue"
-    );
-    assert!(
-        !gutter
-            .modifier
-            .contains(ratatui_core::style::Modifier::UNDERLINED),
-        "hover emphasis must not introduce an underline"
+        !gutter.modifier.intersects(
+            ratatui_core::style::Modifier::ITALIC | ratatui_core::style::Modifier::UNDERLINED
+        ),
+        "hover emphasis must not change type style"
     );
 }
 
@@ -227,16 +221,12 @@ fn collapsed_fold_hover_uses_projected_identity_and_preserves_exact_content() {
     let terminal = draw_theme(&mut fixture, 60, 8, ThemePreference::Dark);
     let cell = &terminal.backend().buffer()[(thought.text_area.x, thought.text_area.y)];
     assert_ne!(cell.style(), before, "fold hover must remain visible");
+    assert!(cell.modifier.contains(ratatui_core::style::Modifier::BOLD));
     assert!(
-        cell.modifier
-            .contains(ratatui_core::style::Modifier::ITALIC),
-        "inline fold hover should use restrained typographic emphasis"
-    );
-    assert!(
-        !cell
-            .modifier
-            .contains(ratatui_core::style::Modifier::UNDERLINED),
-        "fold hover must not introduce an underline"
+        !cell.modifier.intersects(
+            ratatui_core::style::Modifier::ITALIC | ratatui_core::style::Modifier::UNDERLINED
+        ),
+        "fold hover must not change type style"
     );
 
     fixture.pointer(
