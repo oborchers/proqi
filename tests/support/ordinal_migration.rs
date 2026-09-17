@@ -19,6 +19,7 @@ use proqi::{
 };
 use rusqlite::{Connection, types::Value};
 
+#[path = "legacy_ordinals.rs"]
 mod legacy_ordinals;
 use legacy_ordinals::strip_ordinals;
 
