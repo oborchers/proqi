@@ -15,6 +15,7 @@ use crate::domain::{
 use crate::ports::runtime::CaptureOwnerInfo;
 
 pub use effect::Effect;
+pub(crate) use effect::{SequencedMutationEffectError, SequencedMutationEffects};
 
 /// Active interaction context.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

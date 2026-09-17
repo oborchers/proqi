@@ -38,6 +38,7 @@ pub use model::{
     AppState, ClipboardIntent, DurabilityState, Effect, EmptyBoardTransition, HistoryResolution,
     InteractionMode, ScreenshotIntent, ScreenshotPauseReason, UpdateIntent,
 };
+pub(crate) use model::{SequencedMutationEffectError, SequencedMutationEffects};
 pub use onboarding::{FirstRunEnvironment, first_run_board};
 pub(crate) use prompt::{SHARED_PROMPT_STARTERS, join_prompt_for_target, supports_shared_starters};
 pub use recovery::capture_recovery;

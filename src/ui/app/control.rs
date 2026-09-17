@@ -42,6 +42,12 @@ impl BoardApp {
         Ok(effects)
     }
 
+    /// Restore the reducer state when owner-control effect validation rejects a mutation.
+    pub(crate) fn restore_control_state(&mut self, state: crate::application::AppState) {
+        self.state = state;
+        self.sync_editor_from_state();
+    }
+
     fn control_action(
         &self,
         mutation: &ControlMutation,

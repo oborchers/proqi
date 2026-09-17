@@ -196,6 +196,7 @@ impl InputLane {
         let Some(path) = &self.test_acceptance_path else {
             return;
         };
+        wait_for_test_input_release();
         let result = fs::OpenOptions::new()
             .create(true)
             .append(true)
@@ -206,6 +207,32 @@ impl InputLane {
             "test input-acceptance probe must be writable"
         );
     }
+}
+
+fn wait_for_test_input_release() {
+    if std::env::var_os("PROQI_TEST_INPUT_STALL").is_none() {
+        return;
+    }
+    let Some(arm) = std::env::var_os("PROQI_TEST_INPUT_BARRIER_ARM").map(PathBuf::from) else {
+        return;
+    };
+    if fs::remove_file(arm).is_err() {
+        return;
+    }
+    let Some(pending) = std::env::var_os("PROQI_TEST_INPUT_BARRIER_PENDING").map(PathBuf::from)
+    else {
+        return;
+    };
+    let Some(release) = std::env::var_os("PROQI_TEST_INPUT_BARRIER_RELEASE").map(PathBuf::from)
+    else {
+        return;
+    };
+    let _written = fs::write(pending, b"pending");
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while !release.exists() && Instant::now() < deadline {
+        thread::sleep(Duration::from_millis(2));
+    }
+    debug_assert!(release.exists(), "test input barrier was not released");
 }
 
 impl Drop for InputLane {

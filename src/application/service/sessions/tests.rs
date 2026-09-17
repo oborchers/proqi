@@ -1,19 +1,27 @@
 //! Fresh and resumed session load policy.
 
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    time::Duration,
+};
 
 use crate::{
-    application::test_support::{TestClock, TestIds},
+    application::{
+        Effect,
+        test_support::{TestClock, TestIds},
+    },
     domain::{
-        BrowserOperationKind, OperationId, RevisionId, Session, SessionBoard, SessionId, Timestamp,
+        BrowserOperationKind, OperationId, OperationSequence, RevisionId, Session, SessionBoard,
+        SessionId, Timestamp, UndoScope,
     },
     ports::{
+        attachment_accessibility::{AttachmentCheckBatch, AttachmentCheckPurpose},
         environment::IdGenerator,
         runtime::{Lease, RuntimeCoordinator, RuntimeError, RuntimeScan},
         store::{
             BrowserCommitReceipt, BrowserHistoryEntry, BrowserHistoryStatus, CommitReceipt,
-            FirstRunBoard, FirstRunOutcome, OperationBatch, SessionHit, SessionQuery,
-            SessionSnapshot, Store, StoreError, StoredOperationRequest,
+            DurableIdentity, FirstRunBoard, FirstRunOutcome, OperationBatch, SessionHit,
+            SessionQuery, SessionSnapshot, Store, StoreError, StoredOperationRequest,
         },
     },
 };
@@ -26,6 +34,7 @@ struct BusyCompactionStore {
     compact_calls: usize,
     browser_history: BrowserHistoryStatus,
     browser_history_moves: usize,
+    durable_commits: usize,
 }
 
 impl Store for BusyCompactionStore {
@@ -92,11 +101,27 @@ impl Store for BusyCompactionStore {
     }
 
     fn commit(&mut self, batch: &OperationBatch) -> Result<Option<CommitReceipt>, StoreError> {
-        let OperationBatch::CreateSession(session) = batch else {
-            return Err(unused_store_call());
-        };
-        self.session = Some(session.clone());
-        Ok(None)
+        match batch {
+            OperationBatch::CreateSession(session) => {
+                self.session = Some(session.clone());
+                Ok(None)
+            }
+            OperationBatch::HistoryMove {
+                operation_id,
+                session_id,
+                sequence,
+                ..
+            } => {
+                self.durable_commits += 1;
+                Ok(Some(CommitReceipt {
+                    session_id: *session_id,
+                    sequence: *sequence,
+                    identity: DurableIdentity::Operation(*operation_id),
+                    idempotent_replay: false,
+                }))
+            }
+            _ => Err(unused_store_call()),
+        }
     }
 
     fn trash_session(&mut self, _id: SessionId, _at: Timestamp) -> Result<(), StoreError> {
@@ -276,4 +301,37 @@ fn browser_history_acquires_the_target_session_lease_before_mutation() {
         })) if session_id == runtime.busy
     ));
     assert_eq!(store.browser_history_moves, 0);
+}
+
+#[test]
+fn sequenced_service_commit_accepts_attachment_reconciliation_as_auxiliary_work() {
+    let mut store = BusyCompactionStore::default();
+    let runtime = TestRuntime;
+    let clock = TestClock(Timestamp::from_millis(7));
+    let mut ids = TestIds::new(1_725_000_000_000);
+    let session_id = ids.session_id();
+    let operation_id = ids.operation_id();
+    let effects = vec![
+        Effect::CommitHistoryMove {
+            operation_id,
+            session_id,
+            scope: UndoScope::Board,
+            undo: true,
+            sequence: OperationSequence::new(1),
+            at: clock.0,
+        },
+        Effect::CheckAttachments(AttachmentCheckBatch {
+            id: 1,
+            purpose: AttachmentCheckPurpose::Background,
+            checks: Vec::new(),
+            timeout: Duration::ZERO,
+        }),
+    ];
+    let receipt = SessionService::new(&mut store, &runtime, &clock, &mut ids, test_directory())
+        .expect("service")
+        .commit_sequenced_effects(effects)
+        .expect("one durable batch with an attachment check");
+
+    assert_eq!(receipt.sequence, OperationSequence::new(1));
+    assert_eq!(store.durable_commits, 1);
 }
