@@ -56,24 +56,3 @@ pub(super) fn render_thought_name(
         frame.render_widget(Paragraph::new(text).style(style), area);
     }
 }
-
-pub(super) fn render_separator(
-    frame: &mut Frame<'_>,
-    layout: &ThoughtLayout,
-    drag_target: bool,
-    theme: &Theme,
-) {
-    let Some(area) = layout.separator_before else {
-        return;
-    };
-    frame.render_widget(
-        Paragraph::new("─".repeat(usize::from(area.width))).style(Style::default().fg(
-            if drag_target {
-                theme.accent
-            } else {
-                theme.divider
-            },
-        )),
-        area,
-    );
-}

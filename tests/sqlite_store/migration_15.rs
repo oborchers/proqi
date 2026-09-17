@@ -40,6 +40,9 @@ fn reflow_migration_requires_authority_and_preserves_a_pre_migration_backup() {
     connection
         .execute_batch(
             "ALTER TABLE thoughts DROP COLUMN name;
+             DROP INDEX separators_session;
+             DROP INDEX separators_live_position;
+             DROP TABLE separators;
              DROP TABLE browser_history_receipts;
              DROP TABLE browser_operation_receipts;
              DROP TABLE browser_operations;
@@ -90,6 +93,9 @@ fn browser_history_migrates_exact_reflow_schema_and_protocol() {
     connection
         .execute_batch(
             "ALTER TABLE thoughts DROP COLUMN name;
+             DROP INDEX separators_session;
+             DROP INDEX separators_live_position;
+             DROP TABLE separators;
              DROP TABLE browser_history_receipts;
              DROP TABLE browser_operation_receipts;
              DROP TABLE browser_operations;
@@ -139,8 +145,8 @@ fn thought_name_migration_is_additive_and_backed_up() {
     connection
         .execute_batch(
             "ALTER TABLE thoughts DROP COLUMN name;
-             DELETE FROM migration_history WHERE version = 17;
-             UPDATE schema_meta SET schema_version = 16, storage_protocol = 15;",
+             DELETE FROM migration_history WHERE version = 18;
+             UPDATE schema_meta SET schema_version = 17, storage_protocol = 16;",
         )
         .expect("schema 16 fixture");
     drop(connection);

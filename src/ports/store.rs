@@ -31,9 +31,9 @@ pub use session::{SessionHit, SessionQuery, SessionSnapshot};
 pub use submission_route::{SUBMISSION_ROUTE_VERSION, SubmissionJournalRoute};
 
 /// Current storage schema understood by this binary.
-pub const SUPPORTED_SCHEMA_VERSION: u32 = 17;
+pub const SUPPORTED_SCHEMA_VERSION: u32 = 18;
 /// Current local storage protocol understood by this binary.
-pub const STORAGE_PROTOCOL_VERSION: u32 = 16;
+pub const STORAGE_PROTOCOL_VERSION: u32 = 17;
 
 /// One ordered, content-redacted source included in a submission.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

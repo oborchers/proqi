@@ -22,6 +22,7 @@ use proqi::{
 };
 
 pub(super) const OLD_VERSION: &str = "0.8.99";
+const PREVIOUS_RELEASE_COMMIT: &str = "9ddc01f1cb2b55dc4f82c587124844a7209aceba";
 const COMMAND_OUTPUT_LIMIT: u64 = 4 * 1024 * 1024;
 const COORDINATOR_TIMEOUT: Duration = Duration::from_secs(90);
 const PROBE_TIMEOUT: Duration = Duration::from_secs(10);
@@ -290,17 +291,31 @@ fn wait_for_path(path: &Path) {
 fn prepare_old_source(root: &Path) -> PathBuf {
     let source = root.join("source");
     fs::create_dir(&source).expect("source directory");
-    copy_tree(&repo().join("src"), &source.join("src"));
-    for file in [
-        "Cargo.toml",
-        "Cargo.lock",
-        "README.md",
-        "LICENSE",
-        "release-highlights.json",
-        "rust-toolchain.toml",
-    ] {
-        fs::copy(repo().join(file), source.join(file)).expect("copy source file");
-    }
+    let archive = root.join("previous-release.tar");
+    let mut export = Command::new("git");
+    export
+        .args(["archive", "--format=tar", "--output"])
+        .arg(&archive)
+        .arg(PREVIOUS_RELEASE_COMMIT)
+        .current_dir(repo());
+    let output = run_bounded(&mut export, PROBE_TIMEOUT, "previous release source export");
+    assert!(
+        output.status.success(),
+        "previous release source export failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let mut extract = Command::new("/usr/bin/tar");
+    extract.args(["-xf"]).arg(&archive).arg("-C").arg(&source);
+    let output = run_bounded(
+        &mut extract,
+        PROBE_TIMEOUT,
+        "previous release source extraction",
+    );
+    assert!(
+        output.status.success(),
+        "previous release source extraction failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let current_version = format!("version = \"{}\"", env!("CARGO_PKG_VERSION"));
     let old_version = format!("version = \"{OLD_VERSION}\"");
     rewrite(
@@ -314,33 +329,6 @@ fn prepare_old_source(root: &Path) -> PathBuf {
             ),
         ],
     );
-    rewrite(
-        &source.join("src/ports/store.rs"),
-        &[
-            (
-                "SUPPORTED_SCHEMA_VERSION: u32 = 17",
-                "SUPPORTED_SCHEMA_VERSION: u32 = 16",
-            ),
-            (
-                "STORAGE_PROTOCOL_VERSION: u32 = 16",
-                "STORAGE_PROTOCOL_VERSION: u32 = 15",
-            ),
-        ],
-    );
-    rewrite(
-        &source.join("src/adapters/sqlite/migration.rs"),
-        &[
-            (
-                "        MIGRATION_14, MIGRATION_15, MIGRATION_16, MIGRATION_17,",
-                "        MIGRATION_14, MIGRATION_15, MIGRATION_16,",
-            ),
-            (
-                "        MIGRATION_14,\n        MIGRATION_15,\n        MIGRATION_16,\n        MIGRATION_17,",
-                "        MIGRATION_14,\n        MIGRATION_15,\n        MIGRATION_16,",
-            ),
-        ],
-    );
-    remove_thought_name_dependencies(&source);
     fs::write(
         source.join("src/bin/update_fixture.rs"),
         coordinator::SOURCE,
@@ -398,20 +386,6 @@ pub(super) fn shared_fixture_target() -> PathBuf {
         .to_path_buf()
 }
 
-fn copy_tree(source: &Path, target: &Path) {
-    fs::create_dir_all(target).expect("copy target");
-    for entry in fs::read_dir(source).expect("source directory") {
-        let entry = entry.expect("source entry");
-        let path = entry.path();
-        let destination = target.join(entry.file_name());
-        if path.is_dir() {
-            copy_tree(&path, &destination);
-        } else {
-            fs::copy(path, destination).expect("copy source entry");
-        }
-    }
-}
-
 fn rewrite(path: &Path, replacements: &[(&str, &str)]) {
     let mut content = fs::read_to_string(path).expect("rewrite source");
     for (from, to) in replacements {
@@ -423,76 +397,4 @@ fn rewrite(path: &Path, replacements: &[(&str, &str)]) {
         content = content.replacen(from, to, 1);
     }
     fs::write(path, content).expect("write fixture source");
-}
-
-fn remove_first_section(path: &Path, start: &str, end: &str) {
-    let mut content = fs::read_to_string(path).expect("read section source");
-    let start_index = content.find(start).expect("fixture section start");
-    let end_index = content[start_index..]
-        .find(end)
-        .map(|offset| start_index + offset + end.len())
-        .expect("fixture section end");
-    content.replace_range(start_index..end_index, "");
-    fs::write(path, content).expect("write section source");
-}
-
-fn remove_thought_name_dependencies(source: &Path) {
-    rewrite(
-        &source.join("src/adapters/sqlite/schema.rs"),
-        &[(
-            "    content TEXT NOT NULL,\n    name TEXT,\n    annotations_json TEXT NOT NULL DEFAULT '[]',",
-            "    content TEXT NOT NULL,\n    annotations_json TEXT NOT NULL DEFAULT '[]',",
-        )],
-    );
-    remove_first_section(
-        &source.join("src/adapters/sqlite/schema.rs"),
-        "// Add optional organizational names without changing authored thought content.\n",
-        "INSERT INTO migration_history(version, applied_at) VALUES (17, 0);\n\";\n",
-    );
-    rewrite(
-        &source.join("src/adapters/sqlite/schema.rs"),
-        &[(
-            "INSERT INTO migration_history(version, applied_at) VALUES (17, 0);\n\";",
-            "\";",
-        )],
-    );
-    rewrite(
-        &source.join("src/adapters/sqlite/load.rs"),
-        &[
-            (
-                "SELECT id, session_id, content, name, annotations_json, position, created_at, updated_at, presentation, deleted_at",
-                "SELECT id, session_id, content, annotations_json, position, created_at, updated_at, presentation, deleted_at",
-            ),
-            (
-                "                row.get::<_, Option<String>>(3)?,\n                row.get::<_, String>(4)?,\n                row.get::<_, i64>(5)?,\n                row.get::<_, i64>(6)?,\n                row.get::<_, i64>(7)?,\n                row.get::<_, String>(8)?,\n                row.get::<_, Option<i64>>(9)?,",
-                "                row.get::<_, String>(3)?,\n                row.get::<_, i64>(4)?,\n                row.get::<_, i64>(5)?,\n                row.get::<_, i64>(6)?,\n                row.get::<_, String>(7)?,\n                row.get::<_, Option<i64>>(8)?,",
-            ),
-            (
-                "            name,\n            annotations,",
-                "            annotations,",
-            ),
-            (
-                "            name: name\n                .map(crate::domain::ThoughtName::new)\n                .transpose()\n                .map_err(|error| StoreError::Corrupt(error.to_string()))?,",
-                "            name: None,",
-            ),
-        ],
-    );
-    rewrite(
-        &source.join("src/adapters/sqlite/history_commit.rs"),
-        &[
-            (
-                "                    id, session_id, content, name, annotations_json, position, created_at, updated_at,",
-                "                    id, session_id, content, annotations_json, position, created_at, updated_at,",
-            ),
-            (
-                "                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
-                "                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
-            ),
-            ("                    name = excluded.name,\n", ""),
-            (
-                "                    thought.name.as_ref().map(crate::domain::ThoughtName::as_str),\n",
-                "",
-            ),
-        ],
-    );
 }

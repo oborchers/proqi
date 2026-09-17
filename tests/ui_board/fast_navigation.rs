@@ -123,7 +123,7 @@ fn repeated_fast_jumps_keep_the_cursor_visible_through_internal_scroll_and_resiz
     assert!(area.contains(cursor));
 
     fixture.input(crate::key_input(UiKey::Escape));
-    assert_eq!(fixture.app.state.focused_thought, Some(active));
+    assert_eq!(fixture.app.state.focused_thought_id(), Some(active));
     assert_eq!(
         fixture.app.interaction_mode(),
         proqi::application::InteractionMode::Board
@@ -282,7 +282,7 @@ fn board_fast_navigation_moves_and_selects_exactly_five_thoughts() {
     }
     fast(&mut fixture, FastNavigation::Previous, false);
     assert_eq!(
-        fixture.app.state.focused_thought,
+        fixture.app.state.focused_thought_id(),
         Some(fixture.app.state.board.live_thoughts()[6].id)
     );
 
@@ -301,7 +301,7 @@ fn board_fast_navigation_moves_and_selects_exactly_five_thoughts() {
         ["second", "third", "fourth", "fifth", "sixth", "seventh"]
     );
     assert_eq!(
-        fixture.app.state.focused_thought,
+        fixture.app.state.focused_thought_id(),
         Some(fixture.app.state.board.live_thoughts()[1].id)
     );
 }
@@ -318,7 +318,7 @@ fn board_fast_navigation_clamps_and_respects_the_insertion_boundary() {
     fast(&mut fixture, FastNavigation::Next, false);
     assert!(!fixture.app.insertion_focused());
     assert_eq!(
-        fixture.app.state.focused_thought,
+        fixture.app.state.focused_thought_id(),
         Some(fixture.app.state.board.live_thoughts()[6].id)
     );
     fixture.input(crate::key_input(UiKey::Move {
@@ -332,12 +332,12 @@ fn board_fast_navigation_clamps_and_respects_the_insertion_boundary() {
 
     fast(&mut fixture, FastNavigation::Previous, false);
     assert_eq!(
-        fixture.app.state.focused_thought,
+        fixture.app.state.focused_thought_id(),
         Some(fixture.app.state.board.live_thoughts()[2].id)
     );
     fast(&mut fixture, FastNavigation::Previous, false);
     assert_eq!(
-        fixture.app.state.focused_thought,
+        fixture.app.state.focused_thought_id(),
         Some(fixture.app.state.board.live_thoughts()[0].id)
     );
 }
@@ -360,7 +360,7 @@ fn shifted_page_up_reaches_board_as_a_five_thought_range() {
         ["third", "fourth", "fifth", "sixth", "seventh", "eighth"]
     );
     assert_eq!(
-        fixture.app.state.focused_thought,
+        fixture.app.state.focused_thought_id(),
         Some(fixture.app.state.board.live_thoughts()[2].id)
     );
 }

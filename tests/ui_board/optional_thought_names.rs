@@ -340,7 +340,7 @@ fn clicking_another_title_preserves_the_body_editor_owner_and_outside_click_comm
     fixture.input(crate::key_input(UiKey::SelectAll));
     fixture.input(UiInput::Paste("Renamed by mouse".to_owned()));
     assert_eq!(fixture.app.editor_snapshot(), Some(body_editor.clone()));
-    assert_eq!(fixture.app.state.focused_thought, Some(first_id));
+    assert_eq!(fixture.app.state.focused_thought_id(), Some(first_id));
 
     let layout = fixture.app.prepare_frame(Rect::new(0, 0, 52, 10));
     let first_body = layout

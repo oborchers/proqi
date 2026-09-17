@@ -2,19 +2,19 @@
 
 use std::collections::BTreeSet;
 
-use crate::{application::Action, domain::ThoughtId};
+use crate::{application::Action, domain::BoardItemId};
 
 use super::BoardApp;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct BoardRange {
-    anchor: ThoughtId,
-    endpoint: ThoughtId,
+    anchor: BoardItemId,
+    endpoint: BoardItemId,
 }
 
 #[derive(Default)]
 pub(super) struct BoardSelection {
-    selected: BTreeSet<ThoughtId>,
+    selected: BTreeSet<BoardItemId>,
     range: Option<BoardRange>,
     latched: bool,
 }
@@ -31,7 +31,7 @@ impl BoardSelection {
     pub(super) fn restore_recovery_state(
         &mut self,
         state: crate::ports::runtime::InputRecoverySelection,
-        order: &[ThoughtId],
+        order: &[BoardItemId],
     ) -> bool {
         if state.selected.iter().any(|id| !order.contains(id))
             || state.range.is_some_and(|(anchor, endpoint)| {
@@ -48,8 +48,8 @@ impl BoardSelection {
         true
     }
 
-    pub(super) fn contains(&self, thought_id: ThoughtId) -> bool {
-        self.selected.contains(&thought_id)
+    pub(super) fn contains(&self, item_id: BoardItemId) -> bool {
+        self.selected.contains(&item_id)
     }
 
     pub(super) fn is_empty(&self) -> bool {
@@ -60,7 +60,7 @@ impl BoardSelection {
         self.selected.len()
     }
 
-    pub(super) fn selected_in(&self, order: &[ThoughtId]) -> Vec<ThoughtId> {
+    pub(super) fn selected_in(&self, order: &[BoardItemId]) -> Vec<BoardItemId> {
         order
             .iter()
             .copied()
@@ -74,25 +74,25 @@ impl BoardSelection {
         self.latched = false;
     }
 
-    pub(super) fn replace_arbitrary(&mut self, selected: impl IntoIterator<Item = ThoughtId>) {
+    pub(super) fn replace_arbitrary(&mut self, selected: impl IntoIterator<Item = BoardItemId>) {
         self.selected = selected.into_iter().collect();
         self.range = None;
         self.latched = false;
     }
 
-    fn toggle_arbitrary(&mut self, thought_id: ThoughtId) {
+    fn toggle_arbitrary(&mut self, item_id: BoardItemId) {
         self.range = None;
         self.latched = false;
-        if !self.selected.remove(&thought_id) {
-            self.selected.insert(thought_id);
+        if !self.selected.remove(&item_id) {
+            self.selected.insert(item_id);
         }
     }
 
-    fn range_anchor(&self, fallback: ThoughtId) -> ThoughtId {
+    fn range_anchor(&self, fallback: BoardItemId) -> BoardItemId {
         self.range.map_or(fallback, |range| range.anchor)
     }
 
-    fn set_range(&mut self, order: &[ThoughtId], anchor: ThoughtId, endpoint: ThoughtId) {
+    fn set_range(&mut self, order: &[BoardItemId], anchor: BoardItemId, endpoint: BoardItemId) {
         let Some(anchor_index) = order.iter().position(|id| *id == anchor) else {
             self.clear();
             return;
@@ -110,7 +110,7 @@ impl BoardSelection {
         self.range = Some(BoardRange { anchor, endpoint });
     }
 
-    pub(super) fn reconcile(&mut self, order: &[ThoughtId]) {
+    pub(super) fn reconcile(&mut self, order: &[BoardItemId]) {
         if let Some(range) = self.range {
             self.set_range(order, range.anchor, range.endpoint);
         } else {
@@ -119,7 +119,7 @@ impl BoardSelection {
         }
     }
 
-    fn activate_latch(&mut self, order: &[ThoughtId], focused: ThoughtId) {
+    fn activate_latch(&mut self, order: &[BoardItemId], focused: BoardItemId) {
         let anchor = self.range_anchor(focused);
         let endpoint = self.range.map_or(focused, |range| range.endpoint);
         self.set_range(order, anchor, endpoint);
@@ -150,36 +150,37 @@ impl BoardApp {
         self.layout = None;
     }
 
-    pub(super) fn replace_board_selection(
+    pub(super) fn replace_board_selection<T: Into<BoardItemId>>(
         &mut self,
-        selected: impl IntoIterator<Item = ThoughtId>,
+        selected: impl IntoIterator<Item = T>,
     ) {
-        self.selection.replace_arbitrary(selected);
+        self.selection
+            .replace_arbitrary(selected.into_iter().map(Into::into));
         self.hovered = None;
         self.layout = None;
     }
 
     pub(super) fn toggle_selection(&mut self) {
-        let Some(thought_id) = self.state.focused_thought else {
+        let Some(item_id) = self.state.focused_item else {
             return;
         };
-        self.selection.toggle_arbitrary(thought_id);
+        self.selection.toggle_arbitrary(item_id);
         self.hovered = None;
         self.layout = None;
     }
 
-    pub(super) fn select_all_thoughts(&mut self) {
-        let order = self.live_thought_ids();
+    pub(super) fn select_all_items(&mut self) {
+        let order = self.live_item_ids();
         self.selection.replace_arbitrary(order);
         self.hovered = None;
         self.layout = None;
     }
 
     pub(super) fn activate_range_latch(&mut self) {
-        let Some(focused) = self.state.focused_thought else {
+        let Some(focused) = self.state.focused_item else {
             return;
         };
-        let order = self.live_thought_ids();
+        let order = self.live_item_ids();
         self.selection.activate_latch(&order, focused);
         self.hovered = None;
         self.layout = None;
@@ -200,8 +201,8 @@ impl BoardApp {
     }
 
     pub(super) fn extend_range_by(&mut self, delta: isize) {
-        let order = self.live_thought_ids();
-        let Some(focused) = self.state.focused_thought else {
+        let order = self.live_item_ids();
+        let Some(focused) = self.state.focused_item else {
             return;
         };
         let Some(current) = order.iter().position(|id| *id == focused) else {
@@ -215,9 +216,9 @@ impl BoardApp {
         }
     }
 
-    pub(super) fn extend_range_to(&mut self, endpoint: ThoughtId) {
-        let order = self.live_thought_ids();
-        let Some(focused) = self.state.focused_thought else {
+    pub(super) fn extend_range_to(&mut self, endpoint: BoardItemId) {
+        let order = self.live_item_ids();
+        let Some(focused) = self.state.focused_item else {
             return;
         };
         let anchor = self.selection.range_anchor(focused);
@@ -226,31 +227,31 @@ impl BoardApp {
             self.insertion_focus = super::InsertionFocus::Inactive;
             self.board_viewport = self.board_viewport.follow_focus();
             self.scroll_geometry = None;
-            let _effects = self.reduce(Action::FocusThought(Some(endpoint)));
+            let _effects = self.reduce(Action::FocusItem(Some(endpoint)));
             self.hovered = None;
             self.layout = None;
         }
     }
 
     pub(super) fn focus_thought_boundary(&mut self, last: bool) {
-        let live = self.state.board.live_thoughts();
+        let live = self.state.board.live_items();
         let target = if last { live.last() } else { live.first() };
-        let Some(target) = target.map(|thought| thought.id) else {
+        let Some(target) = target.map(|item| item.id()) else {
             return;
         };
         self.clear_range_for_focus_change();
         self.insertion_focus = super::InsertionFocus::Inactive;
         self.board_viewport = self.board_viewport.follow_focus();
         self.scroll_geometry = None;
-        let _effects = self.reduce(Action::FocusThought(Some(target)));
+        let _effects = self.reduce(Action::FocusItem(Some(target)));
         self.hovered = None;
         self.layout = None;
     }
 
     pub(super) fn extend_range_to_boundary(&mut self, last: bool) {
-        let live = self.state.board.live_thoughts();
+        let live = self.state.board.live_items();
         let endpoint = if last { live.last() } else { live.first() };
-        if let Some(endpoint) = endpoint.map(|thought| thought.id) {
+        if let Some(endpoint) = endpoint.map(|item| item.id()) {
             self.extend_range_to(endpoint);
         }
     }
@@ -279,17 +280,17 @@ impl BoardApp {
 
     pub(super) fn move_focus_within_thoughts(&mut self, delta: isize) {
         self.move_focus_outside_range(delta);
-        if self.insertion_focused() && !self.state.board.live_thoughts().is_empty() {
+        if self.insertion_focused() && !self.state.board.live_items().is_empty() {
             self.move_focus(-1);
         }
     }
 
-    pub(super) fn live_thought_ids(&self) -> Vec<ThoughtId> {
+    pub(super) fn live_item_ids(&self) -> Vec<BoardItemId> {
         self.state
             .board
-            .live_thoughts()
+            .live_items()
             .into_iter()
-            .map(|thought| thought.id)
+            .map(crate::domain::BoardItemRef::id)
             .collect()
     }
 }

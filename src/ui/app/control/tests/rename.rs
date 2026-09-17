@@ -72,7 +72,7 @@ fn thought_name_owner_refuses_locks_and_reconciles_external_deletion() {
         AppState::new(SessionBoard::new(session, vec![thought]).expect("board")),
         crate::adapters::editor::RopeEditorFactory,
     );
-    app.state.focused_thought = Some(thought_id);
+    app.state.focused_item = Some(thought_id.into());
     let clock = FakeClock::new(Timestamp::from_millis(2));
 
     app.reduce(Action::BeginSubmission {

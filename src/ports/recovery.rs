@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::domain::{OperationSequence, RequestId, Session, Thought, Timestamp};
+use crate::domain::{OperationSequence, RequestId, Separator, Session, Thought, Timestamp};
 
 /// Versioned exact-content recovery document written outside SQLite.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -18,6 +18,8 @@ pub struct RecoveryDocument {
     pub session: Session,
     /// Current live and recoverably deleted thoughts.
     pub thoughts: Vec<Thought>,
+    /// Current live and recoverably deleted visual separators.
+    pub separators: Vec<Separator>,
     /// Sequences not yet acknowledged as durable.
     pub pending_sequences: Vec<OperationSequence>,
     /// Failed sequence that prompted recovery, if any.

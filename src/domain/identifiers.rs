@@ -138,6 +138,7 @@ macro_rules! define_id {
 
 define_id!(SessionId, "ses", "Durable session identity.");
 define_id!(ThoughtId, "tht", "Durable thought identity.");
+define_id!(SeparatorId, "sep", "Durable visual separator identity.");
 define_id!(RevisionId, "rev", "Durable editor revision identity.");
 define_id!(OperationId, "op", "Durable structural operation identity.");
 define_id!(InstanceId, "ins", "Running Proqi process identity.");

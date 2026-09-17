@@ -1,0 +1,22 @@
+{
+  "data": {
+    "active_session_control": true,
+    "active_session_read_sync": true,
+    "cli_schema_version": 1,
+    "commands": ["sessions", "thoughts", "update"],
+    "control_protocol": 10,
+    "cross_session_transfer": true,
+    "durable_browser_history": true,
+    "durable_thought_collapse": true,
+    "durable_visual_separators": true,
+    "exact_thought_replacement": true,
+    "explicit_update_check": true,
+    "herdr_managed_pane_required": true,
+    "herdr_submission": true,
+    "identifier_encoding": "prefix_base32hex_uuidv7",
+    "max_thought_stdin_bytes": 131072,
+    "replacement_sha256_precondition": true
+  },
+  "ok": true,
+  "schema_version": 1
+}

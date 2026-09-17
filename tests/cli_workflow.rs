@@ -15,6 +15,8 @@ mod diagnostics;
 mod doctor;
 #[path = "support/herdr.rs"]
 mod herdr_fixture;
+#[path = "cli_workflow/separators.rs"]
+mod separators;
 #[path = "cli_workflow/session_contract.rs"]
 mod session_contract;
 #[path = "cli_workflow/thought_names.rs"]
@@ -435,6 +437,7 @@ fn launch_modes_and_capability_discovery_have_stable_output() {
     assert_eq!(capabilities["exact_thought_replacement"], true);
     assert_eq!(capabilities["replacement_sha256_precondition"], true);
     assert_eq!(capabilities["durable_thought_collapse"], true);
+    assert_eq!(capabilities["durable_visual_separators"], true);
     assert_eq!(capabilities["durable_browser_history"], true);
     assert_eq!(capabilities["max_thought_stdin_bytes"], 131_072);
     assert_eq!(capabilities["herdr_submission"], true);

@@ -85,12 +85,12 @@ fn live_board_range_survives_capture_without_focus_or_mode_change() {
         panic!("second thought operation");
     };
     app.acknowledge_persistence_result(operation.sequence, Ok(()));
-    app.state.focused_thought = Some(original_id);
+    app.state.focused_item = Some(original_id.into());
     app.state.mode = InteractionMode::Board;
     app.activate_range_latch();
     app.extend_range_by(1);
     assert_eq!(app.selection_len(), 2);
-    let focused_before = app.state.focused_thought;
+    let focused_before = app.state.focused_thought_id();
 
     app.screenshot_started(std::time::Duration::ZERO);
     app.queue_screenshot_candidates([candidate(45)]);
@@ -98,7 +98,7 @@ fn live_board_range_survives_capture_without_focus_or_mode_change() {
     app.complete_screenshot_capture(Ok(created(&capture)), &mut ids, &clock);
 
     assert_eq!(app.selection_len(), 2);
-    assert_eq!(app.state.focused_thought, focused_before);
+    assert_eq!(app.state.focused_thought_id(), focused_before);
     assert_eq!(app.state.mode, InteractionMode::Board);
     assert_eq!(app.state.board.live_thoughts().len(), 3);
 }
@@ -120,7 +120,7 @@ fn interaction_stays(
     let mode = app.state.mode;
     app.complete_screenshot_capture(Ok(created(&capture)), &mut ids, &clock);
     assert!(retained(&app), "{label} interaction was displaced");
-    assert_eq!(app.state.focused_thought, Some(original_id), "{label}");
+    assert_eq!(app.state.focused_thought_id(), Some(original_id), "{label}");
     assert_eq!(app.state.mode, mode, "{label}");
     assert_eq!(app.state.board.live_thoughts().len(), 2, "{label}");
 }

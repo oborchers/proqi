@@ -7,9 +7,9 @@ use proqi::{
         InteractionMode, reduce,
     },
     domain::{
-        BoardMutation, BoardOperationKind, ContentAnnotation, ContentAnnotationKind,
-        OperationSequence, Session, SessionBoard, TextPosition, ThoughtId, ThoughtPosition,
-        ThoughtPresentation, Timestamp, UndoScope,
+        BoardItemId, BoardMutation, BoardOperationKind, ContentAnnotation, ContentAnnotationKind,
+        OperationSequence, SeparatorId, Session, SessionBoard, TextPosition, ThoughtId,
+        ThoughtPosition, ThoughtPresentation, Timestamp, UndoScope,
     },
     ports::environment::IdGenerator,
 };
@@ -63,6 +63,23 @@ impl Fixture {
     fn operation_id(&mut self) -> proqi::domain::OperationId {
         self.ids.operation_id()
     }
+
+    fn insert_separator(&mut self, insertion_index: usize) -> SeparatorId {
+        let separator_id = self.ids.separator_id();
+        let operation_id = self.ids.operation_id();
+        let at = self.time();
+        reduce(
+            &mut self.state,
+            Action::InsertSeparator {
+                separator_id,
+                operation_id,
+                insertion_index,
+                at,
+            },
+        )
+        .expect("insert separator");
+        separator_id
+    }
 }
 
 fn move_history(fixture: &mut Fixture, scope: UndoScope, undo: bool) {
@@ -90,6 +107,8 @@ mod clipboard;
 mod history;
 #[path = "domain_reducer/locks.rs"]
 mod locks;
+#[path = "domain_reducer/separators.rs"]
+mod separators;
 #[path = "domain_reducer/top_boundary.rs"]
 mod top_boundary;
 #[path = "domain_reducer/transformations.rs"]

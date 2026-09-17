@@ -4,16 +4,17 @@ use rusqlite::{Connection, OptionalExtension};
 
 use crate::{
     domain::{
-        BoardOperation, ContentAnnotation, IntegrationContext, Session, SessionBoard, SessionId,
-        Thought, ThoughtId, ThoughtPosition, ThoughtPresentation, ThoughtRevision, Timestamp,
+        BoardOperation, ContentAnnotation, IntegrationContext, Separator, Session, SessionBoard,
+        SessionId, Thought, ThoughtId, ThoughtPosition, ThoughtPresentation, ThoughtRevision,
+        Timestamp,
     },
     ports::store::{SessionSnapshot, StoreError},
 };
 
 use super::support::{
     i64_to_u32, i64_to_usize, map_sql_error, operation_id_from_blob, path_from_bytes,
-    revision_id_from_blob, sequence_from_i64, session_id_from_blob, thought_id_from_blob,
-    validate_commit_sequence,
+    revision_id_from_blob, separator_id_from_blob, sequence_from_i64, session_id_from_blob,
+    thought_id_from_blob, validate_commit_sequence,
 };
 
 pub(super) fn load_snapshot(
@@ -22,8 +23,9 @@ pub(super) fn load_snapshot(
 ) -> Result<SessionSnapshot, StoreError> {
     let session = load_session_record(connection, session_id)?;
     let thoughts = load_thoughts(connection, session_id)?;
-    let mut board =
-        SessionBoard::new(session, thoughts).map_err(|error| board_load_error(&error))?;
+    let separators = load_separators(connection, session_id)?;
+    let mut board = SessionBoard::with_separators(session, thoughts, separators)
+        .map_err(|error| board_load_error(&error))?;
     super::attachment_numbering::restore(connection, &mut board)?;
     let board_history_cursor: i64 = connection
         .query_row(
@@ -90,13 +92,51 @@ pub(super) fn load_board(
     connection: &Connection,
     session_id: SessionId,
 ) -> Result<SessionBoard, StoreError> {
-    let mut board = SessionBoard::new(
+    let mut board = SessionBoard::with_separators(
         load_session_record(connection, session_id)?,
         load_thoughts(connection, session_id)?,
+        load_separators(connection, session_id)?,
     )
     .map_err(|error| board_load_error(&error))?;
     super::attachment_numbering::restore(connection, &mut board)?;
     Ok(board)
+}
+
+fn load_separators(
+    connection: &Connection,
+    session_id: SessionId,
+) -> Result<Vec<Separator>, StoreError> {
+    let mut statement = connection
+        .prepare(
+            "SELECT id, session_id, position, created_at, updated_at, deleted_at
+             FROM separators WHERE session_id = ?1 ORDER BY deleted_at IS NOT NULL, position, id",
+        )
+        .map_err(map_sql_error)?;
+    let rows = statement
+        .query_map([session_id.database_bytes().as_slice()], |row| {
+            Ok((
+                row.get::<_, Vec<u8>>(0)?,
+                row.get::<_, Vec<u8>>(1)?,
+                row.get::<_, i64>(2)?,
+                row.get::<_, i64>(3)?,
+                row.get::<_, i64>(4)?,
+                row.get::<_, Option<i64>>(5)?,
+            ))
+        })
+        .map_err(map_sql_error)?;
+    let mut separators = Vec::new();
+    for row in rows {
+        let (id, owner, position, created, updated, deleted) = row.map_err(map_sql_error)?;
+        separators.push(Separator {
+            id: separator_id_from_blob(id)?,
+            session_id: session_id_from_blob(owner)?,
+            position: ThoughtPosition::new(i64_to_u32(position)?),
+            created_at: Timestamp::from_millis(created),
+            updated_at: Timestamp::from_millis(updated),
+            deleted_at: deleted.map(Timestamp::from_millis),
+        });
+    }
+    Ok(separators)
 }
 
 pub(super) fn load_session_record(

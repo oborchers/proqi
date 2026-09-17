@@ -234,7 +234,7 @@ limited palette instead of an inaccurate custom approximation.
   typed resource prefix plus 26 characters of canonical lowercase, unpadded
   base32hex. The encoding preserves all 128 UUID bits, is URL safe, and retains
   byte ordering in lexical form. SQLite stores the same UUID as a 16-byte BLOB.
-  Prefixes are `ses` for sessions, `tht` for thoughts, `rev` for revisions,
+  Prefixes are `ses` for sessions, `tht` for thoughts, `sep` for separators, `rev` for revisions,
   `op` for durable operations, `ins` for running instances, `req` for
   idempotent control requests, and `sub` for Proqi submission receipts.
 - A cross-platform advisory file-lock library for session and schema locks.
@@ -394,7 +394,10 @@ cursor model from leaking into the application.
 ### `LayoutEngine`
 
 Layout is a pure function of board state, typed editor-owner state, terminal
-capabilities, and viewport dimensions. It returns a `LayoutSnapshot` containing
+capabilities, and viewport dimensions. One prepared `BoardFlow` measures the
+ordered `BoardItemRef` projection and owns thought rows, explicit separator
+rows, automatic thought divider suppression, scroll anchors, clipping, hit
+targets, and drag insertion indices. It returns a `LayoutSnapshot` containing
 rectangles, wrapped visual lines, scroll bounds, focus geometry, and mouse hit
 targets. Engaged Compose uses the same editor measurement and rendering path at
 the insertion row without synthesizing a durable thought. Passive Compose omits
@@ -787,6 +790,9 @@ event-sourced system.
   name, validated presentation annotations, integer position, timestamps,
   durable automatic, expanded, or collapsed presentation preference, and
   deletion state.
+- `separators`: session, typed `sep_` identity, shared Board position,
+  timestamps, and deletion state. A separator row contains no content or
+  annotation columns.
 - `thought_revisions`: coalesced text revisions with enough data to restore the
   previous and next content, annotations, and cursor state.
 - `operations`: ordered structural operations and their inverse payloads for
@@ -835,9 +841,9 @@ ordinary session creation and neither seed nor advance the marker.
 
 ### Invariants
 
-- Every thought belongs to exactly one session.
-- Thought positions are unique within a live session and are normalized in one
-  transaction after reorder.
+- Every thought and separator belongs to exactly one session.
+- Board item positions are unique within a live session and are normalized in
+  one transaction after insert, delete, duplicate, reorder, undo, or redo.
 - Operation sequences increase monotonically within a session.
 - Undo and redo commit new current state and move the operation cursor
   atomically.
@@ -886,6 +892,14 @@ then returns the stable `schema_busy` error instead of waiting indefinitely.
 The application refuses to open a database schema newer than it understands.
 It does not attempt a best-effort downgrade. Export and explicit recovery tools
 remain available without modifying the source database.
+
+Schema version 17 and storage protocol version 16 add the payload-free
+`separators` table and the typed insert, deletion, and movement mutations used
+by the existing Board operation log. Migration 17 is append-only and preserves
+all previous migration rows and timestamps. The protocol stamp prevents an
+older writer from opening a database that may contain separator history.
+Private recovery document format 2 likewise carries retained separators beside
+retained thoughts so optimistic mixed ordering and deletion state remain exact.
 
 Schema version 11 adds the versioned `onboarding_state` marker while retaining
 storage protocol 10 because the marker does not change ordinary stored board
@@ -1943,6 +1957,13 @@ written to standard output for both outcomes, while human diagnostics use
 standard error. Thought bodies enter through standard input. A caller-supplied
 `op_` identity is resolved against its typed durable request before mutation,
 so matching retries return the original receipt and mismatched reuse fails.
+
+The `thoughts list` response preserves its content-bearing `thoughts` array and
+adds an ordered typed `items` array. Thought entries identify a thought and its
+position. Separator entries use `kind: "separator"`, a `sep_` identity, and a
+position, with no content or annotation payload. Existing thought mutation
+commands continue to address thoughts, while their ordering operates within the
+shared Board item sequence.
 
 Read-only commands synchronize with a compatible active owner before inspecting
 the shared database through the storage facade. When a legacy owner predates

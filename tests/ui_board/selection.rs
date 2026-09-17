@@ -146,7 +146,11 @@ fn shifted_arrows_shrink_and_reverse_around_a_stable_anchor() {
     range_move(&mut fixture, CursorMovement::VisualUp);
     assert_eq!(selected_contents(&fixture), ["third", "fourth"]);
 
-    let focused = fixture.app.state.focused_thought.expect("range endpoint");
+    let focused = fixture
+        .app
+        .state
+        .focused_thought_id()
+        .expect("range endpoint");
     assert_eq!(
         fixture
             .app
@@ -310,7 +314,11 @@ fn search_focus_transition_clears_an_anchored_range() {
     fixture.input(crate::key_input(UiKey::Enter));
 
     assert!(selected_contents(&fixture).is_empty());
-    let focused = fixture.app.state.focused_thought.expect("search focus");
+    let focused = fixture
+        .app
+        .state
+        .focused_thought_id()
+        .expect("search focus");
     assert_eq!(
         fixture
             .app

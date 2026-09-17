@@ -1,7 +1,7 @@
 //! Reducer-owned transient locks for in-flight submission sources.
 
 use super::{Action, AppState, ApplicationError, ApplicationResult, Effect};
-use crate::domain::{BoardMutation, ThoughtId, UndoScope};
+use crate::domain::{BoardItemId, BoardMutation, ThoughtId, UndoScope};
 
 pub(super) fn ensure_action_unlocked(state: &AppState, action: &Action) -> ApplicationResult<()> {
     let locked = match action {
@@ -12,20 +12,34 @@ pub(super) fn ensure_action_unlocked(state: &AppState, action: &Action) -> Appli
         | Action::DeleteThought { thought_id, .. }
         | Action::MoveThought { thought_id, .. }
         | Action::RenameThought { thought_id, .. }
-        | Action::SetPresentation { thought_id, .. } => locked_one(state, *thought_id),
+        | Action::SetPresentation { thought_id, .. }
+        | Action::MoveItem {
+            item_id: BoardItemId::Thought(thought_id),
+            ..
+        } => locked_one(state, *thought_id),
+        Action::DeleteItems { item_ids, .. } => item_ids
+            .iter()
+            .filter_map(|id| id.thought())
+            .find_map(|id| locked_one(state, id)),
         Action::CutThoughts { thought_ids, .. }
         | Action::DeleteThoughts { thought_ids, .. }
         | Action::SetPresentationMany { thought_ids, .. }
         | Action::DuplicateThoughts { thought_ids, .. }
         | Action::MergeThoughts { thought_ids, .. } => locked_many(state, thought_ids),
+        Action::DuplicateItems { item_ids, .. } => item_ids
+            .iter()
+            .filter_map(|id| id.thought())
+            .find_map(|id| locked_one(state, id)),
         Action::Undo { scope, .. } => locked_history(state, *scope, true),
         Action::Redo { scope, .. } => locked_history(state, *scope, false),
         Action::RenameSession { .. }
         | Action::FocusThought(_)
+        | Action::FocusItem(_)
         | Action::EnterCompose
         | Action::ExitCompose
         | Action::ExitEdit
         | Action::CreateThought { .. }
+        | Action::InsertSeparator { .. }
         | Action::CreateComposeThought { .. }
         | Action::CreateOwnedThought(_)
         | Action::PasteAsThought { .. }
@@ -36,7 +50,11 @@ pub(super) fn ensure_action_unlocked(state: &AppState, action: &Action) -> Appli
         | Action::StageSubmissionRemoval { .. }
         | Action::PersistenceCommitted(_)
         | Action::PersistenceFailed { .. }
-        | Action::RetryPersistence(_) => None,
+        | Action::RetryPersistence(_)
+        | Action::MoveItem {
+            item_id: BoardItemId::Separator(_),
+            ..
+        } => None,
         Action::ReflowThought(reflow) => locked_one(state, reflow.thought_id),
         Action::EditOwnedThought(edit) => locked_one(state, edit.thought_id),
     };
@@ -109,6 +127,9 @@ fn locked_mutation(state: &AppState, mutation: &BoardMutation) -> Option<Thought
             .find_map(|mutation| locked_mutation(state, mutation)),
         BoardMutation::AddThought { thought }
         | BoardMutation::AddThoughtFromCompose { thought, .. } => locked_one(state, thought.id),
+        BoardMutation::AddSeparator { .. }
+        | BoardMutation::SetSeparatorDeletion { .. }
+        | BoardMutation::MoveSeparator { .. } => None,
         BoardMutation::SetDeletion { thought_id, .. }
         | BoardMutation::SetDeletionExact { thought_id, .. }
         | BoardMutation::MoveThought { thought_id, .. }

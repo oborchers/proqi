@@ -62,8 +62,9 @@ accidental prompt. What looked like a safe draft becomes part of another
 agent's message without a distinct turn boundary.
 
 **Proqi is the solution: an agent-ready prompt editor on steroids, built for
-power users.** Capture independently; edit, select, duplicate, reorder, recover,
-and discover local skills and commands later.
+power users.** Capture independently; edit, select, duplicate, reorder, add
+persistent visual separators, recover, and discover local skills and commands
+later.
 
 On macOS, the same board becomes a Screenshot Inbox. Captures arrive as private,
 annotatable thoughts: no dragging across panes and no accidental drop into the
@@ -187,6 +188,7 @@ configuration.
 | Input | Action |
 | --- | --- |
 | `n`, `Enter` on `+ New thought`, paste, or click | Create a thought |
+| Commands: `Insert separator` | Insert a persistent visual separator below the focused item |
 | `Primary+V` / `p` with no selection | Paste exactly as a new thought |
 | `j` / `k` or arrows | Focus next / previous; twice at a blocked bottom / top edge creates there |
 | `Ctrl+↓` / `↑` or `Ctrl+j` / `k` | Focus the last / first live thought without wrapping |
@@ -425,6 +427,9 @@ proqi --json thoughts send <source> <thought-id> <destination> --remove
 
 Thought list and inspect JSON include nullable `name` metadata. Cross-session
 send preserves it, while human inspect and agent submission remain body-only.
+Thought listings retain their content-bearing `thoughts` projection and also
+return an ordered typed `items` projection. A separator is reported as
+`kind: "separator"` with its own `sep_` identity and never as an empty thought.
 
 The [Proqi skill](skills/proqi/SKILL.md) uses it without scraping the TUI:
 
@@ -459,6 +464,8 @@ If persistence has already failed, Proqi does not replace the process. It first
 writes the existing private recovery export, with a bounded fallback under the
 private runtime root if the primary recovery directory is unavailable. It then
 exits with both the exact resume command and the optimistic-state recovery path.
+Recovery format 2 retains thoughts and payload-free separators, including their
+exact identities, shared ordering, timestamps, and recoverable deletion state.
 
 ```shell
 proqi doctor

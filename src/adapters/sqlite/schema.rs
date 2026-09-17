@@ -55,6 +55,21 @@ WHERE deleted_at IS NULL;
 
 CREATE INDEX thoughts_session ON thoughts(session_id);
 
+CREATE TABLE separators (
+    id BLOB PRIMARY KEY CHECK (length(id) = 16),
+    session_id BLOB NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL CHECK (position >= 0),
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    deleted_at INTEGER
+) STRICT;
+
+CREATE UNIQUE INDEX separators_live_position
+ON separators(session_id, position)
+WHERE deleted_at IS NULL;
+
+CREATE INDEX separators_session ON separators(session_id);
+
 CREATE TABLE board_operations (
     id BLOB PRIMARY KEY CHECK (length(id) = 16),
     session_id BLOB NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
@@ -203,6 +218,7 @@ INSERT INTO migration_history(version, applied_at) VALUES (14, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (15, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (16, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (17, 0);
+INSERT INTO migration_history(version, applied_at) VALUES (18, 0);
 ";
 
 pub(super) const MIGRATION_2: &str = r"
@@ -444,9 +460,27 @@ UPDATE schema_meta SET schema_version = 16, storage_protocol = 15;
 INSERT INTO migration_history(version, applied_at) VALUES (16, 0);
 ";
 
-// Add optional organizational names without changing authored thought content.
+// Add payload-free durable visual separators in the shared Board order.
 pub(super) const MIGRATION_17: &str = r"
-ALTER TABLE thoughts ADD COLUMN name TEXT;
+CREATE TABLE separators (
+    id BLOB PRIMARY KEY CHECK (length(id) = 16),
+    session_id BLOB NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL CHECK (position >= 0),
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    deleted_at INTEGER
+) STRICT;
+CREATE UNIQUE INDEX separators_live_position
+ON separators(session_id, position)
+WHERE deleted_at IS NULL;
+CREATE INDEX separators_session ON separators(session_id);
 UPDATE schema_meta SET schema_version = 17, storage_protocol = 16;
 INSERT INTO migration_history(version, applied_at) VALUES (17, 0);
+";
+
+// Add optional organizational names without changing authored thought content.
+pub(super) const MIGRATION_18: &str = r"
+ALTER TABLE thoughts ADD COLUMN name TEXT;
+UPDATE schema_meta SET schema_version = 18, storage_protocol = 17;
+INSERT INTO migration_history(version, applied_at) VALUES (18, 0);
 ";

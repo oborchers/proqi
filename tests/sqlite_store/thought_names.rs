@@ -94,3 +94,105 @@ fn same_value_rename_receipt_is_retry_safe_without_a_history_unit() {
         .expect("cursor");
     assert_eq!(cursor, 1);
 }
+
+#[test]
+fn name_and_separator_history_share_order_without_sharing_payload() {
+    let fixture = DatabaseFixture::new();
+    let mut store = fixture.open();
+    let mut ids = FakeIdGenerator::new(1_726_200_000_000);
+    let mut state = session_state(&mut ids, &test_path("proqi-name-separator-history"));
+    let session_id = state.board.session.id;
+    store
+        .commit(&OperationBatch::CreateSession(state.board.session.clone()))
+        .expect("create session");
+    let first = create_thought(&mut store, &mut state, &mut ids, "first body", 2);
+    let separator = ids.separator_id();
+    let insert = one_effect(
+        &mut state,
+        Action::InsertSeparator {
+            separator_id: separator,
+            operation_id: ids.operation_id(),
+            insertion_index: 1,
+            at: Timestamp::from_millis(3),
+        },
+    );
+    persist_effect(&mut store, &insert);
+    let second = create_thought(&mut store, &mut state, &mut ids, "second body", 4);
+    let name = proqi::domain::ThoughtName::new("Named first").expect("name");
+    let rename = one_effect(
+        &mut state,
+        Action::RenameThought {
+            operation_id: ids.operation_id(),
+            thought_id: first,
+            name: Some(name.clone()),
+            at: Timestamp::from_millis(5),
+        },
+    );
+    persist_effect(&mut store, &rename);
+    let moved = one_effect(
+        &mut state,
+        Action::MoveItem {
+            operation_id: ids.operation_id(),
+            item_id: separator.into(),
+            to: 0,
+            at: Timestamp::from_millis(6),
+        },
+    );
+    persist_effect(&mut store, &moved);
+    let deleted = one_effect(
+        &mut state,
+        Action::DeleteItems {
+            operation_id: ids.operation_id(),
+            item_ids: vec![separator.into()],
+            kind: BoardOperationKind::Delete,
+            at: Timestamp::from_millis(7),
+        },
+    );
+    persist_effect(&mut store, &deleted);
+
+    for (undo, at) in [(true, 8), (true, 9), (false, 10)] {
+        let history = one_effect(
+            &mut state,
+            if undo {
+                Action::Undo {
+                    operation_id: ids.operation_id(),
+                    scope: UndoScope::Board,
+                    at: Timestamp::from_millis(at),
+                }
+            } else {
+                Action::Redo {
+                    operation_id: ids.operation_id(),
+                    scope: UndoScope::Board,
+                    at: Timestamp::from_millis(at),
+                }
+            },
+        );
+        persist_effect(&mut store, &history);
+    }
+    drop(store);
+
+    let snapshot = fixture
+        .open()
+        .load_session(session_id)
+        .expect("integrated restart");
+    assert_eq!(
+        snapshot
+            .board
+            .live_items()
+            .into_iter()
+            .map(proqi::domain::BoardItemRef::id)
+            .collect::<Vec<_>>(),
+        vec![separator.into(), first.into(), second.into()]
+    );
+    let first_thought = snapshot.board.thought(first).expect("first thought");
+    assert_eq!(first_thought.content, "first body");
+    assert_eq!(first_thought.name.as_ref(), Some(&name));
+    assert_eq!(
+        snapshot
+            .board
+            .thought(second)
+            .expect("second thought")
+            .content,
+        "second body"
+    );
+}

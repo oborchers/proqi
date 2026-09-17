@@ -1,6 +1,6 @@
 ---
 source: tests/ui_board/commands_disclosure.rs
-assertion_line: 274
+assertion_line: 276
 expression: "trim_snapshot_rows(&text(draw(&mut concise, 72, 16).backend().buffer()))"
 ---
 ┌ commands ──────────────────────────────────────────────────────────[x]
@@ -8,12 +8,12 @@ expression: "trim_snapshot_rows(&text(draw(&mut concise, 72, 16).backend().buffe
 │Relevant now                                                          │
 │New thought                                                  n · board│
 │Split thought at cursor                                       t · edit│
+│Insert separator                                                 board│
 │Edit thought                                                 e · board│
 │Rename thought                                          Ctrl+R · board│
 │Clean up spacing                                             f · board│
-│Copy thought                                                 y · board│
-│Paste exactly                                                p · board│
-│More commands...                                                all 58│
+│Copy thought text                                            y · board│
+│More commands...                                                all 59│
 └──────────────────────────────────────────────────────────────────────┘
 
   proqi-ui-contract

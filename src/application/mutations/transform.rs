@@ -155,7 +155,7 @@ pub(in crate::application) fn merge_thoughts(
         at,
     )?;
     record_transform(state, &operation, thought_ids)?;
-    state.focused_thought = Some(first.id);
+    state.focused_item = Some(crate::domain::BoardItemId::Thought(first.id));
     state.mode = crate::application::InteractionMode::Board;
     Ok(vec![Effect::CommitBoardOperation(operation)])
 }
@@ -206,7 +206,7 @@ fn transform_into_neighbor(
     ];
     let operation = operation(state, operation_id, kind, forward, inverse, at)?;
     record_transform(state, &operation, &[source.id])?;
-    state.focused_thought = Some(new_thought_id);
+    state.focused_item = Some(crate::domain::BoardItemId::Thought(new_thought_id));
     state.mode = crate::application::InteractionMode::Edit {
         thought_id: new_thought_id,
     };
@@ -235,9 +235,15 @@ fn contiguous_sources(
         .iter()
         .map(|thought_id| state.live_thought(*thought_id).cloned())
         .collect::<ApplicationResult<Vec<_>>>()?;
-    let contiguous = selected
-        .windows(2)
-        .all(|pair| pair[1].position.get() == pair[0].position.get().saturating_add(1));
+    let live_thoughts = state.board.live_thoughts();
+    let positions = thought_ids
+        .iter()
+        .filter_map(|id| live_thoughts.iter().position(|thought| thought.id == *id))
+        .collect::<Vec<_>>();
+    let contiguous = positions.len() == thought_ids.len()
+        && positions
+            .windows(2)
+            .all(|pair| pair[1] == pair[0].saturating_add(1));
     if !contiguous {
         return Err(ApplicationError::NoncontiguousSelection);
     }

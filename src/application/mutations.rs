@@ -2,9 +2,11 @@
 
 pub(super) mod bulk;
 mod history;
+mod separator;
 mod session_metadata;
 pub(super) mod transform;
 pub(super) use history::history_move;
+pub(super) use separator::{insert_separator, move_item};
 pub(super) use session_metadata::rename_session;
 
 use super::error::{ApplicationError, ApplicationResult, FailureCode};
@@ -15,10 +17,10 @@ use crate::{
         clipboard::{ClipboardSource, PendingClipboard},
     },
     domain::{
-        BoardMutation, BoardOperation, BoardOperationKind, ContentAnnotation, DomainError,
-        OperationId, RequestId, RevisionId, TextPosition, Thought, ThoughtId, ThoughtName,
-        ThoughtPosition, ThoughtPresentation, ThoughtRevision, Timestamp, merge_annotations,
-        validate_annotations,
+        BoardItemId, BoardMutation, BoardOperation, BoardOperationKind, ContentAnnotation,
+        DomainError, OperationId, RequestId, RevisionId, TextPosition, Thought, ThoughtId,
+        ThoughtName, ThoughtPosition, ThoughtPresentation, ThoughtRevision, Timestamp,
+        merge_annotations, validate_annotations,
     },
 };
 
@@ -129,7 +131,7 @@ pub(super) fn create_thought_with_handoff(
         created_at: at,
     };
     state.record_board_operation(&operation)?;
-    state.focused_thought = Some(thought_id);
+    state.focused_item = Some(BoardItemId::Thought(thought_id));
     state.mode = InteractionMode::Edit { thought_id };
     state.insertion_index = insertion_index + 1;
     Ok(vec![Effect::CommitBoardOperation(operation)])
@@ -321,23 +323,23 @@ pub(super) fn delete_thought(
 ) -> ApplicationResult<Vec<Effect>> {
     let deleted_index = state
         .board
-        .live_thoughts()
+        .live_items()
         .iter()
-        .position(|candidate| candidate.id == thought_id)
+        .position(|candidate| candidate.id() == BoardItemId::Thought(thought_id))
         .ok_or(ApplicationError::InvalidState)?;
-    let was_focused = state.focused_thought == Some(thought_id);
+    let was_focused = state.focused_item == Some(BoardItemId::Thought(thought_id));
     let operation = build_delete_thought_operation(state, operation_id, thought_id, kind, at)?;
     state.record_board_operation(&operation)?;
     if was_focused {
-        let live = state.board.live_thoughts();
-        state.focused_thought = live
+        let live = state.board.live_items();
+        state.focused_item = live
             .get(deleted_index)
             .or_else(|| {
                 deleted_index
                     .checked_sub(1)
                     .and_then(|previous| live.get(previous))
             })
-            .map(|thought| thought.id);
+            .map(|item| item.id());
     }
     Ok(vec![Effect::CommitBoardOperation(operation)])
 }

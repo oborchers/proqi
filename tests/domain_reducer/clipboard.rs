@@ -20,7 +20,7 @@ fn paste_creates_one_focused_thought_and_one_commit_effect() {
 
     assert_eq!(effects.len(), 1);
     assert!(matches!(effects[0], Effect::CommitBoardOperation(_)));
-    assert_eq!(fixture.state.focused_thought, Some(thought_id));
+    assert_eq!(fixture.state.focused_thought_id(), Some(thought_id));
     assert_eq!(fixture.state.mode, InteractionMode::Edit { thought_id });
     assert_eq!(
         fixture
@@ -394,7 +394,7 @@ fn deleting_the_focused_thought_preserves_its_board_position() {
         },
     )
     .expect("delete middle");
-    assert_eq!(fixture.state.focused_thought, Some(third));
+    assert_eq!(fixture.state.focused_thought_id(), Some(third));
 
     let operation_id = fixture.operation_id();
     let at = fixture.time();
@@ -408,7 +408,7 @@ fn deleting_the_focused_thought_preserves_its_board_position() {
         },
     )
     .expect("delete last");
-    assert_eq!(fixture.state.focused_thought, Some(first));
+    assert_eq!(fixture.state.focused_thought_id(), Some(first));
 
     let operation_id = fixture.operation_id();
     let at = fixture.time();
@@ -422,5 +422,5 @@ fn deleting_the_focused_thought_preserves_its_board_position() {
         },
     )
     .expect("delete only remaining thought");
-    assert_eq!(fixture.state.focused_thought, None);
+    assert_eq!(fixture.state.focused_thought_id(), None);
 }

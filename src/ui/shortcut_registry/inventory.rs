@@ -169,7 +169,10 @@ fn descriptor(
     contexts.extend(metadata::help_contexts(&help));
     if let Some(metadata) = command {
         contexts.insert(Context::Commands);
-        if metadata.applicability == CommandApplicability::BoardThought {
+        if matches!(
+            metadata.applicability,
+            CommandApplicability::BoardItem | CommandApplicability::BoardThought
+        ) {
             contexts.extend([Context::Board, Context::InsertionBoundary]);
         } else {
             contexts.extend([

@@ -1,0 +1,4 @@
+{
+  "arguments": ["--json", "capabilities"],
+  "stdin": null
+}

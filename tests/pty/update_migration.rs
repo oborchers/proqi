@@ -293,6 +293,9 @@ fn downgrade_to_schema_eleven(state: &Path) {
         .expect("database")
         .execute_batch(
             "ALTER TABLE thoughts DROP COLUMN name;
+             DROP INDEX separators_session;
+             DROP INDEX separators_live_position;
+             DROP TABLE separators;
              DROP TABLE browser_history_receipts;
              DROP TABLE browser_operation_receipts;
              DROP TABLE browser_operations;
