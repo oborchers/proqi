@@ -7,12 +7,12 @@ means the definition is useful catalog evidence but cannot be inserted.
 
 | Harness / ecosystem | Kind | Project roots | Global roots | Plugin scope | Inserted form | Portability decision |
 | --- | --- | --- | --- | --- | --- | --- |
-| Agent Skills / npx skills | Skill | `.agents/skills` | `~/.agents/skills`, `~/.config/agents/skills` | Harness-specific | `$name` for the documented Codex form | `SKILL.md` metadata is portable; exact forms retain their receiving harness and a receiving harness still decides availability |
-| OpenAI Codex | Skill | `.agents/skills` from cwd through repository or filesystem root | `~/.agents/skills`; `~/.codex/skills` as npx-skills compatibility | Bundled/system skills are outside user configuration | `$name` | First-class Agent Skills support |
-| OpenAI Codex | Agent | `.codex/agents/*.toml` | `~/.codex/agents/*.toml` | None documented | Catalog-only | Codex documents natural-language delegation and `/agent` thread management, not an exact per-agent token |
-| Claude Code | Skill | `.claude/skills/**/SKILL.md` from cwd through repository or filesystem root | `~/.claude/skills` | Installed plugin `skills/` | `/name`; plugin `/plugin:name` | Skill wins a same-name legacy command in Claude; Proqi preserves both typed records and orders documented precedence |
-| Claude Code | Command | `.claude/commands/**/*.md` | `~/.claude/commands` | Manifest `commands` paths or plugin `commands/` | `/name`; plugin `/plugin:name` | Legacy commands remain documented and invokable |
-| Claude Code | Agent | `.claude/agents/**/*.md` | `~/.claude/agents` | Manifest `agents` paths or plugin `agents/` | `@agent-name`; plugin `@agent-plugin:name` | Agents are never mislabeled as skills or slash commands |
+| Agent Skills / npx skills | Skill | `.agents/skills`, excluding the home path owned by the global root | `~/.agents/skills`, `~/.config/agents/skills` | Harness-specific | `$name` for the documented Codex form | `SKILL.md` metadata is portable; exact forms retain their receiving harness and a receiving harness still decides availability |
+| OpenAI Codex | Skill | `.agents/skills` from cwd through repository or filesystem root, excluding the home path owned by the global root | `~/.agents/skills`; `~/.codex/skills` as npx-skills compatibility | Bundled/system skills are outside user configuration | `$name` | First-class Agent Skills support |
+| OpenAI Codex | Agent | `.codex/agents/*.toml`, excluding the home path owned by the global root | `~/.codex/agents/*.toml` | None documented | Catalog-only | Codex documents natural-language delegation and `/agent` thread management, not an exact per-agent token |
+| Claude Code | Skill | `.claude/skills/**/SKILL.md` from cwd through repository or filesystem root, excluding the home path owned by the global root | `~/.claude/skills` | Installed plugin `skills/` | `/name`; plugin `/plugin:name` | Skill wins a same-name legacy command in Claude; Proqi preserves both typed records and orders documented precedence |
+| Claude Code | Command | `.claude/commands/**/*.md`, excluding the home path owned by the global root | `~/.claude/commands` | Manifest `commands` paths or plugin `commands/` | `/name`; plugin `/plugin:name` | Legacy commands remain documented and invokable |
+| Claude Code | Agent | `.claude/agents/**/*.md`, excluding the home path owned by the global root | `~/.claude/agents` | Manifest `agents` paths or plugin `agents/` | `@agent-name`; plugin `@agent-plugin:name` | Agents are never mislabeled as skills or slash commands |
 | OpenCode | Skill | Shared `.agents/skills` | `~/.config/opencode/skills` | Package-managed roots require explicit configuration | Catalog-only | OpenCode's skill tool has no equivalent exact authored token |
 | OpenCode | Command | `.opencode/commands/**/*.md` | `~/.config/opencode/commands` | Explicit configured roots | `/path/name` | Project definitions precede global definitions |
 | OpenCode | Agent | `.opencode/agents/**/*.md` | `~/.config/opencode/agents` | Explicit configured roots | `@name` for subagent/all mode; primary-only definitions are catalog-only | Mode metadata controls whether insertion is truthful |
@@ -120,7 +120,11 @@ require its instruction body to be read.
 Skills and Markdown agents still require their existing metadata. The metadata
 line limit, field sanitization, visibility flags, canonical-path deduplication,
 scope, and precedence remain unchanged. Project roots follow every ancestor to
-the repository root, or to the filesystem root when no repository exists.
+the repository root, or to the filesystem root when no repository exists. At
+the canonical home, a path declared in both scopes is scanned only through its
+global declaration, while project-only home paths remain eligible. This keeps
+one physical global definition in Global scope even when the cwd is the home or
+one of its non-Git descendants.
 
 One named work policy bounds roots, retained entries, visited paths, and
 recursive depth. Reaching any dimension returns the deterministic retained
