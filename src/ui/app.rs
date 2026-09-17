@@ -391,6 +391,9 @@ impl BoardApp {
             UiInput::Key(UiKey::Move {
                 movement: CursorMovement::VisualUp | CursorMovement::VisualDown,
                 extend_selection: false,
+            }) | UiInput::Pointer(PointerInput {
+                kind: PointerKind::Move,
+                ..
             })
         ) {
             self.edit_boundary = None;

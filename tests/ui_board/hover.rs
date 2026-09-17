@@ -280,6 +280,41 @@ fn restricted_pointer_owners_hover_only_controls_they_can_activate() {
 }
 
 #[test]
+fn motion_preserves_armed_keyboard_boundary_state() {
+    let mut insertion = Fixture::new();
+    super::navigation::durable_thought(&mut insertion, "existing");
+    insertion.input(super::navigation::visual(CursorMovement::VisualDown, false));
+    assert!(insertion.app.insertion_focused());
+    insertion.input(super::navigation::visual(CursorMovement::VisualDown, false));
+    let layout = insertion.app.prepare_frame(Rect::new(0, 0, 50, 12));
+    let help = area_for(&layout, HitTarget::Help);
+    insertion.pointer(help.x, help.y, PointerKind::Move);
+    let effects = insertion.effects(super::navigation::visual(CursorMovement::VisualDown, false));
+    assert_eq!(effects.len(), 1);
+    assert_eq!(insertion.app.state.board.live_thoughts().len(), 2);
+
+    let mut editor = Fixture::new();
+    super::navigation::durable_thought(&mut editor, "first");
+    super::navigation::durable_thought(&mut editor, "second");
+    let first = editor.app.state.board.live_thoughts()[0].id;
+    editor.input(crate::key_input(UiKey::Enter));
+    editor.input(crate::key_input(UiKey::Move {
+        movement: CursorMovement::DocumentStart,
+        extend_selection: false,
+    }));
+    editor.input(super::navigation::visual(CursorMovement::VisualUp, false));
+    let layout = editor.app.prepare_frame(Rect::new(0, 0, 50, 12));
+    let point = layout.thoughts[0].text_area;
+    editor.pointer(point.x, point.y, PointerKind::Move);
+    editor.input(super::navigation::visual(CursorMovement::VisualUp, false));
+    assert_eq!(editor.app.state.focused_thought, Some(first));
+    assert_eq!(
+        editor.app.interaction_mode(),
+        proqi::application::InteractionMode::Board
+    );
+}
+
+#[test]
 fn hovered_board_footer_has_a_reviewable_dark_narrow_buffer() {
     let mut fixture = Fixture::new();
     super::navigation::durable_thought(&mut fixture, "hover snapshot");

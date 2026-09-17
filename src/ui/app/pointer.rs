@@ -66,7 +66,9 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        self.edit_boundary = None;
+        if !matches!(pointer.kind, PointerKind::Move) {
+            self.edit_boundary = None;
+        }
         if self.submission_mode.is_some() {
             return self.handle_submission_pointer(pointer, ids, clock);
         }
