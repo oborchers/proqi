@@ -1,11 +1,8 @@
 //! Passive pointer emphasis derived from the current rendered frame.
 
-use crate::{
-    application::InteractionMode,
-    ui::{HitTarget, PointerInput, PointerKind, projection::BoardCellTarget},
-};
+use crate::ui::{HitTarget, PointerInput, PointerKind};
 
-use super::{BoardApp, UiInput, input_dispatch::ActiveInputOwner};
+use super::{BoardApp, UiInput};
 
 impl BoardApp {
     pub(super) fn track_hover_input(&mut self, input: &UiInput) {
@@ -45,60 +42,5 @@ impl BoardApp {
             return None;
         }
         Some(target)
-    }
-
-    pub(super) fn pointer_target_for_owner(&self, pointer: PointerInput) -> Option<HitTarget> {
-        let target = self.pointer_target(pointer)?;
-        match self.active_input_route().1 {
-            ActiveInputOwner::Direction => {
-                matches!(target, HitTarget::Deliver(_, _)).then_some(target)
-            }
-            ActiveInputOwner::Recovery => matches!(
-                target,
-                HitTarget::Retry | HitTarget::ExportRecovery | HitTarget::Help
-            )
-            .then_some(target),
-            ActiveInputOwner::Board
-            | ActiveInputOwner::Compose
-            | ActiveInputOwner::Edit
-            | ActiveInputOwner::InsertionBoundary
-            | ActiveInputOwner::Search
-            | ActiveInputOwner::Rename
-            | ActiveInputOwner::Transfer
-            | ActiveInputOwner::Invocation
-            | ActiveInputOwner::InvocationQuery
-            | ActiveInputOwner::GlobalDeliveryQuery
-            | ActiveInputOwner::GlobalDeliveryDisposition
-            | ActiveInputOwner::Commands
-            | ActiveInputOwner::ReleaseHighlights
-            | ActiveInputOwner::Update
-            | ActiveInputOwner::Screenshot
-            | ActiveInputOwner::Help => Some(target),
-        }
-    }
-
-    pub(super) fn pointer_target(&self, pointer: PointerInput) -> Option<HitTarget> {
-        match self.hit(pointer)? {
-            HitTarget::Thought(thought_id) => {
-                let cell_target = if matches!(
-                    self.state.mode,
-                    InteractionMode::Edit {
-                        thought_id: active_id
-                    } if active_id == thought_id
-                ) {
-                    self.editor_cell(thought_id, pointer)
-                        .and_then(|(row, column)| self.editor_cell_target(row, column))
-                } else {
-                    self.board_cell_target(thought_id, pointer)
-                };
-                match cell_target {
-                    Some(BoardCellTarget::Fold {
-                        annotation_index, ..
-                    }) => Some(HitTarget::Fold(thought_id, annotation_index)),
-                    _ => Some(HitTarget::Thought(thought_id)),
-                }
-            }
-            target => Some(target),
-        }
     }
 }

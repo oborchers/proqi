@@ -24,6 +24,7 @@ const BROWSER_WORKFLOW: &str = r#"
     fconfigure $hover -translation binary -encoding binary
     spawn -noecho sh -c {before=$(stty -g); "$PROQI_TEST_BINARY" --state-dir "$PROQI_TEST_STATE" -r; result=$?; after=$(stty -g); [ "$before" = "$after" ] || exit 90; exit "$result"}
     expect -exact "\x1b\[?1049h"
+    # Allow the initial coalesced terminal frame to finish before draining it.
     after 300
     set timeout 1
     expect {
@@ -34,6 +35,7 @@ const BROWSER_WORKFLOW: &str = r#"
         timeout {}
     }
     send -- "\x1b\[<35;2;24M"
+    # Allow the motion-triggered redraw to finish before capturing its attributes.
     after 300
     set timeout 1
     expect {
@@ -52,6 +54,7 @@ const BROWSER_WORKFLOW: &str = r#"
         timeout { exit 91 }
     }
     send -- "\x1b"
+    # Let the rename cancellation render before the final quit input.
     after 100
     send -- "\x1b"
     expect {
@@ -90,6 +93,7 @@ const BOARD_WORKFLOW: &str = r#"
     spawn -noecho sh -c {before=$(stty -g); "$PROQI_TEST_BINARY" --state-dir "$PROQI_TEST_STATE" -r "$PROQI_TEST_SESSION"; result=$?; after=$(stty -g); [ "$before" = "$after" ] || exit 90; exit "$result"}
     register_watchdog_pid [exp_pid]
     expect -exact "\x1b\[?1049h"
+    # Allow the initial coalesced terminal frame to finish before draining it.
     after 300
     capture_pending $env(PROQI_TEST_INITIAL)
     close [open $env(PROQI_TEST_BEFORE_READY) "w"]
@@ -100,6 +104,7 @@ const BOARD_WORKFLOW: &str = r#"
     }
     if {![file exists $env(PROQI_TEST_BEFORE_ACK)]} { exit 93 }
     send -- "\x1b\[<35;11;12M"
+    # Allow the footer hover redraw to finish before capturing its attributes.
     after 300
     capture_pending $env(PROQI_TEST_FOOTER)
     send -- "\x1b\[<0;11;12M\x1b\[<0;11;12m"
@@ -112,11 +117,14 @@ const BOARD_WORKFLOW: &str = r#"
         }
         timeout { exit 91 }
     }
+    # Let Commands finish opening before targeting its current rows.
     after 200
     send -- "\x1b\[<35;2;3M"
+    # Capture the passive heading only after the pointer redraw has settled.
     after 300
     capture_pending $env(PROQI_TEST_HEADING)
     send -- "\x1b\[<35;2;4M"
+    # Capture the actionable row only after the pointer redraw has settled.
     after 300
     capture_pending $env(PROQI_TEST_ACTION)
     close [open $env(PROQI_TEST_AFTER_READY) "w"]
@@ -127,10 +135,13 @@ const BOARD_WORKFLOW: &str = r#"
     }
     if {![file exists $env(PROQI_TEST_AFTER_ACK)]} { exit 94 }
     send -- "\x1b"
+    # Let overlay cancellation render before exercising resize restoration.
     after 100
     stty rows 6 columns 22
+    # Give each terminal resize one bounded redraw window.
     after 200
     stty rows 18 columns 72
+    # Give the restored viewport the same bounded redraw window before quit.
     after 200
     send -- "q"
     expect {
@@ -190,10 +201,19 @@ impl Drop for WatchedWorkflow {
     }
 }
 
-fn content_hash(path: &std::path::Path) -> u64 {
-    let bytes = std::fs::read(path).expect("read durable database");
+fn durable_content_hash(path: &std::path::Path) -> u64 {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    bytes.hash(&mut hasher);
+    let mut wal = path.as_os_str().to_owned();
+    wal.push("-wal");
+    for durable_path in [path.to_path_buf(), std::path::PathBuf::from(wal)] {
+        let present = durable_path.exists();
+        present.hash(&mut hasher);
+        if present {
+            std::fs::read(&durable_path)
+                .expect("read durable database content")
+                .hash(&mut hasher);
+        }
+    }
     hasher.finish()
 }
 
@@ -206,38 +226,29 @@ fn assert_board_hover_attributes(paths: [&std::path::Path; 5]) {
     let action = std::fs::read(action).expect("read Commands action frame");
     let mut parser = vt100::Parser::new(12, 42, 0);
     parser.process(&initial);
-    assert!(
-        !parser
-            .screen()
-            .cell(11, 10)
-            .expect("Commands key")
-            .underline()
-    );
+    assert!(!parser.screen().cell(11, 10).expect("Commands key").bold());
     parser.process(&footer);
-    assert!(
-        parser
-            .screen()
-            .cell(11, 10)
-            .expect("hovered Commands key")
-            .underline()
-    );
+    let footer_cell = parser.screen().cell(11, 10).expect("hovered Commands key");
+    assert!(footer_cell.bold());
+    assert!(!footer_cell.underline());
     parser.process(&overlay);
     parser.process(&heading);
-    assert!(
-        !parser
-            .screen()
-            .cell(2, 1)
-            .expect("passive Commands heading")
-            .underline()
-    );
+    let heading_cell = parser
+        .screen()
+        .cell(2, 1)
+        .expect("passive Commands heading");
+    assert!(!heading_cell.italic());
+    assert!(!heading_cell.underline());
+    let action_before = parser
+        .screen()
+        .cell(3, 1)
+        .expect("resting Commands action")
+        .clone();
     parser.process(&action);
-    assert!(
-        parser
-            .screen()
-            .cell(3, 1)
-            .expect("hovered Commands action")
-            .underline()
-    );
+    let action_cell = parser.screen().cell(3, 1).expect("hovered Commands action");
+    assert!(action_cell.bold());
+    assert!(!action_cell.underline());
+    assert_ne!(action_cell, &action_before);
 }
 
 #[test]
@@ -246,7 +257,7 @@ fn browser_footer_hover_emits_fresh_attributes_without_mutating_durable_state() 
     let binary = env!("CARGO_BIN_EXE_proqi");
     let _created = json_command(binary, state.path(), &[]);
     let database = state.path().join("data/proqi.sqlite3");
-    let durable_before = content_hash(&database);
+    let durable_before = durable_content_hash(&database);
     let initial = state.path().join("browser-initial.transcript");
     let hover = state.path().join("browser-hover.transcript");
 
@@ -274,11 +285,11 @@ fn browser_footer_hover_emits_fresh_attributes_without_mutating_durable_state() 
     let hover_screen = hover_parser.screen();
     let initial_cell = initial_screen.cell(23, 1).expect("initial Rename key cell");
     let hover_cell = hover_screen.cell(23, 1).expect("hovered Rename key cell");
-    let underlined_columns = (0..12)
+    let bold_columns = (0..12)
         .filter(|column| {
             hover_screen
                 .cell(23, *column)
-                .is_some_and(vt100::Cell::underline)
+                .is_some_and(vt100::Cell::bold)
         })
         .collect::<Vec<_>>();
     assert_eq!(initial_cell.contents(), "F");
@@ -287,20 +298,23 @@ fn browser_footer_hover_emits_fresh_attributes_without_mutating_durable_state() 
         !initial_cell.underline(),
         "resting footer must not be underlined"
     );
+    assert!(!initial_cell.bold(), "resting footer must not be bold");
     assert!(
-        hover_cell.underline(),
-        "hover must emit a fresh underline attribute; hover_bytes={} underlined_columns={underlined_columns:?}",
+        hover_cell.bold(),
+        "hover must emit a fresh bold attribute; hover_bytes={} bold_columns={bold_columns:?}",
         hover_bytes.len()
     );
+    assert!(!hover_cell.underline(), "hover must not emit an underline");
 
-    let durable_after = content_hash(&database);
+    let durable_after = durable_content_hash(&database);
     assert_eq!(
         durable_after, durable_before,
         "passive hover changed durable state"
     );
     println!(
-        "LIVE_BROWSER_HOVER_OK durable_hash={durable_after:016x} baseline_underlined={} hover_underlined={} click_result=rename terminal_restored=true",
-        initial_cell.underline(),
+        "LIVE_BROWSER_HOVER_OK durable_hash={durable_after:016x} baseline_bold={} hover_bold={} hover_underlined={} click_result=rename terminal_restored=true",
+        initial_cell.bold(),
+        hover_cell.bold(),
         hover_cell.underline()
     );
 }
@@ -358,10 +372,10 @@ fn board_footer_and_commands_rows_emit_live_hover_attributes() {
     );
     let database = state.path().join("data/proqi.sqlite3");
     wait_for_path(&before_ready);
-    let durable_before = content_hash(&database);
+    let durable_before = durable_content_hash(&database);
     workflow.release(0);
     wait_for_path(&after_ready);
-    let durable_after = content_hash(&database);
+    let durable_after = durable_content_hash(&database);
     workflow.release(1);
     let status = workflow.finish();
     assert!(status.success(), "Board hover PTY exited with {status}");

@@ -152,18 +152,18 @@ fn render_result(
     let fixed_cells =
         4_usize.saturating_add(crate::ports::text_layout::terminal_cell_width(&badge));
     let label_cells = usize::from(area.width).saturating_sub(fixed_cells);
-    let style = if hovered {
+    let style = if hovered && selected {
+        theme.focused_hovered_style().fg(theme.accent)
+    } else if hovered {
         theme.hovered_style().fg(theme.accent)
     } else if selected {
-        theme.focused_style().fg(theme.accent)
+        theme
+            .focused_style()
+            .fg(theme.accent)
+            .add_modifier(Modifier::BOLD)
     } else {
         theme.base_style()
-    }
-    .add_modifier(if selected {
-        Modifier::BOLD
-    } else {
-        Modifier::empty()
-    });
+    };
     frame.render_widget(
         Paragraph::new(format!(
             "{focus} {}  [{}]",

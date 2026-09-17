@@ -1,6 +1,7 @@
 //! Passive hover feedback for modal controls and authoritative current geometry.
 
 use super::*;
+use ratatui_core::style::Modifier;
 
 fn area_for(layout: &proqi::ui::LayoutSnapshot, target: HitTarget) -> Rect {
     layout
@@ -63,19 +64,104 @@ fn footer_hover_tracks_edges_crossings_repeats_and_focus_without_actions() {
         original_content
     );
 
-    fixture.pointer(
-        layout.thoughts[0].gutter.x,
-        layout.thoughts[0].gutter.y,
-        PointerKind::Move,
+    let resting_terminal = draw_theme(&mut fixture, 42, 12, ThemePreference::Limited);
+    let gutter_area = layout.thoughts[0].gutter;
+    let resting = resting_terminal.backend().buffer()[(gutter_area.x, gutter_area.y)].style();
+    let body = layout.thoughts[0].text_area;
+    let resting_body = resting_terminal.backend().buffer()[(body.x, body.y)].style();
+    fixture.pointer(body.x, body.y, PointerKind::Move);
+    let body_terminal = draw_theme(&mut fixture, 42, 12, ThemePreference::Limited);
+    let hovered_body = body_terminal.backend().buffer()[(body.x, body.y)].style();
+    assert_ne!(
+        hovered_body, resting_body,
+        "focused body hover must be visible"
     );
+    let modifier = hovered_body.add_modifier;
+    assert!(modifier.contains(Modifier::BOLD | Modifier::ITALIC));
+    assert!(!modifier.contains(Modifier::UNDERLINED));
+    assert_eq!(
+        body_terminal.backend().buffer()[(gutter_area.x, gutter_area.y)].style(),
+        resting
+    );
+    fixture.pointer(gutter_area.x, gutter_area.y, PointerKind::Move);
     let terminal = draw_theme(&mut fixture, 42, 12, ThemePreference::Limited);
-    let gutter =
-        &terminal.backend().buffer()[(layout.thoughts[0].gutter.x, layout.thoughts[0].gutter.y)];
+    let gutter = &terminal.backend().buffer()[(gutter_area.x, gutter_area.y)];
+    assert_ne!(
+        gutter.style(),
+        resting,
+        "focused gutter hover must be visible"
+    );
+    assert!(
+        resting
+            .add_modifier
+            .contains(ratatui_core::style::Modifier::BOLD)
+    );
     assert!(
         gutter
             .modifier
-            .contains(ratatui_core::style::Modifier::UNDERLINED)
+            .contains(ratatui_core::style::Modifier::BOLD),
+        "direct gutter hover should preserve the established focus weight"
     );
+    assert!(
+        gutter
+            .modifier
+            .contains(ratatui_core::style::Modifier::ITALIC),
+        "direct hover over an already-focused gutter should add a distinct cue"
+    );
+    assert!(
+        !gutter
+            .modifier
+            .contains(ratatui_core::style::Modifier::UNDERLINED),
+        "hover emphasis must not introduce an underline"
+    );
+}
+
+#[test]
+fn thought_body_hover_does_not_reveal_or_underline_the_drag_gutter() {
+    let mut fixture = Fixture::new();
+    super::navigation::durable_thought(&mut fixture, "one\ntwo\nthree\nfour\nfive");
+    super::navigation::durable_thought(&mut fixture, "focused elsewhere");
+    let layout = fixture.app.prepare_frame(Rect::new(0, 0, 42, 14));
+    let thought = &layout.thoughts[0];
+    assert!(thought.gutter.height >= 3, "test requires a tall gutter");
+    fixture.pointer(thought.text_area.x, thought.text_area.y, PointerKind::Move);
+    assert_eq!(
+        fixture.app.hovered(),
+        Some(HitTarget::Thought(thought.thought_id))
+    );
+
+    let terminal = draw_theme(&mut fixture, 42, 14, ThemePreference::Limited);
+    let body_modifier =
+        terminal.backend().buffer()[(thought.text_area.x, thought.text_area.y)].modifier;
+    assert!(body_modifier.contains(Modifier::BOLD));
+    assert!(!body_modifier.contains(Modifier::UNDERLINED));
+    for row in thought.gutter.y..thought.gutter.bottom() {
+        let cell = &terminal.backend().buffer()[(thought.gutter.x, row)];
+        assert_eq!(cell.symbol(), " ", "body hover revealed gutter row {row}");
+        assert!(
+            !cell
+                .modifier
+                .intersects(Modifier::BOLD | Modifier::ITALIC | Modifier::UNDERLINED),
+            "body hover emphasized gutter row {row}"
+        );
+    }
+
+    fixture.pointer(thought.gutter.x, thought.gutter.y, PointerKind::Move);
+    let terminal = draw_theme(&mut fixture, 42, 14, ThemePreference::Limited);
+    let symbol_row = thought
+        .gutter
+        .y
+        .saturating_add(thought.gutter.height.saturating_sub(1) / 2);
+    for row in thought.gutter.y..thought.gutter.bottom() {
+        let cell = &terminal.backend().buffer()[(thought.gutter.x, row)];
+        assert_eq!(cell.symbol(), if row == symbol_row { "⋮" } else { " " });
+        assert!(
+            !cell
+                .modifier
+                .contains(ratatui_core::style::Modifier::UNDERLINED),
+            "direct gutter hover underlined row {row}"
+        );
+    }
 }
 
 #[test]
@@ -131,6 +217,8 @@ fn collapsed_fold_hover_uses_projected_identity_and_preserves_exact_content() {
     let layout = fixture.app.prepare_frame(Rect::new(0, 0, 60, 8));
     let thought = &layout.thoughts[0];
 
+    let initial = draw_theme(&mut fixture, 60, 8, ThemePreference::Dark);
+    let before = initial.backend().buffer()[(thought.text_area.x, thought.text_area.y)].style();
     fixture.pointer(thought.text_area.x, thought.text_area.y, PointerKind::Move);
 
     let thought_id = thought.thought_id;
@@ -138,9 +226,17 @@ fn collapsed_fold_hover_uses_projected_identity_and_preserves_exact_content() {
     assert_eq!(fixture.app.state.board.live_thoughts()[0].content, content);
     let terminal = draw_theme(&mut fixture, 60, 8, ThemePreference::Dark);
     let cell = &terminal.backend().buffer()[(thought.text_area.x, thought.text_area.y)];
+    assert_ne!(cell.style(), before, "fold hover must remain visible");
     assert!(
         cell.modifier
-            .contains(ratatui_core::style::Modifier::UNDERLINED)
+            .contains(ratatui_core::style::Modifier::ITALIC),
+        "inline fold hover should use restrained typographic emphasis"
+    );
+    assert!(
+        !cell
+            .modifier
+            .contains(ratatui_core::style::Modifier::UNDERLINED),
+        "fold hover must not introduce an underline"
     );
 
     fixture.pointer(

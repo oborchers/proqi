@@ -1654,8 +1654,8 @@ or control contrast are rejected with the failing role pair rather than
 silently altered.
 
 The product remains usable in terminals without true color. The fallback uses
-default foreground and background, one supported green accent, bold, dim, and
-reverse video sparingly.
+default foreground and background, one supported green accent, bold, italic,
+dim, and reverse video sparingly.
 
 ## Accessibility and input correctness
 

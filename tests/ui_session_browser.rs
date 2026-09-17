@@ -471,6 +471,8 @@ fn narrow_browser_has_a_complete_reviewed_buffer() {
     insta::assert_snapshot!(snapshot_buffer(terminal.backend().buffer()));
 }
 
+#[path = "ui_session_browser/geometry.rs"]
+mod geometry;
 #[path = "ui_session_browser/hover.rs"]
 mod hover;
 #[path = "ui_session_browser/paging.rs"]

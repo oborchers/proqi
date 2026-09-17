@@ -329,6 +329,17 @@ fn cancelling_commands_quit_preserves_the_original_editor_handoff() {
     assert_eq!(live.len(), 2);
     assert_eq!(live[0].content, "");
     assert_eq!(live[1].content, "active");
+    assert!(app.screenshot_retry_ready());
+
+    assert!(
+        app.handle(UiInput::Key(UiKey::Quit), &mut ids, &clock)
+            .is_empty()
+    );
+    assert!(
+        !app.quit,
+        "the executed non-Quit command must cancel the earlier confirmation"
+    );
+    assert!(app.screenshot_retry_ready());
 }
 
 #[test]

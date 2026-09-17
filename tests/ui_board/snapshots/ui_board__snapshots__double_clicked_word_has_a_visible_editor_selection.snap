@@ -16,7 +16,7 @@ TEXT
 07│  Esc Board│
 
 STYLE RUNS
-0: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | UNDERLINED | 1-8 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 9-15 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=REVERSED | 16-47 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
+0: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-8 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=BOLD | ITALIC | 9-15 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=BOLD | ITALIC | REVERSED | 16-47 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=BOLD | ITALIC
 1: 0-47 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 2: 0-47 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 3: 0-47 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE

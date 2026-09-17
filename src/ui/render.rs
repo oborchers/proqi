@@ -232,8 +232,8 @@ fn render_board_thought(
         Some(HitTarget::Fold(id, index)) if id == layout.thought_id => Some(index),
         _ => None,
     };
-    let gutter_hovered = hovered
-        || matches!(app.hovered(), Some(HitTarget::DragHandle(id)) if id == layout.thought_id);
+    let gutter_hovered =
+        matches!(app.hovered(), Some(HitTarget::DragHandle(id)) if id == layout.thought_id);
     let overflow_hovered =
         matches!(app.hovered(), Some(HitTarget::Overflow(id)) if id == layout.thought_id);
     render_separator(
@@ -242,8 +242,14 @@ fn render_board_thought(
         app.drag_target() == Some(layout.index),
         theme,
     );
-    if focused || hovered || selected {
-        frame.render_widget(Block::default().style(theme.focused_style()), layout.area);
+    let surface_style = match (focused || selected, hovered) {
+        (true, true) => Some(theme.focused_hovered_style()),
+        (true, false) => Some(theme.focused_style()),
+        (false, true) => Some(theme.hovered_style()),
+        (false, false) => None,
+    };
+    if let Some(style) = surface_style {
+        frame.render_widget(Block::default().style(style), layout.area);
     }
     render_gutter(
         frame,
@@ -329,28 +335,31 @@ fn render_gutter(
 ) {
     let symbol = if focused || hovered { "⋮" } else { " " };
     let padding = usize::from(layout.gutter.height.saturating_sub(1) / 2);
-    let content = format!("{}{symbol}", "\n".repeat(padding));
-    let style = if focused {
-        let style = Style::default()
+    let surface_style = if focused {
+        let modifier = if dragging {
+            Modifier::DIM
+        } else if hovered {
+            Modifier::BOLD | Modifier::ITALIC
+        } else {
+            Modifier::BOLD
+        };
+        Style::default()
             .fg(theme.on_accent)
             .bg(theme.accent_surface)
-            .remove_modifier(Modifier::REVERSED)
-            .add_modifier(if dragging {
-                Modifier::DIM
-            } else {
-                Modifier::BOLD
-            });
-        if hovered {
-            style.add_modifier(Modifier::UNDERLINED)
-        } else {
-            style
-        }
+            .remove_modifier(Modifier::REVERSED | Modifier::ITALIC)
+            .add_modifier(modifier)
     } else if hovered {
         theme.hovered_style().fg(theme.accent)
     } else {
-        Style::default().fg(theme.accent)
+        Style::default()
+            .fg(theme.accent)
+            .remove_modifier(Modifier::BOLD | Modifier::ITALIC)
     };
-    frame.render_widget(Paragraph::new(content).style(style), layout.gutter);
+    frame.render_widget(Block::default().style(surface_style), layout.gutter);
+    frame.render_widget(
+        Paragraph::new(Span::styled(symbol, surface_style)),
+        crate::ui::geometry::row(layout.gutter, u16::try_from(padding).unwrap_or(u16::MAX)),
+    );
 }
 
 fn render_thought(

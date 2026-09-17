@@ -190,8 +190,10 @@ pub(super) fn render_update(
     for (index, (entry, area)) in entries.iter().zip(&overlay.items).enumerate() {
         let prefix = if index == selected { "› " } else { "  " };
         let row_hovered = hovered == Some(crate::ui::HitTarget::PaletteItem(index));
-        let style = if row_hovered {
-            theme.hovered_style().add_modifier(Modifier::BOLD)
+        let style = if row_hovered && index == selected {
+            theme.focused_hovered_style()
+        } else if row_hovered {
+            theme.hovered_style()
         } else if index == selected {
             theme.focused_style().add_modifier(Modifier::BOLD)
         } else {

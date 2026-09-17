@@ -253,18 +253,6 @@ impl PaletteState {
         let visible = self.selected.saturating_sub(self.rendered_scroll);
         interactivity.get(visible).copied().unwrap_or(false)
     }
-
-    fn execution_at(&self, index: usize) -> Option<CommandExecution> {
-        self.projected().get(index).and_then(|row| {
-            if !row.selectable() {
-                return None;
-            }
-            match row.action {
-                RowAction::Command { execution, .. } => Some(execution),
-                RowAction::Expand | RowAction::None => None,
-            }
-        })
-    }
 }
 
 impl BoardApp {

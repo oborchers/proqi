@@ -37,6 +37,10 @@ impl BrowserAvailability {
             Self::Trashed => "trashed",
         }
     }
+
+    pub(super) const fn is_openable(&self) -> bool {
+        matches!(self, Self::Resumable | Self::Recovered)
+    }
 }
 
 /// One search result paired with verified runtime availability.
@@ -436,12 +440,10 @@ impl SessionBrowser {
         let hit = layout.hit_test(column, row, &self.footer_controls);
         match hit {
             BrowserHit::Item(index)
-                if self.items.get(index).is_some_and(|item| {
-                    matches!(
-                        item.availability,
-                        BrowserAvailability::Resumable | BrowserAvailability::Recovered
-                    )
-                }) =>
+                if self
+                    .items
+                    .get(index)
+                    .is_some_and(|item| item.availability.is_openable()) =>
             {
                 hit
             }

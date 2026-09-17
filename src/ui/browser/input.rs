@@ -245,10 +245,10 @@ impl SessionBrowser {
             self.status = Some("No matching session".to_owned());
             return BrowserAction::Continue;
         };
+        if item.availability.is_openable() {
+            return BrowserAction::Open(item.hit.id);
+        }
         match &item.availability {
-            BrowserAvailability::Resumable | BrowserAvailability::Recovered => {
-                BrowserAction::Open(item.hit.id)
-            }
             BrowserAvailability::Active(instance) => {
                 self.status = Some(format!("Session is active in process {}", instance.pid));
                 BrowserAction::Continue
@@ -256,6 +256,9 @@ impl SessionBrowser {
             BrowserAvailability::Trashed => {
                 self.status = Some("Restore this session before opening it".to_owned());
                 BrowserAction::Continue
+            }
+            BrowserAvailability::Resumable | BrowserAvailability::Recovered => {
+                BrowserAction::Open(item.hit.id)
             }
         }
     }

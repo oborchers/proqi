@@ -1,6 +1,6 @@
 ---
 source: tests/ui_board/hover.rs
-assertion_line: 212
+assertion_line: 447
 expression: "super::snapshot_support::snapshot_buffer(draw_theme(&mut fixture, 50, 6,\nThemePreference::Limited).backend().buffer())"
 ---
 SIZE 50x6
@@ -19,4 +19,4 @@ STYLE RUNS
 2: 0-1 fg=Reset bg=Reset mod=NONE | 2-47 fg=Red bg=Reset mod=NONE | 48-49 fg=Reset bg=Reset mod=NONE
 3: 0-49 fg=Reset bg=Reset mod=NONE
 4: 0-1 fg=Reset bg=Reset mod=NONE | 2-47 fg=DarkGray bg=Reset mod=NONE | 48-49 fg=Reset bg=Reset mod=NONE
-5: 0-1 fg=Reset bg=Reset mod=NONE | 2-2 fg=Green bg=Reset mod=UNDERLINED | REVERSED | 3-9 fg=Reset bg=Reset mod=UNDERLINED | REVERSED | 10-10 fg=Reset bg=Reset mod=NONE | 11-11 fg=Green bg=Reset mod=NONE | 12-49 fg=Reset bg=Reset mod=NONE
+5: 0-1 fg=Reset bg=Reset mod=NONE | 2-2 fg=Green bg=Reset mod=BOLD | REVERSED | 3-9 fg=Reset bg=Reset mod=BOLD | REVERSED | 10-10 fg=Reset bg=Reset mod=NONE | 11-11 fg=Green bg=Reset mod=NONE | 12-49 fg=Reset bg=Reset mod=NONE

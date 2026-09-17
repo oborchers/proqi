@@ -90,16 +90,15 @@ impl BoardApp {
             EditFlush::Blocked(effects) => return effects,
         };
         effects.extend(match pointer.kind {
-            PointerKind::Move => {
-                self.hovered = self.hover_target(pointer);
-                Vec::new()
-            }
             PointerKind::ScrollUp => self.scroll_pointer(-1),
             PointerKind::ScrollDown => self.scroll_pointer(1),
             PointerKind::Down(PointerButton::Left) => self.pointer_down(pointer, ids, clock),
             PointerKind::Drag(PointerButton::Left) => self.pointer_drag(pointer),
             PointerKind::Up(PointerButton::Left) => self.pointer_up(ids, clock),
-            PointerKind::Down(_) | PointerKind::Up(_) | PointerKind::Drag(_) => Vec::new(),
+            PointerKind::Move
+            | PointerKind::Down(_)
+            | PointerKind::Up(_)
+            | PointerKind::Drag(_) => Vec::new(),
         });
         effects
     }
@@ -110,11 +109,10 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        let target = self.pointer_target_for_owner(pointer);
         if matches!(pointer.kind, PointerKind::Move) {
-            self.hovered = target;
             return Vec::new();
         }
+        let target = self.pointer_target_for_owner(pointer);
         let Some(HitTarget::Deliver(direction, disposition)) = target else {
             return Vec::new();
         };
@@ -302,11 +300,12 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        if matches!(self.state.mode, InteractionMode::Edit { thought_id: active } if active == thought_id)
-        {
-            let target = self
-                .editor_cell(thought_id, pointer)
-                .and_then(|(row, column)| self.editor_cell_target(row, column));
+        let active_edit = matches!(
+            self.state.mode,
+            InteractionMode::Edit { thought_id: active } if active == thought_id
+        );
+        let target = self.thought_cell_target(thought_id, pointer);
+        if active_edit {
             self.focus(thought_id);
             self.enter_edit();
             let Some(target) = target else {
@@ -327,7 +326,6 @@ impl BoardApp {
             self.apply_pointer_start(position, pointer, click_count);
             return Vec::new();
         }
-        let target = self.board_cell_target(thought_id, pointer);
         self.focus(thought_id);
         let effects = self.expand_and_enter_edit(ids, clock);
         let Some(target) = target else {

@@ -27,6 +27,7 @@ mod pointer;
 mod pointer_activation;
 mod pointer_editor;
 mod pointer_hover;
+mod pointer_target;
 mod presentation;
 pub(in crate::ui) mod query;
 mod recovery;
@@ -314,11 +315,14 @@ impl BoardApp {
         clock: &impl Clock,
     ) -> Vec<Effect> {
         self.track_hover_input(&input);
+        let ready_quit_was_armed = self.screenshot_ready_quit_armed();
         let (owner, input, preserves_handoff) = match self.prepare_input(input, ids, clock) {
             Ok(prepared) => prepared,
             Err(effects) => return effects,
         };
+        let deliberate = input.is_deliberate_interaction();
         if let Some(effects) = self.handle_quit_input(&input, ids, clock) {
+            self.finish_screenshot_interaction(deliberate, ready_quit_was_armed);
             return effects;
         }
         if self.update_barrier.is_some()
@@ -327,9 +331,12 @@ impl BoardApp {
                 UiInput::Resize { .. } | UiInput::HostFocusGained | UiInput::HostFocusLost
             )
         {
+            self.finish_screenshot_interaction(deliberate, ready_quit_was_armed);
             return Vec::new();
         }
-        self.handle_routable_input(owner, input, preserves_handoff, ids, clock)
+        let effects = self.handle_routable_input(owner, input, preserves_handoff, ids, clock);
+        self.finish_screenshot_interaction(deliberate, ready_quit_was_armed);
+        effects
     }
 
     fn prepare_input(
@@ -339,7 +346,7 @@ impl BoardApp {
         clock: &impl Clock,
     ) -> Result<(input_dispatch::ActiveInputOwner, UiInput, bool), Vec<Effect>> {
         if self.screenshot_save_in_flight() && matches!(input, UiInput::KeyStroke(_)) {
-            self.note_screenshot_interaction(&input, false);
+            self.note_screenshot_interaction(&input);
             return Err(self.handle_screenshot_commit_barrier(input, ids, clock));
         }
         if self.update_barrier.is_some() && matches!(input, UiInput::KeyStroke(_)) {
@@ -358,9 +365,7 @@ impl BoardApp {
         };
         let input = self.resolve_edit_navigation(input, owner);
         self.reset_pointer_click_for_input(&input);
-        let preserves_ready_quit =
-            owner == Owner::Commands && self.palette_input_executes_quit(&input);
-        self.note_screenshot_interaction(&input, preserves_ready_quit);
+        self.note_screenshot_interaction(&input);
         self.reset_overlay_activation_for_input(&input, clock.now());
         if matches!(input, UiInput::HostFocusLost) {
             self.collapse_empty_compose();

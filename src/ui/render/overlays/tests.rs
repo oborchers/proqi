@@ -94,6 +94,19 @@ fn every_picker_secondary_uses_the_same_quiet_metadata_style() {
     );
     assert_eq!(selected.spans[2].style.fg, Some(theme.muted));
     assert_eq!(selected.spans[2].style.bg, theme.focused_surface);
+    let hovered_selected = picker_line(row, 24, true, true, &theme);
+    assert!(
+        hovered_selected.spans[0]
+            .style
+            .add_modifier
+            .contains(Modifier::BOLD | Modifier::ITALIC)
+    );
+    assert!(
+        !hovered_selected.spans[0]
+            .style
+            .add_modifier
+            .contains(Modifier::UNDERLINED)
+    );
     insta::with_settings!({ snapshot_path => "../snapshots" }, {
         insta::assert_debug_snapshot!("picker_metadata_styles", (ordinary, selected));
     });

@@ -1,6 +1,6 @@
 ---
 source: tests/ui_board/hover.rs
-assertion_line: 196
+assertion_line: 431
 expression: "super::snapshot_support::snapshot_buffer(draw_theme(&mut fixture, 42, 12,\nThemePreference::Dark).backend().buffer())"
 ---
 SIZE 42x12
@@ -31,4 +31,4 @@ STYLE RUNS
 8: 0-41 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 9: 0-41 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 10: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-39 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE | 40-41 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-11: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-2 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 3-9 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 10-10 fg=Rgb(112, 214, 155) bg=Rgb(39, 40, 48) mod=UNDERLINED | 11-20 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=UNDERLINED | 21-21 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 22-22 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 23-41 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+11: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-2 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 3-9 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 10-10 fg=Rgb(112, 214, 155) bg=Rgb(39, 40, 48) mod=BOLD | 11-20 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=BOLD | 21-21 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 22-22 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 23-41 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE

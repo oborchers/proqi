@@ -24,7 +24,7 @@ STYLE RUNS
 3: 0-43 fg=Rgb(30, 27, 24) bg=Rgb(250, 250, 248) mod=NONE
 4: 0-43 fg=Rgb(79, 70, 62) bg=Rgb(250, 250, 248) mod=NONE
 5: 0-43 fg=Rgb(79, 70, 62) bg=Rgb(250, 250, 248) mod=BOLD
-6: 0-43 fg=Rgb(45, 106, 79) bg=Rgb(236, 236, 240) mod=BOLD | UNDERLINED
+6: 0-43 fg=Rgb(45, 106, 79) bg=Rgb(236, 236, 240) mod=BOLD | ITALIC
 7: 0-43 fg=Rgb(79, 70, 62) bg=Rgb(250, 250, 248) mod=NONE
 8: 0-1 fg=Rgb(30, 27, 24) bg=Rgb(250, 250, 248) mod=NONE | 2-43 fg=Rgb(79, 70, 62) bg=Rgb(250, 250, 248) mod=NONE
 9: 0-0 fg=Rgb(30, 27, 24) bg=Rgb(250, 250, 248) mod=NONE | 1-2 fg=Rgb(45, 106, 79) bg=Rgb(250, 250, 248) mod=NONE | 3-11 fg=Rgb(30, 27, 24) bg=Rgb(250, 250, 248) mod=NONE | 12-13 fg=Rgb(45, 106, 79) bg=Rgb(250, 250, 248) mod=NONE | 14-21 fg=Rgb(30, 27, 24) bg=Rgb(250, 250, 248) mod=NONE | 22-26 fg=Rgb(45, 106, 79) bg=Rgb(250, 250, 248) mod=NONE | 27-33 fg=Rgb(30, 27, 24) bg=Rgb(250, 250, 248) mod=NONE | 34-36 fg=Rgb(45, 106, 79) bg=Rgb(250, 250, 248) mod=NONE | 37-43 fg=Rgb(30, 27, 24) bg=Rgb(250, 250, 248) mod=NONE

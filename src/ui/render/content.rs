@@ -58,6 +58,9 @@ pub(super) fn styled_line(
             if semantic.is_some() || invocation {
                 style = style.add_modifier(Modifier::BOLD);
             }
+            if hovered {
+                style = style.add_modifier(Modifier::ITALIC);
+            }
             if linked {
                 style = style.add_modifier(Modifier::UNDERLINED);
             }

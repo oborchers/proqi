@@ -145,10 +145,16 @@ impl Theme {
         )
     }
 
-    /// Immediate pointer emphasis that remains distinguishable from keyboard focus.
+    /// Immediate pointer emphasis without introducing decorative line work.
     #[must_use]
     pub fn hovered_style(self) -> Style {
-        self.focused_style().add_modifier(Modifier::UNDERLINED)
+        self.focused_style().add_modifier(Modifier::BOLD)
+    }
+
+    /// Combined keyboard-focus and pointer-hover emphasis without an underline.
+    #[must_use]
+    pub fn focused_hovered_style(self) -> Style {
+        self.hovered_style().add_modifier(Modifier::ITALIC)
     }
 
     const fn limited() -> Self {
