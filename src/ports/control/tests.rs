@@ -13,7 +13,32 @@ use crate::{
 use super::{
     CAPTURE_CONTROL_PROTOCOL_VERSION, CONTROL_PROTOCOL_VERSION, ControlCaptureReceipt,
     ControlMutation, ControlRequest, ControlResponse, ControlResult, ControlUpdateReceipt,
+    UPDATE_MUTATION_MINIMUM_PROTOCOL, control_protocol_supports,
 };
+
+#[test]
+fn update_control_accepts_every_advertised_compatible_transport_version() {
+    assert!(control_protocol_supports(
+        Some(UPDATE_MUTATION_MINIMUM_PROTOCOL),
+        UPDATE_MUTATION_MINIMUM_PROTOCOL
+    ));
+    assert!(control_protocol_supports(
+        Some(CONTROL_PROTOCOL_VERSION),
+        UPDATE_MUTATION_MINIMUM_PROTOCOL
+    ));
+    assert!(!control_protocol_supports(
+        Some(UPDATE_MUTATION_MINIMUM_PROTOCOL - 1),
+        UPDATE_MUTATION_MINIMUM_PROTOCOL
+    ));
+    assert!(!control_protocol_supports(
+        Some(CONTROL_PROTOCOL_VERSION + 1),
+        UPDATE_MUTATION_MINIMUM_PROTOCOL
+    ));
+    assert!(!control_protocol_supports(
+        None,
+        UPDATE_MUTATION_MINIMUM_PROTOCOL
+    ));
+}
 
 #[test]
 fn plain_text_keeps_legacy_protocol_while_attachments_require_session_numbering() {

@@ -77,6 +77,40 @@ fn published_protocol_two_owner_blocks_while_protocol_three_owner_can_quiesce() 
 }
 
 #[test]
+fn external_quiescence_negotiates_supported_older_control_protocols() {
+    let mut ids = FakeIdGenerator::new(1_800_050_000_000);
+    let installation = InstallationIdentity::from_digest([44; 32]);
+    let current = StableVersion::parse("0.10.1").expect("current");
+    let mut compatible = instance(
+        &mut ids,
+        "0.10.0",
+        STORAGE_PROTOCOL_VERSION - 1,
+        installation,
+        UPDATE_CONTROL_PROTOCOL_VERSION,
+    );
+    compatible.control_protocol = Some(CONTROL_PROTOCOL_VERSION - 1);
+    let mut too_old = compatible.clone();
+    too_old.instance_id = ids.instance_id();
+    too_old.session_id = ids.session_id();
+    too_old.control_protocol = Some(crate::ports::control::UPDATE_MUTATION_MINIMUM_PROTOCOL - 1);
+
+    let result = plan(
+        vec![compatible.clone(), too_old.clone()],
+        installation,
+        InstallationKind::HomebrewFormula,
+        &current,
+    );
+
+    assert_eq!(result.compatible_older, [compatible]);
+    assert_eq!(result.blockers.len(), 1);
+    assert_eq!(result.blockers[0].instance_id, too_old.instance_id);
+    assert_eq!(
+        result.blockers[0].reason,
+        ExternalUpgradeBlockerReason::OlderIncompatible
+    );
+}
+
+#[test]
 fn same_version_requires_current_storage_and_newer_runtime_blocks() {
     let mut ids = FakeIdGenerator::new(1_800_100_000_000);
     let installation = InstallationIdentity::from_digest([42; 32]);

@@ -6,7 +6,9 @@ use crate::{
         StableVersion,
     },
     ports::{
-        control::CONTROL_PROTOCOL_VERSION, runtime::InstanceInfo, store::STORAGE_PROTOCOL_VERSION,
+        control::{UPDATE_MUTATION_MINIMUM_PROTOCOL, control_protocol_supports},
+        runtime::InstanceInfo,
+        store::STORAGE_PROTOCOL_VERSION,
         update::UPDATE_CONTROL_PROTOCOL_VERSION,
     },
 };
@@ -93,7 +95,10 @@ fn supports_external_quiescence(
     installation: InstallationIdentity,
 ) -> bool {
     participant.storage_protocol <= STORAGE_PROTOCOL_VERSION
-        && participant.control_protocol == Some(CONTROL_PROTOCOL_VERSION)
+        && control_protocol_supports(
+            participant.control_protocol,
+            UPDATE_MUTATION_MINIMUM_PROTOCOL,
+        )
         && participant.control_endpoint.is_some()
         && participant.update.as_ref().is_some_and(|context| {
             context.installation_identity == installation

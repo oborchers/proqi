@@ -450,11 +450,22 @@ pub(super) fn participants(
 }
 
 #[test]
-fn protocol_ten_process_is_not_compatible_with_protocol_eleven_update_convergence() {
+fn update_participants_accept_supported_control_versions_and_reject_both_boundaries() {
     let mut ids = TestIds::new(1_800_000_000_000);
     let identity = InstallationIdentity::from_digest([39; 32]);
     let mut participant = participants(&mut ids, identity, 1).remove(0);
-    participant.storage_protocol = 10;
+    participant.control_protocol = Some(CONTROL_PROTOCOL_VERSION - 1);
+    assert!(super::is_compatible_update_participant(
+        &participant,
+        identity
+    ));
+    participant.control_protocol =
+        Some(crate::ports::control::UPDATE_MUTATION_MINIMUM_PROTOCOL - 1);
+    assert!(!super::is_compatible_update_participant(
+        &participant,
+        identity
+    ));
+    participant.control_protocol = Some(CONTROL_PROTOCOL_VERSION + 1);
     assert!(!super::is_compatible_update_participant(
         &participant,
         identity

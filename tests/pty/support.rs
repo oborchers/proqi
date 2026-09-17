@@ -138,7 +138,13 @@ pub(super) fn json_command(binary: &str, state: &std::path::Path, arguments: &[&
         .args(arguments)
         .output()
         .expect("run JSON command");
-    assert!(output.status.success());
+    assert!(
+        output.status.success(),
+        "JSON command failed: status={}; stdout={}; stderr={}",
+        output.status,
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
     serde_json::from_slice(&output.stdout).expect("JSON output")
 }
 

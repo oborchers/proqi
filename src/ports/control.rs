@@ -21,8 +21,19 @@ pub const CONTROL_PROTOCOL_VERSION: u32 = 10;
 pub const CAPTURE_CONTROL_PROTOCOL_VERSION: u32 = 1;
 /// Oldest owner-control protocol accepted for plain-text mutations.
 pub const MIN_CONTROL_PROTOCOL_VERSION: u32 = 1;
+/// Oldest owner-control protocol capable of update coordination.
+pub const UPDATE_MUTATION_MINIMUM_PROTOCOL: u32 = 3;
 /// Maximum encoded request or response, including framing newline.
 pub const MAX_CONTROL_MESSAGE_BYTES: usize = 1_048_576;
+
+/// Whether one advertised owner protocol can represent a mutation family.
+#[must_use]
+pub const fn control_protocol_supports(protocol: Option<u32>, minimum: u32) -> bool {
+    match protocol {
+        Some(version) => version >= minimum && version <= CONTROL_PROTOCOL_VERSION,
+        None => false,
+    }
+}
 
 /// Stable rejection codes emitted by the local owner-control protocol.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -318,7 +329,7 @@ impl ControlMutation {
                 | Self::UpdateQuiesce { .. }
                 | Self::UpdateRestart { .. }
         ) {
-            3
+            UPDATE_MUTATION_MINIMUM_PROTOCOL
         } else if self.requires_protocol_two() {
             2
         } else {

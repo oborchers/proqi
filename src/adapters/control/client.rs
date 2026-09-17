@@ -6,7 +6,7 @@ use crate::{
     ports::{
         control::{
             CONTROL_PROTOCOL_VERSION, ControlClient, ControlError, ControlMutation, ControlRequest,
-            ControlResult, ControlUpdateReceipt, MIN_CONTROL_PROTOCOL_VERSION,
+            ControlResult, ControlUpdateReceipt, control_protocol_supports,
         },
         environment::IdGenerator,
         runtime::InstanceInfo,
@@ -275,8 +275,11 @@ impl<I: IdGenerator> LocalUpdateControlClient<I> {
         owner: &InstanceInfo,
         mutation: ControlMutation,
     ) -> Result<ControlUpdateReceipt, UpdateError> {
+        let protocol = owner
+            .control_protocol
+            .ok_or_else(|| coordination_error("owner has no control protocol"))?;
         let request = ControlRequest {
-            protocol: CONTROL_PROTOCOL_VERSION,
+            protocol,
             request_id: self.ids.request_id(),
             session_id: owner.session_id,
             mutation,
@@ -334,8 +337,7 @@ fn exchange(owner: &InstanceInfo, request: &ControlRequest) -> Result<ControlRes
 
 fn validate_exchange(owner: &InstanceInfo, request: &ControlRequest) -> Result<(), ControlError> {
     if owner.control_protocol != Some(request.protocol)
-        || !(MIN_CONTROL_PROTOCOL_VERSION..=CONTROL_PROTOCOL_VERSION).contains(&request.protocol)
-        || request.protocol < request.mutation.minimum_protocol()
+        || !control_protocol_supports(Some(request.protocol), request.mutation.minimum_protocol())
         || owner.session_id != request.session_id
     {
         return Err(ControlError::Unsupported);
