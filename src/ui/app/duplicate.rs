@@ -1,4 +1,4 @@
-//! Durable duplication of one thought or an ordered board selection.
+//! Durable duplication of one item or an ordered board selection.
 
 use crate::{
     application::{Action, Effect},
@@ -13,21 +13,28 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        let thought_ids = self.action_thought_ids();
-        if thought_ids.is_empty() {
+        let item_ids = self.action_item_ids();
+        if item_ids.is_empty() {
             return Vec::new();
         }
-        if thought_ids.iter().any(|id| self.submission_locked(*id)) {
+        if item_ids
+            .iter()
+            .filter_map(|id| id.thought())
+            .any(|id| self.submission_locked(id))
+        {
             self.set_warning("selected thought has a submission in progress");
             return Vec::new();
         }
-        let duplicate_ids = thought_ids
+        let duplicate_ids = item_ids
             .iter()
-            .map(|_| ids.thought_id())
+            .map(|item| match item {
+                crate::domain::BoardItemId::Thought(_) => ids.thought_id().into(),
+                crate::domain::BoardItemId::Separator(_) => ids.separator_id().into(),
+            })
             .collect::<Vec<_>>();
-        let effects = self.reduce(Action::DuplicateThoughts {
+        let effects = self.reduce(Action::DuplicateItems {
             operation_id: ids.operation_id(),
-            thought_ids,
+            item_ids,
             duplicate_ids: duplicate_ids.clone(),
             at: clock.now(),
         });

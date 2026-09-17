@@ -191,7 +191,10 @@ fn assert_preservation(schema: u32) {
                 &fixture.connection(),
                 "SELECT schema_version, storage_protocol FROM schema_meta"
             ),
-            vec![vec![16.into(), 15.into()]]
+            vec![vec![
+                proqi::ports::store::SUPPORTED_SCHEMA_VERSION.into(),
+                proqi::ports::store::STORAGE_PROTOCOL_VERSION.into(),
+            ]]
         );
         assert_eq!(
             query(

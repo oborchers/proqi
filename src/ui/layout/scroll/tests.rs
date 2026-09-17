@@ -4,6 +4,7 @@ use crate::ports::{
     editor::{EditorSnapshot, TextViewport},
     text_layout::wrap_rows,
 };
+mod separators;
 
 fn uuid_v7(seed: u8) -> uuid::Uuid {
     let mut bytes = [0; 16];
@@ -136,12 +137,7 @@ fn assert_flow_case(
         3,
         "all presentation variants must exercise long thoughts"
     );
-    let start = flow.resolve(
-        BoardViewport::default(),
-        state.focused_thought,
-        false,
-        height,
-    );
+    let start = flow.resolve(BoardViewport::default(), state.focused_item, false, height);
     let bottom = scroll_to_bottom(&flow, start, presentations, width, height, density);
     assert_bottom_page(&flow, &bottom, presentations, width, height, density);
     let top = scroll_to_top(&flow, bottom, height);
@@ -352,7 +348,7 @@ fn missing_thought_anchor_reconciles_to_the_focused_live_thought() {
             thought_id: missing,
             position: ContentAnchor::Canonical(40),
         }),
-        Some(focused),
+        Some(focused.into()),
         false,
         7,
     );
@@ -384,7 +380,7 @@ fn focused_neighbors_exist_only_for_rows_hidden_inside_an_uncapped_thought() {
             5,
             crate::ui::settings::BoardDensity::Compact,
         );
-        let top = flow.resolve(BoardViewport::default(), state.focused_thought, false, 5);
+        let top = flow.resolve(BoardViewport::default(), state.focused_item, false, 5);
         assert_eq!(top.geometry.focused_previous, None, "{rows} rows");
         assert_eq!(
             top.geometry.focused_next.is_some(),
@@ -409,7 +405,7 @@ fn focused_neighbors_exist_only_for_rows_hidden_inside_an_uncapped_thought() {
             5,
             crate::ui::settings::BoardDensity::Compact,
         );
-        let resolved = flow.resolve(BoardViewport::default(), state.focused_thought, false, 5);
+        let resolved = flow.resolve(BoardViewport::default(), state.focused_item, false, 5);
         assert_eq!(resolved.geometry.focused_previous, None, "{preference:?}");
         assert_eq!(resolved.geometry.focused_next, None, "{preference:?}");
     }
@@ -426,7 +422,7 @@ fn manually_clipped_exact_fit_and_automatic_thoughts_do_not_own_navigation() {
             .collect::<Vec<_>>()
             .join("\n");
         let state = state(&[(&content, preference)]);
-        let focused = state.focused_thought.expect("focused thought");
+        let focused = state.focused_thought_id().expect("focused thought");
         let flow = measure(
             &state,
             None,
@@ -434,10 +430,10 @@ fn manually_clipped_exact_fit_and_automatic_thoughts_do_not_own_navigation() {
             5,
             crate::ui::settings::BoardDensity::Compact,
         );
-        let top = flow.resolve(BoardViewport::default(), Some(focused), false, 5);
+        let top = flow.resolve(BoardViewport::default(), Some(focused.into()), false, 5);
         let clipped = flow.resolve(
             BoardViewport::Manual(top.geometry.next.expect("manual clipping row")),
-            Some(focused),
+            Some(focused.into()),
             false,
             5,
         );
@@ -464,7 +460,7 @@ fn focused_navigation_boundaries_follow_every_wrapped_content_shape() {
             ("next", ThoughtPresentation::Automatic),
         ]);
         let focused = state.board.live_thoughts()[1].id;
-        state.focused_thought = Some(focused);
+        state.focused_item = Some(focused.into());
         let flow = measure(
             &state,
             None,
@@ -472,11 +468,12 @@ fn focused_navigation_boundaries_follow_every_wrapped_content_shape() {
             5,
             crate::ui::settings::BoardDensity::Compact,
         );
-        let start = flow.resolve(BoardViewport::default(), Some(focused), false, 5);
+        let start = flow.resolve(BoardViewport::default(), Some(focused.into()), false, 5);
         let mut current = start;
         let mut steps = 0;
         while let Some(next) = current.geometry.focused_next {
-            let advanced = flow.resolve(BoardViewport::Manual(next), Some(focused), false, 5);
+            let advanced =
+                flow.resolve(BoardViewport::Manual(next), Some(focused.into()), false, 5);
             assert_eq!(advanced.offset, current.offset + 1);
             current = advanced;
             steps += 1;
@@ -484,7 +481,12 @@ fn focused_navigation_boundaries_follow_every_wrapped_content_shape() {
         }
         assert!(steps > 0, "variant must exceed the viewport: {content:?}");
         while let Some(previous) = current.geometry.focused_previous {
-            let reversed = flow.resolve(BoardViewport::Manual(previous), Some(focused), false, 5);
+            let reversed = flow.resolve(
+                BoardViewport::Manual(previous),
+                Some(focused.into()),
+                false,
+                5,
+            );
             assert_eq!(reversed.offset + 1, current.offset);
             current = reversed;
         }

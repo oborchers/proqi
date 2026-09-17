@@ -26,6 +26,7 @@ mod pending_types;
 mod pointer;
 mod pointer_activation;
 mod pointer_editor;
+mod pointer_separator;
 mod presentation;
 pub(in crate::ui) mod query;
 mod recovery;
@@ -49,7 +50,7 @@ use std::{
 
 use crate::{
     application::{AppState, Effect, InteractionMode},
-    domain::{OperationId, OperationSequence, RequestId, SubmissionId, ThoughtId},
+    domain::{BoardItemId, OperationId, OperationSequence, RequestId, SubmissionId, ThoughtId},
     ports::{
         agent::AgentTarget,
         editor::{CursorMovement, EditCommand, Editor, EditorFactory, TextViewport},
@@ -142,7 +143,7 @@ pub struct BoardApp {
     scroll_geometry: Option<ScrollGeometry>,
     layout: Option<LayoutSnapshot>,
     frame_presentation: Option<crate::ui::projection::FramePresentation>,
-    dragged_thought: Option<ThoughtId>,
+    dragged_item: Option<BoardItemId>,
     drag_target: Option<usize>,
     pointer_click: Option<pointer::PointerClick>,
     overlay_activation: Option<pointer_activation::OverlayActivation>,
@@ -193,6 +194,11 @@ pub struct BoardApp {
 }
 
 impl BoardApp {
+    #[cfg(test)]
+    pub(crate) fn pointer_click_count(&self) -> Option<u8> {
+        self.pointer_click.map(|click| click.count)
+    }
+
     /// Construct a board around rehydrated application state.
     #[must_use]
     pub fn new(state: AppState, editor_factory: impl EditorFactory + 'static) -> Self {
@@ -243,7 +249,7 @@ impl BoardApp {
             scroll_geometry: None,
             layout: None,
             frame_presentation: None,
-            dragged_thought: None,
+            dragged_item: None,
             drag_target: None,
             pointer_click: None,
             overlay_activation: None,

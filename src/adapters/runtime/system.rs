@@ -10,8 +10,8 @@ use uuid::Uuid;
 
 use crate::{
     domain::{
-        InstanceId, OperationId, RequestId, RevisionId, SessionId, SubmissionId, ThoughtId,
-        Timestamp,
+        InstanceId, OperationId, RequestId, RevisionId, SeparatorId, SessionId, SubmissionId,
+        ThoughtId, Timestamp,
     },
     ports::environment::{
         AppPaths, Clock, Environment, IdGenerator, MonotonicClock, PathError, Paths,
@@ -67,6 +67,9 @@ impl IdGenerator for SystemIdGenerator {
     }
     fn thought_id(&mut self) -> ThoughtId {
         system_id!(ThoughtId)
+    }
+    fn separator_id(&mut self) -> SeparatorId {
+        system_id!(SeparatorId)
     }
     fn revision_id(&mut self) -> RevisionId {
         system_id!(RevisionId)

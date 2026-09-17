@@ -42,12 +42,12 @@ fn asynchronous_submission_refresh_preserves_the_selected_typed_command() {
         .expect("Commands before target loss")
         .1
         .iter()
-        .position(|row| row == "Copy thought")
+        .position(|row| row == "Copy thought text")
         .expect("Copy command");
     move_down(&mut lost, copy);
     lost.app.complete_agent_discovery(Ok(Vec::new()));
     let (_, rows, selected) = lost.app.palette_view().expect("Commands after target loss");
-    assert_eq!(rows[selected], "Copy thought");
+    assert_eq!(rows[selected], "Copy thought text");
 }
 
 #[test]
@@ -63,7 +63,7 @@ fn commands_show_bindings_and_scope_from_the_captured_invocation_mode() {
     saved_thought(&mut fixture, "contextual shortcuts");
 
     open(&mut fixture);
-    let (_, rendered) = searched_row(&mut fixture, "Copy thought", 88);
+    let (_, rendered) = searched_row(&mut fixture, "Copy thought text", 88);
     assert!(rendered.contains("F5 · board"));
     fixture.input(crate::key_input(UiKey::Escape));
     open(&mut fixture);
@@ -84,7 +84,7 @@ fn commands_show_bindings_and_scope_from_the_captured_invocation_mode() {
     fixture.input(UiInput::KeyStroke(KeyStroke::press(LogicalKey::Function(
         9,
     ))));
-    let (_, rendered) = searched_row(&mut fixture, "Copy thought", 88);
+    let (_, rendered) = searched_row(&mut fixture, "Copy thought text", 88);
     assert!(rendered.contains("F7 · edit"));
     fixture.input(crate::key_input(UiKey::Escape));
     fixture.input(UiInput::KeyStroke(KeyStroke::press(LogicalKey::Function(
@@ -96,8 +96,8 @@ fn commands_show_bindings_and_scope_from_the_captured_invocation_mode() {
     fixture.input(UiInput::KeyStroke(KeyStroke::press(LogicalKey::Function(
         9,
     ))));
-    let (_, rendered) = searched_row(&mut fixture, "Select all thoughts", 88);
-    assert!(rendered.contains("F10 · selection"));
+    let (_, rendered) = searched_row(&mut fixture, "Select all items", 88);
+    assert!(rendered.contains("F10 · selection"), "{rendered}");
     assert!(!rendered.contains("F11"));
 }
 
@@ -182,9 +182,9 @@ fn editor_clipboard_and_board_selection_commands_are_contextually_applicable() {
     fixture.input(crate::key_input(UiKey::Character('e')));
 
     for command in [
-        "Copy thought",
-        "Cut thought",
-        "Toggle thought selection",
+        "Copy thought text",
+        "Cut thought text",
+        "Toggle item selection",
         "Start contiguous range selection",
     ] {
         fixture.input(UiInput::KeyStroke(KeyStroke::press(LogicalKey::Function(
@@ -209,7 +209,7 @@ fn editor_clipboard_and_board_selection_commands_are_contextually_applicable() {
         movement: proqi::ports::editor::CursorMovement::GraphemeForward,
         extend_selection: true,
     }));
-    for command in ["Copy thought", "Cut thought"] {
+    for command in ["Copy thought text", "Cut thought text"] {
         fixture.input(UiInput::KeyStroke(KeyStroke::press(LogicalKey::Function(
             9,
         ))));

@@ -42,6 +42,11 @@ impl BoardApp {
             }
             if self.insertion_focused() {
                 self.create_at_bottom(payload, ids, clock)
+            } else if let Some(crate::domain::BoardItemId::Separator(separator_id)) =
+                self.state.focused_item
+            {
+                let insertion = self.insertion_after_separator(separator_id);
+                self.create_at(payload, insertion, ids, clock)
             } else {
                 self.create(payload, ids, clock)
             }
@@ -75,6 +80,17 @@ impl BoardApp {
             }
             effects
         }
+    }
+
+    fn insertion_after_separator(&self, separator_id: crate::domain::SeparatorId) -> usize {
+        self.state
+            .board
+            .separator(separator_id)
+            .and_then(|separator| usize::try_from(separator.position.get()).ok())
+            .map_or_else(
+                || self.state.board.live_items().len(),
+                |position| position.saturating_add(1),
+            )
     }
 
     pub(super) fn copy_active(&mut self, ids: &mut impl IdGenerator) -> Vec<Effect> {
@@ -113,6 +129,9 @@ impl BoardApp {
     ) -> Vec<Effect> {
         let thought_ids = self.action_thought_ids();
         if thought_ids.is_empty() {
+            if self.action_has_separator() {
+                self.set_info("separator has no text to copy or cut");
+            }
             return Vec::new();
         }
         let request_id = ids.request_id();
@@ -277,7 +296,6 @@ impl BoardApp {
             )
         });
         if success && intent == Some(ClipboardIntent::Cut) && completed_cut {
-            self.clear_board_selection();
             self.sync_empty_insertion_focus();
         }
         effects

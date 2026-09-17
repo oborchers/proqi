@@ -329,7 +329,7 @@ fn restarted_submission_fixture() -> Fixture {
         clock: fixture.clock,
     };
     assert_eq!(
-        restarted.app.state.focused_thought,
+        restarted.app.state.focused_thought_id(),
         restarted
             .app
             .state

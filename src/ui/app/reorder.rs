@@ -1,4 +1,4 @@
-//! Single-thought keyboard and pointer reorder behavior.
+//! Single-item keyboard and pointer reorder behavior.
 
 use crate::{
     application::{Action, Effect},
@@ -16,19 +16,22 @@ impl BoardApp {
     ) -> Vec<Effect> {
         self.board_viewport = self.board_viewport.follow_focus();
         self.scroll_geometry = None;
-        let Some(thought_id) = self.state.focused_thought else {
+        let Some(item_id) = self.state.focused_item else {
             return Vec::new();
         };
-        if self.submission_locked(thought_id) {
+        if item_id
+            .thought()
+            .is_some_and(|thought_id| self.submission_locked(thought_id))
+        {
             self.set_warning("thought has a submission in progress");
             return Vec::new();
         }
         if self.selection_len() > 1 {
-            self.set_warning("reordering is unavailable for multiple selected thoughts");
+            self.set_warning("reordering is unavailable for multiple selected items");
             return Vec::new();
         }
-        let live = self.state.board.live_thoughts();
-        let Some(current) = live.iter().position(|thought| thought.id == thought_id) else {
+        let live = self.state.board.live_items();
+        let Some(current) = live.iter().position(|item| item.id() == item_id) else {
             return Vec::new();
         };
         if live.len() <= 1 {
@@ -41,9 +44,9 @@ impl BoardApp {
         } else {
             current + 1
         };
-        self.reduce(Action::MoveThought {
+        self.reduce(Action::MoveItem {
             operation_id: ids.operation_id(),
-            thought_id,
+            item_id,
             to: target,
             at: clock.now(),
         })

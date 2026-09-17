@@ -20,7 +20,7 @@ use serde_json::{Value, json};
 use crate::{
     adapters::terminal,
     application::{FirstRunEnvironment, SessionService},
-    domain::{ThoughtId, UndoScope},
+    domain::{BoardItemRef, ThoughtId, UndoScope},
     ports::store::{CommitReceipt, DurableIdentity},
 };
 
@@ -264,6 +264,25 @@ fn list_thoughts(context: &mut RuntimeContext, reference: &str) -> Result<Outcom
             })
         })
         .collect();
+    let items = snapshot
+        .board
+        .live_items()
+        .into_iter()
+        .map(|item| match item {
+            BoardItemRef::Thought(thought) => json!({
+                "kind": "thought",
+                "id": thought.id,
+                "position": thought.position,
+            }),
+            BoardItemRef::Separator(separator) => json!({
+                "kind": "separator",
+                "id": separator.id,
+                "position": separator.position,
+                "created_at": separator.created_at,
+                "updated_at": separator.updated_at,
+            }),
+        })
+        .collect::<Vec<_>>();
     let human = snapshot
         .board
         .live_thoughts()
@@ -279,7 +298,7 @@ fn list_thoughts(context: &mut RuntimeContext, reference: &str) -> Result<Outcom
         .collect::<Vec<_>>()
         .join("\n");
     Ok(Outcome {
-        data: json!({ "session_id": session_id, "thoughts": thoughts }),
+        data: json!({ "session_id": session_id, "items": items, "thoughts": thoughts }),
         human,
     })
 }

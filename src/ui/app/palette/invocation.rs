@@ -52,13 +52,20 @@ pub(super) struct CommandContext {
 
 struct BoardContext {
     live_thought_count: usize,
-    focused: bool,
+    live_item_count: usize,
+    focus: BoardFocus,
     mode: InteractionMode,
-    insertion_focused: bool,
     operation_pending: bool,
 }
 
+struct BoardFocus {
+    item: bool,
+    thought: bool,
+    insertion: bool,
+}
+
 struct MutationContext {
+    focused_item_mutable: bool,
     focused_mutable: bool,
     all_thoughts_mutable: bool,
 }
@@ -80,6 +87,7 @@ pub(super) struct ScreenshotContext {
 
 struct SelectionContext {
     count: usize,
+    thought_count: usize,
     contiguous: bool,
     editor_handoff: Option<EditorSelectionHandoff>,
     merge_handoff: Option<Vec<Thought>>,
@@ -99,12 +107,14 @@ impl CommandContext {
         match metadata.applicability {
             A::Always => Applicability::ENABLED,
             A::WritableBoard => self.when_writable_board(),
-            A::HasThoughts => Self::when(self.has_live_thoughts(), "Board has no thoughts"),
+            A::HasItems => Self::when(self.board.live_item_count > 0, "Board is empty"),
             A::BoardNonempty => self.board_nonempty_applicability(),
             A::Copy => self.copy_applicability(),
             A::Cut => self.cut_applicability(),
+            A::MutableItem => self.when_item_mutable(),
             A::MutableThought | A::Editor => self.when_mutable(),
             A::Reorder => self.reorder_applicability(),
+            A::BoardItem => Self::when(self.board_item(), "Available from Board focus"),
             A::BoardThought => Self::when(self.board_thought(), "Available from Board focus"),
             A::Submission => self.submission_applicability(),
             A::SubmissionAll => self.all_submission_applicability(),
@@ -136,7 +146,9 @@ impl CommandContext {
         }
         match metadata.relevance {
             CommandRelevance::Always(priority) => Some(priority),
-            CommandRelevance::FocusedThought(priority) if self.board.focused => Some(priority),
+            CommandRelevance::FocusedThought(priority) if self.board.focus.thought => {
+                Some(priority)
+            }
             CommandRelevance::Selection(priority) if self.selection.count >= 2 => Some(priority),
             CommandRelevance::Editor(priority) if self.selection.editor_handoff.is_some() => {
                 Some(priority)
@@ -219,12 +231,24 @@ impl CommandContext {
     }
 
     const fn when_mutable(&self) -> Applicability {
-        if !self.board.focused {
+        if self.selection.thought_count == 0 {
             Applicability::disabled("No thought is focused")
         } else if self.recovery.failed() {
             Applicability::disabled("Resolve the failed save first")
         } else if !self.mutation.focused_mutable {
             Applicability::disabled("Thought has an operation in progress")
+        } else {
+            Applicability::ENABLED
+        }
+    }
+
+    const fn when_item_mutable(&self) -> Applicability {
+        if !self.board.focus.item {
+            Applicability::disabled("No Board item is focused")
+        } else if self.recovery.failed() {
+            Applicability::disabled("Resolve the failed save first")
+        } else if !self.mutation.focused_item_mutable {
+            Applicability::disabled("Board item has an operation in progress")
         } else {
             Applicability::ENABLED
         }
@@ -291,19 +315,19 @@ impl CommandContext {
     }
 
     fn reorder_applicability(&self) -> Applicability {
-        let mutable = self.when_mutable();
+        let mutable = self.when_item_mutable();
         if !mutable.enabled {
             return mutable;
         }
         if self.selection.count > 1 {
-            return Applicability::disabled("Unavailable for multiple selected thoughts");
+            return Applicability::disabled("Unavailable for multiple selected items");
         }
-        Self::when(self.board.live_thought_count > 1, "Nothing to reorder")
+        Self::when(self.board.live_item_count > 1, "Nothing to reorder")
     }
 
     const fn board_nonempty_applicability(&self) -> Applicability {
-        if !self.has_live_thoughts() {
-            Applicability::disabled("Board has no thoughts")
+        if self.board.live_item_count == 0 {
+            Applicability::disabled("Board is empty")
         } else if !matches!(self.board.mode, InteractionMode::Board) {
             Applicability::disabled("Available from Board focus")
         } else {
@@ -336,7 +360,7 @@ impl CommandContext {
     }
 
     fn merge_applicability(&self) -> Applicability {
-        if self.selection.count < 2 {
+        if self.selection.thought_count < 2 {
             return Applicability::disabled("Select at least two thoughts");
         }
         if !self.selection.contiguous {
@@ -351,8 +375,14 @@ impl CommandContext {
 
     const fn board_thought(&self) -> bool {
         matches!(self.board.mode, InteractionMode::Board)
-            && !self.board.insertion_focused
-            && self.board.focused
+            && !self.board.focus.insertion
+            && self.board.focus.thought
+    }
+
+    const fn board_item(&self) -> bool {
+        matches!(self.board.mode, InteractionMode::Board)
+            && !self.board.focus.insertion
+            && self.board.focus.item
     }
 }
 
@@ -364,7 +394,7 @@ impl BoardApp {
     pub(super) fn board_thought_command_available(&self) -> bool {
         matches!(self.state.mode, InteractionMode::Board)
             && !self.insertion_focused()
-            && self.state.focused_thought.is_some()
+            && self.state.focused_thought_id().is_some()
     }
 
     pub(super) fn capture_screenshot_command_context(&self) -> ScreenshotContext {
@@ -376,8 +406,11 @@ impl BoardApp {
 
     pub(super) fn capture_command_context(&mut self) -> CommandContext {
         let selected_ids = self.action_thought_ids();
+        let selected_thought_count = selected_ids.len();
         let has_thought = self.active_thought_id().is_some();
-        let mutable_thought = has_thought
+        let has_item = self.command_has_item(has_thought);
+        let has_action_thought = selected_thought_count > 0;
+        let mutable_thought = has_action_thought
             && !self.state.deferred_board_operation_pending()
             && selected_ids.iter().all(|id| {
                 !self.submission_locked(*id)
@@ -386,10 +419,16 @@ impl BoardApp {
                         .values()
                         .any(|pending| pending == id)
             });
+        let item_mutable = if has_action_thought {
+            mutable_thought
+        } else {
+            has_item && !self.state.deferred_board_operation_pending()
+        };
         let live_thoughts = self.state.board.live_thoughts();
         let selection_count = self.selection_len();
-        let selection_contiguous = selection_is_contiguous(self, &selected_ids, selection_count);
-        let merge_handoff = (selection_count >= 2).then(|| {
+        let selection_contiguous =
+            selection_is_contiguous(self, &selected_ids, selected_thought_count);
+        let merge_handoff = (selected_thought_count >= 2).then(|| {
             selected_ids
                 .iter()
                 .filter_map(|id| self.state.board.thought(*id).cloned())
@@ -403,12 +442,17 @@ impl BoardApp {
         CommandContext {
             board: BoardContext {
                 live_thought_count: live_thoughts.len(),
-                focused: has_thought,
+                live_item_count: self.state.board.live_items().len(),
+                focus: BoardFocus {
+                    item: has_item,
+                    thought: has_thought,
+                    insertion: self.insertion_focused(),
+                },
                 mode: self.state.mode,
-                insertion_focused: self.insertion_focused(),
                 operation_pending: self.state.deferred_board_operation_pending(),
             },
             mutation: MutationContext {
+                focused_item_mutable: item_mutable,
                 focused_mutable: mutable_thought,
                 all_thoughts_mutable: live_thoughts.iter().all(|thought| {
                     !self.submission_locked(thought.id)
@@ -430,10 +474,21 @@ impl BoardApp {
             screenshot: self.capture_screenshot_command_context(),
             selection: SelectionContext {
                 count: selection_count,
+                thought_count: selected_thought_count,
                 contiguous: selection_contiguous,
                 editor_handoff: self.palette_selection_handoff.take(),
                 merge_handoff,
             },
+        }
+    }
+
+    fn command_has_item(&self, has_thought: bool) -> bool {
+        match self.state.mode {
+            InteractionMode::Board => {
+                !self.insertion_focused() && self.state.focused_item.is_some()
+            }
+            InteractionMode::Edit { .. } => has_thought,
+            InteractionMode::Compose => false,
         }
     }
 }

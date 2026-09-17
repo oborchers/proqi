@@ -24,7 +24,7 @@ impl BoardApp {
             return Err(ApplicationError::InvalidState);
         }
         let previous_mode = self.state.mode;
-        let previous_focus = self.state.focused_thought;
+        let previous_focus = self.state.focused_item;
         let at = clock.now();
         let Some(action) = self.control_action(mutation, at)? else {
             return Ok(Vec::new());
@@ -198,22 +198,19 @@ impl BoardApp {
     fn restore_live_interaction(
         &mut self,
         previous_mode: InteractionMode,
-        previous_focus: Option<ThoughtId>,
+        previous_focus: Option<crate::domain::BoardItemId>,
     ) {
-        let live_focus = previous_focus.filter(|id| {
-            self.state
-                .board
-                .thought(*id)
-                .is_some_and(crate::domain::Thought::is_live)
-        });
+        let live_focus = previous_focus.filter(|id| self.state.board.item_position(*id).is_some());
         self.state.mode = match previous_mode {
             InteractionMode::Compose => InteractionMode::Compose,
-            InteractionMode::Edit { thought_id } if live_focus == Some(thought_id) => {
+            InteractionMode::Edit { thought_id }
+                if live_focus == Some(crate::domain::BoardItemId::Thought(thought_id)) =>
+            {
                 InteractionMode::Edit { thought_id }
             }
             InteractionMode::Board | InteractionMode::Edit { .. } => InteractionMode::Board,
         };
-        self.state.focused_thought = live_focus;
+        self.state.focused_item = live_focus;
     }
 }
 

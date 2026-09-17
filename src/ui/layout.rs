@@ -12,7 +12,7 @@ use ratatui_core::layout::Rect;
 
 use crate::{
     application::AppState,
-    domain::{Direction, ThoughtId},
+    domain::{Direction, SeparatorId, ThoughtId},
     ports::{
         agent::{AgentTarget, SubmissionDisposition},
         editor::EditorSnapshot,
@@ -27,6 +27,10 @@ pub enum HitTarget {
     Thought(ThoughtId),
     /// Reorder handle for one thought.
     DragHandle(ThoughtId),
+    /// Payload-free visual separator.
+    Separator(SeparatorId),
+    /// Reorder handle for one separator.
+    SeparatorDragHandle(SeparatorId),
     /// Overflow indicator for one capped thought.
     Overflow(ThoughtId),
     /// Active insertion area.
@@ -100,6 +104,23 @@ pub struct ThoughtLayout {
     pub content_row_offset: usize,
 }
 
+/// Geometry for one visible payload-free separator.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SeparatorLayout {
+    /// Durable separator identity.
+    pub separator_id: SeparatorId,
+    /// Shared live Board position.
+    pub index: usize,
+    /// Complete visible allocation, including density-owned breathing room.
+    pub area: Rect,
+    /// Visible horizontal rule row when it is not clipped.
+    pub line: Option<Rect>,
+    /// Stable one-cell drag and focus gutter.
+    pub gutter: Rect,
+    /// Whether the viewport clipped this separator allocation.
+    pub viewport_clipped: bool,
+}
+
 /// Geometry for the transient insertion editor.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ComposeLayout {
@@ -142,6 +163,8 @@ pub struct LayoutSnapshot {
     pub footer_agents: Rect,
     /// Visible thought allocations.
     pub thoughts: Vec<ThoughtLayout>,
+    /// Visible explicit separator allocations.
+    pub separators: Vec<SeparatorLayout>,
     /// Transient insertion editor geometry when Compose is active.
     pub compose: Option<ComposeLayout>,
     /// Clickable insertion control when visible.
@@ -208,6 +231,14 @@ impl LayoutSnapshot {
                 return Some(HitTarget::Thought(thought.thought_id));
             }
         }
+        for separator in &self.separators {
+            if crate::ui::geometry::contains(separator.gutter, column, row) {
+                return Some(HitTarget::SeparatorDragHandle(separator.separator_id));
+            }
+            if crate::ui::geometry::contains(separator.area, column, row) {
+                return Some(HitTarget::Separator(separator.separator_id));
+            }
+        }
         if self
             .compose
             .as_ref()
@@ -234,14 +265,10 @@ impl LayoutSnapshot {
             .find(|layout| layout.thought_id == thought_id)
     }
 
-    /// Map a board row to the nearest visible thought position.
+    /// Map a board row to the nearest visible Board item position.
     #[must_use]
     pub fn insertion_index_at(&self, row: u16) -> Option<usize> {
-        self.thoughts
-            .iter()
-            .find(|layout| row < layout.area.bottom())
-            .map(|layout| layout.index)
-            .or_else(|| self.thoughts.last().map(|layout| layout.index))
+        content::insertion_index_at(self, row)
     }
 
     /// Add only currently verified agent controls where footer width permits.
@@ -414,6 +441,7 @@ fn compute_frame(
         footer_actions: chrome.actions,
         footer_agents: chrome.agents,
         thoughts: content.thoughts,
+        separators: content.separators,
         compose: content.compose,
         insert: content.insert,
         first_index: content.first,
@@ -439,7 +467,7 @@ fn compute_frame(
                     ..
                 }
             ),
-            state.focused_thought.is_some(),
+            state.focused_item.is_some(),
             history_available,
             keybindings,
         ),

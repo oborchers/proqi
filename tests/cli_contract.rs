@@ -29,6 +29,15 @@ fn current_success_envelope_matches_the_checked_in_fixture() {
 }
 
 #[test]
+fn current_capabilities_envelope_matches_the_checked_in_fixture() {
+    assert_contract(
+        include_str!("fixtures/cli/v1/capabilities.request.json"),
+        include_str!("fixtures/cli/v1/capabilities.success.json"),
+        true,
+    );
+}
+
+#[test]
 fn current_error_envelope_matches_the_checked_in_fixture() {
     assert_contract(
         include_str!("fixtures/cli/v1/wrong_session_prefix.request.json"),

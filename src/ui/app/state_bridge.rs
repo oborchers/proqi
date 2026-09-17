@@ -96,7 +96,7 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        let Some(thought_id) = self.state.focused_thought else {
+        let Some(thought_id) = self.state.focused_thought_id() else {
             return Vec::new();
         };
         if self.submission_locked(thought_id) {
@@ -114,7 +114,7 @@ impl BoardApp {
     pub(super) fn enter_edit(&mut self) {
         self.insertion_focus = InsertionFocus::Inactive;
         self.edit_boundary = None;
-        if let Some(thought_id) = self.state.focused_thought {
+        if let Some(thought_id) = self.state.focused_thought_id() {
             if self.submission_locked(thought_id) {
                 self.set_warning("thought has a submission in progress");
                 return;
@@ -139,13 +139,7 @@ impl BoardApp {
         match reduce(&mut self.state, action) {
             Ok(effects) => {
                 self.finish_attachment_mutation(may_change_attachments);
-                let order = self
-                    .state
-                    .board
-                    .live_thoughts()
-                    .into_iter()
-                    .map(|thought| thought.id)
-                    .collect::<Vec<_>>();
+                let order = self.live_item_ids();
                 self.selection.reconcile(&order);
                 Some(effects)
             }
@@ -165,11 +159,11 @@ impl BoardApp {
         action: Action,
         transition: EmptyBoardTransition,
     ) -> Vec<Effect> {
-        let was_nonempty = !self.state.board.live_thoughts().is_empty();
+        let was_nonempty = !self.state.board.live_items().is_empty();
         let Some(effects) = self.try_reduce(action) else {
             return Vec::new();
         };
-        if was_nonempty && self.state.board.live_thoughts().is_empty() {
+        if was_nonempty && self.state.board.live_items().is_empty() {
             self.state.reconcile_empty_board(transition);
             if transition == EmptyBoardTransition::ComposeAfterLocalRemoval
                 && matches!(

@@ -6,7 +6,7 @@ use crate::{
     application::AppState, domain::ThoughtPresentation, ui::projection::FramePresentation,
 };
 
-use super::{ComposeLayout, ThoughtLayout, scroll};
+use super::{ComposeLayout, SeparatorLayout, ThoughtLayout, scroll};
 
 pub(super) struct ContentRequest<'a> {
     pub(super) state: &'a AppState,
@@ -22,6 +22,7 @@ pub(super) struct ContentRequest<'a> {
 
 pub(super) struct VisibleContent {
     pub(super) thoughts: Vec<ThoughtLayout>,
+    pub(super) separators: Vec<SeparatorLayout>,
     pub(super) compose: Option<ComposeLayout>,
     pub(super) insert: Option<Rect>,
     pub(super) first: usize,
@@ -48,7 +49,7 @@ pub(super) fn visible_content(request: &ContentRequest<'_>) -> VisibleContent {
     });
     let resolved = flow.resolve(
         viewport,
-        request.state.focused_thought,
+        request.state.focused_item,
         request.insertion_focused,
         request.board.height,
     );
@@ -59,6 +60,7 @@ pub(super) fn visible_content(request: &ContentRequest<'_>) -> VisibleContent {
         request.board.height.saturating_sub(flow.top_padding),
     );
     let thoughts = visible_thoughts(&flow, resolved.offset, board);
+    let separators = visible_separators(&flow, resolved.offset, board);
     let compose = visible_compose(&flow, resolved.offset, board);
     let insert = flow
         .insert_row
@@ -73,6 +75,7 @@ pub(super) fn visible_content(request: &ContentRequest<'_>) -> VisibleContent {
         });
     VisibleContent {
         thoughts,
+        separators,
         compose,
         insert,
         first: resolved.first_index,
@@ -83,6 +86,60 @@ pub(super) fn visible_content(request: &ContentRequest<'_>) -> VisibleContent {
         content_height: usize::from(flow.top_padding).saturating_add(flow.total_rows),
         viewport_offset: resolved.offset,
     }
+}
+
+pub(super) fn insertion_index_at(layout: &super::LayoutSnapshot, row: u16) -> Option<usize> {
+    let items = || {
+        layout
+            .thoughts
+            .iter()
+            .map(|item| (item.index, item.area))
+            .chain(layout.separators.iter().map(|item| (item.index, item.area)))
+    };
+    items()
+        .filter(|(_, area)| row < area.bottom())
+        .min_by_key(|(index, _)| *index)
+        .map(|(index, _)| index)
+        .or_else(|| items().map(|(index, _)| index).max())
+}
+
+fn visible_separators(
+    flow: &scroll::BoardFlow,
+    offset: usize,
+    board: Rect,
+) -> Vec<SeparatorLayout> {
+    let viewport_end = offset.saturating_add(usize::from(board.height));
+    flow.separators
+        .iter()
+        .filter_map(|separator| {
+            let first = separator.start.max(offset);
+            let last = separator.end.min(viewport_end);
+            (first < last).then(|| {
+                let area = Rect::new(
+                    board.x,
+                    viewport_y(board, first, offset),
+                    board.width,
+                    u16::try_from(last.saturating_sub(first)).unwrap_or(u16::MAX),
+                );
+                let line_visible = separator.line >= offset && separator.line < viewport_end;
+                SeparatorLayout {
+                    separator_id: separator.separator_id,
+                    index: separator.index,
+                    area,
+                    line: line_visible.then(|| {
+                        Rect::new(
+                            board.x,
+                            viewport_y(board, separator.line, offset),
+                            board.width,
+                            1,
+                        )
+                    }),
+                    gutter: Rect::new(area.x, area.y, area.width.min(1), area.height),
+                    viewport_clipped: separator.start < offset || separator.end > viewport_end,
+                }
+            })
+        })
+        .collect()
 }
 
 fn visible_compose(flow: &scroll::BoardFlow, offset: usize, board: Rect) -> Option<ComposeLayout> {

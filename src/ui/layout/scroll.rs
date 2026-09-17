@@ -2,13 +2,14 @@
 
 use crate::{
     application::{AppState, InteractionMode},
-    domain::{ThoughtId, ThoughtPresentation},
+    domain::{BoardItemId, SeparatorId, ThoughtId, ThoughtPresentation},
     ports::text_layout::wrap_rows,
     ui::projection::{FramePresentation, PresentedThought},
 };
 
 mod anchor;
 mod focus;
+mod measure;
 #[cfg(test)]
 mod tests;
 
@@ -28,6 +29,7 @@ pub(in crate::ui) enum ScrollAnchor {
         position: ContentAnchor,
     },
     Overflow(ThoughtId),
+    Separator(SeparatorId),
     Compose {
         byte: usize,
     },
@@ -93,9 +95,26 @@ pub(super) struct ThoughtRows {
     editing: bool,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub(super) struct SeparatorRows {
+    pub(super) separator_id: SeparatorId,
+    pub(super) index: usize,
+    pub(super) start: usize,
+    pub(super) line: usize,
+    pub(super) end: usize,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum ItemRows {
+    Thought(usize),
+    Separator(usize),
+}
+
 #[derive(Clone, Debug)]
 pub(super) struct BoardFlow {
     pub(super) thoughts: Vec<ThoughtRows>,
+    pub(super) separators: Vec<SeparatorRows>,
+    items: Vec<ItemRows>,
     pub(super) top_padding: u16,
     pub(super) compose: Option<ComposeRows>,
     pub(super) insert_gap: Option<usize>,
@@ -130,77 +149,10 @@ struct MeasureContext<'a> {
 }
 
 impl BoardFlow {
-    pub(super) fn measure(
-        state: &AppState,
-        presentation: &FramePresentation,
-        content_width: u16,
-        board_height: u16,
-        density: crate::ui::settings::BoardDensity,
-    ) -> Self {
-        let live = presentation.thoughts();
-        let density = density.resolve(board_height);
-        let comfortable = density == crate::ui::settings::BoardDensity::Comfortable;
-        let gap_rows = if comfortable { 2 } else { 1 };
-        let top_padding = u16::from(comfortable && board_height >= 3 && !live.is_empty());
-        let mut cursor = 0_usize;
-        let mut thoughts = Vec::with_capacity(live.len());
-        let context = MeasureContext {
-            state,
-            presentation,
-            content_width,
-            board_height,
-            gap_rows,
-        };
-        for (index, thought) in live.iter().enumerate() {
-            let rows = measure_thought(&context, thought, index, cursor);
-            cursor = rows.end;
-            thoughts.push(rows);
-        }
-        let compose = if matches!(state.mode, InteractionMode::Compose) {
-            presentation.editor_snapshot().map(|snapshot| {
-                let gap = usize::from(!thoughts.is_empty()) * gap_rows;
-                let content_start = cursor.saturating_add(gap);
-                let row_starts = snapshot
-                    .visual_lines
-                    .iter()
-                    .map(|row| row.start_byte)
-                    .collect::<Vec<_>>();
-                let rows = row_starts.len().max(1);
-                ComposeRows {
-                    content_start,
-                    row_starts,
-                    scroll_row: snapshot.scroll_row,
-                    end: content_start.saturating_add(rows),
-                }
-            })
-        } else {
-            None
-        };
-        if let Some(compose) = &compose {
-            cursor = compose.end;
-        }
-        let insertion_prompt = matches!(state.mode, InteractionMode::Board)
-            || (matches!(state.mode, InteractionMode::Compose)
-                && presentation.editor_snapshot().is_none());
-        let insert_gap = insertion_prompt.then_some(cursor);
-        cursor = cursor.saturating_add(usize::from(insertion_prompt));
-        let insert_row = insertion_prompt.then_some(cursor);
-        cursor = cursor.saturating_add(usize::from(insertion_prompt));
-        Self {
-            thoughts,
-            top_padding,
-            compose,
-            insert_gap,
-            insert_row,
-            total_rows: cursor,
-            density,
-        }
-    }
-
     pub(super) fn resolve(
         &self,
         viewport: BoardViewport,
-        focused: Option<ThoughtId>,
+        focused: Option<BoardItemId>,
         insertion_focused: bool,
         board_height: u16,
     ) -> ResolvedScroll {
@@ -213,12 +165,7 @@ impl BoardFlow {
                     .then_some(self.insert_row.or(self.insert_gap))
                     .flatten()
             })
-            .or_else(|| {
-                focused.and_then(|thought_id| {
-                    self.thought(thought_id)
-                        .map(|thought| thought.content_start)
-                })
-            })
+            .or_else(|| focused.and_then(|item_id| self.item_start(item_id)))
             .unwrap_or(0)
             .min(maximum);
         if matches!(viewport, BoardViewport::FollowFocus(_)) {
@@ -289,6 +236,9 @@ impl BoardFlow {
                         .saturating_add(thought.content_rows.saturating_sub(1))
                 })
             }),
+            ScrollAnchor::Separator(separator_id) => {
+                self.separator(separator_id).map(|separator| separator.line)
+            }
             ScrollAnchor::Compose { byte } => self.compose.as_ref().map(|compose| {
                 let row = compose
                     .row_starts
@@ -303,13 +253,6 @@ impl BoardFlow {
     }
 
     fn anchor_at(&self, ordinal: usize) -> ScrollAnchor {
-        if self
-            .thoughts
-            .first()
-            .is_some_and(|thought| ordinal < thought.gap_start)
-        {
-            return ScrollAnchor::Start;
-        }
         for thought in &self.thoughts {
             if ordinal < thought.content_start && ordinal >= thought.gap_start {
                 return ScrollAnchor::GapBefore {
@@ -334,6 +277,11 @@ impl BoardFlow {
                 return ScrollAnchor::Overflow(thought.thought_id);
             }
         }
+        for separator in &self.separators {
+            if ordinal >= separator.start && ordinal < separator.end {
+                return ScrollAnchor::Separator(separator.separator_id);
+            }
+        }
         if let Some(compose) = &self.compose
             && ordinal >= compose.content_start
             && ordinal < compose.end
@@ -353,13 +301,23 @@ impl BoardFlow {
     }
 
     fn first_at(&self, offset: usize) -> (usize, usize) {
-        let Some(thought) = self.thoughts.iter().find(|thought| thought.end > offset) else {
-            return (self.thoughts.len().saturating_sub(1), 0);
+        let Some(item) = self
+            .items
+            .iter()
+            .find(|item| self.item_end(**item) > offset)
+        else {
+            return (self.items.len().saturating_sub(1), 0);
         };
-        let row = offset
-            .saturating_sub(thought.content_start)
-            .min(thought.content_rows.saturating_sub(1));
-        (thought.index, row)
+        match item {
+            ItemRows::Thought(index) => {
+                let thought = &self.thoughts[*index];
+                let row = offset
+                    .saturating_sub(thought.content_start)
+                    .min(thought.content_rows.saturating_sub(1));
+                (thought.index, row)
+            }
+            ItemRows::Separator(index) => (self.separators[*index].index, 0),
+        }
     }
 
     fn thought(&self, thought_id: ThoughtId) -> Option<&ThoughtRows> {
@@ -368,12 +326,32 @@ impl BoardFlow {
             .find(|thought| thought.thought_id == thought_id)
     }
 
+    fn separator(&self, separator_id: SeparatorId) -> Option<&SeparatorRows> {
+        self.separators
+            .iter()
+            .find(|separator| separator.separator_id == separator_id)
+    }
+
+    fn item_start(&self, item_id: BoardItemId) -> Option<usize> {
+        match item_id {
+            BoardItemId::Thought(id) => self.thought(id).map(|item| item.content_start),
+            BoardItemId::Separator(id) => self.separator(id).map(|item| item.start),
+        }
+    }
+
+    fn item_end(&self, item: ItemRows) -> usize {
+        match item {
+            ItemRows::Thought(index) => self.thoughts[index].end,
+            ItemRows::Separator(index) => self.separators[index].end,
+        }
+    }
+
     fn follow_focus_offset(
         &self,
         offset: usize,
         maximum: usize,
         viewport_height: usize,
-        focused: Option<ThoughtId>,
+        focused: Option<BoardItemId>,
         insertion_focused: bool,
     ) -> usize {
         if insertion_focused {
@@ -385,7 +363,24 @@ impl BoardFlow {
                 .saturating_add(compose.scroll_row)
                 .min(maximum);
         }
-        let Some(rows) = focused.and_then(|id| self.thought(id)) else {
+        let Some(focused) = focused else {
+            return offset;
+        };
+        if let BoardItemId::Separator(separator_id) = focused {
+            let Some(separator) = self.separator(separator_id) else {
+                return offset;
+            };
+            let visible = offset..offset.saturating_add(viewport_height);
+            return if visible.contains(&separator.line) {
+                offset
+            } else {
+                separator.line.min(maximum)
+            };
+        }
+        let BoardItemId::Thought(focused) = focused else {
+            return offset;
+        };
+        let Some(rows) = self.thought(focused) else {
             return offset;
         };
         if rows.editing {
@@ -411,8 +406,9 @@ fn measure_thought(
     thought: &PresentedThought,
     index: usize,
     cursor: usize,
+    previous_was_thought: bool,
 ) -> ThoughtRows {
-    let gap_rows = usize::from(index > 0) * context.gap_rows;
+    let gap_rows = usize::from(previous_was_thought) * context.gap_rows;
     let content_start = cursor.saturating_add(gap_rows);
     let active_editor = context.presentation.editor_snapshot().filter(|_| {
         matches!(context.state.mode, InteractionMode::Edit { thought_id } if thought_id == thought.thought_id)
