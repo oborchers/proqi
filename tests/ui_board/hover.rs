@@ -233,6 +233,53 @@ fn scrolling_and_async_footer_refresh_reconcile_at_the_pointer_cell() {
 }
 
 #[test]
+fn restricted_pointer_owners_hover_only_controls_they_can_activate() {
+    let mut fixture = Fixture::new();
+    super::agent::prepare_thought(&mut fixture);
+    fixture.input(crate::key_input(UiKey::Character(' ')));
+    fixture.app.complete_agent_discovery(Ok(vec![
+        super::agent::target(proqi::domain::Direction::Up, "w1:p2"),
+        super::agent::target(proqi::domain::Direction::Right, "w1:p3"),
+    ]));
+    fixture.input(crate::submission_input::control_submit(true));
+    assert_eq!(
+        fixture.app.submission_mode(),
+        Some(proqi::ports::agent::SubmissionDisposition::Keep)
+    );
+    let layout = fixture.app.prepare_frame(Rect::new(0, 0, 100, 12));
+    let thought = layout.thoughts[0].text_area;
+    fixture.pointer(thought.x, thought.y, PointerKind::Move);
+    assert_eq!(fixture.app.hovered(), None);
+    assert!(fixture.app.thought_selected(layout.thoughts[0].thought_id));
+
+    let rename = area_for(&layout, HitTarget::RenameSession);
+    fixture.pointer(rename.x, rename.y, PointerKind::Move);
+    assert_eq!(fixture.app.hovered(), None);
+
+    let (delivery, area) = layout
+        .controls
+        .iter()
+        .find(|(target, _)| matches!(target, HitTarget::Deliver(_, _)))
+        .copied()
+        .expect("submission direction control");
+    fixture.pointer(area.x, area.y, PointerKind::Move);
+    assert_eq!(fixture.app.hovered(), Some(delivery));
+
+    let mut recovery_fixture = Fixture::new();
+    let sequence = recovery_fixture.paste("recovery owner");
+    recovery_fixture
+        .app
+        .acknowledge_persistence(sequence, false);
+    let recovery = recovery_fixture.app.prepare_frame(Rect::new(0, 0, 100, 12));
+    let thought = recovery.thoughts[0].text_area;
+    recovery_fixture.pointer(thought.x, thought.y, PointerKind::Move);
+    assert_eq!(recovery_fixture.app.hovered(), None);
+    let retry = area_for(&recovery, HitTarget::Retry);
+    recovery_fixture.pointer(retry.x, retry.y, PointerKind::Move);
+    assert_eq!(recovery_fixture.app.hovered(), Some(HitTarget::Retry));
+}
+
+#[test]
 fn hovered_board_footer_has_a_reviewable_dark_narrow_buffer() {
     let mut fixture = Fixture::new();
     super::navigation::durable_thought(&mut fixture, "hover snapshot");

@@ -52,7 +52,7 @@ impl BoardApp {
         if !matches!(pointer.kind, PointerKind::Down(PointerButton::Left)) {
             return Vec::new();
         }
-        match self.hit(pointer) {
+        match self.pointer_target_for_owner(pointer) {
             Some(HitTarget::Retry) => self.retry_persistence(),
             Some(HitTarget::ExportRecovery) => self.export_recovery(ids, clock),
             Some(HitTarget::Help) => self.toggle_help(),
@@ -108,7 +108,7 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        let target = self.hit(pointer);
+        let target = self.pointer_target_for_owner(pointer);
         if matches!(pointer.kind, PointerKind::Move) {
             self.hovered = target;
             return Vec::new();
