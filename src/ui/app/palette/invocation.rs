@@ -1,24 +1,23 @@
 //! Captured Commands context resolves labels, applicability, and relevance once.
 
+mod capture;
 mod presentation;
 mod recovery;
 mod selection;
 
 use crate::{
     application::InteractionMode,
-    domain::{ContentAnnotationKind, Thought},
+    domain::Thought,
     ui::{
         CommandApplicability, CommandLabel, CommandMetadata, CommandRelevance,
         app::screenshot::ScreenshotPaletteAction,
     },
 };
 
-use super::{
-    super::{BoardApp, palette_handoff::EditorSelectionHandoff},
-    PaletteHistoryContext,
-};
+#[cfg(test)]
+use super::super::BoardApp;
+use super::{super::palette_handoff::EditorSelectionHandoff, PaletteHistoryContext};
 use recovery::RecoveryContext;
-use selection::selection_is_contiguous;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) struct Applicability {
@@ -65,10 +64,28 @@ struct BoardFocus {
 }
 
 struct MutationContext {
-    focused_item_mutable: bool,
-    focused_mutable: bool,
-    focused_thought_mutable: bool,
-    all_thoughts_mutable: bool,
+    focused_item: MutationReadiness,
+    action_thoughts: MutationReadiness,
+    focused_thought: MutationReadiness,
+    all_thoughts: MutationReadiness,
+}
+
+#[derive(Clone, Copy)]
+enum MutationReadiness {
+    Ready,
+    Pending,
+}
+
+impl MutationReadiness {
+    const fn is_ready(self) -> bool {
+        matches!(self, Self::Ready)
+    }
+}
+
+impl From<bool> for MutationReadiness {
+    fn from(ready: bool) -> Self {
+        if ready { Self::Ready } else { Self::Pending }
+    }
 }
 
 struct FeatureContext {
@@ -237,7 +254,7 @@ impl CommandContext {
             Applicability::disabled("No thought is focused")
         } else if self.recovery.failed() {
             Applicability::disabled("Resolve the failed save first")
-        } else if !self.mutation.focused_mutable {
+        } else if !self.mutation.action_thoughts.is_ready() {
             Applicability::disabled("Thought has an operation in progress")
         } else {
             Applicability::ENABLED
@@ -249,7 +266,7 @@ impl CommandContext {
             Applicability::disabled("No Board item is focused")
         } else if self.recovery.failed() {
             Applicability::disabled("Resolve the failed save first")
-        } else if !self.mutation.focused_item_mutable {
+        } else if !self.mutation.focused_item.is_ready() {
             Applicability::disabled("Board item has an operation in progress")
         } else {
             Applicability::ENABLED
@@ -261,7 +278,7 @@ impl CommandContext {
             Applicability::disabled("No thought is focused")
         } else if self.recovery.failed() {
             Applicability::disabled("Resolve the failed save first")
-        } else if !self.mutation.focused_thought_mutable {
+        } else if !self.mutation.focused_thought.is_ready() {
             Applicability::disabled("Thought has an operation in progress")
         } else {
             Applicability::ENABLED
@@ -319,7 +336,7 @@ impl CommandContext {
         if self.recovery.failed() {
             return Applicability::disabled("Resolve the failed save first");
         }
-        if !self.mutation.all_thoughts_mutable {
+        if !self.mutation.all_thoughts.is_ready() {
             return Applicability::disabled("A thought has an operation in progress");
         }
         Self::when(
@@ -397,122 +414,6 @@ impl CommandContext {
         matches!(self.board.mode, InteractionMode::Board)
             && !self.board.focus.insertion
             && self.board.focus.item
-    }
-}
-
-impl BoardApp {
-    pub(super) fn capture_recovery_command_context(&self) -> RecoveryContext {
-        RecoveryContext::capture(&self.state.durability, self.recovery_exported_for)
-    }
-
-    pub(super) fn board_thought_command_available(&self) -> bool {
-        matches!(self.state.mode, InteractionMode::Board)
-            && !self.insertion_focused()
-            && self.state.focused_thought_id().is_some()
-    }
-
-    pub(super) fn capture_screenshot_command_context(&self) -> ScreenshotContext {
-        ScreenshotContext {
-            action: self.screenshot_palette_action(),
-            retry: self.screenshot_retry_ready(),
-        }
-    }
-
-    pub(super) fn capture_command_context(&mut self) -> CommandContext {
-        let selected_ids = self.action_thought_ids();
-        let selected_thought_count = selected_ids.len();
-        let has_thought = self.active_thought_id().is_some();
-        let has_item = self.command_has_item(has_thought);
-        let has_action_thought = selected_thought_count > 0;
-        let mutable_thought = has_action_thought
-            && !self.state.deferred_board_operation_pending()
-            && selected_ids.iter().all(|id| {
-                !self.submission_locked(*id)
-                    && !self
-                        .pending_transfer_removals
-                        .values()
-                        .any(|pending| pending == id)
-            });
-        let focused_thought_mutable = self.state.focused_thought_id().is_some_and(|id| {
-            !self.state.deferred_board_operation_pending()
-                && !self.submission_locked(id)
-                && !self
-                    .pending_transfer_removals
-                    .values()
-                    .any(|pending| *pending == id)
-        });
-        let item_mutable = if has_action_thought {
-            mutable_thought
-        } else {
-            has_item && !self.state.deferred_board_operation_pending()
-        };
-        let live_thoughts = self.state.board.live_thoughts();
-        let selection_count = self.selection_len();
-        let selection_contiguous =
-            selection_is_contiguous(self, &selected_ids, selected_thought_count);
-        let merge_handoff = (selected_thought_count >= 2).then(|| {
-            selected_ids
-                .iter()
-                .filter_map(|id| self.state.board.thought(*id).cloned())
-                .collect()
-        });
-        let has_attachments = self.state.board.live_thoughts().iter().any(|thought| {
-            thought.annotations.iter().any(|annotation| {
-                matches!(annotation.kind, ContentAnnotationKind::Attachment { .. })
-            })
-        });
-        CommandContext {
-            board: BoardContext {
-                live_thought_count: live_thoughts.len(),
-                live_item_count: self.state.board.live_items().len(),
-                focus: BoardFocus {
-                    item: has_item,
-                    thought: has_thought,
-                    insertion: self.insertion_focused(),
-                },
-                mode: self.state.mode,
-                operation_pending: self.state.deferred_board_operation_pending(),
-            },
-            mutation: MutationContext {
-                focused_item_mutable: item_mutable,
-                focused_mutable: mutable_thought,
-                focused_thought_mutable,
-                all_thoughts_mutable: live_thoughts.iter().all(|thought| {
-                    !self.submission_locked(thought.id)
-                        && !self
-                            .pending_transfer_removals
-                            .values()
-                            .any(|pending| *pending == thought.id)
-                }),
-            },
-            features: FeatureContext {
-                submit_supported: self.supports_submission(),
-                installed_highlights: self.installed_highlights.is_some(),
-            },
-            recovery: self.capture_recovery_command_context(),
-            attachments: AttachmentContext {
-                present: has_attachments,
-                refreshing: self.state.attachments.manual_refresh_active(),
-            },
-            screenshot: self.capture_screenshot_command_context(),
-            selection: SelectionContext {
-                count: selection_count,
-                thought_count: selected_thought_count,
-                contiguous: selection_contiguous,
-                editor_handoff: self.palette_selection_handoff.take(),
-                merge_handoff,
-            },
-        }
-    }
-
-    fn command_has_item(&self, has_thought: bool) -> bool {
-        match self.state.mode {
-            InteractionMode::Board => {
-                !self.insertion_focused() && self.state.focused_item.is_some()
-            }
-            InteractionMode::Edit { .. } => has_thought,
-            InteractionMode::Compose => false,
-        }
     }
 }
 

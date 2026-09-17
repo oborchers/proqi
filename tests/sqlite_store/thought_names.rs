@@ -1,4 +1,18 @@
-use super::*;
+//! Durable optional-name contracts, including mixed separator history.
+
+use proqi::{
+    adapters::{memory::FakeIdGenerator, sqlite::SqliteStore},
+    application::{Action, AppState},
+    domain::{BoardOperationKind, SeparatorId, ThoughtName, Timestamp, UndoScope},
+    ports::{
+        environment::IdGenerator,
+        store::{OperationBatch, Store},
+    },
+};
+
+use super::{
+    DatabaseFixture, create_thought, one_effect, persist_effect, session_state, test_path,
+};
 
 #[test]
 fn names_survive_restart_and_board_undo_redo_without_changing_body() {
@@ -107,18 +121,9 @@ fn name_and_separator_history_share_order_without_sharing_payload() {
         .expect("create session");
     let first = create_thought(&mut store, &mut state, &mut ids, "first body", 2);
     let separator = ids.separator_id();
-    let insert = one_effect(
-        &mut state,
-        Action::InsertSeparator {
-            separator_id: separator,
-            operation_id: ids.operation_id(),
-            insertion_index: 1,
-            at: Timestamp::from_millis(3),
-        },
-    );
-    persist_effect(&mut store, &insert);
+    persist_separator_insert(&mut store, &mut state, &mut ids, separator);
     let second = create_thought(&mut store, &mut state, &mut ids, "second body", 4);
-    let name = proqi::domain::ThoughtName::new("Named first").expect("name");
+    let name = ThoughtName::new("Named first").expect("name");
     let rename = one_effect(
         &mut state,
         Action::RenameThought {
@@ -129,46 +134,7 @@ fn name_and_separator_history_share_order_without_sharing_payload() {
         },
     );
     persist_effect(&mut store, &rename);
-    let moved = one_effect(
-        &mut state,
-        Action::MoveItem {
-            operation_id: ids.operation_id(),
-            item_id: separator.into(),
-            to: 0,
-            at: Timestamp::from_millis(6),
-        },
-    );
-    persist_effect(&mut store, &moved);
-    let deleted = one_effect(
-        &mut state,
-        Action::DeleteItems {
-            operation_id: ids.operation_id(),
-            item_ids: vec![separator.into()],
-            kind: BoardOperationKind::Delete,
-            at: Timestamp::from_millis(7),
-        },
-    );
-    persist_effect(&mut store, &deleted);
-
-    for (undo, at) in [(true, 8), (true, 9), (false, 10)] {
-        let history = one_effect(
-            &mut state,
-            if undo {
-                Action::Undo {
-                    operation_id: ids.operation_id(),
-                    scope: UndoScope::Board,
-                    at: Timestamp::from_millis(at),
-                }
-            } else {
-                Action::Redo {
-                    operation_id: ids.operation_id(),
-                    scope: UndoScope::Board,
-                    at: Timestamp::from_millis(at),
-                }
-            },
-        );
-        persist_effect(&mut store, &history);
-    }
+    persist_separator_reorder_history(&mut store, &mut state, &mut ids, separator);
     drop(store);
 
     let snapshot = fixture
@@ -195,4 +161,70 @@ fn name_and_separator_history_share_order_without_sharing_payload() {
             .content,
         "second body"
     );
+}
+
+fn persist_separator_insert(
+    store: &mut SqliteStore,
+    state: &mut AppState,
+    ids: &mut FakeIdGenerator,
+    separator: SeparatorId,
+) {
+    let insert = one_effect(
+        state,
+        Action::InsertSeparator {
+            separator_id: separator,
+            operation_id: ids.operation_id(),
+            insertion_index: 1,
+            at: Timestamp::from_millis(3),
+        },
+    );
+    persist_effect(store, &insert);
+}
+
+fn persist_separator_reorder_history(
+    store: &mut SqliteStore,
+    state: &mut AppState,
+    ids: &mut FakeIdGenerator,
+    separator: SeparatorId,
+) {
+    let moved = one_effect(
+        state,
+        Action::MoveItem {
+            operation_id: ids.operation_id(),
+            item_id: separator.into(),
+            to: 0,
+            at: Timestamp::from_millis(6),
+        },
+    );
+    persist_effect(store, &moved);
+    let deleted = one_effect(
+        state,
+        Action::DeleteItems {
+            operation_id: ids.operation_id(),
+            item_ids: vec![separator.into()],
+            kind: BoardOperationKind::Delete,
+            at: Timestamp::from_millis(7),
+        },
+    );
+    persist_effect(store, &deleted);
+
+    for (undo, at) in [(true, 8), (true, 9), (false, 10)] {
+        let history = one_effect(
+            state,
+            if undo {
+                Action::Undo {
+                    operation_id: ids.operation_id(),
+                    scope: UndoScope::Board,
+                    at: Timestamp::from_millis(at),
+                }
+            } else {
+                Action::Redo {
+                    operation_id: ids.operation_id(),
+                    scope: UndoScope::Board,
+                    at: Timestamp::from_millis(at),
+                }
+            },
+        );
+        persist_effect(store, &history);
+    }
 }

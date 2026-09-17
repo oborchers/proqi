@@ -81,3 +81,45 @@ fn commands_use_eligible_thoughts_when_a_selected_separator_is_focused() {
                 == vec![submit.first, submit.second]
     ));
 }
+
+#[test]
+fn rename_requires_the_focused_item_to_be_a_thought_even_with_thoughts_selected() {
+    let mut mixed = Mixed::new();
+    mixed.select_all();
+    mixed.fixture.input(crate::key_input(UiKey::Character(':')));
+    for character in "rename thought".chars() {
+        mixed
+            .fixture
+            .input(crate::key_input(UiKey::Character(character)));
+    }
+    let (_, rows, _) = mixed.fixture.app.palette_view().expect("Commands");
+    let rename = rows
+        .iter()
+        .position(|row| row == "Rename thought")
+        .expect("discoverable rename");
+    let layout = mixed.fixture.app.prepare_frame(Rect::new(0, 0, 72, 16));
+    assert!(!layout.overlay.expect("Commands geometry").item_interactive[rename]);
+    mixed.fixture.input(crate::key_input(UiKey::Escape));
+
+    let effects = mixed.fixture.effects(UiInput::KeyStroke(
+        KeyStroke::press(LogicalKey::Character('r')).with_modifiers(LogicalModifiers::CONTROL),
+    ));
+    assert!(effects.is_empty());
+    assert_eq!(
+        mixed.fixture.app.state.focused_item,
+        Some(mixed.separator.into())
+    );
+    assert_eq!(
+        mixed.fixture.app.status_text(),
+        Some("No thought is focused")
+    );
+    assert!([mixed.first, mixed.second].into_iter().all(|id| {
+        mixed
+            .fixture
+            .app
+            .state
+            .board
+            .thought(id)
+            .is_some_and(|thought| thought.name.is_none())
+    }));
+}

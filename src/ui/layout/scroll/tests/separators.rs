@@ -173,37 +173,45 @@ fn name_and_boundary_matrix_has_one_owner_for_every_row() {
     ] {
         for first_named in [false, true] {
             for second_named in [false, true] {
-                let mut adjacent = mixed_state(&['t', 't']);
-                set_names(&mut adjacent, &[first_named, second_named]);
-                let adjacent = measure(&adjacent, None, 40, 20, density);
-                let first = &adjacent.thoughts[0];
-                let second = &adjacent.thoughts[1];
-                assert_eq!(first.name_row.is_some(), first_named);
-                assert_eq!(second.name_row.is_some(), second_named);
-                assert!(first.automatic_separator_row.is_none());
-                assert_eq!(second.automatic_separator_row, Some(second.gap_start));
-                if let Some(name_row) = second.name_row {
-                    assert!(second.automatic_separator_row.expect("divider") < name_row);
-                    assert_eq!(second.content_start, name_row + 1);
-                }
-
-                let mut explicit = mixed_state(&['t', 's', 't']);
-                set_names(&mut explicit, &[first_named, second_named]);
-                let explicit = measure(&explicit, None, 40, 20, density);
-                let separator = explicit.separators[0];
-                let first = &explicit.thoughts[0];
-                let second = &explicit.thoughts[1];
-                assert_eq!(first.name_row.is_some(), first_named);
-                assert_eq!(second.name_row.is_some(), second_named);
-                assert!(first.automatic_separator_row.is_none());
-                assert!(second.automatic_separator_row.is_none());
-                if let Some(name_row) = second.name_row {
-                    assert_eq!(name_row, separator.end);
-                    assert_eq!(second.content_start, name_row + 1);
-                } else {
-                    assert_eq!(second.content_start, separator.end);
-                }
+                assert_name_boundary_case(density, first_named, second_named);
             }
         }
+    }
+}
+
+fn assert_name_boundary_case(
+    density: crate::ui::settings::BoardDensity,
+    first_named: bool,
+    second_named: bool,
+) {
+    let mut adjacent = mixed_state(&['t', 't']);
+    set_names(&mut adjacent, &[first_named, second_named]);
+    let adjacent = measure(&adjacent, None, 40, 20, density);
+    let first = &adjacent.thoughts[0];
+    let second = &adjacent.thoughts[1];
+    assert_eq!(first.name_row.is_some(), first_named);
+    assert_eq!(second.name_row.is_some(), second_named);
+    assert!(first.automatic_separator_row.is_none());
+    assert_eq!(second.automatic_separator_row, Some(second.gap_start));
+    if let Some(name_row) = second.name_row {
+        assert!(second.automatic_separator_row.expect("divider") < name_row);
+        assert_eq!(second.content_start, name_row + 1);
+    }
+
+    let mut explicit = mixed_state(&['t', 's', 't']);
+    set_names(&mut explicit, &[first_named, second_named]);
+    let explicit = measure(&explicit, None, 40, 20, density);
+    let separator = explicit.separators[0];
+    let first = &explicit.thoughts[0];
+    let second = &explicit.thoughts[1];
+    assert_eq!(first.name_row.is_some(), first_named);
+    assert_eq!(second.name_row.is_some(), second_named);
+    assert!(first.automatic_separator_row.is_none());
+    assert!(second.automatic_separator_row.is_none());
+    if let Some(name_row) = second.name_row {
+        assert_eq!(name_row, separator.end);
+        assert_eq!(second.content_start, name_row + 1);
+    } else {
+        assert_eq!(second.content_start, separator.end);
     }
 }
