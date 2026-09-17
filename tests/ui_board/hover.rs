@@ -160,6 +160,62 @@ fn collapsed_fold_hover_uses_projected_identity_and_preserves_exact_content() {
 }
 
 #[test]
+fn scrolled_edit_fold_hover_uses_the_same_visible_projection_as_activation() {
+    let mut fixture = Fixture::new();
+    let prefix = (0..18)
+        .map(|line| format!("visible context {line}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let path = "/tmp/scrolled-screenshot.png";
+    let content = format!("{prefix}\n{path}");
+    let fold_start = prefix.len() + 1;
+    fixture.input(UiInput::PasteAnnotated(
+        PastePayload::annotated(
+            content.clone(),
+            vec![ContentAnnotation {
+                start: fold_start,
+                end: fold_start + path.len(),
+                kind: ContentAnnotationKind::Attachment {
+                    ordinal: Some(1_u64.try_into().expect("fixture ordinal")),
+                    image: true,
+                    display_name: "scrolled-screenshot.png".to_owned(),
+                },
+            }],
+        )
+        .expect("valid annotated payload"),
+    ));
+    let area = Rect::new(0, 0, 48, 8);
+    let layout = fixture.app.prepare_frame(area);
+    assert!(
+        fixture
+            .app
+            .editor_snapshot()
+            .expect("scrolled editor")
+            .scroll_row
+            > 0
+    );
+    let thought = layout.thoughts[0].clone();
+    let fold_row = (thought.text_area.y..thought.text_area.bottom())
+        .find(|row| {
+            fixture.pointer(thought.text_area.x, *row, PointerKind::Move);
+            matches!(fixture.app.hovered(), Some(HitTarget::Fold(_, 0)))
+        })
+        .expect("visible collapsed fold");
+    let thought_id = thought.thought_id;
+    assert_eq!(fixture.app.hovered(), Some(HitTarget::Fold(thought_id, 0)));
+
+    fixture.pointer(
+        thought.text_area.x,
+        fold_row,
+        PointerKind::Down(PointerButton::Left),
+    );
+
+    let selected = fixture.app.editor_snapshot().expect("fold selection");
+    assert!(selected.selection.is_some());
+    assert_eq!(selected.content, content);
+}
+
+#[test]
 fn passive_overlay_regions_and_disabled_rows_never_gain_hover() {
     let mut fixture = Fixture::new();
     fixture.input(crate::key_input(UiKey::Escape));

@@ -253,6 +253,18 @@ impl PaletteState {
         let visible = self.selected.saturating_sub(self.rendered_scroll);
         interactivity.get(visible).copied().unwrap_or(false)
     }
+
+    fn execution_at(&self, index: usize) -> Option<CommandExecution> {
+        self.projected().get(index).and_then(|row| {
+            if !row.selectable() {
+                return None;
+            }
+            match row.action {
+                RowAction::Command { execution, .. } => Some(execution),
+                RowAction::Expand | RowAction::None => None,
+            }
+        })
+    }
 }
 
 impl BoardApp {
@@ -327,14 +339,21 @@ impl BoardApp {
             .palette
             .as_mut()
             .and_then(|palette| palette.context.take_merge_handoff());
-        self.palette = None;
-        self.execute_command(
+        let retain_palette = command_requests_quit(Some(command)) && self.screenshot_retry_ready();
+        if !retain_palette {
+            self.palette = None;
+        }
+        let effects = self.execute_command(
             command,
             selection_handoff,
             merge_handoff.as_deref(),
             ids,
             clock,
-        )
+        );
+        if self.quit {
+            self.palette = None;
+        }
+        effects
     }
 
     pub(super) fn execute_palette_visible_index(
@@ -428,9 +447,18 @@ impl BoardApp {
                 self.help = true;
                 Vec::new()
             }
-            BoardCommand::Quit => self.request_quit_after_edit_flush(ids, clock),
+            BoardCommand::Quit => self.request_global_quit(ids, clock),
         }
     }
+}
+
+fn command_requests_quit(command: Option<CommandExecution>) -> bool {
+    matches!(
+        command,
+        Some(CommandExecution::Board(
+            crate::ui::shortcut_registry::PaletteBoardCommand::Quit
+        ))
+    )
 }
 
 fn palette_query_history(command: Option<CommandExecution>) -> Option<bool> {

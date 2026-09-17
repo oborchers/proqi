@@ -339,7 +339,7 @@ impl BoardApp {
         clock: &impl Clock,
     ) -> Result<(input_dispatch::ActiveInputOwner, UiInput, bool), Vec<Effect>> {
         if self.screenshot_save_in_flight() && matches!(input, UiInput::KeyStroke(_)) {
-            self.note_screenshot_interaction(&input);
+            self.note_screenshot_interaction(&input, false);
             return Err(self.handle_screenshot_commit_barrier(input, ids, clock));
         }
         if self.update_barrier.is_some() && matches!(input, UiInput::KeyStroke(_)) {
@@ -358,7 +358,9 @@ impl BoardApp {
         };
         let input = self.resolve_edit_navigation(input, owner);
         self.reset_pointer_click_for_input(&input);
-        self.note_screenshot_interaction(&input);
+        let preserves_ready_quit =
+            owner == Owner::Commands && self.palette_input_executes_quit(&input);
+        self.note_screenshot_interaction(&input, preserves_ready_quit);
         self.reset_overlay_activation_for_input(&input, clock.now());
         if matches!(input, UiInput::HostFocusLost) {
             self.collapse_empty_compose();

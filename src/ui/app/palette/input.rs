@@ -3,11 +3,33 @@
 use crate::{
     application::Effect,
     ports::environment::{Clock, IdGenerator},
+    ui::{PointerButton, PointerKind},
 };
 
 use super::{BoardApp, QueryEditor, UiInput, UiKey};
 
 impl BoardApp {
+    pub(in crate::ui::app) fn palette_input_executes_quit(&self, input: &UiInput) -> bool {
+        let Some(palette) = &self.palette else {
+            return false;
+        };
+        let execution = match input {
+            UiInput::Key(UiKey::Enter) if palette.selected_has_rendered_geometry() => {
+                palette.execution_at(palette.selected)
+            }
+            UiInput::Pointer(pointer)
+                if matches!(pointer.kind, PointerKind::Down(PointerButton::Left)) =>
+            {
+                let Some(crate::ui::HitTarget::PaletteItem(visible)) = self.hit(*pointer) else {
+                    return false;
+                };
+                palette.execution_at(palette.scroll.saturating_add(visible))
+            }
+            _ => None,
+        };
+        super::command_requests_quit(execution)
+    }
+
     pub(in crate::ui::app) fn handle_palette_input(
         &mut self,
         input: &UiInput,

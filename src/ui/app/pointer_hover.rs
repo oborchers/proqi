@@ -1,6 +1,9 @@
 //! Passive pointer emphasis derived from the current rendered frame.
 
-use crate::ui::{HitTarget, PointerInput, PointerKind, projection::BoardCellTarget};
+use crate::{
+    application::InteractionMode,
+    ui::{HitTarget, PointerInput, PointerKind, projection::BoardCellTarget},
+};
 
 use super::{BoardApp, UiInput, input_dispatch::ActiveInputOwner};
 
@@ -76,12 +79,25 @@ impl BoardApp {
 
     pub(super) fn pointer_target(&self, pointer: PointerInput) -> Option<HitTarget> {
         match self.hit(pointer)? {
-            HitTarget::Thought(thought_id) => match self.board_cell_target(thought_id, pointer) {
-                Some(BoardCellTarget::Fold {
-                    annotation_index, ..
-                }) => Some(HitTarget::Fold(thought_id, annotation_index)),
-                _ => Some(HitTarget::Thought(thought_id)),
-            },
+            HitTarget::Thought(thought_id) => {
+                let cell_target = if matches!(
+                    self.state.mode,
+                    InteractionMode::Edit {
+                        thought_id: active_id
+                    } if active_id == thought_id
+                ) {
+                    self.editor_cell(thought_id, pointer)
+                        .and_then(|(row, column)| self.editor_cell_target(row, column))
+                } else {
+                    self.board_cell_target(thought_id, pointer)
+                };
+                match cell_target {
+                    Some(BoardCellTarget::Fold {
+                        annotation_index, ..
+                    }) => Some(HitTarget::Fold(thought_id, annotation_index)),
+                    _ => Some(HitTarget::Thought(thought_id)),
+                }
+            }
             target => Some(target),
         }
     }

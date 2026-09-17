@@ -183,10 +183,7 @@ impl BoardApp {
             Some(HitTarget::Undo) => self.history(ids, clock, true),
             Some(HitTarget::Redo) => self.history(ids, clock, false),
             Some(HitTarget::Help) => self.toggle_help(),
-            Some(HitTarget::Quit) => {
-                self.request_quit();
-                Vec::new()
-            }
+            Some(HitTarget::Quit) => self.request_global_quit(ids, clock),
             Some(HitTarget::ExitEdit) => self.pointer_exit_edit(ids, clock),
             Some(HitTarget::Retry) => self.retry_persistence(),
             Some(HitTarget::ExportRecovery) => self.export_recovery(ids, clock),
