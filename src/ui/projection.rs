@@ -61,10 +61,6 @@ impl FramePresentation {
         frame
     }
 
-    pub(super) fn thoughts(&self) -> &[PresentedThought] {
-        &self.thoughts
-    }
-
     pub(super) fn thought(&self, thought_id: ThoughtId) -> Option<&PresentedThought> {
         self.thoughts
             .iter()

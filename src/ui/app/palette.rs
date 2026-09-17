@@ -411,6 +411,7 @@ impl BoardApp {
             }
             BoardCommand::InsertAbove => self.insert_relative_to_focus(false, ids, clock),
             BoardCommand::InsertBelow => self.insert_relative_to_focus(true, ids, clock),
+            BoardCommand::InsertSeparator => self.insert_separator(ids, clock),
             BoardCommand::RenameSession => {
                 self.begin_session_rename();
                 Vec::new()

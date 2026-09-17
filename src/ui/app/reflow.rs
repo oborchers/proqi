@@ -28,7 +28,7 @@ impl BoardApp {
         };
         let thought_id = match self.state.mode {
             InteractionMode::Edit { thought_id } => Some(thought_id),
-            InteractionMode::Board if !self.insertion_focused() => self.state.focused_thought,
+            InteractionMode::Board if !self.insertion_focused() => self.state.focused_thought_id(),
             InteractionMode::Board | InteractionMode::Compose => None,
         };
         let Some(source) = thought_id

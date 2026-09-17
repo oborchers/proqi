@@ -470,7 +470,7 @@ fn visual_row_selection_intentions_do_not_change_board_navigation_or_selection()
     for content in ["first", "second", "third"] {
         navigation::durable_thought(&mut fixture, content);
     }
-    let focused = fixture.app.state.focused_thought;
+    let focused = fixture.app.state.focused_thought_id();
     for key in [
         UiKey::ExtendVisualRow {
             edge: VisualRowEdge::Start,
@@ -486,6 +486,6 @@ fn visual_row_selection_intentions_do_not_change_board_navigation_or_selection()
         },
     ] {
         assert!(fixture.effects(crate::key_input(key)).is_empty());
-        assert_eq!(fixture.app.state.focused_thought, focused);
+        assert_eq!(fixture.app.state.focused_thought_id(), focused);
     }
 }

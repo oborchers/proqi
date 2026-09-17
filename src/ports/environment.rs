@@ -5,7 +5,8 @@ use std::{ffi::OsString, path::PathBuf, time::Duration};
 use thiserror::Error;
 
 use crate::domain::{
-    InstanceId, OperationId, RequestId, RevisionId, SessionId, SubmissionId, ThoughtId, Timestamp,
+    InstanceId, OperationId, RequestId, RevisionId, SeparatorId, SessionId, SubmissionId,
+    ThoughtId, Timestamp,
 };
 
 /// Source of UTC domain time.
@@ -26,6 +27,8 @@ pub trait IdGenerator {
     fn session_id(&mut self) -> SessionId;
     /// Generate a thought identity.
     fn thought_id(&mut self) -> ThoughtId;
+    /// Generate a visual separator identity.
+    fn separator_id(&mut self) -> SeparatorId;
     /// Generate a revision identity.
     fn revision_id(&mut self) -> RevisionId;
     /// Generate a durable operation identity.

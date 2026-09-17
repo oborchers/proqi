@@ -2,6 +2,7 @@
 
 mod annotation;
 mod attachment_numbering;
+mod board_item;
 mod browser_history;
 mod identifiers;
 mod model;
@@ -18,9 +19,10 @@ pub use annotation::{
 pub use attachment_numbering::{
     AttachmentCounters, AttachmentOrdinal, renew_attachment_occurrences,
 };
+pub use board_item::{BoardItemId, BoardItemRef, Separator};
 pub use browser_history::{BrowserMutation, BrowserOperation, BrowserOperationKind};
 pub use identifiers::{
-    InstanceId, OperationId, RequestId, RevisionId, SessionId, SubmissionId, ThoughtId,
+    InstanceId, OperationId, RequestId, RevisionId, SeparatorId, SessionId, SubmissionId, ThoughtId,
 };
 pub use model::{
     Direction, DomainError, IntegrationContext, OperationSequence, Session, Thought,

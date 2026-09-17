@@ -52,7 +52,7 @@ pub(super) mod contract {
             cwd.to_owned(),
             RopeEditorFactory,
         );
-        app.state.focused_thought = Some(thought_id);
+        app.state.focused_item = Some(thought_id.into());
         app.state.mode = InteractionMode::Edit { thought_id };
         app.sync_editor_from_state();
         (app, ids, FakeClock::new(Timestamp::from_millis(2)))

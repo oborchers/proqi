@@ -459,7 +459,7 @@ fn motion_preserves_armed_keyboard_boundary_state() {
     let point = layout.thoughts[0].text_area;
     editor.pointer(point.x, point.y, PointerKind::Move);
     editor.input(super::navigation::visual(CursorMovement::VisualUp, false));
-    assert_eq!(editor.app.state.focused_thought, Some(first));
+    assert_eq!(editor.app.state.focused_item, Some(first.into()));
     assert_eq!(
         editor.app.interaction_mode(),
         proqi::application::InteractionMode::Board

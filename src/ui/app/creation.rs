@@ -27,6 +27,42 @@ pub(super) enum CreationHistory {
 }
 
 impl BoardApp {
+    /// Insert a payload-free durable separator below the focused item.
+    pub(super) fn insert_separator(
+        &mut self,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        let insertion_index = self
+            .state
+            .focused_item
+            .and_then(|id| self.state.board.item_position(id))
+            .and_then(|position| usize::try_from(position.get()).ok())
+            .map_or_else(
+                || {
+                    self.state
+                        .insertion_index
+                        .min(self.state.board.live_items().len())
+                },
+                |position| position.saturating_add(1),
+            );
+        self.clear_board_selection();
+        self.compose_presentation = ComposePresentation::Prompt;
+        self.insertion_focus = InsertionFocus::Inactive;
+        self.insertion_confirmation = InsertionConfirmation::Idle;
+        let effects = self.reduce(Action::InsertSeparator {
+            separator_id: ids.separator_id(),
+            operation_id: ids.operation_id(),
+            insertion_index,
+            at: clock.now(),
+        });
+        self.board_viewport = self.board_viewport.follow_focus();
+        self.scroll_geometry = None;
+        self.layout = None;
+        self.sync_editor_from_state();
+        effects
+    }
+
     /// Route every deliberate New-thought intention through one lifecycle owner.
     pub(super) fn new_thought(
         &mut self,
@@ -35,9 +71,22 @@ impl BoardApp {
         clock: &impl Clock,
     ) -> Vec<Effect> {
         if matches!(self.state.mode, InteractionMode::Compose)
-            || self.state.board.live_thoughts().is_empty()
+            || self.state.board.live_items().is_empty()
         {
             self.enter_provisional_compose()
+        } else if let Some(crate::domain::BoardItemId::Separator(separator_id)) =
+            self.state.focused_item
+        {
+            let insertion = self
+                .state
+                .board
+                .separator(separator_id)
+                .and_then(|separator| usize::try_from(separator.position.get()).ok())
+                .map(|position| position.saturating_add(1));
+            match insertion {
+                Some(index) => self.create_blank_at(index, ids, clock),
+                None => self.create_blank(ids, clock),
+            }
         } else if placement == NewThoughtPlacement::DurableTail || self.insertion_focused() {
             self.create_blank_at_bottom(ids, clock)
         } else {

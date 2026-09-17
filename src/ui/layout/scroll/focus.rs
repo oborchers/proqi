@@ -1,7 +1,7 @@
 //! Focus-owned neighbors within one tall expanded thought presentation.
 
 use super::{BoardFlow, ScrollAnchor, ScrollGeometry};
-use crate::domain::ThoughtId;
+use crate::domain::BoardItemId;
 
 impl ScrollGeometry {
     pub(in crate::ui) fn neighbor(self, delta: isize) -> Option<ScrollAnchor> {
@@ -22,9 +22,12 @@ pub(super) fn neighbors(
     offset: usize,
     viewport_height: usize,
     maximum: usize,
-    focused: Option<ThoughtId>,
+    focused: Option<BoardItemId>,
 ) -> (Option<ScrollAnchor>, Option<ScrollAnchor>) {
-    let Some(rows) = focused.and_then(|id| flow.thought(id)) else {
+    let Some(BoardItemId::Thought(focused)) = focused else {
+        return (None, None);
+    };
+    let Some(rows) = flow.thought(focused) else {
         return (None, None);
     };
     let viewport_end = offset.saturating_add(viewport_height);

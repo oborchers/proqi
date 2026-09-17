@@ -17,7 +17,7 @@ impl CommandContext {
                 "Select text in the editor first",
             );
         }
-        Self::when(self.board.focused, "No thought is focused")
+        Self::when(self.selection.thought_count > 0, "No thought is focused")
     }
 
     pub(super) fn cut_applicability(&self) -> Applicability {

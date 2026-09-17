@@ -20,15 +20,10 @@ pub(super) struct PointerClick {
     column: u16,
     row: u16,
     at: Timestamp,
-    count: u8,
+    pub(super) count: u8,
 }
 
 impl BoardApp {
-    #[cfg(test)]
-    pub(crate) fn pointer_click_count(&self) -> Option<u8> {
-        self.pointer_click.map(|click| click.count)
-    }
-
     pub(super) fn reset_pointer_click_for_input(&mut self, input: &super::UiInput) {
         if !matches!(
             input,
@@ -143,9 +138,15 @@ impl BoardApp {
                 if expand {
                     return self.expand_thought(thought_id, ids, clock);
                 }
-                self.dragged_thought = Some(thought_id);
+                self.dragged_item = Some(crate::domain::BoardItemId::Thought(thought_id));
                 self.drag_target = self.position_at(pointer.row);
                 Vec::new()
+            }
+            Some(HitTarget::Separator(separator_id)) => {
+                self.handle_separator_pointer(separator_id, pointer, false)
+            }
+            Some(HitTarget::SeparatorDragHandle(separator_id)) => {
+                self.handle_separator_pointer(separator_id, pointer, true)
             }
             Some(HitTarget::Overflow(thought_id)) => {
                 self.focus(thought_id);
@@ -234,7 +235,7 @@ impl BoardApp {
             && (pointer.extend_selection || self.range_latched())
         {
             self.pointer_click = None;
-            self.extend_range_to(thought_id);
+            self.extend_range_to(crate::domain::BoardItemId::Thought(thought_id));
             return Vec::new();
         }
         let click_count = self.register_text_click(thought_id, pointer, clock.now());
@@ -243,7 +244,7 @@ impl BoardApp {
 
     fn pointer_drag(&mut self, pointer: PointerInput) -> Vec<Effect> {
         self.pointer_click = None;
-        if self.dragged_thought.is_some() {
+        if self.dragged_item.is_some() {
             self.drag_target = self.position_at(pointer.row);
             return Vec::new();
         }
@@ -281,11 +282,11 @@ impl BoardApp {
         } else {
             self.apply_edit(EditCommand::PointerEnd);
         }
-        let thought_id = self.dragged_thought.take();
+        let item_id = self.dragged_item.take();
         let target = self.drag_target.take();
-        match (thought_id, target) {
-            (Some(thought_id), Some(to)) => {
-                self.focus(thought_id);
+        match (item_id, target) {
+            (Some(item_id), Some(to)) => {
+                self.focus_item(item_id);
                 self.reorder_to(to, ids, clock)
             }
             _ => Vec::new(),
@@ -442,11 +443,15 @@ impl BoardApp {
     }
 
     fn focus(&mut self, thought_id: crate::domain::ThoughtId) {
+        self.focus_item(crate::domain::BoardItemId::Thought(thought_id));
+    }
+
+    pub(super) fn focus_item(&mut self, item_id: crate::domain::BoardItemId) {
         self.clear_range_for_focus_change();
         self.insertion_focus = super::InsertionFocus::Inactive;
         self.board_viewport = self.board_viewport.follow_focus();
         self.scroll_geometry = None;
-        let _effects = self.reduce(Action::FocusThought(Some(thought_id)));
+        let _effects = self.reduce(Action::FocusItem(Some(item_id)));
     }
 
     fn reorder_to(
@@ -455,21 +460,21 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        let Some(thought_id) = self.state.focused_thought else {
+        let Some(item_id) = self.state.focused_item else {
             return Vec::new();
         };
         let current = self
             .state
             .board
-            .live_thoughts()
+            .live_items()
             .iter()
-            .position(|thought| thought.id == thought_id);
+            .position(|item| item.id() == item_id);
         if current == Some(to) {
             return Vec::new();
         }
-        self.reduce(Action::MoveThought {
+        self.reduce(Action::MoveItem {
             operation_id: ids.operation_id(),
-            thought_id,
+            item_id,
             to,
             at: clock.now(),
         })
@@ -481,7 +486,7 @@ impl BoardApp {
             .and_then(|layout| layout.hit_test(pointer.column, pointer.row))
     }
 
-    fn position_at(&self, row: u16) -> Option<usize> {
+    pub(super) fn position_at(&self, row: u16) -> Option<usize> {
         self.layout
             .as_ref()
             .and_then(|layout| layout.insertion_index_at(row))

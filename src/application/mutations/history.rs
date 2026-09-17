@@ -46,7 +46,7 @@ fn move_board_history(state: &mut AppState, at: Timestamp, undo: bool) -> Applic
     } else {
         &operation.forward
     };
-    let focused_before = state.focused_thought;
+    let focused_before = state.focused_item;
     let compose_handoff = operation.compose_handoff();
     let transform_source = undo.then(|| transform_source(&operation)).flatten();
     let mut board = state.board.clone();
@@ -56,21 +56,17 @@ fn move_board_history(state: &mut AppState, at: Timestamp, undo: bool) -> Applic
         state
             .board_history_cursor
             .saturating_add_signed(if undo { -1 } else { 1 });
-    let focus_was_removed = focused_before.is_some_and(|thought_id| {
-        state
-            .board
-            .thought(thought_id)
-            .is_none_or(|thought| !thought.is_live())
-    });
+    let focus_was_removed =
+        focused_before.is_some_and(|thought_id| state.board.item_position(thought_id).is_none());
     state.keep_focus_valid();
     if let Some((thought_id, _, _)) = compose_handoff {
         if undo {
             state.mode = super::InteractionMode::Compose;
-            state.focused_thought = None;
-            state.insertion_index = state.board.live_thoughts().len();
+            state.focused_item = None;
+            state.insertion_index = state.board.live_items().len();
         } else {
             state.mode = super::InteractionMode::Edit { thought_id };
-            state.focused_thought = Some(thought_id);
+            state.focused_item = Some(crate::domain::BoardItemId::Thought(thought_id));
         }
     }
     if focus_was_removed
@@ -80,7 +76,7 @@ fn move_board_history(state: &mut AppState, at: Timestamp, undo: bool) -> Applic
             .thought(thought_id)
             .is_some_and(Thought::is_live)
     {
-        state.focused_thought = Some(thought_id);
+        state.focused_item = Some(crate::domain::BoardItemId::Thought(thought_id));
     }
     Ok(())
 }
@@ -101,6 +97,9 @@ fn replaced_thought(mutation: &BoardMutation) -> Option<ThoughtId> {
         BoardMutation::ReplaceContent { thought_id, .. } => Some(*thought_id),
         BoardMutation::AddThought { .. }
         | BoardMutation::AddThoughtFromCompose { .. }
+        | BoardMutation::AddSeparator { .. }
+        | BoardMutation::SetSeparatorDeletion { .. }
+        | BoardMutation::MoveSeparator { .. }
         | BoardMutation::SetDeletion { .. }
         | BoardMutation::SetDeletionExact { .. }
         | BoardMutation::MoveThought { .. }

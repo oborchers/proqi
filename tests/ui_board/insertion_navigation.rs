@@ -136,7 +136,7 @@ fn top_creation_clears_arbitrary_selection_and_round_trips_board_history() {
     let selected = fixture
         .app
         .state
-        .focused_thought
+        .focused_thought_id()
         .expect("focused selection");
     assert!(fixture.app.thought_selected(selected));
     let original = fixture
@@ -292,14 +292,18 @@ fn top_creation_restores_follow_focus_after_manual_board_scroll() {
     for _ in 1..12 {
         fixture.input(crate::key_input(UiKey::Character('k')));
     }
-    let former_first = fixture.app.state.focused_thought.expect("first thought");
+    let former_first = fixture
+        .app
+        .state
+        .focused_thought_id()
+        .expect("first thought");
     let area = Rect::new(0, 0, 42, 9);
     for _ in 0..20 {
         fixture.app.prepare_frame(area);
         fixture.pointer(1, 1, PointerKind::ScrollDown);
     }
     let scrolled = fixture.app.prepare_frame(area);
-    assert_eq!(fixture.app.state.focused_thought, Some(former_first));
+    assert_eq!(fixture.app.state.focused_thought_id(), Some(former_first));
     assert!(
         scrolled
             .thoughts

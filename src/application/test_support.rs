@@ -4,8 +4,8 @@ use uuid::Uuid;
 
 use crate::{
     domain::{
-        InstanceId, OperationId, RequestId, RevisionId, SessionId, SubmissionId, ThoughtId,
-        Timestamp,
+        InstanceId, OperationId, RequestId, RevisionId, SeparatorId, SessionId, SubmissionId,
+        ThoughtId, Timestamp,
     },
     ports::environment::{Clock, IdGenerator},
 };
@@ -60,6 +60,9 @@ impl IdGenerator for TestIds {
     }
     fn thought_id(&mut self) -> ThoughtId {
         generate!(self, ThoughtId)
+    }
+    fn separator_id(&mut self) -> SeparatorId {
+        generate!(self, SeparatorId)
     }
     fn revision_id(&mut self) -> RevisionId {
         generate!(self, RevisionId)

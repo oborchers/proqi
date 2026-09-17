@@ -102,7 +102,7 @@ fn commit_barrier_replays_pointer_and_preserves_resize_and_focus_signals() {
     );
 
     app.complete_screenshot_capture(Ok(created(&capture)), &mut ids, &clock);
-    assert_ne!(app.state.focused_thought, capture_thought_id(&capture));
+    assert_ne!(app.state.focused_thought_id(), capture_thought_id(&capture));
     assert_eq!(
         app.state.mode,
         InteractionMode::Edit {
@@ -369,7 +369,7 @@ fn board_key_and_board_pastes_replay_without_capture_mode_stealing() {
             .any(|effect| matches!(effect, Effect::CheckAttachments(_)))
     );
     assert_eq!(app.state.mode, InteractionMode::Board);
-    assert_ne!(app.state.focused_thought, capture_thought_id(&capture));
+    assert_ne!(app.state.focused_thought_id(), capture_thought_id(&capture));
     assert_eq!(app.state.board.live_thoughts().len(), 3);
 
     for (byte, input, expected) in [
@@ -398,7 +398,7 @@ fn board_key_and_board_pastes_replay_without_capture_mode_stealing() {
                 .iter()
                 .any(|effect| matches!(effect, Effect::CheckAttachments(_)))
         );
-        assert_ne!(app.state.focused_thought, capture_thought_id(&capture));
+        assert_ne!(app.state.focused_thought_id(), capture_thought_id(&capture));
         assert!(matches!(app.state.mode, InteractionMode::Edit { .. }));
         assert_eq!(app.state.board.live_thoughts().len(), 3);
         assert!(

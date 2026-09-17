@@ -218,6 +218,9 @@ pub(super) fn mutation_changes_search(mutation: &BoardMutation) -> bool {
         | BoardMutation::SetDeletionExact { .. }
         | BoardMutation::ReplaceContent { .. } => true,
         BoardMutation::MoveThought { .. }
+        | BoardMutation::AddSeparator { .. }
+        | BoardMutation::SetSeparatorDeletion { .. }
+        | BoardMutation::MoveSeparator { .. }
         | BoardMutation::SetPresentation { .. }
         | BoardMutation::LegacySetCollapsed { .. } => false,
     }
@@ -245,6 +248,9 @@ fn truncate_editor_redo(
         }
         BoardMutation::AddThought { .. }
         | BoardMutation::AddThoughtFromCompose { .. }
+        | BoardMutation::AddSeparator { .. }
+        | BoardMutation::SetSeparatorDeletion { .. }
+        | BoardMutation::MoveSeparator { .. }
         | BoardMutation::SetDeletion { .. }
         | BoardMutation::MoveThought { .. }
         | BoardMutation::SetPresentation { .. }

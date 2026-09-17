@@ -210,7 +210,7 @@ impl BoardApp {
             }
             Action::ContextualTransform => self.contextual_board_transformation(ids, clock),
             Action::SelectAll => {
-                self.select_all_thoughts();
+                self.select_all_items();
                 Vec::new()
             }
             Action::RangeSelect => {
@@ -392,18 +392,22 @@ impl BoardApp {
     }
 
     pub(super) fn delete(&mut self, ids: &mut impl IdGenerator, clock: &impl Clock) -> Vec<Effect> {
-        let thought_ids = self.action_thought_ids();
-        if thought_ids.is_empty() {
+        let item_ids = self.action_item_ids();
+        if item_ids.is_empty() {
             return Vec::new();
         }
-        if thought_ids.iter().any(|id| self.submission_locked(*id)) {
+        if item_ids
+            .iter()
+            .filter_map(|id| id.thought())
+            .any(|id| self.submission_locked(id))
+        {
             self.set_warning("selected thought has a submission in progress");
             return Vec::new();
         }
         let effects = self.reduce_with_empty_transition(
-            Action::DeleteThoughts {
+            Action::DeleteItems {
                 operation_id: ids.operation_id(),
-                thought_ids,
+                item_ids,
                 kind: BoardOperationKind::Delete,
                 at: clock.now(),
             },
@@ -418,7 +422,7 @@ impl BoardApp {
         self.board_viewport = self.board_viewport.follow_focus();
         self.scroll_geometry = None;
         self.insertion_confirmation = super::InsertionConfirmation::Idle;
-        let live = self.state.board.live_thoughts();
+        let live = self.state.board.live_items();
         if live.is_empty() {
             self.insertion_focus = super::InsertionFocus::Active;
             self.layout = None;
@@ -428,14 +432,14 @@ impl BoardApp {
             if delta < 0 {
                 self.insertion_focus = super::InsertionFocus::Inactive;
                 let target = live.len().saturating_add_signed(delta).min(live.len() - 1);
-                let _effects = self.reduce(Action::FocusThought(Some(live[target].id)));
+                let _effects = self.reduce(Action::FocusItem(Some(live[target].id())));
             }
             return;
         }
         let current = self
             .state
-            .focused_thought
-            .and_then(|id| live.iter().position(|thought| thought.id == id))
+            .focused_item
+            .and_then(|id| live.iter().position(|item| item.id() == id))
             .unwrap_or(0);
         if delta > 0 && current == live.len() - 1 {
             self.insertion_focus = super::InsertionFocus::Active;
@@ -443,14 +447,14 @@ impl BoardApp {
             return;
         }
         let target = current.saturating_add_signed(delta).min(live.len() - 1);
-        let _effects = self.reduce(Action::FocusThought(Some(live[target].id)));
+        let _effects = self.reduce(Action::FocusItem(Some(live[target].id())));
     }
 
     pub(super) fn sync_empty_insertion_focus(&mut self) {
-        if self.state.board.live_thoughts().is_empty() {
+        if self.state.board.live_items().is_empty() {
             self.insertion_focus = super::InsertionFocus::Active;
             self.layout = None;
-        } else if self.state.focused_thought.is_some() {
+        } else if self.state.focused_item.is_some() {
             self.insertion_focus = super::InsertionFocus::Inactive;
         }
     }

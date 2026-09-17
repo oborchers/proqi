@@ -7,6 +7,7 @@ mod rejection;
 mod response;
 #[cfg(all(test, unix))]
 mod shutdown_tests;
+mod test_probe;
 mod transport;
 
 pub(crate) use client::CancellableLocalControlClient;
@@ -195,14 +196,15 @@ fn handle_stream(
     }
     let (envelope, response_receiver) = response::pending(request.clone());
     let pending = match sender.try_send(envelope) {
-        Ok(()) => response_receiver
-            .recv_timeout(RESPONSE_TIMEOUT)
-            .map_err(|_| {
+        Ok(()) => {
+            test_probe::record_queued_request();
+            response_receiver.recv_timeout(RESPONSE_TIMEOUT).map_err(|_| {
                 (
                     ControlRejectionCode::OutcomeUnknown,
                     "owner did not answer before the deadline; retry with the same operation id",
                 )
-            }),
+            })
+        }
         Err(_) => Err((
             ControlRejectionCode::OwnerBusy,
             "owner control lane is full",

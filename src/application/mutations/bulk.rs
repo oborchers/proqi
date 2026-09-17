@@ -1,10 +1,11 @@
 //! Atomic board mutations over an explicit thought selection.
 
 use super::{
-    AppState, ApplicationError, ApplicationResult, BoardMutation, BoardOperation,
+    AppState, ApplicationError, ApplicationResult, BoardItemId, BoardMutation, BoardOperation,
     BoardOperationKind, Effect, OperationId, Thought, ThoughtId, ThoughtPosition,
     ThoughtPresentation, Timestamp,
 };
+use crate::domain::Separator;
 
 pub(in crate::application) fn delete_thoughts(
     state: &mut AppState,
@@ -19,9 +20,11 @@ pub(in crate::application) fn delete_thoughts(
     validate_deletion(thought_ids, kind)?;
     let selected = selected_thoughts(state, thought_ids)?;
     let first_index = usize::try_from(selected[0].position.get()).unwrap_or(usize::MAX);
-    let focus_removed = state
-        .focused_thought
-        .is_some_and(|focus| thought_ids.contains(&focus));
+    let focus_removed = state.focused_item.is_some_and(|focus| {
+        thought_ids
+            .iter()
+            .any(|id| focus == BoardItemId::Thought(*id))
+    });
     let forward = selected
         .iter()
         .rev()
@@ -34,11 +37,11 @@ pub(in crate::application) fn delete_thoughts(
     let operation = batch_operation(state, operation_id, kind, forward, inverse, at)?;
     state.record_board_operation(&operation)?;
     if focus_removed {
-        let live = state.board.live_thoughts();
-        state.focused_thought = live
+        let live = state.board.live_items();
+        state.focused_item = live
             .get(first_index)
             .or_else(|| first_index.checked_sub(1).and_then(|index| live.get(index)))
-            .map(|thought| thought.id);
+            .map(|item| item.id());
     }
     Ok(vec![Effect::CommitBoardOperation(operation)])
 }
@@ -182,8 +185,144 @@ pub(in crate::application) fn duplicate_thoughts(
         at,
     )?;
     state.record_board_operation(&operation)?;
-    state.focused_thought = duplicate_ids.first().copied();
+    state.focused_item = duplicate_ids.first().copied().map(BoardItemId::Thought);
     Ok(vec![Effect::CommitBoardOperation(operation)])
+}
+
+pub(in crate::application) fn duplicate_items(
+    state: &mut AppState,
+    operation_id: OperationId,
+    item_ids: &[BoardItemId],
+    duplicate_ids: &[BoardItemId],
+    at: Timestamp,
+) -> ApplicationResult<Vec<Effect>> {
+    if item_ids.len() != duplicate_ids.len() || item_ids.is_empty() {
+        return Err(ApplicationError::InvalidState);
+    }
+    let selected = state
+        .board
+        .live_items()
+        .into_iter()
+        .filter(|item| item_ids.contains(&item.id()))
+        .collect::<Vec<_>>();
+    if selected.len() != item_ids.len() {
+        return Err(ApplicationError::InvalidState);
+    }
+    let insertion = selected
+        .last()
+        .and_then(|item| usize::try_from(item.position().get()).ok())
+        .ok_or(ApplicationError::InvalidState)?
+        .saturating_add(1);
+    let mut counters = state.board.attachment_counters();
+    let mut forward = Vec::with_capacity(selected.len());
+    let mut inverse = Vec::with_capacity(selected.len());
+    for (offset, (source, duplicate_id)) in selected.iter().zip(duplicate_ids).enumerate() {
+        let position = ThoughtPosition::new(super::position_u32(insertion + offset)?);
+        match (source, duplicate_id) {
+            (crate::domain::BoardItemRef::Thought(source), BoardItemId::Thought(duplicate_id)) => {
+                let mut duplicate = (*source).clone();
+                crate::domain::renew_attachment_occurrences(&mut duplicate.annotations);
+                counters.assign(&mut duplicate.annotations)?;
+                duplicate.id = *duplicate_id;
+                duplicate.position = position;
+                duplicate.created_at = at;
+                duplicate.updated_at = at;
+                duplicate.deleted_at = None;
+                forward.push(BoardMutation::AddThought {
+                    thought: duplicate.clone(),
+                });
+                inverse.push(deletion(&duplicate, Some(at)));
+            }
+            (
+                crate::domain::BoardItemRef::Separator(source),
+                BoardItemId::Separator(duplicate_id),
+            ) => {
+                let duplicate = Separator::new(*duplicate_id, source.session_id, position, at);
+                forward.push(BoardMutation::AddSeparator {
+                    separator: duplicate.clone(),
+                });
+                inverse.push(BoardMutation::SetSeparatorDeletion {
+                    separator_id: duplicate.id,
+                    deleted_at: Some(at),
+                    position,
+                });
+            }
+            _ => return Err(ApplicationError::InvalidState),
+        }
+    }
+    inverse.reverse();
+    let operation = batch_operation(
+        state,
+        operation_id,
+        BoardOperationKind::Duplicate,
+        forward,
+        inverse,
+        at,
+    )?;
+    state.record_board_operation(&operation)?;
+    state.focused_item = duplicate_ids.first().copied();
+    Ok(vec![Effect::CommitBoardOperation(operation)])
+}
+
+pub(in crate::application) fn delete_items(
+    state: &mut AppState,
+    operation_id: OperationId,
+    item_ids: &[BoardItemId],
+    kind: BoardOperationKind,
+    at: Timestamp,
+) -> ApplicationResult<Vec<Effect>> {
+    if item_ids.is_empty() || kind != BoardOperationKind::Delete {
+        return Err(ApplicationError::InvalidState);
+    }
+    let live = state.board.live_items();
+    let selected = live
+        .iter()
+        .copied()
+        .filter(|item| item_ids.contains(&item.id()))
+        .collect::<Vec<_>>();
+    if selected.len() != item_ids.len() {
+        return Err(ApplicationError::InvalidState);
+    }
+    let first_index = selected
+        .first()
+        .and_then(|item| usize::try_from(item.position().get()).ok())
+        .ok_or(ApplicationError::InvalidState)?;
+    let focus_removed = state
+        .focused_item
+        .is_some_and(|focus| item_ids.contains(&focus));
+    let forward = selected
+        .iter()
+        .rev()
+        .map(|item| item_deletion(*item, Some(at)))
+        .collect();
+    let inverse = selected
+        .iter()
+        .map(|item| item_deletion(*item, None))
+        .collect();
+    let operation = batch_operation(state, operation_id, kind, forward, inverse, at)?;
+    state.record_board_operation(&operation)?;
+    if focus_removed {
+        let live = state.board.live_items();
+        state.focused_item = live
+            .get(first_index)
+            .or_else(|| first_index.checked_sub(1).and_then(|index| live.get(index)))
+            .map(|item| item.id());
+    }
+    Ok(vec![Effect::CommitBoardOperation(operation)])
+}
+
+fn item_deletion(
+    item: crate::domain::BoardItemRef<'_>,
+    deleted_at: Option<Timestamp>,
+) -> BoardMutation {
+    match item {
+        crate::domain::BoardItemRef::Thought(thought) => deletion(thought, deleted_at),
+        crate::domain::BoardItemRef::Separator(separator) => BoardMutation::SetSeparatorDeletion {
+            separator_id: separator.id,
+            deleted_at,
+            position: separator.position,
+        },
+    }
 }
 
 fn validate_deletion(thought_ids: &[ThoughtId], kind: BoardOperationKind) -> ApplicationResult<()> {

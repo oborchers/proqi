@@ -31,7 +31,7 @@ last item dispatches a stroke.
 
 | Context | Current owner | Text reservation |
 | --- | --- | --- |
-| Board | Whole-thought board | Plain printable characters may be commands |
+| Board | Ordered Board items | Plain printable characters may be commands |
 | Compose | Transient thought editor | All ordinary and shifted printable text |
 | Edit | Durable thought editor | All ordinary and shifted printable text |
 | Help | Contextual Help overlay | None, modal navigation wins |
@@ -51,7 +51,7 @@ last item dispatches a stroke.
 | Recovery | Failed-durability recovery | None, recovery routes remain reachable |
 | Direction | Adjacent-agent direction chooser | None, four-way navigation wins |
 | ReleaseHighlights | Scrollable release highlights | None, modal navigation wins |
-| InsertionBoundary | Board insertion row | Board commands, with thought-only range and reorder no-ops |
+| InsertionBoundary | Board insertion row | Board commands, with item-only range and reorder no-ops |
 
 Every context whose table row reserves editor, query, or name text rejects a
 plain, shifted, Option/Alt, or Control+Alt (AltGr-compatible) printable binding.
@@ -81,7 +81,7 @@ Every semantic action has one stable `ShortcutActionId`. Its descriptor owns:
 - one content-free diagnostics identity;
 - the mapping into an established typed UI intention or application action.
 
-The closed action inventory covers all 57 current Commands actions plus direct
+The closed action inventory covers all 58 current Commands actions plus direct
 close, confirm, text editing, navigation, selection, clipboard, history,
 submission, Board, Browser management, recovery, and direction actions. The
 source of truth is `ShortcutActionId::COMMANDS` plus the registry's

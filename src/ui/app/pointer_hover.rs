@@ -26,6 +26,9 @@ impl BoardApp {
     }
 
     pub(super) fn reconcile_hover(&mut self) {
+        if self.dragged_item.is_some() {
+            return;
+        }
         self.hovered = self.pointer_position.and_then(|(column, row)| {
             self.hover_target(PointerInput {
                 column,

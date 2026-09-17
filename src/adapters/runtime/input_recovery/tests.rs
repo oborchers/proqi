@@ -25,7 +25,7 @@ fn identity(byte: u8) -> ExecutableIdentity {
 fn ui_state() -> InputRecoveryUiState {
     InputRecoveryUiState {
         mode: InputRecoveryMode::Board,
-        focused_thought: None,
+        focused_item: None,
         insertion_index: 0,
         insertion_focused: false,
         compose_editor_visible: false,

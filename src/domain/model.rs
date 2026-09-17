@@ -6,7 +6,8 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::{
-    ContentAnnotation, RevisionId, SessionId, TextPosition, ThoughtId, validate_annotations,
+    ContentAnnotation, RevisionId, SeparatorId, SessionId, TextPosition, ThoughtId,
+    validate_annotations,
 };
 
 /// UTC milliseconds since the Unix epoch.
@@ -59,13 +60,13 @@ impl OperationSequence {
     }
 }
 
-/// Zero-based position among live thoughts in a session.
+/// Zero-based position among live Board items in a session.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct ThoughtPosition(u32);
 
 impl ThoughtPosition {
-    /// Construct a thought position.
+    /// Construct a Board item position.
     #[must_use]
     pub const fn new(value: u32) -> Self {
         Self(value)
@@ -275,7 +276,7 @@ pub struct Thought {
     /// Durable presentation metadata over exact UTF-8 byte ranges.
     #[serde(default)]
     pub annotations: Vec<ContentAnnotation>,
-    /// Current order among live thoughts.
+    /// Current order among live Board items.
     pub position: ThoughtPosition,
     /// Creation time.
     pub created_at: Timestamp,
@@ -428,25 +429,42 @@ pub enum DomainError {
         /// Expected session.
         session_id: SessionId,
     },
+    /// A separator was applied to another session.
+    #[error("separator {separator_id} does not belong to session {session_id}")]
+    WrongSeparatorSession {
+        /// Separator with the invalid ownership.
+        separator_id: SeparatorId,
+        /// Expected session.
+        session_id: SessionId,
+    },
     /// A referenced thought is not present.
     #[error("thought not found: {0}")]
     ThoughtNotFound(ThoughtId),
     /// A live thought with that identity is already present.
     #[error("thought already exists: {0}")]
     ThoughtAlreadyExists(ThoughtId),
+    /// A referenced separator is not present.
+    #[error("separator not found: {0}")]
+    SeparatorNotFound(SeparatorId),
+    /// A live separator with that identity is already present.
+    #[error("separator already exists: {0}")]
+    SeparatorAlreadyExists(SeparatorId),
     /// The aggregate contains two retained records with one identity.
     #[error("duplicate retained thought identity: {0}")]
     DuplicateThoughtId(ThoughtId),
+    /// The aggregate contains two retained separators with one identity.
+    #[error("duplicate retained separator identity: {0}")]
+    DuplicateSeparatorId(SeparatorId),
     /// A requested position is outside the live board.
-    #[error("thought position {requested} exceeds board length {len}")]
+    #[error("Board item position {requested} exceeds board length {len}")]
     InvalidPosition {
         /// Requested zero-based position.
         requested: usize,
         /// Current live board length.
         len: usize,
     },
-    /// Live thought positions are not unique and contiguous.
-    #[error("live thought positions are not normalized")]
+    /// Live Board item positions are not unique and contiguous.
+    #[error("live Board item positions are not normalized")]
     NonNormalizedPositions,
     /// The operation sequence cannot increase further.
     #[error("operation sequence exhausted")]

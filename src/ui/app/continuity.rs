@@ -42,7 +42,7 @@ impl BoardApp {
             });
         Some(InputRecoveryUiState {
             mode,
-            focused_thought: self.state.focused_thought,
+            focused_item: self.state.focused_item,
             insertion_index: self.state.insertion_index,
             insertion_focused: self.insertion_focused(),
             compose_editor_visible: self.compose_editor_visible(),
@@ -54,7 +54,7 @@ impl BoardApp {
     }
 
     pub(crate) fn restore_input_recovery_state(&mut self, state: InputRecoveryUiState) -> bool {
-        let order = self.live_thought_ids();
+        let order = self.live_item_ids();
         let mode = match state.mode {
             InputRecoveryMode::Board => InteractionMode::Board,
             InputRecoveryMode::Compose => InteractionMode::Compose,
@@ -70,8 +70,8 @@ impl BoardApp {
             InputRecoveryMode::Edit { .. } => return false,
         };
         if state
-            .focused_thought
-            .is_some_and(|thought_id| !order.contains(&thought_id))
+            .focused_item
+            .is_some_and(|item_id| !order.contains(&item_id))
             || state.insertion_index > order.len()
             || state.expanded_folds.iter().any(|(thought_id, index)| {
                 self.state
@@ -89,7 +89,7 @@ impl BoardApp {
             return false;
         };
         self.state.mode = mode;
-        self.state.focused_thought = state.focused_thought;
+        self.state.focused_item = state.focused_item;
         self.state.insertion_index = state.insertion_index;
         self.insertion_focus = if state.insertion_focused {
             InsertionFocus::Active
@@ -169,6 +169,9 @@ fn encode_anchor(anchor: ScrollAnchor) -> InputRecoveryScrollAnchor {
             projection_row: Some(row),
         },
         ScrollAnchor::Overflow(thought_id) => InputRecoveryScrollAnchor::Overflow { thought_id },
+        ScrollAnchor::Separator(separator_id) => {
+            InputRecoveryScrollAnchor::Separator { separator_id }
+        }
         ScrollAnchor::Compose { byte } => InputRecoveryScrollAnchor::Compose { byte },
         ScrollAnchor::InsertGap => InputRecoveryScrollAnchor::InsertGap,
         ScrollAnchor::Insert => InputRecoveryScrollAnchor::Insert,
@@ -214,6 +217,9 @@ fn decode_anchor(anchor: InputRecoveryScrollAnchor) -> Option<ScrollAnchor> {
         },
         InputRecoveryScrollAnchor::Content { .. } => return None,
         InputRecoveryScrollAnchor::Overflow { thought_id } => ScrollAnchor::Overflow(thought_id),
+        InputRecoveryScrollAnchor::Separator { separator_id } => {
+            ScrollAnchor::Separator(separator_id)
+        }
         InputRecoveryScrollAnchor::Compose { byte } => ScrollAnchor::Compose { byte },
         InputRecoveryScrollAnchor::InsertGap => ScrollAnchor::InsertGap,
         InputRecoveryScrollAnchor::Insert => ScrollAnchor::Insert,

@@ -3,6 +3,7 @@
 mod attachment_migration;
 mod attachment_numbering;
 mod board_commit;
+mod board_persist;
 mod browser_history;
 mod capture;
 mod compaction;

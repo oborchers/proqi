@@ -39,7 +39,10 @@ fn reflow_migration_requires_authority_and_preserves_a_pre_migration_backup() {
     let connection = rusqlite::Connection::open(&fixture.config.database_path).expect("fixture");
     connection
         .execute_batch(
-            "DROP TABLE browser_history_receipts;
+            "DROP INDEX separators_session;
+             DROP INDEX separators_live_position;
+             DROP TABLE separators;
+             DROP TABLE browser_history_receipts;
              DROP TABLE browser_operation_receipts;
              DROP TABLE browser_operations;
              DROP TABLE browser_history_state;
@@ -88,11 +91,14 @@ fn browser_history_migrates_exact_reflow_schema_and_protocol() {
     let connection = rusqlite::Connection::open(&fixture.config.database_path).expect("fixture");
     connection
         .execute_batch(
-            "DROP TABLE browser_history_receipts;
+            "DROP INDEX separators_session;
+             DROP INDEX separators_live_position;
+             DROP TABLE separators;
+             DROP TABLE browser_history_receipts;
              DROP TABLE browser_operation_receipts;
              DROP TABLE browser_operations;
              DROP TABLE browser_history_state;
-             DELETE FROM migration_history WHERE version = 16;
+             DELETE FROM migration_history WHERE version >= 16;
              UPDATE schema_meta SET schema_version = 15, storage_protocol = 14;",
         )
         .expect("schema 15 stamp");
@@ -126,5 +132,5 @@ fn browser_history_migrates_exact_reflow_schema_and_protocol() {
         .expect("history rows")
         .collect::<Result<Vec<_>, _>>()
         .expect("history versions");
-    assert_eq!(versions, (1..=16).collect::<Vec<_>>());
+    assert_eq!(versions, (1..=SUPPORTED_SCHEMA_VERSION).collect::<Vec<_>>());
 }
