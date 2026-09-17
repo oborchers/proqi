@@ -1,8 +1,18 @@
 //! Live terminal hover attributes and passive durability through real SGR input.
 
-use std::hash::{Hash, Hasher as _};
+use std::{
+    hash::{Hash, Hasher as _},
+    process::{Command, ExitStatus},
+    thread,
+    time::Duration,
+};
 
-use super::support::{expect_command, json_command, json_input_command, wait_for_path};
+use super::{
+    support::{expect_command, json_command, json_input_command, wait_for_path},
+    watchdog,
+};
+
+const WORKFLOW_LIMIT: Duration = Duration::from_secs(30);
 
 const BROWSER_WORKFLOW: &str = r#"
     log_user 0
@@ -71,12 +81,24 @@ const BOARD_WORKFLOW: &str = r#"
         set ::timeout $prior
         close $capture
     }
+    proc register_watchdog_pid {pid} {
+        global env
+        set owned [open $env(PROQI_TEST_PIDS) a]
+        puts $owned $pid
+        close $owned
+    }
     spawn -noecho sh -c {before=$(stty -g); "$PROQI_TEST_BINARY" --state-dir "$PROQI_TEST_STATE" -r "$PROQI_TEST_SESSION"; result=$?; after=$(stty -g); [ "$before" = "$after" ] || exit 90; exit "$result"}
+    register_watchdog_pid [exp_pid]
     expect -exact "\x1b\[?1049h"
     after 300
     capture_pending $env(PROQI_TEST_INITIAL)
     close [open $env(PROQI_TEST_BEFORE_READY) "w"]
-    while {![file exists $env(PROQI_TEST_BEFORE_ACK)]} { after 10 }
+    set waits 0
+    while {![file exists $env(PROQI_TEST_BEFORE_ACK)] && $waits < 1000} {
+        after 10
+        incr waits
+    }
+    if {![file exists $env(PROQI_TEST_BEFORE_ACK)]} { exit 93 }
     send -- "\x1b\[<35;11;12M"
     after 300
     capture_pending $env(PROQI_TEST_FOOTER)
@@ -98,7 +120,12 @@ const BOARD_WORKFLOW: &str = r#"
     after 300
     capture_pending $env(PROQI_TEST_ACTION)
     close [open $env(PROQI_TEST_AFTER_READY) "w"]
-    while {![file exists $env(PROQI_TEST_AFTER_ACK)]} { after 10 }
+    set waits 0
+    while {![file exists $env(PROQI_TEST_AFTER_ACK)] && $waits < 1000} {
+        after 10
+        incr waits
+    }
+    if {![file exists $env(PROQI_TEST_AFTER_ACK)]} { exit 94 }
     send -- "\x1b"
     after 100
     stty rows 6 columns 22
@@ -113,6 +140,55 @@ const BOARD_WORKFLOW: &str = r#"
     catch wait result
     exit [lindex $result 3]
 "#;
+
+struct WatchedWorkflow {
+    watcher: Option<thread::JoinHandle<ExitStatus>>,
+    acknowledgements: [std::path::PathBuf; 2],
+}
+
+impl WatchedWorkflow {
+    fn spawn(
+        mut command: Command,
+        watchdog_pids: std::path::PathBuf,
+        acknowledgements: [std::path::PathBuf; 2],
+    ) -> Self {
+        let watcher = thread::spawn(move || {
+            watchdog::status_before(
+                &mut command,
+                WORKFLOW_LIMIT,
+                &watchdog_pids,
+                "Board hover PTY workflow",
+            )
+        });
+        Self {
+            watcher: Some(watcher),
+            acknowledgements,
+        }
+    }
+
+    fn finish(mut self) -> ExitStatus {
+        self.watcher
+            .take()
+            .expect("active Board hover watchdog")
+            .join()
+            .expect("Board hover watchdog thread")
+    }
+
+    fn release(&self, index: usize) {
+        std::fs::write(&self.acknowledgements[index], []).expect("release Board hover checkpoint");
+    }
+}
+
+impl Drop for WatchedWorkflow {
+    fn drop(&mut self) {
+        for acknowledgement in &self.acknowledgements {
+            let _released = std::fs::write(acknowledgement, []);
+        }
+        if let Some(watcher) = self.watcher.take() {
+            let _settled = watcher.join();
+        }
+    }
+}
 
 fn content_hash(path: &std::path::Path) -> u64 {
     let bytes = std::fs::read(path).expect("read durable database");
@@ -254,6 +330,7 @@ fn board_footer_and_commands_rows_emit_live_hover_attributes() {
     let before_ack = state.path().join("before-hover-ack");
     let after_ready = state.path().join("after-hover-ready");
     let after_ack = state.path().join("after-hover-ack");
+    let watchdog_pids = state.path().join("hover-watchdog-pids");
 
     let mut command = expect_command();
     command
@@ -272,16 +349,21 @@ fn board_footer_and_commands_rows_emit_live_hover_attributes() {
         .env("PROQI_TEST_BEFORE_READY", &before_ready)
         .env("PROQI_TEST_BEFORE_ACK", &before_ack)
         .env("PROQI_TEST_AFTER_READY", &after_ready)
-        .env("PROQI_TEST_AFTER_ACK", &after_ack);
-    let mut child = command.spawn().expect("spawn Board hover PTY workflow");
+        .env("PROQI_TEST_AFTER_ACK", &after_ack)
+        .env("PROQI_TEST_PIDS", &watchdog_pids);
+    let workflow = WatchedWorkflow::spawn(
+        command,
+        watchdog_pids,
+        [before_ack.clone(), after_ack.clone()],
+    );
     let database = state.path().join("data/proqi.sqlite3");
     wait_for_path(&before_ready);
     let durable_before = content_hash(&database);
-    std::fs::write(&before_ack, []).expect("release before-hover checkpoint");
+    workflow.release(0);
     wait_for_path(&after_ready);
     let durable_after = content_hash(&database);
-    std::fs::write(&after_ack, []).expect("release after-hover checkpoint");
-    let status = child.wait().expect("wait for Board hover PTY workflow");
+    workflow.release(1);
+    let status = workflow.finish();
     assert!(status.success(), "Board hover PTY exited with {status}");
 
     assert_board_hover_attributes([&initial, &footer, &overlay, &heading, &action]);
