@@ -3,7 +3,7 @@ use crate::{
     application::{DurabilityState, Effect, FailureCode, ScreenshotIntent, ScreenshotPauseReason},
     domain::OperationSequence,
     ports::store::StoreError,
-    ui::{ScreenshotUpdateReadiness, UiInput, UiKey},
+    ui::{PointerInput, PointerKind, ScreenshotUpdateReadiness, UiInput, UiKey},
 };
 
 #[test]
@@ -215,6 +215,21 @@ fn ready_quit_is_bounded_explicit_and_never_silently_discards() {
         app.status_text()
             .is_some_and(|status| status.contains("quit again to abandon"))
     );
+    assert!(
+        app.handle(
+            UiInput::Pointer(PointerInput {
+                column: 0,
+                row: 0,
+                kind: PointerKind::Move,
+                extend_selection: false,
+            }),
+            &mut ids,
+            &clock,
+        )
+        .is_empty()
+    );
+    assert!(!app.quit);
+    assert!(app.screenshot_retry_ready());
     assert!(
         app.handle(UiInput::Key(UiKey::Quit), &mut ids, &clock)
             .is_empty()

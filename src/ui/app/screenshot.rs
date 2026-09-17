@@ -432,7 +432,7 @@ impl BoardApp {
     }
 
     pub(super) fn note_screenshot_interaction(&mut self, input: &UiInput) {
-        if !matches!(input, UiInput::Key(UiKey::Quit)) {
+        if input.is_deliberate_interaction() && !matches!(input, UiInput::Key(UiKey::Quit)) {
             self.screenshot.ready_quit_armed = false;
         }
         if input.is_deliberate_interaction() {
