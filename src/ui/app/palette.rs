@@ -331,15 +331,20 @@ impl BoardApp {
         if let Some(undo) = palette_query_history(Some(command)) {
             return self.update_palette_query(|query| move_query_history(query, undo));
         }
-        let selection_handoff = self
-            .palette
-            .as_mut()
-            .and_then(|palette| palette.context.take_selection_handoff());
-        let merge_handoff = self
-            .palette
-            .as_mut()
-            .and_then(|palette| palette.context.take_merge_handoff());
         let retain_palette = command_requests_quit(Some(command)) && self.screenshot_retry_ready();
+        let (selection_handoff, merge_handoff) = if retain_palette {
+            (None, None)
+        } else {
+            let selection = self
+                .palette
+                .as_mut()
+                .and_then(|palette| palette.context.take_selection_handoff());
+            let merge = self
+                .palette
+                .as_mut()
+                .and_then(|palette| palette.context.take_merge_handoff());
+            (selection, merge)
+        };
         if !retain_palette {
             self.palette = None;
         }
