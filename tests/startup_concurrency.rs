@@ -375,6 +375,7 @@ fn shared_schema_eleven_owner_blocks_migration_without_backup_then_release_recov
              DROP TABLE browser_history_state;
              ALTER TABLE sessions DROP COLUMN attachment_image_high;
              ALTER TABLE sessions DROP COLUMN attachment_file_high;
+             ALTER TABLE thoughts DROP COLUMN name;
              DELETE FROM migration_history WHERE version >= 12;
              UPDATE schema_meta SET schema_version = 11, storage_protocol = 10;",
         )
