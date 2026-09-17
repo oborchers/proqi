@@ -2,13 +2,18 @@
 
 mod capture;
 mod metadata;
+#[cfg(test)]
+mod tests;
 mod update;
 
 use std::sync::mpsc::TryRecvError;
 
 use crate::{
     adapters::{control::ControlEnvelope, runtime::SystemClock, terminal::TerminalError},
-    application::{ControlReplay, Effect, match_control_replay},
+    application::{
+        ControlReplay, Effect, SequencedMutationEffectError, SequencedMutationEffects,
+        match_control_replay,
+    },
     domain::{RequestId, ThoughtId},
     ports::{
         control::{ControlMutation, ControlRejectionCode, ControlResult},
@@ -229,8 +234,17 @@ fn apply_mutation(
     clock: &impl crate::ports::environment::Clock,
 ) -> Result<bool, TerminalError> {
     let thought_id = envelope.request.mutation.thought_id();
+    let previous_state = app.state.clone();
     match app.handle_control(&envelope.request.mutation, clock) {
-        Ok(effects) => queue_effect(app, lanes, pending, envelope, thought_id, &effects),
+        Ok(effects) => queue_effect(
+            app,
+            lanes,
+            pending,
+            envelope,
+            thought_id,
+            previous_state,
+            effects,
+        ),
         Err(error) => {
             envelope.respond(ControlResult::Rejected {
                 code: error.code().as_str().to_owned(),
@@ -247,36 +261,72 @@ fn queue_effect(
     pending: &mut PendingWork,
     envelope: ControlEnvelope,
     thought_id: Option<ThoughtId>,
-    effects: &[Effect],
+    previous_state: crate::application::AppState,
+    effects: Vec<Effect>,
 ) -> Result<bool, TerminalError> {
-    let [effect] = effects else {
-        envelope.respond(ControlResult::Rejected {
-            code: ControlRejectionCode::NoDurableMutation.as_str().to_owned(),
-            message: "request produced no durable mutation".to_owned(),
-        });
-        return Ok(false);
+    let routed = match validate_control_effects(app, previous_state, effects) {
+        Ok(routed) => routed,
+        Err(error) => {
+            envelope.respond(effect_rejection(error));
+            return Ok(false);
+        }
     };
-    let batch = effect
-        .persistence_batch()
-        .ok_or(TerminalError::Worker("control mutation lacked persistence"))?;
-    let sequence = batch
-        .sequence()
-        .ok_or(TerminalError::Worker("control mutation lacked sequence"))?;
-    if let Err(error) = lanes.persistence.commit(batch) {
-        app.acknowledge_persistence(sequence, false);
+    if let Err(error) = lanes.persistence.commit(routed.batch) {
+        app.acknowledge_persistence(routed.sequence, false);
         envelope.respond(ControlResult::Rejected {
             code: ControlRejectionCode::StorageFailed.as_str().to_owned(),
             message: error.to_string(),
         });
+        super::durability::enqueue_effects(app, lanes, routed.auxiliary, pending)?;
         return Ok(true);
     }
     pending.persistence = pending.persistence.saturating_add(1);
     pending.controls.insert(
-        sequence,
+        routed.sequence,
         PendingControl {
             envelope,
             thought_id,
         },
     );
+    super::durability::enqueue_effects(app, lanes, routed.auxiliary, pending)?;
     Ok(true)
+}
+
+fn validate_control_effects(
+    app: &mut BoardApp,
+    previous_state: crate::application::AppState,
+    effects: Vec<Effect>,
+) -> Result<SequencedMutationEffects, SequencedMutationEffectError> {
+    match SequencedMutationEffects::new(effects) {
+        Ok(routed) => Ok(routed),
+        Err(error) => {
+            app.restore_control_state(previous_state);
+            Err(error)
+        }
+    }
+}
+
+fn effect_rejection(error: SequencedMutationEffectError) -> ControlResult {
+    let (code, message) = match error {
+        SequencedMutationEffectError::MissingDurable => (
+            ControlRejectionCode::NoDurableMutation,
+            "request produced no durable mutation",
+        ),
+        SequencedMutationEffectError::MissingSequence => (
+            ControlRejectionCode::InvalidControlRequest,
+            "request produced a durable mutation without a sequence",
+        ),
+        SequencedMutationEffectError::MultipleDurable => (
+            ControlRejectionCode::InvalidControlRequest,
+            "request produced more than one durable mutation",
+        ),
+        SequencedMutationEffectError::UnsupportedAuxiliary => (
+            ControlRejectionCode::InvalidControlRequest,
+            "request produced an unsupported auxiliary effect",
+        ),
+    };
+    ControlResult::Rejected {
+        code: code.as_str().to_owned(),
+        message: message.to_owned(),
+    }
 }

@@ -655,7 +655,10 @@ One named `InvocationWorkBudgetPolicy` owns the filesystem root, retained-entry,
 visited-path, and recursive-depth safeguards. Each exhausted dimension returns
 the deterministically retained entries plus an exact typed incomplete reason.
 Project ancestor discovery has no fixed count. It stops at the first repository
-root, or at the filesystem root when no repository exists. The adapter follows
+root or at the filesystem root when no repository exists. At the canonical
+home, a compatibility path that also has a global declaration is observed only
+through that global declaration; project-only home paths remain eligible. The
+adapter follows
 only explicitly encountered symlink definitions, canonicalizes physical paths
 for deduplication, and never crawls arbitrary home-directory children.
 Compatibility roots are checked in; extra roots enter through validated
