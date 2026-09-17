@@ -394,6 +394,9 @@ UPDATE schema_meta SET schema_version = 13, storage_protocol = 12;
 INSERT INTO migration_history(version, applied_at) VALUES (13, 0);
 ";
 
+/// First schema whose durable attachments already carry stable session ordinals.
+pub(super) const ATTACHMENT_ORDINAL_SCHEMA_VERSION: u32 = 14;
+
 pub(super) const MIGRATION_14: &str = r"
 ALTER TABLE sessions ADD COLUMN attachment_image_high INTEGER NOT NULL DEFAULT 0 CHECK (attachment_image_high >= 0);
 ALTER TABLE sessions ADD COLUMN attachment_file_high INTEGER NOT NULL DEFAULT 0 CHECK (attachment_file_high >= 0);
