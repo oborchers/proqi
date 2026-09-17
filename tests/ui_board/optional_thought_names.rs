@@ -261,6 +261,48 @@ fn mouse_places_the_title_cursor_and_exposes_truthful_save_and_cancel_controls()
 }
 
 #[test]
+fn clipped_title_click_uses_the_visible_prefix_and_narrow_views_keep_both_controls() {
+    let original = "abcdefghijklmnopqrstuvwxyz".repeat(3);
+    let mut fixture = named_fixture(UiSettings::default(), "body", &original);
+    fixture.input(crate::key_input(UiKey::Escape));
+    let layout = fixture.app.prepare_frame(Rect::new(0, 0, 24, 5));
+    let title = layout.thoughts[0].name.expect("clipped title geometry");
+    fixture.pointer(
+        title.x.saturating_add(2),
+        title.y,
+        PointerKind::Down(PointerButton::Left),
+    );
+    fixture.input(UiInput::Paste("X".to_owned()));
+    let effects = fixture.effects(crate::key_input(UiKey::Enter));
+    assert!(matches!(
+        effects.as_slice(),
+        [Effect::CommitBoardOperation(_)]
+    ));
+    let expected = format!("{}X{}", &original[..2], &original[2..]);
+    assert_eq!(
+        fixture.app.state.board.live_thoughts()[0]
+            .name
+            .as_ref()
+            .map(ThoughtName::as_str),
+        Some(expected.as_str())
+    );
+
+    for width in 8..=16 {
+        fixture.input(control_r());
+        let layout = fixture.app.prepare_frame(Rect::new(0, 0, width, 5));
+        for target in [HitTarget::CommitThoughtName, HitTarget::CancelThoughtName] {
+            let area = layout
+                .controls
+                .iter()
+                .find_map(|(candidate, area)| (*candidate == target).then_some(*area))
+                .expect("both title controls remain visible");
+            assert_eq!(layout.hit_test(area.x, area.y), Some(target));
+        }
+        fixture.input(crate::key_input(UiKey::Escape));
+    }
+}
+
+#[test]
 fn clicking_another_title_preserves_the_body_editor_owner_and_outside_click_commits() {
     let mut fixture = Fixture::new();
     let first_create = fixture.paste("first body");

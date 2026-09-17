@@ -75,14 +75,26 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        let name_area = self
+        let initial_position = self
             .layout
             .as_ref()
             .and_then(|layout| layout.thought(thought_id))
-            .and_then(|thought| thought.name);
+            .and_then(|thought| thought.name)
+            .and_then(|area| {
+                self.state
+                    .board
+                    .thought(thought_id)
+                    .and_then(|thought| thought.name.as_ref())
+                    .map(|name| {
+                        let visible_width = usize::from(area.width).saturating_sub(1);
+                        let relative =
+                            usize::from(pointer.column.saturating_sub(area.x)).min(visible_width);
+                        crate::ports::text_layout::byte_at_display_cell(name.as_str(), relative)
+                    })
+            });
         let effects = self.begin_thought_rename_for(thought_id, ids, clock);
-        if let Some(area) = name_area {
-            self.place_thought_name_cursor_in_area(pointer, area);
+        if let Some(byte) = initial_position {
+            self.update_thought_name(|editor| editor.place_cursor(byte, pointer.extend_selection));
         }
         effects
     }

@@ -47,10 +47,12 @@ pub(crate) fn action(
     })
 }
 
-pub(crate) fn thought_name_action(target: HitTarget) -> Option<ControlLabel> {
-    let text = match target {
-        HitTarget::CommitThoughtName => "Save",
-        HitTarget::CancelThoughtName => "Cancel",
+pub(crate) fn thought_name_action(target: HitTarget, width: u16) -> Option<ControlLabel> {
+    let text = match (target, width) {
+        (HitTarget::CommitThoughtName, 1) => "S",
+        (HitTarget::CommitThoughtName, _) => "Save",
+        (HitTarget::CancelThoughtName, 1) => "X",
+        (HitTarget::CancelThoughtName, _) => "Cancel",
         _ => return None,
     };
     Some(ControlLabel {

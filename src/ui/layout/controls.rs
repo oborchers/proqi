@@ -254,17 +254,33 @@ pub(super) fn configure_thought_name_controls(layout: &mut LayoutSnapshot) {
     layout.controls.retain(|(target, _)| {
         matches!(target, HitTarget::RenameSession | HitTarget::CopySessionId)
     });
-    let area = crate::ui::geometry::inset_horizontal(layout.footer_actions, 2);
+    let area = if layout.footer_actions.width >= 17 {
+        crate::ui::geometry::inset_horizontal(layout.footer_actions, 2)
+    } else {
+        layout.footer_actions
+    };
     if area.height == 0 {
         return;
     }
-    let mut x = area.x;
-    for (target, width) in [
-        (HitTarget::CommitThoughtName, 4),
-        (HitTarget::CancelThoughtName, 6),
-    ] {
-        push(layout, &mut x, area, target, width);
-    }
+    let (save_width, gap, cancel_width) = match area.width {
+        13.. => (4, 3, 6),
+        6.. => (4, 1, 1),
+        3.. => (1, 1, 1),
+        _ => return,
+    };
+    layout.controls.push((
+        HitTarget::CommitThoughtName,
+        Rect::new(area.x, area.y, save_width, 1),
+    ));
+    layout.controls.push((
+        HitTarget::CancelThoughtName,
+        Rect::new(
+            area.x.saturating_add(save_width).saturating_add(gap),
+            area.y,
+            cancel_width,
+            1,
+        ),
+    ));
 }
 
 fn push(layout: &mut LayoutSnapshot, x: &mut u16, area: Rect, target: HitTarget, width: u16) {
