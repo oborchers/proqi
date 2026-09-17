@@ -20,6 +20,15 @@ use picker::picker_line;
 use picker::picker_row;
 pub(super) use picker::{PickerRow, PickerView};
 
+#[derive(Clone, Copy)]
+pub(super) struct TextPromptView<'a> {
+    pub(super) title: &'a str,
+    pub(super) value: &'a str,
+    pub(super) cursor: usize,
+    pub(super) selection: Option<crate::ui::app::query::QuerySelection>,
+    pub(super) hovered: Option<crate::ui::HitTarget>,
+}
+
 mod help;
 
 pub(super) fn render_help(
@@ -51,7 +60,12 @@ pub(super) fn render_help(
         overlay.area,
     );
     render_overflow_cues(frame, overlay, app.help_overflow(), theme);
-    render_close(frame, overlay, theme);
+    render_close(
+        frame,
+        overlay,
+        app.hovered() == Some(crate::ui::HitTarget::CloseOverlay),
+        theme,
+    );
 }
 
 pub(super) fn render_picker(
@@ -71,7 +85,12 @@ pub(super) fn render_picker(
     );
     if overlay.items.is_empty() {
         render_too_small(frame, overlay, theme);
-        render_close(frame, overlay, theme);
+        render_close(
+            frame,
+            overlay,
+            picker.hovered == Some(crate::ui::HitTarget::CloseOverlay),
+            theme,
+        );
         return;
     }
     let input = input_area(overlay);
@@ -113,13 +132,19 @@ pub(super) fn render_picker(
                 *entry,
                 area.width,
                 index == picker.selected,
+                picker.hovered == Some(crate::ui::HitTarget::PaletteItem(index)),
                 theme,
             )),
             *area,
         );
     }
     render_overflow_cues(frame, overlay, overflow, theme);
-    render_close(frame, overlay, theme);
+    render_close(
+        frame,
+        overlay,
+        picker.hovered == Some(crate::ui::HitTarget::CloseOverlay),
+        theme,
+    );
 }
 
 fn render_too_small(frame: &mut Frame<'_>, overlay: &OverlayLayout, theme: &Theme) {
@@ -146,6 +171,7 @@ pub(super) fn render_update(
     title: &str,
     entries: &[String],
     selected: usize,
+    hovered: Option<crate::ui::HitTarget>,
     theme: &Theme,
 ) {
     clear_overlay(frame, overlay.area);
@@ -163,7 +189,10 @@ pub(super) fn render_update(
     );
     for (index, (entry, area)) in entries.iter().zip(&overlay.items).enumerate() {
         let prefix = if index == selected { "› " } else { "  " };
-        let style = if index == selected {
+        let row_hovered = hovered == Some(crate::ui::HitTarget::PaletteItem(index));
+        let style = if row_hovered {
+            theme.hovered_style().add_modifier(Modifier::BOLD)
+        } else if index == selected {
             theme.focused_style().add_modifier(Modifier::BOLD)
         } else {
             theme.base_style()
@@ -173,36 +202,48 @@ pub(super) fn render_update(
             *area,
         );
     }
-    render_close(frame, overlay, theme);
+    render_close(
+        frame,
+        overlay,
+        hovered == Some(crate::ui::HitTarget::CloseOverlay),
+        theme,
+    );
 }
 
 pub(super) fn render_text_prompt(
     frame: &mut Frame<'_>,
     overlay: &OverlayLayout,
-    title: &str,
-    value: &str,
-    cursor: usize,
-    selection: Option<crate::ui::app::query::QuerySelection>,
+    prompt: TextPromptView<'_>,
     theme: &Theme,
 ) {
     clear_overlay(frame, overlay.area);
     frame.render_widget(
         Block::default()
-            .title(title)
+            .title(prompt.title)
             .style(theme.base_style())
             .borders(Borders::ALL),
         overlay.area,
     );
     let input = input_area(overlay);
     let available = usize::from(input.width.saturating_sub(3));
-    let window = crate::ports::text_layout::visible_cell_window(value, cursor, available);
+    let window =
+        crate::ports::text_layout::visible_cell_window(prompt.value, prompt.cursor, available);
     frame.render_widget(
         Paragraph::new(crate::ui::query_render::input_line(
-            "> ", value, &window, selection, theme,
+            "> ",
+            prompt.value,
+            &window,
+            prompt.selection,
+            theme,
         )),
         input,
     );
-    render_close(frame, overlay, theme);
+    render_close(
+        frame,
+        overlay,
+        prompt.hovered == Some(crate::ui::HitTarget::CloseOverlay),
+        theme,
+    );
     let cursor = u16::try_from(window.cursor_cell).unwrap_or(u16::MAX);
     let x = input.x.saturating_add(2).saturating_add(cursor);
     frame.set_cursor_position((x, input.y));
@@ -245,11 +286,18 @@ fn cell_width(value: &str) -> usize {
     crate::ports::text_layout::terminal_cell_width(value)
 }
 
-pub(super) fn render_close(frame: &mut Frame<'_>, overlay: &OverlayLayout, theme: &Theme) {
-    frame.render_widget(
-        Paragraph::new("[x]").style(Style::default().fg(theme.accent)),
-        overlay.close,
-    );
+pub(super) fn render_close(
+    frame: &mut Frame<'_>,
+    overlay: &OverlayLayout,
+    hovered: bool,
+    theme: &Theme,
+) {
+    let style = if hovered {
+        theme.hovered_style().fg(theme.accent)
+    } else {
+        Style::default().fg(theme.accent)
+    };
+    frame.render_widget(Paragraph::new("[x]").style(style), overlay.close);
 }
 
 pub(super) fn render_overflow_cues(

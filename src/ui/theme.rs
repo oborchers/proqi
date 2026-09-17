@@ -145,6 +145,12 @@ impl Theme {
         )
     }
 
+    /// Immediate pointer emphasis that remains distinguishable from keyboard focus.
+    #[must_use]
+    pub fn hovered_style(self) -> Style {
+        self.focused_style().add_modifier(Modifier::UNDERLINED)
+    }
+
     const fn limited() -> Self {
         Self {
             foreground: Color::Reset,

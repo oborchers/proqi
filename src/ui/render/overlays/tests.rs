@@ -62,7 +62,7 @@ fn prioritized_disabled_row_keeps_truthful_state_visible() {
     );
     let theme = Theme::resolve(ThemePreference::Dark, true);
 
-    let rendered = picker_line(row, 20, true, &theme);
+    let rendered = picker_line(row, 20, true, false, &theme);
     assert_eq!(rendered.to_string(), "Block…  p8 · blocked");
     assert!(
         rendered
@@ -78,12 +78,12 @@ fn every_picker_secondary_uses_the_same_quiet_metadata_style() {
     let theme = Theme::resolve(ThemePreference::Dark, true);
     let row = PickerRow::fields("$skill", "Project Skill");
 
-    let ordinary = picker_line(row, 24, false, &theme);
+    let ordinary = picker_line(row, 24, false, false, &theme);
     assert_eq!(ordinary.spans.len(), 3);
     assert_eq!(ordinary.spans[0].style.fg, Some(theme.foreground));
     assert_eq!(ordinary.spans[2].style.fg, Some(theme.muted));
 
-    let selected = picker_line(row, 24, true, &theme);
+    let selected = picker_line(row, 24, true, false, &theme);
     assert_eq!(selected.spans.len(), 3);
     assert_eq!(selected.spans[0].style.fg, Some(theme.accent));
     assert!(
@@ -106,6 +106,7 @@ fn selected_disabled_choice_keeps_focus_surface_and_muted_text() {
         PickerRow::choice("Blocked receiver", "blocked", false),
         32,
         true,
+        false,
         &theme,
     );
 

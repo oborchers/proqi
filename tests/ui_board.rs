@@ -411,6 +411,8 @@ mod global_agent_delivery;
 mod global_agent_delivery_failures;
 #[path = "ui_board/global_delivery_snapshots.rs"]
 mod global_delivery_snapshots;
+#[path = "ui_board/hover.rs"]
+mod hover;
 #[path = "ui_board/insertion_navigation.rs"]
 mod insertion_navigation;
 #[path = "ui_board/kilo.rs"]

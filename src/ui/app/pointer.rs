@@ -89,10 +89,7 @@ impl BoardApp {
         };
         effects.extend(match pointer.kind {
             PointerKind::Move => {
-                self.hovered = self
-                    .selection_is_empty()
-                    .then(|| self.hit(pointer))
-                    .flatten();
+                self.hovered = self.hover_target(pointer);
                 Vec::new()
             }
             PointerKind::ScrollUp => self.scroll_pointer(-1),
@@ -131,13 +128,13 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        let target = self.hit(pointer);
+        let target = self.pointer_target(pointer);
         self.hovered = target;
-        if !matches!(target, Some(HitTarget::Thought(_))) {
+        if !matches!(target, Some(HitTarget::Thought(_) | HitTarget::Fold(_, _))) {
             self.pointer_click = None;
         }
         match target {
-            Some(HitTarget::Thought(thought_id)) => {
+            Some(HitTarget::Thought(thought_id) | HitTarget::Fold(thought_id, _)) => {
                 self.handle_thought_pointer(thought_id, pointer, ids, clock)
             }
             Some(HitTarget::DragHandle(thought_id)) => {
@@ -317,6 +314,7 @@ impl BoardApp {
                 return Vec::new();
             };
             if let BoardCellTarget::Fold {
+                annotation_index: _,
                 canonical_start,
                 canonical_end,
             } = target
@@ -337,6 +335,7 @@ impl BoardApp {
             return effects;
         };
         if let BoardCellTarget::Fold {
+            annotation_index: _,
             canonical_start,
             canonical_end,
         } = target
@@ -369,7 +368,7 @@ impl BoardApp {
         });
     }
 
-    fn board_cell_target(
+    pub(super) fn board_cell_target(
         &self,
         thought_id: crate::domain::ThoughtId,
         pointer: PointerInput,

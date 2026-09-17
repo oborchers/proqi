@@ -1,0 +1,22 @@
+---
+source: tests/ui_board/hover.rs
+assertion_line: 212
+expression: "super::snapshot_support::snapshot_buffer(draw_theme(&mut fixture, 50, 6,\nThemePreference::Limited).backend().buffer())"
+---
+SIZE 50x6
+
+TEXT
+00│⋮ recovery hover│
+01││
+02│  save failed · r Retry · w Export recovery│
+03│  proqi-ui-contract│
+04│  1 thought · edit · unsaved│
+05│  r Retry  w Export    Shortcuts│
+
+STYLE RUNS
+0: 0-0 fg=Black bg=Green mod=BOLD | 1-49 fg=Reset bg=Reset mod=REVERSED
+1: 0-49 fg=Reset bg=Reset mod=NONE
+2: 0-1 fg=Reset bg=Reset mod=NONE | 2-47 fg=Red bg=Reset mod=NONE | 48-49 fg=Reset bg=Reset mod=NONE
+3: 0-49 fg=Reset bg=Reset mod=NONE
+4: 0-1 fg=Reset bg=Reset mod=NONE | 2-47 fg=DarkGray bg=Reset mod=NONE | 48-49 fg=Reset bg=Reset mod=NONE
+5: 0-1 fg=Reset bg=Reset mod=NONE | 2-2 fg=Green bg=Reset mod=UNDERLINED | REVERSED | 3-9 fg=Reset bg=Reset mod=UNDERLINED | REVERSED | 10-10 fg=Reset bg=Reset mod=NONE | 11-11 fg=Green bg=Reset mod=NONE | 12-49 fg=Reset bg=Reset mod=NONE

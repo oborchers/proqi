@@ -25,6 +25,8 @@ use crate::{
 pub enum HitTarget {
     /// Text content of one thought.
     Thought(ThoughtId),
+    /// One collapsed presentation fold within a thought.
+    Fold(ThoughtId, usize),
     /// Reorder handle for one thought.
     DragHandle(ThoughtId),
     /// Overflow indicator for one capped thought.

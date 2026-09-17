@@ -8,8 +8,12 @@ use super::{BrowserAction, BrowserAvailability, BrowserHit, SessionBrowser, Sess
 impl SessionBrowser {
     /// Apply one normalized terminal event.
     pub fn handle(&mut self, input: ExternalInput) -> BrowserAction {
-        self.status = None;
+        let deliberate = input.is_deliberate_interaction();
         let input = UiInput::from(input);
+        self.track_hover_input(&input);
+        if deliberate {
+            self.status = None;
+        }
         let Some(input) = self.resolve_shortcut_input(input) else {
             return BrowserAction::Continue;
         };
@@ -213,6 +217,26 @@ impl SessionBrowser {
                 self.activate()
             }
             BrowserHit::None => BrowserAction::Continue,
+        }
+    }
+
+    fn track_hover_input(&mut self, input: &UiInput) {
+        match input {
+            UiInput::Pointer(pointer) => {
+                self.pointer_position = Some((pointer.column, pointer.row));
+                if matches!(pointer.kind, PointerKind::Move) {
+                    self.hovered = self.hover_target(pointer.column, pointer.row);
+                }
+            }
+            UiInput::HostFocusGained | UiInput::HostFocusLost => {
+                self.pointer_position = None;
+                self.hovered = BrowserHit::None;
+            }
+            UiInput::KeyStroke(_)
+            | UiInput::Key(_)
+            | UiInput::Paste(_)
+            | UiInput::PasteAnnotated(_)
+            | UiInput::Resize { .. } => {}
         }
     }
 

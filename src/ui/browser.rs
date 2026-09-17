@@ -230,6 +230,8 @@ pub struct SessionBrowser {
     now: Timestamp,
     layout: Option<BrowserLayout>,
     pub(super) footer_controls: Vec<BrowserFooterControl>,
+    hovered: BrowserHit,
+    pointer_position: Option<(u16, u16)>,
     rename: Option<management::RenameState>,
     pub(super) shortcut_registry: crate::ui::ShortcutRegistry,
     history: crate::ports::store::BrowserHistoryStatus,
@@ -251,6 +253,8 @@ impl SessionBrowser {
             now,
             layout: None,
             footer_controls: Vec::new(),
+            hovered: BrowserHit::None,
+            pointer_position: None,
             rename: None,
             shortcut_registry: crate::ui::ShortcutRegistry::default(),
             history: crate::ports::store::BrowserHistoryStatus::default(),
@@ -409,7 +413,46 @@ impl SessionBrowser {
         } else {
             Vec::new()
         };
+        self.reconcile_hover();
         layout
+    }
+
+    pub(super) const fn hovered(&self) -> BrowserHit {
+        self.hovered
+    }
+
+    fn reconcile_hover(&mut self) {
+        self.hovered = self
+            .pointer_position
+            .map_or(BrowserHit::None, |(column, row)| {
+                self.hover_target(column, row)
+            });
+    }
+
+    fn hover_target(&self, column: u16, row: u16) -> BrowserHit {
+        let Some(layout) = &self.layout else {
+            return BrowserHit::None;
+        };
+        let hit = layout.hit_test(column, row, &self.footer_controls);
+        match hit {
+            BrowserHit::Item(index)
+                if self.items.get(index).is_some_and(|item| {
+                    matches!(
+                        item.availability,
+                        BrowserAvailability::Resumable | BrowserAvailability::Recovered
+                    )
+                }) =>
+            {
+                hit
+            }
+            BrowserHit::Rename
+            | BrowserHit::Trash
+            | BrowserHit::Undo
+            | BrowserHit::Redo
+            | BrowserHit::Confirm
+            | BrowserHit::Cancel => hit,
+            BrowserHit::Item(_) | BrowserHit::None => BrowserHit::None,
+        }
     }
 }
 

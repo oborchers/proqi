@@ -26,6 +26,7 @@ mod pending_types;
 mod pointer;
 mod pointer_activation;
 mod pointer_editor;
+mod pointer_hover;
 mod presentation;
 pub(in crate::ui) mod query;
 mod recovery;
@@ -147,6 +148,7 @@ pub struct BoardApp {
     pointer_click: Option<pointer::PointerClick>,
     overlay_activation: Option<pointer_activation::OverlayActivation>,
     hovered: Option<HitTarget>,
+    pointer_position: Option<(u16, u16)>,
     insertion_focus: InsertionFocus,
     insertion_confirmation: InsertionConfirmation,
     edit_boundary: Option<CursorMovement>,
@@ -248,6 +250,7 @@ impl BoardApp {
             pointer_click: None,
             overlay_activation: None,
             hovered: None,
+            pointer_position: None,
             insertion_focus,
             insertion_confirmation: InsertionConfirmation::Idle,
             edit_boundary: None,
@@ -310,6 +313,7 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
+        self.track_hover_input(&input);
         let (owner, input, preserves_handoff) = match self.prepare_input(input, ids, clock) {
             Ok(prepared) => prepared,
             Err(effects) => return effects,

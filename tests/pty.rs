@@ -60,6 +60,10 @@ mod input_stall_failures;
 mod input_stall_modes;
 
 #[cfg(target_os = "macos")]
+#[path = "pty/hover.rs"]
+mod hover;
+
+#[cfg(target_os = "macos")]
 #[path = "pty/key_inspector.rs"]
 mod key_inspector;
 
