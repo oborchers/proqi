@@ -1,9 +1,13 @@
 //! Responsive optional-name presentation fixtures.
 
-use super::*;
-use proqi::{domain::ThoughtPresentation, ui::BoardDensity};
+use super::{control_r, named_fixture};
+use proqi::{
+    domain::ThoughtPresentation,
+    ui::{BoardDensity, ThemePreference, UiKey, UiSettings},
+};
+use ratatui_core::{backend::Backend as _, layout::Rect};
 
-use super::super::snapshot_support::snapshot_buffer;
+use super::super::{draw_theme, snapshot_support::snapshot_buffer};
 
 pub(super) fn comfortable() -> String {
     let mut fixture = named_fixture(
