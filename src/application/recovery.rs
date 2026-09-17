@@ -8,10 +8,11 @@ use super::{AppState, DurabilityState};
 #[must_use]
 pub fn capture_recovery(state: &AppState, exported_at: Timestamp) -> RecoveryDocument {
     RecoveryDocument {
-        format_version: 1,
+        format_version: 2,
         exported_at,
         session: state.board.session.clone(),
         thoughts: state.board.thoughts().to_vec(),
+        separators: state.board.separators().to_vec(),
         pending_sequences: state.pending_sequences.iter().copied().collect(),
         failed_sequence: match state.durability {
             DurabilityState::Failed { failed, .. } => Some(failed),

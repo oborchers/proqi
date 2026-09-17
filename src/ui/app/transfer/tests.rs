@@ -321,7 +321,7 @@ fn tutorial_shortcut_annotations_cross_the_session_transfer_boundary_exactly() {
         first_run_board(source, &mut ids, FirstRunEnvironment::Standalone).expect("practice board");
     let thought = board.board().live_thoughts()[1].clone();
     let mut app = BoardApp::new(AppState::new(board.board().clone()), RopeEditorFactory);
-    app.state.focused_thought = Some(thought.id);
+    app.state.focused_item = Some(thought.id.into());
 
     assert_eq!(
         app.begin_session_transfer(false, &mut ids, &clock),
@@ -371,7 +371,7 @@ fn stale_discovery_cannot_mutate_a_reopened_transfer_owner() {
     ));
     app.handle_transfer_input(&UiInput::Key(UiKey::Character('o')), &mut ids, &clock);
     app.handle_transfer_input(&UiInput::Key(UiKey::Escape), &mut ids, &clock);
-    app.state.focused_thought = Some(second_id);
+    app.state.focused_item = Some(second_id.into());
     assert!(matches!(
         app.begin_session_transfer(true, &mut ids, &clock)
             .as_slice(),

@@ -25,7 +25,7 @@ impl CommandContext {
         }
         Some(match metadata.scope {
             CommandScope::Contextual => {
-                ShortcutContext::surface(self.board.mode, self.board.insertion_focused, false)
+                ShortcutContext::surface(self.board.mode, self.board.focus.insertion, false)
             }
             CommandScope::Editor => ShortcutContext::Edit,
             CommandScope::Board

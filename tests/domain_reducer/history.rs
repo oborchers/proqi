@@ -145,7 +145,7 @@ fn undoing_a_nonfocused_create_keeps_the_next_insertion_valid() {
 
     let third = fixture.create("third");
     assert_eq!(fixture.state.board.live_thoughts().len(), 2);
-    assert_eq!(fixture.state.focused_thought, Some(third));
+    assert_eq!(fixture.state.focused_thought_id(), Some(third));
 }
 
 #[test]

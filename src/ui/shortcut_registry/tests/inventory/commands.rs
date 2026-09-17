@@ -8,7 +8,7 @@ use crate::ui::shortcut_registry::{
 fn every_commands_entry_has_one_matching_registry_descriptor() {
     let registry = ShortcutRegistry::resolve(&KeyBindings::default(), ShortcutPlatform::Portable)
         .expect("valid registry");
-    assert_eq!(Action::COMMANDS.len(), 57);
+    assert_eq!(Action::COMMANDS.len(), 58);
     for (order, (action, label)) in Action::COMMANDS.into_iter().enumerate() {
         let descriptor = registry.descriptor(action).expect("Commands descriptor");
         assert_eq!(

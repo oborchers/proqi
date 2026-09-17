@@ -104,6 +104,7 @@ impl ShortcutActionId {
             ReflowThought => "ReflowThought",
             InsertAbove => "InsertAbove",
             InsertBelow => "InsertBelow",
+            InsertSeparator => "InsertSeparator",
             SelectAll => "SelectAll",
             Duplicate => "Duplicate",
             Undo => "Undo",

@@ -5,6 +5,7 @@ mod global_delivery;
 mod overlay_composition;
 mod overlays;
 mod release_highlights;
+mod separator;
 
 use linkify::{LinkFinder, LinkKind};
 use ratatui_core::{
@@ -175,6 +176,26 @@ fn render_board(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, 
     }
     let presentation = app.presentation_for_layout(layout);
     let editor = presentation.editor();
+    render_thought_items(frame, app, layout, &presentation, editor, theme);
+    for separator in &layout.separators {
+        separator::render(frame, app, separator, theme);
+    }
+    if let Some(compose) = &layout.compose {
+        frame.render_widget(Block::default().style(theme.focused_style()), compose.area);
+        render_compose_gutter(frame, compose, theme);
+        render_editor(frame, app, editor, compose.text_area, theme);
+    }
+    render_insert(frame, app, layout, theme);
+}
+
+fn render_thought_items(
+    frame: &mut Frame<'_>,
+    app: &BoardApp,
+    layout: &LayoutSnapshot,
+    presentation: &crate::ui::projection::FramePresentation,
+    editor: Option<&crate::ui::projection::EditorPresentation>,
+    theme: &Theme,
+) {
     for thought_layout in &layout.thoughts {
         let Some(thought) = presentation.thought(thought_layout.thought_id) else {
             continue;
@@ -186,7 +207,7 @@ fn render_board(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, 
             Some(HitTarget::Thought(id) | HitTarget::DragHandle(id) | HitTarget::Overflow(id))
                 if id == thought_layout.thought_id
         );
-        render_separator(
+        separator::render_automatic(
             frame,
             thought_layout,
             app.drag_target() == Some(thought_layout.index),
@@ -203,7 +224,10 @@ fn render_board(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, 
             thought_layout,
             focused,
             hovered,
-            app.dragged_thought() == Some(thought_layout.thought_id),
+            app.dragged_item()
+                == Some(crate::domain::BoardItemId::Thought(
+                    thought_layout.thought_id,
+                )),
             theme,
         );
         if matches!(app.interaction_mode(), InteractionMode::Edit { thought_id } if thought_id == thought_layout.thought_id)
@@ -220,11 +244,9 @@ fn render_board(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, 
             );
         }
     }
-    if let Some(compose) = &layout.compose {
-        frame.render_widget(Block::default().style(theme.focused_style()), compose.area);
-        render_compose_gutter(frame, compose, theme);
-        render_editor(frame, app, editor, compose.text_area, theme);
-    }
+}
+
+fn render_insert(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, theme: &Theme) {
     if let Some(insert) = layout.insert {
         let hovered = app.hovered() == Some(HitTarget::Insert);
         let prompt = app.compose_prompt_visible();
@@ -268,27 +290,6 @@ fn render_compose_gutter(
                 .add_modifier(Modifier::BOLD),
         ),
         layout.gutter,
-    );
-}
-
-fn render_separator(
-    frame: &mut Frame<'_>,
-    layout: &ThoughtLayout,
-    drag_target: bool,
-    theme: &Theme,
-) {
-    let Some(area) = layout.separator_before else {
-        return;
-    };
-    frame.render_widget(
-        Paragraph::new("─".repeat(usize::from(area.width))).style(Style::default().fg(
-            if drag_target {
-                theme.accent
-            } else {
-                theme.divider
-            },
-        )),
-        area,
     );
 }
 

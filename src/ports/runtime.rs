@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::domain::{
-    InstallationIdentity, InstanceId, RequestId, SessionId, StableVersion, TextPosition, ThoughtId,
-    Timestamp,
+    BoardItemId, InstallationIdentity, InstanceId, RequestId, SeparatorId, SessionId,
+    StableVersion, TextPosition, ThoughtId, Timestamp,
 };
 
 /// Content-free interaction checkpoint carried only across input recovery replacement.
@@ -13,8 +13,8 @@ use crate::domain::{
 pub struct InputRecoveryUiState {
     /// Exact non-modal interaction owner.
     pub mode: InputRecoveryMode,
-    /// Focused thought when one exists.
-    pub focused_thought: Option<ThoughtId>,
+    /// Focused Board item when one exists.
+    pub focused_item: Option<BoardItemId>,
     /// Current logical insertion position.
     pub insertion_index: usize,
     /// Whether the insertion row owns Board focus.
@@ -23,7 +23,7 @@ pub struct InputRecoveryUiState {
     pub compose_editor_visible: bool,
     /// Active editor geometry, without editor content.
     pub editor: Option<InputRecoveryEditorState>,
-    /// Exact Board thought selection.
+    /// Exact Board item selection.
     pub selection: InputRecoverySelection,
     /// Expanded presentation folds by thought and annotation index.
     pub expanded_folds: Vec<(ThoughtId, usize)>,
@@ -62,10 +62,10 @@ pub struct InputRecoveryEditorState {
 /// Exact content-free Board selection state.
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 pub struct InputRecoverySelection {
-    /// Selected thoughts.
-    pub selected: Vec<ThoughtId>,
+    /// Selected Board items.
+    pub selected: Vec<BoardItemId>,
     /// Optional contiguous range endpoints.
-    pub range: Option<(ThoughtId, ThoughtId)>,
+    pub range: Option<(BoardItemId, BoardItemId)>,
     /// Whether the keyboard range latch is active.
     pub latched: bool,
 }
@@ -107,6 +107,11 @@ pub enum InputRecoveryScrollAnchor {
     Overflow {
         /// Tall thought owning the overflow marker.
         thought_id: ThoughtId,
+    },
+    /// Payload-free separator row.
+    Separator {
+        /// Separator owning the row.
+        separator_id: SeparatorId,
     },
     /// Compose editor content row.
     Compose {

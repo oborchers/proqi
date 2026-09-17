@@ -445,6 +445,10 @@ mod select_all;
 mod selection;
 #[path = "ui_board/sentence_deletion.rs"]
 mod sentence_deletion;
+#[path = "ui_board/separator_snapshots.rs"]
+mod separator_snapshots;
+#[path = "ui_board/separators.rs"]
+mod separators;
 #[path = "ui_board/session_navigation.rs"]
 mod session_navigation;
 #[path = "ui_board/shortcut_standardization.rs"]

@@ -111,7 +111,7 @@ fn active_add_preserves_the_users_live_editor_and_focus() {
     assert_eq!(effects.len(), 1);
     assert_eq!(app.editor_snapshot(), Some(editor_before));
     assert!(app.has_pending_edit());
-    assert_eq!(app.state.focused_thought, Some(original_id));
+    assert_eq!(app.state.focused_thought_id(), Some(original_id));
     assert_eq!(
         app.state.mode,
         InteractionMode::Edit {

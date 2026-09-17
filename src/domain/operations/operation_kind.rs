@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 pub enum BoardOperationKind {
     /// Created a thought, including paste-to-create.
     Create,
+    /// Inserted a durable payload-free visual separator.
+    InsertSeparator,
     /// Deleted a thought without touching the clipboard.
     Delete,
     /// Deleted a thought after a successful clipboard write.

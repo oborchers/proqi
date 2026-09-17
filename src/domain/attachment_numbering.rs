@@ -71,7 +71,10 @@ impl AttachmentCounters {
                 ..
             } => self.observe(expected_annotations)?,
             BoardMutation::SetDeletion { .. }
+            | BoardMutation::AddSeparator { .. }
+            | BoardMutation::SetSeparatorDeletion { .. }
             | BoardMutation::MoveThought { .. }
+            | BoardMutation::MoveSeparator { .. }
             | BoardMutation::SetPresentation { .. }
             | BoardMutation::LegacySetCollapsed { .. } => {}
         }
