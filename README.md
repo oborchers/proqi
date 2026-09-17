@@ -162,6 +162,10 @@ prompt files or unsaved Sublime scratch document.
 Changes autosave; exit prints the resume command. Boards rename, trash, restore,
 and run in parallel; one lease prevents concurrent editing.
 
+Thoughts may have a short optional name for organization. The name is separate
+from the exact body: copying or submitting a thought never prepends it, and
+creating a thought never opens a naming prompt.
+
 A genuinely empty board opens with `+ Start typing`. Type or paste immediately
 to create the first thought, or click the insertion row to reveal the ordinary
 empty editor first. Nothing is saved until content is produced. Press `Esc` to
@@ -189,6 +193,7 @@ configuration.
 | macOS `Ctrl+N` / `Ctrl+Shift+N`; elsewhere `Alt+↓` / `↑` or `Alt+j` / `k` | Insert a blank below / above the focused thought and edit it |
 | `Page Up` / `Page Down` | Move five thoughts previous / next |
 | `Enter` or `e` | Edit |
+| `Ctrl+R` | Edit or clear the focused thought's optional name |
 | macOS `Option+Shift+↓` / `↑`; `Primary+J` / `Primary+K`, `Primary+Shift+↓` / `↑`, or drag | Reorder |
 | `Primary+C` / `y`; `Primary+X` / `x` | Copy; safe cut |
 | `d` or `Del` (`Entf` on German keyboards) | Delete |
@@ -209,6 +214,7 @@ configuration.
 | Input | Action |
 | --- | --- |
 | `Esc` | Return to the board |
+| `Ctrl+R` | Edit or clear this thought's optional name without changing the body selection |
 | `Primary+A`; `Primary+U` | Select all; delete logical line |
 | `Primary+Shift+U` | Delete containing sentence |
 | macOS `Ctrl+Z`; `Ctrl+Shift+Z` / `Ctrl+Y`; retained Primary aliases elsewhere | Undo; redo |
@@ -237,7 +243,7 @@ configuration.
 | Direction chooser | Arrows or `h` / `j` / `k` / `l`; `Enter`; `Esc` |
 | Global-delivery disposition | `↑` / `↓` or `k` / `j`; page keys; `Enter`; `Esc` |
 | Session Browser and Browser query | Type to filter; `↑` / `↓`; `Home` / `End`; `Alt+↑` / `↓` or page keys; `Enter`; `Backspace` / `Delete`; `F2` rename and `F8` trash while the query is empty; `Esc` |
-| Rename and Browser rename | Type and use text cursor, `Backspace`, or `Delete`; `Enter` confirms; `Esc` cancels |
+| Thought name, Rename, and Browser rename | Type and use text cursor, `Backspace`, or `Delete`; `Enter` confirms; `Esc` cancels |
 | Recovery | `r` retry storage; `w` export recovery; `q` or `Primary+Q` exits through durability handling; `Esc` remains the invariant close route |
 | Empty insertion boundary | Board controls remain available; `Enter` or `n` creates; range and reorder actions are thought-only no-ops; `Esc` returns to the final thought |
 
@@ -413,8 +419,12 @@ The CLI also exposes versioned JSON:
 ```shell
 proqi --json capabilities
 printf '%s' 'Review this.' | proqi --json thoughts add <session-id>
+proqi --json thoughts rename <session-id> <thought-id> 'Release plan'
 proqi --json thoughts send <source> <thought-id> <destination> --remove
 ```
+
+Thought list and inspect JSON include nullable `name` metadata. Cross-session
+send preserves it, while human inspect and agent submission remain body-only.
 
 The [Proqi skill](skills/proqi/SKILL.md) uses it without scraping the TUI:
 
@@ -488,6 +498,7 @@ schema_version = 1
 ]
 "submission.submit_keep" = [] # keyboard aliases disabled; Commands stays available
 "thought.delete" = [{ key = "d" }, { key = "Delete" }]
+"thought.rename" = [{ key = "r", modifiers = ["Control"] }]
 
 [keymap.macos.edit]
 "submission.submit_remove" = [{ key = "Enter", modifiers = ["Super", "Alt"] }]

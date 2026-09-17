@@ -163,7 +163,7 @@ fn load_thoughts(
 ) -> Result<Vec<Thought>, StoreError> {
     let mut statement = connection
         .prepare(
-            "SELECT id, session_id, content, annotations_json, position, created_at, updated_at, presentation, deleted_at
+            "SELECT id, session_id, content, name, annotations_json, position, created_at, updated_at, presentation, deleted_at
              FROM thoughts WHERE session_id = ?1 ORDER BY deleted_at IS NOT NULL, position, id",
         )
         .map_err(map_sql_error)?;
@@ -173,19 +173,30 @@ fn load_thoughts(
                 row.get::<_, Vec<u8>>(0)?,
                 row.get::<_, Vec<u8>>(1)?,
                 row.get::<_, String>(2)?,
-                row.get::<_, String>(3)?,
-                row.get::<_, i64>(4)?,
+                row.get::<_, Option<String>>(3)?,
+                row.get::<_, String>(4)?,
                 row.get::<_, i64>(5)?,
                 row.get::<_, i64>(6)?,
-                row.get::<_, String>(7)?,
-                row.get::<_, Option<i64>>(8)?,
+                row.get::<_, i64>(7)?,
+                row.get::<_, String>(8)?,
+                row.get::<_, Option<i64>>(9)?,
             ))
         })
         .map_err(map_sql_error)?;
     let mut thoughts = Vec::new();
     for row in rows {
-        let (id, owner, content, annotations, position, created, updated, presentation, deleted) =
-            row.map_err(map_sql_error)?;
+        let (
+            id,
+            owner,
+            content,
+            name,
+            annotations,
+            position,
+            created,
+            updated,
+            presentation,
+            deleted,
+        ) = row.map_err(map_sql_error)?;
         let annotations: Vec<ContentAnnotation> = serde_json::from_str(&annotations)
             .map_err(|error| StoreError::Corrupt(error.to_string()))?;
         crate::domain::validate_annotations(&content, &annotations)
@@ -194,6 +205,10 @@ fn load_thoughts(
             id: thought_id_from_blob(id)?,
             session_id: session_id_from_blob(owner)?,
             content,
+            name: name
+                .map(crate::domain::ThoughtName::new)
+                .transpose()
+                .map_err(|error| StoreError::Corrupt(error.to_string()))?,
             annotations,
             position: ThoughtPosition::new(i64_to_u32(position)?),
             created_at: Timestamp::from_millis(created),

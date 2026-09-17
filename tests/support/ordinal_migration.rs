@@ -82,9 +82,10 @@ impl Fixture {
                 "DROP TABLE browser_history_receipts;
             DROP TABLE browser_operation_receipts;
             DROP TABLE browser_operations;
-            DROP TABLE browser_history_state;",
+            DROP TABLE browser_history_state;
+            ALTER TABLE thoughts DROP COLUMN name;",
             )
-            .expect("remove schema 16 state");
+            .expect("remove schema 16 and 17 state");
         connection
             .execute("DELETE FROM migration_history WHERE version > ?1", [schema])
             .expect("historical migration rows");
@@ -220,20 +221,44 @@ pub fn query(connection: &Connection, sql: &str) -> Vec<Vec<Value>> {
 }
 
 pub fn durable_rows(connection: &Connection) -> Vec<Vec<Vec<Value>>> {
-    [
-        "sessions",
-        "thoughts",
-        "thought_revisions",
-        "board_operations",
-        "commit_receipts",
-        "integration_context",
-        "onboarding_state",
-        "submission_attempts",
-        "submission_attempt_items",
+    let has_name = query(connection, "PRAGMA table_info(thoughts)")
+        .iter()
+        .any(|column| column.get(1) == Some(&Value::Text("name".to_owned())));
+    let thoughts = if has_name {
+        query(
+            connection,
+            "SELECT id, session_id, content, name, annotations_json, position,
+            created_at, updated_at, collapsed, presentation, deleted_at, editor_history_cursor
+            FROM thoughts ORDER BY rowid",
+        )
+    } else {
+        query(
+            connection,
+            "SELECT id, session_id, content, NULL AS name, annotations_json, position,
+            created_at, updated_at, collapsed, presentation, deleted_at, editor_history_cursor
+            FROM thoughts ORDER BY rowid",
+        )
+    };
+    vec![
+        query(connection, "SELECT * FROM sessions ORDER BY rowid"),
+        thoughts,
+        query(connection, "SELECT * FROM thought_revisions ORDER BY rowid"),
+        query(connection, "SELECT * FROM board_operations ORDER BY rowid"),
+        query(connection, "SELECT * FROM commit_receipts ORDER BY rowid"),
+        query(
+            connection,
+            "SELECT * FROM integration_context ORDER BY rowid",
+        ),
+        query(connection, "SELECT * FROM onboarding_state ORDER BY rowid"),
+        query(
+            connection,
+            "SELECT * FROM submission_attempts ORDER BY rowid",
+        ),
+        query(
+            connection,
+            "SELECT * FROM submission_attempt_items ORDER BY rowid",
+        ),
     ]
-    .into_iter()
-    .map(|table| query(connection, &format!("SELECT * FROM {table} ORDER BY rowid")))
-    .collect()
 }
 
 pub fn without_ordinals(connection: &Connection) -> Vec<Vec<Vec<Value>>> {
@@ -244,10 +269,10 @@ pub fn without_ordinals(connection: &Connection) -> Vec<Vec<Vec<Value>>> {
         last_opened_at, last_active_at, last_durable_sequence, board_history_cursor, deleted_at
         FROM sessions ORDER BY rowid",
     );
-    for (table, column) in [(1, 3), (2, 5), (3, 4), (4, 4)] {
+    for (table, column) in [(1, 4), (2, 5), (3, 4), (4, 4)] {
         for row in &mut rows[table] {
             let Value::Text(encoded) = &row[column] else {
-                panic!("JSON payload")
+                panic!("JSON payload at table {table}, column {column}: {row:?}")
             };
             let mut value = serde_json::from_str(encoded).expect("payload JSON");
             strip_ordinals(&mut value);

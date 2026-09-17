@@ -175,6 +175,7 @@ pub(super) fn create_action(
                 operation_id,
                 content,
                 annotations,
+                None,
                 insertion_index,
                 at,
             ))

@@ -62,6 +62,7 @@ impl Action {
             | Self::DeleteThoughts { .. }
             | Self::StageSubmissionRemoval { .. }
             | Self::MoveThought { .. }
+            | Self::RenameThought { .. }
             | Self::SetPresentation { .. }
             | Self::SetPresentationMany { .. }
             | Self::DuplicateThoughts { .. } => UndoContract::DurableBoard,

@@ -105,6 +105,7 @@ fn replaced_thought(mutation: &BoardMutation) -> Option<ThoughtId> {
         | BoardMutation::SetDeletionExact { .. }
         | BoardMutation::MoveThought { .. }
         | BoardMutation::SetPresentation { .. }
+        | BoardMutation::SetName { .. }
         | BoardMutation::LegacySetCollapsed { .. } => None,
     }
 }

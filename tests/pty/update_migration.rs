@@ -292,7 +292,8 @@ fn downgrade_to_schema_eleven(state: &Path) {
     Connection::open(state.join("data/proqi.sqlite3"))
         .expect("database")
         .execute_batch(
-            "DROP TABLE browser_history_receipts;
+            "ALTER TABLE thoughts DROP COLUMN name;
+             DROP TABLE browser_history_receipts;
              DROP TABLE browser_operation_receipts;
              DROP TABLE browser_operations;
              DROP TABLE browser_history_state;

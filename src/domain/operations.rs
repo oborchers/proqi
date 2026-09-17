@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     DomainError, OperationId, OperationSequence, Session, SessionId, Thought, ThoughtId,
-    ThoughtPosition, ThoughtPresentation, Timestamp, validate_annotations,
+    ThoughtName, ThoughtPosition, ThoughtPresentation, Timestamp, validate_annotations,
 };
 
 mod addressing;
@@ -119,6 +119,15 @@ pub enum BoardMutation {
         /// New preference.
         presentation: ThoughtPresentation,
     },
+    /// Replace optional organizational metadata with an exact precondition.
+    SetName {
+        /// Affected thought.
+        thought_id: ThoughtId,
+        /// Required current name.
+        before: Option<ThoughtName>,
+        /// Replacement name.
+        after: Option<ThoughtName>,
+    },
     /// Legacy v0.1.x payload retained only for lossless history migration.
     #[doc(hidden)]
     #[serde(rename = "set_collapsed")]
@@ -165,6 +174,7 @@ impl BoardMutation {
             Self::SetDeletion { .. }
             | Self::MoveThought { .. }
             | Self::SetPresentation { .. }
+            | Self::SetName { .. }
             | Self::LegacySetCollapsed { .. } => Ok(()),
         }
     }
@@ -401,27 +411,16 @@ impl SessionBoard {
             BoardMutation::SetPresentation {
                 thought_id,
                 presentation,
-            } => {
-                let thought = self
-                    .thought_mut(*thought_id)
-                    .ok_or(DomainError::ThoughtNotFound(*thought_id))?;
-                thought.presentation = *presentation;
-                thought.updated_at = at;
-            }
+            } => self.set_presentation(*thought_id, *presentation, at)?,
+            BoardMutation::SetName {
+                thought_id,
+                before,
+                after,
+            } => self.set_name(*thought_id, before.as_ref(), after.clone(), at)?,
             BoardMutation::LegacySetCollapsed {
                 thought_id,
                 collapsed,
-            } => {
-                let thought = self
-                    .thought_mut(*thought_id)
-                    .ok_or(DomainError::ThoughtNotFound(*thought_id))?;
-                thought.presentation = if *collapsed {
-                    ThoughtPresentation::Collapsed
-                } else {
-                    ThoughtPresentation::Automatic
-                };
-                thought.updated_at = at;
-            }
+            } => self.set_legacy_collapsed(*thought_id, *collapsed, at)?,
         }
         self.session.last_active_at = self.session.last_active_at.max(at);
         Ok(())
@@ -446,6 +445,9 @@ impl SessionBoard {
                 });
             }
             validate_annotations(&thought.content, &thought.annotations)?;
+            if let Some(name) = &thought.name {
+                ThoughtName::new(name.as_str().to_owned())?;
+            }
         }
         let mut attachment_ids = HashSet::new();
         for (expected, thought) in self.live_thoughts().into_iter().enumerate() {

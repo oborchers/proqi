@@ -37,6 +37,7 @@ CREATE TABLE thoughts (
     id BLOB PRIMARY KEY CHECK (length(id) = 16),
     session_id BLOB NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
     content TEXT NOT NULL,
+    name TEXT,
     annotations_json TEXT NOT NULL DEFAULT '[]',
     position INTEGER NOT NULL CHECK (position >= 0),
     created_at INTEGER NOT NULL,
@@ -201,6 +202,7 @@ INSERT INTO migration_history(version, applied_at) VALUES (13, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (14, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (15, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (16, 0);
+INSERT INTO migration_history(version, applied_at) VALUES (17, 0);
 ";
 
 pub(super) const MIGRATION_2: &str = r"
@@ -440,4 +442,11 @@ CREATE TABLE browser_history_receipts (
 INSERT INTO browser_history_state(singleton, cursor) VALUES (1, 0);
 UPDATE schema_meta SET schema_version = 16, storage_protocol = 15;
 INSERT INTO migration_history(version, applied_at) VALUES (16, 0);
+";
+
+// Add optional organizational names without changing authored thought content.
+pub(super) const MIGRATION_17: &str = r"
+ALTER TABLE thoughts ADD COLUMN name TEXT;
+UPDATE schema_meta SET schema_version = 17, storage_protocol = 16;
+INSERT INTO migration_history(version, applied_at) VALUES (17, 0);
 ";

@@ -15,7 +15,8 @@ use super::mutations::bulk::{
 use super::mutations::transform::{ExactSource, extract_thought, merge_thoughts, split_thought};
 use super::mutations::{
     create_compose_thought, create_thought, delete_thought, edit_thought, finish_clipboard,
-    history_move, move_thought, rename_session, request_clipboard, set_presentation,
+    history_move, move_thought, rename_session, rename_thought, request_clipboard,
+    set_presentation,
 };
 
 /// Reduce one action into current state and ordered effects.
@@ -61,6 +62,7 @@ pub fn reduce(state: &mut AppState, action: Action) -> ApplicationResult<Vec<Eff
         | Action::DeleteThoughts { .. }
         | Action::StageSubmissionRemoval { .. }
         | Action::MoveThought { .. }
+        | Action::RenameThought { .. }
         | Action::SetPresentation { .. }
         | Action::SetPresentationMany { .. }
         | Action::DuplicateThoughts { .. }
@@ -260,13 +262,16 @@ fn create_owned_thought(
     state: &mut AppState,
     creation: OwnedThoughtCreation,
 ) -> ApplicationResult<Vec<Effect>> {
-    create_thought(
+    super::mutations::create_thought_with_handoff(
         state,
         creation.thought_id,
         creation.operation_id,
         creation.content,
         creation.annotations,
         creation.insertion_index.unwrap_or(state.insertion_index),
+        None,
+        false,
+        creation.name,
         creation.at,
     )
 }
@@ -374,6 +379,12 @@ fn reduce_board(state: &mut AppState, action: &Action) -> ApplicationResult<Vec<
             presentation,
             at,
         } => set_presentation(state, *operation_id, *thought_id, *presentation, *at),
+        Action::RenameThought {
+            operation_id,
+            thought_id,
+            name,
+            at,
+        } => rename_thought(state, *operation_id, *thought_id, name.clone(), *at),
         Action::SetPresentationMany {
             operation_id,
             thought_ids,

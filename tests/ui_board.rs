@@ -423,6 +423,8 @@ mod movement_symmetry;
 mod navigation;
 #[path = "ui_board/new_thought.rs"]
 mod new_thought;
+#[path = "ui_board/optional_thought_names.rs"]
+mod optional_thought_names;
 #[path = "ui_board/palette.rs"]
 mod palette;
 #[path = "ui_board/paste_reflow.rs"]

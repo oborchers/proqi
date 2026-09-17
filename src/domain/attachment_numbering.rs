@@ -73,6 +73,7 @@ impl AttachmentCounters {
             BoardMutation::SetDeletion { .. }
             | BoardMutation::MoveThought { .. }
             | BoardMutation::SetPresentation { .. }
+            | BoardMutation::SetName { .. }
             | BoardMutation::LegacySetCollapsed { .. } => {}
         }
         Ok(())

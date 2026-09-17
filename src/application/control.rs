@@ -18,6 +18,14 @@ pub(crate) enum ControlReplay {
     Conflict,
 }
 
+struct AddParts<'a> {
+    thought_id: &'a crate::domain::ThoughtId,
+    content: &'a str,
+    annotations: &'a [crate::domain::ContentAnnotation],
+    name: Option<&'a crate::domain::ThoughtName>,
+    position: &'a Option<usize>,
+}
+
 /// Validate an operation replay without applying it to current state again.
 pub(crate) fn match_control_replay(
     existing: &StoredOperationRequest,
@@ -55,6 +63,11 @@ pub(crate) fn match_control_replay(
         }
         ControlMutation::SetCollapsed { thought_id, .. }
             if matches_collapse(existing, session_id, mutation) =>
+        {
+            Some(*thought_id)
+        }
+        ControlMutation::RenameThought { thought_id, .. }
+            if matches_rename(existing, session_id, mutation) =>
         {
             Some(*thought_id)
         }
@@ -111,7 +124,7 @@ fn matches_add(
     session_id: SessionId,
     mutation: &ControlMutation,
 ) -> bool {
-    let Some((thought_id, content, annotations, position)) = add_parts(mutation) else {
+    let Some(parts) = add_parts(mutation) else {
         return false;
     };
     if let StoredOperationRequest::Compacted { replay, .. } = existing {
@@ -124,14 +137,17 @@ fn matches_add(
         else {
             return false;
         };
-        return crate::ports::store::thought_payload_digest(content, annotations).is_ok_and(
-            |digest| {
-                *stored_session == session_id
-                    && stored_thought == thought_id
-                    && *payload_digest == digest
-                    && position.is_none_or(|value| value == *stored_position)
-            },
-        );
+        return crate::ports::store::thought_payload_digest_with_name(
+            parts.content,
+            parts.annotations,
+            parts.name,
+        )
+        .is_ok_and(|digest| {
+            *stored_session == session_id
+                && stored_thought == parts.thought_id
+                && *payload_digest == digest
+                && parts.position.is_none_or(|value| value == *stored_position)
+        });
     }
     let (StoredOperationRequest::Board { operation, .. }, _) = (existing, mutation) else {
         return false;
@@ -141,23 +157,17 @@ fn matches_add(
         && matches!(
             &operation.forward,
             BoardMutation::AddThought { thought }
-                if thought.id == *thought_id
-                    && thought.content == *content
-                    && same_creation_annotations(&thought.annotations, annotations)
-                    && position.is_none_or(|value| {
+                if thought.id == *parts.thought_id
+                    && thought.content == parts.content
+                    && same_creation_annotations(&thought.annotations, parts.annotations)
+                    && thought.name.as_ref() == parts.name
+                    && parts.position.is_none_or(|value| {
                         u32::try_from(value).ok() == Some(thought.position.get())
                     })
         )
 }
 
-fn add_parts(
-    mutation: &ControlMutation,
-) -> Option<(
-    &crate::domain::ThoughtId,
-    &str,
-    &[crate::domain::ContentAnnotation],
-    &Option<usize>,
-)> {
+fn add_parts(mutation: &ControlMutation) -> Option<AddParts<'_>> {
     match mutation {
         ControlMutation::Add {
             thought_id,
@@ -165,16 +175,67 @@ fn add_parts(
             annotations,
             position,
             ..
-        }
-        | ControlMutation::PreserveAdd {
+        } => Some(AddParts {
             thought_id,
             content,
             annotations,
+            name: None,
+            position,
+        }),
+        ControlMutation::PreserveAdd {
+            thought_id,
+            content,
+            annotations,
+            name,
             position,
             ..
-        } => Some((thought_id, content, annotations, position)),
+        } => Some(AddParts {
+            thought_id,
+            content,
+            annotations,
+            name: name.as_ref(),
+            position,
+        }),
         _ => None,
     }
+}
+
+fn matches_rename(
+    existing: &StoredOperationRequest,
+    session_id: SessionId,
+    mutation: &ControlMutation,
+) -> bool {
+    let ControlMutation::RenameThought {
+        thought_id, name, ..
+    } = mutation
+    else {
+        return false;
+    };
+    if let StoredOperationRequest::Compacted { replay, .. } = existing {
+        return matches!(
+            replay,
+            crate::ports::store::CompactedOperationRequest::Rename {
+                session_id: stored_session,
+                thought_id: stored_thought,
+                name: stored_name,
+            } if *stored_session == session_id
+                && stored_thought == thought_id
+                && stored_name == name
+        );
+    }
+    let StoredOperationRequest::Board { operation, .. } = existing else {
+        return false;
+    };
+    operation.session_id == session_id
+        && operation.kind == BoardOperationKind::Rename
+        && matches!(
+            &operation.forward,
+            BoardMutation::SetName {
+                thought_id: stored,
+                after,
+                ..
+            } if stored == thought_id && after == name
+        )
 }
 
 fn matches_delete(

@@ -75,6 +75,7 @@ const fn command_applicability(action: Action) -> CommandApplicability {
         | Action::Duplicate
         | Action::Collapse
         | Action::Edit
+        | Action::RenameThought
         | Action::InsertInvocation
         | Action::SendSession
         | Action::SendSessionRemove
@@ -96,6 +97,7 @@ const fn command_relevance(action: Action) -> CommandRelevance {
         Action::SubmitKeep => CommandRelevance::Submission(7),
         Action::New => CommandRelevance::Always(0),
         Action::Edit => CommandRelevance::FocusedThought(20),
+        Action::RenameThought => CommandRelevance::FocusedThought(22),
         Action::ReflowThought => CommandRelevance::FocusedThought(25),
         Action::Copy => CommandRelevance::FocusedThought(30),
         Action::PasteExact => CommandRelevance::Always(40),
@@ -173,7 +175,8 @@ const fn command_scope(action: Action) -> CommandScope {
         | Action::SubmitRemove
         | Action::SubmitKeep
         | Action::SubmitToAgent
-        | Action::ReflowThought => CommandScope::Contextual,
+        | Action::ReflowThought
+        | Action::RenameThought => CommandScope::Contextual,
         Action::Undo | Action::Redo => CommandScope::Commands,
         Action::PlainNewline
         | Action::DeleteLogicalLine

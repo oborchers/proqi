@@ -44,6 +44,7 @@ pub(super) fn enqueue_effects(
                 pending.persistence = pending.persistence.saturating_add(1);
             }
             Effect::CommitBoardOperation(_)
+            | Effect::CommitThoughtNoOpRename { .. }
             | Effect::CommitRevision(_)
             | Effect::CommitHistoryMove { .. }
             | Effect::RetryPersistence { .. }
@@ -106,6 +107,7 @@ fn enqueue_persistence_effect(
 ) -> Result<(), TerminalError> {
     match effect {
         Effect::CommitBoardOperation(_)
+        | Effect::CommitThoughtNoOpRename { .. }
         | Effect::CommitRevision(_)
         | Effect::CommitHistoryMove { .. } => {
             let batch = effect

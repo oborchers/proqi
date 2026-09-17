@@ -39,7 +39,8 @@ fn reflow_migration_requires_authority_and_preserves_a_pre_migration_backup() {
     let connection = rusqlite::Connection::open(&fixture.config.database_path).expect("fixture");
     connection
         .execute_batch(
-            "DROP TABLE browser_history_receipts;
+            "ALTER TABLE thoughts DROP COLUMN name;
+             DROP TABLE browser_history_receipts;
              DROP TABLE browser_operation_receipts;
              DROP TABLE browser_operations;
              DROP TABLE browser_history_state;
@@ -88,11 +89,12 @@ fn browser_history_migrates_exact_reflow_schema_and_protocol() {
     let connection = rusqlite::Connection::open(&fixture.config.database_path).expect("fixture");
     connection
         .execute_batch(
-            "DROP TABLE browser_history_receipts;
+            "ALTER TABLE thoughts DROP COLUMN name;
+             DROP TABLE browser_history_receipts;
              DROP TABLE browser_operation_receipts;
              DROP TABLE browser_operations;
              DROP TABLE browser_history_state;
-             DELETE FROM migration_history WHERE version = 16;
+             DELETE FROM migration_history WHERE version >= 16;
              UPDATE schema_meta SET schema_version = 15, storage_protocol = 14;",
         )
         .expect("schema 15 stamp");
@@ -126,5 +128,36 @@ fn browser_history_migrates_exact_reflow_schema_and_protocol() {
         .expect("history rows")
         .collect::<Result<Vec<_>, _>>()
         .expect("history versions");
-    assert_eq!(versions, (1..=16).collect::<Vec<_>>());
+    assert_eq!(versions, (1..=SUPPORTED_SCHEMA_VERSION).collect::<Vec<_>>());
+}
+
+#[test]
+fn thought_name_migration_is_additive_and_backed_up() {
+    let fixture = DatabaseFixture::new();
+    drop(fixture.open());
+    let connection = rusqlite::Connection::open(&fixture.config.database_path).expect("fixture");
+    connection
+        .execute_batch(
+            "ALTER TABLE thoughts DROP COLUMN name;
+             DELETE FROM migration_history WHERE version = 17;
+             UPDATE schema_meta SET schema_version = 16, storage_protocol = 15;",
+        )
+        .expect("schema 16 fixture");
+    drop(connection);
+
+    fixture.open().quick_check().expect("migrated integrity");
+    let connection = rusqlite::Connection::open(&fixture.config.database_path).expect("migrated");
+    let name_column: u32 = connection
+        .query_row(
+            "SELECT count(*) FROM pragma_table_info('thoughts') WHERE name = 'name'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("name column");
+    assert_eq!(name_column, 1);
+    let backups = std::fs::read_dir(&fixture.config.backup_dir)
+        .expect("backup directory")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("backups");
+    assert_eq!(backups.len(), 1);
 }

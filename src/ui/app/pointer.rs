@@ -137,6 +137,9 @@ impl BoardApp {
             self.pointer_click = None;
         }
         match target {
+            Some(HitTarget::ThoughtName(thought_id)) => {
+                self.begin_thought_rename_from_pointer(thought_id, pointer, ids, clock)
+            }
             Some(HitTarget::Thought(thought_id)) => {
                 self.handle_thought_pointer(thought_id, pointer, ids, clock)
             }
@@ -189,6 +192,7 @@ impl BoardApp {
                 Vec::new()
             }
             Some(HitTarget::ExitEdit) => self.pointer_exit_edit(ids, clock),
+            Some(HitTarget::CommitThoughtName | HitTarget::CancelThoughtName) => Vec::new(),
             Some(HitTarget::Retry) => self.retry_persistence(),
             Some(HitTarget::ExportRecovery) => self.export_recovery(ids, clock),
             Some(HitTarget::PaletteItem(index)) => {

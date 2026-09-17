@@ -250,6 +250,23 @@ pub(super) fn configure_agent_controls(
     }
 }
 
+pub(super) fn configure_thought_name_controls(layout: &mut LayoutSnapshot) {
+    layout.controls.retain(|(target, _)| {
+        matches!(target, HitTarget::RenameSession | HitTarget::CopySessionId)
+    });
+    let area = crate::ui::geometry::inset_horizontal(layout.footer_actions, 2);
+    if area.height == 0 {
+        return;
+    }
+    let mut x = area.x;
+    for (target, width) in [
+        (HitTarget::CommitThoughtName, 4),
+        (HitTarget::CancelThoughtName, 6),
+    ] {
+        push(layout, &mut x, area, target, width);
+    }
+}
+
 fn push(layout: &mut LayoutSnapshot, x: &mut u16, area: Rect, target: HitTarget, width: u16) {
     let gap = if *x > area.x { 3 } else { 0 };
     let start = x.saturating_add(gap);

@@ -1,7 +1,8 @@
 use crate::{
     adapters::memory::FakeIdGenerator,
     domain::{
-        ContentAnnotation, ContentAnnotationKind, InstallationIdentity, StableVersion, Timestamp,
+        ContentAnnotation, ContentAnnotationKind, InstallationIdentity, StableVersion, ThoughtName,
+        Timestamp,
     },
     ports::environment::IdGenerator,
     ports::update::{
@@ -84,11 +85,34 @@ fn preservation_of_semantic_inline_metadata_requires_protocol_seven() {
         thought_id: ids.thought_id(),
         content: "Press Enter".to_owned(),
         annotations: vec![ContentAnnotation::shortcut(6, 11)],
+        name: None,
         position: None,
     };
 
     assert!(mutation.requires_protocol_seven());
     assert_eq!(mutation.minimum_protocol(), 7);
+}
+
+#[test]
+fn thought_names_require_protocol_ten_for_rename_and_preservation() {
+    let mut ids = FakeIdGenerator::new(1_725_200_000_000);
+    let name = ThoughtName::new("Release 計画").expect("name");
+    let preserve = ControlMutation::PreserveAdd {
+        operation_id: ids.operation_id(),
+        thought_id: ids.thought_id(),
+        content: "exact body".to_owned(),
+        annotations: Vec::new(),
+        name: Some(name.clone()),
+        position: None,
+    };
+    let rename = ControlMutation::RenameThought {
+        operation_id: ids.operation_id(),
+        thought_id: ids.thought_id(),
+        name: Some(name),
+    };
+
+    assert_eq!(preserve.minimum_protocol(), 10);
+    assert_eq!(rename.minimum_protocol(), 10);
 }
 
 #[test]

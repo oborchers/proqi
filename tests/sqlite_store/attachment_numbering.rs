@@ -295,7 +295,8 @@ pub(super) fn downgrade_to_legacy(fixture: &DatabaseFixture) {
     }
     connection
         .execute_batch(
-            "DROP TABLE browser_history_receipts;
+            "ALTER TABLE thoughts DROP COLUMN name;
+             DROP TABLE browser_history_receipts;
              DROP TABLE browser_operation_receipts;
              DROP TABLE browser_operations;
              DROP TABLE browser_history_state;

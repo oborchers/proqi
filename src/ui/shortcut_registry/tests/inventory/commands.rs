@@ -8,7 +8,7 @@ use crate::ui::shortcut_registry::{
 fn every_commands_entry_has_one_matching_registry_descriptor() {
     let registry = ShortcutRegistry::resolve(&KeyBindings::default(), ShortcutPlatform::Portable)
         .expect("valid registry");
-    assert_eq!(Action::COMMANDS.len(), 57);
+    assert_eq!(Action::COMMANDS.len(), 58);
     for (order, (action, label)) in Action::COMMANDS.into_iter().enumerate() {
         let descriptor = registry.descriptor(action).expect("Commands descriptor");
         assert_eq!(
@@ -112,6 +112,10 @@ fn commands_metadata_owns_reflow_relevance_and_contextual_transform_bindings() {
     let reflow = commands(Action::ReflowThought);
     assert_eq!(reflow.relevance, CommandRelevance::FocusedThought(25));
     assert_eq!(reflow.shortcut_owner, ShortcutActionId::ReflowThought);
+    let rename = commands(Action::RenameThought);
+    assert_eq!(rename.relevance, CommandRelevance::FocusedThought(22));
+    assert_eq!(rename.shortcut_owner, ShortcutActionId::RenameThought);
+    assert_eq!(rename.scope, CommandScope::Contextual);
     for action in [
         Action::SplitThought,
         Action::ExtractSelection,

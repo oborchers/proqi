@@ -1,5 +1,6 @@
 //! Deterministic one-column board renderer.
 
+mod board_metadata;
 mod chrome;
 mod global_delivery;
 mod overlay_composition;
@@ -181,12 +182,8 @@ fn render_board(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, 
         };
         let focused = app.active_thought_id() == Some(thought_layout.thought_id);
         let selected = app.thought_selected(thought_layout.thought_id);
-        let hovered = matches!(
-            app.hovered(),
-            Some(HitTarget::Thought(id) | HitTarget::DragHandle(id) | HitTarget::Overflow(id))
-                if id == thought_layout.thought_id
-        );
-        render_separator(
+        let hovered = thought_hovered(app, thought_layout.thought_id);
+        board_metadata::render_separator(
             frame,
             thought_layout,
             app.drag_target() == Some(thought_layout.index),
@@ -195,7 +192,7 @@ fn render_board(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, 
         if focused || hovered || selected {
             frame.render_widget(
                 Block::default().style(theme.focused_style()),
-                thought_layout.area,
+                thought_layout.body_area,
             );
         }
         render_gutter(
@@ -219,6 +216,7 @@ fn render_board(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, 
                 theme,
             );
         }
+        board_metadata::render_thought_name(frame, app, thought, thought_layout, theme);
     }
     if let Some(compose) = &layout.compose {
         frame.render_widget(Block::default().style(theme.focused_style()), compose.area);
@@ -252,6 +250,18 @@ fn render_board(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, 
     }
 }
 
+fn thought_hovered(app: &BoardApp, thought_id: crate::domain::ThoughtId) -> bool {
+    matches!(
+        app.hovered(),
+        Some(
+            HitTarget::Thought(id)
+                | HitTarget::ThoughtName(id)
+                | HitTarget::DragHandle(id)
+                | HitTarget::Overflow(id)
+        ) if id == thought_id
+    )
+}
+
 fn render_compose_gutter(
     frame: &mut Frame<'_>,
     layout: &crate::ui::layout::ComposeLayout,
@@ -268,27 +278,6 @@ fn render_compose_gutter(
                 .add_modifier(Modifier::BOLD),
         ),
         layout.gutter,
-    );
-}
-
-fn render_separator(
-    frame: &mut Frame<'_>,
-    layout: &ThoughtLayout,
-    drag_target: bool,
-    theme: &Theme,
-) {
-    let Some(area) = layout.separator_before else {
-        return;
-    };
-    frame.render_widget(
-        Paragraph::new("─".repeat(usize::from(area.width))).style(Style::default().fg(
-            if drag_target {
-                theme.accent
-            } else {
-                theme.divider
-            },
-        )),
-        area,
     );
 }
 

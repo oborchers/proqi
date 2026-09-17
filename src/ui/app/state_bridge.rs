@@ -56,11 +56,6 @@ impl BoardApp {
     ) -> Vec<Effect> {
         let succeeded = result.is_ok();
         let failure = result.as_ref().err().copied();
-        if !succeeded {
-            self.quit = false;
-        } else if self.pending_edit.is_some() {
-            self.edit_generation = self.edit_generation.wrapping_add(1);
-        }
         let action = if succeeded {
             Action::PersistenceCommitted(sequence)
         } else {
@@ -69,7 +64,16 @@ impl BoardApp {
                 code: result.err().unwrap_or(FailureCode::StorageFailed),
             }
         };
-        let _effects = self.reduce(action);
+        let may_change_attachments = Self::may_change_attachments(&action);
+        if reduce(&mut self.state, action).is_err() {
+            return Vec::new();
+        }
+        self.finish_successful_reduce(may_change_attachments);
+        if !succeeded {
+            self.quit = false;
+        } else if self.pending_edit.is_some() {
+            self.edit_generation = self.edit_generation.wrapping_add(1);
+        }
         if failure.is_some() {
             self.invalidate_palette();
             self.enter_storage_failure_state();
@@ -138,15 +142,7 @@ impl BoardApp {
         let may_change_attachments = Self::may_change_attachments(&action);
         match reduce(&mut self.state, action) {
             Ok(effects) => {
-                self.finish_attachment_mutation(may_change_attachments);
-                let order = self
-                    .state
-                    .board
-                    .live_thoughts()
-                    .into_iter()
-                    .map(|thought| thought.id)
-                    .collect::<Vec<_>>();
-                self.selection.reconcile(&order);
+                self.finish_successful_reduce(may_change_attachments);
                 Some(effects)
             }
             Err(error) => {
@@ -158,6 +154,19 @@ impl BoardApp {
                 None
             }
         }
+    }
+
+    fn finish_successful_reduce(&mut self, may_change_attachments: bool) {
+        self.finish_attachment_mutation(may_change_attachments);
+        let order = self
+            .state
+            .board
+            .live_thoughts()
+            .into_iter()
+            .map(|thought| thought.id)
+            .collect::<Vec<_>>();
+        self.selection.reconcile(&order);
+        self.reconcile_thought_rename();
     }
 
     pub(super) fn reduce_with_empty_transition(

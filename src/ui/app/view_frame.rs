@@ -79,6 +79,20 @@ impl BoardApp {
                 .as_ref()
                 .map_or_else(Vec::new, |overlay| overlay.item_interactive.clone()),
         );
+        self.configure_footer(&mut layout);
+        let final_height = self.focused_height(&layout);
+        self.prepare_layout(TextViewport::new(layout.content_width, final_height));
+        self.attach_editor_presentation(&mut presentation);
+        self.board_viewport = self.board_viewport.at(scroll.current);
+        self.scroll_geometry = Some(scroll);
+        self.frame_presentation = Some(presentation);
+        self.layout = Some(layout.clone());
+        self.clamp_help_scroll();
+        self.clamp_release_highlights_scroll();
+        layout
+    }
+
+    fn configure_footer(&self, layout: &mut LayoutSnapshot) {
         layout.configure_agent_controls_with_keys(
             &self.agent_targets,
             self.submission_mode(),
@@ -95,16 +109,9 @@ impl BoardApp {
             self.session_display_name().to_owned(),
             session_id,
         );
-        let final_height = self.focused_height(&layout);
-        self.prepare_layout(TextViewport::new(layout.content_width, final_height));
-        self.attach_editor_presentation(&mut presentation);
-        self.board_viewport = self.board_viewport.at(scroll.current);
-        self.scroll_geometry = Some(scroll);
-        self.frame_presentation = Some(presentation);
-        self.layout = Some(layout.clone());
-        self.clamp_help_scroll();
-        self.clamp_release_highlights_scroll();
-        layout
+        if self.thought_name_editing() {
+            layout.configure_thought_name_controls();
+        }
     }
 
     fn focused_height(&self, layout: &LayoutSnapshot) -> u16 {
@@ -208,6 +215,14 @@ impl BoardApp {
     }
 
     fn footer_summary(&self, available_width: u16) -> String {
+        if self.thought_rename.is_some() {
+            return fitting_footer_summary(
+                "name edit · Enter save · Esc cancel".to_owned(),
+                "Enter save · Esc cancel".to_owned(),
+                "name edit".to_owned(),
+                available_width,
+            );
+        }
         let count = self.visible_thought_count();
         let noun = if count == 1 { "thought" } else { "thoughts" };
         let durability = self.durability_summary();

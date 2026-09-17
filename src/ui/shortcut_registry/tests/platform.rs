@@ -162,6 +162,32 @@ fn primary_expands_only_to_control_on_portable_platforms() {
 }
 
 #[test]
+fn physical_control_r_is_the_exact_name_editor_shortcut_on_both_platforms() {
+    for platform in [ShortcutPlatform::MacOs, ShortcutPlatform::Portable] {
+        for context in [ShortcutContext::Board, ShortcutContext::Edit] {
+            assert_eq!(
+                context_action(
+                    platform,
+                    context,
+                    LogicalModifiers::CONTROL,
+                    LogicalKey::Character('r'),
+                ),
+                Some(Action::RenameThought)
+            );
+        }
+        assert_eq!(
+            context_action(
+                platform,
+                ShortcutContext::Compose,
+                LogicalModifiers::CONTROL,
+                LogicalKey::Character('r'),
+            ),
+            None
+        );
+    }
+}
+
+#[test]
 fn horizontal_primary_arrows_keep_platform_specific_movement_contracts() {
     for modifier in [LogicalModifiers::SUPER, LogicalModifiers::META] {
         assert_eq!(

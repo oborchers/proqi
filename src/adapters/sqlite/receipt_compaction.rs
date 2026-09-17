@@ -6,7 +6,7 @@ use sha2::{Digest as _, Sha256};
 
 use crate::{
     domain::{BoardMutation, BoardOperation, BoardOperationKind},
-    ports::store::{CompactedOperationRequest, StoreError, thought_payload_digest},
+    ports::store::{CompactedOperationRequest, StoreError, thought_payload_digest_with_name},
 };
 
 use super::support::map_sql_error;
@@ -28,7 +28,11 @@ pub(super) fn board_replay(
             CompactedOperationRequest::Add {
                 session_id: operation.session_id,
                 thought_id: thought.id,
-                payload_digest: thought_payload_digest(&thought.content, &thought.annotations)?,
+                payload_digest: thought_payload_digest_with_name(
+                    &thought.content,
+                    &thought.annotations,
+                    thought.name.as_ref(),
+                )?,
                 position: usize::try_from(thought.position.get()).map_err(|_| {
                     StoreError::Corrupt("thought position cannot fit in memory".to_owned())
                 })?,
@@ -57,6 +61,16 @@ pub(super) fn board_replay(
                 })?,
             }
         }
+        (
+            BoardOperationKind::Rename,
+            BoardMutation::SetName {
+                thought_id, after, ..
+            },
+        ) => CompactedOperationRequest::Rename {
+            session_id: operation.session_id,
+            thought_id: *thought_id,
+            name: after.clone(),
+        },
         _ => CompactedOperationRequest::Opaque,
     };
     Ok(replay)

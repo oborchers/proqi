@@ -1,6 +1,7 @@
 //! Shared source and installed executable contract for ordinal-bearing migrations.
 
 use crate::ordinal_fixture::{Fixture, durable_rows, query, without_ordinals};
+use proqi::ports::store::{STORAGE_PROTOCOL_VERSION, SUPPORTED_SCHEMA_VERSION};
 use std::{path::Path, process::Command};
 
 pub(super) fn assert_cli_migrations(mut command: impl FnMut() -> Command, state: &Path) {
@@ -44,7 +45,10 @@ pub(super) fn assert_cli_migrations(mut command: impl FnMut() -> Command, state:
                     &fixture.connection(),
                     "SELECT schema_version, storage_protocol FROM schema_meta"
                 ),
-                vec![vec![16.into(), 15.into()]]
+                vec![vec![
+                    i64::from(SUPPORTED_SCHEMA_VERSION).into(),
+                    i64::from(STORAGE_PROTOCOL_VERSION).into(),
+                ]]
             );
             assert_eq!(
                 query(&fixture.connection(), "PRAGMA quick_check"),

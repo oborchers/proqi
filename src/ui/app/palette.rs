@@ -403,6 +403,7 @@ impl BoardApp {
                 self.begin_session_rename();
                 Vec::new()
             }
+            BoardCommand::RenameThought => self.begin_thought_rename(ids, clock),
             BoardCommand::CopySessionId => self.copy_session_id(ids),
             BoardCommand::CopyResume => self.copy_resume_command(ids),
             BoardCommand::SendSession => self.begin_session_transfer(false, ids, clock),

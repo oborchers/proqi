@@ -48,6 +48,12 @@ pub(super) fn binding(
     modifiers: LogicalModifiers,
     macos: bool,
 ) -> Option<(Action, ShortcutBindingPresentation)> {
+    if matches!(context, Context::Board | Context::Edit)
+        && key == LogicalKey::Character('r')
+        && modifiers == LogicalModifiers::CONTROL
+    {
+        return Some((Action::RenameThought, ShortcutBindingPresentation::Explicit));
+    }
     if let Some(binding) = macos_history(context, key, modifiers, macos) {
         return Some(binding);
     }

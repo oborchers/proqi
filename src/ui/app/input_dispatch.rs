@@ -18,6 +18,7 @@ pub(super) enum ActiveInputOwner {
     Direction,
     Search,
     Rename,
+    ThoughtRename,
     Transfer,
     Invocation,
     InvocationQuery,
@@ -40,7 +41,7 @@ impl ActiveInputOwner {
             Self::Recovery => ShortcutContext::Recovery,
             Self::Direction => ShortcutContext::Direction,
             Self::Search => ShortcutContext::Search,
-            Self::Rename => ShortcutContext::Rename,
+            Self::Rename | Self::ThoughtRename => ShortcutContext::Rename,
             Self::Transfer => ShortcutContext::Transfer,
             Self::Invocation => ShortcutContext::Invocation,
             Self::InvocationQuery => ShortcutContext::InvocationQuery,
@@ -126,6 +127,9 @@ impl BoardApp {
         }
         if self.rename.is_some() {
             owners.push(ActiveInputOwner::Rename);
+        }
+        if self.thought_rename.is_some() {
+            owners.push(ActiveInputOwner::ThoughtRename);
         }
         if self.transfer.is_some() {
             owners.push(ActiveInputOwner::Transfer);

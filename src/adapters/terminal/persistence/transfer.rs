@@ -88,6 +88,7 @@ pub(super) fn deliver(
             request.destination_session_id,
             request.content.clone(),
             request.annotations.clone(),
+            request.name.clone(),
             None,
             Some(request.operation_id),
         )
@@ -109,6 +110,7 @@ fn forward(
         thought_id,
         content: request.content.clone(),
         annotations: request.annotations.clone(),
+        name: request.name.clone(),
         position: None,
     };
     if !(crate::ports::control::MIN_CONTROL_PROTOCOL_VERSION

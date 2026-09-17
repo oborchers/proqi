@@ -5,7 +5,7 @@ use thiserror::Error;
 
 use crate::domain::{
     ContentAnnotation, ContentAnnotationKind, OperationId, RequestId, RevisionId, SessionId,
-    ThoughtId, UndoScope,
+    ThoughtId, ThoughtName, UndoScope,
 };
 
 use super::store::DurableIdentity;
@@ -16,7 +16,7 @@ use super::update::{
 use super::{runtime::InstanceInfo, store::CommitReceipt};
 
 /// Current local owner-control protocol.
-pub const CONTROL_PROTOCOL_VERSION: u32 = 9;
+pub const CONTROL_PROTOCOL_VERSION: u32 = 10;
 /// Current compatible screenshot takeover protocol.
 pub const CAPTURE_CONTROL_PROTOCOL_VERSION: u32 = 1;
 /// Oldest owner-control protocol accepted for plain-text mutations.
@@ -140,8 +140,20 @@ pub enum ControlMutation {
         content: String,
         /// Existing validated presentation metadata preserved without re-authoring it.
         annotations: Vec<ContentAnnotation>,
+        /// Optional organizational metadata preserved outside authored content.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        name: Option<ThoughtName>,
         /// Optional zero-based destination position.
         position: Option<usize>,
+    },
+    /// Set or clear one thought's optional organizational name.
+    RenameThought {
+        /// Durable board operation identity.
+        operation_id: OperationId,
+        /// Thought to update.
+        thought_id: ThoughtId,
+        /// Replacement name, or `None` to clear it.
+        name: Option<ThoughtName>,
     },
     /// Soft-delete one thought.
     Delete {
@@ -207,6 +219,7 @@ impl ControlMutation {
             Self::RenameSession { operation_id, .. }
             | Self::Add { operation_id, .. }
             | Self::PreserveAdd { operation_id, .. }
+            | Self::RenameThought { operation_id, .. }
             | Self::Delete { operation_id, .. }
             | Self::Move { operation_id, .. }
             | Self::History { operation_id, .. }
@@ -240,10 +253,10 @@ impl ControlMutation {
             Self::Add { thought_id, .. }
             | Self::PreserveAdd { thought_id, .. }
             | Self::Delete { thought_id, .. }
-            | Self::Move { thought_id, .. } => Some(*thought_id),
-            Self::Replace { thought_id, .. } | Self::SetCollapsed { thought_id, .. } => {
-                Some(*thought_id)
-            }
+            | Self::Move { thought_id, .. }
+            | Self::Replace { thought_id, .. }
+            | Self::SetCollapsed { thought_id, .. }
+            | Self::RenameThought { thought_id, .. } => Some(*thought_id),
             Self::History { .. }
             | Self::RenameSession { .. }
             | Self::Sync
@@ -278,7 +291,11 @@ impl ControlMutation {
     /// Oldest control protocol capable of representing this request.
     #[must_use]
     pub fn minimum_protocol(&self) -> u32 {
-        if matches!(self, Self::RenameSession { .. }) {
+        if matches!(self, Self::RenameThought { .. })
+            || matches!(self, Self::PreserveAdd { name: Some(_), .. })
+        {
+            10
+        } else if matches!(self, Self::RenameSession { .. }) {
             9
         } else if matches!(self, Self::Add { annotations, .. } | Self::PreserveAdd { annotations, .. } if annotations.iter().any(|annotation| matches!(annotation.kind, ContentAnnotationKind::Attachment { .. })))
         {

@@ -79,6 +79,13 @@ impl BoardApp {
             .and_then(|presentation| presentation.thought(thought_id))
             .filter(|thought| {
                 thought.canonical_content == content
+                    && thought.name.as_deref()
+                        == self
+                            .state
+                            .board
+                            .thought(thought_id)
+                            .and_then(|thought| thought.name.as_ref())
+                            .map(crate::domain::ThoughtName::as_str)
                     && thought
                         .presentation
                         .substitutions
@@ -126,6 +133,11 @@ impl BoardApp {
                     canonical_content: content,
                     presentation: projection,
                     preference: thought.presentation,
+                    name: self
+                        .thought_name_editor(thought.id)
+                        .map(|editor| editor.text().to_owned())
+                        .or_else(|| thought.name.as_ref().map(|name| name.as_str().to_owned())),
+                    name_editing: self.thought_name_editor(thought.id).is_some(),
                 }
             })
             .collect();

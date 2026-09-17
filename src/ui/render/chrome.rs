@@ -43,6 +43,9 @@ fn render_control(
             .iter()
             .find(|target| target.adjacent_direction() == Some(direction))
             .map(crate::ui::control_labels::agent),
+        HitTarget::CommitThoughtName | HitTarget::CancelThoughtName => {
+            crate::ui::control_labels::thought_name_action(target)
+        }
         _ => crate::ui::control_labels::action(target, false, context, keys)
             .filter(|label| label.width() <= area.width)
             .or_else(|| crate::ui::control_labels::action(target, true, context, keys)),

@@ -74,6 +74,7 @@ fn server_negotiates_protocol_and_bounds_encoded_messages() {
         thought_id: ids.thought_id(),
         content: "body".to_owned(),
         annotations: vec![ContentAnnotation::shortcut(0, 4)],
+        name: None,
         position: None,
     };
     let stream = connect(&endpoint, owner.pid).expect("protocol six stream");

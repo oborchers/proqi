@@ -8,6 +8,7 @@ mod forwarding;
 mod helpers;
 mod runtime_open;
 mod sessions;
+mod thought_names;
 mod transfer;
 mod update;
 
@@ -163,6 +164,10 @@ fn execute_launch(
     Ok(opened_session(id))
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "the exhaustive typed command dispatcher keeps each route visible"
+)]
 fn execute_thoughts(
     context: &mut RuntimeContext,
     command: ThoughtCommand,
@@ -182,6 +187,19 @@ fn execute_thoughts(
             thought,
             operation_id,
         } => delete_thought(context, &session, &thought, operation_id.as_deref()),
+        ThoughtCommand::Rename {
+            session,
+            thought,
+            name,
+            clear: _,
+            operation_id,
+        } => thought_names::rename_thought(
+            context,
+            &session,
+            &thought,
+            name.as_deref(),
+            operation_id.as_deref(),
+        ),
         ThoughtCommand::Replace {
             session,
             thought,
@@ -227,7 +245,7 @@ fn execute_thoughts(
             remove,
             operation_id,
             remove_operation_id,
-        } => transfer::send_thought(
+        } => execute_send_thought(
             context,
             &source,
             &thought,
@@ -239,6 +257,26 @@ fn execute_thoughts(
         ThoughtCommand::Undo(arguments) => move_history(context, &arguments, true),
         ThoughtCommand::Redo(arguments) => move_history(context, &arguments, false),
     }
+}
+
+fn execute_send_thought(
+    context: &mut RuntimeContext,
+    source: &str,
+    thought: &str,
+    destination: &str,
+    remove: bool,
+    operation_id: Option<&str>,
+    remove_operation_id: Option<&str>,
+) -> Result<Outcome, CliError> {
+    transfer::send_thought(
+        context,
+        source,
+        thought,
+        destination,
+        remove,
+        operation_id,
+        remove_operation_id,
+    )
 }
 
 fn list_thoughts(context: &mut RuntimeContext, reference: &str) -> Result<Outcome, CliError> {
@@ -257,6 +295,7 @@ fn list_thoughts(context: &mut RuntimeContext, reference: &str) -> Result<Outcom
                 "id": thought.id,
                 "position": thought.position,
                 "content": thought.content,
+                "name": thought.name,
                 "collapsed": thought.presentation.is_collapsed(),
                 "presentation": thought.presentation.as_str(),
                 "updated_at": thought.updated_at,
@@ -269,12 +308,11 @@ fn list_thoughts(context: &mut RuntimeContext, reference: &str) -> Result<Outcom
         .live_thoughts()
         .into_iter()
         .map(|thought| {
-            format!(
-                "{}  {}  {}",
-                thought.position.get(),
-                thought.id,
-                excerpt(&thought.content)
-            )
+            let label = thought.name.as_ref().map_or_else(
+                || excerpt(&thought.content),
+                |name| name.as_str().to_owned(),
+            );
+            format!("{}  {}  {}", thought.position.get(), thought.id, label)
         })
         .collect::<Vec<_>>()
         .join("\n");
@@ -309,6 +347,7 @@ fn inspect_thought(
             "thought": {
                 "id": thought.id,
                 "content": thought.content,
+                "name": thought.name,
                 "position": thought.position,
                 "collapsed": thought.presentation.is_collapsed(),
                 "presentation": thought.presentation.as_str(),

@@ -25,6 +25,8 @@ use crate::{
 pub enum HitTarget {
     /// Text content of one thought.
     Thought(ThoughtId),
+    /// Optional organizational name outside authored body text.
+    ThoughtName(ThoughtId),
     /// Reorder handle for one thought.
     DragHandle(ThoughtId),
     /// Overflow indicator for one capped thought.
@@ -63,6 +65,10 @@ pub enum HitTarget {
     Quit,
     /// Leave the editor.
     ExitEdit,
+    /// Save the active optional thought name.
+    CommitThoughtName,
+    /// Cancel the active optional thought name edit.
+    CancelThoughtName,
     /// Retry the failed durable operation.
     Retry,
     /// Export the exact unsaved recovery buffer.
@@ -84,6 +90,10 @@ pub struct ThoughtLayout {
     pub separator_before: Option<Rect>,
     /// Complete visible allocation.
     pub area: Rect,
+    /// Visible body allocation, excluding the optional name row.
+    pub body_area: Rect,
+    /// Optional name row, outside body selection and submission payloads.
+    pub name: Option<Rect>,
     /// Text cells excluding the focus or drag gutter.
     pub text_area: Rect,
     /// Stable one-cell drag and focus gutter.
@@ -195,6 +205,12 @@ impl LayoutSnapshot {
             });
         }
         for thought in &self.thoughts {
+            if thought
+                .name
+                .is_some_and(|area| crate::ui::geometry::contains(area, column, row))
+            {
+                return Some(HitTarget::ThoughtName(thought.thought_id));
+            }
             if crate::ui::geometry::contains(thought.gutter, column, row) {
                 return Some(HitTarget::DragHandle(thought.thought_id));
             }
@@ -267,6 +283,10 @@ impl LayoutSnapshot {
         keybindings: &crate::ui::ShortcutRegistry,
     ) {
         controls::configure_agent_controls(self, targets, selection, context, keybindings);
+    }
+
+    pub(crate) fn configure_thought_name_controls(&mut self) {
+        controls::configure_thought_name_controls(self);
     }
 }
 

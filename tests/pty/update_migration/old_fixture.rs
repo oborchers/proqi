@@ -318,12 +318,12 @@ fn prepare_old_source(root: &Path) -> PathBuf {
         &source.join("src/ports/store.rs"),
         &[
             (
+                "SUPPORTED_SCHEMA_VERSION: u32 = 17",
                 "SUPPORTED_SCHEMA_VERSION: u32 = 16",
-                "SUPPORTED_SCHEMA_VERSION: u32 = 15",
             ),
             (
+                "STORAGE_PROTOCOL_VERSION: u32 = 16",
                 "STORAGE_PROTOCOL_VERSION: u32 = 15",
-                "STORAGE_PROTOCOL_VERSION: u32 = 14",
             ),
         ],
     );
@@ -331,28 +331,16 @@ fn prepare_old_source(root: &Path) -> PathBuf {
         &source.join("src/adapters/sqlite/migration.rs"),
         &[
             (
+                "        MIGRATION_14, MIGRATION_15, MIGRATION_16, MIGRATION_17,",
                 "        MIGRATION_14, MIGRATION_15, MIGRATION_16,",
-                "        MIGRATION_14, MIGRATION_15,",
             ),
             (
+                "        MIGRATION_14,\n        MIGRATION_15,\n        MIGRATION_16,\n        MIGRATION_17,",
                 "        MIGRATION_14,\n        MIGRATION_15,\n        MIGRATION_16,",
-                "        MIGRATION_14,\n        MIGRATION_15,",
             ),
         ],
     );
-    rewrite(
-        &source.join("src/adapters/sqlite/schema.rs"),
-        &[(
-            "INSERT INTO migration_history(version, applied_at) VALUES (16, 0);\n\";",
-            "\";",
-        )],
-    );
-    remove_first_section(
-        &source.join("src/adapters/sqlite/schema.rs"),
-        "CREATE TABLE browser_history_state (",
-        "INSERT INTO browser_history_state(singleton, cursor) VALUES (1, 0);\n\n",
-    );
-    remove_browser_history_dependencies(&source);
+    remove_thought_name_dependencies(&source);
     fs::write(
         source.join("src/bin/update_fixture.rs"),
         coordinator::SOURCE,
@@ -448,21 +436,44 @@ fn remove_first_section(path: &Path, start: &str, end: &str) {
     fs::write(path, content).expect("write section source");
 }
 
-fn remove_browser_history_dependencies(source: &Path) {
+fn remove_thought_name_dependencies(source: &Path) {
     rewrite(
-        &source.join("src/adapters/sqlite/board_commit.rs"),
+        &source.join("src/adapters/sqlite/schema.rs"),
+        &[(
+            "    content TEXT NOT NULL,\n    name TEXT,\n    annotations_json TEXT NOT NULL DEFAULT '[]',",
+            "    content TEXT NOT NULL,\n    annotations_json TEXT NOT NULL DEFAULT '[]',",
+        )],
+    );
+    remove_first_section(
+        &source.join("src/adapters/sqlite/schema.rs"),
+        "// Add optional organizational names without changing authored thought content.\n",
+        "INSERT INTO migration_history(version, applied_at) VALUES (17, 0);\n\";\n",
+    );
+    rewrite(
+        &source.join("src/adapters/sqlite/schema.rs"),
+        &[(
+            "INSERT INTO migration_history(version, applied_at) VALUES (17, 0);\n\";",
+            "\";",
+        )],
+    );
+    rewrite(
+        &source.join("src/adapters/sqlite/load.rs"),
         &[
             (
-                "    super::browser_history::ensure_not_used_by_browser_history(\n        transaction,\n        operation.id.database_bytes(),\n    )?;\n",
-                "",
+                "SELECT id, session_id, content, name, annotations_json, position, created_at, updated_at, presentation, deleted_at",
+                "SELECT id, session_id, content, annotations_json, position, created_at, updated_at, presentation, deleted_at",
             ),
             (
-                "    super::browser_history::invalidate_activity_conflicts(transaction, operation.session_id)?;\n",
-                "",
+                "                row.get::<_, Option<String>>(3)?,\n                row.get::<_, String>(4)?,\n                row.get::<_, i64>(5)?,\n                row.get::<_, i64>(6)?,\n                row.get::<_, i64>(7)?,\n                row.get::<_, String>(8)?,\n                row.get::<_, Option<i64>>(9)?,",
+                "                row.get::<_, String>(3)?,\n                row.get::<_, i64>(4)?,\n                row.get::<_, i64>(5)?,\n                row.get::<_, i64>(6)?,\n                row.get::<_, String>(7)?,\n                row.get::<_, Option<i64>>(8)?,",
             ),
             (
-                "    super::browser_history::ensure_not_used_by_browser_history(\n        transaction,\n        revision.id.database_bytes(),\n    )?;\n",
-                "",
+                "            name,\n            annotations,",
+                "            annotations,",
+            ),
+            (
+                "            name: name\n                .map(crate::domain::ThoughtName::new)\n                .transpose()\n                .map_err(|error| StoreError::Corrupt(error.to_string()))?,",
+                "            name: None,",
             ),
         ],
     );
@@ -470,20 +481,18 @@ fn remove_browser_history_dependencies(source: &Path) {
         &source.join("src/adapters/sqlite/history_commit.rs"),
         &[
             (
-                "    super::browser_history::ensure_not_used_by_browser_history(\n        transaction,\n        operation_id.database_bytes(),\n    )?;\n",
-                "",
+                "                    id, session_id, content, name, annotations_json, position, created_at, updated_at,",
+                "                    id, session_id, content, annotations_json, position, created_at, updated_at,",
             ),
             (
-                "    super::browser_history::invalidate_activity_conflicts(transaction, session_id)?;\n",
+                "                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+                "                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            ),
+            ("                    name = excluded.name,\n", ""),
+            (
+                "                    thought.name.as_ref().map(crate::domain::ThoughtName::as_str),\n",
                 "",
             ),
         ],
-    );
-    rewrite(
-        &source.join("src/adapters/sqlite/session_admin.rs"),
-        &[(
-            "    super::browser_history::invalidate_activity_conflicts(transaction, id)?;\n",
-            "",
-        )],
     );
 }

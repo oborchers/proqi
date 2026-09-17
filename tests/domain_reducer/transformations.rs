@@ -7,6 +7,8 @@ mod review_regressions;
 mod semantic_annotations;
 #[path = "transformations/stale_redo.rs"]
 mod stale_redo;
+#[path = "transformations/thought_names.rs"]
+mod thought_names;
 
 fn folded(start: usize, end: usize) -> ContentAnnotation {
     ContentAnnotation {

@@ -272,6 +272,9 @@ pub struct Thought {
     pub session_id: SessionId,
     /// Exact current content.
     pub content: String,
+    /// Optional organizational metadata, separate from authored content.
+    #[serde(default)]
+    pub name: Option<super::ThoughtName>,
     /// Durable presentation metadata over exact UTF-8 byte ranges.
     #[serde(default)]
     pub annotations: Vec<ContentAnnotation>,
@@ -306,6 +309,7 @@ impl Thought {
             id,
             session_id,
             content,
+            name: None,
             annotations: Vec::new(),
             position,
             created_at: now,
@@ -334,6 +338,11 @@ impl Thought {
         validate_annotations(&self.content, &annotations)?;
         self.annotations = annotations;
         Ok(())
+    }
+
+    /// Replace the optional organizational name.
+    pub fn set_name(&mut self, name: Option<super::ThoughtName>) {
+        self.name = name;
     }
 }
 
@@ -408,6 +417,9 @@ pub struct IntegrationContext {
 /// Domain validation failure.
 #[derive(Clone, Debug, Eq, Error, PartialEq)]
 pub enum DomainError {
+    /// Thought names must be short, trimmed, single-line text.
+    #[error("thought name must be non-blank, single-line, and at most 80 characters")]
+    InvalidThoughtName,
     /// A durable thought presentation value was unknown.
     #[error("invalid thought presentation: {0}")]
     InvalidThoughtPresentation(String),
@@ -466,6 +478,9 @@ pub enum DomainError {
     /// A reversible replacement no longer matches current thought content.
     #[error("thought content changed before transformation: {0}")]
     ThoughtContentConflict(ThoughtId),
+    /// A reversible metadata replacement no longer matches the current name.
+    #[error("thought name changed before rename: {0}")]
+    ThoughtNameConflict(ThoughtId),
 }
 
 fn validate_absolute_path(path: &Path) -> Result<(), DomainError> {

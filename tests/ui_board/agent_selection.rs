@@ -62,6 +62,19 @@ fn selected_thoughts_submit_once_in_board_order_and_remove_as_one_undo_step() {
     fixture.input(crate::key_input(UiKey::Character(' ')));
     fixture.input(crate::key_input(UiKey::Character('k')));
     fixture.input(crate::key_input(UiKey::Character(' ')));
+    let selected_ids = fixture
+        .app
+        .state
+        .board
+        .live_thoughts()
+        .into_iter()
+        .map(|thought| thought.id)
+        .collect::<Vec<_>>();
+    assert!(
+        selected_ids
+            .iter()
+            .all(|thought_id| fixture.app.thought_selected(*thought_id))
+    );
     let target = super::agent::target(Direction::Left, "w1:p2");
     fixture
         .app
@@ -87,10 +100,20 @@ fn selected_thoughts_submit_once_in_board_order_and_remove_as_one_undo_step() {
         [Effect::StoreIntegrationContext { .. }]
     ));
     assert!(fixture.app.state.board.live_thoughts().is_empty());
+    assert!(
+        selected_ids
+            .iter()
+            .all(|thought_id| !fixture.app.thought_selected(*thought_id))
+    );
 
     fixture.input(crate::key_input(UiKey::Escape));
     fixture.input(crate::key_input(UiKey::Undo));
     assert_eq!(fixture.app.state.board.live_thoughts().len(), 2);
+    assert!(
+        selected_ids
+            .iter()
+            .all(|thought_id| !fixture.app.thought_selected(*thought_id))
+    );
 }
 
 #[test]
