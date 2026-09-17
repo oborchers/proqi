@@ -99,12 +99,14 @@ pub(super) fn render(
         Style::default()
             .fg(theme.on_accent)
             .bg(theme.accent_surface)
-            .remove_modifier(Modifier::ITALIC)
+            .remove_modifier(Modifier::REVERSED | Modifier::ITALIC)
             .add_modifier(modifier)
     } else if gutter_hovered {
         theme.hovered_style().fg(theme.accent)
     } else {
-        Style::default().fg(theme.accent)
+        Style::default()
+            .fg(theme.accent)
+            .remove_modifier(Modifier::BOLD | Modifier::ITALIC)
     };
     frame.render_widget(Block::default().style(style), layout.gutter);
     frame.render_widget(

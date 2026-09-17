@@ -113,6 +113,26 @@ fn spacious_dark_separator_owns_the_boundary_and_hover_geometry() {
             .modifier
             .contains(ratatui_core::style::Modifier::UNDERLINED)
     );
+
+    fixture.app.state.focused_item = Some(layout.thoughts[0].thought_id.into());
+    fixture.pointer(
+        separator.area.x.saturating_add(3),
+        separator.area.y,
+        PointerKind::Move,
+    );
+    let terminal = draw_theme(&mut fixture, 62, 14, ThemePreference::Limited);
+    let body = &terminal.backend().buffer()[(separator.area.x.saturating_add(3), separator.area.y)];
+    assert!(body.modifier.contains(ratatui_core::style::Modifier::BOLD));
+    assert!(!body.modifier.intersects(
+        ratatui_core::style::Modifier::ITALIC | ratatui_core::style::Modifier::UNDERLINED
+    ));
+    let gutter = &terminal.backend().buffer()[(separator.gutter.x, separator.gutter.y)];
+    assert_eq!(gutter.symbol(), " ");
+    assert!(!gutter.modifier.intersects(
+        ratatui_core::style::Modifier::BOLD
+            | ratatui_core::style::Modifier::ITALIC
+            | ratatui_core::style::Modifier::UNDERLINED
+    ));
 }
 
 #[test]
