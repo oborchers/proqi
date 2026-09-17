@@ -12,6 +12,14 @@ mod support;
 mod active_control;
 
 #[cfg(target_os = "macos")]
+#[path = "pty/active_transfer.rs"]
+mod active_transfer;
+
+#[cfg(target_os = "macos")]
+#[path = "pty/active_transfer_failures.rs"]
+mod active_transfer_failures;
+
+#[cfg(target_os = "macos")]
 #[path = "pty/bottom_boundary.rs"]
 mod bottom_boundary;
 

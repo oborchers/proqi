@@ -191,3 +191,63 @@ impl Effect {
         }
     }
 }
+
+/// One sequenced durable mutation and the auxiliary work emitted with it.
+#[derive(Debug)]
+pub(crate) struct SequencedMutationEffects {
+    /// Canonical durable store request.
+    pub(crate) batch: OperationBatch,
+    /// Sequence owned by the durable request.
+    pub(crate) sequence: OperationSequence,
+    /// Auxiliary effects that must follow the durable enqueue.
+    pub(crate) auxiliary: Vec<Effect>,
+}
+
+impl SequencedMutationEffects {
+    /// Split one reducer mutation without accepting unrelated effect kinds.
+    pub(crate) fn new(effects: Vec<Effect>) -> Result<Self, SequencedMutationEffectError> {
+        let mut batch = None;
+        let mut auxiliary = Vec::new();
+        for effect in effects {
+            if let Some(candidate) = effect.persistence_batch() {
+                assign_durable_batch(&mut batch, candidate)?;
+            } else if matches!(effect, Effect::CheckAttachments(_)) {
+                auxiliary.push(effect);
+            } else {
+                return Err(SequencedMutationEffectError::UnsupportedAuxiliary);
+            }
+        }
+        let batch = batch.ok_or(SequencedMutationEffectError::MissingDurable)?;
+        let sequence = batch
+            .sequence()
+            .ok_or(SequencedMutationEffectError::MissingSequence)?;
+        Ok(Self {
+            batch,
+            sequence,
+            auxiliary,
+        })
+    }
+}
+
+fn assign_durable_batch(
+    batch: &mut Option<OperationBatch>,
+    candidate: OperationBatch,
+) -> Result<(), SequencedMutationEffectError> {
+    if batch.replace(candidate).is_some() {
+        return Err(SequencedMutationEffectError::MultipleDurable);
+    }
+    Ok(())
+}
+
+/// Invalid effect shape for an ordinary sequenced reducer mutation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum SequencedMutationEffectError {
+    /// No durable mutation was emitted.
+    MissingDurable,
+    /// The durable mutation did not own a session sequence.
+    MissingSequence,
+    /// More than one durable mutation was emitted.
+    MultipleDurable,
+    /// An effect other than attachment reconciliation accompanied the mutation.
+    UnsupportedAuxiliary,
+}

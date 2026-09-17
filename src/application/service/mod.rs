@@ -18,7 +18,7 @@ use crate::{
     },
 };
 
-use super::{AppState, ApplicationError, Effect};
+use super::{AppState, ApplicationError, SequencedMutationEffects};
 use super::{ControlReplay, match_control_replay};
 
 fn match_replay(
@@ -81,18 +81,17 @@ where
         Ok(AppState::from_snapshot(snapshot)?)
     }
 
-    fn commit_single_effect(
+    fn commit_sequenced_effects(
         &mut self,
-        effects: &[Effect],
+        effects: Vec<super::Effect>,
     ) -> Result<CommitReceipt, SessionServiceError> {
-        let [effect] = effects else {
-            return Err(SessionServiceError::NoDurableMutation);
-        };
-        let batch = effect
-            .persistence_batch()
-            .ok_or(SessionServiceError::NoDurableMutation)?;
+        let routed = SequencedMutationEffects::new(effects)
+            .map_err(|_| SessionServiceError::NoDurableMutation)?;
+        // An inactive service has no attachment worker or retained transient state.
+        // Accessibility is reconciled when the next interactive owner restores the session.
+        drop(routed.auxiliary);
         self.store
-            .commit(&batch)?
+            .commit(&routed.batch)?
             .ok_or(SessionServiceError::NoDurableMutation)
     }
 }

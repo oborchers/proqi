@@ -77,7 +77,7 @@ where
                 at: self.clock.now(),
             },
         )?;
-        let receipt = self.commit_single_effect(&effects)?;
+        let receipt = self.commit_sequenced_effects(effects)?;
         Ok(ThoughtMutation {
             thought_id,
             receipt,
@@ -123,7 +123,7 @@ where
                 at: self.clock.now(),
             },
         )?;
-        let receipt = self.commit_single_effect(&effects)?;
+        let receipt = self.commit_sequenced_effects(effects)?;
         Ok(ThoughtMutation {
             thought_id,
             receipt,
