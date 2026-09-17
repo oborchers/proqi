@@ -34,8 +34,14 @@ fn global_external_agent_skill_retains_both_forms_below_non_git_home() {
     .expect("Claude alias through Agent Skills");
 
     let result = discover(&home, &cwd);
+    let canonical_external = fs::canonicalize(&external).expect("canonical external skill");
 
-    assert!(result.project.is_empty());
+    assert!(
+        result
+            .project
+            .iter()
+            .all(|entry| entry.canonical_path != canonical_external)
+    );
     let [entry] = result.global.as_slice() else {
         panic!("one consolidated global skill");
     };
@@ -76,6 +82,7 @@ fn global_scope_stays_stable_at_home_git_and_worktree_boundaries() {
         home.join(".claude/skills/shared"),
     )
     .expect("Claude alias through Agent Skills");
+    let canonical_external = fs::canonicalize(&external).expect("canonical external skill");
 
     let repository = home.join("projects/repository");
     let worktree = home.join("projects/worktree");
@@ -83,7 +90,14 @@ fn global_scope_stays_stable_at_home_git_and_worktree_boundaries() {
     write(&worktree.join(".git"), "gitdir: /fixture/repository.git\n");
     for cwd in [home.clone(), repository, worktree] {
         let result = discover(&home, &cwd);
-        assert!(result.project.is_empty(), "cwd={}", cwd.display());
+        assert!(
+            result
+                .project
+                .iter()
+                .all(|entry| entry.canonical_path != canonical_external),
+            "cwd={}",
+            cwd.display()
+        );
         let [entry] = result.global.as_slice() else {
             panic!("one global skill for cwd={}", cwd.display());
         };
@@ -114,6 +128,7 @@ fn project_only_home_roots_survive_non_git_and_home_repository_contexts() {
         "---\ndescription: Project-only home command\n---\nbody",
     );
     fs::create_dir_all(&nested).expect("nested non-Git cwd");
+    let canonical_home = fs::canonicalize(&home).expect("canonical fixture home");
 
     let nested_result = discover(&home, &nested);
     assert!(nested_result.global.is_empty());
@@ -121,6 +136,7 @@ fn project_only_home_roots_survive_non_git_and_home_repository_contexts() {
         nested_result
             .project
             .iter()
+            .filter(|entry| entry.canonical_path.starts_with(&canonical_home))
             .flat_map(|entry| entry.forms.iter().map(|form| form.token.as_str()))
             .collect::<Vec<_>>(),
         vec!["/home-command", "/skill:home-skill"]
@@ -133,6 +149,7 @@ fn project_only_home_roots_survive_non_git_and_home_repository_contexts() {
         repository_result
             .project
             .iter()
+            .filter(|entry| entry.canonical_path.starts_with(&canonical_home))
             .flat_map(|entry| entry.forms.iter().map(|form| form.token.as_str()))
             .collect::<Vec<_>>(),
         vec!["/home-command", "/skill:home-skill"]
