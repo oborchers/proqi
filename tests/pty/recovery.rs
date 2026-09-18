@@ -239,7 +239,10 @@ fn assert_timeout_cleanup(
         Ok(message) => *message,
         Err(payload) => match payload.downcast::<&str>() {
             Ok(message) => (*message).to_owned(),
-            Err(_) => panic!("recovery watchdog panic did not contain a message"),
+            Err(payload) => panic!(
+                "recovery watchdog panic did not contain a message (payload type {:?})",
+                payload.type_id()
+            ),
         },
     };
     assert!(
@@ -251,7 +254,7 @@ fn assert_timeout_cleanup(
         "recovery watchdog did not settle complete cleanup: {message}"
     );
     assert!(
-        elapsed >= TIMEOUT_PROOF_LIMIT - Duration::from_secs(1),
+        elapsed >= TIMEOUT_PROOF_LIMIT.saturating_sub(Duration::from_secs(1)),
         "recovery watchdog ended before its cleanup window: {elapsed:?}"
     );
     assert!(
