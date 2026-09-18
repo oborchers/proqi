@@ -79,7 +79,8 @@ directory when desired:
 ```toml
 [screenshot_inbox]
 # directory = "/absolute/path/to/an/isolated/inbox"
-# filename_patterns = ["Screenshot", "Screen Shot"]
+# Example filename fallbacks, which match the complete filename:
+# filename_patterns = ["Screenshot *.png", "Screen Shot *.png"]
 capture_all_new_images = false
 # inactivity_timeout_minutes = 20
 # max_unattended_captures = 10

@@ -91,7 +91,7 @@ There is no save command. The footer distinguishes pending work from durable
 work. If storage fails, Proqi keeps the optimistic in-memory board visible and
 does not report it as saved.
 
-The Recovery surface offers:
+The Recovery surface recognizes:
 
 - `r` to retry the failed storage operation;
 - `w` to write a private recovery export;
