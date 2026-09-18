@@ -3,22 +3,12 @@
 use crate::{
     application::Effect,
     domain::{BoardItemId, SeparatorId},
-    ui::{HitTarget, PointerInput},
+    ui::PointerInput,
 };
 
 use super::BoardApp;
 
 impl BoardApp {
-    pub(super) fn reconcile_board_hover(&mut self, target: Option<HitTarget>) {
-        let separator = matches!(
-            target,
-            Some(HitTarget::Separator(_) | HitTarget::SeparatorDragHandle(_))
-        );
-        self.hovered = (self.selection_is_empty() || separator)
-            .then_some(target)
-            .flatten();
-    }
-
     pub(super) fn handle_separator_pointer(
         &mut self,
         separator_id: SeparatorId,

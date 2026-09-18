@@ -4,12 +4,30 @@ use crate::{
     application::{Effect, InteractionMode},
     ports::editor::{EditCommand, SelectionGranularity},
     ports::environment::{Clock, IdGenerator},
-    ui::PointerInput,
+    ui::{PointerInput, projection::BoardCellTarget},
 };
 
 use super::{BoardApp, UiKey};
 
 impl BoardApp {
+    pub(super) fn thought_cell_target(
+        &self,
+        thought_id: crate::domain::ThoughtId,
+        pointer: PointerInput,
+    ) -> Option<BoardCellTarget> {
+        if matches!(
+            self.state.mode,
+            InteractionMode::Edit {
+                thought_id: active_id
+            } if active_id == thought_id
+        ) {
+            self.editor_cell(thought_id, pointer)
+                .and_then(|(row, column)| self.editor_cell_target(row, column))
+        } else {
+            self.board_cell_target(thought_id, pointer)
+        }
+    }
+
     pub(super) fn pointer_insert(
         &mut self,
         pointer: PointerInput,

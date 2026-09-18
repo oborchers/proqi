@@ -99,10 +99,13 @@ fn render_session_rename(
     overlays::render_text_prompt(
         frame,
         overlay,
-        " rename session ",
-        value,
-        cursor,
-        selection,
+        overlays::TextPromptView {
+            title: " rename session ",
+            value,
+            cursor,
+            selection,
+            hovered: app.hovered(),
+        },
         theme,
     );
 }
@@ -123,11 +126,20 @@ fn render_decision(
             " screenshot inbox in use ",
             &entries,
             selected,
+            app.hovered(),
             theme,
         );
         Some(false)
     } else if let Some((title, entries, selected)) = app.update_prompt_view() {
-        overlays::render_update(frame, overlay, &title, &entries, selected, theme);
+        overlays::render_update(
+            frame,
+            overlay,
+            &title,
+            &entries,
+            selected,
+            app.hovered(),
+            theme,
+        );
         Some(false)
     } else if app
         .release_highlights_view(overlay.area.width.saturating_sub(2), 0)

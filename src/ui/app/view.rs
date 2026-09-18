@@ -312,13 +312,7 @@ impl BoardApp {
     /// Current hover target resolved from the latest rendered layout.
     #[must_use]
     pub fn hovered(&self) -> Option<HitTarget> {
-        match self.hovered {
-            separator @ Some(HitTarget::Separator(_) | HitTarget::SeparatorDragHandle(_)) => {
-                separator
-            }
-            target if self.selection_is_empty() => target,
-            _ => None,
-        }
+        self.hovered
     }
 
     /// Board item currently being dragged, when pointer reordering is active.

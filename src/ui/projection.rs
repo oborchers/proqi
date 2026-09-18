@@ -95,6 +95,7 @@ pub(super) struct EditorPresentation {
 pub(super) enum BoardCellTarget {
     Position(TextPosition),
     Fold {
+        annotation_index: usize,
         canonical_start: usize,
         canonical_end: usize,
     },
@@ -122,6 +123,7 @@ pub(super) fn board_cell_target(
             && (display < fold.end || (display == fold.end && fold.start == wrapped.end_byte))
     }) {
         return Some(BoardCellTarget::Fold {
+            annotation_index: fold.annotation_index,
             canonical_start: fold.canonical_start,
             canonical_end: fold.canonical_end,
         });
@@ -180,6 +182,7 @@ impl EditorPresentation {
     pub(super) fn cell_target(&self, row: u16, column: u16) -> BoardCellTarget {
         if let Some(fold) = self.fold_at_cell(row, column) {
             return BoardCellTarget::Fold {
+                annotation_index: fold.annotation_index,
                 canonical_start: fold.canonical_start,
                 canonical_end: fold.canonical_end,
             };

@@ -5,11 +5,11 @@ use std::time::Duration;
 use crate::{
     application::{Effect, ScreenshotIntent, ScreenshotPauseReason},
     ports::screenshot::ScreenshotActivityPolicy,
-    ui::UiInput,
+    ui::UiInput as ExternalInput,
 };
 
+use super::super::{BoardApp, UiInput as RoutedInput};
 use super::{ScreenshotState, presentation::pause_notice};
-use crate::ui::app::BoardApp;
 
 #[derive(Default)]
 pub(super) struct ScreenshotActivity {
@@ -33,7 +33,7 @@ impl ScreenshotActivity {
         self.admitted = 0;
     }
 
-    pub(super) fn note_input(&mut self, input: &UiInput, now: Duration) {
+    pub(super) fn note_input(&mut self, input: &ExternalInput, now: Duration) {
         if self.last_interaction.is_some() && input.is_deliberate_interaction() {
             self.last_interaction = Some(now);
             self.admitted = 0;
@@ -69,6 +69,26 @@ impl ScreenshotActivity {
 }
 
 impl BoardApp {
+    pub(in crate::ui::app) fn note_screenshot_interaction(&mut self, input: &RoutedInput) {
+        if input.is_deliberate_interaction() {
+            self.screenshot.auto_ready = None;
+        }
+    }
+
+    pub(in crate::ui::app) const fn screenshot_ready_quit_armed(&self) -> bool {
+        self.screenshot.ready_quit_armed
+    }
+
+    pub(in crate::ui::app) fn finish_screenshot_interaction(
+        &mut self,
+        deliberate: bool,
+        ready_quit_was_armed: bool,
+    ) {
+        if deliberate && ready_quit_was_armed && self.screenshot.ready_quit_armed {
+            self.screenshot.ready_quit_armed = false;
+        }
+    }
+
     pub(crate) fn screenshot_started(&mut self, now: Duration) {
         self.screenshot.state = ScreenshotState::Listening;
         self.screenshot.takeover = None;
@@ -94,7 +114,7 @@ impl BoardApp {
         self.screenshot.activity.configure(policy);
     }
 
-    pub(crate) fn note_screenshot_activity(&mut self, input: &UiInput, now: Duration) {
+    pub(crate) fn note_screenshot_activity(&mut self, input: &ExternalInput, now: Duration) {
         if matches!(self.screenshot.state, ScreenshotState::Listening) {
             self.screenshot.activity.note_input(input, now);
         }
@@ -135,7 +155,7 @@ impl BoardApp {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ui::{PointerButton, PointerInput, PointerKind, UiKey};
+    use crate::ui::{PointerButton, PointerInput, PointerKind, UiInput, UiKey};
 
     #[test]
     fn only_deliberate_input_renews_the_lease() {

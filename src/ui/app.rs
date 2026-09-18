@@ -26,7 +26,9 @@ mod pending_types;
 mod pointer;
 mod pointer_activation;
 mod pointer_editor;
+mod pointer_hover;
 mod pointer_separator;
+mod pointer_target;
 mod presentation;
 pub(in crate::ui) mod query;
 mod recovery;
@@ -148,6 +150,7 @@ pub struct BoardApp {
     pointer_click: Option<pointer::PointerClick>,
     overlay_activation: Option<pointer_activation::OverlayActivation>,
     hovered: Option<HitTarget>,
+    pointer_position: Option<(u16, u16)>,
     insertion_focus: InsertionFocus,
     insertion_confirmation: InsertionConfirmation,
     edit_boundary: Option<CursorMovement>,
@@ -254,6 +257,7 @@ impl BoardApp {
             pointer_click: None,
             overlay_activation: None,
             hovered: None,
+            pointer_position: None,
             insertion_focus,
             insertion_confirmation: InsertionConfirmation::Idle,
             edit_boundary: None,
@@ -316,11 +320,15 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
+        self.track_hover_input(&input);
+        let ready_quit_was_armed = self.screenshot_ready_quit_armed();
         let (owner, input, preserves_handoff) = match self.prepare_input(input, ids, clock) {
             Ok(prepared) => prepared,
             Err(effects) => return effects,
         };
+        let deliberate = input.is_deliberate_interaction();
         if let Some(effects) = self.handle_quit_input(&input, ids, clock) {
+            self.finish_screenshot_interaction(deliberate, ready_quit_was_armed);
             return effects;
         }
         if self.update_barrier.is_some()
@@ -329,9 +337,12 @@ impl BoardApp {
                 UiInput::Resize { .. } | UiInput::HostFocusGained | UiInput::HostFocusLost
             )
         {
+            self.finish_screenshot_interaction(deliberate, ready_quit_was_armed);
             return Vec::new();
         }
-        self.handle_routable_input(owner, input, preserves_handoff, ids, clock)
+        let effects = self.handle_routable_input(owner, input, preserves_handoff, ids, clock);
+        self.finish_screenshot_interaction(deliberate, ready_quit_was_armed);
+        effects
     }
 
     fn prepare_input(
@@ -393,6 +404,9 @@ impl BoardApp {
             UiInput::Key(UiKey::Move {
                 movement: CursorMovement::VisualUp | CursorMovement::VisualDown,
                 extend_selection: false,
+            }) | UiInput::Pointer(PointerInput {
+                kind: PointerKind::Move,
+                ..
             })
         ) {
             self.edit_boundary = None;

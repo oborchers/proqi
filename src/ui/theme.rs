@@ -145,6 +145,21 @@ impl Theme {
         )
     }
 
+    /// Immediate pointer emphasis without introducing decorative line work.
+    #[must_use]
+    pub fn hovered_style(self) -> Style {
+        self.focused_style().add_modifier(Modifier::BOLD)
+    }
+
+    /// Combined discrete-control focus and hover without changing type style.
+    #[must_use]
+    pub fn focused_hovered_style(self) -> Style {
+        Style::new()
+            .fg(self.on_accent)
+            .bg(self.accent_surface)
+            .add_modifier(Modifier::BOLD)
+    }
+
     const fn limited() -> Self {
         Self {
             foreground: Color::Reset,

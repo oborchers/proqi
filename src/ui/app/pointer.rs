@@ -47,7 +47,7 @@ impl BoardApp {
         if !matches!(pointer.kind, PointerKind::Down(PointerButton::Left)) {
             return Vec::new();
         }
-        match self.hit(pointer) {
+        match self.pointer_target_for_owner(pointer) {
             Some(HitTarget::Retry) => self.retry_persistence(),
             Some(HitTarget::ExportRecovery) => self.export_recovery(ids, clock),
             Some(HitTarget::Help) => self.toggle_help(),
@@ -61,7 +61,9 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        self.edit_boundary = None;
+        if !matches!(pointer.kind, PointerKind::Move) {
+            self.edit_boundary = None;
+        }
         if self.submission_mode.is_some() {
             return self.handle_submission_pointer(pointer, ids, clock);
         }
@@ -83,17 +85,15 @@ impl BoardApp {
             EditFlush::Blocked(effects) => return effects,
         };
         effects.extend(match pointer.kind {
-            PointerKind::Move => {
-                let target = self.hit(pointer);
-                self.reconcile_board_hover(target);
-                Vec::new()
-            }
             PointerKind::ScrollUp => self.scroll_pointer(-1),
             PointerKind::ScrollDown => self.scroll_pointer(1),
             PointerKind::Down(PointerButton::Left) => self.pointer_down(pointer, ids, clock),
             PointerKind::Drag(PointerButton::Left) => self.pointer_drag(pointer),
             PointerKind::Up(PointerButton::Left) => self.pointer_up(ids, clock),
-            PointerKind::Down(_) | PointerKind::Up(_) | PointerKind::Drag(_) => Vec::new(),
+            PointerKind::Move
+            | PointerKind::Down(_)
+            | PointerKind::Up(_)
+            | PointerKind::Drag(_) => Vec::new(),
         });
         effects
     }
@@ -104,11 +104,10 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        let target = self.hit(pointer);
         if matches!(pointer.kind, PointerKind::Move) {
-            self.hovered = target;
             return Vec::new();
         }
+        let target = self.pointer_target_for_owner(pointer);
         let Some(HitTarget::Deliver(direction, disposition)) = target else {
             return Vec::new();
         };
@@ -124,13 +123,13 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        let target = self.hit(pointer);
+        let target = self.pointer_target(pointer);
         self.hovered = target;
-        if !matches!(target, Some(HitTarget::Thought(_))) {
+        if !matches!(target, Some(HitTarget::Thought(_) | HitTarget::Fold(_, _))) {
             self.pointer_click = None;
         }
         match target {
-            Some(HitTarget::Thought(thought_id)) => {
+            Some(HitTarget::Thought(thought_id) | HitTarget::Fold(thought_id, _)) => {
                 self.handle_thought_pointer(thought_id, pointer, ids, clock)
             }
             Some(HitTarget::DragHandle(thought_id)) => {
@@ -183,10 +182,7 @@ impl BoardApp {
             Some(HitTarget::Undo) => self.history(ids, clock, true),
             Some(HitTarget::Redo) => self.history(ids, clock, false),
             Some(HitTarget::Help) => self.toggle_help(),
-            Some(HitTarget::Quit) => {
-                self.request_quit();
-                Vec::new()
-            }
+            Some(HitTarget::Quit) => self.request_global_quit(ids, clock),
             Some(HitTarget::ExitEdit) => self.pointer_exit_edit(ids, clock),
             Some(HitTarget::Retry) => self.retry_persistence(),
             Some(HitTarget::ExportRecovery) => self.export_recovery(ids, clock),
@@ -305,17 +301,19 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        if matches!(self.state.mode, InteractionMode::Edit { thought_id: active } if active == thought_id)
-        {
-            let target = self
-                .editor_cell(thought_id, pointer)
-                .and_then(|(row, column)| self.editor_cell_target(row, column));
+        let active_edit = matches!(
+            self.state.mode,
+            InteractionMode::Edit { thought_id: active } if active == thought_id
+        );
+        let target = self.thought_cell_target(thought_id, pointer);
+        if active_edit {
             self.focus(thought_id);
             self.enter_edit();
             let Some(target) = target else {
                 return Vec::new();
             };
             if let BoardCellTarget::Fold {
+                annotation_index: _,
                 canonical_start,
                 canonical_end,
             } = target
@@ -329,13 +327,13 @@ impl BoardApp {
             self.apply_pointer_start(position, pointer, click_count);
             return Vec::new();
         }
-        let target = self.board_cell_target(thought_id, pointer);
         self.focus(thought_id);
         let effects = self.expand_and_enter_edit(ids, clock);
         let Some(target) = target else {
             return effects;
         };
         if let BoardCellTarget::Fold {
+            annotation_index: _,
             canonical_start,
             canonical_end,
         } = target
@@ -368,7 +366,7 @@ impl BoardApp {
         });
     }
 
-    fn board_cell_target(
+    pub(super) fn board_cell_target(
         &self,
         thought_id: crate::domain::ThoughtId,
         pointer: PointerInput,

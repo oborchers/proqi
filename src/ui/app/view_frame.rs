@@ -102,6 +102,7 @@ impl BoardApp {
         self.scroll_geometry = Some(scroll);
         self.frame_presentation = Some(presentation);
         self.layout = Some(layout.clone());
+        self.reconcile_hover();
         self.clamp_help_scroll();
         self.clamp_release_highlights_scroll();
         layout

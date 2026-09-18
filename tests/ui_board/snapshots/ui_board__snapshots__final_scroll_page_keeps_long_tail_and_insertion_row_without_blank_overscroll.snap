@@ -1,6 +1,6 @@
 ---
 source: tests/ui_board/snapshots.rs
-assertion_line: 323
+assertion_line: 349
 expression: "snapshot(&mut fixture, 52, 16, ThemePreference::Dark)"
 ---
 SIZE 52x16
@@ -25,12 +25,12 @@ TEXT
 
 STYLE RUNS
 0: 0-51 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-1: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-27 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 28-28 fg=Reset bg=Reset mod=NONE | 29-51 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
-2: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-51 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
-3: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-27 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 28-28 fg=Reset bg=Reset mod=NONE | 29-51 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
-4: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-51 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
-5: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-27 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 28-28 fg=Reset bg=Reset mod=NONE | 29-51 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
-6: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-51 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
+1: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-27 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=BOLD | 28-28 fg=Reset bg=Reset mod=NONE | 29-51 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=BOLD
+2: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-51 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=BOLD
+3: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-27 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=BOLD | 28-28 fg=Reset bg=Reset mod=NONE | 29-51 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=BOLD
+4: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-51 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=BOLD
+5: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-27 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=BOLD | 28-28 fg=Reset bg=Reset mod=NONE | 29-51 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=BOLD
+6: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-51 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=BOLD
 7: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-51 fg=Rgb(42, 37, 32) bg=Rgb(15, 13, 10) mod=NONE
 8: 0-51 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 9: 0-0 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 1-51 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
