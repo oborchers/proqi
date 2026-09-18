@@ -316,13 +316,22 @@ fn prepare_old_source(root: &Path) -> PathBuf {
         "previous release source extraction failed: {}",
         String::from_utf8_lossy(&output.stderr)
     );
-    let current_version = format!("version = \"{}\"", env!("CARGO_PKG_VERSION"));
+    // This source is pinned independently of the current test binary. A new
+    // release version must not change which version the historical manifest owns.
+    let manifest: toml::Value = toml::from_str(
+        &fs::read_to_string(source.join("Cargo.toml")).expect("historical manifest"),
+    )
+    .expect("valid historical manifest");
+    let source_version = manifest["workspace"]["package"]["version"]
+        .as_str()
+        .expect("historical workspace version");
+    let source_version = format!("version = \"{source_version}\"");
     let old_version = format!("version = \"{OLD_VERSION}\"");
     rewrite(
         &source.join("Cargo.toml"),
         &[
             ("members = [\".\", \"xtask\"]", "members = [\".\"]"),
-            (&current_version, &old_version),
+            (&source_version, &old_version),
             (
                 "[package]\nname = \"proqi\"",
                 "[package]\nname = \"proqi\"\nautobins = false",
@@ -397,4 +406,27 @@ fn rewrite(path: &Path, replacements: &[(&str, &str)]) {
         content = content.replacen(from, to, 1);
     }
     fs::write(path, content).expect("write fixture source");
+}
+
+#[test]
+fn historical_source_preparation_is_independent_of_current_package_version() {
+    let root = tempfile::tempdir().expect("isolated historical source");
+    let source = prepare_old_source(root.path());
+    let manifest: toml::Value =
+        toml::from_str(&fs::read_to_string(source.join("Cargo.toml")).expect("fixture manifest"))
+            .expect("valid fixture manifest");
+    assert_eq!(
+        manifest["workspace"]["package"]["version"].as_str(),
+        Some(OLD_VERSION)
+    );
+    assert_eq!(
+        manifest["workspace"]["members"]
+            .as_array()
+            .expect("members")
+            .len(),
+        1
+    );
+    assert_eq!(manifest["package"]["autobins"].as_bool(), Some(false));
+    assert!(source.join("src/bin/update_fixture.rs").is_file());
+    assert!(source.join("Cargo.lock").is_file());
 }
