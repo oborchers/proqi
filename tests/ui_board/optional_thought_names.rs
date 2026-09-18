@@ -271,8 +271,10 @@ fn mouse_places_the_title_cursor_and_exposes_truthful_save_and_cancel_controls()
 
 #[test]
 fn hidden_footer_keeps_thought_name_actions_visible_and_hit_testable() {
-    let mut settings = UiSettings::default();
-    settings.footer_hidden = true;
+    let settings = UiSettings {
+        footer_hidden: true,
+        ..UiSettings::default()
+    };
     let mut fixture = named_fixture(settings, "body", "AlphaBeta");
     fixture.input(crate::key_input(UiKey::Escape));
     let layout = fixture.app.prepare_frame(Rect::new(0, 0, 52, 4));

@@ -30,7 +30,7 @@ pub(super) fn compute(area: Rect, chrome: FooterChrome) -> ChromeLayout {
     } else {
         // A one-row frame gives the safety status precedence. Once there is room
         // for both rows, keep functional actions visible and hit-testable.
-        u16::from(mandatory_actions && available >= 1 + u16::from(has_status))
+        u16::from(mandatory_actions && available > u16::from(has_status))
     };
     let state_height = u16::from(optional_visible && available >= 3);
     let name_height = u16::from(optional_visible && available >= 4);
