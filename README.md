@@ -26,6 +26,7 @@
   <img src="assets/proqi-demo.gif" width="1000" alt="Proqi refining, reordering, recovering, and copying independent prompt thoughts">
 </p>
 
+[Guides](docs/guides/README.md) ·
 [Why Proqi](#do-you-hate-this-editor) ·
 [Workflow](#one-board-many-prompts) ·
 [Install](#install) ·
@@ -177,6 +178,15 @@ Board choice.
 elsewhere. Proqi receives modifiers only after the operating system, keyboard
 remapper, and terminal have handled the key. Raw `Ctrl` is not a second Primary
 modifier on macOS.
+
+Task-based documentation for the shipped 0.11.0 workflows starts with the
+[Proqi user guides](docs/guides/README.md):
+
+- [Select and act on thoughts](docs/guides/selection.md)
+- [Configure and troubleshoot shortcuts](docs/guides/shortcuts.md)
+- [Paste, clean up, and attach files](docs/guides/paste-and-attachments.md)
+- [Deliver prompts to agents](docs/guides/agent-delivery.md)
+- [Organize sessions and recover work](docs/guides/organization-and-recovery.md)
 
 The tables below describe the factory map. The complete stable action and
 context inventory is in [context/KEYMAP_ACTIONS.md](context/KEYMAP_ACTIONS.md).
