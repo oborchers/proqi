@@ -67,9 +67,8 @@ fn active_tui_accepts_durable_idempotent_cli_mutations_before_crash() {
         "--operation-id",
         &second_operation,
     ];
-    let second = json_input_command(binary, state.path(), &second_args, "  Keep\t me  ");
+    let second = json_input_command(binary, state.path(), &second_args, "Keep me");
     let second_id = second["data"]["thought_id"].as_str().expect("second ID");
-    semantic::exercise(binary, state.path(), session, first_id, second_id);
     mutate_active(binary, state.path(), session, first_id, second_id);
     let transferred = json_command(
         binary,

@@ -1,7 +1,67 @@
 //! Semantic API parity through one real active TUI owner.
 
-use super::{assert_thought_content, operation_id};
-use crate::support::{json_command, raw_input_command};
+use super::{assert_thought_content, operation_id, spawn_owner};
+use crate::support::{
+    json_command, json_input_command, raw_input_command, wait_for_control_owner, wait_for_path,
+};
+
+#[test]
+fn active_tui_accepts_semantic_board_mutations_before_crash() {
+    let state = tempfile::tempdir().expect("temporary state");
+    let binary = env!("CARGO_BIN_EXE_proqi");
+    let created = json_command(binary, state.path(), &[]);
+    let session = created["data"]["session_id"].as_str().expect("session ID");
+    let first = add_thought(binary, state.path(), session, "external replacement");
+    let second = add_thought(binary, state.path(), session, "  Keep\t me  ");
+    let ready = state.path().join("semantic-owner-ready");
+    let done = state.path().join("semantic-owner-done");
+    let mut owner = spawn_owner(binary, state.path(), session, &ready, &done);
+    wait_for_path(&ready);
+    wait_for_control_owner(state.path(), session);
+
+    exercise(binary, state.path(), session, &first, &second);
+
+    std::fs::write(&done, b"done").expect("release semantic owner workflow");
+    let status = owner.wait().expect("wait for semantic owner workflow");
+    assert!(status.success(), "semantic owner PTY exited with {status}");
+    assert_recovered_state(binary, state.path(), session, &first, &second);
+}
+
+fn add_thought(binary: &str, state: &std::path::Path, session: &str, content: &str) -> String {
+    json_input_command(
+        binary,
+        state,
+        &[
+            "thoughts",
+            "add",
+            session,
+            "--operation-id",
+            &operation_id(),
+        ],
+        content,
+    )["data"]["thought_id"]
+        .as_str()
+        .expect("thought ID")
+        .to_owned()
+}
+
+fn assert_recovered_state(
+    binary: &str,
+    state: &std::path::Path,
+    session: &str,
+    first: &str,
+    second: &str,
+) {
+    let sessions = json_command(binary, state, &["sessions", "list"]);
+    assert_eq!(sessions["data"]["sessions"][0]["state"], "recovered");
+    let thoughts = json_command(binary, state, &["thoughts", "list", session]);
+    let live = thoughts["data"]["thoughts"].as_array().expect("thoughts");
+    assert_eq!(live.len(), 2);
+    assert_eq!(live[0]["id"], first);
+    assert_eq!(live[0]["content"], "external replacement");
+    assert_eq!(live[1]["id"], second);
+    assert_eq!(live[1]["content"], "Keep me");
+}
 
 pub(super) fn exercise(
     binary: &str,
