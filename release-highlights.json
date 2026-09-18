@@ -141,6 +141,16 @@
         "Keep existing attachment numbers, numbering counters, thought content, and undo history intact during migration.",
         "Preserve the recorded dates of earlier database migrations when applying a new migration."
       ]
+    },
+    {
+      "version": "0.11.0",
+      "highlights": [
+        "Give thoughts optional names with Ctrl+R without changing the text copied or submitted to an agent.",
+        "Insert persistent visual separators through Commands, then select, move, duplicate, delete, undo, or redo them alongside thoughts.",
+        "See immediate hover feedback on enabled controls across the Board, session Browser, footers, and overlays without changing keyboard focus.",
+        "Copy or move thoughts with attachments into an open session with durable acknowledgement before source removal.",
+        "Find global Agent Skills outside Git repositories without losing their supported dollar and slash invocation forms."
+      ]
     }
   ]
 }
