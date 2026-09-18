@@ -1,12 +1,17 @@
 //! Principal domain records and aggregate invariants.
 
+mod direction;
+
+pub use direction::Direction;
+
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::{
-    ContentAnnotation, RevisionId, SessionId, TextPosition, ThoughtId, validate_annotations,
+    ContentAnnotation, RevisionId, SeparatorId, SessionId, TextPosition, ThoughtId,
+    validate_annotations,
 };
 
 /// UTC milliseconds since the Unix epoch.
@@ -59,13 +64,13 @@ impl OperationSequence {
     }
 }
 
-/// Zero-based position among live thoughts in a session.
+/// Zero-based position among live Board items in a session.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct ThoughtPosition(u32);
 
 impl ThoughtPosition {
-    /// Construct a thought position.
+    /// Construct a Board item position.
     #[must_use]
     pub const fn new(value: u32) -> Self {
         Self(value)
@@ -75,33 +80,6 @@ impl ThoughtPosition {
     #[must_use]
     pub const fn get(self) -> u32 {
         self.0
-    }
-}
-
-/// Cardinal direction to an adjacent terminal pane.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Direction {
-    /// Pane above Proqi.
-    Up,
-    /// Pane to the right of Proqi.
-    Right,
-    /// Pane below Proqi.
-    Down,
-    /// Pane to the left of Proqi.
-    Left,
-}
-
-impl Direction {
-    /// Stable lowercase representation used at external and durable boundaries.
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Up => "up",
-            Self::Right => "right",
-            Self::Down => "down",
-            Self::Left => "left",
-        }
     }
 }
 
@@ -272,10 +250,13 @@ pub struct Thought {
     pub session_id: SessionId,
     /// Exact current content.
     pub content: String,
+    /// Optional organizational metadata, separate from authored content.
+    #[serde(default)]
+    pub name: Option<super::ThoughtName>,
     /// Durable presentation metadata over exact UTF-8 byte ranges.
     #[serde(default)]
     pub annotations: Vec<ContentAnnotation>,
-    /// Current order among live thoughts.
+    /// Current order among live Board items.
     pub position: ThoughtPosition,
     /// Creation time.
     pub created_at: Timestamp,
@@ -306,6 +287,7 @@ impl Thought {
             id,
             session_id,
             content,
+            name: None,
             annotations: Vec::new(),
             position,
             created_at: now,
@@ -334,6 +316,11 @@ impl Thought {
         validate_annotations(&self.content, &annotations)?;
         self.annotations = annotations;
         Ok(())
+    }
+
+    /// Replace the optional organizational name.
+    pub fn set_name(&mut self, name: Option<super::ThoughtName>) {
+        self.name = name;
     }
 }
 
@@ -408,6 +395,9 @@ pub struct IntegrationContext {
 /// Domain validation failure.
 #[derive(Clone, Debug, Eq, Error, PartialEq)]
 pub enum DomainError {
+    /// Thought names must be short, trimmed, single-line text.
+    #[error("thought name must be non-blank, single-line, and at most 80 characters")]
+    InvalidThoughtName,
     /// A durable thought presentation value was unknown.
     #[error("invalid thought presentation: {0}")]
     InvalidThoughtPresentation(String),
@@ -428,25 +418,42 @@ pub enum DomainError {
         /// Expected session.
         session_id: SessionId,
     },
+    /// A separator was applied to another session.
+    #[error("separator {separator_id} does not belong to session {session_id}")]
+    WrongSeparatorSession {
+        /// Separator with the invalid ownership.
+        separator_id: SeparatorId,
+        /// Expected session.
+        session_id: SessionId,
+    },
     /// A referenced thought is not present.
     #[error("thought not found: {0}")]
     ThoughtNotFound(ThoughtId),
     /// A live thought with that identity is already present.
     #[error("thought already exists: {0}")]
     ThoughtAlreadyExists(ThoughtId),
+    /// A referenced separator is not present.
+    #[error("separator not found: {0}")]
+    SeparatorNotFound(SeparatorId),
+    /// A live separator with that identity is already present.
+    #[error("separator already exists: {0}")]
+    SeparatorAlreadyExists(SeparatorId),
     /// The aggregate contains two retained records with one identity.
     #[error("duplicate retained thought identity: {0}")]
     DuplicateThoughtId(ThoughtId),
+    /// The aggregate contains two retained separators with one identity.
+    #[error("duplicate retained separator identity: {0}")]
+    DuplicateSeparatorId(SeparatorId),
     /// A requested position is outside the live board.
-    #[error("thought position {requested} exceeds board length {len}")]
+    #[error("Board item position {requested} exceeds board length {len}")]
     InvalidPosition {
         /// Requested zero-based position.
         requested: usize,
         /// Current live board length.
         len: usize,
     },
-    /// Live thought positions are not unique and contiguous.
-    #[error("live thought positions are not normalized")]
+    /// Live Board item positions are not unique and contiguous.
+    #[error("live Board item positions are not normalized")]
     NonNormalizedPositions,
     /// The operation sequence cannot increase further.
     #[error("operation sequence exhausted")]
@@ -466,6 +473,9 @@ pub enum DomainError {
     /// A reversible replacement no longer matches current thought content.
     #[error("thought content changed before transformation: {0}")]
     ThoughtContentConflict(ThoughtId),
+    /// A reversible metadata replacement no longer matches the current name.
+    #[error("thought name changed before rename: {0}")]
+    ThoughtNameConflict(ThoughtId),
 }
 
 fn validate_absolute_path(path: &Path) -> Result<(), DomainError> {

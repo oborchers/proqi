@@ -86,6 +86,15 @@ fn click(column: u16, row: u16) -> UiInput {
     })
 }
 
+fn hover(column: u16, row: u16) -> UiInput {
+    UiInput::Pointer(PointerInput {
+        column,
+        row,
+        kind: PointerKind::Move,
+        extend_selection: false,
+    })
+}
+
 fn draw(browser: &mut SessionBrowser, width: u16, height: u16) -> Terminal<TestBackend> {
     let mut terminal = Terminal::new(TestBackend::new(width, height)).expect("terminal");
     terminal
@@ -215,6 +224,107 @@ fn browser_open_mouse_matches_keyboard_and_availability() {
         let column = label_column(&label, "Open");
         assert_eq!(browser.handle(click(column, 6)), expected);
     }
+}
+
+#[test]
+fn browser_footer_motion_changes_the_rendered_control_without_an_action() {
+    let mut browser = browser("session", false);
+    let initial = draw(&mut browser, 80, 7);
+    let line = footer(&initial);
+    let column = label_column(&line, "Rename");
+    let before = initial.backend().buffer()[(column, 6)].style();
+
+    assert_eq!(browser.handle(hover(column, 6)), BrowserAction::Continue);
+    let hovered = draw(&mut browser, 80, 7);
+    let after = hovered.backend().buffer()[(column, 6)].style();
+
+    assert_ne!(before, after, "hover must visibly emphasize the control");
+}
+
+#[test]
+fn passive_browser_motion_does_not_clear_status_feedback() {
+    let mut browser = browser("session", false);
+    browser.items[0].availability = BrowserAvailability::Trashed;
+    assert_eq!(
+        browser.handle(key(LogicalKey::Enter)),
+        BrowserAction::Continue
+    );
+    assert_eq!(
+        browser.status.as_deref(),
+        Some("Restore this session before opening it")
+    );
+
+    assert_eq!(browser.handle(hover(79, 6)), BrowserAction::Continue);
+
+    assert_eq!(
+        browser.status.as_deref(),
+        Some("Restore this session before opening it")
+    );
+}
+
+#[test]
+fn browser_hover_tracks_current_edges_repeats_and_disabled_transitions() {
+    let mut browser = browser("session", false);
+    draw(&mut browser, 80, 7);
+    let rename = browser
+        .footer_controls
+        .iter()
+        .find(|control| control.hit == super::BrowserHit::Rename)
+        .expect("Rename control")
+        .area;
+
+    for column in [rename.x, rename.right().saturating_sub(1), rename.x] {
+        assert_eq!(
+            browser.handle(hover(column, rename.y)),
+            BrowserAction::Continue
+        );
+        assert_eq!(browser.hovered(), super::BrowserHit::Rename);
+    }
+    browser.handle(hover(rename.right(), rename.y));
+    assert_ne!(browser.hovered(), super::BrowserHit::Rename);
+
+    let row = browser.layout.as_ref().expect("browser layout").entries[0].row;
+    browser.handle(hover(row.x, row.y));
+    assert_eq!(browser.hovered(), super::BrowserHit::Item(0));
+    browser.items[0].availability = BrowserAvailability::Trashed;
+    draw(&mut browser, 80, 7);
+    assert_eq!(browser.hovered(), super::BrowserHit::None);
+
+    browser.handle(UiInput::HostFocusLost);
+    assert_eq!(browser.hovered(), super::BrowserHit::None);
+}
+
+#[test]
+fn browser_hover_preserves_query_and_rename_selection_and_reconciles_resize() {
+    let mut browser = browser("session", false);
+    browser.handle(key(LogicalKey::Character('s')));
+    browser.handle(primary_key('a', false));
+    draw(&mut browser, 80, 7);
+    let (query, cursor, selection) = browser.text_input_view();
+    let query_before = (query.to_owned(), cursor, selection);
+    browser.handle(hover(0, 0));
+    let (query, cursor, selection) = browser.text_input_view();
+    assert_eq!((query.to_owned(), cursor, selection), query_before);
+
+    browser.handle(key(LogicalKey::Function(2)));
+    browser.handle(primary_key('a', false));
+    draw(&mut browser, 80, 7);
+    let (rename_value, cursor, selection) = browser.text_input_view();
+    let rename_before = (rename_value.to_owned(), cursor, selection);
+    let rename = browser
+        .footer_controls
+        .iter()
+        .find(|control| control.hit == super::BrowserHit::Confirm)
+        .expect("Save control")
+        .area;
+    browser.handle(hover(rename.x, rename.y));
+    let (rename_value, cursor, selection) = browser.text_input_view();
+    assert_eq!((rename_value.to_owned(), cursor, selection), rename_before);
+
+    draw(&mut browser, 12, 3);
+    let expected = browser.hover_target(rename.x, rename.y);
+    assert_eq!(browser.hovered(), expected);
+    assert_ne!(browser.hovered(), super::BrowserHit::Confirm);
 }
 
 #[test]

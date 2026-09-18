@@ -54,6 +54,9 @@ fn retained_batch_bytes(batch: &crate::ports::store::OperationBatch) -> usize {
             serde_json::to_vec(revision).map_or(usize::MAX, |value| value.len())
         }
         OperationBatch::HistoryMove { .. } => 256,
+        OperationBatch::ThoughtNoOpRename { name, .. } => {
+            name.as_ref().map_or(256, |name| name.as_str().len() + 256)
+        }
         OperationBatch::CreateSession(session) => session
             .name
             .as_ref()

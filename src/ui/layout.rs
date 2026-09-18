@@ -3,6 +3,7 @@
 mod chrome;
 mod content;
 mod controls;
+mod hit_testing;
 mod overlay;
 pub(super) mod scroll;
 
@@ -12,7 +13,7 @@ use ratatui_core::layout::Rect;
 
 use crate::{
     application::AppState,
-    domain::{Direction, ThoughtId},
+    domain::{Direction, SeparatorId, ThoughtId},
     ports::{
         agent::{AgentTarget, SubmissionDisposition},
         editor::EditorSnapshot,
@@ -25,8 +26,19 @@ use crate::{
 pub enum HitTarget {
     /// Text content of one thought.
     Thought(ThoughtId),
+    /// Optional organizational name outside authored body text.
+    ThoughtName(ThoughtId),
+    /// One collapsed presentation fold refined from a thought hit by `BoardApp`.
+    ///
+    /// `LayoutSnapshot::hit_test` returns the enclosing `Thought`; current-frame
+    /// presentation maps the exact terminal cell to this typed fold identity.
+    Fold(ThoughtId, usize),
     /// Reorder handle for one thought.
     DragHandle(ThoughtId),
+    /// Payload-free visual separator.
+    Separator(SeparatorId),
+    /// Reorder handle for one separator.
+    SeparatorDragHandle(SeparatorId),
     /// Overflow indicator for one capped thought.
     Overflow(ThoughtId),
     /// Active insertion area.
@@ -63,6 +75,10 @@ pub enum HitTarget {
     Quit,
     /// Leave the editor.
     ExitEdit,
+    /// Save the active optional thought name.
+    CommitThoughtName,
+    /// Cancel the active optional thought name edit.
+    CancelThoughtName,
     /// Retry the failed durable operation.
     Retry,
     /// Export the exact unsaved recovery buffer.
@@ -84,6 +100,10 @@ pub struct ThoughtLayout {
     pub separator_before: Option<Rect>,
     /// Complete visible allocation.
     pub area: Rect,
+    /// Visible body allocation, excluding the optional name row.
+    pub body_area: Rect,
+    /// Optional name row, outside body selection and submission payloads.
+    pub name: Option<Rect>,
     /// Text cells excluding the focus or drag gutter.
     pub text_area: Rect,
     /// Stable one-cell drag and focus gutter.
@@ -98,6 +118,23 @@ pub struct ThoughtLayout {
     pub scrollable_hidden: bool,
     /// Wrapped rows clipped above the viewport for line-by-line board scrolling.
     pub content_row_offset: usize,
+}
+
+/// Geometry for one visible payload-free separator.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SeparatorLayout {
+    /// Durable separator identity.
+    pub separator_id: SeparatorId,
+    /// Shared live Board position.
+    pub index: usize,
+    /// Complete visible allocation, including density-owned breathing room.
+    pub area: Rect,
+    /// Visible horizontal rule row when it is not clipped.
+    pub line: Option<Rect>,
+    /// Stable one-cell drag and focus gutter.
+    pub gutter: Rect,
+    /// Whether the viewport clipped this separator allocation.
+    pub viewport_clipped: bool,
 }
 
 /// Geometry for the transient insertion editor.
@@ -144,6 +181,8 @@ pub struct LayoutSnapshot {
     pub footer_agents: Rect,
     /// Visible thought allocations.
     pub thoughts: Vec<ThoughtLayout>,
+    /// Visible explicit separator allocations.
+    pub separators: Vec<SeparatorLayout>,
     /// Transient insertion editor geometry when Compose is active.
     pub compose: Option<ComposeLayout>,
     /// Clickable insertion control when visible.
@@ -199,55 +238,6 @@ impl LayoutSnapshot {
         controls::configure_footer_summary(self, summary, session_name, session_id);
     }
 
-    /// Resolve one terminal cell through the same rectangles used to render.
-    #[must_use]
-    pub fn hit_test(&self, column: u16, row: u16) -> Option<HitTarget> {
-        if let Some(overlay) = &self.overlay {
-            if crate::ui::geometry::contains(overlay.close, column, row) {
-                return Some(HitTarget::CloseOverlay);
-            }
-            return overlay.items.iter().enumerate().find_map(|(index, area)| {
-                (overlay
-                    .item_interactive
-                    .get(index)
-                    .copied()
-                    .unwrap_or(false)
-                    && crate::ui::geometry::contains(*area, column, row))
-                .then_some(HitTarget::PaletteItem(index))
-            });
-        }
-        for thought in &self.thoughts {
-            if crate::ui::geometry::contains(thought.gutter, column, row) {
-                return Some(HitTarget::DragHandle(thought.thought_id));
-            }
-            if thought
-                .overflow
-                .is_some_and(|area| crate::ui::geometry::contains(area, column, row))
-            {
-                return Some(HitTarget::Overflow(thought.thought_id));
-            }
-            if crate::ui::geometry::contains(thought.text_area, column, row) {
-                return Some(HitTarget::Thought(thought.thought_id));
-            }
-        }
-        if self
-            .compose
-            .as_ref()
-            .is_some_and(|compose| crate::ui::geometry::contains(compose.area, column, row))
-        {
-            return Some(HitTarget::Insert);
-        }
-        if self
-            .insert
-            .is_some_and(|area| crate::ui::geometry::contains(area, column, row))
-        {
-            return Some(HitTarget::Insert);
-        }
-        self.controls.iter().find_map(|(target, area)| {
-            crate::ui::geometry::contains(*area, column, row).then_some(*target)
-        })
-    }
-
     /// Find current visible geometry for a thought.
     #[must_use]
     pub fn thought(&self, thought_id: ThoughtId) -> Option<&ThoughtLayout> {
@@ -256,14 +246,10 @@ impl LayoutSnapshot {
             .find(|layout| layout.thought_id == thought_id)
     }
 
-    /// Map a board row to the nearest visible thought position.
+    /// Map a board row to the nearest visible Board item position.
     #[must_use]
     pub fn insertion_index_at(&self, row: u16) -> Option<usize> {
-        self.thoughts
-            .iter()
-            .find(|layout| row < layout.area.bottom())
-            .map(|layout| layout.index)
-            .or_else(|| self.thoughts.last().map(|layout| layout.index))
+        content::insertion_index_at(self, row)
     }
 
     /// Add only currently verified agent controls where footer width permits.
@@ -289,6 +275,10 @@ impl LayoutSnapshot {
         keybindings: &crate::ui::ShortcutRegistry,
     ) {
         controls::configure_agent_controls(self, targets, selection, context, keybindings);
+    }
+
+    pub(crate) fn configure_thought_name_controls(&mut self) {
+        controls::configure_thought_name_controls(self);
     }
 }
 
@@ -438,6 +428,7 @@ fn compute_frame(
         footer_actions: chrome.actions,
         footer_agents: chrome.agents,
         thoughts: content.thoughts,
+        separators: content.separators,
         compose: content.compose,
         insert: content.insert,
         first_index: content.first,
@@ -463,7 +454,7 @@ fn compute_frame(
                     ..
                 }
             ),
-            state.focused_thought.is_some(),
+            state.focused_item.is_some(),
             history_available,
             keybindings,
             matches!(footer_chrome.visibility, FooterChromeVisibility::Visible),

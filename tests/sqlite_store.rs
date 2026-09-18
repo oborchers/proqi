@@ -102,6 +102,21 @@ fn persist_effect(store: &mut SqliteStore, effect: &Effect) -> proqi::ports::sto
             sequence: *sequence,
             at: *at,
         },
+        Effect::CommitThoughtNoOpRename {
+            operation_id,
+            session_id,
+            thought_id,
+            name,
+            sequence,
+            at,
+        } => OperationBatch::ThoughtNoOpRename {
+            operation_id: *operation_id,
+            session_id: *session_id,
+            thought_id: *thought_id,
+            name: name.clone(),
+            sequence: *sequence,
+            at: *at,
+        },
         other => panic!("effect is not durable: {other:?}"),
     };
     store.commit(&batch).expect("commit").expect("receipt")
@@ -160,6 +175,8 @@ mod onboarding_migration;
 mod recovery;
 #[path = "sqlite_store/screenshot.rs"]
 mod screenshot;
+#[path = "sqlite_store/separators.rs"]
+mod separators;
 #[path = "sqlite_store/submission.rs"]
 mod submission;
 #[path = "sqlite_store/top_boundary.rs"]
@@ -173,5 +190,11 @@ mod reflow_in_place;
 #[path = "sqlite_store/migration_15.rs"]
 mod migration_15;
 
+#[path = "sqlite_store/migration_17.rs"]
+mod migration_17;
+
 #[path = "sqlite_store/attachment_numbering.rs"]
 mod attachment_numbering;
+
+#[path = "sqlite_store/thought_names.rs"]
+mod thought_names;

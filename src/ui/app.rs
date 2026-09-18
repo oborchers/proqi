@@ -26,6 +26,9 @@ mod pending_types;
 mod pointer;
 mod pointer_activation;
 mod pointer_editor;
+mod pointer_hover;
+mod pointer_separator;
+mod pointer_target;
 mod presentation;
 pub(in crate::ui) mod query;
 mod recovery;
@@ -36,6 +39,7 @@ mod search;
 mod selection;
 mod session;
 mod state_bridge;
+mod thought_name;
 mod transfer;
 mod transformations;
 mod update;
@@ -49,7 +53,7 @@ use std::{
 
 use crate::{
     application::{AppState, Effect, InteractionMode},
-    domain::{OperationId, OperationSequence, RequestId, SubmissionId, ThoughtId},
+    domain::{BoardItemId, OperationId, OperationSequence, RequestId, SubmissionId, ThoughtId},
     ports::{
         agent::AgentTarget,
         editor::{CursorMovement, EditCommand, Editor, EditorFactory, TextViewport},
@@ -142,11 +146,12 @@ pub struct BoardApp {
     scroll_geometry: Option<ScrollGeometry>,
     layout: Option<LayoutSnapshot>,
     frame_presentation: Option<crate::ui::projection::FramePresentation>,
-    dragged_thought: Option<ThoughtId>,
+    dragged_item: Option<BoardItemId>,
     drag_target: Option<usize>,
     pointer_click: Option<pointer::PointerClick>,
     overlay_activation: Option<pointer_activation::OverlayActivation>,
     hovered: Option<HitTarget>,
+    pointer_position: Option<(u16, u16)>,
     insertion_focus: InsertionFocus,
     insertion_confirmation: InsertionConfirmation,
     edit_boundary: Option<CursorMovement>,
@@ -155,6 +160,7 @@ pub struct BoardApp {
     invocation_popup: Option<invocation::InvocationPopup>,
     search: Option<search::SearchState>,
     rename: Option<query::QueryEditor>,
+    thought_rename: Option<thought_name::ThoughtNameState>,
     session_rename_persistence: SessionRenamePersistence,
     transfer: Option<transfer::TransferState>,
     transfer_generation: u64,
@@ -243,11 +249,12 @@ impl BoardApp {
             scroll_geometry: None,
             layout: None,
             frame_presentation: None,
-            dragged_thought: None,
+            dragged_item: None,
             drag_target: None,
             pointer_click: None,
             overlay_activation: None,
             hovered: None,
+            pointer_position: None,
             insertion_focus,
             insertion_confirmation: InsertionConfirmation::Idle,
             edit_boundary: None,
@@ -256,6 +263,7 @@ impl BoardApp {
             invocation_popup: None,
             search: None,
             rename: None,
+            thought_rename: None,
             session_rename_persistence: SessionRenamePersistence::Idle,
             transfer: None,
             transfer_generation: 0,
@@ -310,11 +318,15 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
+        self.track_hover_input(&input);
+        let ready_quit_was_armed = self.screenshot_ready_quit_armed();
         let (owner, input, preserves_handoff) = match self.prepare_input(input, ids, clock) {
             Ok(prepared) => prepared,
             Err(effects) => return effects,
         };
+        let deliberate = input.is_deliberate_interaction();
         if let Some(effects) = self.handle_quit_input(&input, ids, clock) {
+            self.finish_screenshot_interaction(deliberate, ready_quit_was_armed);
             return effects;
         }
         if self.update_barrier.is_some()
@@ -323,9 +335,12 @@ impl BoardApp {
                 UiInput::Resize { .. } | UiInput::HostFocusGained | UiInput::HostFocusLost
             )
         {
+            self.finish_screenshot_interaction(deliberate, ready_quit_was_armed);
             return Vec::new();
         }
-        self.handle_routable_input(owner, input, preserves_handoff, ids, clock)
+        let effects = self.handle_routable_input(owner, input, preserves_handoff, ids, clock);
+        self.finish_screenshot_interaction(deliberate, ready_quit_was_armed);
+        effects
     }
 
     fn prepare_input(
@@ -387,6 +402,9 @@ impl BoardApp {
             UiInput::Key(UiKey::Move {
                 movement: CursorMovement::VisualUp | CursorMovement::VisualDown,
                 extend_selection: false,
+            }) | UiInput::Pointer(PointerInput {
+                kind: PointerKind::Move,
+                ..
             })
         ) {
             self.edit_boundary = None;
@@ -406,6 +424,7 @@ impl BoardApp {
             }
             Owner::Transfer => self.handle_transfer_input(&input, ids, clock),
             Owner::Rename => self.handle_session_rename(&input, ids, clock),
+            Owner::ThoughtRename => self.handle_thought_rename(&input, ids, clock),
             Owner::Search => self.handle_search_input(&input, ids, clock),
             Owner::Direction => self
                 .handle_submission_input(&input, ids, clock)

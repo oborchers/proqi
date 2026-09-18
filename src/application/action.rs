@@ -2,8 +2,9 @@
 
 use super::FailureCode;
 use crate::domain::{
-    BoardOperationKind, ContentAnnotation, OperationId, OperationSequence, RequestId, RevisionId,
-    TextPosition, Thought, ThoughtId, ThoughtPresentation, Timestamp, UndoScope,
+    BoardItemId, BoardOperationKind, ContentAnnotation, OperationId, OperationSequence, RequestId,
+    RevisionId, SeparatorId, TextPosition, Thought, ThoughtId, ThoughtName, ThoughtPresentation,
+    Timestamp, UndoScope,
 };
 use std::ops::Range;
 
@@ -21,6 +22,8 @@ pub enum Action {
     },
     /// Focus one live thought, or clear focus.
     FocusThought(Option<ThoughtId>),
+    /// Focus one live Board item, or clear focus.
+    FocusItem(Option<BoardItemId>),
     /// Enter the multiline editor for one live thought.
     EnterEdit(ThoughtId),
     /// Enter the transient insertion editor without creating durable state.
@@ -41,6 +44,17 @@ pub enum Action {
         annotations: Vec<ContentAnnotation>,
         /// Explicit insertion point, or the current insertion point.
         insertion_index: Option<usize>,
+        /// Event time.
+        at: Timestamp,
+    },
+    /// Insert one payload-free durable visual separator.
+    InsertSeparator {
+        /// New separator identity.
+        separator_id: SeparatorId,
+        /// Durable operation identity.
+        operation_id: OperationId,
+        /// Explicit insertion point in the shared Board order.
+        insertion_index: usize,
         /// Event time.
         at: Timestamp,
     },
@@ -219,6 +233,17 @@ pub enum Action {
         /// Event time.
         at: Timestamp,
     },
+    /// Soft-delete mixed Board items as one Board-history operation.
+    DeleteItems {
+        /// Durable operation identity.
+        operation_id: OperationId,
+        /// Items to delete in Board order.
+        item_ids: Vec<BoardItemId>,
+        /// Semantic deletion kind.
+        kind: BoardOperationKind,
+        /// Event time.
+        at: Timestamp,
+    },
     /// Reserve a submission removal without changing the visible board before durability.
     StageSubmissionRemoval {
         /// Durable operation identity recorded with the accepted submission.
@@ -239,6 +264,17 @@ pub enum Action {
         /// Event time.
         at: Timestamp,
     },
+    /// Reorder one live thought or separator.
+    MoveItem {
+        /// Durable operation identity.
+        operation_id: OperationId,
+        /// Item to move.
+        item_id: BoardItemId,
+        /// Desired zero-based live position.
+        to: usize,
+        /// Event time.
+        at: Timestamp,
+    },
     /// Set the durable presentation preference.
     SetPresentation {
         /// Durable operation identity.
@@ -247,6 +283,17 @@ pub enum Action {
         thought_id: ThoughtId,
         /// New preference.
         presentation: ThoughtPresentation,
+        /// Event time.
+        at: Timestamp,
+    },
+    /// Set or clear optional organizational metadata.
+    RenameThought {
+        /// Durable operation identity.
+        operation_id: OperationId,
+        /// Affected thought.
+        thought_id: ThoughtId,
+        /// Validated replacement, or `None` to clear it.
+        name: Option<ThoughtName>,
         /// Event time.
         at: Timestamp,
     },
@@ -269,6 +316,17 @@ pub enum Action {
         thought_ids: Vec<ThoughtId>,
         /// Fresh identities paired with the ordered sources.
         duplicate_ids: Vec<ThoughtId>,
+        /// Event time.
+        at: Timestamp,
+    },
+    /// Duplicate one or more mixed Board items in their exact order.
+    DuplicateItems {
+        /// Durable operation identity.
+        operation_id: OperationId,
+        /// Source items in Board order.
+        item_ids: Vec<BoardItemId>,
+        /// Fresh typed identities paired with the ordered sources.
+        duplicate_ids: Vec<BoardItemId>,
         /// Event time.
         at: Timestamp,
     },
@@ -313,6 +371,7 @@ pub struct OwnedThoughtCreation {
     pub(crate) operation_id: OperationId,
     pub(crate) content: String,
     pub(crate) annotations: Vec<ContentAnnotation>,
+    pub(crate) name: Option<ThoughtName>,
     pub(crate) insertion_index: Option<usize>,
     pub(crate) at: Timestamp,
 }
@@ -323,6 +382,7 @@ impl OwnedThoughtCreation {
         operation_id: OperationId,
         content: String,
         annotations: Vec<ContentAnnotation>,
+        name: Option<ThoughtName>,
         insertion_index: Option<usize>,
         at: Timestamp,
     ) -> Self {
@@ -331,6 +391,7 @@ impl OwnedThoughtCreation {
             operation_id,
             content,
             annotations,
+            name,
             insertion_index,
             at,
         }

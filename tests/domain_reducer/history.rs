@@ -1,6 +1,74 @@
 use super::*;
 
 #[test]
+fn thought_name_is_board_metadata_with_exact_undo_and_retry_safe_noop() {
+    let mut fixture = Fixture::new();
+    let thought_id = fixture.create("body remains exact");
+    let name = proqi::domain::ThoughtName::new("Release plan").expect("name");
+    let operation_id = fixture.operation_id();
+    let at = fixture.time();
+    let effects = reduce(
+        &mut fixture.state,
+        Action::RenameThought {
+            operation_id,
+            thought_id,
+            name: Some(name.clone()),
+            at,
+        },
+    )
+    .expect("rename");
+    assert!(matches!(
+        effects.as_slice(),
+        [Effect::CommitBoardOperation(operation)]
+            if operation.kind == BoardOperationKind::Rename
+                && operation.content_thought_ids().is_empty()
+    ));
+    let thought = fixture.state.board.thought(thought_id).expect("thought");
+    assert_eq!(thought.content, "body remains exact");
+    assert_eq!(thought.name.as_ref(), Some(&name));
+
+    move_history(&mut fixture, UndoScope::Board, true);
+    assert_eq!(
+        fixture
+            .state
+            .board
+            .thought(thought_id)
+            .expect("thought")
+            .name,
+        None
+    );
+    move_history(&mut fixture, UndoScope::Board, false);
+    assert_eq!(
+        fixture
+            .state
+            .board
+            .thought(thought_id)
+            .expect("thought")
+            .name,
+        Some(name.clone())
+    );
+
+    let history_cursor = fixture.state.board_history_cursor();
+    let operation_id = fixture.operation_id();
+    let at = fixture.time();
+    let effects = reduce(
+        &mut fixture.state,
+        Action::RenameThought {
+            operation_id,
+            thought_id,
+            name: Some(name),
+            at,
+        },
+    )
+    .expect("same-value rename");
+    assert!(matches!(
+        effects.as_slice(),
+        [Effect::CommitThoughtNoOpRename { .. }]
+    ));
+    assert_eq!(fixture.state.board_history_cursor(), history_cursor);
+}
+
+#[test]
 fn editor_history_is_separate_from_board_history() {
     let mut fixture = Fixture::new();
     let thought_id = fixture.create("before");
@@ -145,7 +213,7 @@ fn undoing_a_nonfocused_create_keeps_the_next_insertion_valid() {
 
     let third = fixture.create("third");
     assert_eq!(fixture.state.board.live_thoughts().len(), 2);
-    assert_eq!(fixture.state.focused_thought, Some(third));
+    assert_eq!(fixture.state.focused_thought_id(), Some(third));
 }
 
 #[test]

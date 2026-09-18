@@ -1,6 +1,6 @@
 //! Terminal-independent cross-session thought delivery request.
 
-use crate::domain::{ContentAnnotation, OperationId, SessionId, ThoughtId};
+use crate::domain::{ContentAnnotation, OperationId, SessionId, ThoughtId, ThoughtName};
 
 /// Exact thought copy addressed to another Proqi session.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -15,6 +15,8 @@ pub struct SessionTransferRequest {
     pub content: String,
     /// Durable presentation annotations over the canonical content.
     pub annotations: Vec<ContentAnnotation>,
+    /// Optional organizational metadata preserved separately from content.
+    pub name: Option<ThoughtName>,
     /// Whether the source should be deleted after destination durability.
     pub remove_source: bool,
 }

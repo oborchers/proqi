@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 pub enum BoardOperationKind {
     /// Created a thought, including paste-to-create.
     Create,
+    /// Inserted a durable payload-free visual separator.
+    InsertSeparator,
     /// Deleted a thought without touching the clipboard.
     Delete,
     /// Deleted a thought after a successful clipboard write.
@@ -16,6 +18,8 @@ pub enum BoardOperationKind {
     Reorder,
     /// Changed the explicit collapse preference.
     Collapse,
+    /// Changed optional organizational metadata.
+    Rename,
     /// Duplicated one or more thoughts as one operation.
     Duplicate,
     /// Deleted after an accepted adjacent-agent submission.

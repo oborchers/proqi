@@ -8,8 +8,8 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use super::error::{ApplicationError, ApplicationResult, FailureCode};
 use crate::domain::{
-    BoardOperation, OperationSequence, RequestId, SessionBoard, StableVersion, TextPosition,
-    Thought, ThoughtId, ThoughtRevision,
+    BoardItemId, BoardOperation, OperationSequence, RequestId, SessionBoard, StableVersion,
+    TextPosition, Thought, ThoughtId, ThoughtRevision,
 };
 
 use crate::ports::runtime::CaptureOwnerInfo;
@@ -180,8 +180,8 @@ pub struct AppState {
     pub board: SessionBoard,
     /// Current board or editor context.
     pub mode: InteractionMode,
-    /// Focused live thought, if any.
-    pub focused_thought: Option<ThoughtId>,
+    /// Focused live Board item, if any.
+    pub focused_item: Option<BoardItemId>,
     /// Current insertion position used for new thoughts.
     pub insertion_index: usize,
     /// Current durability status.
@@ -202,10 +202,10 @@ impl AppState {
     /// Construct application state from a validated session snapshot.
     #[must_use]
     pub fn new(board: SessionBoard) -> Self {
-        let focused_thought = board.live_thoughts().first().map(|thought| thought.id);
-        let insertion_index = board.live_thoughts().len();
+        let focused_item = board.live_items().first().map(|item| item.id());
+        let insertion_index = board.live_items().len();
         let sequence = board.session.last_durable_sequence;
-        let mode = if focused_thought.is_some() {
+        let mode = if focused_item.is_some() {
             InteractionMode::Board
         } else {
             InteractionMode::Compose
@@ -213,7 +213,7 @@ impl AppState {
         Self {
             board,
             mode,
-            focused_thought,
+            focused_item,
             insertion_index,
             durability: DurabilityState::Durable { sequence },
             attachments: super::AttachmentAccessibilityState::default(),
@@ -414,14 +414,14 @@ impl AppState {
     }
 
     pub(super) fn keep_focus_valid(&mut self) {
-        self.insertion_index = self.insertion_index.min(self.board.live_thoughts().len());
+        self.insertion_index = self.insertion_index.min(self.board.live_items().len());
         if self
-            .focused_thought
-            .is_some_and(|id| self.live_thought(id).is_ok())
+            .focused_item
+            .is_some_and(|id| self.board.item_position(id).is_some())
         {
             return;
         }
-        self.focused_thought = self.board.live_thoughts().first().map(|thought| thought.id);
+        self.focused_item = self.board.live_items().first().map(|item| item.id());
         if matches!(self.mode, InteractionMode::Edit { .. }) {
             self.mode = InteractionMode::Board;
         }
@@ -442,11 +442,20 @@ impl AppState {
     /// Apply one typed empty-board interaction policy after a completed mutation.
     pub fn reconcile_empty_board(&mut self, transition: EmptyBoardTransition) {
         if transition == EmptyBoardTransition::ComposeAfterLocalRemoval
-            && self.board.live_thoughts().is_empty()
+            && self.board.live_items().is_empty()
         {
             self.mode = InteractionMode::Compose;
-            self.focused_thought = None;
+            self.focused_item = None;
             self.insertion_index = 0;
+        }
+    }
+
+    /// Focused thought when the active Board item carries editable text.
+    #[must_use]
+    pub const fn focused_thought_id(&self) -> Option<ThoughtId> {
+        match self.focused_item {
+            Some(BoardItemId::Thought(id)) => Some(id),
+            Some(BoardItemId::Separator(_)) | None => None,
         }
     }
 }

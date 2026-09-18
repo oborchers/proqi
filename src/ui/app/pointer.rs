@@ -4,13 +4,13 @@ use crate::{
     application::{Action, Effect, InteractionMode},
     domain::{ThoughtId, Timestamp},
     ports::{
-        editor::{EditCommand, SelectionGranularity},
+        editor::EditCommand,
         environment::{Clock, IdGenerator},
     },
 };
 
 use super::{BoardApp, PointerButton, PointerInput, PointerKind, pending_types::EditFlush};
-use crate::ui::{HitTarget, projection::BoardCellTarget};
+use crate::ui::HitTarget;
 
 pub(super) const MULTI_CLICK_MILLIS: i64 = 500;
 
@@ -20,7 +20,7 @@ pub(super) struct PointerClick {
     column: u16,
     row: u16,
     at: Timestamp,
-    count: u8,
+    pub(super) count: u8,
 }
 
 impl BoardApp {
@@ -52,7 +52,7 @@ impl BoardApp {
         if !matches!(pointer.kind, PointerKind::Down(PointerButton::Left)) {
             return Vec::new();
         }
-        match self.hit(pointer) {
+        match self.pointer_target_for_owner(pointer) {
             Some(HitTarget::Retry) => self.retry_persistence(),
             Some(HitTarget::ExportRecovery) => self.export_recovery(ids, clock),
             Some(HitTarget::Help) => self.toggle_help(),
@@ -66,7 +66,9 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        self.edit_boundary = None;
+        if !matches!(pointer.kind, PointerKind::Move) {
+            self.edit_boundary = None;
+        }
         if self.submission_mode.is_some() {
             return self.handle_submission_pointer(pointer, ids, clock);
         }
@@ -88,19 +90,15 @@ impl BoardApp {
             EditFlush::Blocked(effects) => return effects,
         };
         effects.extend(match pointer.kind {
-            PointerKind::Move => {
-                self.hovered = self
-                    .selection_is_empty()
-                    .then(|| self.hit(pointer))
-                    .flatten();
-                Vec::new()
-            }
             PointerKind::ScrollUp => self.scroll_pointer(-1),
             PointerKind::ScrollDown => self.scroll_pointer(1),
             PointerKind::Down(PointerButton::Left) => self.pointer_down(pointer, ids, clock),
             PointerKind::Drag(PointerButton::Left) => self.pointer_drag(pointer),
             PointerKind::Up(PointerButton::Left) => self.pointer_up(ids, clock),
-            PointerKind::Down(_) | PointerKind::Up(_) | PointerKind::Drag(_) => Vec::new(),
+            PointerKind::Move
+            | PointerKind::Down(_)
+            | PointerKind::Up(_)
+            | PointerKind::Drag(_) => Vec::new(),
         });
         effects
     }
@@ -111,11 +109,10 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        let target = self.hit(pointer);
         if matches!(pointer.kind, PointerKind::Move) {
-            self.hovered = target;
             return Vec::new();
         }
+        let target = self.pointer_target_for_owner(pointer);
         let Some(HitTarget::Deliver(direction, disposition)) = target else {
             return Vec::new();
         };
@@ -131,24 +128,26 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        let target = self.hit(pointer);
+        let target = self.pointer_target(pointer);
         self.hovered = target;
-        if !matches!(target, Some(HitTarget::Thought(_))) {
+        if !matches!(target, Some(HitTarget::Thought(_) | HitTarget::Fold(_, _))) {
             self.pointer_click = None;
         }
         match target {
-            Some(HitTarget::Thought(thought_id)) => {
+            Some(HitTarget::ThoughtName(thought_id)) => {
+                self.begin_thought_rename_from_pointer(thought_id, pointer, ids, clock)
+            }
+            Some(HitTarget::Thought(thought_id) | HitTarget::Fold(thought_id, _)) => {
                 self.handle_thought_pointer(thought_id, pointer, ids, clock)
             }
             Some(HitTarget::DragHandle(thought_id)) => {
-                let expand = self.activation_needs_expansion(thought_id);
-                self.focus(thought_id);
-                if expand {
-                    return self.expand_thought(thought_id, ids, clock);
-                }
-                self.dragged_thought = Some(thought_id);
-                self.drag_target = self.position_at(pointer.row);
-                Vec::new()
+                self.begin_thought_drag(thought_id, pointer.row, ids, clock)
+            }
+            Some(HitTarget::Separator(separator_id)) => {
+                self.handle_separator_pointer(separator_id, pointer, false)
+            }
+            Some(HitTarget::SeparatorDragHandle(separator_id)) => {
+                self.handle_separator_pointer(separator_id, pointer, true)
             }
             Some(HitTarget::Overflow(thought_id)) => {
                 self.focus(thought_id);
@@ -184,11 +183,9 @@ impl BoardApp {
             Some(HitTarget::Undo) => self.history(ids, clock, true),
             Some(HitTarget::Redo) => self.history(ids, clock, false),
             Some(HitTarget::Help) => self.toggle_help(),
-            Some(HitTarget::Quit) => {
-                self.request_quit();
-                Vec::new()
-            }
+            Some(HitTarget::Quit) => self.request_global_quit(ids, clock),
             Some(HitTarget::ExitEdit) => self.pointer_exit_edit(ids, clock),
+            Some(HitTarget::CommitThoughtName | HitTarget::CancelThoughtName) => Vec::new(),
             Some(HitTarget::Retry) => self.retry_persistence(),
             Some(HitTarget::ExportRecovery) => self.export_recovery(ids, clock),
             Some(HitTarget::PaletteItem(index)) => {
@@ -203,6 +200,23 @@ impl BoardApp {
                 Vec::new()
             }
         }
+    }
+
+    fn begin_thought_drag(
+        &mut self,
+        thought_id: ThoughtId,
+        row: u16,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        let expand = self.activation_needs_expansion(thought_id);
+        self.focus(thought_id);
+        if expand {
+            return self.expand_thought(thought_id, ids, clock);
+        }
+        self.dragged_item = Some(crate::domain::BoardItemId::Thought(thought_id));
+        self.drag_target = self.position_at(row);
+        Vec::new()
     }
 
     fn activate_palette_item(
@@ -240,7 +254,7 @@ impl BoardApp {
             && (pointer.extend_selection || self.range_latched())
         {
             self.pointer_click = None;
-            self.extend_range_to(thought_id);
+            self.extend_range_to(crate::domain::BoardItemId::Thought(thought_id));
             return Vec::new();
         }
         let click_count = self.register_text_click(thought_id, pointer, clock.now());
@@ -249,7 +263,7 @@ impl BoardApp {
 
     fn pointer_drag(&mut self, pointer: PointerInput) -> Vec<Effect> {
         self.pointer_click = None;
-        if self.dragged_thought.is_some() {
+        if self.dragged_item.is_some() {
             self.drag_target = self.position_at(pointer.row);
             return Vec::new();
         }
@@ -287,107 +301,15 @@ impl BoardApp {
         } else {
             self.apply_edit(EditCommand::PointerEnd);
         }
-        let thought_id = self.dragged_thought.take();
+        let item_id = self.dragged_item.take();
         let target = self.drag_target.take();
-        match (thought_id, target) {
-            (Some(thought_id), Some(to)) => {
-                self.focus(thought_id);
+        match (item_id, target) {
+            (Some(item_id), Some(to)) => {
+                self.focus_item(item_id);
                 self.reorder_to(to, ids, clock)
             }
             _ => Vec::new(),
         }
-    }
-
-    fn focus_and_place_cursor(
-        &mut self,
-        thought_id: crate::domain::ThoughtId,
-        pointer: PointerInput,
-        click_count: u8,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-    ) -> Vec<Effect> {
-        if matches!(self.state.mode, InteractionMode::Edit { thought_id: active } if active == thought_id)
-        {
-            let target = self
-                .editor_cell(thought_id, pointer)
-                .and_then(|(row, column)| self.editor_cell_target(row, column));
-            self.focus(thought_id);
-            self.enter_edit();
-            let Some(target) = target else {
-                return Vec::new();
-            };
-            if let BoardCellTarget::Fold {
-                canonical_start,
-                canonical_end,
-            } = target
-            {
-                self.set_editor_range(canonical_start, canonical_end);
-                return Vec::new();
-            }
-            let BoardCellTarget::Position(position) = target else {
-                return Vec::new();
-            };
-            self.apply_pointer_start(position, pointer, click_count);
-            return Vec::new();
-        }
-        let target = self.board_cell_target(thought_id, pointer);
-        self.focus(thought_id);
-        let effects = self.expand_and_enter_edit(ids, clock);
-        let Some(target) = target else {
-            return effects;
-        };
-        if let BoardCellTarget::Fold {
-            canonical_start,
-            canonical_end,
-        } = target
-        {
-            self.set_editor_range(canonical_start, canonical_end);
-            return effects;
-        }
-        let BoardCellTarget::Position(position) = target else {
-            return effects;
-        };
-        self.apply_pointer_start(position, pointer, click_count);
-        effects
-    }
-
-    fn apply_pointer_start(
-        &mut self,
-        position: crate::domain::TextPosition,
-        pointer: PointerInput,
-        click_count: u8,
-    ) {
-        let granularity = match click_count {
-            2 => SelectionGranularity::Word,
-            3 => SelectionGranularity::LogicalLine,
-            _ => SelectionGranularity::Grapheme,
-        };
-        self.apply_edit(EditCommand::PointerStart {
-            position,
-            granularity,
-            extend_selection: pointer.extend_selection,
-        });
-    }
-
-    fn board_cell_target(
-        &self,
-        thought_id: crate::domain::ThoughtId,
-        pointer: PointerInput,
-    ) -> Option<BoardCellTarget> {
-        let frame = self.layout.as_ref()?;
-        let layout = frame.thought(thought_id)?;
-        let thought = self.frame_presentation.as_ref()?.thought(thought_id)?;
-        let row = layout
-            .content_row_offset
-            .saturating_add(usize::from(pointer.row.saturating_sub(layout.text_area.y)));
-        let column = pointer.column.saturating_sub(layout.text_area.x);
-        crate::ui::projection::board_cell_target(
-            &thought.canonical_content,
-            &thought.presentation,
-            layout.text_area.width,
-            row,
-            column,
-        )
     }
 
     fn register_text_click(
@@ -445,12 +367,16 @@ impl BoardApp {
         Vec::new()
     }
 
-    fn focus(&mut self, thought_id: crate::domain::ThoughtId) {
+    pub(super) fn focus(&mut self, thought_id: crate::domain::ThoughtId) {
+        self.focus_item(crate::domain::BoardItemId::Thought(thought_id));
+    }
+
+    pub(super) fn focus_item(&mut self, item_id: crate::domain::BoardItemId) {
         self.clear_range_for_focus_change();
         self.insertion_focus = super::InsertionFocus::Inactive;
         self.board_viewport = self.board_viewport.follow_focus();
         self.scroll_geometry = None;
-        let _effects = self.reduce(Action::FocusThought(Some(thought_id)));
+        let _effects = self.reduce(Action::FocusItem(Some(item_id)));
     }
 
     fn reorder_to(
@@ -459,21 +385,21 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        let Some(thought_id) = self.state.focused_thought else {
+        let Some(item_id) = self.state.focused_item else {
             return Vec::new();
         };
         let current = self
             .state
             .board
-            .live_thoughts()
+            .live_items()
             .iter()
-            .position(|thought| thought.id == thought_id);
+            .position(|item| item.id() == item_id);
         if current == Some(to) {
             return Vec::new();
         }
-        self.reduce(Action::MoveThought {
+        self.reduce(Action::MoveItem {
             operation_id: ids.operation_id(),
-            thought_id,
+            item_id,
             to,
             at: clock.now(),
         })
@@ -485,7 +411,7 @@ impl BoardApp {
             .and_then(|layout| layout.hit_test(pointer.column, pointer.row))
     }
 
-    fn position_at(&self, row: u16) -> Option<usize> {
+    pub(super) fn position_at(&self, row: u16) -> Option<usize> {
         self.layout
             .as_ref()
             .and_then(|layout| layout.insertion_index_at(row))

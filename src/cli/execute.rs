@@ -6,8 +6,10 @@ mod doctor;
 mod external_thoughts;
 mod forwarding;
 mod helpers;
+mod queries;
 mod runtime_open;
 mod sessions;
+mod thought_names;
 mod transfer;
 mod update;
 
@@ -30,9 +32,7 @@ use super::{
     runtime::RuntimeContext,
 };
 
-use helpers::{
-    content_digest_hex, excerpt, parse_operation_id, parse_thought_id, read_standard_input,
-};
+use helpers::{parse_operation_id, parse_thought_id, read_standard_input};
 use runtime_open::ResumeRequest;
 use sessions::{
     browse_for_session, cancelled_browser, execute_sessions, list_sessions, opened_session,
@@ -163,14 +163,18 @@ fn execute_launch(
     Ok(opened_session(id))
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "the exhaustive typed command dispatcher keeps each route visible"
+)]
 fn execute_thoughts(
     context: &mut RuntimeContext,
     command: ThoughtCommand,
 ) -> Result<Outcome, CliError> {
     match command {
-        ThoughtCommand::List { session } => list_thoughts(context, &session),
+        ThoughtCommand::List { session } => queries::list(context, &session),
         ThoughtCommand::Inspect { session, thought } => {
-            inspect_thought(context, &session, &thought)
+            queries::inspect(context, &session, &thought)
         }
         ThoughtCommand::Add {
             session,
@@ -182,6 +186,19 @@ fn execute_thoughts(
             thought,
             operation_id,
         } => delete_thought(context, &session, &thought, operation_id.as_deref()),
+        ThoughtCommand::Rename {
+            session,
+            thought,
+            name,
+            clear: _,
+            operation_id,
+        } => thought_names::rename_thought(
+            context,
+            &session,
+            &thought,
+            name.as_deref(),
+            operation_id.as_deref(),
+        ),
         ThoughtCommand::Replace {
             session,
             thought,
@@ -227,7 +244,7 @@ fn execute_thoughts(
             remove,
             operation_id,
             remove_operation_id,
-        } => transfer::send_thought(
+        } => execute_send_thought(
             context,
             &source,
             &thought,
@@ -241,83 +258,24 @@ fn execute_thoughts(
     }
 }
 
-fn list_thoughts(context: &mut RuntimeContext, reference: &str) -> Result<Outcome, CliError> {
-    let mut service = session_service(context)?;
-    let session_id = service.resolve_session(reference, true)?;
-    drop(service);
-    forwarding::sync(context, session_id)?;
-    let mut service = session_service(context)?;
-    let snapshot = service.inspect_session(session_id)?;
-    let thoughts: Vec<_> = snapshot
-        .board
-        .live_thoughts()
-        .into_iter()
-        .map(|thought| {
-            json!({
-                "id": thought.id,
-                "position": thought.position,
-                "content": thought.content,
-                "collapsed": thought.presentation.is_collapsed(),
-                "presentation": thought.presentation.as_str(),
-                "updated_at": thought.updated_at,
-                "content_sha256": content_digest_hex(&thought.content),
-            })
-        })
-        .collect();
-    let human = snapshot
-        .board
-        .live_thoughts()
-        .into_iter()
-        .map(|thought| {
-            format!(
-                "{}  {}  {}",
-                thought.position.get(),
-                thought.id,
-                excerpt(&thought.content)
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
-    Ok(Outcome {
-        data: json!({ "session_id": session_id, "thoughts": thoughts }),
-        human,
-    })
-}
-
-fn inspect_thought(
+fn execute_send_thought(
     context: &mut RuntimeContext,
-    session: &str,
+    source: &str,
     thought: &str,
+    destination: &str,
+    remove: bool,
+    operation_id: Option<&str>,
+    remove_operation_id: Option<&str>,
 ) -> Result<Outcome, CliError> {
-    let thought_id = parse_thought_id(thought)?;
-    let mut service = session_service(context)?;
-    let session_id = service.resolve_session(session, true)?;
-    drop(service);
-    forwarding::sync(context, session_id)?;
-    let mut service = session_service(context)?;
-    let snapshot = service.inspect_session(session_id)?;
-    let thought = snapshot.board.thought(thought_id).ok_or_else(|| {
-        CliError::new(
-            "thought_not_found",
-            format!("thought not found: {thought_id}"),
-            3,
-        )
-    })?;
-    Ok(Outcome {
-        data: json!({
-            "session_id": session_id,
-            "thought": {
-                "id": thought.id,
-                "content": thought.content,
-                "position": thought.position,
-                "collapsed": thought.presentation.is_collapsed(),
-                "presentation": thought.presentation.as_str(),
-                "deleted_at": thought.deleted_at,
-                "content_sha256": content_digest_hex(&thought.content),
-            }
-        }),
-        human: thought.content.clone(),
-    })
+    transfer::send_thought(
+        context,
+        source,
+        thought,
+        destination,
+        remove,
+        operation_id,
+        remove_operation_id,
+    )
 }
 
 fn add_thought(

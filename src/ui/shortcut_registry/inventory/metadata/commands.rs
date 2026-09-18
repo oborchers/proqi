@@ -35,16 +35,20 @@ pub(in crate::ui::shortcut_registry) fn command_metadata(
 
 const fn command_applicability(action: Action) -> CommandApplicability {
     match action {
-        Action::New | Action::RenameSession | Action::PasteExact | Action::PasteReflow => {
-            CommandApplicability::WritableBoard
-        }
+        Action::New
+        | Action::InsertSeparator
+        | Action::RenameSession
+        | Action::PasteExact
+        | Action::PasteReflow => CommandApplicability::WritableBoard,
         Action::SubmitRemove | Action::SubmitKeep => CommandApplicability::Submission,
         Action::SubmitAllRemove | Action::SubmitAllKeep => CommandApplicability::SubmissionAll,
         Action::InsertAbove | Action::InsertBelow | Action::Select | Action::RangeSelect => {
-            CommandApplicability::BoardThought
+            CommandApplicability::BoardItem
         }
+        Action::Edit => CommandApplicability::BoardThought,
+        Action::RenameThought => CommandApplicability::FocusedMutableThought,
         Action::FocusFirst | Action::FocusLast => CommandApplicability::BoardNonempty,
-        Action::SelectAll => CommandApplicability::HasThoughts,
+        Action::SelectAll => CommandApplicability::HasItems,
         Action::PlainNewline
         | Action::DeleteLogicalLine
         | Action::DeleteSentence
@@ -70,11 +74,9 @@ const fn command_applicability(action: Action) -> CommandApplicability {
         Action::WhatsNew => CommandApplicability::InstalledHighlights,
         Action::Copy => CommandApplicability::Copy,
         Action::Cut => CommandApplicability::Cut,
-        Action::Delete
-        | Action::ReflowThought
-        | Action::Duplicate
+        Action::Delete | Action::Duplicate => CommandApplicability::MutableItem,
+        Action::ReflowThought
         | Action::Collapse
-        | Action::Edit
         | Action::InsertInvocation
         | Action::SendSession
         | Action::SendSessionRemove
@@ -95,7 +97,9 @@ const fn command_relevance(action: Action) -> CommandRelevance {
         Action::ExtractSelection | Action::SplitThought => CommandRelevance::Editor(6),
         Action::SubmitKeep => CommandRelevance::Submission(7),
         Action::New => CommandRelevance::Always(0),
+        Action::InsertSeparator => CommandRelevance::Always(10),
         Action::Edit => CommandRelevance::FocusedThought(20),
+        Action::RenameThought => CommandRelevance::FocusedThought(22),
         Action::ReflowThought => CommandRelevance::FocusedThought(25),
         Action::Copy => CommandRelevance::FocusedThought(30),
         Action::PasteExact => CommandRelevance::Always(40),
@@ -173,7 +177,8 @@ const fn command_scope(action: Action) -> CommandScope {
         | Action::SubmitRemove
         | Action::SubmitKeep
         | Action::SubmitToAgent
-        | Action::ReflowThought => CommandScope::Contextual,
+        | Action::ReflowThought
+        | Action::RenameThought => CommandScope::Contextual,
         Action::Undo | Action::Redo => CommandScope::Commands,
         Action::PlainNewline
         | Action::DeleteLogicalLine

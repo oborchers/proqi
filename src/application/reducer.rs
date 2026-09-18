@@ -1,5 +1,7 @@
 //! Pure reducer and mutation helpers.
 
+mod board;
+
 use super::{
     Action, OwnedThoughtCreation, OwnedThoughtEdit,
     error::{ApplicationError, ApplicationResult},
@@ -9,14 +11,12 @@ use crate::application::model::{
     AppState, ClipboardIntent, DurabilityState, Effect, InteractionMode,
 };
 
-use super::mutations::bulk::{
-    delete_thoughts, duplicate_thoughts, set_presentation_many, stage_submission_removal,
-};
-use super::mutations::transform::{ExactSource, extract_thought, merge_thoughts, split_thought};
+use super::mutations::transform::{ExactSource, extract_thought, split_thought};
 use super::mutations::{
-    create_compose_thought, create_thought, delete_thought, edit_thought, finish_clipboard,
-    history_move, move_thought, rename_session, request_clipboard, set_presentation,
+    create_compose_thought, create_thought, edit_thought, finish_clipboard, history_move,
+    insert_separator, rename_session, request_clipboard,
 };
+use board::reduce_board;
 
 /// Reduce one action into current state and ordered effects.
 ///
@@ -29,7 +29,7 @@ pub fn reduce(state: &mut AppState, action: Action) -> ApplicationResult<Vec<Eff
     {
         return Err(ApplicationError::InvalidState);
     }
-    let previous_focus = state.focused_thought;
+    let previous_focus = state.focused_item;
     let mut effects = match action {
         Action::RenameSession {
             operation_id,
@@ -37,11 +37,13 @@ pub fn reduce(state: &mut AppState, action: Action) -> ApplicationResult<Vec<Eff
             at,
         } => rename_session(state, operation_id, name, at),
         Action::FocusThought(_)
+        | Action::FocusItem(_)
         | Action::EnterEdit(_)
         | Action::EnterCompose
         | Action::ExitCompose
         | Action::ExitEdit => reduce_navigation(state, &action),
         Action::CreateThought { .. }
+        | Action::InsertSeparator { .. }
         | Action::CreateComposeThought { .. }
         | Action::CreateOwnedThought(_)
         | Action::PasteAsThought { .. }
@@ -59,11 +61,15 @@ pub fn reduce(state: &mut AppState, action: Action) -> ApplicationResult<Vec<Eff
         }
         Action::DeleteThought { .. }
         | Action::DeleteThoughts { .. }
+        | Action::DeleteItems { .. }
         | Action::StageSubmissionRemoval { .. }
         | Action::MoveThought { .. }
+        | Action::RenameThought { .. }
+        | Action::MoveItem { .. }
         | Action::SetPresentation { .. }
         | Action::SetPresentationMany { .. }
         | Action::DuplicateThoughts { .. }
+        | Action::DuplicateItems { .. }
         | Action::MergeThoughts { .. } => reduce_board(state, &action),
         Action::Undo { .. } | Action::Redo { .. } => reduce_history(state, &action),
         Action::PersistenceCommitted(_)
@@ -71,8 +77,8 @@ pub fn reduce(state: &mut AppState, action: Action) -> ApplicationResult<Vec<Eff
         | Action::RetryPersistence(_) => reduce_persistence(state, &action),
     }?;
     effects.extend(state.attachments.reconcile(&state.board));
-    if state.focused_thought != previous_focus
-        && let Some(thought_id) = state.focused_thought
+    if state.focused_item != previous_focus
+        && let Some(thought_id) = state.focused_thought_id()
     {
         effects.extend(state.attachments.prioritize_focus(thought_id));
     }
@@ -85,11 +91,19 @@ fn reduce_navigation(state: &mut AppState, action: &Action) -> ApplicationResult
             if let Some(id) = *focus {
                 state.live_thought(id)?;
             }
-            state.focused_thought = *focus;
+            state.focused_item = focus.map(crate::domain::BoardItemId::Thought);
+        }
+        Action::FocusItem(focus) => {
+            if let Some(id) = *focus
+                && state.board.item_position(id).is_none()
+            {
+                return Err(ApplicationError::InvalidState);
+            }
+            state.focused_item = *focus;
         }
         Action::EnterEdit(thought_id) => {
             state.live_thought(*thought_id)?;
-            state.focused_thought = Some(*thought_id);
+            state.focused_item = Some(crate::domain::BoardItemId::Thought(*thought_id));
             state.mode = InteractionMode::Edit {
                 thought_id: *thought_id,
             };
@@ -156,6 +170,12 @@ fn reduce_creation(state: &mut AppState, action: Action) -> ApplicationResult<Ve
                 at,
             )
         }
+        Action::InsertSeparator {
+            separator_id,
+            operation_id,
+            insertion_index,
+            at,
+        } => insert_separator(state, separator_id, operation_id, insertion_index, at),
         Action::CreateComposeThought {
             thought_id,
             operation_id,
@@ -260,13 +280,16 @@ fn create_owned_thought(
     state: &mut AppState,
     creation: OwnedThoughtCreation,
 ) -> ApplicationResult<Vec<Effect>> {
-    create_thought(
+    super::mutations::create_thought_with_handoff(
         state,
         creation.thought_id,
         creation.operation_id,
         creation.content,
         creation.annotations,
         creation.insertion_index.unwrap_or(state.insertion_index),
+        None,
+        false,
+        creation.name,
         creation.at,
     )
 }
@@ -339,67 +362,6 @@ fn reduce_clipboard(state: &mut AppState, action: &Action) -> ApplicationResult<
                 };
             finish_clipboard(state, *request_id, completion)
         }
-        _ => Err(ApplicationError::InvalidState),
-    }
-}
-
-fn reduce_board(state: &mut AppState, action: &Action) -> ApplicationResult<Vec<Effect>> {
-    match action {
-        Action::DeleteThought {
-            operation_id,
-            thought_id,
-            kind,
-            at,
-        } => delete_thought(state, *operation_id, *thought_id, *kind, *at),
-        Action::DeleteThoughts {
-            operation_id,
-            thought_ids,
-            kind,
-            at,
-        } => delete_thoughts(state, *operation_id, thought_ids, *kind, *at),
-        Action::StageSubmissionRemoval {
-            operation_id,
-            thought_ids,
-            at,
-        } => stage_submission_removal(state, *operation_id, thought_ids, *at),
-        Action::MoveThought {
-            operation_id,
-            thought_id,
-            to,
-            at,
-        } => move_thought(state, *operation_id, *thought_id, *to, *at),
-        Action::SetPresentation {
-            operation_id,
-            thought_id,
-            presentation,
-            at,
-        } => set_presentation(state, *operation_id, *thought_id, *presentation, *at),
-        Action::SetPresentationMany {
-            operation_id,
-            thought_ids,
-            presentation,
-            at,
-        } => set_presentation_many(state, *operation_id, thought_ids, *presentation, *at),
-        Action::DuplicateThoughts {
-            operation_id,
-            thought_ids,
-            duplicate_ids,
-            at,
-        } => duplicate_thoughts(state, *operation_id, thought_ids, duplicate_ids, *at),
-        Action::MergeThoughts {
-            operation_id,
-            thought_ids,
-            expected_sources,
-            separator,
-            at,
-        } => merge_thoughts(
-            state,
-            *operation_id,
-            thought_ids,
-            expected_sources,
-            separator,
-            *at,
-        ),
         _ => Err(ApplicationError::InvalidState),
     }
 }

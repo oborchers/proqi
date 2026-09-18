@@ -5,7 +5,10 @@ use std::{collections::HashSet, str::FromStr};
 use proptest::prelude::*;
 use proqi::{
     adapters::{memory::FakeIdGenerator, runtime::SystemIdGenerator},
-    domain::{InstanceId, OperationId, RequestId, RevisionId, SessionId, SubmissionId, ThoughtId},
+    domain::{
+        InstanceId, OperationId, RequestId, RevisionId, SeparatorId, SessionId, SubmissionId,
+        ThoughtId,
+    },
     ports::environment::IdGenerator,
 };
 use rusqlite::{Connection, params};
@@ -23,16 +26,16 @@ fn every_registered_type_generates_canonical_uuid_v7() {
     let values = [
         ids.session_id().to_string(),
         ids.thought_id().to_string(),
+        ids.separator_id().to_string(),
         ids.revision_id().to_string(),
         ids.operation_id().to_string(),
         ids.instance_id().to_string(),
         ids.request_id().to_string(),
         ids.submission_id().to_string(),
     ];
-    for (value, prefix) in values
-        .iter()
-        .zip(["ses_", "tht_", "rev_", "op_", "ins_", "req_", "sub_"])
-    {
+    for (value, prefix) in values.iter().zip([
+        "ses_", "tht_", "sep_", "rev_", "op_", "ins_", "req_", "sub_",
+    ]) {
         assert!(value.starts_with(prefix));
         assert_eq!(value.len(), prefix.len() + 26);
         assert!(
@@ -60,8 +63,11 @@ fn prefixes_are_type_checked() {
     let mut ids = FakeIdGenerator::new(123);
     let session = ids.session_id().to_string();
     let thought = ids.thought_id().to_string();
+    let separator = ids.separator_id().to_string();
     assert!(ThoughtId::from_str(&session).is_err());
     assert!(SessionId::from_str(&thought).is_err());
+    assert!(SeparatorId::from_str(&thought).is_err());
+    assert!(ThoughtId::from_str(&separator).is_err());
     assert!(OperationId::from_str(&session).is_err());
 }
 
@@ -130,6 +136,7 @@ fn sqlite_blob_round_trips_are_lossless_for_every_type() {
 
     round_trip!("session", ids.session_id(), SessionId);
     round_trip!("thought", ids.thought_id(), ThoughtId);
+    round_trip!("separator", ids.separator_id(), SeparatorId);
     round_trip!("revision", ids.revision_id(), RevisionId);
     round_trip!("operation", ids.operation_id(), OperationId);
     round_trip!("instance", ids.instance_id(), InstanceId);

@@ -98,6 +98,15 @@ Set durable collapsed presentation explicitly when requested:
 proqi --json thoughts collapse ses_06g30t7dv5qv55n1ppn3clis3k tht_06g30t8fudrq55fdkk348i7388 --collapsed true
 ```
 
+Set or clear the optional organizational name independently of thought content:
+
+```console
+proqi --json thoughts rename ses_06g30t7dv5qv55n1ppn3clis3k tht_06g30t8fudrq55fdkk348i7388 "Review notes"
+proqi --json thoughts rename ses_06g30t7dv5qv55n1ppn3clis3k tht_06g30t8fudrq55fdkk348i7388 --clear
+```
+
+Names are metadata. Do not prepend them to content or encode them as annotations.
+
 Add exact content by direct process execution, with the prompt as standard
 input rather than an argument:
 

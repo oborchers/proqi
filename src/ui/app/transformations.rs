@@ -162,11 +162,11 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        if self.selection_len() < 2 {
+        let thought_ids = self.action_thought_ids();
+        if thought_ids.len() < 2 {
             self.set_warning("select at least two contiguous thoughts before merging");
             return Vec::new();
         }
-        let thought_ids = self.action_thought_ids();
         let Some(expected_sources) = expected_sources else {
             self.set_warning("selected thoughts changed after commands opened");
             return Vec::new();

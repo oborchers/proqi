@@ -166,8 +166,10 @@ pub(super) fn control_ready(instance: &InstanceInfo) -> bool {
         .control_endpoint
         .as_deref()
         .is_some_and(|endpoint| {
-            instance.control_protocol == Some(proqi::ports::control::CONTROL_PROTOCOL_VERSION)
-                && Path::new(endpoint).exists()
+            proqi::ports::control::control_protocol_supports(
+                instance.control_protocol,
+                proqi::ports::control::UPDATE_MUTATION_MINIMUM_PROTOCOL,
+            ) && Path::new(endpoint).exists()
         })
 }
 

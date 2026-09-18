@@ -18,6 +18,8 @@ factory labels without requiring another presentation table.
 | Action | Eligible contexts | Safety | Commands |
 | --- | --- | --- | --- |
 | `thought.new` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | Ordinary | yes |
+| `thought.rename` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | Ordinary | yes |
+| `board.insert_separator` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | Ordinary | yes |
 | `session.rename` | `board`, `compose`, `edit`, `commands`, `invocation`, `browser`, `insertion_boundary` | Ordinary | yes |
 | `session.copy_id` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | Ordinary | yes |
 | `session.copy_resume` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | Ordinary | yes |

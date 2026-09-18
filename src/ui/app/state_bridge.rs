@@ -22,20 +22,6 @@ impl BoardApp {
         }
     }
 
-    pub(super) fn request_quit_after_edit_flush(
-        &mut self,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-    ) -> Vec<Effect> {
-        match self.flush_edit_boundary(ids, clock) {
-            EditFlush::Complete(effects) => {
-                self.request_quit();
-                effects
-            }
-            EditFlush::Blocked(effects) => effects,
-        }
-    }
-
     /// Apply one ordered persistence acknowledgement to the reducer state.
     pub fn acknowledge_persistence(
         &mut self,
@@ -56,11 +42,6 @@ impl BoardApp {
     ) -> Vec<Effect> {
         let succeeded = result.is_ok();
         let failure = result.as_ref().err().copied();
-        if !succeeded {
-            self.quit = false;
-        } else if self.pending_edit.is_some() {
-            self.edit_generation = self.edit_generation.wrapping_add(1);
-        }
         let action = if succeeded {
             Action::PersistenceCommitted(sequence)
         } else {
@@ -69,7 +50,16 @@ impl BoardApp {
                 code: result.err().unwrap_or(FailureCode::StorageFailed),
             }
         };
-        let _effects = self.reduce(action);
+        let may_change_attachments = Self::may_change_attachments(&action);
+        if reduce(&mut self.state, action).is_err() {
+            return Vec::new();
+        }
+        self.finish_successful_reduce(may_change_attachments);
+        if !succeeded {
+            self.quit = false;
+        } else if self.pending_edit.is_some() {
+            self.edit_generation = self.edit_generation.wrapping_add(1);
+        }
         if failure.is_some() {
             self.invalidate_palette();
             self.enter_storage_failure_state();
@@ -96,7 +86,7 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        let Some(thought_id) = self.state.focused_thought else {
+        let Some(thought_id) = self.state.focused_thought_id() else {
             return Vec::new();
         };
         if self.submission_locked(thought_id) {
@@ -114,7 +104,7 @@ impl BoardApp {
     pub(super) fn enter_edit(&mut self) {
         self.insertion_focus = InsertionFocus::Inactive;
         self.edit_boundary = None;
-        if let Some(thought_id) = self.state.focused_thought {
+        if let Some(thought_id) = self.state.focused_thought_id() {
             if self.submission_locked(thought_id) {
                 self.set_warning("thought has a submission in progress");
                 return;
@@ -138,15 +128,7 @@ impl BoardApp {
         let may_change_attachments = Self::may_change_attachments(&action);
         match reduce(&mut self.state, action) {
             Ok(effects) => {
-                self.finish_attachment_mutation(may_change_attachments);
-                let order = self
-                    .state
-                    .board
-                    .live_thoughts()
-                    .into_iter()
-                    .map(|thought| thought.id)
-                    .collect::<Vec<_>>();
-                self.selection.reconcile(&order);
+                self.finish_successful_reduce(may_change_attachments);
                 Some(effects)
             }
             Err(error) => {
@@ -160,16 +142,23 @@ impl BoardApp {
         }
     }
 
+    fn finish_successful_reduce(&mut self, may_change_attachments: bool) {
+        self.finish_attachment_mutation(may_change_attachments);
+        let order = self.live_item_ids();
+        self.selection.reconcile(&order);
+        self.reconcile_thought_rename();
+    }
+
     pub(super) fn reduce_with_empty_transition(
         &mut self,
         action: Action,
         transition: EmptyBoardTransition,
     ) -> Vec<Effect> {
-        let was_nonempty = !self.state.board.live_thoughts().is_empty();
+        let was_nonempty = !self.state.board.live_items().is_empty();
         let Some(effects) = self.try_reduce(action) else {
             return Vec::new();
         };
-        if was_nonempty && self.state.board.live_thoughts().is_empty() {
+        if was_nonempty && self.state.board.live_items().is_empty() {
             self.state.reconcile_empty_board(transition);
             if transition == EmptyBoardTransition::ComposeAfterLocalRemoval
                 && matches!(

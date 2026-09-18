@@ -2,7 +2,10 @@
 
 use crate::{
     application::{Action, reduce},
-    domain::{BoardOperationKind, ContentAnnotation, OperationId, SessionId, ThoughtId, UndoScope},
+    domain::{
+        BoardOperationKind, ContentAnnotation, OperationId, SessionId, ThoughtId, ThoughtName,
+        UndoScope,
+    },
     ports::{
         control::ControlMutation,
         environment::{Clock, IdGenerator},
@@ -12,6 +15,15 @@ use crate::{
 };
 
 use super::{SessionService, SessionServiceError, ThoughtMutation, match_replay};
+
+struct ThoughtCreation {
+    content: String,
+    annotations: Vec<ContentAnnotation>,
+    name: Option<ThoughtName>,
+    position: Option<usize>,
+    supplied_operation: Option<OperationId>,
+    preserve: bool,
+}
 
 impl<S, R, C, I> SessionService<'_, S, R, C, I>
 where
@@ -34,11 +46,14 @@ where
     ) -> Result<ThoughtMutation, SessionServiceError> {
         self.add_thought_with_annotations(
             session_id,
-            content,
-            Vec::new(),
-            position,
-            supplied_operation,
-            false,
+            ThoughtCreation {
+                content,
+                annotations: Vec::new(),
+                name: None,
+                position,
+                supplied_operation,
+                preserve: false,
+            },
         )
     }
 
@@ -52,50 +67,53 @@ where
         session_id: SessionId,
         content: String,
         annotations: Vec<ContentAnnotation>,
+        name: Option<ThoughtName>,
         position: Option<usize>,
         supplied_operation: Option<OperationId>,
     ) -> Result<ThoughtMutation, SessionServiceError> {
         self.add_thought_with_annotations(
             session_id,
-            content,
-            annotations,
-            position,
-            supplied_operation,
-            true,
+            ThoughtCreation {
+                content,
+                annotations,
+                name,
+                position,
+                supplied_operation,
+                preserve: true,
+            },
         )
     }
 
     fn add_thought_with_annotations(
         &mut self,
         session_id: SessionId,
-        content: String,
-        annotations: Vec<ContentAnnotation>,
-        position: Option<usize>,
-        supplied_operation: Option<OperationId>,
-        preserve: bool,
+        creation: ThoughtCreation,
     ) -> Result<ThoughtMutation, SessionServiceError> {
-        let operation_id = supplied_operation.unwrap_or_else(|| self.ids.operation_id());
-        let thought_id = if supplied_operation.is_some() {
+        let operation_id = creation
+            .supplied_operation
+            .unwrap_or_else(|| self.ids.operation_id());
+        let thought_id = if creation.supplied_operation.is_some() {
             ThoughtId::from_database_bytes(operation_id.database_bytes())
                 .map_err(|_| SessionServiceError::IdempotencyConflict)?
         } else {
             self.ids.thought_id()
         };
-        let replay = if preserve {
+        let replay = if creation.preserve {
             ControlMutation::PreserveAdd {
                 operation_id,
                 thought_id,
-                content: content.clone(),
-                annotations: annotations.clone(),
-                position,
+                content: creation.content.clone(),
+                annotations: creation.annotations.clone(),
+                name: creation.name.clone(),
+                position: creation.position,
             }
         } else {
             ControlMutation::Add {
                 operation_id,
                 thought_id,
-                content: content.clone(),
+                content: creation.content.clone(),
                 annotations: Vec::new(),
-                position,
+                position: creation.position,
             }
         };
         if let Some(existing) = self.store.operation_request(operation_id)? {
@@ -106,26 +124,69 @@ where
             return match_existing_thought(&existing, session_id, &replay);
         }
         let mut state = self.load_live_state(session_id)?;
-        let action = if preserve {
+        let action = if creation.preserve {
             Action::CreateOwnedThought(crate::application::OwnedThoughtCreation::preserved(
                 thought_id,
                 operation_id,
-                content,
-                annotations,
-                position,
+                creation.content,
+                creation.annotations,
+                creation.name,
+                creation.position,
                 self.clock.now(),
             ))
         } else {
             Action::CreateThought {
                 thought_id,
                 operation_id,
-                content,
-                annotations,
-                insertion_index: position,
+                content: creation.content,
+                annotations: creation.annotations,
+                insertion_index: creation.position,
                 at: self.clock.now(),
             }
         };
         let effects = reduce(&mut state, action)?;
+        let receipt = self.commit_sequenced_effects(effects)?;
+        Ok(ThoughtMutation {
+            thought_id,
+            receipt,
+        })
+    }
+
+    /// Set or clear one thought's optional organizational name.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed lease, reducer, idempotency, or persistence failure.
+    pub fn rename_thought(
+        &mut self,
+        session_id: SessionId,
+        thought_id: ThoughtId,
+        name: Option<ThoughtName>,
+        supplied_operation: Option<OperationId>,
+    ) -> Result<ThoughtMutation, SessionServiceError> {
+        let operation_id = supplied_operation.unwrap_or_else(|| self.ids.operation_id());
+        let replay = ControlMutation::RenameThought {
+            operation_id,
+            thought_id,
+            name: name.clone(),
+        };
+        if let Some(existing) = self.store.operation_request(operation_id)? {
+            return match_existing_thought(&existing, session_id, &replay);
+        }
+        let _lease = self.runtime.acquire_session(session_id)?;
+        if let Some(existing) = self.store.operation_request(operation_id)? {
+            return match_existing_thought(&existing, session_id, &replay);
+        }
+        let mut state = self.load_live_state(session_id)?;
+        let effects = reduce(
+            &mut state,
+            Action::RenameThought {
+                operation_id,
+                thought_id,
+                name,
+                at: self.clock.now(),
+            },
+        )?;
         let receipt = self.commit_sequenced_effects(effects)?;
         Ok(ThoughtMutation {
             thought_id,

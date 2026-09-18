@@ -1,4 +1,7 @@
 use crate::ui::input::RoutedInput as UiInput;
+#[path = "tests/names.rs"]
+mod names;
+
 use crate::{
     adapters::{
         editor::RopeEditorFactory,
@@ -7,7 +10,7 @@ use crate::{
     application::{AppState, Effect, FirstRunEnvironment, ThoughtMutation, first_run_board},
     domain::{
         BoardOperationKind, ContentAnnotation, OperationSequence, Session, SessionBoard, Thought,
-        ThoughtPosition, Timestamp,
+        ThoughtName, ThoughtPosition, Timestamp,
     },
     ports::{
         editor::CursorMovement,
@@ -38,6 +41,7 @@ fn transfer_preserves_annotations_and_removes_only_after_destination_receipt() {
     thought
         .set_annotations(vec![ContentAnnotation::shortcut(6, 11)])
         .expect("annotation");
+    thought.set_name(Some(ThoughtName::new("Delivery contract").expect("name")));
     let thought_id = thought.id;
     let board = SessionBoard::new(source, vec![thought.clone()]).expect("board");
     let mut app = BoardApp::new(AppState::new(board), RopeEditorFactory);
@@ -54,6 +58,7 @@ fn transfer_preserves_annotations_and_removes_only_after_destination_receipt() {
     };
     assert_eq!(request.content, thought.content);
     assert_eq!(request.annotations, thought.annotations);
+    assert_eq!(request.name, thought.name);
     assert_eq!(request.source_thought_id, thought_id);
     assert_thought_is_live(&app, thought_id);
     let failed = app.complete_session_transfer(
@@ -321,7 +326,7 @@ fn tutorial_shortcut_annotations_cross_the_session_transfer_boundary_exactly() {
         first_run_board(source, &mut ids, FirstRunEnvironment::Standalone).expect("practice board");
     let thought = board.board().live_thoughts()[1].clone();
     let mut app = BoardApp::new(AppState::new(board.board().clone()), RopeEditorFactory);
-    app.state.focused_thought = Some(thought.id);
+    app.state.focused_item = Some(thought.id.into());
 
     assert_eq!(
         app.begin_session_transfer(false, &mut ids, &clock),
@@ -371,7 +376,7 @@ fn stale_discovery_cannot_mutate_a_reopened_transfer_owner() {
     ));
     app.handle_transfer_input(&UiInput::Key(UiKey::Character('o')), &mut ids, &clock);
     app.handle_transfer_input(&UiInput::Key(UiKey::Escape), &mut ids, &clock);
-    app.state.focused_thought = Some(second_id);
+    app.state.focused_item = Some(second_id.into());
     assert!(matches!(
         app.begin_session_transfer(true, &mut ids, &clock)
             .as_slice(),

@@ -102,7 +102,7 @@ fn commit_barrier_replays_pointer_and_preserves_resize_and_focus_signals() {
     );
 
     app.complete_screenshot_capture(Ok(created(&capture)), &mut ids, &clock);
-    assert_ne!(app.state.focused_thought, capture_thought_id(&capture));
+    assert_ne!(app.state.focused_thought_id(), capture_thought_id(&capture));
     assert_eq!(
         app.state.mode,
         InteractionMode::Edit {
@@ -268,6 +268,35 @@ fn passive_motion_and_resize_do_not_consume_deliberate_replay_capacity() {
 }
 
 #[test]
+fn commit_barrier_keeps_passive_hover_current_without_queueing_input() {
+    let (mut app, mut ids, clock, thought_id) = app_with_thought();
+    let layout = app.prepare_frame(Rect::new(0, 0, 60, 12));
+    let text = layout.thoughts[0].text_area;
+    app.screenshot_started(std::time::Duration::ZERO);
+    app.queue_screenshot_candidates([candidate(69)]);
+    let capture = next_commit(&mut app, &mut ids, &clock);
+
+    let move_over_thought = UiInput::Pointer(PointerInput {
+        column: text.x,
+        row: text.y,
+        kind: PointerKind::Move,
+        extend_selection: false,
+    });
+    assert!(app.handle(move_over_thought, &mut ids, &clock).is_empty());
+    assert_eq!(app.hovered, Some(crate::ui::HitTarget::Thought(thought_id)));
+    assert!(app.screenshot.deferred_inputs.is_empty());
+
+    assert!(
+        app.handle(UiInput::HostFocusLost, &mut ids, &clock)
+            .is_empty()
+    );
+    assert_eq!(app.hovered, None);
+    assert!(app.screenshot.deferred_inputs.is_empty());
+
+    app.complete_screenshot_capture(Ok(created(&capture)), &mut ids, &clock);
+}
+
+#[test]
 fn deliberate_capacity_backpressures_the_runner_while_passive_input_proceeds() {
     let (mut app, mut ids, clock, thought_id) = app_with_thought();
     app.state.mode = InteractionMode::Edit { thought_id };
@@ -340,7 +369,7 @@ fn board_key_and_board_pastes_replay_without_capture_mode_stealing() {
             .any(|effect| matches!(effect, Effect::CheckAttachments(_)))
     );
     assert_eq!(app.state.mode, InteractionMode::Board);
-    assert_ne!(app.state.focused_thought, capture_thought_id(&capture));
+    assert_ne!(app.state.focused_thought_id(), capture_thought_id(&capture));
     assert_eq!(app.state.board.live_thoughts().len(), 3);
 
     for (byte, input, expected) in [
@@ -369,7 +398,7 @@ fn board_key_and_board_pastes_replay_without_capture_mode_stealing() {
                 .iter()
                 .any(|effect| matches!(effect, Effect::CheckAttachments(_)))
         );
-        assert_ne!(app.state.focused_thought, capture_thought_id(&capture));
+        assert_ne!(app.state.focused_thought_id(), capture_thought_id(&capture));
         assert!(matches!(app.state.mode, InteractionMode::Edit { .. }));
         assert_eq!(app.state.board.live_thoughts().len(), 3);
         assert!(

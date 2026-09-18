@@ -411,6 +411,8 @@ mod global_agent_delivery;
 mod global_agent_delivery_failures;
 #[path = "ui_board/global_delivery_snapshots.rs"]
 mod global_delivery_snapshots;
+#[path = "ui_board/hover.rs"]
+mod hover;
 #[path = "ui_board/insertion_navigation.rs"]
 mod insertion_navigation;
 #[path = "ui_board/kilo.rs"]
@@ -423,6 +425,8 @@ mod movement_symmetry;
 mod navigation;
 #[path = "ui_board/new_thought.rs"]
 mod new_thought;
+#[path = "ui_board/optional_thought_names.rs"]
+mod optional_thought_names;
 #[path = "ui_board/palette.rs"]
 mod palette;
 #[path = "ui_board/paste_reflow.rs"]
@@ -445,6 +449,10 @@ mod select_all;
 mod selection;
 #[path = "ui_board/sentence_deletion.rs"]
 mod sentence_deletion;
+#[path = "ui_board/separator_snapshots.rs"]
+mod separator_snapshots;
+#[path = "ui_board/separators.rs"]
+mod separators;
 #[path = "ui_board/session_navigation.rs"]
 mod session_navigation;
 #[path = "ui_board/shortcut_standardization.rs"]

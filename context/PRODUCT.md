@@ -5,7 +5,7 @@ Status: v0.1.0 product contract
 Product name: Proqi
 
 Command: `proqi`
-Last updated: 2026-09-12
+Last updated: 2026-09-17
 
 ## Vision
 
@@ -45,14 +45,14 @@ There is no save command. Content is saved automatically.
 
 ### Structure must earn its place
 
-A thought has content, position, timestamps, revision history, and session
-membership. It does not require a title, status, priority, category, or due
-date.
+A thought has content, position, timestamps, revision history, session
+membership, and an optional short name. It does not require a name, status,
+priority, category, or due date.
 
-Titles would force the user to describe a thought before using it. They add an
-interaction without helping the primary workflow. A collapsed thought uses its
-first visible lines as its preview. The data model may support optional titles
-later, but the default interface does not show or request them.
+Names are organizational metadata, never thought content. Creation remains
+immediate and never asks for a name. A user may name a focused thought later
+through one direct action. Unnamed thoughts keep the ordinary titleless layout
+without reserved chrome, while a name uses existing whitespace above the body.
 
 ### Order is spatial organization
 
@@ -131,7 +131,7 @@ owns one session. A session records:
 - Creation, most recent opening, and last activity timestamps.
 - Whether it is currently open.
 - Optional last-known terminal integration and verified adjacent-agent context.
-- Its thoughts and persistent operation history.
+- Its thoughts, visual separators, and persistent operation history.
 
 Directory metadata helps rank, recognize, and resume sessions. It does not make
 all instances in the same directory share one session. Terminal pane IDs are
@@ -142,12 +142,26 @@ diagnostic context only because they are not durable across terminal restarts.
 A thought is one independently editable body of plain text. It can contain one
 line, many paragraphs, code, logs, or arbitrary pasted context.
 
-A thought has no required title. Its content is the object.
+A thought has no required name. Its optional short name is separate
+organizational metadata. Copy and agent submission use the body and its
+annotations without adding the name.
+
+### Separator
+
+A separator is one durable, payload-free Board item. It has a stable identity
+and position, but no text, editor, title, color setting, or ownership of nearby
+thoughts. It is visual organization only. Moving or deleting it never moves or
+deletes an adjacent thought.
+
+The Commands action `Insert separator` creates one separator below the focused
+item. On an empty Board it creates the first item and leaves exact-empty Compose
+and durable blank Thought semantics unchanged. Consecutive separators remain
+distinct selectable items.
 
 ### Board
 
-The board is the vertically ordered set of thoughts in a session. It is the
-default screen and normally uses the entire terminal pane.
+The board is the vertically ordered set of thoughts and separators in a
+session. It is the default screen and normally uses the entire terminal pane.
 
 The reference layout is intentionally closer to a quiet editor than to a task
 manager:
@@ -174,9 +188,11 @@ manager:
  n new   y copy   x cut   space select   c collapse   s submit
 ```
 
-The green focus gutter is the strongest routine visual element. Notes have no
-heading row or decorative card chrome. Whole-thought controls can appear for
-the focused or hovered thought without permanently consuming a row.
+The green focus gutter is the strongest routine visual element. Unnamed notes
+have no heading row or decorative card chrome. An optional name appears in a
+restrained accent above the body and uses no body-selection space. Whole-thought
+controls can appear for the focused or hovered thought without permanently
+consuming a row.
 
 The board spends no permanent row on a repeated product header. The footer can
 allocate up to five responsive bands: transient status, session name, thought
@@ -652,23 +668,27 @@ offer stronger ownership.
 
 ### Multi-selection
 
-`Space` toggles the focused thought in a visible board selection. Selected
-thoughts retain their board positions and receive the same non-color focus cue
-as the active thought. Copy, cut, delete, duplicate, collapse, and adjacent-agent
-submission address the selected set in board order. Each structural action is
-one persistent board operation and therefore one undo step. Reordering remains
-a single-thought action.
+`Space` toggles the focused Board item in a visible selection. Selected items
+retain their board positions and receive the same non-color focus cue as the
+active item. Delete and duplicate address thoughts and separators in Board
+order. Copy, cut, collapse, transformations, and agent submission operate only
+on eligible thoughts. Separators are omitted from copied and submitted text and
+remain in place when accepted submission removes thoughts. A separator-only
+copy, cut, or submission is a visible no-op that neither overwrites the
+clipboard nor sends an empty delivery. Each structural action is one persistent
+Board operation and therefore one undo step. Reordering remains a single-item
+action.
 
-The configurable `a` board command selects every live thought in board order.
+The configurable `a` board command selects every live item in board order.
 Forwarded `Primary+A` has the same board meaning. Repeating either spelling is
 idempotent, and `Escape` clears the complete board selection. In edit mode,
 `Primary+A` continues to select only the current thought's text.
 
 `Shift+Up` and `Shift+Down`, or equivalently `K` and `J`, start or update one
-contiguous selection from a stable thought anchor to the focused endpoint.
+contiguous selection from a stable item anchor to the focused endpoint.
 Reversing direction shrinks the range and then extends it past the anchor
 without changing that anchor. Range movement stops at the first and last live
-thoughts, never wraps, and never includes the insertion row. Starting a range
+items, never wraps, and never includes the insertion row. Starting a range
 replaces any arbitrary `Space` selection. Pressing `Space` explicitly returns
 to discontiguous toggle behavior; the two selection models are never merged
 implicitly.
@@ -679,10 +699,11 @@ thought bindings extend or shrink the range, and clicking a thought extends to
 it. `Escape` clears the range and latch. Opening a modal releases the latch,
 and entering thought edit mode clears every board selection.
 
-`Primary+D` or the terminal-safe Board alias `Shift+D` duplicates the focused thought
-or complete selection. Exact content, annotations, and presentation preferences
-are copied in board order directly below the source range. Duplicates receive
-fresh identities and timestamps,
+`Primary+D` or the terminal-safe Board alias `Shift+D` duplicates the focused item
+or complete selection. Thought content, annotations, and presentation
+preferences are copied exactly, while separators remain payload-free. Copies
+are inserted in Board order directly below the source range. Duplicates receive
+fresh typed identities and timestamps,
 become the new selection, and are created as one persistent undo step. Entering
 edit mode or pressing `Escape` clears the complete board selection.
 
@@ -700,7 +721,7 @@ the matching durable receipt. Every source thought is locked
 against TUI and CLI mutation from submission intent until the attempt reaches a
 terminal journaled state.
 
-The command palette also exposes `Select all thoughts`, `Submit all`, and
+The command palette also exposes `Select all items`, `Submit all`, and
 `Submit all and keep`. The two submit-all actions address the complete live
 board directly, without changing the visible selection or requiring a
 confirmation. `Submit all` removes unchanged sources only after matching
@@ -914,7 +935,7 @@ bindings are:
 | Delete thought | `d` or `Del` (`Entf` on German keyboards) | Click delete control |
 | Duplicate thought or selection | `Primary+D` or `Shift+D` | Command palette |
 | Select or deselect thought | `Space` | Click the thought, then use the selection control |
-| Select all thoughts | `a` or `Primary+A` | Command palette |
+| Select all items | `a` or `Primary+A` | Command palette |
 | Select contiguous range | `Shift+↑` / `Shift+↓`, `K` / `J`, or `v` then arrows or `j` / `k` | Shift-click a thought, or use `v` then click it |
 | Focus first or last live thought | `Ctrl+↑` / `↓` or `Ctrl+k` / `j`; the range latch extends to that boundary | Choose `Go to first thought` or `Go to last thought` in Commands |
 | Extend range to a Board boundary | macOS `Ctrl+Shift+↑` / `↓` or `Ctrl+Shift+K` / `J` | Use the range latch and choose the boundary thought elsewhere |
@@ -1327,7 +1348,9 @@ If accepted work has reached a persistence failure, exact replacement is not
 safe. Proqi automatically runs the existing private recovery export through its
 owned external lane, drains that export, and exits without `exec`. The terminal
 failure names both the exact durable-session resume command and the recovery
-file that contains the optimistic board state. A retained failed write remains
+file that contains the optimistic board state. Recovery format 2 contains both
+thoughts and payload-free separators with their exact identities, shared order,
+timestamps, and recoverable deletion state. A retained failed write remains
 eligible for the ordinary retry path before any later independent stall. If the
 primary recovery directory is unavailable, the same exporter makes one bounded
 attempt under the already-private runtime root.
@@ -1663,7 +1686,7 @@ silently altered.
 
 The product remains usable in terminals without true color. The fallback uses
 default foreground and background, one supported green accent, bold, dim, and
-reverse video sparingly.
+reverse video sparingly. Pointer hover never changes the content's type style.
 
 ## Accessibility and input correctness
 

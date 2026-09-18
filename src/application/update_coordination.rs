@@ -18,6 +18,7 @@ pub use external::{
 use crate::{
     domain::{InstallationIdentity, InstanceId, RequestId, SessionId, StableVersion, Timestamp},
     ports::{
+        control::{UPDATE_MUTATION_MINIMUM_PROTOCOL, control_protocol_supports},
         environment::Clock,
         runtime::InstanceInfo,
         store::STORAGE_PROTOCOL_VERSION,
@@ -48,7 +49,10 @@ pub(crate) fn is_compatible_update_participant(
     installation: InstallationIdentity,
 ) -> bool {
     participant.storage_protocol == STORAGE_PROTOCOL_VERSION
-        && participant.control_protocol == Some(crate::ports::control::CONTROL_PROTOCOL_VERSION)
+        && control_protocol_supports(
+            participant.control_protocol,
+            UPDATE_MUTATION_MINIMUM_PROTOCOL,
+        )
         && participant.control_endpoint.is_some()
         && participant.update.as_ref().is_some_and(|context| {
             context.installation_identity == installation

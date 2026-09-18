@@ -52,6 +52,7 @@ impl Action {
         match self {
             Self::RenameSession { .. } => UndoContract::DurableBrowser,
             Self::CreateThought { .. }
+            | Self::InsertSeparator { .. }
             | Self::CreateOwnedThought(_)
             | Self::PasteAsThought { .. }
             | Self::ReflowThought(_)
@@ -60,11 +61,15 @@ impl Action {
             | Self::MergeThoughts { .. }
             | Self::DeleteThought { .. }
             | Self::DeleteThoughts { .. }
+            | Self::DeleteItems { .. }
             | Self::StageSubmissionRemoval { .. }
             | Self::MoveThought { .. }
+            | Self::RenameThought { .. }
+            | Self::MoveItem { .. }
             | Self::SetPresentation { .. }
             | Self::SetPresentationMany { .. }
-            | Self::DuplicateThoughts { .. } => UndoContract::DurableBoard,
+            | Self::DuplicateThoughts { .. }
+            | Self::DuplicateItems { .. } => UndoContract::DurableBoard,
             Self::CreateComposeThought { .. } => UndoContract::ComposeHandoff,
             Self::EditThought { .. } | Self::EditOwnedThought(_) => UndoContract::DurableEditor,
             Self::Undo { .. } | Self::Redo { .. } => UndoContract::ContextualDurableMove,
@@ -72,6 +77,7 @@ impl Action {
             Self::ClipboardResult { .. } => UndoContract::BoardAfterExternalCompletion,
             Self::CopyThoughts { .. } => UndoContract::IrreversibleExternal,
             Self::FocusThought(_)
+            | Self::FocusItem(_)
             | Self::EnterEdit(_)
             | Self::EnterCompose
             | Self::ExitCompose

@@ -15,8 +15,12 @@ mod diagnostics;
 mod doctor;
 #[path = "support/herdr.rs"]
 mod herdr_fixture;
+#[path = "cli_workflow/separators.rs"]
+mod separators;
 #[path = "cli_workflow/session_contract.rs"]
 mod session_contract;
+#[path = "cli_workflow/thought_names.rs"]
+mod thought_names;
 
 fn run(root: &Path, arguments: &[&str], input: Option<&str>) -> Output {
     let mut command = Command::new(env!("CARGO_BIN_EXE_proqi"));
@@ -152,6 +156,8 @@ fn thought_mutations_round_trip_unicode_and_idempotency_across_processes() {
 
     let inspected = success(root, &["thoughts", "inspect", &session, &thought], None);
     assert_eq!(inspected["thought"]["content"], body);
+    assert!(inspected["thought"]["name"].is_null());
+
     let second = success(root, &["thoughts", "add", &session], Some("second"));
     let second_id = second["thought_id"].as_str().expect("second thought");
     let moved = success(
@@ -310,6 +316,7 @@ fn thoughts_copy_between_named_sessions_and_remove_only_after_delivery() {
     rename(root, &destination, "destination");
     let added = success(root, &["thoughts", "add", "source"], Some("exact\n内容"));
     let thought = added["thought_id"].as_str().expect("thought ID");
+    set_thought_name(root, thought, "Transfer label");
     let operation = operation_id();
     let copied = success(
         root,
@@ -335,6 +342,7 @@ fn thoughts_copy_between_named_sessions_and_remove_only_after_delivery() {
         None,
     );
     assert_eq!(inspected["thought"]["content"], "exact\n内容");
+    assert_eq!(inspected["thought"]["name"], "Transfer label");
     let replay = success(
         root,
         &[
@@ -380,6 +388,10 @@ fn thoughts_copy_between_named_sessions_and_remove_only_after_delivery() {
     );
 }
 
+fn set_thought_name(root: &Path, thought: &str, name: &str) {
+    success(root, &["thoughts", "rename", "source", thought, name], None);
+}
+
 fn send_and_remove(
     root: &Path,
     thought: &str,
@@ -419,12 +431,13 @@ fn launch_modes_and_capability_discovery_have_stable_output() {
     let capabilities = success(root, &["capabilities"], None);
     assert_eq!(capabilities["cli_schema_version"], 1);
     assert_eq!(capabilities["active_session_control"], cfg!(unix));
-    assert_eq!(capabilities["control_protocol"], 9);
+    assert_eq!(capabilities["control_protocol"], 10);
     assert_eq!(capabilities["active_session_read_sync"], true);
     assert_eq!(capabilities["cross_session_transfer"], true);
     assert_eq!(capabilities["exact_thought_replacement"], true);
     assert_eq!(capabilities["replacement_sha256_precondition"], true);
     assert_eq!(capabilities["durable_thought_collapse"], true);
+    assert_eq!(capabilities["durable_visual_separators"], true);
     assert_eq!(capabilities["durable_browser_history"], true);
     assert_eq!(capabilities["max_thought_stdin_bytes"], 131_072);
     assert_eq!(capabilities["herdr_submission"], true);

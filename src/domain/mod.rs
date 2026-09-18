@@ -2,12 +2,14 @@
 
 mod annotation;
 mod attachment_numbering;
+mod board_item;
 mod browser_history;
 mod identifiers;
 mod model;
 mod operations;
 mod release_highlights;
 mod text;
+mod thought_name;
 mod update;
 
 pub use annotation::{
@@ -18,9 +20,10 @@ pub use annotation::{
 pub use attachment_numbering::{
     AttachmentCounters, AttachmentOrdinal, renew_attachment_occurrences,
 };
+pub use board_item::{BoardItemId, BoardItemRef, Separator};
 pub use browser_history::{BrowserMutation, BrowserOperation, BrowserOperationKind};
 pub use identifiers::{
-    InstanceId, OperationId, RequestId, RevisionId, SessionId, SubmissionId, ThoughtId,
+    InstanceId, OperationId, RequestId, RevisionId, SeparatorId, SessionId, SubmissionId, ThoughtId,
 };
 pub use model::{
     Direction, DomainError, IntegrationContext, OperationSequence, Session, Thought,
@@ -35,6 +38,7 @@ pub use release_highlights::{
     ReleaseHighlightGroup, ReleaseHighlightsError, ReleaseHighlightsManifest,
 };
 pub use text::TextPosition;
+pub use thought_name::{THOUGHT_NAME_MAX_CHARS, ThoughtName};
 pub use update::{
     EXTERNAL_RESTART_MAX_EXPECTATIONS, ExternalRestartExpectation, ExternalRestartPending,
     Installation, InstallationIdentity, InstallationKind, InstalledVersionRelation, StableVersion,

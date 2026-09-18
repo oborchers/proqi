@@ -46,7 +46,7 @@ pub fn prepare_capture(
         },
     };
     let sequence = state.next_sequence()?;
-    let insertion_index = state.board.live_thoughts().len();
+    let insertion_index = state.board.live_items().len();
     let position = u32::try_from(insertion_index)
         .map(ThoughtPosition::new)
         .map_err(|_| ApplicationError::InvalidState)?;
@@ -118,7 +118,7 @@ pub fn apply_capture(
         return Err(ApplicationError::InvalidState);
     }
     state.apply_durable_capture(operation)?;
-    state.insertion_index = state.board.live_thoughts().len();
+    state.insertion_index = state.board.live_items().len();
     Ok(Some(thought_id))
 }
 

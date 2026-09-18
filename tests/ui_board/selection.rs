@@ -146,7 +146,11 @@ fn shifted_arrows_shrink_and_reverse_around_a_stable_anchor() {
     range_move(&mut fixture, CursorMovement::VisualUp);
     assert_eq!(selected_contents(&fixture), ["third", "fourth"]);
 
-    let focused = fixture.app.state.focused_thought.expect("range endpoint");
+    let focused = fixture
+        .app
+        .state
+        .focused_thought_id()
+        .expect("range endpoint");
     assert_eq!(
         fixture
             .app
@@ -310,7 +314,11 @@ fn search_focus_transition_clears_an_anchored_range() {
     fixture.input(crate::key_input(UiKey::Enter));
 
     assert!(selected_contents(&fixture).is_empty());
-    let focused = fixture.app.state.focused_thought.expect("search focus");
+    let focused = fixture
+        .app
+        .state
+        .focused_thought_id()
+        .expect("search focus");
     assert_eq!(
         fixture
             .app
@@ -382,6 +390,25 @@ fn entering_edit_mode_clears_selection_and_hover_cannot_replace_it() {
         proqi::application::InteractionMode::Edit { .. }
     ));
     assert!(!fixture.app.thought_selected(layout.thoughts[0].thought_id));
+}
+
+#[test]
+fn nonempty_board_selection_still_allows_discrete_control_hover() {
+    let mut fixture = Fixture::new();
+    fixture.paste("selected");
+    fixture.input(crate::key_input(UiKey::Escape));
+    fixture.input(crate::key_input(UiKey::Character(' ')));
+    let layout = fixture.app.prepare_frame(Rect::new(0, 0, 50, 12));
+    let commands = layout
+        .controls
+        .iter()
+        .find_map(|(target, area)| (*target == HitTarget::Commands).then_some(*area))
+        .expect("Commands control");
+
+    fixture.pointer(commands.x, commands.y, PointerKind::Move);
+
+    assert_eq!(fixture.app.hovered(), Some(HitTarget::Commands));
+    assert!(fixture.app.thought_selected(layout.thoughts[0].thought_id));
 }
 
 #[test]

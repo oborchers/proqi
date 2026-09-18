@@ -31,7 +31,7 @@ last item dispatches a stroke.
 
 | Context | Current owner | Text reservation |
 | --- | --- | --- |
-| Board | Whole-thought board | Plain printable characters may be commands |
+| Board | Ordered Board items | Plain printable characters may be commands |
 | Compose | Transient thought editor | All ordinary and shifted printable text |
 | Edit | Durable thought editor | All ordinary and shifted printable text |
 | Help | Contextual Help overlay | None, modal navigation wins |
@@ -44,14 +44,14 @@ last item dispatches a stroke.
 | GlobalDeliveryDisposition | Global-delivery completion choice | None, modal navigation wins |
 | Browser | Empty session-browser query | All query text; F2/F8 management while empty |
 | BrowserQuery | Nonempty session-browser query | Query text |
-| Rename | Board session-name editor | Name text |
+| Rename | Board session-name or focused thought-name editor | Name text |
 | BrowserRename | Session Browser name editor | Name text |
 | Update | Update choice | None, modal navigation wins |
 | Screenshot | Screenshot takeover and quit choice | None, modal navigation wins |
 | Recovery | Failed-durability recovery | None, recovery routes remain reachable |
 | Direction | Adjacent-agent direction chooser | None, four-way navigation wins |
 | ReleaseHighlights | Scrollable release highlights | None, modal navigation wins |
-| InsertionBoundary | Board insertion row | Board commands, with thought-only range and reorder no-ops |
+| InsertionBoundary | Board insertion row | Board commands, with item-only range and reorder no-ops |
 
 Every context whose table row reserves editor, query, or name text rejects a
 plain, shifted, Option/Alt, or Control+Alt (AltGr-compatible) printable binding.
@@ -81,7 +81,7 @@ Every semantic action has one stable `ShortcutActionId`. Its descriptor owns:
 - one content-free diagnostics identity;
 - the mapping into an established typed UI intention or application action.
 
-The closed action inventory covers all 57 current Commands actions plus direct
+The closed action inventory covers all 59 current Commands actions plus direct
 close, confirm, text editing, navigation, selection, clipboard, history,
 submission, Board, Browser management, recovery, and direction actions. The
 source of truth is `ShortcutActionId::COMMANDS` plus the registry's
@@ -104,6 +104,7 @@ schema_version = 1
 ]
 "submission.submit_keep" = []
 "thought.delete" = [{ key = "Delete" }, { key = "d" }]
+"thought.rename" = [{ key = "r", modifiers = ["Control"] }]
 
 [keymap.macos.edit]
 "submission.submit_remove" = [{ key = "Enter", modifiers = ["Super", "Alt"] }]
@@ -165,6 +166,10 @@ Legacy Delete remapping still changes only its character spelling. In version
 1, physical Delete is an ordinary configurable alias and may be removed.
 Browser R/D are the explicit text-safety migration for all configurations.
 No user configuration file is rewritten automatically.
+
+The factory `thought.rename` chord is exact raw Control plus R in Board and Edit
+on every platform. Raw Control is deliberately not Primary on macOS. The action
+also remains discoverable in Commands when the focused thought is eligible.
 
 ## Validation and recovery
 

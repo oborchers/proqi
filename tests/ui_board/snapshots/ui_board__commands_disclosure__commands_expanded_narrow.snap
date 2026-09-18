@@ -1,6 +1,6 @@
 ---
 source: tests/ui_board/commands_disclosure.rs
-assertion_line: 264
+assertion_line: 282
 expression: "text(draw(&mut concise, 34, 12).backend().buffer())"
 ---
 ┌ commands ────────────────────[x]
@@ -9,9 +9,9 @@ expression: "text(draw(&mut concise, 34, 12).backend().buffer())"
 │New thought            n · board│
 │Insert thought above  F5 · board│
 │Insert thought below  F6 · board│
+│Insert separator           board│
 │Edit thought           e · board│
-│Delete thought         d · board│
-│Copy thought           y · board│
-│Cut thought            x · board│
-│Duplicate thought or selection  ↓
+│Rename thought    Ctrl+R · board│
+│Delete item or selection       d│
+│Copy thought text      y · board↓
 └────────────────────────────────┘

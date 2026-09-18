@@ -8,7 +8,10 @@ use proqi::{
         recovery::FileRecoveryExporter,
     },
     application::{Action, AppState, Effect, FailureCode, capture_recovery, reduce},
-    domain::{OperationSequence, Session, SessionBoard, Thought, ThoughtPosition, Timestamp},
+    domain::{
+        BoardItemId, BoardOperationKind, OperationSequence, Separator, Session, SessionBoard,
+        Thought, ThoughtPosition, Timestamp,
+    },
     ports::{
         environment::{Clock, IdGenerator},
         recovery::{RecoveryDocument, RecoveryExporter},
@@ -36,7 +39,9 @@ fn state() -> (AppState, FakeIdGenerator, FakeClock) {
         ThoughtPosition::new(0),
         now,
     );
-    let board = SessionBoard::new(session, vec![thought]).expect("board");
+    let separator = Separator::new(ids.separator_id(), session.id, ThoughtPosition::new(1), now);
+    let board =
+        SessionBoard::with_separators(session, vec![thought], vec![separator]).expect("board");
     (
         AppState::new(board),
         ids,
@@ -68,7 +73,9 @@ fn recovery_export_is_atomic_private_and_lossless() {
     let decoded: RecoveryDocument =
         serde_json::from_slice(&fs::read(&path).expect("read export")).expect("decode export");
     assert_eq!(decoded, document);
+    assert_eq!(decoded.format_version, 2);
     assert_eq!(decoded.thoughts[0].content, " exact\r\nGrüße 界 ");
+    assert_eq!(decoded.separators.len(), 1);
     assert!(exporter.export(request_id, &document).is_err());
 
     #[cfg(unix)]
@@ -87,6 +94,67 @@ fn recovery_export_is_atomic_private_and_lossless() {
             0o600
         );
     }
+}
+
+#[test]
+fn recovery_preserves_inserted_moved_and_deleted_separator_identity_and_order() {
+    let (mut state, mut ids, clock) = state();
+    let retained = state.board.separators()[0].id;
+    let deleted = ids.separator_id();
+    reduce(
+        &mut state,
+        Action::InsertSeparator {
+            separator_id: deleted,
+            operation_id: ids.operation_id(),
+            insertion_index: 0,
+            at: clock.now(),
+        },
+    )
+    .expect("insert separator");
+    reduce(
+        &mut state,
+        Action::MoveItem {
+            operation_id: ids.operation_id(),
+            item_id: BoardItemId::Separator(retained),
+            to: 0,
+            at: clock.now(),
+        },
+    )
+    .expect("move separator");
+    reduce(
+        &mut state,
+        Action::DeleteItems {
+            operation_id: ids.operation_id(),
+            item_ids: vec![BoardItemId::Separator(deleted)],
+            kind: BoardOperationKind::Delete,
+            at: clock.now(),
+        },
+    )
+    .expect("delete separator");
+
+    let document = capture_recovery(&state, clock.now());
+    let recovered = SessionBoard::with_separators(
+        document.session.clone(),
+        document.thoughts.clone(),
+        document.separators.clone(),
+    )
+    .expect("recovered board");
+    assert_eq!(
+        recovered
+            .live_items()
+            .into_iter()
+            .map(proqi::domain::BoardItemRef::id)
+            .collect::<Vec<_>>(),
+        vec![
+            BoardItemId::Separator(retained),
+            BoardItemId::Thought(recovered.thoughts()[0].id)
+        ]
+    );
+    assert!(
+        recovered
+            .separator(deleted)
+            .is_some_and(|separator| separator.deleted_at.is_some())
+    );
 }
 
 #[cfg(unix)]

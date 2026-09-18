@@ -1,12 +1,15 @@
 //! Deterministic one-column board renderer.
 
+mod board_metadata;
 mod chrome;
+mod content;
 mod global_delivery;
 mod overlay_composition;
 mod overlays;
 mod release_highlights;
+mod separator;
 
-use linkify::{LinkFinder, LinkKind};
+use crate::{application::InteractionMode, ports::text_layout::wrap_rows};
 use ratatui_core::{
     layout::Alignment,
     style::{Modifier, Style},
@@ -14,14 +17,12 @@ use ratatui_core::{
     text::{Line, Span, Text},
 };
 use ratatui_widgets::{block::Block, clear::Clear, paragraph::Paragraph};
-use unicode_segmentation::UnicodeSegmentation;
-
-use crate::{application::InteractionMode, ports::text_layout::wrap_rows};
 
 use super::{
     BoardApp, HitTarget, LayoutSnapshot, Theme, ThoughtLayout, app::InvocationChoiceView,
     layout::OverlayLayout,
 };
+use content::{styled_line, url_ranges};
 
 /// Render the complete board into one terminal frame.
 pub fn render(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, theme: &Theme) {
@@ -77,6 +78,7 @@ pub(super) fn render_plain_picker(
             selection: app.overlay_query_selection(),
             entries: &rows,
             selected,
+            hovered: app.hovered(),
         },
         app.picker_overflow(overlay.items.len()),
         theme,
@@ -115,6 +117,7 @@ pub(super) fn render_command_picker(
             selection: app.overlay_query_selection(),
             entries: &rows,
             selected: picker.selected,
+            hovered: app.hovered(),
         },
         app.picker_overflow(overlay.items.len()),
         theme,
@@ -163,6 +166,7 @@ pub(super) fn render_invocation_picker(
             selection: app.overlay_query_selection(),
             entries: &rows,
             selected,
+            hovered: app.hovered(),
         },
         app.picker_overflow(overlay.items.len()),
         theme,
@@ -175,56 +179,32 @@ fn render_board(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, 
     }
     let presentation = app.presentation_for_layout(layout);
     let editor = presentation.editor();
-    for thought_layout in &layout.thoughts {
-        let Some(thought) = presentation.thought(thought_layout.thought_id) else {
-            continue;
-        };
-        let focused = app.active_thought_id() == Some(thought_layout.thought_id);
-        let selected = app.thought_selected(thought_layout.thought_id);
-        let hovered = matches!(
-            app.hovered(),
-            Some(HitTarget::Thought(id) | HitTarget::DragHandle(id) | HitTarget::Overflow(id))
-                if id == thought_layout.thought_id
-        );
-        render_separator(
-            frame,
-            thought_layout,
-            app.drag_target() == Some(thought_layout.index),
-            theme,
-        );
-        if focused || hovered || selected {
-            frame.render_widget(
-                Block::default().style(theme.focused_style()),
-                thought_layout.area,
-            );
-        }
-        render_gutter(
-            frame,
-            thought_layout,
-            focused,
-            hovered,
-            app.dragged_thought() == Some(thought_layout.thought_id),
-            theme,
-        );
-        if matches!(app.interaction_mode(), InteractionMode::Edit { thought_id } if thought_id == thought_layout.thought_id)
-        {
-            render_editor(frame, app, editor, thought_layout.text_area, theme);
-        } else {
-            render_thought(
-                frame,
-                app,
-                &thought.presentation,
-                thought_layout,
-                focused || selected,
-                theme,
-            );
-        }
+    render_thought_items(frame, app, layout, &presentation, editor, theme);
+    for separator in &layout.separators {
+        separator::render(frame, app, separator, theme);
     }
     if let Some(compose) = &layout.compose {
         frame.render_widget(Block::default().style(theme.focused_style()), compose.area);
         render_compose_gutter(frame, compose, theme);
-        render_editor(frame, app, editor, compose.text_area, theme);
+        render_editor(frame, app, editor, compose.text_area, None, theme);
     }
+    render_insert(frame, app, layout, theme);
+}
+
+fn render_thought_items(
+    frame: &mut Frame<'_>,
+    app: &BoardApp,
+    layout: &LayoutSnapshot,
+    presentation: &crate::ui::projection::FramePresentation,
+    editor: Option<&crate::ui::projection::EditorPresentation>,
+    theme: &Theme,
+) {
+    for thought_layout in &layout.thoughts {
+        render_board_thought(frame, app, presentation, editor, thought_layout, theme);
+    }
+}
+
+fn render_insert(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, theme: &Theme) {
     if let Some(insert) = layout.insert {
         let hovered = app.hovered() == Some(HitTarget::Insert);
         let prompt = app.compose_prompt_visible();
@@ -238,7 +218,9 @@ fn render_board(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, 
                 Style::default().fg(theme.foreground),
             ),
         ]);
-        let style = if !prompt && (hovered || app.insertion_focused()) {
+        let style = if !prompt && hovered {
+            theme.control_hovered_style()
+        } else if !prompt && app.insertion_focused() {
             theme.focused_style()
         } else {
             theme.base_style()
@@ -250,6 +232,77 @@ fn render_board(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot, 
             insert,
         );
     }
+}
+
+fn render_board_thought(
+    frame: &mut Frame<'_>,
+    app: &BoardApp,
+    presentation: &crate::ui::projection::FramePresentation,
+    editor: Option<&crate::ui::projection::EditorPresentation>,
+    layout: &ThoughtLayout,
+    theme: &Theme,
+) {
+    let Some(thought) = presentation.thought(layout.thought_id) else {
+        return;
+    };
+    let focused = app.active_thought_id() == Some(layout.thought_id);
+    let selected = app.thought_selected(layout.thought_id);
+    let hovered = matches!(app.hovered(), Some(HitTarget::Thought(id)) if id == layout.thought_id);
+    let hovered_fold = match app.hovered() {
+        Some(HitTarget::Fold(id, index)) if id == layout.thought_id => Some(index),
+        _ => None,
+    };
+    let gutter_hovered =
+        matches!(app.hovered(), Some(HitTarget::DragHandle(id)) if id == layout.thought_id);
+    let overflow_hovered =
+        matches!(app.hovered(), Some(HitTarget::Overflow(id)) if id == layout.thought_id);
+    separator::render_automatic(
+        frame,
+        layout,
+        app.drag_target() == Some(layout.index),
+        theme,
+    );
+    let surface_style = match (focused || selected, hovered) {
+        (_, true) => Some(theme.content_hovered_style()),
+        (true, false) => Some(theme.focused_style()),
+        (false, false) => None,
+    };
+    if let Some(style) = surface_style {
+        frame.render_widget(Block::default().style(style), layout.body_area);
+    }
+    render_gutter(
+        frame,
+        layout,
+        focused,
+        gutter_hovered,
+        app.dragged_item() == Some(crate::domain::BoardItemId::Thought(layout.thought_id)),
+        theme,
+    );
+    if matches!(app.interaction_mode(), InteractionMode::Edit { thought_id } if thought_id == layout.thought_id)
+    {
+        render_editor(frame, app, editor, layout.text_area, hovered_fold, theme);
+    } else {
+        render_thought(
+            frame,
+            app,
+            &thought.presentation,
+            layout,
+            ThoughtEmphasis {
+                surface: focused || selected,
+                overflow_hovered,
+                hovered_fold,
+            },
+            theme,
+        );
+    }
+    board_metadata::render_thought_name(frame, app, thought, layout, theme);
+}
+
+#[derive(Clone, Copy)]
+struct ThoughtEmphasis {
+    surface: bool,
+    overflow_hovered: bool,
+    hovered_fold: Option<usize>,
 }
 
 fn render_compose_gutter(
@@ -271,27 +324,6 @@ fn render_compose_gutter(
     );
 }
 
-fn render_separator(
-    frame: &mut Frame<'_>,
-    layout: &ThoughtLayout,
-    drag_target: bool,
-    theme: &Theme,
-) {
-    let Some(area) = layout.separator_before else {
-        return;
-    };
-    frame.render_widget(
-        Paragraph::new("─".repeat(usize::from(area.width))).style(Style::default().fg(
-            if drag_target {
-                theme.accent
-            } else {
-                theme.divider
-            },
-        )),
-        area,
-    );
-}
-
 fn render_gutter(
     frame: &mut Frame<'_>,
     layout: &ThoughtLayout,
@@ -302,21 +334,35 @@ fn render_gutter(
 ) {
     let symbol = if focused || hovered { "⋮" } else { " " };
     let padding = usize::from(layout.gutter.height.saturating_sub(1) / 2);
-    let content = format!("{}{symbol}", "\n".repeat(padding));
-    let style = if focused {
+    let surface_style = if focused && dragging {
         Style::default()
             .fg(theme.on_accent)
             .bg(theme.accent_surface)
-            .remove_modifier(Modifier::REVERSED)
-            .add_modifier(if dragging {
-                Modifier::DIM
-            } else {
-                Modifier::BOLD
-            })
+            .remove_modifier(Modifier::REVERSED | Modifier::ITALIC)
+            .add_modifier(Modifier::DIM)
+    } else if focused && hovered {
+        theme
+            .control_hovered_style()
+            .fg(theme.accent)
+            .remove_modifier(Modifier::REVERSED | Modifier::ITALIC)
+    } else if focused {
+        Style::default()
+            .fg(theme.on_accent)
+            .bg(theme.accent_surface)
+            .remove_modifier(Modifier::REVERSED | Modifier::ITALIC)
+            .add_modifier(Modifier::BOLD)
+    } else if hovered {
+        theme.control_hovered_style().fg(theme.accent)
     } else {
-        Style::default().fg(theme.accent)
+        Style::default()
+            .fg(theme.accent)
+            .remove_modifier(Modifier::BOLD | Modifier::ITALIC)
     };
-    frame.render_widget(Paragraph::new(content).style(style), layout.gutter);
+    frame.render_widget(Block::default().style(surface_style), layout.gutter);
+    frame.render_widget(
+        Paragraph::new(Span::styled(symbol, surface_style)),
+        crate::ui::geometry::row(layout.gutter, u16::try_from(padding).unwrap_or(u16::MAX)),
+    );
 }
 
 fn render_thought(
@@ -324,7 +370,7 @@ fn render_thought(
     app: &BoardApp,
     presentation: &crate::ui::annotations::Presentation,
     layout: &ThoughtLayout,
-    focused: bool,
+    emphasis: ThoughtEmphasis,
     theme: &Theme,
 ) {
     let links = url_ranges(&presentation.content);
@@ -345,12 +391,16 @@ fn render_thought(
             &presentation.styles,
             &links,
             &invocations,
+            presentation
+                .substitutions
+                .iter()
+                .find(|fold| fold.annotation_index == emphasis.hovered_fold.unwrap_or(usize::MAX)),
             theme,
         )
     })
     .collect::<Vec<_>>();
     let mut paragraph = Paragraph::new(Text::from(rendered_lines));
-    if focused {
+    if emphasis.surface {
         paragraph = paragraph.style(Style::default().fg(theme.foreground));
     } else if layout.hidden_rows > 0 {
         paragraph = paragraph.style(Style::default().fg(theme.muted));
@@ -360,9 +410,13 @@ fn render_thought(
         frame.render_widget(Clear, overflow);
         frame.render_widget(
             Paragraph::new(format!("{} more lines  expand", layout.hidden_rows)).style(
-                Style::default()
-                    .fg(theme.accent)
-                    .add_modifier(Modifier::DIM),
+                if emphasis.overflow_hovered {
+                    theme.control_hovered_style().fg(theme.accent)
+                } else {
+                    Style::default()
+                        .fg(theme.accent)
+                        .add_modifier(Modifier::DIM)
+                },
             ),
             overflow,
         );
@@ -374,6 +428,7 @@ fn render_editor(
     app: &BoardApp,
     presentation: Option<&crate::ui::projection::EditorPresentation>,
     text_area: ratatui_core::layout::Rect,
+    hovered_fold: Option<usize>,
     theme: &Theme,
 ) {
     let Some(presentation) = presentation else {
@@ -394,6 +449,10 @@ fn render_editor(
                 &presentation.styles,
                 &links,
                 &invocations,
+                presentation
+                    .substitutions
+                    .iter()
+                    .find(|fold| fold.annotation_index == hovered_fold.unwrap_or(usize::MAX)),
                 theme,
             )
         })
@@ -414,84 +473,6 @@ fn render_editor(
     if x < text_area.right() && y < text_area.bottom() {
         frame.set_cursor_position((x, y));
     }
-}
-
-fn styled_line(
-    content: &str,
-    line: &crate::ports::editor::VisualLine,
-    semantic_styles: &[crate::ui::annotations::PresentedStyle],
-    links: &[std::ops::Range<usize>],
-    invocations: &[std::ops::Range<usize>],
-    theme: &Theme,
-) -> Line<'static> {
-    let source = content
-        .get(line.start_byte..line.end_byte)
-        .unwrap_or_default();
-    let mut column = 0;
-    let spans = source
-        .grapheme_indices(true)
-        .map(|(offset, grapheme)| {
-            let byte = line.start_byte.saturating_add(offset);
-            let (visible, width) = visible_grapheme(grapheme, column);
-            let selected = line.selected_cells.is_some_and(|selection| {
-                column < selection.end && column.saturating_add(width) > selection.start
-            });
-            let semantic = semantic_styles
-                .iter()
-                .find(|style| byte >= style.start && byte < style.end)
-                .map(|style| style.kind);
-            let linked = links.iter().any(|range| range.contains(&byte));
-            let invocation = invocations.iter().any(|range| range.contains(&byte));
-            column = column.saturating_add(width);
-            let mut style = Style::default().fg(
-                if matches!(
-                    semantic,
-                    Some(crate::ui::annotations::PresentedStyleKind::Warning)
-                ) {
-                    theme.warning
-                } else if semantic.is_some() || invocation {
-                    theme.annotation
-                } else if linked {
-                    theme.link
-                } else {
-                    theme.foreground
-                },
-            );
-            if semantic.is_some() || invocation {
-                style = style.add_modifier(Modifier::BOLD);
-            }
-            if linked {
-                style = style.add_modifier(Modifier::UNDERLINED);
-            }
-            if selected {
-                style = style.add_modifier(Modifier::REVERSED);
-            }
-            Span::styled(visible, style)
-        })
-        .collect::<Vec<_>>();
-    Line::from(spans)
-}
-
-fn url_ranges(content: &str) -> Vec<std::ops::Range<usize>> {
-    let mut finder = LinkFinder::new();
-    finder.kinds(&[LinkKind::Url]);
-    finder
-        .links(content)
-        .filter(|link| {
-            let value = link.as_str();
-            value
-                .get(..7)
-                .is_some_and(|prefix| prefix.eq_ignore_ascii_case("http://"))
-                || value
-                    .get(..8)
-                    .is_some_and(|prefix| prefix.eq_ignore_ascii_case("https://"))
-        })
-        .map(|link| link.start()..link.end())
-        .collect()
-}
-
-fn visible_grapheme(grapheme: &str, column: usize) -> (String, usize) {
-    crate::ports::text_layout::display_grapheme(grapheme, column)
 }
 
 #[cfg(test)]

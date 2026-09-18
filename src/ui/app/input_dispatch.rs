@@ -3,7 +3,7 @@
 use crate::{
     application::{DurabilityState, Effect, InteractionMode},
     ports::environment::{Clock, IdGenerator},
-    ui::{PastePayload, ShortcutContext, ShortcutContextStack},
+    ui::{HitTarget, PastePayload, ShortcutContext, ShortcutContextStack},
 };
 
 use super::{BoardApp, UiInput};
@@ -18,6 +18,7 @@ pub(super) enum ActiveInputOwner {
     Direction,
     Search,
     Rename,
+    ThoughtRename,
     Transfer,
     Invocation,
     InvocationQuery,
@@ -40,7 +41,7 @@ impl ActiveInputOwner {
             Self::Recovery => ShortcutContext::Recovery,
             Self::Direction => ShortcutContext::Direction,
             Self::Search => ShortcutContext::Search,
-            Self::Rename => ShortcutContext::Rename,
+            Self::Rename | Self::ThoughtRename => ShortcutContext::Rename,
             Self::Transfer => ShortcutContext::Transfer,
             Self::Invocation => ShortcutContext::Invocation,
             Self::InvocationQuery => ShortcutContext::InvocationQuery,
@@ -78,6 +79,38 @@ impl ActiveInputOwner {
             self,
             Self::Board | Self::Compose | Self::Edit | Self::InsertionBoundary
         )
+    }
+
+    pub(super) const fn admits_pointer_target(self, target: HitTarget) -> bool {
+        match self {
+            Self::Direction => matches!(target, HitTarget::Deliver(_, _)),
+            Self::Recovery => matches!(
+                target,
+                HitTarget::Retry | HitTarget::ExportRecovery | HitTarget::Help
+            ),
+            Self::ThoughtRename => matches!(
+                target,
+                HitTarget::ThoughtName(_)
+                    | HitTarget::CommitThoughtName
+                    | HitTarget::CancelThoughtName
+            ),
+            Self::Board
+            | Self::Compose
+            | Self::Edit
+            | Self::InsertionBoundary
+            | Self::Search
+            | Self::Rename
+            | Self::Transfer
+            | Self::Invocation
+            | Self::InvocationQuery
+            | Self::GlobalDeliveryQuery
+            | Self::GlobalDeliveryDisposition
+            | Self::Commands
+            | Self::ReleaseHighlights
+            | Self::Update
+            | Self::Screenshot
+            | Self::Help => true,
+        }
     }
 }
 
@@ -126,6 +159,9 @@ impl BoardApp {
         }
         if self.rename.is_some() {
             owners.push(ActiveInputOwner::Rename);
+        }
+        if self.thought_rename.is_some() {
+            owners.push(ActiveInputOwner::ThoughtRename);
         }
         if self.transfer.is_some() {
             owners.push(ActiveInputOwner::Transfer);

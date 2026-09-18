@@ -6,17 +6,19 @@ use proqi::ports::control::{
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::Value;
 
-const REQUEST: &str = include_str!("fixtures/control/v9/add.request.json");
-const ACCEPTED: &str = include_str!("fixtures/control/v9/add.accepted.json");
-const REJECTED: &str = include_str!("fixtures/control/v9/add.rejected.json");
-const PRESERVE: &str = include_str!("fixtures/control/v9/preserve_add.request.json");
-const UPDATE_PREPARE: &str = include_str!("fixtures/control/v9/update_prepare.request.json");
-const UPDATE_READY: &str = include_str!("fixtures/control/v9/update_prepare.ready.json");
-const UPDATE_QUIESCE: &str = include_str!("fixtures/control/v9/update_quiesce.request.json");
-const UPDATE_QUIESCED: &str = include_str!("fixtures/control/v9/update_quiesce.ready.json");
-const CAPTURE_TAKEOVER: &str = include_str!("fixtures/control/v9/capture_takeover.request.json");
-const CAPTURE_SCHEDULED: &str = include_str!("fixtures/control/v9/capture_takeover.scheduled.json");
-const RENAME: &str = include_str!("fixtures/control/v9/rename.request.json");
+const REQUEST: &str = include_str!("fixtures/control/v10/add.request.json");
+const ACCEPTED: &str = include_str!("fixtures/control/v10/add.accepted.json");
+const REJECTED: &str = include_str!("fixtures/control/v10/add.rejected.json");
+const PRESERVE: &str = include_str!("fixtures/control/v10/preserve_add.request.json");
+const UPDATE_PREPARE: &str = include_str!("fixtures/control/v10/update_prepare.request.json");
+const UPDATE_READY: &str = include_str!("fixtures/control/v10/update_prepare.ready.json");
+const UPDATE_QUIESCE: &str = include_str!("fixtures/control/v10/update_quiesce.request.json");
+const UPDATE_QUIESCED: &str = include_str!("fixtures/control/v10/update_quiesce.ready.json");
+const CAPTURE_TAKEOVER: &str = include_str!("fixtures/control/v10/capture_takeover.request.json");
+const CAPTURE_SCHEDULED: &str =
+    include_str!("fixtures/control/v10/capture_takeover.scheduled.json");
+const RENAME: &str = include_str!("fixtures/control/v10/rename.request.json");
+const RENAME_THOUGHT: &str = include_str!("fixtures/control/v10/rename_thought.request.json");
 
 #[test]
 fn current_request_success_and_error_fixtures_round_trip_canonically() {
@@ -87,6 +89,20 @@ fn current_rename_fixture_carries_its_durable_browser_identity() {
         proqi::ports::control::ControlMutation::RenameSession { .. }
     ));
     assert!(request.mutation.durable_operation_id().is_some());
+}
+
+#[test]
+fn current_thought_name_fixtures_keep_metadata_outside_content() {
+    let preserved: ControlRequest = assert_round_trip(PRESERVE);
+    let renamed: ControlRequest = assert_round_trip(RENAME_THOUGHT);
+    assert!(matches!(
+        preserved.mutation,
+        proqi::ports::control::ControlMutation::PreserveAdd { name: Some(_), .. }
+    ));
+    assert!(matches!(
+        renamed.mutation,
+        proqi::ports::control::ControlMutation::RenameThought { .. }
+    ));
 }
 
 #[test]

@@ -22,7 +22,7 @@ use crate::{
     },
 };
 
-use super::{BoardApp, UiInput, UiKey};
+use super::BoardApp;
 use activity::ScreenshotActivity;
 use barrier::DeferredInput;
 pub(crate) use update::ScreenshotUpdateReadiness;
@@ -373,7 +373,7 @@ impl BoardApp {
     ) {
         let make_ready = self.capture_auto_focus_is_safe(was_editing, advance_auto_ready);
         if make_ready {
-            self.state.focused_thought = Some(thought_id);
+            self.state.focused_item = Some(crate::domain::BoardItemId::Thought(thought_id));
             self.state.mode = crate::application::InteractionMode::Edit { thought_id };
         }
         self.screenshot.auto_ready =
@@ -428,15 +428,6 @@ impl BoardApp {
             vec![Effect::Screenshot(ScreenshotIntent::Disable)]
         } else {
             Vec::new()
-        }
-    }
-
-    pub(super) fn note_screenshot_interaction(&mut self, input: &UiInput) {
-        if !matches!(input, UiInput::Key(UiKey::Quit)) {
-            self.screenshot.ready_quit_armed = false;
-        }
-        if input.is_deliberate_interaction() {
-            self.screenshot.auto_ready = None;
         }
     }
 

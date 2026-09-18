@@ -7,6 +7,8 @@ mod review_regressions;
 mod semantic_annotations;
 #[path = "transformations/stale_redo.rs"]
 mod stale_redo;
+#[path = "transformations/thought_names.rs"]
+mod thought_names;
 
 fn folded(start: usize, end: usize) -> ContentAnnotation {
     ContentAnnotation {
@@ -79,7 +81,7 @@ fn split_keeps_left_identity_and_exact_untrimmed_right_at_every_boundary() {
         assert_eq!(live[0].content, &"left\r\n右"[..at_byte]);
         assert_eq!(live[1].id, new);
         assert_eq!(live[1].content, &"left\r\n右"[at_byte..]);
-        assert_eq!(fixture.state.focused_thought, Some(new));
+        assert_eq!(fixture.state.focused_thought_id(), Some(new));
         assert_eq!(
             fixture.state.mode,
             InteractionMode::Edit { thought_id: new }

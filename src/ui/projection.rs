@@ -25,6 +25,8 @@ pub(super) struct PresentedThought {
     pub(super) canonical_content: String,
     pub(super) presentation: Presentation,
     pub(super) preference: ThoughtPresentation,
+    pub(super) name: Option<String>,
+    pub(super) name_editing: bool,
 }
 
 /// The single presentation object consumed by every visual-frame consumer.
@@ -52,6 +54,8 @@ impl FramePresentation {
                 canonical_content: thought.content.clone(),
                 presentation: Presentation::canonical(thought.content.clone()),
                 preference: thought.presentation,
+                name: thought.name.as_ref().map(|name| name.as_str().to_owned()),
+                name_editing: false,
             })
             .collect();
         let mut frame = Self::new(thoughts);
@@ -59,10 +63,6 @@ impl FramePresentation {
             frame.set_editor(snapshot, Presentation::canonical(snapshot.content.clone()));
         }
         frame
-    }
-
-    pub(super) fn thoughts(&self) -> &[PresentedThought] {
-        &self.thoughts
     }
 
     pub(super) fn thought(&self, thought_id: ThoughtId) -> Option<&PresentedThought> {
@@ -99,6 +99,7 @@ pub(super) struct EditorPresentation {
 pub(super) enum BoardCellTarget {
     Position(TextPosition),
     Fold {
+        annotation_index: usize,
         canonical_start: usize,
         canonical_end: usize,
     },
@@ -126,6 +127,7 @@ pub(super) fn board_cell_target(
             && (display < fold.end || (display == fold.end && fold.start == wrapped.end_byte))
     }) {
         return Some(BoardCellTarget::Fold {
+            annotation_index: fold.annotation_index,
             canonical_start: fold.canonical_start,
             canonical_end: fold.canonical_end,
         });
@@ -184,6 +186,7 @@ impl EditorPresentation {
     pub(super) fn cell_target(&self, row: u16, column: u16) -> BoardCellTarget {
         if let Some(fold) = self.fold_at_cell(row, column) {
             return BoardCellTarget::Fold {
+                annotation_index: fold.annotation_index,
                 canonical_start: fold.canonical_start,
                 canonical_end: fold.canonical_end,
             };

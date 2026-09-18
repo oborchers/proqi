@@ -49,7 +49,7 @@ impl BoardApp {
     pub fn start_attachment_checks(&mut self, now: Duration) -> Vec<Effect> {
         self.state
             .attachments
-            .start(&self.state.board, self.state.focused_thought, now)
+            .start(&self.state.board, self.state.focused_thought_id(), now)
     }
 
     /// Refresh all current keys for a manual command or debounced host-focus event.
@@ -69,7 +69,7 @@ impl BoardApp {
         };
         let (effects, outcome) = self.state.attachments.refresh_all(
             &self.state.board,
-            self.state.focused_thought,
+            self.state.focused_thought_id(),
             cause,
         );
         if let Some(outcome) = outcome {
@@ -82,7 +82,7 @@ impl BoardApp {
     pub fn note_attachment_interaction(&mut self, now: Duration) -> Vec<Effect> {
         let (effects, refreshed) = self.state.attachments.note_deliberate_interaction(
             &self.state.board,
-            self.state.focused_thought,
+            self.state.focused_thought_id(),
             now,
         );
         if refreshed {

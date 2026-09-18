@@ -37,6 +37,7 @@ fn one_durable_mutation_and_attachment_checks_share_the_existing_owners() {
                         display_name: "active-transfer-image.png".to_owned(),
                     },
                 }],
+                name: None,
                 position: None,
             },
             &FakeClock::new(Timestamp::from_millis(2)),

@@ -1,6 +1,6 @@
 use crate::{
     adapters::memory::{FakeClock, FakeIdGenerator},
-    application::{AppState, ApplicationError, Effect, InteractionMode},
+    application::{Action, AppState, ApplicationError, Effect, InteractionMode},
     domain::{
         BoardMutation, ContentAnnotation, Session, SessionBoard, TextPosition, Thought,
         ThoughtPosition, Timestamp,
@@ -51,6 +51,7 @@ fn generic_control_add_cannot_author_shortcut_emphasis_but_preservation_can_reta
             thought_id: preserved_id,
             content: "Press Enter".to_owned(),
             annotations: vec![annotation.clone()],
+            name: None,
             position: None,
         },
         &FakeClock::new(Timestamp::from_millis(3)),
@@ -111,7 +112,7 @@ fn active_add_preserves_the_users_live_editor_and_focus() {
     assert_eq!(effects.len(), 1);
     assert_eq!(app.editor_snapshot(), Some(editor_before));
     assert!(app.has_pending_edit());
-    assert_eq!(app.state.focused_thought, Some(original_id));
+    assert_eq!(app.state.focused_thought_id(), Some(original_id));
     assert_eq!(
         app.state.mode,
         InteractionMode::Edit {

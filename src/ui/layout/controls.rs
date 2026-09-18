@@ -250,6 +250,39 @@ pub(super) fn configure_agent_controls(
     }
 }
 
+pub(super) fn configure_thought_name_controls(layout: &mut LayoutSnapshot) {
+    layout.controls.retain(|(target, _)| {
+        matches!(target, HitTarget::RenameSession | HitTarget::CopySessionId)
+    });
+    let area = if layout.footer_actions.width >= 17 {
+        crate::ui::geometry::inset_horizontal(layout.footer_actions, 2)
+    } else {
+        layout.footer_actions
+    };
+    if area.height == 0 {
+        return;
+    }
+    let (save_width, gap, cancel_width) = match area.width {
+        13.. => (4, 3, 6),
+        6.. => (4, 1, 1),
+        3.. => (1, 1, 1),
+        _ => return,
+    };
+    layout.controls.push((
+        HitTarget::CommitThoughtName,
+        Rect::new(area.x, area.y, save_width, 1),
+    ));
+    layout.controls.push((
+        HitTarget::CancelThoughtName,
+        Rect::new(
+            area.x.saturating_add(save_width).saturating_add(gap),
+            area.y,
+            cancel_width,
+            1,
+        ),
+    ));
+}
+
 fn push(layout: &mut LayoutSnapshot, x: &mut u16, area: Rect, target: HitTarget, width: u16) {
     let gap = if *x > area.x { 3 } else { 0 };
     let start = x.saturating_add(gap);

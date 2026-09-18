@@ -80,6 +80,7 @@ fn concise_projection_is_stable_semantic_and_never_selects_a_destructive_action(
         empty_rows,
         [
             "New thought",
+            "Insert separator",
             "Paste exactly",
             "Paste and clean up",
             "Open contextual help",
@@ -98,11 +99,11 @@ fn concise_projection_is_stable_semantic_and_never_selects_a_destructive_action(
         [
             "New thought",
             "Split thought at cursor",
+            "Insert separator",
             "Edit thought",
+            "Rename thought",
             "Clean up spacing",
-            "Copy thought",
-            "Paste exactly",
-            "Paste and clean up",
+            "Copy thought text",
             "More commands...",
         ]
     );
@@ -110,8 +111,8 @@ fn concise_projection_is_stable_semantic_and_never_selects_a_destructive_action(
     assert!(
         !matches!(
             rows[selected].as_str(),
-            "Delete thought"
-                | "Cut thought"
+            "Delete item or selection"
+                | "Cut thought text"
                 | "Submit"
                 | "Send to another Proqi session and remove thought"
         ),
@@ -127,7 +128,7 @@ fn more_commands_expands_in_place_by_keyboard_and_mouse() {
     expand_by_keyboard(&mut keyboard);
     let (query, expanded, selected) = keyboard.app.palette_view().expect("expanded Commands");
     assert!(query.is_empty());
-    assert_eq!(expanded.len(), 57);
+    assert_eq!(expanded.len(), 59);
     assert_eq!(selected, 0);
 
     let mut mouse = Fixture::new();
@@ -143,7 +144,7 @@ fn more_commands_expands_in_place_by_keyboard_and_mouse() {
     mouse.pointer(area.x, area.y, PointerKind::Down(PointerButton::Left));
     assert_eq!(
         mouse.app.palette_view().expect("expanded Commands").1.len(),
-        57
+        59
     );
 }
 
@@ -189,7 +190,7 @@ fn search_uses_complete_inventory_before_expansion_and_clear_restores_prior_view
             .expect("restored expanded")
             .1
             .len(),
-        57
+        59
     );
 }
 
@@ -198,7 +199,7 @@ fn disabled_rows_and_category_headings_are_not_pointer_targets() {
     let mut fixture = Fixture::new();
     fixture.input(crate::key_input(UiKey::Escape));
     open(&mut fixture);
-    type_query(&mut fixture, "delete thought");
+    type_query(&mut fixture, "delete item or selection");
     let before = fixture.app.state.clone();
     let layout = fixture.app.prepare_frame(Rect::new(0, 0, 72, 12));
     let overlay = layout.overlay.as_ref().expect("searched Commands geometry");
@@ -214,9 +215,9 @@ fn disabled_rows_and_category_headings_are_not_pointer_targets() {
     assert_eq!(fixture.app.state, before);
     assert!(fixture.app.palette_view().is_some());
     let rendered = text(draw(&mut fixture, 72, 12).backend().buffer());
-    assert!(rendered.contains("No thought is focused"));
+    assert!(rendered.contains("No Board item is focused"));
 
-    for _ in 0.."delete thought".chars().count() {
+    for _ in 0.."delete item or selection".chars().count() {
         fixture.input(crate::key_input(UiKey::Backspace));
     }
     let _ = draw(&mut fixture, 72, 20);
@@ -288,9 +289,9 @@ fn empty_insertion_and_editor_selection_contexts_report_exact_capabilities() {
     let mut empty = Fixture::new();
     empty.input(crate::key_input(UiKey::Escape));
     open(&mut empty);
-    let (enabled, rendered) = searched_row(&mut empty, "Delete thought", 72);
+    let (enabled, rendered) = searched_row(&mut empty, "Delete item or selection", 72);
     assert!(!enabled);
-    assert!(rendered.contains("No thought is focused"));
+    assert!(rendered.contains("No Board item is focused"));
 
     let mut insertion = Fixture::new();
     saved_thought(&mut insertion, "insertion source");
@@ -485,7 +486,7 @@ fn keyboard_and_mouse_activation_share_typed_execution_and_disabled_movement_is_
     let mut movement = Fixture::new();
     saved_thought(&mut movement, "only thought");
     open(&mut movement);
-    let (enabled, rendered) = searched_row(&mut movement, "Move thought up", 72);
+    let (enabled, rendered) = searched_row(&mut movement, "Move item up", 72);
     assert!(!enabled);
     assert!(rendered.contains("Nothing to reorder"));
 }
