@@ -270,6 +270,41 @@ fn mouse_places_the_title_cursor_and_exposes_truthful_save_and_cancel_controls()
 }
 
 #[test]
+fn hidden_footer_keeps_thought_name_actions_visible_and_hit_testable() {
+    let mut settings = UiSettings::default();
+    settings.footer_hidden = true;
+    let mut fixture = named_fixture(settings, "body", "AlphaBeta");
+    fixture.input(crate::key_input(UiKey::Escape));
+    let layout = fixture.app.prepare_frame(Rect::new(0, 0, 52, 4));
+    let title = layout.thoughts[0].name.expect("title geometry");
+    fixture.pointer(title.x, title.y, PointerKind::Down(PointerButton::Left));
+
+    let layout = fixture.app.prepare_frame(Rect::new(0, 0, 52, 4));
+    assert_eq!(layout.footer_actions.height, 1);
+    let mut cancel = None;
+    for target in [HitTarget::CommitThoughtName, HitTarget::CancelThoughtName] {
+        let area = layout
+            .controls
+            .iter()
+            .find_map(|(candidate, area)| (*candidate == target).then_some(*area))
+            .expect("visible thought-name action");
+        assert_eq!(layout.hit_test(area.x, area.y), Some(target));
+        if target == HitTarget::CancelThoughtName {
+            cancel = Some(area);
+        }
+    }
+    let cancel = cancel.expect("cancel geometry");
+    fixture.pointer(cancel.x, cancel.y, PointerKind::Down(PointerButton::Left));
+    let layout = fixture.app.prepare_frame(Rect::new(0, 0, 52, 4));
+    assert!(layout.controls.iter().all(|(target, _)| {
+        !matches!(
+            target,
+            HitTarget::CommitThoughtName | HitTarget::CancelThoughtName
+        )
+    }));
+}
+
+#[test]
 fn clipped_title_click_uses_the_visible_prefix_and_narrow_views_keep_both_controls() {
     let original = "abcdefghijklmnopqrstuvwxyz".repeat(3);
     let mut fixture = named_fixture(UiSettings::default(), "body", &original);

@@ -68,6 +68,7 @@ fn narrow_and_shallow_separator_clipping_never_invents_an_identity() {
         false,
         FooterChrome {
             has_agents: false,
+            has_required_actions: false,
             status: FooterChromeStatus::None,
             visibility: FooterChromeVisibility::Visible,
         },

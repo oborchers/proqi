@@ -210,6 +210,8 @@ pub struct LayoutSnapshot {
 #[derive(Clone, Copy)]
 pub(super) struct FooterChrome {
     pub(super) has_agents: bool,
+    /// A functional footer action that cannot be suppressed with optional chrome.
+    pub(super) has_required_actions: bool,
     pub(super) status: FooterChromeStatus,
     pub(super) visibility: FooterChromeVisibility,
 }
@@ -301,6 +303,7 @@ pub fn compute(
         insertion_focused,
         FooterChrome {
             has_agents,
+            has_required_actions: false,
             status: FooterChromeStatus::None,
             visibility: FooterChromeVisibility::Visible,
         },

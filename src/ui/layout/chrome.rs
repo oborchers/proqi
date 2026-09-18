@@ -24,10 +24,13 @@ pub(super) fn compute(area: Rect, chrome: FooterChrome) -> ChromeLayout {
     let has_status = !matches!(chrome.status, FooterChromeStatus::None);
     let recovery_controls =
         matches!(chrome.status, FooterChromeStatus::Recovery) && !optional_visible;
+    let mandatory_actions = recovery_controls || chrome.has_required_actions;
     let actions_height = if optional_visible {
         u16::from(available >= 2)
     } else {
-        u16::from(recovery_controls && available >= 2)
+        // A one-row frame gives the safety status precedence. Once there is room
+        // for both rows, keep functional actions visible and hit-testable.
+        u16::from(mandatory_actions && available >= 1 + u16::from(has_status))
     };
     let state_height = u16::from(optional_visible && available >= 3);
     let name_height = u16::from(optional_visible && available >= 4);

@@ -77,7 +77,9 @@ impl BoardApp {
                 .map_or_else(Vec::new, |overlay| overlay.item_interactive.clone()),
         );
         self.configure_footer(&mut layout);
-        if self.thought_name_editing() {
+        if self.thought_name_editing()
+            && !matches!(self.state.durability, DurabilityState::Failed { .. })
+        {
             layout.configure_thought_name_controls();
         }
         let final_height = self.focused_height(&layout);
@@ -120,6 +122,7 @@ impl BoardApp {
             || (self.settings.footer_hidden && self.screenshot_footer_state(false).is_some());
         crate::ui::layout::FooterChrome {
             has_agents: !self.agent_targets.is_empty(),
+            has_required_actions: self.thought_name_editing() && !has_recovery_controls,
             status: if has_recovery_controls {
                 crate::ui::layout::FooterChromeStatus::Recovery
             } else if has_status {
