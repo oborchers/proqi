@@ -300,7 +300,7 @@ fn classify<'a>(paths: impl Iterator<Item = &'a str>) -> Classification {
 
 fn classify_path(path: &str, classes: &mut BTreeSet<ChangeClass>) {
     let predicates = [
-        (ChangeClass::Documentation, has_extension(path, "md")),
+        (ChangeClass::Documentation, is_documentation(path)),
         (ChangeClass::CiPolicy, is_ci_policy(path)),
         (ChangeClass::Dependencies, is_dependency(path)),
         (ChangeClass::Packaging, is_packaging(path)),
@@ -361,9 +361,14 @@ fn is_known(path: &str) -> bool {
                 | "about.toml"
                 | "about.hbs"
                 | "dist-workspace.toml"
+                | "mkdocs.yml"
                 | "release-highlights.json"
                 | ".gitignore"
         )
+}
+
+fn is_documentation(path: &str) -> bool {
+    has_extension(path, "md") || path.starts_with("docs/") || path == "mkdocs.yml"
 }
 
 fn is_ordinary_markdown(path: &str) -> bool {

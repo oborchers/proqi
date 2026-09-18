@@ -25,7 +25,7 @@ The most important effective factory differences are:
 
 Help and footer labels prefer terminal-safe macOS Control aliases where
 appropriate. The complete factory map remains in the
-[README controls](../../README.md#board-controls).
+[README controls](https://github.com/oborchers/proqi/blob/0b016f767af747f013301aaf41bcd0bf1cf827ef/README.md#board-controls).
 
 ## Remap one action
 
@@ -61,9 +61,10 @@ collisions, printable bindings that would steal text, loss of invariant
 `Escape`, and removal of required recovery routes are errors. Proqi never
 rewrites the configuration automatically.
 
-Use the [versioned shortcut contract](../../context/SHORTCUTS.md) for the full
-schema and the [keymap action inventory](../../context/KEYMAP_ACTIONS.md) for
-stable action and context identifiers.
+Use the [versioned shortcut contract](https://github.com/oborchers/proqi/blob/0b016f767af747f013301aaf41bcd0bf1cf827ef/context/SHORTCUTS.md)
+for the full schema and the
+[keymap action inventory](https://github.com/oborchers/proqi/blob/0b016f767af747f013301aaf41bcd0bf1cf827ef/context/KEYMAP_ACTIONS.md)
+for stable action and context identifiers.
 
 ## See what Proqi actually receives
 

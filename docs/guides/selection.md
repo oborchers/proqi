@@ -89,6 +89,6 @@ one Board operation. One Undo restores the complete local operation, even after
 a restart. Undoing local removal does not recall a clipboard write or a prompt
 already accepted by an external agent.
 
-See the canonical [undo and redo guide](../UNDO_REDO.md) for active-owner rules
+See [Undo and redo](../reference/undo-redo.md) for active-owner rules
 and [Deliver prompts to agents](agent-delivery.md) for receipt and removal
 semantics.

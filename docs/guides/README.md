@@ -10,12 +10,16 @@ Start with the workflow you need:
 
 | I want to... | Guide |
 | --- | --- |
+| Create and edit exact prompt text | [Capture and edit thoughts](capture-and-edit.md) |
 | Work with one thought or a group | [Select and act on thoughts](selection.md) |
+| Split, extract, merge, reorder, or separate thoughts | [Transform and organize thoughts](edit-and-transform.md) |
 | Make shortcuts reach Proqi reliably | [Configure and troubleshoot shortcuts](shortcuts.md) |
 | Paste readable text or attach local files | [Paste, clean up, and attach files](paste-and-attachments.md) |
 | Turn new macOS screenshots into thoughts | [Use Screenshot Inbox](paste-and-attachments.md#screenshot-inbox-on-macos) |
+| Find Proqi actions, skills, commands, or collaborators | [Discover commands, skills, and collaborators](discovery-and-invocations.md) |
 | Send a prompt to a verified coding agent | [Deliver prompts to agents](agent-delivery.md) |
 | Name, separate, resume, or recover work | [Organize sessions and recover work](organization-and-recovery.md) |
+| Change themes, list behavior, density, or mouse capture | [Configure appearance and behavior](configuration.md) |
 
 ## The three things to know first
 
@@ -23,8 +27,10 @@ Start with the workflow you need:
    navigation and single-item actions address. Selection builds a group for
    bulk actions. See [Select and act on thoughts](selection.md).
 2. **Copying and delivery are different.** Copying writes exact thought bodies
-   to the native clipboard. Direct delivery is available only through a
-   verified Herdr integration. See [Deliver prompts to agents](agent-delivery.md).
+   through the local clipboard path, using the native clipboard when available
+   and a bounded terminal fallback where supported. Direct delivery is
+   available only through a verified Herdr integration. See
+   [Deliver prompts to agents](agent-delivery.md).
 3. **There is no save command.** Proqi saves accepted changes automatically and
    shows durability in the footer. A storage failure keeps the in-memory work
    visible and offers explicit retry or recovery export choices. See
@@ -40,9 +46,10 @@ could run.
 Press `?` for contextual Help. Help and the footer show the effective bindings
 after configuration, not merely the factory defaults.
 
-For the complete stable action identifiers and contexts, use the
-[keymap action inventory](../../context/KEYMAP_ACTIONS.md). For the full undo
-model, use the canonical [undo and redo guide](../UNDO_REDO.md).
+For exhaustive discovery, use the [complete feature index](../reference/features.md),
+the [59-action Commands reference](../reference/commands.md), and the
+[CLI reference](../reference/cli.md). For local history behavior, see
+[Undo and redo](../reference/undo-redo.md).
 
 ## Versioning
 

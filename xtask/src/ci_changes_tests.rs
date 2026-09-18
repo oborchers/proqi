@@ -16,6 +16,24 @@ fn ordinary_markdown_uses_the_local_documentation_plan() {
 }
 
 #[test]
+fn documentation_site_inputs_reach_the_documentation_gate() {
+    for path in [
+        "mkdocs.yml",
+        "docs/stylesheets/extra.css",
+        "docs/pyproject.toml",
+        "docs/uv.lock",
+        "docs/check.py",
+    ] {
+        let result = paths(&[path]);
+        assert!(
+            result.classes.contains(&ChangeClass::Documentation),
+            "{path}"
+        );
+        assert!(!result.docs_only, "{path}");
+    }
+}
+
+#[test]
 fn policy_and_classifier_changes_fail_closed() {
     for path in [
         ".github/workflows/ci.yml",

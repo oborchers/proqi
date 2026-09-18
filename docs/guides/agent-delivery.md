@@ -9,7 +9,8 @@ verify a suitable target.
 
 ## Choose copy or direct delivery
 
-**Copy** writes exact thought bodies to the native plain-text clipboard. Proqi
+**Copy** writes exact thought bodies through the native plain-text clipboard
+when available, with bounded OSC 52 as a terminal-dependent fallback. Proqi
 does not know whether another application later accepts the clipboard content.
 
 **Direct delivery** calls Herdr's semantic agent prompt operation. An accepted

@@ -50,9 +50,10 @@ time, while different sessions can remain open concurrently.
 
 In the session browser, type to filter and use arrows or a mouse click to choose
 a resumable result. Active sessions remain visible but cannot be opened for
-concurrent editing. `F2` renames and `F8` trashes the focused result only while
-the search query is empty. Browser Undo and Redo cover rename, trash, and
-restore across sessions.
+concurrent editing. `F2` renames and `F8` trashes the focused live result, or
+restores a focused trashed result, only while the search query is empty. The
+same actions have pointer controls in the Browser footer. Browser Undo and Redo
+cover rename, trash, and restore across sessions.
 
 ## Know what is recoverable
 
@@ -68,7 +69,7 @@ restore across sessions.
 Use Commands for contextual Undo and Redo without memorizing a chord. On macOS,
 `Ctrl+Z`, `Ctrl+Shift+Z`, and `Ctrl+Y` are terminal-safe defaults. Board `u` and
 the conventional Primary aliases remain available when the terminal forwards
-them. See the canonical [undo and redo guide](../UNDO_REDO.md) for every active
+them. See [Undo and redo](../reference/undo-redo.md) for every active
 owner.
 
 ## Trash, restore, and prune safely
