@@ -368,7 +368,15 @@ fn is_known(path: &str) -> bool {
 }
 
 fn is_documentation(path: &str) -> bool {
-    has_extension(path, "md") || path.starts_with("docs/") || path == "mkdocs.yml"
+    has_extension(path, "md")
+        || path.starts_with("docs/")
+        || matches!(
+            path,
+            "mkdocs.yml"
+                | "src/cli/args.rs"
+                | "src/ui/shortcut_registry/model.rs"
+                | "xtask/src/documentation.rs"
+        )
 }
 
 fn is_ordinary_markdown(path: &str) -> bool {
@@ -387,6 +395,7 @@ fn is_ci_policy(path: &str) -> bool {
             path,
             "xtask/src/ci_changes.rs"
                 | "xtask/src/dev_gates.rs"
+                | "xtask/src/documentation.rs"
                 | "xtask/src/gate_lock.rs"
                 | "xtask/src/timing.rs"
                 | "xtask/src/main.rs"

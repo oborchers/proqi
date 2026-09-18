@@ -7,9 +7,10 @@ coding agents. Capture each next instruction as an independent thought, refine
 it without interrupting an agent, then copy or deliver it when the time is
 right.
 
-No account, cloud service, or save command is involved. Proqi stores work
-locally, reports whether each change is durable, and keeps board and editor
-history across restarts.
+No account, cloud sync, or save command is involved. Proqi stores work locally,
+reports whether each change is durable, and keeps board and editor history
+across restarts. Release builds make a content-free update check by default;
+you can disable it without affecting local work.
 
 <div class="feature-paths" markdown>
 
@@ -42,7 +43,7 @@ remove semantics.
 <div markdown>
 ## Discover everything
 
-Browse every shipped capability, all 59 Commands actions, and the complete CLI.
+Browse every shipped capability, every Commands action, and the complete CLI.
 
 [Open the feature index](reference/features.md)
 </div>
@@ -81,6 +82,7 @@ configured bindings, not a stale factory table.
 | Look up a Commands action | [Commands palette reference](reference/commands.md) |
 | Work with the command line or JSON | [CLI reference](reference/cli.md) |
 | Recover work safely | [Sessions and recovery](guides/organization-and-recovery.md) |
+| Update Proqi safely | [Updates and restarts](guides/updates.md) |
 | Fix a shortcut that never arrives | [Shortcut troubleshooting](guides/shortcuts.md) |
 
 Proqi is a prompt composer, not a task manager, Markdown IDE, or agent harness.

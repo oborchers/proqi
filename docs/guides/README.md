@@ -19,6 +19,7 @@ Start with the workflow you need:
 | Find Proqi actions, skills, commands, or collaborators | [Discover commands, skills, and collaborators](discovery-and-invocations.md) |
 | Send a prompt to a verified coding agent | [Deliver prompts to agents](agent-delivery.md) |
 | Name, separate, resume, or recover work | [Organize sessions and recover work](organization-and-recovery.md) |
+| Check for updates or restart safely | [Update Proqi and active sessions](updates.md) |
 | Change themes, list behavior, density, or mouse capture | [Configure appearance and behavior](configuration.md) |
 
 ## The three things to know first
@@ -47,7 +48,7 @@ Press `?` for contextual Help. Help and the footer show the effective bindings
 after configuration, not merely the factory defaults.
 
 For exhaustive discovery, use the [complete feature index](../reference/features.md),
-the [59-action Commands reference](../reference/commands.md), and the
+the [Commands reference](../reference/commands.md), and the
 [CLI reference](../reference/cli.md). For local history behavior, see
 [Undo and redo](../reference/undo-redo.md).
 

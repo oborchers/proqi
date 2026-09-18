@@ -123,6 +123,10 @@
   color: var(--md-default-fg-color--light);
 }
 
+.md-typeset .feature-index table {
+  min-width: 48rem;
+}
+
 @media (max-width: 44rem) {
   .md-typeset {
     font-size: 0.88rem;
@@ -134,57 +138,6 @@
     overscroll-behavior-inline: contain;
   }
 
-  .md-typeset .feature-index table,
-  .md-typeset .feature-index table tbody,
-  .md-typeset .feature-index table tr,
-  .md-typeset .feature-index table td {
-    display: block;
-    width: 100%;
-  }
-
-  .md-typeset .feature-index table thead {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
-
-  .md-typeset .feature-index table tr {
-    padding-block: 1rem;
-    border-bottom: 1px solid var(--md-default-fg-color--lightest);
-  }
-
-  .md-typeset .feature-index table td {
-    padding: 0.3rem 0;
-    border: 0;
-  }
-
-  .md-typeset .feature-index table td::before {
-    display: block;
-    color: var(--md-default-fg-color--light);
-    font-size: 0.68rem;
-    font-weight: 650;
-    letter-spacing: 0.045em;
-    text-transform: uppercase;
-  }
-
-  .md-typeset .feature-index table td:nth-child(1)::before {
-    content: "Feature";
-  }
-
-  .md-typeset .feature-index table td:nth-child(2)::before {
-    content: "Availability";
-  }
-
-  .md-typeset .feature-index table td:nth-child(3)::before {
-    content: "What to know";
-  }
-
-  .md-typeset .feature-index table td:nth-child(4)::before {
-    content: "Learn more";
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

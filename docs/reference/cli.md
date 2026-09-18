@@ -26,13 +26,14 @@ command; examples keep it immediately after `proqi` for consistency.
 
 ```text
 proqi
-proqi --continue
-proqi --resume [ID_OR_NAME]
+proqi -c, --continue
+proqi -r, --resume [ID_OR_NAME]
 ```
 
 `--continue` opens the latest inactive session ranked for the current working
-directory. `--resume` without an argument opens the Session Browser. An explicit
-reference accepts one canonical ID or unique session name.
+directory. `-c` is its short form. `--resume` without an argument opens the
+Session Browser, and `-r` is its short form. An explicit reference accepts one
+canonical ID or unique session name.
 
 ## Discover capabilities
 
@@ -59,7 +60,7 @@ contain generated completions.
 
 ```text
 proqi sessions [COMMAND]
-proqi sessions list [--query TEXT] [--all]
+proqi sessions list [-q, --query TEXT] [--all]
 proqi sessions rename <session> [NAME | --clear]
 proqi sessions trash <session>
 proqi sessions restore <session>
@@ -70,7 +71,8 @@ proqi sessions prune <session> --yes
 
 With no subcommand, `sessions` lists resumable sessions. Ranking prefers the
 current directory. Search covers optional names, launch paths, and thought
-content. `--all` includes recoverably trashed sessions.
+content. `-q` is the short form of `--query`. `--all` includes recoverably
+trashed sessions.
 
 Rename, trash, and restore enter persistent Browser history. `sessions undo`
 and `sessions redo` move that history. Prune is different: it permanently

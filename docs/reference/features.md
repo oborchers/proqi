@@ -71,7 +71,7 @@ surface.
 
 | Feature | Availability | What to know | Learn more |
 | --- | --- | --- | --- |
-| Searchable Commands | Shipped | Context-aware Unicode search across all 59 actions. | [Commands](commands.md) |
+| Searchable Commands | Shipped | Context-aware Unicode search across every registered action. | [Commands](commands.md) |
 | Contextual Help | Shipped | Shows effective configured bindings for the active owner. | [Discovery](../guides/discovery-and-invocations.md#use-contextual-help) |
 | Thought search | Shipped | Search prompt bodies without changing Board content. | [Capture and edit](../guides/capture-and-edit.md#search-without-changing-the-board) |
 | Fuzzy invocation lookup | Shipped | Discover `$`, `/`, and supported `@` namespaces with deterministic ranking. | [Discovery](../guides/discovery-and-invocations.md#complete-a-local-invocation) |
@@ -113,9 +113,9 @@ surface.
 | Explicit update check | Shipped | Query the verified stable channel without installing. | [CLI](cli.md#check-updates) |
 | Installed release highlights | Shipped | Open **What's new** for the version already running, without changing it. | [Commands](commands.md#invocations-updates-and-recovery) |
 | Content-free startup update check | Shipped release builds | Coalesced across concurrent starts and individually disableable. | [Privacy and diagnostics](privacy-and-diagnostics.md#know-what-can-leave-the-machine) |
-| Coordinated Homebrew update | Homebrew installs | Saves participants, runs one direct formula upgrade after confirmation, verifies, and resumes. | [Get started](../getting-started.md#install) |
-| Coordinated standalone update | Standalone installer | Verifies the release-bound installer and checksum before replacing the existing user-owned prefix. | [Get started](../getting-started.md#install) |
-| Non-mutating update notice | Debian, Cargo, and source installs | Update discovery does not rewrite these installation types. | [CLI](cli.md#check-updates) |
+| Coordinated Homebrew update | Homebrew installs | Saves participants, runs one direct formula upgrade after confirmation, verifies, and resumes. | [Updates and restarts](../guides/updates.md#install-and-restart-from-the-prompt) |
+| Coordinated standalone update | Standalone installer | Verifies the release-bound installer and checksum before replacing the existing user-owned prefix. | [Updates and restarts](../guides/updates.md#install-and-restart-from-the-prompt) |
+| Non-mutating update notice | Cargo, Debian, source, and unknown installs | Update discovery does not rewrite these installation types. | [Updates and restarts](../guides/updates.md#when-proqi-cannot-update-itself) |
 | Bash, Fish, and Zsh completions | Shipped | Generate from the binary; release archives also include them. | [CLI](cli.md#generate-shell-completions) |
 | macOS and Linux release targets | Shipped | Native Apple, GNU glibc, static musl fallback, and Debian artifacts are published as applicable. | [Get started](../getting-started.md#install) |
 

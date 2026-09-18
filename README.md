@@ -192,7 +192,7 @@ surface, or begin with a workflow:
 - [Discover commands, skills, and collaborators](docs/guides/discovery-and-invocations.md)
 - [Deliver prompts to agents](docs/guides/agent-delivery.md)
 - [Organize sessions and recover work](docs/guides/organization-and-recovery.md)
-- [Browse all 59 Commands actions](docs/reference/commands.md)
+- [Browse every Commands action](docs/reference/commands.md)
 - [Use the complete CLI](docs/reference/cli.md)
 
 The tables below describe the factory map. The complete stable action and

@@ -95,12 +95,10 @@ def public_cli_surfaces(source: str) -> set[str]:
     return root
 
 
-def main() -> int:
-    source = ACTION_SOURCE.read_text(encoding="utf-8")
-    commands_doc = COMMANDS_DOC.read_text(encoding="utf-8")
-    cli_doc = CLI_DOC.read_text(encoding="utf-8")
-    labels = registered_command_labels(source)
-
+def coverage_errors(
+    action_source: str, commands_doc: str, cli_source: str, cli_doc: str
+) -> tuple[list[str], int, int]:
+    labels = registered_command_labels(action_source)
     errors: list[str] = []
     if len(set(labels)) != len(labels):
         errors.append("ShortcutActionId::COMMANDS contains duplicate labels")
@@ -115,7 +113,7 @@ def main() -> int:
                 f"Commands label {label!r} must appear once in commands.md, found {count}"
             )
 
-    cli_surfaces = public_cli_surfaces(CLI_SOURCE.read_text(encoding="utf-8"))
+    cli_surfaces = public_cli_surfaces(cli_source)
     for surface in sorted(cli_surfaces):
         invocation = re.compile(
             rf"^proqi(?:\s+--json)?\s+{re.escape(surface)}(?:\s|$)", re.MULTILINE
@@ -123,6 +121,16 @@ def main() -> int:
         if invocation.search(cli_doc) is None:
             errors.append(f"public CLI surface {surface!r} is missing from cli.md")
 
+    return errors, len(labels), len(cli_surfaces)
+
+
+def main() -> int:
+    errors, action_count, cli_count = coverage_errors(
+        ACTION_SOURCE.read_text(encoding="utf-8"),
+        COMMANDS_DOC.read_text(encoding="utf-8"),
+        CLI_SOURCE.read_text(encoding="utf-8"),
+        CLI_DOC.read_text(encoding="utf-8"),
+    )
     if errors:
         print("documentation coverage check failed:", file=sys.stderr)
         for error in errors:
@@ -130,8 +138,8 @@ def main() -> int:
         return 1
 
     print(
-        f"documentation coverage check passed: {len(labels)} Commands actions and "
-        f"{len(cli_surfaces)} CLI surfaces"
+        f"documentation coverage check passed: {action_count} Commands actions and "
+        f"{cli_count} CLI surfaces"
     )
     return 0
 

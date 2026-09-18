@@ -9,7 +9,7 @@ collaborators while you edit a thought.
 ## Search all Proqi actions
 
 Press `:` in Board mode. Commands initially shows a short **Relevant now**
-set, then searches all 59 shipped actions as you type. Ranking is deterministic
+set, then searches every shipped action as you type. Ranking is deterministic
 and Unicode-aware.
 
 Unavailable commands are filtered by the current context and state. For

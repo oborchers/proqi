@@ -13,7 +13,9 @@ use_directory_urls: false
 
 exclude_docs: |
   check.py
+  check_tests.py
   check_site.py
+  check_site_tests.py
   CI_PERFORMANCE_SPIKE.md
   INPUT_STALL_CONTINUITY.md
   INPUT_WATCHDOG_SUSPENSION.md
@@ -27,6 +29,7 @@ exclude_docs: |
 theme:
   name: material
   language: en
+  font: false
   icon:
     logo: material/console-line
     repo: fontawesome/brands/github
@@ -98,6 +101,7 @@ nav:
           - Discover skills and commands: guides/discovery-and-invocations.md
           - Deliver to agents: guides/agent-delivery.md
           - Sessions and recovery: guides/organization-and-recovery.md
+          - Updates and restarts: guides/updates.md
           - Configure and troubleshoot shortcuts: guides/shortcuts.md
           - Configure appearance and behavior: guides/configuration.md
   - Reference:

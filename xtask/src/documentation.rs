@@ -3,7 +3,21 @@
 use std::{path::Path, process::Command};
 
 pub(super) fn build(root: &Path) -> Result<(), String> {
-    super::run(root, "python3", ["docs/check.py"])?;
+    super::run(
+        root,
+        "python3",
+        [
+            "-B",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "docs",
+            "-p",
+            "*_tests.py",
+        ],
+    )?;
+    super::run(root, "python3", ["-B", "docs/check.py"])?;
 
     let environment = root.join("target/docs-venv");
     run_uv(
@@ -17,7 +31,7 @@ pub(super) fn build(root: &Path) -> Result<(), String> {
         ["run", "--project", "docs", "mkdocs", "build", "--strict"],
     )?;
 
-    super::run(root, "python3", ["docs/check_site.py"])
+    super::run(root, "python3", ["-B", "docs/check_site.py"])
 }
 
 fn run_uv<const N: usize>(

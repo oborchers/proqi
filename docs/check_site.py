@@ -30,7 +30,16 @@ class PageParser(HTMLParser):
             self.ids.add(element_id)
         if tag == "a" and values.get("href"):
             self.links.append(values["href"])
-        if tag == "link" and values.get("href"):
+        link_rel = set((values.get("rel") or "").split())
+        asset_rel = {
+            "icon",
+            "manifest",
+            "modulepreload",
+            "preconnect",
+            "preload",
+            "stylesheet",
+        }
+        if tag == "link" and values.get("href") and link_rel & asset_rel:
             self.resources.append(values["href"])
         if tag in {"script", "img", "source"} and values.get("src"):
             self.resources.append(values["src"])
@@ -38,9 +47,9 @@ class PageParser(HTMLParser):
             self.images_without_alt += 1
 
 
-def rendered_target(page: Path, link_path: str) -> Path:
+def rendered_target(site: Path, page: Path, link_path: str) -> Path:
     if link_path.startswith("/"):
-        target = SITE / unquote(link_path.lstrip("/"))
+        target = site / unquote(link_path.lstrip("/"))
     else:
         target = page.parent / unquote(link_path)
     if link_path.endswith("/") or target.is_dir():
@@ -48,13 +57,10 @@ def rendered_target(page: Path, link_path: str) -> Path:
     return target.resolve()
 
 
-def main() -> int:
-    if not SITE.is_dir():
-        print("rendered documentation site is missing; run mkdocs build first", file=sys.stderr)
-        return 1
-
+def validation_errors(site: Path) -> tuple[list[str], int]:
+    site = site.resolve()
     pages: dict[Path, PageParser] = {}
-    for path in SITE.rglob("*.html"):
+    for path in site.rglob("*.html"):
         parser = PageParser()
         parser.feed(path.read_text(encoding="utf-8"))
         pages[path.resolve()] = parser
@@ -63,42 +69,57 @@ def main() -> int:
     for page, parser in pages.items():
         if parser.images_without_alt:
             errors.append(
-                f"{page.relative_to(SITE)}: "
+                f"{page.relative_to(site)}: "
                 f"{parser.images_without_alt} image(s) have no alt attribute"
             )
         for href in parser.links:
             parsed = urlsplit(href)
             if parsed.scheme or parsed.netloc:
                 continue
-            target = rendered_target(page, parsed.path) if parsed.path else page
+            target = rendered_target(site, page, parsed.path) if parsed.path else page
             try:
-                target.relative_to(SITE.resolve())
+                target.relative_to(site.resolve())
             except ValueError:
-                errors.append(f"{page.relative_to(SITE)}: link escapes site: {href}")
+                errors.append(f"{page.relative_to(site)}: link escapes site: {href}")
                 continue
             if not target.exists():
-                errors.append(f"{page.relative_to(SITE)}: missing target: {href}")
+                errors.append(f"{page.relative_to(site)}: missing target: {href}")
                 continue
             if parsed.fragment and target.suffix == ".html":
                 target_parser = pages.get(target)
                 fragment = unquote(parsed.fragment)
                 if target_parser is None or fragment not in target_parser.ids:
                     errors.append(
-                        f"{page.relative_to(SITE)}: missing fragment "
-                        f"{fragment!r} in {target.relative_to(SITE)}"
+                        f"{page.relative_to(site)}: missing fragment "
+                        f"{fragment!r} in {target.relative_to(site)}"
                     )
         for source in parser.resources:
             parsed = urlsplit(source)
-            if parsed.scheme or parsed.netloc or not parsed.path:
+            if parsed.scheme or parsed.netloc:
+                errors.append(
+                    f"{page.relative_to(site)}: external asset: {source}"
+                )
                 continue
-            target = rendered_target(page, parsed.path)
+            if not parsed.path:
+                continue
+            target = rendered_target(site, page, parsed.path)
             try:
-                target.relative_to(SITE.resolve())
+                target.relative_to(site.resolve())
             except ValueError:
-                errors.append(f"{page.relative_to(SITE)}: asset escapes site: {source}")
+                errors.append(f"{page.relative_to(site)}: asset escapes site: {source}")
                 continue
             if not target.exists():
-                errors.append(f"{page.relative_to(SITE)}: missing asset: {source}")
+                errors.append(f"{page.relative_to(site)}: missing asset: {source}")
+
+    return errors, len(pages)
+
+
+def main() -> int:
+    if not SITE.is_dir():
+        print("rendered documentation site is missing; run mkdocs build first", file=sys.stderr)
+        return 1
+
+    errors, page_count = validation_errors(SITE)
 
     if errors:
         print("rendered documentation link check failed:", file=sys.stderr)
@@ -108,7 +129,7 @@ def main() -> int:
 
     print(
         "rendered documentation link and asset check passed: "
-        f"{len(pages)} HTML pages"
+        f"{page_count} HTML pages"
     )
     return 0
 

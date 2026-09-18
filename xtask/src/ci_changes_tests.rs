@@ -23,6 +23,10 @@ fn documentation_site_inputs_reach_the_documentation_gate() {
         "docs/pyproject.toml",
         "docs/uv.lock",
         "docs/check.py",
+        "docs/check_site.py",
+        "src/cli/args.rs",
+        "src/ui/shortcut_registry/model.rs",
+        "xtask/src/documentation.rs",
     ] {
         let result = paths(&[path]);
         assert!(
@@ -41,6 +45,7 @@ fn policy_and_classifier_changes_fail_closed() {
         "context/ARCHITECTURE.md",
         "xtask/src/ci_changes.rs",
         "xtask/src/dev_gates.rs",
+        "xtask/src/documentation.rs",
     ] {
         let result = paths(&[path]);
         assert_eq!(result.local_plan, LocalPlan::Full, "{path}");
