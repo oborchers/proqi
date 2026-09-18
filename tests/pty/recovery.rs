@@ -5,19 +5,27 @@ use std::{
     os::unix::fs::PermissionsExt as _,
     panic::{AssertUnwindSafe, catch_unwind},
     process::{Command, ExitStatus},
-    thread::{self, JoinHandle},
+    thread,
     time::{Duration, Instant},
 };
 
 use proqi::ports::recovery::RecoveryDocument;
-use rustix::process::{Pid, test_kill_process};
+use rustix::{
+    io::Errno,
+    process::{Pid, test_kill_process},
+};
 
 use super::{
     support::{consume_first_run, expect_command, json_command},
     watchdog,
 };
 
-const RECOVERY_WORKFLOW_LIMIT: Duration = Duration::from_secs(45);
+// The workflow has five sequential ten-second Expect boundaries. The outer
+// watchdog remains an absolute cleanup bound and must not pre-empt the
+// fixture's own reviewed failure path.
+const RECOVERY_WORKFLOW_LIMIT: Duration = Duration::from_secs(60);
+// Rust requires terminal readiness within five seconds. This leaves a full
+// post-readiness interval for the intentional hang before watchdog cleanup.
 const TIMEOUT_PROOF_LIMIT: Duration = Duration::from_secs(15);
 
 const RECOVERY_WORKFLOW: &str = r#"
@@ -27,10 +35,10 @@ const RECOVERY_WORKFLOW: &str = r#"
     set state $env(PROQI_TEST_STATE)
     set session $env(PROQI_TEST_SESSION)
     spawn $binary --state-dir $state -r $session
-    expect -exact "\x1b\[?1049h"
     set owned [open $env(PROQI_TEST_PIDS) w]
     puts $owned [exp_pid]
     close $owned
+    expect -exact "\x1b\[?1049h"
     set ready_marker [open "$state/terminal-ready" w]
     close $ready_marker
     while {![file exists "$state/immutable-ready"]} {
@@ -121,6 +129,7 @@ fn recovery_watchdog_cleans_registered_process_after_post_ready_hang() {
     let terminal_ready = state.path().join("terminal-ready");
     let ready = state.path().join("immutable-ready");
     let pids = state.path().join("recovery-watchdog-pids");
+    let started = Instant::now();
     let workflow = RecoveryWorkflow::spawn(
         recovery_command(binary, state.path(), &session, &pids, true),
         pids.clone(),
@@ -131,21 +140,18 @@ fn recovery_watchdog_cleans_registered_process_after_post_ready_hang() {
     fs::write(ready, b"ready").expect("release recovery hang injection");
     let timeout = catch_unwind(AssertUnwindSafe(|| workflow.finish()));
     drop(immutable);
-    assert!(timeout.is_err(), "recovery watchdog unexpectedly completed");
+    assert_timeout_cleanup(timeout, started.elapsed());
     assert_registered_gone(&pids);
 }
 
 struct RecoveryWorkflow {
-    watcher: Option<JoinHandle<ExitStatus>>,
+    watcher: watchdog::Workflow,
 }
 
 impl RecoveryWorkflow {
-    fn spawn(mut command: Command, pids: std::path::PathBuf, limit: Duration) -> Self {
-        let watcher = thread::spawn(move || {
-            watchdog::status_before(&mut command, limit, &pids, "recovery PTY workflow")
-        });
+    fn spawn(command: Command, pids: std::path::PathBuf, limit: Duration) -> Self {
         Self {
-            watcher: Some(watcher),
+            watcher: watchdog::Workflow::spawn(command, limit, pids, "recovery PTY workflow"),
         }
     }
 
@@ -165,23 +171,11 @@ impl RecoveryWorkflow {
     }
 
     fn finish(mut self) -> ExitStatus {
-        self.watcher
-            .take()
-            .expect("active recovery PTY watchdog")
-            .join()
-            .expect("recovery PTY watchdog thread")
+        self.watcher.finish()
     }
 
     fn watcher_finished(&self) -> bool {
-        self.watcher.as_ref().is_some_and(JoinHandle::is_finished)
-    }
-}
-
-impl Drop for RecoveryWorkflow {
-    fn drop(&mut self) {
-        if let Some(watcher) = self.watcher.take() {
-            let _settled = watcher.join();
-        }
+        self.watcher.is_finished()
     }
 }
 
@@ -230,8 +224,40 @@ fn recovery_command(
         .env_remove("HERDR_ENV");
     if inject_hang {
         command.env("PROQI_TEST_RECOVERY_HANG_AFTER_READY", "1");
+    } else {
+        command.env_remove("PROQI_TEST_RECOVERY_HANG_AFTER_READY");
     }
     command
+}
+
+fn assert_timeout_cleanup(
+    timeout: Result<ExitStatus, Box<dyn std::any::Any + Send>>,
+    elapsed: Duration,
+) {
+    let payload = timeout.expect_err("recovery watchdog unexpectedly completed");
+    let message = match payload.downcast::<String>() {
+        Ok(message) => *message,
+        Err(payload) => match payload.downcast::<&str>() {
+            Ok(message) => (*message).to_owned(),
+            Err(_) => panic!("recovery watchdog panic did not contain a message"),
+        },
+    };
+    assert!(
+        message.contains("exceeded absolute wall-clock limit"),
+        "recovery watchdog failed for the wrong reason: {message}"
+    );
+    assert!(
+        message.contains("CleanupOutcome { driver: true, descendants: true, readers: true }"),
+        "recovery watchdog did not settle complete cleanup: {message}"
+    );
+    assert!(
+        elapsed >= TIMEOUT_PROOF_LIMIT - Duration::from_secs(1),
+        "recovery watchdog ended before its cleanup window: {elapsed:?}"
+    );
+    assert!(
+        elapsed < TIMEOUT_PROOF_LIMIT + Duration::from_secs(3),
+        "recovery watchdog exceeded its bounded cleanup window: {elapsed:?}"
+    );
 }
 
 fn assert_registered_gone(pids: &std::path::Path) {
@@ -245,8 +271,9 @@ fn assert_registered_gone(pids: &std::path::Path) {
     while test_kill_process(child).is_ok() && Instant::now() < deadline {
         thread::sleep(Duration::from_millis(10));
     }
-    assert!(
-        test_kill_process(child).is_err(),
+    assert_eq!(
+        test_kill_process(child),
+        Err(Errno::SRCH),
         "recovery watchdog left its registered child alive"
     );
 }
@@ -256,10 +283,10 @@ fn create_empty_session(binary: &str, state: &std::path::Path) {
         log_user 0
         set timeout 10
         spawn $env(PROQI_TEST_BINARY) --state-dir $env(PROQI_TEST_STATE)
-        expect -exact "\x1b\[?1049h"
         set owned [open $env(PROQI_TEST_PIDS) w]
         puts $owned [exp_pid]
         close $owned
+        expect -exact "\x1b\[?1049h"
         send "\x1b"
         after 50
         send "q"

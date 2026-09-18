@@ -103,7 +103,8 @@ reported cases with the existing serial PTY rule and removes the known visual
 readiness race. It does not claim a product lifecycle defect was fixed.
 
 An interrupted later serial gate last reported the recovery export fixture,
-whose Expect parent had an unbounded `child.wait()`. That fixture now uses the
-existing owned-child watchdog and proves registered child cleanup with a
-post-readiness hang injection. Its isolated bounded run passed; this does not
+whose Rust test waited unboundedly for its Expect driver. That fixture and its
+empty-session setup now use the existing owned-child watchdog. A post-readiness
+hang injection proves the watchdog's complete reported cleanup outcome and the
+registered child PID's absence. Its isolated bounded run passed; this does not
 establish the cause of the interrupted gate.
