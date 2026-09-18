@@ -101,3 +101,9 @@ every driver stage, so they cannot prove which runnable process lost scheduling
 time or exclude the reporting worktree's layout changes. The repair aligns the
 reported cases with the existing serial PTY rule and removes the known visual
 readiness race. It does not claim a product lifecycle defect was fixed.
+
+An interrupted later serial gate last reported the recovery export fixture,
+whose Expect parent had an unbounded `child.wait()`. That fixture now uses the
+existing owned-child watchdog and proves registered child cleanup with a
+post-readiness hang injection. Its isolated bounded run passed; this does not
+establish the cause of the interrupted gate.
