@@ -373,6 +373,7 @@ fn is_documentation(path: &str) -> bool {
         || matches!(
             path,
             "mkdocs.yml"
+                | ".github/workflows/ci.yml"
                 | "src/cli/args.rs"
                 | "src/ui/shortcut_registry/model.rs"
                 | "xtask/src/documentation.rs"

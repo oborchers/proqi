@@ -132,12 +132,6 @@
     font-size: 0.88rem;
   }
 
-  .md-typeset table:not([class]) {
-    display: block;
-    overflow-x: auto;
-    overscroll-behavior-inline: contain;
-  }
-
 }
 
 @media (prefers-reduced-motion: reduce) {

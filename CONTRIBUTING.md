@@ -143,6 +143,11 @@ UV_PROJECT_ENVIRONMENT=../target/docs-venv uv run --project docs mkdocs serve
 The repository does not deploy or publish the site from this build. Public
 hosting remains a separate maintainer decision.
 
+`cargo xtask check` includes the documentation build whenever classified inputs
+affect it. The canonical `cargo xtask check-full` remains exactly quality plus
+tests, so run `cargo xtask docs` separately during final qualification for a
+documentation change.
+
 ## Code guardrails
 
 - Format Rust with the checked-in rustfmt configuration.

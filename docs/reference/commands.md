@@ -42,7 +42,7 @@ available actions below.
 | **Delete logical line** | Deletes the current logical line. | One editor revision. |
 | **Delete sentence** | Deletes Unicode sentences touched by cursor or selection. | Folded targets are revealed unchanged first; review and repeat to delete. |
 | **Jump cursor up 5 visual rows** | Moves up through rendered rows. | Visual wrapping determines the destination. |
-| **Jump cursor down 5 visual rows** | Moves down through rendered rows. | Can cross thought boundaries by established navigation rules. |
+| **Jump cursor down 5 visual rows** | Moves down through rendered rows. | Stops at the thought's last visual row. |
 | **Extend selection to visual row start** | Selects to the current wrapped row start. | Edit only. |
 | **Extend selection to visual row end** | Selects to the current wrapped row end. | Edit only. |
 | **Move cursor to thought beginning** | Moves to byte position zero of the thought. | Edit only. |

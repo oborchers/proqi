@@ -19,6 +19,7 @@ fn ordinary_markdown_uses_the_local_documentation_plan() {
 fn documentation_site_inputs_reach_the_documentation_gate() {
     for path in [
         "mkdocs.yml",
+        ".github/workflows/ci.yml",
         "docs/stylesheets/extra.css",
         "docs/pyproject.toml",
         "docs/uv.lock",

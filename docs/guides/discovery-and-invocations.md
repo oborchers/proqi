@@ -9,8 +9,8 @@ collaborators while you edit a thought.
 ## Search all Proqi actions
 
 Press `:` in Board mode. Commands initially shows a short **Relevant now**
-set, then searches every shipped action as you type. Ranking is deterministic
-and Unicode-aware.
+set, then searches every searchable Commands entry as you type. Ranking is
+deterministic and Unicode-aware.
 
 Unavailable commands are filtered by the current context and state. For
 example, **Extract selection as new thought** requires an editor selection, and

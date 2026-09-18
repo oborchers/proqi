@@ -71,7 +71,7 @@ surface.
 
 | Feature | Availability | What to know | Learn more |
 | --- | --- | --- | --- |
-| Searchable Commands | Shipped | Context-aware Unicode search across every registered action. | [Commands](commands.md) |
+| Searchable Commands | Shipped | Context-aware Unicode search across every searchable Commands entry. | [Commands](commands.md) |
 | Contextual Help | Shipped | Shows effective configured bindings for the active owner. | [Discovery](../guides/discovery-and-invocations.md#use-contextual-help) |
 | Thought search | Shipped | Search prompt bodies without changing Board content. | [Capture and edit](../guides/capture-and-edit.md#search-without-changing-the-board) |
 | Fuzzy invocation lookup | Shipped | Discover `$`, `/`, and supported `@` namespaces with deterministic ranking. | [Discovery](../guides/discovery-and-invocations.md#complete-a-local-invocation) |

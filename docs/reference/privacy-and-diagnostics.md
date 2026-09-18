@@ -14,6 +14,7 @@ collaboration service, or content upload.
 | Direct delivery | Sends assembled prompt text to one verified Herdr agent target. |
 | Cross-session send | Copies one thought into another local Proqi session. |
 | Update check | Makes a content-free request to the verified release channel. |
+| In-app update | Runs the verified Homebrew upgrade or downloads and verifies the standalone installer and checksum. Only starts after explicit confirmation. |
 | Attachment path | The path stays in prompt content; the receiving agent may read it after delivery. |
 | Diagnostics collect | Writes a new redacted local file only. Nothing is uploaded. |
 | Recovery export | Writes a new private local recovery file only. |

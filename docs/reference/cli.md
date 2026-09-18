@@ -14,20 +14,25 @@ arguments.
 
 ```text
 proqi --help
+proqi -h
 proqi --version
+proqi -V
 proqi --json <command>
 ```
 
-`--help` is also available on every command and subcommand. `--version` prints
-the installed release. `--json` is global, so it can precede or follow a
-command; examples keep it immediately after `proqi` for consistency.
+`-h` is the short form of `--help`, which is also available on every command
+and subcommand. `-V` is the short form of `--version`, which prints the
+installed release. `--json` is global, so it can precede or follow a command;
+examples keep it immediately after `proqi` for consistency.
 
 ## Interactive startup
 
 ```text
 proqi
-proqi -c, --continue
-proqi -r, --resume [ID_OR_NAME]
+proqi -c
+proqi --continue
+proqi -r [ID_OR_NAME]
+proqi --resume [ID_OR_NAME]
 ```
 
 `--continue` opens the latest inactive session ranked for the current working
@@ -61,7 +66,7 @@ contain generated completions.
 ```text
 proqi sessions [COMMAND]
 proqi sessions list [-q, --query TEXT] [--all]
-proqi sessions rename <session> [NAME | --clear]
+proqi sessions rename <session> (NAME | --clear)
 proqi sessions trash <session>
 proqi sessions restore <session>
 proqi sessions undo
@@ -85,7 +90,7 @@ proqi thoughts list <session>
 proqi thoughts inspect <session> <thought>
 proqi thoughts add <session> [--position N] [--operation-id OP_ID]
 proqi thoughts delete <session> <thought> [--operation-id OP_ID]
-proqi thoughts rename <session> <thought> [NAME | --clear] [--operation-id OP_ID]
+proqi thoughts rename <session> <thought> (NAME | --clear) [--operation-id OP_ID]
 proqi thoughts replace <session> <thought> (--expected-sha256 HEX | --force) [--revision-id REV_ID]
 proqi thoughts collapse <session> <thought> --collapsed <true|false> [--operation-id OP_ID]
 proqi thoughts move <session> <thought> <position> [--operation-id OP_ID]
@@ -103,6 +108,8 @@ printf '%s' 'Review the retry path.' | proqi --json thoughts add <session>
 Positions are zero-based. List output preserves Board order and distinguishes
 thoughts from payload-free separators. Inspect returns one exact thought body
 plus metadata. Names remain separate metadata.
+
+Rename requires a name or `--clear`. An empty thought name also clears it.
 
 Replace normally requires the SHA-256 digest of current content so a stale
 writer cannot overwrite newer text. `--force` is an explicit opt-out. External
