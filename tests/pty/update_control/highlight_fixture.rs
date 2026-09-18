@@ -44,18 +44,21 @@ pub(super) fn run_dismissal(binary: &Path, state: &Path, session: &str) -> ExitS
     let script = r#"
         log_user 0
         set timeout 20
-        proc reducer_accepted {} {
+        proc reducer_sequence {} {
             global env
             set path "$env(PROQI_TEST_STATE)/runtime/input-accepted"
-            if {![file exists $path]} { return 0 }
+            if {![file exists $path]} { return -1 }
             set input [open $path r]
             set receipt [read $input]
             close $input
-            return [expr {[string first "mode=" $receipt] >= 0}]
+            if {[regexp {^([0-9]+) mode=} $receipt -> sequence]} {
+                return $sequence
+            }
+            return -1
         }
-        proc wait_for_reducer_acceptance {failure} {
-            for {set attempt 0} {$attempt < 100} {incr attempt} {
-                if {[reducer_accepted]} { return }
+        proc wait_for_later_reducer_acceptance {sequence failure deadline} {
+            while {[clock milliseconds] < $deadline} {
+                if {[reducer_sequence] > $sequence} { return }
                 after 20
             }
             exit $failure
@@ -68,17 +71,22 @@ pub(super) fn run_dismissal(binary: &Path, state: &Path, session: &str) -> ExitS
         expect -exact "what's new"
         # Screen output can reach Expect before the render owner arms its input
         # boundary. Probe readiness with harmless overlay navigation until one
-        # event reaches the reducer, without extending the existing bound.
-        for {set attempt 0} {$attempt < 100} {incr attempt} {
+        # event reaches the reducer. One deadline retains the prior two-second
+        # end-to-end bound for readiness, dismissal, and acknowledgement.
+        set dismissal_deadline [expr {[clock milliseconds] + 2000}]
+        set navigation_sequence -1
+        while {[clock milliseconds] < $dismissal_deadline} {
             send -- "\x1b\[B"
             after 20
-            if {[reducer_accepted]} { break }
+            set navigation_sequence [reducer_sequence]
+            if {$navigation_sequence >= 0} { break }
         }
-        if {![reducer_accepted]} { exit 97 }
+        if {$navigation_sequence < 0} { exit 97 }
         file delete $acceptance
         send -- "\x1b"
-        wait_for_reducer_acceptance 98
-        for {set attempt 0} {$attempt < 100} {incr attempt} {
+        wait_for_later_reducer_acceptance $navigation_sequence 98 $dismissal_deadline
+        set acknowledged 0
+        while {[clock milliseconds] < $dismissal_deadline} {
             set acknowledged 0
             foreach path [glob -nocomplain "$env(PROQI_TEST_STATE)/cache/updates/*/state.json"] {
                 set input [open $path r]

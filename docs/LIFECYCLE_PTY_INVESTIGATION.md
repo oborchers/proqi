@@ -8,8 +8,9 @@ This spike investigated three PTY failures reported by a feature worktree:
 - termination while a Screenshot Inbox commit fails persistently;
 - automatic release highlights after an in-app restart.
 
-The original base was `0b016f767af747f013301aaf41bcd0bf1cf827ef`.
-The reporting worktree was `c5329152ff6d1f8f83c1f3cad1bee0e462342153`.
+This lane's original base was `0b016f767af747f013301aaf41bcd0bf1cf827ef`.
+The reporting worktree was `c5329152ff6d1f8f83c1f3cad1bee0e462342153`,
+whose merge base with this lane was the earlier `e679483` revision.
 
 ## Revision evidence
 
@@ -20,10 +21,13 @@ coupling by reading the archived manifest version. The later main CI and release
 candidate for `0b016f7` were green.
 
 The feature diff did not change terminal input admission, Screenshot Inbox
-persistence, update acknowledgement, shutdown, or the three PTY fixtures. Each
-worktree had its own Cargo target directory, which rules out a shared stale test
-executable. The release preparation changed package metadata and reviewed
-release inputs. It did not change these lifecycle owners.
+persistence, update acknowledgement, shutdown, or the three PTY fixtures. It
+did change footer and Screenshot Inbox state layout and rendering. This
+investigation did not serially run the cases at that reporting revision, so it
+does not exclude a feature-side rendering interaction. Each worktree had its
+own Cargo target directory, which rules out a shared stale test executable. The
+release preparation changed package metadata and reviewed release inputs. It
+did not change these lifecycle owners.
 
 ## Failure chains
 
@@ -39,6 +43,8 @@ failed earlier with exit 93 because Screenshot Inbox could not publish capture
 authority. That is a permissions failure and not product evidence. The reported
 exit 87 occurred in the general nextest pool, where the case did not own the
 process and terminal resources that the dedicated serial PTY gate gives it.
+That configuration mismatch is a mitigation target, not proof that scheduling
+caused the reported outcome.
 
 ### Termination during a persistently failed capture
 
@@ -53,7 +59,7 @@ bounded exit, released capture and instance authority, unchanged durable
 content, and exact-session resume. Its distinct risk is the retry workflow's
 additional persistence failure and replay work before the same bounded receipt
 probe. It was also scheduled without exclusive nextest ownership in the failed
-qualification.
+qualification. That scheduling difference is not causal proof.
 
 ### Release highlight dismissal
 
@@ -66,28 +72,32 @@ pre-presentation input, or the accepted update effect can miss the cache probe.
 
 The exact 30-second restart scenario passed alone outside the sandbox. The
 fixture now probes with harmless overlay navigation until one event reaches the
-reducer, then proves Escape reached the reducer, and only then checks the
-durable cache. These are separate readiness, acceptance, and durability oracles.
-A controlled pre-fix nextest run reproduced the race as exit 97 when the first
-navigation event was sent immediately after the visible text arrived.
+reducer, records that receipt sequence, requires later reducer progress after
+Escape, and only then checks the durable cache. These are separate readiness,
+acceptance-progress, and durability oracles under one two-second deadline. An
+intermediate single-probe fixture reproduced rejected navigation immediately
+after visible text; exit 97 was added by this investigation to name that
+readiness failure.
 
 ## Repair
 
 The dedicated PTY command already serializes real PTY fixtures because they own
 process-wide terminal resources. The canonical nextest gate did not preserve
-that rule for these cases. Exact nextest overrides now grant each reported case
-all test threads. No timeout, lifecycle assertion, product ordering, persistence
-path, cleanup path, or restoration path changed.
+that rule for the three reported cases. Exact nextest overrides now grant those
+cases all test threads. This is a targeted mitigation, not a broader policy for
+other capture workflows. No product deadline, lifecycle assertion, product
+ordering, persistence path, cleanup path, or restoration path changed.
 
 The capture assertion now translates its stable driver exit codes into named
-stages. This makes a future failure distinguish input acceptance, capture
-authority, owner readiness, EOF, and the bounded shutdown oracle without
+stages. This makes a future failure distinguish an absent input receipt, capture
+authority, published owner control, and the bounded shutdown oracle without
 retaining user content or machine paths.
 
 ## Remaining uncertainty
 
-The original exit 87 and exit 96 outcomes were not reproduced on the clean base
-outside the sandbox. The retained logs do not contain timestamps for every
-driver stage, so they cannot prove which runnable process lost scheduling time.
-The repair addresses the demonstrated contract mismatch and removes the known
-visual-readiness race. It does not claim a product lifecycle defect was fixed.
+The original exit 87 and exit 96 outcomes were not reproduced on this lane's
+clean base outside the sandbox. The retained logs do not contain timestamps for
+every driver stage, so they cannot prove which runnable process lost scheduling
+time or exclude the reporting worktree's layout changes. The repair aligns the
+reported cases with the existing serial PTY rule and removes the known visual
+readiness race. It does not claim a product lifecycle defect was fixed.
