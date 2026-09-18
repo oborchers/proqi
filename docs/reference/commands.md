@@ -2,8 +2,8 @@
 
 <span class="version-scope">59 actions in Proqi 0.11.0</span>
 
-Press ++colon++ in Board mode to open Commands. Search, use the arrow keys or
-pointer to choose a result, then press ++enter++ or click. The same canonical
+Press `:` in Board mode to open Commands. Search, use the arrow keys or pointer
+to choose a result, then press `Enter` or click. The same canonical
 registry owns availability, execution, effective shortcut display, and
 diagnostic identity.
 
@@ -40,7 +40,7 @@ available actions below.
 | --- | --- | --- |
 | **Insert plain newline** | Inserts a newline without smart-list continuation. | Edit only. |
 | **Delete logical line** | Deletes the current logical line. | One editor revision. |
-| **Delete sentence** | Deletes Unicode sentences touched by cursor or selection. | Folded targets are revealed before deletion. |
+| **Delete sentence** | Deletes Unicode sentences touched by cursor or selection. | Folded targets are revealed unchanged first; review and repeat to delete. |
 | **Jump cursor up 5 visual rows** | Moves up through rendered rows. | Visual wrapping determines the destination. |
 | **Jump cursor down 5 visual rows** | Moves down through rendered rows. | Can cross thought boundaries by established navigation rules. |
 | **Extend selection to visual row start** | Selects to the current wrapped row start. | Edit only. |

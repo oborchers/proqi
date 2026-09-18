@@ -41,8 +41,8 @@ Undo can restore local source thoughts removed after delivery, transfer, or cut.
 It cannot retract the already accepted prompt, destination copy, clipboard
 write, exported file, installed update, or external attachment change.
 
-**Submit and keep**, **Send and keep**, and Copy do not create local undo units
-because they do not change the source Board.
+**Submit and keep**, cross-session send without removal, and Copy do not create
+local undo units because they do not change the source Board.
 
 ## Irreversible operation
 

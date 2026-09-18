@@ -8,7 +8,8 @@ edit_uri: edit/main/docs/
 copyright: Proqi is available under the MIT License.
 
 docs_dir: docs
-site_dir: site
+site_dir: target/docs-site
+use_directory_urls: false
 
 exclude_docs: |
   check.py
@@ -41,8 +42,6 @@ theme:
         icon: material/brightness-4
         name: Switch to light mode
   features:
-    - navigation.instant
-    - navigation.instant.prefetch
     - navigation.tabs
     - navigation.sections
     - navigation.indexes
@@ -73,7 +72,6 @@ markdown_extensions:
       line_spans: __span
       pygments_lang_class: true
   - pymdownx.inlinehilite
-  - pymdownx.keys
   - pymdownx.superfences
   - pymdownx.tabbed:
       alternate_style: true

@@ -65,11 +65,11 @@ Browse every shipped capability, all 59 Commands actions, and the complete CLI.
 
 ## Find an action while working
 
-Press ++colon++ in Board mode to open **Commands**. Search by what you want to
-do and press ++enter++, or click the result. Commands only offers actions that
+Press `:` in Board mode to open **Commands**. Search by what you want to do and
+press `Enter`, or click the result. Commands only offers actions that
 are valid for the current state.
 
-Press ++question++ for contextual Help. Help and the footer show effective
+Press `?` for contextual Help. Help and the footer show effective
 configured bindings, not a stale factory table.
 
 ## Choose a path

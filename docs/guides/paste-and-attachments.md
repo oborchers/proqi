@@ -55,6 +55,11 @@ their exact absolute paths remain the canonical prompt content used for copy,
 search, recovery, and agent delivery. Large pasted context folds similarly once
 it reaches 12 logical lines or 1,200 perceived Unicode characters.
 
+On macOS, annotated copy and cut preserve both plain text and annotation
+metadata through a generation-bound typed clipboard item. Other supported
+platforms reject annotated copy and cut rather than silently dropping metadata.
+Unannotated text still has native clipboard and bounded OSC 52 paths.
+
 An attachment marked inaccessible, in iCloud, or downloading is not ready for
 direct delivery. Proqi can refresh the status, but it never requests an iCloud
 download. The path still refers to an external file that can disappear after a

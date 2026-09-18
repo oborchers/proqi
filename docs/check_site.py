@@ -10,7 +10,7 @@ from urllib.parse import unquote, urlsplit
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SITE = ROOT / "site"
+SITE = ROOT / "target/docs-site"
 
 
 class PageParser(HTMLParser):
@@ -18,6 +18,8 @@ class PageParser(HTMLParser):
         super().__init__(convert_charrefs=True)
         self.ids: set[str] = set()
         self.links: list[str] = []
+        self.resources: list[str] = []
+        self.images_without_alt = 0
 
     def handle_starttag(
         self, tag: str, attrs: list[tuple[str, str | None]]
@@ -28,6 +30,12 @@ class PageParser(HTMLParser):
             self.ids.add(element_id)
         if tag == "a" and values.get("href"):
             self.links.append(values["href"])
+        if tag == "link" and values.get("href"):
+            self.resources.append(values["href"])
+        if tag in {"script", "img", "source"} and values.get("src"):
+            self.resources.append(values["src"])
+        if tag == "img" and "alt" not in values:
+            self.images_without_alt += 1
 
 
 def rendered_target(page: Path, link_path: str) -> Path:
@@ -53,6 +61,11 @@ def main() -> int:
 
     errors: list[str] = []
     for page, parser in pages.items():
+        if parser.images_without_alt:
+            errors.append(
+                f"{page.relative_to(SITE)}: "
+                f"{parser.images_without_alt} image(s) have no alt attribute"
+            )
         for href in parser.links:
             parsed = urlsplit(href)
             if parsed.scheme or parsed.netloc:
@@ -74,6 +87,18 @@ def main() -> int:
                         f"{page.relative_to(SITE)}: missing fragment "
                         f"{fragment!r} in {target.relative_to(SITE)}"
                     )
+        for source in parser.resources:
+            parsed = urlsplit(source)
+            if parsed.scheme or parsed.netloc or not parsed.path:
+                continue
+            target = rendered_target(page, parsed.path)
+            try:
+                target.relative_to(SITE.resolve())
+            except ValueError:
+                errors.append(f"{page.relative_to(SITE)}: asset escapes site: {source}")
+                continue
+            if not target.exists():
+                errors.append(f"{page.relative_to(SITE)}: missing asset: {source}")
 
     if errors:
         print("rendered documentation link check failed:", file=sys.stderr)
@@ -81,7 +106,10 @@ def main() -> int:
             print(f"- {error}", file=sys.stderr)
         return 1
 
-    print(f"rendered documentation link check passed: {len(pages)} HTML pages")
+    print(
+        "rendered documentation link and asset check passed: "
+        f"{len(pages)} HTML pages"
+    )
     return 0
 
 

@@ -12,19 +12,19 @@ remains distinct on macOS.
 
 | Intention | Keyboard | Pointer equivalent |
 | --- | --- | --- |
-| Create | ++n++, insertion-row ++enter++, or paste | Click the insertion row |
-| Focus | ++j++, ++k++, or vertical arrows | Click an item |
-| Edit | ++enter++ or ++e++ | Click body text |
-| Select one | ++space++ | Click the selection control |
-| Extend range | Shift plus vertical movement, ++shift+j++, ++shift+k++, or latch with ++v++ | Shift-click an endpoint |
-| Select all | ++a++ or ++primary+a++ | Commands |
+| Create | `n`, insertion-row `Enter`, or paste | Click the insertion row |
+| Focus | `j`, `k`, or vertical arrows | Click an item |
+| Edit | `Enter` or `e` | Click body text |
+| Select one | `Space` | Click the selection control |
+| Extend range | Shift plus vertical movement, `Shift+J`, `Shift+K`, or latch with `v` | Shift-click an endpoint |
+| Select all | `a` or `Primary+A` | Commands |
 | Reorder one | Primary+Shift plus vertical direction; macOS also Option+Shift | Drag the focused item |
-| Copy or safe cut | ++primary+c++ / ++y++; ++primary+x++ / ++x++ | Visible controls when available |
-| Delete | ++d++ or unmodified Delete | Visible delete control |
-| Duplicate | ++primary+d++ or ++shift+d++ | Commands |
-| Collapse | ++c++ | Click the collapse control |
-| Search / Commands / Help | ++slash++ / ++colon++ / ++question++ | Footer controls |
-| Quit | ++primary+q++ or ++q++ | Quit control |
+| Copy or safe cut | `Primary+C` / `y`; `Primary+X` / `x` | Visible controls when available |
+| Delete | `d` or unmodified Delete | Visible delete control |
+| Duplicate | `Primary+D` or `Shift+D` | Commands |
+| Collapse | `c` | Click the collapse control |
+| Search / Commands / Help | `/` / `:` / `?` | Footer controls |
+| Quit | `Primary+Q` or `q` | Quit control |
 
 Focus is not selection. Keyboard and pointer group actions operate on the
 selection when it exists and otherwise use focus. Reordering always moves only
@@ -34,11 +34,11 @@ the focused item.
 
 | Intention | Factory input |
 | --- | --- |
-| Return to Board | ++esc++ |
-| Select all text | ++primary+a++ |
-| Copy, cut, exact paste | ++primary+c++, ++primary+x++, ++primary+v++ |
-| Paste and clean up | ++primary+shift+v++ |
-| Delete logical line / sentence | ++primary+u++ / ++primary+shift+u++ |
+| Return to Board | `Escape` |
+| Select all text | `Primary+A` |
+| Copy, cut, exact paste | `Primary+C`, `Primary+X`, `Primary+V` |
+| Paste and clean up | `Primary+Shift+V` |
+| Delete logical line / sentence | `Primary+U` / `Primary+Shift+U` |
 | Undo / redo | macOS Control history aliases plus retained Primary forms; portable Primary forms |
 | Move by word | macOS Option plus horizontal arrow; portable Control plus horizontal arrow |
 | Move to logical line edge | macOS Control plus horizontal arrow; portable Alt plus horizontal arrow; Home / End |
@@ -47,7 +47,7 @@ the focused item.
 | Jump five rendered rows | Alt plus vertical arrow or Page Up / Page Down |
 | Move to thought boundary | Control plus vertical arrow |
 | Smart list / indent / outdent | Enter / Tab / Shift+Tab |
-| Split or extract | ++primary+t++ |
+| Split or extract | `Primary+T` |
 | Submit remove / keep | Primary+Enter / Primary+Shift+Enter, with terminal-safe macOS Control aliases |
 
 Mouse editing supports single-click cursor placement, character drag,

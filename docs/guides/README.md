@@ -26,10 +26,10 @@ Start with the workflow you need:
 1. **Focus and selection are different.** Focus identifies the item that
    navigation and single-item actions address. Selection builds a group for
    bulk actions. See [Select and act on thoughts](selection.md).
-2. **Copying and delivery are different.** Copying writes exact thought bodies
-   through the local clipboard path, using the native clipboard when available
-   and a bounded terminal fallback where supported. Direct delivery is
-   available only through a verified Herdr integration. See
+2. **Copying and delivery are different.** Unannotated copying uses the native
+   clipboard when available and a bounded terminal fallback where supported;
+   annotated copy and cut require macOS typed clipboard support. Direct
+   delivery is available only through a verified Herdr integration. See
    [Deliver prompts to agents](agent-delivery.md).
 3. **There is no save command.** Proqi saves accepted changes automatically and
    shows durability in the footer. A storage failure keeps the in-memory work

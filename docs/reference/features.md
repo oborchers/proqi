@@ -63,7 +63,7 @@ surface.
 | File drop and path recognition | Shipped | Absolute, quoted, escaped, file-URL, and multi-file paths become annotations only after every path resolves. | [Paste and attachments](../guides/paste-and-attachments.md#drop-files-and-paste-images) |
 | Clipboard image materialization | Shipped | Native pixels become a private session PNG and an atomic image annotation. | [Paste and attachments](../guides/paste-and-attachments.md#drop-files-and-paste-images) |
 | Attachment accessibility refresh | Shipped | Recheck paths without requesting an iCloud download. | [Paste and attachments](../guides/paste-and-attachments.md#deliver-attachments-safely) |
-| Native clipboard with OSC 52 fallback | Conditional | Copy prefers the native clipboard; bounded OSC 52 is a terminal-dependent fallback. | [Agent delivery](../guides/agent-delivery.md#choose-copy-or-direct-delivery) |
+| Native clipboard with OSC 52 fallback | Conditional | Unannotated text prefers the native clipboard; bounded OSC 52 is a terminal-dependent fallback. Annotated copy and cut require macOS typed clipboard support. | [Agent delivery](../guides/agent-delivery.md#choose-copy-or-direct-delivery) |
 | Screenshot Inbox | macOS | Watch new screenshots without taking, uploading, analyzing, or reconfiguring them. | [Paste and attachments](../guides/paste-and-attachments.md#screenshot-inbox-on-macos) |
 | Screenshot pause, takeover, and retry | macOS | One owner, bounded unattended capture, verified takeover, and explicit failed-capture retry. | [Paste and attachments](../guides/paste-and-attachments.md#screenshot-inbox-on-macos) |
 

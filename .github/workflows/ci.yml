@@ -75,19 +75,15 @@ jobs:
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
           enable-cache: true
-      - name: Check documented command coverage
-        run: python3 docs/check.py
-      - name: Build documentation site
-        run: |
-          uv sync --project docs --locked
-          uv run --project docs mkdocs build --strict
-          python3 docs/check_site.py
+          python-version: "3.12"
+      - name: Build and check documentation site
+        run: cargo xtask docs
       - name: Preserve documentation site
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0b # v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           if-no-files-found: error
           name: proqi-docs-site
-          path: site/
+          path: target/docs-site/
           retention-days: 7
       - run: cargo xtask clean-worktree
 
@@ -340,7 +336,11 @@ jobs:
         run: |
           test "$(jq -r '
             .changes.result == "success" and
-            .docs.result == "skipped" and
+            (if .changes.outputs.documentation == "true" then
+              .docs.result == "success"
+            else
+              .docs.result == "skipped"
+            end) and
             ([.quality, .test, .msrv, .crate, .security, .pty, .package_linux, .package_macos, .debian]
               | all(.result == "success")) and
             (if .changes.outputs.coverage == "true" then

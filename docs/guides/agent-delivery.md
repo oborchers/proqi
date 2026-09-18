@@ -2,16 +2,20 @@
 
 > Applies to Proqi 0.11.0.
 
-Clipboard transfer does not require Herdr, but it still depends on a native
-clipboard or a terminal that accepts Proqi's bounded OSC 52 fallback. Direct
-agent delivery is an optional Herdr enhancement and appears only when Proqi can
-verify a suitable target.
+Clipboard transfer does not require Herdr. Unannotated text uses the native
+clipboard or a terminal that accepts Proqi's bounded OSC 52 fallback. Copying
+annotated content requires the generation-bound typed clipboard available on
+macOS. Direct agent delivery is an optional Herdr enhancement and appears only
+when Proqi can verify a suitable target.
 
 ## Choose copy or direct delivery
 
-**Copy** writes exact thought bodies through the native plain-text clipboard
-when available, with bounded OSC 52 as a terminal-dependent fallback. Proqi
-does not know whether another application later accepts the clipboard content.
+**Copy** writes exact unannotated thought bodies through the native plain-text
+clipboard when available, with bounded OSC 52 as a terminal-dependent fallback.
+Annotated thoughts also require a matching typed clipboard representation. A
+platform without generation-bound typed clipboard support rejects annotated
+copy and cut instead of reporting a metadata-losing copy as successful. Proqi
+does not know whether another application later accepts copied content.
 
 **Direct delivery** calls Herdr's semantic agent prompt operation. An accepted
 receipt means the matching harness accepted the text entry. It does not mean

@@ -124,22 +124,20 @@ The user site uses MkDocs Material with documentation-only Python dependencies
 locked below `docs/`. Install [uv](https://docs.astral.sh/uv/), then run:
 
 ```shell
-uv sync --project docs --locked
-python3 docs/check.py
-uv run --project docs mkdocs build --strict
-python3 docs/check_site.py
+cargo xtask docs
 ```
 
 The coverage check reads the shipped Rust registries and fails when a Commands
 action or public CLI surface is absent from its reference page. The strict
-build validates navigation and writes the ignored static artifact to `site/`.
-The rendered-site check then verifies every local page, asset, and fragment
-link in that exact artifact.
+build validates navigation and writes the ignored static artifact to
+`target/docs-site/`. The rendered-site check then verifies every local HTML
+link, fragment, script, stylesheet, image, and image alt attribute in that exact
+artifact.
 
 For a local preview:
 
 ```shell
-uv run --project docs mkdocs serve
+UV_PROJECT_ENVIRONMENT=../target/docs-venv uv run --project docs mkdocs serve
 ```
 
 The repository does not deploy or publish the site from this build. Public

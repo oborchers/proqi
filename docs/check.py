@@ -102,8 +102,12 @@ def main() -> int:
     labels = registered_command_labels(source)
 
     errors: list[str] = []
-    if len(labels) != 59:
-        errors.append(f"expected 59 registered Commands labels, found {len(labels)}")
+    if len(set(labels)) != len(labels):
+        errors.append("ShortcutActionId::COMMANDS contains duplicate labels")
+    if f"{len(labels)} actions" not in commands_doc:
+        errors.append(
+            f"commands.md must identify the current {len(labels)}-action inventory"
+        )
     for label in labels:
         count = commands_doc.count(f"**{label}**")
         if count != 1:
@@ -113,7 +117,10 @@ def main() -> int:
 
     cli_surfaces = public_cli_surfaces(CLI_SOURCE.read_text(encoding="utf-8"))
     for surface in sorted(cli_surfaces):
-        if surface not in cli_doc:
+        invocation = re.compile(
+            rf"^proqi(?:\s+--json)?\s+{re.escape(surface)}(?:\s|$)", re.MULTILINE
+        )
+        if invocation.search(cli_doc) is None:
             errors.append(f"public CLI surface {surface!r} is missing from cli.md")
 
     if errors:

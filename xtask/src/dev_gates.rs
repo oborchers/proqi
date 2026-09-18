@@ -4,7 +4,7 @@ use std::{fs, path::Path, time::Instant};
 
 use serde_json::json;
 
-use super::ci_changes::{LocalChanges, LocalPlan};
+use super::ci_changes::{ChangeClass, LocalChanges, LocalPlan};
 
 const FULL_NEXTEST_ARGUMENTS: [&str; 5] = [
     "nextest",
@@ -78,6 +78,10 @@ fn parse_check_arguments(arguments: &[String]) -> Result<Option<String>, String>
 }
 
 fn run_classified(root: &Path, changes: &LocalChanges) -> Result<(), String> {
+    let includes_documentation = changes
+        .classification
+        .classes
+        .contains(&ChangeClass::Documentation);
     let classes = changes
         .classification
         .classes
@@ -104,48 +108,85 @@ fn run_classified(root: &Path, changes: &LocalChanges) -> Result<(), String> {
                 comparison,
                 classes: &classes,
                 changed_paths: &changes.paths,
-                planned: &["changed Markdown whitespace", "cargo xtask assets"],
+                planned: &[
+                    "changed Markdown whitespace",
+                    "cargo xtask assets",
+                    "cargo xtask docs",
+                ],
                 omitted: &["quality", "nextest", "PTY", "doctests"],
             },
             || documentation_gate(root, changes),
         ),
-        LocalPlan::Fast => run_gate(
-            root,
-            GatePlan {
-                command: "check",
-                plan: "fast",
-                selection_reason: "changed paths are known product or tooling paths without a high-risk class",
-                complete: false,
-                comparison,
-                classes: &classes,
-                changed_paths: &changes.paths,
-                planned: &[
-                    "cargo xtask quality",
-                    "cargo nextest run excluding binary(=pty)",
-                    "cargo test --doc",
-                ],
-                omitted: &["PTY integration binary"],
-            },
-            || {
-                quality(root)?;
-                test_fast(root)
-            },
-        ),
-        LocalPlan::Full => run_gate(
-            root,
-            GatePlan {
-                command: "check",
-                plan: "full",
-                selection_reason: "a high-risk or ambiguous change class requires the complete gate",
-                complete: true,
-                comparison,
-                classes: &classes,
-                changed_paths: &changes.paths,
-                planned: &["cargo xtask quality", "cargo xtask test"],
-                omitted: &[],
-            },
-            || full_gate(root),
-        ),
+        LocalPlan::Fast => {
+            let planned_with_docs = [
+                "cargo xtask docs",
+                "cargo xtask quality",
+                "cargo nextest run excluding binary(=pty)",
+                "cargo test --doc",
+            ];
+            let planned_without_docs = [
+                "cargo xtask quality",
+                "cargo nextest run excluding binary(=pty)",
+                "cargo test --doc",
+            ];
+            run_gate(
+                root,
+                GatePlan {
+                    command: "check",
+                    plan: "fast",
+                    selection_reason: "changed paths are known product or tooling paths without a high-risk class",
+                    complete: false,
+                    comparison,
+                    classes: &classes,
+                    changed_paths: &changes.paths,
+                    planned: if includes_documentation {
+                        &planned_with_docs
+                    } else {
+                        &planned_without_docs
+                    },
+                    omitted: &["PTY integration binary"],
+                },
+                || {
+                    if includes_documentation {
+                        super::documentation::build(root)?;
+                    }
+                    quality(root)?;
+                    test_fast(root)
+                },
+            )
+        }
+        LocalPlan::Full => {
+            let planned_with_docs = [
+                "cargo xtask docs",
+                "cargo xtask quality",
+                "cargo xtask test",
+            ];
+            let planned_without_docs = ["cargo xtask quality", "cargo xtask test"];
+            run_gate(
+                root,
+                GatePlan {
+                    command: "check",
+                    plan: "full",
+                    selection_reason: "a high-risk or ambiguous change class requires the complete gate",
+                    complete: true,
+                    comparison,
+                    classes: &classes,
+                    changed_paths: &changes.paths,
+                    planned: if includes_documentation {
+                        &planned_with_docs
+                    } else {
+                        &planned_without_docs
+                    },
+                    omitted: &[],
+                },
+                || {
+                    if includes_documentation {
+                        super::documentation::build(root)?;
+                    }
+                    full_gate(root)
+                },
+            )
+        }
     }
 }
 
@@ -237,6 +278,9 @@ fn documentation_gate(root: &Path, changes: &LocalChanges) -> Result<(), String>
     })?;
     super::timing::phase("check.documentation.assets", || {
         super::public_assets::check(root)
+    })?;
+    super::timing::phase("check.documentation.site", || {
+        super::documentation::build(root)
     })
 }
 

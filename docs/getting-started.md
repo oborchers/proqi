@@ -49,14 +49,14 @@ board.
 **Board** is for moving among thoughts, selecting groups, reordering, copying,
 and delivery. **Edit** is for changing one thought's exact text.
 
-- Press ++n++ or activate **+ New thought** to create.
-- Press ++j++ and ++k++, or the arrow keys, to move Board focus.
-- Press ++enter++ or ++e++, or click body text, to edit.
-- Press ++esc++ to leave Edit and return to Board.
-- Press ++colon++ for Commands and ++question++ for contextual Help.
+- Press `n` or activate **+ New thought** to create.
+- Press `j` and `k`, or the arrow keys, to move Board focus.
+- Press `Enter` or `e`, or click body text, to edit.
+- Press `Escape` to leave Edit and return to Board.
+- Press `:` for Commands and `?` for contextual Help.
 
 On a genuinely empty board, typing or pasting creates the first thought. Press
-++esc++ first when you want Board commands instead of immediate composition.
+`Escape` first when you want Board commands instead of immediate composition.
 
 ## Understand saving
 

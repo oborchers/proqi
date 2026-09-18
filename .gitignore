@@ -1,6 +1,4 @@
 /target/
-/site/
-/docs/.venv/
 .DS_Store
 *.profraw
 .env

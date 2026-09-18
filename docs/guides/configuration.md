@@ -36,6 +36,9 @@ theme = "auto"
 | `density` | `comfortable` or `compact`; shallow boards automatically use compact spacing. |
 | `theme` | `auto`, `light`, `dark`, `limited`, or a bounded local theme file. |
 
+`list_indent_width` accepts 1 through 8 spaces. `merge_separator` must contain
+1 through 1,024 UTF-8 bytes and is inserted without normalization.
+
 ## Theme safely
 
 Automatic mode inherits terminal foreground and background while resolving

@@ -8,7 +8,7 @@ collaborators while you edit a thought.
 
 ## Search all Proqi actions
 
-Press ++colon++ in Board mode. Commands initially shows a short **Relevant now**
+Press `:` in Board mode. Commands initially shows a short **Relevant now**
 set, then searches all 59 shipped actions as you type. Ranking is deterministic
 and Unicode-aware.
 
@@ -16,15 +16,16 @@ Unavailable commands are filtered by the current context and state. For
 example, **Extract selection as new thought** requires an editor selection, and
 **Retry Screenshot Capture** requires a retained failed capture.
 
-Use arrows or ++j++ and ++k++ to move, page keys or Alt plus vertical arrows to
-jump, ++enter++ or a click to run, and ++esc++ to close. The Commands query has
-its own transient undo history and never falls through to hidden Board history.
+Use arrows to move, page keys or Alt plus vertical arrows to jump, `Enter` or a
+click to run, and `Escape` to close. Printable `j` and `k` remain query text in
+Commands. The Commands query has its own transient undo history and never falls
+through to hidden Board history.
 
 The [Commands reference](../reference/commands.md) lists every action.
 
 ## Use contextual Help
 
-Press ++question++. Help is projected from the same action registry as
+Press `?`. Help is projected from the same action registry as
 Commands, keyboard dispatch, footer controls, and diagnostics. It shows only
 the controls relevant to the active Board, editor, or recovery context and uses
 effective configured bindings.
@@ -41,8 +42,8 @@ Exact and prefix matches rank first. Contiguous and separator-aware fuzzy
 matches follow, so a compact ordered abbreviation can find a longer hyphenated
 name. Sigils are hard namespaces: dollar, slash, and at results never mix.
 
-Use arrows or ++primary+p++ and ++primary+n++ to navigate. Press ++enter++ or
-++tab++ to insert the selected invocation, or ++esc++ to close. Results beyond
+Use arrows or `Primary+P` and `Primary+N` to navigate. Press `Enter` or `Tab` to
+insert the selected invocation, or `Escape` to close. Results beyond
 the visible viewport remain reachable by keyboard and mouse.
 
 ## Refresh discoveries

@@ -10,7 +10,7 @@ collaboration service, or content upload.
 
 | Action | External effect |
 | --- | --- |
-| Copy | Writes exact body text to the native clipboard or bounded OSC 52 fallback. |
+| Copy | Writes unannotated body text to the native clipboard or bounded OSC 52 fallback. Annotated content requires the generation-bound typed clipboard available on macOS. |
 | Direct delivery | Sends assembled prompt text to one verified Herdr agent target. |
 | Cross-session send | Copies one thought into another local Proqi session. |
 | Update check | Makes a content-free request to the verified release channel. |

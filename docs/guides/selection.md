@@ -69,6 +69,10 @@ Actions process the selection in visible Board order.
 A separator-only copy, cut, or delivery is a visible no-op. It does not erase
 the clipboard and does not send an empty prompt.
 
+Annotated copy and cut require generation-bound typed clipboard support, which
+is available on macOS. Other supported platforms reject those operations
+rather than silently losing folds, attachment, or invocation metadata.
+
 Names remain organizational metadata. Copying or delivering a thought uses its
 body and annotations without prepending the name.
 
