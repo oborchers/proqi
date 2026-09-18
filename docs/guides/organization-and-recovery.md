@@ -96,7 +96,7 @@ The Recovery surface offers:
 - `r` to retry the failed storage operation;
 - `w` to write a private recovery export;
 - `q` or `Primary+Q` to request exit through the same durability checks;
-- `Escape` to close the overlay without discarding the failure.
+- `Escape` is a safe no-op while the unresolved failure remains visible.
 
 Do not edit the database, delete lock files, or start a second writer to force
 recovery. If retry remains unavailable, export first and use the exact resume

@@ -28,8 +28,9 @@ Press `Space` to select or deselect the focused item. Move focus and repeat to
 build a noncontiguous group. Use the visible selection control for the same
 mouse workflow.
 
-Press `a` or `Primary+A` in Board mode to select every live Board item. The same
-chord in Edit selects only the active thought's text.
+Press `a` or `Primary+A` in Board mode to select every live Board item. In Edit,
+`Primary+A` selects only the active thought's text, while plain `a` remains
+ordinary text.
 
 Press `Escape` in Board mode to clear the complete Board selection.
 
@@ -45,8 +46,8 @@ Use any of these routes:
 
 The first range action establishes an anchor and replaces any arbitrary
 `Space` selection. Reversing direction shrinks the range, then extends past the
-same anchor. Pressing `Space` returns to arbitrary toggle selection rather than
-combining both models.
+same anchor. Pressing `Space` drops the anchor, keeps the already selected items
+as an arbitrary selection, and toggles the focused item.
 
 The `v` latch is useful when a terminal does not forward Shift reliably. A
 modal overlay or Edit mode releases the latch. `Escape` clears both the range
@@ -59,7 +60,7 @@ Actions process the selection in visible Board order.
 | Action | Thoughts | Separators | Important result |
 | --- | --- | --- | --- |
 | Copy | Included | Omitted | Bodies are joined with one blank line. Names are not copied. |
-| Cut | Included | Kept | Clipboard verification must succeed before thoughts are removed. |
+| Cut | Included | Omitted and left on the Board | Clipboard verification must succeed before thoughts are removed. |
 | Delete | Included | Included | One recoverable Board operation and one undo step. |
 | Duplicate | Included | Included | Copies appear below the source range and become selected. |
 | Collapse or expand | Included | Ignored | Content does not change. |

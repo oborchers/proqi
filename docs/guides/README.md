@@ -3,9 +3,9 @@
 > Applies to Proqi 0.11.0. These guides describe behavior shipped in that
 > release.
 
-Proqi is a local, resumable prompt board. Each thought stays editable until you
-copy it or deliberately deliver it to an agent. Start with the workflow you
-need:
+Proqi is a local, resumable prompt board. Each thought stays editable. Copying
+never changes it, and **Submit and keep** retains it. Only an accepted
+**Submit** removes the undoable local source. Start with the workflow you need:
 
 | I want to... | Guide |
 | --- | --- |

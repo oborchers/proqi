@@ -2,9 +2,10 @@
 
 > Applies to Proqi 0.11.0.
 
-Clipboard transfer does not require Herdr, but it still depends on the native
-clipboard being available. Direct agent delivery is an optional Herdr
-enhancement and appears only when Proqi can verify a suitable target.
+Clipboard transfer does not require Herdr, but it still depends on a native
+clipboard or a terminal that accepts Proqi's bounded OSC 52 fallback. Direct
+agent delivery is an optional Herdr enhancement and appears only when Proqi can
+verify a suitable target.
 
 ## Choose copy or direct delivery
 

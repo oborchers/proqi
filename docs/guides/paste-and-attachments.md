@@ -79,7 +79,10 @@ directory when desired:
 ```toml
 [screenshot_inbox]
 # directory = "/absolute/path/to/an/isolated/inbox"
+# filename_patterns = ["Screenshot", "Screen Shot"]
 capture_all_new_images = false
+# inactivity_timeout_minutes = 20
+# max_unattended_captures = 10
 notify_terminal_on_auto_pause = false
 ```
 
@@ -92,11 +95,12 @@ Only one Proqi process can listen at a time. A compatible contender offers
 finish admitted work, stop watching, and release authority. It never force
 unlocks a live or incompatible owner.
 
-Every listening period pauses after 20 minutes without deliberate Proqi input
-or after 10 unattended admitted captures. Keyboard input, paste, clicks, drag,
-and scrolling renew the bounds. Resize, host focus, pointer motion, and watcher
-activity do not. Resume starts a fresh baseline, so files accumulated during
-the pause are not imported later. Restart begins with Screenshot Inbox off.
+By default, every listening period pauses after 20 minutes without deliberate
+Proqi input or after 10 unattended admitted captures. Keyboard input, paste,
+clicks, drag, and scrolling renew the bounds. Resize, host focus, pointer
+motion, and watcher activity do not. Resume starts a fresh baseline, so files
+accumulated during the pause are not imported later. Restart begins with
+Screenshot Inbox off.
 
 Use Commands to disable or resume the inbox. A failed capture remains available
 through **Retry Screenshot Capture**. Disabling, pausing, taking over, or
