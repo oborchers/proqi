@@ -24,6 +24,11 @@ pub(super) struct PointerClick {
 }
 
 impl BoardApp {
+    #[cfg(test)]
+    pub(crate) fn pointer_click_count(&self) -> Option<u8> {
+        self.pointer_click.map(|click| click.count)
+    }
+
     pub(super) fn reset_pointer_click_for_input(&mut self, input: &super::UiInput) {
         if !matches!(
             input,
@@ -47,7 +52,7 @@ impl BoardApp {
         if !matches!(pointer.kind, PointerKind::Down(PointerButton::Left)) {
             return Vec::new();
         }
-        match self.hit(pointer) {
+        match self.pointer_target_for_owner(pointer) {
             Some(HitTarget::Retry) => self.retry_persistence(),
             Some(HitTarget::ExportRecovery) => self.export_recovery(ids, clock),
             Some(HitTarget::Help) => self.toggle_help(),
@@ -61,7 +66,9 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        self.edit_boundary = None;
+        if !matches!(pointer.kind, PointerKind::Move) {
+            self.edit_boundary = None;
+        }
         if self.submission_mode.is_some() {
             return self.handle_submission_pointer(pointer, ids, clock);
         }
@@ -83,17 +90,15 @@ impl BoardApp {
             EditFlush::Blocked(effects) => return effects,
         };
         effects.extend(match pointer.kind {
-            PointerKind::Move => {
-                let target = self.hit(pointer);
-                self.reconcile_board_hover(target);
-                Vec::new()
-            }
             PointerKind::ScrollUp => self.scroll_pointer(-1),
             PointerKind::ScrollDown => self.scroll_pointer(1),
             PointerKind::Down(PointerButton::Left) => self.pointer_down(pointer, ids, clock),
             PointerKind::Drag(PointerButton::Left) => self.pointer_drag(pointer),
             PointerKind::Up(PointerButton::Left) => self.pointer_up(ids, clock),
-            PointerKind::Down(_) | PointerKind::Up(_) | PointerKind::Drag(_) => Vec::new(),
+            PointerKind::Move
+            | PointerKind::Down(_)
+            | PointerKind::Up(_)
+            | PointerKind::Drag(_) => Vec::new(),
         });
         effects
     }
@@ -104,11 +109,10 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        let target = self.hit(pointer);
         if matches!(pointer.kind, PointerKind::Move) {
-            self.hovered = target;
             return Vec::new();
         }
+        let target = self.pointer_target_for_owner(pointer);
         let Some(HitTarget::Deliver(direction, disposition)) = target else {
             return Vec::new();
         };
@@ -124,16 +128,16 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
-        let target = self.hit(pointer);
+        let target = self.pointer_target(pointer);
         self.hovered = target;
-        if !matches!(target, Some(HitTarget::Thought(_))) {
+        if !matches!(target, Some(HitTarget::Thought(_) | HitTarget::Fold(_, _))) {
             self.pointer_click = None;
         }
         match target {
             Some(HitTarget::ThoughtName(thought_id)) => {
                 self.begin_thought_rename_from_pointer(thought_id, pointer, ids, clock)
             }
-            Some(HitTarget::Thought(thought_id)) => {
+            Some(HitTarget::Thought(thought_id) | HitTarget::Fold(thought_id, _)) => {
                 self.handle_thought_pointer(thought_id, pointer, ids, clock)
             }
             Some(HitTarget::DragHandle(thought_id)) => {
@@ -179,10 +183,7 @@ impl BoardApp {
             Some(HitTarget::Undo) => self.history(ids, clock, true),
             Some(HitTarget::Redo) => self.history(ids, clock, false),
             Some(HitTarget::Help) => self.toggle_help(),
-            Some(HitTarget::Quit) => {
-                self.request_quit();
-                Vec::new()
-            }
+            Some(HitTarget::Quit) => self.request_global_quit(ids, clock),
             Some(HitTarget::ExitEdit) => self.pointer_exit_edit(ids, clock),
             Some(HitTarget::CommitThoughtName | HitTarget::CancelThoughtName) => Vec::new(),
             Some(HitTarget::Retry) => self.retry_persistence(),

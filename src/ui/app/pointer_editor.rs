@@ -19,11 +19,9 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
+        let target = self.thought_cell_target(thought_id, pointer);
         if matches!(self.state.mode, InteractionMode::Edit { thought_id: active } if active == thought_id)
         {
-            let target = self
-                .editor_cell(thought_id, pointer)
-                .and_then(|(row, column)| self.editor_cell_target(row, column));
             self.focus(thought_id);
             self.enter_edit();
             let Some(target) = target else {
@@ -32,7 +30,6 @@ impl BoardApp {
             self.apply_board_cell_target(target, pointer, click_count);
             return Vec::new();
         }
-        let target = self.board_cell_target(thought_id, pointer);
         self.focus(thought_id);
         let effects = self.expand_and_enter_edit(ids, clock);
         if let Some(target) = target {
@@ -49,6 +46,7 @@ impl BoardApp {
     ) {
         match target {
             BoardCellTarget::Fold {
+                annotation_index: _,
                 canonical_start,
                 canonical_end,
             } => self.set_editor_range(canonical_start, canonical_end),
@@ -74,6 +72,24 @@ impl BoardApp {
             granularity,
             extend_selection: pointer.extend_selection,
         });
+    }
+
+    pub(super) fn thought_cell_target(
+        &self,
+        thought_id: ThoughtId,
+        pointer: PointerInput,
+    ) -> Option<BoardCellTarget> {
+        if matches!(
+            self.state.mode,
+            InteractionMode::Edit {
+                thought_id: active_id
+            } if active_id == thought_id
+        ) {
+            self.editor_cell(thought_id, pointer)
+                .and_then(|(row, column)| self.editor_cell_target(row, column))
+        } else {
+            self.board_cell_target(thought_id, pointer)
+        }
     }
 
     fn board_cell_target(

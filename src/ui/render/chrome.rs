@@ -56,21 +56,24 @@ fn render_control(
     let available = usize::from(area.width)
         .saturating_sub(crate::ports::text_layout::terminal_cell_width(&label.key));
     let text = truncate(&label.text, available);
-    let line = Line::from(vec![
-        Span::styled(label.key, Style::default().fg(theme.accent)),
-        Span::styled(text, Style::default().fg(theme.foreground)),
-    ]);
     let active_submission = matches!(
         target,
         HitTarget::BeginDelivery(disposition)
             if app.submission_mode() == Some(disposition)
     );
     let interactive = !matches!(target, HitTarget::Agent(_));
-    let style = if (interactive && app.hovered() == Some(target)) || active_submission {
+    let hovered = interactive && app.hovered() == Some(target);
+    let style = if hovered {
+        theme.control_hovered_style()
+    } else if active_submission {
         theme.focused_style()
     } else {
         theme.base_style()
     };
+    let line = Line::from(vec![
+        Span::styled(label.key, style.fg(theme.accent)),
+        Span::styled(text, style.fg(theme.foreground)),
+    ]);
     frame.render_widget(Paragraph::new(line).style(style), area);
 }
 
@@ -184,7 +187,7 @@ fn render_identity_hover(
     };
     let value = truncate(value, usize::from(area.width));
     frame.render_widget(
-        Paragraph::new(value).style(theme.focused_style().fg(color)),
+        Paragraph::new(value).style(theme.control_hovered_style().fg(color)),
         *area,
     );
 }

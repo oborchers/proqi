@@ -13,7 +13,7 @@ TEXT
 05│  n New   : Commands│
 
 STYLE RUNS
-0: 0-0 fg=Black bg=Green mod=BOLD | REVERSED | 1-23 fg=Green bg=Reset mod=BOLD | REVERSED
+0: 0-0 fg=Black bg=Green mod=BOLD | 1-23 fg=Green bg=Reset mod=BOLD | REVERSED
 1: 0-23 fg=Reset bg=Reset mod=NONE
 2: 0-5 fg=Reset bg=Reset mod=NONE | 6-6 fg=Green bg=Reset mod=NONE | 7-23 fg=Reset bg=Reset mod=NONE
 3: 0-23 fg=Reset bg=Reset mod=NONE

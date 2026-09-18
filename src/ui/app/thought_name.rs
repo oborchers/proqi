@@ -155,7 +155,6 @@ impl BoardApp {
     ) -> Vec<Effect> {
         let hit = self.hit(pointer);
         if matches!(pointer.kind, PointerKind::Move) {
-            self.hovered = hit;
             return Vec::new();
         }
         let left_down = matches!(pointer.kind, PointerKind::Down(PointerButton::Left));

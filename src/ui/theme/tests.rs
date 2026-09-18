@@ -86,6 +86,35 @@ fn limited_and_failed_auto_detection_keep_a_non_color_focus_cue() {
 }
 
 #[test]
+fn hover_typography_is_owned_by_semantic_role() {
+    for preference in [
+        ThemePreference::Dark,
+        ThemePreference::Light,
+        ThemePreference::Limited,
+    ] {
+        let theme = Theme::resolve(preference, true);
+        let content = theme.content_hovered_style();
+        assert!(!content.add_modifier.contains(Modifier::BOLD));
+        assert!(
+            !content
+                .add_modifier
+                .intersects(Modifier::ITALIC | Modifier::UNDERLINED)
+        );
+        for style in [
+            theme.control_hovered_style(),
+            theme.focused_control_hovered_style(),
+        ] {
+            assert!(style.add_modifier.contains(Modifier::BOLD));
+            assert!(
+                !style
+                    .add_modifier
+                    .intersects(Modifier::ITALIC | Modifier::UNDERLINED)
+            );
+        }
+    }
+}
+
+#[test]
 fn explicit_theme_text_pairs_meet_aa_contrast() {
     let dark = Theme::resolve(ThemePreference::Dark, true);
     assert!(contrast((232, 228, 223), (15, 13, 10)) >= 4.5);

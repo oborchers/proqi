@@ -1,5 +1,6 @@
 ---
 source: tests/ui_board/separator_snapshots.rs
+assertion_line: 105
 expression: "snapshot(&mut fixture, 62, 14, ThemePreference::Dark)"
 ---
 SIZE 62x14
@@ -23,9 +24,9 @@ TEXT
 STYLE RUNS
 0: 0-61 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 1: 0-0 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 1-61 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-2: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-61 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
-3: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-61 fg=Rgb(112, 214, 155) bg=Rgb(39, 40, 48) mod=BOLD
-4: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-61 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
+2: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-61 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=BOLD
+3: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-61 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=BOLD
+4: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-61 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=BOLD
 5: 0-0 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 1-61 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 6: 0-61 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 7: 0-24 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 25-25 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 26-61 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE

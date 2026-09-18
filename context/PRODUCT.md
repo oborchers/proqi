@@ -1678,7 +1678,7 @@ silently altered.
 
 The product remains usable in terminals without true color. The fallback uses
 default foreground and background, one supported green accent, bold, dim, and
-reverse video sparingly.
+reverse video sparingly. Pointer hover never changes the content's type style.
 
 ## Accessibility and input correctness
 

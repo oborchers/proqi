@@ -28,6 +28,11 @@ pub enum HitTarget {
     Thought(ThoughtId),
     /// Optional organizational name outside authored body text.
     ThoughtName(ThoughtId),
+    /// One collapsed presentation fold refined from a thought hit by `BoardApp`.
+    ///
+    /// `LayoutSnapshot::hit_test` returns the enclosing `Thought`; current-frame
+    /// presentation maps the exact terminal cell to this typed fold identity.
+    Fold(ThoughtId, usize),
     /// Reorder handle for one thought.
     DragHandle(ThoughtId),
     /// Payload-free visual separator.

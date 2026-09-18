@@ -7,13 +7,22 @@ use crate::{
         editor::{CursorMovement, EditorSnapshot},
         environment::{Clock, IdGenerator},
     },
-    ui::PastePayload,
+    ui::{PastePayload, PointerKind},
 };
 
 use super::{BoardApp, BoundaryInsertion, InsertionConfirmation, InsertionFocus, UiInput};
 
 impl BoardApp {
     pub(super) fn reset_insertion_confirmation(&mut self, input: &UiInput) {
+        if matches!(
+            input,
+            UiInput::Pointer(crate::ui::PointerInput {
+                kind: PointerKind::Move,
+                ..
+            })
+        ) {
+            return;
+        }
         let boundary = match input {
             UiInput::Key(key) => match self.settings.shortcuts.board_action_for_intention(*key) {
                 Some(crate::ui::ShortcutActionId::FocusPrevious) => {

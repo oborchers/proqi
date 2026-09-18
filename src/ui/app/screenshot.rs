@@ -22,7 +22,7 @@ use crate::{
     },
 };
 
-use super::{BoardApp, UiInput, UiKey};
+use super::BoardApp;
 use activity::ScreenshotActivity;
 use barrier::DeferredInput;
 pub(crate) use update::ScreenshotUpdateReadiness;
@@ -428,15 +428,6 @@ impl BoardApp {
             vec![Effect::Screenshot(ScreenshotIntent::Disable)]
         } else {
             Vec::new()
-        }
-    }
-
-    pub(super) fn note_screenshot_interaction(&mut self, input: &UiInput) {
-        if !matches!(input, UiInput::Key(UiKey::Quit)) {
-            self.screenshot.ready_quit_armed = false;
-        }
-        if input.is_deliberate_interaction() {
-            self.screenshot.auto_ready = None;
         }
     }
 

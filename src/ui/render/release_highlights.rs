@@ -60,7 +60,12 @@ pub(super) fn render(
         (view.overflow_above, view.overflow_below),
         theme,
     );
-    render_close(frame, overlay, theme);
+    render_close(
+        frame,
+        overlay,
+        app.hovered() == Some(crate::ui::HitTarget::CloseOverlay),
+        theme,
+    );
 }
 
 fn highlight_line(row: ReleaseHighlightRow, theme: &Theme) -> Line<'static> {

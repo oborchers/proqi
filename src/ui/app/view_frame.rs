@@ -80,6 +80,9 @@ impl BoardApp {
                 .map_or_else(Vec::new, |overlay| overlay.item_interactive.clone()),
         );
         self.configure_footer(&mut layout);
+        if self.thought_name_editing() {
+            layout.configure_thought_name_controls();
+        }
         let final_height = self.focused_height(&layout);
         self.prepare_layout(TextViewport::new(layout.content_width, final_height));
         self.attach_editor_presentation(&mut presentation);
@@ -87,6 +90,7 @@ impl BoardApp {
         self.scroll_geometry = Some(scroll);
         self.frame_presentation = Some(presentation);
         self.layout = Some(layout.clone());
+        self.reconcile_hover();
         self.clamp_help_scroll();
         self.clamp_release_highlights_scroll();
         layout
@@ -109,9 +113,6 @@ impl BoardApp {
             self.session_display_name().to_owned(),
             session_id,
         );
-        if self.thought_name_editing() {
-            layout.configure_thought_name_controls();
-        }
     }
 
     fn focused_height(&self, layout: &LayoutSnapshot) -> u16 {

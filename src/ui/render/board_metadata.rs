@@ -6,7 +6,7 @@ use ratatui_core::{
 };
 use ratatui_widgets::paragraph::Paragraph;
 
-use crate::ui::{BoardApp, HitTarget, Theme, ThoughtLayout};
+use crate::ui::{BoardApp, Theme, ThoughtLayout};
 
 pub(super) fn render_thought_name(
     frame: &mut Frame<'_>,
@@ -18,15 +18,9 @@ pub(super) fn render_thought_name(
     let Some(area) = layout.name else {
         return;
     };
-    let hovered = app.hovered() == Some(HitTarget::ThoughtName(layout.thought_id));
     let style = Style::default()
-        .fg(theme.accent)
-        .add_modifier(Modifier::BOLD)
-        .add_modifier(if hovered {
-            Modifier::UNDERLINED
-        } else {
-            Modifier::empty()
-        });
+        .fg(theme.muted)
+        .add_modifier(Modifier::BOLD);
     if let Some(editor) = app.thought_name_editor(layout.thought_id) {
         let width = usize::from(area.width);
         let window = crate::ports::text_layout::visible_cell_window(

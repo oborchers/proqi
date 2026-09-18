@@ -51,19 +51,40 @@ fn snapshot(fixture: &mut Fixture, width: u16, height: u16, theme: ThemePreferen
     snapshot_buffer(draw_theme(fixture, width, height, theme).backend().buffer())
 }
 
+fn assert_separator_line_hover(
+    resting: ratatui_core::style::Style,
+    hovered: ratatui_core::style::Style,
+) {
+    assert_ne!(hovered, resting);
+    assert_eq!(
+        hovered.fg,
+        Some(Theme::resolve(ThemePreference::Dark, true).foreground)
+    );
+    assert!(!hovered.add_modifier.intersects(
+        ratatui_core::style::Modifier::ITALIC | ratatui_core::style::Modifier::UNDERLINED
+    ));
+}
+
 #[test]
 fn spacious_dark_separator_owns_the_boundary_and_hover_geometry() {
     let mut fixture = separator_fixture("tst");
     let initial = draw_theme(&mut fixture, 62, 14, ThemePreference::Dark);
-    let separator = fixture
-        .app
-        .prepare_frame(Rect::new(0, 0, 62, 14))
-        .separators[0]
-        .area;
+    let layout = fixture.app.prepare_frame(Rect::new(0, 0, 62, 14));
+    let separator = &layout.separators[0];
+    let resting_gutter =
+        initial.backend().buffer()[(separator.gutter.x, separator.gutter.y)].style();
+    let line = separator.line.expect("visible separator line");
+    let line_column = line.x.saturating_add(1);
+    assert!(line_column < line.right());
+    let resting_line = initial.backend().buffer()[(line_column, line.y)].style();
     fixture.pointer(
-        separator.x.saturating_add(3),
-        separator.y,
+        separator.area.x.saturating_add(3),
+        separator.area.y,
         PointerKind::Move,
+    );
+    assert_eq!(
+        fixture.app.hovered(),
+        Some(HitTarget::Separator(separator.separator_id))
     );
     assert!(
         fixture
@@ -74,8 +95,57 @@ fn spacious_dark_separator_owns_the_boundary_and_hover_geometry() {
             .into_iter()
             .all(|item| !fixture.app.item_selected(item.id()))
     );
+    let hovered = draw_theme(&mut fixture, 62, 14, ThemePreference::Dark);
+    let body = &hovered.backend().buffer()[(separator.area.x.saturating_add(3), separator.area.y)];
+    assert!(body.modifier.contains(ratatui_core::style::Modifier::BOLD));
+    assert!(!body.modifier.intersects(
+        ratatui_core::style::Modifier::ITALIC | ratatui_core::style::Modifier::UNDERLINED
+    ));
+    assert_eq!(
+        hovered.backend().buffer()[(separator.gutter.x, separator.gutter.y)].style(),
+        resting_gutter
+    );
+    let hovered_line = hovered.backend().buffer()[(line_column, line.y)].style();
+    assert_separator_line_hover(resting_line, hovered_line);
     drop(initial);
+    drop(hovered);
     insta::assert_snapshot!(snapshot(&mut fixture, 62, 14, ThemePreference::Dark));
+
+    fixture.pointer(separator.gutter.x, separator.gutter.y, PointerKind::Move);
+    assert_eq!(
+        fixture.app.hovered(),
+        Some(HitTarget::SeparatorDragHandle(separator.separator_id))
+    );
+    let terminal = draw_theme(&mut fixture, 62, 14, ThemePreference::Dark);
+    let gutter = &terminal.backend().buffer()[(separator.gutter.x, separator.gutter.y)];
+    assert!(
+        gutter
+            .modifier
+            .contains(ratatui_core::style::Modifier::BOLD)
+    );
+    assert!(!gutter.modifier.intersects(
+        ratatui_core::style::Modifier::ITALIC | ratatui_core::style::Modifier::UNDERLINED
+    ));
+
+    fixture.app.state.focused_item = Some(layout.thoughts[0].thought_id.into());
+    fixture.pointer(
+        separator.area.x.saturating_add(3),
+        separator.area.y,
+        PointerKind::Move,
+    );
+    let terminal = draw_theme(&mut fixture, 62, 14, ThemePreference::Limited);
+    let body = &terminal.backend().buffer()[(separator.area.x.saturating_add(3), separator.area.y)];
+    assert!(body.modifier.contains(ratatui_core::style::Modifier::BOLD));
+    assert!(!body.modifier.intersects(
+        ratatui_core::style::Modifier::ITALIC | ratatui_core::style::Modifier::UNDERLINED
+    ));
+    let gutter = &terminal.backend().buffer()[(separator.gutter.x, separator.gutter.y)];
+    assert_eq!(gutter.symbol(), " ");
+    assert!(!gutter.modifier.intersects(
+        ratatui_core::style::Modifier::BOLD
+            | ratatui_core::style::Modifier::ITALIC
+            | ratatui_core::style::Modifier::UNDERLINED
+    ));
 }
 
 #[test]

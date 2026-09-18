@@ -385,31 +385,6 @@ fn mouse_uses_rendered_rows_and_footer_geometry() {
 }
 
 #[test]
-fn zero_height_browser_has_no_phantom_footer_target() {
-    let mut ids = FakeIdGenerator::new(1_725_000_000_000);
-    let entry = item(
-        &mut ids,
-        Some("Zero height"),
-        test_path("zero-height"),
-        "hidden",
-        10,
-        resumable,
-    );
-    let mut browser = SessionBrowser::new(vec![entry], Timestamp::from_millis(20));
-    let empty = browser.prepare_frame(ratatui_core::layout::Rect::new(0, 0, 44, 0));
-    assert_eq!(empty.footer.height, 0);
-    assert_eq!(
-        browser.handle(UiInput::Pointer(PointerInput {
-            column: 0,
-            row: 0,
-            kind: PointerKind::Down(PointerButton::Left),
-            extend_selection: false,
-        })),
-        BrowserAction::Continue,
-    );
-}
-
-#[test]
 fn keyboard_rename_and_trash_are_explicit_browser_actions() {
     let mut ids = FakeIdGenerator::new(1_725_000_000_000);
     let entry = item(
@@ -496,5 +471,9 @@ fn narrow_browser_has_a_complete_reviewed_buffer() {
     insta::assert_snapshot!(snapshot_buffer(terminal.backend().buffer()));
 }
 
+#[path = "ui_session_browser/geometry.rs"]
+mod geometry;
+#[path = "ui_session_browser/hover.rs"]
+mod hover;
 #[path = "ui_session_browser/paging.rs"]
 mod paging;

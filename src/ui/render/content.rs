@@ -1,4 +1,4 @@
-//! Semantic styling of canonical text into terminal cells.
+//! Semantic thought text styling, including exact projected fold hover.
 
 use linkify::{LinkFinder, LinkKind};
 use ratatui_core::{
@@ -15,6 +15,7 @@ pub(super) fn styled_line(
     semantic_styles: &[crate::ui::annotations::PresentedStyle],
     links: &[std::ops::Range<usize>],
     invocations: &[std::ops::Range<usize>],
+    hovered_fold: Option<&crate::ui::annotations::PresentedSubstitution>,
     theme: &Theme,
 ) -> Line<'static> {
     let source = content
@@ -35,23 +36,30 @@ pub(super) fn styled_line(
                 .map(|style| style.kind);
             let linked = links.iter().any(|range| range.contains(&byte));
             let invocation = invocations.iter().any(|range| range.contains(&byte));
+            let hovered = hovered_fold.is_some_and(|fold| byte >= fold.start && byte < fold.end);
             column = column.saturating_add(width);
-            let mut style = Style::default().fg(
-                if matches!(
-                    semantic,
-                    Some(crate::ui::annotations::PresentedStyleKind::Warning)
-                ) {
-                    theme.warning
-                } else if semantic.is_some() || invocation {
-                    theme.annotation
-                } else if linked {
-                    theme.link
-                } else {
-                    theme.foreground
-                },
-            );
+            let foreground = if matches!(
+                semantic,
+                Some(crate::ui::annotations::PresentedStyleKind::Warning)
+            ) {
+                theme.warning
+            } else if semantic.is_some() || invocation {
+                theme.annotation
+            } else if linked {
+                theme.link
+            } else {
+                theme.foreground
+            };
+            let mut style = if hovered {
+                theme.content_hovered_style().fg(foreground)
+            } else {
+                Style::default().fg(foreground)
+            };
             if semantic.is_some() || invocation {
                 style = style.add_modifier(Modifier::BOLD);
+            }
+            if hovered {
+                style = style.add_modifier(Modifier::REVERSED);
             }
             if linked {
                 style = style.add_modifier(Modifier::UNDERLINED);

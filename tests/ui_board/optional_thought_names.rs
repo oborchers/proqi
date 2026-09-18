@@ -168,12 +168,21 @@ fn title_hit_geometry_opens_the_same_editor_without_entering_body_selection() {
         Some(HitTarget::ThoughtName(thought.thought_id))
     );
 
+    let resting = draw_theme(&mut fixture, 52, 9, ThemePreference::Dark);
+    let resting_style = resting.backend().buffer()[(name.x, name.y)].style();
+    assert_eq!(
+        resting_style.fg,
+        Some(proqi::ui::Theme::resolve(ThemePreference::Dark, true).muted)
+    );
+    assert!(resting_style.add_modifier.contains(Modifier::BOLD));
+    assert!(!resting_style.add_modifier.contains(Modifier::UNDERLINED));
+
     fixture.pointer(name.x, name.y, PointerKind::Move);
     let hovered = draw_theme(&mut fixture, 52, 9, ThemePreference::Dark);
-    assert!(
-        hovered.backend().buffer()[(name.x, name.y)]
-            .modifier
-            .contains(Modifier::UNDERLINED)
+    assert_eq!(
+        hovered.backend().buffer()[(name.x, name.y)].style(),
+        resting_style,
+        "title hover must preserve its restrained baseline typography"
     );
 
     fixture.pointer(name.x, name.y, PointerKind::Down(PointerButton::Left));

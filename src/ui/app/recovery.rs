@@ -23,7 +23,7 @@ impl BoardApp {
         Some(self.request_global_quit(ids, clock))
     }
 
-    fn request_global_quit(
+    pub(super) fn request_global_quit(
         &mut self,
         ids: &mut impl IdGenerator,
         clock: &impl Clock,

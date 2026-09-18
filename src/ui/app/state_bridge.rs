@@ -22,20 +22,6 @@ impl BoardApp {
         }
     }
 
-    pub(super) fn request_quit_after_edit_flush(
-        &mut self,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-    ) -> Vec<Effect> {
-        match self.flush_edit_boundary(ids, clock) {
-            EditFlush::Complete(effects) => {
-                self.request_quit();
-                effects
-            }
-            EditFlush::Blocked(effects) => effects,
-        }
-    }
-
     /// Apply one ordered persistence acknowledgement to the reducer state.
     pub fn acknowledge_persistence(
         &mut self,

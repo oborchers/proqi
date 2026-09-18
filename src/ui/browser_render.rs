@@ -7,7 +7,10 @@ use ratatui_core::{
 };
 use ratatui_widgets::{block::Block, borders::Borders, paragraph::Paragraph};
 
-use super::{BrowserAvailability, BrowserLayout, SessionBrowser, Theme, browser_summary::summary};
+use super::{
+    BrowserAvailability, BrowserLayout, SessionBrowser, Theme, browser::BrowserHit,
+    browser_summary::summary,
+};
 
 /// Render the complete session browser frame.
 pub fn render_browser(
@@ -43,6 +46,7 @@ pub fn render_browser(
             item,
             entry.row,
             selected,
+            browser.hovered() == BrowserHit::Item(entry.item_index),
             &browser.activity_label(item),
             theme,
         );
@@ -127,6 +131,7 @@ fn render_result(
     item: &super::SessionBrowserItem,
     area: ratatui_core::layout::Rect,
     selected: bool,
+    hovered: bool,
     activity: &str,
     theme: &Theme,
 ) {
@@ -147,16 +152,18 @@ fn render_result(
     let fixed_cells =
         4_usize.saturating_add(crate::ports::text_layout::terminal_cell_width(&badge));
     let label_cells = usize::from(area.width).saturating_sub(fixed_cells);
-    let style = if selected {
-        theme.focused_style().fg(theme.accent)
+    let style = if hovered && selected {
+        theme.focused_control_hovered_style()
+    } else if hovered {
+        theme.control_hovered_style().fg(theme.accent)
+    } else if selected {
+        theme
+            .focused_style()
+            .fg(theme.accent)
+            .add_modifier(Modifier::BOLD)
     } else {
         theme.base_style()
-    }
-    .add_modifier(if selected {
-        Modifier::BOLD
-    } else {
-        Modifier::empty()
-    });
+    };
     frame.render_widget(
         Paragraph::new(format!(
             "{focus} {}  [{}]",
@@ -252,14 +259,17 @@ fn render_footer(
         return;
     }
     for control in &browser.footer_controls {
+        let style = if control.hit != BrowserHit::None && browser.hovered() == control.hit {
+            theme.control_hovered_style()
+        } else {
+            theme.base_style()
+        };
         frame.render_widget(
             Paragraph::new(Line::from(vec![
-                Span::styled(control.key.as_str(), Style::default().fg(theme.accent)),
-                Span::styled(
-                    format!(" {}", control.label),
-                    Style::default().fg(theme.foreground),
-                ),
-            ])),
+                Span::styled(control.key.as_str(), style.fg(theme.accent)),
+                Span::styled(format!(" {}", control.label), style.fg(theme.foreground)),
+            ]))
+            .style(style),
             control.area,
         );
     }

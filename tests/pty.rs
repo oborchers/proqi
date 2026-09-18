@@ -20,6 +20,10 @@ mod active_transfer;
 mod active_transfer_failures;
 
 #[cfg(target_os = "macos")]
+#[path = "pty/active_transfer_names.rs"]
+mod active_transfer_names;
+
+#[cfg(target_os = "macos")]
 #[path = "pty/bottom_boundary.rs"]
 mod bottom_boundary;
 
@@ -66,6 +70,10 @@ mod input_stall_failures;
 #[cfg(target_os = "macos")]
 #[path = "pty/input_stall_modes.rs"]
 mod input_stall_modes;
+
+#[cfg(target_os = "macos")]
+#[path = "pty/hover.rs"]
+mod hover;
 
 #[cfg(target_os = "macos")]
 #[path = "pty/key_inspector.rs"]

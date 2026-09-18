@@ -393,6 +393,25 @@ fn entering_edit_mode_clears_selection_and_hover_cannot_replace_it() {
 }
 
 #[test]
+fn nonempty_board_selection_still_allows_discrete_control_hover() {
+    let mut fixture = Fixture::new();
+    fixture.paste("selected");
+    fixture.input(crate::key_input(UiKey::Escape));
+    fixture.input(crate::key_input(UiKey::Character(' ')));
+    let layout = fixture.app.prepare_frame(Rect::new(0, 0, 50, 12));
+    let commands = layout
+        .controls
+        .iter()
+        .find_map(|(target, area)| (*target == HitTarget::Commands).then_some(*area))
+        .expect("Commands control");
+
+    fixture.pointer(commands.x, commands.y, PointerKind::Move);
+
+    assert_eq!(fixture.app.hovered(), Some(HitTarget::Commands));
+    assert!(fixture.app.thought_selected(layout.thoughts[0].thought_id));
+}
+
+#[test]
 fn duplicate_copies_selection_below_its_range_as_one_undoable_operation() {
     let mut fixture = Fixture::new();
     for content in ["first", "second", "third"] {
