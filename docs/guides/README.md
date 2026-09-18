@@ -4,9 +4,9 @@
 > release.
 
 Proqi is a local, resumable prompt board. Each thought stays editable. Copying
-never changes it, and **Submit and keep** retains it. Among delivery actions,
-only an accepted **Submit** removes the local source, and that removal is
-undoable. Start with the workflow you need:
+never changes it, and **Submit and keep** retains it. For direct agent delivery,
+an accepted **Submit** removes the local source, and that removal is undoable.
+Start with the workflow you need:
 
 | I want to... | Guide |
 | --- | --- |
