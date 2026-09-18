@@ -476,6 +476,7 @@ theme = "auto" # auto, light, dark, limited, or a bounded local theme file
 density = "comfortable" # or compact
 merge_separator = "\n\n" # one blank line between merged thoughts
 mouse_capture = true # set false if your terminal/multiplexer mishandles mouse reporting
+footer_hidden = false # set true to reclaim optional persistent footer chrome
 
 [keymap]
 schema_version = 1
@@ -495,6 +496,9 @@ schema_version = 1
 [keymap.portable.edit]
 "submission.submit_remove" = [{ key = "F5" }]
 ```
+
+`footer_hidden` is read at startup. Because configuration rejects unknown fields,
+remove this line before running an older Proqi release.
 
 Each supplied context/action list replaces all its default aliases. Omitted
 pairs retain defaults; platform overrides replace common lists. Control, Alt,

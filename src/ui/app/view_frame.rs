@@ -39,16 +39,14 @@ impl BoardApp {
         let mut presentation = self.build_frame_presentation();
         self.attach_editor_presentation(&mut presentation);
         let follow_insertion = self.insertion_focused() || self.compose_prompt_visible();
-        let has_status = self.status_view().is_some()
-            || matches!(self.state.durability, DurabilityState::Failed { .. });
+        let footer_chrome = self.footer_chrome();
         let history_available = (self.history_available(true), self.history_available(false));
         let (first, first_scroll) = crate::ui::layout::compute_for_app(
             &self.state,
             &presentation,
             area,
             follow_insertion,
-            !self.agent_targets.is_empty(),
-            has_status,
+            footer_chrome,
             self.settings.density,
             &self.settings.shortcuts,
             history_available,
@@ -63,8 +61,7 @@ impl BoardApp {
             &presentation,
             area,
             follow_insertion,
-            !self.agent_targets.is_empty(),
-            has_status,
+            footer_chrome,
             self.settings.density,
             &self.settings.shortcuts,
             history_available,
@@ -98,13 +95,44 @@ impl BoardApp {
         let final_height = self.focused_height(&layout);
         self.prepare_layout(TextViewport::new(layout.content_width, final_height));
         self.attach_editor_presentation(&mut presentation);
-        self.board_viewport = self.board_viewport.at(scroll.current);
-        self.scroll_geometry = Some(scroll);
         self.frame_presentation = Some(presentation);
+        self.record_frame(layout, &scroll)
+    }
+
+    fn record_frame(
+        &mut self,
+        layout: LayoutSnapshot,
+        scroll: &crate::ui::layout::scroll::ScrollGeometry,
+    ) -> LayoutSnapshot {
+        self.board_viewport = self.board_viewport.at(scroll.current);
+        self.scroll_geometry = Some(*scroll);
         self.layout = Some(layout.clone());
         self.clamp_help_scroll();
         self.clamp_release_highlights_scroll();
         layout
+    }
+
+    fn footer_chrome(&self) -> crate::ui::layout::FooterChrome {
+        let has_recovery_controls = matches!(self.state.durability, DurabilityState::Failed { .. });
+        let has_status = self.status_view().is_some()
+            || has_recovery_controls
+            || (self.settings.footer_hidden && self.durability_footer_status().is_some())
+            || (self.settings.footer_hidden && self.screenshot_footer_state(false).is_some());
+        crate::ui::layout::FooterChrome {
+            has_agents: !self.agent_targets.is_empty(),
+            status: if has_recovery_controls {
+                crate::ui::layout::FooterChromeStatus::Recovery
+            } else if has_status {
+                crate::ui::layout::FooterChromeStatus::Status
+            } else {
+                crate::ui::layout::FooterChromeStatus::None
+            },
+            visibility: if self.settings.footer_hidden {
+                crate::ui::layout::FooterChromeVisibility::Hidden
+            } else {
+                crate::ui::layout::FooterChromeVisibility::Visible
+            },
+        }
     }
 
     fn focused_height(&self, layout: &LayoutSnapshot) -> u16 {
@@ -252,13 +280,15 @@ impl BoardApp {
     fn durability_summary(&self) -> &'static str {
         if matches!(self.state.durability, DurabilityState::Failed { .. }) {
             "unsaved"
-        } else if self.has_pending_edit()
-            || matches!(self.state.durability, DurabilityState::Pending { .. })
-        {
-            "saving"
         } else {
-            "saved"
+            self.durability_footer_status().unwrap_or("saved")
         }
+    }
+
+    pub(in crate::ui) fn durability_footer_status(&self) -> Option<&'static str> {
+        (self.has_pending_edit()
+            || matches!(self.state.durability, DurabilityState::Pending { .. }))
+        .then_some("saving")
     }
 }
 

@@ -39,6 +39,40 @@ fn storage_failure_blocks_new_edits_and_exposes_retry() {
 }
 
 #[test]
+fn hidden_optional_footer_keeps_failure_explanation_recovery_controls_and_hit_geometry() {
+    let mut fixture = Fixture::with_settings(UiSettings {
+        footer_hidden: true,
+        ..UiSettings::default()
+    });
+    let sequence = fixture.paste("must remain recoverable");
+    fixture.app.acknowledge_persistence(sequence, false);
+    let layout = fixture.app.prepare_frame(Rect::new(0, 0, 70, 8));
+    assert_eq!(layout.footer.height, 2);
+    assert_eq!(layout.footer_status.height, 1);
+    assert_eq!(layout.footer_actions.height, 1);
+    assert!(layout.footer_name.is_empty());
+    assert!(layout.footer_context.is_empty());
+    assert!(
+        layout
+            .controls
+            .iter()
+            .any(|(target, _)| *target == HitTarget::Retry)
+    );
+    assert!(
+        layout
+            .controls
+            .iter()
+            .any(|(target, _)| *target == HitTarget::ExportRecovery)
+    );
+    let rendered = text(draw(&mut fixture, 70, 8).backend().buffer());
+    assert!(rendered.contains("save failed · r Retry · w Export recovery"));
+    assert_eq!(
+        fixture.effects(crate::key_input(UiKey::Character('r'))),
+        vec![Effect::RetryPersistence { sequence }]
+    );
+}
+
+#[test]
 fn exhausted_recovery_capacity_exposes_export_without_retry() {
     let mut fixture = Fixture::new();
     let sequence = fixture.paste("must export");
