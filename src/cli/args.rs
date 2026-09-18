@@ -187,6 +187,20 @@ pub(super) enum ThoughtCommand {
         #[arg(long, value_name = "OP_ID")]
         operation_id: Option<String>,
     },
+    /// Set or clear one thought's optional organizational name.
+    Rename {
+        session: String,
+        thought: String,
+        /// Replacement name. An empty value clears it.
+        #[arg(required_unless_present = "clear", conflicts_with = "clear")]
+        name: Option<String>,
+        /// Clear the optional name.
+        #[arg(long)]
+        clear: bool,
+        /// Durable idempotency identity.
+        #[arg(long, value_name = "OP_ID")]
+        operation_id: Option<String>,
+    },
     /// Replace standard input as one exact editor revision.
     Replace {
         session: String,

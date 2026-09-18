@@ -64,6 +64,7 @@ pub fn reduce(state: &mut AppState, action: Action) -> ApplicationResult<Vec<Eff
         | Action::DeleteItems { .. }
         | Action::StageSubmissionRemoval { .. }
         | Action::MoveThought { .. }
+        | Action::RenameThought { .. }
         | Action::MoveItem { .. }
         | Action::SetPresentation { .. }
         | Action::SetPresentationMany { .. }
@@ -279,13 +280,16 @@ fn create_owned_thought(
     state: &mut AppState,
     creation: OwnedThoughtCreation,
 ) -> ApplicationResult<Vec<Effect>> {
-    create_thought(
+    super::mutations::create_thought_with_handoff(
         state,
         creation.thought_id,
         creation.operation_id,
         creation.content,
         creation.annotations,
         creation.insertion_index.unwrap_or(state.insertion_index),
+        None,
+        false,
+        creation.name,
         creation.at,
     )
 }

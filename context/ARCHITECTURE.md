@@ -323,7 +323,7 @@ Responsibilities:
 
 - Start, continue, resume, search, rename, trash, and restore sessions.
 - Acquire a session lease before returning an editable session.
-- Create, update, move, copy, cut, delete, restore, and search thoughts.
+- Create, update, name, move, copy, cut, delete, restore, and search thoughts.
 - Coordinate persistent Editor, Board, and installation-wide Browser undo.
 - Enforce command preconditions and return structured application errors.
 - Produce read models suited to the board and session browser.
@@ -786,9 +786,10 @@ event-sourced system.
 
 - `sessions`: identity, optional name, original and last-opened directories,
   timestamps, last durable operation sequence, and deletion state.
-- `thoughts`: session, exact current content, validated presentation annotations,
-  integer position, timestamps, durable automatic, expanded, or collapsed
-  presentation preference, and deletion state.
+- `thoughts`: session, exact current content, optional validated organizational
+  name, validated presentation annotations, integer position, timestamps,
+  durable automatic, expanded, or collapsed presentation preference, and
+  deletion state.
 - `separators`: session, typed `sep_` identity, shared Board position,
   timestamps, and deletion state. A separator row contains no content or
   annotation columns.
@@ -820,8 +821,9 @@ event-sourced system.
   protocol version.
 
 Full-text search indexes session names, paths, and current thought content.
-Search indexes are derived and rebuildable. User content remains canonical in
-ordinary tables.
+Thought names remain display metadata and do not alter content search. Search
+indexes are derived and rebuildable. User content remains canonical in ordinary
+tables.
 
 The application owns the exact first-run copy and its typed managed-Herdr or
 standalone variant. The copy refers users to the resolved footer and Help
@@ -866,6 +868,12 @@ ordinary session creation and neither seed nor advance the marker.
 - All timestamps are stored as UTC integers and rendered in local time.
 - Presentation annotations are sorted, non-overlapping UTF-8 byte ranges within
   canonical thought content. They never replace or truncate that content.
+- A thought name is optional, trimmed, single-line Unicode of at most 80 scalar
+  values. It is stored only on the thought payload, never in content,
+  annotations, ordering identity, or submission payloads.
+- Duplicate and cross-session transfer preserve a name. Split and extract keep
+  the source name and create an unnamed derived thought. Merge keeps the
+  surviving first thought's name.
 - Annotation validation, partition, extraction closure, concatenation shift,
   and editor-change rebasing share the domain annotation-range owner. Adjacent
   annotations are never coalesced merely because their provenance values match.
@@ -916,6 +924,11 @@ its required direction as route version 0 `adjacent_pane`. New route version 1
 rows store `adjacent_pane` with a direction or `herdr_agent` without one. Neither
 form stores workspace, tab, pane, session, labels, prompt content, or raw Herdr
 responses.
+
+Schema version 17 and storage protocol version 16 add the nullable thought name
+column and the durable `SetName` operation payload. The migration is additive,
+backup-protected, and leaves existing thoughts unnamed. Name-only changes do
+not rebuild full-text search.
 
 ### Stable session attachment ordinals
 
@@ -1343,6 +1356,13 @@ context around it. The maximum board scroll position includes the insertion row
 as a terminal virtual item, so the final page always exposes `+ New thought`
 above the footer without permitting blank overscroll.
 
+`BoardFlow` owns the prepared row projection for an optional thought name and
+its body. A named thought uses the available whitespace above its body in
+comfortable density and one explicit row in compact density. An unnamed thought
+reserves no name row. Rendering, measurement, scrolling, clipping, pointer hit
+testing, and hover all consume that same projection. The name hit target stays
+outside body text geometry and therefore cannot enter body selection.
+
 One Board-density policy resolves the explicit preference against the final
 usable Board rectangle after footer reservation. Comfortable uses the standard
 two-row cadence at five or more Board rows. Four or fewer Board rows resolve to
@@ -1522,8 +1542,8 @@ See [the complete versioned contract](SHORTCUTS.md).
 
 Undo and redo resolve from the same typed active-context stack as every other
 shortcut. The topmost editable owner receives the intention first. Search,
-Commands, manual Invocation, Transfer, Global Delivery, Rename, Browser query,
-and Browser Rename each own an in-memory text history for that field's lifetime.
+Commands, manual Invocation, Transfer, Global Delivery, Thought Name, Rename,
+Browser query, and Browser Rename each own an in-memory text history for that field's lifetime.
 Their snapshots retain Unicode text, cursor, directional selection, typing
 groups, paste units, and redo invalidation. Closing a field destroys that local
 history, and reopening creates a fresh owner. A blocking overlay without an
@@ -1790,6 +1810,9 @@ queued, treated as steering, or rejected. The gateway reports that state and
 the resulting receipt without inventing its own queue semantics.
 
 Both visible actions invoke the same immediate semantic prompt command.
+Submission assembles only canonical thought bodies and their existing
+annotations. Optional names are neither prepended nor sent as a separate agent
+field.
 `SubmissionDisposition::Keep` preserves the thought.
 `SubmissionDisposition::RemoveAfterSuccess` commits deletion only after an
 accepted receipt whose submission identifier and target match the pending
@@ -1958,7 +1981,9 @@ bounded messages, protocol negotiation, idempotency keys, and timeouts are
 mandatory. If forwarding is unsupported or the owner cannot be verified, the
 CLI returns `session_busy`.
 
-Control protocol version 9 is current. Version 9 carries the durable operation
+Control protocol version 10 is current. Version 10 carries thought-name
+replacement and preserves optional names during cross-session creation. Older
+owners reject those requests instead of dropping metadata. Version 9 carries the durable operation
 identity required for active-owner session rename, including idempotent replay
 and Browser history. A same-name rename commits a durable no-op receipt so its
 identity cannot later name different content. Attachment-bearing creation requires version 8 to retain
@@ -1973,8 +1998,9 @@ enters the ordinary editor revision history. The owner rejects every mutation of
 submission is in flight. Cross-session delivery inspects the source, commits an
 idempotent destination creation through the version 7 purpose-specific
 preservation request or an acquired
-inactive-session lease, and only then requests an ordinary source deletion. No
-direct database write bypasses an active destination owner.
+inactive-session lease, and only then requests an ordinary source deletion. The
+destination receives the optional name as separate metadata. No direct database
+write bypasses an active destination owner.
 
 The Proqi skill contains instructions and examples, not privileged executable
 logic. It begins with capability discovery, passes arbitrary thought content by

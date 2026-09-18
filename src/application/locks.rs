@@ -11,6 +11,7 @@ pub(super) fn ensure_action_unlocked(state: &AppState, action: &Action) -> Appli
         | Action::ExtractThought { thought_id, .. }
         | Action::DeleteThought { thought_id, .. }
         | Action::MoveThought { thought_id, .. }
+        | Action::RenameThought { thought_id, .. }
         | Action::SetPresentation { thought_id, .. }
         | Action::MoveItem {
             item_id: BoardItemId::Thought(thought_id),
@@ -134,6 +135,7 @@ fn locked_mutation(state: &AppState, mutation: &BoardMutation) -> Option<Thought
         | BoardMutation::MoveThought { thought_id, .. }
         | BoardMutation::ReplaceContent { thought_id, .. }
         | BoardMutation::SetPresentation { thought_id, .. }
+        | BoardMutation::SetName { thought_id, .. }
         | BoardMutation::LegacySetCollapsed { thought_id, .. } => locked_one(state, *thought_id),
     }
 }

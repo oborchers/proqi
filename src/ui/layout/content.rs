@@ -179,6 +179,7 @@ fn visible_thoughts(flow: &scroll::BoardFlow, offset: usize, board: Rect) -> Vec
 #[derive(Clone, Copy)]
 struct VisibleRows {
     separator: bool,
+    name: bool,
     content_start: usize,
     first: usize,
     last: usize,
@@ -198,11 +199,18 @@ fn visible_thought(
         board.width,
         u16::try_from(visible.last.saturating_sub(visible.first)).unwrap_or(u16::MAX),
     );
+    let body_first = visible.content_start.min(visible.last);
+    let body_area = Rect::new(
+        board.x,
+        viewport_y(board, body_first, offset),
+        board.width,
+        u16::try_from(visible.last.saturating_sub(body_first)).unwrap_or(u16::MAX),
+    );
     let text_area = Rect::new(
-        area.x.saturating_add(2).min(area.right()),
-        area.y,
-        area.width.saturating_sub(2),
-        area.height,
+        body_area.x.saturating_add(2).min(body_area.right()),
+        body_area.y,
+        body_area.width.saturating_sub(2),
+        body_area.height,
     );
     let overflow = thought
         .overflow_row
@@ -221,8 +229,22 @@ fn visible_thought(
         index: thought.index,
         separator_before: visible.separator.then(|| separator(thought, offset, board)),
         area,
+        body_area,
+        name: thought.name_row.filter(|_| visible.name).map(|row| {
+            Rect::new(
+                board.x.saturating_add(2).min(board.right()),
+                viewport_y(board, row, offset),
+                board.width.saturating_sub(2),
+                1,
+            )
+        }),
         text_area,
-        gutter: Rect::new(area.x, area.y, area.width.min(1), area.height),
+        gutter: Rect::new(
+            body_area.x,
+            body_area.y,
+            body_area.width.min(1),
+            body_area.height,
+        ),
         overflow,
         hidden_rows: thought.overflow_row.map_or(0, |_| {
             thought.natural_rows.saturating_sub(thought.content_rows)
@@ -249,10 +271,15 @@ fn visible_rows(
     let overflow = thought
         .overflow_row
         .is_some_and(|row| row >= offset && row < viewport_end);
-    if !content && !overflow {
+    let name = thought
+        .name_row
+        .is_some_and(|row| row >= offset && row < viewport_end);
+    if !content && !overflow && !name {
         return None;
     }
-    let first = if content {
+    let first = if name {
+        thought.name_row.unwrap_or(content_start)
+    } else if content {
         content_start
     } else {
         thought
@@ -264,14 +291,17 @@ fn visible_rows(
         thought.overflow_row.unwrap_or(first).saturating_add(1)
     } else if content {
         content_end
+    } else if name {
+        first.saturating_add(1)
     } else {
         first
     };
     Some(VisibleRows {
-        separator: thought.gap_rows > 0
-            && thought.gap_start >= offset
-            && thought.gap_start < viewport_end,
+        separator: thought
+            .automatic_separator_row
+            .is_some_and(|row| row >= offset && row < viewport_end),
         content_start,
+        name,
         first,
         last,
         overflow,
@@ -279,9 +309,10 @@ fn visible_rows(
 }
 
 fn separator(thought: &scroll::ThoughtRows, offset: usize, board: Rect) -> Rect {
+    let row = thought.automatic_separator_row.unwrap_or(thought.gap_start);
     Rect::new(
         board.x.saturating_add(2).min(board.right()),
-        viewport_y(board, thought.gap_start, offset),
+        viewport_y(board, row, offset),
         board.width.saturating_sub(2),
         1,
     )

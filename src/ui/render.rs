@@ -1,5 +1,6 @@
 //! Deterministic one-column board renderer.
 
+mod board_metadata;
 mod chrome;
 mod content;
 mod global_delivery;
@@ -218,7 +219,7 @@ fn render_insert(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot,
             ),
         ]);
         let style = if !prompt && hovered {
-            theme.hovered_style()
+            theme.control_hovered_style()
         } else if !prompt && app.insertion_focused() {
             theme.focused_style()
         } else {
@@ -262,12 +263,12 @@ fn render_board_thought(
         theme,
     );
     let surface_style = match (focused || selected, hovered) {
-        (_, true) => Some(theme.hovered_style()),
+        (_, true) => Some(theme.content_hovered_style()),
         (true, false) => Some(theme.focused_style()),
         (false, false) => None,
     };
     if let Some(style) = surface_style {
-        frame.render_widget(Block::default().style(style), layout.area);
+        frame.render_widget(Block::default().style(style), layout.body_area);
     }
     render_gutter(
         frame,
@@ -294,6 +295,7 @@ fn render_board_thought(
             theme,
         );
     }
+    board_metadata::render_thought_name(frame, app, thought, layout, theme);
 }
 
 #[derive(Clone, Copy)]
@@ -340,7 +342,7 @@ fn render_gutter(
             .add_modifier(Modifier::DIM)
     } else if focused && hovered {
         theme
-            .hovered_style()
+            .control_hovered_style()
             .fg(theme.accent)
             .remove_modifier(Modifier::REVERSED | Modifier::ITALIC)
     } else if focused {
@@ -350,7 +352,7 @@ fn render_gutter(
             .remove_modifier(Modifier::REVERSED | Modifier::ITALIC)
             .add_modifier(Modifier::BOLD)
     } else if hovered {
-        theme.hovered_style().fg(theme.accent)
+        theme.control_hovered_style().fg(theme.accent)
     } else {
         Style::default()
             .fg(theme.accent)
@@ -409,7 +411,7 @@ fn render_thought(
         frame.render_widget(
             Paragraph::new(format!("{} more lines  expand", layout.hidden_rows)).style(
                 if emphasis.overflow_hovered {
-                    theme.hovered_style().fg(theme.accent)
+                    theme.control_hovered_style().fg(theme.accent)
                 } else {
                     Style::default()
                         .fg(theme.accent)

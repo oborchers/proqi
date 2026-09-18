@@ -19,6 +19,7 @@ pub(crate) use metadata::{
 pub enum ShortcutActionId {
     New,
     RenameSession,
+    RenameThought,
     CopySessionId,
     CopyResume,
     SendSession,
@@ -129,7 +130,7 @@ pub enum ShortcutActionId {
 
 impl ShortcutActionId {
     /// Complete visible Commands inventory in its established order.
-    pub(crate) const COMMANDS: [(Self, &'static str); 58] = [
+    pub(crate) const COMMANDS: [(Self, &'static str); 59] = [
         (Self::New, "New thought"),
         (Self::InsertAbove, "Insert thought above"),
         (Self::InsertBelow, "Insert thought below"),
@@ -138,6 +139,7 @@ impl ShortcutActionId {
         (Self::CopySessionId, "Copy session ID"),
         (Self::CopyResume, "Copy resume command"),
         (Self::Edit, "Edit thought"),
+        (Self::RenameThought, "Rename thought"),
         (Self::PlainNewline, "Insert plain newline"),
         (Self::DeleteLogicalLine, "Delete logical line"),
         (Self::DeleteSentence, "Delete sentence"),
@@ -217,6 +219,7 @@ impl ShortcutActionId {
         match self {
             New => "thought.new",
             RenameSession => "session.rename",
+            RenameThought => "thought.rename",
             CopySessionId => "session.copy_id",
             CopyResume => "session.copy_resume",
             SendSession => "session.send",

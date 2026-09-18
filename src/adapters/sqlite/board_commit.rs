@@ -1,5 +1,7 @@
 //! New structural and editor commits.
 
+mod thought_names;
+
 use rusqlite::{OptionalExtension, Transaction, params};
 
 use crate::{
@@ -48,6 +50,23 @@ pub(super) fn commit_batch(
                 sequence: *sequence,
                 at: *at,
             },
+        )
+        .map(Some),
+        OperationBatch::ThoughtNoOpRename {
+            operation_id,
+            session_id,
+            thought_id,
+            name,
+            sequence,
+            at,
+        } => thought_names::commit_noop_rename(
+            transaction,
+            *operation_id,
+            *session_id,
+            *thought_id,
+            name.as_ref(),
+            *sequence,
+            *at,
         )
         .map(Some),
         OperationBatch::IntegrationContext {
@@ -218,6 +237,7 @@ pub(super) fn mutation_changes_search(mutation: &BoardMutation) -> bool {
         | BoardMutation::SetDeletionExact { .. }
         | BoardMutation::ReplaceContent { .. } => true,
         BoardMutation::MoveThought { .. }
+        | BoardMutation::SetName { .. }
         | BoardMutation::AddSeparator { .. }
         | BoardMutation::SetSeparatorDeletion { .. }
         | BoardMutation::MoveSeparator { .. }
@@ -253,6 +273,7 @@ fn truncate_editor_redo(
         | BoardMutation::MoveSeparator { .. }
         | BoardMutation::SetDeletion { .. }
         | BoardMutation::MoveThought { .. }
+        | BoardMutation::SetName { .. }
         | BoardMutation::SetPresentation { .. }
         | BoardMutation::LegacySetCollapsed { .. } => {}
     }

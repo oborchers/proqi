@@ -4,7 +4,8 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     DomainError, OperationId, OperationSequence, Separator, SeparatorId, Session, SessionId,
-    Thought, ThoughtId, ThoughtPosition, ThoughtPresentation, Timestamp, validate_annotations,
+    Thought, ThoughtId, ThoughtName, ThoughtPosition, ThoughtPresentation, Timestamp,
+    validate_annotations,
 };
 
 mod addressing;
@@ -141,6 +142,15 @@ pub enum BoardMutation {
         /// New preference.
         presentation: ThoughtPresentation,
     },
+    /// Replace optional organizational metadata with an exact precondition.
+    SetName {
+        /// Affected thought.
+        thought_id: ThoughtId,
+        /// Required current name.
+        before: Option<ThoughtName>,
+        /// Replacement name.
+        after: Option<ThoughtName>,
+    },
     /// Legacy v0.1.x payload retained only for lossless history migration.
     #[doc(hidden)]
     #[serde(rename = "set_collapsed")]
@@ -190,6 +200,7 @@ impl BoardMutation {
             | Self::MoveThought { .. }
             | Self::MoveSeparator { .. }
             | Self::SetPresentation { .. }
+            | Self::SetName { .. }
             | Self::LegacySetCollapsed { .. } => Ok(()),
         }
     }
@@ -450,35 +461,18 @@ impl SessionBoard {
             BoardMutation::SetPresentation {
                 thought_id,
                 presentation,
-            } => self.set_thought_presentation(*thought_id, *presentation, at)?,
+            } => self.set_presentation(*thought_id, *presentation, at)?,
+            BoardMutation::SetName {
+                thought_id,
+                before,
+                after,
+            } => self.set_name(*thought_id, before.as_ref(), after.clone(), at)?,
             BoardMutation::LegacySetCollapsed {
                 thought_id,
                 collapsed,
-            } => self.set_thought_presentation(
-                *thought_id,
-                if *collapsed {
-                    ThoughtPresentation::Collapsed
-                } else {
-                    ThoughtPresentation::Automatic
-                },
-                at,
-            )?,
+            } => self.set_legacy_collapsed(*thought_id, *collapsed, at)?,
         }
         self.session.last_active_at = self.session.last_active_at.max(at);
-        Ok(())
-    }
-
-    fn set_thought_presentation(
-        &mut self,
-        thought_id: ThoughtId,
-        presentation: ThoughtPresentation,
-        at: Timestamp,
-    ) -> Result<(), DomainError> {
-        let thought = self
-            .thought_mut(thought_id)
-            .ok_or(DomainError::ThoughtNotFound(thought_id))?;
-        thought.presentation = presentation;
-        thought.updated_at = at;
         Ok(())
     }
 

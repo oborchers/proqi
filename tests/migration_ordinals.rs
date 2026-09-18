@@ -8,7 +8,7 @@ use ordinal_fixture as support;
 
 use proqi::{
     adapters::sqlite::SqliteStore,
-    ports::store::{Store, StoreError},
+    ports::store::{STORAGE_PROTOCOL_VERSION, SUPPORTED_SCHEMA_VERSION, Store, StoreError},
 };
 use support::{Fixture, durable_rows, query};
 
@@ -192,8 +192,8 @@ fn assert_preservation(schema: u32) {
                 "SELECT schema_version, storage_protocol FROM schema_meta"
             ),
             vec![vec![
-                proqi::ports::store::SUPPORTED_SCHEMA_VERSION.into(),
-                proqi::ports::store::STORAGE_PROTOCOL_VERSION.into(),
+                i64::from(SUPPORTED_SCHEMA_VERSION).into(),
+                i64::from(STORAGE_PROTOCOL_VERSION).into(),
             ]]
         );
         assert_eq!(

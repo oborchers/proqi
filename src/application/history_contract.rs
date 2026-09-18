@@ -64,6 +64,7 @@ impl Action {
             | Self::DeleteItems { .. }
             | Self::StageSubmissionRemoval { .. }
             | Self::MoveThought { .. }
+            | Self::RenameThought { .. }
             | Self::MoveItem { .. }
             | Self::SetPresentation { .. }
             | Self::SetPresentationMany { .. }

@@ -131,6 +131,7 @@ impl BoardApp {
                     .is_some_and(|thought| {
                         thought.content != request.content
                             || thought.annotations != request.annotations
+                            || thought.name != request.name
                     }) =>
             {
                 self.set_info("thought sent; source changed and was kept");
@@ -285,6 +286,7 @@ impl BoardApp {
                 operation_id: ids.operation_id(),
                 content: thought.content.clone(),
                 annotations: thought.annotations.clone(),
+                name: thought.name.clone(),
                 remove_source: state.remove_source,
             })
         });

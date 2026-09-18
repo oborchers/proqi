@@ -67,7 +67,12 @@ fn assert_automatic_schema_update(fixture: &OldFixture, count: usize) {
     assert_eq!(execution["quiesced_participants"], count);
     assert_eq!(execution["restart_requests"], count);
     assert_eq!(execution["restart_accepted"], count);
-    assert_eq!(execution["replacement_missing"], 0);
+    assert_eq!(
+        execution["replacement_missing"],
+        0,
+        "execution: {execution}; diagnostics: {}",
+        diagnostic_content(state.path())
+    );
     assert_eq!(execution["restart_failed"], serde_json::json!([]));
 
     let after = wait_for_exact_replacements(state.path(), &before);

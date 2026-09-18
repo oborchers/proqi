@@ -4,7 +4,7 @@ use super::{
     DomainError, Separator, SeparatorId, SessionBoard, Thought, ThoughtId, ThoughtPosition,
     Timestamp, validate_annotations,
 };
-use crate::domain::ContentAnnotation;
+use crate::domain::{ContentAnnotation, ThoughtName, ThoughtPresentation};
 
 impl SessionBoard {
     pub(super) fn add_or_restore(
@@ -177,6 +177,53 @@ impl SessionBoard {
         after_annotations.clone_into(&mut thought.annotations);
         thought.updated_at = at;
         Ok(())
+    }
+
+    pub(super) fn set_name(
+        &mut self,
+        thought_id: ThoughtId,
+        before: Option<&ThoughtName>,
+        after: Option<ThoughtName>,
+        at: Timestamp,
+    ) -> Result<(), DomainError> {
+        let thought = self
+            .thought_mut(thought_id)
+            .filter(|thought| thought.is_live())
+            .ok_or(DomainError::ThoughtNotFound(thought_id))?;
+        if thought.name.as_ref() != before {
+            return Err(DomainError::ThoughtNameConflict(thought_id));
+        }
+        thought.set_name(after);
+        thought.updated_at = at;
+        Ok(())
+    }
+
+    pub(super) fn set_presentation(
+        &mut self,
+        thought_id: ThoughtId,
+        presentation: ThoughtPresentation,
+        at: Timestamp,
+    ) -> Result<(), DomainError> {
+        let thought = self
+            .thought_mut(thought_id)
+            .ok_or(DomainError::ThoughtNotFound(thought_id))?;
+        thought.presentation = presentation;
+        thought.updated_at = at;
+        Ok(())
+    }
+
+    pub(super) fn set_legacy_collapsed(
+        &mut self,
+        thought_id: ThoughtId,
+        collapsed: bool,
+        at: Timestamp,
+    ) -> Result<(), DomainError> {
+        let presentation = if collapsed {
+            ThoughtPresentation::Collapsed
+        } else {
+            ThoughtPresentation::Automatic
+        };
+        self.set_presentation(thought_id, presentation, at)
     }
 
     fn shift_for_insert(&mut self, target: usize) {

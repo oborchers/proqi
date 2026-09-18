@@ -1,0 +1,24 @@
+---
+source: tests/ui_board/optional_thought_names.rs
+assertion_line: 447
+expression: compact
+---
+SIZE 42x7
+
+TEXT
+00│  Compact title│
+01│⋮ Compact body line one│
+02│  line two│
+03││
+04│  proqi-ui-contract│
+05│  1 thought · board · saved│
+06│  n New   : Commands  ? Shortcuts│
+
+STYLE RUNS
+0: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-41 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=BOLD
+1: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-41 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
+2: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-41 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
+3: 0-41 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+4: 0-41 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+5: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-39 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE | 40-41 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
+6: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-2 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 3-9 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 10-10 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 11-21 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 22-22 fg=Rgb(112, 214, 155) bg=Rgb(15, 13, 10) mod=NONE | 23-41 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE

@@ -81,6 +81,21 @@ pub enum Effect {
     },
     /// Commit one new structural operation.
     CommitBoardOperation(BoardOperation),
+    /// Reserve one same-value thought rename without adding a history unit.
+    CommitThoughtNoOpRename {
+        /// Durable operation identity.
+        operation_id: OperationId,
+        /// Owning session.
+        session_id: SessionId,
+        /// Affected thought.
+        thought_id: ThoughtId,
+        /// Current and requested name.
+        name: Option<crate::domain::ThoughtName>,
+        /// Monotonic durable sequence.
+        sequence: OperationSequence,
+        /// Operation time.
+        at: Timestamp,
+    },
     /// Commit one new editor revision.
     CommitRevision(ThoughtRevision),
     /// Atomically move one persistent history cursor and current state.
@@ -141,6 +156,21 @@ impl Effect {
     pub fn persistence_batch(&self) -> Option<OperationBatch> {
         match self {
             Self::CommitBoardOperation(operation) => Some(OperationBatch::Board(operation.clone())),
+            Self::CommitThoughtNoOpRename {
+                operation_id,
+                session_id,
+                thought_id,
+                name,
+                sequence,
+                at,
+            } => Some(OperationBatch::ThoughtNoOpRename {
+                operation_id: *operation_id,
+                session_id: *session_id,
+                thought_id: *thought_id,
+                name: name.clone(),
+                sequence: *sequence,
+                at: *at,
+            }),
             Self::CommitRevision(revision) => Some(OperationBatch::Revision(revision.clone())),
             Self::CommitHistoryMove {
                 operation_id,

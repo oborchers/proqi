@@ -72,13 +72,15 @@ fn footer_hover_tracks_edges_crossings_repeats_and_focus_without_actions() {
     fixture.pointer(body.x, body.y, PointerKind::Move);
     let body_terminal = draw_theme(&mut fixture, 42, 12, ThemePreference::Limited);
     let hovered_body = body_terminal.backend().buffer()[(body.x, body.y)].style();
-    assert_ne!(
-        hovered_body, resting_body,
-        "focused body hover must be visible"
+    assert_eq!(
+        hovered_body.add_modifier, resting_body.add_modifier,
+        "focused body hover must preserve content typography"
     );
-    let modifier = hovered_body.add_modifier;
-    assert!(modifier.contains(Modifier::BOLD));
-    assert!(!modifier.intersects(Modifier::ITALIC | Modifier::UNDERLINED));
+    assert!(
+        !hovered_body
+            .add_modifier
+            .intersects(Modifier::BOLD | Modifier::ITALIC | Modifier::UNDERLINED)
+    );
     assert_eq!(
         body_terminal.backend().buffer()[(gutter_area.x, gutter_area.y)].style(),
         resting
@@ -127,8 +129,7 @@ fn thought_body_hover_does_not_reveal_or_underline_the_drag_gutter() {
     let terminal = draw_theme(&mut fixture, 42, 14, ThemePreference::Limited);
     let body_modifier =
         terminal.backend().buffer()[(thought.text_area.x, thought.text_area.y)].modifier;
-    assert!(body_modifier.contains(Modifier::BOLD));
-    assert!(!body_modifier.contains(Modifier::UNDERLINED));
+    assert!(!body_modifier.intersects(Modifier::BOLD | Modifier::ITALIC | Modifier::UNDERLINED));
     for row in thought.gutter.y..thought.gutter.bottom() {
         let cell = &terminal.backend().buffer()[(thought.gutter.x, row)];
         assert_eq!(cell.symbol(), " ", "body hover revealed gutter row {row}");
@@ -221,7 +222,11 @@ fn collapsed_fold_hover_uses_projected_identity_and_preserves_exact_content() {
     let terminal = draw_theme(&mut fixture, 60, 8, ThemePreference::Dark);
     let cell = &terminal.backend().buffer()[(thought.text_area.x, thought.text_area.y)];
     assert_ne!(cell.style(), before, "fold hover must remain visible");
-    assert!(cell.modifier.contains(ratatui_core::style::Modifier::BOLD));
+    assert_eq!(
+        cell.modifier.contains(Modifier::BOLD),
+        before.add_modifier.contains(Modifier::BOLD),
+        "fold hover must preserve its existing semantic weight"
+    );
     assert!(
         !cell.modifier.intersects(
             ratatui_core::style::Modifier::ITALIC | ratatui_core::style::Modifier::UNDERLINED

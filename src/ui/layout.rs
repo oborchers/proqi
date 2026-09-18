@@ -3,6 +3,7 @@
 mod chrome;
 mod content;
 mod controls;
+mod hit_testing;
 mod overlay;
 pub(super) mod scroll;
 
@@ -25,6 +26,8 @@ use crate::{
 pub enum HitTarget {
     /// Text content of one thought.
     Thought(ThoughtId),
+    /// Optional organizational name outside authored body text.
+    ThoughtName(ThoughtId),
     /// One collapsed presentation fold refined from a thought hit by `BoardApp`.
     ///
     /// `LayoutSnapshot::hit_test` returns the enclosing `Thought`; current-frame
@@ -72,6 +75,10 @@ pub enum HitTarget {
     Quit,
     /// Leave the editor.
     ExitEdit,
+    /// Save the active optional thought name.
+    CommitThoughtName,
+    /// Cancel the active optional thought name edit.
+    CancelThoughtName,
     /// Retry the failed durable operation.
     Retry,
     /// Export the exact unsaved recovery buffer.
@@ -93,6 +100,10 @@ pub struct ThoughtLayout {
     pub separator_before: Option<Rect>,
     /// Complete visible allocation.
     pub area: Rect,
+    /// Visible body allocation, excluding the optional name row.
+    pub body_area: Rect,
+    /// Optional name row, outside body selection and submission payloads.
+    pub name: Option<Rect>,
     /// Text cells excluding the focus or drag gutter.
     pub text_area: Rect,
     /// Stable one-cell drag and focus gutter.
@@ -205,63 +216,6 @@ impl LayoutSnapshot {
         controls::configure_footer_summary(self, summary, session_name, session_id);
     }
 
-    /// Resolve one terminal cell through the same rectangles used to render.
-    #[must_use]
-    pub fn hit_test(&self, column: u16, row: u16) -> Option<HitTarget> {
-        if let Some(overlay) = &self.overlay {
-            if crate::ui::geometry::contains(overlay.close, column, row) {
-                return Some(HitTarget::CloseOverlay);
-            }
-            return overlay.items.iter().enumerate().find_map(|(index, area)| {
-                (overlay
-                    .item_interactive
-                    .get(index)
-                    .copied()
-                    .unwrap_or(false)
-                    && crate::ui::geometry::contains(*area, column, row))
-                .then_some(HitTarget::PaletteItem(index))
-            });
-        }
-        for thought in &self.thoughts {
-            if crate::ui::geometry::contains(thought.gutter, column, row) {
-                return Some(HitTarget::DragHandle(thought.thought_id));
-            }
-            if thought
-                .overflow
-                .is_some_and(|area| crate::ui::geometry::contains(area, column, row))
-            {
-                return Some(HitTarget::Overflow(thought.thought_id));
-            }
-            if crate::ui::geometry::contains(thought.text_area, column, row) {
-                return Some(HitTarget::Thought(thought.thought_id));
-            }
-        }
-        for separator in &self.separators {
-            if crate::ui::geometry::contains(separator.gutter, column, row) {
-                return Some(HitTarget::SeparatorDragHandle(separator.separator_id));
-            }
-            if crate::ui::geometry::contains(separator.area, column, row) {
-                return Some(HitTarget::Separator(separator.separator_id));
-            }
-        }
-        if self
-            .compose
-            .as_ref()
-            .is_some_and(|compose| crate::ui::geometry::contains(compose.area, column, row))
-        {
-            return Some(HitTarget::Insert);
-        }
-        if self
-            .insert
-            .is_some_and(|area| crate::ui::geometry::contains(area, column, row))
-        {
-            return Some(HitTarget::Insert);
-        }
-        self.controls.iter().find_map(|(target, area)| {
-            crate::ui::geometry::contains(*area, column, row).then_some(*target)
-        })
-    }
-
     /// Find current visible geometry for a thought.
     #[must_use]
     pub fn thought(&self, thought_id: ThoughtId) -> Option<&ThoughtLayout> {
@@ -299,6 +253,10 @@ impl LayoutSnapshot {
         keybindings: &crate::ui::ShortcutRegistry,
     ) {
         controls::configure_agent_controls(self, targets, selection, context, keybindings);
+    }
+
+    pub(crate) fn configure_thought_name_controls(&mut self) {
+        controls::configure_thought_name_controls(self);
     }
 }
 

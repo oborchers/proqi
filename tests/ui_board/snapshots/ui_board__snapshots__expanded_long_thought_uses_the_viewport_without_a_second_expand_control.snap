@@ -21,13 +21,13 @@ TEXT
 
 STYLE RUNS
 0: 0-43 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
-1: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-26 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=BOLD | 27-27 fg=Reset bg=Reset mod=NONE | 28-43 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=BOLD
-2: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-43 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=BOLD
-3: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-26 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=BOLD | 27-27 fg=Reset bg=Reset mod=NONE | 28-43 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=BOLD
-4: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-43 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=BOLD
-5: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-26 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=BOLD | 27-27 fg=Reset bg=Reset mod=NONE | 28-43 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=BOLD
-6: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-43 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=BOLD
-7: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-26 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=BOLD | 27-27 fg=Reset bg=Reset mod=NONE | 28-43 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=BOLD
+1: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-26 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 27-27 fg=Reset bg=Reset mod=NONE | 28-43 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
+2: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-43 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
+3: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-26 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 27-27 fg=Reset bg=Reset mod=NONE | 28-43 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
+4: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-43 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
+5: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-26 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 27-27 fg=Reset bg=Reset mod=NONE | 28-43 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
+6: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-43 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
+7: 0-0 fg=Rgb(250, 250, 248) bg=Rgb(45, 106, 79) mod=BOLD | 1-26 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE | 27-27 fg=Reset bg=Reset mod=NONE | 28-43 fg=Rgb(232, 228, 223) bg=Rgb(39, 40, 48) mod=NONE
 8: 0-43 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 9: 0-43 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE
 10: 0-1 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE | 2-41 fg=Rgb(176, 169, 160) bg=Rgb(15, 13, 10) mod=NONE | 42-43 fg=Rgb(232, 228, 223) bg=Rgb(15, 13, 10) mod=NONE

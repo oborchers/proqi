@@ -37,6 +37,7 @@ CREATE TABLE thoughts (
     id BLOB PRIMARY KEY CHECK (length(id) = 16),
     session_id BLOB NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
     content TEXT NOT NULL,
+    name TEXT,
     annotations_json TEXT NOT NULL DEFAULT '[]',
     position INTEGER NOT NULL CHECK (position >= 0),
     created_at INTEGER NOT NULL,
@@ -217,6 +218,7 @@ INSERT INTO migration_history(version, applied_at) VALUES (14, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (15, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (16, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (17, 0);
+INSERT INTO migration_history(version, applied_at) VALUES (18, 0);
 ";
 
 pub(super) const MIGRATION_2: &str = r"
@@ -474,4 +476,11 @@ WHERE deleted_at IS NULL;
 CREATE INDEX separators_session ON separators(session_id);
 UPDATE schema_meta SET schema_version = 17, storage_protocol = 16;
 INSERT INTO migration_history(version, applied_at) VALUES (17, 0);
+";
+
+// Add optional organizational names without changing authored thought content.
+pub(super) const MIGRATION_18: &str = r"
+ALTER TABLE thoughts ADD COLUMN name TEXT;
+UPDATE schema_meta SET schema_version = 18, storage_protocol = 17;
+INSERT INTO migration_history(version, applied_at) VALUES (18, 0);
 ";

@@ -19,8 +19,8 @@ use crate::{
     domain::{
         BoardItemId, BoardMutation, BoardOperation, BoardOperationKind, ContentAnnotation,
         DomainError, OperationId, RequestId, RevisionId, TextPosition, Thought, ThoughtId,
-        ThoughtPosition, ThoughtPresentation, ThoughtRevision, Timestamp, merge_annotations,
-        validate_annotations,
+        ThoughtName, ThoughtPosition, ThoughtPresentation, ThoughtRevision, Timestamp,
+        merge_annotations, validate_annotations,
     },
 };
 
@@ -42,6 +42,7 @@ pub(super) fn create_thought(
         insertion_index,
         None,
         false,
+        None,
         at,
     )
 }
@@ -70,6 +71,7 @@ pub(super) fn create_compose_thought(
         state.insertion_index,
         Some((cursor, selection_anchor)),
         preserve_owned,
+        None,
         at,
     )
 }
@@ -78,7 +80,7 @@ pub(super) fn create_compose_thought(
     clippy::too_many_arguments,
     reason = "canonical creation accepts an optional Compose editor endpoint"
 )]
-fn create_thought_with_handoff(
+pub(super) fn create_thought_with_handoff(
     state: &mut AppState,
     thought_id: ThoughtId,
     operation_id: OperationId,
@@ -87,6 +89,7 @@ fn create_thought_with_handoff(
     insertion_index: usize,
     handoff: Option<(TextPosition, Option<TextPosition>)>,
     preserve_owned: bool,
+    name: Option<ThoughtName>,
     at: Timestamp,
 ) -> ApplicationResult<Vec<Effect>> {
     let sequence = state.next_sequence()?;
@@ -104,6 +107,7 @@ fn create_thought_with_handoff(
         at,
     );
     thought.set_annotations(annotations)?;
+    thought.set_name(name);
     let operation = BoardOperation {
         id: operation_id,
         session_id: state.board.session.id,
@@ -436,6 +440,48 @@ pub(super) fn set_presentation(
         inverse: BoardMutation::SetPresentation {
             thought_id,
             presentation: previous,
+        },
+        created_at: at,
+    };
+    state.record_board_operation(&operation)?;
+    Ok(vec![Effect::CommitBoardOperation(operation)])
+}
+
+pub(super) fn rename_thought(
+    state: &mut AppState,
+    operation_id: OperationId,
+    thought_id: ThoughtId,
+    name: Option<ThoughtName>,
+    at: Timestamp,
+) -> ApplicationResult<Vec<Effect>> {
+    let previous = state.live_thought(thought_id)?.name.clone();
+    if previous == name {
+        let sequence = state.next_sequence()?;
+        state.track_pending(sequence);
+        return Ok(vec![Effect::CommitThoughtNoOpRename {
+            operation_id,
+            session_id: state.board.session.id,
+            thought_id,
+            name,
+            sequence,
+            at,
+        }]);
+    }
+    let sequence = state.next_sequence()?;
+    let operation = BoardOperation {
+        id: operation_id,
+        session_id: state.board.session.id,
+        sequence,
+        kind: BoardOperationKind::Rename,
+        forward: BoardMutation::SetName {
+            thought_id,
+            before: previous.clone(),
+            after: name.clone(),
+        },
+        inverse: BoardMutation::SetName {
+            thought_id,
+            before: name,
+            after: previous,
         },
         created_at: at,
     };

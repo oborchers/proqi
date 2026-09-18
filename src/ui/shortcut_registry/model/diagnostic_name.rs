@@ -16,6 +16,7 @@ impl ShortcutActionId {
         match self {
             New => "New",
             RenameSession => "RenameSession",
+            RenameThought => "RenameThought",
             CopySessionId => "CopySessionId",
             CopyResume => "CopyResume",
             SendSession => "SendSession",

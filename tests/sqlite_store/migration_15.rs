@@ -39,7 +39,8 @@ fn reflow_migration_requires_authority_and_preserves_a_pre_migration_backup() {
     let connection = rusqlite::Connection::open(&fixture.config.database_path).expect("fixture");
     connection
         .execute_batch(
-            "DROP INDEX separators_session;
+            "ALTER TABLE thoughts DROP COLUMN name;
+             DROP INDEX separators_session;
              DROP INDEX separators_live_position;
              DROP TABLE separators;
              DROP TABLE browser_history_receipts;
@@ -91,7 +92,8 @@ fn browser_history_migrates_exact_reflow_schema_and_protocol() {
     let connection = rusqlite::Connection::open(&fixture.config.database_path).expect("fixture");
     connection
         .execute_batch(
-            "DROP INDEX separators_session;
+            "ALTER TABLE thoughts DROP COLUMN name;
+             DROP INDEX separators_session;
              DROP INDEX separators_live_position;
              DROP TABLE separators;
              DROP TABLE browser_history_receipts;
@@ -133,4 +135,35 @@ fn browser_history_migrates_exact_reflow_schema_and_protocol() {
         .collect::<Result<Vec<_>, _>>()
         .expect("history versions");
     assert_eq!(versions, (1..=SUPPORTED_SCHEMA_VERSION).collect::<Vec<_>>());
+}
+
+#[test]
+fn thought_name_migration_is_additive_and_backed_up() {
+    let fixture = DatabaseFixture::new();
+    drop(fixture.open());
+    let connection = rusqlite::Connection::open(&fixture.config.database_path).expect("fixture");
+    connection
+        .execute_batch(
+            "ALTER TABLE thoughts DROP COLUMN name;
+             DELETE FROM migration_history WHERE version = 18;
+             UPDATE schema_meta SET schema_version = 17, storage_protocol = 16;",
+        )
+        .expect("schema 16 fixture");
+    drop(connection);
+
+    fixture.open().quick_check().expect("migrated integrity");
+    let connection = rusqlite::Connection::open(&fixture.config.database_path).expect("migrated");
+    let name_column: u32 = connection
+        .query_row(
+            "SELECT count(*) FROM pragma_table_info('thoughts') WHERE name = 'name'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("name column");
+    assert_eq!(name_column, 1);
+    let backups = std::fs::read_dir(&fixture.config.backup_dir)
+        .expect("backup directory")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("backups");
+    assert_eq!(backups.len(), 1);
 }

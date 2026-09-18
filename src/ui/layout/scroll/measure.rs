@@ -33,7 +33,10 @@ impl BoardFlow {
         let top_padding = u16::from(
             comfortable
                 && board_height >= 3
-                && live.first().is_some_and(|item| item.thought().is_some()),
+                && live
+                    .first()
+                    .and_then(|item| item.thought())
+                    .is_some_and(|thought| thought.name.is_none()),
         );
         let context = MeasureContext {
             state,

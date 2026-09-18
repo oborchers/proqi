@@ -55,6 +55,7 @@ pub(crate) enum CommandApplicability {
     Cut,
     MutableItem,
     MutableThought,
+    FocusedMutableThought,
     Reorder,
     BoardItem,
     BoardThought,

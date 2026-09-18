@@ -5,7 +5,7 @@ Status: v0.1.0 product contract
 Product name: Proqi
 
 Command: `proqi`
-Last updated: 2026-09-12
+Last updated: 2026-09-17
 
 ## Vision
 
@@ -45,14 +45,14 @@ There is no save command. Content is saved automatically.
 
 ### Structure must earn its place
 
-A thought has content, position, timestamps, revision history, and session
-membership. It does not require a title, status, priority, category, or due
-date.
+A thought has content, position, timestamps, revision history, session
+membership, and an optional short name. It does not require a name, status,
+priority, category, or due date.
 
-Titles would force the user to describe a thought before using it. They add an
-interaction without helping the primary workflow. A collapsed thought uses its
-first visible lines as its preview. The data model may support optional titles
-later, but the default interface does not show or request them.
+Names are organizational metadata, never thought content. Creation remains
+immediate and never asks for a name. A user may name a focused thought later
+through one direct action. Unnamed thoughts keep the ordinary titleless layout
+without reserved chrome, while a name uses existing whitespace above the body.
 
 ### Order is spatial organization
 
@@ -142,7 +142,9 @@ diagnostic context only because they are not durable across terminal restarts.
 A thought is one independently editable body of plain text. It can contain one
 line, many paragraphs, code, logs, or arbitrary pasted context.
 
-A thought has no required title. Its content is the object.
+A thought has no required name. Its optional short name is separate
+organizational metadata. Copy and agent submission use the body and its
+annotations without adding the name.
 
 ### Separator
 
@@ -186,9 +188,11 @@ manager:
  n new   y copy   x cut   space select   c collapse   s submit
 ```
 
-The green focus gutter is the strongest routine visual element. Notes have no
-heading row or decorative card chrome. Whole-thought controls can appear for
-the focused or hovered thought without permanently consuming a row.
+The green focus gutter is the strongest routine visual element. Unnamed notes
+have no heading row or decorative card chrome. An optional name appears in a
+restrained accent above the body and uses no body-selection space. Whole-thought
+controls can appear for the focused or hovered thought without permanently
+consuming a row.
 
 The board spends no permanent row on a repeated product header. The footer can
 allocate up to five responsive bands: transient status, session name, thought

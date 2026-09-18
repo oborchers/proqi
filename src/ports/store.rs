@@ -20,7 +20,9 @@ use crate::ports::agent::{AgentState, SubmissionDisposition};
 
 pub use browser_history::{BrowserCommitReceipt, BrowserHistoryEntry, BrowserHistoryStatus};
 pub use capture::{CaptureCommit, CaptureCommitOutcome, CaptureReceipt};
-pub use compaction::{CompactedOperationRequest, thought_payload_digest};
+pub use compaction::{
+    CompactedOperationRequest, thought_payload_digest, thought_payload_digest_with_name,
+};
 pub use error::{StoreError, StoreFailureCode};
 pub use migration::MigrationMode;
 pub use onboarding::{FirstRunBoard, FirstRunOutcome, OnboardingVersion};
@@ -29,9 +31,9 @@ pub use session::{SessionHit, SessionQuery, SessionSnapshot};
 pub use submission_route::{SUBMISSION_ROUTE_VERSION, SubmissionJournalRoute};
 
 /// Current storage schema understood by this binary.
-pub const SUPPORTED_SCHEMA_VERSION: u32 = 17;
+pub const SUPPORTED_SCHEMA_VERSION: u32 = 18;
 /// Current local storage protocol understood by this binary.
-pub const STORAGE_PROTOCOL_VERSION: u32 = 16;
+pub const STORAGE_PROTOCOL_VERSION: u32 = 17;
 
 /// One ordered, content-redacted source included in a submission.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -180,6 +182,21 @@ pub enum OperationBatch {
         /// Event time.
         at: Timestamp,
     },
+    /// Reserve a retry-safe same-value thought rename without adding history.
+    ThoughtNoOpRename {
+        /// Durable operation identity.
+        operation_id: OperationId,
+        /// Owning session.
+        session_id: SessionId,
+        /// Thought whose current name must match.
+        thought_id: ThoughtId,
+        /// Current and requested name.
+        name: Option<crate::domain::ThoughtName>,
+        /// Next monotonic sequence.
+        sequence: OperationSequence,
+        /// Event time.
+        at: Timestamp,
+    },
     /// Store recognition-only integration context.
     IntegrationContext {
         /// Owning session.
@@ -196,7 +213,9 @@ impl OperationBatch {
         match self {
             Self::Board(operation) => Some(operation.sequence),
             Self::Revision(revision) => Some(revision.sequence),
-            Self::HistoryMove { sequence, .. } => Some(*sequence),
+            Self::HistoryMove { sequence, .. } | Self::ThoughtNoOpRename { sequence, .. } => {
+                Some(*sequence)
+            }
             Self::CreateSession(_) | Self::IntegrationContext { .. } => None,
         }
     }

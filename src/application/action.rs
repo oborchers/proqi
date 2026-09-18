@@ -3,8 +3,8 @@
 use super::FailureCode;
 use crate::domain::{
     BoardItemId, BoardOperationKind, ContentAnnotation, OperationId, OperationSequence, RequestId,
-    RevisionId, SeparatorId, TextPosition, Thought, ThoughtId, ThoughtPresentation, Timestamp,
-    UndoScope,
+    RevisionId, SeparatorId, TextPosition, Thought, ThoughtId, ThoughtName, ThoughtPresentation,
+    Timestamp, UndoScope,
 };
 use std::ops::Range;
 
@@ -286,6 +286,17 @@ pub enum Action {
         /// Event time.
         at: Timestamp,
     },
+    /// Set or clear optional organizational metadata.
+    RenameThought {
+        /// Durable operation identity.
+        operation_id: OperationId,
+        /// Affected thought.
+        thought_id: ThoughtId,
+        /// Validated replacement, or `None` to clear it.
+        name: Option<ThoughtName>,
+        /// Event time.
+        at: Timestamp,
+    },
     /// Set one presentation preference as one board-history operation.
     SetPresentationMany {
         /// Durable operation identity.
@@ -360,6 +371,7 @@ pub struct OwnedThoughtCreation {
     pub(crate) operation_id: OperationId,
     pub(crate) content: String,
     pub(crate) annotations: Vec<ContentAnnotation>,
+    pub(crate) name: Option<ThoughtName>,
     pub(crate) insertion_index: Option<usize>,
     pub(crate) at: Timestamp,
 }
@@ -370,6 +382,7 @@ impl OwnedThoughtCreation {
         operation_id: OperationId,
         content: String,
         annotations: Vec<ContentAnnotation>,
+        name: Option<ThoughtName>,
         insertion_index: Option<usize>,
         at: Timestamp,
     ) -> Self {
@@ -378,6 +391,7 @@ impl OwnedThoughtCreation {
             operation_id,
             content,
             annotations,
+            name,
             insertion_index,
             at,
         }

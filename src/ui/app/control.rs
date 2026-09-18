@@ -38,6 +38,7 @@ impl BoardApp {
             self.session_rename_persistence = SessionRenamePersistence::Saving;
         }
         self.restore_live_interaction(previous_mode, previous_focus);
+        self.reconcile_thought_rename();
         self.sync_editor_from_state();
         Ok(effects)
     }
@@ -75,6 +76,16 @@ impl BoardApp {
                 } else {
                     crate::domain::ThoughtPresentation::Automatic
                 },
+                at,
+            },
+            ControlMutation::RenameThought {
+                operation_id,
+                thought_id,
+                name,
+            } => Action::RenameThought {
+                operation_id: *operation_id,
+                thought_id: *thought_id,
+                name: name.clone(),
                 at,
             },
             ControlMutation::Delete {
@@ -157,12 +168,14 @@ impl BoardApp {
                 thought_id,
                 content,
                 annotations,
+                name,
                 position,
             } => Ok(Action::CreateOwnedThought(OwnedThoughtCreation::preserved(
                 *thought_id,
                 *operation_id,
                 content.clone(),
                 annotations.clone(),
+                name.clone(),
                 *position,
                 at,
             ))),

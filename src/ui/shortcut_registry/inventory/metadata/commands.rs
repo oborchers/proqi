@@ -46,6 +46,7 @@ const fn command_applicability(action: Action) -> CommandApplicability {
             CommandApplicability::BoardItem
         }
         Action::Edit => CommandApplicability::BoardThought,
+        Action::RenameThought => CommandApplicability::FocusedMutableThought,
         Action::FocusFirst | Action::FocusLast => CommandApplicability::BoardNonempty,
         Action::SelectAll => CommandApplicability::HasItems,
         Action::PlainNewline
@@ -98,6 +99,7 @@ const fn command_relevance(action: Action) -> CommandRelevance {
         Action::New => CommandRelevance::Always(0),
         Action::InsertSeparator => CommandRelevance::Always(10),
         Action::Edit => CommandRelevance::FocusedThought(20),
+        Action::RenameThought => CommandRelevance::FocusedThought(22),
         Action::ReflowThought => CommandRelevance::FocusedThought(25),
         Action::Copy => CommandRelevance::FocusedThought(30),
         Action::PasteExact => CommandRelevance::Always(40),
@@ -175,7 +177,8 @@ const fn command_scope(action: Action) -> CommandScope {
         | Action::SubmitRemove
         | Action::SubmitKeep
         | Action::SubmitToAgent
-        | Action::ReflowThought => CommandScope::Contextual,
+        | Action::ReflowThought
+        | Action::RenameThought => CommandScope::Contextual,
         Action::Undo | Action::Redo => CommandScope::Commands,
         Action::PlainNewline
         | Action::DeleteLogicalLine

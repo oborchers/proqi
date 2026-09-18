@@ -79,6 +79,7 @@ pub(super) const DIRECT_ACTIONS: &[Action] = &[
     Action::PickerNext,
     Action::New,
     Action::Edit,
+    Action::RenameThought,
     Action::Delete,
     Action::Collapse,
     Action::Select,

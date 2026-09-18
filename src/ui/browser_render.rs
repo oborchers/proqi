@@ -153,9 +153,9 @@ fn render_result(
         4_usize.saturating_add(crate::ports::text_layout::terminal_cell_width(&badge));
     let label_cells = usize::from(area.width).saturating_sub(fixed_cells);
     let style = if hovered && selected {
-        theme.focused_hovered_style()
+        theme.focused_control_hovered_style()
     } else if hovered {
-        theme.hovered_style().fg(theme.accent)
+        theme.control_hovered_style().fg(theme.accent)
     } else if selected {
         theme
             .focused_style()
@@ -260,7 +260,7 @@ fn render_footer(
     }
     for control in &browser.footer_controls {
         let style = if control.hit != BrowserHit::None && browser.hovered() == control.hit {
-            theme.hovered_style()
+            theme.control_hovered_style()
         } else {
             theme.base_style()
         };

@@ -1,13 +1,14 @@
 //! Routing for reversible Board operations.
 
 use crate::application::{Action, AppState, ApplicationError, ApplicationResult, Effect};
+use crate::domain::{OperationId, ThoughtId, ThoughtName, Timestamp};
 
 use crate::application::mutations::{
     bulk::{
         delete_items, delete_thoughts, duplicate_items, duplicate_thoughts, set_presentation_many,
         stage_submission_removal,
     },
-    delete_thought, move_item, move_thought, set_presentation,
+    delete_thought, move_item, move_thought, rename_thought, set_presentation,
     transform::merge_thoughts,
 };
 
@@ -51,12 +52,24 @@ pub(super) fn reduce_board(
             to,
             at,
         } => move_item(state, *operation_id, *item_id, *to, *at),
+        Action::RenameThought {
+            operation_id,
+            thought_id,
+            name,
+            at,
+        } => reduce_rename(state, *operation_id, *thought_id, name.as_ref(), *at),
         Action::SetPresentation {
             operation_id,
             thought_id,
             presentation,
             at,
         } => set_presentation(state, *operation_id, *thought_id, *presentation, *at),
+        _ => reduce_board_bulk(state, action),
+    }
+}
+
+fn reduce_board_bulk(state: &mut AppState, action: &Action) -> ApplicationResult<Vec<Effect>> {
+    match action {
         Action::SetPresentationMany {
             operation_id,
             thought_ids,
@@ -91,4 +104,14 @@ pub(super) fn reduce_board(
         ),
         _ => Err(ApplicationError::InvalidState),
     }
+}
+
+fn reduce_rename(
+    state: &mut AppState,
+    operation_id: OperationId,
+    thought_id: ThoughtId,
+    name: Option<&ThoughtName>,
+    at: Timestamp,
+) -> ApplicationResult<Vec<Effect>> {
+    rename_thought(state, operation_id, thought_id, name.cloned(), at)
 }

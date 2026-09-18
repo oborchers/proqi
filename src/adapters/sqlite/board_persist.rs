@@ -73,12 +73,13 @@ fn persist_thoughts(transaction: &Transaction<'_>, board: &SessionBoard) -> Resu
         transaction
             .execute(
                 "INSERT INTO thoughts(
-                    id, session_id, content, annotations_json, position, created_at, updated_at,
+                    id, session_id, content, name, annotations_json, position, created_at, updated_at,
                     collapsed, presentation, deleted_at, editor_history_cursor
-                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
                  ON CONFLICT(id) DO UPDATE SET
                     session_id = excluded.session_id,
                     content = excluded.content,
+                    name = excluded.name,
                     annotations_json = excluded.annotations_json,
                     position = excluded.position,
                     created_at = excluded.created_at,
@@ -90,6 +91,7 @@ fn persist_thoughts(transaction: &Transaction<'_>, board: &SessionBoard) -> Resu
                     thought.id.database_bytes().as_slice(),
                     thought.session_id.database_bytes().as_slice(),
                     thought.content,
+                    thought.name.as_ref().map(crate::domain::ThoughtName::as_str),
                     annotations_json,
                     i64::from(thought.position.get()),
                     thought.created_at.as_millis(),

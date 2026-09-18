@@ -41,7 +41,9 @@ impl BoardApp {
 
     pub(super) fn hover_target(&self, pointer: PointerInput) -> Option<HitTarget> {
         let target = self.pointer_target_for_owner(pointer)?;
-        if !self.selection_is_empty() && matches!(target, HitTarget::Thought(_)) {
+        if !self.selection_is_empty()
+            && matches!(target, HitTarget::Thought(_) | HitTarget::Fold(_, _))
+        {
             return None;
         }
         Some(target)

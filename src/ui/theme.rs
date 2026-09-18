@@ -145,15 +145,21 @@ impl Theme {
         )
     }
 
-    /// Immediate pointer emphasis without introducing decorative line work.
+    /// Neutral content hover surface without changing authored typography.
     #[must_use]
-    pub fn hovered_style(self) -> Style {
+    pub fn content_hovered_style(self) -> Style {
+        self.focused_style()
+    }
+
+    /// Immediate hover emphasis for discrete controls and navigation rows.
+    #[must_use]
+    pub fn control_hovered_style(self) -> Style {
         self.focused_style().add_modifier(Modifier::BOLD)
     }
 
     /// Combined discrete-control focus and hover without changing type style.
     #[must_use]
-    pub fn focused_hovered_style(self) -> Style {
+    pub fn focused_control_hovered_style(self) -> Style {
         Style::new()
             .fg(self.on_accent)
             .bg(self.accent_surface)

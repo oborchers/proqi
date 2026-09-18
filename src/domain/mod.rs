@@ -9,6 +9,7 @@ mod model;
 mod operations;
 mod release_highlights;
 mod text;
+mod thought_name;
 mod update;
 
 pub use annotation::{
@@ -37,6 +38,7 @@ pub use release_highlights::{
     ReleaseHighlightGroup, ReleaseHighlightsError, ReleaseHighlightsManifest,
 };
 pub use text::TextPosition;
+pub use thought_name::{THOUGHT_NAME_MAX_CHARS, ThoughtName};
 pub use update::{
     EXTERNAL_RESTART_MAX_EXPECTATIONS, ExternalRestartExpectation, ExternalRestartPending,
     Installation, InstallationIdentity, InstallationKind, InstalledVersionRelation, StableVersion,

@@ -141,9 +141,9 @@ pub(super) fn picker_line(
     let enabled_hovered = hovered && entry.enabled;
     if entry.secondary.is_none() {
         let base = if enabled_hovered && selected {
-            theme.focused_hovered_style()
+            theme.focused_control_hovered_style()
         } else if enabled_hovered {
-            theme.hovered_style()
+            theme.control_hovered_style()
         } else if selected {
             theme.focused_style()
         } else {
@@ -167,9 +167,9 @@ pub(super) fn picker_line(
     let width = usize::from(width);
     let (primary, secondary) = picker_content(entry, width);
     let base = if enabled_hovered && selected {
-        theme.focused_hovered_style()
+        theme.focused_control_hovered_style()
     } else if enabled_hovered {
-        theme.hovered_style()
+        theme.control_hovered_style()
     } else if selected {
         theme.focused_style()
     } else {

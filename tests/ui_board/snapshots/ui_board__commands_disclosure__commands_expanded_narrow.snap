@@ -11,7 +11,7 @@ expression: "text(draw(&mut concise, 34, 12).backend().buffer())"
 │Insert thought below  F6 · board│
 │Insert separator           board│
 │Edit thought           e · board│
+│Rename thought    Ctrl+R · board│
 │Delete item or selection       d│
-│Copy thought text      y · board│
-│Cut thought text       x · board↓
+│Copy thought text      y · board↓
 └────────────────────────────────┘

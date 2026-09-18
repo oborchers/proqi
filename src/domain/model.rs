@@ -1,5 +1,9 @@
 //! Principal domain records and aggregate invariants.
 
+mod direction;
+
+pub use direction::Direction;
+
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -76,33 +80,6 @@ impl ThoughtPosition {
     #[must_use]
     pub const fn get(self) -> u32 {
         self.0
-    }
-}
-
-/// Cardinal direction to an adjacent terminal pane.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Direction {
-    /// Pane above Proqi.
-    Up,
-    /// Pane to the right of Proqi.
-    Right,
-    /// Pane below Proqi.
-    Down,
-    /// Pane to the left of Proqi.
-    Left,
-}
-
-impl Direction {
-    /// Stable lowercase representation used at external and durable boundaries.
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Up => "up",
-            Self::Right => "right",
-            Self::Down => "down",
-            Self::Left => "left",
-        }
     }
 }
 
@@ -273,6 +250,9 @@ pub struct Thought {
     pub session_id: SessionId,
     /// Exact current content.
     pub content: String,
+    /// Optional organizational metadata, separate from authored content.
+    #[serde(default)]
+    pub name: Option<super::ThoughtName>,
     /// Durable presentation metadata over exact UTF-8 byte ranges.
     #[serde(default)]
     pub annotations: Vec<ContentAnnotation>,
@@ -307,6 +287,7 @@ impl Thought {
             id,
             session_id,
             content,
+            name: None,
             annotations: Vec::new(),
             position,
             created_at: now,
@@ -335,6 +316,11 @@ impl Thought {
         validate_annotations(&self.content, &annotations)?;
         self.annotations = annotations;
         Ok(())
+    }
+
+    /// Replace the optional organizational name.
+    pub fn set_name(&mut self, name: Option<super::ThoughtName>) {
+        self.name = name;
     }
 }
 
@@ -409,6 +395,9 @@ pub struct IntegrationContext {
 /// Domain validation failure.
 #[derive(Clone, Debug, Eq, Error, PartialEq)]
 pub enum DomainError {
+    /// Thought names must be short, trimmed, single-line text.
+    #[error("thought name must be non-blank, single-line, and at most 80 characters")]
+    InvalidThoughtName,
     /// A durable thought presentation value was unknown.
     #[error("invalid thought presentation: {0}")]
     InvalidThoughtPresentation(String),
@@ -484,6 +473,9 @@ pub enum DomainError {
     /// A reversible replacement no longer matches current thought content.
     #[error("thought content changed before transformation: {0}")]
     ThoughtContentConflict(ThoughtId),
+    /// A reversible metadata replacement no longer matches the current name.
+    #[error("thought name changed before rename: {0}")]
+    ThoughtNameConflict(ThoughtId),
 }
 
 fn validate_absolute_path(path: &Path) -> Result<(), DomainError> {

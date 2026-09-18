@@ -18,6 +18,8 @@ pub enum BoardOperationKind {
     Reorder,
     /// Changed the explicit collapse preference.
     Collapse,
+    /// Changed optional organizational metadata.
+    Rename,
     /// Duplicated one or more thoughts as one operation.
     Duplicate,
     /// Deleted after an accepted adjacent-agent submission.

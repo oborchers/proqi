@@ -131,6 +131,7 @@ fn add_destination(
         session_id,
         &thought.content,
         thought.annotations.clone(),
+        thought.name.clone(),
         None,
         operation,
     )? {
@@ -142,6 +143,7 @@ fn add_destination(
             session_id,
             thought.content.clone(),
             thought.annotations.clone(),
+            thought.name.clone(),
             None,
             operation,
         )

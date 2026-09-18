@@ -3,18 +3,19 @@
 use crate::{
     application::{AppState, InteractionMode},
     domain::{BoardItemId, SeparatorId, ThoughtId, ThoughtPresentation},
-    ports::text_layout::wrap_rows,
     ui::projection::{FramePresentation, PresentedThought},
 };
 
 mod anchor;
 mod focus;
 mod measure;
+mod measurement;
 #[cfg(test)]
 mod tests;
 
 pub(in crate::ui) use anchor::ContentAnchor;
 use anchor::{content_row_anchors, content_row_for_anchor};
+use measurement::{presentation_cap, wrapped_row_starts};
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(in crate::ui) enum ScrollAnchor {
@@ -85,7 +86,9 @@ pub(super) struct ThoughtRows {
     pub(super) index: usize,
     pub(super) gap_start: usize,
     pub(super) gap_rows: usize,
+    pub(super) automatic_separator_row: Option<usize>,
     pub(super) content_start: usize,
+    pub(super) name_row: Option<usize>,
     row_anchors: Vec<ContentAnchor>,
     pub(super) content_rows: usize,
     pub(super) natural_rows: usize,
@@ -383,6 +386,12 @@ impl BoardFlow {
         let Some(rows) = self.thought(focused) else {
             return offset;
         };
+        if let Some(name_row) = rows.name_row {
+            let visible = offset..offset.saturating_add(viewport_height);
+            if !visible.contains(&name_row) {
+                return name_row.min(maximum);
+            }
+        }
         if rows.editing {
             // Reveal the full editor allocation before clipping establishes its
             // internal viewport. Its previous visible height is not a cap.
@@ -408,7 +417,16 @@ fn measure_thought(
     cursor: usize,
     previous_was_thought: bool,
 ) -> ThoughtRows {
-    let gap_rows = usize::from(previous_was_thought) * context.gap_rows;
+    let named = thought.name.is_some() && (context.board_height > 1 || thought.name_editing);
+    let automatic_gap = usize::from(previous_was_thought) * context.gap_rows;
+    let gap_rows = if named && previous_was_thought {
+        automatic_gap.max(2)
+    } else if named {
+        1
+    } else {
+        automatic_gap
+    };
+    let name_row = named.then(|| cursor.saturating_add(gap_rows.saturating_sub(1)));
     let content_start = cursor.saturating_add(gap_rows);
     let active_editor = context.presentation.editor_snapshot().filter(|_| {
         matches!(context.state.mode, InteractionMode::Edit { thought_id } if thought_id == thought.thought_id)
@@ -446,7 +464,9 @@ fn measure_thought(
         index,
         gap_start: cursor,
         gap_rows,
+        automatic_separator_row: previous_was_thought.then_some(cursor),
         content_start,
+        name_row,
         row_anchors,
         content_rows,
         natural_rows,
@@ -455,30 +475,4 @@ fn measure_thought(
         presentation: thought.preference,
         editing: active_editor.is_some(),
     }
-}
-
-fn wrapped_row_starts(content: &str, width: u16) -> Vec<usize> {
-    wrap_rows(content, usize::from(width.max(1)))
-        .into_iter()
-        .map(|row| row.start_byte)
-        .collect()
-}
-
-fn presentation_cap(
-    presentation: ThoughtPresentation,
-    natural_rows: usize,
-    board_height: u16,
-    editing: bool,
-) -> usize {
-    if editing || presentation == ThoughtPresentation::Expanded {
-        return natural_rows;
-    }
-    match presentation {
-        ThoughtPresentation::Collapsed => 2,
-        ThoughtPresentation::Automatic => {
-            usize::from(board_height.saturating_mul(2).div_ceil(3).max(3))
-        }
-        ThoughtPresentation::Expanded => natural_rows,
-    }
-    .max(1)
 }

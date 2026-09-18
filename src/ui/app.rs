@@ -39,6 +39,7 @@ mod search;
 mod selection;
 mod session;
 mod state_bridge;
+mod thought_name;
 mod transfer;
 mod transformations;
 mod update;
@@ -159,6 +160,7 @@ pub struct BoardApp {
     invocation_popup: Option<invocation::InvocationPopup>,
     search: Option<search::SearchState>,
     rename: Option<query::QueryEditor>,
+    thought_rename: Option<thought_name::ThoughtNameState>,
     session_rename_persistence: SessionRenamePersistence,
     transfer: Option<transfer::TransferState>,
     transfer_generation: u64,
@@ -197,11 +199,6 @@ pub struct BoardApp {
 }
 
 impl BoardApp {
-    #[cfg(test)]
-    pub(crate) fn pointer_click_count(&self) -> Option<u8> {
-        self.pointer_click.map(|click| click.count)
-    }
-
     /// Construct a board around rehydrated application state.
     #[must_use]
     pub fn new(state: AppState, editor_factory: impl EditorFactory + 'static) -> Self {
@@ -266,6 +263,7 @@ impl BoardApp {
             invocation_popup: None,
             search: None,
             rename: None,
+            thought_rename: None,
             session_rename_persistence: SessionRenamePersistence::Idle,
             transfer: None,
             transfer_generation: 0,
@@ -426,6 +424,7 @@ impl BoardApp {
             }
             Owner::Transfer => self.handle_transfer_input(&input, ids, clock),
             Owner::Rename => self.handle_session_rename(&input, ids, clock),
+            Owner::ThoughtRename => self.handle_thought_rename(&input, ids, clock),
             Owner::Search => self.handle_search_input(&input, ids, clock),
             Owner::Direction => self
                 .handle_submission_input(&input, ids, clock)

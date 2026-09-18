@@ -43,6 +43,9 @@ fn render_control(
             .iter()
             .find(|target| target.adjacent_direction() == Some(direction))
             .map(crate::ui::control_labels::agent),
+        HitTarget::CommitThoughtName | HitTarget::CancelThoughtName => {
+            crate::ui::control_labels::thought_name_action(target, area.width)
+        }
         _ => crate::ui::control_labels::action(target, false, context, keys)
             .filter(|label| label.width() <= area.width)
             .or_else(|| crate::ui::control_labels::action(target, true, context, keys)),
@@ -61,7 +64,7 @@ fn render_control(
     let interactive = !matches!(target, HitTarget::Agent(_));
     let hovered = interactive && app.hovered() == Some(target);
     let style = if hovered {
-        theme.hovered_style()
+        theme.control_hovered_style()
     } else if active_submission {
         theme.focused_style()
     } else {
@@ -184,7 +187,7 @@ fn render_identity_hover(
     };
     let value = truncate(value, usize::from(area.width));
     frame.render_widget(
-        Paragraph::new(value).style(theme.hovered_style().fg(color)),
+        Paragraph::new(value).style(theme.control_hovered_style().fg(color)),
         *area,
     );
 }

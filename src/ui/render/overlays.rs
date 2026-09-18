@@ -191,9 +191,9 @@ pub(super) fn render_update(
         let prefix = if index == selected { "› " } else { "  " };
         let row_hovered = hovered == Some(crate::ui::HitTarget::PaletteItem(index));
         let style = if row_hovered && index == selected {
-            theme.focused_hovered_style()
+            theme.focused_control_hovered_style()
         } else if row_hovered {
-            theme.hovered_style()
+            theme.control_hovered_style()
         } else if index == selected {
             theme.focused_style().add_modifier(Modifier::BOLD)
         } else {
@@ -295,7 +295,7 @@ pub(super) fn render_close(
     theme: &Theme,
 ) {
     let style = if hovered {
-        theme.hovered_style().fg(theme.accent)
+        theme.control_hovered_style().fg(theme.accent)
     } else {
         Style::default().fg(theme.accent)
     };

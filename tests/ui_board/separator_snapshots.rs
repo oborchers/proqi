@@ -2,7 +2,7 @@ use super::{snapshot_support::snapshot_buffer, *};
 use proqi::{
     adapters::editor::RopeEditorFactory,
     application::{AppState, InteractionMode},
-    domain::{Separator, Thought, ThoughtPosition},
+    domain::{Separator, Thought, ThoughtName, ThoughtPosition},
 };
 
 fn separator_fixture(pattern: &str) -> Fixture {
@@ -203,4 +203,38 @@ fn narrow_limited_separator_board_clips_and_scrolls_without_losing_identity() {
     assert!(layout.viewport_offset > 0);
     assert!(!layout.separators.is_empty());
     insta::assert_snapshot!(snapshot(&mut fixture, 24, 6, ThemePreference::Limited));
+}
+
+#[test]
+fn named_thoughts_and_explicit_separator_share_one_prepared_flow() {
+    let mut fixture = separator_fixture("tst");
+    let thought_ids = fixture
+        .app
+        .state
+        .board
+        .live_thoughts()
+        .iter()
+        .map(|thought| thought.id)
+        .collect::<Vec<_>>();
+    for (thought_id, name) in thought_ids
+        .iter()
+        .copied()
+        .zip(["Before separator", "After separator"])
+    {
+        fixture
+            .app
+            .state
+            .board
+            .thought_mut(thought_id)
+            .expect("thought")
+            .set_name(Some(ThoughtName::new(name).expect("name")));
+    }
+    let layout = fixture.app.prepare_frame(Rect::new(0, 0, 52, 12));
+    let first = layout.thought(thought_ids[0]).expect("first layout");
+    let second = layout.thought(thought_ids[1]).expect("second layout");
+    assert!(first.separator_before.is_none());
+    assert!(second.separator_before.is_none());
+    assert!(first.name.expect("first name").y < first.body_area.y);
+    assert!(second.name.expect("second name").y < second.body_area.y);
+    insta::assert_snapshot!(snapshot(&mut fixture, 52, 12, ThemePreference::Dark));
 }

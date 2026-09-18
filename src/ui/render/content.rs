@@ -51,7 +51,7 @@ pub(super) fn styled_line(
                 theme.foreground
             };
             let mut style = if hovered {
-                theme.hovered_style().fg(foreground)
+                theme.content_hovered_style().fg(foreground)
             } else {
                 Style::default().fg(foreground)
             };

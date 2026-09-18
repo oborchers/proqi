@@ -36,18 +36,18 @@ fn asynchronous_submission_refresh_preserves_the_selected_typed_command() {
             "w1:p2",
         )]));
     open(&mut lost);
-    let copy = lost
+    let rename = lost
         .app
         .palette_view()
         .expect("Commands before target loss")
         .1
         .iter()
-        .position(|row| row == "Copy thought text")
-        .expect("Copy command");
-    move_down(&mut lost, copy);
+        .position(|row| row == "Rename thought")
+        .expect("Rename command");
+    move_down(&mut lost, rename);
     lost.app.complete_agent_discovery(Ok(Vec::new()));
     let (_, rows, selected) = lost.app.palette_view().expect("Commands after target loss");
-    assert_eq!(rows[selected], "Copy thought text");
+    assert_eq!(rows[selected], "Rename thought");
 }
 
 #[test]

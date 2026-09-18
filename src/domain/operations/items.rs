@@ -3,7 +3,9 @@
 use std::collections::HashSet;
 
 use super::{DomainError, Separator, SeparatorId, SessionBoard};
-use crate::domain::{BoardItemId, BoardItemRef, ThoughtPosition, validate_annotations};
+use crate::domain::{
+    BoardItemId, BoardItemRef, ThoughtName, ThoughtPosition, validate_annotations,
+};
 
 impl SessionBoard {
     /// All separators, including recoverably deleted records.
@@ -103,6 +105,9 @@ impl SessionBoard {
                 });
             }
             validate_annotations(&thought.content, &thought.annotations)?;
+            if let Some(name) = &thought.name {
+                ThoughtName::new(name.as_str().to_owned())?;
+            }
             if thought.is_live() {
                 super::super::attachment_numbering::validate_unique(
                     &thought.annotations,

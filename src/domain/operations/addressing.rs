@@ -36,6 +36,10 @@ impl BoardMutation {
                 thought_id: affected,
                 ..
             }
+            | Self::SetName {
+                thought_id: affected,
+                ..
+            }
             | Self::LegacySetCollapsed {
                 thought_id: affected,
                 ..
@@ -61,6 +65,7 @@ impl BoardMutation {
             | Self::MoveThought { thought_id, .. }
             | Self::ReplaceContent { thought_id, .. }
             | Self::SetPresentation { thought_id, .. }
+            | Self::SetName { thought_id, .. }
             | Self::LegacySetCollapsed { thought_id, .. } => {
                 push_distinct(thought_ids, *thought_id);
             }

@@ -25,6 +25,8 @@ pub(super) struct PresentedThought {
     pub(super) canonical_content: String,
     pub(super) presentation: Presentation,
     pub(super) preference: ThoughtPresentation,
+    pub(super) name: Option<String>,
+    pub(super) name_editing: bool,
 }
 
 /// The single presentation object consumed by every visual-frame consumer.
@@ -52,6 +54,8 @@ impl FramePresentation {
                 canonical_content: thought.content.clone(),
                 presentation: Presentation::canonical(thought.content.clone()),
                 preference: thought.presentation,
+                name: thought.name.as_ref().map(|name| name.as_str().to_owned()),
+                name_editing: false,
             })
             .collect();
         let mut frame = Self::new(thoughts);

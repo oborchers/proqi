@@ -51,7 +51,7 @@ pub(super) fn render(
     );
     let dragging = app.dragged_item() == Some(item_id);
     let surface_style = match (focused || selected, body_hovered) {
-        (_, true) => Some(theme.hovered_style()),
+        (_, true) => Some(theme.control_hovered_style()),
         (true, false) => Some(theme.focused_style()),
         (false, false) => None,
     };
@@ -97,7 +97,7 @@ pub(super) fn render(
             .add_modifier(Modifier::DIM)
     } else if focused && gutter_hovered {
         theme
-            .hovered_style()
+            .control_hovered_style()
             .fg(theme.accent)
             .remove_modifier(Modifier::REVERSED | Modifier::ITALIC)
     } else if focused {
@@ -107,7 +107,7 @@ pub(super) fn render(
             .remove_modifier(Modifier::REVERSED | Modifier::ITALIC)
             .add_modifier(Modifier::BOLD)
     } else if gutter_hovered {
-        theme.hovered_style().fg(theme.accent)
+        theme.control_hovered_style().fg(theme.accent)
     } else {
         Style::default()
             .fg(theme.accent)

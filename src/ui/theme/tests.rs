@@ -86,14 +86,24 @@ fn limited_and_failed_auto_detection_keep_a_non_color_focus_cue() {
 }
 
 #[test]
-fn hover_never_changes_type_style() {
+fn hover_typography_is_owned_by_semantic_role() {
     for preference in [
         ThemePreference::Dark,
         ThemePreference::Light,
         ThemePreference::Limited,
     ] {
         let theme = Theme::resolve(preference, true);
-        for style in [theme.hovered_style(), theme.focused_hovered_style()] {
+        let content = theme.content_hovered_style();
+        assert!(!content.add_modifier.contains(Modifier::BOLD));
+        assert!(
+            !content
+                .add_modifier
+                .intersects(Modifier::ITALIC | Modifier::UNDERLINED)
+        );
+        for style in [
+            theme.control_hovered_style(),
+            theme.focused_control_hovered_style(),
+        ] {
             assert!(style.add_modifier.contains(Modifier::BOLD));
             assert!(
                 !style
