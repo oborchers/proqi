@@ -44,11 +44,40 @@ pub(super) fn run_dismissal(binary: &Path, state: &Path, session: &str) -> ExitS
     let script = r#"
         log_user 0
         set timeout 20
+        proc reducer_accepted {} {
+            global env
+            set path "$env(PROQI_TEST_STATE)/runtime/input-accepted"
+            if {![file exists $path]} { return 0 }
+            set input [open $path r]
+            set receipt [read $input]
+            close $input
+            return [expr {[string first "mode=" $receipt] >= 0}]
+        }
+        proc wait_for_reducer_acceptance {failure} {
+            for {set attempt 0} {$attempt < 100} {incr attempt} {
+                if {[reducer_accepted]} { return }
+                after 20
+            }
+            exit $failure
+        }
+        set acceptance "$env(PROQI_TEST_STATE)/runtime/input-accepted"
+        file delete $acceptance
         spawn $env(PROQI_TEST_BINARY) --state-dir $env(PROQI_TEST_STATE) -r $env(PROQI_TEST_SESSION)
         expect -exact "\x1b\[?1049h"
         stty rows 18 columns 84
         expect -exact "what's new"
+        # Screen output can reach Expect before the render owner arms its input
+        # boundary. Probe readiness with harmless overlay navigation until one
+        # event reaches the reducer, without extending the existing bound.
+        for {set attempt 0} {$attempt < 100} {incr attempt} {
+            send -- "\x1b\[B"
+            after 20
+            if {[reducer_accepted]} { break }
+        }
+        if {![reducer_accepted]} { exit 97 }
+        file delete $acceptance
         send -- "\x1b"
+        wait_for_reducer_acceptance 98
         for {set attempt 0} {$attempt < 100} {incr attempt} {
             set acknowledged 0
             foreach path [glob -nocomplain "$env(PROQI_TEST_STATE)/cache/updates/*/state.json"] {
@@ -76,6 +105,7 @@ pub(super) fn run_dismissal(binary: &Path, state: &Path, session: &str) -> ExitS
         .env("PROQI_TEST_BINARY", binary)
         .env("PROQI_TEST_STATE", state)
         .env("PROQI_TEST_SESSION", session)
+        .env("PROQI_TEST_INPUT_ACCEPTANCE", "1")
         .status()
         .expect("run highlight dismissal")
 }

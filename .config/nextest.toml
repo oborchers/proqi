@@ -9,3 +9,19 @@ threads-required = "num-test-threads"
 [[profile.default.overrides]]
 filter = 'test(=update_migration::automatic::old_coordinator_converges_real_schema_changing_replacements)'
 threads-required = "num-test-threads"
+
+# These real PTY workflows use process signals, descendant settlement, terminal
+# restoration, and short external acknowledgement probes. The dedicated PTY
+# gate already serializes them. Keep the general nextest gate from scheduling
+# unrelated processes across their bounded lifecycle oracles.
+[[profile.default.overrides]]
+filter = 'test(=shutdown::keyboard_quit_during_delayed_capture_commit_restores_and_preserves_content)'
+threads-required = "num-test-threads"
+
+[[profile.default.overrides]]
+filter = 'test(=shutdown::termination_during_persistently_failed_capture_restores_and_exits_boundedly)'
+threads-required = "num-test-threads"
+
+[[profile.default.overrides]]
+filter = 'test(=update_control::in_app_restart_reopens_until_dismissed_then_remains_manual)'
+threads-required = "num-test-threads"
