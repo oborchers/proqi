@@ -14,6 +14,7 @@ use super::BoardApp;
 mod compose;
 mod new_thought;
 mod rename;
+mod semantic_ids;
 
 #[test]
 fn generic_control_add_cannot_author_shortcut_emphasis_but_preservation_can_retain_it() {

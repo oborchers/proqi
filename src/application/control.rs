@@ -1,5 +1,7 @@
 //! Durable idempotency matching for owner-control requests.
 
+mod fingerprint;
+mod mixed;
 mod replacement;
 
 use crate::{
@@ -44,50 +46,143 @@ pub(crate) fn match_control_replay(
     if receipt.identity != identity {
         return ControlReplay::Conflict;
     }
-    let thought_id = match mutation {
-        ControlMutation::Add { thought_id, .. }
-        | ControlMutation::PreserveAdd { thought_id, .. }
-            if matches_add(existing, session_id, mutation) =>
-        {
-            Some(*thought_id)
+    if receipt.session_id != session_id {
+        return ControlReplay::Conflict;
+    }
+    if let Some(stored) = existing.semantic_fingerprint() {
+        let Ok(Some(requested)) = fingerprint::semantic_fingerprint(session_id, mutation) else {
+            return ControlReplay::Conflict;
+        };
+        if stored != requested {
+            return ControlReplay::Conflict;
         }
-        ControlMutation::Delete { thought_id, .. }
-            if matches_delete(existing, session_id, *thought_id) =>
-        {
-            Some(*thought_id)
-        }
-        ControlMutation::Move { thought_id, .. }
-            if matches_move(existing, session_id, mutation) =>
-        {
-            Some(*thought_id)
-        }
-        ControlMutation::SetCollapsed { thought_id, .. }
-            if matches_collapse(existing, session_id, mutation) =>
-        {
-            Some(*thought_id)
-        }
-        ControlMutation::RenameThought { thought_id, .. }
-            if matches_rename(existing, session_id, mutation) =>
-        {
-            Some(*thought_id)
-        }
-        ControlMutation::History { scope, undo, .. }
-            if matches_history(existing, session_id, *scope, *undo) =>
-        {
-            None
-        }
-        ControlMutation::Replace { thought_id, .. }
-            if replacement::matches(existing, session_id, mutation) =>
-        {
-            Some(*thought_id)
-        }
-        _ => return ControlReplay::Conflict,
+        let item_ids = match mutation {
+            ControlMutation::DuplicateItems {
+                operation_id,
+                item_ids,
+                ..
+            } => match crate::application::derived_duplicate_item_ids(*operation_id, item_ids) {
+                Ok(ids) => ids,
+                Err(_) => return ControlReplay::Conflict,
+            },
+            _ => mutation.item_ids(),
+        };
+        let mut durable = receipt;
+        durable.idempotent_replay = true;
+        return ControlReplay::Accepted(ControlReceipt {
+            thought_id: mutation.thought_id(),
+            item_ids,
+            durable,
+        });
+    }
+    let Some((thought_id, item_ids)) = matched_ids(existing, session_id, mutation) else {
+        return ControlReplay::Conflict;
     };
     let mut durable = receipt;
     durable.idempotent_replay = true;
     ControlReplay::Accepted(ControlReceipt {
         thought_id,
+        item_ids,
         durable,
+    })
+}
+
+pub(crate) fn attach_control_fingerprint(
+    mut routed: crate::application::SequencedMutationEffects,
+    session_id: SessionId,
+    mutation: &ControlMutation,
+) -> Result<crate::application::SequencedMutationEffects, crate::ports::store::StoreError> {
+    let identity = mutation.durable_identity().ok_or_else(|| {
+        crate::ports::store::StoreError::Conflict(
+            "control mutation has no durable identity".to_owned(),
+        )
+    })?;
+    let fingerprint =
+        fingerprint::semantic_fingerprint(session_id, mutation)?.ok_or_else(|| {
+            crate::ports::store::StoreError::Conflict(
+                "control mutation has no semantic fingerprint".to_owned(),
+            )
+        })?;
+    routed
+        .batch
+        .attach_semantic_fingerprint(identity, fingerprint)?;
+    Ok(routed)
+}
+
+fn matched_ids(
+    existing: &StoredOperationRequest,
+    session_id: SessionId,
+    mutation: &ControlMutation,
+) -> Option<(
+    Option<crate::domain::ThoughtId>,
+    Vec<crate::domain::BoardItemId>,
+)> {
+    Some(match mutation {
+        ControlMutation::Add { thought_id, .. }
+        | ControlMutation::PreserveAdd { thought_id, .. }
+            if matches_add(existing, session_id, mutation) =>
+        {
+            (Some(*thought_id), Vec::new())
+        }
+        ControlMutation::Delete { thought_id, .. }
+            if matches_delete(existing, session_id, *thought_id) =>
+        {
+            (Some(*thought_id), Vec::new())
+        }
+        ControlMutation::Move { thought_id, .. }
+            if matches_move(existing, session_id, mutation) =>
+        {
+            (Some(*thought_id), Vec::new())
+        }
+        ControlMutation::SetCollapsed { thought_id, .. }
+            if matches_collapse(existing, session_id, mutation) =>
+        {
+            (Some(*thought_id), Vec::new())
+        }
+        ControlMutation::RenameThought { thought_id, .. }
+            if matches_rename(existing, session_id, mutation) =>
+        {
+            (Some(*thought_id), Vec::new())
+        }
+        ControlMutation::History { scope, undo, .. }
+            if matches_history(existing, session_id, *scope, *undo) =>
+        {
+            (None, Vec::new())
+        }
+        ControlMutation::Replace { thought_id, .. }
+            if replacement::matches(existing, session_id, mutation) =>
+        {
+            (Some(*thought_id), Vec::new())
+        }
+        ControlMutation::InsertSeparator { .. }
+            if mixed::matches_insert_separator(existing, session_id, mutation) =>
+        {
+            (None, mutation.item_ids())
+        }
+        ControlMutation::MoveItem { .. }
+            if mixed::matches_move_item(existing, session_id, mutation) =>
+        {
+            (None, mutation.item_ids())
+        }
+        ControlMutation::DeleteItems { .. }
+            if mixed::matches_delete_items(existing, session_id, mutation) =>
+        {
+            (None, mutation.item_ids())
+        }
+        ControlMutation::DuplicateItems { .. }
+            if mixed::matches_duplicate_items(existing, session_id, mutation) =>
+        {
+            (None, mixed::duplicated_ids(existing))
+        }
+        ControlMutation::SplitThought { .. }
+        | ControlMutation::ExtractThought { .. }
+        | ControlMutation::MergeThoughts { .. }
+        | ControlMutation::ReflowThought { .. }
+            if mixed::matches_transform(existing, session_id, mutation) =>
+        {
+            (mutation.thought_id(), mutation.item_ids())
+        }
+        _ => return None,
     })
 }
 
@@ -257,14 +352,25 @@ fn matches_delete(
     };
     operation.session_id == session_id
         && operation.kind == BoardOperationKind::Delete
-        && matches!(
-            &operation.forward,
-            BoardMutation::SetDeletion {
-                thought_id: stored,
-                deleted_at: Some(_),
-                ..
-            } if *stored == thought_id
-        )
+        && mutation_deletes_only_thought(&operation.forward, thought_id)
+}
+
+fn mutation_deletes_only_thought(
+    mutation: &BoardMutation,
+    thought_id: crate::domain::ThoughtId,
+) -> bool {
+    let mutations = match mutation {
+        BoardMutation::Batch { mutations } => mutations.as_slice(),
+        other => std::slice::from_ref(other),
+    };
+    matches!(
+        mutations,
+        [BoardMutation::SetDeletion {
+            thought_id: stored,
+            deleted_at: Some(_),
+            ..
+        }] if *stored == thought_id
+    )
 }
 
 fn matches_move(

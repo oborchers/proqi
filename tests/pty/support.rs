@@ -61,14 +61,13 @@ pub(super) fn wait_for_control_owner(state: &std::path::Path, session: &str) -> 
     .expect("runtime coordinator");
     let deadline = std::time::Instant::now() + OWNER_READINESS_TIMEOUT;
     loop {
-        if let Some(participant) =
-            ready_control_owner(&coordinator, session).expect("scan runtime owners")
-        {
+        let observed = coordinator.active_instances().expect("scan runtime owners");
+        if let Some(participant) = ready_control_owner_from(&observed, session) {
             return participant;
         }
         assert!(
             std::time::Instant::now() < deadline,
-            "owner did not advertise a ready control endpoint"
+            "owner did not advertise a ready control endpoint; observed {observed:?}"
         );
         std::thread::sleep(std::time::Duration::from_millis(20));
     }
@@ -78,14 +77,22 @@ fn ready_control_owner(
     coordinator: &FileRuntimeCoordinator,
     session: SessionId,
 ) -> Result<Option<InstanceInfo>, RuntimeError> {
-    Ok(coordinator.active_instances()?.into_iter().find(|info| {
-        info.session_id == session
-            && info.control_protocol == Some(proqi::ports::control::CONTROL_PROTOCOL_VERSION)
-            && info
-                .control_endpoint
-                .as_deref()
-                .is_some_and(|endpoint| std::path::Path::new(endpoint).exists())
-    }))
+    let observed = coordinator.active_instances()?;
+    Ok(ready_control_owner_from(&observed, session))
+}
+
+fn ready_control_owner_from(observed: &[InstanceInfo], session: SessionId) -> Option<InstanceInfo> {
+    observed
+        .iter()
+        .find(|info| {
+            info.session_id == session
+                && info.control_protocol == Some(proqi::ports::control::CONTROL_PROTOCOL_VERSION)
+                && info
+                    .control_endpoint
+                    .as_deref()
+                    .is_some_and(|endpoint| std::path::Path::new(endpoint).exists())
+        })
+        .cloned()
 }
 
 pub(super) fn raw_input_command(

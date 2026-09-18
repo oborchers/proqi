@@ -15,16 +15,22 @@ Important tables have distinct responsibilities:
 
 - `schema_meta` records the current schema and storage protocol.
 - `migration_history` is the append-only record of forward migrations.
-- `sessions` and `thoughts` hold current durable board state.
+- `sessions`, `thoughts`, and payload-free separators hold current durable
+  mixed Board state. Thoughts and separators have separate typed identities and
+  share one ordinal order.
 - `board_operations` and `thought_revisions` hold bounded persistent undo and
   redo history.
-- `commit_receipts` make durable mutations idempotent and replayable.
+- `commit_receipts` make durable mutations idempotent and replayable. Current
+  public mutations retain a nullable content-redacted semantic fingerprint so
+  exact retries remain distinguishable after history compaction; legacy rows
+  may have no fingerprint.
 - `integration_context` stores non-content integration metadata.
 - `submission_attempts` records content-redacted submission intent and outcome.
 - `session_search` is a derived FTS5 index and is not authoritative data.
 
 Typed identifiers are stored as complete 16-byte UUIDv7 blobs. Their public
-forms retain the entity prefix, such as `ses_`, `tht_`, `op_`, and `sub_`.
+forms retain the entity prefix, such as `ses_`, `tht_`, `sep_`, `op_`, and
+`sub_`.
 SQLite statements use bound parameters. Migrations are forward-only, guarded by
 schema coordination, preceded by backup and integrity checks, and refuse a
 newer unsupported schema.
@@ -32,6 +38,12 @@ newer unsupported schema.
 The operating-system lease is authoritative for active ownership. Database and
 runtime metadata are descriptive and must not be used to bypass a verified
 owner. Two processes must never write one session directly.
+
+Browser history is installation-wide and owns session metadata and lifecycle.
+Board history is scoped to one session and owns thought, separator, ordering,
+and split, extract, merge, duplicate, and reflow operations. Editor history is
+scoped to one thought. A failed commit must not advance any of these histories;
+retry uses the same durable operation or revision identity and exact payload.
 
 ## Submission interpretation
 

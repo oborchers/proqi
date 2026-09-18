@@ -797,6 +797,11 @@ event-sourced system.
   previous and next content, annotations, and cursor state.
 - `operations`: ordered structural operations and their inverse payloads for
   persistent undo and redo.
+- `commit_receipts`: durable operation and revision acknowledgements. Public
+  mutations additionally retain a nullable, content-redacted SHA-256 semantic
+  request fingerprint so exact retries remain distinguishable after history
+  payload compaction. Legacy rows remain nullable and use their original
+  structural replay comparison.
 - `browser_operations`: installation-wide ordered rename, trash, and restore
   operations with exact forward and inverse metadata transitions.
 - `browser_operation_receipts`: idempotent Browser mutation receipts, including
@@ -925,10 +930,20 @@ rows store `adjacent_pane` with a direction or `herdr_agent` without one. Neithe
 form stores workspace, tab, pane, session, labels, prompt content, or raw Herdr
 responses.
 
-Schema version 17 and storage protocol version 16 add the nullable thought name
+Schema version 18 and storage protocol version 17 add the nullable thought name
 column and the durable `SetName` operation payload. The migration is additive,
 backup-protected, and leaves existing thoughts unnamed. Name-only changes do
 not rebuild full-text search.
+
+Schema version 19 and storage protocol version 18 add the nullable semantic
+request fingerprint to `commit_receipts`. The application hashes a versioned,
+canonical request envelope that includes the session, typed identities,
+preconditions, ordering, ranges, and digests instead of raw user content. The
+fingerprint survives receipt compaction and lets an exact operation or revision
+retry replay after restart while rejecting reuse for a different request whose
+resulting durable payload happens to be identical. Migration does not infer or
+backfill fingerprints for legacy receipts. Older binaries refuse the newer
+storage protocol before writing.
 
 ### Stable session attachment ordinals
 
@@ -1965,6 +1980,21 @@ position, with no content or annotation payload. Existing thought mutation
 commands continue to address thoughts, while their ordering operates within the
 shared Board item sequence.
 
+The additive `items` family is the semantic mutation boundary for that mixed
+sequence. It inserts payload-free separators, moves one typed item, and deletes
+or duplicates an exact Board-ordered set through the same reducer and Board
+history as the TUI. `thoughts split`, `extract`, `merge`, and `reflow` likewise
+invoke the existing typed transformation owners. Merge loads the same validated
+`merge_separator` setting as the TUI. An active owner canonicalizes initial
+execution and replay matching with its launch-time setting. After an owner
+restart, a changed setting deliberately makes the merge a different semantic
+request. They require current-content SHA-256
+preconditions, preserve annotations and organizational names according
+to the domain transformation rules, and return typed affected `item_ids` only
+after durable acknowledgement. Capabilities publish exact operation arrays so
+an installed-version skill never infers these commands from a broad feature
+boolean.
+
 Read-only commands synchronize with a compatible active owner before inspecting
 the shared database through the storage facade. When a legacy owner predates
 the synchronization request, reads remain available from its last durable
@@ -1978,11 +2008,17 @@ never writes around the owner.
 The local transport is a Unix-domain socket on macOS and Linux. There is no
 insecure fallback. Endpoint metadata lives beside runtime lock metadata. Peer-user validation,
 bounded messages, protocol negotiation, idempotency keys, and timeouts are
-mandatory. If forwarding is unsupported or the owner cannot be verified, the
+mandatory. Before reporting success, the client verifies the receipt's exact
+session, durable identity, affected thought, and typed item identities against
+the request. If forwarding is unsupported or the owner cannot be verified, the
 CLI returns `session_busy`.
 
-Control protocol version 10 is current. Version 10 carries thought-name
-replacement and preserves optional names during cross-session creation. Older
+Control protocol version 11 is current. Version 11 carries typed separator and
+mixed-item mutations plus split, extract, merge, and reflow requests. These
+requests use the canonical reducer, durability lane, and replay matcher; older
+owners reject them instead of accepting a partial semantic operation. Version
+10 carries thought-name replacement and preserves optional names during
+cross-session creation. Older
 owners reject those requests instead of dropping metadata. Version 9 carries the durable operation
 identity required for active-owner session rename, including idempotent replay
 and Browser history. A same-name rename commits a durable no-op receipt so its

@@ -16,6 +16,7 @@ use crate::{
     },
     ports::{
         attachment_accessibility::{AttachmentCheckBatch, AttachmentCheckPurpose},
+        control::ControlMutation,
         environment::IdGenerator,
         runtime::{Lease, RuntimeCoordinator, RuntimeError, RuntimeScan},
         store::{
@@ -327,9 +328,14 @@ fn sequenced_service_commit_accepts_attachment_reconciliation_as_auxiliary_work(
             timeout: Duration::ZERO,
         }),
     ];
+    let mutation = ControlMutation::History {
+        operation_id,
+        scope: UndoScope::Board,
+        undo: true,
+    };
     let receipt = SessionService::new(&mut store, &runtime, &clock, &mut ids, test_directory())
         .expect("service")
-        .commit_sequenced_effects(effects)
+        .commit_control_effects(effects, session_id, &mutation)
         .expect("one durable batch with an attachment check");
 
     assert_eq!(receipt.sequence, OperationSequence::new(1));

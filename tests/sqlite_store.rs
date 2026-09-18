@@ -39,7 +39,7 @@ mod keyboard_support;
 use keyboard_support::key_input;
 
 struct DatabaseFixture {
-    _temporary: tempfile::TempDir,
+    temporary: tempfile::TempDir,
     config: StoreConfig,
 }
 
@@ -52,10 +52,7 @@ impl DatabaseFixture {
             MigrationMode::Allow,
             Timestamp::from_millis(100),
         );
-        Self {
-            _temporary: temporary,
-            config,
-        }
+        Self { temporary, config }
     }
 
     fn open(&self) -> SqliteStore {
@@ -85,8 +82,14 @@ fn one_effect(state: &mut AppState, action: Action) -> Effect {
 
 fn persist_effect(store: &mut SqliteStore, effect: &Effect) -> proqi::ports::store::CommitReceipt {
     let batch = match effect {
-        Effect::CommitBoardOperation(operation) => OperationBatch::Board(operation.clone()),
-        Effect::CommitRevision(revision) => OperationBatch::Revision(revision.clone()),
+        Effect::CommitBoardOperation(operation) => OperationBatch::Board {
+            operation: operation.clone(),
+            semantic_fingerprint: None,
+        },
+        Effect::CommitRevision(revision) => OperationBatch::Revision {
+            revision: revision.clone(),
+            semantic_fingerprint: None,
+        },
         Effect::CommitHistoryMove {
             operation_id,
             session_id,
@@ -101,6 +104,7 @@ fn persist_effect(store: &mut SqliteStore, effect: &Effect) -> proqi::ports::sto
             undo: *undo,
             sequence: *sequence,
             at: *at,
+            semantic_fingerprint: None,
         },
         Effect::CommitThoughtNoOpRename {
             operation_id,
@@ -116,6 +120,7 @@ fn persist_effect(store: &mut SqliteStore, effect: &Effect) -> proqi::ports::sto
             name: name.clone(),
             sequence: *sequence,
             at: *at,
+            semantic_fingerprint: None,
         },
         other => panic!("effect is not durable: {other:?}"),
     };
@@ -192,6 +197,9 @@ mod migration_15;
 
 #[path = "sqlite_store/migration_17.rs"]
 mod migration_17;
+
+#[path = "sqlite_store/migration_19.rs"]
+mod migration_19;
 
 #[path = "sqlite_store/attachment_numbering.rs"]
 mod attachment_numbering;

@@ -98,17 +98,14 @@ fn expanded_envelope_stays_expanded_after_reflow() {
 }
 
 #[test]
-fn failed_transform_keeps_the_exact_large_control_payload() {
+fn unsupported_control_keeps_the_exact_large_payload_as_no_change() {
     let mut fixture = Fixture::new();
     let source = format!("{}\u{7}\nline", "a".repeat(1200));
     fixture.paste(&source);
     let before = fixture.app.state.board.live_thoughts()[0].clone();
     assert!(reflow(&mut fixture).is_empty());
     assert_eq!(fixture.app.state.board.live_thoughts()[0], &before);
-    assert_eq!(
-        fixture.app.status_text(),
-        Some("could not clean up spacing; thought kept unchanged")
-    );
+    assert_eq!(fixture.app.status_text(), Some("spacing already clean"));
     fixture.input(UiInput::Paste(" ordinary exact\n paste".to_owned()));
     assert!(
         fixture

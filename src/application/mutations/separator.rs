@@ -17,6 +17,9 @@ pub(in crate::application) fn insert_separator(
     insertion_index: usize,
     at: Timestamp,
 ) -> ApplicationResult<Vec<Effect>> {
+    if insertion_index > state.board.live_items().len() {
+        return Err(ApplicationError::InvalidState);
+    }
     let position = ThoughtPosition::new(position_u32(insertion_index)?);
     let separator = Separator::new(separator_id, state.board.session.id, position, at);
     let operation = BoardOperation {
@@ -48,6 +51,9 @@ pub(in crate::application) fn move_item(
     to: usize,
     at: Timestamp,
 ) -> ApplicationResult<Vec<Effect>> {
+    if to >= state.board.live_items().len() {
+        return Err(ApplicationError::InvalidState);
+    }
     if let BoardItemId::Thought(thought_id) = item_id {
         return move_thought(state, operation_id, thought_id, to, at);
     }
