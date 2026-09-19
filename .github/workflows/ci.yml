@@ -128,6 +128,14 @@ jobs:
         with:
           tool: cargo-nextest@0.9.143
       - run: cargo xtask test
+      - name: Preserve synthetic migration failure evidence
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: migration-failure-test-${{ matrix.os }}-${{ github.run_attempt }}
+          path: target/qualification-evidence/migration-*.json
+          if-no-files-found: ignore
+          retention-days: 7
       - run: cargo xtask clean-worktree
 
   msrv:
@@ -147,6 +155,14 @@ jobs:
       - name: Run full minimum-Rust diagnostic suite
         if: needs.changes.outputs.full_msrv == 'true'
         run: cargo +1.88.0 xtask msrv-full
+      - name: Preserve synthetic migration failure evidence
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: migration-failure-msrv-${{ github.run_attempt }}
+          path: target/qualification-evidence/migration-*.json
+          if-no-files-found: ignore
+          retention-days: 7
       - run: cargo xtask clean-worktree
 
   crate:
@@ -197,6 +213,14 @@ jobs:
         with:
           key: macos-15
       - run: cargo xtask test-pty
+      - name: Preserve synthetic migration failure evidence
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: migration-failure-pty-${{ github.run_attempt }}
+          path: target/qualification-evidence/migration-*.json
+          if-no-files-found: ignore
+          retention-days: 7
       - run: cargo xtask clean-worktree
 
   coverage:
@@ -216,6 +240,14 @@ jobs:
         with:
           tool: cargo-nextest@0.9.143,cargo-llvm-cov@0.9.0
       - run: cargo xtask coverage
+      - name: Preserve synthetic migration failure evidence
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: migration-failure-coverage-${{ github.run_attempt }}
+          path: target/qualification-evidence/migration-*.json
+          if-no-files-found: ignore
+          retention-days: 7
       - run: cargo xtask clean-worktree
 
   package_linux:

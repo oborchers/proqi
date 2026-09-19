@@ -108,3 +108,61 @@ empty-session setup now use the existing owned-child watchdog. A post-readiness
 hang injection proves the watchdog's complete reported cleanup outcome and the
 registered child PID's absence. Its isolated bounded run passed; this does not
 establish the cause of the interrupted gate.
+
+## Subsequent cache and migration-cohort failures
+
+The first attempt of PR 114 CI run 35439442832 failed on Ubuntu in
+`concurrent_release_refresh_and_external_reconcile_preserve_pending_authority`.
+The release refresh returned `update state lock remained busy`. The fixture
+gave two writers an uncontrolled simultaneous start and required both calls to
+succeed immediately. The real state lease includes atomic file replacement,
+file sync, and directory sync, while a competing writer has a bounded 100-attempt
+lock policy. The log establishes exhausted contention, but does not separate
+filesystem latency from scheduler delay. The successful rerun did not repair
+that test assumption.
+
+The replacement test now coordinates the real acquired and contended OS-lock
+checkpoints through per-store, test-only channels. Both mutation orderings must
+preserve the exact pending authority. A separate test deliberately holds the
+lease through the unchanged retry budget, requires the exact busy failure and
+unchanged durable bytes, then proves an explicit retry after release. No
+production retry count, delay, cache authority, or durability operation changed.
+
+Main run 35440820280 at `e355db5` failed the historical 15-owner cohort with
+15 restart requests and 14 accepted acknowledgements. The PR and merge had
+identical Git trees. That count alone does not establish whether a replacement
+failed: a reply can be missing independently of process replacement. The first
+counter assertion previously omitted the execution and participant evidence.
+
+The fixture also had a concrete lifetime mismatch: its Expect driver exited
+after 20 seconds, while the historical coordinator permits a fresh 45-second
+post-install preparation window and its Rust wrapper permits 90 seconds for
+coordination. A new synthetic owner regression failed against the unchanged
+driver after 21 seconds with `replacement cohort exited before completion`.
+It passed after replacing that independent cutoff with the existing Rust PTY
+watchdog. This proves the harness defect, not its causality in the original
+14-of-15 result.
+
+The cohort's absolute watchdog budget composes the existing owner startup,
+coordinator, installer/probe, verification, and normal-stop bounds. Driver
+liveness is checked throughout the historical coordination wait. Registered
+descendants, process-group fallback, and output readers retain bounded cleanup.
+An injected stuck workflow proves complete watchdog cleanup rather than merely
+observing that the Rust caller returned.
+
+A test-owned gateway wrapper is compiled against the same pinned historical
+source. It preserves every response while recording exact synthetic participant
+identity, stage, elapsed time, process/endpoint presence, and closed reply or
+transport classifications. Accepted acknowledgement is never labeled as a
+verified replacement. Before assertions and during panic unwinding, bounded
+reports retain allowlisted execution counters, runtime identity, trace events,
+and diagnostic stage counts under `target/qualification-evidence`. They exclude
+thought content, databases, terminal output, arbitrary error strings, and paths.
+Normal fixture state remains temporary and is removed after reporting.
+Failed CI test, PTY, full-MSRV, and coverage jobs retain only the matching
+`migration-*.json` reports as GitHub Actions artifacts for seven days. The
+upload does not include fixture roots, databases, or raw process output.
+
+The historical failure remains causally unresolved unless a reproduced trace
+connects a driver exit, refusal, or transport failure to its missing receipt.
+Production coordination deadlines and behavior are intentionally unchanged.

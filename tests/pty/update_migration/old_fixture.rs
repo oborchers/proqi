@@ -24,8 +24,8 @@ use proqi::{
 pub(super) const OLD_VERSION: &str = "0.8.99";
 const PREVIOUS_RELEASE_COMMIT: &str = "9ddc01f1cb2b55dc4f82c587124844a7209aceba";
 const COMMAND_OUTPUT_LIMIT: u64 = 4 * 1024 * 1024;
-const COORDINATOR_TIMEOUT: Duration = Duration::from_secs(90);
-const PROBE_TIMEOUT: Duration = Duration::from_secs(10);
+pub(super) const COORDINATOR_TIMEOUT: Duration = Duration::from_secs(90);
+pub(super) const PROBE_TIMEOUT: Duration = Duration::from_secs(10);
 pub(super) const BUILD_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 
 struct CapturedChild {
@@ -57,9 +57,19 @@ impl CapturedChild {
         }
     }
 
-    fn finish(mut self, timeout: Duration, label: &str) -> Output {
+    fn finish(self, timeout: Duration, label: &str) -> Output {
+        self.finish_observed(timeout, label, || {})
+    }
+
+    fn finish_observed(
+        mut self,
+        timeout: Duration,
+        label: &str,
+        mut observe: impl FnMut(),
+    ) -> Output {
         let deadline = Instant::now() + timeout;
         let status = loop {
+            observe();
             let status = self
                 .child
                 .as_mut()
@@ -227,6 +237,7 @@ impl OldFixture {
         installation: &InstallationFixture,
         initiating: InstanceId,
         initiating_session: proqi::domain::SessionId,
+        owners: &mut super::cohort::Owners,
     ) -> serde_json::Value {
         let initiating = initiating.to_string();
         let initiating_session = initiating_session.to_string();
@@ -243,7 +254,7 @@ impl OldFixture {
             .arg(&installer_active)
             .arg(&late_start_observed);
         let child = CapturedChild::spawn(&mut command, "old coordinator");
-        wait_for_path(&installer_active);
+        wait_for_path(&installer_active, owners);
         let mut late_command = Command::new(&installation.old_binary);
         late_command
             .args([
@@ -253,7 +264,10 @@ impl OldFixture {
                 "-r",
             ])
             .arg(&initiating_session);
-        let late = run_bounded(&mut late_command, PROBE_TIMEOUT, "inactive keg start probe");
+        let late = CapturedChild::spawn(&mut late_command, "inactive keg start probe")
+            .finish_observed(PROBE_TIMEOUT, "inactive keg start probe", || {
+                owners.assert_running();
+            });
         let late_output = format!(
             "{}{}",
             String::from_utf8_lossy(&late.stdout),
@@ -266,7 +280,9 @@ impl OldFixture {
             "{late_output}"
         );
         fs::write(&late_start_observed, b"continue").expect("release installer fixture");
-        let output = child.finish(COORDINATOR_TIMEOUT, "old coordinator");
+        let output = child.finish_observed(COORDINATOR_TIMEOUT, "old coordinator", || {
+            owners.assert_running();
+        });
         assert!(
             output.status.success(),
             "old coordinator failed: {}",
@@ -276,9 +292,10 @@ impl OldFixture {
     }
 }
 
-fn wait_for_path(path: &Path) {
+fn wait_for_path(path: &Path, owners: &mut super::cohort::Owners) {
     let deadline = Instant::now() + Duration::from_secs(10);
     while !path.exists() {
+        owners.assert_running();
         assert!(
             Instant::now() < deadline,
             "path did not appear: {}",
@@ -343,6 +360,11 @@ fn prepare_old_source(root: &Path) -> PathBuf {
         coordinator::SOURCE,
     )
     .expect("write coordinator fixture");
+    fs::write(
+        source.join("src/bin/gateway_trace.rs"),
+        include_str!("gateway_trace.rs"),
+    )
+    .expect("write shared gateway trace fixture");
     let manifest = source.join("Cargo.toml");
     let mut content = fs::read_to_string(&manifest).expect("fixture manifest");
     content.push_str(

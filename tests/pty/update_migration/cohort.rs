@@ -3,7 +3,7 @@
 use std::{
     fs,
     path::{Path, PathBuf},
-    process::Child,
+    process::Command,
     thread,
     time::{Duration, Instant},
 };
@@ -17,15 +17,26 @@ use proqi::{
 };
 use rustix::process::{Pid, Signal, kill_process_group, test_kill_process_group};
 
-use super::super::support::{expect_command, wait_for_path};
+use super::super::{
+    support::{expect_command, wait_for_path},
+    watchdog::Workflow,
+};
 
 pub(super) const OWNER_TIMEOUT: Duration = Duration::from_secs(15);
+// Startup, two final readiness checks, normal shutdown, and the complete
+// historical coordinator (including its pre-finish installer/probe stages).
+const COHORT_TIMEOUT: Duration = OWNER_TIMEOUT
+    .saturating_mul(4)
+    .saturating_add(super::old_fixture::COORDINATOR_TIMEOUT)
+    .saturating_add(super::old_fixture::PROBE_TIMEOUT.saturating_mul(2));
 
 pub(super) struct Owners {
-    child: Option<Child>,
+    workflow: Option<Workflow>,
+    registration: tempfile::NamedTempFile,
     done: PathBuf,
     group: PathBuf,
     expected: usize,
+    started: Instant,
 }
 
 impl Owners {
@@ -44,14 +55,46 @@ impl Owners {
         state: &Path,
         launches: &[(String, PathBuf)],
     ) -> Self {
+        Self::spawn_with_budget(binary, state, launches, COHORT_TIMEOUT)
+    }
+
+    pub(super) fn spawn_with_budget(
+        binary: &str,
+        state: &Path,
+        launches: &[(String, PathBuf)],
+        budget: Duration,
+    ) -> Self {
         let done = state.join("cohort.done");
         let group = state.join("cohort.group");
-        let child = spawn_owners(binary, state, launches, &done, &group);
+        Self::start_driver(binary, state, launches, done, group, budget)
+    }
+
+    fn start_driver(
+        binary: &str,
+        state: &Path,
+        launches: &[(String, PathBuf)],
+        done: PathBuf,
+        group: PathBuf,
+        budget: Duration,
+    ) -> Self {
+        let registration = tempfile::Builder::new()
+            .prefix("cohort-pids-")
+            .tempfile_in(state)
+            .expect("fresh cohort registration");
+        let command = owner_command(binary, state, launches, &done, &group, registration.path());
+        let workflow = Workflow::spawn(
+            command,
+            budget,
+            registration.path().to_path_buf(),
+            "replacement cohort driver",
+        );
         Self {
-            child: Some(child),
+            workflow: Some(workflow),
+            registration,
             done,
             group,
             expected: launches.len(),
+            started: Instant::now(),
         }
     }
 
@@ -60,16 +103,32 @@ impl Owners {
         self.assert_running();
     }
 
+    pub(super) fn registration_path(&self) -> &Path {
+        self.registration.path()
+    }
+
     pub(super) fn assert_running(&mut self) {
-        assert!(
-            self.child
-                .as_mut()
-                .expect("cohort owner")
-                .try_wait()
-                .expect("poll cohort owner")
-                .is_none(),
-            "replacement cohort exited before completion"
-        );
+        let workflow = self.workflow.as_mut().expect("cohort owner");
+        if workflow.is_finished() {
+            let outcome =
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| workflow.finish()));
+            let status = match outcome {
+                Ok(status) => status,
+                Err(panic) => {
+                    let _recorded = fs::write(self.done.with_file_name("cohort.exit"), "-2");
+                    std::panic::resume_unwind(panic);
+                }
+            };
+            fs::write(
+                self.done.with_file_name("cohort.exit"),
+                status.code().unwrap_or(-1).to_string(),
+            )
+            .expect("record driver exit");
+            panic!(
+                "replacement cohort exited before completion: {status}; elapsed={:?}",
+                self.started.elapsed()
+            );
+        }
     }
 
     pub(super) fn wait_ready(&mut self, state: &Path) {
@@ -113,9 +172,10 @@ impl Owners {
     pub(super) fn stop(mut self) {
         self.signal_done();
         let deadline = Instant::now() + OWNER_TIMEOUT;
-        let child = self.child.as_mut().expect("cohort owner");
+        let workflow = self.workflow.as_mut().expect("cohort owner");
         loop {
-            if let Some(status) = child.try_wait().expect("poll cohort shutdown") {
+            if workflow.is_finished() {
+                let status = workflow.finish();
                 assert!(status.success(), "cohort owner exited with {status}");
                 break;
             }
@@ -129,7 +189,7 @@ impl Owners {
         if leaked_group {
             kill_recorded_process_group(&self.group);
         }
-        self.child = None;
+        self.workflow = None;
         assert!(!leaked_group, "cohort process group survived normal stop");
     }
 
@@ -141,8 +201,8 @@ impl Owners {
 impl Drop for Owners {
     fn drop(&mut self) {
         self.signal_done();
-        if let Some(child) = &mut self.child {
-            stop_child(child, read_process_group(&self.group));
+        if self.workflow.is_some() {
+            kill_recorded_process_group(&self.group);
         }
     }
 }
@@ -173,23 +233,6 @@ pub(super) fn control_ready(instance: &InstanceInfo) -> bool {
         })
 }
 
-fn stop_child(child: &mut Child, group: Option<Pid>) {
-    let deadline = Instant::now() + Duration::from_secs(3);
-    while Instant::now() < deadline {
-        if child.try_wait().is_ok_and(|status| status.is_some()) {
-            break;
-        }
-        thread::sleep(Duration::from_millis(20));
-    }
-    if let Some(group) = group {
-        let _killed = kill_process_group(group, Signal::KILL);
-    }
-    if child.try_wait().is_ok_and(|status| status.is_none()) {
-        let _killed = child.kill();
-    }
-    let _reaped = child.wait();
-}
-
 fn kill_recorded_process_group(path: &Path) {
     if let Some(group) = read_process_group(path) {
         let _killed = kill_process_group(group, Signal::KILL);
@@ -212,19 +255,21 @@ fn process_group_absent(path: &Path) -> bool {
         .is_none_or(|group| matches!(test_kill_process_group(group), Err(rustix::io::Errno::SRCH)))
 }
 
-fn spawn_owners(
+fn owner_command(
     binary: &str,
     state: &Path,
     launches: &[(String, PathBuf)],
     done: &Path,
     group: &Path,
-) -> Child {
+    pids: &Path,
+) -> Command {
     let script = r#"
         log_user 0
         set timeout 30
         spawn /bin/zsh -f -c {
             unsetopt BG_NICE MONITOR
             print $$ > "$PROQI_TEST_GROUP"
+            print $$ >> "$PROQI_TEST_PIDS"
             exec {terminal_input}<&0
             typeset -a pids
             typeset -a sessions=(${(s: :)PROQI_TEST_SESSIONS})
@@ -234,26 +279,26 @@ fn spawn_owners(
                 directory=$directories[$index]
                 (cd "$directory" && exec "$PROQI_TEST_BINARY" --state-dir "$PROQI_TEST_STATE" -r "$session" <&$terminal_input) &
                 pids+=($!)
+                print $! >> "$PROQI_TEST_PIDS"
             done
             while [[ ! -e "$PROQI_TEST_DONE" ]]; do sleep 0.02; done
             kill -TERM $pids
             wait $pids
         }
-        set deadline [expr {[clock milliseconds] + 20000}]
         while {![file exists $env(PROQI_TEST_DONE)]} {
-            if {[clock milliseconds] >= $deadline} { exit 91 }
-            expect -timeout 0 {
+            if {[catch {expect -timeout 0 {
                 -re ".+" { exp_continue }
                 timeout {}
                 eof { exit 93 }
-            }
+            }}]} { exit 93 }
             after 20
         }
-        expect eof
+        if {[catch {expect eof}]} { exit 94 }
         catch wait result
         exit [lindex $result 3]
     "#;
-    expect_command()
+    let mut command = expect_command();
+    command
         .args(["-c", script])
         .env("PROQI_TEST_BINARY", binary)
         .env("PROQI_TEST_STATE", state)
@@ -275,6 +320,6 @@ fn spawn_owners(
         )
         .env("PROQI_TEST_DONE", done)
         .env("PROQI_TEST_GROUP", group)
-        .spawn()
-        .expect("spawn replacement owner")
+        .env("PROQI_TEST_PIDS", pids);
+    command
 }
