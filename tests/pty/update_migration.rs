@@ -34,6 +34,10 @@ use rusqlite::Connection;
 mod automatic;
 #[path = "update_migration/cohort.rs"]
 mod cohort;
+#[path = "update_migration/cohort_tests.rs"]
+mod cohort_tests;
+#[path = "update_migration/evidence.rs"]
+mod evidence;
 #[path = "update_migration/external_compatible.rs"]
 mod external_compatible;
 #[path = "update_migration/external_recovery.rs"]
@@ -44,6 +48,10 @@ mod external_source;
 mod external_upgrade;
 #[path = "update_migration/fixture_lock.rs"]
 mod fixture_lock;
+#[path = "update_migration/gateway_trace.rs"]
+mod gateway_trace;
+#[path = "update_migration/gateway_trace_tests.rs"]
+mod gateway_trace_tests;
 #[path = "update_migration/historical_fixture.rs"]
 mod historical_fixture;
 #[path = "update_migration/old_fixture.rs"]
