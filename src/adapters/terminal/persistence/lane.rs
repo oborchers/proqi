@@ -301,8 +301,11 @@ mod tests {
         let [Effect::CommitBoardOperation(operation)] = effects.as_slice() else {
             panic!("expected durable board operation");
         };
-        lane.commit(OperationBatch::Board(operation.clone()))
-            .expect("queue commit");
+        lane.commit(OperationBatch::Board {
+            operation: operation.clone(),
+            semantic_fingerprint: None,
+        })
+        .expect("queue commit");
 
         lane.stop(ShutdownDeadline::after(std::time::Duration::from_secs(1)))
             .expect("drain and stop lane");

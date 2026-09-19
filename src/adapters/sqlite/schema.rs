@@ -97,6 +97,9 @@ CREATE TABLE commit_receipts (
     entity_kind TEXT NOT NULL,
     external_id BLOB NOT NULL CHECK (length(external_id) = 16),
     request_json TEXT NOT NULL,
+    semantic_fingerprint BLOB CHECK (
+        semantic_fingerprint IS NULL OR length(semantic_fingerprint) = 32
+    ),
     created_at INTEGER NOT NULL,
     PRIMARY KEY(session_id, sequence),
     UNIQUE(entity_kind, external_id)
@@ -219,6 +222,7 @@ INSERT INTO migration_history(version, applied_at) VALUES (15, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (16, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (17, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (18, 0);
+INSERT INTO migration_history(version, applied_at) VALUES (19, 0);
 ";
 
 pub(super) const MIGRATION_2: &str = r"
@@ -483,4 +487,12 @@ pub(super) const MIGRATION_18: &str = r"
 ALTER TABLE thoughts ADD COLUMN name TEXT;
 UPDATE schema_meta SET schema_version = 18, storage_protocol = 17;
 INSERT INTO migration_history(version, applied_at) VALUES (18, 0);
+";
+
+// Retain an exact content-redacted API request identity after history compaction.
+pub(super) const MIGRATION_19: &str = r"
+ALTER TABLE commit_receipts ADD COLUMN semantic_fingerprint BLOB
+    CHECK (semantic_fingerprint IS NULL OR length(semantic_fingerprint) = 32);
+UPDATE schema_meta SET schema_version = 19, storage_protocol = 18;
+INSERT INTO migration_history(version, applied_at) VALUES (19, 0);
 ";

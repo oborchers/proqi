@@ -22,7 +22,7 @@ pub(super) fn commit(
     if let Some(existing) = existing(transaction, capture.source)? {
         return Ok(CaptureCommitOutcome::AlreadyCaptured(existing));
     }
-    let durable = commit_board(transaction, &capture.operation)?;
+    let durable = commit_board(transaction, &capture.operation, None)?;
     let BoardMutation::AddThought { thought } = &capture.operation.forward else {
         return Err(StoreError::Invariant(
             "screenshot capture must add exactly one thought".to_owned(),

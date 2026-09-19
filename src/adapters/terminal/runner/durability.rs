@@ -376,6 +376,10 @@ fn complete_sequence(
                         .controls
                         .get(&sequence)
                         .and_then(|control| control.thought_id),
+                    item_ids: pending
+                        .controls
+                        .get(&sequence)
+                        .map_or_else(Vec::new, |control| control.item_ids.clone()),
                     durable: receipt,
                 }),
             );

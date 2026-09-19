@@ -43,6 +43,7 @@ fn exact_add_replay_is_accepted_but_changed_content_conflicts() {
     };
     let existing = StoredOperationRequest::Board {
         operation: Box::new(operation),
+        semantic_fingerprint: None,
         receipt: CommitReceipt {
             session_id,
             sequence: crate::domain::OperationSequence::new(1),
@@ -100,6 +101,7 @@ fn delete_replay_requires_the_same_thought() {
             },
             created_at: deleted_at,
         }),
+        semantic_fingerprint: None,
         receipt: receipt(session_id, delete_id, 1),
     };
     let exact_delete = ControlMutation::Delete {
@@ -141,6 +143,7 @@ fn move_replay_requires_the_same_destination() {
             },
             created_at: Timestamp::from_millis(3),
         }),
+        semantic_fingerprint: None,
         receipt: receipt(session_id, move_id, 2),
     };
     let exact_move = ControlMutation::Move {
@@ -166,6 +169,7 @@ fn history_replay_requires_the_same_direction_and_scope() {
         session_id,
         scope: UndoScope::Board,
         undo: true,
+        semantic_fingerprint: None,
         receipt: receipt(session_id, history_id, 3),
     };
     let exact_history = ControlMutation::History {

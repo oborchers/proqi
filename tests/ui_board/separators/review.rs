@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn mixed_thought_actions_filter_separators_for_collapse_and_merge() {
+fn mixed_thought_actions_filter_separators_for_collapse_but_not_merge_contiguity() {
     let mut collapsed = Mixed::new();
     collapsed.select_all();
     collapsed.fixture.app.prepare_frame(Rect::new(0, 0, 80, 20));
@@ -38,10 +38,7 @@ fn mixed_thought_actions_filter_separators_for_collapse_and_merge() {
     let effects = merged
         .fixture
         .effects(crate::key_input(UiKey::Character('t')));
-    assert!(matches!(
-        effects.as_slice(),
-        [Effect::CommitBoardOperation(_)]
-    ));
+    assert!(effects.is_empty());
     assert_eq!(
         merged
             .fixture
@@ -49,13 +46,24 @@ fn mixed_thought_actions_filter_separators_for_collapse_and_merge() {
             .state
             .board
             .thought(merged.first)
-            .expect("merged thought")
+            .expect("first thought")
             .content,
-        "first\n\nsecond"
+        "first"
     );
     assert_eq!(
         merged.ids(),
-        vec![merged.first.into(), merged.separator.into()]
+        vec![
+            merged.first.into(),
+            merged.separator.into(),
+            merged.second.into()
+        ]
+    );
+    assert!(
+        merged
+            .fixture
+            .app
+            .status_text()
+            .is_some_and(|message| message.contains("contiguous"))
     );
 }
 

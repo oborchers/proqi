@@ -1,3 +1,5 @@
+//! Canonical transformation state, annotation, ordering, and history contracts.
+
 use super::*;
 use proqi::domain::{ContentAnnotation, ContentAnnotationKind};
 
@@ -236,6 +238,48 @@ fn merge_rejects_a_stale_source_snapshot_without_mutation() {
         Err(proqi::application::ApplicationError::ContentConflict(
             second
         ))
+    );
+    assert_eq!(fixture.state, before);
+}
+
+#[test]
+fn merge_treats_a_separator_as_a_real_board_boundary() {
+    let mut fixture = Fixture::new();
+    let first = fixture.create("one");
+    let second = fixture.create("two");
+    let separator_id = fixture.ids.separator_id();
+    let insert_operation = fixture.operation_id();
+    let inserted_at = fixture.time();
+    reduce(
+        &mut fixture.state,
+        Action::InsertSeparator {
+            separator_id,
+            operation_id: insert_operation,
+            insertion_index: 1,
+            at: inserted_at,
+        },
+    )
+    .expect("insert separator");
+    let expected_sources = [first, second]
+        .into_iter()
+        .map(|id| fixture.state.board.thought(id).expect("source").clone())
+        .collect();
+    let before = fixture.state.clone();
+    let operation_id = fixture.operation_id();
+    let at = fixture.time();
+
+    assert_eq!(
+        reduce(
+            &mut fixture.state,
+            Action::MergeThoughts {
+                operation_id,
+                thought_ids: vec![first, second],
+                expected_sources,
+                separator: "\n\n".to_owned(),
+                at,
+            },
+        ),
+        Err(proqi::application::ApplicationError::NoncontiguousSelection)
     );
     assert_eq!(fixture.state, before);
 }

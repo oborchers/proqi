@@ -67,6 +67,14 @@ pub(super) fn handle(
         | ControlMutation::PreserveAdd { .. }
         | ControlMutation::RenameSession { .. }
         | ControlMutation::RenameThought { .. }
+        | ControlMutation::InsertSeparator { .. }
+        | ControlMutation::DeleteItems { .. }
+        | ControlMutation::MoveItem { .. }
+        | ControlMutation::DuplicateItems { .. }
+        | ControlMutation::SplitThought { .. }
+        | ControlMutation::ExtractThought { .. }
+        | ControlMutation::MergeThoughts { .. }
+        | ControlMutation::ReflowThought { .. }
         | ControlMutation::Sync
         | ControlMutation::Replace { .. }
         | ControlMutation::SetCollapsed { .. }

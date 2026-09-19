@@ -155,7 +155,10 @@ impl Effect {
     #[must_use]
     pub fn persistence_batch(&self) -> Option<OperationBatch> {
         match self {
-            Self::CommitBoardOperation(operation) => Some(OperationBatch::Board(operation.clone())),
+            Self::CommitBoardOperation(operation) => Some(OperationBatch::Board {
+                operation: operation.clone(),
+                semantic_fingerprint: None,
+            }),
             Self::CommitThoughtNoOpRename {
                 operation_id,
                 session_id,
@@ -170,8 +173,12 @@ impl Effect {
                 name: name.clone(),
                 sequence: *sequence,
                 at: *at,
+                semantic_fingerprint: None,
             }),
-            Self::CommitRevision(revision) => Some(OperationBatch::Revision(revision.clone())),
+            Self::CommitRevision(revision) => Some(OperationBatch::Revision {
+                revision: revision.clone(),
+                semantic_fingerprint: None,
+            }),
             Self::CommitHistoryMove {
                 operation_id,
                 session_id,
@@ -186,6 +193,7 @@ impl Effect {
                 undo: *undo,
                 sequence: *sequence,
                 at: *at,
+                semantic_fingerprint: None,
             }),
             _ => None,
         }
@@ -250,4 +258,6 @@ pub(crate) enum SequencedMutationEffectError {
     MultipleDurable,
     /// An effect other than attachment reconciliation accompanied the mutation.
     UnsupportedAuxiliary,
+    /// The durable batch could not be paired with the exact public request.
+    InvalidSemanticFingerprint,
 }

@@ -6,6 +6,7 @@ mod compaction;
 mod error;
 mod migration;
 mod onboarding;
+mod operation;
 mod receipt;
 mod session;
 mod submission_route;
@@ -13,8 +14,8 @@ mod submission_route;
 use serde::{Deserialize, Serialize};
 
 use crate::domain::{
-    BoardOperation, BrowserOperation, IntegrationContext, OperationId, OperationSequence,
-    RevisionId, Session, SessionId, SubmissionId, ThoughtId, ThoughtRevision, Timestamp, UndoScope,
+    BrowserOperation, OperationId, OperationSequence, RevisionId, SessionId, SubmissionId,
+    ThoughtId, Timestamp,
 };
 use crate::ports::agent::{AgentState, SubmissionDisposition};
 
@@ -26,14 +27,15 @@ pub use compaction::{
 pub use error::{StoreError, StoreFailureCode};
 pub use migration::MigrationMode;
 pub use onboarding::{FirstRunBoard, FirstRunOutcome, OnboardingVersion};
+pub use operation::{OperationBatch, SemanticRequestFingerprint, StoredOperationRequest};
 pub use receipt::{CommitReceipt, DurableIdentity};
 pub use session::{SessionHit, SessionQuery, SessionSnapshot};
 pub use submission_route::{SUBMISSION_ROUTE_VERSION, SubmissionJournalRoute};
 
 /// Current storage schema understood by this binary.
-pub const SUPPORTED_SCHEMA_VERSION: u32 = 18;
+pub const SUPPORTED_SCHEMA_VERSION: u32 = 19;
 /// Current local storage protocol understood by this binary.
-pub const STORAGE_PROTOCOL_VERSION: u32 = 17;
+pub const STORAGE_PROTOCOL_VERSION: u32 = 18;
 
 /// One ordered, content-redacted source included in a submission.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -119,106 +121,6 @@ pub struct SubmissionOutcome {
     pub deletion_operation_id: Option<OperationId>,
     /// Transition time.
     pub at: Timestamp,
-}
-
-/// Previously committed request associated with a durable operation identity.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum StoredOperationRequest {
-    /// Reversible board mutation.
-    Board {
-        /// Original operation payload.
-        operation: Box<BoardOperation>,
-        /// Original durable receipt.
-        receipt: CommitReceipt,
-    },
-    /// Persistent undo or redo request.
-    HistoryMove {
-        /// Owning session.
-        session_id: SessionId,
-        /// Addressed history scope.
-        scope: UndoScope,
-        /// Undo when true, redo when false.
-        undo: bool,
-        /// Original durable receipt.
-        receipt: CommitReceipt,
-    },
-    /// Exact editor replacement revision.
-    Revision {
-        /// Original editor revision.
-        revision: Box<ThoughtRevision>,
-        /// Original durable receipt.
-        receipt: CommitReceipt,
-    },
-    /// Content-redacted semantic replay data retained after history compaction.
-    Compacted {
-        /// Minimal fields required to compare a replay safely.
-        replay: CompactedOperationRequest,
-        /// Original durable receipt.
-        receipt: CommitReceipt,
-    },
-}
-
-/// One atomic persistence request.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum OperationBatch {
-    /// Insert a new session.
-    CreateSession(Session),
-    /// Apply and retain one reversible board operation.
-    Board(BoardOperation),
-    /// Apply and retain one reversible editor revision.
-    Revision(ThoughtRevision),
-    /// Move one persistent undo or redo cursor.
-    HistoryMove {
-        /// Idempotent durable operation identity.
-        operation_id: OperationId,
-        /// Owning session.
-        session_id: SessionId,
-        /// Board or one thought's editor history.
-        scope: UndoScope,
-        /// Undo when true, redo when false.
-        undo: bool,
-        /// Next monotonic sequence.
-        sequence: OperationSequence,
-        /// Event time.
-        at: Timestamp,
-    },
-    /// Reserve a retry-safe same-value thought rename without adding history.
-    ThoughtNoOpRename {
-        /// Durable operation identity.
-        operation_id: OperationId,
-        /// Owning session.
-        session_id: SessionId,
-        /// Thought whose current name must match.
-        thought_id: ThoughtId,
-        /// Current and requested name.
-        name: Option<crate::domain::ThoughtName>,
-        /// Next monotonic sequence.
-        sequence: OperationSequence,
-        /// Event time.
-        at: Timestamp,
-    },
-    /// Store recognition-only integration context.
-    IntegrationContext {
-        /// Owning session.
-        session_id: SessionId,
-        /// New context, or `None` to clear it.
-        context: Option<IntegrationContext>,
-    },
-}
-
-impl OperationBatch {
-    /// Return the ordered session sequence carried by a mutable operation.
-    #[must_use]
-    pub const fn sequence(&self) -> Option<OperationSequence> {
-        match self {
-            Self::Board(operation) => Some(operation.sequence),
-            Self::Revision(revision) => Some(revision.sequence),
-            Self::HistoryMove { sequence, .. } | Self::ThoughtNoOpRename { sequence, .. } => {
-                Some(*sequence)
-            }
-            Self::CreateSession(_) | Self::IntegrationContext { .. } => None,
-        }
-    }
 }
 
 /// Local durable store used by the TUI and CLI.

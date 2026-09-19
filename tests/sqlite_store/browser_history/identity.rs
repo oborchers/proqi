@@ -305,7 +305,10 @@ fn assert_board_id_conflicts(
         panic!("board effect")
     };
     assert!(matches!(
-        store.commit(&OperationBatch::Board(operation)),
+        store.commit(&OperationBatch::Board {
+            operation,
+            semantic_fingerprint: None,
+        }),
         Err(StoreError::Conflict(message))
             if message == "durable identity is already used by Browser history"
     ));

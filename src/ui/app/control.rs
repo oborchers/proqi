@@ -1,17 +1,27 @@
 //! Owner-control mutations applied through the same reducer as terminal input.
 
+mod transformations;
+
+use super::{BoardApp, SessionRenamePersistence};
 use crate::{
     application::{
-        Action, ApplicationError, Effect, InteractionMode, OwnedThoughtCreation, reduce,
+        Action, ApplicationError, Effect, InteractionMode, OwnedThoughtCreation,
+        exact_live_thought, reduce,
     },
     domain::{BoardOperationKind, OperationId, TextPosition, ThoughtId, Timestamp, UndoScope},
     ports::{control::ControlMutation, environment::Clock},
 };
-use sha2::{Digest as _, Sha256};
-
-use super::{BoardApp, SessionRenamePersistence};
 
 impl BoardApp {
+    /// Resolve owner-local settings that participate in one semantic request.
+    pub(crate) fn canonical_control_mutation(&self, mutation: &ControlMutation) -> ControlMutation {
+        let mut mutation = mutation.clone();
+        if let ControlMutation::MergeThoughts { separator, .. } = &mut mutation {
+            separator.clone_from(&self.settings.merge_separator);
+        }
+        mutation
+    }
+
     /// Apply one typed active-owner mutation and return its ordered persistence effect.
     pub(crate) fn handle_control(
         &mut self,
@@ -88,6 +98,16 @@ impl BoardApp {
                 name: name.clone(),
                 at,
             },
+            mutation @ (ControlMutation::InsertSeparator { .. }
+            | ControlMutation::DeleteItems { .. }
+            | ControlMutation::MoveItem { .. }
+            | ControlMutation::DuplicateItems { .. }) => self.item_control_action(mutation, at)?,
+            mutation @ (ControlMutation::SplitThought { .. }
+            | ControlMutation::ExtractThought { .. }
+            | ControlMutation::MergeThoughts { .. }
+            | ControlMutation::ReflowThought { .. }) => {
+                return self.transformation_control_action(mutation, at);
+            }
             ControlMutation::Delete {
                 operation_id,
                 thought_id,
@@ -121,6 +141,72 @@ impl BoardApp {
             }
         };
         Ok(Some(action))
+    }
+
+    fn item_control_action(
+        &self,
+        mutation: &ControlMutation,
+        at: Timestamp,
+    ) -> Result<Action, ApplicationError> {
+        match mutation {
+            ControlMutation::InsertSeparator {
+                operation_id,
+                separator_id,
+                position,
+            } => {
+                let expected =
+                    crate::domain::SeparatorId::from_database_bytes(operation_id.database_bytes())
+                        .map_err(|_| ApplicationError::InvalidState)?;
+                if expected != *separator_id {
+                    return Err(ApplicationError::InvalidState);
+                }
+                Ok(Action::InsertSeparator {
+                    operation_id: *operation_id,
+                    separator_id: *separator_id,
+                    insertion_index: position
+                        .unwrap_or_else(|| self.state.board.live_items().len()),
+                    at,
+                })
+            }
+            ControlMutation::DeleteItems {
+                operation_id,
+                item_ids,
+            } => Ok(Action::DeleteItems {
+                operation_id: *operation_id,
+                item_ids: item_ids.clone(),
+                kind: BoardOperationKind::Delete,
+                at,
+            }),
+            ControlMutation::MoveItem {
+                operation_id,
+                item_id,
+                position,
+            } => Ok(Action::MoveItem {
+                operation_id: *operation_id,
+                item_id: *item_id,
+                to: *position,
+                at,
+            }),
+            ControlMutation::DuplicateItems {
+                operation_id,
+                item_ids,
+                duplicate_ids,
+            } => {
+                let expected =
+                    crate::application::derived_duplicate_item_ids(*operation_id, item_ids)
+                        .map_err(|_| ApplicationError::InvalidState)?;
+                if expected != *duplicate_ids {
+                    return Err(ApplicationError::InvalidState);
+                }
+                Ok(Action::DuplicateItems {
+                    operation_id: *operation_id,
+                    item_ids: item_ids.clone(),
+                    duplicate_ids: duplicate_ids.clone(),
+                    at,
+                })
+            }
+            _ => Err(ApplicationError::InvalidState),
+        }
     }
 
     fn content_control_action(
@@ -191,16 +277,7 @@ impl BoardApp {
         content: String,
         at: Timestamp,
     ) -> Result<Action, ApplicationError> {
-        let thought = self
-            .state
-            .board
-            .thought(thought_id)
-            .filter(|thought| thought.is_live())
-            .ok_or(ApplicationError::ThoughtNotFound(thought_id))?;
-        let current_digest: [u8; 32] = Sha256::digest(thought.content.as_bytes()).into();
-        if expected_digest.is_some_and(|expected| expected != current_digest) {
-            return Err(ApplicationError::ContentConflict(thought_id));
-        }
+        let thought = exact_live_thought(&self.state, thought_id, expected_digest)?;
         Ok(Action::EditThought {
             thought_id,
             revision_id,

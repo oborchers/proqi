@@ -39,7 +39,8 @@ fn reflow_migration_requires_authority_and_preserves_a_pre_migration_backup() {
     let connection = rusqlite::Connection::open(&fixture.config.database_path).expect("fixture");
     connection
         .execute_batch(
-            "ALTER TABLE thoughts DROP COLUMN name;
+            "ALTER TABLE commit_receipts DROP COLUMN semantic_fingerprint;
+             ALTER TABLE thoughts DROP COLUMN name;
              DROP INDEX separators_session;
              DROP INDEX separators_live_position;
              DROP TABLE separators;
@@ -92,7 +93,8 @@ fn browser_history_migrates_exact_reflow_schema_and_protocol() {
     let connection = rusqlite::Connection::open(&fixture.config.database_path).expect("fixture");
     connection
         .execute_batch(
-            "ALTER TABLE thoughts DROP COLUMN name;
+            "ALTER TABLE commit_receipts DROP COLUMN semantic_fingerprint;
+             ALTER TABLE thoughts DROP COLUMN name;
              DROP INDEX separators_session;
              DROP INDEX separators_live_position;
              DROP TABLE separators;
@@ -144,8 +146,9 @@ fn thought_name_migration_is_additive_and_backed_up() {
     let connection = rusqlite::Connection::open(&fixture.config.database_path).expect("fixture");
     connection
         .execute_batch(
-            "ALTER TABLE thoughts DROP COLUMN name;
-             DELETE FROM migration_history WHERE version = 18;
+            "ALTER TABLE commit_receipts DROP COLUMN semantic_fingerprint;
+             ALTER TABLE thoughts DROP COLUMN name;
+             DELETE FROM migration_history WHERE version >= 18;
              UPDATE schema_meta SET schema_version = 17, storage_protocol = 16;",
         )
         .expect("schema 16 fixture");

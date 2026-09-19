@@ -1,5 +1,6 @@
 //! CLI dispatch into the shared session service.
 
+mod board_items;
 mod capabilities;
 mod diagnostics;
 mod doctor;
@@ -11,6 +12,7 @@ mod runtime_open;
 mod sessions;
 mod thought_names;
 mod transfer;
+mod transformations;
 mod update;
 
 use std::process::ExitCode;
@@ -22,7 +24,7 @@ use serde_json::{Value, json};
 use crate::{
     adapters::terminal,
     application::{FirstRunEnvironment, SessionService},
-    domain::{ThoughtId, UndoScope},
+    domain::{BoardItemId, ThoughtId, UndoScope},
     ports::store::{CommitReceipt, DurableIdentity},
 };
 
@@ -78,6 +80,10 @@ fn execute_inner(cli: Cli) -> Result<Outcome, CliError> {
         Some(Command::Sessions(arguments)) => {
             let mut context = context;
             execute_sessions(&mut context, arguments.command)
+        }
+        Some(Command::Items(arguments)) => {
+            let mut context = context;
+            board_items::execute(&mut context, arguments.command)
         }
         Some(Command::Thoughts(arguments)) => {
             let mut context = context;
@@ -237,6 +243,59 @@ fn execute_thoughts(
             position,
             operation_id.as_deref(),
         ),
+        ThoughtCommand::Split {
+            session,
+            thought,
+            at_byte,
+            expected_sha256,
+            operation_id,
+        } => transformations::split(
+            context,
+            &session,
+            &thought,
+            at_byte,
+            &expected_sha256,
+            operation_id.as_deref(),
+        ),
+        ThoughtCommand::Extract {
+            session,
+            thought,
+            start_byte,
+            end_byte,
+            expected_sha256,
+            operation_id,
+        } => transformations::extract(
+            context,
+            &session,
+            &thought,
+            start_byte..end_byte,
+            &expected_sha256,
+            operation_id.as_deref(),
+        ),
+        ThoughtCommand::Merge {
+            session,
+            thoughts,
+            expected_sha256,
+            operation_id,
+        } => transformations::merge(
+            context,
+            &session,
+            &thoughts,
+            &expected_sha256,
+            operation_id.as_deref(),
+        ),
+        ThoughtCommand::Reflow {
+            session,
+            thought,
+            expected_sha256,
+            operation_id,
+        } => transformations::reflow(
+            context,
+            &session,
+            &thought,
+            &expected_sha256,
+            operation_id.as_deref(),
+        ),
         ThoughtCommand::Send {
             source,
             thought,
@@ -394,6 +453,24 @@ fn receipt_outcome(receipt: CommitReceipt) -> Outcome {
             }
         ),
     }
+}
+
+pub(super) fn item_mutation_outcome(item_ids: &[BoardItemId], receipt: CommitReceipt) -> Outcome {
+    let mut outcome = receipt_outcome(receipt);
+    outcome.data["item_ids"] = json!(item_ids);
+    outcome.human = format!(
+        "Items {}\n{}",
+        item_ids
+            .iter()
+            .map(|id| match id {
+                BoardItemId::Thought(id) => id.to_string(),
+                BoardItemId::Separator(id) => id.to_string(),
+            })
+            .collect::<Vec<_>>()
+            .join(", "),
+        outcome.human
+    );
+    outcome
 }
 
 pub(super) fn session_service(

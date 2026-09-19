@@ -56,21 +56,23 @@ fn one_durable_mutation_and_attachment_checks_share_the_existing_owners() {
 fn malformed_effect_shapes_are_rejected_before_the_owner_routes_them() {
     let (mut app, mut ids) = fixture();
     let previous_state = app.state.clone();
-    let _durable = optimistic_effect(&mut app, &mut ids);
+    let (_durable, mutation) = optimistic_effect(&mut app, &mut ids);
     assert_shape_restores(
         &mut app,
         &previous_state,
         Vec::new(),
+        &mutation,
         SequencedMutationEffectError::MissingDurable,
     );
-    let durable = optimistic_effect(&mut app, &mut ids);
+    let (durable, mutation) = optimistic_effect(&mut app, &mut ids);
     assert_shape_restores(
         &mut app,
         &previous_state,
         vec![durable.clone(), durable],
+        &mutation,
         SequencedMutationEffectError::MultipleDurable,
     );
-    let durable = optimistic_effect(&mut app, &mut ids);
+    let (durable, mutation) = optimistic_effect(&mut app, &mut ids);
     assert_shape_restores(
         &mut app,
         &previous_state,
@@ -80,40 +82,49 @@ fn malformed_effect_shapes_are_rejected_before_the_owner_routes_them() {
                 code: FailureCode::StorageFailed,
             },
         ],
+        &mutation,
         SequencedMutationEffectError::UnsupportedAuxiliary,
     );
 
-    let next = optimistic_effect(&mut app, &mut ids);
+    let (next, _) = optimistic_effect(&mut app, &mut ids);
     let batch = next.persistence_batch().expect("next durable batch");
     assert_eq!(batch.sequence().expect("next sequence").get(), 1);
 }
 
-fn optimistic_effect(app: &mut BoardApp, ids: &mut FakeIdGenerator) -> Effect {
+fn optimistic_effect(app: &mut BoardApp, ids: &mut FakeIdGenerator) -> (Effect, ControlMutation) {
+    let mutation = ControlMutation::Add {
+        operation_id: ids.operation_id(),
+        thought_id: ids.thought_id(),
+        content: "optimistic".to_owned(),
+        annotations: Vec::new(),
+        position: None,
+    };
     let effects = app
-        .handle_control(
-            &ControlMutation::Add {
-                operation_id: ids.operation_id(),
-                thought_id: ids.thought_id(),
-                content: "optimistic".to_owned(),
-                annotations: Vec::new(),
-                position: None,
-            },
-            &FakeClock::new(Timestamp::from_millis(2)),
-        )
+        .handle_control(&mutation, &FakeClock::new(Timestamp::from_millis(2)))
         .expect("control mutation");
     assert_eq!(effects.len(), 1);
-    effects.into_iter().next().expect("durable effect")
+    (
+        effects.into_iter().next().expect("durable effect"),
+        mutation,
+    )
 }
 
 fn assert_shape_restores(
     app: &mut BoardApp,
     previous_state: &AppState,
     effects: Vec<Effect>,
+    mutation: &ControlMutation,
     expected: SequencedMutationEffectError,
 ) {
     assert_ne!(&app.state, previous_state);
-    let error = validate_control_effects(app, previous_state.clone(), effects)
-        .expect_err("invalid owner effect shape");
+    let error = validate_control_effects(
+        app,
+        previous_state.clone(),
+        effects,
+        previous_state.board.session.id,
+        mutation,
+    )
+    .expect_err("invalid owner effect shape");
     assert_eq!(error, expected);
     assert_eq!(&app.state, previous_state);
     let ControlResult::Rejected { code, .. } = effect_rejection(error) else {
