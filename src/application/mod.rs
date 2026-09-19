@@ -12,6 +12,7 @@ mod locks;
 mod model;
 mod mutations;
 mod onboarding;
+mod preconditions;
 mod prompt;
 mod recovery;
 mod reducer;
@@ -20,6 +21,7 @@ mod release_highlights;
 mod service;
 #[cfg(test)]
 mod test_support;
+pub(crate) mod text_reflow;
 mod update;
 mod update_coordination;
 
@@ -31,7 +33,7 @@ pub use attachments::{
     AttachmentRefreshCause, AttachmentRefreshOutcome, attachment_keys,
 };
 pub use capture::{apply_capture, prepare_capture};
-pub(crate) use control::{ControlReplay, match_control_replay};
+pub(crate) use control::{ControlReplay, attach_control_fingerprint, match_control_replay};
 pub use error::{ApplicationError, ApplicationResult, FailureCode};
 pub(crate) use history_contract::UndoContract;
 pub use model::{
@@ -40,11 +42,15 @@ pub use model::{
 };
 pub(crate) use model::{SequencedMutationEffectError, SequencedMutationEffects};
 pub use onboarding::{FirstRunEnvironment, first_run_board};
+pub(crate) use preconditions::exact_live_thought;
 pub(crate) use prompt::{SHARED_PROMPT_STARTERS, join_prompt_for_target, supports_shared_starters};
 pub use recovery::capture_recovery;
 pub use reducer::reduce;
 pub use release_highlights::{ReleaseHighlightPresentation, ReleaseHighlightSelection};
-pub use service::{LeasedSession, SessionService, SessionServiceError, ThoughtMutation};
+pub(crate) use service::derived_duplicate_item_ids;
+pub use service::{
+    BoardItemMutation, LeasedSession, SessionService, SessionServiceError, ThoughtMutation,
+};
 pub use update::{
     UpdateAvailability, UpdateCheckMode, UpdateCheckResult, UpdateRefresh, UpdateService,
 };

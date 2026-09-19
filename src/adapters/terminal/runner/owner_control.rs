@@ -39,6 +39,12 @@ struct ControlContext<'a> {
     schema_lease: &'a mut Option<crate::adapters::runtime::FileSchemaLease>,
 }
 
+struct ControlAffected {
+    thought_id: Option<ThoughtId>,
+    item_ids: Vec<crate::domain::BoardItemId>,
+    mutation: ControlMutation,
+}
+
 pub(super) fn drain(
     app: &mut BoardApp,
     lanes: &WorkerLanes<'_>,
@@ -202,19 +208,16 @@ pub(super) fn complete_lookup(
             Ok(false)
         }
         Ok(Some(existing)) => {
-            respond_to_replay(envelope, &existing);
+            respond_to_replay(app, envelope, &existing);
             Ok(false)
         }
         Ok(None) => apply_mutation(app, lanes, pending, envelope, clock),
     }
 }
 
-fn respond_to_replay(envelope: ControlEnvelope, existing: &StoredOperationRequest) {
-    let result = match match_control_replay(
-        existing,
-        envelope.request.session_id,
-        &envelope.request.mutation,
-    ) {
+fn respond_to_replay(app: &BoardApp, envelope: ControlEnvelope, existing: &StoredOperationRequest) {
+    let mutation = app.canonical_control_mutation(&envelope.request.mutation);
+    let result = match match_control_replay(existing, envelope.request.session_id, &mutation) {
         ControlReplay::Accepted(receipt) => ControlResult::Accepted(receipt),
         ControlReplay::Conflict => ControlResult::Rejected {
             code: ControlRejectionCode::IdempotencyConflict
@@ -233,15 +236,20 @@ fn apply_mutation(
     envelope: ControlEnvelope,
     clock: &impl crate::ports::environment::Clock,
 ) -> Result<bool, TerminalError> {
-    let thought_id = envelope.request.mutation.thought_id();
+    let mutation = app.canonical_control_mutation(&envelope.request.mutation);
+    let affected = ControlAffected {
+        thought_id: mutation.thought_id(),
+        item_ids: mutation.item_ids(),
+        mutation,
+    };
     let previous_state = app.state.clone();
-    match app.handle_control(&envelope.request.mutation, clock) {
+    match app.handle_control(&affected.mutation, clock) {
         Ok(effects) => queue_effect(
             app,
             lanes,
             pending,
             envelope,
-            thought_id,
+            affected,
             previous_state,
             effects,
         ),
@@ -260,11 +268,17 @@ fn queue_effect(
     lanes: &WorkerLanes<'_>,
     pending: &mut PendingWork,
     envelope: ControlEnvelope,
-    thought_id: Option<ThoughtId>,
+    affected: ControlAffected,
     previous_state: crate::application::AppState,
     effects: Vec<Effect>,
 ) -> Result<bool, TerminalError> {
-    let routed = match validate_control_effects(app, previous_state, effects) {
+    let routed = match validate_control_effects(
+        app,
+        previous_state,
+        effects,
+        envelope.request.session_id,
+        &affected.mutation,
+    ) {
         Ok(routed) => routed,
         Err(error) => {
             envelope.respond(effect_rejection(error));
@@ -285,7 +299,8 @@ fn queue_effect(
         routed.sequence,
         PendingControl {
             envelope,
-            thought_id,
+            thought_id: affected.thought_id,
+            item_ids: affected.item_ids,
         },
     );
     super::durability::enqueue_effects(app, lanes, routed.auxiliary, pending)?;
@@ -296,8 +311,13 @@ fn validate_control_effects(
     app: &mut BoardApp,
     previous_state: crate::application::AppState,
     effects: Vec<Effect>,
+    session_id: crate::domain::SessionId,
+    mutation: &crate::ports::control::ControlMutation,
 ) -> Result<SequencedMutationEffects, SequencedMutationEffectError> {
-    match SequencedMutationEffects::new(effects) {
+    match SequencedMutationEffects::new(effects).and_then(|routed| {
+        crate::application::attach_control_fingerprint(routed, session_id, mutation)
+            .map_err(|_| SequencedMutationEffectError::InvalidSemanticFingerprint)
+    }) {
         Ok(routed) => Ok(routed),
         Err(error) => {
             app.restore_control_state(previous_state);
@@ -323,6 +343,10 @@ fn effect_rejection(error: SequencedMutationEffectError) -> ControlResult {
         SequencedMutationEffectError::UnsupportedAuxiliary => (
             ControlRejectionCode::InvalidControlRequest,
             "request produced an unsupported auxiliary effect",
+        ),
+        SequencedMutationEffectError::InvalidSemanticFingerprint => (
+            ControlRejectionCode::InvalidControlRequest,
+            "request does not match its durable mutation",
         ),
     };
     ControlResult::Rejected {

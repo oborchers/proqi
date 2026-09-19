@@ -84,7 +84,7 @@ fn durable_receipt_in_flight_survives_owner_shutdown() {
             .recv_timeout(Duration::from_secs(2))
             .expect("accepted request");
         server.request_stop();
-        envelope.respond(ControlResult::Accepted(expected));
+        envelope.respond(ControlResult::Accepted(expected.clone()));
         assert_eq!(
             client
                 .join()
@@ -117,7 +117,7 @@ fn confirmed_receipt_survives_admission_close_for_one_hundred_cycles() {
                 .recv_timeout(Duration::from_secs(2))
                 .expect("accepted request");
             server.request_stop();
-            let delivery = envelope.respond_confirmed(ControlResult::Accepted(expected));
+            let delivery = envelope.respond_confirmed(ControlResult::Accepted(expected.clone()));
             wait_for_delivery(&delivery);
             assert_eq!(
                 client.join().expect("client thread").expect("receipt"),
@@ -208,6 +208,7 @@ fn request(ids: &mut FakeIdGenerator, content: &str) -> ControlRequest {
 fn receipt(request: &ControlRequest) -> ControlReceipt {
     ControlReceipt {
         thought_id: request.mutation.thought_id(),
+        item_ids: request.mutation.item_ids(),
         durable: CommitReceipt {
             session_id: request.session_id,
             sequence: OperationSequence::new(1),

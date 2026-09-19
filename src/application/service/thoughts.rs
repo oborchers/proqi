@@ -145,7 +145,7 @@ where
             }
         };
         let effects = reduce(&mut state, action)?;
-        let receipt = self.commit_sequenced_effects(effects)?;
+        let receipt = self.commit_control_effects(effects, session_id, &replay)?;
         Ok(ThoughtMutation {
             thought_id,
             receipt,
@@ -187,7 +187,7 @@ where
                 at: self.clock.now(),
             },
         )?;
-        let receipt = self.commit_sequenced_effects(effects)?;
+        let receipt = self.commit_control_effects(effects, session_id, &replay)?;
         Ok(ThoughtMutation {
             thought_id,
             receipt,
@@ -227,7 +227,7 @@ where
                 at: self.clock.now(),
             },
         )?;
-        let receipt = self.commit_sequenced_effects(effects)?;
+        let receipt = self.commit_control_effects(effects, session_id, &replay)?;
         Ok(ThoughtMutation {
             thought_id,
             receipt,
@@ -269,7 +269,7 @@ where
                 at: self.clock.now(),
             },
         )?;
-        let receipt = self.commit_sequenced_effects(effects)?;
+        let receipt = self.commit_control_effects(effects, session_id, &replay)?;
         Ok(ThoughtMutation {
             thought_id,
             receipt,
@@ -316,7 +316,7 @@ where
             }
         };
         let effects = reduce(&mut state, action)?;
-        self.commit_sequenced_effects(effects)
+        self.commit_control_effects(effects, session_id, &replay)
     }
 }
 

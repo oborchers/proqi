@@ -12,7 +12,7 @@ pub(super) fn reflow(
     isolated: &[Range<usize>],
 ) -> Result<ReflowedText, ReflowError> {
     if super::contains_unsupported_control(content) {
-        return Ok(super::unchanged(content));
+        return Ok(super::unchanged(content, isolated));
     }
     let newline = super::preferred_newline(content);
     if isolated.is_empty() {

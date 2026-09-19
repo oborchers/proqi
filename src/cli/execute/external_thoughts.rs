@@ -81,7 +81,7 @@ fn next_operation_id(ids: &mut SystemIdGenerator) -> crate::domain::OperationId 
     ids.operation_id()
 }
 
-fn parse_digest(value: &str) -> Result<[u8; 32], CliError> {
+pub(super) fn parse_digest(value: &str) -> Result<[u8; 32], CliError> {
     if value.len() != 64 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
         return Err(CliError::arguments(
             "SHA-256 precondition must be exactly 64 hexadecimal characters".to_owned(),

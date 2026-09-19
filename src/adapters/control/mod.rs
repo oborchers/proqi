@@ -287,7 +287,7 @@ mod tests {
                 .receiver
                 .recv_timeout(Duration::from_secs(2))
                 .expect("owner request");
-            envelope.respond(ControlResult::Accepted(expected));
+            envelope.respond(ControlResult::Accepted(expected.clone()));
             let first = client
                 .join()
                 .expect("client thread")
@@ -466,6 +466,7 @@ mod tests {
     fn receipt(request: &ControlRequest) -> ControlReceipt {
         ControlReceipt {
             thought_id: request.mutation.thought_id(),
+            item_ids: request.mutation.item_ids(),
             durable: CommitReceipt {
                 session_id: request.session_id,
                 sequence: OperationSequence::new(1),

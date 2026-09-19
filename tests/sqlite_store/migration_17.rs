@@ -2,6 +2,7 @@ use super::*;
 use proqi::domain::{OperationId, SessionId};
 
 const DOWNGRADE_TO_16: &str = r"
+ALTER TABLE commit_receipts DROP COLUMN semantic_fingerprint;
 ALTER TABLE thoughts DROP COLUMN name;
 DROP INDEX separators_session;
 DROP INDEX separators_live_position;

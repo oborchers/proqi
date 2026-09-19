@@ -37,7 +37,10 @@ fn bounded_contention_is_visible_and_failed_commit_is_not_durable() {
         panic!("board effect")
     };
     assert_eq!(
-        store.commit(&OperationBatch::Board(operation.clone())),
+        store.commit(&OperationBatch::Board {
+            operation: operation.clone(),
+            semantic_fingerprint: None,
+        }),
         Err(StoreError::Busy)
     );
     assert!(
@@ -90,7 +93,10 @@ fn rejected_operation_rolls_back_current_state_and_receipt() {
         created_at: Timestamp::from_millis(3),
     };
     assert!(matches!(
-        store.commit(&OperationBatch::Board(invalid)),
+        store.commit(&OperationBatch::Board {
+            operation: invalid,
+            semantic_fingerprint: None,
+        }),
         Err(StoreError::Invariant(_))
     ));
     let snapshot = store.load_session(session_id).expect("unchanged");

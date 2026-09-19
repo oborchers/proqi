@@ -1,15 +1,19 @@
 //! Terminal-independent session lifecycle and scriptable mutation service.
 
+mod board_items;
 mod external_edits;
 mod sessions;
 mod thoughts;
+mod transformations;
+
+pub(crate) use board_items::derived_duplicate_item_ids;
 
 use std::path::PathBuf;
 
 use thiserror::Error;
 
 use crate::{
-    domain::{DomainError, SessionId, ThoughtId},
+    domain::{BoardItemId, DomainError, SessionId, ThoughtId},
     ports::{
         control::{ControlMutation, ControlReceipt},
         environment::{Clock, IdGenerator},
@@ -81,14 +85,15 @@ where
         Ok(AppState::from_snapshot(snapshot)?)
     }
 
-    fn commit_sequenced_effects(
+    fn commit_control_effects(
         &mut self,
         effects: Vec<super::Effect>,
+        session_id: SessionId,
+        mutation: &ControlMutation,
     ) -> Result<CommitReceipt, SessionServiceError> {
         let routed = SequencedMutationEffects::new(effects)
             .map_err(|_| SessionServiceError::NoDurableMutation)?;
-        // An inactive service has no attachment worker or retained transient state.
-        // Accessibility is reconciled when the next interactive owner restores the session.
+        let routed = super::attach_control_fingerprint(routed, session_id, mutation)?;
         drop(routed.auxiliary);
         self.store
             .commit(&routed.batch)?
@@ -122,6 +127,15 @@ impl<L> LeasedSession<L> {
 pub struct ThoughtMutation {
     /// Affected thought.
     pub thought_id: ThoughtId,
+    /// Durable operation receipt.
+    pub receipt: CommitReceipt,
+}
+
+/// Durable result of one mixed Board-item mutation.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BoardItemMutation {
+    /// Created or affected items in canonical Board order.
+    pub item_ids: Vec<BoardItemId>,
     /// Durable operation receipt.
     pub receipt: CommitReceipt,
 }

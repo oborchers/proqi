@@ -32,7 +32,7 @@ impl ControlClient for LocalControlClient {
         request: &ControlRequest,
     ) -> Result<crate::ports::control::ControlReceipt, ControlError> {
         match exchange(owner, request)? {
-            ControlResult::Accepted(receipt) => Ok(receipt),
+            ControlResult::Accepted(receipt) => validate_mutation_receipt(request, receipt),
             ControlResult::Rejected { code, message } => {
                 Err(ControlError::Rejected { code, message })
             }
@@ -81,7 +81,7 @@ impl ControlClient for CancellableLocalControlClient {
         request: &ControlRequest,
     ) -> Result<crate::ports::control::ControlReceipt, ControlError> {
         match exchange_until(owner, request, &self.cancellation)? {
-            ControlResult::Accepted(receipt) => Ok(receipt),
+            ControlResult::Accepted(receipt) => validate_mutation_receipt(request, receipt),
             ControlResult::Rejected { code, message } => {
                 Err(ControlError::Rejected { code, message })
             }
@@ -96,6 +96,23 @@ impl ControlClient for CancellableLocalControlClient {
             )),
         }
     }
+}
+
+fn validate_mutation_receipt(
+    request: &ControlRequest,
+    receipt: crate::ports::control::ControlReceipt,
+) -> Result<crate::ports::control::ControlReceipt, ControlError> {
+    let mutation = &request.mutation;
+    let valid = mutation.durable_identity() == Some(receipt.durable.identity)
+        && receipt.durable.session_id == request.session_id
+        && receipt.thought_id == mutation.thought_id()
+        && receipt.item_ids == mutation.item_ids();
+    if !valid {
+        return Err(ControlError::Protocol(
+            "owner receipt does not match the requested durable resources".to_owned(),
+        ));
+    }
+    Ok(receipt)
 }
 
 /// Verified update client with an injected transport-request identity source.
@@ -374,4 +391,58 @@ fn map_control_error(error: &ControlError) -> UpdateError {
 
 fn coordination_error(message: &str) -> UpdateError {
     UpdateError::Coordination(message.to_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        adapters::memory::FakeIdGenerator,
+        domain::OperationSequence,
+        ports::{
+            control::{ControlMutation, ControlReceipt, ControlRequest},
+            environment::IdGenerator as _,
+            store::{CommitReceipt, DurableIdentity},
+        },
+    };
+
+    use super::validate_mutation_receipt;
+
+    #[test]
+    fn durable_receipt_must_match_session_identity_and_typed_items() {
+        let mut ids = FakeIdGenerator::new(1_725_200_000_000);
+        let session_id = ids.session_id();
+        let operation_id = ids.operation_id();
+        let separator_id = ids.separator_id();
+        let request = ControlRequest {
+            protocol: crate::ports::control::CONTROL_PROTOCOL_VERSION,
+            request_id: ids.request_id(),
+            session_id,
+            mutation: ControlMutation::InsertSeparator {
+                operation_id,
+                separator_id,
+                position: Some(0),
+            },
+        };
+        let receipt = ControlReceipt {
+            thought_id: None,
+            item_ids: vec![separator_id.into()],
+            durable: CommitReceipt {
+                session_id,
+                sequence: OperationSequence::new(1),
+                identity: DurableIdentity::Operation(operation_id),
+                idempotent_replay: false,
+            },
+        };
+        assert!(validate_mutation_receipt(&request, receipt.clone()).is_ok());
+
+        let mut wrong_session = receipt.clone();
+        wrong_session.durable.session_id = ids.session_id();
+        assert!(validate_mutation_receipt(&request, wrong_session).is_err());
+        let mut wrong_identity = receipt.clone();
+        wrong_identity.durable.identity = DurableIdentity::Operation(ids.operation_id());
+        assert!(validate_mutation_receipt(&request, wrong_identity).is_err());
+        let mut wrong_items = receipt;
+        wrong_items.item_ids = vec![ids.thought_id().into()];
+        assert!(validate_mutation_receipt(&request, wrong_items).is_err());
+    }
 }
