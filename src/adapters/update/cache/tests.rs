@@ -23,6 +23,7 @@ use crate::{
 
 use super::FileUpdateStateStore;
 
+mod contention;
 mod external;
 
 fn identity() -> InstallationIdentity {

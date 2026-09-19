@@ -38,6 +38,7 @@ fn assert_automatic_schema_update(fixture: &OldFixture, count: usize) {
         state.path(),
         &launch_order,
     );
+    let evidence = super::evidence::Evidence::new(state.path(), count);
     owners.wait_ready(state.path());
     let before = active_instances(state.path());
     assert_launch_directory_matrix(state.path(), &before, count);
@@ -56,25 +57,19 @@ fn assert_automatic_schema_update(fixture: &OldFixture, count: usize) {
         .matches("\"stage\":\"board_ready\"")
         .count();
 
+    evidence.stage("coordination");
     let execution = fixture.coordinate(
         state.path(),
         &installation,
         initiating.instance_id,
         initiating.session_id,
+        &mut owners,
     );
-    assert_eq!(execution["prepared_participants"], count);
-    assert_eq!(execution["quiescence_requests"], count);
-    assert_eq!(execution["quiesced_participants"], count);
-    assert_eq!(execution["restart_requests"], count);
-    assert_eq!(execution["restart_accepted"], count);
-    assert_eq!(
-        execution["replacement_missing"],
-        0,
-        "execution: {execution}; diagnostics: {}",
-        diagnostic_content(state.path())
-    );
-    assert_eq!(execution["restart_failed"], serde_json::json!([]));
+    evidence.execution(&execution);
+    evidence.stage("coordination_assertions");
+    assert_execution(&execution, count, &evidence);
 
+    evidence.stage("replacement_verification");
     let after = wait_for_exact_replacements(state.path(), &before);
     assert_exact_replacements(&before, &after, &sessions);
     assert_store_after_automatic_update(state.path(), count);
@@ -85,6 +80,7 @@ fn assert_automatic_schema_update(fixture: &OldFixture, count: usize) {
         migration_completed_before,
         follower_before,
     );
+    evidence.stage("final_convergence");
     let cache = wait_for_final_convergence(
         state.path(),
         installation.identity,
@@ -99,8 +95,37 @@ fn assert_automatic_schema_update(fixture: &OldFixture, count: usize) {
             .map(proqi::domain::ReleaseHighlightAnnouncement::session_id),
         Some(initiating.session_id)
     );
+    evidence.stage("normal_shutdown");
     owners.stop();
     assert!(active_instances(state.path()).is_empty());
+}
+
+fn assert_execution(
+    execution: &serde_json::Value,
+    count: usize,
+    evidence: &super::evidence::Evidence,
+) {
+    for field in [
+        "prepared_participants",
+        "quiescence_requests",
+        "quiesced_participants",
+        "restart_requests",
+        "restart_accepted",
+    ] {
+        assert_eq!(execution[field], count, "{field}: {}", evidence.summary());
+    }
+    assert_eq!(
+        execution["replacement_missing"],
+        0,
+        "{}",
+        evidence.summary()
+    );
+    assert_eq!(
+        execution["restart_failed"],
+        serde_json::json!([]),
+        "{}",
+        evidence.summary()
+    );
 }
 
 fn wait_for_final_convergence(
