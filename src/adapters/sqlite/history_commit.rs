@@ -7,7 +7,7 @@ use crate::{
         BoardOperation, ContentAnnotation, IntegrationContext, OperationId, OperationSequence,
         SessionId, ThoughtId, ThoughtRevision, Timestamp, UndoScope,
     },
-    ports::store::{CommitReceipt, DurableIdentity, StoreError},
+    ports::store::{CommitReceipt, DurableIdentity, SemanticRequestFingerprint, StoreError},
 };
 
 use super::{
@@ -27,7 +27,21 @@ pub(super) struct HistoryMove {
     pub(super) undo: bool,
     pub(super) sequence: OperationSequence,
     pub(super) at: Timestamp,
+    pub(super) semantic_fingerprint: Option<SemanticRequestFingerprint>,
 }
+
+#[derive(Clone, Copy)]
+pub(super) struct ReceiptInsert<'a> {
+    pub(super) session_id: SessionId,
+    pub(super) sequence: OperationSequence,
+    pub(super) entity_kind: &'a str,
+    pub(super) external_id: [u8; 16],
+    pub(super) request_json: &'a str,
+    pub(super) semantic_fingerprint: Option<SemanticRequestFingerprint>,
+    pub(super) at: Timestamp,
+}
+
+pub(super) type StoredReceiptRow = (Vec<u8>, i64, String, Option<Vec<u8>>);
 
 pub(super) fn commit_history_move(
     transaction: &Transaction<'_>,
@@ -40,6 +54,7 @@ pub(super) fn commit_history_move(
         undo,
         sequence,
         at,
+        semantic_fingerprint,
     } = request;
     let request_json = serde_json::to_string(&(session_id, scope, undo, sequence, at))
         .map_err(|error| StoreError::Serialization(error.to_string()))?;
@@ -48,6 +63,7 @@ pub(super) fn commit_history_move(
         "operation",
         operation_id.database_bytes(),
         &request_json,
+        semantic_fingerprint,
         DurableIdentity::Operation(operation_id),
     )? {
         return Ok(receipt);
@@ -66,12 +82,15 @@ pub(super) fn commit_history_move(
     };
     insert_receipt(
         transaction,
-        session_id,
-        sequence,
-        "operation",
-        operation_id.database_bytes(),
-        &request_json,
-        at,
+        ReceiptInsert {
+            session_id,
+            sequence,
+            entity_kind: "operation",
+            external_id: operation_id.database_bytes(),
+            request_json: &request_json,
+            semantic_fingerprint,
+            at,
+        },
     )?;
     update_session_sequence(transaction, session_id, sequence, at)?;
     if search_changed {
@@ -282,23 +301,31 @@ pub(super) fn existing_receipt(
     entity_kind: &str,
     external_id: [u8; 16],
     expected_request: &str,
+    expected_fingerprint: Option<SemanticRequestFingerprint>,
     identity: DurableIdentity,
 ) -> Result<Option<CommitReceipt>, StoreError> {
-    let existing: Option<(Vec<u8>, i64, String)> = transaction
+    let existing: Option<StoredReceiptRow> = transaction
         .query_row(
-            "SELECT session_id, sequence, request_json FROM commit_receipts
+            "SELECT session_id, sequence, request_json, semantic_fingerprint FROM commit_receipts
              WHERE entity_kind = ?1 AND external_id = ?2",
             params![entity_kind, external_id.as_slice()],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
         )
         .optional()
         .map_err(map_sql_error)?;
-    let Some((session, sequence, request)) = existing else {
+    let Some((session, sequence, request, stored_fingerprint)) = existing else {
         return Ok(None);
     };
-    if request != expected_request
-        && !super::receipt_compaction::matches_original(&request, expected_request)?
-    {
+    let stored_fingerprint = stored_fingerprint.map(fingerprint_from_blob).transpose()?;
+    let matches = match (stored_fingerprint, expected_fingerprint) {
+        (Some(stored), Some(expected)) => stored == expected,
+        (None, None) => {
+            request == expected_request
+                || super::receipt_compaction::matches_original(&request, expected_request)?
+        }
+        (Some(_), None) | (None, Some(_)) => false,
+    };
+    if !matches {
         return Err(StoreError::Conflict(
             "idempotency identity was reused for another request".to_owned(),
         ));
@@ -313,29 +340,42 @@ pub(super) fn existing_receipt(
 
 pub(super) fn insert_receipt(
     transaction: &Transaction<'_>,
-    session_id: SessionId,
-    sequence: OperationSequence,
-    entity_kind: &str,
-    external_id: [u8; 16],
-    request_json: &str,
-    at: Timestamp,
+    receipt: ReceiptInsert<'_>,
 ) -> Result<(), StoreError> {
+    let ReceiptInsert {
+        session_id,
+        sequence,
+        entity_kind,
+        external_id,
+        request_json,
+        semantic_fingerprint,
+        at,
+    } = receipt;
     transaction
         .execute(
             "INSERT INTO commit_receipts(
-                session_id, sequence, entity_kind, external_id, request_json, created_at
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                session_id, sequence, entity_kind, external_id, request_json,
+                semantic_fingerprint, created_at
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
                 session_id.database_bytes().as_slice(),
                 sequence_to_i64(sequence)?,
                 entity_kind,
                 external_id.as_slice(),
                 request_json,
+                semantic_fingerprint.map(SemanticRequestFingerprint::into_bytes),
                 at.as_millis(),
             ],
         )
         .map_err(map_sql_error)?;
     Ok(())
+}
+
+fn fingerprint_from_blob(bytes: Vec<u8>) -> Result<SemanticRequestFingerprint, StoreError> {
+    let bytes: [u8; 32] = bytes
+        .try_into()
+        .map_err(|_| StoreError::Corrupt("invalid semantic request fingerprint".to_owned()))?;
+    Ok(SemanticRequestFingerprint::from_bytes(bytes))
 }
 
 pub(super) fn require_next_sequence(

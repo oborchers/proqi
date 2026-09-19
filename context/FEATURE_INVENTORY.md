@@ -1,6 +1,6 @@
 # Proqi feature inventory
 
-Status: current `v0.2.0` release candidate, reviewed 2026-09-01.
+Status: published `v0.11.0` baseline plus this change, reviewed 2026-09-18.
 
 This inventory connects observable behavior to implementation and test
 evidence. `Shipped` means a user can reach the behavior in the current native
@@ -60,7 +60,7 @@ must not imply that the behavior exists.
 | Trash and pruning | Shipped | Session trash is recoverable. Permanent pruning requires an explicit confirmation flag. | `tests/cli_workflow.rs`, `tests/sqlite_store/core.rs` |
 | Local SQLite durability | Shipped | Bundled SQLite uses WAL, `synchronous=FULL`, forward migrations, backups, integrity checks, derived search indexes, and typed identifier BLOBs. | `tests/sqlite_store.rs`, `tests/sqlite_store/recovery.rs` |
 | Multiple instances | Shipped | Different sessions may be active concurrently. One authoritative lease prevents silent dual editing of the same session. | `tests/runtime_coordination.rs`, `tests/pty/active_control.rs` |
-| Active-session CLI forwarding | Shipped on current main | Reads synchronize with the owner. Rename, add, exact replacement, collapse, move, delete, undo, and redo travel through its verified reducer. External replacement participates in editor undo, and in-flight submission locks are enforced. | `tests/pty/active_control.rs`, `tests/control_contract.rs`, `src/ui/app/control.rs` |
+| Active-session CLI forwarding | Shipped base plus this change | Reads synchronize with the owner. Session metadata, thought CRUD, and history are shipped. This change adds typed mixed-item operations and exact transformations through the same verified reducer. Durable acknowledgement follows owner persistence, and in-flight submission locks remain enforced. | `tests/pty/active_control.rs`, `tests/control_contract.rs`, `src/ui/app/control.rs` |
 | Cross-session thought transfer | Shipped | A thought can be copied into another named or identified Proqi session and optionally removed only after destination durability. | `tests/cli_workflow.rs`, `src/ui/app/transfer.rs` |
 
 ## Adjacent agent integration
@@ -77,17 +77,33 @@ must not imply that the behavior exists.
 
 ## CLI and agent contract
 
+### API parity audit
+
+| Capability | Public API before this change | Public API after this change | Bundled skill guidance | Canonical owner |
+| --- | --- | --- | --- | --- |
+| Session names | Shipped: rename and `--clear`, exact JSON name, active-owner forwarding, Browser undo and redo | Unchanged and regression-qualified | Added explicit rename, clear, and Browser-history guidance | Session service and Browser history |
+| Thought names and bodies | Shipped as separate metadata and content fields | Unchanged and regression-qualified through transforms and duplication | Added explicit name/body separation and preservation rules | Thought and Board mutation owners |
+| Ordered mixed Board reads | Shipped as typed `items`; separators have identity and position but no payload | Unchanged | Added `sep_`, shared-position, and payload-free guidance | Session Board projection |
+| Separator and mixed-item writes | No semantic JSON mutation API | Added insert, move, atomic delete, and atomic duplicate with typed IDs | Added exact commands, receipts, ordering, and undo guidance | Existing Board item reducers and Board history |
+| Split, extract, merge, and reflow | Available only through interactive commands | Added exact digest-preconditioned JSON commands | Added UTF-8 boundary, contiguity, name, annotation, and `no_change` guidance | Existing transformation reducers and application reflow owner |
+| Thought presentation | Single-thought collapse and expand shipped; atomic multi-thought presentation changes have no semantic JSON API | Single-thought API unchanged; atomic multi-thought collapse and expand remain an explicit follow-up gap | Guidance remains one exact thought per `collapse` command | Existing single and bulk presentation reducers |
+| Active-session parity | Existing thought and session operations forwarded to the active owner | Added every new mixed-item and transformation request with durable acknowledgement and replay | Debug skill now forbids TUI-key emulation and identifies the three history scopes | Control protocol, live reducer, and persistence lane |
+| Clipboard and agent delivery | Clipboard copy and cut plus Herdr submission are host-coupled rather than general JSON operations | Intentionally unchanged | Added truthful host-only limitations | Clipboard and Herdr integrations |
+| Spatial behavior | TUI only | Intentionally unchanged | Added truthful non-API limitations | Terminal UI |
+
 | Capability | Status | Reachable behavior | Evidence |
 | --- | --- | --- | --- |
-| Capability discovery | Shipped | `proqi capabilities --json` reports schema version, identifier encoding, bounds, control protocol, transfer, update, and Herdr capabilities. | `tests/cli_workflow.rs`, `src/cli/execute/capabilities.rs` |
-| Session commands | Shipped | List, search, rename, trash, restore, and prune have human and versioned JSON output. | `tests/cli_workflow.rs` |
-| Thought commands | Shipped on current main | List and inspect expose a content digest. Add, exact replacement through standard input, collapse, delete, move, cross-session send, undo, and redo are scriptable. | `tests/cli_workflow.rs` |
+| Capability discovery | Shipped base plus this change | `proqi capabilities --json` already reports schema version, identifier encoding, bounds, control protocol, transfer, update, and Herdr capabilities. This change makes the top-level command inventory complete and adds exact installed subcommand arrays. | `tests/cli_workflow.rs`, `tests/skill_package.rs`, `src/cli/execute/capabilities.rs` |
+| Session commands | Shipped | List, search, rename or clear, trash, restore, Browser undo and redo, and prune have human and versioned JSON output. | `tests/cli_workflow.rs`, `tests/cli_workflow/session_contract.rs` |
+| Mixed Board item commands | Implemented by this change | `items insert-separator`, `move`, `delete`, and `duplicate` address exact `tht_` and `sep_` identities in shared order. Separators remain payload-free, multi-item changes are one reversible operation, and matching retries return the original receipt. | `tests/cli_workflow/separators.rs`, `tests/pty/active_control.rs` |
+| Thought commands | Shipped base plus this change | List and inspect expose a content digest. Add, exact replacement through standard input, collapse, delete, move, cross-session send, undo, and redo are shipped. This change adds split, extract, merge, and annotation-safe reflow over the existing exact Board transformations with digest preconditions. | `tests/cli_workflow.rs`, `tests/cli_workflow/transformations.rs` |
 | Typed identifiers | Shipped | `ses_`, `tht_`, `sep_`, `rev_`, `op_`, `ins_`, `req_`, and `sub_` preserve all UUIDv7 bits in canonical base32hex and reject wrong prefixes. | `tests/identifiers.rs`, `src/domain/identifiers.rs` |
 | Idempotent mutations | Shipped | Caller-supplied `op_` identities replay matching operations and reject reuse for different input or mutation types. | `tests/cli_contract.rs`, `tests/cli_workflow.rs` |
 | JSON fixtures | Shipped | Current success, error, control request, accepted receipt, and rejected receipt shapes are checked in and round-trip canonically. | `tests/fixtures`, `tests/cli_contract.rs`, `tests/control_contract.rs` |
 | Machine-readable errors | Shipped | Failures use the current versioned envelope, stable current error codes, and nonzero exits. | `tests/cli_contract.rs`, `src/cli/output.rs` |
 | Shell completions | Shipped | Bash, Fish, and Zsh completion output is generated by the installed binary and included in archives. | `tests/cli_smoke.rs`, `tests/package_contract.rs` |
-| Dedicated Proqi skill | Shipped | `skills/proqi/SKILL.md` discovers capabilities, uses JSON and standard input, addresses explicit sessions, and never reads SQLite or TUI output. | `tests/skill_package.rs` |
+| Dedicated Proqi skill | Shipped base plus this change | `skills/proqi/SKILL.md` discovers exact installed operations, uses JSON and standard input, distinguishes mixed items and three history scopes, addresses explicit sessions, and never reads SQLite or TUI output. Its machine-readable inventory is checked against the real binary response. | `tests/skill_package.rs` |
+| Spatial and host-only behavior | Intentionally non-API | Focus, cursor, selection, viewport, resize, hover, drag, modal state, clipboard access, rendering, arbitrary key injection, and host target discovery remain owned by the TUI or host integration. The JSON API does not simulate them. | `skills/proqi/SKILL.md`, `context/ARCHITECTURE.md` |
 | Pre-1.0 stability | Shipped policy | The JSON schema is versioned, but CLI compatibility before 1.0 is not promised. Breaking changes require release-note disclosure. | `README.md`, `context/PRODUCT.md` |
 
 ## Updates and installed product

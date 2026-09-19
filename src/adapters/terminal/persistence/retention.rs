@@ -47,10 +47,10 @@ fn retained_commit_bytes(commit: &RetainedCommit) -> usize {
 
 fn retained_batch_bytes(batch: &crate::ports::store::OperationBatch) -> usize {
     match batch {
-        OperationBatch::Board(operation) => {
+        OperationBatch::Board { operation, .. } => {
             serde_json::to_vec(operation).map_or(usize::MAX, |value| value.len())
         }
-        OperationBatch::Revision(revision) => {
+        OperationBatch::Revision { revision, .. } => {
             serde_json::to_vec(revision).map_or(usize::MAX, |value| value.len())
         }
         OperationBatch::HistoryMove { .. } => 256,
@@ -94,21 +94,24 @@ mod tests {
             ThoughtPosition::new(0),
             Timestamp::from_millis(1),
         );
-        let batch = OperationBatch::Board(BoardOperation {
-            id: ids.operation_id(),
-            session_id,
-            sequence: OperationSequence::new(1),
-            kind: BoardOperationKind::Create,
-            forward: BoardMutation::AddThought {
-                thought: thought.clone(),
+        let batch = OperationBatch::Board {
+            operation: BoardOperation {
+                id: ids.operation_id(),
+                session_id,
+                sequence: OperationSequence::new(1),
+                kind: BoardOperationKind::Create,
+                forward: BoardMutation::AddThought {
+                    thought: thought.clone(),
+                },
+                inverse: BoardMutation::SetDeletion {
+                    thought_id: thought.id,
+                    deleted_at: Some(Timestamp::from_millis(1)),
+                    position: thought.position,
+                },
+                created_at: Timestamp::from_millis(1),
             },
-            inverse: BoardMutation::SetDeletion {
-                thought_id: thought.id,
-                deleted_at: Some(Timestamp::from_millis(1)),
-                position: thought.position,
-            },
-            created_at: Timestamp::from_millis(1),
-        });
+            semantic_fingerprint: None,
+        };
         assert!(!can_retain(
             &BTreeMap::new(),
             OperationSequence::new(1),

@@ -8,7 +8,7 @@ use crate::ports::editor::{TextChange, TextChangeSet};
 
 use super::ReflowError;
 
-pub(in crate::ui) fn position_changes(
+pub(crate) fn position_changes(
     before: &str,
     after: &str,
     groups: &TextChangeSet,

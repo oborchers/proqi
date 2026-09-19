@@ -369,7 +369,8 @@ fn shared_schema_eleven_owner_blocks_migration_without_backup_then_release_recov
     Connection::open(&database)
         .expect("schema eleven fixture")
         .execute_batch(
-            "DROP INDEX separators_session;
+            "ALTER TABLE commit_receipts DROP COLUMN semantic_fingerprint;
+             DROP INDEX separators_session;
              DROP INDEX separators_live_position;
              DROP TABLE separators;
              DROP TABLE browser_history_receipts;

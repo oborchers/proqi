@@ -79,7 +79,8 @@ impl Fixture {
         let connection = self.connection();
         connection
             .execute_batch(
-                "DROP INDEX separators_session;
+                "ALTER TABLE commit_receipts DROP COLUMN semantic_fingerprint;
+            DROP INDEX separators_session;
             DROP INDEX separators_live_position;
             DROP TABLE separators;
             DROP TABLE browser_history_receipts;
@@ -88,7 +89,7 @@ impl Fixture {
             DROP TABLE browser_history_state;
             ALTER TABLE thoughts DROP COLUMN name;",
             )
-            .expect("remove schema 16 and 17 state");
+            .expect("remove schema 16 through 19 state");
         connection
             .execute("DELETE FROM migration_history WHERE version > ?1", [schema])
             .expect("historical migration rows");
@@ -247,7 +248,11 @@ pub fn durable_rows(connection: &Connection) -> Vec<Vec<Vec<Value>>> {
         thoughts,
         query(connection, "SELECT * FROM thought_revisions ORDER BY rowid"),
         query(connection, "SELECT * FROM board_operations ORDER BY rowid"),
-        query(connection, "SELECT * FROM commit_receipts ORDER BY rowid"),
+        query(
+            connection,
+            "SELECT session_id, sequence, entity_kind, external_id, request_json, created_at
+            FROM commit_receipts ORDER BY rowid",
+        ),
         query(
             connection,
             "SELECT * FROM integration_context ORDER BY rowid",

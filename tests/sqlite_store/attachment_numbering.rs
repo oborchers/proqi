@@ -295,7 +295,8 @@ pub(super) fn downgrade_to_legacy(fixture: &DatabaseFixture) {
     }
     connection
         .execute_batch(
-            "ALTER TABLE thoughts DROP COLUMN name;
+            "ALTER TABLE commit_receipts DROP COLUMN semantic_fingerprint;
+             ALTER TABLE thoughts DROP COLUMN name;
              DROP INDEX separators_session;
              DROP INDEX separators_live_position;
              DROP TABLE separators;

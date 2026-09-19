@@ -52,8 +52,57 @@ pub(super) enum Command {
     Doctor,
     /// List and manage resumable sessions.
     Sessions(SessionArgs),
+    /// Mutate typed thoughts and separators in shared Board order.
+    Items(ItemArgs),
     /// Inspect and mutate thoughts in one explicit session.
     Thoughts(ThoughtArgs),
+}
+
+#[derive(Debug, Args)]
+pub(super) struct ItemArgs {
+    #[command(subcommand)]
+    pub(super) command: ItemCommand,
+}
+
+#[derive(Debug, Subcommand)]
+pub(super) enum ItemCommand {
+    /// Insert one payload-free durable separator.
+    InsertSeparator {
+        session: String,
+        /// Zero-based position in the shared Board item order. Defaults to the end.
+        #[arg(long)]
+        position: Option<usize>,
+        /// Durable idempotency identity.
+        #[arg(long, value_name = "OP_ID")]
+        operation_id: Option<String>,
+    },
+    /// Move one typed thought or separator in shared Board order.
+    Move {
+        session: String,
+        item: String,
+        position: usize,
+        /// Durable idempotency identity.
+        #[arg(long, value_name = "OP_ID")]
+        operation_id: Option<String>,
+    },
+    /// Soft-delete Board-ordered typed items as one Board operation.
+    Delete {
+        session: String,
+        #[arg(required = true, num_args = 1..)]
+        items: Vec<String>,
+        /// Durable idempotency identity.
+        #[arg(long, value_name = "OP_ID")]
+        operation_id: Option<String>,
+    },
+    /// Duplicate Board-ordered typed items as one Board operation.
+    Duplicate {
+        session: String,
+        #[arg(required = true, num_args = 1..)]
+        items: Vec<String>,
+        /// Durable idempotency identity.
+        #[arg(long, value_name = "OP_ID")]
+        operation_id: Option<String>,
+    },
 }
 
 #[derive(Debug, Args)]
@@ -231,6 +280,54 @@ pub(super) enum ThoughtCommand {
         session: String,
         thought: String,
         position: usize,
+        /// Durable idempotency identity.
+        #[arg(long, value_name = "OP_ID")]
+        operation_id: Option<String>,
+    },
+    /// Split one thought at an exact UTF-8 byte boundary.
+    Split {
+        session: String,
+        thought: String,
+        at_byte: usize,
+        /// Required SHA-256 of current content.
+        #[arg(long, value_name = "HEX")]
+        expected_sha256: String,
+        /// Durable idempotency identity.
+        #[arg(long, value_name = "OP_ID")]
+        operation_id: Option<String>,
+    },
+    /// Extract one exact nonempty UTF-8 byte range into a new thought.
+    Extract {
+        session: String,
+        thought: String,
+        start_byte: usize,
+        end_byte: usize,
+        /// Required SHA-256 of current content.
+        #[arg(long, value_name = "HEX")]
+        expected_sha256: String,
+        /// Durable idempotency identity.
+        #[arg(long, value_name = "OP_ID")]
+        operation_id: Option<String>,
+    },
+    /// Merge exact Board-contiguous thoughts in the supplied order.
+    Merge {
+        session: String,
+        #[arg(required = true, num_args = 2..)]
+        thoughts: Vec<String>,
+        /// SHA-256 preconditions paired with the thoughts in the same order.
+        #[arg(long = "expected-sha256", required = true, num_args = 1)]
+        expected_sha256: Vec<String>,
+        /// Durable idempotency identity.
+        #[arg(long, value_name = "OP_ID")]
+        operation_id: Option<String>,
+    },
+    /// Clean one thought with Proqi's canonical spacing policy.
+    Reflow {
+        session: String,
+        thought: String,
+        /// Required SHA-256 of current content.
+        #[arg(long, value_name = "HEX")]
+        expected_sha256: String,
         /// Durable idempotency identity.
         #[arg(long, value_name = "OP_ID")]
         operation_id: Option<String>,

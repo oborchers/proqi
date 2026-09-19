@@ -28,8 +28,6 @@ pub(in crate::application) fn split_thought(
     at: Timestamp,
 ) -> ApplicationResult<Vec<Effect>> {
     let thought = exact_source(state, source)?.clone();
-    let (left_annotations, right_annotations) =
-        partition_annotations(&source.content, &source.annotations, at_byte)?;
     let left = source
         .content
         .get(..at_byte)
@@ -40,6 +38,8 @@ pub(in crate::application) fn split_thought(
         .get(at_byte..)
         .ok_or(ApplicationError::InvalidState)?
         .to_owned();
+    let (left_annotations, right_annotations) =
+        partition_annotations(&source.content, &source.annotations, at_byte)?;
     transform_into_neighbor(
         state,
         operation_id,
@@ -63,8 +63,9 @@ pub(in crate::application) fn extract_thought(
     at: Timestamp,
 ) -> ApplicationResult<Vec<Effect>> {
     let thought = exact_source(state, source)?.clone();
-    let (remaining_annotations, extracted_annotations) =
-        extract_annotations(&source.content, &source.annotations, range.clone())?;
+    if range.start >= range.end {
+        return Err(ApplicationError::InvalidState);
+    }
     let prefix = source
         .content
         .get(..range.start)
@@ -78,6 +79,8 @@ pub(in crate::application) fn extract_thought(
         .content
         .get(range.end..)
         .ok_or(ApplicationError::InvalidState)?;
+    let (remaining_annotations, extracted_annotations) =
+        extract_annotations(&source.content, &source.annotations, range.clone())?;
     let remaining = [prefix, suffix].concat();
     transform_into_neighbor(
         state,
@@ -235,10 +238,14 @@ fn contiguous_sources(
         .iter()
         .map(|thought_id| state.live_thought(*thought_id).cloned())
         .collect::<ApplicationResult<Vec<_>>>()?;
-    let live_thoughts = state.board.live_thoughts();
+    let live_items = state.board.live_items();
     let positions = thought_ids
         .iter()
-        .filter_map(|id| live_thoughts.iter().position(|thought| thought.id == *id))
+        .filter_map(|id| {
+            live_items
+                .iter()
+                .position(|item| item.id() == crate::domain::BoardItemId::Thought(*id))
+        })
         .collect::<Vec<_>>();
     let contiguous = positions.len() == thought_ids.len()
         && positions

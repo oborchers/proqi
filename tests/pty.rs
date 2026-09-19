@@ -12,6 +12,10 @@ mod support;
 mod active_control;
 
 #[cfg(target_os = "macos")]
+#[path = "pty/active_board_failure.rs"]
+mod active_board_failure;
+
+#[cfg(target_os = "macos")]
 #[path = "pty/active_transfer.rs"]
 mod active_transfer;
 

@@ -79,8 +79,11 @@ fn failed_batch_is_retained_and_retried_after_contention() {
     };
     let sequence = operation.sequence;
     let lock = setup.acquire_test_write_lock().expect("acquire writer");
-    lane.commit(OperationBatch::Board(operation.clone()))
-        .expect("queue commit");
+    lane.commit(OperationBatch::Board {
+        operation: operation.clone(),
+        semantic_fingerprint: None,
+    })
+    .expect("queue commit");
     let failed = lane
         .receiver
         .recv_timeout(Duration::from_secs(2))
@@ -106,9 +109,11 @@ fn failed_batch_is_retained_and_retried_after_contention() {
     ));
     lane.stop(ShutdownDeadline::after(std::time::Duration::from_secs(1)))
         .expect("stop lane");
-    let snapshot = setup
-        .load_session(state.board.session.id)
-        .expect("snapshot");
+    assert_retained_content(&mut setup, state.board.session.id);
+}
+
+fn assert_retained_content(store: &mut impl Store, session_id: crate::domain::SessionId) {
+    let snapshot = store.load_session(session_id).expect("snapshot");
     assert_eq!(
         snapshot.board.live_thoughts()[0].content,
         "retained through contention"
@@ -161,7 +166,10 @@ fn retry_replays_every_retained_batch_in_sequence_order() {
         let [Effect::CommitBoardOperation(operation)] = effects.as_slice() else {
             panic!("expected board operation");
         };
-        batches.push(OperationBatch::Board(operation.clone()));
+        batches.push(OperationBatch::Board {
+            operation: operation.clone(),
+            semantic_fingerprint: None,
+        });
     }
     let lock = setup.acquire_test_write_lock().expect("acquire writer");
     for batch in batches {
@@ -270,7 +278,10 @@ fn persisted_submission_source(
         panic!("expected create operation");
     };
     setup
-        .commit(&OperationBatch::Board(create.clone()))
+        .commit(&OperationBatch::Board {
+            operation: create.clone(),
+            semantic_fingerprint: None,
+        })
         .expect("persist thought");
     reduce(&mut state, Action::PersistenceCommitted(create.sequence)).expect("acknowledge thought");
     (state, thought_id, create.sequence)

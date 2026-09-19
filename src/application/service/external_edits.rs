@@ -1,9 +1,7 @@
 //! Exact external edits routed through the same reducer histories as the TUI.
 
-use sha2::{Digest as _, Sha256};
-
 use crate::{
-    application::{Action, reduce},
+    application::{Action, exact_live_thought, reduce},
     domain::{OperationId, RevisionId, SessionId, TextPosition, ThoughtId},
     ports::{
         environment::{Clock, IdGenerator},
@@ -51,18 +49,7 @@ where
             return match_existing_replacement(&existing, session_id, thought_id, &replay);
         }
         let mut state = self.load_live_state(session_id)?;
-        let thought = state
-            .board
-            .thought(thought_id)
-            .filter(|thought| thought.is_live())
-            .ok_or(crate::application::ApplicationError::ThoughtNotFound(
-                thought_id,
-            ))?
-            .clone();
-        let digest: [u8; 32] = Sha256::digest(thought.content.as_bytes()).into();
-        if expected_digest.is_some_and(|expected| expected != digest) {
-            return Err(crate::application::ApplicationError::ContentConflict(thought_id).into());
-        }
+        let thought = exact_live_thought(&state, thought_id, expected_digest)?.clone();
         let effects = reduce(
             &mut state,
             Action::EditThought {
@@ -77,7 +64,7 @@ where
                 at: self.clock.now(),
             },
         )?;
-        let receipt = self.commit_sequenced_effects(effects)?;
+        let receipt = self.commit_control_effects(effects, session_id, &replay)?;
         Ok(ThoughtMutation {
             thought_id,
             receipt,
@@ -123,7 +110,7 @@ where
                 at: self.clock.now(),
             },
         )?;
-        let receipt = self.commit_sequenced_effects(effects)?;
+        let receipt = self.commit_control_effects(effects, session_id, &replay)?;
         Ok(ThoughtMutation {
             thought_id,
             receipt,
