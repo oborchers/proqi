@@ -1,13 +1,15 @@
 # Complete feature index
 
-<span class="version-scope">Shipped user surface in Proqi 0.11.0</span>
+<span class="version-scope">Proqi 0.11.0 plus next-release main</span>
 
 <div class="feature-index" markdown>
 
-This index is the discovery map for the installed v0.11.0 product. **Shipped**
-works in the ordinary binary. **Conditional** needs the platform or verified
-integration named in the row. Deliberate boundaries are included so absence is
-not mistaken for a hidden setting.
+This index is the discovery map for the published v0.11.0 product plus additive
+commands already on `main`. **Shipped** works in the published binary.
+**Next release** is implemented on `main` but not in the published v0.11.0
+binary. **Conditional** needs the platform or verified integration named in the
+row. Deliberate boundaries are included so absence is not mistaken for a hidden
+setting.
 
 The [Commands reference](commands.md) separately accounts for every searchable
 action. The [CLI reference](cli.md) accounts for every public command-line
@@ -47,10 +49,12 @@ surface.
 | Thought names | Shipped | Optional names organize without entering copied or delivered bodies. | [Sessions and recovery](../guides/organization-and-recovery.md) |
 | Session names | Shipped | Set, clear, search, and resume by unique name. | [Sessions and recovery](../guides/organization-and-recovery.md) |
 | Payload-free separators | Shipped | Persistent structural items can move and participate in history without becoming prompt content. | [Transform and organize](../guides/edit-and-transform.md#add-visual-structure-without-payload) |
+| Scriptable mixed Board items | Next release | Insert, move, duplicate, or recoverably delete typed thoughts and separators as atomic Board operations. | [CLI](cli.md#change-board-items) |
 | Split thought | Shipped | Divide at the exact cursor as one atomic operation. | [Transform and organize](../guides/edit-and-transform.md#split-at-the-cursor) |
 | Extract selection | Shipped | Move exact selected text into a neighboring thought atomically. | [Transform and organize](../guides/edit-and-transform.md#extract-selected-text) |
 | Merge thoughts | Shipped | Join a contiguous thought range with the configured exact separator. | [Transform and organize](../guides/edit-and-transform.md#merge-a-contiguous-range) |
 | Existing-thought cleanup | Shipped | Clean prose spacing while preserving protected structures and annotations. | [Transform and organize](../guides/edit-and-transform.md#clean-existing-spacing) |
+| Scriptable exact transformations | Next release | Split, extract, merge, and reflow with content digests, UTF-8 byte boundaries, and idempotent retry identities. | [CLI](cli.md#inspect-and-change-thoughts) |
 | Persistent contextual undo and redo | Shipped | Separate Board, editor, and Browser histories survive restart and never claim to recall external effects. | [Undo and redo](undo-redo.md) |
 
 ## Paste, files, and screenshots
@@ -95,7 +99,7 @@ surface.
 | Session trash and restore | Shipped | Trash is recoverable and participates in persistent Browser history. | [Sessions and recovery](../guides/organization-and-recovery.md) |
 | Permanent prune | Shipped CLI | Requires an already trashed session and explicit `--yes`; cannot be undone. | [CLI](cli.md#manage-sessions) |
 | Multiple active sessions | Shipped | Different sessions may run together; one lease prevents dual editing of the same session. | [Sessions and recovery](../guides/organization-and-recovery.md) |
-| Active-session CLI forwarding | Shipped | Reads synchronize and supported mutations travel through the active owner's reducer. | [CLI](cli.md#inspect-and-change-thoughts) |
+| Active-session CLI forwarding | Shipped on macOS and Linux | Reads synchronize and supported mutations travel through the active owner's reducer. Next-release main makes the unavailable result explicit in `capabilities` on other platforms without bypassing the lease boundary. | [CLI](cli.md#inspect-and-change-thoughts) |
 | Autosave acknowledgement | Shipped | Footer state follows real persistence acknowledgement, not optimistic UI state. | [Sessions and recovery](../guides/organization-and-recovery.md#recover-from-a-storage-failure) |
 | Storage retry and recovery export | Shipped | Retry failed durability or export optimistic state to a new private file. | [Sessions and recovery](../guides/organization-and-recovery.md#recover-from-a-storage-failure) |
 | Crash recovery | Shipped | Acknowledged work survives; uncommitted transactions roll back; leases release on death. | [Privacy and diagnostics](privacy-and-diagnostics.md#read-durability-truthfully) |
@@ -125,9 +129,10 @@ surface.
 | --- | --- | --- | --- |
 | Versioned JSON capability discovery | Shipped | Discover schema, bounds, identifiers, transfer, updates, control, and optional integrations. | [CLI](cli.md#discover-capabilities) |
 | Human and JSON session commands | Shipped | List, search, rename, trash, restore, history, and prune. | [CLI](cli.md#manage-sessions) |
-| Human and JSON thought commands | Shipped | List, inspect, add, rename, replace, collapse, move, send, delete, undo, and redo. | [CLI](cli.md#inspect-and-change-thoughts) |
+| Human and JSON Board-item commands | Next release | Insert separators and move, duplicate, or delete typed thoughts and separators. | [CLI](cli.md#change-board-items) |
+| Human and JSON thought commands | Shipped plus next release | The published binary provides list, inspect, add, rename, replace, collapse, move, send, delete, undo, and redo. Split, extract, merge, and reflow are next-release additions. | [CLI](cli.md#inspect-and-change-thoughts) |
 | Typed canonical identifiers | Shipped | Prefixes identify resource kinds and retain complete UUIDv7 values. | [CLI](cli.md) |
-| Idempotent mutations | Shipped | Matching operation identities replay; divergent reuse is rejected. | [CLI](cli.md#inspect-and-change-thoughts) |
+| Idempotent mutations | Shipped | Matching operation identities return the original receipt; divergent semantic reuse is rejected. | [CLI](cli.md#inspect-and-change-thoughts) |
 | Machine-readable errors | Shipped | Versioned envelopes use stable current error codes and nonzero exits. | [CLI](cli.md) |
 | Dedicated Proqi and debug skills | Shipped | Teach compatible coding agents to use the explicit JSON CLI or investigate read-only-first without scraping storage or the TUI. | [CLI](cli.md#install-the-shipped-agent-skills) |
 | Read-only doctor | Shipped | Checks local health without repair or mutation. | [Privacy and diagnostics](privacy-and-diagnostics.md#run-read-only-health-checks) |

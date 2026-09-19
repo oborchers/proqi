@@ -42,8 +42,8 @@ def registered_command_labels(source: str) -> list[str]:
     return [ast.literal_eval(literal) for literal in literals]
 
 
-def enum_body(source: str, name: str) -> str:
-    marker = f"enum {name} "
+def named_body(source: str, kind: str, name: str) -> str:
+    marker = f"{kind} {name} "
     start = source.find(marker)
     if start < 0:
         raise ValueError(f"{name} was not found")
@@ -59,60 +59,70 @@ def enum_body(source: str, name: str) -> str:
     raise ValueError(f"{name} did not have a closing brace")
 
 
-def enum_commands(source: str, name: str) -> list[tuple[str, str]]:
-    body = enum_body(source, name)
-    commands: list[tuple[str, str]] = []
+def enum_entries(source: str, name: str) -> list[tuple[str, str, str | None, str]]:
+    body = named_body(source, "enum", name)
+    raw_entries: list[tuple[int, str, str, str | None, bool]] = []
     depth = 0
     command_attribute = ""
-    for line in body.splitlines():
+    lines = body.splitlines()
+    for index, line in enumerate(lines):
         if depth == 0 and line.strip().startswith("#[command("):
             command_attribute = line
             continue
         if depth == 0:
-            match = re.match(r"\s*([A-Z][A-Za-z0-9_]*)\s*(?:\{|\(|,)", line)
+            match = re.match(
+                r"\s*([A-Z][A-Za-z0-9_]*)\s*"
+                r"(?:\(\s*([A-Z][A-Za-z0-9_]*)\s*\)|\{|,)",
+                line,
+            )
             if match:
-                variant = match.group(1)
-                hidden = re.search(r"\bhide\s*=\s*true\b", command_attribute)
+                variant, payload = match.groups()
+                hidden = bool(
+                    re.search(r"\bhide\s*=\s*true\b", command_attribute)
+                )
                 explicit = re.search(r'\bname\s*=\s*"([^"]+)"', command_attribute)
-                if hidden is None:
-                    commands.append(
-                        (variant, explicit.group(1) if explicit else kebab_case(variant))
-                    )
+                command = explicit.group(1) if explicit else kebab_case(variant)
+                raw_entries.append((index, variant, command, payload, hidden))
                 command_attribute = ""
         depth += line.count("{") - line.count("}")
-    return commands
+
+    entries: list[tuple[str, str, str | None, str]] = []
+    for offset, entry in enumerate(raw_entries):
+        start, variant, command, payload, hidden = entry
+        end = raw_entries[offset + 1][0] if offset + 1 < len(raw_entries) else len(lines)
+        if not hidden:
+            entries.append((variant, command, payload, "\n".join(lines[start:end])))
+    return entries
+
+
+def enum_commands(source: str, name: str) -> list[tuple[str, str]]:
+    return [(variant, command) for variant, command, _, _ in enum_entries(source, name)]
 
 
 def kebab_case(name: str) -> str:
     return re.sub(r"(?<!^)(?=[A-Z])", "-", name).lower()
 
 
-def public_cli_surfaces(source: str) -> set[str]:
-    root = {
-        command
-        for variant, command in enum_commands(source, "Command")
-        if variant not in {"Update", "Diagnostics", "Sessions", "Thoughts"}
-    }
-    nested = {
-        "diagnostics": "DiagnosticsCommand",
-        "update": "UpdateCommand",
-        "sessions": "SessionCommand",
-        "thoughts": "ThoughtCommand",
-    }
-    for prefix, enum in nested.items():
-        root.update(f"{prefix} {command}" for _, command in enum_commands(source, enum))
-        if re.search(rf"command:\s*Option<{re.escape(enum)}>", source):
-            root.add(prefix)
-    return root
+def subcommand_field(source: str, arguments: str) -> tuple[str, bool]:
+    body = named_body(source, "struct", arguments)
+    match = re.search(
+        r"#\[command\(subcommand\)\]\s*"
+        r"(?:pub\(super\)\s+)?command\s*:\s*(Option<)?"
+        r"([A-Z][A-Za-z0-9_]*)(?:>)?",
+        body,
+    )
+    if match is None:
+        raise ValueError(f"{arguments} does not own a subcommand field")
+    return match.group(2), match.group(1) is not None
 
 
-def public_cli_flags(source: str) -> set[str]:
-    flags = {"-h", "--help", "-V", "--version"}
+def flags_in_block(source: str) -> set[str]:
+    flags: set[str] = set()
     fields = re.finditer(
-        r"^\s*#\[arg\((.*)\)\]\s*\n\s*(?:pub\(super\)\s+)?"
+        r"#\[arg\((.*?)\)\]\s*(?:pub\(super\)\s+)?"
         r"([a-z][A-Za-z0-9_]*)\s*:",
         source,
-        re.MULTILINE,
+        re.DOTALL,
     )
     for field in fields:
         options, name = field.groups()
@@ -129,6 +139,45 @@ def public_cli_flags(source: str) -> set[str]:
         elif re.search(r"\bshort\b", options):
             flags.add(f"-{name[0]}")
     return flags
+
+
+def public_cli_contract(source: str) -> tuple[set[str], set[str], dict[str, set[str]]]:
+    surfaces: set[str] = set()
+    callable_parents: set[str] = set()
+    surface_flags: dict[str, set[str]] = {}
+    for _, command, arguments, block in enum_entries(source, "Command"):
+        if arguments is None:
+            surfaces.add(command)
+            surface_flags[command] = flags_in_block(block)
+            continue
+
+        nested_enum, optional = subcommand_field(source, arguments)
+        if optional:
+            surfaces.add(command)
+            callable_parents.add(command)
+            surface_flags[command] = set()
+        for _, nested_command, nested_arguments, nested_block in enum_entries(
+            source, nested_enum
+        ):
+            surface = f"{command} {nested_command}"
+            surfaces.add(surface)
+            flags = flags_in_block(nested_block)
+            if nested_arguments is not None:
+                flags.update(
+                    flags_in_block(named_body(source, "struct", nested_arguments))
+                )
+            surface_flags[surface] = flags
+    return surfaces, callable_parents, surface_flags
+
+
+def public_cli_surfaces(source: str) -> set[str]:
+    return public_cli_contract(source)[0]
+
+
+def public_cli_flags(source: str) -> set[str]:
+    return {"-h", "--help", "-V", "--version"} | flags_in_block(
+        named_body(source, "struct", "Cli")
+    )
 
 
 def has_cli_token(documentation: str, token: str) -> bool:
@@ -155,13 +204,26 @@ def coverage_errors(
                 f"Commands label {label!r} must appear once in commands.md, found {count}"
             )
 
-    cli_surfaces = public_cli_surfaces(cli_source)
+    cli_surfaces, callable_parents, surface_flags = public_cli_contract(cli_source)
     for surface in sorted(cli_surfaces):
+        suffix = r"\s*$" if surface in callable_parents else r"(?:\s|$)"
         invocation = re.compile(
-            rf"^proqi(?:\s+--json)?\s+{re.escape(surface)}(?:\s|$)", re.MULTILINE
+            rf"^proqi(?:\s+--json)?\s+{re.escape(surface)}{suffix}", re.MULTILINE
         )
         if invocation.search(cli_doc) is None:
             errors.append(f"public CLI surface {surface!r} is missing from cli.md")
+            continue
+        synopsis = re.compile(
+            rf"^proqi(?:\s+--json)?\s+{re.escape(surface)}(?:\s.*)?$",
+            re.MULTILINE,
+        )
+        documented = "\n".join(synopsis.findall(cli_doc))
+        for flag in sorted(surface_flags[surface]):
+            if not has_cli_token(documented, flag):
+                errors.append(
+                    f"public CLI flag {flag!r} for {surface!r} is missing "
+                    "from its cli.md synopsis"
+                )
 
     for flag in sorted(public_cli_flags(cli_source)):
         if not has_cli_token(cli_doc, flag):

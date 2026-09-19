@@ -140,8 +140,12 @@ For a local preview:
 UV_PROJECT_ENVIRONMENT=../target/docs-venv uv run --project docs mkdocs serve
 ```
 
-The repository does not deploy or publish the site from this build. Public
-hosting remains a separate maintainer decision.
+The `Docs` workflow runs the same command after a push to `main`, uploads the
+exact checked artifact, and deploys it to
+<https://oborchers.github.io/proqi/> through GitHub Pages. Pull requests build
+and preserve a preview artifact through the ordinary Documentation gate but do
+not publish it. Pages must use **GitHub Actions** as its repository publishing
+source; no generated site branch is committed.
 
 `cargo xtask check` includes the documentation build whenever classified inputs
 affect it. The canonical `cargo xtask check-full` remains exactly quality plus

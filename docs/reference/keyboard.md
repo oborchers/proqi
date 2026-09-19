@@ -23,6 +23,8 @@ remains distinct on macOS.
 | Delete | `d` or unmodified Delete | Visible delete control |
 | Duplicate | `Primary+D` or `Shift+D` | Commands |
 | Collapse | `c` | Click the collapse control |
+| Merge contiguous thoughts | `t` | Commands |
+| Clean up focused thought | `f` | Commands |
 | Search / Commands / Help | `/` / `:` / `?` | Footer controls |
 | Quit | `Primary+Q` or `q` | Quit control |
 
@@ -47,7 +49,7 @@ the focused item.
 | Jump five rendered rows | Alt plus vertical arrow or Page Up / Page Down |
 | Move to thought boundary | Control plus vertical arrow |
 | Smart list / indent / outdent | Enter / Tab / Shift+Tab |
-| Split or extract | `Primary+T` |
+| Split or extract | `Primary+T`, or `Escape` then `t` using the captured cursor or selection |
 | Submit remove / keep | Primary+Enter / Primary+Shift+Enter, with terminal-safe macOS Control aliases |
 
 Mouse editing supports single-click cursor placement, character drag,

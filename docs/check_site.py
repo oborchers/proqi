@@ -11,6 +11,7 @@ from urllib.parse import unquote, urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 SITE = ROOT / "target/docs-site"
+MKDOCS_CONFIG = ROOT / "mkdocs.yml"
 
 
 class PageParser(HTMLParser):
@@ -47,9 +48,24 @@ class PageParser(HTMLParser):
             self.images_without_alt += 1
 
 
-def rendered_target(site: Path, page: Path, link_path: str) -> Path:
+def configured_site_prefix(config: Path) -> str:
+    for line in config.read_text(encoding="utf-8").splitlines():
+        key, separator, value = line.partition(":")
+        if key.strip() == "site_url" and separator:
+            return urlsplit(value.strip().strip('"\'')).path.rstrip("/")
+    return ""
+
+
+def rendered_target(
+    site: Path, page: Path, link_path: str, site_prefix: str = ""
+) -> Path:
     if link_path.startswith("/"):
-        target = site / unquote(link_path.lstrip("/"))
+        relative = link_path
+        if site_prefix and (
+            relative == site_prefix or relative.startswith(f"{site_prefix}/")
+        ):
+            relative = relative[len(site_prefix) :] or "/"
+        target = site / unquote(relative.lstrip("/"))
     else:
         target = page.parent / unquote(link_path)
     if link_path.endswith("/") or target.is_dir():
@@ -57,7 +73,16 @@ def rendered_target(site: Path, page: Path, link_path: str) -> Path:
     return target.resolve()
 
 
-def validation_errors(site: Path) -> tuple[list[str], int]:
+def outside_deployment_prefix(link_path: str, site_prefix: str) -> bool:
+    return bool(
+        site_prefix
+        and link_path.startswith("/")
+        and link_path != site_prefix
+        and not link_path.startswith(f"{site_prefix}/")
+    )
+
+
+def validation_errors(site: Path, site_prefix: str = "") -> tuple[list[str], int]:
     site = site.resolve()
     pages: dict[Path, PageParser] = {}
     for path in site.rglob("*.html"):
@@ -66,6 +91,8 @@ def validation_errors(site: Path) -> tuple[list[str], int]:
         pages[path.resolve()] = parser
 
     errors: list[str] = []
+    if not pages:
+        errors.append("rendered site contains no HTML pages")
     for page, parser in pages.items():
         if parser.images_without_alt:
             errors.append(
@@ -76,7 +103,17 @@ def validation_errors(site: Path) -> tuple[list[str], int]:
             parsed = urlsplit(href)
             if parsed.scheme or parsed.netloc:
                 continue
-            target = rendered_target(site, page, parsed.path) if parsed.path else page
+            if outside_deployment_prefix(parsed.path, site_prefix):
+                errors.append(
+                    f"{page.relative_to(site)}: link is outside deployment prefix: "
+                    f"{href}"
+                )
+                continue
+            target = (
+                rendered_target(site, page, parsed.path, site_prefix)
+                if parsed.path
+                else page
+            )
             try:
                 target.relative_to(site.resolve())
             except ValueError:
@@ -102,7 +139,13 @@ def validation_errors(site: Path) -> tuple[list[str], int]:
                 continue
             if not parsed.path:
                 continue
-            target = rendered_target(site, page, parsed.path)
+            if outside_deployment_prefix(parsed.path, site_prefix):
+                errors.append(
+                    f"{page.relative_to(site)}: asset is outside deployment prefix: "
+                    f"{source}"
+                )
+                continue
+            target = rendered_target(site, page, parsed.path, site_prefix)
             try:
                 target.relative_to(site.resolve())
             except ValueError:
@@ -119,7 +162,9 @@ def main() -> int:
         print("rendered documentation site is missing; run mkdocs build first", file=sys.stderr)
         return 1
 
-    errors, page_count = validation_errors(SITE)
+    errors, page_count = validation_errors(
+        SITE, configured_site_prefix(MKDOCS_CONFIG)
+    )
 
     if errors:
         print("rendered documentation link check failed:", file=sys.stderr)

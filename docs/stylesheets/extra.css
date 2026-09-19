@@ -60,6 +60,12 @@
   max-width: 72ch;
 }
 
+.md-typeset a {
+  text-decoration: underline;
+  text-decoration-thickness: 0.06em;
+  text-underline-offset: 0.14em;
+}
+
 .md-typeset table:not([class]) {
   display: table;
   width: 100%;

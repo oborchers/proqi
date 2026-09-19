@@ -2,9 +2,7 @@
 
 site_name: Proqi
 site_description: User documentation for the terminal-native prompt composer
-repo_url: https://github.com/oborchers/proqi
-repo_name: oborchers/proqi
-edit_uri: edit/main/docs/
+site_url: https://oborchers.github.io/proqi/
 copyright: Proqi is available under the MIT License.
 
 docs_dir: docs
@@ -20,11 +18,16 @@ exclude_docs: |
   INPUT_STALL_CONTINUITY.md
   INPUT_WATCHDOG_SUSPENSION.md
   INVOCATIONS.md
+  LIFECYCLE_PTY_INVESTIGATION.md
   RELEASING.md
   SENTENCE_DELETION.md
   UNDO_REDO.md
   pyproject.toml
   uv.lock
+
+validation:
+  nav:
+    omitted_files: warn
 
 theme:
   name: material

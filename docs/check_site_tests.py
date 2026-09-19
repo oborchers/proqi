@@ -45,6 +45,53 @@ class RenderedSiteTests(unittest.TestCase):
             self.assertTrue(any("no alt attribute" in error for error in errors))
             self.assertTrue(any("missing asset" in error for error in errors))
 
+    def test_deployment_prefix_resolves_inside_static_artifact(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            site = Path(directory)
+            (site / "assets").mkdir()
+            (site / "assets/style.css").write_text("body {}\n", encoding="utf-8")
+            (site / "index.html").write_text(
+                '<link rel="stylesheet" href="/proqi/assets/style.css">'
+                '<a href="/proqi/.">Home</a>',
+                encoding="utf-8",
+            )
+
+            errors, pages = check_site.validation_errors(site, "/proqi")
+
+            self.assertEqual(errors, [])
+            self.assertEqual(pages, 1)
+
+    def test_site_url_path_becomes_deployment_prefix(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / "mkdocs.yml"
+            config.write_text(
+                "site_name: Example\nsite_url: https://example.invalid/proqi/\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(check_site.configured_site_prefix(config), "/proqi")
+
+    def test_root_absolute_asset_outside_deployment_prefix_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            site = Path(directory)
+            (site / "assets").mkdir()
+            (site / "assets/style.css").write_text("body {}\n", encoding="utf-8")
+            (site / "index.html").write_text(
+                '<link rel="stylesheet" href="/assets/style.css">',
+                encoding="utf-8",
+            )
+
+            errors, _ = check_site.validation_errors(site, "/proqi")
+
+            self.assertTrue(any("outside deployment prefix" in error for error in errors))
+
+    def test_empty_site_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            errors, pages = check_site.validation_errors(Path(directory))
+
+            self.assertEqual(pages, 0)
+            self.assertIn("rendered site contains no HTML pages", errors)
+
 
 if __name__ == "__main__":
     unittest.main()

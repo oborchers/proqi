@@ -30,10 +30,15 @@ enum Command {
     #[command(name = "__attachment-check", hide = true)]
     AttachmentCheckWorker,
     Capabilities,
+    Update(UpdateArgs),
+    Diagnostics(DiagnosticsArgs),
     Sessions(SessionArgs),
+    Items(ItemArgs),
+    Thoughts(ThoughtArgs),
 }
 
 struct SessionArgs {
+    #[command(subcommand)]
     pub(super) command: Option<SessionCommand>,
 }
 
@@ -41,12 +46,41 @@ enum SessionCommand {
     List,
 }
 
+struct ItemArgs {
+    #[command(subcommand)]
+    pub(super) command: ItemCommand,
+}
+
+enum ItemCommand {
+    InsertSeparator {
+        #[arg(
+            long
+        )]
+        operation_id: Option<String>,
+    },
+}
+
+struct UpdateArgs {
+    #[command(subcommand)]
+    pub(super) command: UpdateCommand,
+}
+
 enum UpdateCommand {
     Check,
 }
 
+struct DiagnosticsArgs {
+    #[command(subcommand)]
+    pub(super) command: DiagnosticsCommand,
+}
+
 enum DiagnosticsCommand {
     Collect,
+}
+
+struct ThoughtArgs {
+    #[command(subcommand)]
+    pub(super) command: ThoughtCommand,
 }
 
 enum ThoughtCommand {
@@ -65,11 +99,12 @@ class CoverageTests(unittest.TestCase):
             "proqi --resume [SESSION]\nproqi --json capabilities\n"
             "proqi -h\nproqi --help\nproqi -V\nproqi --version\n"
             "proqi capabilities\nproqi sessions\nproqi sessions list\n"
+            "proqi items insert-separator <session> [--operation-id OP_ID]\n"
             "proqi update check\nproqi diagnostics collect\nproqi thoughts list\n",
         )
 
         self.assertEqual(errors, [])
-        self.assertEqual((actions, surfaces), (2, 6))
+        self.assertEqual((actions, surfaces), (2, 7))
 
     def test_missing_command_and_cli_surface_are_rejected(self) -> None:
         errors, _, _ = check.coverage_errors(
@@ -79,6 +114,7 @@ class CoverageTests(unittest.TestCase):
             "proqi\nproqi -c\nproqi --continue\nproqi -r\nproqi --resume\n"
             "proqi --json capabilities\nproqi -h\nproqi --help\nproqi -V\n"
             "proqi capabilities\nproqi sessions\nproqi update check\n"
+            "proqi --json items insert-separator <session> [--operation-id OP_ID]\n"
             "proqi diagnostics collect\nproqi thoughts list\n",
         )
 
@@ -92,6 +128,7 @@ class CoverageTests(unittest.TestCase):
             "2 actions\n**Create thought**\n**Delete selected**\n",
             CLI_SOURCE,
             "proqi capabilities\nproqi sessions\nproqi sessions list\n"
+            "proqi items insert-separator <session> [--operation-id OP_ID]\n"
             "proqi update check\nproqi diagnostics collect\nproqi thoughts list\n"
             "-c --continue -r --resume --json -h --help -V --version\n",
         )
@@ -106,6 +143,48 @@ class CoverageTests(unittest.TestCase):
             check.registered_command_labels(
                 'pub(crate) const COMMANDS: [(Self, &str); 1] = [(Self::Create, "Create")'
             )
+
+    def test_nested_surfaces_are_derived_only_from_the_root_graph(self) -> None:
+        without_items = CLI_SOURCE.replace("    Items(ItemArgs),\n", "")
+        self.assertNotIn(
+            "items insert-separator", check.public_cli_surfaces(without_items)
+        )
+
+        with_widgets = CLI_SOURCE.replace(
+            "    Items(ItemArgs),\n", "    Items(ItemArgs),\n    Widgets(WidgetArgs),\n"
+        ) + '''
+struct WidgetArgs {
+    #[command(subcommand)]
+    pub(super) command: WidgetCommand,
+}
+
+enum WidgetCommand {
+    List,
+}
+'''
+        self.assertIn("widgets list", check.public_cli_surfaces(with_widgets))
+
+    def test_parent_surface_and_owned_flag_must_be_explicit(self) -> None:
+        complete = (
+            "proqi\nproqi -c\nproqi --continue\nproqi -r [SESSION]\n"
+            "proqi --resume [SESSION]\nproqi --json capabilities\n"
+            "proqi -h\nproqi --help\nproqi -V\nproqi --version\n"
+            "proqi capabilities\nproqi sessions list\n"
+            "proqi items insert-separator <session>\n"
+            "proqi update check\nproqi diagnostics collect\nproqi thoughts list\n"
+        )
+
+        errors, _, _ = check.coverage_errors(
+            ACTION_SOURCE,
+            "2 actions\n**Create thought**\n**Delete selected**\n",
+            CLI_SOURCE,
+            complete,
+        )
+
+        self.assertTrue(any("surface 'sessions'" in error for error in errors))
+        self.assertTrue(
+            any("--operation-id" in error and "insert-separator" in error for error in errors)
+        )
 
 
 if __name__ == "__main__":

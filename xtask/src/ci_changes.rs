@@ -374,6 +374,7 @@ fn is_documentation(path: &str) -> bool {
             path,
             "mkdocs.yml"
                 | ".github/workflows/ci.yml"
+                | ".github/workflows/docs.yml"
                 | "src/cli/args.rs"
                 | "src/ui/shortcut_registry/model.rs"
                 | "xtask/src/documentation.rs"
@@ -392,6 +393,7 @@ fn is_ci_policy(path: &str) -> bool {
         || path.ends_with("AGENTS.md")
         || path.ends_with("CLAUDE.md")
         || matches!(path, "context/ARCHITECTURE.md" | "context/PRODUCT.md")
+        || path.starts_with("xtask/src/release_policy/")
         || matches!(
             path,
             "xtask/src/ci_changes.rs"
