@@ -151,6 +151,17 @@
         "Copy or move thoughts with attachments into an open session with durable acknowledgement before source removal.",
         "Find global Agent Skills outside Git repositories without losing their supported dollar and slash invocation forms."
       ]
+    },
+    {
+      "version": "0.12.0",
+      "highlights": [
+        "Create, move, delete, and duplicate mixed Board items through the public CLI, and split, extract, merge, or reflow thought text with stale-edit checks.",
+        "Retry newly recorded semantic operations after restart or history compaction without applying them twice, with updated agent skills and capability reporting.",
+        "Hide optional footer chrome with footer_hidden, or toggle it temporarily with h in Board mode, while required status and recovery controls stay visible.",
+        "Complete 19 shared Codex and Claude commands at the start of a thought, including /clear, /compact, /review, and /status, without executing them.",
+        "Keep bounded automatic input recovery available after executable upgrades and ordinary session resumes, with clearer content-free diagnostics.",
+        "Explore task-oriented user guides for editing, selection, attachments, delivery, sessions, recovery, shortcuts, and configuration."
+      ]
     }
   ]
 }
