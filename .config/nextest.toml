@@ -10,6 +10,10 @@ threads-required = "num-test-threads"
 filter = 'test(=update_migration::automatic::old_coordinator_converges_real_schema_changing_replacements)'
 threads-required = "num-test-threads"
 
+[[profile.default.overrides]]
+filter = 'test(=update_migration::recovery_upgrade::historical_recovery_survives_fresh_upgrade_and_live_update_convergence)'
+threads-required = "num-test-threads"
+
 # These real PTY workflows use process signals, descendant settlement, terminal
 # restoration, and short external acknowledgement probes. The dedicated PTY
 # gate already serializes them. Keep the general nextest gate from scheduling

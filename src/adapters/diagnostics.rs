@@ -1,6 +1,7 @@
 //! Private, bounded, structured, content-redacted diagnostics.
 
 mod collect;
+mod input;
 mod input_recovery;
 mod invocation;
 mod writer;
@@ -17,6 +18,10 @@ use crate::{
 };
 
 pub use collect::{DiagnosticBundle, collect_bundle};
+pub(crate) use input::{
+    InputObservation, InputReaderStage, InputStallEvidence, record_input_observation,
+};
+pub(crate) use input_recovery::record_admission as record_recovery_admission;
 use writer::RotatingMakeWriter;
 
 static INITIALIZED: OnceLock<()> = OnceLock::new();
@@ -327,15 +332,6 @@ fn record_attachment_failure(reason: &str) {
 
 fn record_attachment_cloud_state(state: &str) {
     tracing::info!(event = "attachment_cloud_state", state);
-}
-
-/// Record one content-free input lease reset without widening the public event vocabulary.
-pub(crate) fn record_input_lease_reset(observer_gap_ms: u64) {
-    tracing::warn!(
-        event = "input_lease_reset",
-        reason = "supervisor_gap",
-        observer_gap_ms
-    );
 }
 
 /// Record every stable reason in one incomplete invocation result.
