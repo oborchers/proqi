@@ -56,6 +56,8 @@ mod gateway_trace_tests;
 mod historical_fixture;
 #[path = "update_migration/old_fixture.rs"]
 mod old_fixture;
+#[path = "update_migration/recovery_upgrade.rs"]
+mod recovery_upgrade;
 
 use cohort::{OWNER_TIMEOUT, Owners, active_instances, control_ready};
 

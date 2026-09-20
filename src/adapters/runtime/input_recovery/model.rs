@@ -59,6 +59,24 @@ pub(crate) enum RecoveryStage {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum RecoveryRecordPhase {
+    Prepared,
+    Probation,
+    Healthy,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum RecoveryAdmission {
+    Fresh,
+    Retired {
+        executable_changed: bool,
+        phase: RecoveryRecordPhase,
+    },
+    Probation,
+    Disabled(RecoveryFailure),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum RecoveryFailure {
     CircuitOpen,
     ExecFailed,

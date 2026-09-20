@@ -1,6 +1,7 @@
-//! Exact v0.9.0 source and Homebrew-shaped installation fixture.
+//! Pinned released sources and private Homebrew-shaped installation fixtures.
 
 use std::{
+    fmt::Write as _,
     fs,
     os::unix::fs::symlink,
     path::{Path, PathBuf},
@@ -12,13 +13,30 @@ use proqi::{domain::InstallationIdentity, ports::update::InstallDetector as _};
 
 use super::old_fixture::{BUILD_TIMEOUT, run_bounded, shared_fixture_target};
 
-const HISTORICAL_TAG: &str = "v0.9.0";
-const HISTORICAL_COMMIT: &str = "dd05c49bf3c1e8c1aa2cd707ed3f3b40ca2bc2b9";
+struct Release {
+    tag: &'static str,
+    commit: &'static str,
+    version: &'static str,
+    binary: &'static str,
+}
+const V0_9: Release = Release {
+    tag: "v0.9.0",
+    commit: "dd05c49bf3c1e8c1aa2cd707ed3f3b40ca2bc2b9",
+    version: "0.9.0",
+    binary: "proqi_v0_9_fixture",
+};
+const V0_10_2: Release = Release {
+    tag: "v0.10.2",
+    commit: "9ddc01f1cb2b55dc4f82c587124844a7209aceba",
+    version: "0.10.2",
+    binary: "proqi_v0_10_2_fixture",
+};
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 
 pub(super) struct HistoricalFixture {
     _root: tempfile::TempDir,
     binary: PathBuf,
+    version: &'static str,
 }
 
 pub(super) struct HistoricalInstallation {
@@ -30,19 +48,27 @@ pub(super) struct HistoricalInstallation {
 
 impl HistoricalFixture {
     pub(super) fn build() -> Self {
+        Self::build_release(&V0_9)
+    }
+
+    pub(super) fn build_recovery_release() -> Self {
+        Self::build_release(&V0_10_2)
+    }
+
+    fn build_release(release: &Release) -> Self {
         let root = tempfile::Builder::new()
-            .prefix("proqi-v0.9.0-source")
+            .prefix("proqi-historical-source")
             .tempdir_in("/private/tmp")
             .expect("historical source root");
-        verify_tag();
-        let archive = root.path().join("v0.9.0.tar");
+        verify_tag(release);
+        let archive = root.path().join("historical.tar");
         let source = root.path().join("source");
         fs::create_dir(&source).expect("historical source directory");
         let mut export = Command::new("git");
         export
             .args(["archive", "--format=tar", "--output"])
             .arg(&archive)
-            .arg(HISTORICAL_TAG)
+            .arg(release.commit)
             .current_dir(env!("CARGO_MANIFEST_DIR"));
         let output = run_bounded(&mut export, COMMAND_TIMEOUT, "historical source export");
         assert_success(&output, "historical source export");
@@ -54,8 +80,10 @@ impl HistoricalFixture {
             "historical source extraction",
         );
         assert_success(&output, "historical source extraction");
-        use_cached_rustls(&source);
-        use_distinct_binary_name(&source);
+        if release.version == V0_9.version {
+            use_cached_rustls(&source);
+        }
+        use_distinct_binary_name(&source, release.binary);
         let target = shared_fixture_target();
         let mut build = Command::new("cargo");
         build
@@ -66,13 +94,13 @@ impl HistoricalFixture {
                 "--package",
                 "proqi",
                 "--bin",
-                "proqi_v0_9_fixture",
+                release.binary,
             ])
             .current_dir(&source)
             .env("CARGO_TARGET_DIR", &target);
-        let output = run_bounded(&mut build, BUILD_TIMEOUT, "historical v0.9.0 build");
-        assert_success(&output, "historical v0.9.0 build");
-        let binary = target.join("debug/proqi_v0_9_fixture");
+        let output = run_bounded(&mut build, BUILD_TIMEOUT, "historical release build");
+        assert_success(&output, "historical release build");
+        let binary = target.join("debug").join(release.binary);
         assert_ne!(
             fs::read(&binary).expect("historical executable bytes"),
             fs::read(env!("CARGO_BIN_EXE_proqi")).expect("current executable bytes")
@@ -80,12 +108,16 @@ impl HistoricalFixture {
         Self {
             _root: root,
             binary,
+            version: release.version,
         }
     }
 
     pub(super) fn install(&self, state: &Path) -> HistoricalInstallation {
         let prefix = state.join("prefix");
-        let old_binary = prefix.join("Cellar/proqi/0.9.0/bin/proqi");
+        let old_binary = prefix
+            .join("Cellar/proqi")
+            .join(self.version)
+            .join("bin/proqi");
         let current_binary = prefix
             .join("Cellar/proqi")
             .join(env!("CARGO_PKG_VERSION"))
@@ -121,14 +153,18 @@ fn use_cached_rustls(source: &Path) {
     fs::write(lock, contents.replace(HISTORICAL, CURRENT)).expect("cached historical lockfile");
 }
 
-fn use_distinct_binary_name(source: &Path) {
+fn use_distinct_binary_name(source: &Path, binary: &str) {
     const PACKAGE: &str = "[package]\nname = \"proqi\"";
     let manifest = source.join("Cargo.toml");
     let contents = fs::read_to_string(&manifest).expect("historical manifest");
     assert_eq!(contents.matches(PACKAGE).count(), 1);
     let mut contents =
         contents.replacen(PACKAGE, "[package]\nname = \"proqi\"\nautobins = false", 1);
-    contents.push_str("\n[[bin]]\nname = \"proqi_v0_9_fixture\"\npath = \"src/bin/proqi.rs\"\n");
+    write!(
+        contents,
+        "\n[[bin]]\nname = \"{binary}\"\npath = \"src/bin/proqi.rs\"\n"
+    )
+    .expect("append fixture binary target");
     fs::write(manifest, contents).expect("write historical manifest");
 }
 
@@ -141,10 +177,10 @@ impl HistoricalInstallation {
     }
 }
 
-fn verify_tag() {
+fn verify_tag(release: &Release) {
     let mut command = Command::new("git");
     command
-        .args(["rev-list", "-n", "1", HISTORICAL_TAG])
+        .args(["rev-list", "-n", "1", release.tag])
         .current_dir(env!("CARGO_MANIFEST_DIR"));
     let output = run_bounded(&mut command, COMMAND_TIMEOUT, "historical tag verification");
     assert_success(&output, "historical tag verification");
@@ -152,7 +188,7 @@ fn verify_tag() {
         String::from_utf8(output.stdout)
             .expect("historical commit UTF-8")
             .trim(),
-        HISTORICAL_COMMIT
+        release.commit
     );
 }
 

@@ -25,6 +25,8 @@ use super::{
 use translation::translate;
 
 mod inspection;
+mod observation;
+use observation::{LeaseDecision, ReaderProgress, SourceLease};
 mod translation;
 pub(crate) use inspection::inspect_keypress;
 
@@ -247,47 +249,6 @@ enum SourceMessage {
     Failed(InputFailure),
 }
 
-#[derive(Debug, Eq, PartialEq)]
-enum LeaseDecision {
-    Continue,
-    ResetAfterSupervisorGap { gap: Duration },
-    Unresponsive,
-}
-
-struct SourceLease {
-    last_response: Instant,
-    last_observation: Instant,
-}
-
-impl SourceLease {
-    fn new(now: Instant) -> Self {
-        Self {
-            last_response: now,
-            last_observation: now,
-        }
-    }
-
-    fn observe(&mut self, now: Instant, reader_responded: bool) -> LeaseDecision {
-        let supervisor_gap = now.saturating_duration_since(self.last_observation);
-        self.last_observation = now;
-        if reader_responded {
-            self.last_response = now;
-            return LeaseDecision::Continue;
-        }
-        if supervisor_gap >= SOURCE_STALL_LIMIT {
-            self.last_response = now;
-            return LeaseDecision::ResetAfterSupervisorGap {
-                gap: supervisor_gap,
-            };
-        }
-        if now.saturating_duration_since(self.last_response) >= SOURCE_STALL_LIMIT {
-            LeaseDecision::Unresponsive
-        } else {
-            LeaseDecision::Continue
-        }
-    }
-}
-
 fn supervise_input(
     mut source: Box<dyn EventSource>,
     sender: &SyncSender<InputMessage>,
@@ -298,8 +259,10 @@ fn supervise_input(
     let (source_sender, source_receiver) = sync_channel(64);
     let source_stop = Arc::new(AtomicBool::new(false));
     let reader_stop = Arc::clone(&source_stop);
+    let progress = Arc::new(ReaderProgress::new(Instant::now()));
+    let reader_progress = Arc::clone(&progress);
     let reader = thread::spawn(move || {
-        read_source(&mut *source, &source_sender, &reader_stop);
+        read_source(&mut *source, &source_sender, &reader_stop, &reader_progress);
     });
     let mut pending_resize = None;
     let mut lease = SourceLease::new(Instant::now());
@@ -319,22 +282,25 @@ fn supervise_input(
                 let _sent = send_lossless(sender, InputMessage::Failed(failure), stop);
                 break;
             }
-            Err(RecvTimeoutError::Timeout) => match lease.observe(Instant::now(), false) {
-                LeaseDecision::Continue => {}
-                LeaseDecision::ResetAfterSupervisorGap { gap } => {
-                    crate::adapters::diagnostics::record_input_lease_reset(
-                        u64::try_from(gap.as_millis()).unwrap_or(u64::MAX),
-                    );
+            Err(RecvTimeoutError::Timeout) => {
+                let now = Instant::now();
+                let evidence = lease.evidence(now, &progress);
+                match lease.observe(now, false) {
+                    LeaseDecision::Continue => {}
+                    LeaseDecision::ResetAfterSupervisorGap { .. } => {
+                        observation::record_supervisor_gap(evidence);
+                    }
+                    LeaseDecision::Unresponsive => {
+                        observation::record_stall(evidence);
+                        let _sent = send_lossless(
+                            sender,
+                            InputMessage::Failed(InputFailure::Unresponsive),
+                            stop,
+                        );
+                        break;
+                    }
                 }
-                LeaseDecision::Unresponsive => {
-                    let _sent = send_lossless(
-                        sender,
-                        InputMessage::Failed(InputFailure::Unresponsive),
-                        stop,
-                    );
-                    break;
-                }
-            },
+            }
             Err(RecvTimeoutError::Disconnected) => {
                 let _sent = send_lossless(
                     sender,
@@ -360,21 +326,37 @@ fn read_source(
     source: &mut dyn EventSource,
     sender: &SyncSender<SourceMessage>,
     stop: &AtomicBool,
+    progress: &ReaderProgress,
 ) {
+    use crate::adapters::diagnostics::InputReaderStage::{Delivery, Poll, Read, Stopped};
     while !stop.load(Ordering::Acquire) {
-        let message = match source.poll(SOURCE_POLL_INTERVAL) {
+        progress.enter(Poll, Instant::now());
+        let polled = source.poll(SOURCE_POLL_INTERVAL);
+        progress.complete(Instant::now());
+        let message = match polled {
             Ok(false) => SourceMessage::Responsive,
-            Ok(true) => match source.read() {
-                Ok(event) => SourceMessage::Event(event),
-                Err(error) => SourceMessage::Failed(classify_input_error(&error)),
-            },
+            Ok(true) => {
+                progress.enter(Read, Instant::now());
+                let read = source.read();
+                progress.complete(Instant::now());
+                match read {
+                    Ok(event) => SourceMessage::Event(event),
+                    Err(error) => SourceMessage::Failed(classify_input_error(&error)),
+                }
+            }
             Err(error) => SourceMessage::Failed(classify_input_error(&error)),
         };
         let failed = matches!(message, SourceMessage::Failed(_));
-        if !send_source(message, sender, stop) || failed {
-            return;
+        progress.enter(Delivery, Instant::now());
+        let delivered = send_source(message, sender, stop);
+        if delivered {
+            progress.complete(Instant::now());
+        }
+        if !delivered || failed {
+            break;
         }
     }
+    progress.enter(Stopped, Instant::now());
 }
 
 fn send_source(

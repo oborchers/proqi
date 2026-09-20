@@ -130,14 +130,20 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
     let session_id = state.board.session.id;
     let executable_identity = ExecutableIdentity::read(&executable);
     let runtime_directory = coordinator.runtime_directory().to_path_buf();
-    let mut input_recovery = InputRecovery::open(
+    let input_recovery = InputRecovery::open(
         coordinator.runtime_directory(),
         session_id,
         session_lease.info().instance_id,
         executable_identity.clone(),
         crate::adapters::process::input_recovery_startup_context(),
-    )
-    .map_err(|error| {
+    );
+    crate::adapters::diagnostics::record_recovery_admission(
+        input_recovery
+            .as_ref()
+            .map(InputRecovery::admission)
+            .map_err(|error| *error),
+    );
+    let mut input_recovery = input_recovery.map_err(|error| {
         continuity::unavailable(error, &executable, state_root.as_deref(), session_id)
     })?;
     if input_recovery.stage() == RecoveryStage::Probation {

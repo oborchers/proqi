@@ -15,6 +15,9 @@ use super::{
     RecoveryStage, StallDecision,
 };
 
+#[path = "tests/admission.rs"]
+mod admission;
+
 fn identity(byte: u8) -> ExecutableIdentity {
     ExecutableIdentity {
         sha256: [byte; 32],

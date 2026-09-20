@@ -159,8 +159,19 @@ The record is strict JSON below the existing runtime root, limited to 16 KiB,
 written through a private create-new temporary file and atomic rename, owned by
 the current user, and mode 0600 inside a mode 0700 directory. It contains only
 attempt timestamps, typed lifecycle identity, and a bounded content-free UI
-checkpoint. An ordinary launch removes a valid abandoned record. Malformed,
-oversized, public, symlinked, mismatched, or incomplete state disables automatic
+checkpoint. Only after canonical installation/schema admission and exact-session
+lease acquisition, an ordinary launch removes a valid current-schema abandoned
+record for that session. Retained executable identity is not an admission rule
+for this retirement: a legitimate upgrade or same-binary manual resume starts
+a fresh lineage without importing stale UI state or attempts. Prepared,
+probation, and healthy phases follow the same rule. An update replacement also
+uses this fresh input-recovery admission, while the independent update proof
+remains owned by convergence. Downgrade and inactive-installation refusal stay
+at canonical startup admission, before retirement. An input-recovery proof
+never enters ordinary retirement and still requires exact executable, PID,
+session, lineage, attempt, and prior instance matches. Failed record removal
+disables recovery for the fresh launch. Malformed,
+oversized, public, symlinked, foreign-session, unsupported-schema, or incomplete state disables automatic
 recovery for that launch. Failure to read the current executable identity or
 prepare the private record directory also disables only automatic recovery on
 an ordinary healthy launch. A replacement launch treats either failure as an
@@ -175,6 +186,16 @@ purposes while its timestamp remains in the rolling circuit. Each SessionId has
 its own record and may start at most two automatic recoveries in a rolling ten
 minutes. A third incident fails closed, while timestamps older than the window
 expire before the next decision.
+
+Recovery admission emits one typed, content-free outcome with an optional
+retired phase and executable-change flag. The input reader records only its
+current stage and last completed stage with monotonic timestamps in one small
+in-memory snapshot. The supervisor reads that snapshot without waiting and logs
+only confirmed stalls or supervisor-gap lease resets, with elapsed stage,
+completion, lease, and observer gaps. A contended or poisoned snapshot reports
+unknown stage evidence; a lease reset never invents reader completion. These
+fields do not log input, terminal bytes, identities, or paths, and do not change
+watchdog thresholds, health proof, delivery, or worker teardown policy.
 
 Only non-modal Board, Compose, and Edit owners can produce a checkpoint. The
 checkpoint contains logical cursor and selection positions, editor wrap affinity
