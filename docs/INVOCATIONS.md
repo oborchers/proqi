@@ -88,18 +88,30 @@ recognized adjacent target, all documented forms remain available as a
 scratchpad authoring fallback. Submission remains exact plain text rather than
 a runtime validation or execution boundary.
 
-The checked-in shared-command table supplies `/plan` and `/goal`, both
-documented by Codex and Claude Code. Each appears as a shared Command result only
-at byte zero of a thought when a verified adjacent target for either harness
-exists. Their compact label is `Shared Command`; target detection controls
-availability separately. Leading whitespace, later lines, partial names such as
-`/planner`, and in-body starter prose do not match or highlight.
+The checked-in shared-command table supplies these 19 tokens documented by
+Codex and Claude Code: `/btw`, `/clear`, `/compact`, `/diff`, `/fast`, `/goal`,
+`/hooks`, `/mcp`, `/model`, `/new`, `/permissions`, `/plan`, `/rename`,
+`/resume`, `/review`, `/skills`, `/status`, `/theme`, and `/usage`. Each appears
+as a shared Command result only at byte zero of a thought when a verified
+adjacent target for either harness exists. Their compact label is
+`Shared Command`; target detection controls availability separately. Leading
+whitespace, later lines, extended names such as `/planner`, and in-body command
+prose do not offer or highlight a built-in. A valid byte-zero prefix may open
+completion, while highlighting requires a complete token boundary.
 
-For a multi-thought submission to either supported harness, Proqi preserves a
-complete `/plan` or `/goal` starter on the first thought and omits either shared
-starter from later thoughts in the outbound prompt. It removes the token and one
-following whitespace separator only. Source thoughts remain byte-for-byte
-unchanged.
+A compatible discovered form with the same token inherits the established
+document-start-only collision rule. The shared row deduplicates it when a
+Codex or Claude Code target makes the built-in available. With no such target,
+the compatible discovered form can still appear at byte zero under ordinary
+target fallback behavior.
+
+For a multi-thought submission to either supported harness, every descriptor
+has an explicit outbound normalization policy. Proqi preserves a complete
+`/plan` or `/goal` starter on the first thought and omits either starter from
+later thoughts in the outbound prompt. It removes the token and one following
+whitespace separator only. Every other shared command and its arguments remain
+byte-for-byte exact in first and later thoughts. Source thoughts remain
+byte-for-byte unchanged.
 
 Exact compatible invocation tokens are detected with bounded, sigil-aware
 ranges outside fenced code and receive the same annotation color plus bold cue
@@ -142,8 +154,8 @@ usable entries. The picker keeps every semantic match, bounds only its visible
 viewport, and explicitly asks for refinement when more than twenty matches
 exist or discovery is incomplete.
 
-The byte-zero rule applies only to the shared `/plan` and `/goal` starters.
-Discovered compatible slash forms, including project and local skills or
+The byte-zero rule applies only to the checked-in shared commands. Other
+discovered compatible slash forms, including project and local skills or
 commands, highlight at exact token boundaries after whitespace and on later
 logical lines. Partial names, embedded paths, URLs, fenced code, unsupported
 target forms, and non-boundary occurrences remain plain.
@@ -186,9 +198,9 @@ or otherwise mutates the target.
 - [Visual Studio Code's fuzzy scorer](https://github.com/microsoft/vscode/blob/main/src/vs/base/common/fuzzyScorer.ts)
   provides an MIT-licensed command-palette reference for noncontiguous matching
   and stable secondary comparison. No source code was copied.
-- [Claude Code skills and slash commands](https://code.claude.com/docs/en/slash-commands), [subagents](https://code.claude.com/docs/en/sub-agents), and [plugin manifests](https://code.claude.com/docs/en/plugins-reference) are vendor documentation.
+- [Claude Code built-in commands](https://code.claude.com/docs/en/commands), [subagents](https://code.claude.com/docs/en/sub-agents), and [plugin manifests](https://code.claude.com/docs/en/plugins-reference) are vendor documentation.
 - [OpenAI Codex skills](https://developers.openai.com/codex/skills/) and [subagents](https://developers.openai.com/codex/subagents/) are vendor documentation.
-- [OpenAI Codex developer commands](https://learn.chatgpt.com/docs/developer-commands?surface=cli) documents `/plan`, `/goal`, and their CLI availability.
+- [OpenAI Codex developer commands](https://learn.chatgpt.com/docs/developer-commands?surface=cli) documents the shared built-in token inventory and its configuration-dependent availability.
 - [OpenCode commands](https://opencode.ai/docs/commands/) and [agents](https://opencode.ai/v2/docs/agents/) are vendor documentation.
 - [Agent Skills specification](https://agentskills.io/specification) defines bounded `SKILL.md` metadata.
 - [Vercel Labs `skills`](https://github.com/vercel-labs/skills) informed the compatibility-root table and is MIT licensed. No source code was copied.

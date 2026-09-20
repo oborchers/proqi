@@ -79,6 +79,7 @@ surface.
 | Contextual Help | Shipped | Shows effective configured bindings for the active owner. | [Discovery](../guides/discovery-and-invocations.md#use-contextual-help) |
 | Thought search | Shipped | Search prompt bodies without changing Board content. | [Capture and edit](../guides/capture-and-edit.md#search-without-changing-the-board) |
 | Fuzzy invocation lookup | Shipped | Discover `$`, `/`, and supported `@` namespaces with deterministic ranking. | [Discovery](../guides/discovery-and-invocations.md#complete-a-local-invocation) |
+| Shared Codex and Claude built-ins | Conditional on a verified adjacent target | Insert the checked-in 19-token catalog at byte zero; the receiving harness controls behavior and availability. | [Discovery](../guides/discovery-and-invocations.md#complete-a-local-invocation) |
 | Invocation refresh | Shipped | Rescan supported local roots after definitions or packages change. | [Discovery](../guides/discovery-and-invocations.md#refresh-discoveries) |
 | Generic copy workflow | Shipped | Copy exact bodies into any application without requiring Herdr. | [Agent delivery](../guides/agent-delivery.md#choose-copy-or-direct-delivery) |
 | Adjacent agent discovery | Conditional on Herdr | Independently verify eligible coding agents in four directions. | [Agent delivery](../guides/agent-delivery.md#deliver-to-an-adjacent-agent) |

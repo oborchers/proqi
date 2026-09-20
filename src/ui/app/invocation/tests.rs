@@ -269,7 +269,7 @@ pub(super) mod contract {
     }
 
     #[test]
-    fn shared_starter_picker_requires_a_supported_target_and_byte_zero() {
+    fn shared_command_picker_requires_a_supported_target_and_byte_zero() {
         let cwd = tempfile::tempdir().expect("tempdir");
         let (mut supported, mut ids, clock) = app("task", cwd.path());
         supported.complete_agent_discovery(Ok(vec![target(CODEX_AGENT_KIND)]));
@@ -283,10 +283,9 @@ pub(super) mod contract {
         );
         supported.open_invocation_picker();
         let choices = supported.invocation_view().expect("manual picker").1;
-        assert_eq!(choices[0].token, "/goal");
-        assert_eq!(choices[0].qualifier, "Shared Command");
-        assert_eq!(choices[1].token, "/plan");
-        assert_eq!(choices[1].qualifier, "Shared Command");
+        assert_eq!(choices.len(), 19);
+        assert_eq!(choices[0].token, "/btw");
+        assert_eq!(choices[18].token, "/usage");
 
         let (mut unsupported, _, _) = app("/pl", cwd.path());
         unsupported.complete_agent_discovery(Ok(vec![target(OPENCODE_AGENT_KIND)]));

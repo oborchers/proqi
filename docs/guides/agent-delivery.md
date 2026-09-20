@@ -85,6 +85,9 @@ order. Bodies are joined with one blank line.
 - For Codex and Claude Code multi-thought delivery, a complete leading `/plan`
   or `/goal` starter is retained on the first thought and omitted from later
   thought starts. In-body text and stored sources remain unchanged.
+- Other shared built-ins remain exact in first and later thoughts, including
+  any trailing command arguments. Proqi does not infer or execute their
+  harness-specific behavior.
 - Every annotated attachment must pass a fresh local readability check before
   Proqi creates a submission attempt.
 

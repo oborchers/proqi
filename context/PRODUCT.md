@@ -1181,19 +1181,31 @@ complete. A row-bounded provider snapshot retains valid references and reports
 the exact incomplete source. Outside Herdr, the existing invocation behavior
 is unchanged.
 
-A small data-driven built-in table sits beside filesystem results: `/plan` and
-`/goal` are offered as shared Commands only at byte zero when a verified
-adjacent Codex or Claude Code target exists. Exact discovered invocations and
-these shared starters use the annotation color and bold non-color cue already
-used for folded image and large-paste placeholders. For shared starters, leading
-whitespace, another line, partial tokens, and in-body starter prose remain
-ordinary text.
+A small data-driven built-in table sits beside filesystem results. It contains
+the 19 commands documented by both Codex and Claude Code: `/btw`, `/clear`,
+`/compact`, `/diff`, `/fast`, `/goal`, `/hooks`, `/mcp`, `/model`, `/new`,
+`/permissions`, `/plan`, `/rename`, `/resume`, `/review`, `/skills`, `/status`,
+`/theme`, and `/usage`. These shared Commands are offered only at byte zero when
+a verified adjacent Codex or Claude Code target exists. Exact discovered
+invocations and these shared commands use the annotation color and bold
+non-color cue already used for folded image and large-paste placeholders.
+At byte zero, a valid prefix may open completion. Highlighting requires a
+complete token boundary. Leading whitespace, another line, in-body command
+prose, and extended names remain ordinary text and never offer a built-in.
 
-The byte-zero restriction belongs only to those two shared starters. An exact
-compatible discovered slash form may receive the same render-only treatment at
-a token boundary after whitespace or on a later logical line. Partial names,
-embedded paths, URLs, fenced code, unsupported forms, and non-boundary matches
-remain plain. Discovery, picker entries, and canonical text are unchanged.
+The byte-zero restriction belongs only to the checked-in shared commands. A
+non-colliding exact compatible discovered slash form may receive the same
+render-only treatment at a token boundary after whitespace or on a later
+logical line.
+Partial names, embedded paths, URLs, fenced code, unsupported forms, and
+non-boundary matches remain plain. Discovery, picker entries, and canonical text
+are unchanged. Only `/plan` and `/goal` retain the special outbound policy that
+omits a complete starter from later thoughts in a multi-thought submission. All
+other shared commands and their arguments remain exact in every source position.
+A compatible discovered form with the same token inherits the established
+document-start-only collision rule. When the shared built-in is available, its
+row deduplicates the discovered row. Otherwise the compatible discovered form
+remains available at byte zero under its ordinary target fallback.
 
 Durable shortcut emphasis is a separate closed presentation kind for exact
 application-authored instructional ranges. It uses the global annotation role
