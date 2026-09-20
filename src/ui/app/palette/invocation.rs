@@ -91,6 +91,7 @@ impl From<bool> for MutationReadiness {
 struct FeatureContext {
     submit_supported: bool,
     installed_highlights: bool,
+    footer_visibility: bool,
 }
 
 struct AttachmentContext {
@@ -151,6 +152,10 @@ impl CommandContext {
             A::InstalledHighlights => Self::when(
                 self.features.installed_highlights,
                 "Unavailable for this Proqi installation",
+            ),
+            A::FooterVisibility => Self::when(
+                self.features.footer_visibility,
+                "Available from Board and editors",
             ),
         }
     }

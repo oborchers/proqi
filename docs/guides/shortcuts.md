@@ -1,6 +1,6 @@
 # Configure and troubleshoot shortcuts
 
-> Applies to Proqi 0.11.0.
+> Applies to Proqi 0.11.0 plus next-release main.
 
 Proqi receives logical key events only after macOS or Linux, a keyboard
 remapper, the terminal host, and any terminal multiplexer have handled them.
@@ -22,6 +22,7 @@ The most important effective factory differences are:
 | Deliver and keep | `Ctrl+Shift+Enter`; retained `Primary+Shift+Enter`; Board `Shift+S` | `Primary+Shift+Enter`; Board `Shift+S` |
 | Reorder | `Option+Shift` plus vertical direction; retained Primary forms | `Primary+Shift` plus vertical direction |
 | Paste and clean up | `Primary+Shift+V`; Board `Shift+P` | `Primary+Shift+V`; Board `Shift+P` |
+| Toggle optional footer chrome | `Control+Shift+H` | `Control+Shift+H` |
 
 Help and footer labels prefer terminal-safe macOS Control aliases where
 appropriate. The complete factory map remains in the
@@ -43,6 +44,7 @@ schema_version = 1
 ]
 "submission.submit_keep" = []
 "thought.delete" = [{ key = "Delete" }, { key = "d" }]
+"footer.toggle" = [{ key = "F5" }]
 
 [keymap.macos.edit]
 "submission.submit_remove" = [{ key = "Enter", modifiers = ["Super", "Alt"] }]

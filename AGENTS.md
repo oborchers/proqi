@@ -26,6 +26,8 @@ independently edit instruction content in `CLAUDE.md`.
   current-contract fixtures and the prepared GitHub Release notes.
 - Every visible TUI change updates the representative Insta snapshots in the
   same commit. Pending `.snap.new` files fail the canonical quality gate.
+- Every feature assesses whether canonical user documentation needs an update
+  and updates it in the same change when it does.
 
 ## Architecture
 

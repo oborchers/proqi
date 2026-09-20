@@ -118,8 +118,14 @@ impl BoardApp {
         let has_recovery_controls = matches!(self.state.durability, DurabilityState::Failed { .. });
         let has_status = self.status_view().is_some()
             || has_recovery_controls
-            || (self.settings.footer_hidden && self.durability_footer_status().is_some())
-            || (self.settings.footer_hidden && self.screenshot_footer_state(false).is_some());
+            || (matches!(
+                self.footer_chrome_visibility,
+                crate::ui::layout::FooterChromeVisibility::Hidden
+            ) && self.durability_footer_status().is_some())
+            || (matches!(
+                self.footer_chrome_visibility,
+                crate::ui::layout::FooterChromeVisibility::Hidden
+            ) && self.screenshot_footer_state(false).is_some());
         crate::ui::layout::FooterChrome {
             has_agents: !self.agent_targets.is_empty(),
             has_required_actions: self.thought_name_editing() && !has_recovery_controls,
@@ -130,11 +136,7 @@ impl BoardApp {
             } else {
                 crate::ui::layout::FooterChromeStatus::None
             },
-            visibility: if self.settings.footer_hidden {
-                crate::ui::layout::FooterChromeVisibility::Hidden
-            } else {
-                crate::ui::layout::FooterChromeVisibility::Visible
-            },
+            visibility: self.footer_chrome_visibility,
         }
     }
 

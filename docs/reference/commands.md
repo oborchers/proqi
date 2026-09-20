@@ -1,6 +1,6 @@
 # Commands palette reference
 
-<span class="version-scope">59 actions in Proqi 0.11.0</span>
+<span class="version-scope">60 actions in Proqi 0.11.0 plus next-release main</span>
 
 Press `:` in Board mode to open Commands. Search, use the arrow keys or pointer
 to choose a result, then press `Enter` or click. The same canonical
@@ -98,6 +98,7 @@ available actions below.
 | **Refresh invocations** | Rescans supported local invocation roots. | Does not change thought content. |
 | **Check for updates** | Queries the verified stable installation channel. | Explicit checks work even when startup checks are disabled. |
 | **What's new** | Opens installed release highlights. | Describes the installed product. |
+| **Toggle footer visibility** | Temporarily shows or hides optional footer chrome. | Board, Compose, and Edit only; restart restores `footer_hidden`. |
 | **Retry failed save** | Retries pending persistence after a storage failure. | Recovery-critical action. |
 | **Export recovery file** | Writes optimistic in-memory state to a new private file. | Never overwrites an existing file. |
 | **Undo** | Moves the active history owner backward. | Availability and label are contextual. |

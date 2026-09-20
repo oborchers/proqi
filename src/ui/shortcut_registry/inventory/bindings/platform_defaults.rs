@@ -48,6 +48,12 @@ pub(super) fn binding(
     modifiers: LogicalModifiers,
     macos: bool,
 ) -> Option<(Action, ShortcutBindingPresentation)> {
+    if matches!(context, Context::Board | Context::Compose | Context::Edit)
+        && matches!(key, LogicalKey::Character('h' | 'H'))
+        && modifiers == CONTROL_SHIFT
+    {
+        return Some((Action::ToggleFooter, ShortcutBindingPresentation::Explicit));
+    }
     if matches!(context, Context::Board | Context::Edit)
         && key == LogicalKey::Character('r')
         && modifiers == LogicalModifiers::CONTROL

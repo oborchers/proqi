@@ -61,6 +61,7 @@ const fn command_applicability(action: Action) -> CommandApplicability {
         | Action::Indent
         | Action::Outdent => CommandApplicability::Editor,
         Action::RetryScreenshotCapture => CommandApplicability::ScreenshotRetry,
+        Action::ToggleFooter => CommandApplicability::FooterVisibility,
         Action::SplitThought => CommandApplicability::Split,
         Action::ExtractSelection => CommandApplicability::Extract,
         Action::MergeThoughts => CommandApplicability::Merge,
@@ -105,6 +106,7 @@ const fn command_relevance(action: Action) -> CommandRelevance {
         Action::PasteExact => CommandRelevance::Always(40),
         Action::PasteReflow => CommandRelevance::Always(45),
         Action::Help => CommandRelevance::Always(80),
+        Action::ToggleFooter => CommandRelevance::Always(85),
         Action::Quit => CommandRelevance::Always(90),
         _ => CommandRelevance::Never,
     }
@@ -158,6 +160,7 @@ const fn command_category(action: Action) -> CommandCategory {
         }
         Action::CheckUpdates
         | Action::WhatsNew
+        | Action::ToggleFooter
         | Action::RetryStorage
         | Action::ExportRecovery
         | Action::Undo
@@ -178,7 +181,8 @@ const fn command_scope(action: Action) -> CommandScope {
         | Action::SubmitKeep
         | Action::SubmitToAgent
         | Action::ReflowThought
-        | Action::RenameThought => CommandScope::Contextual,
+        | Action::RenameThought
+        | Action::ToggleFooter => CommandScope::Contextual,
         Action::Undo | Action::Redo => CommandScope::Commands,
         Action::PlainNewline
         | Action::DeleteLogicalLine

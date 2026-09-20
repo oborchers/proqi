@@ -59,11 +59,27 @@ impl BoardApp {
                 vec![Effect::Update(crate::application::UpdateIntent::CheckNow)]
             }
             RuntimeCommand::WhatsNew => self.open_installed_release_highlights(),
+            RuntimeCommand::ToggleFooter => self.toggle_footer_chrome_visibility(),
             RuntimeCommand::ScreenshotInbox => self.toggle_screenshot_inbox(ids, clock),
             RuntimeCommand::RetryScreenshotCapture => self.retry_screenshot_capture(ids, clock),
             RuntimeCommand::RetryStorage => self.retry_persistence(),
             RuntimeCommand::ExportRecovery => self.export_recovery(ids, clock),
         }
+    }
+
+    fn toggle_footer_chrome_visibility(&mut self) -> Vec<Effect> {
+        self.footer_chrome_visibility = match self.footer_chrome_visibility {
+            crate::ui::layout::FooterChromeVisibility::Visible => {
+                crate::ui::layout::FooterChromeVisibility::Hidden
+            }
+            crate::ui::layout::FooterChromeVisibility::Hidden => {
+                crate::ui::layout::FooterChromeVisibility::Visible
+            }
+        };
+        self.layout = None;
+        self.frame_presentation = None;
+        self.hovered = None;
+        Vec::new()
     }
 
     pub(super) fn execute_entry_command(

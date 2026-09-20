@@ -205,8 +205,11 @@ before any two regions can collide.
 `footer_hidden = true` is a launch-time global configuration that removes the
 optional persistent footer chrome and every optional gap so thoughts receive the
 reclaimed rows. It hides the session identity, board summary, shortcut and
-agent hints, and the ordinary session-browser shortcut footer. It never hides
-transient operational status, Screenshot Inbox listening or pause state,
+agent hints, and the ordinary session-browser shortcut footer. `footer.toggle`
+(`Control+Shift+H` by default) temporarily reverses that visibility in Board,
+Compose, and Edit for the current Proqi process. It never changes configuration
+or persistence, and restart restores the configured initial state. It never
+hides transient operational status, Screenshot Inbox listening or pause state,
 durability failure explanation, retry or export recovery controls, or a
 browser rename confirmation. Keyboard actions and Commands remain available.
 

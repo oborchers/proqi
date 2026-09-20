@@ -229,6 +229,50 @@ fn every_eligible_action_context_pair_is_configurable_and_resolves_its_identity(
 }
 
 #[test]
+fn footer_toggle_has_a_remappable_board_and_editor_default_without_modal_claims() {
+    for context in [Context::Board, Context::Compose, Context::Edit] {
+        let registry = parse(
+            "schema_version=1\n[bindings.board]\n\"footer.toggle\"=[{key='F35'}]\n[bindings.compose]\n\"footer.toggle\"=[{key='F35'}]\n[bindings.edit]\n\"footer.toggle\"=[{key='F35'}]",
+        )
+        .expect("valid footer-toggle bindings");
+        assert_eq!(
+            action(
+                &registry,
+                context,
+                LogicalKey::Function(35),
+                LogicalModifiers::NONE,
+            ),
+            Some(Action::ToggleFooter),
+        );
+    }
+    let defaults = ShortcutRegistry::resolve(&KeyBindings::default(), ShortcutPlatform::Portable)
+        .expect("valid default registry");
+    let control_shift = LogicalModifiers::CONTROL.union(LogicalModifiers::SHIFT);
+    for context in [Context::Board, Context::Compose, Context::Edit] {
+        for character in ['h', 'H'] {
+            assert_eq!(
+                action(
+                    &defaults,
+                    context,
+                    LogicalKey::Character(character),
+                    control_shift
+                ),
+                Some(Action::ToggleFooter),
+            );
+        }
+    }
+    assert_eq!(
+        action(
+            &defaults,
+            Context::Recovery,
+            LogicalKey::Character('h'),
+            control_shift
+        ),
+        None,
+    );
+}
+
+#[test]
 fn altgr_option_and_shifted_text_cannot_be_stolen_from_any_text_owner() {
     for context in super::super::inventory::bindings::vocabulary::KEYBOARD_CONTEXTS
         .iter()

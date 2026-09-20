@@ -1,6 +1,6 @@
 # Configure appearance and behavior
 
-<span class="version-scope">Proqi 0.11.0</span>
+<span class="version-scope">Proqi 0.11.0 plus next-release main</span>
 
 Proqi works without configuration. Optional settings live in the
 platform-native Proqi configuration directory as `config.toml`. Invalid
@@ -22,6 +22,7 @@ keyboard_enhancement = "auto"
 mouse_capture = true
 density = "comfortable"
 theme = "auto"
+footer_hidden = false
 ```
 
 | Setting | Shipped values and effect |
@@ -35,9 +36,29 @@ theme = "auto"
 | `mouse_capture` | Requests xterm SGR mouse reporting. Disable if the terminal or multiplexer mishandles it. |
 | `density` | `comfortable` or `compact`; shallow boards automatically use compact spacing. |
 | `theme` | `auto`, `light`, `dark`, `limited`, or a bounded local theme file. |
+| `footer_hidden` | Starts with optional persistent footer chrome hidden while preserving operational status and recovery controls. |
 
 `list_indent_width` accepts 1 through 8 spaces. `merge_separator` must contain
 1 through 1,024 UTF-8 bytes and is inserted without normalization.
+
+## Hide optional footer chrome
+
+<span class="version-scope">Next release</span>
+
+Set `footer_hidden = true` to start with the session identity, Board summary,
+shortcut and agent hints, and other optional persistent footer decoration hidden.
+The hidden footer reclaims every optional row and gap. Screenshot Inbox
+listening or pause state, operational warnings and errors, durability pending
+or failure truth, and required Retry, Export, recovery, and confirmation
+controls remain visible.
+
+In Board, Compose, and Edit, `Control+Shift+H` runs the remappable
+`footer.toggle` action to reverse this for the current Proqi process. It does
+not write configuration or change durable state; restart returns to the
+configured initial state. The Session Browser uses only the startup setting.
+
+Because startup configuration rejects unknown fields, remove `footer_hidden`
+before using an older Proqi release that does not recognize it.
 
 ## Theme safely
 

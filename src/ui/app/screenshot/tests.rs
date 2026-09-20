@@ -7,7 +7,8 @@ use crate::{
         screenshot::ScreenshotActivityPolicy,
     },
     ui::{
-        BoardApp, KeyStroke, LogicalKey, LogicalModifiers, Theme, ThemePreference, UiInput, render,
+        BoardApp, KeyStroke, LogicalKey, LogicalModifiers, Theme, ThemePreference, UiInput,
+        UiSettings, render,
     },
 };
 use ratatui_core::{backend::TestBackend, terminal::Terminal};
@@ -133,8 +134,7 @@ fn listening_indicator_is_present_without_permanent_status_chrome() {
 
 #[test]
 fn hidden_optional_footer_keeps_screenshot_listening_visible_without_a_gap() {
-    let (mut app, _) = app_with_thought();
-    app.settings.footer_hidden = true;
+    let (mut app, _) = app_with_hidden_footer_thought();
     app.screenshot_started(Duration::ZERO);
     app.set_success("copied thought");
     let layout = app.prepare_frame(ratatui_core::layout::Rect::new(0, 0, 72, 10));
@@ -148,8 +148,7 @@ fn hidden_optional_footer_keeps_screenshot_listening_visible_without_a_gap() {
 
 #[test]
 fn hidden_optional_footer_keeps_pending_and_recovery_screenshot_states_visible() {
-    let (mut app, _) = app_with_thought();
-    app.settings.footer_hidden = true;
+    let (mut app, _) = app_with_hidden_footer_thought();
     app.state.durability = DurabilityState::Pending {
         durable: OperationSequence::ZERO,
         latest: OperationSequence::new(1),
@@ -191,8 +190,7 @@ fn hidden_optional_footer_keeps_pending_and_recovery_screenshot_states_visible()
     let paused_tiny = render_snapshot(&mut app, 12, 10);
     assert!(paused_tiny.contains("paused"), "{paused_tiny}");
 
-    let (mut warning, _) = app_with_thought();
-    warning.settings.footer_hidden = true;
+    let (mut warning, _) = app_with_hidden_footer_thought();
     warning.screenshot_started(Duration::ZERO);
     warning.set_error("capture warning");
     let warned = render_snapshot(&mut warning, 18, 10);
@@ -317,6 +315,17 @@ fn releasing_snapshot(width: u16, height: u16) -> String {
 }
 
 fn app_with_thought() -> (BoardApp, FakeIdGenerator) {
+    app_with_settings(UiSettings::default())
+}
+
+fn app_with_hidden_footer_thought() -> (BoardApp, FakeIdGenerator) {
+    app_with_settings(UiSettings {
+        footer_hidden: true,
+        ..UiSettings::default()
+    })
+}
+
+fn app_with_settings(settings: UiSettings) -> (BoardApp, FakeIdGenerator) {
     let mut ids = FakeIdGenerator::new(1_725_260_000_000);
     let session = Session::new(
         ids.session_id(),
@@ -332,7 +341,10 @@ fn app_with_thought() -> (BoardApp, FakeIdGenerator) {
         Timestamp::from_millis(1),
     );
     let board = SessionBoard::new(session, vec![thought]).expect("board");
-    (BoardApp::new(AppState::new(board), RopeEditorFactory), ids)
+    (
+        BoardApp::with_settings(AppState::new(board), settings, RopeEditorFactory),
+        ids,
+    )
 }
 
 fn render_snapshot(app: &mut BoardApp, width: u16, height: u16) -> String {

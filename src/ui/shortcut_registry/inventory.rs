@@ -88,6 +88,7 @@ pub(super) const DIRECT_ACTIONS: &[Action] = &[
     Action::OpenSearch,
     Action::OpenCommands,
     Action::Help,
+    Action::ToggleFooter,
     Action::ScreenshotInbox,
     Action::RenameSession,
     Action::BrowserTrash,
@@ -169,7 +170,9 @@ fn descriptor(
     contexts.extend(metadata::help_contexts(&help));
     if let Some(metadata) = command {
         contexts.insert(Context::Commands);
-        if matches!(
+        if action == Action::ToggleFooter {
+            contexts.extend([Context::Board, Context::Compose, Context::Edit]);
+        } else if matches!(
             metadata.applicability,
             CommandApplicability::BoardItem | CommandApplicability::BoardThought
         ) {

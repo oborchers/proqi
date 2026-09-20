@@ -45,6 +45,7 @@ impl ShortcutActionId {
             RefreshInvocations => "RefreshInvocations",
             CheckUpdates => "CheckUpdates",
             WhatsNew => "WhatsNew",
+            ToggleFooter => "ToggleFooter",
             ScreenshotInbox => "ScreenshotInbox",
             RetryScreenshotCapture => "RetryScreenshotCapture",
             RetryStorage => "RetryStorage",

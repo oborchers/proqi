@@ -229,6 +229,12 @@ pub(super) enum FooterChromeVisibility {
     Hidden,
 }
 
+impl FooterChromeVisibility {
+    pub(super) const fn from_hidden(hidden: bool) -> Self {
+        if hidden { Self::Hidden } else { Self::Visible }
+    }
+}
+
 impl LayoutSnapshot {
     /// Store the rendered footer summary and register its visible session-name target.
     pub fn configure_footer_summary(

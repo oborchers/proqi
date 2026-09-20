@@ -537,8 +537,11 @@ schema_version = 1
 "submission.submit_remove" = [{ key = "F5" }]
 ```
 
-`footer_hidden` is read at startup. Because configuration rejects unknown fields,
-remove this line before running an older Proqi release.
+`footer_hidden` sets the startup state. In Board, Compose, and Edit,
+`Control+Shift+H` (the remappable `footer.toggle` action) changes visibility
+only for the current Proqi process; restart restores the configured state.
+Because configuration rejects unknown fields, remove `footer_hidden` before
+running an older Proqi release.
 
 Each supplied context/action list replaces all its default aliases. Omitted
 pairs retain defaults; platform overrides replace common lists. Control, Alt,

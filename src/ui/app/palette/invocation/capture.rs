@@ -69,6 +69,12 @@ impl BoardApp {
             features: FeatureContext {
                 submit_supported: self.supports_submission(),
                 installed_highlights: self.installed_highlights.is_some(),
+                footer_visibility: !self.insertion_focused()
+                    && !matches!(
+                        self.state.durability,
+                        crate::application::DurabilityState::Failed { .. }
+                    )
+                    && self.invocation_popup.is_none(),
             },
             recovery: self.capture_recovery_command_context(),
             attachments: AttachmentContext {
