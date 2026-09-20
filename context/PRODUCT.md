@@ -114,7 +114,12 @@ Update diagnostics add only reviewed schema stages, aggregate selected and
 prepared counts, restart request and acceptance counts, replacement ready and
 missing counts, stable failure stage and code pairs, and final convergence.
 Input recovery diagnostics add only a stable lifecycle stage, stable reason,
-per-session attempt count, and outcome. They do not record session identity,
+per-session attempt count, and outcome. Admission records distinguish fresh
+startup, retirement of an obsolete record, disabled recovery, and automatic
+probation. Reader-stall and supervisor-gap events add the observed poll, read,
+or delivery stage, last completed stage, and elapsed stage, completion, lease,
+and observer gaps. These observations do not identify an upstream cause.
+They do not record session identity,
 process identity, paths, terminal bytes, pane topology, or thought content.
 
 ## Core concepts
@@ -1362,6 +1367,16 @@ content-free, bounded, private to the current user, and scoped to the exact
 session, PID, executable identity, and replacement lineage. It is runtime
 coordination state, not durable user history, and makes no storage schema or
 protocol change.
+
+A fresh startup that has passed installation and schema admission and acquired
+the exclusive exact-session lease retires that session's valid abandoned
+recovery record, including one from an older executable. It starts a new
+recovery lineage without restoring the abandoned checkpoint. This also applies
+to an admitted update replacement, which is distinct from an input-recovery
+replacement. Automatic input recovery still requires the exact original
+executable and complete replacement proof and retains its probation and rolling
+attempt budget. Unsupported, malformed, foreign, public, or symlinked records
+remain untrusted. Failed retirement disables automatic recovery for that launch.
 
 This bounded continuity fallback complements the upstream input-worker work in
 issue 52. It does not replace the detached Crossterm reader, recover a revoked

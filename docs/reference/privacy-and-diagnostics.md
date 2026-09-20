@@ -55,6 +55,10 @@ Update lifecycle diagnostics contain closed stages, aggregate counts, stable
 failure codes, and convergence outcomes. Input-recovery diagnostics contain a
 stable stage, reason, attempt count, and outcome. They omit thought content,
 session identity, local paths, pane identity, and raw terminal bytes.
+Admission events also distinguish record retirement from automatic recovery
+proof. Stall and supervisor-gap events contain only the observed reader stage,
+last completed stage, and elapsed timing gaps. They help locate where progress
+stopped without claiming why the terminal reader stalled.
 
 ## Inspect one key safely
 
