@@ -128,7 +128,7 @@ fn more_commands_expands_in_place_by_keyboard_and_mouse() {
     expand_by_keyboard(&mut keyboard);
     let (query, expanded, selected) = keyboard.app.palette_view().expect("expanded Commands");
     assert!(query.is_empty());
-    assert_eq!(expanded.len(), 60);
+    assert_eq!(expanded.len(), 59);
     assert_eq!(selected, 0);
 
     let mut mouse = Fixture::new();
@@ -144,7 +144,7 @@ fn more_commands_expands_in_place_by_keyboard_and_mouse() {
     mouse.pointer(area.x, area.y, PointerKind::Down(PointerButton::Left));
     assert_eq!(
         mouse.app.palette_view().expect("expanded Commands").1.len(),
-        60
+        59
     );
 }
 
@@ -190,7 +190,7 @@ fn search_uses_complete_inventory_before_expansion_and_clear_restores_prior_view
             .expect("restored expanded")
             .1
             .len(),
-        60
+        59
     );
 }
 

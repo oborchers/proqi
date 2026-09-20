@@ -1,4 +1,4 @@
-//! Optional footer visibility owns Board, Compose, and Edit projection coverage.
+//! Optional footer visibility owns global startup state and a Board-only runtime toggle.
 
 use proqi::ui::{LogicalKey, LogicalModifiers, ThemePreference, UiInput, UiKey, UiSettings};
 use ratatui_core::layout::Rect;
@@ -6,10 +6,7 @@ use ratatui_core::layout::Rect;
 use super::{Fixture, snapshot};
 
 fn toggle_footer() -> UiInput {
-    UiInput::KeyStroke(
-        proqi::ui::KeyStroke::press(LogicalKey::Character('h'))
-            .with_modifiers(LogicalModifiers::CONTROL.union(LogicalModifiers::SHIFT)),
-    )
+    UiInput::KeyStroke(proqi::ui::KeyStroke::press(LogicalKey::Character('h')))
 }
 
 #[test]
@@ -49,6 +46,23 @@ fn runtime_toggle_reclaims_geometry_without_stale_hits_and_restarts_from_configu
     let stale_control = visible.controls.first().expect("ordinary footer control").1;
     assert!(visible.footer.height > 0);
 
+    for (key, modifiers) in [
+        (LogicalKey::Character('H'), LogicalModifiers::SHIFT),
+        (LogicalKey::Character('h'), LogicalModifiers::CONTROL),
+        (LogicalKey::Character('h'), LogicalModifiers::ALT),
+        (LogicalKey::Character('h'), LogicalModifiers::SUPER),
+    ] {
+        assert!(
+            fixture
+                .effects(UiInput::KeyStroke(
+                    proqi::ui::KeyStroke::press(key).with_modifiers(modifiers),
+                ))
+                .is_empty(),
+            "only the unmodified lowercase physical H key toggles the footer",
+        );
+        assert!(fixture.app.prepare_frame(area).footer.height > 0);
+    }
+
     assert!(fixture.effects(toggle_footer()).is_empty());
     let hidden = fixture.app.prepare_frame(area);
     assert_eq!(hidden.board, area);
@@ -59,17 +73,21 @@ fn runtime_toggle_reclaims_geometry_without_stale_hits_and_restarts_from_configu
     fixture.input(UiInput::KeyStroke(proqi::ui::KeyStroke::press(
         LogicalKey::Character('n'),
     )));
-    assert!(fixture.effects(toggle_footer()).is_empty());
     let compose = fixture.app.prepare_frame(area);
-    assert!(compose.footer.height > 0);
+    // Starting a compose session is pending durability, so only its required
+    // saving status remains while all optional chrome stays hidden.
+    assert_eq!(compose.footer.height, 1);
 
     fixture.paste("runtime footer owner");
     fixture.acknowledge_all_persistence();
     fixture.input(crate::key_input(UiKey::Escape));
     fixture.input(crate::key_input(UiKey::Enter));
-    assert!(fixture.effects(toggle_footer()).is_empty());
     let edit = fixture.app.prepare_frame(area);
     assert_eq!(edit.footer.height, 0);
+
+    fixture.input(crate::key_input(UiKey::Escape));
+    assert!(fixture.effects(toggle_footer()).is_empty());
+    assert!(fixture.app.prepare_frame(area).footer.height > 0);
 
     let restart = Fixture::new().app.prepare_frame(area);
     assert!(restart.footer.height > 0);
@@ -102,52 +120,51 @@ fn runtime_toggle_reclaims_geometry_without_stale_hits_and_restarts_from_configu
 }
 
 #[test]
-fn commands_discovers_and_executes_the_same_footer_toggle_action() {
+fn board_insertion_boundary_toggles_without_creating_a_commands_route() {
     let area = Rect::new(0, 0, 42, 12);
     let mut fixture = Fixture::new();
-    let seed = fixture.paste("commands footer toggle");
-    fixture.app.acknowledge_persistence(seed, true);
     fixture.input(crate::key_input(UiKey::Escape));
+    assert!(fixture.app.insertion_focused());
     assert!(fixture.app.prepare_frame(area).footer.height > 0);
 
-    fixture.input(UiInput::KeyStroke(proqi::ui::KeyStroke::press(
-        LogicalKey::Character(':'),
-    )));
-    fixture.input(UiInput::Paste("toggle footer visibility".to_owned()));
-    let (_, entries, selected) = fixture.app.palette_view().expect("Commands overlay");
-    assert_eq!(
-        entries.get(selected).map(String::as_str),
-        Some("Toggle footer visibility")
-    );
+    assert!(fixture.effects(toggle_footer()).is_empty());
+    assert_eq!(fixture.app.prepare_frame(area).footer.height, 0);
 
-    fixture.input(crate::key_input(UiKey::Enter));
-    let hidden = fixture.app.prepare_frame(area);
-    assert_eq!(hidden.footer.height, 0);
-    assert!(hidden.controls.is_empty());
+    fixture.input(crate::key_input(UiKey::Character(':')));
+    fixture.input(UiInput::Paste("toggle footer visibility".to_owned()));
+    let (_, entries, _) = fixture.app.palette_view().expect("Commands overlay");
+    assert_eq!(entries, ["No matching commands"]);
 }
 
 #[test]
-fn pending_editor_text_does_not_save_or_block_the_footer_toggle() {
+fn compose_and_edit_h_remains_literal_and_never_toggles_footer_chrome() {
     let area = Rect::new(0, 0, 42, 12);
     let mut fixture = Fixture::new();
-    let seed = fixture.paste("presentation-only footer toggle");
+    let seed = fixture.paste("footer text ownership");
     fixture.app.acknowledge_persistence(seed, true);
     fixture.input(crate::key_input(UiKey::Escape));
-    fixture.input(crate::key_input(UiKey::Enter));
-    fixture.input(crate::key_input(UiKey::Character('!')));
+    fixture.input(toggle_footer());
+    assert_eq!(fixture.app.prepare_frame(area).footer.height, 0);
 
-    assert!(fixture.effects(toggle_footer()).is_empty());
+    fixture.input(crate::key_input(UiKey::Character('n')));
+    fixture.input(toggle_footer());
+    assert_eq!(fixture.app.prepare_frame(area).footer.height, 1);
     assert_eq!(
         fixture
             .app
             .editor_snapshot()
-            .expect("editor stays open")
+            .expect("compose editor")
             .content,
-        "presentation-only footer toggle!"
+        "h"
+    );
+    fixture.input(crate::key_input(UiKey::Escape));
+    fixture.input(crate::key_input(UiKey::Enter));
+    fixture.input(toggle_footer());
+    assert_eq!(
+        fixture.app.editor_snapshot().expect("edit editor").content,
+        "hh"
     );
     let layout = fixture.app.prepare_frame(area);
-    // Local editor dirtiness remains visible as the mandatory one-line saving
-    // state, while every optional footer row has been reclaimed.
     assert_eq!(layout.footer.height, 1);
     assert!(layout.controls.is_empty());
 }

@@ -81,7 +81,7 @@ Every semantic action has one stable `ShortcutActionId`. Its descriptor owns:
 - one content-free diagnostics identity;
 - the mapping into an established typed UI intention or application action.
 
-The closed action inventory covers all 60 current Commands actions plus direct
+The closed action inventory covers all 59 current Commands actions plus direct
 close, confirm, text editing, navigation, selection, clipboard, history,
 submission, Board, Browser management, recovery, and direction actions. The
 source of truth is `ShortcutActionId::COMMANDS` plus the registry's
@@ -105,7 +105,7 @@ schema_version = 1
 "submission.submit_keep" = []
 "thought.delete" = [{ key = "Delete" }, { key = "d" }]
 "thought.rename" = [{ key = "r", modifiers = ["Control"] }]
-"footer.toggle" = [{ key = "h", modifiers = ["Control", "Shift"] }]
+"footer.toggle" = [{ key = "h" }]
 
 [keymap.macos.edit]
 "submission.submit_remove" = [{ key = "Enter", modifiers = ["Super", "Alt"] }]

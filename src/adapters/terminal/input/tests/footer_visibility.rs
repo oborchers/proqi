@@ -1,18 +1,16 @@
-//! Footer visibility accepts both terminal reports for Ctrl+Shift+H.
+//! Footer visibility is a plain Board-mode shortcut.
 
 use super::*;
 
 #[test]
-fn footer_toggle_accepts_lowercase_and_uppercase_shifted_control_reports() {
-    for character in ['h', 'H'] {
-        assert_eq!(
-            translate(Event::Key(KeyEvent::new(
-                KeyCode::Char(character),
-                KeyModifiers::CONTROL | KeyModifiers::SHIFT,
-            ))),
-            Some(UiInput::Key(UiKey::Shortcut(
-                crate::ui::ShortcutActionId::ToggleFooter,
-            ))),
-        );
-    }
+fn footer_toggle_accepts_an_unmodified_lowercase_h_report() {
+    assert_eq!(
+        translate(Event::Key(KeyEvent::new(
+            KeyCode::Char('h'),
+            KeyModifiers::NONE,
+        ))),
+        Some(UiInput::Key(UiKey::Shortcut(
+            crate::ui::ShortcutActionId::ToggleFooter,
+        ))),
+    );
 }

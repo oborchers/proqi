@@ -33,11 +33,8 @@ fn missing_config_uses_the_narrow_pane_default() {
     ] {
         assert_binding(&settings, action, key, editor);
     }
-    if cfg!(target_os = "macos") {
-        assert_binding(&settings, Action::ExtendVisualRowStart, 'H', true);
-    } else {
-        assert_binding(&settings, Action::ToggleFooter, 'H', true);
-    }
+    assert_binding(&settings, Action::ExtendVisualRowStart, 'H', true);
+    assert_binding(&settings, Action::ToggleFooter, 'h', false);
     assert!(settings.screenshot.directory.is_none());
     assert!(settings.screenshot.filename_patterns.is_empty());
     assert!(!settings.screenshot.capture_all_new_images);

@@ -112,7 +112,7 @@ surface.
 | Auto, light, dark, limited, and custom themes | Shipped | Semantic colors are validated; focus never relies on color alone. | [Configuration](../guides/configuration.md#theme-safely) |
 | Comfortable and compact density | Shipped | Shallow panes automatically resolve to compact spacing. | [Configuration](../guides/configuration.md#core-settings) |
 | Mouse capture toggle | Shipped | Disable when a terminal or multiplexer mishandles SGR mouse reporting. | [Configuration](../guides/configuration.md#core-settings) |
-| Optional footer chrome visibility | Next release | Start hidden from configuration or temporarily toggle Board, Compose, and Edit for one running process; operational and recovery state stays visible. | [Configuration](../guides/configuration.md#hide-optional-footer-chrome) |
+| Optional footer chrome visibility | Next release | Start hidden from configuration or temporarily toggle Board for one running process; operational and recovery state stays visible. | [Configuration](../guides/configuration.md#hide-optional-footer-chrome) |
 | Versioned keymap with platform overrides | Shipped | Replace exact action/context alias lists with startup validation and safe invariants. | [Shortcut troubleshooting](../guides/shortcuts.md#remap-one-action) |
 | Keypress inspector | Shipped | Observe one content-redacted logical event and its resolved action. | [Shortcut troubleshooting](../guides/shortcuts.md#see-what-proqi-actually-receives) |
 | Explicit update check | Shipped | Query the verified stable channel without installing. | [CLI](cli.md#check-updates) |

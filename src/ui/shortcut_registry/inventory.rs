@@ -132,8 +132,8 @@ pub(super) fn descriptors(keys: &KeyBindings) -> Vec<ShortcutDescriptor> {
         .collect::<BTreeMap<_, _>>();
     let mut actions = DIRECT_ACTIONS.iter().copied().collect::<BTreeSet<_>>();
     actions.extend(commands.keys().copied());
-    let macos_defaults = default_claims(true);
-    let portable_defaults = default_claims(false);
+    let macos_defaults = default_claims(keys, true);
+    let portable_defaults = default_claims(keys, false);
     let macos_aliases = alias_claims(keys, true);
     let portable_aliases = alias_claims(keys, false);
     actions
@@ -170,9 +170,7 @@ fn descriptor(
     contexts.extend(metadata::help_contexts(&help));
     if let Some(metadata) = command {
         contexts.insert(Context::Commands);
-        if action == Action::ToggleFooter {
-            contexts.extend([Context::Board, Context::Compose, Context::Edit]);
-        } else if matches!(
+        if matches!(
             metadata.applicability,
             CommandApplicability::BoardItem | CommandApplicability::BoardThought
         ) {

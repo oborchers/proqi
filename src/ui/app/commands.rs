@@ -226,6 +226,7 @@ impl BoardApp {
                 Vec::new()
             }
             Action::Help => self.toggle_help(),
+            Action::ToggleFooter => self.toggle_footer_chrome_visibility(),
             Action::Quit => {
                 self.request_quit();
                 Vec::new()
@@ -235,6 +236,21 @@ impl BoardApp {
             Action::PasteReflow => self.read_clipboard_reflow(ids),
             _ => self.execute_bound_command(action, ids, clock),
         }
+    }
+
+    fn toggle_footer_chrome_visibility(&mut self) -> Vec<Effect> {
+        self.footer_chrome_visibility = match self.footer_chrome_visibility {
+            crate::ui::layout::FooterChromeVisibility::Visible => {
+                crate::ui::layout::FooterChromeVisibility::Hidden
+            }
+            crate::ui::layout::FooterChromeVisibility::Hidden => {
+                crate::ui::layout::FooterChromeVisibility::Visible
+            }
+        };
+        self.layout = None;
+        self.frame_presentation = None;
+        self.hovered = None;
+        Vec::new()
     }
 
     pub(super) fn handle_edit_key(

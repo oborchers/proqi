@@ -22,7 +22,7 @@ The most important effective factory differences are:
 | Deliver and keep | `Ctrl+Shift+Enter`; retained `Primary+Shift+Enter`; Board `Shift+S` | `Primary+Shift+Enter`; Board `Shift+S` |
 | Reorder | `Option+Shift` plus vertical direction; retained Primary forms | `Primary+Shift` plus vertical direction |
 | Paste and clean up | `Primary+Shift+V`; Board `Shift+P` | `Primary+Shift+V`; Board `Shift+P` |
-| Toggle optional footer chrome | `Control+Shift+H` | `Control+Shift+H` |
+| Toggle optional footer chrome | Board `h` | Board `h` |
 
 Help and footer labels prefer terminal-safe macOS Control aliases where
 appropriate. The complete factory map remains in the
@@ -44,7 +44,7 @@ schema_version = 1
 ]
 "submission.submit_keep" = []
 "thought.delete" = [{ key = "Delete" }, { key = "d" }]
-"footer.toggle" = [{ key = "F5" }]
+"footer.toggle" = [{ key = "F6" }]
 
 [keymap.macos.edit]
 "submission.submit_remove" = [{ key = "Enter", modifiers = ["Super", "Alt"] }]
@@ -57,6 +57,11 @@ A supplied context and action list replaces every factory alias for that pair.
 It does not append. An empty list disables keyboard access where doing so is
 safe. Omitted pairs keep their defaults. Platform-specific lists replace the
 common list for the same pair.
+
+`footer.toggle` is a Board action. Its Board binding also applies while the
+Board insertion boundary is focused. Supply an explicit
+`[keymap.bindings.insertion_boundary]` binding only when that boundary needs a
+different key.
 
 Proqi validates both platform graphs before terminal setup. Unknown actions,
 collisions, printable bindings that would steal text, loss of invariant

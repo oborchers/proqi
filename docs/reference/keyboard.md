@@ -26,7 +26,7 @@ remains distinct on macOS.
 | Merge contiguous thoughts | `t` | Commands |
 | Clean up focused thought | `f` | Commands |
 | Search / Commands / Help | `/` / `:` / `?` | Footer controls |
-| Toggle optional footer chrome | `Control+Shift+H` | Commands |
+| Toggle optional footer chrome | `h` | No pointer equivalent |
 | Quit | `Primary+Q` or `q` | Quit control |
 
 Focus is not selection. Keyboard and pointer group actions operate on the
@@ -38,7 +38,6 @@ the focused item.
 | Intention | Factory input |
 | --- | --- |
 | Return to Board | `Escape` |
-| Toggle optional footer chrome | `Control+Shift+H` |
 | Select all text | `Primary+A` |
 | Copy, cut, exact paste | `Primary+C`, `Primary+X`, `Primary+V` |
 | Paste and clean up | `Primary+Shift+V` |

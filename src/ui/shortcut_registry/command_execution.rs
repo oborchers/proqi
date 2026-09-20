@@ -76,7 +76,6 @@ pub(crate) enum RuntimeCommand {
     RefreshInvocations,
     CheckUpdates,
     WhatsNew,
-    ToggleFooter,
     ScreenshotInbox,
     RetryScreenshotCapture,
     RetryStorage,
@@ -164,7 +163,6 @@ pub(crate) const fn execution_for(action: Action) -> Option<CommandExecution> {
         A::RefreshInvocations => Some(E::Runtime(RuntimeCommand::RefreshInvocations)),
         A::CheckUpdates => Some(E::Runtime(RuntimeCommand::CheckUpdates)),
         A::WhatsNew => Some(E::Runtime(RuntimeCommand::WhatsNew)),
-        A::ToggleFooter => Some(E::Runtime(RuntimeCommand::ToggleFooter)),
         A::ScreenshotInbox => Some(E::Runtime(RuntimeCommand::ScreenshotInbox)),
         A::RetryScreenshotCapture => Some(E::Runtime(RuntimeCommand::RetryScreenshotCapture)),
         A::RetryStorage => Some(E::Runtime(RuntimeCommand::RetryStorage)),
@@ -233,6 +231,7 @@ pub(crate) const fn execution_for(action: Action) -> Option<CommandExecution> {
         | A::PickerPrevious
         | A::PickerNext
         | A::ContextualTransform
+        | A::ToggleFooter
         | A::OpenSearch
         | A::OpenCommands
         | A::BrowserTrash

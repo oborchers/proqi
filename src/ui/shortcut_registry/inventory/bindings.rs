@@ -23,7 +23,11 @@ use vocabulary::{
     is_query_cursor_context, is_text_context, modifier_combinations,
 };
 
-pub(super) fn default_claims(macos: bool) -> BTreeMap<Action, Vec<ShortcutBindingClaim>> {
+pub(super) fn default_claims(
+    keys: &KeyBindings,
+    macos: bool,
+) -> BTreeMap<Action, Vec<ShortcutBindingClaim>> {
+    let board = effective_board_bindings(keys);
     let keys = FIXED_KEYS
         .iter()
         .copied()
@@ -31,6 +35,9 @@ pub(super) fn default_claims(macos: bool) -> BTreeMap<Action, Vec<ShortcutBindin
         .collect::<BTreeSet<_>>();
     collect_claims(keys, |context, key, modifiers| {
         if let Some(binding) = platform_defaults::binding(context, key, modifiers, macos) {
+            if binding.0 == Action::ToggleFooter && board.contains_key(&'h') {
+                return None;
+            }
             return Some(binding);
         }
         let action = fixed_action(context, key, modifiers, macos)?;
@@ -67,7 +74,10 @@ pub(super) fn alias_claims(
         }
     }
     collect_claims(candidates, |context, key, modifiers| {
-        if platform_defaults::binding(context, key, modifiers, macos).is_some()
+        let platform_binding = platform_defaults::binding(context, key, modifiers, macos);
+        let legacy_footer_collision = platform_binding
+            .is_some_and(|binding| binding.0 == Action::ToggleFooter && board.contains_key(&'h'));
+        if (!legacy_footer_collision && platform_binding.is_some())
             || fixed_action(context, key, modifiers, macos).is_some()
         {
             None

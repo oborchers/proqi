@@ -26,11 +26,6 @@ impl BoardApp {
             self.set_warning("command is unavailable in the current state");
             return Vec::new();
         }
-        // Footer visibility is presentation-only. In particular, do not turn a
-        // compact-layout shortcut into an implicit editor save.
-        if action == crate::ui::ShortcutActionId::ToggleFooter {
-            return self.execute_flushed_bound_command(action, None, ids, clock);
-        }
         if self.editor_snapshot().is_some() {
             self.capture_palette_selection_handoff();
         }

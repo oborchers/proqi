@@ -52,10 +52,11 @@ listening or pause state, operational warnings and errors, durability pending
 or failure truth, and required Retry, Export, recovery, and confirmation
 controls remain visible.
 
-In Board, Compose, and Edit, `Control+Shift+H` runs the remappable
-`footer.toggle` action to reverse this for the current Proqi process. It does
-not write configuration or change durable state; restart returns to the
-configured initial state. The Session Browser uses only the startup setting.
+In Board, the unmodified `h` key runs the remappable `footer.toggle` action to reverse this for
+the current Proqi process. It does not write configuration or change durable
+state; restart returns to the configured initial state. Compose and Edit honor
+the current process visibility but do not offer the shortcut. The Session
+Browser uses only the startup setting.
 
 Because startup configuration rejects unknown fields, remove `footer_hidden`
 before using an older Proqi release that does not recognize it.

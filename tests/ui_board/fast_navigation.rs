@@ -414,7 +414,7 @@ fn contextual_help_uses_platform_primary_labels_for_fast_navigation() {
     let visual_row = if cfg!(target_os = "macos") {
         "Cmd+Shift+H/←/L/→"
     } else {
-        "Ctrl+Shift+L"
+        "Ctrl+Shift+H/L"
     };
     assert!(rendered.contains(visual_row));
     assert!(rendered.contains("Select visual row"));

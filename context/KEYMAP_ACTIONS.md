@@ -49,7 +49,7 @@ factory labels without requiring another presentation table.
 | `invocation.refresh` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | Ordinary | yes |
 | `update.check` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | Ordinary | yes |
 | `update.whats_new` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | Ordinary | yes |
-| `footer.toggle` | `board`, `compose`, `edit`, `commands` | Ordinary | yes |
+| `footer.toggle` | `board`, `insertion_boundary` | Ordinary |  |
 | `screenshot.inbox` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | Ordinary | yes |
 | `screenshot.retry_capture` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | Ordinary | yes |
 | `recovery.retry_storage` | `board`, `compose`, `edit`, `commands`, `invocation`, `recovery`, `insertion_boundary` | RecoveryCritical | yes |

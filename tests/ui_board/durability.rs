@@ -66,6 +66,16 @@ fn hidden_optional_footer_keeps_failure_explanation_recovery_controls_and_hit_ge
     );
     let rendered = text(draw(&mut fixture, 70, 8).backend().buffer());
     assert!(rendered.contains("save failed · r Retry · w Export recovery"));
+    assert!(
+        fixture
+            .effects(crate::key_input(UiKey::Character('h')))
+            .is_empty(),
+        "the Board-only footer shortcut cannot hide a Recovery explanation",
+    );
+    assert!(
+        text(draw(&mut fixture, 70, 8).backend().buffer())
+            .contains("save failed · r Retry · w Export recovery")
+    );
     assert_eq!(
         fixture.effects(crate::key_input(UiKey::Character('r'))),
         vec![Effect::RetryPersistence { sequence }]

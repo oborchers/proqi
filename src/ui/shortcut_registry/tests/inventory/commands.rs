@@ -8,7 +8,7 @@ use crate::ui::shortcut_registry::{
 fn every_commands_entry_has_one_matching_registry_descriptor() {
     let registry = ShortcutRegistry::resolve(&KeyBindings::default(), ShortcutPlatform::Portable)
         .expect("valid registry");
-    assert_eq!(Action::COMMANDS.len(), 60);
+    assert_eq!(Action::COMMANDS.len(), 59);
     for (order, (action, label)) in Action::COMMANDS.into_iter().enumerate() {
         let descriptor = registry.descriptor(action).expect("Commands descriptor");
         assert_eq!(
@@ -96,21 +96,6 @@ fn commands_descriptors_own_independent_disclosure_dimensions() {
             .expect("destructive Commands descriptor");
         assert_eq!(metadata.relevance, CommandRelevance::Never);
     }
-}
-
-#[test]
-fn footer_toggle_descriptor_is_a_contextual_command() {
-    let registry = ShortcutRegistry::resolve(&KeyBindings::default(), ShortcutPlatform::Portable)
-        .expect("valid registry");
-    let footer_toggle = registry
-        .descriptor(Action::ToggleFooter)
-        .and_then(|descriptor| descriptor.commands)
-        .expect("footer-toggle descriptor");
-    assert_eq!(
-        footer_toggle.applicability,
-        CommandApplicability::FooterVisibility
-    );
-    assert_eq!(footer_toggle.scope, CommandScope::Contextual);
 }
 
 #[test]

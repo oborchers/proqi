@@ -131,7 +131,7 @@ pub enum ShortcutActionId {
 
 impl ShortcutActionId {
     /// Complete visible Commands inventory in its established order.
-    pub(crate) const COMMANDS: [(Self, &'static str); 60] = [
+    pub(crate) const COMMANDS: [(Self, &'static str); 59] = [
         (Self::New, "New thought"),
         (Self::InsertAbove, "Insert thought above"),
         (Self::InsertBelow, "Insert thought below"),
@@ -185,7 +185,6 @@ impl ShortcutActionId {
         (Self::RefreshInvocations, "Refresh invocations"),
         (Self::CheckUpdates, "Check for updates"),
         (Self::WhatsNew, "What's new"),
-        (Self::ToggleFooter, "Toggle footer visibility"),
         (Self::ScreenshotInbox, "Enable Screenshot Inbox"),
         (Self::RetryScreenshotCapture, "Retry Screenshot Capture"),
         (Self::RetryStorage, "Retry failed save"),

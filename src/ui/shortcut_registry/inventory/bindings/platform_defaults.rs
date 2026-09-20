@@ -48,9 +48,9 @@ pub(super) fn binding(
     modifiers: LogicalModifiers,
     macos: bool,
 ) -> Option<(Action, ShortcutBindingPresentation)> {
-    if matches!(context, Context::Board | Context::Compose | Context::Edit)
-        && matches!(key, LogicalKey::Character('h' | 'H'))
-        && modifiers == CONTROL_SHIFT
+    if matches!(context, Context::Board | Context::InsertionBoundary)
+        && key == LogicalKey::Character('h')
+        && modifiers == LogicalModifiers::NONE
     {
         return Some((Action::ToggleFooter, ShortcutBindingPresentation::Explicit));
     }

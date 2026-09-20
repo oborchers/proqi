@@ -74,7 +74,6 @@ pub(crate) enum CommandApplicability {
     QueryRedo,
     Attachments,
     InstalledHighlights,
-    FooterVisibility,
 }
 
 /// Semantic condition and priority for the concise empty-query projection.
