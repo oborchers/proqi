@@ -445,7 +445,7 @@ fn control_submission_flushes_pending_invocation_text_without_accepting_completi
     let sequence = fixture.paste("/pl");
     fixture.app.acknowledge_persistence(sequence, true);
     let screen = text(draw(&mut fixture, 80, 16).backend().buffer());
-    assert!(screen.contains("/plan"), "shared starter popup is active");
+    assert!(screen.contains("/plan"), "shared command popup is active");
     fixture.input(crate::key_input(UiKey::Character('a')));
     let effects = fixture.effects(control_submit(true));
     let [Effect::CommitRevision(revision)] = effects.as_slice() else {

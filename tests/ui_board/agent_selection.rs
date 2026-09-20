@@ -175,3 +175,103 @@ fn merged_prompt_keeps_only_the_first_shared_starter() {
         }
     }
 }
+
+#[test]
+fn every_added_shared_command_remains_exact_in_first_and_later_thoughts() {
+    const PRESERVED_COMMANDS: [&str; 17] = [
+        "/btw",
+        "/clear",
+        "/compact",
+        "/diff",
+        "/fast",
+        "/hooks",
+        "/mcp",
+        "/model",
+        "/new",
+        "/permissions",
+        "/rename",
+        "/resume",
+        "/review",
+        "/skills",
+        "/status",
+        "/theme",
+        "/usage",
+    ];
+
+    for harness in [CODEX_AGENT_KIND, CLAUDE_AGENT_KIND] {
+        for command in PRESERVED_COMMANDS {
+            assert_preserved_outbound_pair(harness, command, &format!("{command} argument"));
+            assert_preserved_outbound_pair(harness, &format!("{command} argument"), command);
+        }
+    }
+}
+
+#[test]
+fn preserved_and_stripped_commands_mix_without_cross_normalization() {
+    for harness in [CODEX_AGENT_KIND, CLAUDE_AGENT_KIND] {
+        let mut fixture = Fixture::new();
+        for content in ["/review first", "/plan later", "/status final argument"] {
+            fixture.paste(content);
+            fixture.input(crate::key_input(UiKey::Escape));
+        }
+        fixture.acknowledge_all_persistence();
+        fixture.input(crate::key_input(UiKey::Character('a')));
+        fixture
+            .app
+            .complete_agent_discovery(Ok(vec![super::agent::target_with_kind(
+                Direction::Left,
+                "w1:p2",
+                harness,
+            )]));
+
+        let effects = fixture.effects(crate::key_input(UiKey::Character('s')));
+        let request = super::agent::start_submission(&mut fixture, &effects);
+        assert_eq!(
+            request.content,
+            "/review first\n\nlater\n\n/status final argument"
+        );
+        assert_eq!(
+            fixture
+                .app
+                .state
+                .board
+                .live_thoughts()
+                .into_iter()
+                .map(|thought| thought.content.as_str())
+                .collect::<Vec<_>>(),
+            ["/review first", "/plan later", "/status final argument"]
+        );
+    }
+}
+
+fn assert_preserved_outbound_pair(harness: &str, first: &str, later: &str) {
+    let mut fixture = Fixture::new();
+    for content in [first, later] {
+        fixture.paste(content);
+        fixture.input(crate::key_input(UiKey::Escape));
+    }
+    fixture.acknowledge_all_persistence();
+    fixture.input(crate::key_input(UiKey::Character('a')));
+    fixture
+        .app
+        .complete_agent_discovery(Ok(vec![super::agent::target_with_kind(
+            Direction::Left,
+            "w1:p2",
+            harness,
+        )]));
+
+    let effects = fixture.effects(crate::key_input(UiKey::Character('s')));
+    let request = super::agent::start_submission(&mut fixture, &effects);
+    assert_eq!(request.content, format!("{first}\n\n{later}"));
+    assert_eq!(
+        fixture
+            .app
+            .state
+            .board
+            .live_thoughts()
+            .into_iter()
+            .map(|thought| thought.content.as_str())
+            .collect::<Vec<_>>(),
+        [first, later]
+    );
+}

@@ -745,14 +745,24 @@ to that range, and performs one semantic paste.
 The resulting `TextChangeSet` continues through annotation rebasing and editor
 undo without a parallel text-mutation contract.
 
-The UI composes a small data-driven shared-command table beside catalog results:
-`/plan` and `/goal` are available only at byte zero when verified adjacent Codex
-or Claude Code targets exist. They remain ordinary Command choices rather than
-fabricated filesystem evidence. Outbound multi-thought assembly for either
-harness keeps the complete leading shared starter only on the first thought and
-removes a `/plan` or `/goal` token plus one separator from later thought starts.
-It never rewrites stored sources, partial names, leading whitespace, or in-body
-text.
+The UI composes one typed, data-driven shared-command table beside catalog
+results. It contains `/btw`, `/clear`, `/compact`, `/diff`, `/fast`, `/goal`,
+`/hooks`, `/mcp`, `/model`, `/new`, `/permissions`, `/plan`, `/rename`,
+`/resume`, `/review`, `/skills`, `/status`, `/theme`, and `/usage`. Each is
+available only at byte zero when verified adjacent Codex or Claude Code targets
+exist. They remain ordinary Command choices rather than fabricated filesystem
+evidence. Each descriptor also owns its explicit later-thought normalization
+policy. Outbound multi-thought assembly for either harness keeps every command
+exact except that it removes a complete `/plan` or `/goal` token plus one
+separator from later thought starts. It never rewrites stored sources, partial
+names, leading whitespace, in-body text, or any other shared command and its
+arguments.
+
+Token identity also owns the existing collision rule. A compatible discovered
+form whose token appears in the shared table is restricted to document start.
+When an adjacent Codex or Claude Code target makes the built-in available, the
+built-in row deduplicates that discovered form. Without such a target, normal
+form compatibility can still expose the discovered row at document start.
 
 Invocation forms carry their receiving harness independently from the source
 ecosystem. When verified adjacent targets map to known harnesses, completion and

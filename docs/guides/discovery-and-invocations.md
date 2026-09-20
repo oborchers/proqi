@@ -46,6 +46,19 @@ Use arrows or `Primary+P` and `Primary+N` to navigate. Press `Enter` or `Tab` to
 insert the selected invocation, or `Escape` to close. Results beyond
 the visible viewport remain reachable by keyboard and mouse.
 
+When a compatible adjacent Codex or Claude Code agent is verified, Proqi also
+offers a checked-in set of shared built-in commands at the first byte of the
+thought. The set is `/btw`, `/clear`, `/compact`, `/diff`, `/fast`, `/goal`,
+`/hooks`, `/mcp`, `/model`, `/new`, `/permissions`, `/plan`, `/rename`,
+`/resume`, `/review`, `/skills`, `/status`, `/theme`, and `/usage`. Leading
+whitespace, later lines, inline prose, extended names, and fenced code do not
+offer or highlight these built-ins. A valid prefix at byte zero can open
+completion; only a complete token is highlighted. If a discovered command has
+the same token, it retains this document-start-only placement. Choosing a row
+inserts text only. The receiving harness decides what the command does, and
+actual availability may depend on its version, account, platform, and feature
+configuration.
+
 ## Refresh discoveries
 
 Commands exposes separate refresh actions for invocations and adjacent agents.

@@ -43,7 +43,9 @@ pub use model::{
 pub(crate) use model::{SequencedMutationEffectError, SequencedMutationEffects};
 pub use onboarding::{FirstRunEnvironment, first_run_board};
 pub(crate) use preconditions::exact_live_thought;
-pub(crate) use prompt::{SHARED_PROMPT_STARTERS, join_prompt_for_target, supports_shared_starters};
+pub(crate) use prompt::{
+    SHARED_HARNESS_COMMANDS, join_prompt_for_target, supports_shared_commands,
+};
 pub use recovery::capture_recovery;
 pub use reducer::reduce;
 pub use release_highlights::{ReleaseHighlightPresentation, ReleaseHighlightSelection};
