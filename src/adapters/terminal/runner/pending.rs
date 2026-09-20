@@ -42,6 +42,7 @@ impl PendingWork {
 pub(super) struct PendingControl {
     pub(super) envelope: ControlEnvelope,
     pub(super) thought_id: Option<ThoughtId>,
+    pub(super) item_ids: Vec<crate::domain::BoardItemId>,
 }
 
 pub(super) struct PendingUpdateRestart {

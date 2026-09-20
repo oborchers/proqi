@@ -205,7 +205,7 @@ pub(in crate::application) fn duplicate_items(
         .into_iter()
         .filter(|item| item_ids.contains(&item.id()))
         .collect::<Vec<_>>();
-    if selected.len() != item_ids.len() {
+    if !matches_exact_item_order(&selected, item_ids) {
         return Err(ApplicationError::InvalidState);
     }
     let insertion = selected
@@ -280,7 +280,7 @@ pub(in crate::application) fn delete_items(
         .copied()
         .filter(|item| item_ids.contains(&item.id()))
         .collect::<Vec<_>>();
-    if selected.len() != item_ids.len() {
+    if !matches_exact_item_order(&selected, item_ids) {
         return Err(ApplicationError::InvalidState);
     }
     let first_index = selected
@@ -309,6 +309,17 @@ pub(in crate::application) fn delete_items(
             .map(|item| item.id());
     }
     Ok(vec![Effect::CommitBoardOperation(operation)])
+}
+
+fn matches_exact_item_order(
+    selected: &[crate::domain::BoardItemRef<'_>],
+    requested: &[BoardItemId],
+) -> bool {
+    selected.len() == requested.len()
+        && selected
+            .iter()
+            .map(|item| item.id())
+            .eq(requested.iter().copied())
 }
 
 fn item_deletion(

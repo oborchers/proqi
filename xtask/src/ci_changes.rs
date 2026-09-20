@@ -300,7 +300,7 @@ fn classify<'a>(paths: impl Iterator<Item = &'a str>) -> Classification {
 
 fn classify_path(path: &str, classes: &mut BTreeSet<ChangeClass>) {
     let predicates = [
-        (ChangeClass::Documentation, has_extension(path, "md")),
+        (ChangeClass::Documentation, is_documentation(path)),
         (ChangeClass::CiPolicy, is_ci_policy(path)),
         (ChangeClass::Dependencies, is_dependency(path)),
         (ChangeClass::Packaging, is_packaging(path)),
@@ -361,8 +361,23 @@ fn is_known(path: &str) -> bool {
                 | "about.toml"
                 | "about.hbs"
                 | "dist-workspace.toml"
+                | "mkdocs.yml"
                 | "release-highlights.json"
                 | ".gitignore"
+        )
+}
+
+fn is_documentation(path: &str) -> bool {
+    has_extension(path, "md")
+        || path.starts_with("docs/")
+        || matches!(
+            path,
+            "mkdocs.yml"
+                | ".github/workflows/ci.yml"
+                | ".github/workflows/docs.yml"
+                | "src/cli/args.rs"
+                | "src/ui/shortcut_registry/model.rs"
+                | "xtask/src/documentation.rs"
         )
 }
 
@@ -378,10 +393,12 @@ fn is_ci_policy(path: &str) -> bool {
         || path.ends_with("AGENTS.md")
         || path.ends_with("CLAUDE.md")
         || matches!(path, "context/ARCHITECTURE.md" | "context/PRODUCT.md")
+        || path.starts_with("xtask/src/release_policy/")
         || matches!(
             path,
             "xtask/src/ci_changes.rs"
                 | "xtask/src/dev_gates.rs"
+                | "xtask/src/documentation.rs"
                 | "xtask/src/gate_lock.rs"
                 | "xtask/src/timing.rs"
                 | "xtask/src/main.rs"

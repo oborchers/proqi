@@ -10,7 +10,10 @@ scratchpad content.
 
 ## Workflow
 
-1. Run `proqi --version`, `proqi --json capabilities`, and the read-only health
+1. Run `proqi --version` and `proqi --json capabilities`. Require the supported
+   JSON schema, `doctor` in `data.commands`, and the exact diagnostic operation
+   before using it. If the installed version does not advertise a command,
+   report that limitation instead of guessing. Then run the read-only health
    report `proqi --json doctor`. Preserve every doctor check ID, status, and
    remediation exactly. Doctor never repairs, migrates, initializes, or
    recreates canonical Proqi state.
@@ -41,6 +44,10 @@ scratchpad content.
    unrelated sessions or copy the user's live database merely for convenience.
 8. Read [references/storage.md](references/storage.md) only when the failure
    involves persistence, migrations, leases, undo history, or submissions.
+   For history reports, first identify the scope: Browser history owns session
+   rename, trash, and restore; Board history owns item and transformation
+   operations inside one session; editor history owns exact replacements for
+   one thought.
 9. Classify the result as expected behavior, configuration or environment,
    unsupported integration, unconfirmed defect, confirmed defect, or security
    concern. State the evidence and any missing verification.
@@ -106,6 +113,8 @@ separately and explicitly authorizes that exact channel.
 ## Boundaries
 
 - Do not mutate SQLite or bypass Proqi's CLI, owner channel, or leases.
+- Do not emulate a semantic mutation with TUI keys. Active and inactive JSON
+  writes must converge through the same application owner and durable receipt.
 - Do not upload logs, bundles, databases, screenshots, or thought content.
 - Do not retry a submission whose durable state is `outcome_unknown`.
 - Do not claim a fix or successful delivery without direct evidence.

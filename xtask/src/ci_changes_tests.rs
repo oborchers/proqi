@@ -16,13 +16,40 @@ fn ordinary_markdown_uses_the_local_documentation_plan() {
 }
 
 #[test]
+fn documentation_site_inputs_reach_the_documentation_gate() {
+    for path in [
+        "mkdocs.yml",
+        ".github/workflows/ci.yml",
+        ".github/workflows/docs.yml",
+        "docs/stylesheets/extra.css",
+        "docs/pyproject.toml",
+        "docs/uv.lock",
+        "docs/check.py",
+        "docs/check_site.py",
+        "src/cli/args.rs",
+        "src/ui/shortcut_registry/model.rs",
+        "xtask/src/documentation.rs",
+    ] {
+        let result = paths(&[path]);
+        assert!(
+            result.classes.contains(&ChangeClass::Documentation),
+            "{path}"
+        );
+        assert!(!result.docs_only, "{path}");
+    }
+}
+
+#[test]
 fn policy_and_classifier_changes_fail_closed() {
     for path in [
         ".github/workflows/ci.yml",
+        ".github/workflows/docs.yml",
         "AGENTS.md",
         "context/ARCHITECTURE.md",
         "xtask/src/ci_changes.rs",
         "xtask/src/dev_gates.rs",
+        "xtask/src/documentation.rs",
+        "xtask/src/release_policy/docs.rs",
     ] {
         let result = paths(&[path]);
         assert_eq!(result.local_plan, LocalPlan::Full, "{path}");

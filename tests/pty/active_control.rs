@@ -8,6 +8,9 @@ use super::support::{
     wait_for_path,
 };
 
+#[path = "active_control/semantic.rs"]
+mod semantic;
+
 #[test]
 fn active_tui_accepts_durable_idempotent_cli_mutations_before_crash() {
     let state = tempfile::tempdir().expect("temporary state");
@@ -97,13 +100,7 @@ fn exercise_live_metadata_and_editor(
     thought: &str,
     original: &str,
 ) {
-    let renamed = json_command(
-        binary,
-        state,
-        &["sessions", "rename", session, "Live owner"],
-    );
-    assert_eq!(renamed["data"]["status"], "renamed");
-    assert_active_rename_noop(binary, state, session);
+    exercise_live_session_name(binary, state, session);
     let listed = json_command(binary, state, &["thoughts", "list", session]);
     let digest = listed["data"]["thoughts"][0]["content_sha256"]
         .as_str()
@@ -125,22 +122,7 @@ fn exercise_live_metadata_and_editor(
         "external replacement",
     );
     assert_eq!(replaced["data"]["thought_id"], thought);
-    let replay = json_input_command(
-        binary,
-        state,
-        &[
-            "thoughts",
-            "replace",
-            session,
-            thought,
-            "--revision-id",
-            &revision,
-            "--expected-sha256",
-            digest,
-        ],
-        "external replacement",
-    );
-    assert_eq!(replay["data"]["receipt"]["idempotent_replay"], true);
+    assert_replacement_replay(binary, state, session, thought, digest, &revision);
     assert_thought_content(binary, state, session, thought, "external replacement");
     json_command(
         binary,
@@ -173,6 +155,51 @@ fn exercise_live_metadata_and_editor(
             ],
         );
     }
+}
+
+fn exercise_live_session_name(binary: &str, state: &std::path::Path, session: &str) {
+    let renamed = json_command(
+        binary,
+        state,
+        &["sessions", "rename", session, "Live owner"],
+    );
+    assert_eq!(renamed["data"]["status"], "renamed");
+    assert_active_rename_noop(binary, state, session);
+    let cleared = json_command(binary, state, &["sessions", "rename", session, "--clear"]);
+    assert_eq!(cleared["data"]["status"], "renamed");
+    assert_active_session_name(binary, state, session, None);
+    json_command(
+        binary,
+        state,
+        &["sessions", "rename", session, "Live owner"],
+    );
+    assert_active_session_name(binary, state, session, Some("Live owner"));
+}
+
+fn assert_replacement_replay(
+    binary: &str,
+    state: &std::path::Path,
+    session: &str,
+    thought: &str,
+    digest: &str,
+    revision: &str,
+) {
+    let replay = json_input_command(
+        binary,
+        state,
+        &[
+            "thoughts",
+            "replace",
+            session,
+            thought,
+            "--revision-id",
+            revision,
+            "--expected-sha256",
+            digest,
+        ],
+        "external replacement",
+    );
+    assert_eq!(replay["data"]["receipt"]["idempotent_replay"], true);
 }
 
 fn assert_thought_content(
@@ -215,6 +242,22 @@ fn assert_active_rename_noop(binary: &str, state: &std::path::Path, session: &st
         &["sessions", "rename", session, "Live owner"],
     );
     assert_eq!(unchanged["data"]["status"], "renamed");
+}
+
+fn assert_active_session_name(
+    binary: &str,
+    state: &std::path::Path,
+    session: &str,
+    expected: Option<&str>,
+) {
+    let listed = json_command(binary, state, &["sessions", "list"]);
+    let entry = listed["data"]["sessions"]
+        .as_array()
+        .expect("sessions")
+        .iter()
+        .find(|entry| entry["id"] == session)
+        .expect("active session");
+    assert_eq!(entry["name"].as_str(), expected);
 }
 
 fn spawn_owner(

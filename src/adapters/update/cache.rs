@@ -12,6 +12,8 @@ use fs4::{FileExt, TryLockError};
 mod external;
 mod lease;
 mod persistence;
+#[cfg(test)]
+mod test_sync;
 mod validation;
 
 use lease::FileUpdateLease;
@@ -35,6 +37,8 @@ const STATE_LOCK_ATTEMPTS: usize = 100;
 #[derive(Clone, Debug)]
 pub struct FileUpdateStateStore {
     root: PathBuf,
+    #[cfg(test)]
+    lock_probe: Option<std::sync::Arc<test_sync::LockProbe>>,
 }
 
 impl FileUpdateStateStore {
@@ -52,7 +56,11 @@ impl FileUpdateStateStore {
         prepare_private_dir(cache_dir)?;
         let root = cache_dir.join("updates");
         prepare_private_dir(&root)?;
-        Ok(Self { root })
+        Ok(Self {
+            root,
+            #[cfg(test)]
+            lock_probe: None,
+        })
     }
 
     fn installation_dir(&self, installation: InstallationIdentity) -> Result<PathBuf, UpdateError> {
@@ -71,7 +79,11 @@ impl FileUpdateStateStore {
         change: impl FnOnce(&mut UpdateCacheState) -> Result<(), UpdateError>,
     ) -> Result<UpdateCacheState, UpdateError> {
         let directory = self.installation_dir(installation)?;
-        let lock = lock_state(&directory.join("state.lock"))?;
+        let lock = lock_state(
+            &directory.join("state.lock"),
+            #[cfg(test)]
+            self.lock_probe.as_deref(),
+        )?;
         let state_path = directory.join("state.json");
         let mut state = load_path(&state_path)?;
         change(&mut state)?;
@@ -86,7 +98,11 @@ impl FileUpdateStateStore {
         change: impl FnOnce(&mut UpdateCacheState) -> Result<(T, bool), UpdateError>,
     ) -> Result<T, UpdateError> {
         let directory = self.installation_dir(installation)?;
-        let lock = lock_state(&directory.join("state.lock"))?;
+        let lock = lock_state(
+            &directory.join("state.lock"),
+            #[cfg(test)]
+            self.lock_probe.as_deref(),
+        )?;
         let state_path = directory.join("state.json");
         let mut state = load_path(&state_path)?;
         let (result, changed) = change(&mut state)?;
@@ -399,12 +415,23 @@ fn load_path(path: &Path) -> Result<UpdateCacheState, UpdateError> {
     Ok(state)
 }
 
-fn lock_state(path: &Path) -> Result<FileUpdateLease, UpdateError> {
+fn lock_state(
+    path: &Path,
+    #[cfg(test)] probe: Option<&test_sync::LockProbe>,
+) -> Result<FileUpdateLease, UpdateError> {
     let file = open_private_file(path)?;
     for _ in 0..STATE_LOCK_ATTEMPTS {
         match FileExt::try_lock(&file) {
-            Ok(()) => return Ok(FileUpdateLease { file }),
-            Err(TryLockError::WouldBlock) => thread::sleep(Duration::from_millis(2)),
+            Ok(()) => {
+                #[cfg(test)]
+                test_sync::observe(probe, test_sync::Stage::Acquired);
+                return Ok(FileUpdateLease { file });
+            }
+            Err(TryLockError::WouldBlock) => {
+                #[cfg(test)]
+                test_sync::observe(probe, test_sync::Stage::Contended);
+                thread::sleep(Duration::from_millis(2));
+            }
             Err(TryLockError::Error(error)) => return Err(state_error(error)),
         }
     }

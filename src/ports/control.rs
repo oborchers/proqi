@@ -3,20 +3,16 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::domain::{
-    ContentAnnotation, ContentAnnotationKind, OperationId, RequestId, RevisionId, SessionId,
-    ThoughtId, ThoughtName, UndoScope,
-};
+use crate::domain::{BoardItemId, RequestId, SessionId, ThoughtId};
 
-use super::store::DurableIdentity;
-use super::update::{
-    UpdatePrepareReply, UpdatePrepareRequest, UpdateQuiesceReply, UpdateQuiesceRequest,
-    UpdateRestartReply, UpdateRestartRequest,
-};
+use super::update::{UpdatePrepareReply, UpdateQuiesceReply, UpdateRestartReply};
 use super::{runtime::InstanceInfo, store::CommitReceipt};
 
+mod mutation;
+pub use mutation::ControlMutation;
+
 /// Current local owner-control protocol.
-pub const CONTROL_PROTOCOL_VERSION: u32 = 10;
+pub const CONTROL_PROTOCOL_VERSION: u32 = 11;
 /// Current compatible screenshot takeover protocol.
 pub const CAPTURE_CONTROL_PROTOCOL_VERSION: u32 = 1;
 /// Oldest owner-control protocol accepted for plain-text mutations.
@@ -94,250 +90,6 @@ impl ControlRejectionCode {
     }
 }
 
-/// One mutation routed to the process owning a session reducer.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case", tag = "mutation")]
-pub enum ControlMutation {
-    /// Rename or clear the active session through its owner.
-    RenameSession {
-        /// Durable Browser operation identity.
-        operation_id: OperationId,
-        /// Replacement name, or `None` to clear it.
-        name: Option<String>,
-    },
-    /// Flush pending editor work before an active-session CLI read.
-    Sync,
-    /// Replace exact thought content as one persistent editor revision.
-    Replace {
-        /// Durable editor revision identity.
-        revision_id: RevisionId,
-        /// Thought to replace.
-        thought_id: ThoughtId,
-        /// Required SHA-256 of current content, omitted only for explicit force.
-        expected_digest: Option<[u8; 32]>,
-        /// Exact replacement content.
-        content: String,
-    },
-    /// Set one thought's durable collapse state.
-    SetCollapsed {
-        /// Durable board operation identity.
-        operation_id: OperationId,
-        /// Thought to update.
-        thought_id: ThoughtId,
-        /// Exact replacement state.
-        collapsed: bool,
-    },
-    /// Create one exact-content thought.
-    Add {
-        /// Durable board operation identity.
-        operation_id: OperationId,
-        /// Deterministic thought identity associated with this request.
-        thought_id: ThoughtId,
-        /// Exact content, including line endings.
-        content: String,
-        /// Durable presentation metadata, available from protocol version 2.
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        annotations: Vec<ContentAnnotation>,
-        /// Optional zero-based insertion position.
-        position: Option<usize>,
-    },
-    /// Preserve one already-valid Proqi thought during cross-session transfer.
-    PreserveAdd {
-        /// Durable destination operation identity.
-        operation_id: OperationId,
-        /// Deterministic destination thought identity.
-        thought_id: ThoughtId,
-        /// Exact canonical source content.
-        content: String,
-        /// Existing validated presentation metadata preserved without re-authoring it.
-        annotations: Vec<ContentAnnotation>,
-        /// Optional organizational metadata preserved outside authored content.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        name: Option<ThoughtName>,
-        /// Optional zero-based destination position.
-        position: Option<usize>,
-    },
-    /// Set or clear one thought's optional organizational name.
-    RenameThought {
-        /// Durable board operation identity.
-        operation_id: OperationId,
-        /// Thought to update.
-        thought_id: ThoughtId,
-        /// Replacement name, or `None` to clear it.
-        name: Option<ThoughtName>,
-    },
-    /// Soft-delete one thought.
-    Delete {
-        /// Durable board operation identity.
-        operation_id: OperationId,
-        /// Thought to delete.
-        thought_id: ThoughtId,
-    },
-    /// Move one thought.
-    Move {
-        /// Durable board operation identity.
-        operation_id: OperationId,
-        /// Thought to move.
-        thought_id: ThoughtId,
-        /// Zero-based target position.
-        position: usize,
-    },
-    /// Persistently move one history scope.
-    History {
-        /// Durable history operation identity.
-        operation_id: OperationId,
-        /// Board or editor scope.
-        scope: UndoScope,
-        /// Undo when true, redo otherwise.
-        undo: bool,
-    },
-    /// Ask one live owner to flush and enter a bounded update barrier.
-    UpdatePrepare {
-        /// Shared all-session readiness request.
-        request: UpdatePrepareRequest,
-    },
-    /// Release a previously prepared owner after cancellation or failure.
-    UpdateRelease {
-        /// Shared attempt identity.
-        operation_id: RequestId,
-    },
-    /// Commit one prepared owner to irreversible schema quiescence.
-    UpdateQuiesce {
-        /// Exact installed target and shared attempt identity.
-        request: UpdateQuiesceRequest,
-    },
-    /// Ask one prepared owner to clean up and replace itself.
-    UpdateRestart {
-        /// Verified installed version and shared attempt identity.
-        request: UpdateRestartRequest,
-    },
-    /// Ask the exact live screenshot owner to schedule a verified graceful handoff.
-    CaptureTakeover {
-        /// Owner identity observed with the authoritative lock contention.
-        expected_owner_instance_id: crate::domain::InstanceId,
-        /// Process that will retry the authoritative lock.
-        requester_instance_id: crate::domain::InstanceId,
-        /// Screenshot takeover protocol required by the requester.
-        capture_protocol: u32,
-    },
-}
-
-impl ControlMutation {
-    /// Durable idempotency identity carried by every mutation.
-    #[must_use]
-    pub const fn durable_operation_id(&self) -> Option<OperationId> {
-        match self {
-            Self::RenameSession { operation_id, .. }
-            | Self::Add { operation_id, .. }
-            | Self::PreserveAdd { operation_id, .. }
-            | Self::RenameThought { operation_id, .. }
-            | Self::Delete { operation_id, .. }
-            | Self::Move { operation_id, .. }
-            | Self::History { operation_id, .. }
-            | Self::SetCollapsed { operation_id, .. } => Some(*operation_id),
-            Self::UpdatePrepare { .. }
-            | Self::Sync
-            | Self::Replace { .. }
-            | Self::UpdateRelease { .. }
-            | Self::UpdateQuiesce { .. }
-            | Self::UpdateRestart { .. }
-            | Self::CaptureTakeover { .. } => None,
-        }
-    }
-
-    /// Durable idempotency identity carried by a mutation.
-    #[must_use]
-    pub const fn durable_identity(&self) -> Option<DurableIdentity> {
-        match self {
-            Self::Replace { revision_id, .. } => Some(DurableIdentity::Revision(*revision_id)),
-            _ => match self.durable_operation_id() {
-                Some(operation_id) => Some(DurableIdentity::Operation(operation_id)),
-                None => None,
-            },
-        }
-    }
-
-    /// Thought affected by this request, when applicable.
-    #[must_use]
-    pub const fn thought_id(&self) -> Option<ThoughtId> {
-        match self {
-            Self::Add { thought_id, .. }
-            | Self::PreserveAdd { thought_id, .. }
-            | Self::Delete { thought_id, .. }
-            | Self::Move { thought_id, .. }
-            | Self::Replace { thought_id, .. }
-            | Self::SetCollapsed { thought_id, .. }
-            | Self::RenameThought { thought_id, .. } => Some(*thought_id),
-            Self::History { .. }
-            | Self::RenameSession { .. }
-            | Self::Sync
-            | Self::UpdatePrepare { .. }
-            | Self::UpdateRelease { .. }
-            | Self::UpdateQuiesce { .. }
-            | Self::UpdateRestart { .. }
-            | Self::CaptureTakeover { .. } => None,
-        }
-    }
-
-    /// Whether this mutation requires the annotation-aware protocol.
-    #[must_use]
-    pub fn requires_protocol_two(&self) -> bool {
-        matches!(self, Self::Add { annotations, .. } if !annotations.is_empty())
-    }
-
-    /// Whether this mutation carries the invocation-reference annotation added in protocol six.
-    #[must_use]
-    pub fn requires_protocol_six(&self) -> bool {
-        matches!(self, Self::Add { annotations, .. } if annotations.iter().any(|annotation| {
-            matches!(annotation.kind, ContentAnnotationKind::InvocationReference { .. })
-        }))
-    }
-
-    /// Whether this purpose-specific request preserves semantic inline metadata.
-    #[must_use]
-    pub fn requires_protocol_seven(&self) -> bool {
-        matches!(self, Self::PreserveAdd { .. })
-    }
-
-    /// Oldest control protocol capable of representing this request.
-    #[must_use]
-    pub fn minimum_protocol(&self) -> u32 {
-        if matches!(self, Self::RenameThought { .. })
-            || matches!(self, Self::PreserveAdd { name: Some(_), .. })
-        {
-            10
-        } else if matches!(self, Self::RenameSession { .. }) {
-            9
-        } else if matches!(self, Self::Add { annotations, .. } | Self::PreserveAdd { annotations, .. } if annotations.iter().any(|annotation| matches!(annotation.kind, ContentAnnotationKind::Attachment { .. })))
-        {
-            8
-        } else if self.requires_protocol_seven() {
-            7
-        } else if self.requires_protocol_six() {
-            6
-        } else if matches!(self, Self::CaptureTakeover { .. }) {
-            5
-        } else if matches!(
-            self,
-            Self::Replace { .. } | Self::SetCollapsed { .. } | Self::Sync
-        ) {
-            4
-        } else if matches!(
-            self,
-            Self::UpdatePrepare { .. }
-                | Self::UpdateRelease { .. }
-                | Self::UpdateQuiesce { .. }
-                | Self::UpdateRestart { .. }
-        ) {
-            UPDATE_MUTATION_MINIMUM_PROTOCOL
-        } else if self.requires_protocol_two() {
-            2
-        } else {
-            1
-        }
-    }
-}
-
 /// One bounded request addressed to an exact session owner.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ControlRequest {
@@ -352,10 +104,13 @@ pub struct ControlRequest {
 }
 
 /// Accepted durable operation returned by the owner.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ControlReceipt {
     /// Created or affected thought, when applicable.
     pub thought_id: Option<ThoughtId>,
+    /// Created or affected mixed Board items, when applicable.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub item_ids: Vec<BoardItemId>,
     /// Store-confirmed durable operation receipt.
     pub durable: CommitReceipt,
 }

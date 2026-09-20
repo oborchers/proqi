@@ -18,6 +18,7 @@ mod debian;
 mod debian_container;
 mod debian_verify;
 mod dev_gates;
+mod documentation;
 mod gate_lock;
 mod herdr_compatibility;
 mod homebrew;
@@ -72,6 +73,7 @@ fn execute() -> Result<(), String> {
         "architecture" => policy::check(&root),
         "assets" => public_assets::check(&root),
         "clean-worktree" => clean_worktree(&root),
+        "docs" => documentation::build(&root),
         "quality" => dev_gates::quality(&root),
         "check" => dev_gates::check(&root, &env::args().skip(2).collect::<Vec<_>>()),
         "check-full" => dev_gates::check_full(&root, &env::args().skip(2).collect::<Vec<_>>()),
@@ -263,6 +265,7 @@ fn print_help() {
          \n  cargo xtask architecture\
          \n  cargo xtask assets\
          \n  cargo xtask clean-worktree\
+         \n  cargo xtask docs\
          \n  cargo xtask quality\
          \n  cargo xtask check [--base <revision>]\
          \n  cargo xtask check-full\

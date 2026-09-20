@@ -159,27 +159,24 @@ fn repeated_sigstop_grants_fresh_input_leases_and_preserves_exact_content() {
 }
 
 struct WatchedWorkflow {
-    watcher: Option<thread::JoinHandle<ExitStatus>>,
+    watcher: watchdog::Workflow,
     process: Option<Pid>,
     process_path: std::path::PathBuf,
 }
 
 impl WatchedWorkflow {
     fn spawn(
-        mut command: Command,
+        command: Command,
         watchdog_pids: std::path::PathBuf,
         process_path: std::path::PathBuf,
     ) -> Self {
-        let watcher = thread::spawn(move || {
-            watchdog::status_before(
-                &mut command,
-                WORKFLOW_LIMIT,
-                &watchdog_pids,
-                "suspended input PTY workflow",
-            )
-        });
         Self {
-            watcher: Some(watcher),
+            watcher: watchdog::Workflow::spawn(
+                command,
+                WORKFLOW_LIMIT,
+                watchdog_pids,
+                "suspended input PTY workflow",
+            ),
             process: None,
             process_path,
         }
@@ -206,20 +203,13 @@ impl WatchedWorkflow {
     }
 
     fn finish(mut self) -> ExitStatus {
-        let status = self
-            .watcher
-            .take()
-            .expect("active PTY watchdog")
-            .join()
-            .expect("PTY watchdog thread");
+        let status = self.watcher.finish();
         self.process = None;
         status
     }
 
     fn watcher_finished(&self) -> bool {
-        self.watcher
-            .as_ref()
-            .is_some_and(thread::JoinHandle::is_finished)
+        self.watcher.is_finished()
     }
 }
 
@@ -233,11 +223,7 @@ impl Drop for WatchedWorkflow {
             let _continued = kill_process(process, Signal::CONT);
             let _terminated = kill_process(process, Signal::TERM);
         }
-        // The watchdog thread owns an absolute deadline and kills every PID
-        // registered by Expect before it returns, so this join is bounded.
-        if let Some(watcher) = self.watcher.take() {
-            let _settled = watcher.join();
-        }
+        // The shared watchdog owns the bounded join and registered descendants.
     }
 }
 

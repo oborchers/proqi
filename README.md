@@ -26,6 +26,7 @@
   <img src="assets/proqi-demo.gif" width="1000" alt="Proqi refining, reordering, recovering, and copying independent prompt thoughts">
 </p>
 
+[Documentation](https://oborchers.github.io/proqi/) ·
 [Why Proqi](#do-you-hate-this-editor) ·
 [Workflow](#one-board-many-prompts) ·
 [Install](#install) ·
@@ -177,6 +178,27 @@ Board choice.
 elsewhere. Proqi receives modifiers only after the operating system, keyboard
 remapper, and terminal have handled the key. Raw `Ctrl` is not a second Primary
 modifier on macOS.
+
+Complete user documentation for the published 0.11.0 product, with main-only
+next-release additions clearly labeled, starts at the
+[Proqi documentation home](https://oborchers.github.io/proqi/). Use the
+[complete feature index](https://oborchers.github.io/proqi/reference/features.html)
+to discover the full
+surface, or begin with a workflow:
+
+- [Capture and edit thoughts](https://oborchers.github.io/proqi/guides/capture-and-edit.html)
+- [Select and act on thoughts](https://oborchers.github.io/proqi/guides/selection.html)
+- [Transform and organize thoughts](https://oborchers.github.io/proqi/guides/edit-and-transform.html)
+- [Configure and troubleshoot shortcuts](https://oborchers.github.io/proqi/guides/shortcuts.html)
+- [Paste, clean up, and attach files](https://oborchers.github.io/proqi/guides/paste-and-attachments.html)
+- [Discover commands, skills, and collaborators](https://oborchers.github.io/proqi/guides/discovery-and-invocations.html)
+- [Deliver prompts to agents](https://oborchers.github.io/proqi/guides/agent-delivery.html)
+- [Organize sessions and recover work](https://oborchers.github.io/proqi/guides/organization-and-recovery.html)
+- [Browse every Commands action](https://oborchers.github.io/proqi/reference/commands.html)
+- [Use the complete CLI](https://oborchers.github.io/proqi/reference/cli.html)
+
+The Markdown source remains available from
+[`docs/index.md`](docs/index.md) for offline reading and contribution.
 
 The tables below describe the factory map. The complete stable action and
 context inventory is in [context/KEYMAP_ACTIONS.md](context/KEYMAP_ACTIONS.md).

@@ -1,0 +1,120 @@
+# yaml-language-server: $schema=https://squidfunk.github.io/mkdocs-material/schema.json
+
+site_name: Proqi
+site_description: User documentation for the terminal-native prompt composer
+site_url: https://oborchers.github.io/proqi/
+copyright: Proqi is available under the MIT License.
+
+docs_dir: docs
+site_dir: target/docs-site
+use_directory_urls: false
+
+exclude_docs: |
+  check.py
+  check_tests.py
+  check_site.py
+  check_site_tests.py
+  CI_PERFORMANCE_SPIKE.md
+  INPUT_STALL_CONTINUITY.md
+  INPUT_WATCHDOG_SUSPENSION.md
+  INVOCATIONS.md
+  LIFECYCLE_PTY_INVESTIGATION.md
+  RELEASING.md
+  SENTENCE_DELETION.md
+  UNDO_REDO.md
+  pyproject.toml
+  uv.lock
+
+validation:
+  nav:
+    omitted_files: warn
+
+theme:
+  name: material
+  language: en
+  font: false
+  icon:
+    logo: material/console-line
+    repo: fontawesome/brands/github
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - navigation.footer
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+
+plugins:
+  - search
+
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.betterem
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+
+extra_css:
+  - stylesheets/extra.css
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/oborchers/proqi
+      name: Proqi on GitHub
+
+nav:
+  - Guide:
+      - Home: index.md
+      - Get started: getting-started.md
+      - Workflows:
+          - guides/README.md
+          - Capture and edit: guides/capture-and-edit.md
+          - Select and act: guides/selection.md
+          - Transform and organize: guides/edit-and-transform.md
+          - Paste and attach: guides/paste-and-attachments.md
+          - Discover skills and commands: guides/discovery-and-invocations.md
+          - Deliver to agents: guides/agent-delivery.md
+          - Sessions and recovery: guides/organization-and-recovery.md
+          - Updates and restarts: guides/updates.md
+          - Configure and troubleshoot shortcuts: guides/shortcuts.md
+          - Configure appearance and behavior: guides/configuration.md
+  - Reference:
+      - Complete feature index: reference/features.md
+      - Commands palette: reference/commands.md
+      - CLI: reference/cli.md
+      - Keyboard map: reference/keyboard.md
+      - Undo and redo: reference/undo-redo.md
+      - Privacy and diagnostics: reference/privacy-and-diagnostics.md
+  - Project:
+      - Releases: https://github.com/oborchers/proqi/releases
+      - Security: https://github.com/oborchers/proqi/blob/main/SECURITY.md
+      - Contributing: https://github.com/oborchers/proqi/blob/main/CONTRIBUTING.md

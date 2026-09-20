@@ -21,6 +21,7 @@ jobs:
     outputs:
       base_sha: ${{ steps.classify.outputs.base_sha }}
       coverage: ${{ steps.classify.outputs.coverage }}
+      documentation: ${{ steps.classify.outputs.documentation }}
       docs_only: ${{ steps.classify.outputs.docs_only }}
       full_msrv: ${{ steps.classify.outputs.full_msrv }}
     steps:
@@ -49,6 +50,7 @@ jobs:
           {
             echo "base_sha=$base_sha"
             echo "coverage=$(jq -r .coverage <<<"$classification")"
+            echo "documentation=$(jq -r '.classes | index("documentation") != null' <<<"$classification")"
             echo "docs_only=$(jq -r .docs_only <<<"$classification")"
             echo "full_msrv=$(jq -r .full_msrv <<<"$classification")"
           } >> "$GITHUB_OUTPUT"
@@ -56,7 +58,7 @@ jobs:
   docs:
     name: Documentation gate
     needs: changes
-    if: needs.changes.outputs.docs_only == 'true'
+    if: needs.changes.outputs.documentation == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -70,6 +72,19 @@ jobs:
         run: git diff --check "$BASE_SHA" "$GITHUB_SHA"
       - name: Check public documentation assets
         run: cargo xtask assets
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: true
+          python-version: "3.12"
+      - name: Build and check documentation site
+        run: cargo xtask docs
+      - name: Preserve documentation site
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          if-no-files-found: error
+          name: proqi-docs-site
+          path: target/docs-site/
+          retention-days: 7
       - run: cargo xtask clean-worktree
 
   quality:
@@ -113,6 +128,14 @@ jobs:
         with:
           tool: cargo-nextest@0.9.143
       - run: cargo xtask test
+      - name: Preserve synthetic migration failure evidence
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: migration-failure-test-${{ matrix.os }}-${{ github.run_attempt }}
+          path: target/qualification-evidence/migration-*.json
+          if-no-files-found: ignore
+          retention-days: 7
       - run: cargo xtask clean-worktree
 
   msrv:
@@ -132,6 +155,14 @@ jobs:
       - name: Run full minimum-Rust diagnostic suite
         if: needs.changes.outputs.full_msrv == 'true'
         run: cargo +1.88.0 xtask msrv-full
+      - name: Preserve synthetic migration failure evidence
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: migration-failure-msrv-${{ github.run_attempt }}
+          path: target/qualification-evidence/migration-*.json
+          if-no-files-found: ignore
+          retention-days: 7
       - run: cargo xtask clean-worktree
 
   crate:
@@ -182,6 +213,14 @@ jobs:
         with:
           key: macos-15
       - run: cargo xtask test-pty
+      - name: Preserve synthetic migration failure evidence
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: migration-failure-pty-${{ github.run_attempt }}
+          path: target/qualification-evidence/migration-*.json
+          if-no-files-found: ignore
+          retention-days: 7
       - run: cargo xtask clean-worktree
 
   coverage:
@@ -201,6 +240,14 @@ jobs:
         with:
           tool: cargo-nextest@0.9.143,cargo-llvm-cov@0.9.0
       - run: cargo xtask coverage
+      - name: Preserve synthetic migration failure evidence
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: migration-failure-coverage-${{ github.run_attempt }}
+          path: target/qualification-evidence/migration-*.json
+          if-no-files-found: ignore
+          retention-days: 7
       - run: cargo xtask clean-worktree
 
   package_linux:
@@ -321,7 +368,11 @@ jobs:
         run: |
           test "$(jq -r '
             .changes.result == "success" and
-            .docs.result == "skipped" and
+            (if .changes.outputs.documentation == "true" then
+              .docs.result == "success"
+            else
+              .docs.result == "skipped"
+            end) and
             ([.quality, .test, .msrv, .crate, .security, .pty, .package_linux, .package_macos, .debian]
               | all(.result == "success")) and
             (if .changes.outputs.coverage == "true" then

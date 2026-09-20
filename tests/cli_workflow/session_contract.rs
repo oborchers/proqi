@@ -97,6 +97,19 @@ fn session_administration_has_restart_safe_cli_undo_and_redo() {
     let renamed = success(root, &["sessions", "list", "--query", "research"], None);
     assert_eq!(renamed["sessions"][0]["id"], session);
 
+    success(root, &["sessions", "rename", &session, "--clear"], None);
+    let cleared = success(root, &["sessions", "list"], None);
+    let cleared = cleared["sessions"]
+        .as_array()
+        .expect("sessions")
+        .iter()
+        .find(|entry| entry["id"] == session)
+        .expect("cleared session");
+    assert!(cleared["name"].is_null());
+    success(root, &["sessions", "undo"], None);
+    let restored_name = success(root, &["sessions", "list", "--query", "research"], None);
+    assert_eq!(restored_name["sessions"][0]["id"], session);
+
     success(root, &["sessions", "rename", &session, "divergent"], None);
     let unavailable = run(root, &["sessions", "redo"], None);
     assert!(!unavailable.status.success());

@@ -3,7 +3,6 @@
 use std::{
     hash::{Hash, Hasher as _},
     process::{Command, ExitStatus},
-    thread,
     time::Duration,
 };
 
@@ -153,36 +152,29 @@ const BOARD_WORKFLOW: &str = r#"
 "#;
 
 struct WatchedWorkflow {
-    watcher: Option<thread::JoinHandle<ExitStatus>>,
+    watcher: watchdog::Workflow,
     acknowledgements: [std::path::PathBuf; 2],
 }
 
 impl WatchedWorkflow {
     fn spawn(
-        mut command: Command,
+        command: Command,
         watchdog_pids: std::path::PathBuf,
         acknowledgements: [std::path::PathBuf; 2],
     ) -> Self {
-        let watcher = thread::spawn(move || {
-            watchdog::status_before(
-                &mut command,
-                WORKFLOW_LIMIT,
-                &watchdog_pids,
-                "Board hover PTY workflow",
-            )
-        });
         Self {
-            watcher: Some(watcher),
+            watcher: watchdog::Workflow::spawn(
+                command,
+                WORKFLOW_LIMIT,
+                watchdog_pids,
+                "Board hover PTY workflow",
+            ),
             acknowledgements,
         }
     }
 
     fn finish(mut self) -> ExitStatus {
-        self.watcher
-            .take()
-            .expect("active Board hover watchdog")
-            .join()
-            .expect("Board hover watchdog thread")
+        self.watcher.finish()
     }
 
     fn release(&self, index: usize) {
@@ -195,9 +187,7 @@ impl Drop for WatchedWorkflow {
         for acknowledgement in &self.acknowledgements {
             let _released = std::fs::write(acknowledgement, []);
         }
-        if let Some(watcher) = self.watcher.take() {
-            let _settled = watcher.join();
-        }
+        // The shared watchdog owns the bounded join and registered descendants.
     }
 }
 

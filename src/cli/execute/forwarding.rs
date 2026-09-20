@@ -1,5 +1,11 @@
 //! Active-session CLI mutations forwarded to the verified reducer owner.
 
+mod board;
+pub(super) use board::{
+    extract_thought, insert_separator, merge_thoughts, move_item, mutate_items, reflow_thought,
+    split_thought,
+};
+
 use serde_json::json;
 
 use crate::{
@@ -46,7 +52,7 @@ pub(super) fn rename_session(
     };
     LocalControlClient::send_metadata(&owner, &request)
         .map(|_| true)
-        .map_err(|error| map_error(error, &owner))
+        .map_err(|error| map_error(error, &owner, false))
 }
 
 pub(super) fn sync(context: &mut RuntimeContext, session_id: SessionId) -> Result<(), CliError> {
@@ -72,7 +78,7 @@ pub(super) fn sync(context: &mut RuntimeContext, session_id: SessionId) -> Resul
                 6,
             ))
         }
-        Err(error) => Err(map_error(error, &owner)),
+        Err(error) => Err(map_error(error, &owner, false)),
     }
 }
 
@@ -309,6 +315,26 @@ fn send(
     session_id: SessionId,
     mutation: ControlMutation,
 ) -> Result<CommitReceipt, CliError> {
+    send_control(context, owner, session_id, mutation).map(|receipt| receipt.durable)
+}
+
+fn send_control(
+    context: &mut RuntimeContext,
+    owner: &InstanceInfo,
+    session_id: SessionId,
+    mutation: ControlMutation,
+) -> Result<crate::ports::control::ControlReceipt, CliError> {
+    let reports_invalid_state = matches!(
+        mutation,
+        ControlMutation::InsertSeparator { .. }
+            | ControlMutation::DeleteItems { .. }
+            | ControlMutation::MoveItem { .. }
+            | ControlMutation::DuplicateItems { .. }
+            | ControlMutation::SplitThought { .. }
+            | ControlMutation::ExtractThought { .. }
+            | ControlMutation::MergeThoughts { .. }
+            | ControlMutation::ReflowThought { .. }
+    );
     let protocol = required_protocol(owner, &mutation)?;
     let request = ControlRequest {
         protocol,
@@ -318,8 +344,7 @@ fn send(
     };
     LocalControlClient
         .send(owner, &request)
-        .map(|receipt| receipt.durable)
-        .map_err(|error| map_error(error, owner))
+        .map_err(|error| map_error(error, owner, reports_invalid_state))
 }
 
 fn required_protocol(owner: &InstanceInfo, mutation: &ControlMutation) -> Result<u32, CliError> {
@@ -361,7 +386,7 @@ fn sync_protocol(advertised: Option<u32>) -> Result<Option<u32>, CliError> {
     Ok((protocol >= ControlMutation::Sync.minimum_protocol()).then_some(protocol))
 }
 
-fn map_error(error: ControlError, owner: &InstanceInfo) -> CliError {
+fn map_error(error: ControlError, owner: &InstanceInfo, reports_invalid_state: bool) -> CliError {
     let details = json!({
         "session_id": owner.session_id,
         "holder": owner,
@@ -376,6 +401,7 @@ fn map_error(error: ControlError, owner: &InstanceInfo) -> CliError {
             "storage_full" => CliError::new("storage_full", message, 1),
             "idempotency_conflict" => CliError::new("idempotency_conflict", message, 7),
             "no_durable_mutation" | "no_change" => CliError::new("no_change", message, 7),
+            "invalid_state" if reports_invalid_state => CliError::new("invalid_state", message, 7),
             "outcome_unknown" => {
                 CliError::new("operation_indeterminate", message, 8).with_details(details)
             }

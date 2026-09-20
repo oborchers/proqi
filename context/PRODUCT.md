@@ -747,7 +747,8 @@ focus in edit mode with its cursor at the end. An empty or stale selection is
 rejected without mutation.
 
 `Merge selected thoughts` requires at least two thoughts that are contiguous in
-board order. It keeps the first identity, concatenates exact content with
+the mixed Board order. An intervening separator breaks contiguity and remains
+unchanged. It keeps the first identity, concatenates exact content with
 `merge_separator` from `config.toml`, default `"\n\n"`, and recoverably deletes
 the remaining sources. The survivor receives board focus and the selection is
 cleared. A locked, stale, or discontiguous source set produces actionable
