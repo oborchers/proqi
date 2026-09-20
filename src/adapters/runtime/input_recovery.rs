@@ -12,9 +12,11 @@ use serde::{Deserialize, Serialize};
 use crate::domain::{InstanceId, RequestId, SessionId, Timestamp};
 use crate::ports::runtime::InputRecoveryUiState;
 
+mod admission;
 mod model;
 pub(crate) use model::{
-    ExecutableIdentity, RecoveryError, RecoveryExecProof, RecoveryFailure, RecoveryStage,
+    ExecutableIdentity, RecoveryAdmission, RecoveryError, RecoveryExecProof, RecoveryFailure,
+    RecoveryRecordPhase, RecoveryStage,
 };
 
 const SCHEMA_VERSION: u32 = 1;
@@ -60,8 +62,7 @@ pub(crate) struct InputRecovery {
     executable: Option<ExecutableIdentity>,
     record: Option<RecoveryRecord>,
     stage: RecoveryStage,
-    automatic_enabled: bool,
-    disabled_reason: Option<RecoveryFailure>,
+    admission: RecoveryAdmission,
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -76,6 +77,8 @@ pub(crate) enum StallDecision {
 }
 
 impl InputRecovery {
+    // The terminal runner calls this only after canonical startup admission and
+    // acquisition of the exact session lease. Records never confer ownership.
     pub(crate) fn open(
         runtime_root: &Path,
         session_id: SessionId,
@@ -111,53 +114,6 @@ impl InputRecovery {
                 pid,
                 executable,
             ))
-        }
-    }
-
-    fn open_ordinary(
-        path: PathBuf,
-        session_id: SessionId,
-        instance_id: InstanceId,
-        pid: u32,
-        executable: ExecutableIdentity,
-    ) -> Self {
-        let (automatic_enabled, disabled_reason) = match strict_load(&path) {
-            Ok(None) => (true, None),
-            Ok(Some(record))
-                if record.schema_version == SCHEMA_VERSION
-                    && record.session_id == session_id
-                    && record.executable == executable =>
-            {
-                match remove_record(&path) {
-                    Ok(()) => (true, None),
-                    Err(error) => (false, Some(error.failure())),
-                }
-            }
-            Ok(Some(_)) => (false, Some(RecoveryFailure::MismatchedLineage)),
-            Err(error) => (false, Some(error.failure())),
-        };
-        Self {
-            path,
-            instance_id,
-            pid,
-            executable: Some(executable),
-            record: None,
-            stage: RecoveryStage::Healthy,
-            automatic_enabled,
-            disabled_reason,
-        }
-    }
-
-    fn disabled(path: PathBuf, instance_id: InstanceId, pid: u32, reason: RecoveryFailure) -> Self {
-        Self {
-            path,
-            instance_id,
-            pid,
-            executable: None,
-            record: None,
-            stage: RecoveryStage::Healthy,
-            automatic_enabled: false,
-            disabled_reason: Some(reason),
         }
     }
 
@@ -199,9 +155,12 @@ impl InputRecovery {
             executable: Some(executable),
             record: Some(record),
             stage: RecoveryStage::Probation,
-            automatic_enabled: true,
-            disabled_reason: None,
+            admission: RecoveryAdmission::Probation,
         })
+    }
+
+    pub(crate) const fn admission(&self) -> RecoveryAdmission {
+        self.admission
     }
 
     pub(crate) const fn stage(&self) -> RecoveryStage {
@@ -226,8 +185,7 @@ impl InputRecovery {
         };
         record.ui_state = None;
         if let Err(error) = write_atomic(&self.path, record) {
-            self.automatic_enabled = false;
-            self.disabled_reason = Some(error.failure());
+            self.admission = RecoveryAdmission::Disabled(error.failure());
             self.stage = RecoveryStage::Healthy;
             return Err(error);
         }
@@ -244,15 +202,11 @@ impl InputRecovery {
         if self.stage == RecoveryStage::Probation {
             return self.fail(RecoveryFailure::ProbationFailed);
         }
-        if !self.automatic_enabled {
-            return self.fail(
-                self.disabled_reason
-                    .unwrap_or(RecoveryFailure::RecordUnavailable),
-            );
+        if let RecoveryAdmission::Disabled(reason) = self.admission {
+            return self.fail(reason);
         }
         if self.validate_current_record().is_err() {
-            self.automatic_enabled = false;
-            self.disabled_reason = Some(RecoveryFailure::RecordUnavailable);
+            self.admission = RecoveryAdmission::Disabled(RecoveryFailure::RecordUnavailable);
             return self.fail(RecoveryFailure::RecordUnavailable);
         }
         let cutoff = now.as_millis().saturating_sub(recovery_window_ms());
@@ -270,7 +224,7 @@ impl InputRecovery {
             .as_ref()
             .map_or(attempt_id, |record| record.lineage_id);
         let Some(executable) = self.executable.clone() else {
-            self.automatic_enabled = false;
+            self.admission = RecoveryAdmission::Disabled(RecoveryFailure::ExecutableUnavailable);
             return self.fail(RecoveryFailure::ExecutableUnavailable);
         };
         self.record = Some(RecoveryRecord {
