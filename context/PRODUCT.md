@@ -207,6 +207,17 @@ name remains a visible rename target at every supported height and truncates
 without covering status or board state. Narrow panes shorten secondary labels
 before any two regions can collide.
 
+`footer_hidden = true` is a launch-time global configuration that removes the
+optional persistent footer chrome and every optional gap so thoughts receive the
+reclaimed rows. It hides the session identity, board summary, shortcut and
+agent hints, and the ordinary session-browser shortcut footer. In Board, the
+unmodified `h` key default for `footer.toggle` temporarily reverses that
+visibility for the current Proqi process. It never changes configuration or persistence, and
+restart restores the configured initial state. It never
+hides transient operational status, Screenshot Inbox listening or pause state,
+durability failure explanation, retry or export recovery controls, or a
+browser rename confirmation. Keyboard actions and Commands remain available.
+
 ### Revision and operation history
 
 Text revisions preserve editing history within a thought. Structural operations

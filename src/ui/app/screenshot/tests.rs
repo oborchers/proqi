@@ -1,13 +1,14 @@
 use crate::{
     adapters::{editor::RopeEditorFactory, memory::FakeIdGenerator},
-    application::AppState,
-    domain::{Session, SessionBoard, Thought, ThoughtPosition, Timestamp},
+    application::{AppState, DurabilityState, FailureCode, ScreenshotPauseReason},
+    domain::{OperationSequence, Session, SessionBoard, Thought, ThoughtPosition, Timestamp},
     ports::{
         environment::IdGenerator as _, runtime::CaptureOwnerInfo,
         screenshot::ScreenshotActivityPolicy,
     },
     ui::{
-        BoardApp, KeyStroke, LogicalKey, LogicalModifiers, Theme, ThemePreference, UiInput, render,
+        BoardApp, KeyStroke, LogicalKey, LogicalModifiers, Theme, ThemePreference, UiInput,
+        UiSettings, render,
     },
 };
 use ratatui_core::{backend::TestBackend, terminal::Terminal};
@@ -132,6 +133,73 @@ fn listening_indicator_is_present_without_permanent_status_chrome() {
 }
 
 #[test]
+fn hidden_optional_footer_keeps_screenshot_listening_visible_without_a_gap() {
+    let (mut app, _) = app_with_hidden_footer_thought();
+    app.screenshot_started(Duration::ZERO);
+    app.set_success("copied thought");
+    let layout = app.prepare_frame(ratatui_core::layout::Rect::new(0, 0, 72, 10));
+    assert_eq!(layout.footer.height, 1);
+    assert_eq!(layout.footer_status.height, 1);
+    assert!(layout.footer_context.is_empty());
+    let rendered = render_snapshot(&mut app, 72, 10);
+    assert!(rendered.contains("inbox listening"));
+    assert!(rendered.contains("copied thought"), "{rendered}");
+}
+
+#[test]
+fn hidden_optional_footer_keeps_pending_and_recovery_screenshot_states_visible() {
+    let (mut app, _) = app_with_hidden_footer_thought();
+    app.state.durability = DurabilityState::Pending {
+        durable: OperationSequence::ZERO,
+        latest: OperationSequence::new(1),
+    };
+    let pending = render_snapshot(&mut app, 72, 10);
+    assert!(pending.contains("saving"), "{pending}");
+
+    app.state.durability = DurabilityState::Failed {
+        durable: OperationSequence::ZERO,
+        failed: OperationSequence::new(1),
+        code: FailureCode::StorageFailed,
+    };
+    app.set_storage_failure("critical storage failure");
+    app.enter_screenshot_paused(ScreenshotPauseReason::Inactivity { minutes: 1 });
+    let recovered = render_snapshot(&mut app, 100, 10);
+    assert!(recovered.contains("inbox paused"), "{recovered}");
+    assert!(recovered.contains("save failed · r Retry · w Export recovery"));
+
+    let narrow = render_snapshot(&mut app, 30, 10);
+    assert!(narrow.contains("inbox paused"), "{narrow}");
+    assert!(narrow.contains("save failed"), "{narrow}");
+
+    let narrowest = render_snapshot(&mut app, 18, 10);
+    assert!(narrowest.contains("fail/p"), "{narrowest}");
+
+    app.state.durability = DurabilityState::Pending {
+        durable: OperationSequence::ZERO,
+        latest: OperationSequence::new(2),
+    };
+    let pending_paused = render_snapshot(&mut app, 18, 10);
+    assert!(pending_paused.contains("saving paused"), "{pending_paused}");
+    let pending_tiny = render_snapshot(&mut app, 12, 10);
+    assert!(pending_tiny.contains("pause/s"), "{pending_tiny}");
+
+    app.state.durability = DurabilityState::Durable {
+        sequence: OperationSequence::new(2),
+    };
+    app.status = None;
+    let paused_tiny = render_snapshot(&mut app, 12, 10);
+    assert!(paused_tiny.contains("paused"), "{paused_tiny}");
+
+    let (mut warning, _) = app_with_hidden_footer_thought();
+    warning.screenshot_started(Duration::ZERO);
+    warning.set_error("capture warning");
+    let warned = render_snapshot(&mut warning, 18, 10);
+    assert!(warned.contains("error · inbox"), "{warned}");
+    let warned_tiny = render_snapshot(&mut warning, 12, 10);
+    assert!(warned_tiny.contains("error/i"), "{warned_tiny}");
+}
+
+#[test]
 fn releasing_inbox_has_a_complete_wide_snapshot() {
     insta::with_settings!({snapshot_path => "../../snapshots"}, {
         insta::assert_snapshot!("screenshot_releasing_wide", releasing_snapshot(82, 12));
@@ -247,6 +315,17 @@ fn releasing_snapshot(width: u16, height: u16) -> String {
 }
 
 fn app_with_thought() -> (BoardApp, FakeIdGenerator) {
+    app_with_settings(UiSettings::default())
+}
+
+fn app_with_hidden_footer_thought() -> (BoardApp, FakeIdGenerator) {
+    app_with_settings(UiSettings {
+        footer_hidden: true,
+        ..UiSettings::default()
+    })
+}
+
+fn app_with_settings(settings: UiSettings) -> (BoardApp, FakeIdGenerator) {
     let mut ids = FakeIdGenerator::new(1_725_260_000_000);
     let session = Session::new(
         ids.session_id(),
@@ -262,7 +341,10 @@ fn app_with_thought() -> (BoardApp, FakeIdGenerator) {
         Timestamp::from_millis(1),
     );
     let board = SessionBoard::new(session, vec![thought]).expect("board");
-    (BoardApp::new(AppState::new(board), RopeEditorFactory), ids)
+    (
+        BoardApp::with_settings(AppState::new(board), settings, RopeEditorFactory),
+        ids,
+    )
 }
 
 fn render_snapshot(app: &mut BoardApp, width: u16, height: u16) -> String {

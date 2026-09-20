@@ -186,6 +186,31 @@ fn rename_without_visible_footer_cannot_save() {
 }
 
 #[test]
+fn hidden_optional_browser_footer_reclaims_rows_but_status_and_rename_controls_remain() {
+    let mut browser = browser("session", false);
+    browser.footer_hidden = true;
+    let layout = browser.prepare_frame(ratatui_core::layout::Rect::new(0, 0, 80, 7));
+    assert_eq!(layout.footer.height, 0);
+    assert!(browser.footer_controls.is_empty());
+
+    browser.handle(key(LogicalKey::Function(2)));
+    let rename = browser.prepare_frame(ratatui_core::layout::Rect::new(0, 0, 80, 7));
+    assert_eq!(rename.footer.height, 1);
+    assert!(
+        browser
+            .footer_controls
+            .iter()
+            .any(|control| control.hit == super::BrowserHit::Confirm)
+    );
+
+    browser.rename = None;
+    browser.status = Some("Session is active in process 419".to_owned());
+    let status = browser.prepare_frame(ratatui_core::layout::Rect::new(0, 0, 80, 7));
+    assert_eq!(status.footer.height, 1);
+    assert!(browser.footer_controls.is_empty());
+}
+
+#[test]
 fn browser_open_mouse_matches_keyboard_and_availability() {
     for available in [true, false] {
         let mut browser = browser("session", false);
@@ -419,6 +444,7 @@ fn active_session_history_is_unavailable_in_keys_and_footer() {
             undo: Some(target),
             redo: None,
         },
+        false,
     );
 
     assert_eq!(browser.history_status().undo, None);

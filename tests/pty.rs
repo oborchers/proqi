@@ -56,6 +56,10 @@ mod editor_persistence;
 mod fairness;
 
 #[cfg(target_os = "macos")]
+#[path = "pty/footer_visibility.rs"]
+mod footer_visibility;
+
+#[cfg(target_os = "macos")]
 #[path = "pty/invocation.rs"]
 mod invocation;
 

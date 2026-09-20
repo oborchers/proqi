@@ -158,6 +158,7 @@ const fn command_category(action: Action) -> CommandCategory {
         }
         Action::CheckUpdates
         | Action::WhatsNew
+        | Action::ToggleFooter
         | Action::RetryStorage
         | Action::ExportRecovery
         | Action::Undo

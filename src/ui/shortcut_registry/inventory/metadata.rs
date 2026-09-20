@@ -35,6 +35,15 @@ const HELP: &[(Action, HelpMetadata)] = &[
         ),
     ),
     (
+        Action::ToggleFooter,
+        help(
+            HelpSurface::Board,
+            28,
+            "Toggle footer",
+            HelpAvailability::Always,
+        ),
+    ),
+    (
         Action::ReflowThought,
         help(
             HelpSurface::Editor,

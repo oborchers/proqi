@@ -231,6 +231,7 @@ pub(crate) const fn execution_for(action: Action) -> Option<CommandExecution> {
         | A::PickerPrevious
         | A::PickerNext
         | A::ContextualTransform
+        | A::ToggleFooter
         | A::OpenSearch
         | A::OpenCommands
         | A::BrowserTrash

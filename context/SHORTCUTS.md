@@ -105,6 +105,7 @@ schema_version = 1
 "submission.submit_keep" = []
 "thought.delete" = [{ key = "Delete" }, { key = "d" }]
 "thought.rename" = [{ key = "r", modifiers = ["Control"] }]
+"footer.toggle" = [{ key = "h" }]
 
 [keymap.macos.edit]
 "submission.submit_remove" = [{ key = "Enter", modifiers = ["Super", "Alt"] }]

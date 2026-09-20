@@ -228,6 +228,9 @@ fn every_eligible_action_context_pair_is_configurable_and_resolves_its_identity(
     }
 }
 
+#[path = "config/footer_visibility.rs"]
+mod footer_visibility;
+
 #[test]
 fn altgr_option_and_shifted_text_cannot_be_stolen_from_any_text_owner() {
     for context in super::super::inventory::bindings::vocabulary::KEYBOARD_CONTEXTS

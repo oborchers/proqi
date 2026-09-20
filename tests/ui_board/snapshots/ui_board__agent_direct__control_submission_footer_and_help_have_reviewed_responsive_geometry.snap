@@ -1,6 +1,6 @@
 ---
 source: tests/ui_board/agent_direct.rs
-assertion_line: 424
+assertion_line: 436
 expression: evidence
 ---
 Editor 120x12
@@ -95,10 +95,10 @@ TEXT
 11││i                                        Inbox             Ctrl+Enter/Cmd+Enter/s                   Submit            ││
 12││Ctrl+Shift+Enter/Cmd+Shift+Enter/Shift+S Submit & keep     Cmd+Q/q                                  Quit              ││
 13││Esc                                      Close             f                                        Clean up spacing  ││
-14││Ctrl+Shift+N                             Insert above      Ctrl+N                                   Insert below      ││
-15││Ctrl+↑                                   First thought     Ctrl+↓                                   Last thought      ││
-16││Ctrl+Shift+↑                             Extend to first   Ctrl+Shift+↓                             Extend to last    ││
-17││                                                                                                                      ││
+14││h                                        Toggle footer     Ctrl+Shift+N                             Insert above      ││
+15││Ctrl+N                                   Insert below      Ctrl+↑                                   First thought     ││
+16││Ctrl+↓                                   Last thought      Ctrl+Shift+↑                             Extend to first   ││
+17││Ctrl+Shift+↓                             Extend to last                                                               ││
 18││                                                                                                                      ││
 19││                                                                                                                      ││
 20││                                                                                                                      ││
@@ -129,10 +129,10 @@ STYLE RUNS
 11: 0-0 fg=Reset bg=Reset mod=NONE | 1-1 fg=Green bg=Reset mod=NONE | 2-59 fg=Reset bg=Reset mod=NONE | 60-81 fg=Green bg=Reset mod=NONE | 82-119 fg=Reset bg=Reset mod=NONE
 12: 0-0 fg=Reset bg=Reset mod=NONE | 1-40 fg=Green bg=Reset mod=NONE | 41-59 fg=Reset bg=Reset mod=NONE | 60-66 fg=Green bg=Reset mod=NONE | 67-119 fg=Reset bg=Reset mod=NONE
 13: 0-0 fg=Reset bg=Reset mod=NONE | 1-3 fg=Green bg=Reset mod=NONE | 4-59 fg=Reset bg=Reset mod=NONE | 60-60 fg=Green bg=Reset mod=NONE | 61-119 fg=Reset bg=Reset mod=NONE
-14: 0-0 fg=Reset bg=Reset mod=NONE | 1-12 fg=Green bg=Reset mod=NONE | 13-59 fg=Reset bg=Reset mod=NONE | 60-65 fg=Green bg=Reset mod=NONE | 66-119 fg=Reset bg=Reset mod=NONE
+14: 0-0 fg=Reset bg=Reset mod=NONE | 1-1 fg=Green bg=Reset mod=NONE | 2-59 fg=Reset bg=Reset mod=NONE | 60-71 fg=Green bg=Reset mod=NONE | 72-119 fg=Reset bg=Reset mod=NONE
 15: 0-0 fg=Reset bg=Reset mod=NONE | 1-6 fg=Green bg=Reset mod=NONE | 7-59 fg=Reset bg=Reset mod=NONE | 60-65 fg=Green bg=Reset mod=NONE | 66-119 fg=Reset bg=Reset mod=NONE
-16: 0-0 fg=Reset bg=Reset mod=NONE | 1-12 fg=Green bg=Reset mod=NONE | 13-59 fg=Reset bg=Reset mod=NONE | 60-71 fg=Green bg=Reset mod=NONE | 72-119 fg=Reset bg=Reset mod=NONE
-17: 0-119 fg=Reset bg=Reset mod=NONE
+16: 0-0 fg=Reset bg=Reset mod=NONE | 1-6 fg=Green bg=Reset mod=NONE | 7-59 fg=Reset bg=Reset mod=NONE | 60-71 fg=Green bg=Reset mod=NONE | 72-119 fg=Reset bg=Reset mod=NONE
+17: 0-0 fg=Reset bg=Reset mod=NONE | 1-12 fg=Green bg=Reset mod=NONE | 13-119 fg=Reset bg=Reset mod=NONE
 18: 0-119 fg=Reset bg=Reset mod=NONE
 19: 0-119 fg=Reset bg=Reset mod=NONE
 20: 0-119 fg=Reset bg=Reset mod=NONE

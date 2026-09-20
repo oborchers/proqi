@@ -234,6 +234,7 @@ pub struct SessionBrowser {
     now: Timestamp,
     layout: Option<BrowserLayout>,
     pub(super) footer_controls: Vec<BrowserFooterControl>,
+    footer_hidden: bool,
     hovered: BrowserHit,
     pointer_position: Option<(u16, u16)>,
     rename: Option<management::RenameState>,
@@ -257,6 +258,7 @@ impl SessionBrowser {
             now,
             layout: None,
             footer_controls: Vec::new(),
+            footer_hidden: false,
             hovered: BrowserHit::None,
             pointer_position: None,
             rename: None,
@@ -271,10 +273,12 @@ impl SessionBrowser {
         now: Timestamp,
         shortcut_registry: crate::ui::ShortcutRegistry,
         history: crate::ports::store::BrowserHistoryStatus,
+        footer_hidden: bool,
     ) -> Self {
         let mut browser = Self::new(items, now);
         browser.shortcut_registry = shortcut_registry;
         browser.history = history.without_active_targets(&browser.items);
+        browser.footer_hidden = footer_hidden;
         browser
     }
 
@@ -412,11 +416,12 @@ impl SessionBrowser {
             layout = self.compute_layout(area);
         }
         self.layout = Some(layout.clone());
-        self.footer_controls = if self.status.is_none() {
-            browser_footer_controls(layout.footer, self)
-        } else {
-            Vec::new()
-        };
+        self.footer_controls =
+            if self.status.is_none() && (!self.footer_hidden || self.rename.is_some()) {
+                browser_footer_controls(layout.footer, self)
+            } else {
+                Vec::new()
+            };
         self.reconcile_hover();
         layout
     }

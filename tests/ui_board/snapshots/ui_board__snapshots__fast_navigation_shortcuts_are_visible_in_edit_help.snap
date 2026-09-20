@@ -1,5 +1,6 @@
 ---
 source: tests/ui_board/snapshots.rs
+assertion_line: 473
 expression: "snapshot(&mut fixture, 120, 14, ThemePreference::Dark)"
 ---
 SIZE 120x14

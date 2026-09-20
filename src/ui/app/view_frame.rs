@@ -39,16 +39,14 @@ impl BoardApp {
         let mut presentation = self.build_frame_presentation();
         self.attach_editor_presentation(&mut presentation);
         let follow_insertion = self.insertion_focused() || self.compose_prompt_visible();
-        let has_status = self.status_view().is_some()
-            || matches!(self.state.durability, DurabilityState::Failed { .. });
+        let footer_chrome = self.footer_chrome();
         let history_available = (self.history_available(true), self.history_available(false));
         let (first, first_scroll) = crate::ui::layout::compute_for_app(
             &self.state,
             &presentation,
             area,
             follow_insertion,
-            !self.agent_targets.is_empty(),
-            has_status,
+            footer_chrome,
             self.settings.density,
             &self.settings.shortcuts,
             history_available,
@@ -63,8 +61,7 @@ impl BoardApp {
             &presentation,
             area,
             follow_insertion,
-            !self.agent_targets.is_empty(),
-            has_status,
+            footer_chrome,
             self.settings.density,
             &self.settings.shortcuts,
             history_available,
@@ -80,7 +77,9 @@ impl BoardApp {
                 .map_or_else(Vec::new, |overlay| overlay.item_interactive.clone()),
         );
         self.configure_footer(&mut layout);
-        if self.thought_name_editing() {
+        if self.thought_name_editing()
+            && !matches!(self.state.durability, DurabilityState::Failed { .. })
+        {
             layout.configure_thought_name_controls();
         }
         let final_height = self.focused_height(&layout);
@@ -113,6 +112,32 @@ impl BoardApp {
             self.session_display_name().to_owned(),
             session_id,
         );
+    }
+
+    fn footer_chrome(&self) -> crate::ui::layout::FooterChrome {
+        let has_recovery_controls = matches!(self.state.durability, DurabilityState::Failed { .. });
+        let has_status = self.status_view().is_some()
+            || has_recovery_controls
+            || (matches!(
+                self.footer_chrome_visibility,
+                crate::ui::layout::FooterChromeVisibility::Hidden
+            ) && self.durability_footer_status().is_some())
+            || (matches!(
+                self.footer_chrome_visibility,
+                crate::ui::layout::FooterChromeVisibility::Hidden
+            ) && self.screenshot_footer_state(false).is_some());
+        crate::ui::layout::FooterChrome {
+            has_agents: !self.agent_targets.is_empty(),
+            has_required_actions: self.thought_name_editing() && !has_recovery_controls,
+            status: if has_recovery_controls {
+                crate::ui::layout::FooterChromeStatus::Recovery
+            } else if has_status {
+                crate::ui::layout::FooterChromeStatus::Status
+            } else {
+                crate::ui::layout::FooterChromeStatus::None
+            },
+            visibility: self.footer_chrome_visibility,
+        }
     }
 
     fn focused_height(&self, layout: &LayoutSnapshot) -> u16 {
@@ -268,13 +293,15 @@ impl BoardApp {
     fn durability_summary(&self) -> &'static str {
         if matches!(self.state.durability, DurabilityState::Failed { .. }) {
             "unsaved"
-        } else if self.has_pending_edit()
-            || matches!(self.state.durability, DurabilityState::Pending { .. })
-        {
-            "saving"
         } else {
-            "saved"
+            self.durability_footer_status().unwrap_or("saved")
         }
+    }
+
+    pub(in crate::ui) fn durability_footer_status(&self) -> Option<&'static str> {
+        (self.has_pending_edit()
+            || matches!(self.state.durability, DurabilityState::Pending { .. }))
+        .then_some("saving")
     }
 }
 

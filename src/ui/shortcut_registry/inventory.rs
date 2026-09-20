@@ -88,6 +88,7 @@ pub(super) const DIRECT_ACTIONS: &[Action] = &[
     Action::OpenSearch,
     Action::OpenCommands,
     Action::Help,
+    Action::ToggleFooter,
     Action::ScreenshotInbox,
     Action::RenameSession,
     Action::BrowserTrash,
@@ -131,8 +132,8 @@ pub(super) fn descriptors(keys: &KeyBindings) -> Vec<ShortcutDescriptor> {
         .collect::<BTreeMap<_, _>>();
     let mut actions = DIRECT_ACTIONS.iter().copied().collect::<BTreeSet<_>>();
     actions.extend(commands.keys().copied());
-    let macos_defaults = default_claims(true);
-    let portable_defaults = default_claims(false);
+    let macos_defaults = default_claims(keys, true);
+    let portable_defaults = default_claims(keys, false);
     let macos_aliases = alias_claims(keys, true);
     let portable_aliases = alias_claims(keys, false);
     actions

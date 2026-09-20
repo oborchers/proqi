@@ -51,6 +51,11 @@ use std::{
     path::PathBuf,
 };
 
+use super::{
+    HitTarget, LayoutSnapshot, UiSettings,
+    input::{PointerButton, PointerInput, PointerKind, RoutedInput as UiInput, UiKey},
+    layout::scroll::{BoardViewport, ScrollGeometry},
+};
 use crate::{
     application::{AppState, Effect, InteractionMode},
     domain::{BoardItemId, OperationId, OperationSequence, RequestId, SubmissionId, ThoughtId},
@@ -62,12 +67,7 @@ use crate::{
     },
 };
 
-use super::{
-    HitTarget, LayoutSnapshot, UiSettings,
-    input::{PointerButton, PointerInput, PointerKind, RoutedInput as UiInput, UiKey},
-    layout::scroll::{BoardViewport, ScrollGeometry},
-};
-
+use super::layout::FooterChromeVisibility;
 use input_dispatch::ActiveInputOwner as Owner;
 pub(in crate::ui) use invocation::InvocationChoiceView;
 pub(in crate::ui) use palette::CommandPaletteView;
@@ -165,6 +165,7 @@ pub struct BoardApp {
     transfer: Option<transfer::TransferState>,
     transfer_generation: u64,
     settings: UiSettings,
+    footer_chrome_visibility: crate::ui::layout::FooterChromeVisibility,
     selection: selection::BoardSelection,
     expanded_folds: BTreeSet<(ThoughtId, usize)>,
     pending_editor_clipboard: BTreeMap<RequestId, PendingEditorClipboard>,
@@ -223,6 +224,7 @@ impl BoardApp {
         invocation_cwd: PathBuf,
         editor_factory: impl EditorFactory + 'static,
     ) -> Self {
+        let footer_chrome_visibility = FooterChromeVisibility::from_hidden(settings.footer_hidden);
         let insertion_focus = InsertionFocus::Inactive;
         let editor_factory: Box<dyn EditorFactory> = Box::new(editor_factory);
         let editor = if matches!(state.mode, InteractionMode::Compose) {
@@ -268,6 +270,7 @@ impl BoardApp {
             transfer: None,
             transfer_generation: 0,
             settings,
+            footer_chrome_visibility,
             selection: selection::BoardSelection::default(),
             expanded_folds: BTreeSet::new(),
             pending_editor_clipboard: BTreeMap::new(),
