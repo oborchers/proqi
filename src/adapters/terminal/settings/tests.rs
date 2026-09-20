@@ -29,10 +29,14 @@ fn missing_config_uses_the_narrow_pane_default() {
         (Action::ScreenshotInbox, 'i', false),
         (Action::PasteExact, 'p', false),
         (Action::DeleteSentence, 'U', true),
-        (Action::ExtendVisualRowStart, 'H', true),
         (Action::ExtendVisualRowEnd, 'L', true),
     ] {
         assert_binding(&settings, action, key, editor);
+    }
+    if cfg!(target_os = "macos") {
+        assert_binding(&settings, Action::ExtendVisualRowStart, 'H', true);
+    } else {
+        assert_binding(&settings, Action::ToggleFooter, 'H', true);
     }
     assert!(settings.screenshot.directory.is_none());
     assert!(settings.screenshot.filename_patterns.is_empty());
