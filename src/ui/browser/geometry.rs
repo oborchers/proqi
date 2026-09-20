@@ -34,7 +34,8 @@ impl BrowserLayout {
 impl SessionBrowser {
     pub(super) fn compute_layout(&self, area: Rect) -> BrowserLayout {
         let header_height = area.height.min(2);
-        let footer_height = u16::from(area.height > header_height);
+        let footer_required = self.status.is_some() || !self.footer_hidden || self.rename.is_some();
+        let footer_height = u16::from(footer_required && area.height > header_height);
         let header = Rect::new(area.x, area.y, area.width, header_height);
         let body_y = area.y.saturating_add(header_height);
         let body_height = area.height.saturating_sub(header_height + footer_height);

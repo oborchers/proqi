@@ -100,8 +100,26 @@ fn render_context(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot
     } else {
         String::new()
     };
-    let left = status.map_or(recovery.as_str(), |(message, _)| message);
+    let screenshot = (!layout.optional_footer_chrome_visible)
+        .then(|| app.screenshot_footer_state(false))
+        .flatten();
+    let primary = status.map(|(message, _)| message);
     let status_area = crate::ui::geometry::inset_horizontal(layout.footer_status, 2);
+    let left = if layout.optional_footer_chrome_visible {
+        primary
+            .or_else(|| (!recovery.is_empty()).then_some(recovery.as_str()))
+            .unwrap_or_default()
+            .to_owned()
+    } else {
+        hidden_status_text(
+            app,
+            failed,
+            &recovery,
+            screenshot.as_deref(),
+            status,
+            usize::from(status_area.width),
+        )
+    };
     let color = status.map_or_else(
         || if failed { theme.error } else { theme.muted },
         |(_, severity)| match severity {
@@ -113,7 +131,7 @@ fn render_context(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot
     );
     if status_area.height > 0 && !left.is_empty() {
         frame.render_widget(
-            Paragraph::new(truncate(left, usize::from(status_area.width)))
+            Paragraph::new(truncate(&left, usize::from(status_area.width)))
                 .style(Style::default().fg(color)),
             status_area,
         );
@@ -129,6 +147,143 @@ fn render_context(frame: &mut Frame<'_>, app: &BoardApp, layout: &LayoutSnapshot
             state_area,
         );
     }
+}
+
+fn hidden_status_text(
+    app: &BoardApp,
+    failed: bool,
+    recovery: &str,
+    screenshot: Option<&str>,
+    status: Option<(&str, StatusSeverity)>,
+    available: usize,
+) -> String {
+    if failed {
+        return hidden_failure_status(app, recovery, available);
+    }
+
+    let durability = app.durability_footer_status();
+    let primary = status.map(|(message, _)| message);
+    let detailed = join_footer_states([screenshot, durability, primary]);
+    let compact_screenshot = app.screenshot_footer_state(true);
+    let micro_screenshot = compact_screenshot.as_ref().map(|label| {
+        if label.contains("paused") {
+            "paused"
+        } else {
+            "inbox"
+        }
+    });
+    let compact = join_footer_states([compact_screenshot.as_deref(), durability, primary]);
+    let safety = join_footer_states([compact_screenshot.as_deref(), durability]);
+    let terse_safety = compact_screenshot.as_ref().and_then(|label| {
+        durability.map(|_| {
+            if label.contains("paused") {
+                "saving paused"
+            } else {
+                "saving · inbox"
+            }
+        })
+    });
+    let micro_safety = compact_screenshot.as_ref().and_then(|label| {
+        durability.map(|_| {
+            if label.contains("paused") {
+                "pause/s"
+            } else {
+                "inbox/s"
+            }
+        })
+    });
+    let terse_status = compact_screenshot.as_ref().and_then(|label| {
+        status.and_then(|(_, severity)| match severity {
+            StatusSeverity::Warning if label.contains("paused") => Some("warn · paused"),
+            StatusSeverity::Warning => Some("warn · inbox"),
+            StatusSeverity::Error if label.contains("paused") => Some("error · paused"),
+            StatusSeverity::Error => Some("error · inbox"),
+            StatusSeverity::Info | StatusSeverity::Success => None,
+        })
+    });
+    let micro_status = compact_screenshot.as_ref().and_then(|label| {
+        status.and_then(|(_, severity)| match severity {
+            StatusSeverity::Warning if label.contains("paused") => Some("warn/p"),
+            StatusSeverity::Warning => Some("warn/i"),
+            StatusSeverity::Error if label.contains("paused") => Some("error/p"),
+            StatusSeverity::Error => Some("error/i"),
+            StatusSeverity::Info | StatusSeverity::Success => None,
+        })
+    });
+    let compact_status = status.and_then(|(_, severity)| match severity {
+        StatusSeverity::Warning => Some("warn"),
+        StatusSeverity::Error => Some("error"),
+        StatusSeverity::Info | StatusSeverity::Success => None,
+    });
+    first_fitting_footer_state(
+        [
+            Some(detailed.as_str()),
+            Some(compact.as_str()),
+            terse_safety,
+            terse_status,
+            micro_safety,
+            micro_status,
+            Some(safety.as_str()),
+            micro_screenshot,
+            compact_screenshot.as_deref(),
+            durability,
+            compact_status,
+            primary,
+        ],
+        available,
+    )
+}
+
+fn hidden_failure_status(app: &BoardApp, recovery: &str, available: usize) -> String {
+    let compact_screenshot = app.screenshot_footer_state(true);
+    let detailed = join_footer_states([Some(recovery), compact_screenshot.as_deref()]);
+    let concise = join_footer_states([Some("save failed"), compact_screenshot.as_deref()]);
+    let terse = compact_screenshot.as_ref().map(|label| {
+        if label.contains("paused") {
+            "failed · paused"
+        } else {
+            "failed · inbox"
+        }
+    });
+    let micro = compact_screenshot.as_ref().map(|label| {
+        if label.contains("paused") {
+            "fail/p"
+        } else {
+            "fail/i"
+        }
+    });
+    first_fitting_footer_state(
+        [
+            Some(detailed.as_str()),
+            Some(concise.as_str()),
+            terse,
+            micro,
+            Some("failed"),
+        ],
+        available,
+    )
+}
+
+fn join_footer_states<const N: usize>(states: [Option<&str>; N]) -> String {
+    states.into_iter().flatten().collect::<Vec<_>>().join(" · ")
+}
+
+fn first_fitting_footer_state<const N: usize>(
+    candidates: [Option<&str>; N],
+    available: usize,
+) -> String {
+    let mut fallback = None;
+    for candidate in candidates
+        .into_iter()
+        .flatten()
+        .filter(|candidate| !candidate.is_empty())
+    {
+        if crate::ports::text_layout::terminal_cell_width(candidate) <= available {
+            return candidate.to_owned();
+        }
+        fallback = Some(candidate);
+    }
+    fallback.unwrap_or_default().to_owned()
 }
 
 fn render_session_identity(

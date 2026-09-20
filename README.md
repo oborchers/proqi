@@ -515,6 +515,7 @@ theme = "auto" # auto, light, dark, limited, or a bounded local theme file
 density = "comfortable" # or compact
 merge_separator = "\n\n" # one blank line between merged thoughts
 mouse_capture = true # set false if your terminal/multiplexer mishandles mouse reporting
+footer_hidden = false # set true to reclaim optional persistent footer chrome
 
 [keymap]
 schema_version = 1
@@ -535,6 +536,12 @@ schema_version = 1
 [keymap.portable.edit]
 "submission.submit_remove" = [{ key = "F5" }]
 ```
+
+`footer_hidden` sets the startup state. In Board, the unmodified `h` key (the remappable
+`footer.toggle` action) changes visibility only for the current Proqi process;
+restart restores the configured state.
+Because configuration rejects unknown fields, remove `footer_hidden` before
+running an older Proqi release.
 
 Each supplied context/action list replaces all its default aliases. Omitted
 pairs retain defaults; platform overrides replace common lists. Control, Alt,

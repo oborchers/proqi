@@ -1,6 +1,6 @@
 # Keyboard and pointer map
 
-<span class="version-scope">Factory behavior in Proqi 0.11.0</span>
+<span class="version-scope">Factory behavior in Proqi 0.11.0 plus next-release main</span>
 
 The map below is a discovery summary. Contextual Help is the authoritative view
 of the bindings effective in the running application after configuration.
@@ -26,6 +26,7 @@ remains distinct on macOS.
 | Merge contiguous thoughts | `t` | Commands |
 | Clean up focused thought | `f` | Commands |
 | Search / Commands / Help | `/` / `:` / `?` | Footer controls |
+| Toggle optional footer chrome | `h` | No pointer equivalent |
 | Quit | `Primary+Q` or `q` | Quit control |
 
 Focus is not selection. Keyboard and pointer group actions operate on the

@@ -1,3 +1,4 @@
+use super::super::{FooterChrome, FooterChromeStatus, FooterChromeVisibility};
 use super::*;
 use crate::domain::{Separator, SeparatorId};
 
@@ -65,8 +66,12 @@ fn narrow_and_shallow_separator_clipping_never_invents_an_identity() {
         Rect::new(0, 0, 1, 6),
         0,
         false,
-        false,
-        false,
+        FooterChrome {
+            has_agents: false,
+            has_required_actions: false,
+            status: FooterChromeStatus::None,
+            visibility: FooterChromeVisibility::Visible,
+        },
         crate::ui::settings::BoardDensity::Comfortable,
         0,
         &crate::ui::ShortcutRegistry::default(),

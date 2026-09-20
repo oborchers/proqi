@@ -4,7 +4,7 @@ use ratatui_core::layout::Rect;
 
 use crate::ui::{ShortcutContext, ShortcutRegistry};
 
-use super::HitTarget;
+use super::{FooterChrome, FooterChromeStatus, FooterChromeVisibility, HitTarget};
 
 pub(super) struct ChromeLayout {
     pub(super) header: Rect,
@@ -17,16 +17,31 @@ pub(super) struct ChromeLayout {
     pub(super) agents: Rect,
 }
 
-pub(super) fn compute(area: Rect, has_agents: bool, has_status: bool) -> ChromeLayout {
+pub(super) fn compute(area: Rect, chrome: FooterChrome) -> ChromeLayout {
     let header_height = 0;
     let available = area.height.saturating_sub(header_height);
-    let actions_height = u16::from(available >= 2);
-    let state_height = u16::from(available >= 3);
-    let name_height = u16::from(available >= 4);
-    let agents_height = u16::from(has_agents && available >= 5);
-    let status_height = u16::from(has_status && available >= 6);
+    let optional_visible = matches!(chrome.visibility, FooterChromeVisibility::Visible);
+    let has_status = !matches!(chrome.status, FooterChromeStatus::None);
+    let recovery_controls =
+        matches!(chrome.status, FooterChromeStatus::Recovery) && !optional_visible;
+    let mandatory_actions = recovery_controls || chrome.has_required_actions;
+    let actions_height = if optional_visible {
+        u16::from(available >= 2)
+    } else {
+        // A one-row frame gives the safety status precedence. Once there is room
+        // for both rows, keep functional actions visible and hit-testable.
+        u16::from(mandatory_actions && available > u16::from(has_status))
+    };
+    let state_height = u16::from(optional_visible && available >= 3);
+    let name_height = u16::from(optional_visible && available >= 4);
+    let agents_height = u16::from(optional_visible && chrome.has_agents && available >= 5);
+    let status_height = if optional_visible {
+        u16::from(has_status && available >= 6)
+    } else {
+        u16::from(has_status && available >= 1)
+    };
     let chrome_height = actions_height + state_height + name_height + agents_height + status_height;
-    let gap_height = u16::from(available.saturating_sub(chrome_height) >= 4);
+    let gap_height = u16::from(optional_visible && available.saturating_sub(chrome_height) >= 4);
     let footer_height = chrome_height + gap_height;
     let header = Rect::new(area.x, area.y, area.width, header_height);
     let board = Rect::new(
@@ -65,6 +80,7 @@ pub(super) fn controls(
     has_focus: bool,
     history_available: (bool, bool),
     keys: &ShortcutRegistry,
+    optional_chrome_visible: bool,
 ) -> Vec<(HitTarget, Rect)> {
     if area.height == 0 || area.width == 0 {
         return Vec::new();
@@ -77,6 +93,9 @@ pub(super) fn controls(
         history_available,
         keys,
     );
+    if !optional_chrome_visible && !matches!(context, ShortcutContext::Recovery) {
+        return Vec::new();
+    }
     let inset_width = area.width.saturating_sub(4);
     place(
         Rect::new(area.x.saturating_add(2), area.y, inset_width, area.height),

@@ -30,6 +30,9 @@ mod pointer;
 #[path = "tests/primary.rs"]
 mod primary;
 
+#[path = "tests/footer_visibility.rs"]
+mod footer_visibility;
+
 #[path = "tests/watchdog.rs"]
 mod watchdog;
 

@@ -167,6 +167,8 @@ pub struct LayoutSnapshot {
     pub header: Rect,
     /// Complete footer allocation.
     pub footer: Rect,
+    /// Whether the optional persistent footer chrome is present in this projection.
+    pub optional_footer_chrome_visible: bool,
     /// Transient status row.
     pub footer_status: Rect,
     /// Durable, always-addressable session name row.
@@ -203,6 +205,34 @@ pub struct LayoutSnapshot {
     pub content_width: u16,
     /// Modal help or command geometry, when visible.
     pub overlay: Option<OverlayLayout>,
+}
+
+#[derive(Clone, Copy)]
+pub(super) struct FooterChrome {
+    pub(super) has_agents: bool,
+    /// A functional footer action that cannot be suppressed with optional chrome.
+    pub(super) has_required_actions: bool,
+    pub(super) status: FooterChromeStatus,
+    pub(super) visibility: FooterChromeVisibility,
+}
+
+#[derive(Clone, Copy)]
+pub(super) enum FooterChromeStatus {
+    None,
+    Status,
+    Recovery,
+}
+
+#[derive(Clone, Copy)]
+pub(super) enum FooterChromeVisibility {
+    Visible,
+    Hidden,
+}
+
+impl FooterChromeVisibility {
+    pub(super) const fn from_hidden(hidden: bool) -> Self {
+        if hidden { Self::Hidden } else { Self::Visible }
+    }
 }
 
 impl LayoutSnapshot {
@@ -277,8 +307,12 @@ pub fn compute(
         area,
         requested_first,
         insertion_focused,
-        has_agents,
-        false,
+        FooterChrome {
+            has_agents,
+            has_required_actions: false,
+            status: FooterChromeStatus::None,
+            visibility: FooterChromeVisibility::Visible,
+        },
         crate::ui::settings::BoardDensity::Comfortable,
         0,
         &crate::ui::ShortcutRegistry::default(),
@@ -297,8 +331,7 @@ pub(super) fn compute_with_density(
     area: Rect,
     requested_first: usize,
     insertion_focused: bool,
-    has_agents: bool,
-    has_status: bool,
+    footer_chrome: FooterChrome,
     density: crate::ui::settings::BoardDensity,
     requested_row_offset: usize,
     keybindings: &crate::ui::ShortcutRegistry,
@@ -313,8 +346,7 @@ pub(super) fn compute_with_density(
         area,
         requested_first,
         insertion_focused,
-        has_agents,
-        has_status,
+        footer_chrome,
         density,
         requested_row_offset,
         keybindings,
@@ -333,8 +365,7 @@ pub(super) fn compute_for_app(
     presentation: &FramePresentation,
     area: Rect,
     insertion_focused: bool,
-    has_agents: bool,
-    has_status: bool,
+    footer_chrome: FooterChrome,
     density: crate::ui::settings::BoardDensity,
     keybindings: &crate::ui::ShortcutRegistry,
     history_available: (bool, bool),
@@ -346,8 +377,7 @@ pub(super) fn compute_for_app(
         area,
         0,
         insertion_focused,
-        has_agents,
-        has_status,
+        footer_chrome,
         density,
         0,
         keybindings,
@@ -366,15 +396,14 @@ fn compute_frame(
     area: Rect,
     requested_first: usize,
     insertion_focused: bool,
-    has_agents: bool,
-    has_status: bool,
+    footer_chrome: FooterChrome,
     density: crate::ui::settings::BoardDensity,
     requested_row_offset: usize,
     keybindings: &crate::ui::ShortcutRegistry,
     history_available: (bool, bool),
     viewport: Option<scroll::BoardViewport>,
 ) -> (LayoutSnapshot, scroll::ScrollGeometry) {
-    let chrome = chrome::compute(area, has_agents, has_status);
+    let chrome = chrome::compute(area, footer_chrome);
     let board = chrome.board;
     let content_width = board.width.saturating_sub(2).max(1);
     let content = content::visible_content(&content::ContentRequest {
@@ -398,6 +427,10 @@ fn compute_frame(
         maximum_viewport_offset: scroll.maximum_offset,
         header: chrome.header,
         footer: chrome.footer,
+        optional_footer_chrome_visible: matches!(
+            footer_chrome.visibility,
+            FooterChromeVisibility::Visible
+        ),
         footer_status: chrome.status,
         footer_name: chrome.name,
         footer_context: chrome.state,
@@ -433,6 +466,7 @@ fn compute_frame(
             state.focused_item.is_some(),
             history_available,
             keybindings,
+            matches!(footer_chrome.visibility, FooterChromeVisibility::Visible),
         ),
         content_width,
         overlay: None,
