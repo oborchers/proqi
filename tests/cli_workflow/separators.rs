@@ -67,7 +67,7 @@ fn insert_and_assert_separator(
     assert_eq!(conflict["error"]["code"], "idempotency_conflict");
 
     let listed = success(root, &["thoughts", "list", session], None);
-    assert_eq!(listed["thoughts"].as_array().expect("thoughts").len(), 2);
+    assert_eq!(listed["items"].as_array().expect("items").len(), 3);
     assert_eq!(listed["items"][0]["id"], first);
     assert_eq!(listed["items"][1]["kind"], "separator");
     assert_eq!(listed["items"][1]["id"], separator);

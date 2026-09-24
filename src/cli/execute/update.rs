@@ -1,3 +1,4 @@
+use crate::cli::error_code::ErrorCode;
 use std::path::Path;
 
 use serde_json::json;
@@ -31,9 +32,8 @@ pub(super) fn execute(arguments: &UpdateArgs, cache_dir: &Path) -> Result<Outcom
 fn check(cache_dir: &Path) -> Result<Outcome, CliError> {
     let installed = StableVersion::parse(env!("CARGO_PKG_VERSION")).map_err(|_| {
         CliError::new(
-            "installed_version_invalid",
+            ErrorCode::InstalledVersionInvalid,
             "installed Proqi version is invalid".to_owned(),
-            1,
         )
     })?;
     let store = FileUpdateStateStore::new(cache_dir).map_err(|error| update_error(&error))?;
@@ -71,38 +71,35 @@ fn outcome(result: &UpdateCheckResult) -> Outcome {
 }
 
 fn update_error(error: &UpdateError) -> CliError {
-    let (code, message, exit) = match error {
-        UpdateError::Network => ("update_network_failed", "stable release check failed", 1),
+    let (code, message) = match error {
+        UpdateError::Network => (
+            ErrorCode::UpdateNetworkFailed,
+            "stable release check failed",
+        ),
         UpdateError::InvalidResponse => (
-            "update_response_invalid",
+            ErrorCode::UpdateResponseInvalid,
             "stable release response is invalid",
-            1,
         ),
         UpdateError::ResponseTooLarge => (
-            "update_response_too_large",
+            ErrorCode::UpdateResponseTooLarge,
             "stable release response exceeded its limit",
-            1,
         ),
         UpdateError::Installation(_) => (
-            "installation_unverified",
+            ErrorCode::InstallationUnverified,
             "installation context could not be verified",
-            1,
         ),
         UpdateError::State(_) => (
-            "update_state_failed",
+            ErrorCode::UpdateStateFailed,
             "private update state could not be accessed",
-            1,
         ),
         UpdateError::Coordination(_) => (
-            "update_coordination_failed",
+            ErrorCode::UpdateCoordinationFailed,
             "active Proqi sessions could not be coordinated",
-            1,
         ),
         UpdateError::InstallerFailed => (
-            "update_installation_failed",
+            ErrorCode::UpdateInstallationFailed,
             "the verified installation method could not install the release",
-            1,
         ),
     };
-    CliError::new(code, message.to_owned(), exit)
+    CliError::new(code, message.to_owned())
 }

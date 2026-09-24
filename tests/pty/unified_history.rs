@@ -83,7 +83,7 @@ fn compose_and_query_history_use_exact_primary_chords_without_punching_through()
     assert!(status.success(), "unified history PTY exited with {status}");
 
     let thoughts = json_command(binary, state.path(), &["thoughts", "list", session]);
-    let thoughts = thoughts["data"]["thoughts"].as_array().expect("thoughts");
+    let thoughts = thoughts["data"]["items"].as_array().expect("thoughts");
     assert_eq!(thoughts.len(), 1);
     assert_eq!(thoughts[0]["content"], CONTENT);
 }

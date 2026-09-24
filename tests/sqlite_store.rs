@@ -182,6 +182,8 @@ mod recovery;
 mod screenshot;
 #[path = "sqlite_store/separators.rs"]
 mod separators;
+#[path = "sqlite_store/session_requests.rs"]
+mod session_requests;
 #[path = "sqlite_store/submission.rs"]
 mod submission;
 #[path = "sqlite_store/top_boundary.rs"]

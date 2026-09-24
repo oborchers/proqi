@@ -128,7 +128,7 @@ fn assert_copy_after_restart(fixture: &TransferFixture, transferred_id: &str) {
         fixture.state(),
         &["thoughts", "list", &fixture.destination],
     );
-    let live = destination_thoughts["data"]["thoughts"]
+    let live = destination_thoughts["data"]["items"]
         .as_array()
         .expect("destination thoughts");
     assert_eq!(live.len(), 3);
@@ -144,7 +144,7 @@ fn assert_copy_after_restart(fixture: &TransferFixture, transferred_id: &str) {
         &["thoughts", "list", &fixture.source],
     );
     assert_eq!(
-        source_after["data"]["thoughts"]
+        source_after["data"]["items"]
             .as_array()
             .expect("source thoughts")
             .len(),
@@ -169,7 +169,7 @@ fn assert_history_round_trip(fixture: &TransferFixture, transferred_id: &str) {
         fixture.state(),
         &["thoughts", "list", &fixture.destination],
     );
-    let after_undo = empty["data"]["thoughts"]
+    let after_undo = empty["data"]["items"]
         .as_array()
         .expect("thoughts after undo");
     assert_eq!(after_undo.len(), 1);
@@ -192,7 +192,7 @@ fn assert_history_round_trip(fixture: &TransferFixture, transferred_id: &str) {
         &["thoughts", "list", &fixture.destination],
     );
     assert_eq!(
-        restored["data"]["thoughts"][2]["content"],
+        restored["data"]["items"][2]["content"],
         "ordinary write after transfer"
     );
     assert_destination_database(
@@ -241,7 +241,7 @@ impl TransferFixture {
         let destination = new_session(binary, state.path());
         create_annotated_source(binary, state.path(), &source, &image);
         let source_list = json_command(binary, state.path(), &["thoughts", "list", &source]);
-        let source_thought = source_list["data"]["thoughts"][0]["id"]
+        let source_thought = source_list["data"]["items"][0]["id"]
             .as_str()
             .expect("source thought ID")
             .to_owned();

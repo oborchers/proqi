@@ -165,7 +165,7 @@ fn assert_recovered_content(binary: &Path, state: &Path, session: &str, content:
         state,
         &["thoughts", "list", session],
     );
-    assert_eq!(listed["data"]["thoughts"][0]["content"], content);
+    assert_eq!(listed["data"]["items"][0]["content"], content);
     let integrity: String = Connection::open(state.join("data/proqi.sqlite3"))
         .expect("database")
         .query_row("PRAGMA quick_check", [], |row| row.get(0))

@@ -21,7 +21,11 @@ Act only after explicit invocation. Use the scriptable CLI, never TUI output.
 4. Run all further commands with `--json`. On `ok: false`, surface
    `error.code`, `error.message`, and `error.details` without rewriting them.
    Do not automatically retry busy, ambiguous, conflicting, or unsupported
-   mutations.
+   mutations. Every code, its exit status, `details` shape, and retry guidance
+   is listed in the
+   [CLI error reference](https://oborchers.github.io/proqi/reference/cli.html#errors),
+   and the installed `capabilities` response publishes the same inventory in
+   `data.error_codes`. Branch on `error.code`, never on the message.
 5. Pass arbitrary thought content as exact standard-input bytes. Do not put it
    in shell syntax, command arguments, environment variables, or temporary
    command files.
@@ -70,7 +74,7 @@ version may expose only a subset.
 ```json
 {
   "diagnostics": ["collect", "keypress"],
-  "sessions": ["list", "rename", "trash", "restore", "undo", "redo", "prune"],
+  "sessions": ["list", "ensure", "create", "rename", "trash", "restore", "undo", "redo", "prune"],
   "items": ["insert-separator", "move", "delete", "duplicate"],
   "thoughts": ["list", "inspect", "add", "delete", "rename", "replace", "collapse", "move", "split", "extract", "merge", "reflow", "send", "undo", "redo"],
   "update": ["check"],
@@ -95,10 +99,22 @@ proqi --json thoughts list ses_06g30t7dv5qv55n1ppn3clis3k
 proqi --json thoughts inspect ses_06g30t7dv5qv55n1ppn3clis3k tht_06g30t8fudrq55fdkk348i7388
 ```
 
-`thoughts list` returns both the legacy thought projection and `items`, the
-authoritative ordered mixed Board projection. Each `items` entry is typed.
-Thought entries include their content metadata; separator entries contain only
-their `sep_` identity and type. Never treat a separator as an empty thought.
+`thoughts list` returns `items`, the authoritative ordered mixed Board
+projection. Each entry is typed. Thought entries carry `content`, `name`,
+`content_sha256`, and presentation metadata; separator entries contain only
+their `sep_` identity, position, and timestamps. Never treat a separator as an
+empty thought. The former `thoughts` array no longer exists.
+
+Both list commands accept `--limit N`. Their responses include `total` and
+`next_after`. When `next_after` is not `null` and the user needs more, pass it
+as `--after` with the same session, query, and filters. Prefer a small limit
+over reading a large session completely:
+
+```console
+proqi --json thoughts list ses_06g30t7dv5qv55n1ppn3clis3k --limit 20
+proqi --json thoughts list ses_06g30t7dv5qv55n1ppn3clis3k --limit 20 --after tht_06g30t8fudrq55fdkk348i7388
+proqi --json sessions list --limit 10
+```
 
 List and inspect synchronize with an active session owner before reading. Both
 return `content_sha256`. Use that digest as the precondition for exact
@@ -138,6 +154,16 @@ input rather than an argument:
 
 ```text
 argv:  ["proqi", "--json", "thoughts", "add", "ses_06g30t7dv5qv55n1ppn3clis3k"]
+stdin: Review the Unicode resize behavior.
+```
+
+When the user wants the new thought named, pass `--name` in the same command.
+Content, name, and position then form one Board operation and one undo step, so
+no unnamed intermediate thought exists. Do not add and rename separately:
+
+```text
+argv:  ["proqi", "--json", "thoughts", "add", "ses_06g30t7dv5qv55n1ppn3clis3k",
+        "--name", "Review plan", "--operation-id", "op_06g30t8fudrq55fdkjqr6mpe44"]
 stdin: Review the Unicode resize behavior.
 ```
 
@@ -211,6 +237,19 @@ Use `--thought tht_06g30t8fudrq55fdkk348i7388` with undo or redo only when
 the user explicitly requests that thought's editor history instead of board
 history.
 
+To obtain one canonical named session for automation, use `sessions ensure`.
+It returns the live session with that exact name and origin directory or
+creates it atomically, and it never opens a TUI or contacts Herdr. Report
+`ambiguous_session` and `session_name_conflict` to the user instead of choosing.
+Use `sessions create` only when the user explicitly wants an additional session
+even if the name exists. Neither command opens the session; the user can run
+the returned `resume_command`:
+
+```console
+proqi --json sessions ensure --name agent-os-claude --cwd /path/to/agent-os
+proqi --json sessions create --name scratch --operation-id op_06g30t8fudrq55fdkjqr6mpe44
+```
+
 Session rename, trash, and restore use Browser history, which is separate from
 every session's Board and editor history:
 
@@ -226,6 +265,11 @@ proqi --json sessions redo
 `sessions prune --yes` is permanent and is not Browser-undoable. Use it only
 when the user explicitly requests permanent deletion of an already trashed
 session.
+
+Every session mutation accepts `--operation-id`. Supply a fresh `op_`
+identifier when a lost response must be retryable, and reuse it only to retry
+the exact same request; a replay reports `idempotent_replay: true`. Trashing an
+already trashed session succeeds with `changed: false`.
 
 ## Limitations
 

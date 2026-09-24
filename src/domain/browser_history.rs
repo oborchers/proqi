@@ -294,9 +294,5 @@ impl BrowserOperation {
 }
 
 fn validate_name(name: Option<&str>) -> Result<(), DomainError> {
-    if name.is_some_and(|value| value.trim().is_empty()) {
-        Err(DomainError::BlankSessionName)
-    } else {
-        Ok(())
-    }
+    name.map_or(Ok(()), super::validate_session_name)
 }

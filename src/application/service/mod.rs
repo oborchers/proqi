@@ -7,6 +7,9 @@ mod thoughts;
 mod transformations;
 
 pub(crate) use board_items::derived_duplicate_item_ids;
+pub use sessions::{
+    BrowserHistoryMovement, NamedSession, NamedSessionDisposition, SessionAdministrationReceipt,
+};
 
 use std::path::PathBuf;
 
@@ -158,6 +161,14 @@ pub enum SessionServiceError {
     /// No matching session exists.
     #[error("session not found: {0}")]
     SessionNotFound(String),
+    /// The requested session name belongs only to sessions from other directories.
+    #[error("session name is already used for another directory: {name}")]
+    SessionNameConflict {
+        /// Exact requested name.
+        name: String,
+        /// Live sessions that already use the name.
+        sessions: Vec<crate::ports::store::NamedSessionMatch>,
+    },
     /// More than one session has the requested name.
     #[error("session name is ambiguous: {reference}")]
     AmbiguousSession {

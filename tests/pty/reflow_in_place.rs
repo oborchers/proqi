@@ -80,7 +80,7 @@ fn board_and_edit_reflow_chords_commit_exact_restart_safe_content() {
         .as_str()
         .expect("session");
     let thoughts = json_command(binary, state.path(), &["thoughts", "list", session]);
-    let thoughts = thoughts["data"]["thoughts"].as_array().expect("thoughts");
+    let thoughts = thoughts["data"]["items"].as_array().expect("thoughts");
     assert_eq!(thoughts.len(), 2);
     assert_eq!(thoughts[0]["content"], "board text\nwrapped prose");
     assert_eq!(thoughts[1]["content"], "editor text\r\nwrapped prose");

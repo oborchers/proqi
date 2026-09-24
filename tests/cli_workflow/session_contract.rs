@@ -15,7 +15,7 @@ fn json_fresh_launch_is_empty_and_retains_interactive_onboarding_eligibility() {
     let root = temporary.path();
     let session = create_session(root);
     let thoughts = success(root, &["thoughts", "list", &session], None);
-    assert!(thoughts["thoughts"].as_array().is_some_and(Vec::is_empty));
+    assert!(thoughts["items"].as_array().is_some_and(Vec::is_empty));
     let connection =
         rusqlite::Connection::open(root.join("data/proqi.sqlite3")).expect("open database");
     let completed: i64 = connection

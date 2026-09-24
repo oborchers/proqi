@@ -1,5 +1,6 @@
 //! Platform composition for paths, schema coordination, and SQLite.
 
+use crate::cli::error_code::ErrorCode;
 use std::path::{Path, PathBuf};
 
 use crate::{
@@ -58,7 +59,7 @@ impl RuntimeContext {
         let exact_resume = resume_reference.and_then(|reference| reference.parse().ok());
         let cwd = SystemEnvironment
             .current_directory()
-            .map_err(|error| CliError::new("environment_failed", error.to_string(), 1))?;
+            .map_err(|error| CliError::new(ErrorCode::EnvironmentFailed, error.to_string()))?;
         let paths = resolve_paths(state_root)?;
         let executable = current_executable()?;
         prepare_state_paths(&paths, state_root)?;
@@ -178,7 +179,7 @@ impl RuntimeContext {
 fn current_executable() -> Result<PathBuf, CliError> {
     SystemEnvironment
         .current_executable()
-        .map_err(|error| CliError::new("environment_failed", error.to_string(), 1))
+        .map_err(|error| CliError::new(ErrorCode::EnvironmentFailed, error.to_string()))
 }
 
 fn initialize_runtime_diagnostics(
@@ -187,7 +188,7 @@ fn initialize_runtime_diagnostics(
 ) -> Result<InstanceId, CliError> {
     let instance_id = ids.instance_id();
     crate::adapters::diagnostics::initialize(data_dir, instance_id)
-        .map_err(|error| CliError::new("diagnostics_failed", error.to_string(), 1))?;
+        .map_err(|error| CliError::new(ErrorCode::DiagnosticsFailed, error.to_string()))?;
     crate::adapters::diagnostics::record(SafeEvent::RuntimeOpening { instance_id });
     Ok(instance_id)
 }
@@ -197,23 +198,22 @@ fn detect_startup_installation(
 ) -> Result<(Installation, StableVersion, Option<ExecutableIdentity>), CliError> {
     let installation = SystemInstallDetector::for_executable(executable.to_path_buf())
         .detect()
-        .map_err(|error| CliError::new("installation_failed", error.to_string(), 1))?;
+        .map_err(|error| CliError::new(ErrorCode::InstallationFailed, error.to_string()))?;
     let executable_identity = (installation.kind
         == crate::domain::InstallationKind::StandaloneArchive)
         .then(|| ExecutableIdentity::read(executable))
         .transpose()
         .map_err(|error| {
             CliError::new(
-                "installation_failed",
+                ErrorCode::InstallationFailed,
                 format!(
                     "verified standalone executable identity is unavailable: {}",
                     error.failure().as_str()
                 ),
-                1,
             )
         })?;
     let current = StableVersion::parse(env!("CARGO_PKG_VERSION"))
-        .map_err(|error| CliError::new("invalid_build_version", error.to_string(), 1))?;
+        .map_err(|error| CliError::new(ErrorCode::InvalidBuildVersion, error.to_string()))?;
     Ok((installation, current, executable_identity))
 }
 
@@ -230,9 +230,8 @@ fn prepare_state_paths(paths: &AppPaths, state_root: Option<&Path>) -> Result<()
     ]);
     crate::adapters::filesystem::prepare_private_dirs(&directories).map_err(|error| {
         CliError::new(
-            "unsafe_state_path",
+            ErrorCode::UnsafeStatePath,
             format!("Proqi state paths are unsafe: {error}"),
-            2,
         )
     })
 }
@@ -254,7 +253,7 @@ pub(super) fn resolve_paths(state_root: Option<&Path>) -> Result<AppPaths, CliEr
     }
     NativePaths
         .resolve()
-        .map_err(|error| CliError::new("environment_failed", error.to_string(), 1))
+        .map_err(|error| CliError::new(ErrorCode::EnvironmentFailed, error.to_string()))
 }
 
 fn open_store(

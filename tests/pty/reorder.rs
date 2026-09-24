@@ -40,7 +40,7 @@ fn option_shift_reorder(sequence: &str) -> Vec<String> {
     let session = sessions["data"]["sessions"][0]["id"]
         .as_str()
         .expect("session ID");
-    json_command(binary, state.path(), &["thoughts", "list", session])["data"]["thoughts"]
+    json_command(binary, state.path(), &["thoughts", "list", session])["data"]["items"]
         .as_array()
         .expect("thought list")
         .iter()
@@ -110,7 +110,7 @@ fn primary_shift_arrow_reorders_one_thought_in_a_real_pty() {
         .as_str()
         .expect("session ID");
     let thoughts = json_command(binary, state.path(), &["thoughts", "list", session]);
-    let contents = thoughts["data"]["thoughts"]
+    let contents = thoughts["data"]["items"]
         .as_array()
         .expect("thought list")
         .iter()
@@ -164,7 +164,7 @@ fn lowercase_primary_shift_k_report_reorders_one_thought_in_a_real_pty() {
         .as_str()
         .expect("session ID");
     let thoughts = json_command(binary, state.path(), &["thoughts", "list", session]);
-    let contents = thoughts["data"]["thoughts"]
+    let contents = thoughts["data"]["items"]
         .as_array()
         .expect("thought list")
         .iter()

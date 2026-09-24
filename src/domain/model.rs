@@ -1,10 +1,12 @@
 //! Principal domain records and aggregate invariants.
 
 mod direction;
+mod session;
 
 pub use direction::Direction;
+pub use session::{Session, validate_session_name};
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -80,95 +82,6 @@ impl ThoughtPosition {
     #[must_use]
     pub const fn get(self) -> u32 {
         self.0
-    }
-}
-
-/// A scratchpad session.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct Session {
-    /// Stable identity.
-    pub id: SessionId,
-    /// Optional user-assigned name.
-    pub name: Option<String>,
-    /// Directory from which the session was created.
-    pub origin_cwd: PathBuf,
-    /// Directory from which it was most recently opened.
-    pub last_opened_cwd: PathBuf,
-    /// Creation time.
-    pub created_at: Timestamp,
-    /// Most recent successful opening time.
-    pub last_opened_at: Timestamp,
-    /// Most recent content activity time.
-    pub last_active_at: Timestamp,
-    /// Last operation acknowledged as durable.
-    pub last_durable_sequence: OperationSequence,
-    /// Soft-deletion time, if in recoverable trash.
-    pub deleted_at: Option<Timestamp>,
-}
-
-impl Session {
-    /// Create a live, unnamed session.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`DomainError::RelativeDirectory`] when `cwd` is not absolute.
-    pub fn new(id: SessionId, cwd: PathBuf, now: Timestamp) -> Result<Self, DomainError> {
-        validate_absolute_path(&cwd)?;
-        Ok(Self {
-            id,
-            name: None,
-            origin_cwd: cwd.clone(),
-            last_opened_cwd: cwd,
-            created_at: now,
-            last_opened_at: now,
-            last_active_at: now,
-            last_durable_sequence: OperationSequence::ZERO,
-            deleted_at: None,
-        })
-    }
-
-    /// Rename the session, or clear its optional name.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`DomainError::BlankSessionName`] for whitespace-only names.
-    pub fn rename(&mut self, name: Option<String>) -> Result<(), DomainError> {
-        if name.as_deref().is_some_and(|value| value.trim().is_empty()) {
-            return Err(DomainError::BlankSessionName);
-        }
-        self.name = name;
-        Ok(())
-    }
-
-    /// Validate restored session paths and optional naming invariants.
-    ///
-    /// # Errors
-    ///
-    /// Returns a domain error when persisted state bypassed constructor invariants.
-    pub fn validate(&self) -> Result<(), DomainError> {
-        validate_absolute_path(&self.origin_cwd)?;
-        validate_absolute_path(&self.last_opened_cwd)?;
-        if self
-            .name
-            .as_deref()
-            .is_some_and(|value| value.trim().is_empty())
-        {
-            return Err(DomainError::BlankSessionName);
-        }
-        Ok(())
-    }
-
-    /// Record a successful open after a lease has been acquired.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`DomainError::RelativeDirectory`] when `cwd` is not absolute.
-    pub fn record_open(&mut self, cwd: PathBuf, now: Timestamp) -> Result<(), DomainError> {
-        validate_absolute_path(&cwd)?;
-        self.last_opened_cwd = cwd;
-        self.last_opened_at = now;
-        self.last_active_at = self.last_active_at.max(now);
-        Ok(())
     }
 }
 
@@ -476,12 +389,4 @@ pub enum DomainError {
     /// A reversible metadata replacement no longer matches the current name.
     #[error("thought name changed before rename: {0}")]
     ThoughtNameConflict(ThoughtId),
-}
-
-fn validate_absolute_path(path: &Path) -> Result<(), DomainError> {
-    if path.is_absolute() {
-        Ok(())
-    } else {
-        Err(DomainError::RelativeDirectory(path.to_path_buf()))
-    }
 }

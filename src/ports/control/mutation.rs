@@ -58,7 +58,11 @@ pub enum ControlMutation {
         /// Optional zero-based insertion position.
         position: Option<usize>,
     },
-    /// Preserve one already-valid Proqi thought during cross-session transfer.
+    /// Create one thought whose content, validated metadata, and optional name are exact.
+    ///
+    /// Cross-session transfer preserves an existing thought through this request,
+    /// and named CLI creation uses it so content, name, and position commit as one
+    /// Board operation.
     PreserveAdd {
         /// Durable destination operation identity.
         operation_id: OperationId,

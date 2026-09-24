@@ -286,11 +286,8 @@ fn assert_shared_runtime_contents(binary: &str, state: &Path) {
         .iter()
         .map(|session| {
             let thoughts = json_command(binary, state, &["thoughts", "list", session]);
-            assert_eq!(
-                thoughts["data"]["thoughts"].as_array().map(Vec::len),
-                Some(1)
-            );
-            thoughts["data"]["thoughts"][0]["content"]
+            assert_eq!(thoughts["data"]["items"].as_array().map(Vec::len), Some(1));
+            thoughts["data"]["items"][0]["content"]
                 .as_str()
                 .expect("thought content")
                 .to_owned()
@@ -312,11 +309,8 @@ fn assert_single_thought(binary: &str, state: &std::path::Path, expected: &str) 
         .as_str()
         .expect("session ID");
     let thoughts = json_command(binary, state, &["thoughts", "list", session]);
-    assert_eq!(
-        thoughts["data"]["thoughts"].as_array().map(Vec::len),
-        Some(1)
-    );
-    assert_eq!(thoughts["data"]["thoughts"][0]["content"], expected);
+    assert_eq!(thoughts["data"]["items"].as_array().map(Vec::len), Some(1));
+    assert_eq!(thoughts["data"]["items"][0]["content"], expected);
 }
 
 fn assert_large_paste_annotation(binary: &str, state: &Path) {

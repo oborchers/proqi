@@ -835,9 +835,13 @@ event-sourced system.
   structural replay comparison.
 - `browser_operations`: installation-wide ordered rename, trash, and restore
   operations with exact forward and inverse metadata transitions.
-- `browser_operation_receipts`: idempotent Browser mutation receipts, including
-  same-name rename requests that intentionally create no history, retained
-  independently of the active Browser cursor.
+- `browser_operation_receipts`: idempotent session-administration receipts,
+  retained independently of the active Browser cursor. A row holds either one
+  reversible Browser operation or one versioned request receipt that
+  intentionally creates no history: a same-name rename, a trash request for an
+  already trashed session, a named session creation, or a permanent prune. The
+  prune receipt is written after the pruned session's other receipts are
+  removed, so an exact prune retry remains a replay.
 - `browser_history_receipts`: idempotent, compare-and-set Browser undo and redo
   receipts tied to the exact operation that was presented to the caller.
 - `browser_history_state`: the single applied-prefix cursor for Browser
@@ -2004,12 +2008,44 @@ standard error. Thought bodies enter through standard input. A caller-supplied
 `op_` identity is resolved against its typed durable request before mutation,
 so matching retries return the original receipt and mismatched reuse fails.
 
-The `thoughts list` response preserves its content-bearing `thoughts` array and
-adds an ordered typed `items` array. Thought entries identify a thought and its
-position. Separator entries use `kind: "separator"`, a `sep_` identity, and a
-position, with no content or annotation payload. Existing thought mutation
-commands continue to address thoughts, while their ordering operates within the
-shared Board item sequence.
+The `thoughts list` response returns one ordered typed `items` array. Thought
+entries carry their identity, position, exact content, optional name,
+presentation, update time, and content digest. Separator entries use
+`kind: "separator"`, a `sep_` identity, and a position, with no content or
+annotation payload. The former duplicate `thoughts` projection was removed
+before 1.0. Existing thought mutation commands continue to address thoughts,
+while their ordering operates within the shared Board item sequence.
+
+`thoughts list` and `sessions list` accept a positive limit and continue after a
+stable typed anchor identity. Both report the complete `total` and the next
+anchor. A missing anchor fails with `cursor_not_found` instead of restarting.
+
+`sessions ensure` and `sessions create` create named sessions without a lease,
+terminal, or Herdr access. `Session::with_name` sets the name in the first
+durable state. The store's named creation evaluates the collision policy and
+inserts the session in one immediate transaction. For get-or-create, it returns
+the live sessions that already use the exact name. The application then reuses
+the one with the requested canonical origin directory, reports ambiguity for
+several, and reports `session_name_conflict` when the name belongs only to
+other directories. Concurrent callers therefore create at most one session.
+Unconditional creation derives the session identity from its operation
+identity and retains a creation receipt in the same transaction.
+
+Session rename, trash, restore, prune, undo, and redo accept caller-supplied
+operation identities. The application compares one typed `SessionRequest`
+against the retained receipt before and after acquiring the session lease, so an
+exact retry returns the original result and divergent reuse, including reuse of
+a Board or editor history identity, fails with `idempotency_conflict`. A trash
+request for an already trashed session reserves its identity and reports that
+nothing changed. `thoughts add --name` reuses the purpose-specific preserved
+creation request, which already carries an optional name through the owner
+control protocol, so content, name, and position remain one Board operation.
+
+Every JSON failure code is a variant of one closed CLI inventory that owns its
+exit status, retry guidance, and `details` shape. The public reference table is
+rendered from that inventory and checked verbatim, and `capabilities` publishes
+the codes. With `--json`, clap help and version displays are successful
+responses.
 
 The additive `items` family is the semantic mutation boundary for that mixed
 sequence. It inserts payload-free separators, moves one typed item, and deletes

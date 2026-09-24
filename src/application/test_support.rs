@@ -7,7 +7,10 @@ use crate::{
         InstanceId, OperationId, RequestId, RevisionId, SeparatorId, SessionId, SubmissionId,
         ThoughtId, Timestamp,
     },
-    ports::environment::{Clock, IdGenerator},
+    ports::{
+        environment::{Clock, IdGenerator},
+        runtime::{Lease, RuntimeCoordinator, RuntimeError, RuntimeScan},
+    },
 };
 
 pub(super) struct TestClock(pub(super) Timestamp);
@@ -78,5 +81,44 @@ impl IdGenerator for TestIds {
     }
     fn submission_id(&mut self) -> SubmissionId {
         generate!(self, SubmissionId)
+    }
+}
+
+#[derive(Clone, Copy)]
+pub(super) struct TestLease;
+
+impl Lease for TestLease {}
+
+/// Runtime fake whose optional busy session refuses its lease.
+pub(super) struct TestRuntime {
+    pub(super) busy: Option<SessionId>,
+}
+
+impl RuntimeCoordinator for TestRuntime {
+    type SessionLease = TestLease;
+    type SharedSchemaLease = TestLease;
+    type ExclusiveSchemaLease = TestLease;
+
+    fn acquire_session(&self, session_id: SessionId) -> Result<TestLease, RuntimeError> {
+        if self.busy == Some(session_id) {
+            Err(RuntimeError::SessionBusy {
+                session_id,
+                holder: None,
+            })
+        } else {
+            Ok(TestLease)
+        }
+    }
+
+    fn acquire_schema_shared(&self) -> Result<TestLease, RuntimeError> {
+        Ok(TestLease)
+    }
+
+    fn acquire_schema_exclusive(&self) -> Result<TestLease, RuntimeError> {
+        Ok(TestLease)
+    }
+
+    fn scan_runtime(&self) -> Result<RuntimeScan, RuntimeError> {
+        Ok(RuntimeScan::default())
     }
 }

@@ -15,10 +15,15 @@ use super::{
 mod codec;
 mod prune;
 mod receipts;
+mod request_codec;
 
 use codec::{decode, encode, kind_str, parse_kind};
 pub(super) use prune::{invalidate_activity_conflicts, remove_session};
-pub(super) use receipts::commit_noop_rename;
+pub(super) use receipts::{
+    ReceiptReplay, commit_noop_rename, commit_noop_trash, insert as insert_request_receipt,
+    replay as replay_request, stored_request,
+};
+pub(super) use request_codec::RequestReceipt;
 
 pub(super) fn commit(
     transaction: &Transaction<'_>,
@@ -164,7 +169,7 @@ pub(super) fn operation(
         .map_err(map_sql_error)?;
     let operation = stored
         .map(|(target, payload)| {
-            if receipts::is_noop_receipt(&payload, id, &target)? {
+            if receipts::is_request_receipt(&payload, id, &target)? {
                 return Err(StoreError::Conflict(
                     "operation identity is already used by Browser history".to_owned(),
                 ));

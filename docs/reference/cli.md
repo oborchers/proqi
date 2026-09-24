@@ -7,8 +7,12 @@
     The published v0.11.0 binary does not include the `items` family or the
     `thoughts split`, `extract`, `merge`, and `reflow` operations. Those eight
     additive commands are available on `main` for the next release and are
-    labeled below. Always read `capabilities` from the installed binary before
-    using an operation.
+    labeled below. Next-release main also adds `sessions ensure` and
+    `sessions create`, `--operation-id` on every session mutation,
+    `thoughts add --name`, bounded list pages, and successful JSON help and
+    version output. It removes the legacy `thoughts` array from `thoughts list`.
+    Always read `capabilities` from the installed binary before using an
+    operation.
 
 Run `proqi --help` or append `--help` to any command for the installed contract.
 Human output is for people. Add global `--json` when a script or coding agent
@@ -32,6 +36,14 @@ proqi --json <command>
 and subcommand. `-V` is the short form of `--version`, which prints the
 installed release. `--json` is global, so it can precede or follow a command;
 examples keep it immediately after `proqi` for consistency.
+
+<span class="version-scope">Next release</span>
+
+With `--json`, help and version are successful informational requests. They
+exit 0 and return `ok: true`. Version data is `{"name": "proqi", "version":
+"X.Y.Z"}`, and help data is `{"help": "<rendered help text>"}`. A literal
+`--json` after the `--` argument terminator is a positional value and never
+selects JSON output.
 
 ## Interactive startup
 
@@ -77,13 +89,15 @@ contain generated completions.
 
 ```text
 proqi sessions
-proqi sessions list [-q, --query TEXT] [--all]
-proqi sessions rename <session> (NAME | --clear)
-proqi sessions trash <session>
-proqi sessions restore <session>
-proqi sessions undo
-proqi sessions redo
-proqi sessions prune <session> --yes
+proqi sessions list [-q, --query TEXT] [--all] [--limit N] [--after SESSION_ID]
+proqi sessions ensure --name NAME --cwd PATH
+proqi sessions create --name NAME [--cwd PATH] [--operation-id OP_ID]
+proqi sessions rename <session> (NAME | --clear) [--operation-id OP_ID]
+proqi sessions trash <session> [--operation-id OP_ID]
+proqi sessions restore <session> [--operation-id OP_ID]
+proqi sessions undo [--operation-id OP_ID]
+proqi sessions redo [--operation-id OP_ID]
+proqi sessions prune <session> --yes [--operation-id OP_ID]
 ```
 
 With no subcommand, `sessions` lists resumable sessions. Ranking prefers the
@@ -94,6 +108,70 @@ trashed sessions.
 Rename, trash, and restore enter persistent Browser history. `sessions undo`
 and `sessions redo` move that history. Prune is different: it permanently
 deletes an already trashed session and requires `--yes`. It is not undoable.
+
+### Create named sessions
+
+<span class="version-scope">Next release</span>
+
+`sessions ensure` returns the one live session whose exact name and origin
+directory match, and creates it when no live session uses the name. The name
+lookup and the creation run in one storage transaction, so repeated and
+concurrent calls with the same inputs return one session. The session receives
+its name in the same commit that creates it, so no unnamed intermediate session
+can remain after a failure.
+
+`--cwd` must name an existing directory. Proqi resolves it the same way it
+records an interactive launch directory, so symlinked spellings of one
+directory match. Trashed sessions are ignored. When several live sessions match
+the name and directory, the command fails with `ambiguous_session` and lists
+them in `details.matches`. When the name belongs only to live sessions from
+other directories, it fails with `session_name_conflict` and lists each
+conflicting `id` and `origin_cwd`.
+
+`sessions create` always creates one additional session, even when the name is
+already in use. `--cwd` defaults to the current directory. Its session
+identifier derives from the operation identity, so repeating the request with
+the same `--operation-id` returns the same session instead of creating another.
+
+Neither command opens a terminal interface or contacts Herdr. Both return:
+
+```json
+{
+  "session_id": "ses_...",
+  "name": "agent-os-claude",
+  "origin_cwd": "/path/to/agent-os",
+  "state": "resumable",
+  "disposition": "created",
+  "resume_command": "proqi -r ses_..."
+}
+```
+
+`disposition` is `created` or `reused`. `state` uses the same values as
+`sessions list`. `sessions create` additionally returns
+`receipt: {session_id, operation_id, idempotent_replay}`. Open the returned
+session with `proqi --resume <session-id>`.
+
+### Retry session changes
+
+<span class="version-scope">Next release</span>
+
+Every session mutation accepts `--operation-id`. A retry with the same
+identity and the same request returns the original result with
+`idempotent_replay: true` instead of applying anything again. Reusing the
+identity for another request, including a thought or item mutation, fails with
+`idempotency_conflict`. Undo and redo requests match on their direction.
+
+Rename, trash, restore, and prune return
+`{session_id, status, changed, receipt: {session_id, operation_id,
+idempotent_replay}}`. `changed` reports whether the call changed durable state.
+Trashing an already trashed session succeeds with `changed: false`. A rename to
+the current name also reports `changed: false`. Undo and redo return
+`{history, operation, cursor, receipt: {operation_id, idempotent_replay}}`.
+
+Prune retains its receipt after the session is deleted, so an exact retry
+succeeds as a replay. Pruning also forgets the session's other request
+receipts. A replayed `sessions create` for a pruned session therefore creates
+it again.
 
 ## Change Board items
 
@@ -125,9 +203,9 @@ Reusing that identity for different arguments fails with
 ## Inspect and change thoughts
 
 ```text
-proqi thoughts list <session>
+proqi thoughts list <session> [--limit N] [--after ITEM_ID]
 proqi thoughts inspect <session> <thought>
-proqi thoughts add <session> [--position N] [--operation-id OP_ID]
+proqi thoughts add <session> [--name NAME] [--position N] [--operation-id OP_ID]
 proqi thoughts delete <session> <thought> [--operation-id OP_ID]
 proqi thoughts rename <session> <thought> (NAME | --clear) [--operation-id OP_ID]
 proqi thoughts replace <session> <thought> (--expected-sha256 HEX | --force) [--revision-id REV_ID]
@@ -148,10 +226,40 @@ proqi thoughts redo <session> [--thought THOUGHT] [--operation-id OP_ID]
 printf '%s' 'Review the retry path.' | proqi --json thoughts add <session>
 ```
 
-Positions are zero-based. List output preserves Board order in `items`, retains
-the legacy ordered `thoughts` view, and distinguishes thoughts from payload-free
-separators. Inspect returns one exact thought body, its `content_sha256`, and
-metadata. Names remain separate metadata.
+Positions are zero-based. List output preserves Board order in `items` and
+distinguishes thoughts from payload-free separators. Each thought entry carries
+`kind: "thought"`, `id`, `position`, `content`, `name`, `collapsed`,
+`presentation`, `updated_at`, and `content_sha256`. Separator entries carry
+`kind: "separator"`, `id`, `position`, `created_at`, and `updated_at`. Inspect
+returns one exact thought body, its `content_sha256`, and metadata. Names
+remain separate metadata.
+
+<span class="version-scope">Next release</span>
+
+The legacy `thoughts` array is removed from `thoughts list`. Read thought
+content from the `items` entries whose `kind` is `thought`.
+
+`add --name` creates the content, name, and position as one Board operation and
+one undo step, for active and inactive sessions. The name follows thought-name
+rules: it must be nonblank, single-line, and at most 80 characters after
+surrounding whitespace is trimmed. An invalid name fails with `invalid_input`
+before any write. The name is part of the operation identity, so the same
+`--operation-id` with a different name fails with `idempotency_conflict`.
+
+### Bounded lists
+
+<span class="version-scope">Next release</span>
+
+`thoughts list` and `sessions list` accept `--limit N`, where `N` is at least 1.
+Both return `total`, the number of entries in the complete list, and
+`next_after`, the identifier of the last returned entry when more remain, or
+`null`. Pass `next_after` as `--after` to read the following page. A thought
+list page contains Board items, including separators, so its `--after` accepts a
+`tht_` or `sep_` identifier. A session list page accepts a `ses_` identifier and
+follows the same ranking and filters as the first page. An `--after` entry that
+is no longer listed fails with `cursor_not_found` rather than restarting. Pages
+read the current state on each call, so concurrent changes can move entries
+between pages.
 
 Rename requires a name or `--clear`. An empty thought name also clears it.
 
@@ -187,6 +295,91 @@ main, other platforms report active control as unavailable in `capabilities`;
 they do not bypass the session lease. The CLI does not expose TUI focus, cursor
 or pointer geometry, clipboard acquisition, host target discovery, or raw key
 injection.
+
+## Errors
+
+With `--json`, every failure writes
+`{"schema_version": 1, "ok": false, "error": {"code", "message", "details"}}` to
+standard output and exits with the status below. `message` is human text and can
+change. Branch on `code`. `capabilities` publishes the same inventory in
+`error_codes`.
+
+Exit status 0 is success, 2 is an invalid request, 3 is absent state, 4 is an
+ambiguous reference, 5 is contention, 6 is an unsupported version or protocol,
+7 is a state or precondition conflict, 8 is an indeterminate outcome, and 1 is
+any other failure.
+
+**Retry** states whether repeating the identical request can succeed:
+
+- **No**: change the arguments or input first.
+- **After change**: retry after the reported state changes, for example after
+  restoring a session, re-inspecting content, or fixing the environment.
+- **Yes**: retry after contention or a transient fault clears.
+- **Same identity**: completion is unknown. Retry only with the same operation
+  identity so the original result can be matched.
+
+| Code | Exit | Retry | `details` |
+|---|---|---|---|
+| `invalid_arguments` | 2 | No | `{}` |
+| `invalid_input` | 2 | No | `{}` |
+| `invalid_identifier` | 2 | No | `{}` |
+| `config_invalid` | 2 | No | `{}` |
+| `invalid_shortcut_context` | 2 | No | `{}` |
+| `unsafe_state_path` | 2 | No | `{}` |
+| `session_not_found` | 3 | After change | `{}` |
+| `thought_not_found` | 3 | After change | `{}` |
+| `not_found` | 3 | After change | `{}` |
+| `cursor_not_found` | 3 | After change | `{}` |
+| `ambiguous_session` | 4 | After change | `{"matches": [session_id]}` |
+| `session_busy` | 5 | Yes | `{}`, or `{"session_id", "holder"}` when the active owner is known |
+| `schema_busy` | 5 | Yes | `{}` |
+| `storage_busy` | 5 | Yes | `{}` |
+| `unsupported` | 6 | No | `{}` |
+| `protocol_mismatch` | 6 | No | `{}` |
+| `session_trashed` | 7 | After change | `{}` |
+| `session_not_trashed` | 7 | After change | `{}` |
+| `session_name_conflict` | 7 | After change | `{"name", "sessions": [{"id", "origin_cwd"}]}` |
+| `history_unavailable` | 7 | After change | `{}` |
+| `idempotency_conflict` | 7 | No | `{}` |
+| `no_change` | 7 | No | `{}` |
+| `content_conflict` | 7 | After change | `{}` |
+| `thought_locked` | 7 | After change | `{}` |
+| `invalid_state` | 7 | After change | `{}` |
+| `invariant_violation` | 7 | No | `{}` |
+| `conflict` | 7 | After change | `{}` |
+| `mutation_rejected` | 7 | After change | `{}` |
+| `operation_indeterminate` | 8 | Same identity | `{"session_id", "holder"}` |
+| `storage_failed` | 1 | After change | `{}` |
+| `storage_full` | 1 | After change | `{}` |
+| `disk_full` | 1 | After change | `{}` |
+| `recovery_capacity` | 1 | After change | `{}` |
+| `runtime_failed` | 1 | After change | `{}` |
+| `runtime_metadata_invalid` | 1 | After change | `{}` |
+| `terminal_failed` | 1 | After change | `{}` |
+| `terminal_worker_failed` | 1 | After change | `{}` |
+| `terminal_cleanup_failed` | 1 | After change | `{}` |
+| `control_failed` | 1 | After change | `{}` |
+| `output_failed` | 1 | After change | `{}` |
+| `environment_failed` | 1 | After change | `{}` |
+| `diagnostics_failed` | 1 | After change | `{}` |
+| `doctor_failed` | 1 | After change | The complete `doctor` report |
+| `installation_failed` | 1 | After change | `{}` |
+| `installation_unverified` | 1 | After change | `{}` |
+| `installed_version_invalid` | 1 | No | `{}` |
+| `invalid_build_version` | 1 | No | `{}` |
+| `obsolete_executable` | 1 | No | `{"current_version", "observed_installed_version"}` |
+| `update_convergence_active` | 1 | Yes | `{}` |
+| `external_upgrade_pending` | 1 | After change | `{"current_version", "pending_target_version", "sessions": [{"session_id", "previous_version"}]}` |
+| `external_upgrade_blocked` | 1 | After change | `{"blockers": [blocker]}` |
+| `external_upgrade_capacity` | 1 | After change | `{"blockers": [blocker], "participant_count", "maximum", "blockers_truncated"}` |
+| `external_upgrade_incomplete` | 1 | After change | `{"blockers": [blocker]}` |
+| `external_upgrade_persistence_failed` | 1 | After change | `{"blockers": [blocker]}` |
+| `update_network_failed` | 1 | Yes | `{}` |
+| `update_response_invalid` | 1 | After change | `{}` |
+| `update_response_too_large` | 1 | After change | `{}` |
+| `update_state_failed` | 1 | After change | `{}` |
+| `update_coordination_failed` | 1 | After change | `{}` |
+| `update_installation_failed` | 1 | After change | `{}` |
 
 ## Check updates
 

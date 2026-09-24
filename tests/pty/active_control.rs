@@ -8,6 +8,8 @@ use super::support::{
     wait_for_path,
 };
 
+#[path = "active_control/named_requests.rs"]
+mod named_requests;
 #[path = "active_control/semantic.rs"]
 mod semantic;
 
@@ -102,7 +104,7 @@ fn exercise_live_metadata_and_editor(
 ) {
     exercise_live_session_name(binary, state, session);
     let listed = json_command(binary, state, &["thoughts", "list", session]);
-    let digest = listed["data"]["thoughts"][0]["content_sha256"]
+    let digest = listed["data"]["items"][0]["content_sha256"]
         .as_str()
         .expect("content digest");
     let revision = revision_id();
@@ -414,7 +416,7 @@ fn assert_recovered_state(
     assert_eq!(sessions["data"]["sessions"][0]["state"], "recovered");
     assert_eq!(sessions["data"]["sessions"][0]["name"], "Live owner");
     let thoughts = json_command(binary, state, &["thoughts", "list", session]);
-    let live = thoughts["data"]["thoughts"].as_array().expect("thoughts");
+    let live = thoughts["data"]["items"].as_array().expect("thoughts");
     assert_eq!(live.len(), 2);
     assert_eq!(live[0]["id"], surviving_id);
     assert_eq!(live[0]["content"], "Keep me");

@@ -17,7 +17,7 @@ fn thought_content(binary: &str, state: &std::path::Path) -> String {
     let session = sessions["data"]["sessions"][0]["id"]
         .as_str()
         .expect("session ID");
-    json_command(binary, state, &["thoughts", "list", session])["data"]["thoughts"][0]["content"]
+    json_command(binary, state, &["thoughts", "list", session])["data"]["items"][0]["content"]
         .as_str()
         .expect("thought content")
         .to_owned()
@@ -135,7 +135,7 @@ fn short_fuzzy_invocation_completes_exactly_and_shuts_down_in_a_real_pty() {
         .expect("session ID");
     let thoughts = json_command(binary, state.path(), &["thoughts", "list", session]);
     assert_eq!(
-        thoughts["data"]["thoughts"][0]["content"],
+        thoughts["data"]["items"][0]["content"],
         "$aos-communication-email "
     );
 }

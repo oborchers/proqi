@@ -1,5 +1,6 @@
 //! Active-session CLI mutations forwarded to the verified reducer owner.
 
+use crate::cli::error_code::ErrorCode;
 mod board;
 pub(super) use board::{
     extract_thought, insert_separator, merge_thoughts, move_item, mutate_items, reflow_thought,
@@ -35,14 +36,12 @@ pub(super) fn rename_session(
     context: &mut RuntimeContext,
     session_id: SessionId,
     name: Option<String>,
+    operation_id: OperationId,
 ) -> Result<bool, CliError> {
     let Some(owner) = owner(context, session_id)? else {
         return Ok(false);
     };
-    let mutation = ControlMutation::RenameSession {
-        operation_id: context.ids.operation_id(),
-        name,
-    };
+    let mutation = ControlMutation::RenameSession { operation_id, name };
     let protocol = required_protocol(&owner, &mutation)?;
     let request = ControlRequest {
         protocol,
@@ -73,9 +72,8 @@ pub(super) fn sync(context: &mut RuntimeContext, session_id: SessionId) -> Resul
         Ok(crate::ports::control::ControlMetadataReceipt::Synchronized) => Ok(()),
         Ok(crate::ports::control::ControlMetadataReceipt::SessionRenamed { .. }) => {
             Err(CliError::new(
-                "protocol_mismatch",
+                ErrorCode::ProtocolMismatch,
                 "owner returned a rename receipt".to_owned(),
-                6,
             ))
         }
         Err(error) => Err(map_error(error, &owner, false)),
@@ -350,9 +348,8 @@ fn send_control(
 fn required_protocol(owner: &InstanceInfo, mutation: &ControlMutation) -> Result<u32, CliError> {
     let protocol = owner.control_protocol.ok_or_else(|| {
         CliError::new(
-            "session_busy",
+            ErrorCode::SessionBusy,
             "active owner does not advertise a control protocol".to_owned(),
-            5,
         )
     })?;
     if !(crate::ports::control::MIN_CONTROL_PROTOCOL_VERSION
@@ -361,9 +358,8 @@ fn required_protocol(owner: &InstanceInfo, mutation: &ControlMutation) -> Result
         || protocol < mutation.minimum_protocol()
     {
         return Err(CliError::new(
-            "session_busy",
+            ErrorCode::SessionBusy,
             "active owner does not support the required control protocol".to_owned(),
-            5,
         ));
     }
     Ok(protocol)
@@ -378,9 +374,8 @@ fn sync_protocol(advertised: Option<u32>) -> Result<Option<u32>, CliError> {
         .contains(&protocol)
     {
         return Err(CliError::new(
-            "session_busy",
+            ErrorCode::SessionBusy,
             "active owner advertises an unsupported control protocol".to_owned(),
-            5,
         ));
     }
     Ok((protocol >= ControlMutation::Sync.minimum_protocol()).then_some(protocol))
@@ -393,22 +388,24 @@ fn map_error(error: ControlError, owner: &InstanceInfo, reports_invalid_state: b
     });
     match error {
         ControlError::Rejected { code, message } => match code.as_str() {
-            "thought_not_found" => CliError::new("thought_not_found", message, 3),
-            "content_conflict" => CliError::new("content_conflict", message, 7),
-            "thought_locked" => CliError::new("thought_locked", message, 7),
-            "storage_failed" => CliError::new("storage_failed", message, 1),
-            "storage_busy" => CliError::new("storage_busy", message, 5),
-            "storage_full" => CliError::new("storage_full", message, 1),
-            "idempotency_conflict" => CliError::new("idempotency_conflict", message, 7),
-            "no_durable_mutation" | "no_change" => CliError::new("no_change", message, 7),
-            "invalid_state" if reports_invalid_state => CliError::new("invalid_state", message, 7),
+            "thought_not_found" => CliError::new(ErrorCode::ThoughtNotFound, message),
+            "content_conflict" => CliError::new(ErrorCode::ContentConflict, message),
+            "thought_locked" => CliError::new(ErrorCode::ThoughtLocked, message),
+            "storage_failed" => CliError::new(ErrorCode::StorageFailed, message),
+            "storage_busy" => CliError::new(ErrorCode::StorageBusy, message),
+            "storage_full" => CliError::new(ErrorCode::StorageFull, message),
+            "idempotency_conflict" => CliError::new(ErrorCode::IdempotencyConflict, message),
+            "no_durable_mutation" | "no_change" => CliError::new(ErrorCode::NoChange, message),
+            "invalid_state" if reports_invalid_state => {
+                CliError::new(ErrorCode::InvalidState, message)
+            }
             "outcome_unknown" => {
-                CliError::new("operation_indeterminate", message, 8).with_details(details)
+                CliError::new(ErrorCode::OperationIndeterminate, message).with_details(details)
             }
             "owner_busy" | "protocol_mismatch" | "wrong_session" => {
-                CliError::new("session_busy", message, 5).with_details(details)
+                CliError::new(ErrorCode::SessionBusy, message).with_details(details)
             }
-            _ => CliError::new("mutation_rejected", message, 7),
+            _ => CliError::new(ErrorCode::MutationRejected, message),
         },
         ControlError::MessageTooLarge => CliError::input(error.to_string()),
         ControlError::Unsupported
@@ -416,7 +413,7 @@ fn map_error(error: ControlError, owner: &InstanceInfo, reports_invalid_state: b
         | ControlError::Protocol(_)
         | ControlError::Timeout
         | ControlError::Io(_) => {
-            CliError::new("session_busy", error.to_string(), 5).with_details(details)
+            CliError::new(ErrorCode::SessionBusy, error.to_string()).with_details(details)
         }
     }
 }

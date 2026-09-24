@@ -55,7 +55,7 @@ fn primary_split_and_plain_board_merge_survive_a_real_pty_restart() {
         .as_str()
         .expect("session ID");
     let thoughts = json_command(binary, state.path(), &["thoughts", "list", session]);
-    let thoughts = thoughts["data"]["thoughts"].as_array().expect("thoughts");
+    let thoughts = thoughts["data"]["items"].as_array().expect("thoughts");
     assert_eq!(thoughts.len(), 1);
     assert_eq!(thoughts[0]["content"], "left\n\n right");
 }

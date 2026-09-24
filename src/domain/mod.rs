@@ -27,7 +27,7 @@ pub use identifiers::{
 };
 pub use model::{
     Direction, DomainError, IntegrationContext, OperationSequence, Session, Thought,
-    ThoughtPosition, ThoughtPresentation, ThoughtRevision, Timestamp,
+    ThoughtPosition, ThoughtPresentation, ThoughtRevision, Timestamp, validate_session_name,
 };
 pub use operations::{
     BoardMutation, BoardOperation, BoardOperationKind, OperationRecord, SessionBoard, UndoScope,

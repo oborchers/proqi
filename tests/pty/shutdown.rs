@@ -151,7 +151,7 @@ fn queued_quit_waits_for_the_preceding_paste_to_become_durable() {
         .expect("session ID");
     let thoughts = json_command(binary, state.path(), &["thoughts", "list", session]);
     assert_eq!(
-        thoughts["data"]["thoughts"][0]["content"],
+        thoughts["data"]["items"][0]["content"],
         "accepted pending work 界"
     );
 }
@@ -191,7 +191,7 @@ fn acknowledged_paste_survives_forced_process_termination() {
         .expect("session ID");
     let thoughts = json_command(binary, state.path(), &["thoughts", "list", session]);
     assert_eq!(
-        thoughts["data"]["thoughts"][0]["content"],
+        thoughts["data"]["items"][0]["content"],
         "committed before crash 界"
     );
 }
@@ -431,7 +431,7 @@ fn assert_capture_shutdown_result(
         .as_str()
         .expect("session ID");
     let thoughts = json_command(binary, state, &["thoughts", "list", session]);
-    let contents = thoughts["data"]["thoughts"]
+    let contents = thoughts["data"]["items"]
         .as_array()
         .expect("thoughts")
         .iter()

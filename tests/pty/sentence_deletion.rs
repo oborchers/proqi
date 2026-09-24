@@ -44,10 +44,10 @@ fn primary_shift_u_deletes_and_persists_a_sentence_in_a_real_pty() {
         .expect("session ID");
     let thoughts = json_command(binary, state.path(), &["thoughts", "list", session]);
     assert_eq!(
-        thoughts["data"]["thoughts"][0]["content"],
+        thoughts["data"]["items"][0]["content"],
         "The quick brown fox\njumped over the hoop."
     );
-    let thought = thoughts["data"]["thoughts"][0]["id"]
+    let thought = thoughts["data"]["items"][0]["id"]
         .as_str()
         .expect("thought ID");
 
@@ -58,7 +58,7 @@ fn primary_shift_u_deletes_and_persists_a_sentence_in_a_real_pty() {
     );
     let undone = json_command(binary, state.path(), &["thoughts", "list", session]);
     assert_eq!(
-        undone["data"]["thoughts"][0]["content"],
+        undone["data"]["items"][0]["content"],
         "The quick brown fox\njumped over the hoop. It failed."
     );
     let _redo = json_command(
@@ -68,7 +68,7 @@ fn primary_shift_u_deletes_and_persists_a_sentence_in_a_real_pty() {
     );
     let redone = json_command(binary, state.path(), &["thoughts", "list", session]);
     assert_eq!(
-        redone["data"]["thoughts"][0]["content"],
+        redone["data"]["items"][0]["content"],
         "The quick brown fox\njumped over the hoop."
     );
 }

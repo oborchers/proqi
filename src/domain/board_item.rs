@@ -25,6 +25,15 @@ impl BoardItemId {
     }
 }
 
+impl std::fmt::Display for BoardItemId {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Thought(id) => id.fmt(formatter),
+            Self::Separator(id) => id.fmt(formatter),
+        }
+    }
+}
+
 impl From<ThoughtId> for BoardItemId {
     fn from(value: ThoughtId) -> Self {
         Self::Thought(value)
