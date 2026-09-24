@@ -104,10 +104,7 @@ fn api_first_add_renders_board_focus_and_navigation_without_host_click() {
     assert_focus_frames(&stages);
     let listed = json_command(binary, state.path(), &["thoughts", "list", session]);
     assert_eq!(
-        listed["data"]["thoughts"]
-            .as_array()
-            .expect("thoughts")
-            .len(),
+        listed["data"]["items"].as_array().expect("thoughts").len(),
         2
     );
 }
